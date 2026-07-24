@@ -2,7 +2,7 @@
 
 ## One-line state
 
-B75 is functionally and publicly VERIFIED: OpenVSX 0.0.36 is published, hash-matched, installed in Antigravity, and visually proven for continuous diagnostics, did-you-mean, schema/script completion, hover, and correction clearing. Close documentation is updated. Only recoverable cleanup, post-cleanup gates, and commit/push remain.
+B75 is fully VERIFIED and closed: OpenVSX 0.0.36 is published, hash-matched, installed in Antigravity, visually proven, recoverably cleaned, committed, and pushed. `main`, `HEAD`, and `origin/main` matched at release commit `0054ed54b055dd793123f58c7a850869439045a2`; the worktree was clean.
 
 ## Public release identity
 
@@ -20,12 +20,12 @@ B75 is functionally and publicly VERIFIED: OpenVSX 0.0.36 is published, hash-mat
 - Full e2e 24/24; production build; extension build; staged probe 6/6; product-copy guard; graph update; reviewctl 0; precommit PASS.
 - Antigravity public proof: `<illegal_child>` red XSD error; `faction.player.nme` amber warning with `did you mean name?`; valid correction clears; `<cue>` child completion; faction property completion; `faction.id: string` hover.
 
-## Current bounded work
+## Closed work
 
-1. Perform the already-approved non-destructive cleanup. Move only ignored/disposable artifacts to a dated sibling quarantine and write a recovery manifest; permanently delete nothing.
-2. Re-run post-cleanup typecheck/build/oracle/route/extension package probe/product-copy/precommit gates.
-3. Fresh status/diff review, then commit and push per project policy; assert branch attached and `origin/main == HEAD`.
-4. Overwrite this handoff with the final commit/hash and close.
+- Non-destructive cleanup moved 37 ignored/disposable payload files (431.20 MiB) to `F:\DEV_ENV\X4_Forge-cleanup-quarantine\2026-07-24-b75-0.0.36`; `MANIFEST.md` contains exact recovery paths. Nothing was permanently deleted.
+- Post-cleanup typecheck, build, 101/101 oracles, 37/37 routes, extension build/stage/probe 6/6, exact VSIX hash, product-copy guard, and precommit passed.
+- Final Git-status review caught one tracked Playwright snapshot in the broad cleanup enumeration; it was restored from quarantine before commit. No tracked cleanup deletion shipped.
+- Release commit `0054ed54b055dd793123f58c7a850869439045a2` includes the full 0.0.36 continuous-validation/product close; the preceding corpus commit `9af72cc99dc4abff07224d85c70c2c0dd407551f` was pushed with it.
 
 ## Preserve / hazards
 
@@ -41,4 +41,4 @@ Empty. Public installed visual proof is complete and recorded.
 
 ## Commit question
 
-Not committed yet. After cleanup and final gates, commit point title: `feat: ship canonical X4 intelligence and continuous validation`.
+Committed and pushed: `0054ed5 feat: ship canonical X4 intelligence and continuous validation`. This handoff-only finalization follows as the session-close mirror.
