@@ -16,7 +16,6 @@
 // House pattern: pure engine + runXpathSynthSelftest() + endpoints in
 // server.ts (public selftest GET, authed synth POST), THEN UI.
 
-import * as xpathLib from 'xpath';
 import {
   DOMParser,
   XMLSerializer,
@@ -26,18 +25,10 @@ import {
   type Text as XmlText,
   type CDATASection as XmlCdataSection
 } from '@xmldom/xmldom';
+import { applyDiffOperations, type DiffOperation } from './diffSimulator';
 
-export interface PatchOp {
-  type: 'add' | 'replace' | 'remove';
-  /** XPath selector (anchor node for add with pos, target node otherwise). */
-  sel: string;
-  /** For add: 'child' (append into sel) or 'before' (insert before sel). */
-  pos?: 'child' | 'before';
-  /** For attribute adds: the attribute name as '@name'. */
-  attrType?: string;
-  /** Serialized element fragment (add/replace of elements) or attr/text value. */
-  content?: string;
-}
+/** Back-compatible authoring shape; execution is owned by the shared X4 diff simulator. */
+export type PatchOp = DiffOperation;
 
 export interface SynthesizedPatch {
   ops: PatchOp[];
@@ -281,52 +272,10 @@ export function synthesizePatch(vanillaXml: string, editedXml: string): Synthesi
  * synthesized patch must never do that against its own base).
  */
 export function applyPatch(vanillaXml: string, ops: PatchOp[]): string {
-  const doc = parseDoc(vanillaXml);
-  for (const op of ops) {
-    if (op.type === 'replace' && op.sel.includes('/@')) {
-      const cut = op.sel.lastIndexOf('/@');
-      const owner = selectOne(doc, op.sel.slice(0, cut), op);
-      owner.setAttribute(op.sel.slice(cut + 2), op.content || '');
-      continue;
-    }
-    if (op.type === 'remove' && op.sel.includes('/@')) {
-      const cut = op.sel.lastIndexOf('/@');
-      const owner = selectOne(doc, op.sel.slice(0, cut), op);
-      owner.removeAttribute(op.sel.slice(cut + 2));
-      continue;
-    }
-    const node = selectOne(doc, op.sel, op);
-    if (op.type === 'remove') {
-      node.parentNode.removeChild(node);
-    } else if (op.type === 'replace') {
-      const frag = parseDoc(op.content || '').documentElement;
-      node.parentNode.replaceChild(doc.importNode(frag, true), node);
-    } else if (op.attrType) {
-      node.setAttribute(op.attrType.replace(/^@/, ''), op.content || '');
-    } else {
-      const frag = parseDoc(op.content || '').documentElement;
-      const imported = doc.importNode(frag, true);
-      if (op.pos === 'before') node.parentNode.insertBefore(imported, node);
-      else node.appendChild(imported);
-    }
-  }
-  return String(serializer.serializeToString(doc));
-}
-
-function selectOne(doc: XmlDocument, sel: string, op: PatchOp): XmlElement {
-  let matches: unknown;
-  try { matches = xpathLib.select(sel, doc as unknown as Node); } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error('bad selector "' + sel + '": ' + message);
-  }
-  if (!Array.isArray(matches) || matches.length === 0) {
-    throw new Error(op.type + ' selector matched nothing: ' + sel);
-  }
-  const first = matches[0];
-  if (!isElement(first as XmlNode)) {
-    throw new Error(op.type + ' selector did not resolve to an element: ' + sel);
-  }
-  return first as XmlElement;
+  const result = applyDiffOperations(vanillaXml, ops);
+  const failure = result.findings.find(finding => finding.severity === 'error' || finding.code === 'DIFF_SELECTOR_ZERO');
+  if (failure) throw new Error(failure.message);
+  return result.content;
 }
 
 /** Structural equality: same tree ignoring attribute order, whitespace-only

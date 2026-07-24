@@ -10,8 +10,9 @@
  *   - missing `use="required"` attributes
  *   - unknown attributes on a recognized element
  *   - unknown elements (info-level, since the schema index can be incomplete)
- * — with raw-text line numbers for actionable sourceRefs. It deliberately does
- * NOT attempt full sequence/cardinality/choice validation.
+ * — with raw-text line numbers for actionable sourceRefs. Ordered XSD content
+ * particles are retained as separate variants and compiled to a small NFA for
+ * sequence/choice/all/cardinality completion and strict validation.
  */
 
 import fs from 'fs';
@@ -48,6 +49,11 @@ export interface ChildSpec {
   maxOccurs: number | null;
 }
 
+export type ContentParticle =
+  | { kind: 'element'; name: string; minOccurs: number; maxOccurs: number | null }
+  | { kind: 'any'; minOccurs: number; maxOccurs: number | null }
+  | { kind: 'sequence' | 'choice' | 'all'; children: ContentParticle[]; minOccurs: number; maxOccurs: number | null };
+
 export interface ElementSpec {
   attributes: Map<string, AttrSpec>;
   /** true when the element's complexType permits arbitrary attributes (anyAttribute) */
@@ -60,6 +66,8 @@ export interface ElementSpec {
   childSpecs: Map<string, ChildSpec>;
   /** true when xs:any permits arbitrary direct child payloads */
   openChildren: boolean;
+  /** Preserved-order content models. Same-name contextual declarations stay separate. */
+  particles: ContentParticle[];
   typeName?: string;
   documentation?: string;
 }
@@ -78,6 +86,13 @@ const parser = new XMLParser({
   attributeNamePrefix: '',
   allowBooleanAttributes: true,
   trimValues: true
+});
+const orderedParser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: '',
+  allowBooleanAttributes: true,
+  trimValues: true,
+  preserveOrder: true,
 });
 
 function arrayOf<T>(v: T | T[] | undefined): T[] {
@@ -149,7 +164,9 @@ export function buildSchemaIndex(xsdPaths: string[]): SchemaIndex {
   const cached = indexCache.get(slot);
   if (cached && cached.key === key) return cached.index;
 
-  const roots = existing.map(p => parser.parse(fs.readFileSync(p, 'utf8')));
+  const sources = existing.map(p => fs.readFileSync(p, 'utf8'));
+  const roots = sources.map(source => parser.parse(source));
+  const orderedRoots = sources.map(source => orderedParser.parse(source) as AnyNode[]);
 
   // Global named simpleTypes -> enum lists, attributeGroups + complexTypes for ref resolution.
   const simpleTypeEnums: Record<string, string[]> = {};
@@ -247,6 +264,134 @@ export function buildSchemaIndex(xsdPaths: string[]): SchemaIndex {
     arrayOf(root['xs:schema']?.['xs:group']).forEach((g: AnyNode) => {
       if (g.name) groups.set(g.name, g);
     });
+  }
+
+  // The regular object model above is ideal for named lookup, but it groups
+  // repeated tag names and therefore loses mixed sequence order. Build a second,
+  // preserveOrder view solely for content particles.
+  const orderedComplexTypes = new Map<string, AnyNode>();
+  const orderedGroups = new Map<string, AnyNode>();
+  const orderedElements: AnyNode[] = [];
+  const nodeAttrs = (node: AnyNode): AnyNode => (node?.[':@'] || {}) as AnyNode;
+  const nodeKey = (node: AnyNode): string | null => Object.keys(node || {}).find(key => key !== ':@') || null;
+  const nodeBody = (node: AnyNode): AnyNode[] => {
+    const key = nodeKey(node);
+    return key && Array.isArray(node[key]) ? node[key] : [];
+  };
+  for (const root of orderedRoots) {
+    for (const wrapper of root) {
+      if (!Array.isArray(wrapper?.['xs:schema'])) continue;
+      for (const child of wrapper['xs:schema']) {
+        const key = nodeKey(child);
+        const attrs = nodeAttrs(child);
+        if (key === 'xs:complexType' && attrs.name) orderedComplexTypes.set(String(attrs.name), child);
+        else if (key === 'xs:group' && attrs.name) orderedGroups.set(String(attrs.name), child);
+      }
+    }
+  }
+  const collectOrderedElements = (value: unknown) => {
+    if (Array.isArray(value)) { for (const child of value) collectOrderedElements(child); return; }
+    if (!value || typeof value !== 'object') return;
+    const node = value as AnyNode;
+    if (nodeKey(node) === 'xs:element' && nodeAttrs(node).name) orderedElements.push(node);
+    for (const [key, child] of Object.entries(node)) if (key !== ':@') collectOrderedElements(child);
+  };
+  for (const root of orderedRoots) collectOrderedElements(root);
+
+  const particleOccurs = (attrs: AnyNode) => ({
+    minOccurs: occurs(attrs.minOccurs, 1) as number,
+    maxOccurs: occurs(attrs.maxOccurs, 1),
+  });
+  const cloneParticle = (particle: ContentParticle): ContentParticle => particle.kind === 'element' || particle.kind === 'any'
+    ? { ...particle }
+    : { ...particle, children: particle.children.map(cloneParticle) };
+
+  const combineParticles = (particles: ContentParticle[]): ContentParticle | null => {
+    if (!particles.length) return null;
+    if (particles.length === 1) return particles[0];
+    return { kind: 'sequence', children: particles, minOccurs: 1, maxOccurs: 1 };
+  };
+
+  const particleFromNode = (
+    node: AnyNode,
+    seenTypes = new Set<string>(),
+    seenGroups = new Set<string>(),
+    depth = 0,
+  ): ContentParticle | null => {
+    if (!node || depth > 50) return null;
+    const key = nodeKey(node);
+    const attrs = nodeAttrs(node);
+    const occurrence = particleOccurs(attrs);
+    if (key === 'xs:element') {
+      const rawName = attrs.name || attrs.ref;
+      return rawName ? { kind: 'element', name: String(rawName).toLowerCase(), ...occurrence } : null;
+    }
+    if (key === 'xs:any') return { kind: 'any', ...occurrence };
+    if (key === 'xs:group') {
+      const ref = attrs.ref || attrs.name;
+      if (!ref || seenGroups.has(String(ref))) return null;
+      const target = orderedGroups.get(String(ref));
+      if (!target) return null;
+      const nextGroups = new Set(seenGroups); nextGroups.add(String(ref));
+      const resolved = combineParticles(nodeBody(target)
+        .map(child => particleFromNode(child, seenTypes, nextGroups, depth + 1))
+        .filter((item): item is ContentParticle => !!item));
+      return resolved ? { kind: 'sequence', children: [cloneParticle(resolved)], ...occurrence } : null;
+    }
+    if (key === 'xs:sequence' || key === 'xs:choice' || key === 'xs:all') {
+      const children = nodeBody(node)
+        .map(child => particleFromNode(child, seenTypes, seenGroups, depth + 1))
+        .filter((item): item is ContentParticle => !!item);
+      return { kind: key.slice(3) as 'sequence' | 'choice' | 'all', children, ...occurrence };
+    }
+    return null;
+  };
+
+  const particleFromType = (node: AnyNode, seenTypes = new Set<string>(), depth = 0): ContentParticle | null => {
+    if (!node || depth > 50) return null;
+    const particles: ContentParticle[] = [];
+    for (const child of nodeBody(node)) {
+      const key = nodeKey(child);
+      if (key === 'xs:sequence' || key === 'xs:choice' || key === 'xs:all' || key === 'xs:group') {
+        const particle = particleFromNode(child, seenTypes, new Set(), depth + 1);
+        if (particle) particles.push(particle);
+        continue;
+      }
+      if (key !== 'xs:complexContent' && key !== 'xs:simpleContent') continue;
+      for (const derivation of nodeBody(child)) {
+        const derivationKey = nodeKey(derivation);
+        if (derivationKey !== 'xs:extension' && derivationKey !== 'xs:restriction') continue;
+        const base = String(nodeAttrs(derivation).base || '');
+        if (base && orderedComplexTypes.has(base) && !seenTypes.has(base)) {
+          const nextTypes = new Set(seenTypes); nextTypes.add(base);
+          const inherited = particleFromType(orderedComplexTypes.get(base)!, nextTypes, depth + 1);
+          if (inherited) particles.push(inherited);
+        }
+        for (const local of nodeBody(derivation)) {
+          const particle = particleFromNode(local, seenTypes, new Set(), depth + 1);
+          if (particle) particles.push(particle);
+        }
+      }
+    }
+    return combineParticles(particles);
+  };
+
+  const orderedParticles = new Map<string, ContentParticle[]>();
+  for (const element of orderedElements) {
+    const attrs = nodeAttrs(element);
+    const name = String(attrs.name || '').toLowerCase();
+    if (!name) continue;
+    let particle: ContentParticle | null = null;
+    const inline = nodeBody(element).find(child => nodeKey(child) === 'xs:complexType');
+    if (inline) particle = particleFromType(inline);
+    else if (attrs.type && orderedComplexTypes.has(String(attrs.type))) {
+      particle = particleFromType(orderedComplexTypes.get(String(attrs.type))!, new Set([String(attrs.type)]));
+    }
+    if (particle) {
+      const variants = orderedParticles.get(name) || [];
+      variants.push(particle);
+      orderedParticles.set(name, variants);
+    }
   }
 
   // Collect the child-element names an element may contain, following named
@@ -534,6 +679,7 @@ export function buildSchemaIndex(xsdPaths: string[]): SchemaIndex {
         children,
         childSpecs,
         openChildren,
+        particles: [],
         typeName,
         documentation,
       });
@@ -549,6 +695,13 @@ export function buildSchemaIndex(xsdPaths: string[]): SchemaIndex {
     }
   }
 
+  for (const [name, variants] of orderedParticles) {
+    const spec = elements.get(name);
+    if (!spec) continue;
+    const unique = new Map(variants.map(variant => [JSON.stringify(variant), variant]));
+    spec.particles = [...unique.values()];
+  }
+
   const index: SchemaIndex = { elements, loaded: true, sourceFiles: existing, elementCount: elements.size };
   if (indexCache.size >= INDEX_CACHE_MAX && !indexCache.has(slot)) {
     const oldest = indexCache.keys().next().value;
@@ -556,6 +709,218 @@ export function buildSchemaIndex(xsdPaths: string[]): SchemaIndex {
   }
   indexCache.set(slot, { key, index });
   return index;
+}
+
+interface ParticleNfaState {
+  epsilon: Set<number>;
+  transitions: Map<string, Set<number>>;
+}
+interface ParticleNfa { start: number; accept: number; states: ParticleNfaState[] }
+
+const particleNfaCache = new WeakMap<object, ParticleNfa>();
+
+function compileParticleNfa(root: ContentParticle): ParticleNfa {
+  const cached = particleNfaCache.get(root as object);
+  if (cached) return cached;
+  const states: ParticleNfaState[] = [];
+  const state = () => (states.push({ epsilon: new Set(), transitions: new Map() }), states.length - 1);
+  const eps = (from: number, to: number) => states[from].epsilon.add(to);
+  const edge = (from: number, token: string, to: number) => {
+    const targets = states[from].transitions.get(token) || new Set<number>();
+    targets.add(to); states[from].transitions.set(token, targets);
+  };
+
+  const core = (particle: ContentParticle): [number, number] => {
+    const start = state(); const end = state();
+    if (particle.kind === 'element') edge(start, particle.name, end);
+    else if (particle.kind === 'any') edge(start, '*', end);
+    else if (particle.kind === 'sequence') {
+      let cursor = start;
+      for (const child of particle.children) {
+        const [childStart, childEnd] = compile(child);
+        eps(cursor, childStart); cursor = childEnd;
+      }
+      eps(cursor, end);
+    } else if (particle.kind === 'choice') {
+      for (const child of particle.children) {
+        const [childStart, childEnd] = compile(child);
+        eps(start, childStart); eps(childEnd, end);
+      }
+    } else {
+      // XSD 1.0 xs:all children are single-occurrence particles. A subset NFA
+      // preserves arbitrary order and required/optional membership. Large or
+      // non-conforming all-groups fall back to a conservative sequence.
+      if (particle.children.length <= 16) {
+        const subsetStates = new Map<number, number>([[0, start]]);
+        const requiredMask = particle.children.reduce((mask, child, index) => child.minOccurs > 0 ? mask | (1 << index) : mask, 0);
+        const maxMask = 1 << particle.children.length;
+        for (let mask = 0; mask < maxMask; mask++) {
+          const from = subsetStates.get(mask) ?? state(); subsetStates.set(mask, from);
+          if ((mask & requiredMask) === requiredMask) eps(from, end);
+          for (let index = 0; index < particle.children.length; index++) {
+            if (mask & (1 << index)) continue;
+            const nextMask = mask | (1 << index);
+            const to = subsetStates.get(nextMask) ?? state(); subsetStates.set(nextMask, to);
+            const child = particle.children[index];
+            const one = { ...child, minOccurs: 1, maxOccurs: 1 } as ContentParticle;
+            const [childStart, childEnd] = compile(one);
+            eps(from, childStart); eps(childEnd, to);
+          }
+        }
+      } else {
+        let cursor = start;
+        for (const child of particle.children) {
+          const [childStart, childEnd] = compile(child);
+          eps(cursor, childStart); cursor = childEnd;
+        }
+        eps(cursor, end);
+      }
+    }
+    return [start, end];
+  };
+
+  const compile = (particle: ContentParticle): [number, number] => {
+    const start = state(); const end = state();
+    const min = Math.max(0, particle.minOccurs);
+    const finiteMax = particle.maxOccurs === null ? null : Math.max(min, particle.maxOccurs);
+    const treatAsLoop = finiteMax === null || finiteMax > 64;
+    let cursor = start;
+    for (let index = 0; index < min; index++) {
+      const [itemStart, itemEnd] = core(particle);
+      eps(cursor, itemStart); cursor = itemEnd;
+    }
+    if (treatAsLoop) {
+      eps(cursor, end);
+      const [loopStart, loopEnd] = core(particle);
+      eps(cursor, loopStart); eps(loopEnd, end); eps(loopEnd, loopStart);
+    } else {
+      eps(cursor, end);
+      for (let index = min; index < finiteMax!; index++) {
+        const [itemStart, itemEnd] = core(particle);
+        eps(cursor, itemStart); cursor = itemEnd; eps(cursor, end);
+      }
+    }
+    return [start, end];
+  };
+
+  const [start, accept] = compile(root);
+  const nfa = { start, accept, states };
+  particleNfaCache.set(root as object, nfa);
+  return nfa;
+}
+
+function epsilonClosure(nfa: ParticleNfa, input: Iterable<number>): Set<number> {
+  const closure = new Set(input);
+  const work = [...closure];
+  while (work.length) {
+    const current = work.pop()!;
+    for (const next of nfa.states[current].epsilon) {
+      if (!closure.has(next)) { closure.add(next); work.push(next); }
+    }
+  }
+  return closure;
+}
+
+interface ParticleDfaState {
+  active: Set<number>;
+  transitions: Map<string, ParticleDfaState>;
+}
+interface ParticleDfa {
+  nfa: ParticleNfa;
+  start: ParticleDfaState;
+  states: Map<string, ParticleDfaState>;
+}
+
+const particleDfaCache = new WeakMap<ParticleNfa, ParticleDfa>();
+
+function dfaFor(nfa: ParticleNfa): ParticleDfa {
+  const cached = particleDfaCache.get(nfa);
+  if (cached) return cached;
+  const active = epsilonClosure(nfa, [nfa.start]);
+  const start: ParticleDfaState = { active, transitions: new Map() };
+  const dfa = { nfa, start, states: new Map([[[...active].join(','), start]]) };
+  particleDfaCache.set(nfa, dfa);
+  return dfa;
+}
+
+function advanceParticleDfa(dfa: ParticleDfa, current: ParticleDfaState, raw: string): ParticleDfaState {
+  const token = raw.toLowerCase();
+  const cached = current.transitions.get(token);
+  if (cached) return cached;
+  const next = new Set<number>();
+  for (const nfaState of current.active) {
+    for (const target of dfa.nfa.states[nfaState].transitions.get(token) || []) next.add(target);
+    for (const target of dfa.nfa.states[nfaState].transitions.get('*') || []) next.add(target);
+  }
+  const active = epsilonClosure(dfa.nfa, next);
+  const key = [...active].join(',');
+  let result = dfa.states.get(key);
+  if (!result) {
+    result = { active, transitions: new Map() };
+    dfa.states.set(key, result);
+  }
+  current.transitions.set(token, result);
+  return result;
+}
+
+export interface ParticleState {
+  viable: boolean;
+  complete: boolean;
+  next: Set<string>;
+  wildcard: boolean;
+}
+
+/** Incremental particle matcher used by the validator's XML stack. */
+export class ContentParticleCursor {
+  private readonly fallback: ElementSpec | null;
+  private readonly variants: Array<{ dfa: ParticleDfa; state: ParticleDfaState }>;
+
+  constructor(spec: ElementSpec) {
+    this.fallback = spec.particles.length ? null : spec;
+    this.variants = spec.particles.map(particle => {
+      const nfa = compileParticleNfa(particle);
+      const dfa = dfaFor(nfa);
+      return { dfa, state: dfa.start };
+    });
+  }
+
+  advance(child: string): ParticleState {
+    for (const variant of this.variants) variant.state = advanceParticleDfa(variant.dfa, variant.state, child);
+    return this.state();
+  }
+
+  state(): ParticleState {
+    if (this.fallback) return {
+      viable: true,
+      complete: true,
+      next: new Set(this.fallback.children),
+      wildcard: this.fallback.openChildren,
+    };
+    const next = new Set<string>();
+    let viable = false;
+    let complete = false;
+    let wildcard = false;
+    for (const variant of this.variants) {
+      const active = variant.state.active;
+      if (!active.size) continue;
+      viable = true;
+      if (active.has(variant.dfa.nfa.accept)) complete = true;
+      for (const current of active) {
+        for (const token of variant.dfa.nfa.states[current].transitions.keys()) {
+          if (token === '*') wildcard = true;
+          else next.add(token);
+        }
+      }
+    }
+    return { viable, complete, next, wildcard };
+  }
+}
+
+/** State of every retained schema variant after consuming the parent's existing children. */
+export function contentParticleState(spec: ElementSpec, children: string[]): ParticleState {
+  const cursor = new ContentParticleCursor(spec);
+  for (const child of children) cursor.advance(child);
+  return cursor.state();
 }
 
 interface RawTag {
@@ -579,9 +944,10 @@ function scanTags(xml: string): RawTag[] {
   // match opening or self-closing tags, skip closing tags, comments, PIs, declarations
   const re = /<([a-zA-Z_][\w.-]*)((?:\s+[\w.\-:]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*(\/?)>/g;
   let m: RegExpExecArray | null;
+  let line = 1;
+  let last = 0;
   while ((m = re.exec(masked)) !== null) {
-    const before = masked.slice(0, m.index);
-    const line = before.split('\n').length;
+    for (let index = last; index < m.index; index++) if (masked.charCodeAt(index) === 10) line++;
     const name = m[1];
     const attrStr = m[2] || '';
     const attrs: { name: string; value: string }[] = [];
@@ -591,6 +957,8 @@ function scanTags(xml: string): RawTag[] {
       attrs.push({ name: a[1], value: a[2] !== undefined ? a[2] : (a[3] || '') });
     }
     tags.push({ name, attrs, line, selfClosing: m[3] === '/' });
+    for (let index = m.index; index < re.lastIndex; index++) if (masked.charCodeAt(index) === 10) line++;
+    last = re.lastIndex;
   }
   return tags;
 }
@@ -700,6 +1068,7 @@ function referenceSuggestion(value: string, candidates: Set<string>): string {
  * (warning), and optionally unknown elements (info).
  */
 export function validateXmlAgainstSchema(xml: string, index: SchemaIndex, opts: ValidateOptions = {}): XsdDiagnostic[] {
+  const profileStarted = performance.now();
   const out: XsdDiagnostic[] = [];
   if (!index.loaded || !index.elements.size) return out;
   const domain = opts.domain || 'md';
@@ -709,7 +1078,9 @@ export function validateXmlAgainstSchema(xml: string, index: SchemaIndex, opts: 
   const strict = opts.strictStructure === true;
   const citation = schemaCitation(index);
 
-  for (const tag of scanTags(xml)) {
+  const scannedTags = scanTags(xml);
+  const tagScanCompleted = performance.now();
+  for (const tag of scannedTags) {
     const lname = tag.name.toLowerCase();
     const spec = index.elements.get(lname);
 
@@ -887,28 +1258,96 @@ export function validateXmlAgainstSchema(xml: string, index: SchemaIndex, opts: 
     }
   }
 
+  const attributesCompleted = performance.now();
+
   if (strict) {
-    const stack: string[] = [];
+    interface Frame {
+      name: string;
+      line: number;
+      children: Array<{ name: string; line: number }>;
+      particleBroken: boolean;
+      particle: ContentParticleCursor | null;
+    }
+    const stack: Frame[] = [];
+    const closeFrame = (frame: Frame, line: number) => {
+      const spec = index.elements.get(frame.name);
+      if (!spec?.resolved || !spec.particles.length || frame.particleBroken) return;
+      const state = frame.particle?.state() || contentParticleState(spec, frame.children.map(child => child.name));
+      if (state.viable && !state.complete) {
+        out.push({
+          severity: 'error', domain, filePath, line,
+          sourceRef: frame.name, code: 'XSD_CHILD_CARDINALITY',
+          message: `<${frame.name}> ends before its required child content is complete per the ordered particle in ${citation}. Legal next children: ${[...state.next].sort().join(', ') || '(none)'}.`,
+        });
+      }
+    };
     for (const event of scanTagEvents(xml)) {
       if (event.close) {
         for (let i = stack.length - 1; i >= 0; i--) {
-          if (stack[i] === event.name) { stack.length = i; break; }
+          if (stack[i].name === event.name) {
+            const frame = stack[i];
+            stack.length = i;
+            closeFrame(frame, event.line);
+            break;
+          }
         }
         continue;
       }
-      const parentName = stack.length ? stack[stack.length - 1] : null;
-      if (parentName) {
+      const parentFrame = stack.length ? stack[stack.length - 1] : null;
+      if (parentFrame) {
+        const parentName = parentFrame.name;
         const parent = index.elements.get(parentName);
+        const beforeState = parentFrame.particle?.state() || null;
+        parentFrame.children.push({ name: event.name, line: event.line });
+        const afterState = parentFrame.particle?.advance(event.name) || null;
         if (parent?.resolved && !parent.openChildren && !parent.children.has(event.name)) {
+          parentFrame.particleBroken = true;
           out.push({
             severity: 'error', domain, filePath, line: event.line,
             sourceRef: `${parentName}>${event.name}`, code: 'XSD_ILLEGAL_CHILD',
             message: `<${event.name}> is not a legal direct child of <${parentName}> per ${citation}. Allowed direct children: ${[...parent.children].sort().slice(0, 30).join(', ')}${parent.children.size > 30 ? ', …' : ''}.`,
           });
+        } else if (parent?.resolved && parent.particles.length && !parentFrame.particleBroken) {
+          if (afterState && !afterState.viable) {
+            parentFrame.particleBroken = true;
+            const childSpec = parent.childSpecs.get(event.name);
+            const count = parentFrame.children.filter(child => child.name === event.name).length;
+            const exceedsMax = childSpec?.maxOccurs !== null && childSpec?.maxOccurs !== undefined && count > childSpec.maxOccurs;
+            out.push({
+              severity: 'error', domain, filePath, line: event.line,
+              sourceRef: `${parentName}>${event.name}`,
+              code: exceedsMax ? 'XSD_CHILD_CARDINALITY' : 'XSD_CHILD_ORDER',
+              message: exceedsMax
+                ? `<${event.name}> occurs ${count} times under <${parentName}>, exceeding maxOccurs=${childSpec!.maxOccurs} in ${citation}.`
+                : `<${event.name}> is not legal at this position under <${parentName}> per the ordered sequence/choice particle in ${citation}. Expected next: ${[...(beforeState?.next || [])].sort().join(', ') || '(no child)'}.`,
+            });
+          }
         }
       }
-      if (!event.selfClosing) stack.push(event.name);
+      const frameSpec = index.elements.get(event.name);
+      const frame: Frame = {
+        name: event.name,
+        line: event.line,
+        children: [],
+        particleBroken: false,
+        particle: frameSpec?.particles.length ? new ContentParticleCursor(frameSpec) : null,
+      };
+      if (event.selfClosing) closeFrame(frame, event.line);
+      else stack.push(frame);
     }
+  }
+
+
+  if (process.env.X4_PROFILE_VALIDATION === '1') {
+    console.error(JSON.stringify({
+      profile: 'xsd-validation',
+      file: filePath || '(memory)',
+      bytes: Buffer.byteLength(xml),
+      tags: scannedTags.length,
+      scanMs: Math.round((tagScanCompleted - profileStarted) * 10) / 10,
+      attributesMs: Math.round((attributesCompleted - tagScanCompleted) * 10) / 10,
+      particlesMs: Math.round((performance.now() - attributesCompleted) * 10) / 10,
+    }));
   }
 
   return out;
@@ -925,15 +1364,19 @@ export function runXsdValidateSelftest() {
     fs.writeFileSync(file, `<?xml version="1.0"?><xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
       <xs:simpleType name="modeBase"><xs:restriction base="xs:string"><xs:enumeration value="a"/><xs:enumeration value="b"/><xs:pattern value="[ab]"/></xs:restriction></xs:simpleType>
       <xs:simpleType name="mode"><xs:restriction base="modeBase"/></xs:simpleType>
-      <xs:element name="root"><xs:complexType><xs:sequence><xs:element ref="child" minOccurs="0" maxOccurs="2"/></xs:sequence><xs:attribute name="mode" type="mode" use="required" default="a"/><xs:attribute name="exact" type="xs:string"/></xs:complexType></xs:element>
+      <xs:element name="root"><xs:complexType><xs:sequence><xs:element ref="child" minOccurs="0" maxOccurs="2"/><xs:element ref="tail" minOccurs="0"/></xs:sequence><xs:attribute name="mode" type="mode" use="required" default="a"/><xs:attribute name="exact" type="xs:string"/></xs:complexType></xs:element>
       <xs:element name="child"><xs:complexType><xs:choice><xs:element ref="leaf"/><xs:any minOccurs="0"/></xs:choice></xs:complexType></xs:element>
       <xs:element name="leaf"><xs:complexType/></xs:element>
+      <xs:element name="tail"><xs:complexType/></xs:element>
       <xs:element name="other"><xs:complexType/></xs:element>
     </xs:schema>`, 'utf8');
     const index = buildSchemaIndex([file]);
     const root = index.elements.get('root');
     ok('child_particle_cardinality_indexed', root?.childSpecs.get('child')?.particle === 'sequence'
       && root.childSpecs.get('child')?.minOccurs === 0 && root.childSpecs.get('child')?.maxOccurs === 2, root?.childSpecs.get('child'));
+    ok('ordered_particle_retained', root?.particles.length === 1
+      && contentParticleState(root, []).next.has('child')
+      && contentParticleState(root, []).next.has('tail'));
     ok('attribute_enum_pattern_default_indexed', root?.attributes.get('mode')?.enumValues?.length === 2
       && root.attributes.get('mode')?.patterns?.includes('[ab]') && root.attributes.get('mode')?.defaultValue === 'a', root?.attributes.get('mode'));
     ok('named_restriction_inherits_base_enumeration', root?.attributes.get('mode')?.enumValues?.join(',') === 'a,b', root?.attributes.get('mode'));
@@ -948,6 +1391,10 @@ export function runXsdValidateSelftest() {
     ok('expression_ware_reference_warns_with_suggestion', badWare.some(d => d.code === 'REF_UNKNOWN_WARE' && d.severity === 'warning' && d.message.includes('energycells')), badWare);
     const siblings = validateXmlAgainstSchema('<root mode="a"><child/><child/></root>', index, { strictStructure: true, reportUnknownElements: true });
     ok('self_closing_siblings_do_not_nest', !siblings.some(d => d.code === 'XSD_ILLEGAL_CHILD'), siblings);
+    const wrongOrder = validateXmlAgainstSchema('<root mode="a"><tail/><child/></root>', index, { strictStructure: true, reportUnknownElements: true });
+    ok('sequence_order_violation_is_error', wrongOrder.some(d => d.code === 'XSD_CHILD_ORDER' && d.severity === 'error'), wrongOrder);
+    const tooMany = validateXmlAgainstSchema('<root mode="a"><child/><child/><child/></root>', index, { strictStructure: true, reportUnknownElements: true });
+    ok('particle_max_occurs_is_error', tooMany.some(d => d.code === 'XSD_CHILD_CARDINALITY' && d.severity === 'error'), tooMany);
   } finally {
     try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* best effort */ }
   }

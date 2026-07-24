@@ -26,6 +26,7 @@
  */
 
 import { DOMParser } from '@xmldom/xmldom';
+import { parseExpressionChains } from './expressionAst';
 
 export interface SPEntry {
   kind: 'keyword' | 'datatype';
@@ -312,7 +313,7 @@ const UNTYPED_ROOTS = new Set(['this', 'parent', 'static', 'namespace']);
  * - dynamic keyword roots (faction, ware, md, …) and `{…}` / `$var` segments end checking.
  * All findings are warnings (import-generated properties are invisible to the static set).
  */
-export function lintScriptPropertyChains(xml: string, index: ScriptPropertyIndex, opts?: { filePath?: string }): ScriptPropertyFinding[] {
+export function lintScriptPropertyChains(xml: string, index: ScriptPropertyIndex, opts?: { filePath?: string; variableTypes?: Record<string, string> }): ScriptPropertyFinding[] {
   const out: ScriptPropertyFinding[] = [];
   if (!index.loaded) return out;
   const masked = maskNonExpressionSpans(xml);
@@ -388,27 +389,28 @@ export function lintScriptPropertyChains(xml: string, index: ScriptPropertyIndex
   }
   // Type-aware pass for roots knowable without project-wide data flow: imported
   // keywords (`faction.<id>`) and variables named exactly after a datatype (`$ship`).
-  const typedChain = /(\$?[A-Za-z_]\w*)((?:\.(?:[A-Za-z_]\w*|\{[^}]*\}|\[[^\]]*\]))+)/g;
-  let typed: RegExpExecArray | null;
-  while ((typed = typedChain.exec(masked)) !== null) {
-    const root = typed[1];
+  for (const typed of parseExpressionChains(masked)) {
+    const root = typed.root.raw;
     const rootName = root.replace(/^\$/, '').toLowerCase();
     const keyword = !root.startsWith('$') ? index.model.keywords.get(rootName) : undefined;
-    let datatype = root.startsWith('$') && index.model.datatypes.has(rootName) ? rootName : keyword?.dynamicResultType;
+    const suppliedType = root.startsWith('$')
+      ? opts?.variableTypes?.[root] || opts?.variableTypes?.[root.toLowerCase()] || opts?.variableTypes?.[rootName]
+      : undefined;
+    let datatype = suppliedType?.toLowerCase()
+      || (root.startsWith('$') && index.model.datatypes.has(rootName) ? rootName : keyword?.dynamicResultType);
     if (!datatype || !index.model.datatypes.has(datatype)) continue;
-    const typedOffset = typed.index;
-    const segments = [...typed[2].matchAll(/\.([A-Za-z_]\w*|\{[^}]*\}|\[[^\]]*\])/g)]
-      .map(match => ({ value: match[1], at: typedOffset + root.length + (match.index || 0) }));
+    const segments = typed.segments.map(segment => ({ value: segment.raw, at: segment.start }));
     let indexInChain = keyword?.dynamic ? 1 : 0; // imported keyword's first segment is its lookup id
     for (; indexInChain < segments.length; indexInChain++) {
       const segment = segments[indexInChain];
       if (/^[{[]/.test(segment.value)) continue;
+      const segmentName = segment.value.replace(/\?$/, '').toLowerCase();
       const properties = resolveDatatypeProperties(index.model, datatype);
-      const property = properties.find(candidate => propertyHead(candidate.name) === segment.value.toLowerCase());
+      const property = properties.find(candidate => propertyHead(candidate.name) === segmentName);
       if (!property) {
         // Variable-name typing is a conservative hint, not proof of runtime type. If
         // the segment exists anywhere in the corpus, retain the legacy union allowance.
-        if (root.startsWith('$') && index.union.has(segment.value.toLowerCase())) break;
+        if (root.startsWith('$') && index.union.has(segmentName)) break;
         const chain = `${root}${segments.slice(0, indexInChain + 1).map(value => `.${value.value}`).join('')}`;
         const candidates = properties.map(candidate => propertyHead(candidate.name)).filter(Boolean);
         const finding = buildFinding(masked, segment.at, chain, segment.value, datatype, candidates, opts);
@@ -424,7 +426,7 @@ export function lintScriptPropertyChains(xml: string, index: ScriptPropertyIndex
   return out;
 }
 
-function buildSubselectorFinding(masked: string, at: number, chain: string, head: string, index: ScriptPropertyIndex, opts?: { filePath?: string }): ScriptPropertyFinding {
+function buildSubselectorFinding(masked: string, at: number, chain: string, head: string, index: ScriptPropertyIndex, opts?: { filePath?: string; variableTypes?: Record<string, string> }): ScriptPropertyFinding {
   const line = masked.slice(0, at).split('\n').length;
   const conts = [...(index.continuations.get(head) || [])].map(c => c === '*' ? `{$...}` : c);
   const suggestions = conts.slice(0, 5).map(c => `${head}.${c}`);
@@ -439,7 +441,7 @@ function buildSubselectorFinding(masked: string, at: number, chain: string, head
   };
 }
 
-function buildFinding(masked: string, at: number, chain: string, segment: string, root: string | undefined, candidates: Iterable<string>, opts?: { filePath?: string }): ScriptPropertyFinding {
+function buildFinding(masked: string, at: number, chain: string, segment: string, root: string | undefined, candidates: Iterable<string>, opts?: { filePath?: string; variableTypes?: Record<string, string> }): ScriptPropertyFinding {
   const line = masked.slice(0, at).split('\n').length;
   const clean = segment.replace(/\?$/, '');
   const suggestions = suggestProperties(clean, candidates);

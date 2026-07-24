@@ -140,8 +140,9 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onClose, onOpenManualSe
             </div>
             <div className="bg-white/[0.03] border border-white/10 rounded-lg p-3 space-y-1.5 mb-4">
               {row('Game', detect.proposal.x4GamePath)}
-              {row('Deploys to', detect.proposal.filesystemPath)}
-              {row('Your mods', detect.proposal.modWorkspacePath)}
+              {row('Dev workspace', detect.proposal.modWorkspacePath)}
+              {row('File explorer', detect.proposal.filesystemPath)}
+              {row('Deploy target', `${detect.proposal.x4GamePath}\\extensions (only when you choose Deploy)`)}
               {row('Schemas', `${detect.proposal.xsdSchemaPath} (extracted from the game)`)}
             </div>
             <div className="flex gap-2">

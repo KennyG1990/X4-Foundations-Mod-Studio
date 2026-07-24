@@ -55,7 +55,7 @@ export function isDbAvailable(): { available: boolean; reason?: string } {
 // Schema (v1) — exactly the ROADMAP DDL.
 // ---------------------------------------------------------------------------
 
-export const SCHEMA_VERSION = 2; // v2: + object_index.detail (needed for lossless restore)
+export const SCHEMA_VERSION = 4; // v4: normalized, path-keyed reference manifest
 
 const SCHEMA_DDL = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -75,6 +75,41 @@ CREATE TABLE IF NOT EXISTS ext_files (
   PRIMARY KEY (folder, rel_path)
 );
 CREATE INDEX IF NOT EXISTS idx_extfiles_path ON ext_files(rel_path);
+CREATE TABLE IF NOT EXISTS reference_generations (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  id TEXT NOT NULL UNIQUE,
+  root_key TEXT NOT NULL,
+  root TEXT NOT NULL,
+  status TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  completed_at TEXT,
+  total_files INTEGER NOT NULL DEFAULT 0,
+  total_bytes INTEGER NOT NULL DEFAULT 0,
+  counts_json TEXT NOT NULL DEFAULT '{}',
+  error TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_refgen_root_status ON reference_generations(root_key, status, completed_at);
+CREATE TABLE IF NOT EXISTS reference_classes (
+  class_id INTEGER PRIMARY KEY,
+  extension TEXT NOT NULL,
+  source TEXT NOT NULL,
+  domain TEXT NOT NULL,
+  role TEXT NOT NULL,
+  authority TEXT NOT NULL,
+  consumer TEXT NOT NULL,
+  schema_role TEXT NOT NULL DEFAULT '',
+  UNIQUE(extension, source, domain, role, authority, consumer, schema_role)
+);
+CREATE TABLE IF NOT EXISTS reference_files (
+  generation_seq INTEGER NOT NULL,
+  rel_path TEXT NOT NULL,
+  class_id INTEGER NOT NULL,
+  bytes INTEGER NOT NULL,
+  mtime_ms INTEGER NOT NULL,
+  sha256 TEXT,
+  PRIMARY KEY (generation_seq, rel_path)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_reffile_gen_class ON reference_files(generation_seq, class_id);
 `;
 
 export interface StudioDb {
@@ -95,16 +130,27 @@ export function openStudioDb(cacheDir?: string): StudioDb | null {
     const dbPath = path.join(dir, 'index.db');
     const raw = new BetterSqlite3(dbPath);
     raw.pragma('journal_mode = WAL');
-    raw.exec(SCHEMA_DDL);
+    // Read the version before applying the complete DDL. A prior cache can have
+    // tables with the same names but an older column layout, and CREATE INDEX
+    // against that layout would fail before we get a chance to migrate it.
+    raw.exec('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);');
     const existing = getMeta(raw, 'schema_version');
     if (existing !== String(SCHEMA_VERSION)) {
       if (existing !== null) {
         // It's a cache, not a store: on any schema change drop + recreate the data
         // tables (DDL above runs IF NOT EXISTS, so recreate explicitly).
-        raw.exec('DROP TABLE IF EXISTS object_index; DROP TABLE IF EXISTS extensions; DROP TABLE IF EXISTS ext_files; DELETE FROM source_mtime; DELETE FROM meta;');
-        raw.exec(SCHEMA_DDL);
+        raw.exec('DROP TABLE IF EXISTS object_index; DROP TABLE IF EXISTS extensions; DROP TABLE IF EXISTS ext_files; DROP TABLE IF EXISTS reference_files; DROP TABLE IF EXISTS reference_classes; DROP TABLE IF EXISTS reference_generations; DELETE FROM source_mtime; DELETE FROM meta;');
       }
+      raw.exec(SCHEMA_DDL);
       setMeta(raw, 'schema_version', String(SCHEMA_VERSION));
+      if (existing !== null) {
+        // This is a disposable cache migration. Reclaim pages held by the old
+        // million-row manifest now so the compact layout has a real disk win.
+        raw.pragma('wal_checkpoint(TRUNCATE)');
+        raw.exec('VACUUM');
+      }
+    } else {
+      raw.exec(SCHEMA_DDL);
     }
     return { raw, path: dbPath };
   } catch (err) {
@@ -278,6 +324,196 @@ export function unresolvedDependencies(db: StudioDb): { folder: string; dep_id: 
     }
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Unpacked-reference manifest — million-file inventory, generation-swapped.
+// ---------------------------------------------------------------------------
+
+export interface DbReferenceGeneration {
+  seq: number;
+  id: string;
+  root_key: string;
+  root: string;
+  status: 'scanning' | 'ready' | 'error';
+  started_at: string;
+  completed_at?: string | null;
+  total_files: number;
+  total_bytes: number;
+  counts_json: string;
+  error?: string | null;
+}
+
+export interface DbReferenceFile {
+  generation_id: string;
+  rel_path: string;
+  extension: string;
+  source: string;
+  domain: string;
+  role: string;
+  authority: string;
+  consumer: string;
+  schema_role?: string | null;
+  bytes: number;
+  mtime_ms: number;
+  sha256?: string | null;
+}
+
+export function beginReferenceGeneration(db: StudioDb, row: Pick<DbReferenceGeneration, 'id' | 'root_key' | 'root' | 'started_at'>): void {
+  db.raw.prepare(
+    `INSERT INTO reference_generations(id, root_key, root, status, started_at, counts_json)
+     VALUES (?, ?, ?, 'scanning', ?, '{}')`,
+  ).run(row.id, row.root_key, row.root, row.started_at);
+}
+
+export function appendReferenceFiles(db: StudioDb, rows: DbReferenceFile[]): void {
+  if (!rows.length) return;
+  const generationId = rows[0].generation_id;
+  const generation = db.raw.prepare('SELECT seq FROM reference_generations WHERE id = ?').get(generationId) as { seq: number } | undefined;
+  if (!generation) throw new Error(`Reference generation not found: ${generationId}`);
+  const insertClass = db.raw.prepare(
+    `INSERT OR IGNORE INTO reference_classes(
+       extension, source, domain, role, authority, consumer, schema_role
+     ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const selectClass = db.raw.prepare(
+    `SELECT class_id FROM reference_classes
+     WHERE extension = ? AND source = ? AND domain = ? AND role = ?
+       AND authority = ? AND consumer = ? AND schema_role = ?`,
+  );
+  const insertFile = db.raw.prepare(
+    `INSERT INTO reference_files(
+       generation_seq, rel_path, class_id, bytes, mtime_ms, sha256
+     ) VALUES (?, ?, ?, ?, ?, ?)`,
+  );
+  const tx = db.raw.transaction((all: DbReferenceFile[]) => {
+    const classIds = new Map<string, number>();
+    for (const row of all) {
+      const values = [
+        row.extension, row.source, row.domain, row.role, row.authority,
+        row.consumer, row.schema_role ?? '',
+      ] as const;
+      const key = JSON.stringify(values);
+      let classId = classIds.get(key);
+      if (classId === undefined) {
+        insertClass.run(...values);
+        const found = selectClass.get(...values) as { class_id: number } | undefined;
+        if (!found) throw new Error(`Reference classification could not be stored: ${key}`);
+        classId = found.class_id;
+        classIds.set(key, classId);
+      }
+      insertFile.run(generation.seq, row.rel_path, classId, row.bytes, row.mtime_ms, row.sha256 ?? null);
+    }
+  });
+  tx(rows);
+}
+
+export function completeReferenceGeneration(
+  db: StudioDb,
+  id: string,
+  completedAt: string,
+  totalFiles: number,
+  totalBytes: number,
+  counts: Record<string, unknown>,
+): void {
+  db.raw.prepare(
+    `UPDATE reference_generations
+     SET status = 'ready', completed_at = ?, total_files = ?, total_bytes = ?, counts_json = ?, error = NULL
+     WHERE id = ?`,
+  ).run(completedAt, totalFiles, totalBytes, JSON.stringify(counts), id);
+  const row = db.raw.prepare('SELECT seq, root_key FROM reference_generations WHERE id = ?').get(id) as
+    { seq: number; root_key: string } | undefined;
+  if (!row) return;
+  const old = db.raw.prepare(
+    `SELECT id FROM reference_generations
+     WHERE root_key = ? AND status = 'ready' AND id <> ?
+     ORDER BY completed_at DESC`,
+  ).all(row.root_key, id) as Array<{ id: string }>;
+  const dropFiles = db.raw.prepare('DELETE FROM reference_files WHERE generation_seq = ?');
+  const dropGeneration = db.raw.prepare('DELETE FROM reference_generations WHERE id = ?');
+  db.raw.transaction((ids: Array<{ id: string }>) => {
+    for (const previous of ids) {
+      const seq = db.raw.prepare('SELECT seq FROM reference_generations WHERE id = ?').get(previous.id) as { seq: number } | undefined;
+      if (seq) dropFiles.run(seq.seq);
+      dropGeneration.run(previous.id);
+    }
+    db.raw.prepare(
+      `DELETE FROM reference_classes
+       WHERE class_id NOT IN (SELECT DISTINCT class_id FROM reference_files)`,
+    ).run();
+  })(old);
+}
+
+export function failReferenceGeneration(db: StudioDb, id: string, completedAt: string, error: string): void {
+  db.raw.prepare(
+    `UPDATE reference_generations SET status = 'error', completed_at = ?, error = ? WHERE id = ?`,
+  ).run(completedAt, error, id);
+  const row = db.raw.prepare('SELECT seq FROM reference_generations WHERE id = ?').get(id) as { seq: number } | undefined;
+  if (row) db.raw.prepare('DELETE FROM reference_files WHERE generation_seq = ?').run(row.seq);
+}
+
+export function latestReferenceGeneration(db: StudioDb, rootKey: string): DbReferenceGeneration | null {
+  const row = db.raw.prepare(
+    `SELECT * FROM reference_generations
+     WHERE root_key = ? AND status = 'ready'
+     ORDER BY completed_at DESC LIMIT 1`,
+  ).get(rootKey) as DbReferenceGeneration | undefined;
+  return row || null;
+}
+
+export function queryReferenceFiles(
+  db: StudioDb,
+  generationId: string,
+  filters: { q?: string; extension?: string; source?: string; domain?: string; role?: string; authority?: string; consumer?: string; limit?: number; offset?: number },
+): { total: number; files: DbReferenceFile[] } {
+  const generation = db.raw.prepare('SELECT seq FROM reference_generations WHERE id = ?').get(generationId) as { seq: number } | undefined;
+  if (!generation) return { total: 0, files: [] };
+  const clauses = ['f.generation_seq = ?'];
+  const params: unknown[] = [generation.seq];
+  for (const [column, value] of [
+    ['extension', filters.extension], ['source', filters.source], ['domain', filters.domain],
+    ['role', filters.role], ['authority', filters.authority], ['consumer', filters.consumer],
+  ] as Array<[string, string | undefined]>) {
+    if (value) { clauses.push(`c.${column} = ?`); params.push(value); }
+  }
+  if (filters.q) { clauses.push('f.rel_path LIKE ?'); params.push(`%${filters.q}%`); }
+  const where = clauses.join(' AND ');
+  const total = Number(db.raw.prepare(
+    `SELECT COUNT(*) AS n FROM reference_files f
+     JOIN reference_classes c ON c.class_id = f.class_id WHERE ${where}`,
+  ).get(...params).n);
+  const requestedLimit = Number.isFinite(filters.limit) ? Number(filters.limit) : 100;
+  const requestedOffset = Number.isFinite(filters.offset) ? Number(filters.offset) : 0;
+  const limit = Math.max(1, Math.min(requestedLimit, 500));
+  const offset = Math.max(0, Math.min(requestedOffset, 5_000_000));
+  const files = db.raw.prepare(
+    `SELECT ? AS generation_id, f.rel_path, c.extension, c.source, c.domain, c.role,
+            c.authority, c.consumer, NULLIF(c.schema_role, '') AS schema_role,
+            f.bytes, f.mtime_ms, f.sha256
+     FROM reference_files f JOIN reference_classes c ON c.class_id = f.class_id
+     WHERE ${where} ORDER BY f.rel_path LIMIT ? OFFSET ?`,
+  ).all(generationId, ...params, limit, offset) as DbReferenceFile[];
+  return { total, files };
+}
+
+export function referenceCoverageRows(db: StudioDb, generationId: string): {
+  byExtension: Array<{ key: string; count: number }>;
+  byDomain: Array<{ key: string; count: number }>;
+  byRole: Array<{ key: string; count: number }>;
+  bySource: Array<{ key: string; count: number }>;
+  byConsumer: Array<{ key: string; count: number }>;
+} {
+  const generation = db.raw.prepare('SELECT seq FROM reference_generations WHERE id = ?').get(generationId) as { seq: number } | undefined;
+  if (!generation) return { byExtension: [], byDomain: [], byRole: [], bySource: [], byConsumer: [] };
+  const group = (column: string) => db.raw.prepare(
+    `SELECT c.${column} AS key, COUNT(*) AS count
+     FROM reference_files f JOIN reference_classes c ON c.class_id = f.class_id
+     WHERE f.generation_seq = ? GROUP BY c.${column} ORDER BY count DESC, key`,
+  ).all(generation.seq).map((row: any) => ({ key: String(row.key), count: Number(row.count) }));
+  return {
+    byExtension: group('extension'), byDomain: group('domain'), byRole: group('role'),
+    bySource: group('source'), byConsumer: group('consumer'),
+  };
 }
 
 // ---------------------------------------------------------------------------

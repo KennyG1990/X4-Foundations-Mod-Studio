@@ -9,11 +9,21 @@ import {
 import { runExpressionSuggestSelftest } from '../src/lib/expressionSuggest';
 import { runReferenceLanguageSelftest } from '../src/lib/referenceLanguage';
 import { runReferenceLiteralLintSelftest } from '../src/lib/referenceLint';
+import { runExpressionAstSelftest } from '../src/lib/expressionAst';
+import { runProjectSymbolsSelftest } from '../src/lib/projectSymbols';
+import { runDiffSimulatorSelftest } from '../src/lib/diffSimulator';
+import { runReferenceOverlaySelftest } from '../src/lib/referenceOverlay';
+
+const scriptPropertyIndex = buildScriptPropertyIndex(SCRIPT_PROPERTIES_FIXTURE);
 
 const suites = [
   ['xsd-model', runXsdValidateSelftest()],
   ['scriptproperties', runScriptPropertiesSelftest()],
-  ['expression-suggest', runExpressionSuggestSelftest(buildScriptPropertyIndex(SCRIPT_PROPERTIES_FIXTURE))],
+  ['expression-suggest', runExpressionSuggestSelftest(scriptPropertyIndex)],
+  ['expression-ast', runExpressionAstSelftest()],
+  ['project-symbols', runProjectSymbolsSelftest(scriptPropertyIndex)],
+  ['diff-simulator', runDiffSimulatorSelftest()],
+  ['reference-overlay', runReferenceOverlaySelftest()],
   ['reference-language', runReferenceLanguageSelftest()],
   ['reference-literals', runReferenceLiteralLintSelftest()],
 ] as const;

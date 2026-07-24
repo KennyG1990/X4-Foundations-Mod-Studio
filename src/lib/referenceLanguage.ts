@@ -11,8 +11,9 @@ import {
   type SPEntry,
 } from './scriptProperties';
 import { resolveExpressionState, suggestExpression, type ExpressionSuggestOptions } from './expressionSuggest';
+import { buildProjectSymbols } from './projectSymbols';
 import type { ReferenceCorpus, ScriptPropertyReference } from './referenceCorpus';
-import type { AttrSpec, ElementSpec, SchemaIndex } from './xsdValidate';
+import { contentParticleState, type AttrSpec, type ElementSpec, type SchemaIndex } from './xsdValidate';
 
 export type ReferenceCompletionKind = 'Element' | 'Attribute' | 'Enum' | 'Reference' | 'Property' | 'Function';
 
@@ -56,6 +57,7 @@ interface CursorContext {
   elementStart: boolean;
   rootTag: string | null;
   partialElement: string;
+  priorSiblings: string[];
 }
 
 let schemaState: { root: string; checkedAt: number; signature: string; registry: SchemaRegistry } | null = null;
@@ -110,18 +112,30 @@ export function xmlCursorContext(content: string, offset: number): CursorContext
       }
     }
   }
-  const stack: string[] = [];
+  const stack: Array<{ name: string; children: string[] }> = [];
   const tagRe = /<(\/)?([A-Za-z_][\w.:-]*)((?:"[^"]*"|[^"<>])*?)(\/)?>/g;
   let match: RegExpExecArray | null;
   while ((match = tagRe.exec(prefix)) !== null) {
     const name = match[2].toLowerCase();
     if (match[1]) {
       for (let index = stack.length - 1; index >= 0; index--) {
-        if (stack[index] === name) { stack.length = index; break; }
+        if (stack[index].name === name) { stack.length = index; break; }
       }
-    } else if (!match[4]) stack.push(name);
+    } else {
+      if (stack.length) stack[stack.length - 1].children.push(name);
+      if (!match[4]) stack.push({ name, children: [] });
+    }
   }
-  return { offset, parentTag: stack.at(-1) || null, inTag, inAttrValue, elementStart, rootTag, partialElement };
+  return {
+    offset,
+    parentTag: stack.at(-1)?.name || null,
+    inTag,
+    inAttrValue,
+    elementStart,
+    rootTag,
+    partialElement,
+    priorSiblings: [...(stack.at(-1)?.children || [])],
+  };
 }
 
 function entryFromReference(reference: ScriptPropertyReference): SPEntry {
@@ -281,7 +295,8 @@ export function completeReferenceDocument(request: ReferenceLanguageRequest, res
     const element = schema?.elements.get(context.inTag);
     const attr = element?.attributes.get(context.inAttrValue);
     if (expressionAttribute(context.inAttrValue, attr)) {
-      const suggestions = suggestExpression(request.content, offset, resources.scriptProperties, { dynamicValues: dynamicValues(resources.corpus) });
+      const variableTypes = buildProjectSymbols([{ path: request.path, content: request.content }], resources.scriptProperties).variableTypesFor(request.path);
+      const suggestions = suggestExpression(request.content, offset, resources.scriptProperties, { dynamicValues: dynamicValues(resources.corpus), variableTypes });
       if (suggestions.length) return suggestions.map((suggestion, index) => ({
         label: suggestion.label,
         kind: suggestion.kind === 'function' ? 'Function' : suggestion.kind === 'reference' ? 'Reference' : 'Property',
@@ -315,16 +330,18 @@ export function completeReferenceDocument(request: ReferenceLanguageRequest, res
   if (context.elementStart && context.parentTag) {
     const parent = schema?.elements.get(context.parentTag);
     if (!parent || parent.openChildren) return [];
-    return [...parent.children]
+    const particle = contentParticleState(parent, context.priorSiblings);
+    const legal = parent.particles.length && particle.viable ? particle.next : parent.children;
+    return [...legal]
       .filter(name => !context.partialElement || name.startsWith(context.partialElement))
       .filter(name => schema?.elements.has(name))
       .sort()
       .map((name, index) => {
         const child = schema?.elements.get(name);
-        const particle = parent.childSpecs.get(name);
+        const childParticle = parent.childSpecs.get(name);
         return {
           label: name, kind: 'Element' as const,
-          detail: particle ? `${particle.particle} · ${particle.minOccurs}..${particle.maxOccurs === null ? '∞' : particle.maxOccurs}` : resources.domain,
+          detail: childParticle ? `${childParticle.particle} · ${childParticle.minOccurs}..${childParticle.maxOccurs === null ? '∞' : childParticle.maxOccurs}` : resources.domain,
           insertText: requiredSnippet(name, child), documentation: child?.documentation,
           sortText: String(index).padStart(5, '0'),
         };
@@ -353,8 +370,9 @@ export function hoverReferenceDocument(request: ReferenceLanguageRequest, resour
     const element = resources.schema?.elements.get(context.inTag);
     const attr = element?.attributes.get(context.inAttrValue);
     if (expressionAttribute(context.inAttrValue, attr)) {
+      const variableTypes = buildProjectSymbols([{ path: request.path, content: request.content }], resources.scriptProperties).variableTypesFor(request.path);
       const leafStart = token.end - leaf.length;
-      const state = resolveExpressionState(request.content, leafStart, resources.scriptProperties, { dynamicValues: dynamicValues(resources.corpus) });
+      const state = resolveExpressionState(request.content, leafStart, resources.scriptProperties, { dynamicValues: dynamicValues(resources.corpus), variableTypes });
       if (state?.datatype && resources.scriptProperties.model.datatypes.has(state.datatype)) {
         const property = resolveDatatypeProperties(resources.scriptProperties.model, state.datatype).find(candidate => propertyHead(candidate.name) === leaf);
         if (property) return {
@@ -409,8 +427,13 @@ export function runReferenceLanguageSelftest() {
   const element = (attributes: Array<[string, AttrSpec]>, children: string[] = []): ElementSpec => ({
     attributes: new Map(attributes), openAttributes: false, resolved: true,
     children: new Set(children), childSpecs: new Map(children.map(name => [name, { name, particle: 'sequence' as const, minOccurs: 0, maxOccurs: 1 }])),
-    openChildren: false,
+    openChildren: false, particles: [],
   });
+  const cue = element([], ['conditions', 'actions', 'cues']);
+  cue.particles = [{
+    kind: 'sequence', minOccurs: 1, maxOccurs: 1,
+    children: ['conditions', 'actions', 'cues'].map(name => ({ kind: 'element' as const, name, minOccurs: 0, maxOccurs: 1 })),
+  }];
   const model: ScriptPropertyModel = { keywords: new Map(), datatypes: new Map(), parsedProperties: 1 };
   model.keywords.set('faction', {
     kind: 'keyword', name: 'faction', heads: new Set(), headDocs: new Map(), propNames: [], properties: [], wildcard: false, dynamic: true, dynamicResultType: 'faction',
@@ -422,7 +445,7 @@ export function runReferenceLanguageSelftest() {
   const schema: SchemaIndex = {
     loaded: true, sourceFiles: ['md.xsd', 'common.xsd'], elementCount: 4,
     elements: new Map([
-      ['cue', element([], ['conditions', 'actions', 'cues'])],
+      ['cue', cue],
       ['conditions', element([])], ['actions', element([])], ['cues', element([])],
       ['event_owner', element([['owner', attr('faction')]])],
       ['set_value', element([['exact', attr('expression')]])],
@@ -438,6 +461,10 @@ export function runReferenceLanguageSelftest() {
   };
   const child = cursor('<cue><|');
   ok('contextual child completion', completeReferenceDocument({ path: 'md/x.xml', ...child }, resources).map(item => item.label).join(',') === 'actions,conditions,cues');
+  const afterConditions = cursor('<cue><conditions/><|');
+  ok('particle completion removes prior sequence member', completeReferenceDocument({ path: 'md/x.xml', ...afterConditions }, resources).map(item => item.label).join(',') === 'actions,cues');
+  const afterActions = cursor('<cue><actions/><|');
+  ok('particle completion respects skipped optional prefix', completeReferenceDocument({ path: 'md/x.xml', ...afterActions }, resources).map(item => item.label).join(',') === 'cues');
   const lookup = cursor('<set_value exact="faction.|"/>');
   ok('canonical dynamic lookup completion', completeReferenceDocument({ path: 'md/x.xml', ...lookup }, resources).length === 2);
   const props = cursor('<set_value exact="faction.player.|"/>');

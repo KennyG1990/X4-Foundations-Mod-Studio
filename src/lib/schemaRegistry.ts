@@ -19,6 +19,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { buildSchemaIndex, type SchemaIndex } from './xsdValidate';
+import { listReferenceManifestFiles } from './referenceManifest';
 
 export interface SchemaDomainInfo {
   /** basename without .xsd, lowercased — the routing key (factions.xsd → 'factions') */
@@ -65,6 +66,18 @@ function enumerateXsds(root: string): { path: string; depth: number; dlc: boolea
   };
   walk(root, 0);
   return out;
+}
+
+function enumerateManifestXsds(schemaDir: string): { path: string; depth: number; dlc: boolean }[] | null {
+  if (path.basename(schemaDir).toLowerCase() !== 'libraries') return null;
+  const manifestRoot = path.dirname(schemaDir);
+  const manifest = listReferenceManifestFiles(manifestRoot, { role: 'grammar' }, 1_000);
+  if (!manifest?.files.length) return null;
+  return manifest.files.map(file => ({
+    path: path.join(manifestRoot, ...file.path.split('/')),
+    depth: file.path.split('/').length - 1,
+    dlc: /^ego_dlc_/i.test(file.source),
+  }));
 }
 
 /** Pull schemaLocation="…" targets out of an XSD's text (xs:include and xs:import). */
@@ -150,7 +163,8 @@ function discoverSchemaRegistryUncached(schemaDir: string, gamePath?: string): S
   // Collect all copies grouped by basename. Earlier roots win ties (schemaDir over gamePath).
   const byBase = new Map<string, { path: string; depth: number; dlc: boolean; rootRank: number }[]>();
   uniqueRoots.forEach((root, rootRank) => {
-    for (const hit of enumerateXsds(root)) {
+    const hits = enumerateManifestXsds(root) || enumerateXsds(root);
+    for (const hit of hits) {
       const base = path.basename(hit.path).toLowerCase();
       const list = byBase.get(base) || [];
       list.push({ ...hit, rootRank });

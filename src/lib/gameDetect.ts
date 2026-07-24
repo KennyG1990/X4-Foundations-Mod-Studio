@@ -37,7 +37,7 @@ export function parseLibraryFolders(vdfText: string): string[] {
 
 export interface SetupProposal {
   x4GamePath: string;
-  /** The game's extensions dir — where deploys land. */
+  /** Safe editable filesystem root; explicit Deploy separately targets game extensions. */
   filesystemPath: string;
   /** Where the user's mod source projects live. */
   modWorkspacePath: string;
@@ -56,10 +56,11 @@ const joinWin = (...parts: string[]) =>
  * manual override always visible).
  */
 export function proposeSetup(input: { gameDir: string; homeDir: string; forgeCwd: string }): SetupProposal {
+  const developmentRoot = joinWin(input.homeDir, 'Documents', 'X4ForgeMods');
   return {
     x4GamePath: input.gameDir,
-    filesystemPath: joinWin(input.gameDir, 'extensions'),
-    modWorkspacePath: joinWin(input.homeDir, 'Documents', 'X4ForgeMods'),
+    filesystemPath: developmentRoot,
+    modWorkspacePath: developmentRoot,
     xsdSchemaPath: joinWin(input.forgeCwd, 'data', 'harvested-schemas'),
   };
 }
@@ -104,8 +105,9 @@ export function runGameDetectSelftest(): {
 
   // Synthetic fixture paths only — deliberately generic (these strings ship in the bundle).
   const p = proposeSetup({ gameDir: 'D:\\SteamLibrary\\steamapps\\common\\X4 Foundations', homeDir: 'C:\\Users\\example', forgeCwd: 'C:\\X4Forge' });
-  ok('proposal_extensions_under_game', p.filesystemPath === 'D:\\SteamLibrary\\steamapps\\common\\X4 Foundations\\extensions', p.filesystemPath);
+  ok('proposal_filesystem_isolated', p.filesystemPath === 'C:\\Users\\example\\Documents\\X4ForgeMods', p.filesystemPath);
   ok('proposal_workspace_under_documents', p.modWorkspacePath === 'C:\\Users\\example\\Documents\\X4ForgeMods', p.modWorkspacePath);
+  ok('proposal_editable_roots_match', p.filesystemPath === p.modWorkspacePath, `${p.filesystemPath} != ${p.modWorkspacePath}`);
   ok('proposal_schemas_under_data', p.xsdSchemaPath === 'C:\\X4Forge\\data\\harvested-schemas', p.xsdSchemaPath);
   ok('proposal_keeps_game_dir_verbatim', p.x4GamePath === 'D:\\SteamLibrary\\steamapps\\common\\X4 Foundations');
 

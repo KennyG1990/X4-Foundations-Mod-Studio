@@ -16,6 +16,15 @@ import {
   hoverReferenceDocument,
   type ReferenceLanguageRequest,
 } from '../lib/referenceLanguage';
+import {
+  getReferenceCoverage,
+  getReferenceManifestStatus,
+  queryReferenceManifest,
+  scheduleReferenceManifest,
+  type ReferenceManifestStatus,
+} from '../lib/referenceManifest';
+import { resolveEffectiveReferenceDocument } from '../lib/referenceOverlay';
+import { simulateXmlDiff } from '../lib/diffSimulator';
 
 function errorText(error: unknown): string { return error instanceof Error ? error.message : String(error); }
 function forceRefresh(req: Request): boolean { return /^(1|true|yes)$/i.test(String(req.query.refresh || '')); }
@@ -58,9 +67,16 @@ export function initializeReferenceCorpus(): void {
   try {
     const corpus = getReferenceCorpus(resolved.x4ReferenceRoot);
     console.log(`[reference-corpus] loaded ${corpus.factions.length} factions, ${corpus.wares.length} wares, ${corpus.sectors.length} sectors from ${corpus.sourceFiles.length} files (${corpus.root})`);
+    const manifest = getReferenceManifestStatus(corpus.root);
+    console.log(`[reference-manifest] ${manifest.state}: ${manifest.root}`);
   } catch (error) {
     console.warn(`[reference-corpus] failed to load ${resolved.x4ReferenceRoot}: ${errorText(error)}`);
   }
+}
+
+export function startCanonicalReferenceManifest(force = false): ReferenceManifestStatus {
+  const resolved = resolveXsdConfig();
+  return scheduleReferenceManifest(resolved.x4ReferenceRoot, force);
 }
 
 function sendCorpusError(res: Response, error: unknown): Response {
@@ -74,6 +90,28 @@ function sendCorpusError(res: Response, error: unknown): Response {
 }
 
 export function registerReferenceRoutes(app: Express): void {
+  app.post('/api/reference/simulate-diff', (req, res) => {
+    try {
+      const body = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {};
+      const relativePath = typeof body.path === 'string' ? body.path.trim() : '';
+      const diff = typeof body.content === 'string' ? body.content : '';
+      if (!relativePath) throw new Error('Invalid request: path is required.');
+      if (typeof body.content !== 'string') throw new Error('Invalid request: content must be a string.');
+      if (diff.length > 5_000_000) throw new Error('Invalid request: content exceeds 5 MB.');
+      const corpus = load(req);
+      const effective = resolveEffectiveReferenceDocument(corpus.root, relativePath, forceRefresh(req));
+      if (!effective.available || effective.content === undefined) {
+        return res.status(404).json({ error: `Canonical base file not found: ${relativePath}`, effective });
+      }
+      const simulation = simulateXmlDiff(effective.content, diff);
+      return res.json({
+        path: effective.relativePath,
+        base: { signature: effective.signature, sources: effective.sources, findings: effective.findings },
+        ...simulation,
+      });
+    } catch (error) { return sendCorpusError(res, error); }
+  });
+
   app.post('/api/reference/complete', (req, res) => {
     try {
       const request = languageRequest(req);
@@ -93,13 +131,53 @@ export function registerReferenceRoutes(app: Express): void {
   app.get('/api/reference/status', (req, res) => {
     try {
       const corpus = load(req);
+      const manifest = getReferenceManifestStatus(corpus.root);
       return res.json({
         available: true,
         root: corpus.root,
         generatedAt: corpus.generatedAt,
+        manifestGeneration: corpus.manifestGeneration || null,
         sourceFiles: corpus.sourceFiles.length,
         counts: { factions: corpus.factions.length, wares: corpus.wares.length, sectors: corpus.sectors.length, scriptProperties: corpus.scriptProperties.length },
+        manifest,
       });
+    } catch (error) { return sendCorpusError(res, error); }
+  });
+
+  app.get('/api/reference/manifest', (req, res) => {
+    try {
+      const resolved = resolveXsdConfig();
+      let status = forceRefresh(req)
+        ? scheduleReferenceManifest(resolved.x4ReferenceRoot, true)
+        : getReferenceManifestStatus(resolved.x4ReferenceRoot);
+      if (status.state === 'idle') status = scheduleReferenceManifest(resolved.x4ReferenceRoot, false);
+      const extensionInput = String(req.query.extension || '').trim().toLowerCase();
+      const result = queryReferenceManifest(resolved.x4ReferenceRoot, {
+        q: String(req.query.q || '').trim(),
+        extension: extensionInput ? (extensionInput.startsWith('.') ? extensionInput : `.${extensionInput}`) : undefined,
+        source: String(req.query.source || '').trim().toLowerCase() || undefined,
+        domain: String(req.query.domain || '').trim().toLowerCase() || undefined,
+        role: String(req.query.role || '').trim().toLowerCase() || undefined,
+        authority: String(req.query.authority || '').trim().toLowerCase() || undefined,
+        consumer: String(req.query.consumer || '').trim().toLowerCase() || undefined,
+        limit: Number(req.query.limit || 100),
+        offset: Number(req.query.offset || 0),
+      });
+      if (!result) return res.status(status.state === 'error' || status.state === 'unavailable' ? 503 : 202).json({ status, files: [], total: 0 });
+      return res.json({ status, ...result });
+    } catch (error) { return sendCorpusError(res, error); }
+  });
+
+  app.get('/api/reference/coverage', (req, res) => {
+    try {
+      const resolved = resolveXsdConfig();
+      let status = forceRefresh(req)
+        ? scheduleReferenceManifest(resolved.x4ReferenceRoot, true)
+        : getReferenceManifestStatus(resolved.x4ReferenceRoot);
+      if (status.state === 'idle') status = scheduleReferenceManifest(resolved.x4ReferenceRoot, false);
+      const coverage = getReferenceCoverage(resolved.x4ReferenceRoot);
+      if (!coverage) return res.status(status.state === 'error' || status.state === 'unavailable' ? 503 : 202).json({ status });
+      return res.json({ status, coverage });
     } catch (error) { return sendCorpusError(res, error); }
   });
 

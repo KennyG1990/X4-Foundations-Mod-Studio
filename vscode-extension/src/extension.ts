@@ -26,6 +26,7 @@ import { mapFlatFindings, type FlatFinding } from "./diagnosticsMap";
 import { buildXmlAssociations, listModFolders, writeRecommendations, writeXmlAssociations } from "./modFolder";
 import { xmlCursorContext } from "./langContext";
 import { findCueDefinition, findCueReferences, mdscriptNameOf, parseCueWord } from "./langNav";
+import { detectIdeCapabilities, formatIdeCapabilityReport } from "./capabilities";
 
 interface BackendHandle {
   baseUrl: string;
@@ -163,6 +164,22 @@ function showBackendError(message: string): void {
   void vscode.window.showErrorMessage(`X4 Forge: ${message}`, "Show Logs").then((pick) => {
     if (pick === "Show Logs") output.show(true);
   });
+}
+
+function currentIdeCapabilities() {
+  return detectIdeCapabilities({
+    installedExtensionIds: vscode.extensions.all.map(extension => extension.id),
+    xmlAssociationsEnabled: cfg().writeXmlAssociations,
+    backendState: backend ? (backend.owned ? 'managed' : 'attached') : 'stopped',
+  });
+}
+
+function showIdeCapabilities(): void {
+  const lines = formatIdeCapabilityReport(currentIdeCapabilities());
+  log('IDE capabilities:');
+  for (const line of lines) log(`  ${line}`);
+  output.show(true);
+  void vscode.window.showInformationMessage('X4 Forge capability report written to the X4 Forge output channel.');
 }
 
 // ---------------------------------------------------------------------------
@@ -490,6 +507,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(output, statusItem);
 
   log(`extension activated (host: ${vscode.env.appName} ${vscode.version})`);
+  for (const line of formatIdeCapabilityReport(currentIdeCapabilities())) log(`capability: ${line}`);
 
   // B50: the Activity Bar launcher view. An empty tree provider makes the view render its
   // `viewsWelcome` buttons (Open Studio / Create Agent Key / Logs / Stop) — a click-to-run
@@ -505,6 +523,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand("x4forge.openStudio", () => openStudio(context)),
     vscode.commands.registerCommand("x4forge.showLogs", () => output.show(true)),
+    vscode.commands.registerCommand("x4forge.showCapabilities", showIdeCapabilities),
     vscode.commands.registerCommand("x4forge.stopSidecar", () => {
       if (stopOwnedSidecar("stop command")) {
         void vscode.window.showInformationMessage("X4 Forge: backend sidecar stopped.");

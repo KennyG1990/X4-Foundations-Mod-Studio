@@ -2,7 +2,7 @@
   "name": "x4-forge-studio",
   "displayName": "X4 Forge Studio",
   "description": "Visual modding studio for X4: Foundations â€” build, validate, and deploy mods with a node canvas and real-schema validation, no hand-written XML required.",
-  "version": "0.0.32",
+  "version": "0.0.33",
   "icon": "icon.png",
   "publisher": "x4forge",
   "license": "MIT",
@@ -74,6 +74,10 @@
       {
         "command": "x4forge.showLogs",
         "title": "X4 Forge: Show Backend Logs"
+      },
+      {
+        "command": "x4forge.showCapabilities",
+        "title": "X4 Forge: Show IDE Capabilities"
       },
       {
         "command": "x4forge.createAgentKey",
@@ -178,6 +182,7 @@
   "scripts": {
     "build": "node scripts/build-ext.mjs",
     "stage-app": "node scripts/stage-app.mjs",
+    "probe-app": "node scripts/probe-staged-app.mjs",
     "package": "npx --yes @vscode/vsce package --allow-missing-repository",
     "changelog": "node scripts/gen-changelog.mjs"
   },

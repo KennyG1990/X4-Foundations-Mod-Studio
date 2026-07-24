@@ -1,68 +1,68 @@
-# SESSION-HANDOFF — X4 Forge (B74 PARTIAL close 2026-07-24)
+# SESSION-HANDOFF — X4 Forge B75 release candidate (2026-07-24)
 
-## Project / objective
+## One-line state
 
-- Project: X4 Forge at `F:\DEV_ENV\X4_Forge`.
-- Active task: B74 schema-driven autocomplete and validation, extending B73 canonical reference values.
-- User decisions: expose corpus-truth `faction.id`; HTTP completion/hover wired into existing extension providers; standalone LSP deferred; deterministic XSD violations are errors; unknown properties/functions/reference IDs are suggestion-bearing warnings.
-- Plan: `docs/plans/2026-07-24-schema-intelligence.md` (`SPECIFIED`, Full lane).
+B75 unified corpus intelligence is implemented and headless/corpus validated; 0.0.33 is packaged but NOT published, installed, committed, or pushed. Final status remains PARTIAL until e2e plus installed Antigravity visual proof.
 
-## Baseline / ownership
+## Project / authoritative plan
 
-- Observed revision: `5b960d10b648fbf2b9bb912da9f451f27940cc01` (`feat(reference): Introduce canonical corpus API and validation`).
-- Preserve all pre-existing Part 1 modified/untracked files recorded in the prior handoff and plan.
-- No Git mutation, publish, game/mod-directory write, standing-config write, or external side effect performed.
+- Repo: `F:\DEV_ENV\X4_Forge`.
+- Goal: one unpacked X4 root drives full discovery, canonical data, XSD grammar, typed expression completion/hover, validation, and effective diff simulation.
+- Plan/design: `docs/plans/2026-07-24-unified-x4-corpus-intelligence.md` and `docs/plans/2026-07-24-unified-x4-corpus-intelligence-design.md`.
+- Backlog: B75 `in_progress`. Do not move it to ROADMAP or claim VERIFIED yet.
+- Current corpus: `F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00`.
 
-## Reconciliation
+## Implemented
 
-- Reuse `schemaRegistry`, `SchemaIndex`, `langService`, `expressionSuggest`, `scriptProperties`, Part 1 `referenceCorpus`, project validation, legacy language routes, and existing extension providers.
-- Existing gaps: no cursor-aware POST engine, no datatype return-flow, no canonical dynamic IDs in expression completion, no direct-child XSD errors, no exact XSD signature invalidation.
-- Canonical grammar source for B74 is `<x4ReferenceRoot>/libraries/*.xsd`; explicit `xsi:noNamespaceSchemaLocation` will outrank existing path/root fallback routing.
+- Persistent classified manifest: 1,028,384 files / 33,206,154,495 bytes; 154,140,672-byte v4 cache; 43.5 s full scan; generation refresh and DLC add/remove invalidation.
+- Public read-only manifest/coverage/status plus Part 1 factions/wares/sectors/scriptproperties/file/search; authenticated completion, hover, and diff simulation.
+- Ordered XSD particle engine with lazy DFA runtime; 544/544 authoritative MD/AI files, zero particle findings, 29.2 s.
+- Typed expression AST + schema-driven project variable inference shared by completion, hover, and warning validation.
+- Dependency-ordered base + all official `ego_dlc_*` overlays and read-only mod diff simulation with post-apply validation/baseline subtraction.
+- Directory Settings primary corpus row, live coverage, Advanced XSD fallback, and credited Nexus X4 Unpacker recommendation (author z1ppeh; unofficial; no download/run).
+- Extension capability broker for optional generic XML companions; Forge remains sole X4 semantic authority.
 
-## Implementation complete
+## Current green evidence
 
-- `src/lib/xsdValidate.ts`: exported rich attribute/child/element metadata; particle/cardinality/default/pattern/docs/base metadata; `xs:any` openness; strict deterministic unknown element/attribute/required/enum/pattern/fixed/direct-child diagnostics; focused selftest.
-- `src/lib/schemaRegistry.ts`: optional signature-aware cache key and cheap `schemaFilesSignature()` seam.
-- `src/lib/scriptProperties.ts`: dynamic import result datatype, inherited full property records, enriched fixture.
-- `src/lib/expressionSuggest.ts`: datatype-aware expression state, canonical dynamic IDs/selectors, inherited properties, return types, conservative variable-name datatype inference.
-- `scripts/schema-intelligence-check.ts` + `test:schema-intelligence` package script.
-- `src/lib/referenceLanguage.ts`: zero-based CRLF-safe cursor context; schema selection; legal child/required-first attribute/enum/canonical-reference/expression completion; typed hover; root/XSD signature caching.
-- `src/server/referenceRoutes.ts`: authenticated `POST /api/reference/complete` and `/hover` with bounded payload and coordinate rejection.
-- `vscode-extension/src/extension.ts`: owned-sidecar authenticated completion/hover calls mapped to VS Code items/snippets/Markdown; attach-mode legacy fallback retained.
-- Project validation now prefers the canonical reference-root schemas, emits strict deterministic XSD errors, warning-only typed-property/reference findings, and deduplicates overlapping dedicated/routed schema diagnostics.
-- `referenceCorpus.ts` signature scans are throttled to one second so keystroke requests reuse the indexed corpus; explicit refresh remains immediate.
-- `scripts/reference-api-integration.mjs` covers the real corpus, 32 faction completions, `faction.id`, contextual cue children, hover, auth/400 negatives, diff payload, strict validation findings, and warm p95.
-
-## Current evidence
-
-- `npm run test:schema-intelligence`: 78/78 PASS.
-- `npm run test:reference-corpus`: 10/10 PASS against unpacked 9.00 (32 factions, 1,902 wares, 170 sectors, 6,505 macros).
-- `npm run test:reference-api`: 40/40 PASS; 37 schemas, MD/common resolved, warm p95 2.9 ms.
-- `npm run test:routes`: 16/16 PASS; `npm run test:oracles`: 100/100 PASS.
 - `npm run typecheck`: PASS.
-- `npx tsc -p vscode-extension/tsconfig.json --noEmit`: PASS.
-- `npm run lint`: PASS with 0 errors / 430 existing warnings; precommit and production build PASS.
-- `graphify update .`: 2,014 nodes / 4,734 edges / 122 communities.
-- `git diff --check`: PASS; only existing LF→CRLF notices.
-- Review fixes already landed: inherited named-enum restrictions; no 5,000-macro or 24-expression truncation; CRLF cursor offsets; duplicate schema finding collapse; MD/AI `ware.<id>` and faction/ware/macro literal lint wiring; sector-set correction.
+- `npm run lint`: 0 errors / 437 existing warnings.
+- `npm run test:schema-intelligence`: 107/107 PASS.
+- `npm run test:reference-api`: 53/53 PASS; real corpus; warm completion p95 2.9 ms.
+- `npm run test:reference-corpus`: 10/10 PASS.
+- manifest selftest 7/7; manifest API 16/16.
+- oracle integration runtime index: 100/100 PASS.
+- ordered XSD corpus: 544/544, zero findings, 29.2 s.
+- official diff corpus: 176 files / 60 targets / 0 interpreter errors / 0 source mutations / 10.7 s. The 65 zero-match warnings are preserved selector-health evidence from official patches.
+- root production build PASS; extension capability 6/6; staged product boot/auth/config/completion probe 6/6.
+- A correctly ordered release artifact was produced at `vscode-extension\x4-forge-studio-0.0.33.vsix` (17.03 MB), but the subsequent testability-only `data-testid` addition means the final root-build → extension-build → stage → probe → package sequence must be rerun before publication.
+- Focused rendered-settings contract added at `tests/e2e/reference-settings.spec.ts`; root typecheck PASS and Playwright discovery 1/1. It has not been executed yet.
 
-## Remaining validation / close
+## Important failures / AAR triggers
 
-- Code, headless validation, review, plan, ROADMAP, capability-map delta, and both AAR ledgers are complete.
-- Status is PARTIAL only for machine-gated full e2e and real rendered Antigravity completion/hover proof.
+- Initial official-diff sweep timed out above 240 s. `sound_library.xml` reproduced at 101,091 ms; simple absolute-selector fast path reduced it to 1,352 ms.
+- Official corpus proved multi-node `<replace>` and compact `or.=` semantics not represented accurately by the generic XPath/XSD assumptions; regression tests added.
+- Fresh-eyes review caught byte-unbounded effective XML cache and inherited vanilla post-apply warnings; both fixed.
+- Direct `oracle-sweep` failed because no server listened on :3001; isolated `test:oracles` is the valid 100/100 evidence.
+- `reviewctl` skill path is stale/missing; no automated reviewctl evidence exists.
+- First 0.0.33 package attempt staged an older root dist because the command ran from the extension directory. It is superseded by a fresh root build followed by rebuild/restage/probe/repackage.
+- A task-log read used a nonexistent `-implementation.md` filename; the canonical implementation record is `docs/plans/2026-07-24-unified-x4-corpus-intelligence.md`.
 
-## Remaining operator gates
+## Machine gate / eyeball queue
 
-- Machine-state question was asked. Passive check found X4 PID 57972 plus Antigravity running, so live-server/e2e/rendered-host validation is frozen until Ken confirms safe state.
-- Eyeball queue when safe:
-  1. Close X4; save/close any active Forge editor work; confirm the machine is quiet.
-  2. From this repo run `npm run test:e2e`; confirm the verdict parser reports PASS and the workspace guard restored the real workspace.
-  3. In Antigravity open an MD XML file inside the configured mod root, place the caret directly under `<cue>`, invoke completion, and confirm contextual `conditions`, `actions`, `cues`, and `delay` entries rather than a flat vocabulary.
-  4. In an expression attribute type `faction.player.`, confirm real faction properties including `id`, `knownname`, `primaryrace`, and `relationto`; hover `id` and confirm `faction.id: string` plus documentation.
-  5. Open Directory Settings and confirm the unpacked reference root is visible/valid (the remaining B73 rendered check).
-- Commit question: was the previous B73 close committed? If not, B73+B74 are now one uncommitted blast radius. Suggested B74 title: `feat: add schema-driven X4 completion hover and validation`.
+Machine-state gate remains closed: passive check on 2026-07-24 found X4 PID 57972 and 16 Antigravity processes. Do not run full e2e or take over Antigravity until Ken confirms the machine is quiet. Current Playwright is isolated on ports 3100/3101 with a per-run state directory rather than the live workspace, but the validation-heavy operator gate still applies.
 
-## AAR state
+When safe:
 
-- Triggered: reconciliation changed architecture; command orchestration failures caused a strategic pivot; focused tests/typecheck caught and corrected multiple issues; fresh-eyes review forced completeness/latency/reference-lint fixes; `reviewctl` is unavailable.
-- Durable project/workflow AAR, capability-map delta, ROADMAP close, and plan close are written.
+1. Run `npm run test:e2e` once (workers=1); verify it used the ephemeral 3100/3101 stack and left the live 3000/3001 workspace untouched.
+2. Rebuild root + extension, restage, rerun the 6/6 staged probe, and repackage 0.0.33 so the artifact exactly matches source; then run `npm run precommit:check`.
+3. Publish-before-commit: publish the refreshed `vscode-extension\x4-forge-studio-0.0.33.vsix` with `ovsx`, verify Open VSX shows 0.0.33, then install/update that public version in Antigravity.
+4. In Antigravity open X4 Forge → Directory Settings. Confirm no config-fetch error; corpus root is found; coverage shows the million-file inventory and consumer categories; X4 Unpacker link/description/z1ppeh credit sits beside the corpus row; manual XSD is Advanced fallback.
+5. On a scratch MD file, request child completion under `<cue>` and see legal ordered children; type `faction.player.` and `$target.` after `<find_ship name="$target"/>`; hover `faction.player.id`/inherited `name`; confirm docs/types.
+6. Validate controlled illegal child/enum/property/faction/ware/diff selector fixtures; confirm XSD errors vs suggestion-bearing warnings in Problems. Capture screenshots under `vscode-extension/evidence/`.
+7. Check debug watcher `erroringCount=0`, then review acceptance 1–14, update capability map/ROADMAP/AAR/BACKLOG/handoff, commit and push only after publication.
+
+## Commit / publish state
+
+- No publication, installation, commit, or push has occurred for 0.0.33.
+- Publish-before-commit is mandatory for this user-facing release.
+- Suggested final commit title: `feat: unify X4 corpus intelligence and contextual validation`.

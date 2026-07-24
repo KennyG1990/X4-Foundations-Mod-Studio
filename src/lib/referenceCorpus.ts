@@ -16,6 +16,7 @@ import path from 'path';
 import { DOMParser } from '@xmldom/xmldom';
 import { parseScriptProperties } from './scriptProperties';
 import { parseLocalizationXml, resolveLocName, type LocalizationMap } from './x4ObjectIndex';
+import { listReferenceManifestFiles } from './referenceManifest';
 
 export type ReferenceSource = 'base' | `ego_dlc_${string}`;
 export type FactionCategory = 'political' | 'player' | 'system' | 'hostile';
@@ -64,6 +65,8 @@ export interface ReferenceCorpus {
   root: string;
   generatedAt: string;
   signature: string;
+  /** Complete all-file manifest generation used for discovery, when available. */
+  manifestGeneration?: string;
   sourceFiles: string[];
   factions: FactionReference[];
   wares: WareReference[];
@@ -121,9 +124,36 @@ function walkXml(dir: string, out: string[]): void {
   }
 }
 
-function discoverReferenceFiles(rootInput: string): ReferenceFile[] {
+function referenceKind(relativeInput: string): ReferenceFileKind | null {
+  const relative = forward(relativeInput).toLowerCase();
+  const parts = relative.split('/');
+  const inner = parts[0] === 'extensions' && parts.length > 2 ? parts.slice(2).join('/') : relative;
+  if (inner === 'libraries/factions.xml') return 'factions';
+  if (inner === 'libraries/wares.xml') return 'wares';
+  if (inner === 'libraries/scriptproperties.xml') return 'scriptproperties';
+  if (inner === 'index/macros.xml') return 'macro-index';
+  if (inner.startsWith('t/') && /-l044\.xml$/i.test(inner)) return 'localization';
+  if (inner.startsWith('maps/') && inner.endsWith('.xml')) return 'map';
+  return null;
+}
+
+function discoverReferenceFiles(rootInput: string): { files: ReferenceFile[]; manifestGeneration?: string } {
   const root = path.resolve(rootInput);
-  if (!isDirectory(root)) return [];
+  if (!isDirectory(root)) return { files: [] };
+  const manifest = listReferenceManifestFiles(root, { consumer: 'reference-corpus' }, 10_000);
+  if (manifest) {
+    const files = manifest.files
+      .map(record => {
+        const kind = referenceKind(record.path);
+        if (!kind || (record.source !== 'base' && !/^ego_dlc_/i.test(record.source))) return null;
+        const absolute = path.join(root, ...record.path.split('/'));
+        if (!isFile(absolute)) return null;
+        return { absolute, relative: record.path, source: record.source as ReferenceSource, kind } satisfies ReferenceFile;
+      })
+      .filter((file): file is ReferenceFile => Boolean(file))
+      .sort((a, b) => (Number(a.source !== 'base') - Number(b.source !== 'base')) || a.source.localeCompare(b.source) || a.relative.localeCompare(b.relative));
+    if (files.length) return { files, manifestGeneration: manifest.generation };
+  }
   const files: ReferenceFile[] = [];
   const seen = new Set<string>();
   const add = (absolute: string, source: ReferenceSource, kind: ReferenceFileKind) => {
@@ -155,7 +185,7 @@ function discoverReferenceFiles(rootInput: string): ReferenceFile[] {
   for (const ext of extensions.filter(e => e.isDirectory() && /^ego_dlc_/i.test(e.name)).sort((a, b) => a.name.localeCompare(b.name))) {
     addSource(path.join(extRoot, ext.name), ext.name.toLowerCase() as ReferenceSource);
   }
-  return files;
+  return { files };
 }
 
 function signatureFor(files: ReferenceFile[]): string {
@@ -316,7 +346,7 @@ function parsePropertyReferences(files: ReferenceFile[]): ScriptPropertyReferenc
   return [...found.values()].sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name));
 }
 
-function buildCorpus(root: string, files: ReferenceFile[], signature: string): ReferenceCorpus {
+function buildCorpus(root: string, files: ReferenceFile[], signature: string, manifestGeneration?: string): ReferenceCorpus {
   const loc: LocalizationMap = new Map();
   for (const file of files.filter(f => f.kind === 'localization')) {
     try { parseLocalizationXml(fs.readFileSync(file.absolute, 'utf8'), loc); } catch { /* one bad language file cannot erase IDs */ }
@@ -330,6 +360,7 @@ function buildCorpus(root: string, files: ReferenceFile[], signature: string): R
     root,
     generatedAt: new Date().toISOString(),
     signature,
+    ...(manifestGeneration ? { manifestGeneration } : {}),
     sourceFiles: files.map(f => f.relative),
     factions,
     wares,
@@ -353,13 +384,15 @@ export function getReferenceCorpus(rootInput: string, force = false): ReferenceC
   if (!force && cache && cache.root.toLowerCase() === root.toLowerCase() && now - cache.checkedAt < REFERENCE_SIGNATURE_CHECK_MS) {
     return cache.corpus;
   }
-  const files = discoverReferenceFiles(root);
+  const discovery = discoverReferenceFiles(root);
+  const files = discovery.files;
   const signature = signatureFor(files);
-  if (!force && cache && cache.root.toLowerCase() === root.toLowerCase() && cache.signature === signature) {
+  if (!force && cache && cache.root.toLowerCase() === root.toLowerCase() && cache.signature === signature
+    && cache.corpus.manifestGeneration === discovery.manifestGeneration) {
     cache.checkedAt = now;
     return cache.corpus;
   }
-  const corpus = buildCorpus(root, files, signature);
+  const corpus = buildCorpus(root, files, signature, discovery.manifestGeneration);
   cache = { root, signature, corpus, checkedAt: now };
   return corpus;
 }

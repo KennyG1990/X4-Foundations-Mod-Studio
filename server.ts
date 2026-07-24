@@ -57,6 +57,7 @@ import { runPositionPickerSelftest } from "./src/lib/positionPicker";
 import { debugScan as catDatDebugScan, extractBaseGameFile as catDatExtractBaseGameFile, extractEntries as catDatExtractEntries, findCatDatArchives, parseCat, readEntryText, runCatDatSelftest } from "./src/lib/x4CatDat";
 import { buildSchemaIndex, validateXmlAgainstSchema, runXsdValidateSelftest, type SchemaIndex } from "./src/lib/xsdValidate";
 import { runReferenceLanguageSelftest } from "./src/lib/referenceLanguage";
+import { isSameOrDescendant, runPathRolesSelftest, validateDirectoryRoles, type DirectoryField } from "./src/lib/pathRoles";
 import { parseXMLToWorkspace, extractTopLevelCueXml } from "./src/lib/xmlParser";
 import type { SchemaLibrary } from "./src/lib/schemaTypes";
 import { generateHttpGlueLua, generateContractMdScript, validateContract, runContractGlueSelftest, type IntegrationContract } from "./src/lib/contractGlue";
@@ -96,7 +97,7 @@ import { analyzeModDependencies, runModDependencyGraphSelftest, parseModManifest
 import { buildMergedGalaxyMap, runGalaxyMapSelftest, type GalaxyMapSource } from "./src/lib/galaxyMap";
 import { classifyPath, indexCueReferences, runExtensionProjectSelftest, buildContentXml, type ExtensionProject } from "./src/lib/extensionProject";
 import { getAiSchemaIndex, getScriptPropertyIndex, registerValidationAgentRoutes } from "./src/server/validationRoutes";
-import { getCanonicalReferenceSets, initializeReferenceCorpus, registerReferenceRoutes } from "./src/server/referenceRoutes";
+import { getCanonicalReferenceSets, initializeReferenceCorpus, registerReferenceRoutes, startCanonicalReferenceManifest } from "./src/server/referenceRoutes";
 import { computeModDrift, fingerprintModFolder, flattenProjectValidation, getSchemaIndex, loadProjectFromDisk, runProjectValidation } from "./src/server/projectValidation";
 import { buildRemediationCapsules, runAgentLoopSelftest, runRepairLoop, type LoopDiagnostic } from "./src/lib/agentLoop";
 import { assessSourceSync, hashFolderFingerprint, runCompileFidelitySelftest } from "./src/lib/compileFidelity";
@@ -331,6 +332,8 @@ const PUBLIC_READONLY_GETS = new Set<string>([
   "/agent/md-pitfall-selftest",
   "/agent/expression-suggest-selftest",
   "/reference/status",
+  "/reference/manifest",
+  "/reference/coverage",
   "/reference/factions",
   "/reference/wares",
   "/reference/sectors",
@@ -1644,9 +1647,14 @@ function runSchemaValidation(files: Record<string, string>, modId: string): Serv
  * check would wrongly accept it — the classic path-traversal edge case).
  */
 function isPathWithin(child: string, root: string): boolean {
-  const rootAbs = path.resolve(root);
-  const childAbs = path.resolve(child);
-  return childAbs === rootAbs || childAbs.startsWith(rootAbs + path.sep);
+  return isSameOrDescendant(child, root);
+}
+
+/** Resolve a strict child path and reject traversal or junction escape. */
+function resolvePathInside(root: string, ...segments: string[]): string | null {
+  const candidate = path.resolve(root, ...segments.map(segment => String(segment)));
+  if (path.resolve(root) === candidate || !isPathWithin(candidate, root)) return null;
+  return candidate;
 }
 
 /** Resolve an XML patch target's base content from loose files or packed archives. */
@@ -2971,11 +2979,39 @@ app.get("/api/schema/library", (req, res) => {
   return res.json(schemaLibrary);
 });
 
+function directoryRoleIssues(resolved: ResolvedXsdConfig) {
+  return validateDirectoryRoles({
+    x4GamePath: resolved.x4GamePath,
+    x4ReferenceRoot: resolved.x4ReferenceRoot,
+    modWorkspacePath: resolved.modWorkspacePath,
+    filesystemPath: resolved.filesystemPath,
+  });
+}
+
+/** Block writes through an old unsafe config even if it predates save-time validation. */
+function rejectUnsafeDevelopmentWrite(res: express.Response, resolved: ResolvedXsdConfig, fields: DirectoryField[]): boolean {
+  const issue = directoryRoleIssues(resolved).find(candidate => fields.includes(candidate.field));
+  if (!issue) return false;
+  res.status(409).json({
+    success: false,
+    code: issue.code,
+    error: `Write blocked by directory safety: ${issue.message}`,
+    issue,
+  });
+  return true;
+}
+
 app.get("/api/schema/config", (req, res) => {
   try {
+    const resolved = resolveXsdConfig();
+    const issues = directoryRoleIssues(resolved);
     return res.json({
       config: readXsdConfig(),
-      resolved: resolveXsdConfig(),
+      resolved,
+      directorySafety: {
+        safe: issues.length === 0,
+        issues,
+      },
       schema_counts: {
         events: schemaLibrary.events.length,
         conditions: schemaLibrary.conditions.length,
@@ -2993,7 +3029,7 @@ app.get("/api/schema/config", (req, res) => {
 app.post("/api/schema/config", (req, res) => {
   try {
     const schemaDir = String(req.body?.schemaDir || '').trim();
-    const gamePath = String(req.body?.x4GamePath || '').trim();
+    const gamePath = req.body?.x4GamePath !== undefined ? String(req.body.x4GamePath || '').trim() : undefined;
     const modWorkspacePath = req.body?.modWorkspacePath !== undefined ? String(req.body.modWorkspacePath || '').trim() : undefined;
     const filesystemPath = req.body?.filesystemPath !== undefined ? String(req.body.filesystemPath || '').trim() : undefined;
     const referenceRoot = req.body?.x4ReferenceRoot !== undefined ? String(req.body.x4ReferenceRoot || '').trim() : undefined;
@@ -3005,16 +3041,27 @@ app.post("/api/schema/config", (req, res) => {
     // save, blocking the other paths — the exact foot-gun this removes.)
     const nextConfig = {
       ...readXsdConfig(),
-      ...(gamePath ? { x4GamePath: gamePath } : {}),
+      ...(gamePath !== undefined ? { x4GamePath: gamePath } : {}),
       ...(modWorkspacePath !== undefined ? { modWorkspacePath } : {}),
       ...(filesystemPath !== undefined ? { filesystemPath } : {}),
       ...(referenceRoot !== undefined ? { x4ReferenceRoot: referenceRoot } : {}),
       xsdSchemaPath: schemaDir,
       schemaFiles: ['md.xsd', 'common.xsd']
     };
-    writeXsdConfig(nextConfig);
     const resolved = resolveXsdConfig(nextConfig);
+    const directoryIssues = directoryRoleIssues(resolved);
+    if (directoryIssues.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: directoryIssues[0].message,
+        code: directoryIssues[0].code,
+        issues: directoryIssues,
+        resolved,
+      });
+    }
+    writeXsdConfig(nextConfig);
     const library = reloadSchemaLibrary();
+    const manifest = startCanonicalReferenceManifest(true);
     const schemaComplete = !!(resolved.mdExists && resolved.commonExists);
     const schemaWarning = schemaComplete
       ? null
@@ -3024,6 +3071,7 @@ app.post("/api/schema/config", (req, res) => {
     return res.json({
       success: true,
       saved: true,
+      directorySafety: { safe: true, issues: [] },
       schemaComplete,
       schemaWarning,
       config: nextConfig,
@@ -3035,7 +3083,8 @@ app.post("/api/schema/config", (req, res) => {
         control_flow: library.controlFlow.length,
       },
       loaded: library.loaded,
-      error: library.error
+      error: library.error,
+      manifest,
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || "Failed to update schema config." });
@@ -3114,7 +3163,6 @@ app.get("/api/fs/read", (req, res) => {
     if (!rootPath) {
       return res.status(400).json({ error: "No filesystem/workspace path configured." });
     }
-    
     const safePath = path.resolve(rootPath, relativePath);
     if (!isPathWithin(safePath, rootPath)) {
       return res.status(403).json({ error: "Forbidden: Directory traversal detected." });
@@ -3210,6 +3258,7 @@ app.post("/api/fs/write", (req, res) => {
     if (!rootPath) {
       return res.status(400).json({ error: "No filesystem/workspace path configured." });
     }
+    if (rejectUnsafeDevelopmentWrite(res, resolved, [resolved.filesystemPath ? 'filesystemPath' : 'modWorkspacePath'])) return;
     
     const safePath = path.resolve(rootPath, relativePath);
     if (!isPathWithin(safePath, rootPath)) {
@@ -3241,6 +3290,7 @@ app.post("/api/fs/create", (req, res) => {
     if (!rootPath) {
       return res.status(400).json({ error: "No filesystem/workspace path configured." });
     }
+    if (rejectUnsafeDevelopmentWrite(res, resolved, [resolved.filesystemPath ? 'filesystemPath' : 'modWorkspacePath'])) return;
     
     const safePath = path.resolve(rootPath, cleanName);
     if (!isPathWithin(safePath, rootPath)) {
@@ -3279,7 +3329,8 @@ app.get("/api/fs/snapshots", (req, res) => {
     if (!modWorkspacePath) {
       return res.json([]);
     }
-    const modDir = path.join(modWorkspacePath, modId);
+    const modDir = resolvePathInside(modWorkspacePath, modId);
+    if (!modDir) return res.status(403).json({ error: "Forbidden: modId escapes the Mod Workspace Folder." });
     
     // Read the unique mod ID from .studio-mod-id in staging mod folder
     const modIdFile = path.join(modDir, '.studio-mod-id');
@@ -3331,7 +3382,9 @@ app.post("/api/fs/snapshot", (req, res) => {
     if (!modWorkspacePath) {
       return res.status(400).json({ error: "No mod workspace path configured." });
     }
-    const modDir = path.join(modWorkspacePath, modId);
+    if (rejectUnsafeDevelopmentWrite(res, resolved, ['modWorkspacePath'])) return;
+    const modDir = resolvePathInside(modWorkspacePath, modId);
+    if (!modDir) return res.status(403).json({ error: "Forbidden: modId escapes the Mod Workspace Folder." });
     if (!fs.existsSync(modDir)) {
       fs.mkdirSync(modDir, { recursive: true });
     }
@@ -3389,7 +3442,10 @@ app.post("/api/fs/restore-snapshot", (req, res) => {
     if (!modWorkspacePath) {
       return res.status(400).json({ error: "No mod workspace path configured." });
     }
-    const snapFile = path.join(modWorkspacePath, modId, '.snapshots', snapshotName);
+    if (rejectUnsafeDevelopmentWrite(res, resolved, ['modWorkspacePath'])) return;
+    const snapDir = resolvePathInside(modWorkspacePath, modId, '.snapshots');
+    const snapFile = snapDir ? resolvePathInside(snapDir, snapshotName) : null;
+    if (!snapFile) return res.status(403).json({ error: "Forbidden: snapshot path escapes the Mod Workspace Folder." });
     if (!fs.existsSync(snapFile)) {
       return res.status(404).json({ error: "Snapshot not found." });
     }
@@ -3419,7 +3475,10 @@ app.post("/api/fs/delete-snapshot", (req, res) => {
     if (!modWorkspacePath) {
       return res.status(400).json({ error: "No mod workspace path configured." });
     }
-    const snapFile = path.join(modWorkspacePath, modId, '.snapshots', snapshotName);
+    if (rejectUnsafeDevelopmentWrite(res, resolved, ['modWorkspacePath'])) return;
+    const snapDir = resolvePathInside(modWorkspacePath, modId, '.snapshots');
+    const snapFile = snapDir ? resolvePathInside(snapDir, snapshotName) : null;
+    if (!snapFile) return res.status(403).json({ error: "Forbidden: snapshot path escapes the Mod Workspace Folder." });
     if (fs.existsSync(snapFile)) {
       fs.unlinkSync(snapFile);
     }
@@ -3442,11 +3501,12 @@ app.post("/api/fs/delete-dir", (req, res) => {
     }
     const resolved = resolveXsdConfig();
     const roots = [resolved.filesystemPath, resolved.modWorkspacePath].filter((r): r is string => Boolean(r));
+    if (rejectUnsafeDevelopmentWrite(res, resolved, ['filesystemPath', 'modWorkspacePath'])) return;
     const removed: string[] = [];
     for (const root of roots) {
       const rootAbs = path.resolve(root);
       const abs = path.resolve(rootAbs, normalized);
-      if (abs === rootAbs || !abs.startsWith(rootAbs + path.sep)) continue; // never delete a root
+      if (abs === rootAbs || !isPathWithin(abs, rootAbs)) continue; // never delete a root or follow a junction outside it
       if (fs.existsSync(abs) && fs.statSync(abs).isDirectory()) {
         fs.rmSync(abs, { recursive: true, force: true });
         removed.push(abs);
@@ -5760,6 +5820,7 @@ const SELFTESTS: Record<string, () => unknown> = {
   "bug-report-selftest": runBugReportSelftest,
   "data-dir-selftest": runDataDirSelftest,
   "game-detect-selftest": runGameDetectSelftest,
+  "path-roles-selftest": runPathRolesSelftest,
   "ttfm-selftest": runTtfmSelftest,
   "action-census-selftest": runActionCensusSelftest,
   "ai-spend-meter-selftest": runAiSpendMeterSelftest,
@@ -7288,6 +7349,7 @@ app.post("/api/agent/deploy", (req, res) => {
         error: "Neither Mod Workspace Folder nor X4 Game Installation are configured."
       });
     }
+    if (modWorkspacePath && rejectUnsafeDevelopmentWrite(res, resolved, ['modWorkspacePath'])) return;
 
     const modId = effectiveModId(ws);
 
@@ -7410,6 +7472,13 @@ app.post("/api/agent/deploy-verify", (req, res) => {
     if (!x4GamePath) {
       check('config', 'Paths configured', 'fail', 'X4 Game Installation path not configured.');
       return res.status(400).json(failWith('config', { error: 'X4 Game Installation path not configured.' }));
+    }
+    if (modWorkspacePath) {
+      const issue = directoryRoleIssues(resolved).find(candidate => candidate.field === 'modWorkspacePath');
+      if (issue) {
+        check('config', 'Paths configured', 'fail', issue.message);
+        return res.status(409).json(failWith('config', { error: `Write blocked by directory safety: ${issue.message}`, code: issue.code, issue }));
+      }
     }
     check('config', 'Paths configured', 'pass', `game=${x4GamePath}${modWorkspacePath ? ' · staging=' + modWorkspacePath : ''}`);
 
@@ -7714,6 +7783,7 @@ app.post("/api/agent/package/release", (req, res) => {
       });
     }
     const resolved = resolveXsdConfig();
+    if (resolved.modWorkspacePath && rejectUnsafeDevelopmentWrite(res, resolved, ['modWorkspacePath'])) return;
     const baseDir = resolved.modWorkspacePath || process.cwd();
     const releasesDir = path.join(baseDir, "releases");
     if (!fs.existsSync(releasesDir)) fs.mkdirSync(releasesDir, { recursive: true });

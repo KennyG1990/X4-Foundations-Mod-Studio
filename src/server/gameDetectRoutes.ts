@@ -26,6 +26,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { execFileSync } from "node:child_process";
 import { parseLibraryFolders, proposeSetup, X4_STEAM_APPID, X4_STEAM_REL_DIR } from "../lib/gameDetect";
+import { inspectGameInstall } from "../lib/pathRoles";
 import { dataPath } from "../lib/dataDir";
 import { findCatDatArchives, parseCat, readEntryText } from "../lib/x4CatDat";
 
@@ -66,7 +67,7 @@ function findSteamX4(): { gameDir: string; source: string } | null {
       try {
         if (!fs.existsSync(path.join(lib, "steamapps", `appmanifest_${X4_STEAM_APPID}.acf`))) continue;
         const gameDir = path.join(lib, ...X4_STEAM_REL_DIR.split("/"));
-        if (fs.existsSync(gameDir)) return { gameDir, source: "steam" };
+        if (inspectGameInstall(gameDir).valid) return { gameDir, source: "steam" };
       } catch { /* unreadable library → skip */ }
     }
   }
@@ -79,7 +80,7 @@ function findGogX4(): { gameDir: string; source: string } | null {
       const name = regValue(key.replace(/^HKEY_LOCAL_MACHINE/i, "HKLM"), "gameName");
       if (!/x4/i.test(name)) continue;
       const dir = regValue(key.replace(/^HKEY_LOCAL_MACHINE/i, "HKLM"), "path");
-      if (dir && fs.existsSync(dir)) return { gameDir: dir, source: "gog" };
+      if (dir && inspectGameInstall(dir).valid) return { gameDir: dir, source: "gog" };
     } catch { /* skip unreadable entries */ }
   }
   return null;

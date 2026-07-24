@@ -25,6 +25,9 @@ const E2E_BASE_URL = process.env.PLAYWRIGHT_BASE_URL || `http://127.0.0.1:${E2E_
 const ephemeralEnv = {
   STUDIO_API_TOKEN: E2E_TOKEN,
   API_PORT: String(E2E_API_PORT),
+  // The e2e stack already starts a standalone Vite process below. Keep server.ts
+  // API-only so it never starts a second embedded Vite/HMR server (port 24678).
+  API_ONLY: 'true',
   X4_STATE_DIR: E2E_STATE_DIR,
   // Deterministic pages: no HMR socket, no watcher-triggered reloads mid-spec.
   DISABLE_HMR: 'true',

@@ -1,5 +1,10 @@
 {
   "_comment": "Plain-English release notes for the CHANGELOG (B60). ONE human step per release: add a version key with a few user-facing bullets — what a modder can now DO or what got better. Everything else (version list, dates, ordering, the shipped CHANGELOG.md) is generated automatically by `npm run changelog`. Versions with no entry here fall back to a cleaned-up commit subject.",
+  "0.0.33": [
+    "Point Forge at one unpacked X4 root and it now discovers, classifies, and caches the full corpus — base game, official DLCs, schemas, scripts, reference data, examples, and assets — while the settings screen shows live coverage instead of asking you to wire separate schema folders.",
+    "Autocomplete and validation now follow X4's ordered XSD grammar and typed script-expression chains, including project-inferred variables, inherited properties, legal next children, canonical ids, hover documentation, and did-you-mean warnings.",
+    "Mod XML patches are now applied read-only to the effective base-plus-DLC document before validation, so dead or overly broad selectors and illegal post-patch structures are caught. The corpus setting also links to X4 Unpacker by z1ppeh as an optional community tool for creating an unpacked corpus."
+  ],
   "0.0.32": [
     "XML authoring now has schema-aware completion: child elements, attributes, enum values, and canonical faction, ware, sector, and macro ids come directly from X4's unpacked XSDs and reference data.",
     "MD and AI-script expressions now complete and document real datatype properties and functions — including chained results such as faction.player.relationto — with hover signatures and return types.",

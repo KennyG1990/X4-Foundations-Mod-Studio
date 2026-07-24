@@ -24,9 +24,11 @@ import fs from "fs";
 import path from "path";
 import { compareModCopies, type DriftReport, type FileFingerprint } from "../lib/modDrift";
 import { resolveXsdConfig } from "../lib/xsdParser";
-import { discoverSchemaRegistry, expandIncludeChain, schemaFilesSignature } from "../lib/schemaRegistry";
-import { validateRoutedFiles, type RoutedFileResult } from "../lib/schemaRouting";
+import { discoverSchemaRegistry, expandIncludeChain, schemaFilesSignature, type SchemaRegistry } from "../lib/schemaRegistry";
+import { sniffRootElement, validateRoutedFiles, type RoutedFileResult } from "../lib/schemaRouting";
 import { buildSchemaIndex, validateXmlAgainstSchema, type XsdDiagnostic } from "../lib/xsdValidate";
+import { simulateXmlDiff, type DiffFinding } from "../lib/diffSimulator";
+import { resolveEffectiveReferenceDocument, type OverlayFinding, type OverlaySource } from "../lib/referenceOverlay";
 import {
   classifyPath,
   indexCueReferences,
@@ -45,6 +47,7 @@ import { buildModTextIndex, lintTextReferences, lintTranslationCoverage, type Te
 import { lintFactionRelations, type FactionLintFinding } from "../lib/factionsLint";
 import { lintGodMacros, type GodLintFinding } from "../lib/godLint";
 import { lintReferenceLiterals, type ReferenceLiteralFinding } from "../lib/referenceLint";
+import { buildProjectSymbols, type ProjectVariableSymbol } from "../lib/projectSymbols";
 import { getAiOrderParamTypes, getAiSchemaIndex, getScriptPropertyIndex } from "./validationRoutes";
 
 /**
@@ -95,6 +98,8 @@ export interface ProjectValidationResult {
     factionRelationWarnings: number;
     godMacroWarnings: number;
     referenceWarnings: number;
+    diffErrors: number;
+    diffWarnings: number;
   };
   structure: ReturnType<typeof validateProjectStructure>;
   cueIndex: ReturnType<typeof indexCueReferences>;
@@ -108,6 +113,7 @@ export interface ProjectValidationResult {
   };
   aiscript: { findings: AiscriptLintFinding[] };
   scriptProperties: { available: boolean; findings: ScriptPropertyFinding[] };
+  symbols: { available: boolean; variables: ProjectVariableSymbol[] };
   pitfalls: { findings: MdPitfallFinding[] };
   /** B61: corpus-grounded content lint for jobs.xml (the game ships no jobs XSD). available:false
    *  when no vocabulary was injected (CLI / schema-less instances) — never a claimed-but-unrun check. */
@@ -126,6 +132,17 @@ export interface ProjectValidationResult {
   godMacros: { findings: GodLintFinding[] };
   /** Canonical explicit-literal checks, including Lua Get*Data("literal", ...) calls. */
   references: { available: boolean; findings: ReferenceLiteralFinding[] };
+  /** Read-only application of each project <diff> against base + dependency-ordered official DLCs. */
+  diffSimulation: {
+    files: Array<{
+      path: string;
+      available: boolean;
+      sources: OverlaySource[];
+      overlayFindings: OverlayFinding[];
+      findings: DiffFinding[];
+      postApplyFindings: XsdDiagnostic[];
+    }>;
+  };
 }
 
 /** Copy canonical sets and admit definitions owned by this project. Never mutate shared cache sets. */
@@ -167,9 +184,11 @@ export function runProjectValidation(
   const schemaFindings: XsdDiagnostic[] = [];
   let mdSchemaAvailable = false;
   let aiSchemaAvailable = false;
+  let mdIndexRef: ReturnType<typeof getSchemaIndex> | null = null;
   let aiIndexRef: ReturnType<typeof getAiSchemaIndex> = null;
   try {
     const mdIndex = getSchemaIndex();
+    mdIndexRef = mdIndex;
     mdSchemaAvailable = !!mdIndex.loaded && mdIndex.elements.size > 0;
     if (mdSchemaAvailable) {
       for (const f of project.files) {
@@ -197,6 +216,7 @@ export function runProjectValidation(
   // patches) to their real game schemas via the phase-1 registry. Degrades to an empty
   // route list on schema-less instances — never wrong-schema noise.
   let routed: RoutedFileResult[] = [];
+  let schemaRegistryRef: SchemaRegistry | null = null;
   try {
     const resolved = resolveXsdConfig();
     const referenceLibraries = path.join(resolved.x4ReferenceRoot, "libraries");
@@ -208,6 +228,7 @@ export function runProjectValidation(
           useReferenceSchemas ? { signature: schemaFilesSignature(referenceLibraries) } : undefined,
         )
       : null;
+    schemaRegistryRef = registry;
     routed = validateRoutedFiles(
       project.files.filter(f => typeof f.content === "string").map(f => ({ path: f.path, content: f.content as string })),
       registry,
@@ -215,6 +236,66 @@ export function runProjectValidation(
     );
     for (const r of routed) schemaFindings.push(...r.findings);
   } catch { /* routing degrades silently; md/aiscripts layers already reported */ }
+
+  // Apply mod-owned <diff> files to the effective official document in memory, then
+  // validate the result. This catches selectors that are syntactically valid but dead,
+  // broad selectors that unexpectedly hit many nodes, and structurally illegal outcomes.
+  const diffSimulation: ProjectValidationResult['diffSimulation']['files'] = [];
+  try {
+    const resolved = resolveXsdConfig();
+    for (const file of project.files) {
+      if (typeof file.content !== 'string' || sniffRootElement(file.content) !== 'diff') continue;
+      const relativePath = file.path.replace(/\\/g, '/').replace(/^\.\//, '');
+      const effective = resolveEffectiveReferenceDocument(resolved.x4ReferenceRoot, relativePath);
+      const entry: ProjectValidationResult['diffSimulation']['files'][number] = {
+        path: relativePath,
+        available: effective.available,
+        sources: effective.sources,
+        overlayFindings: effective.findings,
+        findings: [],
+        postApplyFindings: [],
+      };
+      if (effective.available && effective.content !== undefined) {
+        const simulation = simulateXmlDiff(effective.content, file.content);
+        entry.findings = simulation.findings;
+        if (simulation.ok) {
+          const kind = file.kind || classifyPath(relativePath);
+          const validateEffective = (content: string): XsdDiagnostic[] => {
+            if (kind === 'md' && mdIndexRef?.loaded) {
+              return validateXmlAgainstSchema(content, mdIndexRef, {
+                filePath: relativePath, domain: 'mission_director', reportUnknownElements: true,
+                references, strictStructure: true,
+              });
+            }
+            if (kind === 'aiscript' && aiIndexRef?.loaded) {
+              return validateXmlAgainstSchema(content, aiIndexRef, {
+                filePath: relativePath, domain: 'ai_scripts', reportUnknownElements: true,
+                references, strictStructure: true,
+              });
+            }
+            if (schemaRegistryRef) {
+              return validateRoutedFiles([{ path: relativePath, content }], schemaRegistryRef, {
+                references, strictStructure: true,
+              }).flatMap(result => result.findings);
+            }
+            return [];
+          };
+          const diagnosticKey = (finding: XsdDiagnostic) => [
+            finding.severity, finding.domain, finding.code, finding.sourceRef, finding.message,
+          ].join('|');
+          const baseline = new Set(validateEffective(effective.content).map(diagnosticKey));
+          entry.postApplyFindings = validateEffective(simulation.content)
+            .filter(finding => !baseline.has(diagnosticKey(finding)));
+        }
+      } else {
+        entry.findings.push({
+          severity: 'warning', code: 'DIFF_SELECTOR_ZERO',
+          message: `No canonical base document exists for ${relativePath}; selector application could not be proven.`,
+        });
+      }
+      diffSimulation.push(entry);
+    }
+  } catch { /* unavailable corpus/root degrades honestly through an empty layer */ }
 
   // MD/AI files intentionally pass through the dedicated indexes and the general
   // registry router. Collapse identical diagnostics at this shared boundary so a
@@ -239,11 +320,15 @@ export function runProjectValidation(
 
   const scriptPropertyFindings: ScriptPropertyFinding[] = [];
   const spIndex = getScriptPropertyIndex();
+  const projectSymbols = spIndex ? buildProjectSymbols(project.files, spIndex) : null;
   if (spIndex) {
     for (const f of project.files) {
       const k = f.kind || classifyPath(f.path);
       if ((k === "md" || k === "aiscript") && typeof f.content === "string") {
-        scriptPropertyFindings.push(...lintScriptPropertyChains(f.content, spIndex, { filePath: f.path }));
+        scriptPropertyFindings.push(...lintScriptPropertyChains(f.content, spIndex, {
+          filePath: f.path,
+          variableTypes: projectSymbols?.variableTypesFor(f.path),
+        }));
       }
     }
   }
@@ -329,9 +414,15 @@ export function runProjectValidation(
 
   const schemaErrors = schemaFindings.filter(d => d.severity === "error").length;
   const aiscriptErrors = aiscriptLint.filter(d => d.severity === "error").length;
+  const diffErrors = diffSimulation.reduce((count, file) => count
+    + file.findings.filter(finding => finding.severity === 'error').length
+    + file.postApplyFindings.filter(finding => finding.severity === 'error').length, 0);
+  const diffWarnings = diffSimulation.reduce((count, file) => count
+    + file.findings.filter(finding => finding.severity === 'warning').length
+    + file.postApplyFindings.filter(finding => finding.severity === 'warning').length, 0);
   return {
     ok: structuralErrors === 0 && cueIndex.unresolved.length === 0 && crossFile.ok
-      && schemaErrors === 0 && aiscriptErrors === 0,
+      && schemaErrors === 0 && aiscriptErrors === 0 && diffErrors === 0,
     summary: {
       files: project.files.length,
       structuralErrors,
@@ -354,6 +445,8 @@ export function runProjectValidation(
       factionRelationWarnings: factionFindings.length,
       godMacroWarnings: godFindings.length,
       referenceWarnings: referenceFindings.length,
+      diffErrors,
+      diffWarnings,
     },
     structure,
     cueIndex,
@@ -366,6 +459,7 @@ export function runProjectValidation(
     },
     aiscript: { findings: aiscriptLint },
     scriptProperties: { available: !!spIndex, findings: scriptPropertyFindings },
+    symbols: { available: !!projectSymbols, variables: projectSymbols?.variables || [] },
     pitfalls: { findings: pitfallFindings },
     jobsLint: { available: !!jobsVocab, findings: jobsLintFindings },
     waresLint: { available: !!waresVocab, findings: waresLintFindings },
@@ -375,6 +469,7 @@ export function runProjectValidation(
     factionRelations: { findings: factionFindings },
     godMacros: { findings: godFindings },
     references: { available: !!references, findings: referenceFindings },
+    diffSimulation: { files: diffSimulation },
   };
 }
 
@@ -446,6 +541,14 @@ export function flattenProjectValidation(result: ProjectValidationResult): FlatP
   }
   for (const f of result.references.findings) {
     out.push({ severity: f.severity, code: f.code, filePath: f.filePath, sourceRef: f.id, line: f.line, message: f.message });
+  }
+  for (const file of result.diffSimulation.files) {
+    for (const finding of file.findings) {
+      out.push({ severity: finding.severity, code: finding.code, filePath: file.path, sourceRef: finding.selector, line: finding.line, message: finding.message });
+    }
+    for (const finding of file.postApplyFindings) {
+      out.push({ severity: finding.severity, code: `post-apply.${finding.code}`, filePath: file.path, sourceRef: finding.sourceRef, line: finding.line, message: `Post-apply: ${finding.message}` });
+    }
   }
   // De-dupe identical findings that reach the flat view via two layers (the cross-file
   // validator re-reports structure issues under its own code — same message, same file).

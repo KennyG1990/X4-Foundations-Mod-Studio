@@ -15,10 +15,48 @@ import {
   AlertTriangle,
   Save,
   Sparkles,
+  ExternalLink,
+  Search,
+  Loader2,
+  Users,
   Settings as SettingsIcon
 } from 'lucide-react';
 
 type AiTier = 'off' | 'explain' | 'assist' | 'cobuild';
+
+interface CoverageRow { key: string; count: number }
+interface CorpusCoverage {
+  generation: string;
+  totalFiles: number;
+  totalBytes: number;
+  byRole: CoverageRow[];
+  byConsumer: CoverageRow[];
+}
+interface CorpusScanStatus {
+  state: 'unavailable' | 'idle' | 'scanning' | 'ready' | 'stale' | 'error';
+  scanning?: { files: number; bytes: number; startedAt: string };
+  error?: string;
+}
+
+interface DirectoryPathIssue {
+  field: 'x4GamePath' | 'modWorkspacePath' | 'filesystemPath';
+  code: string;
+  message: string;
+}
+
+interface DetectResult {
+  found: boolean;
+  error?: string;
+  source?: string;
+  gameDir?: string;
+  hint?: string;
+  proposal?: {
+    x4GamePath: string;
+    filesystemPath: string;
+    modWorkspacePath: string;
+    xsdSchemaPath: string;
+  } | null;
+}
 
 interface DirectorySettingsModalProps {
   isOpen: boolean;
@@ -49,15 +87,17 @@ function DirectoryRow({
   icon,
   title,
   tooltip,
+  testId,
   children
 }: {
   icon: React.ReactNode;
   title: string;
   tooltip: string;
+  testId?: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className="p-3 rounded-lg bg-white/[0.02] border border-white/5 space-y-2">
+    <div data-testid={testId} className="p-3 rounded-lg bg-white/[0.02] border border-white/5 space-y-2">
       <div className="flex items-center gap-2">
         <span className="text-cyan-400">{icon}</span>
         <span className="text-[12px] font-mono font-bold text-white uppercase tracking-wide">{title}</span>
@@ -94,23 +134,89 @@ export default function DirectorySettingsModal({
   // B65-1: in-place schema recovery — harvest from the user's own install, and a teach panel.
   const [harvesting, setHarvesting] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [advancedSchemaOpen, setAdvancedSchemaOpen] = useState(false);
+  const [coverage, setCoverage] = useState<CorpusCoverage | null>(null);
+  const [corpusStatus, setCorpusStatus] = useState<CorpusScanStatus | null>(null);
+  const [coverageError, setCoverageError] = useState('');
+  const [coverageRefresh, setCoverageRefresh] = useState(0);
+  const [directoryIssues, setDirectoryIssues] = useState<DirectoryPathIssue[]>([]);
+  const [detection, setDetection] = useState<{ state: 'idle' | 'scanning' | 'found' | 'notfound' | 'error'; source?: string; message?: string }>({ state: 'idle' });
+
+  const detectGameInstall = React.useCallback(async (overwrite = false) => {
+    setDetection({ state: 'scanning' });
+    try {
+      const response = await fetch('/api/agent/detect-game');
+      const result: DetectResult = await response.json();
+      if (!response.ok) throw new Error(result.error || `Detection failed (${response.status}).`);
+      if (!result.found || !result.proposal) {
+        setDetection({ state: 'notfound', message: result.hint || 'No Steam or GOG X4 installation was found.' });
+        return;
+      }
+      const proposal = result.proposal;
+      setGamePath(current => overwrite || !current.trim() ? proposal.x4GamePath : current);
+      setWorkspaceInput(current => overwrite || !current.trim() ? proposal.modWorkspacePath : current);
+      setFilesystemInput(current => overwrite || !current.trim() ? proposal.filesystemPath : current);
+      setDirectoryIssues(current => current.filter(issue => !['x4GamePath', 'modWorkspacePath', 'filesystemPath'].includes(issue.field)));
+      setDetection({
+        state: 'found',
+        source: result.source,
+        message: `Found X4 via ${result.source === 'gog' ? 'GOG' : 'Steam'}. Review the isolated development paths, then save.`,
+      });
+    } catch (error: unknown) {
+      setDetection({ state: 'error', message: error instanceof Error ? error.message : 'Game detection failed.' });
+    }
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;
     (async () => {
       try {
-        const res = await fetch('/api/schema/config').then(r => r.json());
-        setGamePath(res.config?.x4GamePath || res.resolved?.x4GamePath || '');
-        setSchemaPath(res.config?.xsdSchemaPath || res.resolved?.schemaDir || '');
+        const response = await fetch('/api/schema/config');
+        const res = await response.json();
+        if (!response.ok) throw new Error(res.error || `Directory config request failed (${response.status}).`);
+        const configuredGamePath = res.config?.x4GamePath || res.resolved?.x4GamePath || '';
+        setGamePath(configuredGamePath);
+        setSchemaPath(res.config?.xsdSchemaPath || '');
         setReferenceRoot(res.config?.x4ReferenceRoot || res.resolved?.x4ReferenceRoot || '');
         setWorkspaceInput(res.config?.modWorkspacePath || res.resolved?.modWorkspacePath || '');
         setFilesystemInput(res.config?.filesystemPath || res.resolved?.filesystemPath || '');
         setResolved(res.resolved || null);
-      } catch {
-        setStatus({ type: 'error', msg: 'Could not load directory config from the server.' });
+        setDirectoryIssues(res.directorySafety?.issues || []);
+        if (!configuredGamePath) void detectGameInstall(false);
+      } catch (error: any) {
+        setStatus({ type: 'error', msg: `Could not load directory config from the server: ${error?.message || 'request failed'}` });
       }
     })();
-  }, [isOpen]);
+  }, [isOpen, detectGameInstall]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      try {
+        const response = await fetch('/api/reference/coverage');
+        const body = await response.json();
+        if (!response.ok && response.status !== 202) {
+          throw new Error(body.error || body.status?.error || `Coverage request failed (${response.status}).`);
+        }
+        if (stopped) return;
+        setCorpusStatus(body.status || null);
+        setCoverage(body.coverage || null);
+        setCoverageError('');
+        if (response.status === 202 || body.status?.state === 'scanning' || body.status?.state === 'idle') {
+          timer = setTimeout(poll, 1500);
+        }
+      } catch (error: any) {
+        if (!stopped) setCoverageError(error?.message || 'Coverage is unavailable.');
+      }
+    };
+    void poll();
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [isOpen, coverageRefresh]);
 
   const saveServerPaths = async (schemaDirOverride?: string) => {
     // schemaDirOverride: harvest sets schemaPath via setState (async), so it passes the new
@@ -118,7 +224,7 @@ export default function DirectorySettingsModal({
     const schemaDir = (schemaDirOverride ?? schemaPath).trim();
     setStatus({ type: 'saving', msg: '' });
     try {
-      const res = await fetch('/api/schema/config', {
+      const response = await fetch('/api/schema/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -128,7 +234,12 @@ export default function DirectorySettingsModal({
           modWorkspacePath: workspaceInput.trim(),
           filesystemPath: filesystemInput.trim()
         })
-      }).then(r => r.json());
+      });
+      const res = await response.json();
+      if (!response.ok) {
+        setDirectoryIssues(res.issues || []);
+        throw new Error(res.error || `Save failed (${response.status}).`);
+      }
       if (res.error) {
         setResolved(res.resolved || resolved);
         setStatus({ type: 'error', msg: res.error });
@@ -136,8 +247,11 @@ export default function DirectorySettingsModal({
         // Paths always save now (schema no longer gates the save). Reflect that honestly:
         // green when the schema also loaded, amber "saved, schema pending" when it didn't.
         setResolved(res.resolved || null);
+        setDirectoryIssues(res.directorySafety?.issues || []);
         setModWorkspacePath(workspaceInput.trim());
         setFilesystemPath(filesystemInput.trim());
+        setCorpusStatus(res.manifest || null);
+        setCoverageRefresh(value => value + 1);
         const events = res.schema_counts?.events ?? 0;
         const conditions = res.schema_counts?.conditions ?? 0;
         const actions = res.schema_counts?.actions ?? 0;
@@ -197,6 +311,10 @@ export default function DirectorySettingsModal({
 
   const schemaOk = resolved?.mdExists && resolved?.commonExists;
   const showGuide = guideOpen || (resolved && !schemaOk); // auto-open the teach panel when stuck
+  const showAdvancedSchema = advancedSchemaOpen || Boolean(resolved && !schemaOk && !resolved.x4ReferenceExists);
+  const count = (rows: CoverageRow[] | undefined, key: string) => rows?.find(row => row.key === key)?.count || 0;
+  const number = (value: number) => new Intl.NumberFormat().format(value);
+  const issuesFor = (field: DirectoryPathIssue['field']) => directoryIssues.filter(issue => issue.field === field);
 
   return (
     <div
@@ -226,52 +344,72 @@ export default function DirectorySettingsModal({
           <DirectoryRow
             icon={<HardDrive className="w-4 h-4" />}
             title="Mod Workspace Folder"
-            tooltip="Your sandbox (e.g. a 'My X4 Mods' folder) where the studio writes compiled mods. Each mod becomes its own <modid>/ subfolder here, with content.xml and a .snapshots/ version history inside it."
+            tooltip="Your isolated development sandbox where Forge writes editable mod copies, snapshots, and releases. Never use the installed game's extensions folder or the unpacked corpus. Git can protect history inside this workspace, but it does not replace this boundary."
+            testId="mod-workspace-settings"
           >
             <input
               type="text"
               value={workspaceInput}
-              onChange={e => setWorkspaceInput(e.target.value)}
+              onChange={e => { setWorkspaceInput(e.target.value); setDirectoryIssues(current => current.filter(issue => issue.field !== 'modWorkspacePath')); }}
               placeholder="e.g. C:\Users\you\Documents\X4ForgeMods"
               className="w-full px-2 py-1.5 rounded bg-[#0F1115] border border-white/10 text-[11px] font-mono text-slate-300 focus:outline-none focus:border-cyan-500"
             />
+            <p className="text-[9.5px] leading-relaxed text-slate-500">Forge develops and snapshots mod copies here. The live game is updated only through an explicit Deploy operation.</p>
+            {issuesFor('modWorkspacePath').map(issue => <div key={issue.code} className="text-[10px] font-mono text-red-300 flex items-start gap-1"><AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />{issue.message}</div>)}
           </DirectoryRow>
 
           {/* 1b. Filesystem folder */}
           <DirectoryRow
             icon={<FolderOpen className="w-4 h-4" />}
             title="Filesystem Folder"
-            tooltip="The directory shown in the left-hand 'Filesystem' explorer sidebar. Used to browse and edit files. Defaults to your Mod Workspace folder if not configured."
+            tooltip="The editable directory shown in Forge's Filesystem explorer. Leave blank to use the isolated Mod Workspace folder. Protected game and corpus trees cannot be used as editable roots."
+            testId="filesystem-settings"
           >
             <input
               type="text"
               value={filesystemInput}
-              onChange={e => setFilesystemInput(e.target.value)}
-              placeholder="e.g. C:\Program Files (x86)\Steam\steamapps\common\X4 Foundations\extensions"
+              onChange={e => { setFilesystemInput(e.target.value); setDirectoryIssues(current => current.filter(issue => issue.field !== 'filesystemPath')); }}
+              placeholder="Optional; defaults to the Mod Workspace folder"
               className="w-full px-2 py-1.5 rounded bg-[#0F1115] border border-white/10 text-[11px] font-mono text-slate-300 focus:outline-none focus:border-cyan-500"
             />
+            {issuesFor('filesystemPath').map(issue => <div key={issue.code} className="text-[10px] font-mono text-red-300 flex items-start gap-1"><AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />{issue.message}</div>)}
           </DirectoryRow>
 
           {/* 2. X4 Game installation (server path) */}
           <DirectoryRow
             icon={<Gamepad2 className="w-4 h-4" />}
             title="X4 Game Installation"
-            tooltip="The root folder of your X4 Foundations install (the folder containing the game .exe and the 'extensions' directory). Used to locate the game's reference files and schemas."
+            tooltip="The installed X4 Foundations root containing X4.exe. Forge reads this for runtime discovery and writes to its extensions folder only during an explicit Deploy. Steam and GOG installs can be detected automatically."
+            testId="game-install-settings"
           >
             <input
               type="text"
               value={gamePath}
-              onChange={e => setGamePath(e.target.value)}
+              onChange={e => { setGamePath(e.target.value); setDirectoryIssues(current => current.filter(issue => issue.field !== 'x4GamePath')); setDetection({ state: 'idle' }); }}
               placeholder="e.g. C:\Program Files (x86)\Steam\steamapps\common\X4 Foundations"
               className="w-full px-2 py-1.5 rounded bg-[#0F1115] border border-white/10 text-[11px] font-mono text-slate-300 focus:outline-none focus:border-cyan-500"
             />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void detectGameInstall(true)}
+                disabled={detection.state === 'scanning'}
+                className="inline-flex items-center gap-1 rounded border border-cyan-500/30 px-2 py-1 text-[10px] font-mono font-semibold text-cyan-300 hover:border-cyan-400 disabled:opacity-50"
+              >
+                {detection.state === 'scanning' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
+                {detection.state === 'scanning' ? 'Detecting…' : 'Detect X4 installation'}
+              </button>
+              {detection.message && <span className={`text-[9.5px] ${detection.state === 'found' ? 'text-emerald-300' : 'text-amber-300'}`}>{detection.message}</span>}
+            </div>
+            {issuesFor('x4GamePath').map(issue => <div key={issue.code} className="text-[10px] font-mono text-red-300 flex items-start gap-1"><AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />{issue.message}</div>)}
           </DirectoryRow>
 
-          {/* 2b. Canonical loose/unpacked reference corpus */}
+          {/* 2b. One read-only source for canonical data, schemas, and examples. */}
           <DirectoryRow
             icon={<Database className="w-4 h-4" />}
-            title="X4 Unpacked Reference Corpus"
-            tooltip="A read-only unpacked X4 root containing libraries/, maps/, t/, and extensions/ego_dlc_*. Powers canonical faction, ware, sector, macro, and script-property APIs plus unknown-ID validation. Forge never writes here."
+            title="X4 Unpacked Game Corpus"
+            tooltip="The root of an unpacked X4 installation. Forge discovers its schemas, canonical base/DLC values, scripts, localization, and assets once, caches a read-only index outside this folder, and reports exactly what each validation layer consumes. Forge never writes here."
+            testId="x4-corpus-settings"
           >
             <input
               type="text"
@@ -280,28 +418,83 @@ export default function DirectorySettingsModal({
               placeholder="e.g. D:\X4 unpacked 9.00"
               className="w-full px-2 py-1.5 rounded bg-[#0F1115] border border-white/10 text-[11px] font-mono text-slate-300 focus:outline-none focus:border-cyan-500"
             />
+
+            <div className="rounded border border-cyan-500/20 bg-cyan-500/[0.04] p-2 text-[10px] leading-relaxed text-slate-400">
+              <div className="flex items-center justify-between gap-3">
+                <span><span className="font-semibold text-slate-200">Need an unpacked copy?</span> X4 Unpacker provides GUI and CLI extraction of base-game and DLC catalogues with patch ordering.</span>
+                <a
+                  href="https://www.nexusmods.com/x4foundations/mods/2142?tab=description"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="shrink-0 inline-flex items-center gap-1 rounded border border-cyan-500/30 px-2 py-1 font-mono font-semibold text-cyan-300 hover:border-cyan-400 hover:text-cyan-200"
+                  title="Open X4 Unpacker on Nexus Mods"
+                >
+                  Find X4 Unpacker <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+              <div className="mt-1 text-[9px] text-slate-500">Created by <span className="font-semibold text-slate-300">z1ppeh</span>. Unofficial community utility; not affiliated with or endorsed by Egosoft. Forge does not download or run it.</div>
+            </div>
+
             {resolved && (
               <div className="mt-1 text-[10px] font-mono">
                 {resolved.x4ReferenceExists ? (
-                  <span className="text-emerald-400 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Reference root found — canonical read-only APIs and ID checks are on</span>
+                  <span className="text-emerald-400 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Corpus root found — read-only discovery and canonical ID checks are available</span>
                 ) : (
-                  <span className="text-amber-400 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Reference root not found — canonical ID checks are unavailable</span>
+                  <span className="text-amber-400 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Corpus root not found — schema and canonical ID coverage is degraded</span>
                 )}
+              </div>
+            )}
+
+            {corpusStatus?.state === 'scanning' && (
+              <div className="rounded border border-cyan-500/20 bg-black/20 p-2 text-[10px] font-mono text-cyan-300">
+                Discovering corpus… {number(corpusStatus.scanning?.files || 0)} files indexed. The last complete generation remains active.
+              </div>
+            )}
+            {coverage && (corpusStatus?.state === 'ready' || corpusStatus?.state === 'stale') && (
+              <div className="rounded border border-white/10 bg-black/20 p-2 text-[9.5px] font-mono text-slate-400 space-y-1">
+                <div className="flex flex-wrap gap-x-3 gap-y-1">
+                  <span className="text-emerald-300">{number(coverage.totalFiles)} discovered</span>
+                  <span>{number(count(coverage.byRole, 'grammar'))} grammar</span>
+                  <span>{number(count(coverage.byRole, 'canonical-data'))} canonical data</span>
+                  <span>{number(count(coverage.byRole, 'executable-example'))} code examples</span>
+                  <span>{number(count(coverage.byRole, 'asset'))} assets</span>
+                </div>
+                <div className="text-slate-500">
+                  Generation {coverage.generation.slice(0, 12)} · {number(count(coverage.byConsumer, 'unconsumed'))} files visible but not yet semantically consumed
+                  {corpusStatus?.state === 'stale' ? ' · serving last complete generation after refresh error' : ''}
+                </div>
+              </div>
+            )}
+            {(coverageError || corpusStatus?.state === 'error' || corpusStatus?.state === 'unavailable') && (
+              <div className="text-[10px] font-mono text-amber-400 flex items-start gap-1">
+                <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                <span>{coverageError || corpusStatus?.error || 'Corpus coverage is unavailable until a valid unpacked root is saved.'}</span>
               </div>
             )}
           </DirectoryRow>
 
-          {/* 3. XSD schema folder (server path) */}
-          <DirectoryRow
+          <button
+            type="button"
+            aria-expanded={showAdvancedSchema}
+            onClick={() => setAdvancedSchemaOpen(open => !open)}
+            className="w-full px-3 py-2 rounded-lg border border-white/5 bg-white/[0.015] text-left text-[10px] font-mono text-slate-500 hover:text-cyan-300 hover:border-cyan-500/20 cursor-pointer"
+          >
+            {showAdvancedSchema ? '▾' : '▸'} Advanced fallback: manual XSD schema folder
+            <span className="block mt-0.5 font-sans text-[9px] text-slate-600">Normally derived from the unpacked corpus above. Use this only for harvested schemas or a nonstandard layout.</span>
+          </button>
+
+          {/* 3. Legacy/manual schema override. The corpus is the primary source. */}
+          {showAdvancedSchema && <DirectoryRow
             icon={<Database className="w-4 h-4" />}
-            title="XSD Schema Folder"
-            tooltip="The folder holding X4's schema files (md.xsd, common.xsd + ~40 more). Powers validation and autocomplete. Fill this automatically by setting your Game Installation above and clicking Extract — or point it at an unpacked game's root folder."
+            title="Manual XSD Schema Override"
+            tooltip="Advanced compatibility fallback for harvested or nonstandard schema layouts. Leave empty to derive X4's schema library from the unpacked corpus above."
+            testId="manual-xsd-settings"
           >
             <input
               type="text"
               value={schemaPath}
               onChange={e => setSchemaPath(e.target.value)}
-              placeholder="Click Extract below to auto-fill — or paste an unpacked game folder's root path"
+              placeholder="Optional: folder containing md.xsd + common.xsd"
               className="w-full px-2 py-1.5 rounded bg-[#0F1115] border border-white/10 text-[11px] font-mono text-slate-300 focus:outline-none focus:border-cyan-500"
             />
             {resolved && (
@@ -329,12 +522,35 @@ export default function DirectorySettingsModal({
                   <div className="text-[10px] leading-relaxed text-slate-400 font-sans bg-white/[0.03] border border-white/10 rounded p-2 space-y-1">
                     <p><span className="text-slate-200 font-semibold">How it works:</span> the Forge validates your mod against X4’s own schema files — md.xsd, common.xsd, and ~40 more the game ships. The more it has, the more of your mod it checks (factions, game starts, patches, and so on).</p>
                     <p><span className="text-slate-200 font-semibold">What it needs:</span> those schema files, from <span className="text-slate-200">your</span> install — the Forge can’t legally ship X4’s files with it.</p>
-                    <p><span className="text-emerald-300 font-semibold">Easiest:</span> set your <span className="text-slate-200">X4 Game Installation</span> above, then click <span className="text-slate-200">Extract schemas from my game install</span> — it pulls every schema straight out of your own game. No unpacking needed.</p>
-                    <p><span className="text-cyan-300 font-semibold">If that fails:</span> unpack the game once with an X4 cat/dat extractor (community tools live on the <span className="text-slate-200">Egosoft forum “Scripts and Modding → Tools” board</span> and Nexus Mods), then paste the <span className="text-slate-200">unpacked folder’s root</span> into the field above — the Forge finds the schemas anywhere inside it. Any extractor works.</p>
+                    <p><span className="text-emerald-300 font-semibold">Preferred:</span> set <span className="text-slate-200">X4 Unpacked Game Corpus</span>. Forge derives schemas and canonical base/DLC data from that one read-only root.</p>
+                    <p><span className="text-cyan-300 font-semibold">Schema-only fallback:</span> set your <span className="text-slate-200">X4 Game Installation</span> and click <span className="text-slate-200">Extract schemas</span>. This enables XSD structure checks, but it does not provide the canonical IDs, examples, localization, or asset inventory of a complete unpacked corpus.</p>
                   </div>
                 )}
               </div>
             )}
+          </DirectoryRow>}
+
+          <DirectoryRow
+            icon={<Users className="w-4 h-4" />}
+            title="Community & Support"
+            tooltip="Meet other X4 Forge users, ask questions about Forge, share your mods, and discuss mod-authoring workflows."
+            testId="forge-discord-community"
+          >
+            <div className="rounded border border-indigo-400/20 bg-indigo-400/[0.04] p-2 text-[10px] leading-relaxed text-slate-400">
+              <div className="flex items-center justify-between gap-3">
+                <span><span className="font-semibold text-slate-200">Join the X4 Forge Discord.</span> Ask questions about Forge, discuss your workflow, share the mods you are building, and connect with other mod authors.</span>
+                <a
+                  href="https://discord.gg/9qvAvtXqWP"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="shrink-0 inline-flex items-center gap-1 rounded border border-indigo-400/30 px-2 py-1 font-mono font-semibold text-indigo-300 hover:border-indigo-300 hover:text-indigo-200"
+                  title="Open the X4 Forge Discord invite"
+                >
+                  Open Discord <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+              <div className="mt-1 text-[9px] text-slate-500">Community-run support for X4 Forge users; not affiliated with or endorsed by Egosoft. Forge never opens or joins the server automatically.</div>
+            </div>
           </DirectoryRow>
 
           {/* AI Assistant — opt-in tiers (off by default). Applied immediately (client-side). */}

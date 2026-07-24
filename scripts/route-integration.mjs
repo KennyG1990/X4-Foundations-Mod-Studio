@@ -32,13 +32,21 @@ const SESSION_TOKEN = 'route-int-selftest-token-' + process.pid;
 const tmp = path.join(os.tmpdir(), `x4-route-int-${process.pid}`);
 const stateDir = path.join(tmp, 'state');
 const dataDir = path.join(tmp, 'data');
+const configDir = path.join(tmp, 'config');
 fs.mkdirSync(stateDir, { recursive: true });
 fs.mkdirSync(dataDir, { recursive: true });
+fs.mkdirSync(configDir, { recursive: true });
 const referenceRoot = path.join(tmp, 'reference');
 fs.mkdirSync(path.join(referenceRoot, 'libraries'), { recursive: true });
 fs.writeFileSync(path.join(referenceRoot, 'libraries', 'factions.xml'), '<factions><faction id="routefixture" name="Route Fixture" tags="economic"/></factions>');
 fs.writeFileSync(path.join(referenceRoot, 'libraries', 'wares.xml'), '<wares><ware id="routeware" name="Route Ware" group="test" tags="economy"/></wares>');
 fs.writeFileSync(path.join(referenceRoot, 'libraries', 'scriptproperties.xml'), '<scriptproperties><datatype name="faction"><property name="id" result="ID" type="string"/></datatype></scriptproperties>');
+const gameRoot = path.join(tmp, 'X4 Foundations');
+const liveExtensions = path.join(gameRoot, 'extensions');
+const safeWorkspace = path.join(tmp, 'X4ForgeMods');
+fs.mkdirSync(liveExtensions, { recursive: true });
+fs.mkdirSync(safeWorkspace, { recursive: true });
+fs.writeFileSync(path.join(gameRoot, 'X4.exe'), 'fixture');
 
 const checks = [];
 const ok = (name, pass, detail) => { checks.push({ name, pass: !!pass, detail }); console.log(`${pass ? '  ok  ' : ' FAIL '}${name}${detail ? `  [${detail}]` : ''}`); };
@@ -72,7 +80,7 @@ async function main() {
     cwd: process.cwd(),
     shell: false,
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, PORT: String(PORT), NODE_ENV: 'development', STUDIO_API_TOKEN: SESSION_TOKEN, X4_STATE_DIR: stateDir, X4_DATA_DIR: dataDir, X4_REFERENCE_ROOT: referenceRoot },
+    env: { ...process.env, PORT: String(PORT), NODE_ENV: 'development', STUDIO_API_TOKEN: SESSION_TOKEN, X4_STATE_DIR: stateDir, X4_DATA_DIR: dataDir, X4_CONFIG_DIR: configDir, X4_REFERENCE_ROOT: referenceRoot },
   });
   let serverOut = '';
   child.stdout.on('data', (d) => { serverOut += d; });
@@ -121,9 +129,50 @@ async function main() {
   ok('write_key_403_run_command', (await req('GET', '/api/run_command?cmd=echo+hi', writeKey)).status === 403);
   ok('write_key_403_key_mgmt', (await req('GET', '/api/agent/keys', writeKey)).status === 403);
 
-  // --- fs/write path containment ---
+  // --- directory-role safety: save-time rejection + old-config runtime guard ---
+  const unsafeConfig = await req('POST', '/api/schema/config', SESSION_TOKEN, {
+    x4GamePath: gameRoot,
+    x4ReferenceRoot: referenceRoot,
+    modWorkspacePath: liveExtensions,
+    filesystemPath: liveExtensions,
+  });
+  ok('unsafe_live_workspace_config_rejected', unsafeConfig.status === 400 && unsafeConfig.json?.code === 'PROTECTED_ROOT_OVERLAP', `status=${unsafeConfig.status} code=${unsafeConfig.json?.code}`);
+  ok('rejected_config_not_persisted', !fs.existsSync(path.join(configDir, 'config.json')));
+
+  const safeConfigBody = {
+    x4GamePath: gameRoot,
+    x4ReferenceRoot: referenceRoot,
+    modWorkspacePath: safeWorkspace,
+    filesystemPath: safeWorkspace,
+  };
+  const safeConfig = await req('POST', '/api/schema/config', SESSION_TOKEN, safeConfigBody);
+  ok('isolated_workspace_config_saved', safeConfig.status === 200 && safeConfig.json?.directorySafety?.safe === true, `status=${safeConfig.status}`);
+
+  // Simulate a pre-upgrade unsafe config. Runtime write chokepoints must still refuse it.
+  fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({ ...safeConfigBody, modWorkspacePath: liveExtensions, filesystemPath: liveExtensions }));
+  const runtimeWrite = await req('POST', '/api/fs/write', SESSION_TOKEN, { path: 'must-not-exist.txt', content: 'blocked' });
+  ok('old_unsafe_config_fs_write_blocked', runtimeWrite.status === 409 && runtimeWrite.json?.code === 'PROTECTED_ROOT_OVERLAP', `status=${runtimeWrite.status}`);
+  ok('blocked_write_did_not_touch_game', !fs.existsSync(path.join(liveExtensions, 'must-not-exist.txt')));
+  const runtimeSnapshot = await req('POST', '/api/fs/snapshot', SESSION_TOKEN, { modId: 'unsafe_fixture', workspace: { id: 'fixture', name: 'fixture' } });
+  ok('old_unsafe_config_snapshot_blocked', runtimeSnapshot.status === 409, `status=${runtimeSnapshot.status}`);
+  const runtimeDeploy = await req('POST', '/api/agent/deploy', SESSION_TOKEN, { workspace: { id: 'fixture', name: 'fixture', nodes: [], links: [], uiWidgets: [] } });
+  ok('old_unsafe_config_staging_deploy_blocked', runtimeDeploy.status === 409, `status=${runtimeDeploy.status}`);
+
+  const repairedConfig = await req('POST', '/api/schema/config', SESSION_TOKEN, safeConfigBody);
+  ok('unsafe_config_can_be_repaired', repairedConfig.status === 200, `status=${repairedConfig.status}`);
+
+  // --- fs/write path containment and positive safe-root write ---
   const traversal = await req('POST', '/api/fs/write', SESSION_TOKEN, { path: '../../../../etc/passwd_x4_route_test', content: 'x' });
   ok('fs_write_traversal_rejected', traversal.status === 400 || traversal.status === 403, `status=${traversal.status}`);
+  const safeWrite = await req('POST', '/api/fs/write', SESSION_TOKEN, { path: 'fixture/readme.txt', content: 'safe' });
+  ok('fs_write_inside_isolated_workspace_accepted', safeWrite.status === 200 && fs.readFileSync(path.join(safeWorkspace, 'fixture', 'readme.txt'), 'utf8') === 'safe', `status=${safeWrite.status}`);
+  const snapshotTraversal = await req('POST', '/api/fs/snapshot', SESSION_TOKEN, { modId: '../outside', workspace: { id: 'fixture', name: 'fixture' } });
+  ok('snapshot_modid_traversal_rejected', snapshotTraversal.status === 403, `status=${snapshotTraversal.status}`);
+  const linkedLive = path.join(safeWorkspace, 'linked-live');
+  fs.symlinkSync(liveExtensions, linkedLive, 'junction');
+  const junctionWrite = await req('POST', '/api/fs/write', SESSION_TOKEN, { path: 'linked-live/junction-write.txt', content: 'blocked' });
+  ok('fs_write_junction_escape_rejected', junctionWrite.status === 403, `status=${junctionWrite.status}`);
+  ok('junction_escape_did_not_touch_game', !fs.existsSync(path.join(liveExtensions, 'junction-write.txt')));
 }
 
 try {

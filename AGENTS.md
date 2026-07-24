@@ -474,9 +474,11 @@ player reads/sees/feels) flip only on Ken's screen — and every Ken-gated item 
 click-by-click script (lesson 2026-07-12). Pure backend/infra with no player surface is exempt: its
 applicable layers ARE its bar.
 
-**e2e/machine safety:** e2e swaps the LIVE server workspace — MACHINE-STATE ASK (operator rule 2)
-before any run; never parallelize (workers=1 is deliberate); after every run verify the guard restored
-the real workspace (leak class #70). Ken's canvas is HIS — never replace it without asking.
+**e2e/machine safety:** the current harness owns an EPHEMERAL stack on ports 3100/3101 plus a per-run
+state directory; it must never reuse or mutate the live 3000/3001 workspace. MACHINE-STATE ASK
+(operator rule 2) before any run; never parallelize (workers=1 is deliberate); after every run verify
+the ephemeral stack stopped and the live workspace remained unchanged (legacy leak class #70). Ken's
+canvas is HIS — never replace it without asking.
 
 **Spending / network / deletion policy:** AI spend meter + daily cap live at the
 `callMultiProviderAI` chokepoint (B25) — any NEW spend/network/delete surface needs a verified meter,

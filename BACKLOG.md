@@ -6,6 +6,11 @@
 
 ## P0 — Active
 
+### B75 · Unified unpacked-corpus intelligence — one root, full manifest, contextual proof `in_progress`
+Ken's 2026-07-24 product goal: pointing Forge at an unpacked X4 root must automatically discover every file and use each according to what it can safely prove. Current 9.00 baseline: 1,028,384 files / 33.2 GB; 9,884 XML, 88 XSD, 157 Lua, 849 JS, 1,422 TS. The 88 XSDs are 40 names / 52 unique contents (37 canonical base-library schemas plus shims/UI/DLC variants), so blind union is forbidden. Build one persistent classified manifest feeding reference data, schema routing, completion, validation, diff simulation, coverage UI/API, and an IDE capability broker. Generic IDE/XML extensions supplement formatting/navigation only; Forge remains X4 semantic authority. Directory Settings must also recommend Nexus X4 Unpacker near the corpus/schema control, explain its role, link to it, and credit author z1ppeh without automatic download/execution or implied Egosoft affiliation. Plan: `docs/plans/2026-07-24-unified-x4-corpus-intelligence.md`; design: `docs/plans/2026-07-24-unified-x4-corpus-intelligence-design.md`. Close requires installed Open VSX/Antigravity rendered proof on a scratch mod.
+Addendum 2026-07-24: reuse Steam/GOG game-install detection in Directory Settings and enforce `modWorkspacePath`/editable `filesystemPath` as isolated development roots. They must never equal or sit beneath the installed game, its live `extensions`, or the unpacked corpus. Git complements this boundary; it does not replace it. Explicit deploy remains the only live-extension write path. Acceptance and negative paths are in Batch 9 of the plan.
+Community addendum: Directory Settings must provide a professional, user-initiated X4 Forge Discord link (`https://discord.gg/9qvAvtXqWP`) for questions, mod sharing, workflow discussion, and community contact; no automatic opening or Egosoft-affiliation implication.
+
 ### B72 · Lua GetComponentData semantics lint — close the blind spot that let a 12k-error bug pass validation `spec'd`
 Motivated 2026-07-21: x4_ai_influence's aic_uix.lua fed the `"sector"` property (returns the sector NAME
 string — vanilla menu_map.lua:9302 pairs "sectorid"+"sector" as id+name) into ConvertStringToLuaID →

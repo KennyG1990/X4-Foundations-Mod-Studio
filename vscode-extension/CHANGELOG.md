@@ -3,6 +3,12 @@
 The latest changes, newest first. (This page is generated automatically — see
 `release-notes.json` to edit the wording.)
 
+## 0.0.33 — 2026-07-24
+
+- Point Forge at one unpacked X4 root and it now discovers, classifies, and caches the full corpus — base game, official DLCs, schemas, scripts, reference data, examples, and assets — while the settings screen shows live coverage instead of asking you to wire separate schema folders.
+- Autocomplete and validation now follow X4's ordered XSD grammar and typed script-expression chains, including project-inferred variables, inherited properties, legal next children, canonical ids, hover documentation, and did-you-mean warnings.
+- Mod XML patches are now applied read-only to the effective base-plus-DLC document before validation, so dead or overly broad selectors and illegal post-patch structures are caught. The corpus setting also links to X4 Unpacker by z1ppeh as an optional community tool for creating an unpacked corpus.
+
 ## 0.0.32 — 2026-07-24
 
 - XML authoring now has schema-aware completion: child elements, attributes, enum values, and canonical faction, ware, sector, and macro ids come directly from X4's unpacked XSDs and reference data.

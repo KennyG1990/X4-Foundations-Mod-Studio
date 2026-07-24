@@ -122,6 +122,12 @@ try {
   const cueLabels = cueCompletion.body.map((item) => item.label);
   check('cue completion is schema-contextual', cueCompletion.response.status === 200 && ['conditions', 'actions', 'cues'].every((label) => cueLabels.includes(label)), cueLabels.slice(0, 20).join(','));
   check('cue completion is not a flat vocabulary', !cueLabels.includes('ware') && !cueLabels.includes('faction'), String(cueLabels.length));
+  const afterConditions = await complete('md/b74.xml', `${mdHeader}<cues><cue name="Root"><conditions/><|`);
+  const afterConditionLabels = afterConditions.body.map((item) => item.label);
+  check('cue completion consumes prior sequence state', !afterConditionLabels.includes('conditions') && ['actions', 'delay', 'cues'].every((label) => afterConditionLabels.includes(label)), afterConditionLabels.join(','));
+  const afterActions = await complete('md/b74.xml', `${mdHeader}<cues><cue name="Root"><actions/><|`);
+  const afterActionLabels = afterActions.body.map((item) => item.label);
+  check('cue completion rejects earlier sequence members', !afterActionLabels.includes('conditions') && afterActionLabels.includes('cues'), afterActionLabels.join(','));
 
   const warmLatencies = [];
   for (let sample = 0; sample < 20; sample++) {
@@ -142,6 +148,10 @@ try {
   check('faction datatype completion exposes corpus truth', ['id', 'relationto', 'primaryrace', 'knownname'].every((name) => factionPropMap.has(name)), [...factionPropMap.keys()].slice(0, 30).join(','));
   check('faction.id completion carries return type', /string/i.test(String(factionPropMap.get('id')?.detail || '')), JSON.stringify(factionPropMap.get('id') || null));
 
+  const projectTypedProps = await complete('md/b74.xml', `${mdHeader}<cues><cue name="Root"><actions><find_ship name="$target"/><set_value name="$x" exact="$target.|"/></actions></cue></cues></mdscript>`);
+  const projectTypedLabels = projectTypedProps.body.map((item) => item.label);
+  check('project symbol drives variable completion', projectTypedLabels.includes('name') && projectTypedLabels.includes('cargo'), projectTypedLabels.slice(0, 40).join(','));
+
   const factionAttr = await complete('md/b74.xml', `${mdHeader}<cues><cue name="Root"><conditions><event_object_changed_owner owner="|"/></conditions></cue></cues></mdscript>`);
   check('faction-typed attribute completes 32 ids', factionAttr.body.length === 32 && factionAttr.body.some((item) => item.label === 'trinity'), String(factionAttr.body.length));
 
@@ -149,6 +159,31 @@ try {
   const hoverResponse = await request('/api/reference/hover', { method: 'POST', token, body: { path: 'md/b74.xml', ...hoverFixture } });
   const hover = await hoverResponse.json();
   check('expression hover exposes property signature and docs', hoverResponse.status === 200 && hover?.kind === 'property' && /faction\.id/i.test(hover.signature) && hover.documentation, JSON.stringify(hover));
+
+  const variableHoverFixture = cursorDoc(`${mdHeader}<cues><cue name="Root"><actions><find_ship name="$target"/><set_value name="$x" exact="$target.na|me"/></actions></cue></cues></mdscript>`);
+  const variableHoverResponse = await request('/api/reference/hover', { method: 'POST', token, body: { path: 'md/b74.xml', ...variableHoverFixture } });
+  const variableHover = await variableHoverResponse.json();
+  check('project-inferred variable hover exposes typed inherited property', variableHoverResponse.status === 200
+    && variableHover?.kind === 'property' && variableHover?.label === 'name' && /name:\s*string/i.test(variableHover.signature)
+    && /inherited from component/i.test(variableHover.detail || ''), JSON.stringify(variableHover));
+
+  const factionDiffResponse = await request('/api/reference/simulate-diff', {
+    method: 'POST', token,
+    body: { path: 'libraries/factions.xml', content: '<diff><add sel="/factions"><faction id="x4forge_probe" name="Probe"/></add></diff>' },
+  });
+  const factionDiff = await factionDiffResponse.json();
+  check('read-only diff API uses effective base plus official DLCs', factionDiffResponse.status === 200 && factionDiff.ok === true
+    && factionDiff.base?.sources?.some((source) => source.source === 'base')
+    && factionDiff.base?.sources?.some((source) => /^ego_dlc_/.test(source.source))
+    && /id="x4forge_probe"/.test(factionDiff.content || ''), JSON.stringify(factionDiff.base || factionDiff));
+  const deadDiffResponse = await request('/api/reference/simulate-diff', {
+    method: 'POST', token,
+    body: { path: 'libraries/factions.xml', content: '<diff><remove sel="/factions/faction[@id=\'definitely_missing\']"/></diff>' },
+  });
+  const deadDiff = await deadDiffResponse.json();
+  check('diff API reports zero-match selector', deadDiffResponse.status === 200 && deadDiff.findings?.some((finding) => finding.code === 'DIFF_SELECTOR_ZERO'), JSON.stringify(deadDiff.findings || deadDiff));
+  check('diff API requires authentication', (await request('/api/reference/simulate-diff', { method: 'POST', body: { path: 'libraries/factions.xml', content: '<diff/>' } })).status === 401);
+  check('diff API rejects traversal', (await request('/api/reference/simulate-diff', { method: 'POST', token, body: { path: '../outside.xml', content: '<diff/>' } })).status === 403);
 
   check('completion POST requires authentication', (await request('/api/reference/complete', { method: 'POST', body: { path: 'md/x.xml', content: '<x/>', line: 0, column: 0 } })).status === 401);
   check('invalid cursor rejected', (await request('/api/reference/complete', { method: 'POST', token, body: { path: 'md/x.xml', content: '<x/>', line: 9, column: 0 } })).status === 400);
@@ -166,10 +201,12 @@ try {
     id: 'reference_acceptance',
     name: 'Reference Acceptance',
     files: [
-      { path: 'md/b74_invalid.xml', kind: 'md', content: `${mdHeader}<cues><cue name="Root" bogus="1"><conditions><totally_illegal/><match_relation_of relation="bogus"/></conditions><actions><set_value name="$x" exact="faction.player.knownnmae"/><set_value name="$f" exact="faction.riptide"/><set_value name="$w" exact="ware.notarealware"/></actions></cue></cues></mdscript>` },
+      { path: 'md/b74_invalid.xml', kind: 'md', content: `${mdHeader}<cues><cue name="Root" bogus="1"><conditions><totally_illegal/><match_relation_of relation="bogus"/></conditions><actions><find_ship name="$target"/><set_value name="$x" exact="$target.knownnmae"/><set_value name="$f" exact="faction.riptide"/><set_value name="$w" exact="ware.notarealware"/></actions></cue></cues></mdscript>` },
+      { path: 'md/b74_order_invalid.xml', kind: 'md', content: `${mdHeader}<cues><cue name="Root"><actions/><conditions/></cue></cues></mdscript>` },
       { path: 'libraries/wares.xml', kind: 'xml', content: '<wares><ware id="projectware" name="Project Ware" group="test"/></wares>' },
       { path: 'libraries/factions.xml', kind: 'xml', content: '<factions><faction id="projectfaction" name="Project Faction"/></factions>' },
       { path: 'libraries/diff_fixture.xml', kind: 'xml', content: '<diff><add sel="/wares"><ware id="diffware"/></add></diff>' },
+      { path: 'libraries/gamestarts.xml', kind: 'xml', content: '<diff><remove sel="/gamestarts/definitely_missing"/><add sel="/gamestarts"><definitely_illegal/></add></diff>' },
       { path: 'ui/addons/reference_acceptance/reference.lua', kind: 'lua', content: 'GetWareData("projectware", "name")\nGetFactionData("projectfaction", "name")\nGetWareData("notarealware", "name")\nGetFactionData("notarealfaction", "name")' },
     ],
   };
@@ -185,10 +222,16 @@ try {
   check('self-closing sibling actions do not create false nesting errors', !schemaFindings.some((finding) => finding.code === 'XSD_ILLEGAL_CHILD' && finding.sourceRef === 'set_value>set_value'), JSON.stringify(schemaFindings.filter((finding) => finding.sourceRef === 'set_value>set_value')));
   check('illegal attribute is a cited XSD error', schemaFindings.some((finding) => finding.severity === 'error' && finding.code === 'XSD_UNKNOWN_ATTRIBUTE' && /bogus/.test(finding.sourceRef || finding.message)));
   check('bad enum is a cited XSD error', schemaFindings.some((finding) => finding.severity === 'error' && finding.code === 'XSD_ENUM_VIOLATION' && /relation/.test(finding.sourceRef || finding.message)));
+  check('illegal XSD child order is a cited error', schemaFindings.some((finding) => finding.filePath === 'md/b74_order_invalid.xml' && finding.severity === 'error' && finding.code === 'XSD_CHILD_ORDER' && /md\.xsd|common\.xsd/i.test(finding.message)), JSON.stringify(schemaFindings.filter((finding) => finding.filePath === 'md/b74_order_invalid.xml')));
   check('diff.xsd accepts schema-legal patch payload', !schemaFindings.some((finding) => finding.filePath === 'libraries/diff_fixture.xml' && ['XSD_UNKNOWN_ELEMENT', 'XSD_ILLEGAL_CHILD', 'XSD_UNKNOWN_ATTRIBUTE'].includes(finding.code)), JSON.stringify(schemaFindings.filter((finding) => finding.filePath === 'libraries/diff_fixture.xml')));
   const propertyFindings = validation?.scriptProperties?.findings || [];
-  check('unknown typed script property is warning with suggestion', propertyFindings.some((finding) => finding.severity === 'warning' && finding.segment === 'knownnmae' && finding.suggestions?.includes('knownname')), JSON.stringify(propertyFindings));
+  check('unknown typed script property is warning with suggestion', propertyFindings.some((finding) => finding.severity === 'warning' && finding.chain?.startsWith('$target.') && finding.segment === 'knownnmae' && finding.suggestions?.includes('knownname')), JSON.stringify(propertyFindings));
+  check('project validation exposes inferred symbols', validation?.symbols?.variables?.some((symbol) => symbol.name === '$target' && symbol.type === 'ship' && symbol.filePath === 'md/b74_invalid.xml'), JSON.stringify(validation?.symbols || null));
   check('expression reference ids warn', referenceFindings.some((finding) => finding.id === 'riptide') && referenceFindings.some((finding) => finding.id === 'notarealware'));
+  const diffLayer = validation?.diffSimulation?.files?.find((file) => file.path === 'libraries/gamestarts.xml');
+  check('project validation detects dead diff selector', diffLayer?.findings?.some((finding) => finding.code === 'DIFF_SELECTOR_ZERO'), JSON.stringify(diffLayer || null));
+  check('project validation XSD-checks post-apply document', diffLayer?.postApplyFindings?.some((finding) => finding.severity === 'error' && /ILLEGAL|UNKNOWN/.test(finding.code)), JSON.stringify(diffLayer?.postApplyFindings || null));
+  check('post-apply validation subtracts vanilla baseline findings', !diffLayer?.postApplyFindings?.some((finding) => /test_ship_arg_m_uimax_test_macro/.test(finding.message || '')), JSON.stringify(diffLayer?.postApplyFindings || null));
 } catch (error) {
   check('harness completed without exception', false, error instanceof Error ? error.message : String(error));
 } finally {

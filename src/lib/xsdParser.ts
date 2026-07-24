@@ -333,10 +333,13 @@ export function resolveXsdConfig(config = readXsdConfig()): ResolvedXsdConfig {
       || config.x4ReferenceRoot?.trim()
       || DEFAULT_X4_REFERENCE_ROOT,
   );
+  const referenceLibraries = path.join(x4ReferenceRoot, 'libraries');
   const schemaDir = process.env.X4_XSD_PATH
     || (config.xsdSchemaPath
       ? (path.isAbsolute(config.xsdSchemaPath) ? config.xsdSchemaPath : path.join(gamePath, config.xsdSchemaPath))
-      : dataPath('harvested-schemas'));
+      : (fs.existsSync(path.join(referenceLibraries, 'md.xsd'))
+          ? referenceLibraries
+          : dataPath('harvested-schemas')));
 
   const files = config.schemaFiles?.length ? config.schemaFiles : ['md.xsd', 'common.xsd'];
   // An explicit ABSOLUTE path in schemaFiles always wins (a user who set an exact file). Else
@@ -397,6 +400,12 @@ export function runSchemaDiscoverySelftest(): { pass: boolean; checks: Array<{ n
 
     const r = resolveXsdConfig({ xsdSchemaPath: tmp });
     ok('resolveXsdConfig reports all present', r.mdExists === true && r.commonExists === true && r.aiscriptsExists === true);
+
+    const corpus = path.join(tmp, 'corpus');
+    mk('corpus/libraries/md.xsd'); mk('corpus/libraries/common.xsd'); mk('corpus/libraries/aiscripts.xsd');
+    const fromCorpus = resolveXsdConfig({ x4ReferenceRoot: corpus });
+    ok('unpacked root derives schema directory', fromCorpus.schemaDir === path.join(corpus, 'libraries'), fromCorpus.schemaDir);
+    ok('derived corpus schemas report present', fromCorpus.mdExists && fromCorpus.commonExists && fromCorpus.aiscriptsExists);
 
     // B64-SEC3: a corrupt config.json degrades to {} (unconfigured) and never throws.
     const cfgDir = path.join(tmp, 'cfg'); fs.mkdirSync(cfgDir, { recursive: true });
