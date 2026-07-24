@@ -4,8 +4,8 @@
  *
  * Bridge live-state normalization — Play-In-Editor slice 2 (2026-07-09).
  *
- * The x4_neural_link bridge is a live process the RUNNING GAME talks to; its /health
- * payload plus its telemetry DB (`bridge_events`: ts_ms/kind/status/latency, probed
+ * An optional external runtime may receive events from the running game; its /health
+ * payload plus telemetry DB (`bridge_events`: ts_ms/kind/status/latency, probed
  * real shape) tell the editor whether the game←→bridge←→Player2 chain is alive and
  * how fresh the last in-game activity is. Pure normalization: I/O lives server-side.
  */
@@ -52,7 +52,7 @@ export function normalizeBridgeLiveState(
   const gameActive = bridgeUp && lastEventAgoMs !== null && lastEventAgoMs < ACTIVE_WINDOW_MS;
 
   const summary = !bridgeUp
-    ? 'Neural-link bridge is DOWN (no /health response).'
+    ? 'Optional runtime is unavailable (no /health response).'
     : gameActive
       ? `Bridge UP, game ACTIVE — last in-game event ${Math.round((lastEventAgoMs as number) / 1000)}s ago (${last?.kind}).`
       : lastEventAgoMs !== null
@@ -86,7 +86,7 @@ export function runBridgeLiveStateSelftest(): {
     checks.push({ name, pass: !!cond, detail: detail === undefined ? undefined : (typeof detail === 'string' ? detail : JSON.stringify(detail)) });
 
   const NOW = 1_783_304_500_000;
-  const health = { ok: true, service: 'x4_neural_link', version: '0.1.0', bridge: { host: '127.0.0.1', port: 8713 }, player2: { ok: true, client_version: '0.10.67' } };
+  const health = { ok: true, service: 'external_runtime', version: '0.1.0', bridge: { host: '127.0.0.1', port: 8713 }, player2: { ok: true, client_version: '0.10.67' } };
 
   const active = normalizeBridgeLiveState(health, [
     { ts_ms: NOW - 30_000, kind: 'request.completed', status: 'ok' },
@@ -106,8 +106,13 @@ export function runBridgeLiveStateSelftest(): {
   ok('error status counted', errors.errorsLastHour === 1 && errors.eventsLastHour === 2);
 
   const down = normalizeBridgeLiveState(null, [], NOW);
-  ok('no health → bridge DOWN, never active', !down.bridgeUp && !down.gameActive && down.summary.includes('DOWN'));
+  ok('no health → runtime unavailable, never active', !down.bridgeUp && !down.gameActive && down.summary.includes('unavailable'));
   ok('empty events degrade', down.lastEventAgoMs === null && down.eventsLastHour === 0);
+  ok('bridge summaries are implementation-neutral',
+    active.summary.startsWith('Bridge UP, game ACTIVE')
+    && idle.summary.startsWith('Bridge UP, game idle')
+    && down.summary === 'Optional runtime is unavailable (no /health response).',
+    [active.summary, idle.summary, down.summary]);
 
   const passed = checks.filter(c => c.pass).length;
   const allPassed = passed === checks.length;

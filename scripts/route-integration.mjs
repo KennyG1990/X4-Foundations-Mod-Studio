@@ -139,17 +139,22 @@ async function main() {
   ok('unsafe_live_workspace_config_rejected', unsafeConfig.status === 400 && unsafeConfig.json?.code === 'PROTECTED_ROOT_OVERLAP', `status=${unsafeConfig.status} code=${unsafeConfig.json?.code}`);
   ok('rejected_config_not_persisted', !fs.existsSync(path.join(configDir, 'config.json')));
 
-  const safeConfigBody = {
+  const deployedRolesConfig = {
     x4GamePath: gameRoot,
     x4ReferenceRoot: referenceRoot,
     modWorkspacePath: safeWorkspace,
-    filesystemPath: safeWorkspace,
+    filesystemPath: liveExtensions,
   };
-  const safeConfig = await req('POST', '/api/schema/config', SESSION_TOKEN, safeConfigBody);
-  ok('isolated_workspace_config_saved', safeConfig.status === 200 && safeConfig.json?.directorySafety?.safe === true, `status=${safeConfig.status}`);
+  const safeConfig = await req('POST', '/api/schema/config', SESSION_TOKEN, deployedRolesConfig);
+  ok('isolated_workspace_and_deployed_filesystem_saved', safeConfig.status === 200 && safeConfig.json?.directorySafety?.safe === true, `status=${safeConfig.status}`);
 
-  // Simulate a pre-upgrade unsafe config. Runtime write chokepoints must still refuse it.
-  fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({ ...safeConfigBody, modWorkspacePath: liveExtensions, filesystemPath: liveExtensions }));
+  // A valid deployed filesystem role is read/browse/import capable but not a generic write target.
+  const protectedLiveWrite = await req('POST', '/api/fs/write', SESSION_TOKEN, { path: 'must-not-exist.txt', content: 'blocked' });
+  ok('deployed_filesystem_generic_write_blocked', protectedLiveWrite.status === 409 && protectedLiveWrite.json?.code === 'PROTECTED_ROOT_OVERLAP', `status=${protectedLiveWrite.status}`);
+  ok('deployed_filesystem_block_did_not_touch_game', !fs.existsSync(path.join(liveExtensions, 'must-not-exist.txt')));
+
+  // Simulate a pre-upgrade unsafe workspace. Staging/snapshot/deploy chokepoints must still refuse it.
+  fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({ ...deployedRolesConfig, modWorkspacePath: liveExtensions }));
   const runtimeWrite = await req('POST', '/api/fs/write', SESSION_TOKEN, { path: 'must-not-exist.txt', content: 'blocked' });
   ok('old_unsafe_config_fs_write_blocked', runtimeWrite.status === 409 && runtimeWrite.json?.code === 'PROTECTED_ROOT_OVERLAP', `status=${runtimeWrite.status}`);
   ok('blocked_write_did_not_touch_game', !fs.existsSync(path.join(liveExtensions, 'must-not-exist.txt')));
@@ -158,10 +163,12 @@ async function main() {
   const runtimeDeploy = await req('POST', '/api/agent/deploy', SESSION_TOKEN, { workspace: { id: 'fixture', name: 'fixture', nodes: [], links: [], uiWidgets: [] } });
   ok('old_unsafe_config_staging_deploy_blocked', runtimeDeploy.status === 409, `status=${runtimeDeploy.status}`);
 
-  const repairedConfig = await req('POST', '/api/schema/config', SESSION_TOKEN, safeConfigBody);
+  const repairedConfig = await req('POST', '/api/schema/config', SESSION_TOKEN, deployedRolesConfig);
   ok('unsafe_config_can_be_repaired', repairedConfig.status === 200, `status=${repairedConfig.status}`);
 
   // --- fs/write path containment and positive safe-root write ---
+  const safeFilesystemConfig = await req('POST', '/api/schema/config', SESSION_TOKEN, { ...deployedRolesConfig, filesystemPath: safeWorkspace });
+  ok('optional_safe_filesystem_root_saved', safeFilesystemConfig.status === 200, `status=${safeFilesystemConfig.status}`);
   const traversal = await req('POST', '/api/fs/write', SESSION_TOKEN, { path: '../../../../etc/passwd_x4_route_test', content: 'x' });
   ok('fs_write_traversal_rejected', traversal.status === 400 || traversal.status === 403, `status=${traversal.status}`);
   const safeWrite = await req('POST', '/api/fs/write', SESSION_TOKEN, { path: 'fixture/readme.txt', content: 'safe' });
@@ -173,6 +180,30 @@ async function main() {
   const junctionWrite = await req('POST', '/api/fs/write', SESSION_TOKEN, { path: 'linked-live/junction-write.txt', content: 'blocked' });
   ok('fs_write_junction_escape_rejected', junctionWrite.status === 403, `status=${junctionWrite.status}`);
   ok('junction_escape_did_not_touch_game', !fs.existsSync(path.join(liveExtensions, 'junction-write.txt')));
+  const restoredDeployedRoles = await req('POST', '/api/schema/config', SESSION_TOKEN, deployedRolesConfig);
+  ok('deployed_roles_restored_after_fs_tests', restoredDeployedRoles.status === 200, `status=${restoredDeployedRoles.status}`);
+
+  // Continuous authoring uses /compile as the same full-project referee as agents/deploy.
+  // An unsaved editor buffer overlays the generated manifest without writing to disk.
+  const liveCompile = await req('POST', '/api/agent/compile', SESSION_TOKEN, {
+    workspace: { id: 'fixture', name: 'fixture', nodes: [], links: [], uiWidgets: [] },
+    fileOverrides: {
+      'md/fixture.xml': '<?xml version="1.0"?><mdscript name="fixture"><cues><cue name="Root"><actions><set_value name="$x" exact="$faction.noexist"/></actions></cue></cues></mdscript>',
+    },
+  });
+  ok('compile_runs_full_project_validator', liveCompile.status === 200 && liveCompile.json?.validation?.scope === 'full-project', `status=${liveCompile.status} scope=${liveCompile.json?.validation?.scope}`);
+  ok('compile_live_buffer_reports_unknown_scriptproperty', liveCompile.json?.diagnostics?.some((d) => d.code === 'scriptproperty.unknown' && d.filePath === 'md/fixture.xml'), JSON.stringify(liveCompile.json?.diagnostics || []));
+  ok('compile_never_reports_false_clean_when_schema_unavailable', liveCompile.json?.diagnostics?.some((d) => d.code === 'validation.md_schema_unavailable' && d.severity === 'warning'));
+  const unsafeOverride = await req('POST', '/api/agent/compile', SESSION_TOKEN, {
+    workspace: { id: 'fixture', name: 'fixture', nodes: [], links: [], uiWidgets: [] },
+    fileOverrides: { '../escape.xml': '<mdscript/>' },
+  });
+  ok('compile_live_buffer_traversal_rejected', unsafeOverride.status === 400, `status=${unsafeOverride.status}`);
+  const windowsAbsoluteOverride = await req('POST', '/api/agent/compile', SESSION_TOKEN, {
+    workspace: { id: 'fixture', name: 'fixture', nodes: [], links: [], uiWidgets: [] },
+    fileOverrides: { 'C:/escape.xml': '<mdscript/>' },
+  });
+  ok('compile_live_buffer_windows_absolute_path_rejected', windowsAbsoluteOverride.status === 400, `status=${windowsAbsoluteOverride.status}`);
 }
 
 try {

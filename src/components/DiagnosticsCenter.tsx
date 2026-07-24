@@ -29,7 +29,7 @@ interface DiagnosticsCenterProps {
   autoSaveEnabled?: boolean;
   setAutoSaveEnabled?: (val: boolean) => void;
   diagnostics: PackageDiagnostic[];
-  diagnosticSource: 'checking' | 'package' | 'local';
+  diagnosticSource: 'checking' | 'project' | 'local';
   /** Jump to the Cues tab (the cue-health summary deep-links there). */
   onOpenCues?: () => void;
   /** A4.10 — gates the optional AI-polish affordance in the Scripts (MDScanner) view. */
@@ -41,7 +41,7 @@ export type DiagnosticsScope = 'scripts' | 'package' | 'install';
 
 const SCOPES: { id: DiagnosticsScope; label: string; icon: typeof Brain; activeClass: string }[] = [
   { id: 'scripts', label: 'Scripts', icon: Brain, activeClass: 'bg-amber-500/10 text-amber-400 border-amber-500/40' },
-  { id: 'package', label: 'Package', icon: PackageCheck, activeClass: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/40' },
+  { id: 'package', label: 'Validation', icon: PackageCheck, activeClass: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/40' },
   { id: 'install', label: 'Install', icon: Boxes, activeClass: 'bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/40' },
 ];
 

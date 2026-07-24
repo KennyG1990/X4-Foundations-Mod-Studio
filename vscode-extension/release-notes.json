@@ -1,5 +1,20 @@
 {
   "_comment": "Plain-English release notes for the CHANGELOG (B60). ONE human step per release: add a version key with a few user-facing bullets — what a modder can now DO or what got better. Everything else (version list, dates, ordering, the shipped CHANGELOG.md) is generated automatically by `npm run changelog`. Versions with no entry here fall back to a cleaned-up commit subject.",
+  "0.0.36": [
+    "Validation now runs continuously across the whole mod while you type in Forge's code editor, node properties, and raw XML fields. Deterministic XSD errors appear in red, while unknown X4 ids and script properties appear as non-blocking warnings with suggestions.",
+    "The Antigravity extension now uses the same full-project validator for open XML and Lua files and reports findings in the editor and Problems panel automatically, with no manual validation step.",
+    "Unsaved editor buffers are validated read-only against the unpacked X4 schemas, reference corpus, and script-property grammar, with stale results suppressed so an older response cannot overwrite newer typing."
+  ],
+  "0.0.35": [
+    "Corrected Directory Settings to preserve Forge's intended split: Mod Workspace is the isolated development copy, while Filesystem Folder points at the installed X4 extensions directory for browsing, importing, and workspace-versus-deployed comparison.",
+    "The deployed filesystem remains protected from generic edit, create, and delete operations. Intentional live changes still pass through Forge's validated Deploy workflow.",
+    "Startup and live-status diagnostics now describe optional external integrations generically, without promoting or exposing unrelated project-specific runtime identities."
+  ],
+  "0.0.34": [
+    "Forge now detects Steam and GOG X4 installations from Directory Settings and proposes a separate Documents\\X4ForgeMods development workspace instead of treating the live game extensions folder as an editor workspace.",
+    "Directory safety now blocks configuration, file writes, snapshots, staging, traversal, and junction escapes that could modify the installed game or read-only unpacked corpus by mistake. The live extensions folder is reached only through an explicit Deploy operation.",
+    "Directory Settings now includes a professional X4 Forge Discord community link where users can ask Forge questions, discuss workflows, share their mods, and meet other mod authors."
+  ],
   "0.0.33": [
     "Point Forge at one unpacked X4 root and it now discovers, classifies, and caches the full corpus — base game, official DLCs, schemas, scripts, reference data, examples, and assets — while the settings screen shows live coverage instead of asking you to wire separate schema folders.",
     "Autocomplete and validation now follow X4's ordered XSD grammar and typed script-expression chains, including project-inferred variables, inherited properties, legal next children, canonical ids, hover documentation, and did-you-mean warnings.",

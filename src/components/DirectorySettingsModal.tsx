@@ -362,16 +362,17 @@ export default function DirectorySettingsModal({
           <DirectoryRow
             icon={<FolderOpen className="w-4 h-4" />}
             title="Filesystem Folder"
-            tooltip="The editable directory shown in Forge's Filesystem explorer. Leave blank to use the isolated Mod Workspace folder. Protected game and corpus trees cannot be used as editable roots."
+            tooltip="The installed/deployed X4 extensions folder shown in Forge's Filesystem explorer. Forge may browse and import from this tree, but generic edits are blocked; validated Deploy is the intentional live-write path."
             testId="filesystem-settings"
           >
             <input
               type="text"
               value={filesystemInput}
               onChange={e => { setFilesystemInput(e.target.value); setDirectoryIssues(current => current.filter(issue => issue.field !== 'filesystemPath')); }}
-              placeholder="Optional; defaults to the Mod Workspace folder"
+              placeholder="e.g. G:\SteamLibrary\steamapps\common\X4 Foundations\extensions"
               className="w-full px-2 py-1.5 rounded bg-[#0F1115] border border-white/10 text-[11px] font-mono text-slate-300 focus:outline-none focus:border-cyan-500"
             />
+            <p className="text-[9.5px] leading-relaxed text-slate-500">Browse/import installed mods here. Develop in Mod Workspace; update the live game only through validated Deploy.</p>
             {issuesFor('filesystemPath').map(issue => <div key={issue.code} className="text-[10px] font-mono text-red-300 flex items-start gap-1"><AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />{issue.message}</div>)}
           </DirectoryRow>
 

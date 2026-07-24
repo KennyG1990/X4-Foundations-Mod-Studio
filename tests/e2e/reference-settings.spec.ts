@@ -13,10 +13,11 @@ test('Directory Settings presents one corpus root, measured coverage, and the cr
     contentType: 'application/json',
     body: JSON.stringify({
       loaded: true,
-      config: { x4ReferenceRoot: unpackedRoot, xsdSchemaPath: '', x4GamePath: 'D:\\Games\\X4 Foundations', modWorkspacePath: 'D:\\X4ForgeMods' },
+      config: { x4ReferenceRoot: unpackedRoot, xsdSchemaPath: '', x4GamePath: 'D:\\Games\\X4 Foundations', modWorkspacePath: 'D:\\X4ForgeMods', filesystemPath: 'D:\\Games\\X4 Foundations\\extensions' },
       resolved: {
         x4GamePath: 'D:\\Games\\X4 Foundations',
         modWorkspacePath: 'D:\\X4ForgeMods',
+        filesystemPath: 'D:\\Games\\X4 Foundations\\extensions',
         x4ReferenceRoot: unpackedRoot,
         x4ReferenceExists: true,
         mdExists: true,
@@ -82,8 +83,9 @@ test('Directory Settings presents one corpus root, measured coverage, and the cr
   expect(detectionRequests).toBe(0);
 });
 
-test('Directory Settings auto-detects an empty game path into an isolated development workspace', async ({ page }) => {
+test('Directory Settings auto-detects distinct development and deployed filesystem roles', async ({ page }) => {
   const game = 'G:\\SteamLibrary\\steamapps\\common\\X4 Foundations';
+  const live = `${game}\\extensions`;
   const workspace = 'C:\\Users\\example\\Documents\\X4ForgeMods';
   await page.route('**/api/schema/config', route => route.fulfill({
     status: 200,
@@ -101,7 +103,7 @@ test('Directory Settings auto-detects an empty game path into an isolated develo
     body: JSON.stringify({
       found: true,
       source: 'steam',
-      proposal: { x4GamePath: game, modWorkspacePath: workspace, filesystemPath: workspace, xsdSchemaPath: 'C:\\schemas' },
+      proposal: { x4GamePath: game, modWorkspacePath: workspace, filesystemPath: live, xsdSchemaPath: 'C:\\schemas' },
     }),
   }));
   await page.route('**/api/reference/coverage', route => route.fulfill({ status: 202, contentType: 'application/json', body: JSON.stringify({ status: { state: 'scanning' } }) }));
@@ -111,9 +113,10 @@ test('Directory Settings auto-detects an empty game path into an isolated develo
 
   await expect(page.getByTestId('game-install-settings').locator('input')).toHaveValue(game);
   await expect(page.getByTestId('mod-workspace-settings').locator('input')).toHaveValue(workspace);
-  await expect(page.getByTestId('filesystem-settings').locator('input')).toHaveValue(workspace);
+  await expect(page.getByTestId('filesystem-settings').locator('input')).toHaveValue(live);
   await expect(page.getByText(/Found X4 via Steam/)).toBeVisible();
   await expect(page.getByText(/live game is updated only through an explicit Deploy operation/)).toBeVisible();
+  await expect(page.getByText(/Browse\/import installed mods here/)).toBeVisible();
 });
 
 test('Directory Settings exposes and repairs a legacy live-extensions workspace', async ({ page }) => {
@@ -139,7 +142,6 @@ test('Directory Settings exposes and repairs a legacy live-extensions workspace'
         resolved: { x4GamePath: game, modWorkspacePath: live, filesystemPath: live, x4ReferenceRoot: unpackedRoot, x4ReferenceExists: true, mdExists: true, commonExists: true },
         directorySafety: { safe: false, issues: [
           { field: 'modWorkspacePath', code: 'PROTECTED_ROOT_OVERLAP', message: 'Mod Workspace Folder must be an isolated development directory.' },
-          { field: 'filesystemPath', code: 'PROTECTED_ROOT_OVERLAP', message: 'Filesystem Folder must be an isolated development directory.' },
         ] },
       }),
     });
@@ -147,7 +149,7 @@ test('Directory Settings exposes and repairs a legacy live-extensions workspace'
   await page.route('**/api/agent/detect-game', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    body: JSON.stringify({ found: true, source: 'steam', proposal: { x4GamePath: game, modWorkspacePath: safe, filesystemPath: safe, xsdSchemaPath: 'C:\\schemas' } }),
+    body: JSON.stringify({ found: true, source: 'steam', proposal: { x4GamePath: game, modWorkspacePath: safe, filesystemPath: live, xsdSchemaPath: 'C:\\schemas' } }),
   }));
   await page.route('**/api/reference/coverage', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: { state: 'ready' }, coverage: { generation: 'safe', totalFiles: 0, totalBytes: 0, byRole: [], byConsumer: [] } }) }));
 
@@ -156,9 +158,9 @@ test('Directory Settings exposes and repairs a legacy live-extensions workspace'
   await expect(page.getByText('Mod Workspace Folder must be an isolated development directory.')).toBeVisible();
   await page.getByRole('button', { name: 'Detect X4 installation' }).click();
   await expect(page.getByTestId('mod-workspace-settings').locator('input')).toHaveValue(safe);
-  await expect(page.getByTestId('filesystem-settings').locator('input')).toHaveValue(safe);
+  await expect(page.getByTestId('filesystem-settings').locator('input')).toHaveValue(live);
   await page.getByRole('button', { name: 'Save Paths' }).click();
   await expect(page.getByText(/Saved\. Schema library reloaded/)).toBeVisible();
   expect(savedBody.modWorkspacePath).toBe(safe);
-  expect(savedBody.filesystemPath).toBe(safe);
+  expect(savedBody.filesystemPath).toBe(live);
 });

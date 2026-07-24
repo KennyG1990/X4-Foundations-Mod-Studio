@@ -76,7 +76,8 @@ interface CodePreviewProps {
   compileMessage: string;
   handleCompileModProject: () => Promise<void>;
   diagnostics: PackageDiagnostic[];
-  diagnosticSource: 'checking' | 'package' | 'local';
+  onBufferDiagnosticsChange?: (diagnostics: PackageDiagnostic[] | null) => void;
+  diagnosticSource: 'checking' | 'project' | 'local';
   snapshotDiffWorkspace: ModWorkspace | null;
   onClearSnapshotDiff?: () => void;
   selectedCueIds: string[];
@@ -172,6 +173,7 @@ export default function CodePreview({
   compileMessage: _compileMessage,
   handleCompileModProject,
   diagnostics,
+  onBufferDiagnosticsChange,
   diagnosticSource: _diagnosticSource,
   snapshotDiffWorkspace,
   onClearSnapshotDiff,
@@ -201,6 +203,7 @@ export default function CodePreview({
   const [generatedDraft, setGeneratedDraft] = useState<string>('');
   const [generatedDraftKey, setGeneratedDraftKey] = useState<string>('');
   const [generatedDraftDirty, setGeneratedDraftDirty] = useState<boolean>(false);
+  const [bufferDiagnostics, setBufferDiagnostics] = useState<PackageDiagnostic[] | null>(null);
   const [generatedApplyStatus, setGeneratedApplyStatus] = useState<'idle' | 'applying' | 'applied' | 'error'>('idle');
   const [generatedApplyMessage, setGeneratedApplyMessage] = useState<string>('');
   const [generatedEditorScroll, setGeneratedEditorScroll] = useState({ top: 0, left: 0 });
@@ -496,6 +499,60 @@ export default function CodePreview({
   const activeCodeText = codeActiveTab === 'file'
     ? editorContent
     : (generatedDraft || currentCode);
+
+  const liveOverridePath = codeActiveTab === 'file' && activeEditorFile
+    ? activeEditorFile.path
+    : codeActiveTab === 'ui'
+      ? 'ui.xml'
+      : codeActiveTab === 'node'
+        ? 'md/__forge_live_node.xml'
+        : activeMdScript && /^[\w.-]+$/.test(activeMdScript)
+          ? `md/${activeMdScript}.xml`
+          : `md/${toSafeModId(workspace.name)}.xml`;
+
+  // The generated/file editor owns an unsaved buffer that is not yet represented by the
+  // workspace object. Overlay that buffer on the compiled manifest and ask the same full
+  // project validator after a short debounce; no save or Apply click is required.
+  useEffect(() => {
+    const shouldValidate = codeActiveTab === 'file' || generatedDraftDirty;
+    if (!shouldValidate || !liveOverridePath || !/\.(xml|lua)$/i.test(liveOverridePath)) {
+      setBufferDiagnostics(null);
+      onBufferDiagnosticsChange?.(null);
+      return;
+    }
+    setBufferDiagnostics(null);
+    onBufferDiagnosticsChange?.(null);
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch('/api/agent/compile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ workspace, fileOverrides: { [liveOverridePath]: activeCodeText } }),
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json() as { diagnostics?: PackageDiagnostic[]; validation?: { scope?: string } };
+        if (data.validation?.scope !== 'full-project') throw new Error('Full-project validation unavailable');
+        if (!controller.signal.aborted) {
+          const next = data.diagnostics || [];
+          setBufferDiagnostics(next);
+          onBufferDiagnosticsChange?.(next);
+        }
+      } catch {
+        if (!controller.signal.aborted) {
+          setBufferDiagnostics(null);
+          onBufferDiagnosticsChange?.(null);
+        }
+      }
+    }, 650);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [activeCodeText, codeActiveTab, generatedDraftDirty, liveOverridePath, onBufferDiagnosticsChange, workspace]);
+
+  useEffect(() => () => onBufferDiagnosticsChange?.(null), [onBufferDiagnosticsChange]);
 
   const handleGeneratedDraftChange = (val: string) => {
     setGeneratedDraft(val);
@@ -944,14 +1001,37 @@ export default function CodePreview({
   );
 
   const isFileEditorActive = codeActiveTab === 'file' && !!activeEditorFile;
+  const effectiveDiagnostics = bufferDiagnostics ?? diagnostics;
+  const visibleDiagnostics = React.useMemo(() => {
+    const norm = (input?: string) => String(input || '').replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase();
+    if (codeActiveTab === 'file' && activeEditorFile) {
+      const active = norm(activeEditorFile.path);
+      return effectiveDiagnostics.filter((finding) => norm(finding.filePath) === active);
+    }
+    if (codeActiveTab === 'ui') {
+      return effectiveDiagnostics.filter((finding) => norm(finding.filePath) === 'ui.xml');
+    }
+    if (codeActiveTab === 'md' || codeActiveTab === 'node') {
+      const selectedId = selectedNode?.id;
+      return effectiveDiagnostics.filter((finding) => {
+        const filePath = norm(finding.filePath);
+        if (filePath && !filePath.startsWith('md/')) return false;
+        if (codeActiveTab === 'node' && selectedId) {
+          return finding.nodeId === selectedId || finding.sourceRef?.id === selectedId || !finding.nodeId;
+        }
+        return true;
+      });
+    }
+    return [];
+  }, [activeEditorFile, codeActiveTab, effectiveDiagnostics, selectedNode?.id]);
   // Memoized: splitting + token-searching a large generated file on every render is
   // O(file size × diagnostics) — only recompute when the text or diagnostics change.
   const codeLines = React.useMemo(() => activeCodeText.split('\n'), [activeCodeText]);
   const lineDiagMap = React.useMemo(
-    () => computeLineDiagMap(activeCodeText, diagnostics),
+    () => computeLineDiagMap(activeCodeText, visibleDiagnostics),
     // reason: computeLineDiagMap is a plain function recreated each render; the real inputs are activeCodeText and diagnostics, so memoizing on those is correct.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activeCodeText, diagnostics]
+    [activeCodeText, visibleDiagnostics]
   );
   const renderTopBar = (content: React.ReactNode) => (
     topBarTarget ? createPortal(content, topBarTarget) : content
@@ -1156,6 +1236,7 @@ export default function CodePreview({
                     <CodeMirrorField
                       value={isFileEditorActive ? editorContent : activeCodeText}
                       onChange={isFileEditorActive ? handleEditorContentChange : handleGeneratedDraftChange}
+                      diagnostics={visibleDiagnostics}
                       className="h-full"
                     />
                   </React.Suspense>

@@ -128,7 +128,7 @@ interface SidebarProps {
   handleDeclineAction: (index: number) => void;
 
   diagnostics: PackageDiagnostic[];
-  diagnosticSource: 'checking' | 'package' | 'local';
+  diagnosticSource: 'checking' | 'project' | 'local';
   diagnosticsScope?: DiagnosticsScope;
   onSelectSnapshot?: (snapWS: ModWorkspace | null) => void;
   autoSaveEnabled?: boolean;
@@ -512,7 +512,7 @@ export default function Sidebar({
               ? 'text-cyan-400 bg-cyan-950/20 border-l-2 border-cyan-500 font-bold'
               : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
           }`}
-          title="Diagnostics — script, package & install checks"
+          title="Diagnostics — continuous project, script, package & install checks"
         >
           <Activity className="w-4 h-4 shrink-0" />
           <span className="text-[7.5px] font-mono tracking-tighter uppercase font-bold mt-1 text-center truncate w-full">DIAGNOSE</span>
@@ -573,7 +573,7 @@ export default function Sidebar({
               {activeTab === 'templates' && 'Manage reusable subgraphs'}
               {activeTab === 'ai' && 'AI-assisted logic & templates'}
               {activeTab === 'playtest' && 'Directory sync, manual syncer, and log parser'}
-              {activeTab === 'diagnostics' && 'Scripts, package & cross-mod install checks'}
+              {activeTab === 'diagnostics' && 'Continuous project, script, package & install checks'}
               {activeTab === 'reference' && 'Browse local ships, wares, factions, and code references'}
             </div>
           </div>
@@ -1402,6 +1402,7 @@ export default function Sidebar({
           handleLabelChange={handleLabelChange}
           handlePropChange={handlePropChange}
           handleSendCuePackageToAIGuide={handleSendCuePackageToAIGuide}
+          diagnostics={diagnostics}
           setWorkspaceView={setWorkspaceView}
         />
               </div>

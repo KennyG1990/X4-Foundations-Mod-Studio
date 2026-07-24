@@ -57,7 +57,7 @@ import { runPositionPickerSelftest } from "./src/lib/positionPicker";
 import { debugScan as catDatDebugScan, extractBaseGameFile as catDatExtractBaseGameFile, extractEntries as catDatExtractEntries, findCatDatArchives, parseCat, readEntryText, runCatDatSelftest } from "./src/lib/x4CatDat";
 import { buildSchemaIndex, validateXmlAgainstSchema, runXsdValidateSelftest, type SchemaIndex } from "./src/lib/xsdValidate";
 import { runReferenceLanguageSelftest } from "./src/lib/referenceLanguage";
-import { isSameOrDescendant, runPathRolesSelftest, validateDirectoryRoles, type DirectoryField } from "./src/lib/pathRoles";
+import { isSameOrDescendant, runPathRolesSelftest, validateDirectoryRoles, validateProtectedWriteTargets, type DirectoryField } from "./src/lib/pathRoles";
 import { parseXMLToWorkspace, extractTopLevelCueXml } from "./src/lib/xmlParser";
 import type { SchemaLibrary } from "./src/lib/schemaTypes";
 import { generateHttpGlueLua, generateContractMdScript, validateContract, runContractGlueSelftest, type IntegrationContract } from "./src/lib/contractGlue";
@@ -428,6 +428,8 @@ type ServerDiagnostic = {
   code: string;
   domain: string;
   filePath: string;
+  line?: number;
+  nodeId?: string;
   message: string;
   sourceRef?: { kind: string; id?: string; label?: string };
 };
@@ -1563,81 +1565,6 @@ function getWaresVocabulary(): WaresVocabulary | undefined {
   if (!merged.transports.size) { _waresVocabCache = null; return undefined; } // parse failed / empty — honest degrade
   _waresVocabCache = { key, vocab: merged };
   return merged;
-}
-
-function runSchemaValidation(files: Record<string, string>, modId: string): ServerDiagnostic[] {
-  const out: ServerDiagnostic[] = [];
-  let index: SchemaIndex;
-  try {
-    index = getSchemaIndex();
-  } catch {
-    return out;
-  }
-  if (!index.loaded) return out;
-
-  const references = getReferenceSets();
-
-  const validateFile = (filePath: string, domain: string, reportUnknownElements: boolean, useIndex: SchemaIndex) => {
-    const xml = files[filePath];
-    if (!xml) return;
-    const diags = validateXmlAgainstSchema(xml, useIndex, { filePath, domain, reportUnknownElements, references, strictStructure: true });
-    for (const d of diags) {
-      out.push({
-        severity: d.severity,
-        category: 'schema',
-        code: d.code,
-        domain,
-        filePath,
-        message: d.line ? `${d.message} (line ${d.line})` : d.message,
-        sourceRef: d.sourceRef ? { kind: 'xsd', label: d.sourceRef } : undefined
-      });
-    }
-  };
-
-  // Validate whatever MD file(s) the manifest emitted (the editable file may keep its
-  // original name, e.g. md/ai_influence_test_chat.xml, not md/<modId>.xml).
-  for (const fp of Object.keys(files)) {
-    if (/^md\/[^/]+\.xml$/i.test(fp)) validateFile(fp, 'mission_director', true, index);
-  }
-
-  // AI scripts only when their own schema is available (avoid wrong-schema noise).
-  const aiIndex = (() => { try { return getAiSchemaIndex(); } catch { return null; } })();
-  if (aiIndex && aiIndex.loaded) {
-    for (const fp of Object.keys(files)) {
-      if (/^aiscripts\//i.test(fp)) validateFile(fp, 'ai_scripts', true, aiIndex);
-    }
-  }
-
-  // B46P2: route the remaining emitted files (libraries diff patches, t-files, ui addons)
-  // to their real game schemas — the self-check on our own most-used output path (<diff>
-  // documents). Degrades to nothing on schema-less instances.
-  try {
-    const resolved = resolveXsdConfig();
-    const referenceLibraries = path.join(resolved.x4ReferenceRoot, 'libraries');
-    const useReferenceSchemas = fs.existsSync(referenceLibraries);
-    const registry = (useReferenceSchemas || resolved.schemaDir || resolved.x4GamePath)
-      ? discoverSchemaRegistry(
-          useReferenceSchemas ? referenceLibraries : resolved.schemaDir,
-          useReferenceSchemas ? undefined : resolved.x4GamePath || undefined,
-          useReferenceSchemas ? { signature: schemaFilesSignature(referenceLibraries) } : undefined,
-        )
-      : null;
-    const routedInputs = Object.entries(files).map(([p, content]) => ({ path: p, content }));
-    for (const r of validateRoutedFiles(routedInputs, registry, { references, strictStructure: useReferenceSchemas })) {
-      for (const d of r.findings) {
-        out.push({
-          severity: d.severity,
-          category: 'schema',
-          code: d.code,
-          domain: d.domain || r.route.domain || 'routed',
-          filePath: r.path,
-          message: d.line ? `${d.message} (line ${d.line})` : d.message,
-          sourceRef: d.sourceRef ? { kind: 'xsd', label: d.sourceRef } : undefined
-        });
-      }
-    }
-  } catch { /* routing degrades silently; md/aiscripts layers already reported */ }
-  return out;
 }
 
 /**
@@ -2990,7 +2917,18 @@ function directoryRoleIssues(resolved: ResolvedXsdConfig) {
 
 /** Block writes through an old unsafe config even if it predates save-time validation. */
 function rejectUnsafeDevelopmentWrite(res: express.Response, resolved: ResolvedXsdConfig, fields: DirectoryField[]): boolean {
-  const issue = directoryRoleIssues(resolved).find(candidate => fields.includes(candidate.field));
+  const writableFields = fields.filter((field): field is 'modWorkspacePath' | 'filesystemPath' =>
+    field === 'modWorkspacePath' || field === 'filesystemPath'
+  );
+  const issue = [
+    ...directoryRoleIssues(resolved),
+    ...validateProtectedWriteTargets({
+      x4GamePath: resolved.x4GamePath,
+      x4ReferenceRoot: resolved.x4ReferenceRoot,
+      modWorkspacePath: resolved.modWorkspacePath,
+      filesystemPath: resolved.filesystemPath,
+    }, writableFields),
+  ].find(candidate => fields.includes(candidate.field));
   if (!issue) return false;
   res.status(409).json({
     success: false,
@@ -3558,10 +3496,91 @@ app.get("/api/agent/workspace", (req, res) => {
   });
 });
 
-/** Compute the full diagnostic set for a workspace (doctor + XSD + patches). */
-function computeWorkspaceDiagnostics(ws: ModWorkspace): any[] {
+type FullWorkspaceValidation = {
+  diagnostics: ServerDiagnostic[];
+  validation: ReturnType<typeof runProjectValidation>;
+};
+
+function diagnosticCategory(code: string): string {
+  if (/^(xsd\.|schema\.|project\.)/.test(code)) return "syntax";
+  if (/^(reference\.|scriptproperty\.|tfile\.|jobs\.|wares\.|factions\.|god\.)/.test(code)) return "references";
+  return "egosoft";
+}
+
+/**
+ * One validation chokepoint for canvas, API agents, packaging, readiness, and deploy.
+ * The generated manifest is validated as a complete X4 project; callers no longer
+ * assemble narrower doctor/XSD subsets that can disagree with project validation.
+ */
+function runFullWorkspaceValidation(ws: ModWorkspace, built?: { modId: string; files: CompiledFileManifest }): FullWorkspaceValidation {
+  const { modId, files } = built || buildWorkspaceFileManifest(ws);
+  const project: ExtensionProject = {
+    id: modId,
+    name: ws.name || modId,
+    files: Object.entries(files).map(([filePath, content]) => ({
+      path: filePath,
+      kind: classifyPath(filePath),
+      content: String(content),
+    })),
+  };
+  const references = (() => { try { return getReferenceSets(); } catch { return undefined; } })();
+  const validation = runProjectValidation(project, {
+    references,
+    jobsVocabulary: getJobsVocabulary(),
+    waresVocabulary: getWaresVocabulary(),
+  });
+  const hasMd = project.files.some((file) => file.kind === "md" || classifyPath(file.path) === "md");
+  const hasAiScript = project.files.some((file) => file.kind === "aiscript" || classifyPath(file.path) === "aiscript");
+  const firstMdPath = project.files.find((file) => file.kind === "md" || classifyPath(file.path) === "md")?.path;
+  const firstAiScriptPath = project.files.find((file) => file.kind === "aiscript" || classifyPath(file.path) === "aiscript")?.path;
+  const firstXmlPath = project.files.find((file) => /\.xml$/i.test(file.path))?.path || "project";
+  const unavailable: ServerDiagnostic[] = [];
+  const warnUnavailable = (code: string, message: string, filePath = firstXmlPath) => unavailable.push({
+    severity: "warning", category: "egosoft", code, domain: "validation", filePath, message,
+  });
+  if (hasMd && !validation.schema.mdAvailable) warnUnavailable("validation.md_schema_unavailable", "Mission Director schema validation is unavailable; this is not a clean MD structure result.", firstMdPath || firstXmlPath);
+  if (hasAiScript && !validation.schema.aiscriptAvailable) warnUnavailable("validation.aiscript_schema_unavailable", "AI Script schema validation is unavailable; this is not a clean AI Script structure result.", firstAiScriptPath || firstXmlPath);
+  if ((hasMd || hasAiScript) && !validation.scriptProperties.available) warnUnavailable("validation.scriptproperties_unavailable", "scriptproperties.xml is unavailable; script-expression properties and functions were not checked.", firstMdPath || firstAiScriptPath || firstXmlPath);
+  if (!validation.references.available) warnUnavailable("validation.reference_corpus_unavailable", "The canonical X4 reference corpus is unavailable; faction, ware, sector, and macro IDs were not checked.");
+  const combined: ServerDiagnostic[] = [
+    ...unavailable,
+    ...runModDoctor(ws, files, modId).map((finding): ServerDiagnostic => ({
+      severity: finding.severity,
+      category: finding.category || "egosoft",
+      code: finding.code || "doctor.finding",
+      domain: finding.domain || "project",
+      filePath: finding.filePath || "project",
+      line: finding.line,
+      nodeId: finding.nodeId,
+      message: finding.message,
+      sourceRef: finding.sourceRef,
+    })),
+    ...runPatchDiagnostics(ws),
+    ...flattenProjectValidation(validation).map((finding): ServerDiagnostic => ({
+      severity: finding.severity,
+      category: diagnosticCategory(finding.code || "project.validation"),
+      code: finding.code || "project.validation",
+      domain: finding.filePath ? classifyPath(finding.filePath) : "project",
+      filePath: finding.filePath || "project",
+      line: finding.line,
+      message: finding.message,
+      sourceRef: finding.sourceRef ? { kind: "project", label: finding.sourceRef } : undefined,
+    })),
+  ];
+  const seen = new Set<string>();
+  const diagnostics = combined.filter((d) => {
+    const key = [d.severity, d.code, d.filePath, d.line || 0, d.nodeId || "", d.message].join("|");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return { diagnostics, validation };
+}
+
+/** Compute the same full diagnostic set used by compile and agents. */
+function computeWorkspaceDiagnostics(ws: ModWorkspace): ServerDiagnostic[] {
   const { modId, files } = buildWorkspaceFileManifest(ws);
-  return [...runModDoctor(ws, files, modId), ...runSchemaValidation(files, modId), ...runPatchDiagnostics(ws)];
+  return runFullWorkspaceValidation(ws, { modId, files }).diagnostics;
 }
 
 function summarizeDiagnostics(diags: any[]) {
@@ -5659,7 +5678,7 @@ function computeServerReadiness() {
   const graphDiagnostics = validateModWorkspace(ws, mdCode);
   const { modId, files } = buildWorkspaceFileManifest(ws);
   // The stage builder only counts severities; adapt server diagnostics to its shape.
-  const packageDiagnostics = [...runModDoctor(ws, files, modId), ...runSchemaValidation(files, modId), ...runPatchDiagnostics(ws)]
+  const packageDiagnostics = runFullWorkspaceValidation(ws, { modId, files }).diagnostics
     .map(d => ({ severity: d.severity, message: d.message, category: "egosoft" as const }));
   const brief = buildDebugWatcherBrief(modId, []);
   const stages = buildReadinessStages({
@@ -5667,7 +5686,7 @@ function computeServerReadiness() {
     workspaceHash: activeWorkspaceHash(),
     graphDiagnostics,
     packageDiagnostics,
-    diagnosticSource: "package",
+    diagnosticSource: "project",
     watcher: { phase: "ready", lastDeploy: brief.status?.lastDeploy ?? null, sinceDeploy: brief.sinceDeploy, verdict: brief.verdict, error: null },
     confirmation: null,
   });
@@ -7186,7 +7205,7 @@ app.get("/api/agent/catdat-debug", (req, res) => {
 // since cleanForgeManagedEntries replaced it, but a recursive-delete foot-gun sitting
 // unused is exactly what a future edit re-wires by accident. Deleted, not left dormant.)
 
-// Explicit preserve-list: newline-separated top-level names (e.g. "x4_neural_link") in a `.forgekeep`
+// Explicit preserve-list: newline-separated top-level names (e.g. "external_runtime") in a `.forgekeep`
 // file at the deploy root. Lines starting with '#' are comments. Lets a mod co-locate non-Forge runtime.
 function readForgeKeep(dirPath: string): Set<string> {
   const keep = new Set<string>();
@@ -7204,7 +7223,7 @@ function readForgeKeep(dirPath: string): Set<string> {
 
 // Safe deploy refresh: delete ONLY the top-level entries the Forge is about to (re)write (`managedTop`),
 // so its own content stays current, while PRESERVING any foreign entry the Forge doesn't manage (a
-// co-located service like x4_neural_link) and anything listed in .forgekeep. Replaces the old
+// co-located external service) and anything listed in .forgekeep. Replaces the old
 // wipe-everything behavior that destroyed non-Forge files on every deploy.
 function cleanForgeManagedEntries(dirPath: string, managedTop: Set<string>) {
   if (!fs.existsSync(dirPath)) return;
@@ -7237,9 +7256,9 @@ function compileWorkspaceToFolder(ws: any, rootPath: string, mode: 'candy' | 'st
 
   if (mode === 'store' && fs.existsSync(targetPath)) {
     // Refresh ONLY the top-level entries the Forge actually writes; PRESERVE everything foreign
-    // (e.g. a nested non-Forge service like x4_neural_link) plus anything an explicit .forgekeep lists.
+    // (e.g. a nested non-Forge runtime service) plus anything an explicit .forgekeep lists.
     // Previously this wiped the whole directory, deleting files/dirs the Forge does not manage — which
-    // silently destroyed co-located runtime (the Neural Link bridge). See cleanForgeManagedEntries.
+    // silently destroyed a co-located external runtime. See cleanForgeManagedEntries.
     const managedTop = new Set<string>(
       Object.keys(files).map(rel => rel.replace(/\\/g, '/').replace(/^\/+/, '').split('/')[0])
     );
@@ -7257,7 +7276,7 @@ function compileWorkspaceToFolder(ws: any, rootPath: string, mode: 'candy' | 'st
   );
   // .forgekeep'd top-level dirs are FULLY foreign: the Forge neither cleans nor (re)writes them.
   // This stops the deploy from writing over a co-located live service's open files — e.g. the
-  // Neural Link bridge's SQLite -shm/-wal, which previously errored the whole compile (EBUSY /
+  // External runtime SQLite -shm/-wal files previously errored the whole compile (EBUSY /
   // "unknown error, open …shm"). The on-disk copy is left exactly as-is.
   const keepTop = readForgeKeep(targetPath);
   for (const [rel, content] of Object.entries(files)) {
@@ -7703,11 +7722,37 @@ app.post("/api/agent/deploy-verify", (req, res) => {
 app.post("/api/agent/compile", (req, res) => {
   const ws = sanitizeWorkspace(req.body.workspace || activeWorkspace);
   try {
-    const { modId, files } = buildWorkspaceFileManifest(ws);
+    const built = buildWorkspaceFileManifest(ws);
+    const modId = built.modId;
+    const files = { ...built.files };
+    const overrides = req.body?.fileOverrides;
+    if (overrides !== undefined) {
+      if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) {
+        return res.status(400).json({ success: false, error: "fileOverrides must be an object of project-relative paths to string contents." });
+      }
+      let totalBytes = 0;
+      for (const [rawPath, rawContent] of Object.entries(overrides)) {
+        const normalized = String(rawPath || "").replace(/\\/g, "/").replace(/^\.\//, "");
+        if (!normalized || path.posix.isAbsolute(normalized) || /^[A-Za-z]:/.test(normalized) || normalized.includes("\0") || normalized.split("/").includes("..") || !/\.(xml|lua)$/i.test(normalized)) {
+          return res.status(400).json({ success: false, error: `Unsafe or unsupported validation override path: ${rawPath}` });
+        }
+        if (typeof rawContent !== "string") {
+          return res.status(400).json({ success: false, error: `Validation override content must be a string: ${rawPath}` });
+        }
+        totalBytes += Buffer.byteLength(rawContent, "utf8");
+        if (totalBytes > 4 * 1024 * 1024) {
+          return res.status(413).json({ success: false, error: "Validation overrides exceed the 4 MiB request limit." });
+        }
+        files[normalized] = rawContent;
+      }
+      if (Object.keys(files).length > 2000) {
+        return res.status(413).json({ success: false, error: "Compiled project exceeds the 2,000-file validation limit." });
+      }
+    }
     const mdPath = `md/${modId}.xml`;
     const uiIndexPath = `ui.xml`;
     const uiLuaPath = `ui/${modId}.lua`;
-    const diagnostics = [...runModDoctor(ws, files, modId), ...runSchemaValidation(files, modId), ...runPatchDiagnostics(ws)];
+    const full = runFullWorkspaceValidation(ws, { modId, files });
 
     return res.json({
       success: true,
@@ -7723,7 +7768,18 @@ app.post("/api/agent/compile", (req, res) => {
         mission_director_xml: files[mdPath],
         ui_index_xml: files[uiIndexPath] || ""
       },
-      diagnostics
+      diagnostics: full.diagnostics,
+      validation: {
+        scope: "full-project",
+        ok: full.validation.ok,
+        summary: full.validation.summary,
+        availability: {
+          mdSchema: full.validation.schema.mdAvailable,
+          aiScriptSchema: full.validation.schema.aiscriptAvailable,
+          scriptProperties: full.validation.scriptProperties.available,
+          references: full.validation.references.available,
+        },
+      }
     });
   } catch (error) {
     return res.status(500).json({
@@ -7741,14 +7797,25 @@ app.post("/api/agent/package", (req, res) => {
   const ws = sanitizeWorkspace(req.body.workspace || activeWorkspace);
   try {
     const { modId, files } = buildWorkspaceFileManifest(ws);
-    const diagnostics = [...runModDoctor(ws, files, modId), ...runSchemaValidation(files, modId), ...runPatchDiagnostics(ws)];
+    const full = runFullWorkspaceValidation(ws, { modId, files });
 
     return res.json({
       success: true,
       modId,
       file_count: Object.keys(files).length,
       files,
-      diagnostics
+      diagnostics: full.diagnostics,
+      validation: {
+        scope: "full-project",
+        ok: full.validation.ok,
+        summary: full.validation.summary,
+        availability: {
+          mdSchema: full.validation.schema.mdAvailable,
+          aiScriptSchema: full.validation.schema.aiscriptAvailable,
+          scriptProperties: full.validation.scriptProperties.available,
+          references: full.validation.references.available,
+        },
+      }
     });
   } catch (error) {
     return res.status(500).json({
@@ -7770,7 +7837,8 @@ app.post("/api/agent/package/release", (req, res) => {
   const bump = ['none', 'patch', 'minor'].includes(req.body?.bump) ? req.body.bump : 'none';
   try {
     const { modId, files } = buildWorkspaceFileManifest(ws);
-    const diagnostics = [...runModDoctor(ws, files, modId), ...runSchemaValidation(files, modId), ...runPatchDiagnostics(ws)];
+    const full = runFullWorkspaceValidation(ws, { modId, files });
+    const diagnostics = full.diagnostics;
     const plan = buildReleasePlan({
       modId, files, diagnostics, bump,
       meta: { name: ws.name, author: ws.author, description: ws.description },

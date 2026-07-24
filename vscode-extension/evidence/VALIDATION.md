@@ -234,7 +234,7 @@ then finalize package.json publisher/repo/keywords and Ken-authorized `vsce publ
 2. **Edit canvas item** — selected Spawn Ship; Beginner→Customize exposed the real
    PropertiesInspector; set Variable Name `$MyHeavyEscortPoC`. Server state confirmed:
    `workspaceHash` changed → `3334da56a1ab11ac`, node property = `$MyHeavyEscortPoC`.
-3. **Deterministic validation** — Beginner→Validate: "Graph valid / Package valid — zero
+3. **Deterministic validation** — Beginner→Validate: "Graph valid / Project valid — zero
    blocking errors or warnings" (DOM). Authoritative: compile → `POST /api/agent/project/validate`
    → `ok:true`, 0 structural/schema/crossfile errors.
 4. **Compile/preview** — `POST /api/agent/compile`: success, modId `player_elite_escort`,

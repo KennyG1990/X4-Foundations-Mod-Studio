@@ -1631,8 +1631,8 @@ export default function Canvas({
               ? 'bg-amber-500/10 border-amber-500/20 text-amber-400 hover:bg-amber-500/15'
               : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/15'
           }`}
-          title={diagnosticSource === 'package'
-            ? 'Package compiler and Mod Doctor status. Open for package plus graph details.'
+          title={diagnosticSource === 'project'
+            ? 'Continuous full-project validation status. Open for corpus, schema, package, and graph details.'
             : diagnosticSource === 'checking'
               ? 'Package compiler is checking the current workspace.'
               : 'Package compiler is unavailable; showing local MD validation only.'}
@@ -1644,7 +1644,7 @@ export default function Canvas({
           ) : (
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
           )}
-          <span>PACKAGE: {packageStatus.label}</span>
+          <span>VALIDATION: {packageStatus.label}</span>
         </button>
         
         <div className="h-5 w-px bg-white/10 mx-1" />

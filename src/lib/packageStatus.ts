@@ -1,6 +1,6 @@
 import type { PackageDiagnostic } from '../types';
 
-export type DiagnosticSource = 'checking' | 'package' | 'local';
+export type DiagnosticSource = 'checking' | 'project' | 'local';
 
 export function summarizePackageStatus(
   diagnostics: PackageDiagnostic[],
@@ -21,9 +21,9 @@ export function runPackageStatusSelftest() {
   const checks = [
     { name: 'checking_never_green', pass: summarizePackageStatus([], 'checking').tone === 'amber' },
     { name: 'offline_never_green', pass: summarizePackageStatus([], 'local').label === 'OFFLINE' && summarizePackageStatus([], 'local').tone === 'amber' },
-    { name: 'package_error_red', pass: summarizePackageStatus([error], 'package').tone === 'red' },
-    { name: 'package_warning_amber', pass: summarizePackageStatus([warning], 'package').label === 'WARN' },
-    { name: 'only_confirmed_clean_is_green', pass: summarizePackageStatus([], 'package').tone === 'green' },
+    { name: 'project_error_red', pass: summarizePackageStatus([error], 'project').tone === 'red' },
+    { name: 'project_warning_amber', pass: summarizePackageStatus([warning], 'project').label === 'WARN' },
+    { name: 'only_confirmed_clean_is_green', pass: summarizePackageStatus([], 'project').tone === 'green' },
   ];
   const passed = checks.filter(check => check.pass).length;
   return { allPassed: passed === checks.length, passed, total: checks.length, checks };

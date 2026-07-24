@@ -23,6 +23,8 @@ import { bracketMatching, indentOnInput, foldGutter } from '@codemirror/language
 import { xml } from '@codemirror/lang-xml';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { MergeView, unifiedMergeView } from '@codemirror/merge';
+import { lintGutter, setDiagnostics, type Diagnostic as CodeMirrorDiagnostic } from '@codemirror/lint';
+import type { PackageDiagnostic } from '../types';
 
 export interface CodeMirrorFieldProps {
   value: string;
@@ -31,6 +33,8 @@ export interface CodeMirrorFieldProps {
   /** When set, render a READ-ONLY diff of `value` (current) against this (original). */
   diffOriginal?: string | null;
   diffMode?: 'split' | 'unified';
+  /** Current-file findings from the Forge's continuous full-project validator. */
+  diagnostics?: PackageDiagnostic[];
   className?: string;
 }
 
@@ -54,6 +58,7 @@ function baseExtensions(readOnly: boolean) {
     highlightActiveLine(),
     highlightActiveLineGutter(),
     foldGutter(),
+    lintGutter(),
     bracketMatching(),
     indentOnInput(),
     history(),
@@ -73,6 +78,7 @@ export default function CodeMirrorField({
   readOnly,
   diffOriginal,
   diffMode = 'split',
+  diagnostics = [],
   className,
 }: CodeMirrorFieldProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -143,6 +149,26 @@ export default function CodeMirrorField({
     valueRef.current = value;
     view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value } });
   }, [value, isDiff]);
+
+  // Project diagnostics are pushed into CodeMirror's native lint layer. Findings without
+  // a line remain in Diagnostics; inventing a squiggle location would mislead the author.
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || view instanceof MergeView || isDiff) return;
+    const mapped: CodeMirrorDiagnostic[] = diagnostics.flatMap((finding) => {
+      if (!finding.line || finding.line < 1) return [];
+      const number = Math.min(Math.max(1, Math.floor(finding.line)), view.state.doc.lines);
+      const line = view.state.doc.line(number);
+      return [{
+        from: line.from,
+        to: line.to,
+        severity: finding.severity === 'error' ? 'error' : finding.severity === 'warning' ? 'warning' : 'info',
+        message: finding.message,
+        source: finding.code ? `X4 Forge · ${finding.code}` : 'X4 Forge',
+      } satisfies CodeMirrorDiagnostic];
+    });
+    view.dispatch(setDiagnostics(view.state, mapped));
+  }, [diagnostics, isDiff, value]);
 
   return <div ref={hostRef} className={className} style={{ height: '100%', overflow: 'auto' }} />;
 }

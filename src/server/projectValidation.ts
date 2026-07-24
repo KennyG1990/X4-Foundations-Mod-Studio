@@ -506,7 +506,7 @@ export function flattenProjectValidation(result: ProjectValidationResult): FlatP
     out.push({ severity: f.severity, code: f.code, sourceRef: f.order ? `${f.order}${f.param ? `@${f.param}` : ""}` : f.param, message: f.detail });
   }
   for (const f of result.scriptProperties.findings) {
-    out.push({ severity: f.severity, code: f.code, sourceRef: f.chain, line: f.line, message: `Property chain "${f.chain}": segment "${f.segment}" — ${f.suggestions.length ? `did you mean ${f.suggestions.slice(0, 3).join(", ")}?` : "unknown in scriptproperties.xml."}` });
+    out.push({ severity: f.severity, code: f.code, filePath: f.filePath, sourceRef: f.chain, line: f.line, message: `Property chain "${f.chain}": segment "${f.segment}" — ${f.suggestions.length ? `did you mean ${f.suggestions.slice(0, 3).join(", ")}?` : "unknown in scriptproperties.xml."}` });
   }
   for (const f of result.pitfalls.findings) {
     out.push({ severity: f.severity, code: f.code, sourceRef: f.cue, line: f.line, message: f.detail });

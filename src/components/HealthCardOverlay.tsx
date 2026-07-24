@@ -36,7 +36,7 @@ const HealthCardOverlay: React.FC = () => {
   return (
     <div
       data-testid="health-card"
-      className={`fixed bottom-4 right-4 z-[9998] w-[380px] rounded-xl border shadow-2xl bg-[#0a0d14]/97 backdrop-blur p-3 font-mono text-[10px] ${
+      className={`fixed bottom-4 right-4 z-[90] w-[380px] rounded-xl border shadow-2xl bg-[#0a0d14]/97 backdrop-blur p-3 font-mono text-[10px] ${
         card.verdict === 'blocked' ? 'border-red-500/40' : 'border-amber-500/30'
       }`}
     >

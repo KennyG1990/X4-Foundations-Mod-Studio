@@ -141,10 +141,18 @@ function checkE2eVerdict() {
   if (result.status !== 0) throw new Error(`e2e verdict selftest failed with exit ${result.status ?? "unknown"}`);
 }
 
+function checkProductCopy() {
+  console.log("[precommit] shipped product-copy guard");
+  const result = spawnSync("npm run test:product-copy", { cwd: root, shell: true, stdio: "inherit" });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(`product-copy guard failed with exit ${result.status ?? "unknown"}`);
+}
+
 try {
   checkTripwires();
   checkMirrorDrift();
   checkE2eVerdict();
+  checkProductCopy();
   runTypecheck();
   checkLargeFiles();
   console.log("[precommit] OK");

@@ -3,6 +3,12 @@
 The latest changes, newest first. (This page is generated automatically — see
 `release-notes.json` to edit the wording.)
 
+## 0.0.36 — 2026-07-24
+
+- Validation now runs continuously across the whole mod while you type in Forge's code editor, node properties, and raw XML fields. Deterministic XSD errors appear in red, while unknown X4 ids and script properties appear as non-blocking warnings with suggestions.
+- The Antigravity extension now uses the same full-project validator for open XML and Lua files and reports findings in the editor and Problems panel automatically, with no manual validation step.
+- Unsaved editor buffers are validated read-only against the unpacked X4 schemas, reference corpus, and script-property grammar, with stale results suppressed so an older response cannot overwrite newer typing.
+
 ## 0.0.33 — 2026-07-24
 
 - Point Forge at one unpacked X4 root and it now discovers, classifies, and caches the full corpus — base game, official DLCs, schemas, scripts, reference data, examples, and assets — while the settings screen shows live coverage instead of asking you to wire separate schema folders.

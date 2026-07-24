@@ -44,7 +44,7 @@ export interface BuildReadinessInput {
   workspaceHash: string;
   graphDiagnostics: PackageDiagnostic[];
   packageDiagnostics: PackageDiagnostic[];
-  diagnosticSource: 'checking' | 'package' | 'local';
+  diagnosticSource: 'checking' | 'project' | 'local';
   watcher: ReadinessWatcherEvidence;
   confirmation?: ExperienceConfirmation | null;
 }
@@ -84,17 +84,17 @@ function diagnosticStage(
   const errors = countSeverity(diagnostics, 'error');
   const warnings = countSeverity(diagnostics, 'warning');
   if (errors > 0) return {
-    id, label, shortLabel: id === 'graph' ? 'Graph' : 'Package', status: 'fail', owner,
+    id, label, shortLabel: id === 'graph' ? 'Graph' : 'Validation', status: 'fail', owner,
     summary: `${errors} error${errors === 1 ? '' : 's'}`,
     evidence: `${errors} blocking error(s), ${warnings} warning(s) in current workspace evidence.`,
   };
   if (warnings > 0) return {
-    id, label, shortLabel: id === 'graph' ? 'Graph' : 'Package', status: 'warning', owner,
+    id, label, shortLabel: id === 'graph' ? 'Graph' : 'Validation', status: 'warning', owner,
     summary: `Valid · ${warnings} warning${warnings === 1 ? '' : 's'}`,
     evidence: `No blocking errors; ${warnings} warning(s) need review.`,
   };
   return {
-    id, label, shortLabel: id === 'graph' ? 'Graph' : 'Package', status: 'pass', owner,
+    id, label, shortLabel: id === 'graph' ? 'Graph' : 'Validation', status: 'pass', owner,
     summary: 'Valid', evidence: 'Current workspace has zero blocking errors or warnings.',
   };
 }
@@ -104,11 +104,11 @@ export function buildReadinessStages(input: BuildReadinessInput): ReadinessStage
 
   let pkg: ReadinessStage;
   if (input.diagnosticSource === 'checking') {
-    pkg = { id: 'package', label: 'Package valid', shortLabel: 'Package', status: 'pending', owner: 'diagnostics', summary: 'Checking', evidence: 'The package compiler is checking the current workspace.' };
+    pkg = { id: 'package', label: 'Project valid', shortLabel: 'Validation', status: 'pending', owner: 'diagnostics', summary: 'Checking', evidence: 'The full-project validator is checking the current workspace.' };
   } else if (input.diagnosticSource === 'local') {
-    pkg = { id: 'package', label: 'Package valid', shortLabel: 'Package', status: 'unavailable', owner: 'diagnostics', summary: 'Compiler offline', evidence: 'Only local graph heuristics ran; package/schema validity is not proven.' };
+    pkg = { id: 'package', label: 'Project valid', shortLabel: 'Validation', status: 'unavailable', owner: 'diagnostics', summary: 'Validator offline', evidence: 'Only local graph heuristics ran; schema, corpus, and cross-file validity are not proven.' };
   } else {
-    pkg = diagnosticStage('package', 'Package valid', input.packageDiagnostics, 'diagnostics');
+    pkg = diagnosticStage('package', 'Project valid', input.packageDiagnostics, 'diagnostics');
   }
 
   const deploy = input.watcher.lastDeploy;
@@ -178,7 +178,7 @@ export function runReadinessSelftest() {
     sinceDeploy: { hasDeploy: true, changedSinceDeploy: true, summary: 'fresh' },
     verdict: { state: 'loaded_clean', detail: 'loaded clean', errorCount: 0 },
   };
-  const base: BuildReadinessInput = { workspaceName: 'W', workspaceHash: 'hash', graphDiagnostics: [], packageDiagnostics: [], diagnosticSource: 'package', watcher: readyWatcher };
+  const base: BuildReadinessInput = { workspaceName: 'W', workspaceHash: 'hash', graphDiagnostics: [], packageDiagnostics: [], diagnosticSource: 'project', watcher: readyWatcher };
   const checks: Array<{ name: string; pass: boolean; detail?: unknown }> = [];
   const ok = (name: string, pass: boolean, detail?: unknown) => checks.push({ name, pass, detail });
   const stage = (over: Partial<BuildReadinessInput>, id: ReadinessStageId) => buildReadinessStages({ ...base, ...over }).find(item => item.id === id)!;

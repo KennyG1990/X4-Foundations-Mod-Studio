@@ -51,7 +51,8 @@ if (!fs.existsSync(path.join(repoDist, "server.cjs")) || !fs.existsSync(path.joi
 fs.rmSync(APP, { recursive: true, force: true });
 fs.mkdirSync(path.join(APP, "dist"), { recursive: true });
 
-// Copy dist, excluding sourcemaps.
+// Copy only declared production artifacts, excluding sourcemaps. A recursive copy of
+// repoDist previously admitted Vite-copied validation fixtures and real mod content.
 let copied = 0, skippedMaps = 0;
 function copyDir(from, to) {
   for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
@@ -68,7 +69,30 @@ function copyDir(from, to) {
     }
   }
 }
-copyDir(repoDist, path.join(APP, "dist"));
+const allowedRootFiles = ["index.html", "favicon.svg", "server.cjs"];
+const allowedRootEntries = new Set([...allowedRootFiles, "assets", "server.cjs.map"]);
+const unexpectedEntries = fs.readdirSync(repoDist).filter((name) => !allowedRootEntries.has(name));
+if (unexpectedEntries.length > 0) {
+  console.error(`[stage-app] unexpected repo build artifact(s); refusing to package: ${unexpectedEntries.join(", ")}`);
+  process.exit(1);
+}
+for (const name of allowedRootFiles) {
+  const src = path.join(repoDist, name);
+  if (!fs.existsSync(src)) {
+    console.error(`[stage-app] required repo build artifact missing: ${name}`);
+    process.exit(1);
+  }
+  fs.copyFileSync(src, path.join(APP, "dist", name));
+  copied++;
+}
+const assetsDir = path.join(repoDist, "assets");
+if (!fs.existsSync(assetsDir)) {
+  console.error("[stage-app] required repo build artifact missing: assets/");
+  process.exit(1);
+}
+fs.mkdirSync(path.join(APP, "dist", "assets"), { recursive: true });
+copyDir(assetsDir, path.join(APP, "dist", "assets"));
+if (fs.existsSync(path.join(repoDist, "server.cjs.map"))) skippedMaps++;
 
 // Pruned runtime package.json with versions pinned from the repo's manifest.
 const repoPkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, "package.json"), "utf8"));

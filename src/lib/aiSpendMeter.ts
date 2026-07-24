@@ -8,7 +8,7 @@
  * sites; one orchestration request can fan out 5 provider calls). Gates existed
  * (tier default-off, per-call token caps, origin-locked keys) but nothing METERED
  * cumulative spend or LIMITED a runaway day — the exact shape that cost $256 on
- * the neural-link project. This meter counts per-provider daily calls at the
+ * optional external runtime projects. This meter counts per-provider daily calls at the
  * chokepoint and soft-stops past a configurable daily cap.
  *
  * Pure logic with injected store/clock (oracle-testable); the server persists to

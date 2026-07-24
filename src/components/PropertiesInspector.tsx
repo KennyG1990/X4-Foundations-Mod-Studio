@@ -25,7 +25,7 @@ import {
   Check,
   Copy
 } from 'lucide-react';
-import { ModWorkspace, MDNode, UIWidget } from '../types';
+import { ModWorkspace, MDNode, UIWidget, PackageDiagnostic } from '../types';
 import { explainNode } from '../lib/mdExplain';
 import { listQuickFixes, applyQuickFix } from '../lib/workspaceQuickFixes';
 import { luaMdBinding } from '../lib/luaMdBinding';
@@ -45,6 +45,7 @@ interface PropertiesInspectorProps {
   handleLabelChange: (newLabel: string) => void;
   handlePropChange: (key: string, value: unknown) => void;
   handleSendCuePackageToAIGuide: () => void;
+  diagnostics?: PackageDiagnostic[];
   showAdvancedActions?: boolean;
   setWorkspaceView?: (view: 'blueprint' | 'ui-designer' | 'aiscripts' | 'libraries' | 'xmlpatch' | 'contracts' | 'translation' | 'wiki' | 'project' | 'galaxy') => void;
 }
@@ -60,12 +61,20 @@ export default function PropertiesInspector({
   handleLabelChange,
   handlePropChange,
   handleSendCuePackageToAIGuide,
+  diagnostics = [],
   showAdvancedActions = true,
   setWorkspaceView
 }: PropertiesInspectorProps) {
   // Inspector-local UI state (moved in with the block — used nowhere else).
   const [explainOpen, setExplainOpen] = useState<boolean>(false);
   const [sidebarCopied, setSidebarCopied] = useState<boolean>(false);
+
+  const selectedDiagnostics = selectedNode ? diagnostics.filter((finding) => {
+    if (finding.nodeId === selectedNode.id || finding.sourceRef?.id === selectedNode.id) return true;
+    const label = String(finding.sourceRef?.label || '').trim();
+    if (!label) return false;
+    return Object.values(selectedNode.properties || {}).some((value) => String(value || '').includes(label));
+  }) : [];
 
   if (!selectedNode && !selectedWidget) return null;
 
@@ -183,6 +192,23 @@ export default function PropertiesInspector({
                   </div>
                 );
               })()}
+
+              {selectedNode && selectedDiagnostics.length > 0 && (
+                <div className="space-y-1" aria-live="polite" data-testid="selected-node-live-diagnostics">
+                  <div className="text-[8px] font-mono uppercase tracking-wider text-slate-400">Live validation</div>
+                  {selectedDiagnostics.slice(0, 5).map((finding, index) => (
+                    <div
+                      key={`${finding.code || finding.message}-${index}`}
+                      className={`rounded border px-2 py-1 text-[9px] leading-snug ${finding.severity === 'error'
+                        ? 'border-red-500/35 bg-red-500/[0.07] text-red-300'
+                        : 'border-amber-500/30 bg-amber-500/[0.06] text-amber-200'}`}
+                    >
+                      {finding.message}
+                      {finding.code && <span className="block mt-0.5 opacity-60 font-mono">{finding.code}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <div>
                 <label className="text-slate-400 block mb-1 font-semibold uppercase text-[9px] tracking-wider">Display Label</label>

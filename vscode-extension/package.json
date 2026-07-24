@@ -2,7 +2,7 @@
   "name": "x4-forge-studio",
   "displayName": "X4 Forge Studio",
   "description": "Visual modding studio for X4: Foundations â€” build, validate, and deploy mods with a node canvas and real-schema validation, no hand-written XML required.",
-  "version": "0.0.33",
+  "version": "0.0.36",
   "icon": "icon.png",
   "publisher": "x4forge",
   "license": "MIT",
@@ -59,7 +59,7 @@
     "viewsWelcome": [
       {
         "view": "x4forge.launcher",
-        "contents": "Build, validate, and deploy X4: Foundations mods on a visual canvas.\n\n[Open Studio](command:x4forge.openStudio)\n\nOpens the full studio in an editor tab, starting the local backend automatically.\n\n[Open Mod Folder](command:x4forge.openModFolder)\n[Validate Mod Folder](command:x4forge.validateModFolder)\n[Create Agent Key](command:x4forge.createAgentKey)\n[Show Backend Logs](command:x4forge.showLogs)\n[Stop Backend](command:x4forge.stopSidecar)"
+        "contents": "Build, validate, and deploy X4: Foundations mods on a visual canvas.\n\n[Open Studio](command:x4forge.openStudio)\n\nOpens the full studio in an editor tab, starts the local backend automatically, and continuously validates open X4 mod files while you type.\n\n[Open Mod Folder](command:x4forge.openModFolder)\n[Create Agent Key](command:x4forge.createAgentKey)\n[Show Backend Logs](command:x4forge.showLogs)\n[Stop Backend](command:x4forge.stopSidecar)"
       }
     ],
     "commands": [
@@ -82,10 +82,6 @@
       {
         "command": "x4forge.createAgentKey",
         "title": "X4 Forge: Create Agent Key"
-      },
-      {
-        "command": "x4forge.validateModFolder",
-        "title": "X4 Forge: Validate Mod Folder (Problems panel)"
       },
       {
         "command": "x4forge.openModFolder",
@@ -150,11 +146,6 @@
             "Like inspect, but pause at the first line so you can debug startup; continue execution in the debugger to start the server."
           ],
           "description": "Attach a Node debugger to the managed backend sidecar. For SOURCE-LEVEL (TypeScript) breakpoints, also set x4forge.forgeRoot to a built repo checkout (its bundle keeps sourcemaps); against the bundled app you debug at the bundled-JS level. Default off."
-        },
-        "x4forge.modFolder": {
-          "type": "string",
-          "default": "",
-          "description": "Default mod folder name (under the configured Mod Workspace root) for \"Validate Mod Folder\" — leave empty to be prompted each time."
         },
         "x4forge.writeXmlAssociations": {
           "type": "boolean",

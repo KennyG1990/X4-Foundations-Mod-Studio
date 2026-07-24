@@ -165,7 +165,7 @@ test('real canvas interactions create oriented links, move groups, add from pale
   // app compiles), not about the compiler — and mocking keeps the spec fast.
   await page.route('**/api/agent/compile', async (route) => {
     compileRequests += 1;
-    await route.fulfill({ json: { diagnostics: [] } });
+    await route.fulfill({ json: { diagnostics: [], validation: { scope: 'full-project' } } });
   });
 
   await seedWorkspace(page);

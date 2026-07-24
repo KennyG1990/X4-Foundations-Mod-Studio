@@ -64,7 +64,6 @@ function cfg() {
     nodePath: (c.get<string>("nodePath") || "").trim(),
     autoOpen: c.get<boolean>("autoOpen") === true,
     debug: ((c.get<string>("debug") || "off").trim() as "off" | "inspect" | "inspect-brk"),
-    modFolder: (c.get<string>("modFolder") || "").trim(),
     writeXmlAssociations: c.get<boolean>("writeXmlAssociations") === true,
   };
 }
@@ -373,7 +372,19 @@ async function autoRestartSidecar(context: vscode.ExtensionContext, exitCode: nu
   }
 }
 
+let backendEnsurePromise: Promise<BackendHandle> | null = null;
+
 async function ensureBackend(context: vscode.ExtensionContext): Promise<BackendHandle> {
+  if (backendEnsurePromise) return backendEnsurePromise;
+  backendEnsurePromise = ensureBackendOnce(context);
+  try {
+    return await backendEnsurePromise;
+  } finally {
+    backendEnsurePromise = null;
+  }
+}
+
+async function ensureBackendOnce(context: vscode.ExtensionContext): Promise<BackendHandle> {
   // Reuse a live handle.
   if (backend) {
     if (await probeForge(backend.baseUrl, 2000)) return backend;
@@ -597,14 +608,11 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
-  // B56s1 — Problems-panel projection: run the sidecar's FULL validator stack
-  // (structure → cues → cross-file → schemas incl. routed domains → lints) over a mod
-  // folder and surface the flat findings as native IDE diagnostics. The extension never
-  // revalidates anything itself — it projects server truth (one-referee rule).
+  // Problems-panel projection is continuous: the sidecar's FULL validator stack runs
+  // for open/change/save events and the extension only projects its one-referee result.
   diagCollection = vscode.languages.createDiagnosticCollection("x4forge");
   context.subscriptions.push(
     diagCollection,
-    vscode.commands.registerCommand("x4forge.validateModFolder", () => validateModFolder(context)),
     vscode.commands.registerCommand("x4forge.openModFolder", () => openModFolder(context)),
     vscode.commands.registerCommand("x4forge.copyMcpConfig", () => copyMcpConfig(context)),
     vscode.commands.registerCommand("x4forge.refreshAgentBrief", () => refreshAgentBrief(context)),
@@ -614,13 +622,6 @@ export function activate(context: vscode.ExtensionContext): void {
   registerLangProviders(context);
   registerNavProviders(context);
   registerTwoWayEditing(context);
-  context.subscriptions.push(
-    vscode.workspace.onDidSaveTextDocument((doc) => {
-      if (!lastValidated || !doc.uri.fsPath.toLowerCase().startsWith(lastValidated.root.toLowerCase())) return;
-      if (revalidateTimer) clearTimeout(revalidateTimer);
-      revalidateTimer = setTimeout(() => void validateModFolder(context, lastValidated?.fromPath), 600);
-    }),
-  );
 
   // Opt-in convenience (x4forge.autoOpen): open the studio once the workspace loads.
   // Only ever runs in trusted workspaces — the manifest disables the extension
@@ -636,83 +637,12 @@ export function activate(context: vscode.ExtensionContext): void {
 // ---------------------------------------------------------------------------
 
 let diagCollection: vscode.DiagnosticCollection | null = null;
-let lastValidated: { root: string; fromPath: string } | null = null;
-let revalidateTimer: ReturnType<typeof setTimeout> | null = null;
 
 const DIAG_SEVERITY: Record<string, vscode.DiagnosticSeverity> = {
   error: vscode.DiagnosticSeverity.Error,
   warning: vscode.DiagnosticSeverity.Warning,
   info: vscode.DiagnosticSeverity.Information,
 };
-
-async function validateModFolder(context: vscode.ExtensionContext, fromPathArg?: string): Promise<void> {
-  try {
-    const handle = await ensureBackend(context);
-    if (!handle.owned || !handle.token) {
-      void vscode.window.showInformationMessage(
-        "X4 Forge: attached to an externally-run Forge — the extension holds no credential for it (by design). Validate in that Forge's UI, or stop it and let the extension manage a sidecar.",
-      );
-      return;
-    }
-    const fromPath = (fromPathArg
-      || cfg().modFolder
-      || (await vscode.window.showInputBox({
-        prompt: "Mod folder to validate (name under the configured Mod Workspace root)",
-        placeHolder: "e.g. x4_ai_influence — set x4forge.modFolder to skip this prompt",
-        validateInput: (v) => (v.trim() ? undefined : "Folder name required"),
-      }))
-      || "").trim();
-    if (!fromPath) return;
-
-    const res = await fetch(`${handle.baseUrl}/api/agent/project/validate`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${handle.token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ fromPath }),
-    });
-    const data = (await res.json()) as {
-      flat?: FlatFinding[];
-      source?: { mode: string; root?: string; loaded?: string[] };
-      summary?: Record<string, number>;
-      error?: string;
-    };
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    if (!data.source || data.source.mode !== "fromPath" || !data.source.root) {
-      throw new Error("Validate response carried no folder root — server too old for fromPath projection?");
-    }
-
-    const mapped = mapFlatFindings(data.flat || [], data.source.loaded || []);
-    diagCollection?.clear();
-    let errors = 0;
-    let warnings = 0;
-    for (const [rel, list] of mapped.byFile) {
-      const uri = vscode.Uri.file(path.join(data.source.root, ...rel.split("/")));
-      diagCollection?.set(uri, list.map((d) => {
-        if (d.severity === "error") errors++;
-        else if (d.severity === "warning") warnings++;
-        const diag = new vscode.Diagnostic(
-          new vscode.Range(d.line, 0, d.line, 200),
-          d.message,
-          DIAG_SEVERITY[d.severity] ?? vscode.DiagnosticSeverity.Information,
-        );
-        diag.source = "x4forge";
-        if (d.code) diag.code = d.code;
-        return diag;
-      }));
-    }
-    lastValidated = { root: data.source.root, fromPath };
-    const suffix = mapped.unanchored ? ` (+${mapped.unanchored} unanchored)` : "";
-    log(`validated "${fromPath}": ${errors} error(s), ${warnings} warning(s) across ${mapped.byFile.size} file(s)${suffix}`);
-    void vscode.window.setStatusBarMessage(
-      `X4 Forge: ${errors === 0 && warnings === 0 ? "validation clean" : `${errors} error(s), ${warnings} warning(s)`} — ${fromPath}${suffix}`,
-      8000,
-    );
-  } catch (err) {
-    // Sidecar down / request failed → never leave STALE diagnostics lying around.
-    diagCollection?.clear();
-    lastValidated = null;
-    showBackendError(`Validate Mod Folder failed: ${err instanceof Error ? err.message : String(err)}`);
-  }
-}
 
 // ---------------------------------------------------------------------------
 // B56s2 — mod workspace as a real IDE folder (read-mostly phase A; the canvas/server
@@ -779,6 +709,7 @@ async function openModFolder(context: vscode.ExtensionContext): Promise<void> {
       });
     }
     log(`opened mod folder as workspace folder: ${modPath} (recommendations written)`);
+    scheduleLiveRootValidation(context, modPath, 80);
     void vscode.window.setStatusBarMessage(`X4 Forge: "${pick}" added to the workspace — explorer, search, and git now see it.`, 8000);
   } catch (err) {
     showBackendError(`Open Mod Folder failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -797,10 +728,26 @@ const langCache = new Map<string, { at: number; data: unknown }>();
 
 /** A file participates in X4 IntelliSense when it lives under a known mod root. */
 function modRootFor(fsPath: string): string | null {
-  const p = fsPath.toLowerCase();
-  if (lastValidated && p.startsWith(lastValidated.root.toLowerCase())) return lastValidated.root;
-  for (const f of vscode.workspace.workspaceFolders || []) {
-    if (f.name.startsWith("X4 Mod: ") && p.startsWith(f.uri.fsPath.toLowerCase())) return f.uri.fsPath;
+  const absolute = path.resolve(fsPath);
+  const folders = [...(vscode.workspace.workspaceFolders || [])]
+    .filter((folder) => {
+      const rel = path.relative(folder.uri.fsPath, absolute);
+      return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+    })
+    .sort((a, b) => b.uri.fsPath.length - a.uri.fsPath.length);
+  for (const folder of folders) {
+    const boundary = path.resolve(folder.uri.fsPath);
+    let cursor = path.dirname(absolute);
+    try { if (fs.existsSync(absolute) && fs.statSync(absolute).isDirectory()) cursor = absolute; } catch { /* use parent */ }
+    while (true) {
+      if (fs.existsSync(path.join(cursor, "content.xml"))) return cursor;
+      if (cursor.toLowerCase() === boundary.toLowerCase()) break;
+      const parent = path.dirname(cursor);
+      if (parent === cursor) break;
+      cursor = parent;
+    }
+    // Newly scaffolded folders may not have content.xml until their first canvas compile.
+    if (folder.name.startsWith("X4 Mod: ")) return boundary;
   }
   return null;
 }
@@ -1124,58 +1071,142 @@ function registerNavProviders(context: vscode.ExtensionContext): void {
     }),
   );
 
-  // Unsaved-buffer diagnostics: the edited BUFFER + its siblings from disk go through the
-  // full inline validator — squiggles while typing, saves not required. Debounced; the
-  // server stays the referee (nothing is computed extension-side).
-  let liveTimer: ReturnType<typeof setTimeout> | null = null;
+  // Unsaved-buffer diagnostics: all open buffers overlay a complete disk scan and go
+  // through the full inline validator. Open/change/save all schedule the same referee.
   context.subscriptions.push(
     vscode.workspace.onDidChangeTextDocument((e) => {
-      if (!e.document.uri.fsPath.toLowerCase().endsWith(".xml")) return;
-      const root = modRootFor(e.document.uri.fsPath);
-      if (!root || !backend?.owned || !backend.token) return;
-      if (liveTimer) clearTimeout(liveTimer);
-      liveTimer = setTimeout(() => void liveValidateBuffer(root, e.document), 800);
+      scheduleLiveValidation(context, e.document, 650);
     }),
+    vscode.workspace.onDidOpenTextDocument((doc) => scheduleLiveValidation(context, doc, 80)),
+    vscode.workspace.onDidSaveTextDocument((doc) => scheduleLiveValidation(context, doc, 80)),
   );
+  for (const doc of vscode.workspace.textDocuments) scheduleLiveValidation(context, doc, 120);
+  for (const folder of vscode.workspace.workspaceFolders || []) {
+    const roots: string[] = [];
+    if (fs.existsSync(path.join(folder.uri.fsPath, "content.xml"))) roots.push(folder.uri.fsPath);
+    else {
+      try {
+        for (const entry of fs.readdirSync(folder.uri.fsPath, { withFileTypes: true })) {
+          if (entry.isDirectory() && !entry.name.startsWith(".") && fs.existsSync(path.join(folder.uri.fsPath, entry.name, "content.xml"))) {
+            roots.push(path.join(folder.uri.fsPath, entry.name));
+          }
+        }
+      } catch { /* workspace folder may disappear during activation */ }
+    }
+    roots.forEach((root, index) => scheduleLiveRootValidation(context, root, 180 + index * 40));
+  }
 }
 
-async function liveValidateBuffer(root: string, doc: vscode.TextDocument): Promise<void> {
+const LIVE_FILE_LIMIT = 2000;
+const liveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const liveGenerations = new Map<string, number>();
+const diagnosticUrisByRoot = new Map<string, Set<string>>();
+
+function setRootValidationWarning(root: string, code: string, message: string): void {
+  const key = path.resolve(root).toLowerCase();
+  const uri = vscode.Uri.file(path.join(root, "content.xml"));
+  for (const stale of diagnosticUrisByRoot.get(key) || []) diagCollection?.delete(vscode.Uri.parse(stale));
+  const warning = new vscode.Diagnostic(new vscode.Range(0, 0, 0, 0), message, vscode.DiagnosticSeverity.Warning);
+  warning.source = "x4forge";
+  warning.code = code;
+  diagCollection?.set(uri, [warning]);
+  diagnosticUrisByRoot.set(key, new Set([uri.toString()]));
+}
+
+function isAuthoringDocument(doc: vscode.TextDocument): boolean {
+  return doc.uri.scheme === "file" && /\.(xml|lua)$/i.test(doc.uri.fsPath);
+}
+
+function scheduleLiveValidation(context: vscode.ExtensionContext, doc: vscode.TextDocument, delayMs: number): void {
+  if (!isAuthoringDocument(doc)) return;
+  const root = modRootFor(doc.uri.fsPath);
+  if (!root) return;
+  scheduleLiveRootValidation(context, root, delayMs);
+}
+
+function scheduleLiveRootValidation(context: vscode.ExtensionContext, root: string, delayMs = 650): void {
+  const key = path.resolve(root).toLowerCase();
+  const prior = liveTimers.get(key);
+  if (prior) clearTimeout(prior);
+  const generation = (liveGenerations.get(key) || 0) + 1;
+  liveGenerations.set(key, generation);
+  liveTimers.set(key, setTimeout(() => {
+    liveTimers.delete(key);
+    void ensureBackend(context)
+      .then(() => liveValidateRoot(root, generation))
+      .catch((err) => log(`continuous validation unavailable: ${err instanceof Error ? err.message : String(err)}`));
+  }, delayMs));
+}
+
+async function liveValidateRoot(root: string, generation: number): Promise<void> {
   try {
-    if (!backend?.owned || !backend.token) return;
-    const editedRel = relModPath(root, doc.uri.fsPath);
-    const files: Array<{ path: string; content: string }> = [{ path: editedRel, content: doc.getText() }];
-    // Siblings from disk so cross-file checks stay accurate (mod folders are small).
-    const walk = (rel: string, depth: number) => {
-      if (depth > 3 || files.length > 80) return;
+    if (!backend?.owned || !backend.token) {
+      setRootValidationWarning(root, "validation.backend_credential_unavailable", "X4 Forge continuous validation is unavailable because this extension attached to an externally managed backend without a credential. The Studio still validates continuously; native IDE squiggles require the extension-managed sidecar.");
+      return;
+    }
+    const byPath = new Map<string, { path: string; content: string }>();
+    let overflow = false;
+    const walk = (rel: string) => {
+      if (byPath.size >= LIVE_FILE_LIMIT) { overflow = true; return; }
       let entries: fs.Dirent[];
       try { entries = fs.readdirSync(path.join(root, ...rel.split("/").filter(Boolean)), { withFileTypes: true }); } catch { return; }
       for (const e of entries) {
+        if (byPath.size >= LIVE_FILE_LIMIT) { overflow = true; return; }
         const childRel = rel ? `${rel}/${e.name}` : e.name;
-        if (e.isDirectory()) { if (!e.name.startsWith(".")) walk(childRel, depth + 1); continue; }
-        if (!/\.(xml|lua)$/i.test(e.name) || childRel === editedRel) continue;
-        try { files.push({ path: childRel, content: fs.readFileSync(path.join(root, ...childRel.split("/")), "utf8") }); } catch { /* skip */ }
+        if (e.isDirectory()) {
+          if (!e.name.startsWith(".") && e.name.toLowerCase() !== "node_modules") walk(childRel);
+          continue;
+        }
+        if (!/\.(xml|lua)$/i.test(e.name)) continue;
+        try { byPath.set(childRel.toLowerCase(), { path: childRel, content: fs.readFileSync(path.join(root, ...childRel.split("/")), "utf8") }); } catch { /* skip */ }
       }
     };
-    walk("", 0);
+    walk("");
+    for (const open of vscode.workspace.textDocuments) {
+      if (!isAuthoringDocument(open)) continue;
+      const rel = path.relative(root, open.uri.fsPath);
+      if (rel.startsWith("..") || path.isAbsolute(rel)) continue;
+      const normalized = rel.replace(/\\/g, "/");
+      byPath.set(normalized.toLowerCase(), { path: normalized, content: open.getText() });
+    }
+    if (overflow || byPath.size > LIVE_FILE_LIMIT) {
+      setRootValidationWarning(root, "validation.file_limit", `X4 Forge continuous validation stopped: this mod exceeds the ${LIVE_FILE_LIMIT.toLocaleString()}-file safety limit. No partial clean result was reported.`);
+      return;
+    }
+    const files = [...byPath.values()];
     const res = await fetch(`${backend.baseUrl}/api/agent/project/validate`, {
       method: "POST",
       headers: { Authorization: `Bearer ${backend.token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ project: { id: path.basename(root), name: path.basename(root), files } }),
     });
-    if (!res.ok) return;
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = (await res.json()) as { flat?: FlatFinding[] };
+    const key = path.resolve(root).toLowerCase();
+    if (liveGenerations.get(key) !== generation) return;
     const mapped = mapFlatFindings(data.flat || [], files.map((f) => f.path));
-    diagCollection?.clear();
+    const currentUris = new Set<string>();
     for (const [rel, list] of mapped.byFile) {
-      diagCollection?.set(vscode.Uri.file(path.join(root, ...rel.split("/"))), list.map((d) => {
-        const diag = new vscode.Diagnostic(new vscode.Range(d.line, 0, d.line, 200), d.message, DIAG_SEVERITY[d.severity] ?? vscode.DiagnosticSeverity.Information);
+      const uri = vscode.Uri.file(path.join(root, ...rel.split("/")));
+      currentUris.add(uri.toString());
+      const open = vscode.workspace.textDocuments.find((candidate) => candidate.uri.toString() === uri.toString());
+      diagCollection?.set(uri, list.map((d) => {
+        const line = open ? Math.min(d.line, Math.max(0, open.lineCount - 1)) : d.line;
+        const end = open ? open.lineAt(line).text.length : 200;
+        const diag = new vscode.Diagnostic(new vscode.Range(line, 0, line, end), d.message, DIAG_SEVERITY[d.severity] ?? vscode.DiagnosticSeverity.Information);
         diag.source = "x4forge";
         if (d.code) diag.code = d.code;
         return diag;
       }));
     }
-  } catch {
-    /* live diagnostics are best-effort; the save/command paths remain authoritative */
+    for (const stale of diagnosticUrisByRoot.get(key) || []) {
+      if (!currentUris.has(stale)) diagCollection?.delete(vscode.Uri.parse(stale));
+    }
+    diagnosticUrisByRoot.set(key, currentUris);
+    log(`continuous validation: ${path.basename(root)} · ${mapped.total} finding(s) across ${files.length} file(s)`);
+  } catch (error) {
+    const key = path.resolve(root).toLowerCase();
+    if (liveGenerations.get(key) !== generation) return;
+    setRootValidationWarning(root, "validation.request_failed", `X4 Forge continuous validation could not refresh: ${error instanceof Error ? error.message : String(error)}. The previous result was discarded so it cannot masquerade as current.`);
   }
 }
 

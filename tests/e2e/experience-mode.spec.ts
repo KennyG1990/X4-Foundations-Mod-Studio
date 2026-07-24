@@ -19,7 +19,7 @@ async function bootBeginner(page: Page, corruptPreference = false) {
     if (corrupt) localStorage.setItem('x4_forge_experience_mode', 'not-a-mode');
     else localStorage.removeItem('x4_forge_experience_mode');
   }, corruptPreference);
-  await page.route('**/api/agent/compile', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ diagnostics: [] }) }));
+  await page.route('**/api/agent/compile', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ diagnostics: [], validation: { scope: 'full-project' } }) }));
   await page.route('**/api/agent/debug-watcher/brief**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, status: { lastDeploy: null }, verdict: { state: 'not_seen', detail: 'No current game evidence.', errorCount: 0 }, sinceDeploy: { hasDeploy: false, changedSinceDeploy: false, summary: 'No deploy.' } }) }));
   await page.goto('/');
   await expect(page.getByTestId('beginner-workspace')).toBeVisible();
@@ -75,7 +75,7 @@ test('corrupt preference falls back safely and blocking evidence cannot become g
     localStorage.removeItem('x4_mod_studio_workspace');
     localStorage.setItem('x4_forge_experience_mode', 'broken');
   });
-  await page.route('**/api/agent/compile', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ diagnostics: [{ severity: 'error', category: 'syntax', code: 'test.blocker', domain: 'md', filePath: 'md/test.xml', message: 'Blocking package error' }] }) }));
+  await page.route('**/api/agent/compile', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ diagnostics: [{ severity: 'error', category: 'syntax', code: 'test.blocker', domain: 'md', filePath: 'md/test.xml', message: 'Blocking package error' }], validation: { scope: 'full-project' } }) }));
   await page.route('**/api/agent/debug-watcher/brief**', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'watcher offline' }) }));
   await page.goto('/');
   await expect(page.getByTestId('beginner-workspace')).toBeVisible();

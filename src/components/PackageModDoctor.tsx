@@ -11,7 +11,7 @@ import { critiqueWorkspace } from '../lib/mdCritic';
 interface PackageModDoctorProps {
   workspace: ModWorkspace;
   diagnostics: PackageDiagnostic[];
-  diagnosticSource: 'checking' | 'package' | 'local';
+  diagnosticSource: 'checking' | 'project' | 'local';
   /** H7: which diagnostics scope to render. 'package' = this mod's build/critic/
    *  selftests; 'install' = the cross-mod Install Diagnostics (Extension Doctor);
    *  'all' (default) = both, for standalone use. */
@@ -294,10 +294,10 @@ export default function PackageModDoctor({
         <div className="flex items-center justify-between border-b border-white/5 pb-2">
           <div className="flex items-center gap-1.5 text-slate-300 font-semibold tracking-tight text-[11px]">
             <Terminal className="w-4 h-4 text-cyan-400 animate-pulse" />
-            PACKAGE DIAGNOSTICS
+            FULL-PROJECT VALIDATION
           </div>
           <span className="text-[9px] font-bold text-slate-400 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20">
-            {diagnosticSource === 'checking' ? 'CHECKING...' : diagnosticSource === 'package' ? 'API INTEGRATED' : 'LOCAL ENGINE'}
+            {diagnosticSource === 'checking' ? 'CHECKING...' : diagnosticSource === 'project' ? 'FULL PROJECT · LIVE' : 'LOCAL ENGINE'}
           </span>
         </div>
 
@@ -647,7 +647,7 @@ export default function PackageModDoctor({
             <div className="text-emerald-400/90 text-[10.5px] leading-normal flex flex-col items-center justify-center text-center gap-2 bg-emerald-500/5 p-4 rounded-lg border border-emerald-500/10 font-sans font-medium h-32">
               <CheckCircle className="w-7 h-7 text-emerald-400 shrink-0 mb-1" />
               <span className="font-mono font-bold uppercase text-[9px] text-emerald-300 tracking-wider">Mod Status Clean</span>
-              <span>All generated mod files comply with X4 system validation schemas.</span>
+              <span>The current mod passes the available X4 schemas, corpus references, script-property, and cross-file checks.</span>
             </div>
           )
         ) : (

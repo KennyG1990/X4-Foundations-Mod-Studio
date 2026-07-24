@@ -78,6 +78,9 @@ function studioTokenPlugin(): Plugin {
 
 export default defineConfig(() => {
   return {
+    // `public/` contains tracked validation fixtures and must never be copied into a
+    // production app. Only explicitly curated browser assets live in this clean root.
+    publicDir: path.resolve(__dirname, 'public-assets'),
     define: {
       __APP_VERSION__: JSON.stringify(APP_VERSION),
       __APP_BUILD__: JSON.stringify(APP_BUILD),

@@ -4,7 +4,7 @@
  *
  * Startup walkaround card (beta-UX bundle D1, 2026-07-09) — the pre-flight inspection
  * a pilot does before touching anything: paths found, schemas loaded, game data indexed,
- * bridge alive, mod copies in sync, resident Lua fresh. One card, five seconds, no
+ * optional runtime integration alive, mod copies in sync, resident Lua fresh. One card, five seconds, no
  * surprises an hour into work.
  *
  * Pure assembly: the server gathers probe RESULTS (this module does no I/O) and this
@@ -62,14 +62,13 @@ export function buildHealthCard(p: HealthProbes): HealthCard {
   row('object_index', 'Game object index', p.objectIndex ? 'pass' : 'warn',
     p.objectIndex ? `${p.objectIndex.items} wares/factions/ships indexed` : 'Object index not built yet — reference pickers will be empty until first build.');
 
-  // Live chain — bridge + log. The neural-link bridge is an OPTIONAL integration used
-  // only by bridge-connected mods (e.g. x4_ai_influence) — ADR-F3 binds it as "optional,
-  // never a dependency". A down bridge is therefore NEVER a warning for the general
-  // walkaround: report it neutrally so it can't read as a requirement for every mod.
-  if (!p.bridge) row('bridge', 'Neural-link bridge (optional)', 'unknown', 'Probe did not run.');
-  else if (p.bridge.bridgeUp) row('bridge', 'Neural-link bridge (optional)', 'pass', p.bridge.summary);
-  else row('bridge', 'Neural-link bridge (optional)', 'unknown',
-    `Not running — only used by bridge-integrated mods (e.g. x4_ai_influence); not required for anything else. (${p.bridge.summary})`);
+  // Live chain — optional external runtime + log. ADR-F3 binds external integrations as
+  // optional and never a Forge dependency. An unavailable runtime is therefore NEVER a
+  // warning for the general walkaround.
+  if (!p.bridge) row('bridge', 'Optional runtime integration', 'unknown', 'Probe did not run.');
+  else if (p.bridge.bridgeUp) row('bridge', 'Optional runtime integration', 'pass', p.bridge.summary);
+  else row('bridge', 'Optional runtime integration', 'unknown',
+    `Not running — core Forge authoring and validation are unaffected. (${p.bridge.summary})`);
   if (!p.debugLog) row('debuglog', 'X4 debug log', 'unknown', 'Probe did not run.');
   else row('debuglog', 'X4 debug log', p.debugLog.found ? 'pass' : 'warn',
     p.debugLog.found ? `Found (last write ${p.debugLog.updatedAt || 'unknown'}) — LIVE mode available` : 'No debuglog found — LIVE mode and the log watcher have nothing to read (launch X4 with -debug scripts -logfile debuglog.txt).');
@@ -136,12 +135,16 @@ export function runHealthCardSelftest(): {
     broken.rows.find(r => r.id === 'game_path')!.detail.includes('Settings')
     && broken.rows.find(r => r.id === 'debuglog')!.detail.includes('-debug scripts'));
   ok('drift warn not fail (advisory)', broken.rows.find(r => r.id === 'drift')!.status === 'warn');
-  // Ken 2026-07-15: the bridge is x4_ai_influence-specific (ADR-F3 optional) — a DOWN
-  // bridge must NEVER surface as a warn/requirement in the general walkaround.
+  // ADR-F3: an unavailable optional runtime must NEVER surface as a warning or
+  // requirement in the general walkaround.
   ok('down bridge is neutral info, never a warn (optional integration)',
     broken.rows.find(r => r.id === 'bridge')!.status === 'unknown'
-    && broken.rows.find(r => r.id === 'bridge')!.label.toLowerCase().includes('optional')
-    && broken.rows.find(r => r.id === 'bridge')!.detail.includes('x4_ai_influence'));
+    && broken.rows.find(r => r.id === 'bridge')!.label.toLowerCase().includes('optional'));
+  ok('optional integration copy is implementation-neutral',
+    broken.rows.find(r => r.id === 'bridge')!.label === 'Optional runtime integration'
+    && broken.rows.find(r => r.id === 'bridge')!.detail.includes('core Forge authoring and validation are unaffected')
+    && !broken.rows.find(r => r.id === 'bridge')!.detail.includes('x4_ai'),
+    broken.rows.find(r => r.id === 'bridge'));
 
   const partial = buildHealthCard({ gamePath: { path: 'G:/X4', exists: true }, mdSchema: { loaded: true, elements: 10 } });
   ok('missing probes → unknown, never claimed healthy',

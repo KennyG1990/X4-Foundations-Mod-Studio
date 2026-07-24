@@ -1,4 +1,6 @@
 import { expect, test } from '@playwright/test';
+import { buildTemplateWorkspace } from '../../src/lib/modTemplates';
+import { readServerWorkspace, seedServerWorkspace } from './ephemeral';
 
 const baseXml = `<?xml version="1.0" encoding="utf-8"?>
 <wares>
@@ -11,6 +13,8 @@ const editedXml = `<?xml version="1.0" encoding="utf-8"?>
 </wares>`;
 
 test('diff-to-patch three-pane merge synthesizes and adopts a patch block', async ({ page }) => {
+  const workspace = { ...buildTemplateWorkspace('welcome'), xmlPatches: [] };
+  await seedServerWorkspace(workspace);
   await page.addInitScript(() => {
     localStorage.removeItem('x4_mod_studio_workspace');
     localStorage.removeItem('x4_mod_studio_version');
@@ -44,17 +48,10 @@ test('diff-to-patch three-pane merge synthesizes and adopts a patch block', asyn
   });
 
   await page.goto('/');
-  await page.waitForFunction(() => !!(window as Window & { __X4_E2E__?: unknown }).__X4_E2E__);
-  await page.evaluate(() => {
-    const api = (window as Window & {
-      __X4_E2E__?: {
-        getWorkspace: () => Record<string, unknown>;
-        setWorkspace: (workspace: Record<string, unknown>) => void;
-      };
-    }).__X4_E2E__;
-    if (!api) throw new Error('missing E2E API');
-    api.setWorkspace({ ...api.getWorkspace(), xmlPatches: [] });
-  });
+  await page.waitForFunction((name: string) => {
+    const api = (window as Window & { __X4_E2E__?: { getWorkspace: () => { name?: string } } }).__X4_E2E__;
+    return api?.getWorkspace().name === name;
+  }, workspace.name);
   await page.getByRole('button', { name: 'XML Patching' }).click();
   await page.getByRole('button', { name: 'Diff→Patch', exact: true }).click();
 
@@ -84,4 +81,9 @@ test('diff-to-patch three-pane merge synthesizes and adopts a patch block', asyn
   await page.getByRole('button', { name: 'Add to Workspace' }).click();
   await expect(workbench.locator('span').filter({ hasText: 'Diff→Patch synthesized' })).toBeVisible();
   await expect(workbench.getByText("/wares/ware[@id='energycells']/@volume")).toBeVisible();
+  await expect.poll(async () => {
+    const saved = await readServerWorkspace();
+    return saved.xmlPatches?.some((patch: { note?: string; sel?: string }) =>
+      patch.note === 'Diff→Patch synthesized' && patch.sel === "/wares/ware[@id='energycells']/@volume");
+  }).toBe(true);
 });

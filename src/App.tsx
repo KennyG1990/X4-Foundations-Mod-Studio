@@ -220,7 +220,8 @@ export default function App() {
 
   // Diagnostics / Mod Doctor states moved to App level to share across Sidebar/CodePreview
   const [diagnostics, setDiagnostics] = useState<PackageDiagnostic[]>([]);
-  const [diagnosticSource, setDiagnosticSource] = useState<'checking' | 'package' | 'local'>('checking');
+  const [bufferDiagnostics, setBufferDiagnostics] = useState<PackageDiagnostic[] | null>(null);
+  const [diagnosticSource, setDiagnosticSource] = useState<'checking' | 'project' | 'local'>('checking');
   const [readinessWatcher, setReadinessWatcher] = useState<ReadinessWatcherEvidence>({ phase: 'loading' });
   const [experienceConfirmations, setExperienceConfirmations] = useState<Record<string, ExperienceConfirmation>>(
     () => parseExperienceConfirmations(localStorage.getItem(EXPERIENCE_CONFIRMATIONS_KEY))
@@ -250,6 +251,7 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     const localReports = validateModWorkspace(workspace, mdCode);
     setDiagnosticSource('checking');
 
@@ -258,15 +260,20 @@ export default function App() {
         const response = await fetch('/api/agent/compile', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ workspace })
+          body: JSON.stringify({ workspace }),
+          signal: controller.signal,
         });
-        const data = await handleApiResponse<{ diagnostics?: PackageDiagnostic[] }>(response, 'Package Mod Doctor check failed.');
+        const data = await handleApiResponse<{ diagnostics?: PackageDiagnostic[]; validation?: { scope?: string } }>(response, 'Full project validation failed.');
+        if (data.validation?.scope !== 'full-project') {
+          throw new Error('The connected Forge backend does not expose full-project live validation. Restart or update the backend.');
+        }
         if (!cancelled) {
           setDiagnostics(data.diagnostics || []);
-          setDiagnosticSource('package');
+          setDiagnosticSource('project');
         }
       } catch (err) {
-        console.warn('Package Mod Doctor unavailable; falling back to local MD diagnostics:', err);
+        if (controller.signal.aborted) return;
+        console.warn('Full project validation unavailable; falling back to local MD diagnostics:', err);
         if (!cancelled) {
           setDiagnostics(localReports);
           setDiagnosticSource('local');
@@ -276,6 +283,7 @@ export default function App() {
 
     return () => {
       cancelled = true;
+      controller.abort();
       window.clearTimeout(timer);
     };
   }, [workspace, mdCode]);
@@ -315,15 +323,16 @@ export default function App() {
     () => validateModWorkspace(workspace, mdCode),
     [workspace, mdCode]
   );
+  const effectiveDiagnostics = bufferDiagnostics ?? diagnostics;
   const readinessStages = React.useMemo(() => buildReadinessStages({
     workspaceName: workspace.name,
     workspaceHash: readinessWorkspaceHash,
     graphDiagnostics,
-    packageDiagnostics: diagnostics,
+    packageDiagnostics: effectiveDiagnostics,
     diagnosticSource,
     watcher: readinessWatcher,
     confirmation: experienceConfirmations[workspace.name] || null,
-  }), [workspace.name, readinessWorkspaceHash, graphDiagnostics, diagnostics, diagnosticSource, readinessWatcher, experienceConfirmations]);
+  }), [workspace.name, readinessWorkspaceHash, graphDiagnostics, effectiveDiagnostics, diagnosticSource, readinessWatcher, experienceConfirmations]);
 
   const navigateReadiness = React.useCallback((owner: ReadinessOwner, stage: ReadinessStageId) => {
     if (experienceMode === 'beginner') {
@@ -1816,7 +1825,7 @@ export default function App() {
           onDeclineArchitectStep={declineArchitectStep}
           architectCanRun={architectCanRun}
           architectRunDisabledReason={architectCanRun ? undefined : 'No AI key set — add one in Settings → AI Assistant → Configure AI engine.'}
-          diagnostics={diagnostics}
+          diagnostics={effectiveDiagnostics}
           diagnosticSource={diagnosticSource}
           diagnosticsScope={diagnosticsScope}
           onSelectSnapshot={setSnapshotDiffWorkspace}
@@ -1868,7 +1877,7 @@ export default function App() {
               selectedCueIds={selectedCueIds}
               setSelectedCueIds={setSelectedCueIds}
               activeMdScript={activeMdScript}
-              packageDiagnostics={diagnostics}
+              packageDiagnostics={effectiveDiagnostics}
               diagnosticSource={diagnosticSource}
             />
           ) : workspaceView === 'ui-designer' ? (
@@ -1971,7 +1980,8 @@ export default function App() {
             activeEditorFile={activeEditorFile}
             setActiveEditorFile={setActiveEditorFile}
             selectedNode={selectedNode}
-            diagnostics={diagnostics}
+            diagnostics={effectiveDiagnostics}
+            onBufferDiagnosticsChange={setBufferDiagnostics}
             diagnosticSource={diagnosticSource}
             snapshotDiffWorkspace={snapshotDiffWorkspace}
             onClearSnapshotDiff={() => setSnapshotDiffWorkspace(null)}

@@ -91,6 +91,8 @@ export interface ScriptPropertyFinding {
   segment: string;
   /** keyword root the typed check used, when applicable */
   root?: string;
+  /** Project-relative source file so editor diagnostics land in the correct buffer. */
+  filePath?: string;
   line: number;
   suggestions: string[];
   detail: string;
@@ -435,6 +437,7 @@ function buildSubselectorFinding(masked: string, at: number, chain: string, head
     severity: 'warning',
     chain,
     segment: head,
+    filePath: opts?.filePath,
     line,
     suggestions,
     detail: `"${head}" (in ${chain}${opts?.filePath ? `, ${opts.filePath}` : ''}) has no bare form in scriptproperties.xml — it always takes a sub-selector (${suggestions.join(', ')}). Bare use evaluates to nothing in-game with no error (the $station.controlentity failure class).`,
@@ -451,6 +454,7 @@ function buildFinding(masked: string, at: number, chain: string, segment: string
     chain,
     segment: clean,
     root,
+    filePath: opts?.filePath,
     line,
     suggestions,
     detail: `"${clean}" (in ${chain}${opts?.filePath ? `, ${opts.filePath}` : ''}) is not a known script property${root ? ` of keyword "${root}"` : ''} in the game's scriptproperties.xml — X4 raises no error for unknown properties, the expression just evaluates false/null and the branch silently skips.${suggestions.length ? ` Did you mean: ${suggestions.join(', ')}?` : ''}`,

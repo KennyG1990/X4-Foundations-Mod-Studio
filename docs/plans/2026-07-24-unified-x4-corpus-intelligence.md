@@ -9,6 +9,7 @@
 
 Task: B75 unified corpus intelligence
 Lane: FULL
+Status: VERIFIED 2026-07-24 — published and installed as OpenVSX 0.0.36
 
 ## PLAN
 
@@ -213,13 +214,13 @@ Lane: FULL
 - Reconciliation correction: the current e2e harness is isolated on ports 3100/3101 with a per-run state directory; it does not swap the live 3000/3001 workspace. The stricter machine-state ask remains in force for this validation-heavy run.
 - AAR trigger: an attempted task-log read used a nonexistent `-implementation.md` suffix; the canonical implementation record is this file.
 
-### Batch 9 — installed-game detection and isolated workspace safety (SPECIFIED)
+### Batch 9 — installed-game detection and path-role safety (RECONCILED CORRECTION IN PROGRESS)
 
 **Reconciled baseline:** `GET /api/agent/detect-game` already finds the current Steam install and returns a proposal. The first-run wizard consumes it, but Directory Settings does not. The proposal currently sets `modWorkspacePath` to `C:\\Users\\<user>\\Documents\\X4ForgeMods` while setting the general `filesystemPath` to the live game `extensions` directory. The current persisted config was read-only reproduced with `modWorkspacePath` equal to `G:\\SteamLibrary\\steamapps\\common\\X4 Foundations\\extensions`; the server accepts this and has no central runtime development-root guard. X4 was not running; Antigravity and a source-dev server on PID 40040 were active. No config/game/mod write was performed.
 
-**Bounded unit:** reuse installed-game detection in Directory Settings, make automatic proposals point both editable roots at the isolated development folder, and enforce the development-root boundary at save and write time.
+**Bounded unit:** reuse installed-game detection in Directory Settings, propose the isolated development workspace and deployed extensions filesystem as distinct roles, and enforce that only the workspace is an editable development root while generic filesystem writes remain blocked against protected live/corpus trees.
 
-**In scope:** Steam/GOG detection reuse; explicit Detect control; non-destructive auto-fill when game path is empty; path-role validation; blocking unsafe mod workspace/filesystem roots; safe proposal copy; API/UI/runtime negative paths; first-run copy correction; installed scratch-workspace proof; a professional external X4 Forge Discord community/support card.
+**In scope:** Steam/GOG detection reuse; explicit Detect control; non-destructive auto-fill when game path is empty; distinct workspace/deployed-filesystem path validation; blocking unsafe mod workspace roots and generic live-filesystem mutations; correct proposal copy; API/UI/runtime negative paths; first-run copy correction; installed scratch-workspace proof; a professional external X4 Forge Discord community/support card.
 
 **Out of scope:** scanning whole drives; automatic unpacking; moving or deleting the user's existing live mod; silently changing standing config; changing explicit deploy's destination; requiring Git; adding Epic detection without an authoritative installed-app source.
 
@@ -228,10 +229,102 @@ Lane: FULL
 **Acceptance:**
 
 15. With an empty game field, Directory Settings detects an unambiguous Steam/GOG install and visibly identifies its source; an existing manual path is not overwritten.
-16. The automatic proposal sets both `modWorkspacePath` and `filesystemPath` to the isolated `Documents\\X4ForgeMods` root, never the live game `extensions` folder.
-17. Config save rejects development/editor roots equal to or nested under the game root, game `extensions`, or unpacked corpus, with a specific corrective error; a safe sibling/temp root saves.
-18. Runtime staging/snapshot/release/filesystem-write chokepoints reject an already-persisted unsafe development root. Explicit validated deploy remains the only game-extension write path.
+16. The automatic proposal sets `modWorkspacePath` to the isolated `Documents\\X4ForgeMods` root and `filesystemPath` to the detected game's `extensions` folder.
+17. Config save accepts the deployed extensions folder as `filesystemPath`, rejects `modWorkspacePath` equal to or nested under the game/corpus tree, and accepts a safe workspace sibling/temp root.
+18. Runtime staging/snapshot/release chokepoints reject an already-persisted unsafe workspace. Generic filesystem write/create/delete operations reject protected live-game/corpus roots even though those roots are valid for read/browse/import. Explicit validated Deploy remains the only live-extension write path.
 19. Installed Antigravity proof runs from a scratch development workspace, uses the packaged managed sidecar rather than the source-dev server, and leaves the real game/corpus/mod unchanged.
 20. Directory Settings presents an external Community & Support link to `https://discord.gg/9qvAvtXqWP` inviting Forge questions, mod sharing, workflow discussion, and contact with other mod authors; it does not open automatically or imply Egosoft affiliation.
 
-**Validation:** pure path-safety/game-detect selftests; route integration for unsafe/safe config; focused UI e2e for auto-fill, no-overwrite, blocked live root, safe save, and the Discord link contract; typecheck/lint/oracles/full e2e/build/package/precommit; installed visual proof and a negative Problems/config path. Evidence remains under `vscode-extension/evidence/` and the durable close records.
+**Validation:** pure path-role/protected-write/game-detect selftests; route integration for unsafe workspace, accepted deployed filesystem, rejected direct live mutation, and safe workspace writes; focused UI e2e for auto-fill, no-overwrite, correct role copy, safe save, and the Discord link contract; typecheck/lint/oracles/full e2e/build/package/precommit; installed visual proof and a negative Problems/config path. Evidence remains under `vscode-extension/evidence/` and the durable close records.
+
+**Reconciliation correction (2026-07-24):** review of `computeModDrift()` and the import/list/read call sites reproduced that `filesystemPath` is the deployed extensions root, not a second development root. The earlier Batch 9 assumption was wrong and would break the workspace/deployed contract. This forced reimplementation before installed proof; no standing config or game/mod file was written under the incorrect contract.
+
+**Implementation checkpoint:**
+
+- Added `src/lib/pathRoles.ts`: case/separator normalization, existing-ancestor realpath/junction resolution, installed-game marker validation, protected-root overlap decisions, and a shared 12/12 oracle.
+- Reused the Steam/GOG detector in Directory Settings. Empty game paths auto-fill without overwriting manual values; the explicit Detect action repairs legacy unsafe paths. Automatic proposals now set both editable roots to `Documents\\X4ForgeMods`.
+- `POST /api/schema/config` rejects unsafe roles before persistence. Existing unsafe configs are also blocked at filesystem writes/creates/deletes, snapshot operations, staging deploys, deploy-verify, and releases. Strict child containment now rejects snapshot traversal and junction escapes.
+- Directory Settings explains the development-vs-live boundary and adds the requested external X4 Forge Discord Community & Support card (`https://discord.gg/9qvAvtXqWP`). First-run copy now distinguishes dev workspace/file explorer from explicit deploy target.
+- Review caught the junction/snapshot containment gap and forced the correction above. Focused proof: path roles 12/12; game detection 11/11; routes 28/28; rendered settings 3/3; typecheck PASS; lint 0 errors / exact 437-warning baseline; oracles 101/101; reference corpus 10/10; schema intelligence 107/107; reference API 53/53; manifest 7/7; manifest API 16/16; XSD corpus 544/544 zero findings in 24.6 s; diff corpus 176 files / 60 targets / zero interpreter errors or source mutations in 10.0 s; full e2e 22/22; build, staged probe 6/6, package, graph update, and precommit PASS.
+- Validation-infrastructure AAR: Playwright claimed a split ephemeral stack but omitted `API_ONLY=true`, so its API process started a second Vite/HMR server and collided with the active dev server on port 24678 after the first focused test. `playwright.config.ts` now enforces API-only mode; focused 3/3 and full 22/22 then passed, with 3100/3101 released.
+- Version 0.0.34 was packaged and `ovsx publish` returned success. Open VSX version indexing was still pending at the immediate verification poll; installed-marketplace and Antigravity rendered proof remain required before close.
+
+### Batch 10 — 0.0.35 product-copy cleanup and release blockers (IN PROGRESS)
+
+- Removed project-specific runtime identity and mod promotion from shipped Startup Walkaround/live telemetry copy while preserving the optional generic bridge response fields and routes. Added health-card/bridge-state oracle assertions, a shipped-source/packaged-content guard, and rendered Playwright coverage.
+- Focused proof: health-card 10/10; bridge-state 8/8; shipped source 0 banned mentions; root + extension typechecks PASS; lint 0 errors / 437 baseline warnings; rendered product-copy 1/1; runtime oracles 101/101.
+- Full e2e: 21/23. The new product-copy contract passed. Two pre-existing release blockers reproduced: Startup Walkaround `z-[9998]` intercepts Directory Settings' Save Paths button; late-suite Diff→Patch does not render the expected synthesized confirmation. These must be root-caused and corrected before build/package/installed proof. Tests may not be skipped or weakened.
+- Release staging guard caught tracked validation fixtures from `public/` being copied by Vite into `dist/` and then recursively packaged by `stage-app`; one contained the removed identity and real mod source. Correct by isolating legitimate public assets and allowlisting staged build outputs, then rerun the entire artifact chain and payload scan.
+
+### Batch 11 — continuous authoritative validation during authoring (SPECIFIED 2026-07-24)
+
+#### PLAN
+
+- **Bounded unit:** remove the manual IDE validation command and make the existing live authoring paths continuously run the full `runProjectValidation` stack over the current generated/file project.
+- **Assumptions:** the cached corpus/schema indexes keep warm validation within interactive latency; deterministic errors remain blocking/red while semantic unknowns remain advisory/amber; no validator may silently rewrite user text.
+- **Authoritative references:** Ken's corrected interaction contract; `runProjectValidation`; the configured unpacked X4 corpus and XSD graph; ADR-F2's lowest-barrier editor requirement; the one-referee diagnostic design already used by `/api/agent/project/validate`.
+- **In scope:** `/api/agent/compile` full-stack parity; deduplicated diagnostics; debounced/cancellable App requests; CodeMirror red/amber inline diagnostics and hover text; selected-node/raw-XML feedback; automatic IDE validation on mod open, XML/Lua change, and save; removal of `x4forge.validateModFolder` and its setting/copy.
+- **Out of scope:** automatic mutation/correction of authored text; weakening warnings/errors; standalone LSP; deployment/runtime/experience proof; validation of unrelated workspace folders without an X4 `content.xml` root.
+- **Reconciled infrastructure reused:** `buildWorkspaceFileManifest`, `runModDoctor`, `runPatchDiagnostics`, `runProjectValidation`, `flattenProjectValidation`, App's debounced `/api/agent/compile` polling, Canvas/Diagnostics/Readiness shared diagnostic props, CodeMirror 6, and the extension Problems collection.
+- **Rejected alternatives:** a new live-only endpoint would create another validation truth; client-side XSD/reference validation would duplicate server authority; retaining the manual command would preserve a misleading workflow.
+- **Risks:** full diff/schema work on rapid edits, stale responses painting old errors, duplicate findings from Doctor/project layers, inaccurate file/line projection, and extension scans reading too broad a tree. Mitigations are debounce + abort/sequence guards, cached indexes, stable diagnostic dedupe keys, exact mod-root discovery, a 2,000-file bound matching the server, and no filesystem writes.
+- **Authorization/rollback:** source/test/docs changes only; no vanilla, installed mod, standing config, publish, or deploy writes during implementation. Roll back by restoring the old compile composition, CodeMirror props, and extension contribution/listener block.
+
+#### ACCEPTANCE CONTRACT
+
+21. The extension launcher and command palette contain no **Validate Mod Folder** action and no `x4forge.modFolder` validation setting.
+22. Opening an X4 mod, opening an XML/Lua file, changing an unsaved XML/Lua buffer, and saving it automatically refresh the full mod's Problems diagnostics without a manual first run.
+23. Unsaved-buffer validation includes all supported files under the detected mod root (bounded at 2,000), not the previous depth-3/80-file subset.
+24. Canvas/workspace edits debounce into `/api/agent/compile`, which runs `runProjectValidation` with canonical reference sets plus Doctor/patch checks and returns one deduplicated diagnostic list.
+25. A bad XSD child/attribute/enum is an error; an unknown faction/ware/script property is a warning with its existing suggestion. Both appear in Diagnostics/Readiness; applicable generated-code lines receive CodeMirror error/warning underlines and hover messages.
+26. Node/raw-XML authoring remains uninterrupted: no modal, no forced correction, no focus theft, and no validation-triggered write. Deterministic one-click fixes remain explicit and checkpointed.
+27. A slower obsolete response cannot replace results for newer text/workspace state. Backend/corpus unavailability is shown honestly as unavailable/local fallback, never green full validation.
+28. The built-in AI loop, external `project/validate`, deploy preflight, and automatic authoring checks continue to consume the same project-validation engine; `/api/agent/compile` is no longer the narrower exception.
+
+### Post-release non-destructive repository cleanup addendum (Ken, 2026-07-24)
+
+This phase begins only after the continuous-validation release is fully validated, installed in Antigravity, published to OpenVSX, and marketplace-probed.
+
+- Inventory candidates through package/build scripts, imports, Git status, generated-output conventions, and reference searches before deletion.
+- Move disposable or uncertain artifacts into a dated recovery/quarantine location with a path manifest; permanently erase nothing.
+- Reproducible caches/build output may be cleared only after its regeneration command has passed and its original path is recorded.
+- Do **not** classify maintained regression tests, oracle scripts, or required fixtures as junk: they are part of Forge's failure-prevention system.
+- Record every moved/cleared path, its recovery location or regeneration command, and whether Git also retains it.
+- Re-run typecheck, production build, oracle sweep, focused route tests, extension build/package probe, and the product-copy guard after cleanup.
+- Preserve ambiguous candidates for human review rather than guessing destructively.
+
+#### REQUIRED VALIDATION
+
+- Static: root and extension typechecks; lint; package-manifest/contribution assertion that the removed command is absent.
+- Focused: compile-route fixture proves full-stack-only findings reach the live response and duplicates collapse; debounce/stale-response helper oracle; CodeMirror diagnostic conversion/range negative cases.
+- Integration: real configured corpus with controlled invalid child, faction, ware, and property; clean fixture returns zero blocking errors; schema/corpus-unavailable response is not falsely labelled full/clean.
+- Negative: traversal/unrelated folders remain excluded; >2,000 IDE files are bounded; a superseded request cannot paint stale diagnostics; warnings do not block typing or mutate content.
+- UI: scratch canvas raw-XML edit visibly produces/removes a red inline diagnostic after debounce; IDE scratch XML produces/removes a Problems/squiggle diagnostic without the removed button; warnings render amber and remain non-modal.
+- Regression: oracle sweep, full e2e, production build, staged extension probe/package, installed Antigravity proof when the machine-state gate is clear.
+- **Evidence:** focused command output and JSON under the task record; screenshots under `vscode-extension/evidence/`; close delta in capability map/ROADMAP/AAR/handoff.
+
+#### BASELINE / RECONCILE
+
+- Baseline revision: `9af72cc99dc4abff07224d85c70c2c0dd407551f`; the worktree already contains the active B75/product-copy changes listed in `SESSION-HANDOFF.md` and `git status`; they are preserved.
+- Current App authoring runs `validateModWorkspace` immediately and the narrower `/api/agent/compile` after 400 ms. Canvas separately runs node-schema and workspace-law checks. CodePreview receives those diagnostics but CodeMirror itself has no lint extension.
+- Current IDE behavior runs full inline project validation only after an XML change, scans at most 80 files/depth 3, requires an already-owned sidecar, and retains a manual command plus save-after-manual state (`lastValidated`). It does not validate Lua changes or automatically validate on initial open.
+- Capability-map delta required: full corpus validation becomes an always-on authoring capability rather than a manual/API-only capability.
+- Plan changed after Ken explicitly rejected the manual button and required typo-style continuous diagnostics. This Batch supersedes any prior acceptance language retaining that command.
+
+## IMPLEMENT / VALIDATE / REVIEW / CLOSE
+
+- **Implemented:** one-root manifest/reference/schema/diff engine; official-DLC overlay; path-contained raw reference file API; XSD particle model with transitive include/import resolution; typed script-expression completion/hover; shared reference/XSD/expression validation; continuous unsaved-buffer validation in app and IDE; path-role protection; Directory Settings corpus/unpacker/Discord guidance; generic runtime-integration copy; public extension version 0.0.36.
+- **Validation:** typecheck PASS; lint 0 errors; routes 37/37; oracles 101/101; reference corpus 10/10; schema intelligence 107/107; reference API 53/53; manifest 7/7; manifest API 16/16; XSD particle corpus 544/544; official DLC diffs 176 files/60 targets/0 errors/0 source mutations; full e2e 24/24; production build; extension build; staged probe 6/6; product-copy guard; precommit PASS.
+- **Negative paths:** traversal outside the reference root rejected; unsafe workspace/live-root writes rejected; invalid XSD child rendered as an error; unknown script property rendered as a warning with suggestion; stale authoring responses suppressed; valid correction removed the scratch file's Forge diagnostics; warnings remained non-modal.
+- **Installed/public proof:** OpenVSX published 0.0.36. Public and local VSIX SHA-256 are exactly `538A26B1D1F1ECCAEE123EE9661B973D651377102B61D7E23A712C69EA37106E`. Antigravity loaded the public install from `C:\Users\Moshi\.antigravity-ide\extensions\x4forge.x4-forge-studio-0.0.36-universal`, sidecar port 62148, and visibly proved XML-child and faction-property completion, `faction.id` hover, red/amber diagnostics, did-you-mean, and clear-on-correction. Evidence: `vscode-extension/evidence/0.0.36-installed-public-validation.md` plus the task transcript.
+- **Review:** every original Part 1, Part 2, path-role, product-copy, continuous-validation, installed-proof, and publish requirement is done and evidenced. Standalone LSP remains deliberately out of scope; HTTP providers are the shipped integration. Generic third-party XML extensions remain supplemental, never X4 semantic authorities.
+- **Status:** `VERIFIED`.
+- **Rollback:** install public 0.0.35; restore quarantined artifacts from the cleanup manifest; source rollback by reverting this bounded release commit. Vanilla, game, and real-mod data were not mutated by validation.
+
+## AAR
+
+- **Triggers:** reconciliation corrected path roles and `faction.id`; review forced fixes; full e2e initially had one stale label assertion; precommit caught forbidden manual-validation copy in release notes; OpenVSX indexing and Antigravity preserved-webview state required explicit cache/host checks; command-wrapper mistakes triggered strategic pivot; final Git status caught and reversed one over-broad cleanup move of a tracked Playwright snapshot.
+- **Sustain:** one shared validator and one corpus engine prevented UI/API/agent truth drift; real installed public-package proof caught stale-host state that build/API checks could not; product-copy and corpus-zero-error gates prevented release regressions.
+- **Improve work/approach:** close the preserved IDE webview before installed proof and verify the new managed sidecar port; keep single-purpose host commands instead of quoting-heavy orchestration wrappers.
+- **Improve tools:** marketplace result rows can retain stale version metadata after the detail/install state updates; compare installed path/version plus public artifact hash. The computer-use accessibility tree is the reliable diagnostic oracle; full-tree dumps must be filtered.
+- **Highest-risk evidenced weakness:** validation coverage is intentionally bounded by what X4's XSD/corpus can prove; domains such as Lua C-API semantics remain separate backlog work. The UI now reports corpus/manifest coverage rather than implying zero-risk omniscience.

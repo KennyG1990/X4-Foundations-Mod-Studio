@@ -154,7 +154,7 @@ async function readWorkspace(page: Page): Promise<E2EWorkspace> {
 
 test('single-node drag moves only the dragged node', async ({ page }) => {
   await page.route('**/api/agent/compile', async (route) => {
-    await route.fulfill({ json: { diagnostics: [] } });
+    await route.fulfill({ json: { diagnostics: [], validation: { scope: 'full-project' } } });
   });
 
   await withSeededCanvas(page, async () => {
@@ -196,7 +196,7 @@ test('single-node drag moves only the dragged node', async ({ page }) => {
 
 test('deleting a node removes the node and cascades its links', async ({ page }) => {
   await page.route('**/api/agent/compile', async (route) => {
-    await route.fulfill({ json: { diagnostics: [] } });
+    await route.fulfill({ json: { diagnostics: [], validation: { scope: 'full-project' } } });
   });
 
   await withSeededCanvas(page, async () => {
@@ -231,7 +231,7 @@ test('deleting a node removes the node and cascades its links', async ({ page })
 
 test('creates a link on the conditions orientation (cue.conditions -> event.condition)', async ({ page }) => {
   await page.route('**/api/agent/compile', async (route) => {
-    await route.fulfill({ json: { diagnostics: [] } });
+    await route.fulfill({ json: { diagnostics: [], validation: { scope: 'full-project' } } });
   });
 
   await withSeededCanvas(page, async () => {

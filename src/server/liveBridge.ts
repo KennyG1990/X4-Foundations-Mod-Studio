@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Bridge live-state I/O (Play-In-Editor slice 2) — fetches the x4_neural_link bridge's
+ * Bridge live-state I/O (Play-In-Editor slice 2) — fetches an optional runtime's
  * /health and reads its telemetry SQLite (READ-ONLY) to tell the editor whether the
  * game←→bridge chain is alive right now. Cached ~10s so canvas polling stays cheap.
  * Pure normalization lives in src/lib/bridgeLiveState.ts.

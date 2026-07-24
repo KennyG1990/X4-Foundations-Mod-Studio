@@ -39,7 +39,7 @@ test('readiness ladder routes to evidence, confirms experience, and invalidates 
     sinceDeploy: { hasDeploy: false, changedSinceDeploy: false, summary: 'No deploy.' },
   };
   await page.route('**/api/agent/debug-watcher/brief**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(watcher) }));
-  await page.route('**/api/agent/compile', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ diagnostics: [] }) }));
+  await page.route('**/api/agent/compile', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ diagnostics: [], validation: { scope: 'full-project' } }) }));
   await waitForApp(page);
 
   await expect(page.getByTestId('readiness-stage-graph')).toHaveAttribute('data-status', 'pass');
@@ -62,7 +62,7 @@ test('readiness ladder routes to evidence, confirms experience, and invalidates 
 
   await page.getByTestId('readiness-stage-package').click();
   await expect(page.getByTestId('diagnostics-scope-package')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByTestId('readiness-evidence')).toContainText('Package valid');
+  await expect(page.getByTestId('readiness-evidence')).toContainText('Project valid');
 
   await page.getByTestId('readiness-stage-seen').click();
   await expect(page.getByText('Playtest Workspace', { exact: true })).toBeVisible();
