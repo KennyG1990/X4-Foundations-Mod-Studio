@@ -38,6 +38,7 @@ import {
 } from "../lib/extensionProject";
 import { validateProjectCrossFile } from "../lib/projectCrossFileValidation";
 import { lintScriptPropertyChains, type ScriptPropertyFinding } from "../lib/scriptProperties";
+import { checkXmlWellformed } from "../lib/xmlWellformed";
 import { lintAiscriptOrderParams, type AiscriptLintFinding } from "../lib/aiscriptLint";
 import { lintMdPitfalls, type MdPitfallFinding } from "../lib/mdPitfallLints";
 import { lintJobsContent, type JobsVocabulary, type JobLintFinding } from "../lib/jobsContentLint";
@@ -176,6 +177,33 @@ export function runProjectValidation(
   opts: { references?: ProjectValidationReferences; jobsVocabulary?: JobsVocabulary; waresVocabulary?: WaresVocabulary } = {},
 ): ProjectValidationResult {
   const structure = validateProjectStructure(project);
+
+  // B82 / B93.10 — XML WELL-FORMEDNESS RUNS FIRST, ALWAYS.
+  //
+  // This engine already existed and deploy-verify already used it; the SHARED validator did not.
+  // The cost of that gap was measured: one `</do_else>` closing a `<do_elseif>` reported
+  // structuralErrors: 0 while the entire diplomacy subsystem was dead in-game for weeks. X4 drops
+  // a malformed MD file whole, with no log line, so nothing downstream ever notices.
+  //
+  // It is deliberately an ERROR and deliberately first: a file that does not parse cannot be
+  // meaningfully schema-checked, and every later finding on it would be noise.
+  for (const file of project.files) {
+    if (typeof file.content !== "string") continue;
+    if (!/\.xml$/i.test(file.path)) continue;
+    const wellformed = checkXmlWellformed(file.content);
+    if (wellformed.ok) continue;
+    // Report every position, not just the first: a mismatched tag often produces a cascade and
+    // the LAST one is frequently the real edit site.
+    for (const err of wellformed.errors) {
+      structure.push({
+        severity: "error",
+        code: "xml_not_wellformed",
+        path: file.path,
+        detail: `Line ${err.line}, column ${err.col}: ${err.message}. X4 discards a malformed file entirely and logs nothing, so everything it defines silently stops existing.`,
+      } as any);
+    }
+  }
+
   const cueIndex = indexCueReferences(project);
   const crossFile = validateProjectCrossFile(project);
   const references = referencesForProject(project, opts.references);

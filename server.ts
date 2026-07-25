@@ -102,6 +102,7 @@ import { computeModDrift, fingerprintModFolder, flattenProjectValidation, getSch
 import { buildRemediationCapsules, runAgentLoopSelftest, runRepairLoop, type LoopDiagnostic } from "./src/lib/agentLoop";
 import { assessSourceSync, hashFolderFingerprint, runCompileFidelitySelftest } from "./src/lib/compileFidelity";
 import { workspaceContentHash, runWorkspaceIdentitySelftest } from "./src/lib/workspaceIdentity";
+import { lintScriptPropertyChains } from "./src/lib/scriptProperties";
 import { publishInstance, unpublishInstance, latestPath, runInstanceDiscoverySelftest } from "./src/lib/instanceDiscovery";
 import { buildReleasePlan, buildZip, runModDistributionSelftest } from "./src/lib/modDistribution";
 import { aiKeyStatus, getStoredAiKey, setStoredAiKey } from "./src/server/aiKeyStore";
@@ -3769,6 +3770,64 @@ app.post("/api/fs/write", (req, res) => {
  * four or five calls plus a disk walk, and `/status`, `/drift` and `/state` were all genuinely 404.
  * Everything below is state the server already holds; this just stops withholding it.
  */
+/**
+ * B93.8 — ask about ONE expression.
+ *
+ * "Is this one expression legal?" previously required POSTing a 34-file project, so during
+ * authoring the question got asked dozens of times a session and was usually skipped — the answer
+ * arriving in-game twenty minutes later, or never. Three of this session's defects were wrong
+ * property names ($st.manager, ware.{$id}.avgprice) that this data could always have caught: an
+ * unknown MD property evaluates to null with no error, forever.
+ *
+ * Uses the SAME `lintScriptPropertyChains` engine as full project validation, so a green answer
+ * here means the same thing a green answer there means.
+ */
+app.post("/api/agent/check-expression", (req, res) => {
+  try {
+    const expression = typeof req.body?.expression === 'string' ? req.body.expression.trim() : '';
+    if (!expression) {
+      return res.status(400).json({
+        ok: false,
+        code: 'MISSING_EXPRESSION',
+        error: 'Send {"expression": "$station.manager"} — the single MD/AIScript expression to check. Optionally add {"variableTypes": {"$station": "station"}} so typed variables resolve.',
+      });
+    }
+    const spIndex = getScriptPropertyIndex();
+    if (!spIndex) {
+      return res.status(503).json({
+        ok: false,
+        code: 'SCRIPTPROPERTIES_UNAVAILABLE',
+        error: 'No scriptproperties index is loaded, so expression legality cannot be judged. Configure the unpacked game reference root in Directory Settings.',
+      });
+    }
+    const variableTypes = (req.body?.variableTypes && typeof req.body.variableTypes === 'object') ? req.body.variableTypes : undefined;
+    // Wrap the bare expression in the smallest legal carrier so the chain linter sees it in the
+    // same shape it sees inside a real MD file.
+    const carrier = `<mdscript name="ExpressionProbe"><cues><cue name="Probe"><actions><set_value name="$probe" exact="${expression.replace(/"/g, '&quot;')}"/></actions></cue></cues></mdscript>`;
+    const findings = lintScriptPropertyChains(carrier, spIndex, { filePath: 'expression-probe', variableTypes });
+    const problems = findings.map(f => ({
+      severity: f.severity,
+      chain: (f as any).chain,
+      segment: (f as any).segment,
+      suggestions: ((f as any).suggestions || []).slice(0, 5),
+      message: (f as any).suggestions?.length
+        ? `"${(f as any).chain}": segment "${(f as any).segment}" is not a known property — did you mean ${(f as any).suggestions.slice(0, 3).join(', ')}?`
+        : `"${(f as any).chain}": segment "${(f as any).segment}" is unknown in scriptproperties.xml.`,
+    }));
+    return res.json({
+      ok: problems.length === 0,
+      expression,
+      legal: problems.length === 0,
+      problems,
+      note: problems.length === 0
+        ? 'Every property segment resolves against scriptproperties.xml. This does not assert the value is non-null at runtime, only that the properties exist.'
+        : 'An unknown property evaluates to null in X4 with no error, so a guard using this expression would silently never fire.',
+    });
+  } catch (error: any) {
+    return res.status(500).json({ ok: false, error: error?.message || 'check-expression failed' });
+  }
+});
+
 app.get("/api/agent/status", (_req, res) => {
   try {
     const resolved = resolveXsdConfig();

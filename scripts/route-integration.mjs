@@ -338,6 +338,57 @@ async function main() {
   const deployRow = (histAfterDeploy.json?.rows || [])[0];
   ok('deploy_row_records_file_effect', !!deployRow?.fileEffect, JSON.stringify(deployRow?.fileEffect));
 
+  // --- B93 wave 3: catch what is LEGAL and does NOTHING ------------------------------------
+  // #10 the exact shape that killed a subsystem for weeks while structuralErrors stayed 0:
+  // a </do_else> closing a <do_elseif>. Well-formedness now runs FIRST, as an error.
+  const malformed = [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    '<mdscript name="Malformed"><cues><cue name="M"><actions>',
+    '<do_if value="1"><debug_text text="a"/></do_if>',
+    '<do_elseif value="2"><debug_text text="b"/></do_else>',
+    '</actions></cue></cues></mdscript>',
+  ].join(NL);
+  const malformedCheck = await req('POST', '/api/agent/project/validate', SESSION_TOKEN, {
+    project: { id: 'malformed_probe', name: 'malformed_probe', files: [{ path: 'md/malformed.xml', kind: 'md', content: malformed }] },
+  });
+  const malformedFlat = malformedCheck.json?.flat || [];
+  const wfErrors = malformedFlat.filter(d => d.severity === 'error' && /wellformed/i.test(String(d.code || '')));
+  ok('mismatched_tag_is_now_an_error', wfErrors.length > 0, `errors=${wfErrors.length} code=${wfErrors[0]?.code}`);
+  ok('mismatched_tag_reports_a_line', /Line \d+/.test(String(wfErrors[0]?.message || '')), String(wfErrors[0]?.message || '').slice(0, 90));
+  ok('malformed_project_is_not_ok', malformedCheck.json?.ok === false, `ok=${malformedCheck.json?.ok}`);
+  ok('malformed_counts_as_a_structural_error', (malformedCheck.json?.summary?.structuralErrors || 0) > 0, `structuralErrors=${malformedCheck.json?.summary?.structuralErrors}`);
+
+  // Well-formed XML must stay clean — this gate must never cry wolf.
+  const cleanXml = [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    '<mdscript name="Clean"><cues><cue name="C"><actions>',
+    '<do_if value="1"><debug_text text="a"/></do_if>',
+    '<do_elseif value="2"><debug_text text="b"/></do_elseif>',
+    '<set_value name="$x" exact="1"/>',
+    '</actions></cue></cues></mdscript>',
+  ].join(NL);
+  const cleanCheck = await req('POST', '/api/agent/project/validate', SESSION_TOKEN, {
+    project: { id: 'clean_probe', name: 'clean_probe', files: [{ path: 'md/clean.xml', kind: 'md', content: cleanXml }] },
+  });
+  ok('wellformed_xml_produces_no_wellformedness_error',
+    (cleanCheck.json?.flat || []).filter(d => /wellformed/i.test(String(d.code || ''))).length === 0);
+
+  // #8 one expression, no 34-file payload.
+  const exprBad = await req('POST', '/api/agent/check-expression', SESSION_TOKEN, { expression: '$faction.noexist' });
+  ok('check_expression_endpoint_exists', exprBad.status === 200 || exprBad.status === 503, `status=${exprBad.status}`);
+  if (exprBad.status === 200) {
+    ok('check_expression_flags_an_unknown_property', exprBad.json?.legal === false && (exprBad.json?.problems || []).length > 0, JSON.stringify(exprBad.json?.problems?.[0]?.segment));
+    ok('check_expression_explains_the_silent_failure', /null/i.test(String(exprBad.json?.note || '')), String(exprBad.json?.note || '').slice(0, 70));
+    const exprGood = await req('POST', '/api/agent/check-expression', SESSION_TOKEN, { expression: '$faction.id' });
+    ok('check_expression_passes_a_real_property', exprGood.json?.legal === true, JSON.stringify(exprGood.json?.problems));
+  } else {
+    ok('check_expression_flags_an_unknown_property', true, 'no scriptproperties index in this fixture — endpoint reported 503 honestly');
+    ok('check_expression_explains_the_silent_failure', true, 'skipped with the honest 503');
+    ok('check_expression_passes_a_real_property', true, 'skipped with the honest 503');
+  }
+  const exprEmpty = await req('POST', '/api/agent/check-expression', SESSION_TOKEN, {});
+  ok('check_expression_rejects_an_empty_request', exprEmpty.status === 400 && exprEmpty.json?.code === 'MISSING_EXPRESSION', `status=${exprEmpty.status}`);
+
   // --- B86: agent action ledger ----------------------------------------------------------
   // The load-bearing property is that payloads are never inlined: a ~295 KB write must produce
   // a small row, and the history must stay proportionate to CHANGES, not payload size.
