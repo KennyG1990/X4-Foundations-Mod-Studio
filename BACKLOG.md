@@ -6,6 +6,49 @@
 
 ## P0 — Active
 
+### B82 · Project validation omits XML well-formedness — malformed MD passes until deploy `spec'd`
+
+**[REPRODUCED 2026-07-25]** `x4_ai_influence/md/ai_influence_diplomacy.xml` opened a
+`<do_elseif>` and closed `</do_else>`. `POST /api/agent/project/validate` reported zero structural/schema
+errors, while `/api/agent/deploy-verify` rejected the emitted file through its separate
+`checkXmlWellformed` stage before writing anything. This is not explained by Claude's mistaken
+`kind:"markdown"`: `runProjectValidation` already falls back to `classifyPath(f.path)` for MD routing.
+The gap is architectural—`validateXmlAgainstSchema` scans tags but does not enforce paired XML structure,
+and the shared project validator never calls `checkXmlWellformed`.
+
+**Bounded repair:** make `runProjectValidation` apply the existing deterministic XML well-formedness engine
+to every textual `.xml` project file before XSD/domain lints. Surface specific error diagnostics with file,
+line, XML rule, and summary count through the existing flat diagnostics/capsules/editor projections. Refactor
+deploy-verify to consume the shared result or a shared helper so malformed XML is not governed by two drifting
+implementations. Do not weaken the deploy gate during convergence.
+
+**Acceptance:** inline and `fromPath` project validation both reject mismatched, unclosed, and stray closing
+tags as errors; the exact `do_elseif`/`do_else` fixture flags at the source line; legal self-closing elements
+and tag-looking text inside comments remain clean; malformed files produce continuous editor/agent diagnostics
+before Compile/Deploy; deploy still refuses and writes zero files; clean representative MD/AI/library/diff/t XML
+has zero new false positives; route/oracle/e2e/type/lint/precommit gates pass using scratch data only.
+
+### B81 · `/api/fs/read` and `/api/fs/write` resolve different roots — stale read-modify-write hazard `spec'd`
+
+**[REPRODUCED 2026-07-25]** With both directory roles configured, `GET /api/fs/read?path=...`
+resolves `filesystemPath || modWorkspacePath` (`server.ts:3214`), while `POST /api/fs/write` always
+resolves `modWorkspacePath` (`server.ts:3310`). An agent can therefore read the deployed G: copy and
+write a derived patch into the F: source copy; when the two differ, a later read-modify-write can silently
+clobber newer workspace content. Claude encountered exactly this contract while validating
+`x4_ai_influence` and correctly worked around it by reading the workspace from disk, writing through Forge,
+then verifying from disk.
+
+**Bounded repair:** extend `/api/fs/read` with the same explicit `root=workspace|filesystem` selector used
+by `/api/fs/list`, carry source identity through `DirectoryExplorer` and `LibraryConfigurator`, and make
+agent-facing editable reads explicitly select `workspace`. Preserve or deliberately migrate the legacy
+unqualified behavior only after its two current UI callers are covered; never silently change one side of
+the contract. Update the agent schema/purpose text so read-modify-write examples name the root.
+
+**Acceptance:** fixtures with the same relative file in both roots return the selected bytes; a workspace
+read followed by `/api/fs/write` operates on one root; filesystem reads remain read-only; invalid selectors,
+traversal, and junction escapes reject; legacy UI behavior is covered explicitly; route/e2e/oracle/type/
+precommit gates pass. No real workspace, deployed mod, or game directory is used for validation.
+
 ### B77 · Graph refresh rewrites ignored historical PNG evidence `spec'd`
 Observed twice during the B76 final audit: `graphify update .` changed the byte size/hash and timestamp of
 two tracked `vscode-extension/evidence/0.0.35-*.png` files even though `.graphifyignore` contains `*.png`.
