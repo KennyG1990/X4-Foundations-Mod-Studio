@@ -18,7 +18,7 @@ import os from 'os';
 import path from 'path';
 import {
   describeAction, lineDelta, unifiedDiff, looksBinary, redactSecrets, encodeRow, decodeRows,
-  filterRows, revertibility, ledgerRouteKind, LedgerRow,
+  filterRows, revertibility, ledgerRouteKind, compactDiagnostics, LedgerRow,
 } from './agentHistory';
 import { AgentHistoryStore } from './agentHistoryStore';
 
@@ -74,6 +74,90 @@ export function runAgentHistorySelftest(): { pass: boolean; checks: Array<{ name
       body: { error: 'x'.repeat(5000) },
     });
     ok('an enormous error is truncated, not pasted', wall.title.length <= 200, `len=${wall.title.length}`);
+
+    // --- B86.1: coverage. The first version recorded 6 of ~47 mutating routes and the gap was
+    // invisible. Mutating routes must default to VISIBLE; only proven read-only stays quiet.
+    ok('workspace replacement is recorded', ledgerRouteKind('POST', '/api/agent/workspace') === 'workspace');
+    ok('AI generation is recorded', ledgerRouteKind('POST', '/api/agent/generate') === 'generate');
+    ok('snapshot restore is recorded', ledgerRouteKind('POST', '/api/fs/restore-snapshot') === 'snapshot');
+    ok('settings changes are recorded', ledgerRouteKind('POST', '/api/schema/config') === 'config');
+    ok('key lifecycle is recorded', ledgerRouteKind('POST', '/api/agent/keys/revoke') === 'keys');
+    ok('shell jobs are recorded', ledgerRouteKind('POST', '/api/run_command/job') === 'command');
+    ok('an UNKNOWN mutating route still records', ledgerRouteKind('POST', '/api/agent/some-future-route') === 'action');
+    ok('read-only analysis stays quiet', ledgerRouteKind('POST', '/api/agent/explain') === null);
+    ok('the ledger never records itself', ledgerRouteKind('POST', '/api/agent/history/x/raw') === null);
+    ok('but revert IS recorded', ledgerRouteKind('POST', '/api/agent/history/abc123/revert') === 'revert');
+
+    // --- B86.1: a validation error must NAME the error, not just count it -------------------
+    const namedError = describeAction({
+      kind: 'validate', status: 200, request: {}, files: [],
+      body: {
+        fileCount: 2,
+        summary: { schemaErrors: 1 },
+        flat: [
+          { severity: 'error', code: 'project.unresolved_cue_ref', filePath: 'md/ai_influence_diplomacy.xml', line: 278, message: 'Cue reference "Foo" resolves to nothing in this project.' },
+        ],
+      },
+    });
+    ok('validate error names the file', namedError.title.includes('ai_influence_diplomacy.xml'), namedError.title);
+    ok('validate error names the line', namedError.title.includes('278'), namedError.title);
+    ok('validate error names the reason', /resolves to nothing/.test(namedError.title), namedError.title);
+    ok('validate error is not a bare count', !/^Validated 2 files — 1 error, 0 warnings$/.test(namedError.title), namedError.title);
+
+    const multi = describeAction({
+      kind: 'validate', status: 200, request: {}, files: [],
+      body: {
+        fileCount: 5, summary: { schemaErrors: 3 },
+        flat: [{ severity: 'error', filePath: 'a.xml', message: 'First problem.' }],
+      },
+    });
+    ok('extra errors are counted after the named one', multi.title.includes('(+2 more)'), multi.title);
+
+    const cleanRun = describeAction({
+      kind: 'validate', status: 200, request: {}, files: [], body: { fileCount: 27, summary: { schemaWarnings: 0 }, flat: [] },
+    });
+    ok('a clean validation keeps the original register', cleanRun.title === 'Validated 27 files — 0 errors, 0 warnings', cleanRun.title);
+
+    ok('diagnostics are compacted for storage', (() => {
+      const d = compactDiagnostics({ flat: [{ severity: 'error', filePath: 'a.xml', line: 3, message: 'boom', code: 'x' }] });
+      return d.length === 1 && d[0].filePath === 'a.xml' && d[0].line === 3;
+    })());
+    ok('diagnostics redact key material', (() => {
+      const d = compactDiagnostics({ flat: [{ severity: 'error', message: 'token x4fk_deadbeefdeadbeef leaked' }] });
+      return !d[0].message.includes('x4fk_deadbeefdeadbeef');
+    })());
+
+    // --- B86.1: the new kinds produce real sentences, not route names ------------------------
+    const wsRow = describeAction({
+      kind: 'workspace', status: 200, files: [], routePath: '/api/agent/workspace',
+      request: { workspace: { name: 'AI Influence', nodes: new Array(225) } },
+      nodes: [{ id: 'n1', label: 'Registry' }],
+    });
+    ok('workspace summary names the canvas and node counts', /Replaced the working canvas "AI Influence" \(225 nodes\)/.test(wsRow.title), wsRow.title);
+    ok('workspace summary reports changed nodes', wsRow.title.includes('1 node changed'), wsRow.title);
+
+    const genRow = describeAction({
+      kind: 'generate', status: 200, files: [], routePath: '/api/agent/generate',
+      request: { prompt: 'Create a custom mission with an Elite Fighter wing escort' }, body: {},
+    });
+    ok('generation summary quotes the prompt', genRow.title.includes('Elite Fighter wing escort'), genRow.title);
+
+    const cmdRow = describeAction({
+      kind: 'command', status: 200, files: [], routePath: '/api/run_command/job',
+      request: { cmd: 'npm run typecheck' }, body: {},
+    });
+    ok('shell summary names the command', cmdRow.title === 'Ran shell command: npm run typecheck', cmdRow.title);
+
+    const keyRow = describeAction({
+      kind: 'keys', status: 200, files: [], routePath: '/api/agent/keys/revoke',
+      request: { label: 'codex', token: 'x4fk_shouldneverappear' }, body: {},
+    });
+    ok('key summary names the label, never the key', keyRow.title.includes('codex') && !keyRow.title.includes('x4fk_'), keyRow.title);
+
+    const unknownRow = describeAction({
+      kind: 'action', status: 200, files: [], routePath: '/api/agent/some-future-route', request: {}, body: {},
+    });
+    ok('an unclassified action still reads as something', unknownRow.title === 'Ran agent/some-future-route', unknownRow.title);
 
     // --- diff maths ----------------------------------------------------------------------
     const delta = lineDelta('a\nb\nc', 'a\nc\nd');

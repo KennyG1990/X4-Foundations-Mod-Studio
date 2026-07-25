@@ -2041,6 +2041,7 @@ export default function App() {
         setWorkspace={setWorkspace}
         localVersion={localVersion}
         setLocalVersion={setLocalVersion}
+        setFocusNodeRequest={setFocusNodeRequest}
       />
 
       {/* Load Mod & GitHub Synchronization Module */}

@@ -3,6 +3,12 @@
 The latest changes, newest first. (This page is generated automatically — see
 `release-notes.json` to edit the wording.)
 
+## 0.0.42 — 2026-07-25
+
+- History entries now tell you what actually went wrong. A validation that found an error used to say only "1 error" — it now names the file, the line and the reason, the same way a blocked deploy names its failing stage. Expanding an entry lists every finding in readable form instead of raw JSON.
+- History now covers everything an agent can do, not a handful of routes. Workspace replacements, AI generation, snapshots and restores, settings changes, key creation and revocation, packaging, and shell jobs all appear. Any future endpoint is recorded by default, so an action can no longer go missing silently. Read-only analysis calls stay out of the way, and a canvas auto-save that changed nothing no longer creates an entry.
+- History entries link to the nodes they touched. Affected cues appear as clickable chips on an expanded entry — click one and the canvas jumps straight to that node.
+
 ## 0.0.41 — 2026-07-25
 
 - Deploying now works even when your mod folder is open in an editor, a terminal, or a file watcher. Windows refuses to rename a folder anything is holding, which previously stopped the whole deployment; the Forge now detects that specific lock and updates the folder in place instead, with a verified backup and an exact rollback if anything goes wrong. You no longer have to close things to deploy.

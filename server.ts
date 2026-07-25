@@ -130,7 +130,7 @@ import { createAgentKeyStore, scopeAllows, runAgentKeysSelftest, AGENT_KEY_TTLS,
 // B86 — agent action ledger: a skimmable record of what agents actually did.
 import {
   ledgerRouteKind, describeAction, lineDelta, unifiedDiff, looksBinary, filterRows, revertibility,
-  MAX_DIFFABLE_BYTES, type LedgerRow, type LedgerKind,
+  compactDiagnostics, MAX_DIFFABLE_BYTES, type LedgerRow, type LedgerKind,
 } from "./src/lib/agentHistory";
 import { AgentHistoryStore } from "./src/lib/agentHistoryStore";
 import { runAgentHistorySelftest } from "./src/lib/agentHistory.selftest";
@@ -427,7 +427,22 @@ function ledgerMiddleware(req: express.Request, res: express.Response, next: exp
   if (!kind) return next();
 
   const startedAt = Date.now();
+  const fullPath = `${req.baseUrl || ''}${req.path}`;
   let before: { text?: string; bytes: number; binary: boolean; existed: boolean } | null = null;
+  // B86.1: snapshot the canvas node ids BEFORE the call, so a workspace-replacing action can
+  // report which nodes it actually changed rather than "all of them".
+  let nodesBefore: Map<string, string> | null = null;
+  // The app auto-syncs the canvas to POST /api/agent/workspace on a 300ms debounce after every
+  // edit, so recording each one would bury the history in "Replaced the working canvas" rows —
+  // precisely the uselessness this panel exists to avoid. Hash the workspace before and after
+  // and drop the row when nothing actually changed.
+  let workspaceHashBefore = '';
+  if (kind === 'workspace' || kind === 'generate') {
+    try {
+      nodesBefore = new Map((activeWorkspace?.nodes || []).map((n: any) => [String(n.id), JSON.stringify(n)]));
+      workspaceHashBefore = workspaceContentHash(sanitizeWorkspace(activeWorkspace));
+    } catch { nodesBefore = null; }
+  }
 
   // Hot-path work, deliberately minimal and only for edits: without the pre-write bytes there
   // is no diff and no undo. Oversized files are hashed by size only, never read into memory.
@@ -489,9 +504,64 @@ function ledgerMiddleware(req: express.Request, res: express.Response, next: exp
         for (const file of ((req as any).__revertFiles || [])) files.push(String(file));
       }
 
+      // B86.1: diagnostics. A row saying "1 error" without naming it is the failure mode this
+      // panel exists to prevent, so the findings are captured and the erroring files become the
+      // row's files (which also makes the file filter work for validation rows).
+      let diagnosticsBlob: string | undefined;
+      let diagnosticsCount: number | undefined;
+      if (kind === 'validate' || kind === 'compile') {
+        const diagnostics = compactDiagnostics(captured);
+        if (diagnostics.length) {
+          diagnosticsBlob = agentHistoryStore.putBlob(JSON.stringify(diagnostics, null, 2));
+          diagnosticsCount = diagnostics.length;
+          for (const d of diagnostics) {
+            if (d.severity === 'error' && d.filePath && !files.includes(d.filePath)) files.push(d.filePath);
+          }
+        }
+      }
+
+      // B86.1: which canvas nodes did this touch? Rows become clickable so a reader can jump
+      // straight to the node an action changed.
+      let touchedNodes: Array<{ id: string; label?: string }> | undefined;
+      try {
+        const current: any[] = (activeWorkspace?.nodes || []) as any[];
+        if (nodesBefore) {
+          const changed = current.filter(n => nodesBefore!.get(String(n.id)) !== JSON.stringify(n));
+          const removed = [...nodesBefore.keys()].filter(id => !current.some(n => String(n.id) === id));
+          touchedNodes = [
+            ...changed.map(n => ({ id: String(n.id), label: String(n.label || n.xmlTag || n.id) })),
+            ...removed.map(id => ({ id, label: 'removed node' })),
+          ].slice(0, 50);
+        } else if (diagnosticsBlob || kind === 'edit') {
+          // Diagnostics and file edits point at cues by name/file; match them to live nodes.
+          const needles = new Set<string>();
+          for (const f of files) {
+            const base = String(f).replace(/\\/g, '/').split('/').pop() || '';
+            if (base) needles.add(base.replace(/\.[^.]+$/, '').toLowerCase());
+          }
+          const flat = Array.isArray(captured?.flat) ? captured.flat : [];
+          for (const d of flat) if (d?.sourceRef) needles.add(String(d.sourceRef).toLowerCase());
+          const matched = current.filter(n => {
+            const label = String(n.label || '').toLowerCase();
+            const script = String(n.properties?.mdScript || n.mdScript || '').toLowerCase();
+            return (label && needles.has(label)) || (script && needles.has(script));
+          });
+          if (matched.length) touchedNodes = matched.slice(0, 50).map(n => ({ id: String(n.id), label: String(n.label || n.id) }));
+        }
+      } catch { touchedNodes = undefined; }
+
+      // A workspace sync that changed nothing is not an action worth a row.
+      if (kind === 'workspace' && workspaceHashBefore) {
+        let after = '';
+        try { after = workspaceContentHash(sanitizeWorkspace(activeWorkspace)); } catch { after = ''; }
+        if (after && after === workspaceHashBefore) return;
+      }
+
       const described = describeAction({
         kind, status: res.statusCode, body: captured, request: req.body, files, lines, binary, bytes,
         revertOfTitle: (req as any).__revertOfTitle,
+        routePath: fullPath,
+        nodes: touchedNodes,
       });
       const rule = revertibility(kind, described.outcome, !!beforeBlob);
       const row: LedgerRow = {
@@ -509,6 +579,8 @@ function ledgerMiddleware(req: express.Request, res: express.Response, next: exp
         ...(afterBlob ? { afterBlob } : {}),
         ...(diffBlob ? { diffBlob } : {}),
         ...(binary ? { binary } : {}),
+        ...(diagnosticsBlob ? { diagnosticsBlob, diagnosticsCount } : {}),
+        ...(touchedNodes && touchedNodes.length ? { nodes: touchedNodes } : {}),
         revertible: rule.revertible,
         ...(rule.reason ? { revertReason: rule.reason } : {}),
         ...((req as any).__revertOf ? { revertOf: (req as any).__revertOf } : {}),
@@ -3652,7 +3724,10 @@ app.get("/api/agent/history/:id/raw", (req, res) => {
     const row = agentHistoryStore.find(String(req.params.id));
     if (!row) return res.status(404).json({ ok: false, error: 'No such history entry.' });
     const which = String(req.query.which || 'diff');
-    const ref = which === 'before' ? row.beforeBlob : which === 'after' ? row.afterBlob : row.diffBlob;
+    const ref = which === 'before' ? row.beforeBlob
+      : which === 'after' ? row.afterBlob
+      : which === 'diagnostics' ? row.diagnosticsBlob
+      : row.diffBlob;
     if (!ref) return res.status(404).json({ ok: false, error: `This entry has no stored "${which}" payload.` });
     const blob = agentHistoryStore.readBlob(ref);
     if (!blob) return res.status(410).json({ ok: false, error: 'The stored payload has been rotated out of history.' });

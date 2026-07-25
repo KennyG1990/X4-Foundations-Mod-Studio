@@ -20,7 +20,9 @@
  * in the store (`agentHistoryStore.ts`) so every rule here is testable without touching disk.
  */
 
-export type LedgerKind = 'edit' | 'import' | 'validate' | 'compile' | 'deploy' | 'package' | 'revert';
+export type LedgerKind =
+  | 'edit' | 'import' | 'validate' | 'compile' | 'deploy' | 'package' | 'revert'
+  | 'workspace' | 'generate' | 'snapshot' | 'config' | 'keys' | 'command' | 'action';
 export type LedgerStatus = 'ok' | 'warn' | 'error';
 
 export interface LedgerActor {
@@ -53,6 +55,16 @@ export interface LedgerRow {
   afterBlob?: string;
   diffBlob?: string;
   binary?: boolean;
+  /** B86.1: blob holding this action's diagnostics, shown when the row is expanded. */
+  diagnosticsBlob?: string;
+  /** B86.1: how many diagnostics that blob holds, so the UI can label the expander. */
+  diagnosticsCount?: number;
+  /**
+   * B86.1: canvas nodes this action touched. Rows become clickable — pick an entry, land on
+   * the node it changed — which is what makes this read like Photoshop's history rather than
+   * a log file.
+   */
+  nodes?: Array<{ id: string; label?: string }>;
   revertible: boolean;
   revertReason?: string;
   /** Set on a `revert` row: the id of the entry it undid. */
@@ -60,17 +72,71 @@ export interface LedgerRow {
 }
 
 /**
- * The routes the ledger records, by method + exact path. An ALLOWLIST, deliberately: read-only
- * traffic (`/api/reference/*`, every GET) must never reach the ledger, and a future route does
- * not silently start logging because it happened to mutate something.
+ * Route classification, DENY-LIST FIRST.
+ *
+ * This started as an allowlist of six routes taken from the feature brief. That was wrong: the
+ * server exposes ~47 mutating endpoints, so the ledger silently recorded a fraction of what
+ * agents actually do and the gap was invisible — the panel looked healthy while missing
+ * workspace replacements, AI generation, snapshots and shell jobs.
+ *
+ * Inverted here on purpose. Every mutating `/api` request is recorded UNLESS it is proven
+ * read-only analysis (`LEDGER_QUIET_ROUTES`). A new route therefore defaults to being VISIBLE;
+ * drift now shows up as an extra row someone can see, never as a silent hole.
  */
+export const LEDGER_QUIET_ROUTES: string[] = [
+  // Pure analysis/read endpoints that happen to use POST because they take a body. They change
+  // no state, and recording them would bury the actions that matter.
+  '/api/agent/critic',
+  '/api/agent/explain',
+  '/api/agent/node-diagnostics',
+  '/api/agent/simulate',
+  '/api/agent/suggest/expression',
+  '/api/agent/xpath-synth',
+  '/api/agent/xsd-lookup',
+  '/api/agent/round-trip-check',
+  '/api/agent/probe/preview',
+  '/api/agent/log-diagnose',
+  '/api/agent/log-file-tail',
+  '/api/agent/live/cue-telemetry',
+  '/api/agent/quick-fixes',
+  '/api/agent/project/validate-crossfile',
+  '/api/gemini',
+  '/api/gemini/analyze',
+  '/api/gemini/analyze-log',
+];
+
+/** Exact-path kind mapping. Anything mutating and unlisted still records, as kind `action`. */
 export const LEDGER_ROUTES: Array<{ method: string; path: string; kind: LedgerKind }> = [
   { method: 'POST', path: '/api/fs/write', kind: 'edit' },
+  { method: 'POST', path: '/api/fs/create', kind: 'edit' },
+  { method: 'POST', path: '/api/fs/delete-dir', kind: 'edit' },
+  { method: 'POST', path: '/api/agent/project/file/create', kind: 'edit' },
+  { method: 'POST', path: '/api/agent/project/content-xml', kind: 'edit' },
+  { method: 'POST', path: '/api/agent/lua-staleness/instrument', kind: 'edit' },
   { method: 'POST', path: '/api/agent/mod-folder/import', kind: 'import' },
+  { method: 'POST', path: '/api/agent/project/create', kind: 'import' },
   { method: 'POST', path: '/api/agent/project/validate', kind: 'validate' },
   { method: 'POST', path: '/api/agent/compile', kind: 'compile' },
   { method: 'POST', path: '/api/agent/deploy-verify', kind: 'deploy' },
+  { method: 'POST', path: '/api/agent/deploy', kind: 'deploy' },
   { method: 'POST', path: '/api/agent/package/release', kind: 'package' },
+  { method: 'POST', path: '/api/agent/package', kind: 'package' },
+  { method: 'POST', path: '/api/agent/project/package', kind: 'package' },
+  { method: 'POST', path: '/api/agent/artifact/build', kind: 'package' },
+  { method: 'POST', path: '/api/agent/workspace', kind: 'workspace' },
+  { method: 'POST', path: '/api/agent/workspace/merge', kind: 'workspace' },
+  { method: 'POST', path: '/api/agent/workspace/restore-parked', kind: 'workspace' },
+  { method: 'POST', path: '/api/agent/generate', kind: 'generate' },
+  { method: 'POST', path: '/api/agent/project/generate', kind: 'generate' },
+  { method: 'POST', path: '/api/fs/snapshot', kind: 'snapshot' },
+  { method: 'POST', path: '/api/fs/restore-snapshot', kind: 'snapshot' },
+  { method: 'POST', path: '/api/fs/delete-snapshot', kind: 'snapshot' },
+  { method: 'POST', path: '/api/schema/config', kind: 'config' },
+  { method: 'POST', path: '/api/agent/external-api/register', kind: 'config' },
+  { method: 'POST', path: '/api/agent/keys', kind: 'keys' },
+  { method: 'POST', path: '/api/agent/keys/revoke', kind: 'keys' },
+  { method: 'POST', path: '/api/ai/keys', kind: 'keys' },
+  { method: 'POST', path: '/api/run_command/job', kind: 'command' },
 ];
 
 /**
@@ -82,10 +148,20 @@ export const LEDGER_REVERT_PATTERN = /^\/api\/agent\/history\/[A-Za-z0-9._-]+\/r
 
 export function ledgerRouteKind(method: string, path: string): LedgerKind | null {
   const upper = method.toUpperCase();
+  // Reads are never recorded, whatever the route.
+  if (upper === 'GET' || upper === 'HEAD' || upper === 'OPTIONS') return null;
+  if (!path.startsWith('/api/')) return null;
+  // The ledger's own surface must not record itself (revert is the deliberate exception).
+  if (upper === 'POST' && LEDGER_REVERT_PATTERN.test(path)) return 'revert';
+  if (path.startsWith('/api/agent/history')) return null;
+  // The canonical-corpus read API is read-only whatever verb is used against it.
+  if (path.startsWith('/api/reference/')) return null;
+  // Proven read-only analysis stays quiet so it cannot bury the actions that matter.
+  if (LEDGER_QUIET_ROUTES.includes(path)) return null;
   const hit = LEDGER_ROUTES.find(r => r.method === upper && r.path === path);
   if (hit) return hit.kind;
-  if (upper === 'POST' && LEDGER_REVERT_PATTERN.test(path)) return 'revert';
-  return null;
+  // Unclassified but mutating: record it anyway. A visible generic row beats a silent gap.
+  return 'action';
 }
 
 /**
@@ -199,13 +275,16 @@ function plural(n: number, one: string, many = `${one}s`): string {
 export function describeAction(input: {
   kind: LedgerKind;
   status: number;
-  body: any;
-  request: any;
+  body?: any;
+  request?: any;
   files: string[];
   lines?: { added: number; removed: number };
   binary?: boolean;
   bytes?: { before?: number; after?: number };
   revertOfTitle?: string;
+  /** Full route path, so generic and family summaries can distinguish siblings. */
+  routePath?: string;
+  nodes?: Array<{ id: string; label?: string }>;
 }): { title: string; outcome: LedgerOutcome } {
   const { kind, status, body, request, files } = input;
   const httpFailed = status >= 400;
@@ -256,10 +335,82 @@ export function describeAction(input: {
     const warnings = numberish(s.schemaWarnings) + numberish(s.scriptPropertyWarnings) + numberish(s.mdPitfallWarnings);
     const scanned = numberish(body?.fileCount ?? s.files ?? files.length);
     const scope = scanned ? `Validated ${plural(scanned, 'file')}` : 'Validated project';
+    // A count alone is useless: "1 error" does not tell you WHICH error, which is the whole
+    // reason this panel exists. Name the first one — file, line, message — the same way the
+    // deploy row names its failing stage.
+    const worst = firstDiagnostic(body, 'error');
+    if (errors > 0 && worst) {
+      const more = errors > 1 ? ` (+${errors - 1} more)` : '';
+      return {
+        title: `${scope} — ${plural(errors, 'error')}: ${describeDiagnostic(worst)}${more}`,
+        outcome: { status: 'error', code: worst.code },
+      };
+    }
+    if (errors > 0) {
+      return { title: `${scope} — ${plural(errors, 'error')}, ${plural(warnings, 'warning')}`, outcome: { status: 'error' } };
+    }
+    if (warnings > 0 && !firstDiagnostic(body, 'warning')) {
+      return { title: `${scope} — 0 errors, ${plural(warnings, 'warning')}`, outcome: { status: 'warn' } };
+    }
+    const firstWarning = warnings > 0 ? firstDiagnostic(body, 'warning') : null;
+    if (firstWarning) {
+      const more = warnings > 1 ? ` (+${warnings - 1} more)` : '';
+      return {
+        title: `${scope} — ${plural(warnings, 'warning')}: ${describeDiagnostic(firstWarning)}${more}`,
+        outcome: { status: 'warn', code: firstWarning.code },
+      };
+    }
+    return { title: `${scope} — 0 errors, 0 warnings`, outcome: { status: 'ok' } };
+  }
+
+  if (kind === 'workspace') {
+    if (httpFailed) return { title: `Workspace update REFUSED — ${cleanReason(body)}`, outcome: { status: 'error', code: body?.code } };
+    const nodeCount = numberish(request?.workspace?.nodes?.length);
+    const name = request?.workspace?.name ? ` "${request.workspace.name}"` : '';
+    const changed = input.nodes?.length ? ` — ${plural(input.nodes.length, 'node')} changed` : '';
+    return { title: `Replaced the working canvas${name} (${plural(nodeCount, 'node')})${changed}`, outcome: { status: 'ok' } };
+  }
+
+  if (kind === 'generate') {
+    if (httpFailed) return { title: `AI generation FAILED — ${cleanReason(body)}`, outcome: { status: 'error', code: body?.code } };
+    const prompt = typeof request?.prompt === 'string' ? firstSentence(request.prompt) : '';
+    const repaired = numberish(body?.repair?.attempts);
+    const suffix = repaired ? ` (${plural(repaired, 'repair pass', 'repair passes')})` : '';
     return {
-      title: `${scope} — ${plural(errors, 'error')}, ${plural(warnings, 'warning')}`,
-      outcome: { status: errors > 0 ? 'error' : warnings > 0 ? 'warn' : 'ok' },
+      title: prompt ? `AI generated from: "${truncate(prompt, 80)}"${suffix}` : `AI generation completed${suffix}`,
+      outcome: { status: 'ok' },
     };
+  }
+
+  if (kind === 'snapshot') {
+    if (httpFailed) return { title: `Snapshot action FAILED — ${cleanReason(body)}`, outcome: { status: 'error', code: body?.code } };
+    const modId = request?.modId ? ` for ${request.modId}` : '';
+    if (/restore/.test(input.routePath || '')) return { title: `Restored a workspace snapshot${modId}`, outcome: { status: 'ok' } };
+    if (/delete/.test(input.routePath || '')) return { title: `Deleted a workspace snapshot${modId}`, outcome: { status: 'ok' } };
+    return { title: `Saved a workspace snapshot${modId}`, outcome: { status: 'ok' } };
+  }
+
+  if (kind === 'config') {
+    if (httpFailed) return { title: `Settings change REFUSED — ${cleanReason(body)}`, outcome: { status: 'error', code: body?.code } };
+    const touched = Object.keys(request || {}).filter(k => k !== 'schemaFiles');
+    return {
+      title: touched.length ? `Changed settings: ${touched.slice(0, 4).join(', ')}` : 'Changed studio settings',
+      outcome: { status: 'ok' },
+    };
+  }
+
+  if (kind === 'keys') {
+    // Never record key material — only that a key's lifecycle changed, and its label.
+    if (httpFailed) return { title: `Key operation FAILED — ${cleanReason(body)}`, outcome: { status: 'error', code: body?.code } };
+    const label = typeof request?.label === 'string' ? ` "${request.label}"` : '';
+    if (/revoke/.test(input.routePath || '')) return { title: `Revoked an agent key${label}`, outcome: { status: 'ok' } };
+    return { title: `Created or updated a stored key${label}`, outcome: { status: 'ok' } };
+  }
+
+  if (kind === 'command') {
+    const cmd = typeof request?.cmd === 'string' ? truncate(request.cmd.replace(/\s+/g, ' ').trim(), 90) : '';
+    if (httpFailed) return { title: `Shell command REFUSED — ${cleanReason(body)}`, outcome: { status: 'error', code: body?.code } };
+    return { title: cmd ? `Ran shell command: ${cmd}` : 'Ran a shell command', outcome: { status: 'ok' } };
   }
 
   if (kind === 'compile') {
@@ -309,13 +460,57 @@ export function describeAction(input: {
     };
   }
 
-  // revert
-  return {
-    title: input.revertOfTitle
-      ? `Reverted: ${input.revertOfTitle}`
-      : `Reverted \`${target}\` to its previous content`,
-    outcome: { status: httpFailed ? 'error' : 'ok' },
-  };
+  if (kind === 'revert') {
+    return {
+      title: input.revertOfTitle
+        ? `Reverted: ${input.revertOfTitle}`
+        : `Reverted \`${target}\` to its previous content`,
+      outcome: { status: httpFailed ? 'error' : 'ok' },
+    };
+  }
+
+  // Generic mutating route with no bespoke summary yet. Deliberately still recorded: an
+  // unglamorous row a reader can see beats a silent gap in the history.
+  const routeLabel = (input.routePath || '').replace(/^\/api\//, '');
+  if (httpFailed) {
+    return { title: `${routeLabel} FAILED — ${cleanReason(body)}`, outcome: { status: 'error', code: body?.code } };
+  }
+  return { title: `Ran ${routeLabel}`, outcome: { status: 'ok' } };
+}
+
+/** One diagnostic rendered as a readable clause: where it is, then what is wrong. */
+export function describeDiagnostic(d: { filePath?: string; line?: number; message?: string; code?: string }): string {
+  const where = d.filePath ? `${shortPath(d.filePath)}${d.line ? `:${d.line}` : ''}` : '';
+  const what = firstSentence(String(d.message || d.code || 'no detail given'));
+  return where ? `${where} — ${what}` : what;
+}
+
+/**
+ * The first diagnostic of a given severity from a validation response. Reads the `flat` list —
+ * the project's single diagnostic currency — so this stays correct as individual lint layers
+ * come and go.
+ */
+export function firstDiagnostic(body: any, severity: 'error' | 'warning'): { filePath?: string; line?: number; message?: string; code?: string; sourceRef?: string } | null {
+  const flat = Array.isArray(body?.flat) ? body.flat : [];
+  const hit = flat.find((d: any) => d && d.severity === severity);
+  return hit || null;
+}
+
+/** Compact diagnostics for storage/expansion — bounded so a noisy project cannot bloat a blob. */
+export function compactDiagnostics(body: any, limit = 200): Array<{ severity: string; code?: string; filePath?: string; line?: number; message: string }> {
+  const flat = Array.isArray(body?.flat) ? body.flat : [];
+  return flat.slice(0, limit).map((d: any) => ({
+    severity: String(d?.severity || 'info'),
+    code: d?.code,
+    filePath: d?.filePath,
+    line: d?.line,
+    message: redactSecrets(String(d?.message || '')),
+  }));
+}
+
+function truncate(text: string, max: number): string {
+  const flat = String(text || '').replace(/\s+/g, ' ').trim();
+  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 }
 
 function numberish(value: unknown): number {

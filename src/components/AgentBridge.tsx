@@ -32,6 +32,8 @@ interface AgentBridgeProps {
   setWorkspace: React.Dispatch<React.SetStateAction<ModWorkspace>>;
   localVersion: number;
   setLocalVersion: (v: number) => void;
+  /** B86.1: jump the canvas to a node named by a history entry. */
+  setFocusNodeRequest?: (req: { nodeId: string; timestamp: number } | null) => void;
 }
 
 type AgentRuntimeValue = string | number | boolean | null | Record<string, unknown> | AgentRuntimeValue[];
@@ -84,7 +86,8 @@ export default function AgentBridge({
   workspace,
   setWorkspace,
   localVersion,
-  setLocalVersion
+  setLocalVersion,
+  setFocusNodeRequest
 }: AgentBridgeProps) {
   const [activeTab, setActiveTab] = useState<'docs' | 'status' | 'execute' | 'keys' | 'history'>('docs');
 
@@ -155,8 +158,10 @@ export default function AgentBridge({
     if (expandedRow === row.id) { setExpandedRow(null); setRowDetail(null); return; }
     setExpandedRow(row.id);
     setRowDetail(null);
-    const which = row.diffBlob ? 'diff' : row.afterBlob ? 'after' : 'before';
-    if (!row.diffBlob && !row.afterBlob && !row.beforeBlob) return;
+    // Diagnostics first: for a validation or compile row, the findings ARE the detail worth
+    // reading — a bare "1 error" is exactly the uselessness this panel exists to remove.
+    const which = row.diagnosticsBlob ? 'diagnostics' : row.diffBlob ? 'diff' : row.afterBlob ? 'after' : 'before';
+    if (!row.diagnosticsBlob && !row.diffBlob && !row.afterBlob && !row.beforeBlob) return;
     try {
       const r = await fetch(`/api/agent/history/${row.id}/raw?which=${which}`);
       const d = await r.json();
@@ -822,6 +827,33 @@ export default function AgentBridge({
                             <span className="text-slate-600"> · {row.durationMs}ms</span>
                           </div>
                         )}
+                        {/* B86.1: the nodes this action touched. Click one to jump the canvas
+                            to it — the entry stops being a log line and becomes a way back to
+                            the thing that changed. */}
+                        {row.nodes?.length > 0 && (
+                          <div className="flex flex-wrap items-center gap-1">
+                            <span className="text-[9.5px] font-mono text-slate-500 mr-0.5">Nodes:</span>
+                            {row.nodes.slice(0, 12).map((n: any) => (
+                              <button
+                                key={n.id}
+                                onClick={() => setFocusNodeRequest?.({ nodeId: n.id, timestamp: Date.now() })}
+                                title={`Focus ${n.label || n.id} on the canvas`}
+                                data-testid="history-node-chip"
+                                className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/15 cursor-pointer"
+                              >
+                                {n.label || n.id}
+                              </button>
+                            ))}
+                            {row.nodes.length > 12 && (
+                              <span className="text-[9px] font-mono text-slate-600">+{row.nodes.length - 12} more</span>
+                            )}
+                          </div>
+                        )}
+                        {row.diagnosticsCount > 0 && (
+                          <div className="text-[9.5px] font-mono text-slate-500">
+                            {row.diagnosticsCount} diagnostic(s) — full detail below
+                          </div>
+                        )}
                         {row.revertible ? (
                           <button
                             onClick={() => void revertToRow(row)}
@@ -833,11 +865,39 @@ export default function AgentBridge({
                         ) : (
                           <div className="text-[9.5px] font-mono text-slate-500 italic">{row.revertReason}</div>
                         )}
-                        {rowDetail?.id === row.id && (
-                          <pre className="text-[9.5px] font-mono text-slate-400 bg-[#070a0f] rounded p-2 max-h-[240px] overflow-auto whitespace-pre-wrap break-all">
-                            {rowDetail.content.length > 20000 ? `${rowDetail.content.slice(0, 20000)}\n… (truncated for display)` : rowDetail.content}
-                          </pre>
-                        )}
+                        {rowDetail?.id === row.id && (() => {
+                          // Diagnostics render as readable lines, never as raw JSON — a wall of
+                          // JSON is the thing this panel is supposed to replace.
+                          if (row.diagnosticsBlob) {
+                            let parsed: any[] | null = null;
+                            try { parsed = JSON.parse(rowDetail.content); } catch { parsed = null; }
+                            if (Array.isArray(parsed)) {
+                              return (
+                                <div className="bg-[#070a0f] rounded p-2 max-h-[240px] overflow-auto space-y-1">
+                                  {parsed.map((d, i) => (
+                                    <div key={i} className="text-[9.5px] font-mono leading-relaxed flex items-start gap-1.5">
+                                      <span className={`font-bold shrink-0 ${
+                                        d.severity === 'error' ? 'text-red-400' : d.severity === 'warning' ? 'text-amber-400' : 'text-slate-500'
+                                      }`}>
+                                        {d.severity === 'error' ? 'ERR' : d.severity === 'warning' ? 'WARN' : 'INFO'}
+                                      </span>
+                                      <span className="text-slate-300 break-all">
+                                        {d.filePath ? <span className="text-cyan-400">{d.filePath}{d.line ? `:${d.line}` : ''}</span> : null}
+                                        {d.filePath ? ' — ' : ''}{d.message}
+                                        {d.code ? <span className="text-slate-600"> [{d.code}]</span> : null}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            }
+                          }
+                          return (
+                            <pre className="text-[9.5px] font-mono text-slate-400 bg-[#070a0f] rounded p-2 max-h-[240px] overflow-auto whitespace-pre-wrap break-all">
+                              {rowDetail.content.length > 20000 ? `${rowDetail.content.slice(0, 20000)}\n… (truncated for display)` : rowDetail.content}
+                            </pre>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
