@@ -9,11 +9,15 @@ store (namespace `x4forge`). GitHub and the store are two SEPARATE destinations:
 
 ---
 
-# ⚙️ MACHINE RUNBOOK — exact verified sequence (last run: 0.0.31, 2026-07-20, green)
+# ⚙️ MACHINE RUNBOOK — the exact package+publish sequence (written 2026-07-21)
 
-> For an agent (Codex/Claude/etc.) cutting a release unattended. Every command below was
-> actually executed for 0.0.31; the expected-output lines are real. Run from a HOST shell
-> (sandbox mirrors of this repo are stale and lie). `<REPO>` = `F:\DEV_ENV\X4_Forge`.
+> For an agent (Codex/Claude/etc.) cutting a release unattended. The COMMANDS and the artifact
+> chain below are read straight from the current scripts (`stage-app.mjs`, `build-ext.mjs`,
+> `gen-changelog.mjs`, `.vscodeignore`) and are authoritative. The sample output lines show the
+> SHAPE of a green run (captured from a 0.0.31-era release) — match the shape, not the exact
+> counts: file counts, VSIX size, and the oracle total grow with the product. Current published
+> version at time of writing: **0.0.38**. Run from a HOST shell (sandbox mirrors of this repo
+> are stale and lie). `<REPO>` = `F:\DEV_ENV\X4_Forge`.
 
 ## What the pipeline actually builds (4 artifacts, in order)
 
@@ -45,8 +49,9 @@ Oracle sweep needs a RUNNING server and **defaults to port 3001** — with the p
 cost time on 0.0.31):
 ```bash
 cd <REPO> && npm run build && node dist/server.cjs &        # prod bundle on :3000
-cd <REPO> && X4_FORGE_BASE=http://localhost:3000 node scripts/oracle-sweep.mjs   # 96/96 green
+cd <REPO> && X4_FORGE_BASE=http://localhost:3000 node scripts/oracle-sweep.mjs   # N/N green (0 red)
 ```
+Cite the REAL N the sweep prints (it is runtime-discovered and grows); any red is a stop.
 Stop that server before packaging. THE e2e gate is `test:e2e` (verdict-parsed) — raw Playwright
 exit codes lie via the libuv teardown crash `0xC0000409`; never judge by exit code alone.
 
