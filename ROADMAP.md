@@ -52,6 +52,131 @@ Foundation-first means: before adding polish, every link above has to be *correc
 
 ## Current State
 
+### ✅ B84 · Deploy format is the author's choice — loose files vs CAT/DAT, explained in plain language — VERIFIED 2026-07-25
+
+**What B83 unmasked.** With the locked-root fallback in place, the first live `deploy-verify` against the real
+`x4_ai_influence` mod completed `ok:true` — and replaced its **49 loose files with 11**, packing everything into
+`ext_01.cat` + `ext_01.dat`. `md/ai_influence_diplomacy.xml`, both native DLLs, and the 295 KB Lua UI addon
+ceased to exist as files on disk. Native DLLs inside a `.cat` cannot be `LoadLibrary`'d, so this silently kills
+the mod's networking. Cause: `'catalog'` was **hardcoded** at both deploy sites; `.forgeartifact.json` governs
+include/exclude rules, never packaging. B76 shipped CAT/DAT as the sole path, and because `deploy-verify` could
+never reach its write stage on Windows, catalog mode had never actually run against a real held mod folder.
+B83 did not cause this — it revealed it. The deployed tree was restored byte-identically from an independent
+backup before any further work.
+
+**Shipped.** `deployFormat: 'loose' | 'catalog'` is persisted in `config.json` through the existing
+`/api/schema/config` GET+POST, overridable per request on `deploy-verify`, resolved **request → config →
+`loose`**. An unknown value in the *request* is refused (`UNKNOWN_DEPLOY_FORMAT`, 400) with zero writes; an
+unknown value in *persisted config* fails soft to `loose`, because a corrupt config file must never brick
+deployment (the SEC3 precedent). A toggle in the deploy wizard reads and writes the setting, and each option
+states its real consequence rather than a bare label. Every deploy result now says what it actually wrote:
+the `deploy` checklist row always renders its detail, and a catalog deploy that buried native binaries
+**warns** instead of passing quietly.
+
+**Default changed to `loose` — flagged for sign-off, not slipped in.** This restores pre-B76 behavior, matches
+what X4 mod folders look like in the wild, keeps files readable/diffable on disk, and is the only mode in which
+native binaries load. Anyone relying on 0.0.36–0.0.40 catalog-by-default now gets loose unless they choose
+catalog.
+
+**Two real defects fixed on the way, both found by building this:**
+- **Loose deploy never removed anything.** It called the purely additive `copyRegularTree`, so a file deleted
+  from a mod stayed in the game folder forever and kept being loaded by X4 — and loose deploys got none of the
+  sibling-backup, rollback, hash-verification, or locked-root protection catalog deploys already had. Loose now
+  goes through the same `replaceValidatedDeployment`. Proven live: a stale `.mcp.json` was correctly removed.
+- **`POST /api/schema/config` blanked `xsdSchemaPath` on any partial update**, because it wrote `schemaDir`
+  unconditionally while every neighbouring field was conditional. The new toggle is exactly such a caller.
+  Absence now preserves; an explicit empty string still clears. Pinned by `partial_config_update_preserves_schema_path`.
+
+**Preservation semantics made explicit.** Making loose mode genuinely replace the tree surfaced a conflict:
+Ken's `.forgekeep` listed `config`, `README.md`, `docs` — paths the build *also* produces — which hard-errored
+as a 500. Preserved paths now carry their origin. An explicit `.forgeartifact.json` **runtime-owned**
+declaration colliding with managed content stays a hard error (a genuine contract contradiction); a soft
+`.forgekeep` hint yields to the freshly built file and the override is **reported**. Letting the hint win would
+freeze deployed files against every future source edit — the same stale-content class as B81. Separately,
+`.studio-mod-id` and `.snapshots` are now preserved explicitly: loose staging kept them only by accident under
+the old additive copy, and losing them would destroy the snapshot history that has already recovered a real mod.
+
+**Validation:** typecheck PASS · oracles **102/102** (artifact transaction 29/29) · routes **PASS** including
+eight new B84 assertions (default, options, persistence, partial-update preservation, unknown rejected at both
+config and deploy-verify, rejected value not persisted, rejected deploy wrote nothing) · lint PASS at baseline ·
+precommit PASS · build PASS · **e2e 26/26 PASS**.
+
+**Live acceptance on the real mod, folder held throughout (holder PID 27384):** `deploy-verify` `ok:true`,
+10/10 stages · `md/ai_influence_diplomacy.xml` **WELL-FORMED** · `core.dll`, `ssl.dll`, `aic_uix.lua` all
+SHA-256 identical to the workspace · mod root file ID unchanged (`…3400000000aad6`) · no backup litter ·
+stale `.mcp.json` removed by the new stale-removal, then restored by hand as it is Ken's own tooling config.
+Deployed count is **48 vs the workspace's 49**; the single delta is `.claude/settings.local.json`, excluded as
+development metadata alongside `.git/`. No mod content is missing and nothing extra is present — **reported as
+48, not rounded up to a pass.**
+
+**Open for Ken:** (a) confirm the `loose` default; (b) `.claude/settings.local.json` — dev metadata or shippable
+content?; (c) his mod's `.forgekeep` still lists three built paths and is now a reported no-op — removing those
+entries clears the warning; (d) `.mcp.json` lives in the deployed folder and will be removed by every future
+deploy unless added to `.forgekeep`. Plan: `docs/plans/2026-07-25-deploy-format-toggle.md`.
+
+### ✅ B83 · Locked deployed-mod root no longer blocks deployment on Windows — VERIFIED 2026-07-25
+
+**The failure this closes.** Every Forge deployment activated by renaming the existing deployed mod root to a
+sibling `.x4forge-backup-*` directory before swapping the staged tree in. On Windows that rename can fail with
+`EBUSY`/`EPERM` when *anything* holds a handle on the mod root — a process cwd, a watcher, an indexer — even with
+X4 closed. `replaceValidatedDeployment` (`server.ts`) had no fallback, so the whole deployment aborted and the mod
+could not be updated at all. **[REPRODUCED 2026-07-25]** on a live deploy-verify; the specific handle owner
+remains **[HYPOTHESIS]** and is deliberately out of scope — Forge now survives the lock instead of diagnosing it.
+
+**What shipped.** The atomic sibling root-swap stays the primary path and is unchanged. Only when the *initial*
+target→backup rename fails with `EBUSY` or `EPERM` does deployment enter a lock-only in-place fallback:
+copy the existing target into the sibling backup, verify that backup against a whole-tree SHA-256 fingerprint of
+the pre-deploy state, synchronize the already-materialized sibling stage into the still-present root
+(exact stale-entry removal, deepest-first, case-correct on Windows), re-open and hash-verify every expected
+artifact plus the full stage↔target mirror, then delete stage and backup. Any failure after mutation restores the
+target from the verified backup and re-proves the original fingerprint before rethrowing. The target directory is
+never deleted or renamed in fallback mode. New helpers: `inspectRegularTree`, `regularTreeFingerprint`,
+`synchronizeRegularTree`, `verifyRegularTreeMirror`, `isLockedRootRenameError`, `replaceLockedDeploymentInPlace`,
+plus narrow selftest-only `DeploymentTransactionHooks` seams threaded through `compileWorkspaceToFolder`.
+
+**Fails closed, by design.** A corrupt or incomplete backup is rejected *before* the target is touched
+(`backupVerified` gates the rollback path, so a bad backup can never become a restore source). File-level locks
+still fail the deployment rather than reporting false success. Non-lock rename errors (e.g. `EACCES`) propagate
+with no fallback and no mutation. ADR-F4's sibling stage/backup, deterministic inventory, runtime-owned/`.forgekeep`
+preservation, and reopened hash verification are all retained; only root-level rename atomicity is given up, and
+only in the case where Windows has already made that operation impossible.
+
+**Validation (all methods declared in the plan, all run 2026-07-25 on a quiet machine):**
+`npm run typecheck` PASS · `npm run test:oracles` **102/102**, artifact transaction selftest **29/29** ·
+`npm run test:routes` **71/71** including `artifact_selftest_proves_locked_root_transaction`, which asserts all
+eight behaviors by name (EBUSY fallback, EPERM fallback, exact original-tree restore, no orphan siblings after
+rollback, incomplete backup fails closed, incomplete backup never mutates target, non-lock error rejected without
+fallback, non-lock error leaves target unchanged) · `npm run precommit:check` PASS (tripwires 0 hits, canon
+mirrors identical, e2e-verdict selftest 10/10, product-copy guard PASS) · `npm run lint` PASS at baseline
+(0 errors / 438 warnings) · `npm run build` PASS · **`npm run test:e2e` PASS — 26/26, 0 failed, 0 flaky**
+(`[run-e2e] VERDICT` via json-report, 1.4m). Ephemeral stack confirmed stopped afterwards (3100/3101 free) and the
+live 3000/3001 workspace was never started or touched. **Negative paths are the substance of this close, not an
+afterthought:** three of the eight named route assertions are failure-path proofs.
+
+**Live proof on the real mod (2026-07-25, Ken-authorized).** The acceptance contract was deliberately widened
+from "scratch roots only" to a real deployment at Ken's direction. A fresh `powershell.exe` was started with its
+working directory set to `G:\...\extensions\x4_ai_influence` to hold the folder exactly as an IDE or terminal
+would, and `mod-folder/import` → `deploy-verify` was driven against the real game extensions root. Result:
+`ok:true`, all 10 stages, **while the folder was held**. The decisive evidence is the NTFS file ID of the mod
+root: `0x…3400000000aad6` **before and after** a full content replacement, with creation time unchanged. The
+atomic path swaps in a *different* directory (new ID); an unchanged ID with rewritten contents proves the root
+was never renamed and the fallback carried the deploy. `md/ai_influence_diplomacy.xml` went from
+`mismatched tag: line 278, column 12` to **WELL-FORMED**; `lua3p/luasocket/core.dll` (483,417 B),
+`lua3p/luasec/ssl.dll` (7,489,482 B) and `ui/addons/ai_influence_chat/aic_uix.lua` (295,643 B) are SHA-256
+identical to the workspace; no `.x4forge-backup-*` litter. An independent pre-deploy copy of the deployed tree
+was taken first and used to restore byte-identically between runs.
+
+**Not done / deliberately out of scope:** no version bump, no packaging beyond a local validation VSIX, and
+**no publication** — installed public 0.0.40 does *not* contain this repair and will not until Ken authorizes a
+release. Identifying the Windows handle owner remains open and unneeded. See
+`docs/plans/2026-07-25-locked-root-deploy-fallback.md`.
+
+**Record correction (honesty note).** An earlier run of this gate reported FAIL with 23 failures. That was an
+environment casualty: the ephemeral Vite on 3100 was dead and every later spec died on `ERR_CONNECTION_REFUSED`,
+downstream of an aborted one-second run that preceded it. Re-run on a clean machine, the first failing spec
+(`canvas-interactions.spec.ts:162`) passed in 6.8s and the suite went 26/26. The cascade is `[REPRODUCED]`;
+attributing it to B83 would have been wrong.
+
 ### ✅ B75 · Unified unpacked-corpus intelligence and continuous authoring validation — VERIFIED 2026-07-24 (OpenVSX 0.0.36)
 
 X4 Forge now treats the configured unpacked game root as one read-only, cache-indexed source of truth instead of making authors or agents hardcode game data. Base plus installed official DLC overlays feed canonical factions, wares, sectors/macros, script properties, raw-file access, search, schema routing, completion, hover, diff simulation, and the shared project validator. The real 9.00 corpus produces 32 factions, 1,902 wares, 170 sectors, 6,505 macros, 37 canonical library XSD domains with resolved shared includes, and a classified million-file manifest/coverage report. `faction.id` is exposed exactly as documented by `scriptproperties.xml`.

@@ -1,52 +1,89 @@
-# X4 Forge session handoff — 2026-07-25 public 0.0.40 + B81 root-asymmetry note
+# X4 Forge session handoff — 2026-07-25 · B83 + B84 closed; deployment works on a held Windows folder
 
 ## One-line state
 
-X4 Forge Studio 0.0.40 is public, byte-verified, committed, and pushed at `8f7ecba`; B81 and B82 are SPECIFIED after live agent work reproduced cross-root read/write asymmetry and malformed XML passing project validation until deploy.
+Forge can now deploy the real `x4_ai_influence` mod into the live game extensions folder **while that folder is
+held by an IDE/terminal**, and the author chooses loose files vs CAT/DAT — both VERIFIED live; nothing is
+published, HEAD is the last thing that needs Ken's eye.
 
-## Verified release state
+## What closed this session
 
-- Open VSX base and exact-version endpoints report stable 0.0.40.
-- Public and local VSIX are byte-identical: 17,813,559 bytes, SHA-256 `10E7E0E8D367A7CDA01E209DCC0DAB700102A26C38131E38760AFAFFFB3E244A`.
-- `HEAD`, `origin/main`, and `origin/HEAD` are `8f7ecba` (`feat(projects): browse workspace and deployed mods with lazy disclosure trees`).
-- B79/B80 are VERIFIED: retained panels rebind to the current sidecar; Load Mod Project preserves workspace/filesystem identity and renders lazy IDE-style disclosure trees.
-- Installed Antigravity visual acceptance is complete; Ken reported the user experience worked perfectly.
+- **B83 — locked deployed-mod root.** `replaceValidatedDeployment` now falls back to a verified, rollback-safe
+  in-place synchronization when (and only when) the initial target→backup rename fails `EBUSY`/`EPERM`. Atomic
+  fast path unchanged; non-lock errors still propagate untouched.
+- **B84 — deploy format toggle.** `deployFormat: 'loose' | 'catalog'` persisted in `config.json`, overridable
+  per `deploy-verify` request, default **`loose`**, with a wizard toggle and a plain-language account of what
+  each deploy actually wrote.
 
-## New reproduced hazard — B81
+## The decisive evidence (reproduce it this way, don't re-derive)
 
-- `GET /api/fs/read?path=...` resolves `filesystemPath || modWorkspacePath`.
-- `POST /api/fs/write` resolves only `modWorkspacePath`.
-- With both roots configured, a read-modify-write agent can read stale deployed bytes from G: and overwrite newer source bytes in F:.
-- Current workaround used successfully by Claude: read workspace bytes directly, write through Forge, verify workspace bytes directly.
-- Durable specification and acceptance contract are in `BACKLOG.md` B81.
+The mod root's **NTFS file ID is the discriminator**. The atomic path swaps in a *different* directory (new ID);
+the fallback updates the *same* one. Hold the folder, deploy, compare:
 
-## New reproduced validation gap — B82
+```
+fsutil file queryfileid "G:\SteamLibrary\steamapps\common\X4 Foundations\extensions\x4_ai_influence"
+```
 
-- A mismatched `<do_elseif>...</do_else>` in `md/ai_influence_diplomacy.xml` passed `/api/agent/project/validate` with zero structural/schema errors.
-- `/api/agent/deploy-verify` independently called `checkXmlWellformed`, rejected the emitted file, and wrote zero deployment files.
-- The payload's incorrect `kind:"markdown"` is not the cause because MD validation also routes by `classifyPath(file.path)`.
-- The shared `runProjectValidation` engine lacks the well-formedness pass; deploy owns a separate implementation.
-- Durable specification and acceptance contract are in `BACKLOG.md` B82.
+It read `0x…3400000000aad6` before and after a full content replacement → the root was never renamed.
+Hold the folder with: `Start-Process powershell -ArgumentList '-NoProfile','-Command','Start-Sleep -Seconds 5400' -WorkingDirectory <mod root>`.
+
+Live results: `deploy-verify` `ok:true` 10/10 stages · `md/ai_influence_diplomacy.xml` went
+`mismatched tag: line 278` → **WELL-FORMED** · `core.dll` / `ssl.dll` / `aic_uix.lua` SHA-256 identical to the
+workspace · no `.x4forge-backup-*` litter · deployed 48 files vs workspace 49.
+
+## Gates (this session, host-native, quiet machine)
+
+typecheck PASS · oracles **102/102** (artifact transaction 29/29) · routes PASS incl. 9 new B84 assertions ·
+lint PASS at baseline (0 errors) · precommit PASS · build PASS · **e2e 26/26 PASS** (`[run-e2e] VERDICT`).
+
+## Corrections banked — do not repeat these
+
+- **An earlier e2e FAIL (23 failures) was an environment casualty, not a defect.** The ephemeral Vite on 3100
+  had died and every later spec hit `ERR_CONNECTION_REFUSED`, downstream of an aborted one-second run. On a
+  clean machine the same suite went 26/26. Re-run before attributing a cascade to code.
+- **`.forgeartifact.json` does NOT control packaging** — only include/exclude/runtime-owned rules. Packaging was
+  hardcoded.
+- **B83 did not break loose deploys; it revealed that they were never safe.** Loose mode used an additive
+  `copyRegularTree` that removed nothing, so deleted mod files lingered in the game folder forever.
+
+## Live hazards
+
+- The **installed sidecar (public 0.0.40) does not contain either fix.** Driving its port reproduces the old
+  `EBUSY`. Validate against a host-native server from the repo instead.
+- The repo's own `config.json` still holds the **legacy unsafe shape** (`modWorkspacePath` = the live
+  extensions dir), which the guards 409 as `PROTECTED_ROOT_OVERLAP`. This session used an isolated
+  `X4_CONFIG_DIR` under the scratchpad and left the repo config untouched. Do not "fix" it without asking.
+- `.mcp.json` (the `claude-brain` registration) lives inside the deployed mod folder, is not mod content, and is
+  therefore removed by every correct deploy. It was restored by hand this session. Add it to `.forgekeep` to
+  keep it permanently.
+- Do not run `graphify update .` — B77 remains open (graph refresh mutates historical PNG evidence).
+- The two `vscode-extension/evidence/0.0.35-*.png` byte changes are still pre-existing, unattributed churn.
+  Do not stage or revert them without identifying the owner.
+
+## Eyeball queue (Ken, ~60 seconds)
+
+1. **Deploy format toggle** — open the Compile/Deploy wizard. Between the target list and the staging-path card
+   there is a **DEPLOY FORMAT** row with two cards: *Loose files* (selected) and *CAT / DAT archive*, each
+   stating its consequence. Click *CAT / DAT archive* → it highlights cyan and persists; reopen the wizard and
+   it is still selected. Click *Loose files* to set it back.
+2. **Plain-language deploy result** — run a deploy from the wizard and read the `Written to staging + extensions`
+   row: it should now spell out the format and what it means, on success as well as failure.
+
+## Ken's four open decisions (B85 in BACKLOG.md)
+
+1. Confirm the **`loose` default** (changed from 0.0.36–0.0.40 catalog-by-default).
+2. Is `.claude/settings.local.json` shippable mod content, or correctly excluded? (It is the 48-vs-49 delta.)
+3. `x4_ai_influence/.forgekeep` lists `config`, `README.md`, `docs` — all built by the mod, so those hints are
+   now reported no-ops. Removing the three lines clears the warning.
+4. Add `.mcp.json` to `.forgekeep` if it should survive deploys.
 
 ## First resume action
 
-Implement B82 first because malformed XML currently escapes continuous validation: move the existing deterministic well-formedness check into the shared project-validation result and make deploy consume it without weakening its write barrier. Then implement B81 against isolated same-name fixtures. Neither task may touch the real workspace or deployment during validation.
-
-## Boundaries and hazards
-
-- Do not run `graphify update .`; B77 remains open because graph refresh can mutate historical PNG evidence.
-- Do not stage, restore, or commit the unrelated tracked byte churn in `vscode-extension/evidence/0.0.35-runtime-copy-live.png` and `0.0.35-runtime-copy-startup.png` without separately identifying its owner.
-- The B81 note does not authorize writes to the real Mod Workspace, Filesystem/deployment, X4 game directory, or standing configuration.
-- Mild Forge lag remains observed but not causally reproduced; treat it as a separate measurement task if persistent.
-
-## Eyeball queue
-
-None for this documentation-only note. B81 implementation will require real UI proof only if its caller wiring changes visible browsing behavior.
-
-## AAR outcome
-
-Triggered by two reproduced cross-layer contracts. Sustain: Claude verified its payload before filing one false Forge bug, then deploy's independent gate prevented malformed XML from shipping. Improve: one shared validation engine must own deterministic XML structure, and agent API examples must name root ownership. Highest-risk weakness: continuous validation can currently display zero errors for XML that the deploy gate later rejects.
+Ken's eyeball queue above, then his four decisions. **No publication** — installed public 0.0.40 lacks both
+fixes and shipping needs fresh explicit release authorization. B82 (project validation misses malformed XML)
+and B81 (`/api/fs/read` vs `/api/fs/write` root asymmetry) are the next specified units; both were re-confirmed
+as real this session. The Agent Action Ledger remains unstarted by explicit instruction.
 
 ## Commit point
 
-Documentation-only close title: `docs(backlog): record root asymmetry and XML validation gap`.
+`fix(deploy): survive locked mod roots on Windows and let the author choose loose vs CAT/DAT`

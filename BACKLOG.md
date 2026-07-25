@@ -6,6 +6,23 @@
 
 ## P0 — Active
 
+> **B83 (locked deployed-mod root) and B84 (deploy format toggle) both CLOSED VERIFIED 2026-07-25 → ROADMAP.**
+> Deployment on Windows works with the mod folder held, and the author now chooses loose vs CAT/DAT.
+> Four follow-up decisions are Ken's, listed in B85 below.
+
+### B85 · Deploy-format follow-ups needing Ken's decision `spec'd`
+
+Opened 2026-07-25 out of the B84 close. None block deployment; all four are judgement calls, not defects:
+1. **Confirm the `loose` default.** B84 changed the shipped default from catalog (0.0.36–0.0.40) to loose.
+   Rationale in ROADMAP; reversible by flipping `DEFAULT_DEPLOY_FORMAT`.
+2. **`.claude/settings.local.json`** is excluded as development metadata, so a deployed mod has 48 files where
+   its workspace has 49. Decide whether agent config is shippable mod content.
+3. **`x4_ai_influence/.forgekeep` lists `config`, `README.md`, `docs`** — all built by the mod, so the hints are
+   now reported no-ops on every deploy. Removing those three lines clears the warning. Likely a workaround for
+   catalog mode burying them, which the toggle makes unnecessary.
+4. **`.mcp.json` in the deployed folder** (the `claude-brain` registration) is not mod content, so correct
+   stale-removal deletes it on every deploy. Adding it to `.forgekeep` preserves it properly.
+
 ### B82 · Project validation omits XML well-formedness — malformed MD passes until deploy `spec'd`
 
 **[REPRODUCED 2026-07-25]** `x4_ai_influence/md/ai_influence_diplomacy.xml` opened a
@@ -49,7 +66,14 @@ read followed by `/api/fs/write` operates on one root; filesystem reads remain r
 traversal, and junction escapes reject; legacy UI behavior is covered explicitly; route/e2e/oracle/type/
 precommit gates pass. No real workspace, deployed mod, or game directory is used for validation.
 
-### B77 · Graph refresh rewrites ignored historical PNG evidence `spec'd`
+### B77 · Something in the ordinary gate flow rewrites ignored historical PNG evidence `spec'd`
+**NEW EVIDENCE 2026-07-25 (narrows the suspect — the title's "graph refresh" attribution is now doubtful):**
+both tracked `vscode-extension/evidence/0.0.35-*.png` files changed bytes AGAIN during the B83/B84 session
+(`0.0.35-runtime-copy-live.png` 82,251 → 82,206; `-startup.png` 127,514 → 127,513) and **`graphify update .`
+was never run**. The only things executed were typecheck / oracles / routes / lint / e2e / precommit / build
+and a host-native server. So the writer is in that ordinary flow, not the graph refresh. Next step: bisect by
+running each gate alone against copied fixture images and diffing after each. Do NOT stage or revert the two
+tracked files until the writer is identified.
 Observed twice during the B76 final audit: `graphify update .` changed the byte size/hash and timestamp of
 two tracked `vscode-extension/evidence/0.0.35-*.png` files even though `.graphifyignore` contains `*.png`.
 Reproduce on copied fixture images outside user evidence, identify the graphify/tooling writer, make ignore

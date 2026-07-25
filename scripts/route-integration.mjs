@@ -110,6 +110,23 @@ async function main() {
   const referenceTraversal = await req('GET', '/api/reference/file?path=../outside.xml', null);
   ok('reference_file_traversal_rejected', referenceTraversal.status === 403, `status=${referenceTraversal.status}`);
 
+  // B83: the externally visible artifact oracle must prove locked-root fallback,
+  // rollback, lock-code scoping, and transaction-sibling cleanup—not merely return pass:true.
+  const artifactSelftest = await req('GET', '/api/agent/artifact-pipeline-selftest', null);
+  const artifactChecks = new Map((artifactSelftest.json?.checks || []).map(check => [check.name, check.pass]));
+  const requiredArtifactChecks = [
+    'locked-root EBUSY fallback deploys without moving target root',
+    'locked-root EPERM fallback deploys without moving target root',
+    'locked-root fallback restores exact original tree',
+    'locked-root rollback leaves no transaction siblings',
+    'incomplete locked-root backup fails closed',
+    'incomplete backup never mutates target',
+    'non-lock rename error fails without fallback',
+    'non-lock rename error leaves target unchanged',
+  ];
+  ok('artifact_selftest_public_and_green', artifactSelftest.status === 200 && artifactSelftest.json?.pass === true, `status=${artifactSelftest.status} summary=${artifactSelftest.json?.summary}`);
+  ok('artifact_selftest_proves_locked_root_transaction', requiredArtifactChecks.every(name => artifactChecks.get(name) === true), JSON.stringify(Object.fromEntries(requiredArtifactChecks.map(name => [name, artifactChecks.get(name)]))));
+
   // --- mint a read + a write agent key with the session token ---
   const mkKey = async (scope) => {
     const r = await req('POST', '/api/agent/keys', SESSION_TOKEN, { label: `route-int-${scope}`, scope, ttl: '1h' });
@@ -167,6 +184,49 @@ async function main() {
 
   const repairedConfig = await req('POST', '/api/schema/config', SESSION_TOKEN, deployedRolesConfig);
   ok('unsafe_config_can_be_repaired', repairedConfig.status === 200, `status=${repairedConfig.status}`);
+
+  // --- B84: deploy format toggle (loose vs CAT/DAT) -------------------------------------
+  // The format is persisted server-side so every deploy surface agrees, an explicit unknown
+  // value is refused rather than silently substituted, and a partial config update must not
+  // blank neighbouring settings.
+  // Seed a REAL schema path first. Without this the preservation check below would compare
+  // undefined to undefined and pass while proving nothing.
+  await req('POST', '/api/schema/config', SESSION_TOKEN, { ...deployedRolesConfig, schemaDir: referenceRoot });
+  const formatDefault = await req('GET', '/api/schema/config', SESSION_TOKEN);
+  ok('deploy_format_defaults_to_loose',
+    formatDefault.json?.deployFormat?.format === 'loose' && formatDefault.json?.deployFormat?.source === 'default',
+    `format=${formatDefault.json?.deployFormat?.format} source=${formatDefault.json?.deployFormat?.source}`);
+  ok('deploy_format_options_advertised',
+    Array.isArray(formatDefault.json?.deployFormat?.options) && formatDefault.json.deployFormat.options.join(',') === 'loose,catalog',
+    `options=${formatDefault.json?.deployFormat?.options}`);
+
+  const schemaPathBeforeToggle = formatDefault.json?.config?.xsdSchemaPath;
+  const setCatalog = await req('POST', '/api/schema/config', SESSION_TOKEN, { deployFormat: 'catalog' });
+  ok('deploy_format_catalog_saved', setCatalog.status === 200 && setCatalog.json?.config?.deployFormat === 'catalog', `status=${setCatalog.status}`);
+  const afterCatalog = await req('GET', '/api/schema/config', SESSION_TOKEN);
+  ok('deploy_format_catalog_persisted',
+    afterCatalog.json?.deployFormat?.format === 'catalog' && afterCatalog.json?.deployFormat?.source === 'config',
+    `format=${afterCatalog.json?.deployFormat?.format} source=${afterCatalog.json?.deployFormat?.source}`);
+  // The toggle sends ONLY deployFormat. Omitting schemaDir must preserve it, not blank it.
+  ok('partial_config_update_preserves_schema_path',
+    !!schemaPathBeforeToggle && afterCatalog.json?.config?.xsdSchemaPath === schemaPathBeforeToggle,
+    `before=${schemaPathBeforeToggle} after=${afterCatalog.json?.config?.xsdSchemaPath}`);
+
+  const badFormat = await req('POST', '/api/schema/config', SESSION_TOKEN, { deployFormat: 'zipfile' });
+  ok('deploy_format_unknown_rejected', badFormat.status === 400 && badFormat.json?.code === 'UNKNOWN_DEPLOY_FORMAT', `status=${badFormat.status} code=${badFormat.json?.code}`);
+  const afterBadFormat = await req('GET', '/api/schema/config', SESSION_TOKEN);
+  ok('rejected_deploy_format_not_persisted', afterBadFormat.json?.deployFormat?.format === 'catalog', `format=${afterBadFormat.json?.deployFormat?.format}`);
+
+  // A bad per-request override must fail the deploy BEFORE anything is written.
+  const badDeploy = await req('POST', '/api/agent/deploy-verify', SESSION_TOKEN, {
+    workspace: { id: 'fixture', name: 'fixture', nodes: [], links: [], uiWidgets: [] },
+    deployFormat: 'tarball',
+  });
+  ok('deploy_verify_rejects_unknown_format', badDeploy.status === 400 && badDeploy.json?.code === 'UNKNOWN_DEPLOY_FORMAT', `status=${badDeploy.status} code=${badDeploy.json?.code}`);
+  ok('rejected_format_deploy_wrote_nothing', !fs.existsSync(path.join(liveExtensions, 'fixture')));
+
+  const restoreLoose = await req('POST', '/api/schema/config', SESSION_TOKEN, { deployFormat: 'loose' });
+  ok('deploy_format_restored_to_loose', restoreLoose.status === 200 && restoreLoose.json?.config?.deployFormat === 'loose', `status=${restoreLoose.status}`);
 
   // --- dual project roots: independent discovery + collision-safe preview/import ---
   const writeFixtureMod = (root, name, displayName, marker) => {

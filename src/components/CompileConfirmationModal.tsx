@@ -62,6 +62,52 @@ export default function CompileConfirmationModal({
   compileMessage = '',
   checklist = []
 }: CompileConfirmationModalProps) {
+  // B84: the deploy FORMAT toggle. Hooks must sit above the `isOpen` early return.
+  // The value is server-persisted config, not workspace state, so every deploy surface
+  // (wizard, IDE, agent API) agrees on one answer.
+  const [deployFormat, setDeployFormat] = React.useState<'loose' | 'catalog' | null>(null);
+  const [formatBusy, setFormatBusy] = React.useState(false);
+  const [formatError, setFormatError] = React.useState('');
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/schema/config');
+        const data = await res.json();
+        if (!cancelled && data?.deployFormat?.format) setDeployFormat(data.deployFormat.format);
+      } catch {
+        // A read failure leaves the toggle in its unknown state rather than asserting a
+        // format the server may not agree with.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isOpen]);
+
+  const chooseDeployFormat = async (next: 'loose' | 'catalog') => {
+    if (next === deployFormat || formatBusy) return;
+    setFormatBusy(true);
+    setFormatError('');
+    const previous = deployFormat;
+    setDeployFormat(next);
+    try {
+      const res = await fetch('/api/schema/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deployFormat: next }),
+      });
+      const data = await res.json();
+      if (!res.ok || data?.success === false) throw new Error(data?.error || `Save failed (${res.status})`);
+    } catch (error) {
+      // Never leave the toggle showing a preference the server did not store.
+      setDeployFormat(previous);
+      setFormatError(error instanceof Error ? error.message : 'Could not save the deploy format.');
+    } finally {
+      setFormatBusy(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   const compileSettings = workspace.compileSettings || {
@@ -262,6 +308,62 @@ export default function CompileConfirmationModal({
           </div>
         </div>
 
+        {/* B84: deploy FORMAT toggle — the author picks how the mod lands in the game folder,
+            and each option states its real consequence rather than a bare label. */}
+        <div className="mx-4 mb-4 p-2.5 bg-[#0f131c] border border-white/5 rounded space-y-2" data-testid="deploy-format-toggle">
+          <div className="text-slate-400 uppercase text-[8.5px] font-bold tracking-wider flex items-center gap-1">
+            <Database className="w-3.5 h-3.5 text-cyan-500" />
+            Deploy format
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              {
+                key: 'loose' as const,
+                title: 'Loose files',
+                desc: 'Every file written to the mod folder as a real file. Readable, diffable, hand-editable — and native .dll/.so files load normally. Most X4 mods ship this way.',
+              },
+              {
+                key: 'catalog' as const,
+                title: 'CAT / DAT archive',
+                desc: 'Payload packed into ext_01.cat + ext_01.dat. Tidier, but packed files no longer exist individually on disk, and native binaries inside an archive cannot load.',
+              },
+            ]).map(option => {
+              const selected = deployFormat === option.key;
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => chooseDeployFormat(option.key)}
+                  disabled={formatBusy}
+                  aria-pressed={selected}
+                  data-testid={`deploy-format-${option.key}`}
+                  className={`text-left p-2 rounded border transition-colors disabled:opacity-60 ${
+                    selected
+                      ? 'border-cyan-500/60 bg-cyan-500/10'
+                      : 'border-white/5 bg-[#070a0f] hover:border-white/20'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    {selected
+                      ? <CheckSquare className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                      : <Square className="w-3.5 h-3.5 text-slate-600 shrink-0" />}
+                    <span className={`text-[11px] font-semibold ${selected ? 'text-cyan-300' : 'text-slate-300'}`}>
+                      {option.title}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-[9.5px] leading-relaxed text-slate-500">{option.desc}</div>
+                </button>
+              );
+            })}
+          </div>
+          {deployFormat === null && !formatError && (
+            <div className="text-[9.5px] text-slate-500">Reading the saved deploy format…</div>
+          )}
+          {formatError && (
+            <div className="text-[9.5px] text-red-400" role="alert">{formatError}</div>
+          )}
+        </div>
+
         {/* Staging target directory info */}
         {modWorkspacePath && (
           <div className="mx-4 mb-4 p-2.5 bg-[#0f131c] border border-white/5 rounded text-[10px] font-mono leading-relaxed text-slate-500 space-y-1">
@@ -289,7 +391,12 @@ export default function CompileConfirmationModal({
                 <span className={`${CHECK_COLORS[row.status]} font-bold w-3 shrink-0`}>{CHECK_GLYPH[row.status]}</span>
                 <span className={row.status === 'fail' ? 'text-red-300' : row.status === 'skipped' ? 'text-slate-600' : 'text-slate-400'}>
                   {row.label}
-                  {row.status !== 'pass' && row.detail ? <span className="text-slate-500"> — {row.detail}</span> : null}
+                  {/* B84: the deploy row ALWAYS shows its detail — that is where the plain
+                      account of what format was written now lives. A successful deploy that
+                      silently packed the mod into an archive is exactly the surprise to avoid. */}
+                  {(row.status !== 'pass' || row.id === 'deploy') && row.detail
+                    ? <span className="text-slate-500"> — {row.detail}</span>
+                    : null}
                 </span>
               </div>
             ))}

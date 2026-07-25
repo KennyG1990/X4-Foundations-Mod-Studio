@@ -464,8 +464,126 @@ type ArtifactBuildReport = {
   outputFiles: number;
   catalogVolumes: number;
   verified: boolean;
+  /**
+   * B84: relative paths of native binaries in the deployed plan. Catalog mode buries these
+   * inside ext_NN.dat where the OS cannot LoadLibrary them, which silently kills any mod
+   * that loads native code (lived: x4_ai_influence's luasocket/luasec DLLs). Recorded here
+   * so the deploy result can SAY so instead of leaving the author to discover it in-game.
+   */
+  nativeBinaries: string[];
+  /**
+   * B84: soft `.forgekeep` keep-hints that named a path the build actually manages. The
+   * build won; these are reported so the author learns their hint is a no-op instead of
+   * assuming the deployed copy was left alone.
+   */
+  preservationOverrides: string[];
 };
 let lastArtifactReport: ArtifactBuildReport | null = null;
+/** B84: filled by `replaceValidatedDeployment`, read when the artifact report is built. */
+let lastPreservationOverrides: string[] = [];
+
+/**
+ * B84 — deployment packaging format. `loose` writes every file to disk as a file (the
+ * long-standing behavior, what X4 mod folders look like in the wild, and the only mode in
+ * which native binaries load). `catalog` packs the payload into ext_NN.cat/.dat.
+ */
+type DeployFormat = 'loose' | 'catalog';
+const DEPLOY_FORMATS: readonly DeployFormat[] = ['loose', 'catalog'] as const;
+const DEFAULT_DEPLOY_FORMAT: DeployFormat = 'loose';
+
+function normalizeDeployFormat(value: unknown): DeployFormat | null {
+  if (value === undefined || value === null) return null;
+  const text = String(value).trim().toLowerCase();
+  if (!text) return null;
+  return (DEPLOY_FORMATS as readonly string[]).includes(text) ? (text as DeployFormat) : null;
+}
+
+function isNativeBinaryPath(relativePath: string): boolean {
+  return /\.(dll|so|dylib)$/i.test(relativePath);
+}
+
+// A flat shape, not a discriminated union: this project compiles without strictNullChecks,
+// where boolean-literal discriminants do not narrow reliably.
+type DeployFormatResolution = {
+  ok: boolean;
+  format: DeployFormat;
+  source: 'request' | 'config' | 'default';
+  error?: string;
+  value?: string;
+};
+
+/**
+ * Request override -> persisted config -> `loose`. An explicit BAD request value is an
+ * error (the caller asked for something that does not exist and must not silently get
+ * something else). A bad PERSISTED value fails soft to the default — a corrupt config.json
+ * must never brick deployment (same principle as the SEC3 config-parse hardening).
+ */
+function resolveDeployFormat(requested: unknown): DeployFormatResolution {
+  if (requested !== undefined && requested !== null && String(requested).trim() !== '') {
+    const normalized = normalizeDeployFormat(requested);
+    if (!normalized) {
+      return {
+        ok: false,
+        format: DEFAULT_DEPLOY_FORMAT,
+        source: 'request',
+        error: `Unknown deploy format "${String(requested)}". Use "loose" or "catalog".`,
+        value: String(requested),
+      };
+    }
+    return { ok: true, format: normalized, source: 'request' };
+  }
+  let stored: unknown;
+  try { stored = (readXsdConfig() as any)?.deployFormat; } catch { stored = undefined; }
+  const storedFormat = normalizeDeployFormat(stored);
+  if (storedFormat) return { ok: true, format: storedFormat, source: 'config' };
+  return { ok: true, format: DEFAULT_DEPLOY_FORMAT, source: 'default' };
+}
+
+/**
+ * B84 — the plain-language account of what a deploy actually wrote. The author should never
+ * have to infer packaging from a file listing; every deploy says what it produced and what
+ * that means for them.
+ */
+function describeDeployFormat(format: DeployFormat, report: ArtifactBuildReport | null) {
+  const natives = report?.nativeBinaries || [];
+  const overrides = report?.preservationOverrides || [];
+  const overrideNote = overrides.length
+    ? [
+        `${overrides.length} ".forgekeep" entry(ies) name paths this mod actually builds ` +
+        `(${overrides.slice(0, 5).join(', ')}${overrides.length > 5 ? `, +${overrides.length - 5} more` : ''}), ` +
+        `so the freshly built version was deployed and the keep-hint had no effect. Remove them from ` +
+        `.forgekeep — keep-hints are for files the build does NOT produce, like an external bridge folder.`,
+      ]
+    : [];
+  if (format === 'catalog') {
+    const volumes = report?.catalogVolumes ?? 0;
+    const packed = report?.includedFiles ?? 0;
+    const loose = report?.outputFiles ?? 0;
+    const summary =
+      `Packed as CAT/DAT: ${packed} file(s) were packed into ${volumes} catalog volume(s) ` +
+      `(ext_NN.cat + ext_NN.dat) alongside ${loose} loose file(s). X4 reads the archive normally, ` +
+      `but the packed files no longer exist individually on disk — you cannot open, diff, or hand-edit ` +
+      `them in the deployed folder.`;
+    const warnings = natives.length
+      ? [
+          `${natives.length} native binary file(s) were packed INTO the archive: ${natives.slice(0, 5).join(', ')}` +
+          `${natives.length > 5 ? `, +${natives.length - 5} more` : ''}. Windows cannot load a DLL from inside ` +
+          `a .cat/.dat, so any feature that depends on them will fail at runtime with no error in the game log. ` +
+          `Deploy as loose files if this mod loads native code.`,
+        ]
+      : [];
+    return { mode: format, summary, warnings: [...warnings, ...overrideNote] };
+  }
+  const written = report?.outputFiles ?? report?.includedFiles ?? 0;
+  return {
+    mode: format,
+    summary:
+      `Deployed as loose files: ${written} file(s) written directly into the mod folder. ` +
+      `Every file is readable, diffable, and hand-editable on disk, and native binaries load normally. ` +
+      `This is the format most X4 mods ship in.`,
+    warnings: overrideNote,
+  };
+}
 
 function activeBuildWorkspace(workspaceInput: unknown): ModWorkspace {
   const sanitized = sanitizeWorkspace(workspaceInput);
@@ -2967,9 +3085,13 @@ app.get("/api/schema/config", (req, res) => {
   try {
     const resolved = resolveXsdConfig();
     const issues = directoryRoleIssues(resolved);
+    // B84: the EFFECTIVE deploy format (persisted or defaulted) so the toggle renders the
+    // truth rather than guessing from a possibly-absent config key.
+    const effectiveFormat = resolveDeployFormat(undefined);
     return res.json({
       config: readXsdConfig(),
       resolved,
+      deployFormat: { format: effectiveFormat.format, source: effectiveFormat.source, options: [...DEPLOY_FORMATS] },
       directorySafety: {
         safe: issues.length === 0,
         issues,
@@ -2990,11 +3112,28 @@ app.get("/api/schema/config", (req, res) => {
 
 app.post("/api/schema/config", (req, res) => {
   try {
-    const schemaDir = String(req.body?.schemaDir || '').trim();
+    // B84: `schemaDir` used to be written UNCONDITIONALLY, so any partial update that omitted
+    // it silently blanked the configured schema path. Absence now preserves the existing value
+    // (matching every other field here); an explicit empty string still clears it.
+    const schemaDir = req.body?.schemaDir !== undefined ? String(req.body.schemaDir || '').trim() : undefined;
     const gamePath = req.body?.x4GamePath !== undefined ? String(req.body.x4GamePath || '').trim() : undefined;
     const modWorkspacePath = req.body?.modWorkspacePath !== undefined ? String(req.body.modWorkspacePath || '').trim() : undefined;
     const filesystemPath = req.body?.filesystemPath !== undefined ? String(req.body.filesystemPath || '').trim() : undefined;
     const referenceRoot = req.body?.x4ReferenceRoot !== undefined ? String(req.body.x4ReferenceRoot || '').trim() : undefined;
+    // B84: the deploy-format toggle persists here beside the directory roles. An explicit
+    // unknown value is rejected — the caller must not silently get a format it did not ask for.
+    let deployFormat: DeployFormat | undefined;
+    if (req.body?.deployFormat !== undefined) {
+      const normalized = normalizeDeployFormat(req.body.deployFormat);
+      if (!normalized) {
+        return res.status(400).json({
+          success: false,
+          code: 'UNKNOWN_DEPLOY_FORMAT',
+          error: `Unknown deploy format "${String(req.body.deployFormat)}". Use "loose" or "catalog".`,
+        });
+      }
+      deployFormat = normalized;
+    }
 
     // Paths save INDEPENDENTLY of schema validity. The schema directory is validated and
     // REPORTED, never a hard gate — you can save just the workspace/filesystem/game paths
@@ -3007,7 +3146,8 @@ app.post("/api/schema/config", (req, res) => {
       ...(modWorkspacePath !== undefined ? { modWorkspacePath } : {}),
       ...(filesystemPath !== undefined ? { filesystemPath } : {}),
       ...(referenceRoot !== undefined ? { x4ReferenceRoot: referenceRoot } : {}),
-      xsdSchemaPath: schemaDir,
+      ...(deployFormat !== undefined ? { deployFormat } : {}),
+      ...(schemaDir !== undefined ? { xsdSchemaPath: schemaDir } : {}),
       schemaFiles: ['md.xsd', 'common.xsd']
     };
     const resolved = resolveXsdConfig(nextConfig);
@@ -7388,6 +7528,93 @@ function copyRegularTree(sourceRoot: string, targetRoot: string): void {
   walk(sourceRoot, '');
 }
 
+interface RegularTreeEntry {
+  path: string;
+  type: 'file' | 'directory';
+}
+
+function inspectRegularTree(rootPath: string): RegularTreeEntry[] {
+  if (!fs.existsSync(rootPath)) return [];
+  const entries: RegularTreeEntry[] = [];
+  const walk = (dirPath: string, relativeDir: string) => {
+    for (const entry of fs.readdirSync(dirPath, { withFileTypes: true })) {
+      const relativePath = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
+      const absolutePath = path.join(dirPath, entry.name);
+      const stat = fs.lstatSync(absolutePath);
+      if (stat.isSymbolicLink()) throw new Error(`Refusing symbolic link or reparse point in deployment tree: ${relativePath}`);
+      if (stat.isDirectory()) {
+        entries.push({ path: relativePath, type: 'directory' });
+        walk(absolutePath, relativePath);
+      } else if (stat.isFile()) {
+        entries.push({ path: relativePath, type: 'file' });
+      } else {
+        throw new Error(`Refusing unsupported deployment entry type: ${relativePath}`);
+      }
+    }
+  };
+  walk(rootPath, '');
+  return entries.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+function regularTreeFingerprint(rootPath: string): string {
+  const digest = crypto.createHash('sha256');
+  for (const entry of inspectRegularTree(rootPath)) {
+    digest.update(entry.type === 'directory' ? 'D\0' : 'F\0');
+    digest.update(entry.path.replace(/\\/g, '/'));
+    digest.update('\0');
+    if (entry.type === 'file') {
+      const filePath = path.join(rootPath, ...entry.path.split('/'));
+      const stat = fs.statSync(filePath);
+      digest.update(String(stat.size));
+      digest.update('\0');
+      digest.update(hashArtifactFile(filePath));
+      digest.update('\0');
+    }
+  }
+  return digest.digest('hex');
+}
+
+function synchronizeRegularTree(sourceRoot: string, targetRoot: string): void {
+  const desired = inspectRegularTree(sourceRoot);
+  const current = inspectRegularTree(targetRoot);
+  const comparisonKey = (relativePath: string) => process.platform === 'win32' ? relativePath.toLowerCase() : relativePath;
+  const desiredByPath = new Map(desired.map(entry => [comparisonKey(entry.path), entry]));
+
+  // Remove entries that are absent from the desired tree or whose file/directory
+  // type changed. Deepest-first keeps parent removal deterministic.
+  const removals = current
+    .filter(entry => {
+      const wanted = desiredByPath.get(comparisonKey(entry.path));
+      return !wanted || wanted.type !== entry.type || wanted.path !== entry.path;
+    })
+    .sort((a, b) => b.path.split('/').length - a.path.split('/').length || b.path.localeCompare(a.path));
+  for (const entry of removals) {
+    const targetPath = path.join(targetRoot, ...entry.path.split('/'));
+    if (!fs.existsSync(targetPath)) continue;
+    if (entry.type === 'directory') fs.rmSync(targetPath, { recursive: true, force: true });
+    else fs.rmSync(targetPath, { force: true });
+  }
+
+  fs.mkdirSync(targetRoot, { recursive: true });
+  for (const entry of desired.filter(entry => entry.type === 'directory').sort((a, b) => a.path.split('/').length - b.path.split('/').length)) {
+    fs.mkdirSync(path.join(targetRoot, ...entry.path.split('/')), { recursive: true });
+  }
+  for (const entry of desired.filter(entry => entry.type === 'file')) {
+    const sourcePath = path.join(sourceRoot, ...entry.path.split('/'));
+    const targetPath = path.join(targetRoot, ...entry.path.split('/'));
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    fs.copyFileSync(sourcePath, targetPath);
+  }
+}
+
+function verifyRegularTreeMirror(expectedRoot: string, actualRoot: string): void {
+  const expectedFingerprint = regularTreeFingerprint(expectedRoot);
+  const actualFingerprint = regularTreeFingerprint(actualRoot);
+  if (expectedFingerprint !== actualFingerprint) {
+    throw new Error(`Deployed tree verification failed: expected ${expectedFingerprint}, got ${actualFingerprint}`);
+  }
+}
+
 function verifyExpectedFiles(targetRoot: string, expected: Array<{ path: string; size: number; sha256: string }>): void {
   for (const entry of expected) {
     const filePath = path.join(targetRoot, ...entry.path.split('/'));
@@ -7398,13 +7625,91 @@ function verifyExpectedFiles(targetRoot: string, expected: Array<{ path: string;
   }
 }
 
-function preservedDeploymentPaths(targetPath: string, plan: ArtifactPlan): string[] {
-  const paths = new Set<string>();
-  for (const entry of plan.runtimeOwned) paths.add(entry.path.replace(/\/\*\*$/, ''));
+/**
+ * B84 — preserved paths carry their ORIGIN, because the two sources are different promises:
+ *
+ *  - `runtime` comes from an explicit `.forgeartifact.json` runtime-owned declaration. The
+ *    project asserted the build does NOT manage this path, so finding it in the built
+ *    artifact is a genuine contract contradiction and must fail closed.
+ *  - `forgekeep` / `forge-state` are soft "don't wipe this" hints. When such a hint names a
+ *    path the build DOES manage, the built artifact wins and the override is reported.
+ *    Letting the hint win instead would silently freeze deployed files against every future
+ *    source edit — the same stale-content class as the B81 read/write root split.
+ */
+type PreservedOrigin = 'runtime' | 'forgekeep' | 'forge-state';
+
+function preservedDeploymentEntries(targetPath: string, plan: ArtifactPlan): Array<{ path: string; origin: PreservedOrigin }> {
+  const origins = new Map<string, PreservedOrigin>();
+  const put = (relativePath: string, origin: PreservedOrigin) => {
+    if (!relativePath || relativePath.split('/').includes('..')) return;
+    // A hard runtime-owned declaration outranks a soft hint for the same path.
+    if (origin === 'runtime' || !origins.has(relativePath)) origins.set(relativePath, origin);
+  };
+  for (const entry of plan.runtimeOwned) put(entry.path.replace(/\/\*\*$/, ''), 'runtime');
   const keep = readForgeKeep(targetPath);
-  for (const top of keep) paths.add(top);
-  if (keep.size > 0) paths.add('.forgekeep');
-  return [...paths].filter(relativePath => relativePath && !relativePath.split('/').includes('..'));
+  for (const top of keep) put(top, 'forgekeep');
+  if (keep.size > 0) put('.forgekeep', 'forgekeep');
+  put('.studio-mod-id', 'forge-state');
+  put('.snapshots', 'forge-state');
+  return [...origins.entries()].map(([path, origin]) => ({ path, origin }));
+}
+
+interface DeploymentTransactionHooks {
+  /** Test seam for deterministic Windows root-lock fixtures. Production uses fs.renameSync. */
+  rename?: (oldPath: string, newPath: string) => void;
+  /** Test seam for proving an incomplete backup never becomes a rollback source. */
+  afterFallbackBackupCopy?: (backupPath: string) => void;
+  /** Test seam for proving rollback after the fallback has changed target bytes. */
+  afterFallbackApply?: (targetPath: string) => void;
+}
+
+function isLockedRootRenameError(error: unknown): boolean {
+  const code = String((error as NodeJS.ErrnoException | undefined)?.code || '').toUpperCase();
+  return code === 'EBUSY' || code === 'EPERM';
+}
+
+function replaceLockedDeploymentInPlace(
+  stage: string,
+  backup: string,
+  targetPath: string,
+  expected: Array<{ path: string; size: number; sha256: string }>,
+  hooks: DeploymentTransactionHooks,
+): void {
+  const originalFingerprint = regularTreeFingerprint(targetPath);
+  let backupVerified = false;
+  let targetMutated = false;
+  try {
+    copyRegularTree(targetPath, backup);
+    hooks.afterFallbackBackupCopy?.(backup);
+    const backupFingerprint = regularTreeFingerprint(backup);
+    if (backupFingerprint !== originalFingerprint) {
+      throw new Error(`Locked-root backup verification failed: expected ${originalFingerprint}, got ${backupFingerprint}`);
+    }
+    backupVerified = true;
+
+    targetMutated = true;
+    synchronizeRegularTree(stage, targetPath);
+    hooks.afterFallbackApply?.(targetPath);
+    verifyExpectedFiles(targetPath, expected);
+    verifyRegularTreeMirror(stage, targetPath);
+    fs.rmSync(stage, { recursive: true, force: true });
+    fs.rmSync(backup, { recursive: true, force: true });
+  } catch (error) {
+    try {
+      if (backupVerified && targetMutated && fs.existsSync(backup)) {
+        synchronizeRegularTree(backup, targetPath);
+        const restoredFingerprint = regularTreeFingerprint(targetPath);
+        if (restoredFingerprint !== originalFingerprint) {
+          throw new Error(`rollback fingerprint mismatch: expected ${originalFingerprint}, got ${restoredFingerprint}`);
+        }
+      }
+      if (fs.existsSync(stage)) fs.rmSync(stage, { recursive: true, force: true });
+      if (fs.existsSync(backup)) fs.rmSync(backup, { recursive: true, force: true });
+    } catch (rollbackError) {
+      throw new Error(`${error instanceof Error ? error.message : String(error)}; locked-root rollback also failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`);
+    }
+    throw error;
+  }
 }
 
 function replaceValidatedDeployment(
@@ -7412,21 +7717,33 @@ function replaceValidatedDeployment(
   targetPath: string,
   expected: Array<{ path: string; size: number; sha256: string }>,
   plan: ArtifactPlan,
+  hooks: DeploymentTransactionHooks = {},
 ): void {
   const parent = path.dirname(targetPath);
   fs.mkdirSync(parent, { recursive: true });
   const nonce = `${process.pid}-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
   const stage = path.join(parent, `.${path.basename(targetPath)}.x4forge-next-${nonce}`);
   const backup = path.join(parent, `.${path.basename(targetPath)}.x4forge-backup-${nonce}`);
+  const rename = hooks.rename || ((oldPath: string, newPath: string) => fs.renameSync(oldPath, newPath));
+  lastPreservationOverrides = [];
   let movedOld = false;
   try {
     copyRegularTree(artifactRoot, stage);
     if (fs.existsSync(targetPath)) {
-      for (const relativePath of preservedDeploymentPaths(targetPath, plan)) {
+      for (const { path: relativePath, origin } of preservedDeploymentEntries(targetPath, plan)) {
         const source = path.join(targetPath, ...relativePath.split('/'));
         if (!fs.existsSync(source)) continue;
         const destination = path.join(stage, ...relativePath.split('/'));
-        if (fs.existsSync(destination)) throw new Error(`Runtime-owned path conflicts with built artifact: ${relativePath}`);
+        if (fs.existsSync(destination)) {
+          // An explicit `.forgeartifact.json` runtime-owned declaration colliding with
+          // managed content is a genuine contract contradiction — fail closed.
+          if (origin === 'runtime') throw new Error(`Runtime-owned path conflicts with built artifact: ${relativePath}`);
+          // A soft keep-hint yields to the build, and the override is REPORTED rather than
+          // silently applied. Letting the hint win would freeze the deployed copy against
+          // every future source edit.
+          lastPreservationOverrides.push(relativePath);
+          continue;
+        }
         const stat = fs.lstatSync(source);
         if (stat.isSymbolicLink()) throw new Error(`Runtime-owned path is a symbolic link or reparse point: ${relativePath}`);
         if (stat.isDirectory()) copyRegularTree(source, destination);
@@ -7435,10 +7752,16 @@ function replaceValidatedDeployment(
           fs.copyFileSync(source, destination);
         }
       }
-      fs.renameSync(targetPath, backup);
-      movedOld = true;
+      try {
+        rename(targetPath, backup);
+        movedOld = true;
+      } catch (error) {
+        if (!isLockedRootRenameError(error)) throw error;
+        replaceLockedDeploymentInPlace(stage, backup, targetPath, expected, hooks);
+        return;
+      }
     }
-    fs.renameSync(stage, targetPath);
+    rename(stage, targetPath);
     verifyExpectedFiles(targetPath, expected);
     if (movedOld) fs.rmSync(backup, { recursive: true, force: true });
   } catch (error) {
@@ -7446,7 +7769,7 @@ function replaceValidatedDeployment(
     if (movedOld) {
       try {
         if (fs.existsSync(targetPath)) fs.rmSync(targetPath, { recursive: true, force: true });
-        if (fs.existsSync(backup)) fs.renameSync(backup, targetPath);
+        if (fs.existsSync(backup)) rename(backup, targetPath);
       } catch (rollbackError) {
         throw new Error(`${error instanceof Error ? error.message : String(error)}; rollback also failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`);
       }
@@ -7461,6 +7784,7 @@ function compileWorkspaceToFolder(
   mode: 'candy' | 'store',
   writeSnapshots: boolean = false,
   artifactMode: 'loose' | 'catalog' = 'loose',
+  transactionHooks: DeploymentTransactionHooks = {},
 ): string {
   ws = activeBuildWorkspace(ws);
   const targetPath = mode === 'store' ? path.join(rootPath, effectiveModId(ws)) : rootPath;
@@ -7481,7 +7805,7 @@ function compileWorkspaceToFolder(
     if (artifactMode === 'catalog') {
       const packaged = materializeCatalogArtifact(plan, artifactRoot);
       if (!packaged.ok) throw new Error(`Packed artifact failed: ${packaged.errors.join('; ')}`);
-      replaceValidatedDeployment(artifactRoot, targetPath, packaged.files, plan);
+      replaceValidatedDeployment(artifactRoot, targetPath, packaged.files, plan, transactionHooks);
       lastArtifactReport = {
         mode: artifactMode,
         sourceRoot,
@@ -7495,14 +7819,20 @@ function compileWorkspaceToFolder(
         outputFiles: packaged.files.length,
         catalogVolumes: packaged.catalogs.volumes.length,
         verified: true,
+        nativeBinaries: plan.entries.filter(entry => isNativeBinaryPath(entry.path)).map(entry => entry.path),
+        preservationOverrides: [...lastPreservationOverrides],
       };
     } else {
       const built = materializeArtifact(plan, artifactRoot);
       if (!built.ok) throw new Error(`Loose artifact failed: ${built.errors.join('; ')}`);
       const verified = verifyMaterializedArtifact(plan, artifactRoot);
       if (!verified.ok) throw new Error(`Loose artifact verification failed: ${verified.errors.join('; ')}`);
-      copyRegularTree(artifactRoot, targetPath);
-      verifyExpectedFiles(targetPath, plan.entries);
+      // B84: loose deployments now go through the SAME rollback-safe replacement as catalog
+      // ones. The previous `copyRegularTree` was purely ADDITIVE: it never removed anything,
+      // so a file deleted from the mod stayed in the game folder forever and kept being
+      // loaded by X4 — and loose deploys got none of the sibling-backup, rollback, hash
+      // verification, or locked-root (B83) protection that catalog deploys already had.
+      replaceValidatedDeployment(artifactRoot, targetPath, plan.entries, plan, transactionHooks);
       lastArtifactReport = {
         mode: artifactMode,
         sourceRoot,
@@ -7516,6 +7846,8 @@ function compileWorkspaceToFolder(
         outputFiles: plan.entries.length,
         catalogVolumes: 0,
         verified: true,
+        nativeBinaries: plan.entries.filter(entry => isNativeBinaryPath(entry.path)).map(entry => entry.path),
+        preservationOverrides: [...lastPreservationOverrides],
       };
     }
 
@@ -7623,6 +7955,87 @@ function runCompileArtifactSelftest() {
       record('large catalog payload is hash-identical', sourceHash === packedHash);
     }
     record('unicode and unknown paths are cataloged', catalogEntries.some(entry => entry.name === 'unicode/船.txt') && catalogEntries.some(entry => entry.name === 'unknown/deep/path/file.arbitrary'));
+
+    // B83: simulate the Windows case where the deployed mod root is a process
+    // cwd/watched directory. The root cannot move, but its files remain writable.
+    const transactionArtifacts = () => fs.readdirSync(deployRoot)
+      .filter(name => name.startsWith(`.${path.basename(target)}.x4forge-next-`) || name.startsWith(`.${path.basename(target)}.x4forge-backup-`));
+    const lockedRename = (code: 'EBUSY' | 'EPERM', attempts: { value: number }) => (oldPath: string, newPath: string) => {
+      if (path.resolve(oldPath) === path.resolve(target) && path.basename(newPath).includes('.x4forge-backup-')) {
+        attempts.value++;
+        throw Object.assign(new Error(`simulated locked deployed root (${code})`), { code });
+      }
+      fs.renameSync(oldPath, newPath);
+    };
+    for (const code of ['EBUSY', 'EPERM'] as const) {
+      fs.writeFileSync(path.join(target, `stale-after-${code.toLowerCase()}.txt`), 'must disappear through fallback');
+      const attempts = { value: 0 };
+      try {
+        const lockedDeploy = compileWorkspaceToFolder(imported.workspace, deployRoot, 'store', false, 'catalog', {
+          rename: lockedRename(code, attempts),
+        });
+        record(`locked-root ${code} fallback deploys without moving target root`, lockedDeploy === target && attempts.value === 1);
+        record(`locked-root ${code} fallback removes stale managed payload`, !fs.existsSync(path.join(target, `stale-after-${code.toLowerCase()}.txt`)));
+        record(`locked-root ${code} fallback preserves runtime-owned state`, fs.readFileSync(path.join(target, 'runtime', 'state.db'), 'utf8') === 'deployed mutable state');
+        record(`locked-root ${code} fallback leaves no transaction siblings`, transactionArtifacts().length === 0, transactionArtifacts().join(', '));
+      } catch (error) {
+        record(`locked-root ${code} fallback deploys without moving target root`, false, error instanceof Error ? error.message : String(error));
+      }
+    }
+
+    // A failure after in-place mutation must restore the exact original tree.
+    fs.writeFileSync(path.join(target, 'rollback-only.txt'), 'original bytes that stage will remove');
+    const beforeRollbackFingerprint = regularTreeFingerprint(target);
+    let rollbackFailureObserved = false;
+    try {
+      const attempts = { value: 0 };
+      compileWorkspaceToFolder(imported.workspace, deployRoot, 'store', false, 'catalog', {
+        rename: lockedRename('EBUSY', attempts),
+        afterFallbackApply: () => { throw new Error('simulated post-apply verification failure'); },
+      });
+    } catch (error) {
+      rollbackFailureObserved = String(error instanceof Error ? error.message : error).includes('simulated post-apply verification failure');
+    }
+    record('locked-root fallback propagates apply failure', rollbackFailureObserved);
+    record('locked-root fallback restores exact original tree', regularTreeFingerprint(target) === beforeRollbackFingerprint);
+    record('locked-root rollback leaves no transaction siblings', transactionArtifacts().length === 0, transactionArtifacts().join(', '));
+
+    // A partial/corrupt backup is never eligible as a rollback source. The
+    // untouched target must remain byte-identical while the transaction fails closed.
+    const beforeBackupFailureFingerprint = regularTreeFingerprint(target);
+    let incompleteBackupRejected = false;
+    try {
+      const attempts = { value: 0 };
+      compileWorkspaceToFolder(imported.workspace, deployRoot, 'store', false, 'catalog', {
+        rename: lockedRename('EBUSY', attempts),
+        afterFallbackBackupCopy: backupPath => fs.rmSync(path.join(backupPath, 'content.xml'), { force: true }),
+      });
+    } catch (error) {
+      incompleteBackupRejected = String(error instanceof Error ? error.message : error).includes('Locked-root backup verification failed');
+    }
+    record('incomplete locked-root backup fails closed', incompleteBackupRejected);
+    record('incomplete backup never mutates target', regularTreeFingerprint(target) === beforeBackupFailureFingerprint);
+    record('incomplete backup leaves no transaction siblings', transactionArtifacts().length === 0, transactionArtifacts().join(', '));
+
+    // Only lock-shaped errors are eligible. An unrelated rename failure must
+    // leave the existing deployment untouched and must not enter fallback.
+    const beforeNonLockFingerprint = regularTreeFingerprint(target);
+    let nonLockFailureObserved = false;
+    try {
+      compileWorkspaceToFolder(imported.workspace, deployRoot, 'store', false, 'catalog', {
+        rename: (oldPath, newPath) => {
+          if (path.resolve(oldPath) === path.resolve(target) && path.basename(newPath).includes('.x4forge-backup-')) {
+            throw Object.assign(new Error('simulated access failure'), { code: 'EACCES' });
+          }
+          fs.renameSync(oldPath, newPath);
+        },
+      });
+    } catch (error) {
+      nonLockFailureObserved = String(error instanceof Error ? error.message : error).includes('simulated access failure');
+    }
+    record('non-lock rename error fails without fallback', nonLockFailureObserved);
+    record('non-lock rename error leaves target unchanged', regularTreeFingerprint(target) === beforeNonLockFingerprint);
+    record('non-lock rename error leaves no transaction siblings', transactionArtifacts().length === 0, transactionArtifacts().join(', '));
   } catch (error) {
     record('artifact integration selftest completed', false, error instanceof Error ? error.stack || error.message : String(error));
   } finally {
@@ -7783,6 +8196,14 @@ app.post("/api/agent/deploy-verify", (req, res) => {
     const resolved = resolveXsdConfig();
     const x4GamePath = resolved.x4GamePath;
     const modWorkspacePath = resolved.modWorkspacePath;
+    // B84: resolve the packaging format BEFORE any staging or write happens, so a bad
+    // request is rejected with zero writes rather than after a partial deploy.
+    const formatChoice = resolveDeployFormat(req.body?.deployFormat);
+    if (!formatChoice.ok) {
+      check('config', 'Paths configured', 'fail', formatChoice.error);
+      return res.status(400).json(failWith('config', { error: formatChoice.error, code: 'UNKNOWN_DEPLOY_FORMAT' }));
+    }
+    const deployFormat = formatChoice.format;
     if (!x4GamePath) {
       check('config', 'Paths configured', 'fail', 'X4 Game Installation path not configured.');
       return res.status(400).json(failWith('config', { error: 'X4 Game Installation path not configured.' }));
@@ -7956,7 +8377,8 @@ app.post("/api/agent/deploy-verify", (req, res) => {
     }
     const extensionsPath = path.join(x4GamePath, 'extensions');
     if (!fs.existsSync(extensionsPath)) fs.mkdirSync(extensionsPath, { recursive: true });
-    const deployedPath = compileWorkspaceToFolder(ws, extensionsPath, 'store', false, 'catalog');
+    const deployedPath = compileWorkspaceToFolder(ws, extensionsPath, 'store', false, deployFormat);
+    const formatReport = describeDeployFormat(deployFormat, lastArtifactReport);
 
     // 4. Bytes confirm — deployed content.xml exists, non-empty, id matches modId.
     const deployedContent = path.join(deployedPath, 'content.xml');
@@ -7969,19 +8391,29 @@ app.post("/api/agent/deploy-verify", (req, res) => {
     const modFindings = (doctor.findings || []).filter((f: any) => JSON.stringify(f).toLowerCase().includes(modId.toLowerCase()));
     const blocking = modFindings.filter((f: any) => f.severity === 'error' || f.code === 'ext.duplicate_id' || f.code === 'ext.folder_id_mismatch');
 
-    check('deploy', 'Written to staging + extensions', 'pass', deployedPath + (stagingPath ? ` (+ staging)` : ''));
+    // B84: the deploy row SAYS which format was written and what that means. A catalog
+    // deploy that buried native binaries warns rather than passing quietly — the author
+    // would otherwise only discover it as a silent runtime failure in-game.
+    check('deploy', 'Written to staging + extensions', formatReport.warnings.length ? 'warn' : 'pass',
+      `${deployedPath}${stagingPath ? ' (+ staging)' : ''} — ${formatReport.summary}` +
+      (formatReport.warnings.length ? ` ⚠ ${formatReport.warnings.join(' ')}` : ''));
     check('bytes', 'Deployed bytes confirmed', bytesConfirmed ? 'pass' : 'fail',
       bytesConfirmed ? `content.xml ${deployedBytes}b, id "${deployedId}"` : `content.xml missing/empty or id mismatch (got "${deployedId}", want "${modId}")`);
     check('doctor', 'Extension doctor', blocking.length === 0 ? 'pass' : 'fail',
       blocking.length === 0 ? `${modFindings.length} finding(s) for this mod, none blocking` : blocking.map((f: any) => f.code).join(', '));
 
     // 6. Drift — after a deploy the workspace and deployed copies should agree.
-    const deployedArtifact = lastArtifactReport?.mode === 'catalog' && path.resolve(lastArtifactReport.targetRoot) === path.resolve(deployedPath)
+    // B84: BOTH artifact modes reopen-and-hash-verify what they wrote, so either one is
+    // direct sync evidence. Restricting this to 'catalog' made a verified loose deploy fall
+    // through to the coarser drift heuristic and report a needless warning.
+    const deployedArtifact = lastArtifactReport && path.resolve(lastArtifactReport.targetRoot) === path.resolve(deployedPath)
       ? lastArtifactReport
       : null;
     const driftReport = deployedArtifact ? null : computeModDrift(path.basename(deployedPath));
     if (deployedArtifact?.verified) {
-      check('drift', 'Workspace/deployed sync', 'pass', `verified packed artifact: ${deployedArtifact.includedFiles} source/generated files -> ${deployedArtifact.outputFiles} loose/catalog files across ${deployedArtifact.catalogVolumes} catalog volume(s)`);
+      check('drift', 'Workspace/deployed sync', 'pass', deployedArtifact.mode === 'catalog'
+        ? `verified packed artifact: ${deployedArtifact.includedFiles} source/generated files -> ${deployedArtifact.outputFiles} loose/catalog files across ${deployedArtifact.catalogVolumes} catalog volume(s)`
+        : `verified loose artifact: ${deployedArtifact.includedFiles} source/generated files -> ${deployedArtifact.outputFiles} file(s) written to disk`);
     } else if (driftReport) {
       check('drift', 'Workspace/deployed sync', driftReport.verdict === 'identical' ? 'pass' : 'warn', driftReport.summary);
     } else {
@@ -8020,6 +8452,9 @@ app.post("/api/agent/deploy-verify", (req, res) => {
     return res.json({
       ok, stage: 'done', modId, deployedPath, stagingPath, bytesConfirmed, deployedBytes,
       checklist,
+      // B84: what format was written, why it was chosen, and what it means — in the payload
+      // so every surface (wizard, IDE, agent) can say the same plain thing.
+      deployFormat: { ...formatReport, source: formatChoice.source },
       artifact: lastArtifactReport,
       preflightWarnings: pfWarnings,
       diskValidationSkipped,
