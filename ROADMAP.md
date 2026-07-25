@@ -52,6 +52,70 @@ Foundation-first means: before adding polish, every link above has to be *correc
 
 ## Current State
 
+### 🚀 RELEASE 0.0.43 — the user-friction pass: 10/10 items — published to Open VSX 2026-07-25
+
+The resident `x4_ai_influence` agent (49 files, ~350 KB Lua, 15 MD scripts) filed ten incident-ranked
+items. Its own diagnosis was the design brief: **"the Forge knows the answer and makes me re-derive
+it… not missing features — withheld knowledge."** All ten shipped across three gated waves.
+
+**Wave 1 — expose what the Forge already knows.**
+- **Instance discovery.** The sidecar's port changes every launch (observed 3000 → 62148 → 57950 →
+  49208 → 60855) and nothing on disk said what it was, so callers scanned up to 40 ports per session.
+  Each instance now publishes `{port, token, pid, startedAt, cwd, mode}` to
+  `~/.x4forge/instances/<pid>.json` + `latest.json`, mode `0600`, per-user home, never inside a
+  mod/game/workspace root, removed on exit and pruned when the process is gone.
+- **Error honesty.** Wrong verb → `405` + `Allow`; unknown API path → JSON `404` that says it came
+  from the API router, not the app shell (a caller previously could not tell "no such route" from
+  "wrong verb" and nearly filed a working endpoint as missing). `mod-folder/import` no longer returns
+  `200` with a multi-thousand-file garbage workspace — it returns `400 NOT_A_MOD_FOLDER` and names a
+  mod you can actually import.
+- **`project/validate` accepts `{root, path}`.** `resolveModFolder` already supported a root and
+  `round-trip-check` already passed one; validate simply never forwarded it — three lines. Callers had
+  been reimplementing the Forge's file model and being blamed for the difference.
+- **`GET /api/agent/status`.** Port, workspace, roots, last deploy, readiness, ledger counts, and
+  whether the canvas drifted from its source — with the exact call that fixes it. `/status`, `/drift`
+  and `/state` were all genuinely 404 before.
+
+**Wave 2 — make writes and deploys legible before they happen.**
+- **Deploy dry-run** (`{dryRun: true}`): added / overwritten / **deleted** / preserved with sizes,
+  writing nothing, computed from the real artifact plan so it cannot drift from the planner.
+- **Stale source is no longer a dead end.** The guard stays (it prevented a real data-loss incident);
+  the `409` now names both remedies, and `{autoReimport: true}` re-imports and continues, reported in
+  the checklist rather than done silently.
+- **Writes report what landed** — bytes, SHA-256, byte-exactness vs what was sent, CRLF/LF profile.
+  The author's helper had been weakening its byte-exact readback to tolerate the tool.
+- **Ledger records file effects** for deploys, with the per-file list in the blob store.
+
+**Wave 3 — "legal, and it will do nothing" (closes B82).**
+- **XML well-formedness runs FIRST, ALWAYS, as an ERROR** in the shared validator. The engine existed
+  and deploy-verify used it; the shared validator did not — and one `</do_else>` closing a
+  `<do_elseif>` reported `structuralErrors: 0` while the diplomacy subsystem was dead in-game **for
+  weeks**. X4 discards a malformed file whole and logs nothing. Every error position is reported, not
+  just the first, because the last is often the real edit site.
+- **`POST /api/agent/check-expression`** — one expression, no 34-file payload, same
+  `lintScriptPropertyChains` engine as full validation, with suggestions and an explanation of why the
+  failure is silent.
+
+**Validation:** typecheck · lint 0 errors · oracles **104/104** (new `instance-discovery-selftest`
+13/13) · routes **141/141** (+42 assertions across the three waves) · **e2e 26/26 PASS** · precommit ·
+build. Store verified before commit: `0.0.43` on both the direct and latest endpoints.
+
+**Live proof on the running instance (v1.0.313, sidecar :61720), driven exactly as an agent would:**
+read `~/.x4forge/latest.json` → no port scan → `GET /api/agent/status` reported *AI Influence, 211
+nodes*, `sourceSync: false` with the exact re-import call → `POST /api/agent/check-expression
+{"expression": "$station.manager"}` returned **`legal: false`, "segment 'manager' is unknown in
+scriptproperties.xml"** — the exact wrong property that had made the NPC census silently always empty.
+
+**A real bug this pass caught in itself:** the oracle harness published discovery into the *real* user
+profile and exited, leaving `latest.json` advertising dead port 8972. A caller trusting a well-known
+path is worse off than one with no file at all. Fixed three ways — harnesses and the e2e stack write
+to isolated dirs, prune now repoints or removes a stale `latest.json`, and the oracle pins it. A full
+gate run leaves zero records in the real profile.
+
+**Still open, and it is the reporter's #1:** **B81** — `/api/fs/read` still resolves the deployment
+root while `/api/fs/write` resolves the workspace. Not fixed here; it needs the root selector plus an
+error-on-absent rather than silent fallthrough. Plan: `docs/plans/2026-07-25-forge-user-friction.md`.
+
 ### 🚀 RELEASE 0.0.41 — published to Open VSX 2026-07-25
 
 First release carrying B83 + B84 + B86. VSIX 2,091 files / 17,830,228 bytes, SHA-256

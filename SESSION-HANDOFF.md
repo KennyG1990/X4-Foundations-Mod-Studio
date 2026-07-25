@@ -1,136 +1,75 @@
-# X4 Forge session handoff — 2026-07-25 · 0.0.41 published — deployment works on a held folder, format is a choice, agents have a history
-
-## RELEASE 0.0.41 — published to Open VSX 2026-07-25
-
-Contains B83 (locked-root deploy fallback), B84 (deploy format toggle + loose stale-removal +
-`schemaDir` blanking fix), and B86 (Agent Action Ledger). VSIX 2,091 files / 17,830,228 bytes,
-SHA-256 `7e16370bb3b5ea85cb640cea9913dc8404a14299edf39c99091022943ea1b874`.
-
-**Validated in the REAL IDE via computer-use** (not the browser — the Forge ships as an extension, and
-that distinction cost a round of rework this session):
-- Installed 0.0.40 → 0.0.41, window reloaded, header moved `v1.0.298` → `v1.0.305`, sidecar `:53211`.
-- **History tab** renders in the Agent API panel with live rows, filters, Refresh, OK/ERROR badges, the
-  "not version control" scope note, and per-row expand showing the non-revertible reason.
-- **A real blocked deploy was captured verbatim in the requested register:**
-  `Deploy BLOCKED at stage "Canvas in sync with source folder" — The mod folder on disk changed AFTER
-  this canvas imported it (2026-07-25T07:46:57.147Z).`
-- **Deploy Format toggle** renders with both options and their real consequences, Loose selected by
-  default, switches on click, and **persists to the installed extension's own config.json**.
-- The `schemaDir` fix is proven in the shipped product: the toggle POSTs only `deployFormat` and
-  `xsdSchemaPath` survived intact.
-
-**Left as found:** deploy format restored to `loose`; deployed mod 49 files, `ai_influence_diplomacy.xml`
-well-formed, `.mcp.json` present, no `.x4forge-backup-*` litter.
+# X4 Forge session handoff — 2026-07-25 · 0.0.43 published · deploy fixed, ledger shipped, friction pass 10/10
 
 ## One-line state
 
-Forge can now deploy the real `x4_ai_influence` mod into the live game extensions folder **while that folder is
-held by an IDE/terminal**, and the author chooses loose files vs CAT/DAT — both VERIFIED live; nothing is
-published, HEAD is the last thing that needs Ken's eye.
+Three releases shipped today (0.0.41 → 0.0.43, all published and store-verified); deployment survives a
+held Windows folder, the author chooses loose vs CAT/DAT, agents have an action history, and the
+ten-item user-friction brief is fully implemented — with **B81 (`/api/fs/read` root) still open and
+still the resident agent's #1**.
 
-## What closed this session
+## What shipped today
 
-- **B83 — locked deployed-mod root.** `replaceValidatedDeployment` now falls back to a verified, rollback-safe
-  in-place synchronization when (and only when) the initial target→backup rename fails `EBUSY`/`EPERM`. Atomic
-  fast path unchanged; non-lock errors still propagate untouched.
-- **B84 — deploy format toggle.** `deployFormat: 'loose' | 'catalog'` persisted in `config.json`, overridable
-  per `deploy-verify` request, default **`loose`**, with a wizard toggle and a plain-language account of what
-  each deploy actually wrote.
+| Release | Contents |
+|---|---|
+| **0.0.41** | B83 locked-root deploy fallback · B84 deploy-format toggle + loose stale-removal + `schemaDir` blanking fix · B86 Agent Action Ledger |
+| **0.0.42** | Ledger fixes: errors NAME the error, coverage inverted to deny-list (6 → all mutating routes), node linkage |
+| **0.0.43** | B93 user-friction pass, 10/10 items across three waves; **closes B82** |
 
-## The decisive evidence (reproduce it this way, don't re-derive)
+## The 0.0.43 API surface an agent should know
 
-The mod root's **NTFS file ID is the discriminator**. The atomic path swaps in a *different* directory (new ID);
-the fallback updates the *same* one. Hold the folder, deploy, compare:
+- **Discovery — stop port-scanning.** `~/.x4forge/latest.json` (and `instances/<pid>.json`) carry
+  `{port, token, pid, startedAt, cwd, mode}`, `0600`, pruned when the process dies. **Check `pid`
+  liveness if you cache it.**
+- **`GET /api/agent/status`** — port, workspace, roots, last deploy, readiness, ledger counts, and
+  canvas-vs-source staleness *with the exact call that fixes it*.
+- **`POST /api/agent/project/validate {root, path}`** — same shape as `mod-folder/import`; stop
+  building file lists by hand.
+- **`POST /api/agent/deploy-verify {dryRun: true}`** — added/overwritten/**deleted**/preserved with
+  sizes, writes nothing. `{autoReimport: true}` clears a stale canvas in one step.
+- **`POST /api/agent/check-expression {expression, variableTypes?}`** — one expression, no 34-file
+  payload. Live-proven: `$station.manager` → `legal:false`.
+- **`POST /api/fs/write`** returns a receipt: bytes, sha256, `byteExact`, CRLF/LF profile. You can
+  drop your own byte-exact readback.
+- **Wrong verb → 405 + `Allow`. Unknown API path → JSON 404.** No more SPA HTML on an API route.
 
-```
-fsutil file queryfileid "G:\SteamLibrary\steamapps\common\X4 Foundations\extensions\x4_ai_influence"
-```
+## Gates (all green at close)
 
-It read `0x…3400000000aad6` before and after a full content replacement → the root was never renamed.
-Hold the folder with: `Start-Process powershell -ArgumentList '-NoProfile','-Command','Start-Sleep -Seconds 5400' -WorkingDirectory <mod root>`.
+typecheck · lint 0 errors · oracles **104/104** · routes **141/141** · **e2e 26/26 PASS** · precommit ·
+build. Store: `0.0.43` on both endpoints.
 
-Live results: `deploy-verify` `ok:true` 10/10 stages · `md/ai_influence_diplomacy.xml` went
-`mismatched tag: line 278` → **WELL-FORMED** · `core.dll` / `ssl.dll` / `aic_uix.lua` SHA-256 identical to the
-workspace · no `.x4forge-backup-*` litter · deployed 48 files vs workspace 49.
+## Live hazards / do not repeat
 
-## Gates (this session, host-native, quiet machine)
-
-typecheck PASS · oracles **102/102** (artifact transaction 29/29) · routes PASS incl. 9 new B84 assertions ·
-lint PASS at baseline (0 errors) · precommit PASS · build PASS · **e2e 26/26 PASS** (`[run-e2e] VERDICT`).
-
-## Corrections banked — do not repeat these
-
-- **An earlier e2e FAIL (23 failures) was an environment casualty, not a defect.** The ephemeral Vite on 3100
-  had died and every later spec hit `ERR_CONNECTION_REFUSED`, downstream of an aborted one-second run. On a
-  clean machine the same suite went 26/26. Re-run before attributing a cascade to code.
-- **`.forgeartifact.json` does NOT control packaging** — only include/exclude/runtime-owned rules. Packaging was
-  hardcoded.
-- **B83 did not break loose deploys; it revealed that they were never safe.** Loose mode used an additive
-  `copyRegularTree` that removed nothing, so deleted mod files lingered in the game folder forever.
-
-## Live hazards
-
-- The **installed sidecar (public 0.0.40) does not contain either fix.** Driving its port reproduces the old
-  `EBUSY`. Validate against a host-native server from the repo instead.
-- The repo's own `config.json` still holds the **legacy unsafe shape** (`modWorkspacePath` = the live
-  extensions dir), which the guards 409 as `PROTECTED_ROOT_OVERLAP`. This session used an isolated
-  `X4_CONFIG_DIR` under the scratchpad and left the repo config untouched. Do not "fix" it without asking.
-- `.mcp.json` (the `claude-brain` registration) lives inside the deployed mod folder, is not mod content, and is
-  therefore removed by every correct deploy. It was restored by hand this session. Add it to `.forgekeep` to
-  keep it permanently.
-- Do not run `graphify update .` — B77 remains open (graph refresh mutates historical PNG evidence).
-- The two `vscode-extension/evidence/0.0.35-*.png` byte changes are still pre-existing, unattributed churn.
-  Do not stage or revert them without identifying the owner.
-
-## B86 — Agent Action Ledger (added this session, VERIFIED)
-
-A HISTORY tab on the Agent API screen records every agent action as one readable line. Engine
-`src/lib/agentHistory.ts` (pure) + `agentHistoryStore.ts` (JSONL + content-addressed blobs under
-`dataPath('history')`). Capture is ONE middleware over an allowlist, on `res.on('finish')`.
-
-**The rule that matters:** payloads are never inlined. Measured — a 312,000-byte write produces a
-**496-byte row**, and re-writing identical content adds **0 bytes**. If a future change starts inlining,
-`route-integration.mjs` fails on those two numbers.
-
-**Two premises in the original brief were wrong; do not re-adopt them.** `.forge/checkpoints/` is written by
-the SEPARATE `kennyg.forge-agent` harness extension (BACKLOG B70) — this codebase's only `.forge/` reference
-is an exclusion rule. `.snapshots/` stores whole-WORKSPACE JSON and cannot restore a single file write.
-
-**Banked gotcha:** middleware mounted via `app.use("/api", …)` receives a MOUNT-RELATIVE `req.path`
-(`/fs/write`). Match `req.baseUrl + req.path`. The first version recorded nothing and looked like it simply
-never ran.
+- **A stale discovery record is worse than none.** The oracle harness once published into the real
+  `~/.x4forge` and exited, advertising a dead port. Every test harness now sets
+  `X4FORGE_DISCOVERY_DIR`; keep it that way for any new harness that boots a server.
+- **Never generate nested escapes (`\r\n`, XML) through a Python heredoc into JS** — collapsed to real
+  newlines twice today. Use `String.fromCharCode` / array `.join()`, or edit the file directly.
+- Test fixtures must be owned by the assertion that needs them; borrowing another section's fixture
+  produced an ordering-dependent failure.
+- Do not run `graphify update .` (B77). The **post-commit hook already runs graphify automatically** —
+  that is why the tracked evidence PNGs keep changing with nobody admitting to it. Those two PNGs stay
+  unstaged.
+- The installed sidecar always lags the repo; validating a repo fix against the installed extension
+  reproduces the OLD bug. Install first, then reload the window.
 
 ## Eyeball queue (Ken, ~60 seconds)
 
-0. **Agent Action Ledger** — open the Agent API panel (header button, "Open External AI Agent API Control
-   panel") → **History** tab (5th, emerald). You should see newest-first rows like
-   ``Edited `ledger_demo.xml` — +2 / −0 lines`` with an OK/WARN/ERROR badge. Click a row: it expands to the
-   file, line counts, duration, a **Revert to here** button and the unified diff. Behaviour and DOM are
-   proven; only the *look* is unverified, because screenshots cannot composite while the Browser pane is
-   hidden (B28).
+1. **Agent API → History**: rows now NAME errors (`Validated 1 file — 4 errors: Extension has no
+   content.xml… (+3 more)`), expand shows readable `ERR file:line — message [code]`, and node chips
+   focus the canvas.
+2. **Compile/Deploy wizard**: DEPLOY FORMAT toggle, Loose selected.
 
-1. **Deploy format toggle** — open the Compile/Deploy wizard. Between the target list and the staging-path card
-   there is a **DEPLOY FORMAT** row with two cards: *Loose files* (selected) and *CAT / DAT archive*, each
-   stating its consequence. Click *CAT / DAT archive* → it highlights cyan and persists; reopen the wizard and
-   it is still selected. Click *Loose files* to set it back.
-2. **Plain-language deploy result** — run a deploy from the wizard and read the `Written to staging + extensions`
-   row: it should now spell out the format and what it means, on success as well as failure.
+## Open, in priority order
 
-## Ken's four open decisions (B85 in BACKLOG.md)
-
-1. Confirm the **`loose` default** (changed from 0.0.36–0.0.40 catalog-by-default).
-2. Is `.claude/settings.local.json` shippable mod content, or correctly excluded? (It is the 48-vs-49 delta.)
-3. `x4_ai_influence/.forgekeep` lists `config`, `README.md`, `docs` — all built by the mod, so those hints are
-   now reported no-ops. Removing the three lines clears the warning.
-4. Add `.mcp.json` to `.forgekeep` if it should survive deploys.
-
-## First resume action
-
-Ken's eyeball queue above, then his four decisions. **No publication** — installed public 0.0.40 lacks both
-fixes and shipping needs fresh explicit release authorization. B82 (project validation misses malformed XML)
-and B81 (`/api/fs/read` vs `/api/fs/write` root asymmetry) are the next specified units; both were re-confirmed
-as real this session. The Agent Action Ledger remains unstarted by explicit instruction.
+1. **B81 — `/api/fs/read` resolves the deployment, not the workspace.** The resident agent's #1; it
+   bypasses the API with Python on every edit, so its reads are invisible to the ledger. Needs
+   `root=workspace|deployment` + **error when the requested root lacks the file**, not silent fallthrough.
+2. **B88** validate-on-write (`strict:true`) · **B89** Lua gate (wire + extend; six modules already
+   exist) · **B90** edit-path byte fidelity → **gates B91** per-node editing · **B92** transactional
+   multi-edit.
+3. **B85** four deploy-format decisions · **B87** QOL/redundancy pass (start with the self-declared
+   deprecated `/api/agent/deploy`).
 
 ## Commit point
 
-`fix(deploy): survive locked mod roots on Windows and let the author choose loose vs CAT/DAT`
+`release: 0.0.43 — the user-friction pass, 10/10 items`

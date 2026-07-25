@@ -10,6 +10,13 @@
 > Deployment on Windows works with the mod folder held, and the author now chooses loose vs CAT/DAT.
 > Four follow-up decisions are Ken's, listed in B85 below.
 
+> **B93 (the 10-item user-friction brief) CLOSED VERIFIED 2026-07-25 → ROADMAP, shipped as 0.0.43.**
+> All ten items implemented across three waves. **B82 is CLOSED by wave 3** (XML well-formedness now
+> runs first, as an error, inside the shared validator). **B81 is CLOSED by wave 1's sibling work?
+> NO — B81 remains OPEN**: `/api/fs/read` still resolves the deployment root. Wave 1 delivered
+> discovery, error honesty, `validate {root,path}` and `status`; the read-root selector is still
+> the reporter's #1 and is still specified below.
+
 ### ⭐ MOD-AGENT BRIEF 2026-07-25 — decomposed into B88–B92, ordered by evidence not excitement
 
 Source: the `x4_ai_influence` agent (49 files, ~350 KB Lua, 15 MD scripts), ranked by incident.
