@@ -8,6 +8,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+// B93.1: never publish discovery records into the real user profile from a test harness.
+const discoveryDirForTests = path.join(os.tmpdir(), `x4-oracle-discovery-${process.pid}`);
 
 const port = Number(process.env.ORACLE_TEST_PORT || 8972);
 const base = `http://127.0.0.1:${port}`;
@@ -40,7 +42,7 @@ try {
     shell: false,
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {
-      ...process.env,
+      ...process.env, X4FORGE_DISCOVERY_DIR: discoveryDirForTests,
       PORT: String(port),
       NODE_ENV: 'development',
       X4_STATE_DIR: stateDir,

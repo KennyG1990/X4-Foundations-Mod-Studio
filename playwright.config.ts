@@ -31,6 +31,10 @@ const ephemeralEnv = {
   X4_STATE_DIR: E2E_STATE_DIR,
   // Deterministic pages: no HMR socket, no watcher-triggered reloads mid-spec.
   DISABLE_HMR: 'true',
+  // B93.1: the ephemeral stack must NOT publish its port into the user's real ~/.x4forge.
+  // Observed for real: a harness published, exited, and left a record advertising a dead port —
+  // which is worse than no discovery file at all, because a caller trusts it.
+  X4FORGE_DISCOVERY_DIR: path.join(E2E_STATE_DIR, 'discovery'),
 };
 
 export default defineConfig({

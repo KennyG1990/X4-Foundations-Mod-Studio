@@ -102,6 +102,7 @@ import { computeModDrift, fingerprintModFolder, flattenProjectValidation, getSch
 import { buildRemediationCapsules, runAgentLoopSelftest, runRepairLoop, type LoopDiagnostic } from "./src/lib/agentLoop";
 import { assessSourceSync, hashFolderFingerprint, runCompileFidelitySelftest } from "./src/lib/compileFidelity";
 import { workspaceContentHash, runWorkspaceIdentitySelftest } from "./src/lib/workspaceIdentity";
+import { publishInstance, unpublishInstance, latestPath, runInstanceDiscoverySelftest } from "./src/lib/instanceDiscovery";
 import { buildReleasePlan, buildZip, runModDistributionSelftest } from "./src/lib/modDistribution";
 import { aiKeyStatus, getStoredAiKey, setStoredAiKey } from "./src/server/aiKeyStore";
 import { runModDriftSelftest } from "./src/lib/modDrift";
@@ -185,6 +186,8 @@ dotenv.config({ path: '.env.local', override: true });
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const TOKEN_FILE = path.join(process.cwd(), ".studio-api-token");
+/** B93.5: reported by GET /api/agent/status so callers can tell a restart from a stale read. */
+const SERVER_STARTED_AT = new Date().toISOString();
 
 function loadStudioApiToken(): string {
   if (process.env.STUDIO_API_TOKEN?.trim()) {
@@ -3696,6 +3699,80 @@ app.post("/api/fs/write", (req, res) => {
 // is an activity log with undo, NOT version control — git remains the authoritative history of
 // the workspace, and the panel says so.
 // ---------------------------------------------------------------------------
+/**
+ * B93.5 — "where am I?" in one call.
+ *
+ * Every session previously re-derived the same facts: which port, which workspace, what is deployed
+ * versus what is in source, when the last deploy happened, whether the canvas is stale. That was
+ * four or five calls plus a disk walk, and `/status`, `/drift` and `/state` were all genuinely 404.
+ * Everything below is state the server already holds; this just stops withholding it.
+ */
+app.get("/api/agent/status", (_req, res) => {
+  try {
+    const resolved = resolveXsdConfig();
+    const ws = activeWorkspace;
+    const sourceDir = typeof (ws as any)?.sourceStamp?.dir === 'string' ? (ws as any).sourceStamp.dir : '';
+
+    // Is the canvas stale relative to the folder it was imported from? This is the exact question
+    // deploy answers with a hard block, so the caller should be able to ask it BEFORE deploying.
+    let sourceSync: { known: boolean; inSync?: boolean; detail: string } = { known: false, detail: 'This workspace was not imported from a folder, so there is nothing to compare.' };
+    if (sourceDir) {
+      try {
+        if (!fs.existsSync(sourceDir)) {
+          sourceSync = { known: true, inSync: false, detail: `The imported source folder no longer exists: ${sourceDir}` };
+        } else {
+          const current = hashFolderFingerprint(fingerprintModFolder(sourceDir));
+          const stamped = String((ws as any).sourceStamp?.hash || '');
+          sourceSync = current === stamped
+            ? { known: true, inSync: true, detail: `Canvas matches ${sourceDir}.` }
+            : {
+                known: true,
+                inSync: false,
+                detail: `The folder changed after this canvas imported it. Re-import with POST /api/agent/mod-folder/import {"root":"workspace","path":"${path.basename(sourceDir)}"} and deploy the returned workspace, or call deploy-verify with {"autoReimport": true}.`,
+              };
+        }
+      } catch (error: any) {
+        sourceSync = { known: false, detail: `Could not compare against the source folder: ${error?.message || error}` };
+      }
+    }
+
+    return res.json({
+      ok: true,
+      port: PORT,
+      pid: process.pid,
+      mode: process.env.X4_FORGE_MODE?.trim() || (process.env.X4_DATA_DIR ? 'sidecar' : 'standalone'),
+      startedAt: SERVER_STARTED_AT,
+      discoveryFile: latestPath(),
+      workspace: {
+        name: ws?.name,
+        id: ws?.id,
+        version: workspaceVersion,
+        contentHash: (() => { try { return workspaceContentHash(sanitizeWorkspace(ws)); } catch { return undefined; } })(),
+        nodes: (ws?.nodes || []).length,
+        sourceFolder: sourceDir || undefined,
+      },
+      sourceSync,
+      roots: {
+        modWorkspacePath: resolved.modWorkspacePath || null,
+        filesystemPath: resolved.filesystemPath || null,
+        x4GamePath: resolved.x4GamePath || null,
+        referenceRoot: resolved.x4ReferenceRoot || null,
+        schemaDir: resolved.schemaDir || null,
+      },
+      lastDeploy: lastDeployInfo || null,
+      deployFormat: (() => { const r = resolveDeployFormat(undefined); return { format: r.format, source: r.source }; })(),
+      readiness: {
+        schemaLoaded: !!schemaLibrary.loaded,
+        schemaElements: schemaLibrary.events.length + schemaLibrary.actions.length + schemaLibrary.conditions.length,
+        referenceCorpus: (() => { try { const s = getReferenceSets(); return { factions: s?.factions?.size ?? 0, wares: s?.wares?.size ?? 0 }; } catch { return null; } })(),
+      },
+      history: (() => { try { const rows = agentHistoryStore.readAll(); return { entries: rows.length, lastAction: rows.length ? rows[rows.length - 1].title : null, failures: agentHistoryStore.failures }; } catch { return null; } })(),
+    });
+  } catch (error: any) {
+    return res.status(500).json({ ok: false, error: error?.message || 'status failed' });
+  }
+});
+
 app.get("/api/agent/history", (req, res) => {
   try {
     const rows = filterRows(agentHistoryStore.readAll(), {
@@ -5080,6 +5157,24 @@ app.post("/api/agent/mod-folder/import", (req, res) => {
   try {
     const r = resolveModFolder(req.body?.path, req.body?.root);
     if ('error' in r) return res.status(r.status).json({ error: r.error });
+    // B93.2: never 200 on a degenerate result. Pointing this at a root that is not a mod (or at a
+    // whole library of mods) previously returned success with a multi-thousand-file garbage
+    // workspace, which is worse than an error because it LOOKS like it worked.
+    const contentXml = path.join(r.abs, 'content.xml');
+    if (!fs.existsSync(contentXml)) {
+      const entries = (() => { try { return fs.readdirSync(r.abs, { withFileTypes: true }); } catch { return []; } })();
+      const modLikeChildren = entries
+        .filter(e => e.isDirectory() && fs.existsSync(path.join(r.abs, e.name, 'content.xml')))
+        .map(e => e.name);
+      return res.status(400).json({
+        error: modLikeChildren.length
+          ? `"${req.body?.path}" is a folder CONTAINING mods, not a mod. It has no content.xml of its own. Import one of its mods instead, e.g. {"root":"${req.body?.root || 'workspace'}","path":"${modLikeChildren[0]}"}.`
+          : `"${req.body?.path}" has no content.xml, so it is not an X4 extension. Point this at the mod's own folder — the one containing content.xml.`,
+        code: 'NOT_A_MOD_FOLDER',
+        folder: r.abs,
+        ...(modLikeChildren.length ? { modsFoundInside: modLikeChildren.slice(0, 20) } : {}),
+      });
+    }
     const { workspace, report } = importModFolder(r.abs);
     return res.json({ success: true, workspace, report });
   } catch (error) {
@@ -6130,9 +6225,16 @@ app.post("/api/agent/project/validate", (req, res) => {
     let project = req.body?.project as ExtensionProject | undefined;
     let source: { mode: "inline" } | { mode: "fromPath"; root: string; loaded: string[]; skipped: { path: string; reason: string }[] } = { mode: "inline" };
 
-    const fromPath = typeof req.body?.fromPath === "string" ? req.body.fromPath.trim() : "";
+    // B93.3: accept the SAME {root, path} shape as mod-folder/import. Callers previously had to
+    // walk the folder and classify every file themselves; one reporter mis-classified
+    // `libraries/*.xml`, got 16 "unknown ware" warnings, and reasonably concluded the Forge's
+    // reference data was incomplete. The Forge already knows how to walk a mod folder — asking the
+    // caller to reimplement that and then blaming them for the difference is the defect.
+    const fromPath = typeof req.body?.fromPath === "string" ? req.body.fromPath.trim()
+      : typeof req.body?.path === "string" ? req.body.path.trim()
+      : "";
     if (fromPath) {
-      const resolvedFolder = resolveModFolder(fromPath);
+      const resolvedFolder = resolveModFolder(fromPath, req.body?.root);
       if ("error" in resolvedFolder) {
         return res.status(resolvedFolder.status).json({ error: resolvedFolder.error });
       }
@@ -6396,6 +6498,7 @@ app.get("/api/agent/galaxy-map", (_req, res) => {
 // SELFTEST REGISTRY (audit R1): one line per oracle — route + public allowlist wired together.
 const SELFTESTS: Record<string, () => unknown> = {
   "agent-history-selftest": runAgentHistorySelftest,
+  "instance-discovery-selftest": runInstanceDiscoverySelftest,
   "agent-keys-selftest": runAgentKeysSelftest,
   "schema-discovery-selftest": runSchemaDiscoverySelftest,
   "schema-registry-selftest": runSchemaRegistrySelftest,
@@ -9649,10 +9752,70 @@ if (process.env.NODE_ENV !== "production" || process.env.FORGE_ALLOW_RUN_COMMAND
   });
 }
 
+/**
+ * B93.2 — tell the caller the truth about the request they made.
+ *
+ * Unmatched GETs previously fell through to the SPA fallback and returned the app's HTML, so a
+ * caller could not distinguish "this route does not exist" from "wrong verb" — one reporter nearly
+ * filed a working endpoint as missing. Mounted after every route and before the SPA fallback, so
+ * real page loads are untouched: only `/api/*` is affected.
+ */
+function allowedMethodsForApiPath(requestPath: string): string[] {
+  const methods = new Set<string>();
+  try {
+    const stack = (app as any)._router?.stack || [];
+    for (const layer of stack) {
+      if (!layer?.route || !layer.regexp?.test?.(requestPath)) continue;
+      for (const [method, enabled] of Object.entries(layer.route.methods || {})) {
+        if (enabled && method !== '_all') methods.add(method.toUpperCase());
+      }
+    }
+  } catch { /* fall through to a 404 rather than crashing the request */ }
+  return [...methods].sort();
+}
+
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api/')) return next();
+  const allowed = allowedMethodsForApiPath(req.path);
+  if (allowed.length === 0) {
+    return res.status(404).json({
+      error: `No endpoint at ${req.path}. This is a 404 from the API router, not the app shell — the route genuinely does not exist.`,
+      code: 'UNKNOWN_ENDPOINT',
+      path: req.path,
+    });
+  }
+  if (!allowed.includes(req.method.toUpperCase())) {
+    res.set('Allow', allowed.join(', '));
+    return res.status(405).json({
+      error: `${req.method} is not supported on ${req.path}. This route exists and accepts: ${allowed.join(', ')}.`,
+      code: 'METHOD_NOT_ALLOWED',
+      allow: allowed,
+      path: req.path,
+    });
+  }
+  return next();
+});
+
 initializeReferenceCorpus();
 setupDevOrProd().then(() => {
   app.listen(PORT, "127.0.0.1", () => {
     console.log(`X4 Forge Dev Server running on http://127.0.0.1:${PORT}`);
+    // B93.1: publish where we are. The sidecar's port changes every launch and nothing on disk
+    // said what it was, so callers were port-scanning to find us. Never fatal.
+    const published = publishInstance({
+      port: PORT,
+      token: STUDIO_API_TOKEN,
+      pid: process.pid,
+      startedAt: new Date().toISOString(),
+      cwd: process.cwd(),
+      mode: process.env.X4_FORGE_MODE?.trim() || (process.env.X4_DATA_DIR ? 'sidecar' : 'standalone'),
+    });
+    if (published) console.log(`[discovery] port + token published to ${published.latestFile}`);
+    const releaseDiscovery = () => unpublishInstance(process.pid);
+    process.on('exit', releaseDiscovery);
+    for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
+      process.on(signal, () => { releaseDiscovery(); process.exit(0); });
+    }
   });
 }).catch(err => {
   console.error("Server failure: ", err);

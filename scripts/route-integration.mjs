@@ -81,7 +81,7 @@ async function main() {
     cwd: process.cwd(),
     shell: false,
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, PORT: String(PORT), NODE_ENV: 'development', STUDIO_API_TOKEN: SESSION_TOKEN, X4_STATE_DIR: stateDir, X4_DATA_DIR: dataDir, X4_CONFIG_DIR: configDir, X4_REFERENCE_ROOT: referenceRoot },
+    env: { ...process.env, PORT: String(PORT), NODE_ENV: 'development', STUDIO_API_TOKEN: SESSION_TOKEN, X4_STATE_DIR: stateDir, X4_DATA_DIR: dataDir, X4_CONFIG_DIR: configDir, X4_REFERENCE_ROOT: referenceRoot, X4FORGE_DISCOVERY_DIR: path.join(tmp, 'discovery') },
   });
   let serverOut = '';
   child.stdout.on('data', (d) => { serverOut += d; });
@@ -227,6 +227,58 @@ async function main() {
 
   const restoreLoose = await req('POST', '/api/schema/config', SESSION_TOKEN, { deployFormat: 'loose' });
   ok('deploy_format_restored_to_loose', restoreLoose.status === 200 && restoreLoose.json?.config?.deployFormat === 'loose', `status=${restoreLoose.status}`);
+
+  // --- B93 wave 1: stop making callers re-derive what the server already knows -------------
+  // #1 discovery: the port changes every launch and nothing on disk said what it was.
+  const discLatest = path.join(tmp, 'discovery', 'latest.json');
+  ok('discovery_file_published', fs.existsSync(discLatest), discLatest);
+  const discRec = fs.existsSync(discLatest) ? JSON.parse(fs.readFileSync(discLatest, 'utf8')) : {};
+  ok('discovery_carries_port', discRec.port === PORT, `port=${discRec.port}`);
+  ok('discovery_carries_token', discRec.token === SESSION_TOKEN);
+  ok('discovery_is_outside_mod_and_game_roots',
+    !discRec.cwd || (!discLatest.includes('extensions') && !discLatest.includes('X4 Foundations')), discLatest);
+
+  // #2 a caller must be able to tell "wrong verb" from "no such route".
+  const wrongVerb = await req('GET', '/api/agent/deploy-verify', SESSION_TOKEN);
+  ok('wrong_verb_returns_405', wrongVerb.status === 405 && wrongVerb.json?.code === 'METHOD_NOT_ALLOWED', `status=${wrongVerb.status}`);
+  ok('wrong_verb_names_allowed_methods', Array.isArray(wrongVerb.json?.allow) && wrongVerb.json.allow.includes('POST'), JSON.stringify(wrongVerb.json?.allow));
+  const noRoute = await req('GET', '/api/agent/definitely-not-a-route', SESSION_TOKEN);
+  ok('unknown_endpoint_returns_json_404', noRoute.status === 404 && noRoute.json?.code === 'UNKNOWN_ENDPOINT', `status=${noRoute.status}`);
+  ok('unknown_endpoint_is_not_the_spa_html', !String(noRoute.raw || '').includes('<!doctype'), (noRoute.raw || '').slice(0, 40));
+
+  // #2 never 200 on a degenerate result.
+  fs.mkdirSync(path.join(safeWorkspace, 'not_a_mod', 'inner_mod'), { recursive: true });
+  fs.writeFileSync(path.join(safeWorkspace, 'not_a_mod', 'inner_mod', 'content.xml'), '<content id="inner_mod" name="Inner"/>');
+  const degenerate = await req('POST', '/api/agent/mod-folder/import', SESSION_TOKEN, { root: 'workspace', path: 'not_a_mod' });
+  ok('non_mod_folder_import_rejected', degenerate.status === 400 && degenerate.json?.code === 'NOT_A_MOD_FOLDER', `status=${degenerate.status}`);
+  ok('non_mod_folder_error_names_an_importable_mod',
+    Array.isArray(degenerate.json?.modsFoundInside) && degenerate.json.modsFoundInside.includes('inner_mod'),
+    JSON.stringify(degenerate.json?.modsFoundInside));
+
+  // #3 validate accepts the SAME {root, path} shape as mod-folder/import.
+  // Own fixture: borrowing another section's mod made this assertion depend on unrelated ordering.
+  const validateFixture = path.join(safeWorkspace, 'validate_path_mod');
+  fs.mkdirSync(path.join(validateFixture, 'md'), { recursive: true });
+  fs.writeFileSync(path.join(validateFixture, 'content.xml'), '<content id="validate_path_mod" name="Validate Path Mod" version="100"/>');
+  fs.writeFileSync(
+    path.join(validateFixture, 'md', 'vp.xml'),
+    [
+      '<?xml version="1.0" encoding="utf-8"?>',
+      '<mdscript name="VP"><cues><cue name="VP_Start"><conditions><event_game_started/></conditions>',
+      '<actions><set_value name="$vp" exact="1"/></actions></cue></cues></mdscript>',
+    ].join('\n'),
+  );
+  const validateByPath = await req('POST', '/api/agent/project/validate', SESSION_TOKEN, { root: 'workspace', path: 'validate_path_mod' });
+  ok('validate_accepts_root_and_path', validateByPath.status === 200 && validateByPath.json?.source?.mode === 'fromPath', `status=${validateByPath.status} mode=${validateByPath.json?.source?.mode}`);
+  const validateWrongRoot = await req('POST', '/api/agent/project/validate', SESSION_TOKEN, { root: 'nonsense', path: 'root_collision_mod' });
+  ok('validate_rejects_an_invalid_root', validateWrongRoot.status === 400, `status=${validateWrongRoot.status}`);
+
+  // #5 one "where am I?" call.
+  const status = await req('GET', '/api/agent/status', SESSION_TOKEN);
+  ok('status_endpoint_exists', status.status === 200 && status.json?.ok === true, `status=${status.status}`);
+  ok('status_reports_port_and_roots', status.json?.port === PORT && !!status.json?.roots, `port=${status.json?.port}`);
+  ok('status_reports_source_sync', typeof status.json?.sourceSync?.known === 'boolean' && typeof status.json?.sourceSync?.detail === 'string');
+  ok('status_never_leaks_the_token', !JSON.stringify(status.json || {}).includes(SESSION_TOKEN));
 
   // --- B86: agent action ledger ----------------------------------------------------------
   // The load-bearing property is that payloads are never inlined: a ~295 KB write must produce
