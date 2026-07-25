@@ -1,5 +1,10 @@
 {
   "_comment": "Plain-English release notes for the CHANGELOG (B60). ONE human step per release: add a version key with a few user-facing bullets — what a modder can now DO or what got better. Everything else (version list, dates, ordering, the shipped CHANGELOG.md) is generated automatically by `npm run changelog`. Versions with no entry here fall back to a cleaned-up commit subject.",
+  "0.0.37": [
+    "Forge now packages every included mod file from the development folder, including large binaries and unfamiliar file types. The editor's browser-memory limits no longer cause files to disappear from a build.",
+    "Validated Deploy can build X4-compatible CAT/DAT archives, reopen them, and verify every packaged file before replacing the installed copy. Failed activation restores the previous deployment instead of leaving a partial mod.",
+    "Build output is isolated under the Mod Workspace's .forge-builds folder, so compiling or deploying never replaces the source checkout, Git history, documentation, or other development-only files."
+  ],
   "0.0.36": [
     "Validation now runs continuously across the whole mod while you type in Forge's code editor, node properties, and raw XML fields. Deterministic XSD errors appear in red, while unknown X4 ids and script properties appear as non-blocking warnings with suggestions.",
     "The Antigravity extension now uses the same full-project validator for open XML and Lua files and reports findings in the editor and Problems panel automatically, with no manual validation step.",

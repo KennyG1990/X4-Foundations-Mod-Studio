@@ -3,6 +3,12 @@
 The latest changes, newest first. (This page is generated automatically — see
 `release-notes.json` to edit the wording.)
 
+## 0.0.37 — 2026-07-25
+
+- Forge now packages every included mod file from the development folder, including large binaries and unfamiliar file types. The editor's browser-memory limits no longer cause files to disappear from a build.
+- Validated Deploy can build X4-compatible CAT/DAT archives, reopen them, and verify every packaged file before replacing the installed copy. Failed activation restores the previous deployment instead of leaving a partial mod.
+- Build output is isolated under the Mod Workspace's .forge-builds folder, so compiling or deploying never replaces the source checkout, Git history, documentation, or other development-only files.
+
 ## 0.0.36 — 2026-07-24
 
 - Validation now runs continuously across the whole mod while you type in Forge's code editor, node properties, and raw XML fields. Deterministic XSD errors appear in red, while unknown X4 ids and script properties appear as non-blocking warnings with suggestions.

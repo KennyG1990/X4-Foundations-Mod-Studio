@@ -6209,3 +6209,11 @@ deployment; runtime-discovered oracles 102/102; full e2e 24/24; typecheck, lint 
 warnings), precommit, production build, extension build/stage, and staged sidecar probe 6/6 all pass.
 A read-only check against installed `dynamic_universe` confirmed Forge's CAT MD5 interpretation matches
 the paired DAT bytes. No real G-drive mod/game directory was mutated and nothing was published.
+
+## 2026-07-25 — X4 Forge Studio 0.0.37 stable OpenVSX release — VERIFIED
+
+Published `x4forge.x4-forge-studio` 0.0.37 to OpenVSX as the stable public package for B76's generic disk-backed artifact and CAT/DAT pipeline. The release packages arbitrary included regular files by provenance rather than hard-coded filenames or extensions, keeps browser-memory limits separate from build limits, stages loose output away from source, and uses verified scratch artifacts plus rollback for explicit game deployment.
+
+Evidence: precommit PASS; production and extension builds PASS; staged sidecar probe 6/6, including unauthenticated config 401 and canonical 32-faction completion; stable VSIX package PASS with 2,091 files and 17,809,845 bytes; forbidden-payload scan found zero secrets, runtime state, source maps, evidence, tests, or source-tree entries. OpenVSX indexed 0.0.37 as latest, and the public VSIX SHA-256 exactly matches local: `02168E41468979B46FF023BE9C15A9AA6C16DF546B084C5F44717EC9A2B933E0`.
+
+The two historical 0.0.35 PNG evidence files accidentally changed by the B76 graph refresh were restored exactly to their pre-B76 bytes during authorized release prep. B77 remains open for isolated graph-tool root-cause repair. No real X4 game/mod directory or standing configuration was mutated during release work. Suggested commit title: `chore(release): publish X4 Forge Studio 0.0.37`.

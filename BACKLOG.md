@@ -11,7 +11,7 @@ Observed twice during the B76 final audit: `graphify update .` changed the byte 
 two tracked `vscode-extension/evidence/0.0.35-*.png` files even though `.graphifyignore` contains `*.png`.
 Reproduce on copied fixture images outside user evidence, identify the graphify/tooling writer, make ignore
 rules truly read-only, then restore the two tracked files only with an explicitly authorized cleanup action.
-Do not mix the binary churn into a Forge feature commit.
+The original bytes are restored during authorized 0.0.37 release prep; root-cause reproduction/fix remains open.
 
 ### B72 · Lua GetComponentData semantics lint — close the blind spot that let a 12k-error bug pass validation `spec'd`
 Motivated 2026-07-21: x4_ai_influence's aic_uix.lua fed the `"sector"` property (returns the sector NAME
