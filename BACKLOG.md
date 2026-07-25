@@ -10,6 +10,35 @@
 > Deployment on Windows works with the mod folder held, and the author now chooses loose vs CAT/DAT.
 > Four follow-up decisions are Ken's, listed in B85 below.
 
+### B87 · QOL / redundancy pass — decide what the Forge should STOP doing `spec'd`
+
+Opened 2026-07-25 from Ken's observation that the agent API has no node verbs and that some Forge
+features look redundant. Read-only recon done that day; **nothing removed yet, deliberately.**
+
+**Evidence gathered (verify again before acting — see the hazard below):**
+1. **Surgical Execute is the ONLY node-verb surface and it is client-side.** `AgentRuntimeApi`
+   (`addNode` / `updateNodeProperty` / `updateWidget` / `execute(cmd)`) has 3 uses, all inside
+   `AgentBridge.tsx`, and no HTTP route exposes it — so an external agent cannot reach it. Two
+   coherent directions, and they are opposites: **promote** it to real per-node endpoints
+   (`POST/PATCH /api/agent/workspace/nodes/:id`) so agents can edit granularly instead of
+   replacing the whole `nodes[]` array, or **remove** it as ahalf-feature nobody can automate.
+   Ken's call; do not split the difference.
+2. **Five overlapping build/deploy routes**: `/api/agent/compile`, `/api/agent/package` (the API's
+   own text calls it "Alias of compile"), `/api/agent/project/package`, `/api/agent/artifact/build`,
+   `/api/agent/deploy`. Consolidation candidate with a real deprecation path.
+3. **`/api/agent/deploy` already self-declares `deprecated: true`** (`server.ts:8493`) with the
+   comment "should use deploy-verify. Converge the UI, then retire this route." That is the
+   cheapest, best-evidenced removal in the list.
+
+**⚠ HAZARD — the reason this is not a drive-by.** B64-U3 proved that a static audit of this
+codebase can cite a DISABLED render path: the finding was real in the old renderer and a no-op in
+the live one. Any removal here must be re-grounded against the LIVE path (running app + real route
+callers) before deleting, or the pass ships no-ops and breaks something real. Deleting features has
+blast radius that adding them does not.
+
+**Suggested shape:** one unit per candidate, smallest first (the self-declared deprecated route),
+each with a caller census before removal and a full gate run after. Not a single sweeping "cleanup".
+
 ### B86-follow-ons · Agent Action Ledger — deferred slices `spec'd`
 
 Opened 2026-07-25 from the B86 close. The ledger itself is VERIFIED → ROADMAP; these are the pieces
