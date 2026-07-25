@@ -52,6 +52,33 @@ Foundation-first means: before adding polish, every link above has to be *correc
 
 ## Current State
 
+### 🚀 RELEASE 0.0.41 — published to Open VSX 2026-07-25
+
+First release carrying B83 + B84 + B86. VSIX 2,091 files / 17,830,228 bytes, SHA-256
+`7e16370bb3b5ea85cb640cea9913dc8404a14299edf39c99091022943ea1b874`. Published stable (never
+`--pre-release`, standing rule). Store verified before commit: the direct `0.0.41` endpoint returned
+HTTP 200 and the latest endpoint reports `0.0.41` (`2026-07-25T11:04:29Z`), so the committed version
+equals the published version.
+
+**Validated in the REAL IDE via computer-use, not the browser.** Ken's correction, and it mattered: the
+Forge ships as an IDE extension, so a browser check proves the web surface rather than the product. The
+installed extension was upgraded 0.0.40 → 0.0.41 and the window reloaded — header moved `v1.0.298` →
+`v1.0.305`, sidecar `:53211`, Ken's canvas and workspace intact. Evidence seen on screen:
+- **History tab** live in the Agent API panel: real rows, kind/outcome filters, Refresh, OK and ERROR
+  badges, the "activity log with undo — not version control" note, and per-row expand showing the
+  non-revertible reason.
+- **A real blocked deploy captured verbatim in the requested register:** `Deploy BLOCKED at stage
+  "Canvas in sync with source folder" — The mod folder on disk changed AFTER this canvas imported it
+  (2026-07-25T07:46:57.147Z).` That deploy attempt wrote nothing — it stopped at stage 3 of 10 and the
+  deployed mod stayed at 49 files with its XML well-formed.
+- **Deploy Format toggle** rendering both options with their real consequences, Loose selected by
+  default, switching on click, and persisting to the installed extension's own `config.json`.
+- **The `schemaDir` blanking fix proven in the shipped product:** the toggle POSTs only `deployFormat`,
+  and `xsdSchemaPath` survived intact — exactly the landmine B84 removed.
+
+Left as found: deploy format restored to `loose`, deployed mod 49 files, `.mcp.json` present, no
+`.x4forge-backup-*` litter.
+
 ### ✅ B86 · Agent Action Ledger — a skimmable history of what agents actually did — VERIFIED 2026-07-25
 
 **Why.** Claude is building `x4_ai_influence` entirely through the agent API. Two hours were lost on

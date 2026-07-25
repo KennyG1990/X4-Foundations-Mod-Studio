@@ -1,4 +1,26 @@
-# X4 Forge session handoff — 2026-07-25 · B83 + B84 closed; deployment works on a held Windows folder
+# X4 Forge session handoff — 2026-07-25 · 0.0.41 published — deployment works on a held folder, format is a choice, agents have a history
+
+## RELEASE 0.0.41 — published to Open VSX 2026-07-25
+
+Contains B83 (locked-root deploy fallback), B84 (deploy format toggle + loose stale-removal +
+`schemaDir` blanking fix), and B86 (Agent Action Ledger). VSIX 2,091 files / 17,830,228 bytes,
+SHA-256 `7e16370bb3b5ea85cb640cea9913dc8404a14299edf39c99091022943ea1b874`.
+
+**Validated in the REAL IDE via computer-use** (not the browser — the Forge ships as an extension, and
+that distinction cost a round of rework this session):
+- Installed 0.0.40 → 0.0.41, window reloaded, header moved `v1.0.298` → `v1.0.305`, sidecar `:53211`.
+- **History tab** renders in the Agent API panel with live rows, filters, Refresh, OK/ERROR badges, the
+  "not version control" scope note, and per-row expand showing the non-revertible reason.
+- **A real blocked deploy was captured verbatim in the requested register:**
+  `Deploy BLOCKED at stage "Canvas in sync with source folder" — The mod folder on disk changed AFTER
+  this canvas imported it (2026-07-25T07:46:57.147Z).`
+- **Deploy Format toggle** renders with both options and their real consequences, Loose selected by
+  default, switches on click, and **persists to the installed extension's own config.json**.
+- The `schemaDir` fix is proven in the shipped product: the toggle POSTs only `deployFormat` and
+  `xsdSchemaPath` survived intact.
+
+**Left as found:** deploy format restored to `loose`; deployed mod 49 files, `ai_influence_diplomacy.xml`
+well-formed, `.mcp.json` present, no `.x4forge-backup-*` litter.
 
 ## One-line state
 

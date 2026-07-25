@@ -3,6 +3,13 @@
 The latest changes, newest first. (This page is generated automatically — see
 `release-notes.json` to edit the wording.)
 
+## 0.0.41 — 2026-07-25
+
+- Deploying now works even when your mod folder is open in an editor, a terminal, or a file watcher. Windows refuses to rename a folder anything is holding, which previously stopped the whole deployment; the Forge now detects that specific lock and updates the folder in place instead, with a verified backup and an exact rollback if anything goes wrong. You no longer have to close things to deploy.
+- You choose how your mod lands in the game folder. A new Deploy Format toggle in the deploy wizard offers loose files (every file readable and editable on disk, and the format native binaries need to load) or a packed CAT/DAT archive. Loose is the default. Every deploy now says in plain language what it actually wrote, and warns you if a packed deploy would bury a .dll where the game cannot load it.
+- Deploying loose files now removes files you deleted from your mod. Previously a loose deploy only ever added and overwrote, so a file you removed from your project stayed in the game folder and kept being loaded. Runtime-owned paths and anything listed in .forgekeep are still preserved.
+- New History tab on the Agent API screen: a plain-language record of what an AI agent actually did to your project — edits with line counts, validations with error totals, deploys with the exact stage that blocked. Expand any entry for the diff, and use Revert to here to restore a file's previous contents through the same validation as a normal edit.
+
 ## 0.0.40 — 2026-07-25
 
 - Load Mod Project now presents both the development workspace and installed-mod filesystem as collapsible directory trees. Expand only the folders you need, inspect nested files in place, and select the exact mod folder to preview or load.
