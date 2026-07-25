@@ -3,6 +3,11 @@
 The latest changes, newest first. (This page is generated automatically — see
 `release-notes.json` to edit the wording.)
 
+## 0.0.39 — 2026-07-25
+
+- Load Mod Project now browses the Mod Workspace and installed Filesystem as separate, clearly labelled sources. Preview and Load Project use the exact folder you clicked even when both locations contain a mod with the same name.
+- Restored Studio tabs now rebind to the current Forge sidecar after an extension restart, so settings, reference data, and project browsing no longer keep calling a stale backend port.
+
 ## 0.0.38 — 2026-07-25
 
 - Fixed a blank Studio tab after an extension or backend restart. The Forge now reconnects an open or restored Studio panel to the current sidecar automatically instead of leaving it attached to a dead port.

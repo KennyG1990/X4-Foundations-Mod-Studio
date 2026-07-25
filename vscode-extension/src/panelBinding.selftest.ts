@@ -1,4 +1,4 @@
-import { PanelBackendBinding, type PanelBackendDescriptor } from "./panelBinding";
+import { PanelBackendBinding, SharedBackendEnsure, type PanelBackendDescriptor } from "./panelBinding";
 
 const checks: Array<{ name: string; pass: boolean }> = [];
 const ok = (name: string, pass: boolean) => checks.push({ name, pass });
@@ -20,14 +20,47 @@ const b: PanelBackendDescriptor = {
 };
 const samePortNewSession: PanelBackendDescriptor = { ...b, token: "token-c" };
 
-ok("first_bind_renders", binding.bind(a, render) && renders.length === 1);
-ok("same_identity_does_not_reload", !binding.bind(a, render) && renders.length === 1);
-ok("replacement_port_reloads_once", binding.bind(b, render) && renders.length === 2);
-ok("same_port_new_token_reloads", binding.bind(samePortNewSession, render) && renders.length === 3);
-binding.reset();
-ok("restored_panel_reset_rebinds", binding.bind(samePortNewSession, render) && renders.length === 4);
+async function main(): Promise<void> {
+  ok("first_bind_renders", binding.bind(a, render) && renders.length === 1);
+  ok("same_identity_does_not_reload", !binding.bind(a, render) && renders.length === 1);
+  ok("replacement_port_reloads_once", binding.bind(b, render) && renders.length === 2);
+  ok("same_port_new_token_reloads", binding.bind(samePortNewSession, render) && renders.length === 3);
+  binding.reset();
+  ok("restored_panel_reset_rebinds", binding.bind(samePortNewSession, render) && renders.length === 4);
 
-const passed = checks.filter((check) => check.pass).length;
-for (const check of checks) console.log(`${check.pass ? "ok" : "not ok"} ${check.name}`);
-console.log(`panel binding selftest: ${passed}/${checks.length}`);
-if (passed !== checks.length) process.exitCode = 1;
+  const shared = new SharedBackendEnsure<PanelBackendDescriptor>();
+  let resolveStartup!: (value: PanelBackendDescriptor) => void;
+  const startup = new Promise<PanelBackendDescriptor>((resolve) => { resolveStartup = resolve; });
+  let starts = 0;
+  const readyCallers: string[] = [];
+  const start = () => { starts += 1; return startup; };
+  const owner = shared.run(start, () => readyCallers.push("owner"));
+  const restoredPanelJoiner = shared.run(start, () => readyCallers.push("restored-panel"));
+  resolveStartup(b);
+  await Promise.all([owner, restoredPanelJoiner]);
+  ok("joined_callers_share_one_startup", starts === 1);
+  ok("joined_restored_panel_runs_ready_binding", readyCallers.join(",") === "owner,restored-panel");
+
+  let rejectedStarts = 0;
+  let rejectedReady = 0;
+  await shared.run(
+    async () => { rejectedStarts += 1; throw new Error("expected startup failure"); },
+    () => { rejectedReady += 1; },
+  ).catch(() => undefined);
+  await shared.run(
+    async () => { rejectedStarts += 1; return a; },
+    () => { rejectedReady += 1; },
+  );
+  ok("failed_startup_does_not_false_bind", rejectedReady === 1);
+  ok("failed_startup_can_retry", rejectedStarts === 2);
+
+  const passed = checks.filter((check) => check.pass).length;
+  for (const check of checks) console.log(`${check.pass ? "ok" : "not ok"} ${check.name}`);
+  console.log(`panel binding selftest: ${passed}/${checks.length}`);
+  if (passed !== checks.length) process.exitCode = 1;
+}
+
+void main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

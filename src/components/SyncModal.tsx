@@ -44,7 +44,10 @@ interface FSItem {
   children?: FSItem[];
 }
 
+type ProjectSourceRoot = 'workspace' | 'filesystem';
+
 interface ModCandidate {
+  root: ProjectSourceRoot;
   name: string;
   path: string;
   totalFiles: number;
@@ -52,6 +55,11 @@ interface ModCandidate {
   hasContent: boolean;
   hasPacked: boolean;
 }
+
+const PROJECT_SOURCES: Array<{ root: ProjectSourceRoot; label: string; description: string }> = [
+  { root: 'workspace', label: 'Mod Workspace', description: 'Development copies' },
+  { root: 'filesystem', label: 'Filesystem', description: 'Installed or external mods' }
+];
 
 const DOMAIN_RULES: { key: string; label: string; test: (p: string) => boolean }[] = [
   { key: 'md', label: 'Mission Director', test: p => /^md\//i.test(p) },
@@ -68,7 +76,7 @@ function collectFiles(node: FSItem, out: FSItem[] = []): FSItem[] {
   return out;
 }
 
-function findModCandidates(items: FSItem[]): ModCandidate[] {
+function findModCandidates(items: FSItem[], root: ProjectSourceRoot): ModCandidate[] {
   const candidates: ModCandidate[] = [];
   const visit = (node: FSItem) => {
     if (node.kind !== 'directory') return;
@@ -78,6 +86,7 @@ function findModCandidates(items: FSItem[]): ModCandidate[] {
     if (hasContent) {
       const domains = DOMAIN_RULES.filter(r => relFiles.some(r.test)).map(r => r.label);
       candidates.push({
+        root,
         name: node.name,
         path: node.path,
         totalFiles: files.length,
@@ -112,16 +121,21 @@ export default function SyncModal({
   const [statusBanner, setStatusBanner] = useState<{ type: 'success' | 'refused' | 'info'; msg: string } | null>(null);
   const [importText, setImportText] = useState('');
   const [dragActive, setDragActive] = useState(false);
-  const [fileTree, setFileTree] = useState<FSItem[]>([]);
+  const [fileTrees, setFileTrees] = useState<Record<ProjectSourceRoot, FSItem[]>>({ workspace: [], filesystem: [] });
+  const [rootErrors, setRootErrors] = useState<Partial<Record<ProjectSourceRoot, string>>>({});
   const [loadingTree, setLoadingTree] = useState(false);
   const [projectFilter, setProjectFilter] = useState('');
+  const [selectedRoot, setSelectedRoot] = useState<ProjectSourceRoot>('workspace');
   const [selectedPath, setSelectedPath] = useState('');
   const [previewReport, setPreviewReport] = useState<any>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [showOfficial, setShowOfficial] = useState(false);
 
-  const candidates = useMemo(() => findModCandidates(fileTree), [fileTree]);
+  const candidates = useMemo(
+    () => PROJECT_SOURCES.flatMap(source => findModCandidates(fileTrees[source.root], source.root)),
+    [fileTrees]
+  );
   const filteredCandidates = useMemo(() => {
     const q = projectFilter.trim().toLowerCase();
     return candidates.filter(c => {
@@ -130,8 +144,7 @@ export default function SyncModal({
       return c.name.toLowerCase().includes(q) || c.path.toLowerCase().includes(q);
     });
   }, [candidates, projectFilter, showOfficial]);
-  const selectedCandidate = candidates.find(c => c.path === selectedPath) || null;
-  const rootLabel = filesystemPath || modWorkspacePath || 'No mod workspace folder configured';
+  const selectedCandidate = candidates.find(c => c.root === selectedRoot && c.path === selectedPath) || null;
   const previewCounts = countClasses(previewReport?.importReport || previewReport);
 
   useEffect(() => {
@@ -142,28 +155,40 @@ export default function SyncModal({
   }, [isOpen, modWorkspacePath, filesystemPath]);
 
   useEffect(() => {
-    if (!selectedPath || candidates.some(c => c.path === selectedPath)) return;
+    if (!selectedPath || candidates.some(c => c.root === selectedRoot && c.path === selectedPath)) return;
     setSelectedPath('');
     setPreviewReport(null);
-  }, [candidates, selectedPath]);
+  }, [candidates, selectedPath, selectedRoot]);
 
   const loadProjectTree = async () => {
     setLoadingTree(true);
     setStatusBanner(null);
-    try {
-      const res = await fetch('/api/fs/list');
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || `Filesystem scan failed (${res.status})`);
-      setFileTree(Array.isArray(data) ? data : []);
-      setStatusBanner({ type: 'info', msg: `Scanned configured mod workspace: ${filesystemPath || modWorkspacePath || 'unset'}` });
-    } catch (e) {
-      setStatusBanner({ type: 'refused', msg: e.message || 'Failed to scan mod workspace.' });
-    } finally {
-      setLoadingTree(false);
+    const results = await Promise.all(PROJECT_SOURCES.map(async source => {
+      try {
+        const res = await fetch(`/api/fs/list?root=${source.root}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || `${source.label} scan failed (${res.status})`);
+        return { root: source.root, tree: Array.isArray(data) ? data : [], error: '' };
+      } catch (error) {
+        return { root: source.root, tree: [] as FSItem[], error: error instanceof Error ? error.message : `Failed to scan ${source.label}.` };
+      }
+    }));
+    const nextTrees: Record<ProjectSourceRoot, FSItem[]> = { workspace: [], filesystem: [] };
+    const nextErrors: Partial<Record<ProjectSourceRoot, string>> = {};
+    for (const result of results) {
+      nextTrees[result.root] = result.tree;
+      if (result.error) nextErrors[result.root] = result.error;
     }
+    setFileTrees(nextTrees);
+    setRootErrors(nextErrors);
+    const failures = Object.keys(nextErrors).length;
+    setStatusBanner(failures
+      ? { type: 'refused', msg: `Scanned ${PROJECT_SOURCES.length - failures} of ${PROJECT_SOURCES.length} project sources. ${Object.values(nextErrors).join(' ')}` }
+      : { type: 'info', msg: 'Scanned Mod Workspace and Filesystem project sources.' });
+    setLoadingTree(false);
   };
 
-  const previewProject = async (path: string) => {
+  const previewProject = async (root: ProjectSourceRoot, path: string) => {
     if (!path) return;
     setPreviewLoading(true);
     setPreviewReport(null);
@@ -172,7 +197,7 @@ export default function SyncModal({
       const res = await fetch('/api/agent/round-trip-check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path })
+        body: JSON.stringify({ root, path })
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || `Preview failed (${res.status})`);
@@ -184,9 +209,10 @@ export default function SyncModal({
     }
   };
 
-  const selectProject = (path: string) => {
-    setSelectedPath(path);
-    void previewProject(path);
+  const selectProject = (candidate: ModCandidate) => {
+    setSelectedRoot(candidate.root);
+    setSelectedPath(candidate.path);
+    void previewProject(candidate.root, candidate.path);
   };
 
   const importProject = async () => {
@@ -199,7 +225,7 @@ export default function SyncModal({
       const res = await fetch('/api/agent/mod-folder/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: selectedPath.trim() })
+        body: JSON.stringify({ root: selectedRoot, path: selectedPath.trim() })
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || `Import failed (${res.status})`);
@@ -207,7 +233,7 @@ export default function SyncModal({
       setWorkspace(data.workspace);
       setAutoSaveEnabled?.(false);
       if (setWorkspaceView) setWorkspaceView('blueprint');
-      setStatusBanner({ type: 'success', msg: `Loaded mod folder "${selectedPath}". ${data.report?.summary || ''}` });
+      setStatusBanner({ type: 'success', msg: `Loaded ${selectedRoot} mod folder "${selectedPath}". ${data.report?.summary || ''}` });
       onClose();
     } catch (e) {
       setStatusBanner({ type: 'refused', msg: e.message || 'Project import failed.' });
@@ -383,12 +409,11 @@ export default function SyncModal({
             <aside className="border-r border-white/8 bg-[#10151f] min-h-0 flex flex-col">
               <div className="p-3 border-b border-white/8 space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="font-mono text-[10px] uppercase text-slate-400">Configured Root</div>
+                  <div className="font-mono text-[10px] uppercase text-slate-400">Project Sources</div>
                   <button onClick={loadProjectTree} className="p-1.5 rounded border border-white/10 bg-white/[0.03] hover:bg-white/10 text-slate-300 cursor-pointer" title="Refresh projects">
                     <RefreshCw className={`w-3.5 h-3.5 ${loadingTree ? 'animate-spin' : ''}`} />
                   </button>
                 </div>
-                <div className="font-mono text-[10px] text-slate-300 bg-black/35 rounded border border-white/8 px-2 py-1.5 break-all">{rootLabel}</div>
                 <div className="relative">
                   <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2 top-2" />
                   <input
@@ -408,26 +433,47 @@ export default function SyncModal({
                   Show official Ego/DLC extensions
                 </label>
               </div>
-              <div className="flex-1 overflow-y-auto scrollbar-thin p-2 space-y-1">
-                {filteredCandidates.length === 0 ? (
-                  <div className="text-[11px] text-slate-500 p-3 leading-relaxed">No extension folders with `content.xml` found under the configured root.</div>
-                ) : filteredCandidates.map(c => (
-                  <button
-                    key={c.path}
-                    onClick={() => selectProject(c.path)}
-                    className={`w-full text-left p-2 rounded-md border transition-all cursor-pointer ${selectedPath === c.path ? 'bg-cyan-500/12 border-cyan-500/35' : 'bg-white/[0.025] border-white/6 hover:bg-white/[0.06] hover:border-white/12'}`}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <FolderOpen className="w-4 h-4 text-cyan-300 shrink-0" />
-                      <span className="font-mono text-[11px] text-slate-100 font-bold truncate">{c.name}</span>
-                    </div>
-                    <div className="mt-1 font-mono text-[9px] text-slate-500 truncate">{c.path}</div>
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      <span className="text-[8px] px-1 py-0.5 rounded bg-black/35 border border-white/8 text-slate-400">{c.totalFiles} files</span>
-                      {c.hasPacked && <span className="text-[8px] px-1 py-0.5 rounded bg-fuchsia-500/10 border border-fuchsia-500/20 text-fuchsia-300">CAT/DAT</span>}
-                    </div>
-                  </button>
-                ))}
+              <div className="flex-1 overflow-y-auto scrollbar-thin p-2 space-y-3">
+                {PROJECT_SOURCES.map(source => {
+                  const sourcePath = source.root === 'workspace' ? modWorkspacePath : filesystemPath;
+                  const sourceCandidates = filteredCandidates.filter(candidate => candidate.root === source.root);
+                  return (
+                    <section key={source.root} data-testid={`project-source-${source.root}`} className="rounded-md border border-white/8 bg-black/20 overflow-hidden">
+                      <div className="px-2 py-2 border-b border-white/8 bg-white/[0.025]">
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <div className="font-mono text-[10px] font-bold uppercase text-slate-200">{source.label}</div>
+                            <div className="text-[9px] text-slate-500">{source.description}</div>
+                          </div>
+                          <span className="font-mono text-[9px] text-slate-500">{sourceCandidates.length}</span>
+                        </div>
+                        <div className="mt-1 font-mono text-[8px] text-slate-500 break-all">{sourcePath || 'Not configured'}</div>
+                        {rootErrors[source.root] && <div className="mt-1 text-[9px] text-red-300">{rootErrors[source.root]}</div>}
+                      </div>
+                      <div className="p-1 space-y-1">
+                        {sourceCandidates.length === 0 ? (
+                          <div className="text-[10px] text-slate-500 p-2 leading-relaxed">No mod folders with `content.xml` found.</div>
+                        ) : sourceCandidates.map(c => (
+                          <button
+                            key={`${c.root}:${c.path}`}
+                            onClick={() => selectProject(c)}
+                            className={`w-full text-left p-2 rounded-md border transition-all cursor-pointer ${selectedRoot === c.root && selectedPath === c.path ? 'bg-cyan-500/12 border-cyan-500/35' : 'bg-white/[0.025] border-white/6 hover:bg-white/[0.06] hover:border-white/12'}`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <FolderOpen className="w-4 h-4 text-cyan-300 shrink-0" />
+                              <span className="font-mono text-[11px] text-slate-100 font-bold truncate">{c.name}</span>
+                            </div>
+                            <div className="mt-1 font-mono text-[9px] text-slate-500 truncate">{c.path}</div>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              <span className="text-[8px] px-1 py-0.5 rounded bg-black/35 border border-white/8 text-slate-400">{c.totalFiles} files</span>
+                              {c.hasPacked && <span className="text-[8px] px-1 py-0.5 rounded bg-fuchsia-500/10 border border-fuchsia-500/20 text-fuchsia-300">CAT/DAT</span>}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  );
+                })}
               </div>
             </aside>
 
@@ -437,7 +483,7 @@ export default function SyncModal({
                   <div className="min-w-0">
                     <div className="font-mono text-[10px] uppercase text-slate-500">Selected Extension</div>
                     <h3 className="mt-1 text-lg font-semibold text-white truncate">{selectedCandidate?.name || 'No mod selected'}</h3>
-                    <div className="mt-1 font-mono text-[10px] text-slate-400 break-all">{selectedPath || 'Pick a folder from the project browser, or type a relative folder path below.'}</div>
+                    <div className="mt-1 font-mono text-[10px] text-slate-400 break-all">{selectedPath ? `${selectedRoot}: ${selectedPath}` : 'Pick a folder from either project source, or type a relative folder path below.'}</div>
                   </div>
                   <button
                     onClick={importProject}
@@ -449,6 +495,18 @@ export default function SyncModal({
                   </button>
                 </div>
                 <div className="mt-3 flex gap-2">
+                  <div className="flex rounded border border-white/10 overflow-hidden shrink-0">
+                    {PROJECT_SOURCES.map(source => (
+                      <button
+                        key={source.root}
+                        onClick={() => { setSelectedRoot(source.root); setPreviewReport(null); }}
+                        className={`px-2 py-2 font-mono text-[9px] uppercase cursor-pointer ${selectedRoot === source.root ? 'bg-cyan-500/15 text-cyan-200' : 'bg-black/35 text-slate-500 hover:text-slate-300'}`}
+                        title={source.label}
+                      >
+                        {source.root}
+                      </button>
+                    ))}
+                  </div>
                   <input
                     value={selectedPath}
                     onChange={e => setSelectedPath(e.target.value)}
@@ -456,7 +514,7 @@ export default function SyncModal({
                     className="flex-1 bg-black/35 border border-white/10 rounded px-2 py-2 text-[11px] text-slate-200 font-mono focus:outline-none focus:border-cyan-500"
                   />
                   <button
-                    onClick={() => previewProject(selectedPath)}
+                    onClick={() => previewProject(selectedRoot, selectedPath)}
                     disabled={!selectedPath || previewLoading}
                     className="px-3 py-2 rounded border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] text-slate-200 font-mono text-[11px] cursor-pointer disabled:opacity-45"
                   >

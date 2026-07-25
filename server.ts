@@ -2698,7 +2698,7 @@ app.get("/api/agent/schema", (req, res) => {
         method: "POST",
         path: "/api/agent/round-trip-check",
         auth: true,
-        body: { path: "mod folder under the configured mod workspace/filesystem root" },
+        body: { root: "workspace | filesystem (optional for legacy callers)", path: "mod folder under the selected configured root" },
         purpose: "Import a real mod folder, compile it to an in-memory manifest, and report lossless/strictLossless status, dropped files, omitted preserved files, and modeled byte changes."
       },
       {
@@ -2817,7 +2817,7 @@ app.get("/api/agent/schema", (req, res) => {
         method: "GET",
         path: "/api/fs/list",
         auth: true,
-        purpose: "List configured filesystem/mod workspace root."
+        purpose: "List a configured project root. Optional ?root=workspace|filesystem selects it explicitly; no selector preserves the legacy filesystem-first response."
       },
       {
         method: "GET",
@@ -3095,11 +3095,28 @@ function scanDirectory(dir: string, baseDir: string): any[] {
   });
 }
 
+type ProjectSourceRoot = 'workspace' | 'filesystem';
+
+function parseProjectSourceRoot(value: unknown): { root?: ProjectSourceRoot; error?: string } {
+  const raw = String(value ?? '').trim().toLowerCase();
+  if (!raw) return {};
+  if (raw === 'workspace' || raw === 'filesystem') return { root: raw };
+  return { error: `Invalid project root "${raw}". Expected "workspace" or "filesystem".` };
+}
+
+function configuredProjectRoot(resolved: ReturnType<typeof resolveXsdConfig>, root: ProjectSourceRoot): string | undefined {
+  return root === 'workspace' ? resolved.modWorkspacePath : resolved.filesystemPath;
+}
+
 // Server Filesystem list endpoint
 app.get("/api/fs/list", (req, res) => {
   try {
     const resolved = resolveXsdConfig();
-    const rootPath = resolved.filesystemPath || resolved.modWorkspacePath;
+    const selection = parseProjectSourceRoot(req.query.root);
+    if (selection.error) return res.status(400).json({ error: selection.error });
+    const rootPath = selection.root
+      ? configuredProjectRoot(resolved, selection.root)
+      : resolved.filesystemPath || resolved.modWorkspacePath;
     if (!rootPath) {
       return res.json([]);
     }
@@ -4523,12 +4540,24 @@ function importModFolder(absDir: string): { workspace: ModWorkspace; report: any
   return { workspace: ws, report };
 }
 
-function resolveModFolder(reqPath: string): { abs: string } | { error: string; status: number } {
+function resolveModFolder(reqPath: string, requestedRoot?: unknown): { abs: string } | { error: string; status: number } {
   const resolved = resolveXsdConfig();
-  const roots = [resolved.modWorkspacePath, resolved.filesystemPath]
+  const selection = parseProjectSourceRoot(requestedRoot);
+  if (selection.error) return { error: selection.error, status: 400 };
+  const configuredRoots = selection.root
+    ? [configuredProjectRoot(resolved, selection.root)]
+    : [resolved.modWorkspacePath, resolved.filesystemPath];
+  const roots = configuredRoots
     .filter((root): root is string => Boolean(root))
     .filter((root, idx, arr) => arr.indexOf(root) === idx);
-  if (roots.length === 0) return { error: 'No modWorkspacePath/filesystemPath configured.', status: 400 };
+  if (roots.length === 0) {
+    return {
+      error: selection.root
+        ? `No ${selection.root} project root is configured.`
+        : 'No modWorkspacePath/filesystemPath configured.',
+      status: 400,
+    };
+  }
   const rel = String(reqPath || '').trim();
   const normalized = path.normalize(rel);
   if (path.isAbsolute(normalized) || normalized.startsWith('..')) return { error: 'Invalid folder path.', status: 400 };
@@ -4543,7 +4572,7 @@ function resolveModFolder(reqPath: string): { abs: string } | { error: string; s
 
 app.post("/api/agent/mod-folder/import", (req, res) => {
   try {
-    const r = resolveModFolder(req.body?.path);
+    const r = resolveModFolder(req.body?.path, req.body?.root);
     if ('error' in r) return res.status(r.status).json({ error: r.error });
     const { workspace, report } = importModFolder(r.abs);
     return res.json({ success: true, workspace, report });
@@ -4665,7 +4694,7 @@ app.get("/api/agent/round-trip-selftest", (req, res) => {
 
 app.post("/api/agent/round-trip-check", (req, res) => {
   try {
-    const r = resolveModFolder(req.body?.path);
+    const r = resolveModFolder(req.body?.path, req.body?.root);
     if ('error' in r) return res.status(r.status).json({ error: r.error });
     const { workspace, report } = importModFolder(r.abs);
     const { files } = buildWorkspaceFileManifest(workspace);

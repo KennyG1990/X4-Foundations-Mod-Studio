@@ -168,6 +168,48 @@ async function main() {
   const repairedConfig = await req('POST', '/api/schema/config', SESSION_TOKEN, deployedRolesConfig);
   ok('unsafe_config_can_be_repaired', repairedConfig.status === 200, `status=${repairedConfig.status}`);
 
+  // --- dual project roots: independent discovery + collision-safe preview/import ---
+  const writeFixtureMod = (root, name, displayName, marker) => {
+    const folder = path.join(root, name);
+    fs.mkdirSync(folder, { recursive: true });
+    fs.writeFileSync(path.join(folder, 'content.xml'), `<?xml version="1.0"?><content id="${name}_${marker}" name="${displayName}" version="100"/>`);
+    fs.writeFileSync(path.join(folder, `${marker}.arbitrary`), marker);
+    return folder;
+  };
+  const collisionName = 'root_collision_mod';
+  const workspaceCollision = writeFixtureMod(safeWorkspace, collisionName, 'Workspace Collision', 'workspace');
+  const filesystemCollision = writeFixtureMod(liveExtensions, collisionName, 'Filesystem Collision', 'filesystem');
+  writeFixtureMod(safeWorkspace, 'workspace_only_mod', 'Workspace Only', 'workspace-only');
+  writeFixtureMod(liveExtensions, 'filesystem_only_mod', 'Filesystem Only', 'filesystem-only');
+
+  const workspaceTree = await req('GET', '/api/fs/list?root=workspace', SESSION_TOKEN);
+  const filesystemTree = await req('GET', '/api/fs/list?root=filesystem', SESSION_TOKEN);
+  const workspaceTreeText = JSON.stringify(workspaceTree.json || []);
+  const filesystemTreeText = JSON.stringify(filesystemTree.json || []);
+  ok('project_list_workspace_scans_only_workspace_root', workspaceTree.status === 200 && workspaceTreeText.includes('workspace_only_mod') && !workspaceTreeText.includes('filesystem_only_mod'));
+  ok('project_list_filesystem_scans_only_filesystem_root', filesystemTree.status === 200 && filesystemTreeText.includes('filesystem_only_mod') && !filesystemTreeText.includes('workspace_only_mod'));
+  const legacyTree = await req('GET', '/api/fs/list', SESSION_TOKEN);
+  const legacyTreeText = JSON.stringify(legacyTree.json || []);
+  ok('project_list_legacy_filesystem_first_behavior_preserved', legacyTree.status === 200 && Array.isArray(legacyTree.json) && legacyTreeText.includes('filesystem_only_mod') && !legacyTreeText.includes('workspace_only_mod'));
+  const invalidProjectRoot = await req('GET', '/api/fs/list?root=elsewhere', SESSION_TOKEN);
+  ok('project_list_invalid_root_rejected', invalidProjectRoot.status === 400, `status=${invalidProjectRoot.status}`);
+
+  const filesystemPreview = await req('POST', '/api/agent/round-trip-check', SESSION_TOKEN, { root: 'filesystem', path: collisionName });
+  ok('project_preview_collision_uses_selected_filesystem_root', filesystemPreview.status === 200 && filesystemPreview.json?.importReport?.folder === filesystemCollision, `folder=${filesystemPreview.json?.importReport?.folder}`);
+  const workspacePreview = await req('POST', '/api/agent/round-trip-check', SESSION_TOKEN, { root: 'workspace', path: collisionName });
+  ok('project_preview_collision_uses_selected_workspace_root', workspacePreview.status === 200 && workspacePreview.json?.importReport?.folder === workspaceCollision, `folder=${workspacePreview.json?.importReport?.folder}`);
+  const workspaceImport = await req('POST', '/api/agent/mod-folder/import', SESSION_TOKEN, { root: 'workspace', path: collisionName });
+  ok('project_import_collision_uses_selected_workspace_root', workspaceImport.status === 200 && workspaceImport.json?.report?.folder === workspaceCollision, `folder=${workspaceImport.json?.report?.folder}`);
+  const filesystemImport = await req('POST', '/api/agent/mod-folder/import', SESSION_TOKEN, { root: 'filesystem', path: collisionName });
+  ok('project_import_collision_uses_selected_filesystem_root', filesystemImport.status === 200 && filesystemImport.json?.report?.folder === filesystemCollision, `folder=${filesystemImport.json?.report?.folder}`);
+  const arbitraryClassification = filesystemImport.json?.report?.classification?.find(entry => entry.path === 'filesystem.arbitrary');
+  const arbitraryPayload = filesystemImport.json?.workspace?.passthroughFiles?.find(entry => entry.path === 'filesystem.arbitrary');
+  ok('project_import_preserves_arbitrary_source_file', arbitraryClassification?.class === 'binary' && arbitraryPayload?.reason === 'binary' && Buffer.from(arbitraryPayload.content, 'base64').toString('utf8') === 'filesystem');
+  const projectTraversal = await req('POST', '/api/agent/mod-folder/import', SESSION_TOKEN, { root: 'filesystem', path: '../outside' });
+  ok('project_import_selected_root_traversal_rejected', projectTraversal.status === 400, `status=${projectTraversal.status}`);
+  const invalidImportRoot = await req('POST', '/api/agent/mod-folder/import', SESSION_TOKEN, { root: 'elsewhere', path: collisionName });
+  ok('project_import_invalid_root_rejected', invalidImportRoot.status === 400, `status=${invalidImportRoot.status}`);
+
   // --- complete artifact/deploy route: arbitrary >legacy-cap payload + packed game output ---
   const hostileName = 'hostile_artifact_mod';
   const hostileSource = path.join(safeWorkspace, hostileName);
@@ -192,7 +234,7 @@ async function main() {
   fs.mkdirSync(path.join(hostileLive, 'runtime'), { recursive: true });
   fs.writeFileSync(path.join(hostileLive, 'runtime', 'state.db'), 'live mutable state');
   fs.writeFileSync(path.join(hostileLive, 'stale-loose.txt'), 'must disappear');
-  const hostileImport = await req('POST', '/api/agent/mod-folder/import', SESSION_TOKEN, { path: hostileName });
+  const hostileImport = await req('POST', '/api/agent/mod-folder/import', SESSION_TOKEN, { root: 'workspace', path: hostileName });
   ok('hostile_mod_imported_from_workspace', hostileImport.status === 200 && hostileImport.json?.success === true, `status=${hostileImport.status}`);
   const hostileScratchBuild = await req('POST', '/api/agent/artifact/build', SESSION_TOKEN, { workspace: hostileImport.json?.workspace, format: 'catalog' });
   const hostileScratchPath = path.join(safeWorkspace, '.forge-builds', 'catalog', hostileName);

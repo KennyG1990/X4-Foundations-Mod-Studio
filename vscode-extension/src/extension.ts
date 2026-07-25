@@ -27,7 +27,7 @@ import { buildXmlAssociations, listModFolders, writeRecommendations, writeXmlAss
 import { xmlCursorContext } from "./langContext";
 import { findCueDefinition, findCueReferences, mdscriptNameOf, parseCueWord } from "./langNav";
 import { detectIdeCapabilities, formatIdeCapabilityReport } from "./capabilities";
-import { PanelBackendBinding } from "./panelBinding";
+import { PanelBackendBinding, SharedBackendEnsure } from "./panelBinding";
 
 interface BackendHandle {
   baseUrl: string;
@@ -44,6 +44,7 @@ interface BackendHandle {
 let backend: BackendHandle | null = null;
 let panel: vscode.WebviewPanel | null = null;
 const panelBinding = new PanelBackendBinding();
+const backendEnsurer = new SharedBackendEnsure<BackendHandle>();
 let output: vscode.OutputChannel;
 let statusItem: vscode.StatusBarItem;
 /** Set while deliberately stopping the sidecar so the exit handler stays quiet. */
@@ -365,18 +366,11 @@ async function autoRestartSidecar(context: vscode.ExtensionContext, exitCode: nu
   }
 }
 
-let backendEnsurePromise: Promise<BackendHandle> | null = null;
-
 async function ensureBackend(context: vscode.ExtensionContext): Promise<BackendHandle> {
-  if (backendEnsurePromise) return backendEnsurePromise;
-  backendEnsurePromise = ensureBackendOnce(context);
-  try {
-    const handle = await backendEnsurePromise;
-    bindStudioPanel(handle);
-    return handle;
-  } finally {
-    backendEnsurePromise = null;
-  }
+  return backendEnsurer.run(
+    () => ensureBackendOnce(context),
+    (handle) => { bindStudioPanel(handle); },
+  );
 }
 
 async function ensureBackendOnce(context: vscode.ExtensionContext): Promise<BackendHandle> {

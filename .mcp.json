@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "claude-brain": {
+      "type": "stdio",
+      "command": "graphify-mcp",
+      "args": [
+        "F:\\\\DEV_ENV\\\\Agent Brain Vault\\\\graphify-out\\\\graph.json",
+        "--transport",
+        "stdio"
+      ]
+    }
+  }
+}

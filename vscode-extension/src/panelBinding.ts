@@ -29,3 +29,24 @@ export class PanelBackendBinding {
     this.boundIdentity = null;
   }
 }
+
+/**
+ * Coalesces backend startup without skipping per-caller readiness work. Every caller that
+ * joins the shared promise still runs `onReady` after it resolves. This matters for restored
+ * webviews: the startup owner may have completed before the serializer tracks its panel.
+ */
+export class SharedBackendEnsure<T> {
+  private pending: Promise<T> | null = null;
+
+  async run(start: () => Promise<T>, onReady: (value: T) => void): Promise<T> {
+    const active = this.pending ?? start();
+    if (!this.pending) this.pending = active;
+    try {
+      const value = await active;
+      onReady(value);
+      return value;
+    } finally {
+      if (this.pending === active) this.pending = null;
+    }
+  }
+}
