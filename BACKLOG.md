@@ -10,6 +10,124 @@
 > Deployment on Windows works with the mod folder held, and the author now chooses loose vs CAT/DAT.
 > Four follow-up decisions are Ken's, listed in B85 below.
 
+### ⭐ MOD-AGENT BRIEF 2026-07-25 — decomposed into B88–B92, ordered by evidence not excitement
+
+Source: the `x4_ai_influence` agent (49 files, ~350 KB Lua, 15 MD scripts), ranked by incident.
+**Its own audit found per-node editing prevents 3 of its 10 real defects; six were semantic
+(wrong property names, phantom ids) and two were Lua.** That ordering is kept below. Three of its
+claims were verified against this codebase before scheduling — one was wrong, and one of its asks
+already exists and PASSES.
+
+**VERIFIED TRUE — `/api/fs/read` resolves the wrong root.** Already filed as **B81**; the agent's
+report is independent confirmation from the critical path, so B81 is promoted to the top of P0.
+
+**VERIFIED WRONG — "there is ZERO static checking on Lua".** Six Lua modules exist
+(`luaStaticAnalysis.ts`, `luaMdBinding.ts`, `luaLogicBlocks.ts`, `luaStalenessCheck.ts`,
+`luaRuntimeLog.ts`, `luaSnippets.ts`), `analyzeLuaFiles` is imported and called in `server.ts`,
+and the MD↔Lua cross-check (`mdLuaMissingRegisters` / `luaMdMissingListeners`) is already in
+`projectCrossFileValidation.ts`. The real gap is **WIRING and COVERAGE**, not absence — which makes
+B90 much cheaper than the brief assumes. Do not rebuild what exists (workflow rule 3).
+
+**ALREADY EXISTS AND PASSES — "the one test that would convince me".**
+`POST /api/agent/round-trip-check` run against the real mod on 2026-07-25 returned
+`strictLossless: true` — 49 files in, 45 out, **0 dropped, 0 passthrough mismatches, 0 modeled byte
+changes**, 27 passthrough byte-verified. **`md/ai_influence_diplomacy.xml` — the exact file named —
+is in `modeledByteIdentical`**, i.e. it round-tripped THROUGH the node model and came back
+byte-for-byte. Comments survive today. The 4 `omittedPreserved` (`docs/ROADMAP.md`, both DLLs,
+`aic_uix.lua`) are disk-referenced, which is why they deployed hash-identical.
+**⚠ What that does NOT prove:** that editing ONE node preserves the OTHER nodes' bytes. Round-trip
+fidelity of an unedited file tests the serializer; the edit path is untested. B91 owns that.
+
+### B88 · `POST /api/fs/write` validates the incoming bytes and returns findings `spec'd` (P0)
+
+**Motivating incidents (agent-reported, 3 of its 10 defects):** `$st.manager` is not a property, so
+an NPC-census guard never fired and the census was **silently always empty**; `ware.{$id}.avgprice`
+should be `averageprice` and was used as a **divisor**; `recursive="true"` is not declared on
+`find_ship_by_true_owner`. Unknown MD properties evaluate to null with no engine error — nothing
+downstream catches them. The Forge already indexes 258 scriptproperty datatypes; validation just
+runs as a **separate POST over an agent-assembled payload**, so bytes land first and are judged later.
+
+**Bounded repair:** run the EXISTING validation stack (well-formedness → schema → scriptproperty
+chains) over the incoming bytes inside `writeWorkspaceFileGuarded`, return findings in the write
+response, and accept `strict:true` to REJECT the write instead of warning. Reuse
+`runProjectValidation`; add no second validator (B82 is converging these — sequence B82 first or
+share its helper).
+
+**Acceptance:** a write of a file using `$st.manager` returns a scriptproperty finding; the same
+write with `strict:true` returns 4xx and **writes zero bytes** (assert on disk); a clean write is
+unchanged in status and body shape; `averageprice` passes and `avgprice` flags; per-write latency
+stays bounded on a 295 KB file; existing `/api/fs/write` callers keep working. Side benefit to
+assert: the ledger's write row then carries its own verdict.
+
+### B89 · Lua gate — wire and extend what already exists `spec'd` (P0)
+
+**Motivating incidents:** an ambiguous `\]` escape in the HTTP transport (would have broken the
+Player2 connection for every user), and `HydrateWorldEvents` silently dropping a field on reload,
+**leaking fog-of-war secrets the player should never see**. ~350 KB of the mod is Lua.
+
+**RECONCILE FIRST (mandatory):** `luaStaticAnalysis.ts` + `analyzeLuaFiles` and the MD↔Lua binding
+counters already exist. Establish by reading the code and running it: what does `analyzeLuaFiles`
+actually check, is it reachable from `runProjectValidation` or only from one endpoint, and are the
+binding counters surfaced as findings or only as numbers? Build only the delta.
+
+**Bounded repair (expected delta):** (a) a syntax-only parse gate (`luac -p` equivalent, or a
+pure-JS Lua parser — no new heavy dependency without a decision); (b) surface
+`mdLuaMissingRegisters` / `luaMdMissingListeners` as real diagnostics on the validate path, so every
+MD `raise_lua_event` has a Lua listener and every `RegisterAddon`/`RegisterEvent` has an MD caller.
+**Related, already specified: B72** (GetComponentData semantics) — do not duplicate it.
+
+**Acceptance:** the ambiguous-escape shape fails the syntax gate; a `raise_lua_event` with no
+listener is an error with file and event name; the real `aic_uix.lua` (295 KB) produces **zero false
+positives** — the cry-wolf bar this project holds; runtime on 350 KB stays bounded.
+
+### B90 · Node edit fidelity — prove the EDIT path before building on it `spec'd` (P1, gates B91)
+
+The agent would "trade the entire per-node feature for a byte-fidelity guarantee", because its
+rationale comments are load-bearing documentation. Round-trip of unedited files already passes
+(above). **This unit tests the thing that is actually unproven: edit one node, re-serialize, and
+compare every OTHER byte.**
+
+**Acceptance — the agent's four identity-breaking fixtures, by hash:** (a) a cue containing only
+self-closing actions; (b) a cue whose name is a substring of another cue's name in the same file;
+(c) two byte-identical action blocks in different cues; (d) a file with a comment as the first child
+of `<cue>`. Plus the real 23,125-byte `md/ai_influence_diplomacy.xml`: edit one node, assert every
+byte outside that node's span is identical and the surrounding comments are intact. A tidy fixture
+finds none of these — use the real file.
+
+**Decision this unit produces:** whether per-node editing needs byte-span splicing, or whether the
+existing serializer is already exact enough. Do not build B91 before this answers.
+
+### B91 · Per-node editing API — only if B90 says the edit path is safe `spec'd` (P1)
+
+Design constraints taken from the brief, all four non-negotiable:
+1. **Byte-span splicing** — the importer records `[start,end)` per node; an edit re-serializes only
+   that node and splices, so every other byte is provably identical.
+2. **Semantic paths at the API boundary**, not opaque ids:
+   `md/ai_influence_diplomacy.xml#Diplomacy_Referee/Check_Terms/do_if[0]`. Ordinals scoped to
+   (parent, tag) so inserting an element cannot renumber unrelated siblings. Keep opaque ids
+   internally; accept and RETURN paths — it also makes the ledger legible.
+3. **`dry_run` on every mutation returning the exact unified diff.** This is what replaces the
+   agent's anchor assertions; without it the API is not trustworthy.
+4. **Refuse rather than clobber on unmodelled nodes.** 77% of this mod's nodes are `custom_xml_*`
+   rawXml blobs; a property edit there could only swap the whole subtree. That must be a hard ERROR
+   naming why the node is unmodelled — **silent blob replacement is the original bug wearing the
+   fix's uniform.**
+
+**Node identity:** derivation is the DEFAULT (works on vanilla files and other people's mods with no
+writes); a comment marker is an OPTIONAL OVERRIDE written only when a cue rename must survive — not
+on all 225 nodes, which would add permanent git-diff noise. Note self-closing elements have no
+"inside" to host a marker, which is why marker-only identity fails for the most numerous node class.
+
+### B92 · Transactional multi-edit `spec'd` (P2)
+
+N edits across M files, atomic, one ledger row. The agent's `#296` change touched **9 sites across
+4 files**; as 9 independent calls a failure at call 5 leaves the mod in neither the old nor the new
+design — and MD fails silently, so the damage may not surface until an in-game test.
+
+**Explicit NON-GOAL across B91/B92 (the agent asked for this twice):** do NOT remove file authoring
+in favour of nodes. A mechanical sweep — one faction-list string across 9 sites — is strictly faster
+and safer as one text pass. Both paths stay, chosen per task. This is not a migration.
+
 ### B87 · QOL / redundancy pass — decide what the Forge should STOP doing `spec'd`
 
 Opened 2026-07-25 from Ken's observation that the agent API has no node verbs and that some Forge
@@ -88,7 +206,17 @@ and tag-looking text inside comments remain clean; malformed files produce conti
 before Compile/Deploy; deploy still refuses and writes zero files; clean representative MD/AI/library/diff/t XML
 has zero new false positives; route/oracle/e2e/type/lint/precommit gates pass using scratch data only.
 
-### B81 · `/api/fs/read` and `/api/fs/write` resolve different roots — stale read-modify-write hazard `spec'd`
+### B81 · `/api/fs/read` and `/api/fs/write` resolve different roots — stale read-modify-write hazard `spec'd` (P0 — TOP OF QUEUE)
+
+**PROMOTED 2026-07-25.** Independently re-reported by the `x4_ai_influence` agent as its **#1** pain:
+"`/api/fs/read` returns the DEPLOYMENT, not the WORKSPACE… patch #2 silently clobbers patch #1. I
+work around it by reading disk directly with Python — which means the Forge is NOT the authority on
+reads, and my reads are invisible to the ledger. This is in my path on **every** edit."
+Two consequences beyond the original filing: the Forge loses authority over the read side entirely,
+and every bypassed read is missing from the B86 action history. The agent's requested shape matches
+the existing spec below — `root=workspace|deployment`, defaulting to **workspace**, and it asks for
+one addition: **error when the requested root does not contain the file, rather than silently
+falling through to the other root** (silent fallback is what makes the bug invisible).
 
 **[REPRODUCED 2026-07-25]** With both directory roles configured, `GET /api/fs/read?path=...`
 resolves `filesystemPath || modWorkspacePath` (`server.ts:3214`), while `POST /api/fs/write` always
