@@ -21,12 +21,15 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import zlib from 'zlib';
+import crypto from 'node:crypto';
 
 export interface CatEntry {
   /** forward-slash normalized relative path, e.g. "libraries/wares.xml" */
   name: string;
   size: number;
   offset: number;
+  timestamp?: number;
+  md5?: string;
 }
 
 export interface CatDatArchive {
@@ -49,10 +52,276 @@ export function parseCat(catPath: string): CatEntry[] {
     const size = parseInt(parts[parts.length - 3], 10);
     if (!Number.isFinite(size) || size < 0) continue;
     const name = parts.slice(0, parts.length - 3).join(' ').replace(/\\/g, '/');
-    entries.push({ name, size, offset });
+    const timestamp = parseInt(parts[parts.length - 2], 10);
+    const md5 = parts[parts.length - 1].toLowerCase();
+    entries.push({
+      name,
+      size,
+      offset,
+      ...(Number.isFinite(timestamp) ? { timestamp } : {}),
+      ...(/^[0-9a-f]{32}$/.test(md5) ? { md5 } : {}),
+    });
     offset += size;
   }
   return entries;
+}
+
+export interface CatDatPackEntry {
+  name: string;
+  size: number;
+  sourcePath?: string;
+  content?: string | Buffer;
+  expectedSha256?: string;
+  timestamp?: number;
+}
+
+export interface CatDatPackedEntry {
+  name: string;
+  size: number;
+  md5: string;
+  sha256: string;
+  timestamp: number;
+}
+
+export interface CatDatPackedVolume {
+  index: number;
+  catPath: string;
+  datPath: string;
+  bytes: number;
+  entries: CatDatPackedEntry[];
+}
+
+export interface CatDatPackResult {
+  ok: boolean;
+  volumes: CatDatPackedVolume[];
+  errors: string[];
+}
+
+function safeCatalogName(input: string): string | null {
+  const normalized = String(input || '').replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!normalized || normalized.includes('\0') || /[\r\n]/.test(normalized) || /^[a-zA-Z]:\//.test(normalized)) return null;
+  const parts = normalized.split('/');
+  if (parts.some(part => !part || part === '.' || part === '..')) return null;
+  return parts.join('/');
+}
+
+function writeAll(fd: number, buffer: Buffer): void {
+  let offset = 0;
+  while (offset < buffer.length) {
+    const written = fs.writeSync(fd, buffer, offset, buffer.length - offset);
+    if (written <= 0) throw new Error('catalog data write made no progress');
+    offset += written;
+  }
+}
+
+function appendPackEntry(fd: number, entry: CatDatPackEntry): CatDatPackedEntry {
+  const md5 = crypto.createHash('md5');
+  const sha256 = crypto.createHash('sha256');
+  let written = 0;
+  const consume = (chunk: Buffer) => {
+    writeAll(fd, chunk);
+    md5.update(chunk);
+    sha256.update(chunk);
+    written += chunk.length;
+  };
+
+  if (entry.content !== undefined) {
+    consume(Buffer.isBuffer(entry.content) ? entry.content : Buffer.from(entry.content, 'utf8'));
+  } else if (entry.sourcePath) {
+    const sourceStat = fs.lstatSync(entry.sourcePath);
+    if (sourceStat.isSymbolicLink() || !sourceStat.isFile()) throw new Error('catalog source is not a regular file');
+    const sourceFd = fs.openSync(entry.sourcePath, 'r');
+    const buffer = Buffer.allocUnsafe(1024 * 1024);
+    try {
+      while (true) {
+        const read = fs.readSync(sourceFd, buffer, 0, buffer.length, null);
+        if (read <= 0) break;
+        consume(buffer.subarray(0, read));
+      }
+    } finally {
+      fs.closeSync(sourceFd);
+    }
+  } else {
+    throw new Error('entry has neither content nor sourcePath');
+  }
+
+  if (written !== entry.size) throw new Error(`source size changed (${entry.size} planned, ${written} read)`);
+  const sha = sha256.digest('hex');
+  if (entry.expectedSha256 && sha !== entry.expectedSha256) {
+    throw new Error(`source hash changed (${entry.expectedSha256} planned, ${sha} read)`);
+  }
+  return {
+    name: entry.name,
+    size: written,
+    md5: md5.digest('hex'),
+    sha256: sha,
+    timestamp: entry.timestamp ?? 0,
+  };
+}
+
+/**
+ * Stream arbitrary regular files into deterministic X4 extension catalogs.
+ * The caller decides which paths remain loose; this function only packs the
+ * entries supplied to it. No entry is loaded wholesale unless it was already
+ * supplied as generated in-memory content.
+ */
+export function writeCatDatCatalogs(
+  entriesInput: CatDatPackEntry[],
+  outputRootInput: string,
+  options: { baseName?: string; maxVolumeBytes?: number; startIndex?: number } = {},
+): CatDatPackResult {
+  const outputRoot = path.resolve(outputRootInput);
+  const baseName = String(options.baseName || 'ext').trim();
+  const maxVolumeBytes = options.maxVolumeBytes ?? (2 * 1024 * 1024 * 1024);
+  const startIndex = options.startIndex ?? 1;
+  const errors: string[] = [];
+  const volumes: CatDatPackedVolume[] = [];
+  if (!/^[a-zA-Z0-9_-]+$/.test(baseName)) errors.push(`Unsafe catalog base name: ${baseName}`);
+  if (!Number.isSafeInteger(maxVolumeBytes) || maxVolumeBytes <= 0) errors.push(`Invalid maxVolumeBytes: ${maxVolumeBytes}`);
+  if (!Number.isSafeInteger(startIndex) || startIndex < 1 || startIndex > 99) errors.push(`Invalid catalog startIndex: ${startIndex}`);
+
+  const seen = new Map<string, string>();
+  const entries: CatDatPackEntry[] = [];
+  for (const input of entriesInput) {
+    const name = safeCatalogName(input.name);
+    if (!name) {
+      errors.push(`Unsafe catalog entry path: ${input.name}`);
+      continue;
+    }
+    if (!Number.isSafeInteger(input.size) || input.size < 0) {
+      errors.push(`Invalid catalog entry size for ${name}: ${input.size}`);
+      continue;
+    }
+    const key = name.toLocaleLowerCase('en-US');
+    const prior = seen.get(key);
+    if (prior) {
+      errors.push(`Catalog entries collide after case normalization: ${prior} and ${name}`);
+      continue;
+    }
+    seen.set(key, name);
+    entries.push({ ...input, name });
+  }
+  entries.sort((left, right) => left.name.localeCompare(right.name));
+  if (errors.length > 0) return { ok: false, volumes, errors };
+  fs.mkdirSync(outputRoot, { recursive: true });
+
+  const partitions: CatDatPackEntry[][] = [];
+  let current: CatDatPackEntry[] = [];
+  let currentBytes = 0;
+  for (const entry of entries) {
+    if (current.length > 0 && currentBytes + entry.size > maxVolumeBytes) {
+      partitions.push(current);
+      current = [];
+      currentBytes = 0;
+    }
+    current.push(entry);
+    currentBytes += entry.size;
+  }
+  if (current.length > 0) partitions.push(current);
+
+  for (let index = 0; index < partitions.length; index++) {
+    const volumeIndex = startIndex + index;
+    if (volumeIndex > 99) {
+      errors.push(`Catalog volume index exceeds ext_99: ${volumeIndex}`);
+      break;
+    }
+    const suffix = String(volumeIndex).padStart(2, '0');
+    const catPath = path.join(outputRoot, `${baseName}_${suffix}.cat`);
+    const datPath = path.join(outputRoot, `${baseName}_${suffix}.dat`);
+    const catTemp = `${catPath}.tmp-${process.pid}`;
+    const datTemp = `${datPath}.tmp-${process.pid}`;
+    if (fs.existsSync(catPath) || fs.existsSync(datPath)) {
+      errors.push(`Catalog output already exists: ${catPath} or ${datPath}`);
+      break;
+    }
+    let datFd: number | undefined;
+    try {
+      datFd = fs.openSync(datTemp, 'wx');
+      const packed: CatDatPackedEntry[] = [];
+      for (const entry of partitions[index]) packed.push(appendPackEntry(datFd, entry));
+      fs.closeSync(datFd);
+      datFd = undefined;
+      const manifest = packed.map(entry => `${entry.name} ${entry.size} ${entry.timestamp} ${entry.md5}`).join('\n') + '\n';
+      fs.writeFileSync(catTemp, manifest, { encoding: 'utf8', flag: 'wx' });
+      fs.renameSync(datTemp, datPath);
+      fs.renameSync(catTemp, catPath);
+      volumes.push({
+        index: volumeIndex,
+        catPath,
+        datPath,
+        bytes: packed.reduce((sum, entry) => sum + entry.size, 0),
+        entries: packed,
+      });
+    } catch (error) {
+      if (datFd !== undefined) fs.closeSync(datFd);
+      for (const candidate of [catTemp, datTemp, catPath, datPath]) {
+        try { fs.rmSync(candidate, { force: true }); } catch { /* best effort rollback */ }
+      }
+      errors.push(`Failed to write catalog volume ${volumeIndex}: ${error instanceof Error ? error.message : String(error)}`);
+      break;
+    }
+  }
+  if (errors.length > 0) {
+    for (const volume of volumes) {
+      for (const outputPath of [volume.catPath, volume.datPath]) {
+        try { fs.rmSync(outputPath, { force: true }); } catch { /* best effort rollback */ }
+      }
+    }
+    volumes.length = 0;
+  }
+  return { ok: errors.length === 0 && volumes.length === partitions.length, volumes, errors };
+}
+
+function hashEntryRange(datPath: string, entry: CatEntry, algorithm: 'md5' | 'sha256'): string {
+  const hash = crypto.createHash(algorithm);
+  const fd = fs.openSync(datPath, 'r');
+  const buffer = Buffer.allocUnsafe(1024 * 1024);
+  let offset = 0;
+  try {
+    while (offset < entry.size) {
+      const wanted = Math.min(buffer.length, entry.size - offset);
+      const read = fs.readSync(fd, buffer, 0, wanted, entry.offset + offset);
+      if (read <= 0) throw new Error(`catalog data ended after ${offset}/${entry.size} bytes`);
+      hash.update(buffer.subarray(0, read));
+      offset += read;
+    }
+  } finally {
+    fs.closeSync(fd);
+  }
+  return hash.digest('hex');
+}
+
+/** Reopen written catalogs through the reader and verify names, sizes, and hashes. */
+export function verifyCatDatCatalogs(result: CatDatPackResult): { ok: boolean; checked: number; errors: string[] } {
+  const errors = [...result.errors];
+  let checked = 0;
+  if (!result.ok) return { ok: false, checked, errors };
+  for (const volume of result.volumes) {
+    try {
+      const actual = parseCat(volume.catPath);
+      if (actual.length !== volume.entries.length) errors.push(`Catalog entry count mismatch in ${volume.catPath}: ${actual.length} != ${volume.entries.length}`);
+      const datSize = fs.statSync(volume.datPath).size;
+      if (datSize !== volume.bytes) errors.push(`Catalog data size mismatch in ${volume.datPath}: ${datSize} != ${volume.bytes}`);
+      for (let index = 0; index < volume.entries.length; index++) {
+        const expected = volume.entries[index];
+        const entry = actual[index];
+        if (!entry) continue;
+        if (entry.name !== expected.name || entry.size !== expected.size) {
+          errors.push(`Catalog manifest mismatch at ${volume.index}:${index}: ${entry.name}/${entry.size} != ${expected.name}/${expected.size}`);
+          continue;
+        }
+        if (entry.md5 !== expected.md5) errors.push(`Catalog manifest MD5 mismatch for ${entry.name}`);
+        const md5 = hashEntryRange(volume.datPath, entry, 'md5');
+        const sha256 = hashEntryRange(volume.datPath, entry, 'sha256');
+        if (md5 !== expected.md5) errors.push(`Catalog data MD5 mismatch for ${entry.name}: ${md5} != ${expected.md5}`);
+        if (sha256 !== expected.sha256) errors.push(`Catalog data SHA-256 mismatch for ${entry.name}: ${sha256} != ${expected.sha256}`);
+        checked++;
+      }
+    } catch (error) {
+      errors.push(`Could not verify catalog ${volume.catPath}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  return { ok: errors.length === 0 && checked === result.volumes.reduce((sum, volume) => sum + volume.entries.length, 0), checked, errors };
 }
 
 /**

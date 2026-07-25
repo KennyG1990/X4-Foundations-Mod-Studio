@@ -185,6 +185,7 @@ export const WRITE_SCOPE_POST_PREFIXES = [
   '/agent/workspace',
   '/agent/compile',
   '/agent/package',
+  '/agent/artifact/',
   '/agent/project/',
   '/agent/simulate',
   '/agent/probe/preview',
@@ -278,6 +279,7 @@ export function runAgentKeysSelftest(): { pass: boolean; checks: Array<{ name: s
   ok('write_scope_allows_workspace_compile_only',
     scopeAllows('write', 'POST', '/agent/workspace') === true &&
     scopeAllows('write', 'POST', '/agent/compile') === true &&
+    scopeAllows('write', 'POST', '/agent/artifact/build') === true &&
     scopeAllows('write', 'POST', '/agent/deploy') === false &&
     scopeAllows('write', 'POST', '/fs/write') === false &&
     scopeAllows('write', 'POST', '/ai/keys') === false);

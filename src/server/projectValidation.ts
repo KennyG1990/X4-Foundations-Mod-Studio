@@ -569,6 +569,7 @@ export function flattenProjectValidation(result: ProjectValidationResult): FlatP
 const LOADABLE_RE = /^(content\.xml|md\/[^/]+\.xml|aiscripts\/[^/]+\.xml|t\/[^/]+\.xml|libraries\/[^/]+\.xml|ui\/.+\.xml|(?:ui|lua|subst_lua)\/.+\.lua|[^/]+\.lua)$/i;
 const MAX_FILES = 500;
 const MAX_FILE_BYTES = 4 * 1024 * 1024;
+const LOAD_SKIP_DIRS = new Set(['.git', '.hg', '.svn', '.claude', '.kilo', '.forge', '.snapshots', 'node_modules', '__pycache__']);
 
 export interface DiskProjectLoad {
   project: ExtensionProject;
@@ -592,7 +593,7 @@ export function loadProjectFromDisk(rootDir: string, id?: string): DiskProjectLo
       if (files.length >= MAX_FILES) return;
       const abs = path.join(dir, e.name);
       if (e.isDirectory()) {
-        if (e.name === ".git" || e.name === "node_modules") continue;
+        if (LOAD_SKIP_DIRS.has(e.name.toLowerCase())) continue;
         walk(abs);
         continue;
       }

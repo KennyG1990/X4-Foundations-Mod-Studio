@@ -54,7 +54,7 @@ import { runWaresJobsRoundtripSelftest, parseWaresXml, parseJobsXml } from "./sr
 import { runAiScriptRoundtripSelftest, parseAiScriptXml } from "./src/lib/aiScriptParser";
 import { runLuaMdBindingSelftest } from "./src/lib/luaMdBinding";
 import { runPositionPickerSelftest } from "./src/lib/positionPicker";
-import { debugScan as catDatDebugScan, extractBaseGameFile as catDatExtractBaseGameFile, extractEntries as catDatExtractEntries, findCatDatArchives, parseCat, readEntryText, runCatDatSelftest } from "./src/lib/x4CatDat";
+import { debugScan as catDatDebugScan, extractBaseGameFile as catDatExtractBaseGameFile, extractEntries as catDatExtractEntries, findCatDatArchives, parseCat, readEntryBytes, readEntryText, runCatDatSelftest } from "./src/lib/x4CatDat";
 import { buildSchemaIndex, validateXmlAgainstSchema, runXsdValidateSelftest, type SchemaIndex } from "./src/lib/xsdValidate";
 import { runReferenceLanguageSelftest } from "./src/lib/referenceLanguage";
 import { isSameOrDescendant, runPathRolesSelftest, validateDirectoryRoles, validateProtectedWriteTargets, type DirectoryField } from "./src/lib/pathRoles";
@@ -128,6 +128,8 @@ import { registerNpcIdentityProbeRoutes } from "./src/server/npcIdentityProbe";
 import { registerSelftests } from "./src/server/selftestRegistry";
 import { createAgentKeyStore, scopeAllows, runAgentKeysSelftest, AGENT_KEY_TTLS, AGENT_KEY_PREFIX, type AgentKeyScope } from "./src/lib/agentKeys";
 import { runBugReportSelftest } from "./src/lib/bugReport";
+import { buildArtifactPlan, hashArtifactFile, materializeArtifact, verifyMaterializedArtifact, type ArtifactPlan } from "./src/lib/artifactPipeline";
+import { materializeCatalogArtifact } from "./src/lib/artifactPackager";
 import { dataPath, runDataDirSelftest } from "./src/lib/dataDir";
 import { discoverSchemaRegistry, getDomainIndex, runSchemaRegistrySelftest, schemaFilesSignature } from "./src/lib/schemaRegistry";
 import { routeProjectFile, runSchemaRoutingSelftest, validateRoutedFiles } from "./src/lib/schemaRouting";
@@ -449,6 +451,21 @@ type LastDeployInfo = {
 };
 
 let lastDeployInfo: LastDeployInfo | null = null;
+type ArtifactBuildReport = {
+  mode: 'loose' | 'catalog';
+  sourceRoot: string;
+  targetRoot: string;
+  includedFiles: number;
+  includedBytes: number;
+  generatedFiles: number;
+  sourceCopyFiles: number;
+  excluded: ArtifactPlan['excluded'];
+  runtimeOwned: ArtifactPlan['runtimeOwned'];
+  outputFiles: number;
+  catalogVolumes: number;
+  verified: boolean;
+};
+let lastArtifactReport: ArtifactBuildReport | null = null;
 
 function activeBuildWorkspace(workspaceInput: unknown): ModWorkspace {
   const sanitized = sanitizeWorkspace(workspaceInput);
@@ -493,7 +510,7 @@ function namespaceModAiScripts(ws: ModWorkspace, modId: string): void {
   }
 }
 
-function buildWorkspaceFileManifest(workspaceInput: unknown): { modId: string; files: CompiledFileManifest } {
+function buildWorkspaceFileManifest(workspaceInput: unknown, options: { includePassthrough?: boolean } = {}): { modId: string; files: CompiledFileManifest } {
   const ws = activeBuildWorkspace(workspaceInput);
   const modId = effectiveModId(ws);
   namespaceModAiScripts(ws, modId);
@@ -577,7 +594,7 @@ function buildWorkspaceFileManifest(workspaceInput: unknown): { modId: string; f
 
   // Passthrough files preserved from an imported mod. Generated output always
   // wins a path collision so the studio's modeled domains stay authoritative.
-  for (const pf of (ws.passthroughFiles || [])) {
+  for (const pf of (options.includePassthrough === false ? [] : (ws.passthroughFiles || []))) {
     if (!pf || typeof pf.path !== 'string') continue;
     const rel = pf.path.replace(/\\/g, '/').replace(/^\/+/, '');
     if (!rel || rel.includes('..')) continue;
@@ -2665,6 +2682,13 @@ app.get("/api/agent/schema", (req, res) => {
         purpose: "Alias of compile for agents that want a package/file-manifest vocabulary."
       },
       {
+        method: "POST",
+        path: "/api/agent/artifact/build",
+        auth: true,
+        body: { workspace: "optional ModWorkspace; defaults to active workspace", format: "loose | catalog (default catalog)" },
+        purpose: "Build and hash-verify a complete disk-backed artifact under <Mod Workspace>/.forge-builds without writing to the installed game."
+      },
+      {
         method: "GET",
         path: "/api/agent/round-trip-selftest",
         auth: false,
@@ -3192,11 +3216,11 @@ app.post("/api/fs/write", (req, res) => {
       return res.status(400).json({ error: "Missing path parameter." });
     }
     const resolved = resolveXsdConfig();
-    const rootPath = resolved.filesystemPath || resolved.modWorkspacePath;
+    const rootPath = resolved.modWorkspacePath;
     if (!rootPath) {
-      return res.status(400).json({ error: "No filesystem/workspace path configured." });
+      return res.status(400).json({ error: "No Mod Workspace Folder configured." });
     }
-    if (rejectUnsafeDevelopmentWrite(res, resolved, [resolved.filesystemPath ? 'filesystemPath' : 'modWorkspacePath'])) return;
+    if (rejectUnsafeDevelopmentWrite(res, resolved, ['modWorkspacePath'])) return;
     
     const safePath = path.resolve(rootPath, relativePath);
     if (!isPathWithin(safePath, rootPath)) {
@@ -3224,11 +3248,11 @@ app.post("/api/fs/create", (req, res) => {
     }
     const cleanName = name.replace(/[^a-zA-Z0-9_.-]/g, '_');
     const resolved = resolveXsdConfig();
-    const rootPath = resolved.filesystemPath || resolved.modWorkspacePath;
+    const rootPath = resolved.modWorkspacePath;
     if (!rootPath) {
-      return res.status(400).json({ error: "No filesystem/workspace path configured." });
+      return res.status(400).json({ error: "No Mod Workspace Folder configured." });
     }
-    if (rejectUnsafeDevelopmentWrite(res, resolved, [resolved.filesystemPath ? 'filesystemPath' : 'modWorkspacePath'])) return;
+    if (rejectUnsafeDevelopmentWrite(res, resolved, ['modWorkspacePath'])) return;
     
     const safePath = path.resolve(rootPath, cleanName);
     if (!isPathWithin(safePath, rootPath)) {
@@ -3438,8 +3462,8 @@ app.post("/api/fs/delete-dir", (req, res) => {
       return res.status(400).json({ error: "Invalid path." });
     }
     const resolved = resolveXsdConfig();
-    const roots = [resolved.filesystemPath, resolved.modWorkspacePath].filter((r): r is string => Boolean(r));
-    if (rejectUnsafeDevelopmentWrite(res, resolved, ['filesystemPath', 'modWorkspacePath'])) return;
+    const roots = [resolved.modWorkspacePath].filter((r): r is string => Boolean(r));
+    if (rejectUnsafeDevelopmentWrite(res, resolved, ['modWorkspacePath'])) return;
     const removed: string[] = [];
     for (const root of roots) {
       const rootAbs = path.resolve(root);
@@ -3499,6 +3523,7 @@ app.get("/api/agent/workspace", (req, res) => {
 type FullWorkspaceValidation = {
   diagnostics: ServerDiagnostic[];
   validation: ReturnType<typeof runProjectValidation>;
+  diskSkipped: Array<{ path: string; reason: string }>;
 };
 
 function diagnosticCategory(code: string): string {
@@ -3514,14 +3539,26 @@ function diagnosticCategory(code: string): string {
  */
 function runFullWorkspaceValidation(ws: ModWorkspace, built?: { modId: string; files: CompiledFileManifest }): FullWorkspaceValidation {
   const { modId, files } = built || buildWorkspaceFileManifest(ws);
-  const project: ExtensionProject = {
-    id: modId,
-    name: ws.name || modId,
-    files: Object.entries(files).map(([filePath, content]) => ({
+  const projectFiles = new Map<string, ExtensionProject['files'][number]>(
+    Object.entries(files).map(([filePath, content]) => [filePath.toLowerCase(), {
       path: filePath,
       kind: classifyPath(filePath),
       content: String(content),
-    })),
+    }]),
+  );
+  let diskSkipped: Array<{ path: string; reason: string }> = [];
+  const sourceDir = typeof (ws as any)?.sourceStamp?.dir === 'string' ? (ws as any).sourceStamp.dir : '';
+  if (sourceDir && fs.existsSync(sourceDir)) {
+    const diskLoad = loadProjectFromDisk(sourceDir, modId);
+    diskSkipped = diskLoad.skipped;
+    for (const file of diskLoad.project.files) {
+      if (!projectFiles.has(file.path.toLowerCase())) projectFiles.set(file.path.toLowerCase(), file);
+    }
+  }
+  const project: ExtensionProject = {
+    id: modId,
+    name: ws.name || modId,
+    files: [...projectFiles.values()],
   };
   const references = (() => { try { return getReferenceSets(); } catch { return undefined; } })();
   const validation = runProjectValidation(project, {
@@ -3542,6 +3579,7 @@ function runFullWorkspaceValidation(ws: ModWorkspace, built?: { modId: string; f
   if (hasAiScript && !validation.schema.aiscriptAvailable) warnUnavailable("validation.aiscript_schema_unavailable", "AI Script schema validation is unavailable; this is not a clean AI Script structure result.", firstAiScriptPath || firstXmlPath);
   if ((hasMd || hasAiScript) && !validation.scriptProperties.available) warnUnavailable("validation.scriptproperties_unavailable", "scriptproperties.xml is unavailable; script-expression properties and functions were not checked.", firstMdPath || firstAiScriptPath || firstXmlPath);
   if (!validation.references.available) warnUnavailable("validation.reference_corpus_unavailable", "The canonical X4 reference corpus is unavailable; faction, ware, sector, and macro IDs were not checked.");
+  for (const skipped of diskSkipped) warnUnavailable('validation.disk_file_skipped', `Disk-backed validation skipped ${skipped.path}: ${skipped.reason}. The artifact still includes the file, so this is not a clean validation result.`, skipped.path);
   const combined: ServerDiagnostic[] = [
     ...unavailable,
     ...runModDoctor(ws, files, modId).map((finding): ServerDiagnostic => ({
@@ -3574,7 +3612,7 @@ function runFullWorkspaceValidation(ws: ModWorkspace, built?: { modId: string; f
     seen.add(key);
     return true;
   });
-  return { diagnostics, validation };
+  return { diagnostics, validation, diskSkipped };
 }
 
 /** Compute the same full diagnostic set used by compile and agents. */
@@ -3969,7 +4007,7 @@ function contentXmlFor(modId: string, ws: any): string {
   if (typeof orig === 'string' && orig) {
     const m = parseContentMeta(orig);
     const eq = (a: any, b: any) => String(a ?? '') === String(b ?? '');
-    if (eq(m.id, ws.contentId) && eq(m.name, ws.name) && eq(m.version, ws.version)
+    if (eq(m.id, modId) && eq(m.id, ws.contentId) && eq(m.name, ws.name) && eq(m.version, ws.version)
         && eq(m.author, ws.author) && eq(m.description, ws.description)) {
       return orig; // unedited → verbatim
     }
@@ -4049,7 +4087,8 @@ function applyOriginalModeledFiles(ws: any, files: CompiledFileManifest): void {
     if (!rel || rel.includes('..')) continue;
     if (files[rel] === undefined) continue;
     if (original.kind === 'content') {
-      if (!original.fingerprint || original.fingerprint === contentFingerprint(ws)) files[rel] = original.content;
+      const originalId = parseContentMeta(original.content).id;
+      if (originalId === effectiveModId(ws) && (!original.fingerprint || original.fingerprint === contentFingerprint(ws))) files[rel] = original.content;
     } else if (original.kind === 'md') {
       const stem = original.stem || rel.replace(/^md\//i, '').replace(/\.xml$/i, '');
       if (!original.fingerprint || original.fingerprint === mdStemFingerprint(ws, stem)) files[rel] = original.content;
@@ -4517,6 +4556,7 @@ app.get("/api/agent/round-trip-selftest", (req, res) => {
   let tmp = '';
   try {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'x4rt-'));
+    const modDir = path.join(tmp, 'roundtrip_test');
     // Synthesize a small mod exercising modeled + unknown domains.
     const mdXml = `<?xml version="1.0" encoding="utf-8"?>
 <mdscript name="RoundTrip_Test" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
@@ -4549,12 +4589,12 @@ app.get("/api/agent/round-trip-selftest", (req, res) => {
       'README.md': `# RoundTrip Test\n\nHand-authored README that must not be replaced by generated boilerplate.\n`
     };
     for (const [rel, content] of Object.entries(files)) {
-      const abs = path.join(tmp, rel);
+      const abs = path.join(modDir, rel);
       fs.mkdirSync(path.dirname(abs), { recursive: true });
       fs.writeFileSync(abs, content);
     }
 
-    const { workspace, report } = importModFolder(tmp);
+    const { workspace, report } = importModFolder(modDir);
     const out = buildWorkspaceFileManifest(workspace);
     const outFiles = out.files;
 
@@ -5849,6 +5889,7 @@ const SELFTESTS: Record<string, () => unknown> = {
   "mod-distribution-selftest": runModDistributionSelftest,
   "override-map-selftest": runOverrideMapSelftest,
   "catdat-selftest": runCatDatSelftest,
+  "artifact-pipeline-selftest": runCompileArtifactSelftest,
   "object-index-selftest": runObjectIndexSelftest,
   "reference-corpus-selftest": runReferenceCorpusSelftest,
   "reference-literal-lint-selftest": runReferenceLiteralLintSelftest,
@@ -7214,82 +7255,167 @@ function readForgeKeep(dirPath: string): Set<string> {
     if (fs.existsSync(kp)) {
       for (const line of fs.readFileSync(kp, 'utf8').split(/\r?\n/)) {
         const t = line.trim();
-        if (t && !t.startsWith('#')) keep.add(t.replace(/[\\/]+$/, ''));
+        const top = t.replace(/[\\/]+$/, '');
+        if (top && !top.startsWith('#') && top !== '.' && top !== '..' && !/[\\/:]/.test(top)) keep.add(top);
       }
     }
   } catch { /* ignore */ }
   return keep;
 }
 
-// Safe deploy refresh: delete ONLY the top-level entries the Forge is about to (re)write (`managedTop`),
-// so its own content stays current, while PRESERVING any foreign entry the Forge doesn't manage (a
-// co-located external service) and anything listed in .forgekeep. Replaces the old
-// wipe-everything behavior that destroyed non-Forge files on every deploy.
-function cleanForgeManagedEntries(dirPath: string, managedTop: Set<string>) {
-  if (!fs.existsSync(dirPath)) return;
-  const keep = readForgeKeep(dirPath);
-  try {
-    for (const entry of fs.readdirSync(dirPath, { withFileTypes: true })) {
-      const name = entry.name;
-      if (name === '.snapshots' || name === '.studio-mod-id' || name === '.forgekeep') continue;
-      if (keep.has(name)) continue;            // explicit preserve-list
-      if (!managedTop.has(name)) continue;     // foreign top-level entry → preserve (e.g. the bridge)
-      const fullPath = path.join(dirPath, name);
-      if (entry.isDirectory()) {
-        fs.rmSync(fullPath, { recursive: true, force: true });
+function copyRegularTree(sourceRoot: string, targetRoot: string): void {
+  const walk = (sourceDir: string, relativeDir: string) => {
+    for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
+      const relativePath = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
+      const source = path.join(sourceDir, entry.name);
+      const target = path.join(targetRoot, ...relativePath.split('/'));
+      const stat = fs.lstatSync(source);
+      if (stat.isSymbolicLink()) throw new Error(`Refusing to copy symbolic link or reparse point: ${relativePath}`);
+      if (stat.isDirectory()) {
+        fs.mkdirSync(target, { recursive: true });
+        walk(source, relativePath);
+      } else if (stat.isFile()) {
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.copyFileSync(source, target);
       } else {
-        fs.unlinkSync(fullPath);
+        throw new Error(`Refusing unsupported artifact entry type: ${relativePath}`);
       }
     }
-  } catch (err) {
-    console.warn(`Error refreshing Forge-managed entries in ${dirPath}:`, err);
+  };
+  fs.mkdirSync(targetRoot, { recursive: true });
+  walk(sourceRoot, '');
+}
+
+function verifyExpectedFiles(targetRoot: string, expected: Array<{ path: string; size: number; sha256: string }>): void {
+  for (const entry of expected) {
+    const filePath = path.join(targetRoot, ...entry.path.split('/'));
+    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) throw new Error(`Deployed artifact is missing ${entry.path}`);
+    const stat = fs.statSync(filePath);
+    const hash = hashArtifactFile(filePath);
+    if (stat.size !== entry.size || hash !== entry.sha256) throw new Error(`Deployed artifact verification failed for ${entry.path}`);
   }
 }
 
-function compileWorkspaceToFolder(ws: any, rootPath: string, mode: 'candy' | 'store', writeSnapshots: boolean = false): string {
-  ws = activeBuildWorkspace(ws);
-  // SINGLE SOURCE OF TRUTH: write exactly what buildWorkspaceFileManifest produces — byte-fidelity
-  // MD + content.xml (deps/comments/names/ids preserved) and every passthrough file — instead of a
-  // divergent re-derivation. This is the same map the validator/round-trip and agent endpoints use.
-  const { modId, files } = buildWorkspaceFileManifest(ws);
-  const targetPath = mode === 'store' ? path.join(rootPath, modId) : rootPath;
+function preservedDeploymentPaths(targetPath: string, plan: ArtifactPlan): string[] {
+  const paths = new Set<string>();
+  for (const entry of plan.runtimeOwned) paths.add(entry.path.replace(/\/\*\*$/, ''));
+  const keep = readForgeKeep(targetPath);
+  for (const top of keep) paths.add(top);
+  if (keep.size > 0) paths.add('.forgekeep');
+  return [...paths].filter(relativePath => relativePath && !relativePath.split('/').includes('..'));
+}
 
-  if (mode === 'store' && fs.existsSync(targetPath)) {
-    // Refresh ONLY the top-level entries the Forge actually writes; PRESERVE everything foreign
-    // (e.g. a nested non-Forge runtime service) plus anything an explicit .forgekeep lists.
-    // Previously this wiped the whole directory, deleting files/dirs the Forge does not manage — which
-    // silently destroyed a co-located external runtime. See cleanForgeManagedEntries.
-    const managedTop = new Set<string>(
-      Object.keys(files).map(rel => rel.replace(/\\/g, '/').replace(/^\/+/, '').split('/')[0])
-    );
-    cleanForgeManagedEntries(targetPath, managedTop);
-  }
-  if (!fs.existsSync(targetPath)) {
-    fs.mkdirSync(targetPath, { recursive: true });
-  }
-
-  // Binary passthrough files are stored base64 in the manifest; decode them on write.
-  const binaryRel = new Set<string>(
-    (ws.passthroughFiles || [])
-      .filter((pf: any) => pf && pf.reason === 'binary' && typeof pf.path === 'string')
-      .map((pf: any) => pf.path.replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase())
-  );
-  // .forgekeep'd top-level dirs are FULLY foreign: the Forge neither cleans nor (re)writes them.
-  // This stops the deploy from writing over a co-located live service's open files — e.g. the
-  // External runtime SQLite -shm/-wal files previously errored the whole compile (EBUSY /
-  // "unknown error, open …shm"). The on-disk copy is left exactly as-is.
-  const keepTop = readForgeKeep(targetPath);
-  for (const [rel, content] of Object.entries(files)) {
-    const top = rel.replace(/\\/g, '/').replace(/^\/+/, '').split('/')[0];
-    if (keepTop.has(top)) continue;
-    const destPath = path.join(targetPath, rel);
-    fs.mkdirSync(path.dirname(destPath), { recursive: true });
-    if (binaryRel.has(rel.toLowerCase())) {
-      fs.writeFileSync(destPath, Buffer.from(String(content), 'base64'));
-    } else {
-      fs.writeFileSync(destPath, String(content), 'utf8');
+function replaceValidatedDeployment(
+  artifactRoot: string,
+  targetPath: string,
+  expected: Array<{ path: string; size: number; sha256: string }>,
+  plan: ArtifactPlan,
+): void {
+  const parent = path.dirname(targetPath);
+  fs.mkdirSync(parent, { recursive: true });
+  const nonce = `${process.pid}-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+  const stage = path.join(parent, `.${path.basename(targetPath)}.x4forge-next-${nonce}`);
+  const backup = path.join(parent, `.${path.basename(targetPath)}.x4forge-backup-${nonce}`);
+  let movedOld = false;
+  try {
+    copyRegularTree(artifactRoot, stage);
+    if (fs.existsSync(targetPath)) {
+      for (const relativePath of preservedDeploymentPaths(targetPath, plan)) {
+        const source = path.join(targetPath, ...relativePath.split('/'));
+        if (!fs.existsSync(source)) continue;
+        const destination = path.join(stage, ...relativePath.split('/'));
+        if (fs.existsSync(destination)) throw new Error(`Runtime-owned path conflicts with built artifact: ${relativePath}`);
+        const stat = fs.lstatSync(source);
+        if (stat.isSymbolicLink()) throw new Error(`Runtime-owned path is a symbolic link or reparse point: ${relativePath}`);
+        if (stat.isDirectory()) copyRegularTree(source, destination);
+        else if (stat.isFile()) {
+          fs.mkdirSync(path.dirname(destination), { recursive: true });
+          fs.copyFileSync(source, destination);
+        }
+      }
+      fs.renameSync(targetPath, backup);
+      movedOld = true;
     }
+    fs.renameSync(stage, targetPath);
+    verifyExpectedFiles(targetPath, expected);
+    if (movedOld) fs.rmSync(backup, { recursive: true, force: true });
+  } catch (error) {
+    try { if (fs.existsSync(stage)) fs.rmSync(stage, { recursive: true, force: true }); } catch { /* best effort */ }
+    if (movedOld) {
+      try {
+        if (fs.existsSync(targetPath)) fs.rmSync(targetPath, { recursive: true, force: true });
+        if (fs.existsSync(backup)) fs.renameSync(backup, targetPath);
+      } catch (rollbackError) {
+        throw new Error(`${error instanceof Error ? error.message : String(error)}; rollback also failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`);
+      }
+    }
+    throw error;
   }
+}
+
+function compileWorkspaceToFolder(
+  ws: any,
+  rootPath: string,
+  mode: 'candy' | 'store',
+  writeSnapshots: boolean = false,
+  artifactMode: 'loose' | 'catalog' = 'loose',
+): string {
+  ws = activeBuildWorkspace(ws);
+  const targetPath = mode === 'store' ? path.join(rootPath, effectiveModId(ws)) : rootPath;
+  const scratchParent = fs.mkdtempSync(path.join(os.tmpdir(), 'x4forge-compile-'));
+  let ephemeralSource = '';
+  try {
+    const stampedSource = typeof ws?.sourceStamp?.dir === 'string' ? path.resolve(ws.sourceStamp.dir) : '';
+    const hasDiskSource = Boolean(stampedSource && fs.existsSync(stampedSource) && fs.statSync(stampedSource).isDirectory());
+    if (!hasDiskSource && (ws.passthroughFiles || []).some((file: any) => file?.omitted)) {
+      throw new Error('Cannot build a complete artifact: omitted passthrough files have no available disk source. Re-import the project from its workspace folder.');
+    }
+    const sourceRoot = hasDiskSource ? stampedSource : (ephemeralSource = fs.mkdtempSync(path.join(os.tmpdir(), 'x4forge-generated-source-')));
+    const generated = buildWorkspaceFileManifest(ws, { includePassthrough: !hasDiskSource });
+    const plan = buildArtifactPlan({ sourceRoot, generatedFiles: generated.files });
+    if (!plan.ok) throw new Error(`Artifact planning failed: ${plan.errors.join('; ')}`);
+
+    const artifactRoot = path.join(scratchParent, artifactMode);
+    if (artifactMode === 'catalog') {
+      const packaged = materializeCatalogArtifact(plan, artifactRoot);
+      if (!packaged.ok) throw new Error(`Packed artifact failed: ${packaged.errors.join('; ')}`);
+      replaceValidatedDeployment(artifactRoot, targetPath, packaged.files, plan);
+      lastArtifactReport = {
+        mode: artifactMode,
+        sourceRoot,
+        targetRoot: targetPath,
+        includedFiles: plan.entries.length,
+        includedBytes: plan.totals.includedBytes,
+        generatedFiles: plan.totals.generatedFiles,
+        sourceCopyFiles: plan.totals.sourceCopyFiles,
+        excluded: plan.excluded,
+        runtimeOwned: plan.runtimeOwned,
+        outputFiles: packaged.files.length,
+        catalogVolumes: packaged.catalogs.volumes.length,
+        verified: true,
+      };
+    } else {
+      const built = materializeArtifact(plan, artifactRoot);
+      if (!built.ok) throw new Error(`Loose artifact failed: ${built.errors.join('; ')}`);
+      const verified = verifyMaterializedArtifact(plan, artifactRoot);
+      if (!verified.ok) throw new Error(`Loose artifact verification failed: ${verified.errors.join('; ')}`);
+      copyRegularTree(artifactRoot, targetPath);
+      verifyExpectedFiles(targetPath, plan.entries);
+      lastArtifactReport = {
+        mode: artifactMode,
+        sourceRoot,
+        targetRoot: targetPath,
+        includedFiles: plan.entries.length,
+        includedBytes: plan.totals.includedBytes,
+        generatedFiles: plan.totals.generatedFiles,
+        sourceCopyFiles: plan.totals.sourceCopyFiles,
+        excluded: plan.excluded,
+        runtimeOwned: plan.runtimeOwned,
+        outputFiles: plan.entries.length,
+        catalogVolumes: 0,
+        verified: true,
+      };
+    }
 
   // Snapshots & modID identification
   if (writeSnapshots) {
@@ -7336,6 +7462,71 @@ function compileWorkspaceToFolder(ws: any, rootPath: string, mode: 'candy' | 'st
   }
 
   return targetPath;
+  } finally {
+    fs.rmSync(scratchParent, { recursive: true, force: true });
+    if (ephemeralSource) fs.rmSync(ephemeralSource, { recursive: true, force: true });
+  }
+}
+
+function runCompileArtifactSelftest() {
+  const checks: Array<{ name: string; pass: boolean; detail?: string }> = [];
+  const record = (name: string, pass: boolean, detail?: unknown) => checks.push({ name, pass, ...(detail === undefined ? {} : { detail: String(detail) }) });
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'x4forge-compile-selftest-'));
+  const source = path.join(root, 'source');
+  const deployRoot = path.join(root, 'extensions');
+  const sourceWrite = (relativePath: string, content: string | Buffer) => {
+    const filePath = path.join(source, ...relativePath.split('/'));
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, content);
+  };
+  try {
+    sourceWrite('content.xml', '<?xml version="1.0"?><content id="artifact_integration" name="Artifact Integration" version="100"/>');
+    sourceWrite('md/source.xml', '<?xml version="1.0"?><mdscript name="ArtifactIntegration"><cues/></mdscript>');
+    sourceWrite('assets/over-legacy-total.bin', Buffer.alloc((7 * 1024 * 1024) + 19, 0x6d));
+    sourceWrite('unknown/deep/path/file.arbitrary', Buffer.from([0x00, 0xff, 0x10, 0x20]));
+    sourceWrite('unicode/船.txt', 'payload');
+    sourceWrite('runtime/state.db', 'source placeholder');
+    sourceWrite('.git/config', 'must not deploy');
+    sourceWrite('.forgeartifact.json', JSON.stringify({ runtimeOwned: ['runtime/**'] }));
+
+    const imported = importModFolder(source);
+    const target = path.join(deployRoot, effectiveModId(imported.workspace));
+    fs.mkdirSync(path.join(target, 'runtime'), { recursive: true });
+    fs.writeFileSync(path.join(target, 'runtime', 'state.db'), 'deployed mutable state');
+    fs.writeFileSync(path.join(target, 'stale-loose.txt'), 'must disappear');
+    fs.mkdirSync(path.join(target, '.git'), { recursive: true });
+    fs.writeFileSync(path.join(target, '.git', 'config'), 'stale deploy metadata');
+    fs.mkdirSync(path.join(target, 'preserved'), { recursive: true });
+    fs.writeFileSync(path.join(target, 'preserved', 'state.bin'), 'forgekeep state');
+    fs.writeFileSync(path.join(target, '.forgekeep'), 'preserved\n../outside\nC:\\escape\n');
+
+    const deployed = compileWorkspaceToFolder(imported.workspace, deployRoot, 'store', false, 'catalog');
+    record('compile returns expected target', deployed === target, deployed);
+    record('content.xml remains loose', fs.existsSync(path.join(target, 'content.xml')));
+    const deployedContentId = fs.readFileSync(path.join(target, 'content.xml'), 'utf8').match(/<content\b[^>]*\bid="([^"]+)"/i)?.[1];
+    record('content.xml id matches effective deployment folder', deployedContentId === path.basename(target), `${deployedContentId} / ${path.basename(target)}`);
+    record('catalog pair emitted', fs.existsSync(path.join(target, 'ext_01.cat')) && fs.existsSync(path.join(target, 'ext_01.dat')));
+    record('stale loose payload removed by validated swap', !fs.existsSync(path.join(target, 'stale-loose.txt')));
+    record('development metadata excluded from deploy', !fs.existsSync(path.join(target, '.git')));
+    record('runtime-owned state preserved', fs.readFileSync(path.join(target, 'runtime', 'state.db'), 'utf8') === 'deployed mutable state');
+    record('valid forgekeep top-level path preserved', fs.readFileSync(path.join(target, 'preserved', 'state.bin'), 'utf8') === 'forgekeep state');
+    record('unsafe forgekeep paths ignored', !fs.existsSync(path.join(deployRoot, 'outside')) && !fs.existsSync(path.join(deployRoot, 'C:', 'escape')));
+
+    const catalogEntries = parseCat(path.join(target, 'ext_01.cat'));
+    const large = catalogEntries.find(entry => entry.name === 'assets/over-legacy-total.bin');
+    record('large arbitrary file is inside catalog', Boolean(large && large.size === (7 * 1024 * 1024) + 19));
+    if (large) {
+      const sourceHash = crypto.createHash('sha256').update(fs.readFileSync(path.join(source, 'assets', 'over-legacy-total.bin'))).digest('hex');
+      const packedHash = crypto.createHash('sha256').update(readEntryBytes(path.join(target, 'ext_01.dat'), large)).digest('hex');
+      record('large catalog payload is hash-identical', sourceHash === packedHash);
+    }
+    record('unicode and unknown paths are cataloged', catalogEntries.some(entry => entry.name === 'unicode/船.txt') && catalogEntries.some(entry => entry.name === 'unknown/deep/path/file.arbitrary'));
+  } catch (error) {
+    record('artifact integration selftest completed', false, error instanceof Error ? error.stack || error.message : String(error));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+  return { pass: checks.every(check => check.pass), checks, summary: `${checks.filter(check => check.pass).length}/${checks.length}` };
 }
 
 /**
@@ -7401,7 +7592,8 @@ app.post("/api/agent/deploy", (req, res) => {
       if (!fs.existsSync(modWorkspacePath)) {
         fs.mkdirSync(modWorkspacePath, { recursive: true });
       }
-      stagingPath = compileWorkspaceToFolder(ws, modWorkspacePath, 'store', true);
+      const stagingRoot = path.join(modWorkspacePath, '.forge-builds', 'loose');
+      stagingPath = compileWorkspaceToFolder(ws, stagingRoot, 'store', true);
     }
 
     // 2. Compile and deploy to Game Extensions Path if configured
@@ -7411,7 +7603,7 @@ app.post("/api/agent/deploy", (req, res) => {
         if (!fs.existsSync(extensionsPath)) {
           fs.mkdirSync(extensionsPath, { recursive: true });
         }
-        deployedPath = compileWorkspaceToFolder(ws, extensionsPath, 'store', false);
+        deployedPath = compileWorkspaceToFolder(ws, extensionsPath, 'store', false, 'catalog');
       } else {
         console.warn(`Configured X4 Game Installation path "${x4GamePath}" does not exist.`);
       }
@@ -7440,6 +7632,7 @@ app.post("/api/agent/deploy", (req, res) => {
       message,
       deployedPath: deployedPath || stagingPath,
       lastDeploy: lastDeployInfo,
+      artifact: lastArtifactReport,
       // Audit A5: this route deploys WITHOUT the 9-stage preflight checklist. It stays
       // for UI/agent compatibility (and carries the malformed-XML gate), but new flows
       // should use deploy-verify. Converge the UI, then retire this route.
@@ -7621,14 +7814,27 @@ app.post("/api/agent/deploy-verify", (req, res) => {
     // 2b. PREFLIGHT — the FULL validation stack over the emitted manifest (same engine as
     // project/validate: structure, cue refs, MD↔Lua wiring, XSD md+aiscript, order-param
     // lint, scriptproperty chains, pitfall lints). Errors block; warnings surface.
+    const validationFiles = new Map<string, { path: string; kind: ReturnType<typeof classifyPath>; content: string }>(
+      Object.entries(files).map(([p, c]) => [p.toLowerCase(), { path: p, kind: classifyPath(p), content: String(c) }]),
+    );
+    let diskValidationSkipped: Array<{ path: string; reason: string }> = [];
+    const validationSourceDir = sourceStamp?.dir && fs.existsSync(sourceStamp.dir) ? sourceStamp.dir : modSourceDir;
+    if (validationSourceDir) {
+      const diskLoad = loadProjectFromDisk(validationSourceDir, modId);
+      diskValidationSkipped = diskLoad.skipped;
+      for (const file of diskLoad.project.files) {
+        const key = file.path.toLowerCase();
+        if (!validationFiles.has(key)) validationFiles.set(key, { path: file.path, kind: file.kind, content: file.content });
+      }
+    }
     const manifestProject = {
       id: modId,
       name: modId,
-      files: Object.entries(files).map(([p, c]) => ({ path: p, kind: classifyPath(p), content: String(c) })),
+      files: [...validationFiles.values()],
     };
     const references = (() => { try { return getReferenceSets(); } catch { return undefined; } })();
     const preflight = runProjectValidation(manifestProject as any, { references, jobsVocabulary: getJobsVocabulary(), waresVocabulary: getWaresVocabulary() });
-    const pfWarnings = preflight.summary.schemaWarnings + preflight.summary.scriptPropertyWarnings + preflight.summary.mdPitfallWarnings;
+    const pfWarnings = preflight.summary.schemaWarnings + preflight.summary.scriptPropertyWarnings + preflight.summary.mdPitfallWarnings + diskValidationSkipped.length;
     if (!preflight.ok) {
       check('preflight', 'Full validation (schema/cues/lints)', 'fail',
         `${preflight.summary.schemaErrors} schema, ${preflight.summary.unresolvedCueRefs} cue, ${preflight.summary.crossFileErrors} cross-file, ${preflight.summary.aiscriptErrors} aiscript error(s)`);
@@ -7636,18 +7842,19 @@ app.post("/api/agent/deploy-verify", (req, res) => {
     }
     check('preflight', 'Full validation (schema/cues/lints)', pfWarnings > 0 ? 'warn' : 'pass',
       pfWarnings > 0
-        ? `0 errors; ${pfWarnings} warning(s) — ${preflight.summary.scriptPropertyWarnings} scriptproperty, ${preflight.summary.mdPitfallWarnings} pitfall, ${preflight.summary.schemaWarnings} schema`
+        ? `0 errors; ${pfWarnings} warning(s) — ${preflight.summary.scriptPropertyWarnings} scriptproperty, ${preflight.summary.mdPitfallWarnings} pitfall, ${preflight.summary.schemaWarnings} schema, ${diskValidationSkipped.length} disk file(s) above/unavailable to the validation loader`
         : '0 errors, 0 warnings across the full stack');
 
     // 3. Deploy — staging (writeSnapshots) + game extensions (clean), same as /deploy.
     let stagingPath = '';
     if (modWorkspacePath) {
       if (!fs.existsSync(modWorkspacePath)) fs.mkdirSync(modWorkspacePath, { recursive: true });
-      stagingPath = compileWorkspaceToFolder(ws, modWorkspacePath, 'store', true);
+      const stagingRoot = path.join(modWorkspacePath, '.forge-builds', 'loose');
+      stagingPath = compileWorkspaceToFolder(ws, stagingRoot, 'store', true);
     }
     const extensionsPath = path.join(x4GamePath, 'extensions');
     if (!fs.existsSync(extensionsPath)) fs.mkdirSync(extensionsPath, { recursive: true });
-    const deployedPath = compileWorkspaceToFolder(ws, extensionsPath, 'store', false);
+    const deployedPath = compileWorkspaceToFolder(ws, extensionsPath, 'store', false, 'catalog');
 
     // 4. Bytes confirm — deployed content.xml exists, non-empty, id matches modId.
     const deployedContent = path.join(deployedPath, 'content.xml');
@@ -7667,8 +7874,13 @@ app.post("/api/agent/deploy-verify", (req, res) => {
       blocking.length === 0 ? `${modFindings.length} finding(s) for this mod, none blocking` : blocking.map((f: any) => f.code).join(', '));
 
     // 6. Drift — after a deploy the workspace and deployed copies should agree.
-    const driftReport = computeModDrift(path.basename(deployedPath));
-    if (driftReport) {
+    const deployedArtifact = lastArtifactReport?.mode === 'catalog' && path.resolve(lastArtifactReport.targetRoot) === path.resolve(deployedPath)
+      ? lastArtifactReport
+      : null;
+    const driftReport = deployedArtifact ? null : computeModDrift(path.basename(deployedPath));
+    if (deployedArtifact?.verified) {
+      check('drift', 'Workspace/deployed sync', 'pass', `verified packed artifact: ${deployedArtifact.includedFiles} source/generated files -> ${deployedArtifact.outputFiles} loose/catalog files across ${deployedArtifact.catalogVolumes} catalog volume(s)`);
+    } else if (driftReport) {
       check('drift', 'Workspace/deployed sync', driftReport.verdict === 'identical' ? 'pass' : 'warn', driftReport.summary);
     } else {
       check('drift', 'Workspace/deployed sync', 'pass', 'single-copy mod (nothing to compare)');
@@ -7706,7 +7918,9 @@ app.post("/api/agent/deploy-verify", (req, res) => {
     return res.json({
       ok, stage: 'done', modId, deployedPath, stagingPath, bytesConfirmed, deployedBytes,
       checklist,
+      artifact: lastArtifactReport,
       preflightWarnings: pfWarnings,
+      diskValidationSkipped,
       compileErrors: [],
       doctor: {
         scanned: doctor.findings?.length || 0,
@@ -7822,6 +8036,32 @@ app.post("/api/agent/package", (req, res) => {
       success: false,
       error: error.message || "Failed to package workspace schema to file manifest."
     });
+  }
+});
+
+app.post("/api/agent/artifact/build", (req, res) => {
+  const ws = sanitizeWorkspace(req.body?.workspace || activeWorkspace);
+  const format = req.body?.format === 'loose' ? 'loose' : req.body?.format === undefined || req.body?.format === 'catalog' ? 'catalog' : null;
+  if (!format) return res.status(400).json({ success: false, error: 'format must be "loose" or "catalog".' });
+  try {
+    const resolved = resolveXsdConfig();
+    if (!resolved.modWorkspacePath) return res.status(400).json({ success: false, error: 'No Mod Workspace Folder configured.' });
+    if (rejectUnsafeDevelopmentWrite(res, resolved, ['modWorkspacePath'])) return;
+    const buildRoot = path.join(resolved.modWorkspacePath, '.forge-builds', format);
+    const artifactPath = compileWorkspaceToFolder(ws, buildRoot, 'store', false, format);
+    const built = buildWorkspaceFileManifest(ws);
+    const full = runFullWorkspaceValidation(ws, built);
+    return res.json({
+      success: true,
+      modId: built.modId,
+      format,
+      artifactPath,
+      artifact: lastArtifactReport,
+      diagnostics: full.diagnostics,
+      validation: { scope: 'full-project', ok: full.validation.ok, summary: full.validation.summary },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });
   }
 });
 

@@ -22,6 +22,7 @@
  * Exit 0 ⇔ every assertion passed; exit 1 ⇔ any failed / server never came up.
  */
 import { spawn, spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -148,10 +149,11 @@ async function main() {
   const safeConfig = await req('POST', '/api/schema/config', SESSION_TOKEN, deployedRolesConfig);
   ok('isolated_workspace_and_deployed_filesystem_saved', safeConfig.status === 200 && safeConfig.json?.directorySafety?.safe === true, `status=${safeConfig.status}`);
 
-  // A valid deployed filesystem role is read/browse/import capable but not a generic write target.
-  const protectedLiveWrite = await req('POST', '/api/fs/write', SESSION_TOKEN, { path: 'must-not-exist.txt', content: 'blocked' });
-  ok('deployed_filesystem_generic_write_blocked', protectedLiveWrite.status === 409 && protectedLiveWrite.json?.code === 'PROTECTED_ROOT_OVERLAP', `status=${protectedLiveWrite.status}`);
-  ok('deployed_filesystem_block_did_not_touch_game', !fs.existsSync(path.join(liveExtensions, 'must-not-exist.txt')));
+  // The deployed filesystem role is browse/import-only. Generic edits always land in the
+  // isolated workspace even while filesystemPath points at the live extensions directory.
+  const routedWorkspaceWrite = await req('POST', '/api/fs/write', SESSION_TOKEN, { path: 'must-not-exist.txt', content: 'workspace only' });
+  ok('deployed_filesystem_generic_write_routes_to_workspace', routedWorkspaceWrite.status === 200 && fs.readFileSync(path.join(safeWorkspace, 'must-not-exist.txt'), 'utf8') === 'workspace only', `status=${routedWorkspaceWrite.status}`);
+  ok('workspace_routed_write_did_not_touch_game', !fs.existsSync(path.join(liveExtensions, 'must-not-exist.txt')));
 
   // Simulate a pre-upgrade unsafe workspace. Staging/snapshot/deploy chokepoints must still refuse it.
   fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({ ...deployedRolesConfig, modWorkspacePath: liveExtensions }));
@@ -165,6 +167,70 @@ async function main() {
 
   const repairedConfig = await req('POST', '/api/schema/config', SESSION_TOKEN, deployedRolesConfig);
   ok('unsafe_config_can_be_repaired', repairedConfig.status === 200, `status=${repairedConfig.status}`);
+
+  // --- complete artifact/deploy route: arbitrary >legacy-cap payload + packed game output ---
+  const hostileName = 'hostile_artifact_mod';
+  const hostileSource = path.join(safeWorkspace, hostileName);
+  const hostileWrite = (rel, bytes) => {
+    const file = path.join(hostileSource, ...rel.split('/'));
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, bytes);
+  };
+  hostileWrite('content.xml', '<?xml version="1.0"?><content id="hostile_artifact_mod" name="Hostile Artifact Mod" version="100"/>');
+  hostileWrite('md/source.xml', '<?xml version="1.0"?><mdscript name="HostileArtifact"><cues/></mdscript>');
+  hostileWrite('assets/large.weird', Buffer.alloc((7 * 1024 * 1024) + 31, 0x4a));
+  hostileWrite('unknown/船/custom.noext', Buffer.from([0x00, 0xff, 0x01, 0x7f]));
+  hostileWrite('runtime/state.db', 'source placeholder');
+  hostileWrite('.git/config', 'must not deploy');
+  hostileWrite('.forgeartifact.json', JSON.stringify({ runtimeOwned: ['runtime/**'] }));
+  const sourceSentinels = new Map([
+    ['assets/large.weird', crypto.createHash('sha256').update(fs.readFileSync(path.join(hostileSource, 'assets', 'large.weird'))).digest('hex')],
+    ['.git/config', crypto.createHash('sha256').update(fs.readFileSync(path.join(hostileSource, '.git', 'config'))).digest('hex')],
+    ['.forgeartifact.json', crypto.createHash('sha256').update(fs.readFileSync(path.join(hostileSource, '.forgeartifact.json'))).digest('hex')],
+  ]);
+  const hostileLive = path.join(liveExtensions, hostileName);
+  fs.mkdirSync(path.join(hostileLive, 'runtime'), { recursive: true });
+  fs.writeFileSync(path.join(hostileLive, 'runtime', 'state.db'), 'live mutable state');
+  fs.writeFileSync(path.join(hostileLive, 'stale-loose.txt'), 'must disappear');
+  const hostileImport = await req('POST', '/api/agent/mod-folder/import', SESSION_TOKEN, { path: hostileName });
+  ok('hostile_mod_imported_from_workspace', hostileImport.status === 200 && hostileImport.json?.success === true, `status=${hostileImport.status}`);
+  const hostileScratchBuild = await req('POST', '/api/agent/artifact/build', SESSION_TOKEN, { workspace: hostileImport.json?.workspace, format: 'catalog' });
+  const hostileScratchPath = path.join(safeWorkspace, '.forge-builds', 'catalog', hostileName);
+  ok('hostile_scratch_artifact_build_verified', hostileScratchBuild.status === 200 && hostileScratchBuild.json?.success === true && hostileScratchBuild.json?.artifact?.verified === true, `status=${hostileScratchBuild.status}`);
+  ok('scratch_artifact_stays_under_workspace', hostileScratchBuild.json?.artifactPath === hostileScratchPath && fs.existsSync(path.join(hostileScratchPath, 'ext_01.cat')) && !fs.existsSync(path.join(liveExtensions, hostileName, 'ext_01.cat')));
+  const invalidArtifactFormat = await req('POST', '/api/agent/artifact/build', SESSION_TOKEN, { workspace: hostileImport.json?.workspace, format: 'rar' });
+  ok('artifact_build_rejects_unknown_format', invalidArtifactFormat.status === 400);
+  const hostileDeploy = await req('POST', '/api/agent/deploy', SESSION_TOKEN, { workspace: hostileImport.json?.workspace });
+  ok('hostile_mod_deployed_as_verified_catalog_artifact', hostileDeploy.status === 200 && hostileDeploy.json?.success === true && hostileDeploy.json?.artifact?.verified === true && hostileDeploy.json?.artifact?.mode === 'catalog', `status=${hostileDeploy.status} artifact=${JSON.stringify(hostileDeploy.json?.artifact || {})}`);
+  const hostileLooseStage = path.join(safeWorkspace, '.forge-builds', 'loose', hostileName);
+  ok('deploy_stages_outside_source_checkout', hostileDeploy.json?.lastDeploy?.stagingPath === hostileLooseStage && fs.existsSync(path.join(hostileLooseStage, 'assets', 'large.weird')));
+  ok('build_and_deploy_leave_source_checkout_byte_identical', [...sourceSentinels].every(([rel, expected]) => {
+    const sourceFile = path.join(hostileSource, ...rel.split('/'));
+    return fs.existsSync(sourceFile) && crypto.createHash('sha256').update(fs.readFileSync(sourceFile)).digest('hex') === expected;
+  }));
+  ok('hostile_deploy_keeps_content_loose_and_packs_payload', fs.existsSync(path.join(hostileLive, 'content.xml')) && fs.existsSync(path.join(hostileLive, 'ext_01.cat')) && fs.existsSync(path.join(hostileLive, 'ext_01.dat')) && !fs.existsSync(path.join(hostileLive, 'assets')));
+  ok('hostile_deploy_removes_stale_and_dev_metadata', !fs.existsSync(path.join(hostileLive, 'stale-loose.txt')) && !fs.existsSync(path.join(hostileLive, '.git')));
+  ok('hostile_deploy_preserves_declared_runtime_state', fs.readFileSync(path.join(hostileLive, 'runtime', 'state.db'), 'utf8') === 'live mutable state');
+  const catLines = fs.readFileSync(path.join(hostileLive, 'ext_01.cat'), 'utf8').trim().split(/\r?\n/);
+  let datOffset = 0;
+  let largeEntry = null;
+  for (const line of catLines) {
+    const parts = line.split(' ');
+    const size = Number(parts.at(-3));
+    const name = parts.slice(0, -3).join(' ');
+    if (name === 'assets/large.weird') largeEntry = { offset: datOffset, size };
+    datOffset += size;
+  }
+  let packedLargeHash = '';
+  if (largeEntry) {
+    const dat = fs.openSync(path.join(hostileLive, 'ext_01.dat'), 'r');
+    const packed = Buffer.alloc(largeEntry.size);
+    try { fs.readSync(dat, packed, 0, packed.length, largeEntry.offset); } finally { fs.closeSync(dat); }
+    packedLargeHash = crypto.createHash('sha256').update(packed).digest('hex');
+  }
+  const sourceLargeHash = crypto.createHash('sha256').update(fs.readFileSync(path.join(hostileSource, 'assets', 'large.weird'))).digest('hex');
+  ok('hostile_large_payload_hash_identical_through_http_deploy', Boolean(largeEntry) && packedLargeHash === sourceLargeHash);
+  ok('hostile_unicode_unknown_path_cataloged', catLines.some(line => line.startsWith('unknown/船/custom.noext ')));
 
   // --- fs/write path containment and positive safe-root write ---
   const safeFilesystemConfig = await req('POST', '/api/schema/config', SESSION_TOKEN, { ...deployedRolesConfig, filesystemPath: safeWorkspace });

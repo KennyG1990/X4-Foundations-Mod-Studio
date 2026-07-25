@@ -28,7 +28,8 @@
     "test:reference-manifest-api": "node scripts/reference-manifest-api-integration.mjs",
     "test:extension-capabilities": "tsx vscode-extension/src/capabilities.ts",
     "test:schema-particle-corpus": "tsx scripts/schema-particle-corpus-check.ts",
-    "test:diff-overlay-corpus": "tsx scripts/diff-overlay-corpus-check.ts"
+    "test:diff-overlay-corpus": "tsx scripts/diff-overlay-corpus-check.ts",
+    "test:artifact-pipeline": "tsx scripts/artifact-pipeline-check.ts"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.4",

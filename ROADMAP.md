@@ -6185,3 +6185,27 @@ fixed before close. **PARTIAL residual:** full e2e and real rendered Antigravity
 because the machine-state gate found X4 and Antigravity active; no live workspace/game/UI state was
 disturbed. Standalone LSP remains deliberately deferred. No Git mutation. Suggested commit title:
 `feat: add schema-driven X4 completion hover and validation`.
+## 2026-07-24 — B76 generic disk-backed artifact and CAT/DAT deployment — VERIFIED
+
+Forge now builds arbitrary X4 mods from one provenance inventory instead of treating the browser's
+256 KiB-per-file / 6 MiB import budgets as deployment limits. Compiler-emitted paths are `generated`;
+every other included regular file is disk-backed `source-copy` regardless of name, extension, or size.
+Universal/project exclusions, runtime-owned paths, catalog-loose paths, unsafe links/traversal, and
+case-fold collisions are explicit and reported. Unknown file types default to byte-preserving payload.
+
+Loose builds live at `<Mod Workspace>/.forge-builds/loose/<modId>` and never replace the source checkout.
+Explicit game deployment builds a separate verified scratch artifact, keeps `content.xml` and declared
+loose files outside catalogs, streams all other payload into deterministic `ext_NN.cat/.dat` volumes,
+reopens and hash-verifies them, then activates through sibling stage/backup rollback while preserving only
+declared runtime-owned state. Generic filesystem mutations target only the development workspace; only
+validated Deploy owns the installed-extension write boundary. Full-project validation merges disk-backed
+text omitted from browser memory and emits `validation.disk_file_skipped` when a file exceeds its separate
+4 MiB semantic-loader budget, preventing false-clean claims.
+
+Evidence: hostile arbitrary-file fixture 41/41; external authenticated route/deploy harness 49/49,
+including a hash-identical 7+ MiB binary, Unicode/unknown paths, source-checkout byte preservation,
+runtime-state preservation, stale-output cleanup, traversal/junction rejection, and isolated fake-game
+deployment; runtime-discovered oracles 102/102; full e2e 24/24; typecheck, lint (0 errors / 437 existing
+warnings), precommit, production build, extension build/stage, and staged sidecar probe 6/6 all pass.
+A read-only check against installed `dynamic_universe` confirmed Forge's CAT MD5 interpretation matches
+the paired DAT bytes. No real G-drive mod/game directory was mutated and nothing was published.
