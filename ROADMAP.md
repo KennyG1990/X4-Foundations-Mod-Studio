@@ -6227,3 +6227,66 @@ The extension now tracks the full backend-session identity (URL, ownership, port
 Evidence: panel-binding selftest 5/5; root typecheck/build PASS; extension build/stage PASS; staged sidecar probe 6/6; root precommit PASS; package inspection PASS with 2,091 entries and zero forbidden payloads. Antigravity visibly identified installed X4 Forge Studio v0.0.38. Leaving the Studio tab open across **Restart Extensions** changed the managed sidecar from 56542 to 56203 while the full canvas remained rendered, directly proving the formerly blank retained-panel path. OpenVSX published and indexed stable 0.0.38; public and local VSIX files are byte-identical at 17,810,331 bytes and SHA-256 `354622FC6A9F79F115129F2067EF2B5D13ACF77AB15C05E01603BFFFE19EA0C1`.
 
 No game directory, live mod, standing Forge configuration, validation semantics, or B77 graph artifact was changed. Suggested commit title: `fix(extension): rebind retained Studio panels after sidecar restarts`.
+
+## 2026-07-25 — B79 retained-session repair + dual-root project browser / committed 0.0.39 candidate — VERIFIED
+
+The restored Studio panel now binds to the authoritative managed sidecar after every shared backend ensure,
+including callers that joined an already-running ensure operation. Load Mod Project now exposes the Mod
+Workspace and deployed Filesystem as separate labeled sources and preserves the clicked source through
+list, preview, and import. Same-named folders in both roots are no longer ambiguous; legacy unqualified API
+callers retain their prior behavior.
+
+The 0.0.39 manifest/release candidate was committed before B80 began, but live Open VSX verification on
+2026-07-25 shows 0.0.38 is still the latest public release and the registry contains no 0.0.39 entry. The
+installed local 0.0.40 host exercises the same B79 session/root contracts: the Studio rendered against
+managed sidecar 57950; both source paths loaded; source-qualified selection and preview remained intact.
+B79's stale `blocked` handoff state is superseded by the live baseline and B80's complete regression board.
+
+## 2026-07-25 — B80 IDE-style lazy dual-root project tree / local 0.0.40 candidate — VERIFIED
+
+Load Mod Project now renders Mod Workspace and Filesystem as independent disclosure roots. Directories use
+right/down chevrons, fetch only their immediate children when expanded, cache loaded branches for the modal
+session, and display nested files with type-aware icons and CAT/DAT badges. A mod folder remains selectable
+when its direct children contain `content.xml`; expansion and selection are separate actions. Filtering keeps
+loaded matching ancestry visible, and an unavailable source reports its own error without hiding the other.
+
+The server adds opt-in `/api/fs/list?root=workspace|filesystem&depth=1&path=...` shallow listing while the
+legacy recursive response remains unchanged. Every shallow path is textually contained, realpath-contained,
+hidden/development filtered, and specific about traversal, missing, non-directory, unsupported-depth, and
+junction-escape failures. No game, deployed mod, standing configuration, or active Forge workspace was
+written by project browsing or validation.
+
+Evidence: test-first route baseline 60/66 red before implementation; final routes 69/69; runtime oracles
+102/102; focused project-browser e2e 2/2; full e2e 26/26 with `[run-e2e] VERDICT: PASS`; typecheck PASS;
+lint 0 errors / 438 existing warnings; precommit PASS; production and extension builds PASS; staged sidecar
+probe 6/6; VSIX package PASS (2,091 files, 16.99 MB); Antigravity registry and active host identify installed
+`x4forge.x4-forge-studio@0.0.40`. Installed visual proof covered collapsed and expanded roots, a real nested
+`content.xml` plus CAT/DAT files, selected `workspace: x4_ai_influence`, preview counts, and no fetch error.
+Ken independently confirmed the user experience “worked perfectly” and supplied screenshot
+`codex-clipboard-f9826a4a-c28e-4790-9aa4-19cb7752cd9d.png`.
+
+Fresh-eyes review added missing filter and partial-root-failure browser assertions and corrected unreadable
+folder disclosure/retry plus selected-file count behavior before close. The observed “lags a bit” report is
+not causally attributed: installed screenshots showed 152–180 rAF-cadence FPS with isolated 51 ms long-task
+markers while Antigravity was also running several repositories and agent panes. Measure before assigning a
+Forge regression. Local 0.0.40 is deliberately **not published or committed**; external publication remains
+explicitly user-authorized. Suggested commit title after authorized publication:
+`feat(projects): browse workspace and deployed mods with lazy disclosure trees`.
+
+## 2026-07-25 — 0.0.40 Open VSX publication CONFIRMED PUBLIC (supersedes the "not published" line above) — VERIFIED
+The B80 entry above was written before publication and states local 0.0.40 is "not published"; `ovsx publish`
+subsequently reported `Published x4forge.x4-forge-studio v0.0.40`, then the registry appeared not to have it.
+Registry probe (2026-07-25, agent, read-only) resolves that as **propagation lag, NOT a failed publish**:
+- `GET /api/x4forge/x4-forge-studio` → 200, **latest = 0.0.40**, timestamp `2026-07-25 07:26:10`, `preRelease: false`.
+- `GET /api/x4forge/x4-forge-studio/0.0.40` → **200** (the earlier 404 was pre-propagation; do NOT republish).
+- `GET /api/x4forge/x4-forge-studio/universal/0.0.40` → 200 (target-qualified path also live).
+- `GET /api/x4forge/x4-forge-studio/versions` → 200 but the LIST still ends at 0.0.38 — the version *list* is the
+  laggy surface; the base + version-specific endpoints are the fast truth. (Same lag class as the 0.0.31 release;
+  now confirmed twice — the runbook's guidance to judge by the latest/version endpoint holds.)
+- **Integrity proven:** public download is BYTE-IDENTICAL to the locally probed artifact — 17,813,559 bytes,
+  SHA-256 `10E7E0E8D367A7CDA01E209DCC0DAB700102A26C38131E38760AFAFFFB3E244A`, both sides. Users receive exactly
+  the package that passed build/stage/security/6-of-6 runtime probe.
+- **0.0.39 confirmed never published** (`GET /.../0.0.39` → 404): it was committed as a manifest candidate only.
+  That version number is skipped, not consumed by a failed upload; no cleanup required.
+Publish-before-commit is therefore satisfied for 0.0.40 (public confirmation preceded this commit). The two
+`0.0.35-runtime-copy-*.png` binary diffs are unrelated churn and are deliberately EXCLUDED from this commit.

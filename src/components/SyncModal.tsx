@@ -7,10 +7,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   ClipboardPaste,
   Code2,
   FileCode,
   FileJson,
+  FileText,
   FolderOpen,
   FolderSync,
   Layers3,
@@ -42,6 +45,11 @@ interface FSItem {
   kind: 'file' | 'directory';
   path: string;
   children?: FSItem[];
+  childrenLoaded?: boolean;
+  hasChildren?: boolean;
+  childCount?: number;
+  hasContent?: boolean;
+  hasPacked?: boolean;
 }
 
 type ProjectSourceRoot = 'workspace' | 'filesystem';
@@ -50,7 +58,6 @@ interface ModCandidate {
   root: ProjectSourceRoot;
   name: string;
   path: string;
-  totalFiles: number;
   domains: string[];
   hasContent: boolean;
   hasPacked: boolean;
@@ -76,30 +83,62 @@ function collectFiles(node: FSItem, out: FSItem[] = []): FSItem[] {
   return out;
 }
 
+function collectRelativeEntries(node: FSItem, out: string[] = []): string[] {
+  for (const child of node.children || []) {
+    const relative = child.path.slice(node.path.length).replace(/^\/+/, '').replace(/\\/g, '/');
+    out.push(child.kind === 'directory' ? `${relative}/` : relative);
+    collectRelativeEntries(child, out);
+  }
+  return out;
+}
+
 function findModCandidates(items: FSItem[], root: ProjectSourceRoot): ModCandidate[] {
   const candidates: ModCandidate[] = [];
   const visit = (node: FSItem) => {
     if (node.kind !== 'directory') return;
     const files = collectFiles(node);
     const relFiles = files.map(f => f.path.slice(node.path.length).replace(/^\/+/, '').replace(/\\/g, '/'));
-    const hasContent = relFiles.some(p => p.toLowerCase() === 'content.xml');
+    const relEntries = collectRelativeEntries(node);
+    const hasContent = node.hasContent ?? relFiles.some(p => p.toLowerCase() === 'content.xml');
     if (hasContent) {
-      const domains = DOMAIN_RULES.filter(r => relFiles.some(r.test)).map(r => r.label);
+      const domains = DOMAIN_RULES.filter(r => relEntries.some(r.test)).map(r => r.label);
       candidates.push({
         root,
         name: node.name,
         path: node.path,
-        totalFiles: files.length,
         domains,
         hasContent,
-        hasPacked: relFiles.some(p => /\.(cat|dat)$/i.test(p))
+        hasPacked: node.hasPacked ?? relFiles.some(p => /\.(cat|dat)$/i.test(p))
       });
-      return;
     }
     for (const child of node.children || []) visit(child);
   };
   for (const item of items) visit(item);
   return candidates.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function updateTreeNode(items: FSItem[], targetPath: string, update: (item: FSItem) => FSItem): FSItem[] {
+  return items.map(item => {
+    if (item.path === targetPath) return update(item);
+    if (!item.children?.length) return item;
+    return { ...item, children: updateTreeNode(item.children, targetPath, update) };
+  });
+}
+
+function filterProjectTree(items: FSItem[], query: string, showOfficial: boolean, depth = 0): FSItem[] {
+  const normalized = query.trim().toLowerCase();
+  return items.flatMap(item => {
+    if (!showOfficial && depth === 0 && /^ego_/i.test(item.name)) return [];
+    const children = item.children ? filterProjectTree(item.children, query, showOfficial, depth + 1) : undefined;
+    if (!normalized || item.name.toLowerCase().includes(normalized) || item.path.toLowerCase().includes(normalized) || children?.length) {
+      return [{ ...item, ...(children ? { children } : {}) }];
+    }
+    return [];
+  });
+}
+
+function treeNodeTestId(root: ProjectSourceRoot, relativePath: string): string {
+  return `project-tree-node-${root}-${relativePath.replace(/[^a-zA-Z0-9_-]+/g, '-')}`;
 }
 
 function countClasses(report: any) {
@@ -123,6 +162,10 @@ export default function SyncModal({
   const [dragActive, setDragActive] = useState(false);
   const [fileTrees, setFileTrees] = useState<Record<ProjectSourceRoot, FSItem[]>>({ workspace: [], filesystem: [] });
   const [rootErrors, setRootErrors] = useState<Partial<Record<ProjectSourceRoot, string>>>({});
+  const [rootExpanded, setRootExpanded] = useState<Record<ProjectSourceRoot, boolean>>({ workspace: true, filesystem: true });
+  const [expandedPaths, setExpandedPaths] = useState<Record<string, boolean>>({});
+  const [loadingPaths, setLoadingPaths] = useState<Record<string, boolean>>({});
+  const [nodeErrors, setNodeErrors] = useState<Record<string, string>>({});
   const [loadingTree, setLoadingTree] = useState(false);
   const [projectFilter, setProjectFilter] = useState('');
   const [selectedRoot, setSelectedRoot] = useState<ProjectSourceRoot>('workspace');
@@ -144,8 +187,15 @@ export default function SyncModal({
       return c.name.toLowerCase().includes(q) || c.path.toLowerCase().includes(q);
     });
   }, [candidates, projectFilter, showOfficial]);
+  const visibleTrees = useMemo<Record<ProjectSourceRoot, FSItem[]>>(() => ({
+    workspace: filterProjectTree(fileTrees.workspace, projectFilter, showOfficial),
+    filesystem: filterProjectTree(fileTrees.filesystem, projectFilter, showOfficial),
+  }), [fileTrees, projectFilter, showOfficial]);
   const selectedCandidate = candidates.find(c => c.root === selectedRoot && c.path === selectedPath) || null;
   const previewCounts = countClasses(previewReport?.importReport || previewReport);
+  const selectedFileCount = previewReport?.importReport?.classification?.length
+    ?? previewReport?.classification?.length
+    ?? null;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -163,9 +213,12 @@ export default function SyncModal({
   const loadProjectTree = async () => {
     setLoadingTree(true);
     setStatusBanner(null);
+    setExpandedPaths({});
+    setLoadingPaths({});
+    setNodeErrors({});
     const results = await Promise.all(PROJECT_SOURCES.map(async source => {
       try {
-        const res = await fetch(`/api/fs/list?root=${source.root}`);
+        const res = await fetch(`/api/fs/list?root=${source.root}&depth=1`);
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error || `${source.label} scan failed (${res.status})`);
         return { root: source.root, tree: Array.isArray(data) ? data : [], error: '' };
@@ -186,6 +239,48 @@ export default function SyncModal({
       ? { type: 'refused', msg: `Scanned ${PROJECT_SOURCES.length - failures} of ${PROJECT_SOURCES.length} project sources. ${Object.values(nextErrors).join(' ')}` }
       : { type: 'info', msg: 'Scanned Mod Workspace and Filesystem project sources.' });
     setLoadingTree(false);
+  };
+
+  const loadDirectoryChildren = async (root: ProjectSourceRoot, item: FSItem) => {
+    const key = `${root}:${item.path}`;
+    if (item.childrenLoaded || loadingPaths[key]) return;
+    setLoadingPaths(prev => ({ ...prev, [key]: true }));
+    setNodeErrors(prev => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+    try {
+      const query = new URLSearchParams({ root, depth: '1', path: item.path });
+      const res = await fetch(`/api/fs/list?${query.toString()}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `Could not expand ${item.name} (${res.status})`);
+      if (!Array.isArray(data)) throw new Error(`Directory response for ${item.name} was not an array.`);
+      setFileTrees(prev => ({
+        ...prev,
+        [root]: updateTreeNode(prev[root], item.path, current => ({
+          ...current,
+          children: data,
+          childrenLoaded: true,
+          hasChildren: data.length > 0,
+          childCount: data.length,
+        })),
+      }));
+    } catch (error) {
+      setNodeErrors(prev => ({
+        ...prev,
+        [key]: error instanceof Error ? error.message : `Could not expand ${item.name}.`,
+      }));
+    } finally {
+      setLoadingPaths(prev => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const toggleDirectory = (root: ProjectSourceRoot, item: FSItem) => {
+    const key = `${root}:${item.path}`;
+    const nextExpanded = !expandedPaths[key];
+    setExpandedPaths(prev => ({ ...prev, [key]: nextExpanded }));
+    if (nextExpanded && !item.childrenLoaded) void loadDirectoryChildren(root, item);
   };
 
   const previewProject = async (root: ProjectSourceRoot, path: string) => {
@@ -353,6 +448,91 @@ export default function SyncModal({
     reader.readAsText(file);
   };
 
+  const renderProjectTreeNode = (
+    source: (typeof PROJECT_SOURCES)[number],
+    item: FSItem,
+    depth = 0
+  ): React.ReactNode => {
+    const key = `${source.root}:${item.path}`;
+    const filterForcesExpanded = Boolean(projectFilter.trim() && item.children?.length);
+    const isExpanded = Boolean(expandedPaths[key] || filterForcesExpanded);
+    const isLoading = Boolean(loadingPaths[key]);
+    const candidate = item.hasContent
+      ? candidates.find(current => current.root === source.root && current.path === item.path) || null
+      : null;
+    const isSelected = selectedRoot === source.root && selectedPath === item.path;
+
+    if (item.kind === 'file') {
+      const lowerName = item.name.toLowerCase();
+      const icon = /\.(?:cat|dat)$/.test(lowerName)
+        ? <PackageOpen className="w-3.5 h-3.5 text-fuchsia-300 shrink-0" />
+        : lowerName.endsWith('.json')
+          ? <FileJson className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+          : /\.(?:xml|xsd|lua)$/.test(lowerName)
+            ? <FileCode className="w-3.5 h-3.5 text-cyan-300 shrink-0" />
+            : <FileText className="w-3.5 h-3.5 text-slate-500 shrink-0" />;
+      return (
+        <div
+          key={key}
+          data-testid={treeNodeTestId(source.root, item.path)}
+          className="flex items-center gap-1.5 rounded px-1.5 py-1 font-mono text-[10px] text-slate-400"
+          style={{ paddingLeft: `${8 + depth * 12}px` }}
+          title={item.path}
+        >
+          <span className="w-3.5 shrink-0" aria-hidden="true" />
+          {icon}
+          <span className="truncate">{item.name}</span>
+        </div>
+      );
+    }
+
+    const canExpand = item.hasChildren !== false;
+    return (
+      <div key={key} data-testid={treeNodeTestId(source.root, item.path)}>
+        <div
+          className={`group flex items-center rounded border transition-colors ${isSelected ? 'bg-cyan-500/12 border-cyan-500/30' : 'border-transparent hover:bg-white/[0.04]'}`}
+          style={{ paddingLeft: `${depth * 12}px` }}
+        >
+          {canExpand ? (
+            <button
+              type="button"
+              onClick={() => toggleDirectory(source.root, item)}
+              aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${item.name}`}
+              aria-expanded={isExpanded}
+              className="p-1 text-slate-500 hover:text-white cursor-pointer shrink-0"
+            >
+              {isLoading
+                ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                : isExpanded
+                  ? <ChevronDown className="w-3.5 h-3.5" />
+                  : <ChevronRight className="w-3.5 h-3.5" />}
+            </button>
+          ) : <span className="w-[22px] shrink-0" aria-hidden="true" />}
+          <button
+            type="button"
+            onClick={() => candidate ? selectProject(candidate) : toggleDirectory(source.root, item)}
+            aria-label={candidate ? `Select ${item.name} from ${source.label}` : `${isExpanded ? 'Collapse' : 'Expand'} folder ${item.name}`}
+            className="min-w-0 flex-1 flex items-center gap-1.5 py-1 pr-1.5 text-left cursor-pointer"
+            title={item.path}
+          >
+            <FolderOpen className={`w-3.5 h-3.5 shrink-0 ${candidate ? 'text-cyan-300' : 'text-slate-500'}`} />
+            <span className={`truncate font-mono text-[10.5px] ${candidate ? 'font-bold text-slate-100' : 'text-slate-400'}`}>{item.name}</span>
+            {item.hasPacked && <span className="text-[7px] px-1 py-0.5 rounded bg-fuchsia-500/10 border border-fuchsia-500/20 text-fuchsia-300">CAT/DAT</span>}
+            {typeof item.childCount === 'number' && <span className="ml-auto font-mono text-[8px] text-slate-600">{item.childCount}</span>}
+          </button>
+        </div>
+        {nodeErrors[key] && <div className="ml-7 px-2 py-1 text-[9px] text-red-300">{nodeErrors[key]}</div>}
+        {isExpanded && item.children && (
+          <div className="ml-3 border-l border-white/8">
+            {item.children.length
+              ? item.children.map(child => renderProjectTreeNode(source, child, depth + 1))
+              : <div className="pl-5 py-1 text-[9px] text-slate-600">Empty folder</div>}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -437,40 +617,38 @@ export default function SyncModal({
                 {PROJECT_SOURCES.map(source => {
                   const sourcePath = source.root === 'workspace' ? modWorkspacePath : filesystemPath;
                   const sourceCandidates = filteredCandidates.filter(candidate => candidate.root === source.root);
+                  const sourceTree = visibleTrees[source.root];
+                  const isSourceExpanded = rootExpanded[source.root];
                   return (
                     <section key={source.root} data-testid={`project-source-${source.root}`} className="rounded-md border border-white/8 bg-black/20 overflow-hidden">
-                      <div className="px-2 py-2 border-b border-white/8 bg-white/[0.025]">
-                        <div className="flex items-center justify-between gap-2">
-                          <div>
-                            <div className="font-mono text-[10px] font-bold uppercase text-slate-200">{source.label}</div>
-                            <div className="text-[9px] text-slate-500">{source.description}</div>
+                      <button
+                        type="button"
+                        onClick={() => setRootExpanded(prev => ({ ...prev, [source.root]: !prev[source.root] }))}
+                        aria-label={`${isSourceExpanded ? 'Collapse' : 'Expand'} ${source.label}`}
+                        aria-expanded={isSourceExpanded}
+                        className="w-full flex items-start gap-1.5 px-2 py-2 bg-white/[0.025] hover:bg-white/[0.05] text-left cursor-pointer"
+                      >
+                        {isSourceExpanded ? <ChevronDown className="w-3.5 h-3.5 mt-0.5 text-slate-400 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 mt-0.5 text-slate-400 shrink-0" />}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <div className="font-mono text-[10px] font-bold uppercase text-slate-200">{source.label}</div>
+                              <div className="text-[9px] text-slate-500">{source.description}</div>
+                            </div>
+                            <span className="font-mono text-[9px] text-slate-500">{sourceCandidates.length}</span>
                           </div>
-                          <span className="font-mono text-[9px] text-slate-500">{sourceCandidates.length}</span>
+                          <div className="mt-1 font-mono text-[8px] text-slate-500 break-all">{sourcePath || 'Not configured'}</div>
                         </div>
-                        <div className="mt-1 font-mono text-[8px] text-slate-500 break-all">{sourcePath || 'Not configured'}</div>
-                        {rootErrors[source.root] && <div className="mt-1 text-[9px] text-red-300">{rootErrors[source.root]}</div>}
-                      </div>
-                      <div className="p-1 space-y-1">
-                        {sourceCandidates.length === 0 ? (
-                          <div className="text-[10px] text-slate-500 p-2 leading-relaxed">No mod folders with `content.xml` found.</div>
-                        ) : sourceCandidates.map(c => (
-                          <button
-                            key={`${c.root}:${c.path}`}
-                            onClick={() => selectProject(c)}
-                            className={`w-full text-left p-2 rounded-md border transition-all cursor-pointer ${selectedRoot === c.root && selectedPath === c.path ? 'bg-cyan-500/12 border-cyan-500/35' : 'bg-white/[0.025] border-white/6 hover:bg-white/[0.06] hover:border-white/12'}`}
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <FolderOpen className="w-4 h-4 text-cyan-300 shrink-0" />
-                              <span className="font-mono text-[11px] text-slate-100 font-bold truncate">{c.name}</span>
-                            </div>
-                            <div className="mt-1 font-mono text-[9px] text-slate-500 truncate">{c.path}</div>
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              <span className="text-[8px] px-1 py-0.5 rounded bg-black/35 border border-white/8 text-slate-400">{c.totalFiles} files</span>
-                              {c.hasPacked && <span className="text-[8px] px-1 py-0.5 rounded bg-fuchsia-500/10 border border-fuchsia-500/20 text-fuchsia-300">CAT/DAT</span>}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
+                      </button>
+                      {isSourceExpanded && (
+                        <div className="border-t border-white/8 p-1">
+                          {rootErrors[source.root] ? (
+                            <div className="text-[9px] text-red-300 p-2">{rootErrors[source.root]}</div>
+                          ) : sourceTree.length === 0 ? (
+                            <div className="text-[10px] text-slate-500 p-2 leading-relaxed">No folders or files found.</div>
+                          ) : sourceTree.map(item => renderProjectTreeNode(source, item))}
+                        </div>
+                      )}
                     </section>
                   );
                 })}
@@ -580,7 +758,7 @@ export default function SyncModal({
                 <div className="font-mono text-[10px] uppercase text-slate-400">Project Summary</div>
                 <div className="mt-2 space-y-2 text-[11px] text-slate-300">
                   <div className="flex justify-between gap-2"><span>Candidate mods</span><span className="font-mono text-white">{candidates.length}</span></div>
-                  <div className="flex justify-between gap-2"><span>Selected files</span><span className="font-mono text-white">{selectedCandidate?.totalFiles ?? 0}</span></div>
+                  <div className="flex justify-between gap-2"><span>Selected files</span><span className="font-mono text-white">{selectedFileCount ?? 'preview pending'}</span></div>
                   <div className="flex justify-between gap-2"><span>Packed archive</span><span className="font-mono text-white">{selectedCandidate?.hasPacked ? 'yes' : 'no'}</span></div>
                 </div>
               </div>

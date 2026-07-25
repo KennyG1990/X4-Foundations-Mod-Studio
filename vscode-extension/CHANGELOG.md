@@ -3,6 +3,11 @@
 The latest changes, newest first. (This page is generated automatically — see
 `release-notes.json` to edit the wording.)
 
+## 0.0.40 — 2026-07-25
+
+- Load Mod Project now presents both the development workspace and installed-mod filesystem as collapsible directory trees. Expand only the folders you need, inspect nested files in place, and select the exact mod folder to preview or load.
+- Large mod libraries no longer require a full recursive scan when the project browser opens. Folder contents load on demand, remain cached while the dialog is open, and keep workspace and deployed copies distinct even when they share a name.
+
 ## 0.0.39 — 2026-07-25
 
 - Load Mod Project now browses the Mod Workspace and installed Filesystem as separate, clearly labelled sources. Preview and Load Project use the exact folder you clicked even when both locations contain a mod with the same name.

@@ -3053,7 +3053,14 @@ app.post("/api/schema/config", (req, res) => {
   }
 });
 
-// Helper for scanning filesystem recursively
+function includeFilesystemEntry(name: string): boolean {
+  if (name.startsWith('.') && name !== '.snapshots') return false;
+  return name !== 'node_modules' && name !== 'dist';
+}
+
+// Helper for scanning filesystem recursively. This remains the compatibility
+// response for existing Files/Library consumers; the project browser opts into
+// the bounded shallow form below.
 function scanDirectory(dir: string, baseDir: string): any[] {
   const items: any[] = [];
   try {
@@ -3062,12 +3069,7 @@ function scanDirectory(dir: string, baseDir: string): any[] {
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
       const relativePath = path.relative(baseDir, fullPath).replace(/\\/g, '/');
-      if (entry.name.startsWith('.') && entry.name !== '.snapshots') {
-        continue;
-      }
-      if (entry.name === 'node_modules' || entry.name === 'dist') {
-        continue;
-      }
+      if (!includeFilesystemEntry(entry.name)) continue;
       if (entry.isDirectory()) {
         items.push({
           name: entry.name,
@@ -3095,6 +3097,44 @@ function scanDirectory(dir: string, baseDir: string): any[] {
   });
 }
 
+function inspectShallowDirectory(dir: string, baseDir: string) {
+  const entries = fs.readdirSync(dir, { withFileTypes: true })
+    .filter(entry => includeFilesystemEntry(entry.name));
+
+  const items = entries.map(entry => {
+    const fullPath = path.join(dir, entry.name);
+    const relativePath = path.relative(baseDir, fullPath).replace(/\\/g, '/');
+    if (!entry.isDirectory()) {
+      return { name: entry.name, kind: 'file', path: relativePath };
+    }
+
+    let visibleChildren: fs.Dirent[] = [];
+    let readable = true;
+    try {
+      visibleChildren = fs.readdirSync(fullPath, { withFileTypes: true })
+        .filter(child => includeFilesystemEntry(child.name));
+    } catch {
+      // Keep a disclosure control for unreadable directories. Expanding it
+      // produces the specific request error without breaking sibling browsing.
+      readable = false;
+    }
+    return {
+      name: entry.name,
+      kind: 'directory',
+      path: relativePath,
+      hasChildren: readable ? visibleChildren.length > 0 : true,
+      childCount: readable ? visibleChildren.length : undefined,
+      hasContent: visibleChildren.some(child => child.isFile() && child.name.toLowerCase() === 'content.xml'),
+      hasPacked: visibleChildren.some(child => child.isFile() && /\.(?:cat|dat)$/i.test(child.name)),
+    };
+  });
+
+  return items.sort((a, b) => {
+    if (a.kind !== b.kind) return a.kind === 'directory' ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+}
+
 type ProjectSourceRoot = 'workspace' | 'filesystem';
 
 function parseProjectSourceRoot(value: unknown): { root?: ProjectSourceRoot; error?: string } {
@@ -3114,6 +3154,17 @@ app.get("/api/fs/list", (req, res) => {
     const resolved = resolveXsdConfig();
     const selection = parseProjectSourceRoot(req.query.root);
     if (selection.error) return res.status(400).json({ error: selection.error });
+    const depth = String(req.query.depth ?? '').trim();
+    const relativePath = String(req.query.path ?? '').trim();
+    if (depth && depth !== '1') {
+      return res.status(400).json({ error: 'Unsupported list depth. Expected depth=1 for shallow project browsing.' });
+    }
+    if ((depth || relativePath) && !selection.root) {
+      return res.status(400).json({ error: 'Shallow project browsing requires root="workspace" or root="filesystem".' });
+    }
+    if (relativePath && !depth) {
+      return res.status(400).json({ error: 'A project list path requires depth=1.' });
+    }
     const rootPath = selection.root
       ? configuredProjectRoot(resolved, selection.root)
       : resolved.filesystemPath || resolved.modWorkspacePath;
@@ -3122,6 +3173,28 @@ app.get("/api/fs/list", (req, res) => {
     }
     if (!fs.existsSync(rootPath)) {
       return res.json([]);
+    }
+    if (depth === '1') {
+      const requestedPath = path.resolve(rootPath, relativePath || '.');
+      if (!isPathWithin(requestedPath, rootPath)) {
+        return res.status(403).json({ error: 'Forbidden: Directory traversal detected.' });
+      }
+      const relativeSegments = path.relative(rootPath, requestedPath).split(path.sep).filter(Boolean);
+      if (relativeSegments.some(segment => !includeFilesystemEntry(segment))) {
+        return res.status(403).json({ error: 'Forbidden: Hidden or development directories are not browsable.' });
+      }
+      if (!fs.existsSync(requestedPath)) {
+        return res.status(404).json({ error: 'Directory not found.' });
+      }
+      const realRoot = fs.realpathSync(rootPath);
+      const realRequested = fs.realpathSync(requestedPath);
+      if (!isPathWithin(realRequested, realRoot)) {
+        return res.status(403).json({ error: 'Forbidden: Directory escapes the configured project root.' });
+      }
+      if (!fs.statSync(realRequested).isDirectory()) {
+        return res.status(400).json({ error: 'Requested project path is not a directory.' });
+      }
+      return res.json(inspectShallowDirectory(realRequested, realRoot));
     }
     const tree = scanDirectory(rootPath, rootPath);
     return res.json(tree);

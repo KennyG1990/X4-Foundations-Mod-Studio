@@ -179,6 +179,9 @@ async function main() {
   const collisionName = 'root_collision_mod';
   const workspaceCollision = writeFixtureMod(safeWorkspace, collisionName, 'Workspace Collision', 'workspace');
   const filesystemCollision = writeFixtureMod(liveExtensions, collisionName, 'Filesystem Collision', 'filesystem');
+  fs.mkdirSync(path.join(filesystemCollision, 'nested', 'deeper'), { recursive: true });
+  fs.writeFileSync(path.join(filesystemCollision, 'nested', 'visible.txt'), 'visible');
+  fs.writeFileSync(path.join(filesystemCollision, 'nested', 'deeper', 'lazy.txt'), 'lazy');
   writeFixtureMod(safeWorkspace, 'workspace_only_mod', 'Workspace Only', 'workspace-only');
   writeFixtureMod(liveExtensions, 'filesystem_only_mod', 'Filesystem Only', 'filesystem-only');
 
@@ -193,6 +196,39 @@ async function main() {
   ok('project_list_legacy_filesystem_first_behavior_preserved', legacyTree.status === 200 && Array.isArray(legacyTree.json) && legacyTreeText.includes('filesystem_only_mod') && !legacyTreeText.includes('workspace_only_mod'));
   const invalidProjectRoot = await req('GET', '/api/fs/list?root=elsewhere', SESSION_TOKEN);
   ok('project_list_invalid_root_rejected', invalidProjectRoot.status === 400, `status=${invalidProjectRoot.status}`);
+
+  const shallowWorkspaceRoot = await req('GET', '/api/fs/list?root=workspace&depth=1', SESSION_TOKEN);
+  const shallowWorkspaceCollision = shallowWorkspaceRoot.json?.find?.(entry => entry.path === collisionName);
+  ok('project_list_shallow_root_reports_mod_metadata_without_recursive_children', shallowWorkspaceRoot.status === 200
+    && shallowWorkspaceCollision?.kind === 'directory'
+    && shallowWorkspaceCollision?.hasContent === true
+    && shallowWorkspaceCollision?.children === undefined,
+  `entry=${JSON.stringify(shallowWorkspaceCollision)}`);
+  const shallowFilesystemMod = await req('GET', `/api/fs/list?root=filesystem&depth=1&path=${encodeURIComponent(collisionName)}`, SESSION_TOKEN);
+  const shallowNested = shallowFilesystemMod.json?.find?.(entry => entry.path === `${collisionName}/nested`);
+  ok('project_list_shallow_mod_returns_immediate_children_only', shallowFilesystemMod.status === 200
+    && shallowFilesystemMod.json?.some?.(entry => entry.path === `${collisionName}/content.xml`)
+    && shallowNested?.kind === 'directory'
+    && shallowNested?.hasChildren === true
+    && shallowNested?.children === undefined
+    && !JSON.stringify(shallowFilesystemMod.json).includes('lazy.txt'),
+  `tree=${JSON.stringify(shallowFilesystemMod.json)}`);
+  const shallowNestedChildren = await req('GET', `/api/fs/list?root=filesystem&depth=1&path=${encodeURIComponent(`${collisionName}/nested`)}`, SESSION_TOKEN);
+  ok('project_list_shallow_nested_expansion_returns_next_level', shallowNestedChildren.status === 200
+    && shallowNestedChildren.json?.some?.(entry => entry.path === `${collisionName}/nested/visible.txt`)
+    && shallowNestedChildren.json?.some?.(entry => entry.path === `${collisionName}/nested/deeper`)
+    && !JSON.stringify(shallowNestedChildren.json).includes('lazy.txt'),
+  `tree=${JSON.stringify(shallowNestedChildren.json)}`);
+  const shallowTraversal = await req('GET', `/api/fs/list?root=filesystem&depth=1&path=${encodeURIComponent('../outside')}`, SESSION_TOKEN);
+  ok('project_list_shallow_traversal_rejected', shallowTraversal.status === 403, `status=${shallowTraversal.status}`);
+  const shallowMissing = await req('GET', `/api/fs/list?root=filesystem&depth=1&path=${encodeURIComponent('missing-folder')}`, SESSION_TOKEN);
+  ok('project_list_shallow_missing_directory_is_specific', shallowMissing.status === 404, `status=${shallowMissing.status}`);
+  const shallowHidden = await req('GET', `/api/fs/list?root=filesystem&depth=1&path=${encodeURIComponent('.git')}`, SESSION_TOKEN);
+  ok('project_list_shallow_hidden_development_path_rejected', shallowHidden.status === 403, `status=${shallowHidden.status}`);
+  const shallowFile = await req('GET', `/api/fs/list?root=filesystem&depth=1&path=${encodeURIComponent(`${collisionName}/content.xml`)}`, SESSION_TOKEN);
+  ok('project_list_shallow_file_path_rejected_as_not_directory', shallowFile.status === 400, `status=${shallowFile.status}`);
+  const invalidDepth = await req('GET', '/api/fs/list?root=filesystem&depth=2', SESSION_TOKEN);
+  ok('project_list_unsupported_depth_rejected', invalidDepth.status === 400, `status=${invalidDepth.status}`);
 
   const filesystemPreview = await req('POST', '/api/agent/round-trip-check', SESSION_TOKEN, { root: 'filesystem', path: collisionName });
   ok('project_preview_collision_uses_selected_filesystem_root', filesystemPreview.status === 200 && filesystemPreview.json?.importReport?.folder === filesystemCollision, `folder=${filesystemPreview.json?.importReport?.folder}`);
@@ -287,6 +323,8 @@ async function main() {
   fs.symlinkSync(liveExtensions, linkedLive, 'junction');
   const junctionWrite = await req('POST', '/api/fs/write', SESSION_TOKEN, { path: 'linked-live/junction-write.txt', content: 'blocked' });
   ok('fs_write_junction_escape_rejected', junctionWrite.status === 403, `status=${junctionWrite.status}`);
+  const junctionList = await req('GET', `/api/fs/list?root=filesystem&depth=1&path=${encodeURIComponent('linked-live')}`, SESSION_TOKEN);
+  ok('project_list_shallow_junction_escape_rejected', junctionList.status === 403, `status=${junctionList.status}`);
   ok('junction_escape_did_not_touch_game', !fs.existsSync(path.join(liveExtensions, 'junction-write.txt')));
   const restoredDeployedRoles = await req('POST', '/api/schema/config', SESSION_TOKEN, deployedRolesConfig);
   ok('deployed_roles_restored_after_fs_tests', restoredDeployedRoles.status === 200, `status=${restoredDeployedRoles.status}`);

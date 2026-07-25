@@ -6,20 +6,6 @@
 
 ## P0 — Active
 
-### B79 · Retained Studio backend race + dual-root Load Mod Project browser `blocked`
-Public 0.0.38 retained a rendered Studio canvas across extension restart, but installed-host inspection
-proved the iframe was still bound to stale backend port 56542 while the extension status bar and healthy
-sidecar were on 56203. Root cause: callers that join `backendEnsurePromise` return the shared promise
-before executing `bindStudioPanel`. Independently, Load Mod Project calls one legacy `/api/fs/list` route
-whose filesystem-first fallback hides the workspace root; preview/import then resolve same-named relative
-folders workspace-first, so the clicked source is not authoritative. Repair the shared ensure path so every
-caller binds after awaiting it; add explicit `workspace|filesystem` selection to list/preview/import while
-preserving legacy route defaults; render both configured roots as labeled project sources; cover collisions,
-invalid selectors, traversal, whole-folder preservation, packaged sidecar, and real Antigravity UI behavior.
-Plan: `docs/plans/2026-07-25-studio-rebind-dual-root-project-browser.md`.
-Implementation is complete and static/focused checks are green; heavy route/e2e/package and installed
-Antigravity proof are blocked while X4 remains running and the host is loaded. Resume when X4 is closed.
-
 ### B77 · Graph refresh rewrites ignored historical PNG evidence `spec'd`
 Observed twice during the B76 final audit: `graphify update .` changed the byte size/hash and timestamp of
 two tracked `vscode-extension/evidence/0.0.35-*.png` files even though `.graphifyignore` contains `*.png`.
