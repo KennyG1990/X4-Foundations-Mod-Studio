@@ -21,7 +21,7 @@ features look redundant. Read-only recon done that day; **nothing removed yet, d
    `AgentBridge.tsx`, and no HTTP route exposes it — so an external agent cannot reach it. Two
    coherent directions, and they are opposites: **promote** it to real per-node endpoints
    (`POST/PATCH /api/agent/workspace/nodes/:id`) so agents can edit granularly instead of
-   replacing the whole `nodes[]` array, or **remove** it as ahalf-feature nobody can automate.
+   replacing the whole `nodes[]` array, or **remove** it as a half-feature nobody can automate.
    Ken's call; do not split the difference.
 2. **Five overlapping build/deploy routes**: `/api/agent/compile`, `/api/agent/package` (the API's
    own text calls it "Alias of compile"), `/api/agent/project/package`, `/api/agent/artifact/build`,
