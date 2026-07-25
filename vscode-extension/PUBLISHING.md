@@ -7,6 +7,113 @@ store (namespace `x4forge`). GitHub and the store are two SEPARATE destinations:
 - **Open VSX** = the installable app users get (a published `.vsix`). Pushing to GitHub does
   NOT update the store; you must publish.
 
+---
+
+# ⚙️ MACHINE RUNBOOK — exact verified sequence (last run: 0.0.31, 2026-07-20, green)
+
+> For an agent (Codex/Claude/etc.) cutting a release unattended. Every command below was
+> actually executed for 0.0.31; the expected-output lines are real. Run from a HOST shell
+> (sandbox mirrors of this repo are stale and lie). `<REPO>` = `F:\DEV_ENV\X4_Forge`.
+
+## What the pipeline actually builds (4 artifacts, in order)
+
+```
+1. <REPO>/dist/            ← npm run build          (vite client bundle + esbuild server.cjs)
+2. vscode-extension/app/   ← npm run stage-app      (copies dist/ + pruned prod node_modules)
+3. vscode-extension/out/   ← npm run build          (tsc --noEmit, then esbuild extension.js)
+4. x4-forge-studio-<v>.vsix ← vsce package          (out/ + app/ + manifest/docs per .vscodeignore)
+```
+The extension spawns `node dist/server.cjs` with **cwd = `app/`** — that is why the whole
+product is staged inside the extension rather than fetched at runtime. `stage-app` HARD-FAILS
+if `<REPO>/dist/server.cjs` or `dist/index.html` is missing, so **step 1 is mandatory before
+step 2** even if only extension code changed.
+
+## Preconditions (verify, don't assume)
+```bash
+git -C <REPO> status --short          # must be empty
+git -C <REPO> rev-parse HEAD origin/main   # two identical SHAs
+```
+
+## Gates — all four must pass before you bump anything
+```bash
+cd <REPO> && npm run typecheck                              # exit 0
+cd <REPO> && npm run test:routes                            # [route-integration] 13/13 PASS
+cd <REPO> && npm run test:e2e                               # [run-e2e] VERDICT: PASS — 19 passed
+```
+Oracle sweep needs a RUNNING server and **defaults to port 3001** — with the prod bundle on
+:3000 you must override the base or every oracle reports `fetch failed` (a false red that
+cost time on 0.0.31):
+```bash
+cd <REPO> && npm run build && node dist/server.cjs &        # prod bundle on :3000
+cd <REPO> && X4_FORGE_BASE=http://localhost:3000 node scripts/oracle-sweep.mjs   # 96/96 green
+```
+Stop that server before packaging. THE e2e gate is `test:e2e` (verdict-parsed) — raw Playwright
+exit codes lie via the libuv teardown crash `0xC0000409`; never judge by exit code alone.
+
+## Release sequence (publish BEFORE commit — this ordering is the rule, not a preference)
+
+**1. Bump the version** in `vscode-extension/package.json` (`0.0.30` → `0.0.31`). Must always
+increase; Open VSX rejects re-publishing an existing version.
+
+**2. Write the human release note** — the ONE manual step. Add a `"<version>": [ ... ]` block at
+the TOP of `vscode-extension/release-notes.json`, in plain language aimed at modders (what they
+can now DO), not commit-speak. Missing entry ⇒ the changelog falls back to a humanized commit
+subject, which reads badly on the store.
+
+**3. Build and package**, from `<REPO>/vscode-extension`:
+```bash
+cd <REPO> && npm run build                     # ✱ REQUIRED FIRST — produces dist/
+cd <REPO>/vscode-extension
+npm run changelog     # [gen-changelog] wrote CHANGELOG.md — 29 version(s), newest 0.0.31
+npm run stage-app     # [stage-app] OK — app/ staged (… native binding present; no secrets)
+npm run build         # [build-ext] OK — out/extension.js written from a fresh out/
+npx --yes @vscode/vsce package --allow-missing-repository
+                      # DONE Packaged: …/x4-forge-studio-0.0.31.vsix (2098 files, 16.99 MB)
+```
+**NEVER pass `--pre-release`** (standing rule, Ken 2026-07-16). The flag is baked at PACKAGE
+time; 0.0.4/0.0.6 shipped pre-release and hit the "no release version" install wall.
+
+`stage-app` self-asserts: `better-sqlite3` native binding present, and no `.env` /
+`.studio-api-token` / `.studio-state` / `data/` / `debuglog.txt` staged. It exits non-zero on any
+unexpected file in `dist/` — that guard exists because a recursive copy once admitted real mod
+content into the package. If it fails, FIX the input; do not bypass it.
+
+**4. Publish** (token lives in `<REPO>/.env.local` as `OVSX_PAT`, gitignored — read it
+programmatically, never echo it, never paste it into chat):
+```bash
+cd <REPO>/vscode-extension
+# PowerShell: $pat = ((Get-Content <REPO>\.env.local | Select-String '^OVSX_PAT=').Line -replace '^OVSX_PAT=','')
+npx --yes ovsx publish x4-forge-studio-<version>.vsix -p "$pat"
+#   🚀  Published x4forge.x4-forge-studio v0.0.31
+```
+
+**5. Verify on the store BEFORE committing.** Two endpoints, and they disagree for a while —
+the `/versions` list lags several minutes behind a successful publish, so the "latest" endpoint
+is the faster truth (observed on 0.0.31: latest said 0.0.31 while /versions still listed 0.0.30):
+```bash
+curl -s https://open-vsx.org/api/x4forge/x4-forge-studio | jq -r .version      # → 0.0.31
+curl -s https://open-vsx.org/api/x4forge/x4-forge-studio/versions             # eventually lists it
+```
+A successful `ovsx publish` line plus the latest-endpoint match is sufficient evidence to commit.
+
+**6. Commit LAST**, so the committed version always equals the published version. Stage exactly:
+`vscode-extension/package.json`, `vscode-extension/CHANGELOG.md`,
+`vscode-extension/release-notes.json`, plus whatever code shipped and the `ROADMAP.md` /
+`SESSION-HANDOFF.md` records. The repo's git pre-commit hook auto-runs `npm run precommit:check`
+(tripwires + canon-mirror identity + e2e verdict selftest 10/10 + typecheck) — expect ~30s and a
+green block. Then `git push origin main` and assert `HEAD == origin/main`.
+
+## Failure modes seen in practice
+| Symptom | Cause / fix |
+|---|---|
+| `[stage-app] repo build output missing` | Skipped `npm run build` in the REPO ROOT. Run it. |
+| Oracle sweep `0/N green — fetch failed` | Sweep hit :3001; no server there. Set `X4_FORGE_BASE`. |
+| `vsce` not found / wrong cwd | Package must run from `vscode-extension/`, via `npx --yes @vscode/vsce`. |
+| Publish rejected, version exists | Version didn't increase. Bump again; a burned version is gone forever. |
+| Store `/versions` missing the new version | Index lag. Check the latest endpoint; don't republish. |
+| Users can't install / "no release version" | Something shipped `--pre-release`. Cut a new stable version. |
+| Playwright "N passed" then exit 0xC0000409 | Known libuv teardown crash. Judge by `[run-e2e] VERDICT:`. |
+
 ## One-time facts
 - Namespace: `x4forge` · extension id: `x4forge.x4-forge-studio`
 - Store page: https://open-vsx.org/extension/x4forge/x4-forge-studio
