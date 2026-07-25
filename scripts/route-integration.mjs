@@ -280,6 +280,64 @@ async function main() {
   ok('status_reports_source_sync', typeof status.json?.sourceSync?.known === 'boolean' && typeof status.json?.sourceSync?.detail === 'string');
   ok('status_never_leaks_the_token', !JSON.stringify(status.json || {}).includes(SESSION_TOKEN));
 
+  // --- B93 wave 2: make writes and deploys legible BEFORE they happen ----------------------
+  // #7 a write must report exactly what landed, so a caller can drop its own byte-exact readback
+  // instead of weakening it to tolerate the tool.
+  const CR = String.fromCharCode(13);
+  const NL = String.fromCharCode(10);
+  const crlfBody = `line one${CR}${NL}line two${CR}${NL}`;
+  const crlfWrite = await req('POST', '/api/fs/write', SESSION_TOKEN, { path: 'crlf_probe.txt', content: crlfBody });
+  ok('write_returns_a_receipt', crlfWrite.status === 200 && !!crlfWrite.json?.written, `status=${crlfWrite.status}`);
+  ok('write_receipt_reports_byte_exact', crlfWrite.json?.written?.byteExact === true, JSON.stringify(crlfWrite.json?.written));
+  ok('write_preserves_crlf_on_disk',
+    fs.readFileSync(path.join(safeWorkspace, 'crlf_probe.txt'), 'utf8') === crlfBody,
+    JSON.stringify(fs.readFileSync(path.join(safeWorkspace, 'crlf_probe.txt'), 'utf8')));
+  ok('write_receipt_reports_line_endings', crlfWrite.json?.written?.lineEndings?.crlf === 2, JSON.stringify(crlfWrite.json?.written?.lineEndings));
+  ok('write_receipt_carries_a_hash', /^[a-f0-9]{64}$/.test(String(crlfWrite.json?.written?.sha256 || '')));
+
+  // #4 a stale canvas must not be a dead end: the refusal names the exact unblocking call.
+  const staleMod = path.join(safeWorkspace, 'stale_probe_mod');
+  fs.mkdirSync(path.join(staleMod, 'md'), { recursive: true });
+  fs.writeFileSync(path.join(staleMod, 'content.xml'), '<content id="stale_probe_mod" name="Stale Probe" version="100"/>');
+  fs.writeFileSync(path.join(staleMod, 'md', 'sp.xml'), [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    '<mdscript name="SP"><cues><cue name="SP_Start"><conditions><event_game_started/></conditions>',
+    '<actions><set_value name="$sp" exact="1"/></actions></cue></cues></mdscript>',
+  ].join(NL));
+  const staleImport = await req('POST', '/api/agent/mod-folder/import', SESSION_TOKEN, { root: 'workspace', path: 'stale_probe_mod' });
+  ok('stale_probe_imported', staleImport.status === 200 && !!staleImport.json?.workspace, `status=${staleImport.status}`);
+  // Change the folder AFTER import so the guard must fire.
+  fs.writeFileSync(path.join(staleMod, 'md', 'sp2.xml'), [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    '<mdscript name="SP2"><cues/></mdscript>',
+  ].join(NL));
+  const staleDeploy = await req('POST', '/api/agent/deploy-verify', SESSION_TOKEN, { workspace: staleImport.json?.workspace });
+  ok('stale_source_still_blocks_deploy', staleDeploy.status === 409, `status=${staleDeploy.status}`);
+  ok('stale_refusal_names_the_unblocking_call',
+    /autoReimport/.test(String(staleDeploy.json?.error || '')) && !!staleDeploy.json?.remedy,
+    String(staleDeploy.json?.error || '').slice(0, 120));
+
+  // #6 dry run reports the effect and writes NOTHING.
+  const dryTarget = path.join(liveExtensions, 'stale_probe_mod');
+  const beforeDry = fs.existsSync(dryTarget);
+  const dry = await req('POST', '/api/agent/deploy-verify', SESSION_TOKEN, { workspace: staleImport.json?.workspace, autoReimport: true, dryRun: true });
+  ok('dry_run_returns_an_effect', dry.status === 200 && dry.json?.dryRun === true && !!dry.json?.effect, `status=${dry.status}`);
+  ok('dry_run_lists_files_it_would_add', Array.isArray(dry.json?.effect?.added) && dry.json.effect.added.length > 0, `added=${(dry.json?.effect?.added || []).length}`);
+  ok('dry_run_reports_deletions_explicitly', Array.isArray(dry.json?.effect?.deleted), JSON.stringify((dry.json?.effect?.deleted || []).slice(0, 3)));
+  ok('dry_run_wrote_nothing', fs.existsSync(dryTarget) === beforeDry, `targetExisted=${beforeDry} now=${fs.existsSync(dryTarget)}`);
+
+  // #4 autoReimport actually unblocks the deploy the guard refused.
+  const autoDeploy = await req('POST', '/api/agent/deploy-verify', SESSION_TOKEN, { workspace: staleImport.json?.workspace, autoReimport: true });
+  ok('auto_reimport_unblocks_the_deploy', autoDeploy.status === 200 && autoDeploy.json?.ok === true, `status=${autoDeploy.status} stage=${autoDeploy.json?.stage}`);
+  ok('auto_reimport_is_reported_not_silent',
+    (autoDeploy.json?.checklist || []).some(c => c.id === 'source-sync' && /re-imported/i.test(c.detail || '')),
+    JSON.stringify((autoDeploy.json?.checklist || []).find(c => c.id === 'source-sync')));
+
+  // #9 the ledger row for that deploy carries its file effect.
+  const histAfterDeploy = await req('GET', '/api/agent/history?kind=deploy', SESSION_TOKEN);
+  const deployRow = (histAfterDeploy.json?.rows || [])[0];
+  ok('deploy_row_records_file_effect', !!deployRow?.fileEffect, JSON.stringify(deployRow?.fileEffect));
+
   // --- B86: agent action ledger ----------------------------------------------------------
   // The load-bearing property is that payloads are never inlined: a ~295 KB write must produce
   // a small row, and the history must stay proportionate to CHANGES, not payload size.

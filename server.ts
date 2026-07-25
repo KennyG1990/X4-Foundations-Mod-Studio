@@ -483,6 +483,9 @@ function ledgerMiddleware(req: express.Request, res: express.Response, next: exp
       let diffBlob: string | undefined;
       let binary = false;
       let bytes: { before?: number; after?: number } | undefined;
+      let diagnosticsBlob: string | undefined;
+      let diagnosticsCount: number | undefined;
+      let fileEffect: { added: number; overwritten: number; deleted: number; preserved: number; bytes: number } | undefined;
 
       if (kind === 'edit') {
         const requested = String((req.body as any)?.path || '');
@@ -502,6 +505,28 @@ function ledgerMiddleware(req: express.Request, res: express.Response, next: exp
       } else if (kind === 'deploy') {
         const deployed = captured?.deployedPath;
         if (deployed) files.push(String(deployed));
+        // B93.9: record what the deploy did to files, so the history answers the question the
+        // author previously needed a separate script to answer.
+        const effect = captured?.effect || captured?.artifact?.effect;
+        if (effect) {
+          fileEffect = {
+            added: (effect.added || []).length,
+            overwritten: (effect.overwritten || []).length,
+            deleted: (effect.deleted || []).length,
+            preserved: (effect.preserved || []).length,
+            bytes: Number(effect.totalBytes) || 0,
+          };
+          diagnosticsBlob = agentHistoryStore.putBlob(JSON.stringify(effect, null, 2));
+        } else if (captured?.artifact) {
+          const a = captured.artifact;
+          fileEffect = {
+            added: 0,
+            overwritten: Number(a.outputFiles) || 0,
+            deleted: 0,
+            preserved: (a.runtimeOwned || []).length,
+            bytes: Number(a.includedBytes) || 0,
+          };
+        }
       } else if (kind === 'revert') {
         // The handler records which files it restored; capture still happens here.
         for (const file of ((req as any).__revertFiles || [])) files.push(String(file));
@@ -510,8 +535,6 @@ function ledgerMiddleware(req: express.Request, res: express.Response, next: exp
       // B86.1: diagnostics. A row saying "1 error" without naming it is the failure mode this
       // panel exists to prevent, so the findings are captured and the erroring files become the
       // row's files (which also makes the file filter work for validation rows).
-      let diagnosticsBlob: string | undefined;
-      let diagnosticsCount: number | undefined;
       if (kind === 'validate' || kind === 'compile') {
         const diagnostics = compactDiagnostics(captured);
         if (diagnostics.length) {
@@ -583,6 +606,7 @@ function ledgerMiddleware(req: express.Request, res: express.Response, next: exp
         ...(diffBlob ? { diffBlob } : {}),
         ...(binary ? { binary } : {}),
         ...(diagnosticsBlob ? { diagnosticsBlob, diagnosticsCount } : {}),
+        ...(fileEffect ? { fileEffect } : {}),
         ...(touchedNodes && touchedNodes.length ? { nodes: touchedNodes } : {}),
         revertible: rule.revertible,
         ...(rule.reason ? { revertReason: rule.reason } : {}),
@@ -3658,6 +3682,38 @@ app.get("/api/patch/base-content", (req, res) => {
  * same validation and containment as any other write, never poke files behind the guards.
  * Returns false having ALREADY sent an error response; true means the bytes are on disk.
  */
+/**
+ * B93.7 — what the write actually put on disk.
+ *
+ * The reporter's write helper compared byte-exact, and on mismatch retried while ignoring CRLF/LF
+ * and printed "(note: line endings normalised by Forge)". That weakens their single best safety
+ * check to tolerate the tool. The Forge does not normalise — but "trust me" is not evidence, so
+ * every write now reads the file back and REPORTS the truth: exact byte count, sha256, whether the
+ * bytes on disk equal the bytes requested, and the line-ending profile. A caller can then drop its
+ * own readback instead of weakening it.
+ */
+function describeWrittenBytes(requested: string, targetPath: string): {
+  bytes: number; sha256: string; byteExact: boolean;
+  lineEndings: { crlf: number; lf: number; mixed: boolean };
+  note?: string;
+} {
+  const onDisk = fs.readFileSync(targetPath);
+  const requestedBuffer = Buffer.from(requested, 'utf8');
+  const text = onDisk.toString('utf8');
+  const crlf = (text.match(/\r\n/g) || []).length;
+  const lf = (text.match(/(^|[^\r])\n/g) || []).length;
+  const byteExact = onDisk.equals(requestedBuffer);
+  return {
+    bytes: onDisk.length,
+    sha256: crypto.createHash('sha256').update(onDisk).digest('hex'),
+    byteExact,
+    lineEndings: { crlf, lf, mixed: crlf > 0 && lf > 0 },
+    ...(byteExact
+      ? {}
+      : { note: `The bytes on disk differ from the bytes sent (${requestedBuffer.length} sent, ${onDisk.length} written). The Forge does not transform content, so inspect the transport or encoding.` }),
+  };
+}
+
 function writeWorkspaceFileGuarded(res: express.Response, relativePath: string, content: any): boolean {
   if (!relativePath) {
     res.status(400).json({ error: "Missing path parameter." });
@@ -3680,13 +3736,19 @@ function writeWorkspaceFileGuarded(res: express.Response, relativePath: string, 
   const dir = path.dirname(safePath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(safePath, content, 'utf8');
+  // B93.7: stash the readback so the route can report exactly what landed.
+  lastWriteReceipt = describeWrittenBytes(String(content ?? ''), safePath);
   return true;
 }
 
+/** Receipt for the most recent guarded write, consumed by the route that triggered it. */
+let lastWriteReceipt: ReturnType<typeof describeWrittenBytes> | null = null;
+
 app.post("/api/fs/write", (req, res) => {
   try {
+    lastWriteReceipt = null;
     if (!writeWorkspaceFileGuarded(res, String(req.body?.path || '').trim(), req.body?.content ?? '')) return;
-    return res.json({ success: true });
+    return res.json({ success: true, written: lastWriteReceipt });
   } catch (error) {
     return res.status(500).json({ error: error.message || "Failed to write file." });
   }
@@ -8124,6 +8186,73 @@ function replaceLockedDeploymentInPlace(
   }
 }
 
+/**
+ * B93.6 — what a deploy WOULD do, computed from the real artifact plan.
+ *
+ * Shares `buildWorkspaceFileManifest` + `buildArtifactPlan` with the actual deploy so the preview
+ * cannot drift from reality, and applies the same preservation rules, so `.forgekeep` and
+ * runtime-owned paths show up as preserved rather than as deletions.
+ */
+function previewDeploymentEffect(ws: any, targetRoot: string, format: DeployFormat):
+  | { added: Array<{ path: string; bytes: number }>; overwritten: Array<{ path: string; bytes: number; wasBytes: number }>; deleted: Array<{ path: string; bytes: number }>; preserved: string[]; totalBytes: number; format: DeployFormat }
+  | { error: string } {
+  try {
+    const build = activeBuildWorkspace(ws);
+    const stampedSource = typeof build?.sourceStamp?.dir === 'string' ? path.resolve(build.sourceStamp.dir) : '';
+    const hasDiskSource = Boolean(stampedSource && fs.existsSync(stampedSource) && fs.statSync(stampedSource).isDirectory());
+    const generated = buildWorkspaceFileManifest(build, { includePassthrough: !hasDiskSource });
+    const plan = buildArtifactPlan({ sourceRoot: hasDiskSource ? stampedSource : '', generatedFiles: generated.files });
+    if (!plan.ok) return { error: `Cannot preview: artifact planning failed — ${plan.errors.join('; ')}` };
+
+    // Catalog mode packs the payload, so the on-disk names are the catalog volumes, not the
+    // sources. Say so rather than implying per-file placement that will not happen.
+    const willWrite = new Map<string, number>();
+    if (format === 'catalog') {
+      willWrite.set('content.xml', 0);
+      willWrite.set('ext_01.cat', 0);
+      willWrite.set('ext_01.dat', plan.totals.includedBytes);
+    } else {
+      for (const entry of plan.entries) willWrite.set(entry.path.replace(/\\/g, '/'), (entry as any).size ?? 0);
+    }
+
+    const preserved = preservedDeploymentEntries(targetRoot, plan, false).map(e => e.path);
+    const isPreserved = (rel: string) => preserved.some(p => rel === p || rel.startsWith(`${p}/`));
+
+    const existing = new Map<string, number>();
+    if (fs.existsSync(targetRoot)) {
+      for (const entry of inspectRegularTree(targetRoot)) {
+        if (entry.type !== 'file') continue;
+        const abs = path.join(targetRoot, ...entry.path.split('/'));
+        existing.set(entry.path, (() => { try { return fs.statSync(abs).size; } catch { return 0; } })());
+      }
+    }
+
+    const added: Array<{ path: string; bytes: number }> = [];
+    const overwritten: Array<{ path: string; bytes: number; wasBytes: number }> = [];
+    for (const [rel, bytes] of willWrite) {
+      if (existing.has(rel)) overwritten.push({ path: rel, bytes, wasBytes: existing.get(rel)! });
+      else added.push({ path: rel, bytes });
+    }
+    const deleted: Array<{ path: string; bytes: number }> = [];
+    for (const [rel, bytes] of existing) {
+      if (willWrite.has(rel) || isPreserved(rel)) continue;
+      deleted.push({ path: rel, bytes });
+    }
+
+    const sortByPath = <T extends { path: string }>(rows: T[]) => rows.sort((a, b) => a.path.localeCompare(b.path));
+    return {
+      added: sortByPath(added),
+      overwritten: sortByPath(overwritten),
+      deleted: sortByPath(deleted),
+      preserved,
+      totalBytes: plan.totals.includedBytes,
+      format,
+    };
+  } catch (error) {
+    return { error: `Cannot preview: ${error instanceof Error ? error.message : String(error)}` };
+  }
+}
+
 function replaceValidatedDeployment(
   artifactRoot: string,
   targetPath: string,
@@ -8696,8 +8825,39 @@ app.post("/api/agent/deploy-verify", (req, res) => {
       }
       const verdict = assessSourceSync(sourceStamp, currentSourceHash, req.body?.allowStaleOverwrite === true);
       if (!verdict.ok) {
-        check('source-sync', 'Canvas in sync with source folder', 'fail', verdict.detail);
-        return res.status(409).json(failWith('source-sync', { error: verdict.detail, sourceStamp }));
+        // B93.4 — a correct diagnosis should not be a dead end. The Forge can perform the exact
+        // remedy itself: re-import from the stamped folder and continue. The GUARD stays (it
+        // prevented a real data-loss incident); what changes is that the caller is no longer
+        // required to know a magic call, and when it does have to act, the error names that call.
+        const stampedDir = typeof sourceStamp?.dir === 'string' ? sourceStamp.dir : '';
+        if (req.body?.autoReimport === true && stampedDir && fs.existsSync(stampedDir)) {
+          try {
+            const reimported = importModFolder(stampedDir);
+            ws = reimported.workspace as any;
+            (ws as any).sourceStamp = {
+              dir: stampedDir,
+              hash: hashFolderFingerprint(fingerprintModFolder(stampedDir)),
+              at: new Date().toISOString(),
+            };
+            check('source-sync', 'Canvas in sync with source folder', 'warn',
+              `Was stale; re-imported ${path.basename(stampedDir)} from disk on request (autoReimport) and continued with the fresh copy.`);
+          } catch (error: any) {
+            const detail = `Auto re-import failed: ${error?.message || error}`;
+            check('source-sync', 'Canvas in sync with source folder', 'fail', detail);
+            return res.status(409).json(failWith('source-sync', { error: detail, sourceStamp }));
+          }
+        } else {
+          const remedy = stampedDir
+            ? ` Fix it either way: re-send this request with {"autoReimport": true}, or re-import first with POST /api/agent/mod-folder/import {"root":"workspace","path":"${path.basename(stampedDir)}"} and deploy the workspace it returns.`
+            : '';
+          check('source-sync', 'Canvas in sync with source folder', 'fail', verdict.detail + remedy);
+          return res.status(409).json(failWith('source-sync', {
+            error: verdict.detail + remedy,
+            sourceStamp,
+            code: 'SOURCE_STALE',
+            ...(stampedDir ? { remedy: { autoReimport: true, reimport: { root: 'workspace', path: path.basename(stampedDir) } } } : {}),
+          }));
+        }
       }
       check('source-sync', 'Canvas in sync with source folder', verdict.reason === 'in_sync' ? 'pass' : 'warn', verdict.detail);
     }
@@ -8819,6 +8979,32 @@ app.post("/api/agent/deploy-verify", (req, res) => {
     }
     const extensionsPath = path.join(x4GamePath, 'extensions');
     if (!fs.existsSync(extensionsPath)) fs.mkdirSync(extensionsPath, { recursive: true });
+
+    // B93.6 — DRY RUN. Deletion is the direction that cannot be undone, and the author previously
+    // only learned what a deploy removed by diffing afterwards. This reports the exact effect and
+    // writes NOTHING. It is computed from the REAL artifact plan, not a second estimate, because a
+    // dry run that drifts from the real planner is worse than none.
+    if (req.body?.dryRun === true) {
+      const targetRoot = path.join(extensionsPath, effectiveModId(activeBuildWorkspace(ws)));
+      const preview = previewDeploymentEffect(ws, targetRoot, deployFormat);
+      if ('error' in preview) {
+        check('deploy', 'Deploy preview', 'fail', preview.error);
+        return res.status(400).json(failWith('deploy', { error: preview.error, dryRun: true }));
+      }
+      check('deploy', 'Deploy preview (dry run — nothing written)', preview.deleted.length ? 'warn' : 'pass',
+        `would add ${preview.added.length}, overwrite ${preview.overwritten.length}, delete ${preview.deleted.length}, preserve ${preview.preserved.length}`);
+      return res.json({
+        ok: true,
+        dryRun: true,
+        stage: 'preview',
+        modId,
+        targetRoot,
+        deployFormat: { mode: deployFormat },
+        effect: preview,
+        checklist,
+        note: 'Nothing was written. Re-send without dryRun to apply exactly this effect.',
+      });
+    }
     const deployedPath = compileWorkspaceToFolder(ws, extensionsPath, 'store', false, deployFormat);
     const formatReport = describeDeployFormat(deployFormat, lastArtifactReport);
 

@@ -65,6 +65,11 @@ export interface LedgerRow {
    * a log file.
    */
   nodes?: Array<{ id: string; label?: string }>;
+  /**
+   * B93.9: what this action did to files on disk. The reporter maintained a separate deploy
+   * script purely because the Forge would not answer "what did you add, overwrite and delete".
+   */
+  fileEffect?: { added: number; overwritten: number; deleted: number; preserved: number; bytes: number };
   revertible: boolean;
   revertReason?: string;
   /** Set on a `revert` row: the id of the entry it undid. */
@@ -424,6 +429,14 @@ export function describeAction(input: {
   }
 
   if (kind === 'deploy') {
+    // A dry run changed nothing; say so plainly rather than implying a deploy happened.
+    if (body?.dryRun === true) {
+      const e = body?.effect || {};
+      return {
+        title: `Deploy PREVIEW (nothing written) — would add ${(e.added || []).length}, overwrite ${(e.overwritten || []).length}, delete ${(e.deleted || []).length}`,
+        outcome: { status: (e.deleted || []).length ? 'warn' : 'ok' },
+      };
+    }
     // A blocked deploy must name the failing stage and reason IN THE TITLE — this exact row is
     // the two hours the panel exists to save.
     const checklist: Array<{ id: string; label: string; status: string; detail: string }> = body?.checklist || [];
