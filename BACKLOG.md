@@ -10,6 +10,20 @@
 > Deployment on Windows works with the mod folder held, and the author now chooses loose vs CAT/DAT.
 > Four follow-up decisions are Ken's, listed in B85 below.
 
+### B86-follow-ons · Agent Action Ledger — deferred slices `spec'd`
+
+Opened 2026-07-25 from the B86 close. The ledger itself is VERIFIED → ROADMAP; these are the pieces
+deliberately left out of that bounded unit:
+1. **Whole-state "step back to here"** (true Photoshop behaviour). B86 ships per-entry revert, which is what
+   the acceptance criteria specified. Multi-file state-step-back needs CAS conflict handling for the case
+   where the workspace has moved on since that row, and deserves its own reconcile.
+2. **Blob garbage collection on rotation.** Rows rotate out at the size cap, but their blobs are currently
+   only bounded by hash dedup — a very long-lived install could retain blobs whose rows are gone. Add a sweep
+   that drops blobs unreferenced by any retained segment.
+3. **Live tail.** The panel polls on open and on Refresh. A push/stream would help during long agent runs.
+4. **Ledger for the IDE extension surface.** Today the panel is app-side only; the extension could read the
+   same endpoint.
+
 ### B85 · Deploy-format follow-ups needing Ken's decision `spec'd`
 
 Opened 2026-07-25 out of the B84 close. None block deployment; all four are judgement calls, not defects:

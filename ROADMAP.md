@@ -52,6 +52,65 @@ Foundation-first means: before adding polish, every link above has to be *correc
 
 ## Current State
 
+### ✅ B86 · Agent Action Ledger — a skimmable history of what agents actually did — VERIFIED 2026-07-25
+
+**Why.** Claude is building `x4_ai_influence` entirely through the agent API. Two hours were lost on
+2026-07-25 to a stale workspace snapshot and a malformed MD file that silently killed a subsystem — both of
+which would have been one glance in a history panel. Ken's framing: Photoshop's history window.
+
+**What shipped.** One capture middleware over an explicit route allowlist (`fs/write`, `mod-folder/import`,
+`project/validate`, `compile`, `deploy-verify`, `package/release`, plus revert). Rows are built on
+`res.on('finish')`; the only hot-path work is reading the previous bytes of an `fs/write`, without which
+there is no diff and no undo. `src/lib/agentHistory.ts` holds the pure engine (summaries, redaction,
+diff maths, revertibility, filters), `agentHistoryStore.ts` the append-only JSONL + content-addressed blob
+store under `dataPath('history')` — so history survives extension updates and can never land in a game
+folder. A HISTORY tab on the Agent API screen renders rows reverse-chronologically with expand, filters,
+raw-payload fetch, and "Revert to here".
+
+**Payloads are never inlined — the decision the whole feature rests on.** Measured, not asserted: a
+**312,000-byte** write produces a **496-byte row**, and re-writing identical content grows the store by
+**0 bytes** (hash dedup). Rows carry counts and blob references; bytes sit behind an explicit `/raw` fetch.
+Binaries store hash + size only. Ledger size tracks changes, not payload size.
+
+**Summaries in the requested register**, proven live: ``Edited `ledger_demo.xml` — +2 / −0 lines`` ·
+`Validated 1 file — 2 errors, 0 warnings` (ERROR badge) · `Compiled 8 files — 0 errors` ·
+``Reverted: Edited `ledger_demo.xml` — +2 / −0 lines``. A blocked deploy names its failing stage and reason
+in the title. Stack traces, JSON and script bodies are stripped from titles by construction.
+
+**Revert replays through the SAME validated write path.** `writeWorkspaceFileGuarded()` was extracted so
+`/api/fs/write` and revert share one implementation — duplicating those containment checks would have created
+a second security surface. A revert is itself a ledger entry. Entries with no previous content (first write
+of a new file) are non-revertible and refuse with 409 rather than pretending.
+
+**Deploy asymmetry stated honestly.** Deploy rows are non-revertible, and the copy deliberately does **not**
+point at "the existing backup": `replaceValidatedDeployment` deletes its sibling backup on success, so after a
+good deploy no rollback target exists. The oracle pins this — it fails if the reason text ever promises a
+surviving backup. Correct instruction is "redeploy from a previous workspace state".
+
+**Reconcile corrected two premises in the brief** (both recorded in the plan): `.forge/checkpoints/` is written
+by the *separate* `kennyg.forge-agent` harness extension, not this codebase — the only `.forge/` reference here
+is an *exclusion* rule; and `.snapshots/` stores whole-workspace JSON, so it cannot restore an arbitrary
+`fs/write` either. The ledger therefore owns the blob store it already needed for "show raw".
+
+**Scope discipline.** The panel states in-product: *"Activity log with undo — not version control. Git remains
+the authoritative history of this workspace."*
+
+**Validation:** typecheck PASS · lint PASS at baseline (0 errors) · **oracles 103/103** (new
+`agent-history-selftest` 41/41, sweep count 102 → 103) · **routes 100/100** including one-entry-per-call,
+read-only silence, the 312 KB row-size proof, +0-byte dedup proof, revert round-trip, 409 on non-revertible,
+raw-on-demand, no key material on disk, and a REAL injected ledger fault (blob dir replaced by a file) leaving
+the underlying write at 200 with correct bytes · **e2e 26/26 PASS** · precommit PASS · build PASS.
+
+**Live UI validation** (isolated stack, Vite 8800 + sidecar 8801, scratch config): HISTORY tab mounts beside
+the existing four; rows render with actor, kind, title and outcome badge; expanding shows file, line counts,
+duration and the real unified diff fetched on demand; clicking **Revert to here** restored the file on disk
+(4-line → 2-line, verified by reading the file) and appended the `revert` row.
+
+**PARTIAL on appearance only:** screenshots could not composite (the Browser pane is not displayed — the known
+B28 wedge), so behaviour and DOM are proven but the *look* is not screenshot-verified. Eyeball script in
+`SESSION-HANDOFF.md`. Follow-on slices (whole-state step-back, blob GC on rotation, live tail, IDE surface)
+are logged in `BACKLOG.md`. Plan: `docs/plans/2026-07-25-agent-action-ledger.md`.
+
 ### ✅ B84 · Deploy format is the author's choice — loose files vs CAT/DAT, explained in plain language — VERIFIED 2026-07-25
 
 **What B83 unmasked.** With the locked-root fallback in place, the first live `deploy-verify` against the real

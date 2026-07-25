@@ -20,7 +20,8 @@ import {
   X,
   Zap,
   KeyRound,
-  Trash2
+  Trash2,
+  Clock
 } from 'lucide-react';
 import { ModWorkspace, NODE_TEMPLATES, MDNode } from '../types';
 
@@ -85,7 +86,7 @@ export default function AgentBridge({
   localVersion,
   setLocalVersion
 }: AgentBridgeProps) {
-  const [activeTab, setActiveTab] = useState<'docs' | 'status' | 'execute' | 'keys'>('docs');
+  const [activeTab, setActiveTab] = useState<'docs' | 'status' | 'execute' | 'keys' | 'history'>('docs');
 
   // B42: agent-key manager state (list is safe records only — never plaintext keys).
   interface AgentKeyRow {
@@ -115,6 +116,69 @@ export default function AgentBridge({
   useEffect(() => {
     if (activeTab === 'keys') void loadAgentKeys();
   }, [activeTab, loadAgentKeys]);
+
+  // B86 — agent action ledger. Rows carry summaries and references only; payloads are fetched
+  // on demand so opening this tab never pulls hundreds of KB of Lua across the wire.
+  const [historyRows, setHistoryRows] = useState<any[]>([]);
+  const [historyError, setHistoryError] = useState('');
+  const [historyNote, setHistoryNote] = useState('');
+  const [historyKindFilter, setHistoryKindFilter] = useState('');
+  const [historyOutcomeFilter, setHistoryOutcomeFilter] = useState('');
+  const [historyFileFilter, setHistoryFileFilter] = useState('');
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [rowDetail, setRowDetail] = useState<{ id: string; content: string } | null>(null);
+  const [revertBusy, setRevertBusy] = useState('');
+
+  const loadHistory = useCallback(async () => {
+    try {
+      const params = new URLSearchParams();
+      if (historyKindFilter) params.set('kind', historyKindFilter);
+      if (historyOutcomeFilter) params.set('outcome', historyOutcomeFilter);
+      if (historyFileFilter.trim()) params.set('file', historyFileFilter.trim());
+      const r = await fetch(`/api/agent/history?${params.toString()}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      setHistoryRows(Array.isArray(d.rows) ? d.rows : []);
+      setHistoryNote(String(d.note || ''));
+      // A ledger that is silently failing should be visible, not merely empty.
+      setHistoryError(d.ledgerFailures > 0 ? `${d.ledgerFailures} history write(s) failed — ${d.lastFailure || 'unknown error'}` : '');
+    } catch (e) {
+      setHistoryError(`Could not load history: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, [historyKindFilter, historyOutcomeFilter, historyFileFilter]);
+
+  useEffect(() => {
+    if (activeTab === 'history') void loadHistory();
+  }, [activeTab, loadHistory]);
+
+  const showRowDetail = useCallback(async (row: any) => {
+    if (expandedRow === row.id) { setExpandedRow(null); setRowDetail(null); return; }
+    setExpandedRow(row.id);
+    setRowDetail(null);
+    const which = row.diffBlob ? 'diff' : row.afterBlob ? 'after' : 'before';
+    if (!row.diffBlob && !row.afterBlob && !row.beforeBlob) return;
+    try {
+      const r = await fetch(`/api/agent/history/${row.id}/raw?which=${which}`);
+      const d = await r.json();
+      setRowDetail({ id: row.id, content: d.ok ? String(d.content) : `(${d.error || 'unavailable'})` });
+    } catch (e) {
+      setRowDetail({ id: row.id, content: `(could not load: ${e instanceof Error ? e.message : String(e)})` });
+    }
+  }, [expandedRow]);
+
+  const revertToRow = useCallback(async (row: any) => {
+    setRevertBusy(row.id);
+    try {
+      const r = await fetch(`/api/agent/history/${row.id}/revert`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const d = await r.json();
+      if (!r.ok || d?.ok === false) throw new Error(d?.error || `HTTP ${r.status}`);
+      await loadHistory();
+    } catch (e) {
+      setHistoryError(`Revert failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setRevertBusy('');
+    }
+  }, [loadHistory]);
 
   const createAgentKey = useCallback(async () => {
     setKeysError('');
@@ -639,10 +703,149 @@ export default function AgentBridge({
           <KeyRound className="w-3.5 h-3.5 inline mr-1.5" />
           Agent Keys
         </button>
+        <button
+          onClick={() => setActiveTab('history')}
+          data-testid="agent-history-tab"
+          className={`flex-1 py-1.5 rounded font-mono text-[11px] font-bold transition-all cursor-pointer ${
+            activeTab === 'history'
+              ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <Clock className="w-3.5 h-3.5 inline mr-1.5" />
+          History
+        </button>
       </div>
 
       {/* View area panel content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+
+        {/* -----------------------------------------------------
+            VIEW TAB: HISTORY (B86 — agent action ledger)
+            Photoshop-style: newest first, one readable line per action.
+            ----------------------------------------------------- */}
+        {activeTab === 'history' && (
+          <div className="space-y-3" data-testid="agent-history-panel">
+            <div className="flex items-center justify-between">
+              <div className="text-emerald-400 font-mono text-[11px] font-bold tracking-wider">ACTION HISTORY</div>
+              <button
+                onClick={() => void loadHistory()}
+                className="text-[10px] font-mono px-2 py-1 rounded border border-white/10 text-slate-400 hover:text-white hover:border-white/30 cursor-pointer"
+              >
+                Refresh
+              </button>
+            </div>
+
+            {/* Scope discipline: this must never be mistaken for version control. */}
+            {historyNote && (
+              <div className="text-[9.5px] font-mono text-slate-500 border-l-2 border-slate-700 pl-2 leading-relaxed">
+                {historyNote}
+              </div>
+            )}
+
+            {historyError && (
+              <div className="text-[10px] font-mono text-red-400 border border-red-500/30 bg-red-500/5 rounded p-2" role="alert">
+                {historyError}
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              <select
+                value={historyKindFilter}
+                onChange={e => setHistoryKindFilter(e.target.value)}
+                className="bg-[#0f131c] border border-white/10 rounded text-[10px] font-mono text-slate-300 px-2 py-1"
+                aria-label="Filter by action kind"
+              >
+                <option value="">all kinds</option>
+                {['edit', 'import', 'validate', 'compile', 'deploy', 'package', 'revert'].map(k => <option key={k} value={k}>{k}</option>)}
+              </select>
+              <select
+                value={historyOutcomeFilter}
+                onChange={e => setHistoryOutcomeFilter(e.target.value)}
+                className="bg-[#0f131c] border border-white/10 rounded text-[10px] font-mono text-slate-300 px-2 py-1"
+                aria-label="Filter by outcome"
+              >
+                <option value="">all outcomes</option>
+                {['ok', 'warn', 'error'].map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+              <input
+                value={historyFileFilter}
+                onChange={e => setHistoryFileFilter(e.target.value)}
+                placeholder="filter by file…"
+                aria-label="Filter by file path"
+                className="flex-1 min-w-[140px] bg-[#0f131c] border border-white/10 rounded text-[10px] font-mono text-slate-300 px-2 py-1"
+              />
+            </div>
+
+            {historyRows.length === 0 && !historyError && (
+              <div className="text-[10px] font-mono text-slate-500 py-6 text-center">
+                No actions recorded yet. Edits, imports, validations, compiles, deploys and packages appear here.
+              </div>
+            )}
+
+            <div className="space-y-1">
+              {historyRows.map(row => {
+                const badge = row.outcome?.status === 'error'
+                  ? 'text-red-400 border-red-500/40 bg-red-500/10'
+                  : row.outcome?.status === 'warn'
+                    ? 'text-amber-400 border-amber-500/40 bg-amber-500/10'
+                    : 'text-emerald-400 border-emerald-500/40 bg-emerald-500/10';
+                const open = expandedRow === row.id;
+                return (
+                  <div key={row.id} className="border border-white/5 rounded bg-[#0f131c]">
+                    <button
+                      onClick={() => void showRowDetail(row)}
+                      className="w-full text-left p-2 cursor-pointer hover:bg-white/5 rounded"
+                      aria-expanded={open}
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="text-[9px] font-mono text-slate-600 shrink-0 w-[52px] pt-0.5">
+                          {new Date(row.ts).toLocaleTimeString()}
+                        </span>
+                        <span className="text-[9px] font-mono text-slate-500 shrink-0 w-[70px] pt-0.5 truncate" title={row.agent?.label}>
+                          {row.agent?.label}
+                        </span>
+                        <span className="text-[9px] font-mono text-cyan-500/70 shrink-0 w-[52px] pt-0.5">{row.kind}</span>
+                        <span className="text-[11px] font-mono text-slate-200 flex-1 leading-relaxed">{row.title}</span>
+                        <span className={`text-[8.5px] font-mono font-bold px-1.5 py-0.5 rounded border shrink-0 ${badge}`}>
+                          {String(row.outcome?.status || '').toUpperCase()}
+                        </span>
+                      </div>
+                    </button>
+                    {open && (
+                      <div className="border-t border-white/5 p-2 space-y-2">
+                        {row.files?.length > 0 && (
+                          <div className="text-[9.5px] font-mono text-slate-500">
+                            {row.files.length === 1 ? 'File: ' : 'Files: '}
+                            <span className="text-slate-300 break-all">{row.files.join(', ')}</span>
+                            {row.lines && <span className="text-slate-500"> · +{row.lines.added} / −{row.lines.removed} lines</span>}
+                            <span className="text-slate-600"> · {row.durationMs}ms</span>
+                          </div>
+                        )}
+                        {row.revertible ? (
+                          <button
+                            onClick={() => void revertToRow(row)}
+                            disabled={revertBusy === row.id}
+                            className="text-[10px] font-mono px-2 py-1 rounded border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 disabled:opacity-50 cursor-pointer"
+                          >
+                            {revertBusy === row.id ? 'Reverting…' : 'Revert to here'}
+                          </button>
+                        ) : (
+                          <div className="text-[9.5px] font-mono text-slate-500 italic">{row.revertReason}</div>
+                        )}
+                        {rowDetail?.id === row.id && (
+                          <pre className="text-[9.5px] font-mono text-slate-400 bg-[#070a0f] rounded p-2 max-h-[240px] overflow-auto whitespace-pre-wrap break-all">
+                            {rowDetail.content.length > 20000 ? `${rowDetail.content.slice(0, 20000)}\n… (truncated for display)` : rowDetail.content}
+                          </pre>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* -----------------------------------------------------
             VIEW TAB: API DOCUMENTATION

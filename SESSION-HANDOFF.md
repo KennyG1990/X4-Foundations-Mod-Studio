@@ -60,7 +60,32 @@ lint PASS at baseline (0 errors) · precommit PASS · build PASS · **e2e 26/26 
 - The two `vscode-extension/evidence/0.0.35-*.png` byte changes are still pre-existing, unattributed churn.
   Do not stage or revert them without identifying the owner.
 
+## B86 — Agent Action Ledger (added this session, VERIFIED)
+
+A HISTORY tab on the Agent API screen records every agent action as one readable line. Engine
+`src/lib/agentHistory.ts` (pure) + `agentHistoryStore.ts` (JSONL + content-addressed blobs under
+`dataPath('history')`). Capture is ONE middleware over an allowlist, on `res.on('finish')`.
+
+**The rule that matters:** payloads are never inlined. Measured — a 312,000-byte write produces a
+**496-byte row**, and re-writing identical content adds **0 bytes**. If a future change starts inlining,
+`route-integration.mjs` fails on those two numbers.
+
+**Two premises in the original brief were wrong; do not re-adopt them.** `.forge/checkpoints/` is written by
+the SEPARATE `kennyg.forge-agent` harness extension (BACKLOG B70) — this codebase's only `.forge/` reference
+is an exclusion rule. `.snapshots/` stores whole-WORKSPACE JSON and cannot restore a single file write.
+
+**Banked gotcha:** middleware mounted via `app.use("/api", …)` receives a MOUNT-RELATIVE `req.path`
+(`/fs/write`). Match `req.baseUrl + req.path`. The first version recorded nothing and looked like it simply
+never ran.
+
 ## Eyeball queue (Ken, ~60 seconds)
+
+0. **Agent Action Ledger** — open the Agent API panel (header button, "Open External AI Agent API Control
+   panel") → **History** tab (5th, emerald). You should see newest-first rows like
+   ``Edited `ledger_demo.xml` — +2 / −0 lines`` with an OK/WARN/ERROR badge. Click a row: it expands to the
+   file, line counts, duration, a **Revert to here** button and the unified diff. Behaviour and DOM are
+   proven; only the *look* is unverified, because screenshots cannot composite while the Browser pane is
+   hidden (B28).
 
 1. **Deploy format toggle** — open the Compile/Deploy wizard. Between the target list and the staging-path card
    there is a **DEPLOY FORMAT** row with two cards: *Loose files* (selected) and *CAT / DAT archive*, each

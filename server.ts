@@ -127,6 +127,13 @@ import { parse as luaParse } from "luaparse";
 import { registerNpcIdentityProbeRoutes } from "./src/server/npcIdentityProbe";
 import { registerSelftests } from "./src/server/selftestRegistry";
 import { createAgentKeyStore, scopeAllows, runAgentKeysSelftest, AGENT_KEY_TTLS, AGENT_KEY_PREFIX, type AgentKeyScope } from "./src/lib/agentKeys";
+// B86 — agent action ledger: a skimmable record of what agents actually did.
+import {
+  ledgerRouteKind, describeAction, lineDelta, unifiedDiff, looksBinary, filterRows, revertibility,
+  MAX_DIFFABLE_BYTES, type LedgerRow, type LedgerKind,
+} from "./src/lib/agentHistory";
+import { AgentHistoryStore } from "./src/lib/agentHistoryStore";
+import { runAgentHistorySelftest } from "./src/lib/agentHistory.selftest";
 import { runBugReportSelftest } from "./src/lib/bugReport";
 import { buildArtifactPlan, hashArtifactFile, materializeArtifact, verifyMaterializedArtifact, type ArtifactPlan } from "./src/lib/artifactPipeline";
 import { materializeCatalogArtifact } from "./src/lib/artifactPackager";
@@ -362,6 +369,9 @@ function authMiddleware(req: express.Request, res: express.Response, next: expre
 
   const token = authHeader.substring(7);
   if (token === STUDIO_API_TOKEN) {
+    // B86: record WHO acted, never WHAT they authenticated with. Only the actor kind and a
+    // human label are ever attached; the token itself never leaves this function.
+    (req as any).__actor = { kind: 'studio', label: 'Studio UI' };
     return next(); // session token: full power, unchanged fast path
   }
 
@@ -379,6 +389,7 @@ function authMiddleware(req: express.Request, res: express.Response, next: expre
       });
     }
     agentKeyStore.touch(v.id!);
+    (req as any).__actor = { kind: 'agent', label: v.label || 'unnamed key' };
     return next();
   }
 
@@ -386,6 +397,134 @@ function authMiddleware(req: express.Request, res: express.Response, next: expre
 }
 
 app.use("/api", authMiddleware);
+
+// ---------------------------------------------------------------------------
+// B86 — AGENT ACTION LEDGER capture.
+//
+// One middleware over an explicit allowlist (LEDGER_ROUTES). Read-only traffic never reaches
+// it. The ONLY hot-path work is reading the target file's previous bytes for an fs/write —
+// everything else (diffing, blob writes, summarising, appending) runs on 'finish', after the
+// response has already gone out.
+//
+// Nothing in here may fail, delay, or alter the underlying request: a broken ledger must never
+// break the work it records, so every step is wrapped and faults are counted, not thrown.
+// ---------------------------------------------------------------------------
+const agentHistoryStore = new AgentHistoryStore();
+
+function ledgerActor(req: express.Request): { kind: 'agent' | 'studio'; label: string } {
+  const actor = (req as any).__actor;
+  return actor && actor.kind ? actor : { kind: 'studio', label: 'Studio UI' };
+}
+
+function ledgerMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
+  let kind: LedgerKind | null = null;
+  try {
+    // Mounted under app.use("/api", …), so req.path is MOUNT-RELATIVE ("/fs/write"). The
+    // allowlist is written as full paths because that is what a reader can verify against the
+    // route definitions, so rebuild the full path here rather than storing half-paths.
+    kind = ledgerRouteKind(req.method, `${req.baseUrl || ''}${req.path}`);
+  } catch { kind = null; }
+  if (!kind) return next();
+
+  const startedAt = Date.now();
+  let before: { text?: string; bytes: number; binary: boolean; existed: boolean } | null = null;
+
+  // Hot-path work, deliberately minimal and only for edits: without the pre-write bytes there
+  // is no diff and no undo. Oversized files are hashed by size only, never read into memory.
+  if (kind === 'edit') {
+    try {
+      const requested = String((req.body as any)?.path || '');
+      const resolvedRoot = resolveXsdConfig().modWorkspacePath;
+      if (requested && resolvedRoot) {
+        const target = path.resolve(resolvedRoot, requested);
+        if (target.startsWith(path.resolve(resolvedRoot)) && fs.existsSync(target) && fs.statSync(target).isFile()) {
+          const size = fs.statSync(target).size;
+          if (size <= MAX_DIFFABLE_BYTES) {
+            const buffer = fs.readFileSync(target);
+            const binary = looksBinary(buffer);
+            before = { text: binary ? undefined : buffer.toString('utf8'), bytes: size, binary, existed: true };
+          } else {
+            before = { bytes: size, binary: true, existed: true };
+          }
+        }
+      }
+    } catch { before = null; }
+  }
+
+  // Capture the response body without changing it — the summaries need the parsed payload.
+  let captured: any = null;
+  const originalJson = res.json.bind(res);
+  (res as any).json = (body: any) => { captured = body; return originalJson(body); };
+
+  res.on('finish', () => {
+    try {
+      const files: string[] = [];
+      let lines: { added: number; removed: number } | undefined;
+      let beforeBlob: string | undefined;
+      let afterBlob: string | undefined;
+      let diffBlob: string | undefined;
+      let binary = false;
+      let bytes: { before?: number; after?: number } | undefined;
+
+      if (kind === 'edit') {
+        const requested = String((req.body as any)?.path || '');
+        if (requested) files.push(requested);
+        const after = (req.body as any)?.content;
+        const afterText = typeof after === 'string' ? after : undefined;
+        binary = !!before?.binary || (afterText === undefined && after !== undefined);
+        bytes = { before: before?.bytes, after: afterText !== undefined ? Buffer.byteLength(afterText, 'utf8') : undefined };
+        if (res.statusCode < 400 && !binary && afterText !== undefined) {
+          lines = lineDelta(before?.text ?? '', afterText);
+          if (before?.text !== undefined) {
+            beforeBlob = agentHistoryStore.putBlob(before.text);
+            diffBlob = agentHistoryStore.putBlob(unifiedDiff(before.text, afterText, requested));
+          }
+          afterBlob = agentHistoryStore.putBlob(afterText);
+        }
+      } else if (kind === 'deploy') {
+        const deployed = captured?.deployedPath;
+        if (deployed) files.push(String(deployed));
+      } else if (kind === 'revert') {
+        // The handler records which files it restored; capture still happens here.
+        for (const file of ((req as any).__revertFiles || [])) files.push(String(file));
+      }
+
+      const described = describeAction({
+        kind, status: res.statusCode, body: captured, request: req.body, files, lines, binary, bytes,
+        revertOfTitle: (req as any).__revertOfTitle,
+      });
+      const rule = revertibility(kind, described.outcome, !!beforeBlob);
+      const row: LedgerRow = {
+        id: `${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}`,
+        ts: new Date().toISOString(),
+        agent: ledgerActor(req),
+        kind,
+        title: described.title,
+        files,
+        outcome: described.outcome,
+        durationMs: Date.now() - startedAt,
+        ...(bytes && (bytes.before !== undefined || bytes.after !== undefined) ? { bytes } : {}),
+        ...(lines ? { lines } : {}),
+        ...(beforeBlob ? { beforeBlob } : {}),
+        ...(afterBlob ? { afterBlob } : {}),
+        ...(diffBlob ? { diffBlob } : {}),
+        ...(binary ? { binary } : {}),
+        revertible: rule.revertible,
+        ...(rule.reason ? { revertReason: rule.reason } : {}),
+        ...((req as any).__revertOf ? { revertOf: (req as any).__revertOf } : {}),
+      };
+      agentHistoryStore.append(row);
+    } catch {
+      // Swallowed BY DESIGN. The response has already been sent; a ledger fault must not
+      // surface as a request failure. The store counts its own faults for the panel.
+      agentHistoryStore.failures++;
+    }
+  });
+
+  return next();
+}
+
+app.use("/api", ledgerMiddleware);
 
 // ---------------------------------------------------------------------------
 // B42: agent-key management (SESSION TOKEN ONLY — scopeAllows denies /agent/keys
@@ -3438,34 +3577,113 @@ app.get("/api/patch/base-content", (req, res) => {
 });
 
 // Server Filesystem write endpoint
+/**
+ * B86: THE single guarded workspace-write path. Extracted so that `/api/fs/write` and the
+ * history "Revert to here" action share one implementation — a revert must replay through the
+ * same validation and containment as any other write, never poke files behind the guards.
+ * Returns false having ALREADY sent an error response; true means the bytes are on disk.
+ */
+function writeWorkspaceFileGuarded(res: express.Response, relativePath: string, content: any): boolean {
+  if (!relativePath) {
+    res.status(400).json({ error: "Missing path parameter." });
+    return false;
+  }
+  const resolved = resolveXsdConfig();
+  const rootPath = resolved.modWorkspacePath;
+  if (!rootPath) {
+    res.status(400).json({ error: "No Mod Workspace Folder configured." });
+    return false;
+  }
+  if (rejectUnsafeDevelopmentWrite(res, resolved, ['modWorkspacePath'])) return false;
+
+  const safePath = path.resolve(rootPath, relativePath);
+  if (!isPathWithin(safePath, rootPath)) {
+    res.status(403).json({ error: "Forbidden: Directory traversal detected." });
+    return false;
+  }
+
+  const dir = path.dirname(safePath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(safePath, content, 'utf8');
+  return true;
+}
+
 app.post("/api/fs/write", (req, res) => {
   try {
-    const relativePath = String(req.body?.path || '').trim();
-    const content = req.body?.content ?? '';
-    if (!relativePath) {
-      return res.status(400).json({ error: "Missing path parameter." });
-    }
-    const resolved = resolveXsdConfig();
-    const rootPath = resolved.modWorkspacePath;
-    if (!rootPath) {
-      return res.status(400).json({ error: "No Mod Workspace Folder configured." });
-    }
-    if (rejectUnsafeDevelopmentWrite(res, resolved, ['modWorkspacePath'])) return;
-    
-    const safePath = path.resolve(rootPath, relativePath);
-    if (!isPathWithin(safePath, rootPath)) {
-      return res.status(403).json({ error: "Forbidden: Directory traversal detected." });
-    }
-    
-    const dir = path.dirname(safePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    
-    fs.writeFileSync(safePath, content, 'utf8');
+    if (!writeWorkspaceFileGuarded(res, String(req.body?.path || '').trim(), req.body?.content ?? '')) return;
     return res.json({ success: true });
   } catch (error) {
     return res.status(500).json({ error: error.message || "Failed to write file." });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// B86 — AGENT ACTION LEDGER surface.
+//
+// Rows carry summaries and references only; payloads live behind an explicit /raw fetch. This
+// is an activity log with undo, NOT version control — git remains the authoritative history of
+// the workspace, and the panel says so.
+// ---------------------------------------------------------------------------
+app.get("/api/agent/history", (req, res) => {
+  try {
+    const rows = filterRows(agentHistoryStore.readAll(), {
+      kind: req.query.kind ? String(req.query.kind) : undefined,
+      outcome: req.query.outcome ? String(req.query.outcome) : undefined,
+      file: req.query.file ? String(req.query.file) : undefined,
+      limit: req.query.limit ? Number(req.query.limit) : 200,
+    });
+    return res.json({
+      ok: true,
+      rows,
+      total: rows.length,
+      // A silently broken ledger should be visible, not merely absent.
+      ledgerFailures: agentHistoryStore.failures,
+      lastFailure: agentHistoryStore.lastFailure || undefined,
+      note: 'Activity log with undo — not version control. Git remains the authoritative history of this workspace.',
+    });
+  } catch (error: any) {
+    return res.status(500).json({ ok: false, error: error?.message || 'Failed to read history.' });
+  }
+});
+
+/** Payload bytes, deliberately behind an explicit action so rows stay small. */
+app.get("/api/agent/history/:id/raw", (req, res) => {
+  try {
+    const row = agentHistoryStore.find(String(req.params.id));
+    if (!row) return res.status(404).json({ ok: false, error: 'No such history entry.' });
+    const which = String(req.query.which || 'diff');
+    const ref = which === 'before' ? row.beforeBlob : which === 'after' ? row.afterBlob : row.diffBlob;
+    if (!ref) return res.status(404).json({ ok: false, error: `This entry has no stored "${which}" payload.` });
+    const blob = agentHistoryStore.readBlob(ref);
+    if (!blob) return res.status(410).json({ ok: false, error: 'The stored payload has been rotated out of history.' });
+    return res.json({ ok: true, id: row.id, which, bytes: blob.length, content: blob.toString('utf8') });
+  } catch (error: any) {
+    return res.status(500).json({ ok: false, error: error?.message || 'Failed to read payload.' });
+  }
+});
+
+app.post("/api/agent/history/:id/revert", (req, res) => {
+  try {
+    const row = agentHistoryStore.find(String(req.params.id));
+    if (!row) return res.status(404).json({ ok: false, error: 'No such history entry.' });
+    const rule = revertibility(row.kind, row.outcome, !!row.beforeBlob);
+    if (!rule.revertible) {
+      return res.status(409).json({ ok: false, code: 'NOT_REVERTIBLE', error: rule.reason });
+    }
+    const previous = agentHistoryStore.readBlob(row.beforeBlob!);
+    if (!previous) {
+      return res.status(410).json({ ok: false, error: 'The previous content has been rotated out of history and can no longer be restored.' });
+    }
+    const target = row.files[0];
+    // Tell the capture middleware what this revert touched, so the new entry is complete.
+    (req as any).__revertOf = row.id;
+    (req as any).__revertOfTitle = row.title;
+    (req as any).__revertFiles = [target];
+    // Same guarded write path as /api/fs/write — validation and containment still apply.
+    if (!writeWorkspaceFileGuarded(res, target, previous.toString('utf8'))) return;
+    return res.json({ ok: true, revertedTo: row.id, file: target, bytes: previous.length });
+  } catch (error: any) {
+    return res.status(500).json({ ok: false, error: error?.message || 'Revert failed.' });
   }
 });
 
@@ -6102,6 +6320,7 @@ app.get("/api/agent/galaxy-map", (_req, res) => {
 // registered by the validation module (src/server/validationRoutes.ts, stage-1 split).
 // SELFTEST REGISTRY (audit R1): one line per oracle — route + public allowlist wired together.
 const SELFTESTS: Record<string, () => unknown> = {
+  "agent-history-selftest": runAgentHistorySelftest,
   "agent-keys-selftest": runAgentKeysSelftest,
   "schema-discovery-selftest": runSchemaDiscoverySelftest,
   "schema-registry-selftest": runSchemaRegistrySelftest,

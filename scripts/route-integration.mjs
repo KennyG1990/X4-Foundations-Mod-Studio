@@ -228,6 +228,99 @@ async function main() {
   const restoreLoose = await req('POST', '/api/schema/config', SESSION_TOKEN, { deployFormat: 'loose' });
   ok('deploy_format_restored_to_loose', restoreLoose.status === 200 && restoreLoose.json?.config?.deployFormat === 'loose', `status=${restoreLoose.status}`);
 
+  // --- B86: agent action ledger ----------------------------------------------------------
+  // The load-bearing property is that payloads are never inlined: a ~295 KB write must produce
+  // a small row, and the history must stay proportionate to CHANGES, not payload size.
+  const histBefore = await req('GET', '/api/agent/history', SESSION_TOKEN);
+  const histBeforeCount = (histBefore.json?.rows || []).length;
+  ok('history_endpoint_serves_rows', histBefore.status === 200 && Array.isArray(histBefore.json?.rows), `status=${histBefore.status}`);
+  ok('history_states_it_is_not_version_control', /not version control/i.test(String(histBefore.json?.note || '')), histBefore.json?.note);
+
+  await req('POST', '/api/fs/write', SESSION_TOKEN, { path: 'ledger_probe.xml', content: 'line1\nline2\nline3\n' });
+  const afterFirstWrite = await req('GET', '/api/agent/history', SESSION_TOKEN);
+  ok('one_entry_per_mutating_call', (afterFirstWrite.json?.rows || []).length === histBeforeCount + 1,
+    `${histBeforeCount} -> ${(afterFirstWrite.json?.rows || []).length}`);
+  const firstRow = (afterFirstWrite.json?.rows || [])[0];
+  ok('edit_row_title_is_human_readable',
+    typeof firstRow?.title === 'string' && firstRow.title.startsWith('Edited') && !firstRow.title.includes('{') && !firstRow.title.includes('\n'),
+    firstRow?.title);
+  ok('edit_row_attributes_the_actor', firstRow?.agent?.kind === 'studio', JSON.stringify(firstRow?.agent));
+
+  // GETs and reference reads must not spam the ledger.
+  const rowsBeforeReads = (afterFirstWrite.json?.rows || []).length;
+  await req('GET', '/api/reference/factions', SESSION_TOKEN);
+  await req('GET', '/api/agent/schema', SESSION_TOKEN);
+  const afterReads = await req('GET', '/api/agent/history', SESSION_TOKEN);
+  ok('read_only_calls_do_not_spam_the_ledger', (afterReads.json?.rows || []).length === rowsBeforeReads,
+    `${rowsBeforeReads} -> ${(afterReads.json?.rows || []).length}`);
+
+  // The 295 KB proof, against real bytes on disk.
+  const bigContent = 'local M = {}\n'.repeat(24_000);
+  const historyDirPath = path.join(dataDir, 'history');
+  const dirBytes = (dir) => {
+    let total = 0;
+    const walk = (d) => {
+      if (!fs.existsSync(d)) return;
+      for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+        const full = path.join(d, e.name);
+        if (e.isDirectory()) walk(full); else total += fs.statSync(full).size;
+      }
+    };
+    walk(dir);
+    return total;
+  };
+  await req('POST', '/api/fs/write', SESSION_TOKEN, { path: 'big_probe.lua', content: bigContent });
+  const afterBig = await req('GET', '/api/agent/history', SESSION_TOKEN);
+  const bigRow = (afterBig.json?.rows || [])[0];
+  const bigRowBytes = Buffer.byteLength(JSON.stringify(bigRow), 'utf8');
+  ok('large_write_produces_a_small_row', bigRowBytes < 1024, `row=${bigRowBytes}B for a ${bigContent.length}B payload`);
+  ok('large_write_row_carries_no_payload', !JSON.stringify(bigRow).includes('local M = {}'), 'payload absent from row');
+
+  const bytesAfterBig = dirBytes(historyDirPath);
+  await req('POST', '/api/fs/write', SESSION_TOKEN, { path: 'big_probe.lua', content: bigContent });
+  const bytesAfterRewrite = dirBytes(historyDirPath);
+  ok('rewriting_identical_content_barely_grows_history', bytesAfterRewrite - bytesAfterBig < 2048,
+    `+${bytesAfterRewrite - bytesAfterBig}B for a repeated ${bigContent.length}B payload`);
+
+  // Revert round-trip: restores previous bytes THROUGH the guarded write path, and is itself an entry.
+  await req('POST', '/api/fs/write', SESSION_TOKEN, { path: 'revert_probe.xml', content: 'original\n' });
+  await req('POST', '/api/fs/write', SESSION_TOKEN, { path: 'revert_probe.xml', content: 'replaced\n' });
+  const beforeRevert = await req('GET', '/api/agent/history?file=revert_probe.xml', SESSION_TOKEN);
+  const replacedRow = (beforeRevert.json?.rows || [])[0];
+  ok('edit_over_existing_file_is_revertible', replacedRow?.revertible === true, `revertible=${replacedRow?.revertible}`);
+  const revertRes = await req('POST', `/api/agent/history/${replacedRow?.id}/revert`, SESSION_TOKEN, {});
+  ok('revert_succeeds', revertRes.status === 200 && revertRes.json?.ok === true, `status=${revertRes.status}`);
+  ok('revert_restored_previous_bytes', fs.readFileSync(path.join(safeWorkspace, 'revert_probe.xml'), 'utf8') === 'original\n');
+  const afterRevert = await req('GET', '/api/agent/history', SESSION_TOKEN);
+  const revertRow = (afterRevert.json?.rows || [])[0];
+  ok('revert_is_itself_a_ledger_entry', revertRow?.kind === 'revert' && revertRow?.revertOf === replacedRow?.id, `kind=${revertRow?.kind}`);
+  ok('revert_row_title_names_what_it_undid', /^Reverted/.test(String(revertRow?.title || '')), revertRow?.title);
+
+  // A brand-new file has no previous content, so it must NOT claim to be revertible.
+  await req('POST', '/api/fs/write', SESSION_TOKEN, { path: 'brand_new_probe.xml', content: 'fresh\n' });
+  const afterFresh = await req('GET', '/api/agent/history', SESSION_TOKEN);
+  ok('first_write_of_a_new_file_is_not_revertible', (afterFresh.json?.rows || [])[0]?.revertible === false);
+  const badRevert = await req('POST', `/api/agent/history/${(afterFresh.json?.rows || [])[0]?.id}/revert`, SESSION_TOKEN, {});
+  ok('non_revertible_entry_refuses_revert', badRevert.status === 409 && badRevert.json?.code === 'NOT_REVERTIBLE', `status=${badRevert.status}`);
+
+  // Raw payloads are behind an explicit fetch, not in the row.
+  const raw = await req('GET', `/api/agent/history/${replacedRow?.id}/raw?which=before`, SESSION_TOKEN);
+  ok('raw_payload_available_on_demand', raw.status === 200 && raw.json?.content === 'original\n', `status=${raw.status}`);
+
+  // No key material may ever reach disk.
+  const ledgerText = fs.existsSync(path.join(historyDirPath, 'ledger.jsonl')) ? fs.readFileSync(path.join(historyDirPath, 'ledger.jsonl'), 'utf8') : '';
+  ok('ledger_file_contains_no_key_material', !!ledgerText && !ledgerText.includes('x4fk_') && !ledgerText.includes(SESSION_TOKEN));
+
+  // A REAL ledger fault (blob dir replaced by a file) must not disturb the underlying write.
+  const blobDirPath = path.join(historyDirPath, 'blobs');
+  fs.rmSync(blobDirPath, { recursive: true, force: true });
+  fs.writeFileSync(blobDirPath, 'not a directory');
+  const duringFault = await req('POST', '/api/fs/write', SESSION_TOKEN, { path: 'fault_probe.xml', content: 'still written\n' });
+  ok('ledger_failure_never_breaks_the_operation',
+    duringFault.status === 200 && fs.readFileSync(path.join(safeWorkspace, 'fault_probe.xml'), 'utf8') === 'still written\n',
+    `status=${duringFault.status}`);
+  fs.rmSync(blobDirPath, { force: true });
+
   // --- dual project roots: independent discovery + collision-safe preview/import ---
   const writeFixtureMod = (root, name, displayName, marker) => {
     const folder = path.join(root, name);
