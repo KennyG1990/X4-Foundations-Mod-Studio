@@ -27,6 +27,7 @@ import { buildXmlAssociations, listModFolders, writeRecommendations, writeXmlAss
 import { xmlCursorContext } from "./langContext";
 import { findCueDefinition, findCueReferences, mdscriptNameOf, parseCueWord } from "./langNav";
 import { detectIdeCapabilities, formatIdeCapabilityReport } from "./capabilities";
+import { PanelBackendBinding } from "./panelBinding";
 
 interface BackendHandle {
   baseUrl: string;
@@ -42,6 +43,7 @@ interface BackendHandle {
 
 let backend: BackendHandle | null = null;
 let panel: vscode.WebviewPanel | null = null;
+const panelBinding = new PanelBackendBinding();
 let output: vscode.OutputChannel;
 let statusItem: vscode.StatusBarItem;
 /** Set while deliberately stopping the sidecar so the exit handler stays quiet. */
@@ -352,15 +354,6 @@ async function autoRestartSidecar(context: vscode.ExtensionContext, exitCode: nu
   try {
     const handle = await ensureBackend(context);
     log(`sidecar auto-restarted at ${handle.baseUrl}`);
-    // A new sidecar has a NEW port + token, so an open studio panel still points at the dead
-    // one — reload its iframe against the fresh backend.
-    if (panel) {
-      panel.webview.html = webviewHtml(
-        panel.webview,
-        handle.baseUrl,
-        handle.owned ? `managed sidecar on port ${handle.port}` : `attached to ${handle.baseUrl}`,
-      );
-    }
     void vscode.window.showInformationMessage(
       "X4 Forge: the backend stopped unexpectedly and was restarted automatically.",
     );
@@ -378,7 +371,9 @@ async function ensureBackend(context: vscode.ExtensionContext): Promise<BackendH
   if (backendEnsurePromise) return backendEnsurePromise;
   backendEnsurePromise = ensureBackendOnce(context);
   try {
-    return await backendEnsurePromise;
+    const handle = await backendEnsurePromise;
+    bindStudioPanel(handle);
+    return handle;
   } finally {
     backendEnsurePromise = null;
   }
@@ -477,8 +472,41 @@ function updateStatus(): void {
   statusItem.show();
 }
 
+function trackStudioPanel(nextPanel: vscode.WebviewPanel): void {
+  panel = nextPanel;
+  panelBinding.reset();
+  nextPanel.onDidDispose(() => {
+    if (panel === nextPanel) {
+      panel = null;
+      panelBinding.reset();
+    }
+  });
+}
+
+function bindStudioPanel(handle: BackendHandle): boolean {
+  const activePanel = panel;
+  if (!activePanel) return false;
+  return panelBinding.bind(handle, (current) => {
+    activePanel.webview.html = webviewHtml(
+      activePanel.webview,
+      current.baseUrl,
+      current.owned ? `managed sidecar on port ${current.port}` : `attached to ${current.baseUrl}`,
+    );
+    log(`studio panel bound to ${current.baseUrl}`);
+  });
+}
+
 async function openStudio(context: vscode.ExtensionContext): Promise<void> {
   if (panel) {
+    try {
+      await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: "X4 Forge: checking backend…" },
+        () => ensureBackend(context),
+      );
+    } catch (err) {
+      showBackendError(err instanceof Error ? err.message : String(err));
+      return;
+    }
     panel.reveal();
     return;
   }
@@ -493,19 +521,12 @@ async function openStudio(context: vscode.ExtensionContext): Promise<void> {
     return;
   }
 
-  panel = vscode.window.createWebviewPanel("x4forge.studio", "X4 Forge Studio", vscode.ViewColumn.One, {
+  const createdPanel = vscode.window.createWebviewPanel("x4forge.studio", "X4 Forge Studio", vscode.ViewColumn.One, {
     enableScripts: true,
     retainContextWhenHidden: true,
   });
-  panel.webview.html = webviewHtml(
-    panel.webview,
-    handle.baseUrl,
-    handle.owned ? `managed sidecar on port ${handle.port}` : `attached to ${handle.baseUrl}`,
-  );
-  panel.onDidDispose(() => {
-    // Keep the sidecar warm for quick reopen; it is released on deactivate/stop command.
-    panel = null;
-  });
+  trackStudioPanel(createdPanel);
+  bindStudioPanel(handle);
 }
 
 // ---------------------------------------------------------------------------
@@ -529,6 +550,20 @@ export function activate(context: vscode.ExtensionContext): void {
   };
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider("x4forge.launcher", emptyLauncher),
+    vscode.window.registerWebviewPanelSerializer("x4forge.studio", {
+      async deserializeWebviewPanel(restoredPanel): Promise<void> {
+        restoredPanel.webview.options = { enableScripts: true };
+        trackStudioPanel(restoredPanel);
+        try {
+          await ensureBackend(context);
+          restoredPanel.reveal(undefined, true);
+        } catch (err) {
+          showBackendError(
+            `Could not restore the X4 Forge Studio panel: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      },
+    }),
   );
 
   context.subscriptions.push(

@@ -1,41 +1,39 @@
-# X4 Forge session handoff — 2026-07-25 release close
+# X4 Forge session handoff — 2026-07-25 B78 / 0.0.38 close
 
 ## One-line state
 
-X4 Forge Studio 0.0.37 is publicly published, indexed as latest on OpenVSX, and byte-identical to the locally inspected stable VSIX. This handoff is part of the publish-before-commit release close; the final operation is commit/push plus `origin/main == HEAD` proof.
+X4 Forge Studio 0.0.38 is implemented, installed in Antigravity, visually regression-proven, published stable on OpenVSX, and public/local hash-identical; the remaining close operation is commit/push plus `origin/main == HEAD` proof.
 
-## Public release proof
+## What shipped
 
-- Extension: `x4forge.x4-forge-studio` 0.0.37, stable.
-- OpenVSX exact-version timestamp: `2026-07-25T04:34:46.910747Z`; versions list returns 0.0.37 first.
-- Public file: `https://open-vsx.org/api/x4forge/x4-forge-studio/0.0.37/file/x4forge.x4-forge-studio-0.0.37.vsix`.
-- Local/public bytes: 17,809,845.
-- Local/public SHA-256: `02168E41468979B46FF023BE9C15A9AA6C16DF546B084C5F44717EC9A2B933E0`.
-- Full evidence: `vscode-extension/evidence/0.0.37-release-validation.md`.
+- Retained or restored `x4forge.studio` webviews are rebound to the authoritative backend session after extension-host or sidecar replacement.
+- Backend identity includes URL, ownership, port, and token, so a reused port with a new credential refreshes once while unchanged sessions do not reload.
+- Existing **Open Studio** now health-checks/rebinds before reveal.
+- A `WebviewPanelSerializer` restores retained Studio panels; `onWebviewPanel:x4forge.studio` activates the extension for that path.
 
-## Shipped boundary
+## Evidence
 
-- B76's generic disk-backed artifact/CAT-DAT pipeline: arbitrary included files survive regardless of filename, extension, or size; unknown types default to byte-preserving source-copy.
-- Build output is isolated under `.forge-builds`; explicit validated Deploy alone owns the installed-extension write boundary.
-- Deterministic multi-volume CAT/DAT output is reopened and hash-verified, with activation rollback and explicit runtime-owned preservation.
-- Browser import limits are not build limits. Oversized textual files that cannot receive semantic validation emit an explicit warning instead of a false-clean result.
+- Focused panel-binding selftest 5/5.
+- Root typecheck/build and extension build/stage PASS.
+- Staged sidecar probe 6/6.
+- Root precommit PASS before release.
+- Installed Antigravity displayed X4 Forge Studio v0.0.38.
+- Retained Studio stayed fully rendered while the extension restart replaced managed sidecar port 56542 with 56203.
+- OpenVSX stable 0.0.38 public/local VSIX: 17,810,331 bytes; SHA-256 `354622FC6A9F79F115129F2067EF2B5D13ACF77AB15C05E01603BFFFE19EA0C1`.
+- Full evidence: `vscode-extension/evidence/0.0.38-stale-webview-validation.md`.
 
-## Release gates
+## Boundaries and hazards
 
-- PASS `npm run precommit:check`, root production build, extension stage/build, staged sidecar probe 6/6, and stable VSIX packaging.
-- PASS package inspection: 2,091 files; zero secret, config, runtime-state, source-map, evidence, test, or source-tree entries.
-- PASS public artifact availability and exact SHA-256 parity.
-- No real game, mod, or standing config directory was written during this release.
-
-## Open hazard
-
-- B77 remains `spec'd`: `graphify update .` can mutate tracked historical PNG evidence despite `*.png` ignore rules. The two affected 0.0.35 files are restored exactly in this release state; do not run graphify until B77 is fixed or the restoration is deliberately repeated.
+- No real game directory, live mod, or standing Forge config was written.
+- B77 remains open: do not run `graphify update .` until its historical-PNG mutation is fixed.
+- OpenVSX public routes briefly lagged the successful publish response, then converged; do not republish merely because the first metadata read is 404.
+- One byte-identical public VSIX copy remains in Windows Temp because the command-policy layer rejected its explicit removal. It is outside the repository and product install.
 
 ## Operator queue
 
-- Install/update X4 Forge Studio from OpenVSX in Antigravity, then reload the extension host if it does not refresh automatically.
-- Commit question: this release close must be committed and pushed after publication; verify `origin/main == HEAD` rather than trusting push exit status.
+- Commit and push the verified 0.0.38 release state.
+- Assert the branch is attached and `origin/main == HEAD`; do not trust push exit status alone.
 
 ## Commit point
 
-Release close title: `chore(release): publish X4 Forge Studio 0.0.37`
+Release close title: `fix(extension): rebind retained Studio panels after sidecar restarts`.

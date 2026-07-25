@@ -3,6 +3,10 @@
 The latest changes, newest first. (This page is generated automatically — see
 `release-notes.json` to edit the wording.)
 
+## 0.0.38 — 2026-07-25
+
+- Fixed a blank Studio tab after an extension or backend restart. The Forge now reconnects an open or restored Studio panel to the current sidecar automatically instead of leaving it attached to a dead port.
+
 ## 0.0.37 — 2026-07-25
 
 - Forge now packages every included mod file from the development folder, including large binaries and unfamiliar file types. The editor's browser-memory limits no longer cause files to disappear from a build.
