@@ -7857,7 +7857,18 @@ function verifyExpectedFiles(targetRoot: string, expected: Array<{ path: string;
  */
 type PreservedOrigin = 'runtime' | 'forgekeep' | 'forge-state';
 
-function preservedDeploymentEntries(targetPath: string, plan: ArtifactPlan): Array<{ path: string; origin: PreservedOrigin }> {
+function preservedDeploymentEntries(
+  targetPath: string,
+  plan: ArtifactPlan,
+  /**
+   * True only for the STAGING target inside the mod workspace, which is where Forge writes its
+   * own dev state (`.studio-mod-id`, `.snapshots`). The deployed game directory must stay a
+   * CLEAN mod: Forge state has no business there, so if a stale copy exists it is removed as
+   * stale rather than preserved. Preserving it unconditionally (as B84 first did) would turn
+   * dev artifacts into permanent litter in the folder the game loads.
+   */
+  ownsForgeState: boolean,
+): Array<{ path: string; origin: PreservedOrigin }> {
   const origins = new Map<string, PreservedOrigin>();
   const put = (relativePath: string, origin: PreservedOrigin) => {
     if (!relativePath || relativePath.split('/').includes('..')) return;
@@ -7868,8 +7879,12 @@ function preservedDeploymentEntries(targetPath: string, plan: ArtifactPlan): Arr
   const keep = readForgeKeep(targetPath);
   for (const top of keep) put(top, 'forgekeep');
   if (keep.size > 0) put('.forgekeep', 'forgekeep');
-  put('.studio-mod-id', 'forge-state');
-  put('.snapshots', 'forge-state');
+  // Forge's own dev state belongs ONLY in the workspace-side staging target. In the deployed
+  // game directory it is litter, so it is left out of preservation and cleaned as stale.
+  if (ownsForgeState) {
+    put('.studio-mod-id', 'forge-state');
+    put('.snapshots', 'forge-state');
+  }
   return [...origins.entries()].map(([path, origin]) => ({ path, origin }));
 }
 
@@ -7937,6 +7952,8 @@ function replaceValidatedDeployment(
   expected: Array<{ path: string; size: number; sha256: string }>,
   plan: ArtifactPlan,
   hooks: DeploymentTransactionHooks = {},
+  /** True only for the workspace-side staging target — see `preservedDeploymentEntries`. */
+  ownsForgeState: boolean = false,
 ): void {
   const parent = path.dirname(targetPath);
   fs.mkdirSync(parent, { recursive: true });
@@ -7949,7 +7966,7 @@ function replaceValidatedDeployment(
   try {
     copyRegularTree(artifactRoot, stage);
     if (fs.existsSync(targetPath)) {
-      for (const { path: relativePath, origin } of preservedDeploymentEntries(targetPath, plan)) {
+      for (const { path: relativePath, origin } of preservedDeploymentEntries(targetPath, plan, ownsForgeState)) {
         const source = path.join(targetPath, ...relativePath.split('/'));
         if (!fs.existsSync(source)) continue;
         const destination = path.join(stage, ...relativePath.split('/'));
@@ -8024,7 +8041,7 @@ function compileWorkspaceToFolder(
     if (artifactMode === 'catalog') {
       const packaged = materializeCatalogArtifact(plan, artifactRoot);
       if (!packaged.ok) throw new Error(`Packed artifact failed: ${packaged.errors.join('; ')}`);
-      replaceValidatedDeployment(artifactRoot, targetPath, packaged.files, plan, transactionHooks);
+      replaceValidatedDeployment(artifactRoot, targetPath, packaged.files, plan, transactionHooks, writeSnapshots);
       lastArtifactReport = {
         mode: artifactMode,
         sourceRoot,
@@ -8051,7 +8068,7 @@ function compileWorkspaceToFolder(
       // so a file deleted from the mod stayed in the game folder forever and kept being
       // loaded by X4 — and loose deploys got none of the sibling-backup, rollback, hash
       // verification, or locked-root (B83) protection that catalog deploys already had.
-      replaceValidatedDeployment(artifactRoot, targetPath, plan.entries, plan, transactionHooks);
+      replaceValidatedDeployment(artifactRoot, targetPath, plan.entries, plan, transactionHooks, writeSnapshots);
       lastArtifactReport = {
         mode: artifactMode,
         sourceRoot,
@@ -8255,6 +8272,34 @@ function runCompileArtifactSelftest() {
     record('non-lock rename error fails without fallback', nonLockFailureObserved);
     record('non-lock rename error leaves target unchanged', regularTreeFingerprint(target) === beforeNonLockFingerprint);
     record('non-lock rename error leaves no transaction siblings', transactionArtifacts().length === 0, transactionArtifacts().join(', '));
+
+    // The DEPLOYED directory must stay a clean mod: Forge's own dev state (.snapshots,
+    // .studio-mod-id) belongs in the workspace-side staging target only. A stale copy sitting
+    // in the game folder must be cleaned as stale, never preserved into permanence.
+    fs.mkdirSync(path.join(target, '.snapshots'), { recursive: true });
+    fs.writeFileSync(path.join(target, '.snapshots', 'snapshot_stale.json'), '{"stale":true}');
+    fs.writeFileSync(path.join(target, '.studio-mod-id'), 'mod_stale');
+    try {
+      compileWorkspaceToFolder(imported.workspace, deployRoot, 'store', false, 'catalog');
+      record('deployed mod folder is cleaned of forge dev state',
+        !fs.existsSync(path.join(target, '.snapshots')) && !fs.existsSync(path.join(target, '.studio-mod-id')),
+        `snapshots=${fs.existsSync(path.join(target, '.snapshots'))} modId=${fs.existsSync(path.join(target, '.studio-mod-id'))}`);
+    } catch (error) {
+      record('deployed mod folder is cleaned of forge dev state', false, error instanceof Error ? error.message : String(error));
+    }
+    // …but a staging deploy (writeSnapshots=true) OWNS that state and must keep it.
+    const stagingRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'x4forge-staging-selftest-'));
+    try {
+      const stagedPath = compileWorkspaceToFolder(imported.workspace, stagingRoot, 'store', true, 'loose');
+      fs.writeFileSync(path.join(stagedPath, '.snapshots', 'snapshot_keepme.json'), '{"keep":true}');
+      compileWorkspaceToFolder(imported.workspace, stagingRoot, 'store', true, 'loose');
+      record('staging deploy preserves its own snapshot history',
+        fs.existsSync(path.join(stagedPath, '.snapshots', 'snapshot_keepme.json')));
+    } catch (error) {
+      record('staging deploy preserves its own snapshot history', false, error instanceof Error ? error.message : String(error));
+    } finally {
+      try { fs.rmSync(stagingRoot, { recursive: true, force: true }); } catch { /* scratch cleanup */ }
+    }
   } catch (error) {
     record('artifact integration selftest completed', false, error instanceof Error ? error.stack || error.message : String(error));
   } finally {
