@@ -67,13 +67,19 @@ traversal, and junction escapes reject; legacy UI behavior is covered explicitly
 precommit gates pass. No real workspace, deployed mod, or game directory is used for validation.
 
 ### B77 · Something in the ordinary gate flow rewrites ignored historical PNG evidence `spec'd`
-**NEW EVIDENCE 2026-07-25 (narrows the suspect — the title's "graph refresh" attribution is now doubtful):**
-both tracked `vscode-extension/evidence/0.0.35-*.png` files changed bytes AGAIN during the B83/B84 session
-(`0.0.35-runtime-copy-live.png` 82,251 → 82,206; `-startup.png` 127,514 → 127,513) and **`graphify update .`
-was never run**. The only things executed were typecheck / oracles / routes / lint / e2e / precommit / build
-and a host-native server. So the writer is in that ordinary flow, not the graph refresh. Next step: bisect by
-running each gate alone against copied fixture images and diffing after each. Do NOT stage or revert the two
-tracked files until the writer is identified.
+**NEW EVIDENCE 2026-07-25 — the mechanism that made this look mysterious is now [REPRODUCED]:**
+`.git/hooks/post-commit` contains a `graphify-hook-start`/`-end` block that **launches a graphify rebuild in
+the background after every commit** (`[graphify hook] launching background rebuild`, log
+`~/.cache/graphify-rebuild.log`). So graph refresh runs *automatically* — nobody has to type
+`graphify update .`, which is why the PNG churn kept appearing with no one admitting to running it, and why
+"don't run graphify" was never sufficient protection.
+**Still unexplained [HYPOTHESIS]:** both tracked `0.0.35-*.png` files also changed bytes MID-session
+(`-live` 82,251 → 82,206; `-startup` 127,514 → 127,513) at a point where **no commit had yet been made**, so
+the post-commit hook cannot account for that particular change on its own. A stale background rebuild from an
+earlier commit, or a second writer, remains possible.
+**Next step:** copy the two images to a fixture dir, then (a) make a trivial commit and diff after the hook's
+background rebuild completes, and (b) run each gate alone and diff after each. Fix the ignore rule so
+`*.png` is genuinely read-only. Do NOT stage or revert the two tracked files until the writer is proven.
 Observed twice during the B76 final audit: `graphify update .` changed the byte size/hash and timestamp of
 two tracked `vscode-extension/evidence/0.0.35-*.png` files even though `.graphifyignore` contains `*.png`.
 Reproduce on copied fixture images outside user evidence, identify the graphify/tooling writer, make ignore
