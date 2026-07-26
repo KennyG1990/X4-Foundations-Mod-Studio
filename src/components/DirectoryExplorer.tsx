@@ -132,7 +132,7 @@ export default function DirectoryExplorer({
       saveCheckpoint();
       setActiveFilePath(file.path);
 
-      const response = await fetch(`/api/fs/read?path=${encodeURIComponent(file.path)}`);
+      const response = await fetch(`/api/fs/read?root=filesystem&path=${encodeURIComponent(file.path)}`);
       if (!response.ok) {
         throw new Error("Could not read file from server.");
       }

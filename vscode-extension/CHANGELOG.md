@@ -3,6 +3,13 @@
 The latest changes, newest first. (This page is generated automatically — see
 `release-notes.json` to edit the wording.)
 
+## 0.0.44 — 2026-07-26
+
+- Reading and writing a file now use the same folder. GET /api/fs/read used to return the DEPLOYED copy while writes went to your workspace, so an edit built on a read could silently overwrite newer work once the two folders differed. Reads now default to the workspace and take an explicit root=workspace or root=deployment. The two places in the app that browse the deployed folder ask for it by name, so nothing changed for them.
+- A read that misses no longer quietly hands you the other copy. If the file is not in the folder you asked for, you get a clear "not found" that tells you which folder does have it and how to ask for it — because silently substituting the other copy is exactly what made the old bug invisible.
+- Writes are checked before they land. POST /api/fs/write now validates the content you send — XML well-formedness on every .xml file, plus script-property checks on Mission Director and AI script files — and returns the findings with the write. Add strict: true to refuse the write instead, in which case nothing is written at all.
+- That check catches the two failure kinds that used to reach the game silently: a mismatched tag, which makes X4 discard the whole file without a log line, and an unknown property name, which evaluates to null so the guard using it simply never fires.
+
 ## 0.0.43 — 2026-07-25
 
 - The Forge now tells you where it is. Every instance writes its port and token to ~/.x4forge/latest.json (and one file per instance), so tools no longer have to scan dozens of ports to find it. Records are removed when the Forge stops, and a record left by a crashed instance is cleaned up rather than pointing you at a dead port.

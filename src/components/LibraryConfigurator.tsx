@@ -248,7 +248,7 @@ export default function LibraryConfigurator({ workspace, setWorkspace, saveCheck
         
         for (const file of xmlFiles) {
           try {
-            const readRes = await fetch(`/api/fs/read?path=${encodeURIComponent(file.path)}`);
+            const readRes = await fetch(`/api/fs/read?root=filesystem&path=${encodeURIComponent(file.path)}`);
             if (readRes.ok) {
               const data = await readRes.json();
               const fileContent = data.content || '';

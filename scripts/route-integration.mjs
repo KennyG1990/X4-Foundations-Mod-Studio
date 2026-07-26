@@ -389,6 +389,54 @@ async function main() {
   const exprEmpty = await req('POST', '/api/agent/check-expression', SESSION_TOKEN, {});
   ok('check_expression_rejects_an_empty_request', exprEmpty.status === 400 && exprEmpty.json?.code === 'MISSING_EXPRESSION', `status=${exprEmpty.status}`);
 
+  // --- B81: reads and writes must name the same root ---------------------------------------
+  // The original hazard: fs/read served the DEPLOYMENT while fs/write targeted the WORKSPACE, so a
+  // read-modify-write chain read stale bytes and clobbered newer ones.
+  const bothName = 'both_roots_probe.xml';
+  fs.writeFileSync(path.join(safeWorkspace, bothName), '<workspace-copy/>');
+  fs.writeFileSync(path.join(liveExtensions, bothName), '<deployed-copy/>');
+  const readDefault = await req('GET', `/api/fs/read?path=${bothName}`, SESSION_TOKEN);
+  ok('fs_read_defaults_to_workspace', readDefault.json?.content === '<workspace-copy/>' && readDefault.json?.root === 'workspace', `root=${readDefault.json?.root}`);
+  const readDeployed = await req('GET', `/api/fs/read?root=deployment&path=${bothName}`, SESSION_TOKEN);
+  ok('fs_read_deployment_alias_works', readDeployed.json?.content === '<deployed-copy/>' && readDeployed.json?.root === 'filesystem', `root=${readDeployed.json?.root}`);
+  const readFilesystem = await req('GET', `/api/fs/read?root=filesystem&path=${bothName}`, SESSION_TOKEN);
+  ok('fs_read_filesystem_matches_the_ui_callers', readFilesystem.json?.content === '<deployed-copy/>');
+  ok('fs_read_reports_which_root_served_it', typeof readDefault.json?.absolutePath === 'string' && readDefault.json.absolutePath.includes('X4ForgeMods'));
+
+  // The read/write pair must now agree, which is the whole point of the fix.
+  await req('POST', '/api/fs/write', SESSION_TOKEN, { path: bothName, content: '<patched-once/>' });
+  const readBack = await req('GET', `/api/fs/read?path=${bothName}`, SESSION_TOKEN);
+  ok('read_modify_write_operates_on_one_root', readBack.json?.content === '<patched-once/>', String(readBack.json?.content));
+  ok('deployed_copy_was_not_touched_by_the_write', fs.readFileSync(path.join(liveExtensions, bothName), 'utf8') === '<deployed-copy/>');
+
+  // No silent fallthrough: a workspace-only file must NOT be served from the deployment root.
+  fs.writeFileSync(path.join(safeWorkspace, 'workspace_only_probe.xml'), '<only-in-workspace/>');
+  const missIn = await req('GET', '/api/fs/read?root=filesystem&path=workspace_only_probe.xml', SESSION_TOKEN);
+  ok('missing_in_requested_root_is_404_not_a_substitute', missIn.status === 404 && missIn.json?.code === 'FILE_NOT_FOUND_IN_ROOT', `status=${missIn.status}`);
+  ok('404_names_the_root_that_does_have_it', missIn.json?.alsoIn === 'workspace' && /root=workspace/.test(String(missIn.json?.error || '')), String(missIn.json?.error || '').slice(0, 100));
+  const badRoot = await req('GET', '/api/fs/read?root=nonsense&path=x.xml', SESSION_TOKEN);
+  ok('fs_read_rejects_an_invalid_root', badRoot.status === 400 && badRoot.json?.code === 'INVALID_ROOT', `status=${badRoot.status}`);
+  const readTraversal = await req('GET', '/api/fs/read?root=workspace&path=../outside.xml', SESSION_TOKEN);
+  ok('fs_read_traversal_still_rejected', readTraversal.status === 403, `status=${readTraversal.status}`);
+
+  // --- B88: judge the bytes before they land ------------------------------------------------
+  const badXml = '<mdscript name="B88"><cues><cue name="C"><actions><do_if value="1"/></do_else></actions></cue></cues></mdscript>';
+  const lenientWrite = await req('POST', '/api/fs/write', SESSION_TOKEN, { path: 'md/b88_probe.xml', content: badXml });
+  ok('write_reports_validation_findings', lenientWrite.status === 200 && (lenientWrite.json?.validation?.findings || []).length > 0, `findings=${(lenientWrite.json?.validation?.findings || []).length}`);
+  ok('write_names_which_checks_ran', (lenientWrite.json?.validation?.ran || []).includes('xml-wellformed'), JSON.stringify(lenientWrite.json?.validation?.ran));
+  ok('lenient_write_still_writes_by_default', fs.existsSync(path.join(safeWorkspace, 'md', 'b88_probe.xml')));
+
+  fs.rmSync(path.join(safeWorkspace, 'md', 'b88_probe.xml'), { force: true });
+  const strictWrite = await req('POST', '/api/fs/write', SESSION_TOKEN, { path: 'md/b88_probe.xml', content: badXml, strict: true });
+  ok('strict_write_is_refused', strictWrite.status === 422 && strictWrite.json?.code === 'REJECTED_BY_STRICT_VALIDATION', `status=${strictWrite.status}`);
+  ok('strict_refusal_wrote_zero_bytes', !fs.existsSync(path.join(safeWorkspace, 'md', 'b88_probe.xml')));
+
+  const goodWrite = await req('POST', '/api/fs/write', SESSION_TOKEN, { path: 'md/b88_clean.xml', content: '<mdscript name="Clean"><cues/></mdscript>', strict: true });
+  ok('strict_write_accepts_clean_content', goodWrite.status === 200 && goodWrite.json?.validation?.ok === true, `status=${goodWrite.status}`);
+  const luaBody = ['local M = {}', 'return M'].join(NL);
+  const luaWrite = await req('POST', '/api/fs/write', SESSION_TOKEN, { path: 'ui/probe.lua', content: luaBody, strict: true });
+  ok('non_xml_writes_are_unaffected', luaWrite.status === 200 && (luaWrite.json?.validation?.ran || []).length === 0, JSON.stringify(luaWrite.json?.validation?.ran));
+
   // --- B86: agent action ledger ----------------------------------------------------------
   // The load-bearing property is that payloads are never inlined: a ~295 KB write must produce
   // a small row, and the history must stay proportionate to CHANGES, not payload size.

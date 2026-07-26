@@ -3585,26 +3585,69 @@ app.get("/api/fs/list", (req, res) => {
 // Server Filesystem read endpoint
 app.get("/api/fs/read", (req, res) => {
   try {
+    // B81 — READS AND WRITES MUST NAME THE SAME ROOT.
+    //
+    // This endpoint used to resolve `filesystemPath || modWorkspacePath` — the DEPLOYMENT first —
+    // while `/api/fs/write` always resolves the workspace. A read-modify-write chain therefore read
+    // stale deployed bytes and wrote the derived patch into the source, so patch #2 silently
+    // clobbered patch #1 once the two roots diverged. The reporting agent bypassed the API entirely
+    // and read from disk with Python on every edit, which also made its reads invisible to the ledger.
+    //
+    // `root` is now explicit. The unqualified default is WORKSPACE, because that is what
+    // read-modify-write means every time; the two UI callers that wanted the deployed copy were
+    // migrated to `root=filesystem` FIRST, so no caller's behavior changes silently.
     const relativePath = String(req.query.path || '').trim();
     if (!relativePath) {
       return res.status(400).json({ error: "Missing path parameter." });
     }
     const resolved = resolveXsdConfig();
-    const rootPath = resolved.filesystemPath || resolved.modWorkspacePath;
+    // `deployment` is accepted as an alias for `filesystem` — that role IS the deployed mod folder,
+    // and callers reason about it by that name.
+    const rawRoot = String(req.query.root ?? '').trim().toLowerCase();
+    const requestedRoot = rawRoot === 'deployment' ? 'filesystem' : rawRoot;
+    const selection = parseProjectSourceRoot(requestedRoot);
+    if (selection.error) {
+      return res.status(400).json({
+        error: `${selection.error} Use root=workspace for your editable source, or root=filesystem (alias: deployment) for the deployed copy.`,
+        code: 'INVALID_ROOT',
+      });
+    }
+    const chosen: ProjectSourceRoot = selection.root || 'workspace';
+    const rootPath = configuredProjectRoot(resolved, chosen);
     if (!rootPath) {
-      return res.status(400).json({ error: "No filesystem/workspace path configured." });
+      return res.status(400).json({
+        error: `No ${chosen === 'workspace' ? 'Mod Workspace' : 'deployed Filesystem'} folder is configured, so root=${chosen} cannot be read.`,
+        code: 'ROOT_NOT_CONFIGURED',
+        root: chosen,
+      });
     }
     const safePath = path.resolve(rootPath, relativePath);
     if (!isPathWithin(safePath, rootPath)) {
       return res.status(403).json({ error: "Forbidden: Directory traversal detected." });
     }
-    
+
     if (!fs.existsSync(safePath)) {
-      return res.status(404).json({ error: "File not found." });
+      // NO SILENT FALLTHROUGH. Quietly serving the other root is exactly what made this bug
+      // invisible. If the other copy exists, say so and name the parameter that reaches it.
+      const otherRoot: ProjectSourceRoot = chosen === 'workspace' ? 'filesystem' : 'workspace';
+      const otherPath = configuredProjectRoot(resolved, otherRoot);
+      const otherHasIt = !!otherPath && (() => {
+        const candidate = path.resolve(otherPath, relativePath);
+        return isPathWithin(candidate, otherPath) && fs.existsSync(candidate);
+      })();
+      return res.status(404).json({
+        error: otherHasIt
+          ? `"${relativePath}" is not in the ${chosen} root, but it DOES exist in the ${otherRoot} root. Pass root=${otherRoot} if you meant that copy — this endpoint will not substitute it for you, because silently serving the other root is how stale reads clobber newer writes.`
+          : `"${relativePath}" is not in the ${chosen} root.`,
+        code: 'FILE_NOT_FOUND_IN_ROOT',
+        root: chosen,
+        ...(otherHasIt ? { alsoIn: otherRoot } : {}),
+      });
     }
-    
+
     const content = fs.readFileSync(safePath, 'utf8');
-    return res.json({ content });
+    // Always report which copy was served, so a caller never has to guess.
+    return res.json({ content, root: chosen, absolutePath: safePath, bytes: Buffer.byteLength(content, 'utf8') });
   } catch (error) {
     return res.status(500).json({ error: error.message || "Failed to read file." });
   }
@@ -3715,6 +3758,61 @@ function describeWrittenBytes(requested: string, targetPath: string): {
   };
 }
 
+/**
+ * B88 — judge the bytes BEFORE they land.
+ *
+ * Validation used to be a separate POST over a payload the caller assembled, so bytes landed first
+ * and were judged later, if at all. Three defects in one session were wrong property names this
+ * data could always have caught — `$st.manager` (a guard that never fired, so the NPC census was
+ * silently always empty) and `ware.{$id}.avgprice` (used as a DIVISOR).
+ *
+ * Deliberately a SUBSET, and it says so. The full `runProjectValidation` needs a whole project plus
+ * a loaded schema/corpus, so per-write it would be both heavy and frequently unavailable. An honest
+ * subset that always runs beats a superset that is sometimes absent — and `ran` names exactly which
+ * checks executed so nobody mistakes this for the full stack.
+ */
+function validateIncomingBytes(relativePath: string, content: string): {
+  ran: string[]; ok: boolean;
+  findings: Array<{ severity: string; code: string; line?: number; message: string }>;
+} {
+  const ran: string[] = [];
+  const findings: Array<{ severity: string; code: string; line?: number; message: string }> = [];
+  const kind = classifyPath(relativePath);
+
+  if (/\.xml$/i.test(relativePath)) {
+    ran.push('xml-wellformed');
+    const wf = checkXmlWellformed(content);
+    for (const err of wf.errors) {
+      findings.push({
+        severity: 'error',
+        code: 'xml_not_wellformed',
+        line: err.line,
+        message: `Line ${err.line}, column ${err.col}: ${err.message}. X4 discards a malformed file entirely and logs nothing.`,
+      });
+    }
+  }
+
+  if (kind === 'md' || kind === 'aiscript') {
+    const spIndex = (() => { try { return getScriptPropertyIndex(); } catch { return null; } })();
+    if (spIndex) {
+      ran.push('scriptproperty-chains');
+      for (const f of lintScriptPropertyChains(content, spIndex, { filePath: relativePath })) {
+        const chain = (f as any).chain;
+        const segment = (f as any).segment;
+        const suggestions = ((f as any).suggestions || []).slice(0, 3);
+        findings.push({
+          severity: f.severity,
+          code: 'scriptproperty.unknown',
+          line: (f as any).line,
+          message: `"${chain}": segment "${segment}" is unknown in scriptproperties.xml${suggestions.length ? ` — did you mean ${suggestions.join(', ')}?` : ''}. An unknown property evaluates to null with no error, so a guard using it never fires.`,
+        });
+      }
+    }
+  }
+
+  return { ran, ok: !findings.some(f => f.severity === 'error'), findings };
+}
+
 function writeWorkspaceFileGuarded(res: express.Response, relativePath: string, content: any): boolean {
   if (!relativePath) {
     res.status(400).json({ error: "Missing path parameter." });
@@ -3748,8 +3846,21 @@ let lastWriteReceipt: ReturnType<typeof describeWrittenBytes> | null = null;
 app.post("/api/fs/write", (req, res) => {
   try {
     lastWriteReceipt = null;
-    if (!writeWorkspaceFileGuarded(res, String(req.body?.path || '').trim(), req.body?.content ?? '')) return;
-    return res.json({ success: true, written: lastWriteReceipt });
+    const targetPath = String(req.body?.path || '').trim();
+    const incoming = req.body?.content ?? '';
+    // B88: judge the bytes first. strict:true refuses rather than warning — and refusing must mean
+    // ZERO bytes written, so this runs before the guarded write, not after it.
+    const validation = typeof incoming === 'string' ? validateIncomingBytes(targetPath, incoming) : { ran: [], ok: true, findings: [] };
+    if (req.body?.strict === true && !validation.ok) {
+      return res.status(422).json({
+        success: false,
+        code: 'REJECTED_BY_STRICT_VALIDATION',
+        error: `Refused to write "${targetPath}": ${validation.findings.filter(f => f.severity === 'error').length} error(s) in the content you sent. Nothing was written.`,
+        validation,
+      });
+    }
+    if (!writeWorkspaceFileGuarded(res, targetPath, incoming)) return;
+    return res.json({ success: true, written: lastWriteReceipt, validation });
   } catch (error) {
     return res.status(500).json({ error: error.message || "Failed to write file." });
   }

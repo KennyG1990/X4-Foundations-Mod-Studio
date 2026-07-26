@@ -93,6 +93,51 @@ ids as errors on the authoring path (B88 + existing reference sets). This is the
 calls the 10× multiplier, and the Forge already holds the data: 258 scriptproperty datatypes, 32
 factions, 1,902 wares.
 
+## WAVE 4 — B81 + B88 (added 2026-07-25, after 0.0.43)
+
+### B81 — `/api/fs/read` root selector
+
+**RECONCILE:** `fs/read` resolves `filesystemPath || modWorkspacePath` (deployment first) with no
+selector. Two UI callers pass no root: `DirectoryExplorer.tsx:135` and `LibraryConfigurator.tsx:251`.
+The project's existing selector vocabulary is `workspace|filesystem` (`parseProjectSourceRoot`), while
+the reporting agent's mental model is `deployment` — accept **both**, since `filesystem` IS the
+deployment role.
+
+**Plan (the migration order B81's own spec demands — never silently change one side):**
+1. Accept `?root=workspace|filesystem|deployment`.
+2. **Cover the two UI callers first** by making them pass `root=filesystem` explicitly, preserving
+   their behavior exactly.
+3. **Only then** flip the unqualified default to `workspace`, which is what an agent doing
+   read-modify-write means every time.
+4. **No silent fallthrough.** If the requested root lacks the file, 404 naming the root — and, when
+   the *other* root has it, say so and name the parameter that would reach it. Silent fallthrough is
+   precisely what made this bug invisible.
+5. Report `root` and the absolute path in the response so a caller can always see which copy it got.
+
+**Acceptance:** same relative path present in both roots returns the workspace copy by default and the
+filesystem copy on request; a workspace-only file 404s under `root=filesystem` with a message naming
+the other root; invalid selector 400s; traversal still 403s; both UI callers keep reading the
+deployment; a read-modify-write through `fs/read` → `fs/write` now operates on one root.
+
+### B88 — validate on write
+
+**RECONCILE:** `checkXmlWellformed` and `lintScriptPropertyChains` are both pure and already used
+elsewhere. The full `runProjectValidation` needs a whole project and a loaded schema/corpus, so
+running it per write would be heavy and would often be *unavailable* — an honest subset beats a
+sometimes-absent superset.
+
+**Plan:** in the guarded write path, before writing, run on the INCOMING bytes:
+- every `.xml` file → XML well-formedness (milliseconds; the reporter added exactly this to their own
+  harness after the `</do_else>` incident);
+- MD/AIScript files → scriptproperty chain lint when the index is loaded.
+Return `validation: { ran, ok, findings[] }` naming which checks ran, so nobody mistakes it for the
+full stack. `strict: true` rejects with 422 and **writes zero bytes**.
+
+**Acceptance:** a malformed XML write returns findings and still writes by default; the same write with
+`strict:true` returns 422 and the file is unchanged on disk; `$station.manager` produces a
+scriptproperty finding; a clean write is unchanged in shape apart from the added block; a binary/Lua
+write is unaffected; `validation.ran` names the checks honestly when the index is absent.
+
 ## ACCEPTANCE (per wave, gates each time)
 
 Every wave: typecheck · lint at baseline · oracles · routes · e2e 26/26 · precommit · build, plus
