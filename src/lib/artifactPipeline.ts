@@ -76,12 +76,29 @@ export interface BuildArtifactPlanOptions {
   rules?: Partial<ArtifactRules>;
 }
 
+/**
+ * Never COPIED out of the workspace.
+ *
+ * B85: this is a different need from the PRESERVE list, and conflating them left a gap. "Never copy
+ * this out of the workspace" (here) and "don't delete this thing that lives in the deployment"
+ * (`preservedDeploymentEntries`) are opposite directions, and the deploy previously had only the
+ * second. The visible symptom: `.gitignore` was being shipped into the live game folder — harmless
+ * in itself, but evidence that source-control and editor metadata had no exclusion at all.
+ */
 const UNIVERSAL_EXCLUDES = [
   '.git/**',
+  '.gitignore',
+  '.gitattributes',
+  '.gitmodules',
   '.hg/**',
   '.svn/**',
   '.claude/**',
   '.kilo/**',
+  '.vscode/**',
+  '.idea/**',
+  '.editorconfig',
+  '.DS_Store',
+  'Thumbs.db',
   '.forge/**',
   '.forge-builds/**',
   '.snapshots/**',

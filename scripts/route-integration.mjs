@@ -712,6 +712,47 @@ async function main() {
     fileOverrides: { 'C:/escape.xml': '<mdscript/>' },
   });
   ok('compile_live_buffer_windows_absolute_path_rejected', windowsAbsoluteOverride.status === 400, `status=${windowsAbsoluteOverride.status}`);
+
+  // --- PRODUCTION SURFACE ---------------------------------------------------------------------
+  // The API-honesty guard shipped GREEN on every dev assertion and was BROKEN in production: the
+  // SPA catch-all `app.get("*")` is a ROUTE layer that matches everything, and it only exists in
+  // the production branch (dev uses `app.use(vite.middlewares)`, which has no `.route`). Dev-only
+  // coverage is how a false "done" reaches a user, so the prod bundle is now probed for real.
+  const distServer = path.join(process.cwd(), 'dist', 'server.cjs');
+  if (!fs.existsSync(distServer)) {
+    ok('production_surface_probed', false, 'dist/server.cjs missing — run npm run build. NOT silently skipped.');
+  } else {
+    const prodPort = PORT + 3;
+    const prodToken = SESSION_TOKEN + '-prod';
+    const prodChild = spawn(process.execPath, [distServer], {
+      cwd: process.cwd(), shell: false, stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, PORT: String(prodPort), NODE_ENV: 'production', STUDIO_API_TOKEN: prodToken,
+             X4_STATE_DIR: stateDir, X4_DATA_DIR: dataDir, X4_CONFIG_DIR: configDir, X4_REFERENCE_ROOT: referenceRoot,
+             X4FORGE_DISCOVERY_DIR: path.join(tmp, 'discovery-prod') },
+    });
+    try {
+      let prodUp = false;
+      for (let i = 0; i < 60; i++) {
+        await sleep(500);
+        try { const r = await fetch(`http://127.0.0.1:${prodPort}/api/agent/schema`); if (r.status) { prodUp = true; break; } } catch { /* not yet */ }
+      }
+      ok('production_bundle_came_up', prodUp);
+      if (prodUp) {
+        const base = `http://127.0.0.1:${prodPort}`;
+        const h = { Authorization: `Bearer ${prodToken}` };
+        const wrong = await fetch(`${base}/api/agent/deploy-verify`, { headers: h });
+        ok('prod_wrong_verb_is_405_not_spa_html', wrong.status === 405 && wrong.headers.get('allow') === 'POST', `status=${wrong.status} allow=${wrong.headers.get('allow')}`);
+        const unknown = await fetch(`${base}/api/agent/definitely-not-a-route`, { headers: h });
+        const unknownBody = await unknown.text();
+        ok('prod_unknown_route_is_json_404', unknown.status === 404 && !unknownBody.includes('<!doctype'), `status=${unknown.status}`);
+        const shell = await fetch(`${base}/`);
+        const shellBody = await shell.text();
+        ok('prod_app_shell_still_loads', shell.status === 200 && shellBody.includes('<!doctype'), `status=${shell.status}`);
+      }
+    } finally {
+      killTree(prodChild.pid);
+    }
+  }
 }
 
 try {

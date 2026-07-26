@@ -8265,7 +8265,7 @@ function verifyExpectedFiles(targetRoot: string, expected: Array<{ path: string;
  *    Letting the hint win instead would silently freeze deployed files against every future
  *    source edit — the same stale-content class as the B81 read/write root split.
  */
-type PreservedOrigin = 'runtime' | 'forgekeep' | 'forge-state';
+type PreservedOrigin = 'runtime' | 'forgekeep' | 'forge-state' | 'foreign-dotfile';
 
 function preservedDeploymentEntries(
   targetPath: string,
@@ -8295,6 +8295,39 @@ function preservedDeploymentEntries(
     put('.studio-mod-id', 'forge-state');
     put('.snapshots', 'forge-state');
   }
+
+  /**
+   * B85 — NEVER DELETE A DOT-ENTRY THE FORGE DID NOT CREATE.
+   *
+   * The preserve list used to be a checklist: forget to add something and a deploy silently ate it,
+   * and you found out later. That is the silent-loss class this project keeps paying for. Inverted,
+   * forgetting costs a STALE file instead — visible, inspectable, and harmless.
+   *
+   * This is not hypothetical: agent tooling runs with the DEPLOYMENT folder as its working
+   * directory, so dot-entries appear there directly. `.mcp.json` did exactly that, and a deploy
+   * would have destroyed it. `.forgekeep` becomes an escape hatch for non-dot paths rather than the
+   * only thing standing between a user and losing a file they never told us about.
+   *
+   * Forge-created dot-entries are excluded from this rule, because those we DO own and must be able
+   * to replace or clean.
+   */
+  // Dot-entries the Forge RECOGNISES: either it created them, or it classifies them as development
+  // metadata that must never live in a game folder. Those stay cleanable. The rule protects the
+  // UNKNOWN — a file we have no opinion about is one we must not destroy.
+  const forgeOwnedDotEntries = new Set([
+    '.forgekeep', '.forgeartifact.json', '.studio-mod-id', '.snapshots', '.forge', '.forge-builds',
+    '.git', '.gitignore', '.gitattributes', '.gitmodules', '.hg', '.svn',
+    '.claude', '.kilo', '.vscode', '.idea', '.editorconfig', '.DS_Store',
+  ]);
+  try {
+    if (fs.existsSync(targetPath)) {
+      for (const entry of fs.readdirSync(targetPath, { withFileTypes: true })) {
+        if (!entry.name.startsWith('.')) continue;
+        if (forgeOwnedDotEntries.has(entry.name)) continue;
+        put(entry.name, 'foreign-dotfile');
+      }
+    }
+  } catch { /* preservation must never break a deploy; the explicit lists still apply */ }
   return [...origins.entries()].map(([path, origin]) => ({ path, origin }));
 }
 
@@ -8749,6 +8782,21 @@ function runCompileArtifactSelftest() {
     record('non-lock rename error fails without fallback', nonLockFailureObserved);
     record('non-lock rename error leaves target unchanged', regularTreeFingerprint(target) === beforeNonLockFingerprint);
     record('non-lock rename error leaves no transaction siblings', transactionArtifacts().length === 0, transactionArtifacts().join(', '));
+
+    // B85: a dot-entry the Forge did not create must SURVIVE a deploy. Forgetting to list a file
+    // used to mean silent loss; now it means a stale file, which is visible and harmless. Proven
+    // with the real shape: agent tooling writes .mcp.json directly into the deployment folder.
+    fs.writeFileSync(path.join(target, '.mcp.json'), '{"mcpServers":{}}');
+    fs.writeFileSync(path.join(target, '.someones-tool-config'), 'not ours');
+    fs.writeFileSync(path.join(target, 'stale-normal-file.txt'), 'ordinary stale file');
+    try {
+      compileWorkspaceToFolder(imported.workspace, deployRoot, 'store', false, 'catalog');
+      record('a foreign dotfile survives a deploy', fs.existsSync(path.join(target, '.mcp.json')));
+      record('any unknown dot-entry survives, not just known ones', fs.existsSync(path.join(target, '.someones-tool-config')));
+      record('an ordinary stale file is still removed', !fs.existsSync(path.join(target, 'stale-normal-file.txt')));
+    } catch (error) {
+      record('a foreign dotfile survives a deploy', false, error instanceof Error ? error.message : String(error));
+    }
 
     // The DEPLOYED directory must stay a clean mod: Forge's own dev state (.snapshots,
     // .studio-mod-id) belongs in the workspace-side staging target only. A stale copy sitting
@@ -10122,6 +10170,14 @@ function allowedMethodsForApiPath(requestPath: string): string[] {
     const stack = (app as any)._router?.stack || [];
     for (const layer of stack) {
       if (!layer?.route || !layer.regexp?.test?.(requestPath)) continue;
+      // The SPA catch-all `app.get("*")` is a ROUTE layer whose regexp matches EVERYTHING, so it
+      // used to contribute GET to every path — making `allowed` always include GET, sending the
+      // request onward, and serving the app's HTML for a wrong verb or a missing route. That is
+      // exactly the bug this guard exists to fix, and it only appears in PRODUCTION: in dev the
+      // fallback is `app.use(vite.middlewares)`, which has no `.route` and was skipped. Count only
+      // real API routes.
+      const routePaths = Array.isArray(layer.route.path) ? layer.route.path : [layer.route.path];
+      if (!routePaths.some((p: unknown) => typeof p === 'string' && p.startsWith('/api/'))) continue;
       for (const [method, enabled] of Object.entries(layer.route.methods || {})) {
         if (enabled && method !== '_all') methods.add(method.toUpperCase());
       }

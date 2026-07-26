@@ -6,6 +6,73 @@
 
 ## P0 — Active
 
+### B94 · Phantom string ids — the last piece of MD "legal but inert" `spec'd` (P0, cheapest high-value)
+
+**[REPRODUCED 2026-07-25 by the mod agent]** It poisoned one file with all seven defect classes that
+have really shipped here. The validator now catches **five**: unknown property (`$st.manager`), wrong
+property name (`ware.{}.avgprice`), undeclared attribute (`recursive="true"`), `<delay>` inside
+`<actions>`, and `@` combined with `?`. Result: `ok:false, scriptPropertyWarnings: 3, schemaErrors: 5`.
+**Its two misses are the same class:** string literals sitting in ID positions — `'riptide'` (phantom
+faction in a list literal) and `order="AutoTrade"` / `"AutoMine"` (phantom order ids). `referenceWarnings: 0`.
+
+**Why they slip through:** `referenceLint.ts` matches `faction.<id>` / `ware.<id>` chains and a few
+explicit attributes. A bare quoted string is invisible to it — to the schema `'riptide'` is just a
+string; to the game it is a reference that resolves to nothing.
+
+**Bounded repair, cry-wolf-safe (this project's bar is 0 false positives on the real corpus):**
+1. **List-literal heuristic for factions** — inside a list literal that already contains ≥1 KNOWN
+   faction id, an unknown token of the same shape is a phantom. High precision because the list
+   itself proves the position is a faction position. Catches `riptide`.
+2. **Order ids** — needs a canonical order set first. Establish where it comes from (aiscript file
+   names in the unpacked corpus vs. a declared list) BEFORE linting; do not invent one.
+
+**Acceptance:** the agent's poisoned fixture flags `riptide` and both order ids; **all 15 real MD files
+of `x4_ai_influence` and a representative vanilla MD sample produce zero new warnings**; findings carry
+file, line and suggestions.
+
+### B95 · debug-watcher `runtimeErrors` false positive — the one runtime signal, and it lies `spec'd` (P0)
+
+**[REPRODUCED]** `debug-watcher/brief` reports `runtimeErrors: true` on `x4_ai_influence` because the
+mod's own debug lines carry an `[=ERROR=]` prefix and the watcher pattern-matches them. The agent
+discovered this itself, worked around it, and **now ignores the field entirely and greps the log
+directly** — so the Forge's only runtime signal is not merely wrong, it is retired by its user.
+
+**Bounded repair:** distinguish ENGINE-emitted errors from mod-authored log text. The engine's own
+error lines have a known shape; a `debug_text` line authored by the mod does not become an error
+because it contains the word. Ship with the mod's own marker convention excluded, and report *why* a
+line was classified as an error so the next false positive is diagnosable rather than discovered.
+
+**Acceptance:** the real `x4_ai_influence` debuglog reports `runtimeErrors: false` when only its own
+`[=ERROR=]`-prefixed debug lines are present; a genuine engine error still reports true; the response
+names the matched line for each error counted.
+
+### B96 · The runtime frontier — where the agent's time actually goes `spec'd` (P1, the biggest prize)
+
+The agent's closing point, and it is not on anyone's list: **everything the Forge does stops at
+deploy.** Its real loop is deploy → launch X4 → load save → play → grep debuglog → discover it did not
+work → repeat, at **20+ minutes per iteration**, and that is where nearly all its time goes. The static
+side is now nearly solved; the runtime side is untouched.
+
+Wanted, in its words: *"your cue never fired"*, *"this cue errored 40 times"*, *"this script was
+dropped"*. It rates a trustworthy debug-watcher as **worth more than every remaining backlog item
+combined**. B95 is the precondition — a signal nobody trusts cannot be built on. Carriers that already
+exist: `debug-watcher/brief`, `logTelemetry.ts`, `cueLineage.ts`, `luaRuntimeLog.ts`. Needs its own
+reconcile and design pass; do not start it as a drive-by.
+
+### B97 · `/api/agent/deploy` — deprecate in the RESPONSE, do not retire `spec'd` (P2)
+
+Correcting B87 #1 with a hard data point from the agent: **it is a live caller of that route** and hit
+it minutes ago for a real 409. Silently retiring it would break working tooling mid-session with no
+warning. Keep the route functional and add a `deprecated: true` field plus the replacement route name
+to the response body, so callers learn while things still work rather than when they stop.
+
+**Also from the agent, and it settles B87 #3:** per-node editing is **promote, not remove** — but not
+now. Building it on non-deterministic ids (77 of 225 stable) and 77% opaque `rawXml` blobs would ship
+something that *looks* safe and silently clobbers, which is worse than today's obviously-lossy
+whole-file rewrite. Leave the client-side implementation alone, invest nothing in it, and **stop
+describing it as an agent capability** — agents cannot reach it, so the description is the only
+actually misleading part. B90 → B91 delivers the real thing.
+
 > **B83 (locked deployed-mod root) and B84 (deploy format toggle) both CLOSED VERIFIED 2026-07-25 → ROADMAP.**
 > Deployment on Windows works with the mod folder held, and the author now chooses loose vs CAT/DAT.
 > Four follow-up decisions are Ken's, listed in B85 below.
