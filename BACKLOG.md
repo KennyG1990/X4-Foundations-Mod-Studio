@@ -6,7 +6,76 @@
 
 ## P0 — Active
 
-### B94 · Phantom string ids — the last piece of MD "legal but inert" `spec'd` (P0, cheapest high-value)
+### B98 · Deploy fails EBUSY whenever X4 is running — copying byte-identical files `in_progress` (P0, TOP)
+
+**[REPRODUCED 2026-07-26 by the mod agent, traced in source not guessed]** A real in-game verification
+of mod change #298 failed:
+
+```
+EBUSY: resource busy or locked, copyfile
+  '…\.x4_ai_influence.x4forge-next-…\lua3p\luasocket\core.dll' -> '…\x4_ai_influence\lua3p\luasocket\core.dll'
+locked-root rollback also failed: EBUSY … (the SAME file)
+```
+
+**Chain:** `rename(targetPath, backup)` fails → `isLockedRootRenameError` → true →
+`replaceLockedDeploymentInPlace` → `synchronizeRegularTree` copies **every** file including unchanged
+ones → EBUSY on the one file Windows will not let anyone overwrite. **This is a defect in the B83
+fallback I shipped.**
+
+**Why that file:** `lua3p/luasocket/core.dll` is the LuaSocket NATIVE DLL. X4 loads it via
+`require("socket.core")`, so Windows holds an exclusive handle for the whole game session. It is a
+vendored third-party binary that never changes between deploys. The agent measured every file by
+opening it ReadWrite/None: **1 of 49 is locked** — `luasocket/core.dll`. Even `luasec/ssl.dll` is free
+(SSL only initialises on an HTTPS call).
+
+**Impact — this is the B96 unlock.** Today: close X4 → deploy → relaunch → load save (~4 min of pure
+loading) per change. With this fixed: deploy → F11 → `/refreshmd` → `/reloadui`, game never closes.
+The in-game reload path already works; only the deploy blocks.
+
+**Fix:** in `synchronizeRegularTree`, skip the copy when the destination is already byte-identical —
+size first (cheap reject), then content hash. Identical file → no copy → no EBUSY. The rollback path
+uses the same function, so this fixes both halves of the reported error. It is also simply correct:
+copying a byte-identical file is pure waste on every deploy, locked or not.
+
+**MUST NOT BREAK (the agent's constraints, all four kept):**
+1. A file that genuinely DIFFERS and is locked must still **fail loudly**. Never silently skip a write
+   that was actually needed — that converts a visible EBUSY into an invisible stale deployment, which
+   is strictly worse.
+2. `verifyExpectedFiles` must still run and still pass. A skipped file is correct *because* it is
+   identical; verification confirms that rather than being bypassed.
+3. **Never mtime alone** — copies do not preserve it reliably. Size + hash.
+4. **No exclude list, no `.forgekeep`.** Excluding `core.dll` risks it being DELETED; `.forgekeep`
+   means "do not delete", not "do not overwrite". Content-identity is the right axis.
+
+**Acceptance (the agent's test):** with X4 running and a save loaded, change exactly one file
+(`ui/addons/ai_influence_chat/aic_uix.lua`), deploy → **must succeed with X4 still running**; the
+changed file's hash in `G:` matches the workspace; `core.dll` untouched. Negative: make `core.dll`
+genuinely differ, deploy with X4 running → must FAIL with a clear error, never silently skip.
+
+### B97 · `/api/agent/deploy` — deprecate in the RESPONSE, do not retire `spec'd` (P1)
+
+The agent is a live caller and hit it minutes ago for a real 409. Retiring it silently breaks working
+tooling mid-session. Keep it functional; add `deprecated: true` + the replacement route to the
+response body so callers learn while things still work.
+
+### B94 · Phantom string ids — first approach FALSIFIED, still open `spec'd` (P0)
+
+**ATTEMPTED AND REVERTED 2026-07-26.** The obvious heuristic — *inside a list literal that already
+contains a KNOWN faction id, an unknown sibling token is a phantom* — was implemented, measured, and
+**failed on both sides**:
+- **False positive on the real mod:** it flagged `broker` in `md/ai_influence_chat.xml`. Real lists
+  mix faction ids with role/tag tokens, so "has a known faction neighbour" does NOT prove the
+  position is a faction position. The project's bar is zero false positives on the real corpus.
+- **It still missed the target.** `riptide` lives inside an XML attribute as `&apos;`-escaped text,
+  which the expression masker treats differently than a bare list literal.
+
+Reverted rather than shipped: a lint that cries wolf is worse than no lint (same reason B62e was
+rejected). **What the next attempt must handle:** entity-escaped attribute payloads, and a
+position-proving signal stronger than a known neighbour — e.g. the MD property/parameter the list is
+being assigned to, which the scriptproperties model can type. Order ids still need a canonical set
+established first; do not invent one.
+
+### B94-original · the incident evidence (kept)
 
 **[REPRODUCED 2026-07-25 by the mod agent]** It poisoned one file with all seven defect classes that
 have really shipped here. The validator now catches **five**: unknown property (`$st.manager`), wrong

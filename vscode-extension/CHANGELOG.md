@@ -3,7 +3,15 @@
 The latest changes, newest first. (This page is generated automatically — see
 `release-notes.json` to edit the wording.)
 
-## 0.0.45 — 2026-07-26
+## 0.0.46 — 2026-07-26
+
+- You can now deploy while X4 is running. Deploying used to fail with a file-in-use error whenever the game was open, because it re-copied every file including ones that had not changed — and the game holds an exclusive lock on the LuaSocket native library for the whole session. Unchanged files are now skipped (compared by size and content, never timestamps), so the one locked file no longer blocks anything. This turns a mod iteration from close-the-game, deploy, relaunch, reload-a-save into deploy and reload in-game.
+- A file that genuinely changed and is locked still fails loudly, with the file named. That is deliberate: silently skipping a write you actually needed would leave you with a stale deployment and no error, which is worse than the failure it replaces.
+- Leftover deploy folders are cleaned up automatically. A failed deploy could leave .x4forge-backup / .x4forge-next copies of your mod behind, each a complete copy containing content.xml — so X4 loaded them as duplicate extensions declaring the same id. Deploy now sweeps them before starting, and a failed rollback no longer leaves them behind (or tells you exactly which folder to delete if it cannot).
+- The game-log watcher no longer reports errors that are not errors. It used to flag any log line containing the word "error", including a mod's own debug output — X4's [=ERROR=] channel is writable by debug_text, so a mod that labels its own diagnostics that way was permanently reported as failing. The verdict now requires an actual engine fault signature, still lists mod-authored lines separately, and names the exact line and reason behind its verdict.
+- The older /api/agent/deploy endpoint now reports that it is deprecated in its own response, and points at deploy-verify. It keeps working — tools calling it will not break.
+
+## 0.0.45 — 2026-07-25
 
 - Fixed: wrong-method and unknown-endpoint responses were still returning the app's web page in the installed extension. The fix shipped in 0.0.43 worked in development but not in the packaged build, because the app's page-serving catch-all matched every path and made the check let requests through. Calling an endpoint with the wrong method now correctly returns 405 with the methods it accepts, and an endpoint that does not exist returns a clear 404 — in the installed extension, not just in development. The test suite now checks the packaged build too, so this class of mistake cannot pass again.
 - Deploy no longer deletes files it does not recognise. Any dot-file in your deployed mod folder that the Forge did not put there — a tool's config, an editor file — now survives a deploy instead of needing to be listed for protection. Forgetting to list something used to mean silent loss; now it means a stale file you can see and delete yourself. Development metadata the Forge does recognise, such as .git and .vscode, is still cleaned out of the game folder.

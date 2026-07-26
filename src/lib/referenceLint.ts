@@ -99,6 +99,12 @@ export function lintReferenceLiterals(
     for (const m of masked.matchAll(/\bware\s*=\s*(["'])([A-Za-z_][\w-]*)\1/g)) add('ware', m[2], m.index || 0, references.wares);
     for (const m of masked.matchAll(/\bmacro\s*=\s*(["'])([A-Za-z_][\w-]*_macro)\1/g)) add('macro', m[2], m.index || 0, references.macros);
     for (const m of masked.matchAll(/\bsector\s*=\s*(["'])([A-Za-z_][\w-]*_macro)\1/g)) add('sector', m[2], m.index || 0, references.sectors || references.macros);
+
+    // B94 (phantom ids in list literals) was ATTEMPTED here and REVERTED 2026-07-26 — see BACKLOG.
+    // The "a list containing a known faction proves a faction position" heuristic FAILED its bar:
+    // it flagged `broker` in the real mod's ai_influence_chat.xml (real lists mix faction ids with
+    // role/tag tokens) and still missed the target `riptide`, which lives in an XML attribute as
+    // &apos;-escaped text. Shipping a lint that cries wolf is worse than shipping none.
   }
   return findings;
 }

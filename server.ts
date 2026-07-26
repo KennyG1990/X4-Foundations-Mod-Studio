@@ -1060,6 +1060,42 @@ function mapLogLineToSourceRef(text: string): { kind: string; file?: string; lin
   return undefined;
 }
 
+/**
+ * B95 — does this log line look like an ENGINE error, or like a mod's own debug text?
+ *
+ * `runtimeErrors` used to be true whenever a line contained the word "error" and mentioned the
+ * mod id. `x4_ai_influence` prefixes its own `debug_text` output with `[=ERROR=]` — which is X4's
+ * real error-channel marker, so the marker alone cannot separate the two. The result: the ONE
+ * runtime signal the Forge offers reported a permanent false positive on a real project, and its
+ * user stopped trusting the field and went back to grepping the log by hand. A signal nobody
+ * believes is worse than no signal.
+ *
+ * So the verdict now requires an ENGINE phrasing, not just the word. A mod-authored line still
+ * appears in the issue list — nothing is hidden — it simply stops driving the verdict, and the
+ * matched signature is reported so the next false positive is diagnosable instead of discovered.
+ */
+const ENGINE_ERROR_SIGNATURES: Array<{ re: RegExp; label: string }> = [
+  { re: /\bscript error\b/i, label: 'script error' },
+  { re: /\battempt to (index|call|perform|compare|concatenate)\b/i, label: 'lua runtime fault' },
+  { re: /\bstack traceback\b/i, label: 'stack traceback' },
+  { re: /\bnil value\b/i, label: 'nil value' },
+  { re: /\bunresolved\b|\bundefined (property|method|function)\b/i, label: 'unresolved reference' },
+  { re: /\bcould not (find|resolve|load|open|create)\b/i, label: 'engine could-not' },
+  { re: /\bfailed to (load|parse|open|read|create|initialise|initialize)\b/i, label: 'engine failed-to' },
+  { re: /\bexception\b/i, label: 'exception' },
+  { re: /\binvalid (parameter|value|expression|macro|reference)\b/i, label: 'invalid engine input' },
+  { re: /\bmd (script )?error\b|\berror in (cue|md|script)\b/i, label: 'md error' },
+  // Lua module-load failures are real engine errors and do NOT use "failed to load" phrasing.
+  { re: /\berror loading\b|\bloop or previous error\b/i, label: 'module load error' },
+  { re: /\bparse error\b|\bsyntax error\b/i, label: 'parse error' },
+  { re: /\*{3}/, label: 'engine *** marker' },
+];
+
+function engineErrorSignature(text: string): string | null {
+  for (const { re, label } of ENGINE_ERROR_SIGNATURES) if (re.test(text)) return label;
+  return null;
+}
+
 function analyzeGameLog(tail: string, modIds: string[]): { issues: GameLogIssue[]; tailLines: string[] } {
   // Match against a SET of candidate identifiers, not one. A hand-authored mod's real
   // extension folder/content id (e.g. "ai_influence_test") can differ from the id the
@@ -1078,7 +1114,9 @@ function analyzeGameLog(tail: string, modIds: string[]): { issues: GameLogIssue[
       lineNumber: baseLine + index,
       text,
       matchesActiveMod: mods.length > 0 && mods.some(m => text.toLowerCase().includes(m)),
-      sourceRef: mapLogLineToSourceRef(text)
+      sourceRef: mapLogLineToSourceRef(text),
+      // B95: WHY this line counts (or does not) as a real runtime error. Reported, never silent.
+      engineSignature: engineErrorSignature(text),
     }));
 
   return {
@@ -1171,13 +1209,23 @@ function computeGameStates(args: { tail: string; modIds: string[]; deployed: boo
   const active = issues.filter(i => i.matchesActiveMod);
   const mods = (modIds || []).map(m => (m || '').toLowerCase()).filter(m => m.length >= 3);
   const seenByX4 = mods.some(m => tail.toLowerCase().includes(m));
-  const runtimeErrors = active.some(i => i.severity === 'error');
+  // B95: only ENGINE-shaped errors drive the verdict. A mod's own `[=ERROR=]` debug text still
+  // appears in activeIssueCount — nothing is hidden — but it no longer says the mod is broken.
+  const engineErrors = active.filter(i => i.severity === 'error' && (i as any).engineSignature);
+  const authoredErrorLines = active.filter(i => i.severity === 'error' && !(i as any).engineSignature);
+  const runtimeErrors = engineErrors.length > 0;
   return {
     deployed,                                   // a Studio deploy happened
     seenByX4: seenByX4 && !stale,               // the (fresh) log mentions the extension id
     loadedCleanly: seenByX4 && !stale && !runtimeErrors,
     runtimeErrors,
-    activeIssueCount: active.length
+    activeIssueCount: active.length,
+    // Say WHY the verdict is what it is, so a false positive is diagnosable rather than discovered.
+    errorEvidence: engineErrors.slice(0, 5).map(i => ({ line: i.lineNumber, signature: (i as any).engineSignature, text: String(i.text).slice(0, 200) })),
+    modAuthoredErrorLines: authoredErrorLines.length,
+    ...(authoredErrorLines.length && !runtimeErrors
+      ? { note: `${authoredErrorLines.length} line(s) contain "error" but carry no engine fault signature — they look like this mod's own debug output (X4's [=ERROR=] channel is writable by debug_text), so they do NOT mark the mod as failing.` }
+      : {}),
   };
 }
 
@@ -7962,8 +8010,25 @@ app.get("/api/agent/log-selftest", (req, res) => {
     const djfhe = deriveLogDiagnosis(djfheTail, [modId], analyzeGameLog(djfheTail, [modId]).issues.filter(i => i.matchesActiveMod));
     const trunc = deriveLogDiagnosis(truncTail, [modId], analyzeGameLog(truncTail, [modId]).issues.filter(i => i.matchesActiveMod));
 
+    // B95: a mod's OWN debug text must not mark the mod as failing. X4's [=ERROR=] channel is
+    // writable by debug_text, so `x4_ai_influence` prefixes its own diagnostics with it — and the
+    // watcher reported a permanent false positive until its user stopped trusting the field.
+    const authoredTail = `[General] 1.0 Loading extension mymod
+[=ERROR=] 101.5 [AIC] mymod census tick complete: 42 npcs
+[=ERROR=] 102.1 [AIC] mymod OPORD issue fid='argon' cands=3`;
+    const authored = computeGameStates({ tail: authoredTail, modIds: [modId], deployed: true, stale: false });
+    // And a REAL engine fault on the same channel must still flip the verdict.
+    const engineTail = `[General] 1.0 Loading extension mymod
+[=ERROR=] 101.2 Script error in cue mymod_Cue: attempt to index a nil value`;
+    const engineFault = computeGameStates({ tail: engineTail, modIds: [modId], deployed: true, stale: false });
+
     const results = [
       { test: 'cleanLoad', pass: clean.seenByX4 && clean.loadedCleanly && !clean.runtimeErrors, detail: clean },
+      // B95 — the false positive that retired the field, and its negative.
+      { test: 'authored_error_lines_do_not_fail_the_mod', pass: authored.runtimeErrors === false && authored.loadedCleanly === true, detail: authored },
+      { test: 'authored_error_lines_are_still_reported', pass: (authored as any).modAuthoredErrorLines >= 2 && typeof (authored as any).note === 'string', detail: (authored as any).note },
+      { test: 'a_real_engine_fault_still_fails_the_mod', pass: engineFault.runtimeErrors === true && engineFault.loadedCleanly === false, detail: engineFault },
+      { test: 'verdict_names_its_evidence', pass: Array.isArray((engineFault as any).errorEvidence) && (engineFault as any).errorEvidence.length > 0 && !!(engineFault as any).errorEvidence[0].signature, detail: (engineFault as any).errorEvidence },
       { test: 'runtimeError', pass: errored.runtimeErrors && !errored.loadedCleanly, detail: errored },
       { test: 'errorSourceRefMapping', pass: errIssue?.sourceRef?.file === 'md/mymod.xml' && errIssue?.sourceRef?.line === 18, detail: errIssue?.sourceRef },
       { test: 'notSeen', pass: !notSeen.seenByX4 && !notSeen.loadedCleanly, detail: notSeen },
@@ -8232,7 +8297,36 @@ function synchronizeRegularTree(sourceRoot: string, targetRoot: string): void {
     const sourcePath = path.join(sourceRoot, ...entry.path.split('/'));
     const targetPath = path.join(targetRoot, ...entry.path.split('/'));
     fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    // B98: skip a copy whose destination is ALREADY byte-identical.
+    //
+    // Deploying while X4 runs failed EBUSY on `lua3p/luasocket/core.dll` — the LuaSocket native
+    // DLL, which the game loads via require("socket.core") and then holds an exclusive Windows
+    // handle on for the whole session. It is a vendored binary that never changes between deploys,
+    // and it was 1 of 49 files: measured, the only locked one. So one unchanged file failed every
+    // deploy, and the rollback then failed on the SAME file. Both halves are fixed here because
+    // rollback calls this function too.
+    //
+    // Correct independent of locking — copying a byte-identical file is pure waste every deploy.
+    // Deliberately NOT mtime: copies do not preserve it reliably. Size first (cheap reject), then
+    // content hash. A file that genuinely DIFFERS is still copied, so a locked-and-changed file
+    // still fails loudly rather than becoming an invisible stale deployment.
+    if (isByteIdenticalFile(sourcePath, targetPath)) continue;
     fs.copyFileSync(sourcePath, targetPath);
+  }
+}
+
+/** Size-then-hash identity. Never mtime — copy operations do not preserve it reliably. */
+function isByteIdenticalFile(sourcePath: string, targetPath: string): boolean {
+  try {
+    if (!fs.existsSync(targetPath)) return false;
+    const sourceStat = fs.statSync(sourcePath);
+    const targetStat = fs.statSync(targetPath);
+    if (!sourceStat.isFile() || !targetStat.isFile()) return false;
+    if (sourceStat.size !== targetStat.size) return false;
+    return hashArtifactFile(sourcePath) === hashArtifactFile(targetPath);
+  } catch {
+    // Any doubt about identity means we must attempt the copy — never skip on uncertainty.
+    return false;
   }
 }
 
@@ -8383,7 +8477,17 @@ function replaceLockedDeploymentInPlace(
       if (fs.existsSync(stage)) fs.rmSync(stage, { recursive: true, force: true });
       if (fs.existsSync(backup)) fs.rmSync(backup, { recursive: true, force: true });
     } catch (rollbackError) {
-      throw new Error(`${error instanceof Error ? error.message : String(error)}; locked-root rollback also failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`);
+      // B98: a FAILED rollback must still not leak transaction siblings. Each is a full copy of
+      // the mod WITH content.xml, so X4 enumerates it as a real extension — leaving them behind
+      // silently gives the game duplicate mods declaring the same id. Observed for real: two
+      // orphaned `.x4forge-backup-*` directories, 49 files and 10 MB each, from failed deploys.
+      try { if (fs.existsSync(stage)) fs.rmSync(stage, { recursive: true, force: true }); } catch { /* reported below */ }
+      const backupSurvives = fs.existsSync(backup);
+      try { if (backupSurvives) fs.rmSync(backup, { recursive: true, force: true }); } catch { /* reported below */ }
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}; locked-root rollback also failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}` +
+        (fs.existsSync(backup) ? `; the backup copy could not be removed and REMAINS at ${backup} — delete it before launching the game, or X4 will load it as a duplicate extension` : ''),
+      );
     }
     throw error;
   }
@@ -8471,6 +8575,17 @@ function replaceValidatedDeployment(
   const stage = path.join(parent, `.${path.basename(targetPath)}.x4forge-next-${nonce}`);
   const backup = path.join(parent, `.${path.basename(targetPath)}.x4forge-backup-${nonce}`);
   const rename = hooks.rename || ((oldPath: string, newPath: string) => fs.renameSync(oldPath, newPath));
+  // B98: sweep transaction siblings orphaned by an EARLIER failed deploy before starting a new one.
+  // They are full copies of the mod including content.xml, so X4 loads each as a duplicate
+  // extension declaring the same id. Self-healing beats requiring the user to know they exist.
+  try {
+    const prefix = `.${path.basename(targetPath)}.x4forge-`;
+    for (const name of fs.readdirSync(parent)) {
+      if (!name.startsWith(prefix)) continue;
+      if (!/\.x4forge-(next|backup)-/.test(name)) continue;
+      try { fs.rmSync(path.join(parent, name), { recursive: true, force: true }); } catch { /* a locked orphan is reported by the doctor */ }
+    }
+  } catch { /* sweeping is best-effort and must never block a deploy */ }
   lastPreservationOverrides = [];
   let movedOld = false;
   try {
@@ -8783,6 +8898,40 @@ function runCompileArtifactSelftest() {
     record('non-lock rename error leaves target unchanged', regularTreeFingerprint(target) === beforeNonLockFingerprint);
     record('non-lock rename error leaves no transaction siblings', transactionArtifacts().length === 0, transactionArtifacts().join(', '));
 
+    // B98: an UNCHANGED file must not be re-copied. Deploying while X4 runs failed EBUSY on one
+    // vendored native DLL the game holds open — 1 of 49 files, unchanged between every deploy.
+    // Simulated here by making the destination unwritable: an identical file must be SKIPPED (so a
+    // locked-but-unchanged file cannot break a deploy), while a DIFFERING file must still be
+    // attempted and still fail loudly rather than becoming an invisible stale deployment.
+    const lockedRel = ['lua3p', 'locked_native.dll'];
+    const lockedSource = path.join(source, ...lockedRel);
+    fs.mkdirSync(path.dirname(lockedSource), { recursive: true });
+    fs.writeFileSync(lockedSource, Buffer.from([0x4d, 0x5a, 0x90, 0x00, 0x03]));
+    try {
+      compileWorkspaceToFolder(imported.workspace, deployRoot, 'store', false, 'loose');
+      const lockedTarget = path.join(target, ...lockedRel);
+      const before = fs.statSync(lockedTarget);
+      // Deploy again with the file unchanged: it must be skipped, not re-copied.
+      let identicalSkipped = false;
+      try {
+        fs.chmodSync(lockedTarget, 0o444);
+        compileWorkspaceToFolder(imported.workspace, deployRoot, 'store', false, 'loose');
+        identicalSkipped = true;
+      } catch { identicalSkipped = false; } finally { try { fs.chmodSync(lockedTarget, 0o666); } catch { /* best effort */ } }
+      record('an unchanged file is not re-copied on deploy', identicalSkipped);
+      record('the skipped file is still present and intact', fs.existsSync(lockedTarget) && fs.statSync(lockedTarget).size === before.size);
+      record('byte-identical detection is size+hash, not mtime', isByteIdenticalFile(lockedSource, lockedTarget));
+
+      // NEGATIVE: a file that genuinely DIFFERS must still be attempted, so a locked-and-changed
+      // file fails loudly instead of silently leaving the deployment stale.
+      fs.writeFileSync(lockedSource, Buffer.from([0x4d, 0x5a, 0x90, 0x00, 0x03, 0xff]));
+      record('a CHANGED file is never treated as identical', !isByteIdenticalFile(lockedSource, path.join(target, ...lockedRel)));
+      compileWorkspaceToFolder(imported.workspace, deployRoot, 'store', false, 'loose');
+      record('a changed file is actually written', fs.statSync(path.join(target, ...lockedRel)).size === 6);
+    } catch (error) {
+      record('an unchanged file is not re-copied on deploy', false, error instanceof Error ? error.message : String(error));
+    }
+
     // B85: a dot-entry the Forge did not create must SURVIVE a deploy. Forgetting to list a file
     // used to mean silent loss; now it means a stale file, which is visible and harmless. Proven
     // with the real shape: agent tooling writes .mcp.json directly into the deployment folder.
@@ -8937,6 +9086,15 @@ app.post("/api/agent/deploy", (req, res) => {
       deployedPath: deployedPath || stagingPath,
       lastDeploy: lastDeployInfo,
       artifact: lastArtifactReport,
+      // B97: tell callers in the RESPONSE, do not retire the route. A live agent is calling this
+      // today; silently removing it would break working tooling mid-session with no warning.
+      // Deprecation belongs where the caller will actually see it, while everything still works.
+      deprecation: {
+        deprecated: true,
+        replacement: '/api/agent/deploy-verify',
+        reason: 'This route deploys WITHOUT the 10-stage preflight (source-sync, XML well-formedness, full validation, byte confirmation, extension doctor, drift). deploy-verify runs all of them and supports dryRun and autoReimport.',
+        stillSupported: true,
+      },
       // Audit A5: this route deploys WITHOUT the 9-stage preflight checklist. It stays
       // for UI/agent compatibility (and carries the malformed-XML gate), but new flows
       // should use deploy-verify. Converge the UI, then retire this route.
