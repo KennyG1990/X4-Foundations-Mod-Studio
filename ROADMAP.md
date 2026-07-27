@@ -222,6 +222,41 @@ A discipline you have to remember is not a discipline.
 * **Unstable node IDs** across imports — makes graph-level automation unreliable.
 * **READ-routing bug** — open.
 
+### 🟡 KB-11 · The write-conflict dialog does not say which side is NEWER
+
+**Reproduce:** open a workspace in the Studio canvas, then write to that workspace through
+`/api/fs/write` (which is what an agent does on every patch). The canvas keeps its in-memory snapshot, the
+two diverge, and the header shows:
+
+```
+⚠ WRITE CONFLICT   [ADOPT SERVER]  [KEEP MINE]
+```
+
+The dialog is right to refuse to pick a winner. The problem is that it withholds **the only fact needed to
+choose**: which side is newer, and by how much. Ken hit this after ~25 agent-applied units and asked what to
+do, because from the UI both options look equally plausible — and one of them silently discards hours of work.
+
+**Why this matters more in an agent-driven workflow than a human one.** A human editing in the canvas knows
+what they last typed. An operator supervising an agent does NOT know whether the canvas snapshot predates the
+agent's work, so "KEEP MINE" reads like the safe, conservative choice when it is in fact the destructive one.
+The safe-sounding button is the dangerous one, which is the worst possible default framing.
+
+**Fix:** label each side with its provenance and age.
+
+```
+⚠ WRITE CONFLICT
+   Server (disk):  modified 2 minutes ago · 25 files changed since this canvas loaded
+   This canvas:    snapshot from 4 hours ago · 0 local edits
+   [ADOPT SERVER — recommended]   [KEEP MINE]
+```
+
+With "0 local edits" shown, it stops being a decision at all. Two further cheap wins: recommend the newer
+side by default, and — since the destructive direction is recoverable only if the repo is committed — say so
+(`KEEP MINE will overwrite 25 changed files on disk`). A count in the warning would have turned Ken's "I'm a
+little scared, I don't know what to do" into a two-second glance.
+
+**Severity:** low frequency, high fear, and irreversible for anything not committed. Cheap to fix.
+
 ### Suggested build order
 
 | # | Item | Why |
@@ -235,6 +270,7 @@ A discipline you have to remember is not a discipline.
 | 7 | KB-6 patch primitive | Pure velocity |
 | 8 | KB-8 cue-liveness lint | Rare, expensive, X4-unique |
 | 9 | KB-9 consistency rules | Generalises a fix already proven mod-side |
+| 10 | KB-11 conflict-dialog provenance | Trivial change; removes a genuinely frightening moment |
 
 ---
 
