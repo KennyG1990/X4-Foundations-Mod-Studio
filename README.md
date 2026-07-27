@@ -6,6 +6,16 @@ It is designed for the part of X4 modding that usually turns into scattered XML 
 
 The goal is simple: build a real X4 extension inside X4 Forge, compile it, validate it, deploy it, and run it in-game with no manual file surgery.
 
+## For AI agents
+
+If you are an AI agent, start with the document that matches your job:
+
+| Your job | Read |
+|---|---|
+| **Build a mod** through the Forge | **[AGENT-USING-THE-FORGE.md](AGENT-USING-THE-FORGE.md)** — connect, patch, validate, deploy, prove in-game, plus the seven traps that cost real debugging time |
+| Develop the Forge itself | [AGENTS.md](AGENTS.md) (workflow) and [CODEX-ONBOARDING.md](CODEX-ONBOARDING.md) (architecture) |
+| Fix a known Forge defect | [ROADMAP.md](ROADMAP.md) § KNOWN BUGS — each entry carries a reproduction |
+
 ## What Problems It Solves
 
 X4 modding is powerful, but the normal workflow has sharp edges:

@@ -50,6 +50,164 @@ Foundation-first means: before adding polish, every link above has to be *correc
 
 ---
 
+---
+
+## 🐞 KNOWN BUGS — filed 2026-07-27 by the resident `x4_ai_influence` agent
+
+Filed from the #290→#325 run (espionage arc → knowledge-gated trade). **Each entry has a reproduction.**
+Full argument and build order: `x4_ai_influence/docs/FORGE-IMPROVEMENTS-2026-07-27.md`.
+
+> **The framing that matters.** Across that whole session the static gates caught **zero** real defects.
+> Every bug was found by Ken playing the game or by hand-grepping `debuglog.txt` — #307, #312, #313 (99 live
+> runtime errors), #314, #316, #317, #318, #320, #322, #323, and an empty-hold sale. Meanwhile a single
+> validate run emitted 5 warnings of which **at least 3 were false positives**. A validator that misses real
+> errors *and* cries wolf is one the developer learns to ignore, which is worse than having none.
+>
+> The root cause is shared: **the Forge has the vanilla corpus and the runtime log; the developer's
+> assumptions have neither.** Most items below are that one idea applied in different places.
+
+### 🔴 KB-1 · scriptProperties DB has false positives AND false negatives — it is hand-curated, not corpus-mined
+
+**False positive (blocks nothing, but destroys trust).** Reproduce: validate any MD using `cargo.free.all`.
+
+```
+scriptproperty.unknown   chain "$nsh.cargo.free.all"   md/ai_influence_chat.xml:157
+    suggestions: ["age", "hull", "null", ...]
+```
+
+`cargo.free.all` is real — **9 vanilla usages** (`this.ship.cargo.free.all`,
+`this.assignedcontrolled.cargo.free.all`). Same run flagged `.cargo.free.container/solid/liquid`-class chains.
+
+**False negative (shipped 99 runtime errors).** `isdocked`, `isparked`, `isatdock`, `isstationary`,
+`isonhighway`, `dockedat` — **none exist**. In X4 a failed property lookup **aborts the whole MD expression**,
+so the feature silently died and the log filled with errors. All six passed validation clean. Repeated at
+#314 with `relationchangereason.default` and `$fnames.length` (the real property is `.count`).
+
+**Fix:** build the property/enum DB by parsing every property chain in the unpacked corpus (223 `md/` +
+~1000 `aiscripts/`). **Vanilla usage IS the definition of valid.** One change fixes both directions. Then
+promote unknown-property from warning to **error** with a per-chain allowlist — a phantom property is never a
+style issue, it is always a broken expression.
+
+### 🔴 KB-2 · No runtime feedback — `debuglog.txt` is never read
+
+The Forge deploys and then goes blind at exactly the moment truth becomes available. Every real defect in the
+session surfaced in the game log and was found by hand-written `grep`.
+
+**Fix:** after deploy, watch `debuglog.txt` from the current byte offset, attribute error lines back to mod
+source (`file:line`), and report **"your last deploy introduced N new error signatures"** against a pre-deploy
+baseline. Expose as `forge logsweep --since-deploy`. *(The mod carries a crude `tools/logsweep.py` written
+purely because this was needed so often — it should be a Forge primitive.)*
+
+### 🟠 KB-3 · `reference.unknown_ware` misreads a property chain as an enum reference
+
+Reproduce: any MD containing `$offer.ware.name`.
+
+```
+reference.unknown_ware  kind=ware id="name"  md/aic_opord_execution.xml:448
+    suggestions: ["ice", "ore", "water"]
+```
+
+`$offer.ware.name` is a **property chain** (`.ware` then `.name`); the checker read it as the static enum
+`ware.<id>` and looked up a ware called "name". **Fix:** if the token preceding `.ware` is a variable or
+expression (`$x`, `this`, `event.`, `player.`), it is a property access, not an enum reference.
+
+### 🟠 KB-4 · No "vanilla shape divergence" check — schema-clean, runtime-broken passes silently
+
+Reproduce: emit `<create_ship>` with no `<pilot>` child. Valid XML, schema-clean, Forge-clean — and it spawns
+**ships with no crew**, which cannot be given orders. Cost a full test fixture; Ken found it, not the tooling.
+
+The engine is full of constraints invisible to XML validation:
+* `<requires primarypurpose="purpose.mine"/>` — a mining order on a trade hull is refused.
+* `aiscripts.xsd:3290` — *"Default orders must be infinite."* Only ~42 of ~80 order defs qualify. A
+  non-infinite order in the default slot produces a **100 ms busy-loop + repeating log spam**
+  (`aiscripts/orders.base.xml:373-383`) and passes every static check.
+* Order ids resolve to `aiscripts/order.*.xml` whose `<params>` mark params `required="true"`. Issuing
+  `id="'Attack'"` without `primarytarget` is schema-valid and runtime-broken.
+
+**Fix:** compare each emitted element against the **distribution of that element's vanilla usages**, and
+validate order-id params against the target order's `<params>` block:
+
+```
+warn: <create_ship> at md/ai_influence_chat.xml:412
+      28 of 31 vanilla <create_ship> include a <pilot> child; yours does not.
+      Typical: <pilot><select race="[race.argon, race.paranid, race.teladi]" tags="tag.aipilot"/></pilot>
+```
+
+Only possible because the Forge has the corpus — and it reaches the class of bug nothing else catches.
+
+### 🟠 KB-5 · Corpus knowledge is not queryable — ~15 hand-greps in one session
+
+Questions asked by grepping the unpacked corpus, each of which the Forge already indexes: `SingleSell`'s
+params; `create_order default="true"`; whether `cargo.list` elements are wares; `find_buy_offer` `result=` vs
+`name=`; whether `primarypurpose` is readable on a ship.
+
+**Fix:** `GET /api/reference/usages?element=create_order&attr=default` → usage count, attribute/child
+frequency table, N example sites with line numbers. Same for property chains and enum values.
+**This is existing task B46-P3 — promote it: it is the shared index KB-1 and KB-4 both need anyway.**
+
+### 🟡 KB-6 · `fs/write` has no patch primitive — anchors fail silently on line endings
+
+Every mod edit is `read()` → string replace → `write()`. A multi-line anchor silently failed to match because
+the target file is **CRLF** and the search literal was **LF**. Single-line anchors had always worked, so it
+stayed invisible until a large patch, then cost three round-trips of dumping `repr()` to find the difference.
+
+**Fix:** `POST /api/fs/replace {path, old, new, count}` that normalises line endings on both sides, re-applies
+the file's own on write, **refuses ambiguous matches** (count > expected), and on a miss reports the closest
+match with a character-level diff (*"closest at line 2779, differs only in line endings"*). A failed anchor
+must never be a bare assertion — it must say **why**.
+
+### 🟡 KB-7 · Deploy has no ignore-list and no secret scan — **a bearer token shipped to the deployed mod**
+
+`tools/forge.py` carried the Forge API key as a literal. `tools/` mirrors into the deployed mod on `G:` — a
+**distributable directory**. The deploy also swept in `__pycache__/`, `.forge_port`, `*_result.json`.
+Caught only by chance while reading a deploy delta.
+
+**Fix:** (1) **refuse to deploy** when a token-shaped string (`x4fk_…`, `sk-…`, long hex/base64 assigned to a
+KEY/TOKEN/SECRET identifier) would land in the deployment — hard fail, not a warning; (2) `.forgeignore`;
+(3) ignore `__pycache__`, `*.pyc`, `.env`, `*_result.json` by default. Cheapest item here, worst downside.
+
+### 🟡 KB-8 · No cue-liveness lint (X4-specific; cost a full cycle)
+
+A new child cue was added under a root cue with no `<conditions>`. Such a root **fires once and is `complete`
+in the save**, so the child has no instance and **the code can never run in any existing save**.
+
+**Fix:** flag a newly-added `<cue>` whose ancestor chain contains a conditionless root — *"existing saves will
+never instantiate this child."* Save-state semantics are invisible to schema validation and brutal in practice.
+
+### 🟡 KB-9 · No declarative deploy consistency rules
+
+A hand-maintained version marker drifted **within an hour** of being added, so the thing that exists to tell
+the player which build they are running told them something false. Fixed mod-side with a deploy gate that
+refuses if the Lua changed without the marker changing.
+
+**Fix:** let a mod declare rules the Forge enforces at deploy:
+`{"consistency":[{"whenChanged":"ui/**","requireChanged":"AI_Influence.BUILD"}]}`.
+A discipline you have to remember is not a discipline.
+
+### ⚪ KB-10 · Carried defects (previously reported, still open)
+
+* **Import payload returns HTTP 200 on rejection** — 2 of 3 payload shapes return **200 with garbage** instead
+  of 4xx. A success code for a rejected write is the worst failure mode: every caller must re-read to learn
+  whether the write happened. *Strict shape validation, 4xx on unknown.*
+* **Unstable node IDs** across imports — makes graph-level automation unreliable.
+* **READ-routing bug** — open.
+
+### Suggested build order
+
+| # | Item | Why |
+|---|---|---|
+| 1 | KB-5 corpus index API | Shared foundation — KB-1 and KB-4 both need it |
+| 2 | KB-1 corpus-mined property DB | Kills the most expensive bug class, both directions |
+| 3 | KB-2 runtime log ingestion | The only feedback channel that has actually worked |
+| 4 | KB-7 secret scan + `.forgeignore` | Cheapest fix, worst downside |
+| 5 | KB-4 vanilla shape divergence | Catches what nothing else can |
+| 6 | KB-3 ware-reference parser | Small, removes a recurring false positive |
+| 7 | KB-6 patch primitive | Pure velocity |
+| 8 | KB-8 cue-liveness lint | Rare, expensive, X4-unique |
+| 9 | KB-9 consistency rules | Generalises a fix already proven mod-side |
+
+---
+
 ## Current State
 
 ### 🚀 RELEASE 0.0.43 — the user-friction pass: 10/10 items — published to Open VSX 2026-07-25
