@@ -124,6 +124,36 @@ The engine is full of constraints invisible to XML validation:
 * Order ids resolve to `aiscripts/order.*.xml` whose `<params>` mark params `required="true"`. Issuing
   `id="'Attack'"` without `primarytarget` is schema-valid and runtime-broken.
 
+**LIVE REPRODUCTION, 2026-07-27 — this shipped and the Forge passed it.** A clean load of a fresh save
+logged, ten times:
+
+```
+[=ERROR=] Script warning: MD script 'aic_opord_execution' references AI order 'CollectDropsInRadius'
+          via <create_order> without required parameter 'destination'
+```
+
+`POST /api/agent/project/validate` returned **0 structural, 0 schema, 0 cross-file errors** on that exact
+file — correctly, because the XML *is* legal. `<create_order>` declares no required children; the requirement
+lives in a different file entirely, `aiscripts/order.collect.ship.radius.xml`, in that order's own `<params>`
+block (`<param name="destination" required="true" type="position"/>`).
+
+A 100-line checker written afterwards found **four** such sites, not one — the game only warns about orders it
+has actually executed, so two more were latent. One of them had survived four builds behind a code comment
+asserting the opposite ("warebasket defaults to the ship's own minable basket per the vanilla order
+definition" — it does not; only the `_Basic` variant defaults it). **A confidently wrong comment plus a
+permissive validator is indistinguishable from correct code.**
+
+**Reference implementation:** `x4_ai_influence/tools/ordergate.py` — reads every `<order id>` + `<params>` in
+`aiscripts/` (vanilla *and* the mod's own), then checks every `<create_order>` in the mod's MD. ~100 lines,
+no heuristics, and it cannot drift from the engine because the corpus IS the specification. Two refinements
+worth copying: an order the *mod* defines is not a phantom, and an `id` attribute is an **expression**, so
+`if $x == 'automine' then 'MiningRoutine_Basic' else ...` contains comparison operands that must not be
+reported as order ids.
+
+Same shape applies to `<create_ship>`/`<pilot>` and to any element whose real contract lives in a sibling
+file. **Suggested severity: this belongs in the validator as an ERROR, not a lint** — a missing required param
+means the order silently does nothing, which is the most expensive failure mode this project has.
+
 **Fix:** compare each emitted element against the **distribution of that element's vanilla usages**, and
 validate order-id params against the target order's `<params>` block:
 
