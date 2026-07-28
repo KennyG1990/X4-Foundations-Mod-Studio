@@ -191,6 +191,20 @@ export const WRITE_SCOPE_POST_PREFIXES = [
   '/agent/probe/preview',
 ] as const;
 
+/** Exact POST routes that are read-only despite using a body for cursor/content context. */
+export const READ_SCOPE_POST_PATHS = new Set([
+  '/reference/complete',
+  '/reference/hover',
+  '/reference/xpath-complete',
+  '/reference/simulate-diff',
+  '/agent/bulk-transform/preview',
+]);
+
+/** Exact mutation routes added outside the older broad workspace prefixes. */
+export const WRITE_SCOPE_POST_PATHS = new Set([
+  '/agent/bulk-transform/apply',
+]);
+
 /** Key management is session-token-only for EVERY scope. */
 export const KEY_MANAGEMENT_PREFIX = '/agent/keys';
 
@@ -212,10 +226,11 @@ export function scopeAllows(scope: AgentKeyScope, method: string, reqPath: strin
   if (reqPath.startsWith(EXEC_PREFIX)) return false; // B64-SEC1: exec is session-token-only, even on GET
   const m = method.toUpperCase();
   if (m === 'GET' || m === 'HEAD' || m === 'OPTIONS') return true; // all scopes read
+  if (m === 'POST' && READ_SCOPE_POST_PATHS.has(reqPath)) return true;
   if (scope === 'read') return false;
   if (scope === 'deploy') return true; // full API power (minus key mgmt above)
   // scope === 'write'
-  return WRITE_SCOPE_POST_PREFIXES.some((p) => reqPath.startsWith(p));
+  return WRITE_SCOPE_POST_PATHS.has(reqPath) || WRITE_SCOPE_POST_PREFIXES.some((p) => reqPath.startsWith(p));
 }
 
 // ---------------------------------------------------------------------------
@@ -276,13 +291,21 @@ export function runAgentKeysSelftest(): { pass: boolean; checks: Array<{ name: s
   ok('read_scope_get_only',
     scopeAllows('read', 'GET', '/agent/workspace') === true &&
     scopeAllows('read', 'POST', '/agent/workspace') === false);
+  ok('read_scope_allows_exact_intelligence_posts_only',
+    scopeAllows('read', 'POST', '/reference/complete') === true &&
+    scopeAllows('read', 'POST', '/reference/xpath-complete') === true &&
+    scopeAllows('read', 'POST', '/agent/bulk-transform/preview') === true &&
+    scopeAllows('read', 'POST', '/agent/bulk-transform/apply') === false &&
+    scopeAllows('read', 'POST', '/reference/complete/extra') === false);
   ok('write_scope_allows_workspace_compile_only',
     scopeAllows('write', 'POST', '/agent/workspace') === true &&
     scopeAllows('write', 'POST', '/agent/compile') === true &&
     scopeAllows('write', 'POST', '/agent/artifact/build') === true &&
     scopeAllows('write', 'POST', '/agent/deploy') === false &&
     scopeAllows('write', 'POST', '/fs/write') === false &&
-    scopeAllows('write', 'POST', '/ai/keys') === false);
+    scopeAllows('write', 'POST', '/ai/keys') === false &&
+    scopeAllows('write', 'POST', '/agent/bulk-transform/apply') === true &&
+    scopeAllows('write', 'POST', '/agent/bulk-transform/apply/extra') === false);
   ok('deploy_scope_full_power', scopeAllows('deploy', 'POST', '/agent/deploy') === true);
   ok('no_scope_can_manage_keys',
     (['read', 'write', 'deploy'] as AgentKeyScope[]).every(

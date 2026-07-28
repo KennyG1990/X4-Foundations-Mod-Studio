@@ -121,12 +121,13 @@ export function parseJobsXml(content: string): JobDef[] | null {
     const openTag = '<job ' + m[1] + '>';
     const inner = m[2];
     const selectTag = (inner.match(/<select\b[^>]*\/?>/i) || [''])[0];
+    const shipTag = (inner.match(/<ship\b[^>]*>/i) || [''])[0];
     const quotaTag = (inner.match(/<quota\b[^>]*\/?>/i) || [''])[0];
     const taskTag = (inner.match(/<task\b[^>]*\/?>/i) || [''])[0];
     const modsTag = (inner.match(/<modifiers\b[^>]*\/?>/i) || [''])[0];
 
     // shipClass is encoded by the studio as tags="military <class>" — take the class token.
-    const tags = attr(selectTag, 'tags').split(/\s+/).filter(Boolean);
+    const tags = attr(selectTag, 'tags').split(/[^A-Za-z0-9_]+/).filter(Boolean);
     const VALID = new Set(['fighter', 'corvette', 'destroyer', 'carrier', 'freighter']);
     const shipClass = (tags.find(t => VALID.has(t.toLowerCase())) || 'fighter') as JobDef['shipClass'];
 
@@ -135,10 +136,10 @@ export function parseJobsXml(content: string): JobDef[] | null {
       name: attr(openTag, 'name'),
       faction: attr(selectTag, 'faction'),
       shipClass,
-      shipMacro: '', // not present in the studio job emit — round-trips as empty
+      shipMacro: attr(shipTag, 'macro'),
       galaxyQuota: num(quotaTag, 'galaxy'),
       sectorQuota: num(quotaTag, 'sector'),
-      taskScript: attr(taskTag, 'script'),
+      taskScript: attr(taskTag, 'task') || attr(taskTag, 'script'),
       rebuildOnDestroy: /\btrue\b/i.test(attr(modsTag, 'rebuild')),
       includeInBuild: true,
     });
@@ -184,10 +185,10 @@ export function runWaresJobsRoundtripSelftest(): {
   ok('wares round-trip deep-equal', eq(wareParsed, wareFixture),
     `got=${JSON.stringify(wareParsed)}`);
 
-  // ---- jobs round-trip (shipMacro omitted by emit → '') ----
+  // ---- jobs round-trip ----
   const jobFixture: JobDef[] = [{
     id: 'forge_test_job', name: 'Forge Test Patrol', faction: 'argon',
-    shipClass: 'destroyer', shipMacro: '', galaxyQuota: 5, sectorQuota: 2,
+    shipClass: 'destroyer', shipMacro: 'ship_arg_l_destroyer_01_a_macro', galaxyQuota: 5, sectorQuota: 2,
     taskScript: 'masstraffic.patrol', rebuildOnDestroy: true, includeInBuild: true,
   }];
   const jobXml = compileJobsXML(jobFixture);

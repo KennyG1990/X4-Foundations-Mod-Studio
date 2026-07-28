@@ -21,10 +21,14 @@ import {
 import { ModWorkspace } from '../types';
 import { compileDiffDocument as compileSharedDiffDocument } from '../lib/modCompiler';
 import ObjectIndexPicker from './ObjectIndexPicker';
+import XPathInput from './XPathInput';
+import BulkTransformPanel from './BulkTransformPanel';
 
 interface XMLPatchSystemProps {
   workspace: ModWorkspace;
   setWorkspace: React.Dispatch<React.SetStateAction<ModWorkspace>>;
+  saveCheckpoint?: (customTarget?: ModWorkspace) => void;
+  onServerWorkspaceApplied?: (workspace: ModWorkspace, metadata: { workspaceHash: string; version: number }) => void;
 }
 
 export interface PatchBlock {
@@ -37,6 +41,9 @@ export interface PatchBlock {
   attrType?: string;
   targetFile?: string;
   includeInBuild?: boolean;
+  generatedRuleId?: string;
+  generatedPlanHash?: string;
+  sourceSignature?: string;
 }
 
 interface SynthesizedPatchOp {
@@ -98,15 +105,15 @@ export const BUILTIN_BOILERPLATES: BoilerplateSnippet[] = [
     targetFile: 'libraries/jobs.xml',
     sel: '/jobs',
     action: 'add',
-    content: `<job id="job_patrol_heavy_wing" name="Local Border Elite Squad" active="true font">
-  <expiration min="7200" max="14400" />
+    content: `<job id="job_patrol_heavy_wing" name="Local Border Elite Squad" startactive="true">
   <modifiers rebuild="true" />
-  <ship>
-    <select faction="argon" tags="military fighter" />
-    <loadout><level min="0.8" max="1.0" /></loadout>
-  </ship>
   <quota galaxy="5" sector="1" />
-  <task script="patrol.heavy.task" />
+  <expirationtime min="7200" max="14400" />
+  <task task="order.patrol" />
+  <ship macro="ship_arg_s_fighter_01_a_macro">
+    <select faction="argon" tags="[military, fighter]" />
+    <owner exact="argon" overridenpc="true" />
+  </ship>
 </job>`
   },
   {
@@ -166,15 +173,16 @@ export const BUILTIN_BOILERPLATES: BoilerplateSnippet[] = [
 // B13b2 mailbox: the pretarget event fires while the workbench is unmounted (the same
 // event switches the view); this module-scope listener lives from first import, so the
 // mount effect can consume what arrived before mount.
-let pendingPretargetFile: string | null = null;
+let pendingPretarget: { targetFile: string; selector?: string } | null = null;
 if (typeof window !== 'undefined') {
   window.addEventListener('xmlpatch-pretarget', (ev: Event) => {
     const file = String((ev as CustomEvent).detail?.targetFile || '').trim();
-    if (file) pendingPretargetFile = file;
+    const selector = String((ev as CustomEvent).detail?.selector || '').trim();
+    if (file) pendingPretarget = { targetFile: file, ...(selector ? { selector } : {}) };
   });
 }
 
-export default function XMLPatchSystem({ workspace, setWorkspace }: XMLPatchSystemProps) {
+export default function XMLPatchSystem({ workspace, setWorkspace, saveCheckpoint, onServerWorkspaceApplied }: XMLPatchSystemProps) {
   // QoL: default to a target that actually exists in vanilla (ship_macros.xml
   // does not — first open used to show a resolution error).
   const [targetFile, setTargetFile] = useState<string>('libraries/wares.xml');
@@ -185,8 +193,10 @@ export default function XMLPatchSystem({ workspace, setWorkspace }: XMLPatchSyst
   const [baseFileContent, setBaseFileContent] = useState<string | null>(null);
   const [baseFileLoading, setBaseFileLoading] = useState<boolean>(false);
   const [baseFileError, setBaseFileError] = useState<string | null>(null);
-  const [isPacked, setIsPacked] = useState<boolean>(false);
+  const [effectiveSources, setEffectiveSources] = useState<Array<{ source: string; mode: string }>>([]);
   const [rightPanelTab, setRightPanelTab] = useState<'patch' | 'preview' | 'difftool'>('patch');
+  const [pretargetSelector, setPretargetSelector] = useState<string>('');
+  const [authoringMode, setAuthoringMode] = useState<'single' | 'bulk'>('single');
 
   // T4.2 Inc 2 — Diff→Patch merge view: the user edits a copy of the vanilla
   // file and the studio synthesizes the minimal <diff> ops via
@@ -258,15 +268,19 @@ export default function XMLPatchSystem({ workspace, setWorkspace }: XMLPatchSyst
   // the view, and we mount after) — the module-scope mailbox below catches it; this
   // effect consumes the mailbox on mount and handles the already-mounted case live.
   useEffect(() => {
-    const apply = (file: string) => {
-      if (!file) return;
-      pendingPretargetFile = null; // consumed — never replays on a later mount
-      setTargetFile(file);
-      setRightPanelTab('difftool');
+    const apply = (target: { targetFile: string; selector?: string }) => {
+      if (!target.targetFile) return;
+      pendingPretarget = null; // consumed — never replays on a later mount
+      setTargetFile(target.targetFile);
+      setPretargetSelector(target.selector || '');
+      setRightPanelTab(target.selector ? 'patch' : 'difftool');
       setDtSeededFor(null); // reseed the editable copy from the new file's vanilla content
     };
-    if (pendingPretargetFile) apply(pendingPretargetFile);
-    const handlePretarget = (ev: Event) => apply(String((ev as CustomEvent).detail?.targetFile || '').trim());
+    if (pendingPretarget) apply(pendingPretarget);
+    const handlePretarget = (ev: Event) => apply({
+      targetFile: String((ev as CustomEvent).detail?.targetFile || '').trim(),
+      selector: String((ev as CustomEvent).detail?.selector || '').trim() || undefined,
+    });
     window.addEventListener('xmlpatch-pretarget', handlePretarget);
     return () => window.removeEventListener('xmlpatch-pretarget', handlePretarget);
   }, []);
@@ -275,9 +289,9 @@ export default function XMLPatchSystem({ workspace, setWorkspace }: XMLPatchSyst
     if (!targetFile) return;
     setBaseFileLoading(true);
     setBaseFileError(null);
-    setIsPacked(false);
+    setEffectiveSources([]);
     setBaseFileContent(null);
-    fetch(`/api/patch/base-content?targetFile=${encodeURIComponent(targetFile)}`)
+    fetch(`/api/reference/effective-file?path=${encodeURIComponent(targetFile)}`)
       .then(res => {
         if (!res.ok) {
           return res.json().then(data => {
@@ -288,13 +302,11 @@ export default function XMLPatchSystem({ workspace, setWorkspace }: XMLPatchSyst
       })
       .then(data => {
         setBaseFileContent(data.content);
+        setEffectiveSources(Array.isArray(data.sources) ? data.sources : []);
         setBaseFileLoading(false);
       })
       .catch(err => {
         setBaseFileError(err.message);
-        if (err.message.includes('packed')) {
-          setIsPacked(true);
-        }
         setBaseFileLoading(false);
       });
   }, [targetFile]);
@@ -424,8 +436,8 @@ export default function XMLPatchSystem({ workspace, setWorkspace }: XMLPatchSyst
     if (baseFileLoading) {
       return { status: 'loading', message: 'Loading base file...' };
     }
-    if (isPacked || baseFileError) {
-      return { status: 'no_file', message: 'Base file packed or not found (XPath validation skipped)' };
+    if (baseFileError) {
+      return { status: 'no_file', message: 'Effective corpus file unavailable (XPath validation skipped)' };
     }
     if (!parsedBaseDoc) {
       return { status: 'no_file', message: 'No valid base file loaded' };
@@ -703,7 +715,7 @@ export default function XMLPatchSystem({ workspace, setWorkspace }: XMLPatchSyst
 
     const nBlock: PatchBlock = {
       id: `p_block_${Date.now()}`,
-      sel,
+      sel: pretargetSelector || sel,
       action,
       content,
       note,
@@ -711,6 +723,7 @@ export default function XMLPatchSystem({ workspace, setWorkspace }: XMLPatchSyst
     };
 
     savePatches([...patchBlocks, nBlock]);
+    setPretargetSelector('');
   };
 
   const handleDeletePatchBlock = (id: string) => {
@@ -784,10 +797,14 @@ export default function XMLPatchSystem({ workspace, setWorkspace }: XMLPatchSyst
         <div className="flex items-center gap-2">
           <GitFork className="w-4 h-4 text-emerald-400" />
           <span className="font-semibold text-slate-200 uppercase tracking-tight">XML DIFF INTERACTIVE WORKBENCH</span>
+          <div className="ml-3 flex rounded border border-white/10 bg-black/30 p-0.5">
+            <button onClick={() => setAuthoringMode('single')} className={`rounded px-2.5 py-1 text-[8.5px] font-bold uppercase ${authoringMode === 'single' ? 'bg-emerald-500/15 text-emerald-300' : 'text-slate-500 hover:text-slate-300'}`}>Single patch</button>
+            <button onClick={() => setAuthoringMode('bulk')} className={`rounded px-2.5 py-1 text-[8.5px] font-bold uppercase ${authoringMode === 'bulk' ? 'bg-cyan-500/15 text-cyan-300' : 'text-slate-500 hover:text-slate-300'}`}>Bulk transform</button>
+          </div>
         </div>
         
         {/* Target file selectors */}
-        <div className="flex items-center gap-2 font-mono text-[11px]">
+        {authoringMode === 'single' && <div className="flex items-center gap-2 font-mono text-[11px]">
           <span className="text-slate-500 uppercase font-bold text-[9.5px]">Target File:</span>
           <div className="w-80">
             <ObjectIndexPicker
@@ -798,9 +815,22 @@ export default function XMLPatchSystem({ workspace, setWorkspace }: XMLPatchSyst
               placeholder="Search real base-game files… (e.g. libraries/wares.xml)"
             />
           </div>
-        </div>
+          {effectiveSources.length > 0 && (
+            <span className="max-w-56 truncate text-[8.5px] text-emerald-500/80" title={effectiveSources.map(source => `${source.source} (${source.mode})`).join(' → ')}>
+              effective: {effectiveSources.map(source => source.source).join(' + ')}
+            </span>
+          )}
+          {pretargetSelector && (
+            <span className="max-w-72 truncate rounded border border-amber-500/25 bg-amber-500/5 px-2 py-1 text-[8.5px] text-amber-300" title={pretargetSelector}>
+              Patch existing: {pretargetSelector}
+            </span>
+          )}
+        </div>}
       </div>
 
+      {authoringMode === 'bulk' ? (
+        <BulkTransformPanel workspace={workspace} setWorkspace={setWorkspace} saveCheckpoint={saveCheckpoint} onServerWorkspaceApplied={onServerWorkspaceApplied} />
+      ) : (
       <div className="flex-1 flex overflow-hidden">
         {/* Left Side: Recipes and template insertions */}
         <div className="w-80 border-r border-white/10 p-3.5 flex flex-col h-full bg-[#0d0f14]/80 overflow-y-auto space-y-4">
@@ -1065,12 +1095,11 @@ export default function XMLPatchSystem({ workspace, setWorkspace }: XMLPatchSyst
 
                   <div className="flex flex-col gap-1">
                     <label className="text-[9.5px] text-slate-500 font-mono uppercase">XPath Selector / Node Target</label>
-                    <input
-                      type="text"
-                      required
+                    <XPathInput
+                      targetPath={newBPRelativePath}
                       placeholder="e.g. /wares"
                       value={newBPSel}
-                      onChange={(e) => setNewBPSel(e.target.value)}
+                      onChange={setNewBPSel}
                       className="bg-[#14161d] border border-white/10 text-xs font-mono text-slate-200 rounded p-1.5 focus:outline-none focus:border-emerald-500"
                     />
                   </div>
@@ -1262,10 +1291,10 @@ export default function XMLPatchSystem({ workspace, setWorkspace }: XMLPatchSyst
                   <div className="space-y-1 font-mono text-[10.5px]">
                     <div className="flex items-center gap-1">
                       <span className="text-slate-400 uppercase font-bold text-[9px] w-24">Sel (XPath):</span>
-                      <input
-                        type="text"
+                      <XPathInput
+                        targetPath={targetFile}
                         value={b.sel}
-                        onChange={(e) => handleUpdatePatchBlock(b.id, 'sel', e.target.value)}
+                        onChange={value => handleUpdatePatchBlock(b.id, 'sel', value)}
                         className="bg-black/50 border border-white/10 rounded px-2 py-1 text-slate-200 flex-1 h-7 focus:outline-none focus:border-emerald-500 text-[10px] font-mono font-bold"
                         placeholder="e.g. /wares/ware[@id='ore']"
                       />
@@ -1470,9 +1499,9 @@ export default function XMLPatchSystem({ workspace, setWorkspace }: XMLPatchSyst
             <div className="flex-1 bg-black/50 rounded-lg p-3 font-mono text-[10px] overflow-y-auto relative custom-scrollbar border border-white/5 leading-relaxed select-text flex flex-col gap-0.5">
               {baseFileLoading ? (
                 <div className="text-center py-20 text-slate-500 font-mono text-xs">Loading base game XML...</div>
-              ) : isPacked || baseFileError ? (
+              ) : baseFileError ? (
                 <div className="text-center py-16 text-slate-500 text-[10.5px] whitespace-pre-line px-4 font-mono leading-relaxed">
-                  {baseFileError || `Target file '${targetFile}' is packed in Egosoft .cat/.dat game archives.\n\nUnified text diff preview is unavailable unless loose XML files are provided.`}
+                  {baseFileError || `Effective canonical file '${targetFile}' is unavailable.`}
                 </div>
               ) : (
                 <div className="flex flex-col font-mono text-[9.5px]">
@@ -1508,6 +1537,7 @@ export default function XMLPatchSystem({ workspace, setWorkspace }: XMLPatchSyst
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

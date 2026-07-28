@@ -25,6 +25,10 @@ import {
 } from '../lib/referenceManifest';
 import { resolveEffectiveReferenceDocument } from '../lib/referenceOverlay';
 import { simulateXmlDiff } from '../lib/diffSimulator';
+import { projectReferenceSymbols, suggestReferences, type ReferenceSuggestionIntent } from '../lib/referenceSuggestions';
+import type { CanonicalSymbolKind } from '../lib/referenceCorpus';
+import type { ModWorkspace } from '../types';
+import { completeXPath } from '../lib/xpathCompletion';
 
 function errorText(error: unknown): string { return error instanceof Error ? error.message : String(error); }
 function forceRefresh(req: Request): boolean { return /^(1|true|yes)$/i.test(String(req.query.refresh || '')); }
@@ -53,9 +57,9 @@ function languageRequest(req: Request): ReferenceLanguageRequest {
   return { path: filePath, content, line, column };
 }
 
-export function getCanonicalReferenceSets(): { macros: Set<string>; wares: Set<string>; factions: Set<string>; sectors: Set<string> } {
+export function getCanonicalReferenceSets(): { macros: Set<string>; wares: Set<string>; factions: Set<string>; sectors: Set<string>; jobs: Set<string>; aiScripts: Set<string> } {
   try { return load().references; }
-  catch { return { macros: new Set(), wares: new Set(), factions: new Set(), sectors: new Set() }; }
+  catch { return { macros: new Set(), wares: new Set(), factions: new Set(), sectors: new Set(), jobs: new Set(), aiScripts: new Set() }; }
 }
 
 export function initializeReferenceCorpus(): void {
@@ -89,7 +93,41 @@ function sendCorpusError(res: Response, error: unknown): Response {
   return res.status(500).json({ error: message || 'Reference corpus request failed.' });
 }
 
-export function registerReferenceRoutes(app: Express): void {
+export function registerReferenceRoutes(app: Express, workspaceProvider?: () => ModWorkspace | null | undefined): void {
+  app.get('/api/reference/effective-file', (req, res) => {
+    try {
+      const corpus = load(req);
+      const effective = resolveEffectiveReferenceDocument(corpus.root, String(req.query.path || ''), forceRefresh(req));
+      if (!effective.available || effective.content === undefined) return res.status(404).json({ error: `Canonical effective file not found: ${String(req.query.path || '')}`, ...effective });
+      return res.json(effective);
+    } catch (error) { return sendCorpusError(res, error); }
+  });
+
+  app.post('/api/reference/xpath-complete', (req, res) => {
+    try {
+      const body = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {};
+      const relativePath = typeof body.path === 'string' ? body.path.trim() : '';
+      const selector = typeof body.selector === 'string' ? body.selector : '';
+      const cursor = Number(body.cursor);
+      if (!relativePath) throw new Error('Invalid request: path is required.');
+      if (typeof body.selector !== 'string') throw new Error('Invalid request: selector must be a string.');
+      if (selector.length > 16_384) throw new Error('Invalid request: selector exceeds 16 KB.');
+      if (!Number.isInteger(cursor) || cursor < 0 || cursor > selector.length) throw new Error('Invalid request: cursor is outside the selector.');
+      const corpus = load(req);
+      const effective = resolveEffectiveReferenceDocument(corpus.root, relativePath, forceRefresh(req));
+      if (!effective.available || effective.content === undefined) return res.status(404).json({ error: `Canonical effective file not found: ${relativePath}`, effective });
+      const items = completeXPath({
+        targetPath: effective.relativePath,
+        content: effective.content,
+        selector,
+        cursor,
+        corpus,
+        limit: Number(body.limit || 50),
+      });
+      return res.json({ path: effective.relativePath, signature: effective.signature, sources: effective.sources, findings: effective.findings, items });
+    } catch (error) { return sendCorpusError(res, error); }
+  });
+
   app.post('/api/reference/simulate-diff', (req, res) => {
     try {
       const body = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {};
@@ -116,7 +154,7 @@ export function registerReferenceRoutes(app: Express): void {
     try {
       const request = languageRequest(req);
       const corpus = load(req);
-      return res.json(completeReferenceDocument(request, getReferenceLanguageResources(corpus, request)));
+      return res.json(completeReferenceDocument(request, getReferenceLanguageResources(corpus, request, workspaceProvider?.())));
     } catch (error) { return sendCorpusError(res, error); }
   });
 
@@ -124,7 +162,7 @@ export function registerReferenceRoutes(app: Express): void {
     try {
       const request = languageRequest(req);
       const corpus = load(req);
-      return res.json(hoverReferenceDocument(request, getReferenceLanguageResources(corpus, request)));
+      return res.json(hoverReferenceDocument(request, getReferenceLanguageResources(corpus, request, workspaceProvider?.())));
     } catch (error) { return sendCorpusError(res, error); }
   });
 
@@ -138,7 +176,7 @@ export function registerReferenceRoutes(app: Express): void {
         generatedAt: corpus.generatedAt,
         manifestGeneration: corpus.manifestGeneration || null,
         sourceFiles: corpus.sourceFiles.length,
-        counts: { factions: corpus.factions.length, wares: corpus.wares.length, sectors: corpus.sectors.length, scriptProperties: corpus.scriptProperties.length },
+        counts: { factions: corpus.factions.length, wares: corpus.wares.length, jobs: corpus.jobs.length, aiScripts: corpus.aiScripts.length, sectors: corpus.sectors.length, scriptProperties: corpus.scriptProperties.length },
         manifest,
       });
     } catch (error) { return sendCorpusError(res, error); }
@@ -191,6 +229,39 @@ export function registerReferenceRoutes(app: Express): void {
     catch (error) { return sendCorpusError(res, error); }
   });
 
+  app.get('/api/reference/jobs', (req, res) => {
+    try { return res.json(load(req).jobs); }
+    catch (error) { return sendCorpusError(res, error); }
+  });
+
+  app.get('/api/reference/aiscripts', (req, res) => {
+    try { return res.json(load(req).aiScripts); }
+    catch (error) { return sendCorpusError(res, error); }
+  });
+
+  app.get('/api/reference/suggest', (req, res) => {
+    try {
+      const kind = String(req.query.kind || '').trim().toLowerCase() as CanonicalSymbolKind;
+      const allowedKinds = new Set<CanonicalSymbolKind>(['faction', 'ware', 'sector', 'macro', 'job', 'aiscript']);
+      if (!allowedKinds.has(kind)) return res.status(400).json({ error: 'Query ?kind=faction|ware|sector|macro|job|aiscript required.' });
+      const q = String(req.query.q || '').trim();
+      if (!q && req.query.limit === undefined) return res.status(400).json({ error: 'Query ?q=<text> or an explicit bounded ?limit= is required.' });
+      const intentInput = String(req.query.intent || 'reference').trim().toLowerCase();
+      if (!['reference', 'new-definition', 'selector'].includes(intentInput)) {
+        return res.status(400).json({ error: 'Query ?intent=reference|new-definition|selector required.' });
+      }
+      const corpus = load(req);
+      const items = suggestReferences(corpus, {
+        kind,
+        query: q,
+        intent: intentInput as ReferenceSuggestionIntent,
+        limit: Number(req.query.limit || 25),
+        projectSymbols: projectReferenceSymbols(workspaceProvider?.()),
+      });
+      return res.json({ generation: corpus.manifestGeneration || corpus.signature, kind, query: q, intent: intentInput, items });
+    } catch (error) { return sendCorpusError(res, error); }
+  });
+
   app.get('/api/reference/sectors', (req, res) => {
     try { return res.json(load(req).sectors); }
     catch (error) { return sendCorpusError(res, error); }
@@ -235,6 +306,8 @@ export function registerReferenceRoutes(app: Express): void {
       };
       for (const f of corpus.factions) push('faction', f as unknown as Record<string, unknown>);
       for (const w of corpus.wares) push('ware', w as unknown as Record<string, unknown>);
+      for (const job of corpus.jobs) push('job', job as unknown as Record<string, unknown>);
+      for (const script of corpus.aiScripts) push('aiscript', script as unknown as Record<string, unknown>);
       for (const s of corpus.sectors) push('sector', s as unknown as Record<string, unknown>);
       for (const entry of corpus.scriptProperties) {
         for (const property of entry.properties) push('property', { ownerKind: entry.kind, owner: entry.name, ...property });

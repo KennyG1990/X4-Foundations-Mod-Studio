@@ -12,7 +12,10 @@ import {
 } from './scriptProperties';
 import { resolveExpressionState, suggestExpression, type ExpressionSuggestOptions } from './expressionSuggest';
 import { buildProjectSymbols } from './projectSymbols';
-import type { ReferenceCorpus, ScriptPropertyReference } from './referenceCorpus';
+import type { CanonicalSymbol, ReferenceCorpus, ScriptPropertyReference } from './referenceCorpus';
+import type { ModWorkspace } from '../types';
+import { fallbackLibrarySchemaDomain, resolveReferenceBinding } from './referenceBindings';
+import { projectReferenceSymbols, suggestReferences } from './referenceSuggestions';
 import { contentParticleState, type AttrSpec, type ElementSpec, type SchemaIndex } from './xsdValidate';
 
 export type ReferenceCompletionKind = 'Element' | 'Attribute' | 'Enum' | 'Reference' | 'Property' | 'Function';
@@ -47,6 +50,7 @@ export interface ReferenceLanguageResources {
   schema: SchemaIndex | null;
   domain: string;
   scriptProperties: ScriptPropertyIndex;
+  projectSymbols?: CanonicalSymbol[];
 }
 
 interface CursorContext {
@@ -54,6 +58,7 @@ interface CursorContext {
   parentTag: string | null;
   inTag: string | null;
   inAttrValue: string | null;
+  attrValuePrefix: string;
   elementStart: boolean;
   rootTag: string | null;
   partialElement: string;
@@ -96,6 +101,7 @@ export function xmlCursorContext(content: string, offset: number): CursorContext
   const lastGt = prefix.lastIndexOf('>');
   let inTag: string | null = null;
   let inAttrValue: string | null = null;
+  let attrValuePrefix = '';
   let elementStart = false;
   let partialElement = '';
   if (lastLt > lastGt) {
@@ -107,8 +113,8 @@ export function xmlCursorContext(content: string, offset: number): CursorContext
         partialElement = body.replace(/^\//, '').toLowerCase();
       } else if (name) {
         inTag = name;
-        const attr = /([A-Za-z_][\w.:-]*)\s*=\s*"[^"]*$/.exec(body);
-        if (attr) inAttrValue = attr[1].toLowerCase();
+        const attr = /([A-Za-z_][\w.:-]*)\s*=\s*(["'])([^"']*)$/.exec(body);
+        if (attr) { inAttrValue = attr[1].toLowerCase(); attrValuePrefix = attr[3]; }
       }
     }
   }
@@ -131,6 +137,7 @@ export function xmlCursorContext(content: string, offset: number): CursorContext
     parentTag: stack.at(-1)?.name || null,
     inTag,
     inAttrValue,
+    attrValuePrefix,
     elementStart,
     rootTag,
     partialElement,
@@ -215,12 +222,14 @@ export function fallbackSchemaDomain(filePath: string, content: string): string 
   if (/(^|\/)aiscripts\//.test(normalized) || root === 'aiscript') return 'aiscripts';
   if (/(^|\/)md\//.test(normalized) || root === 'mdscript') return 'md';
   if (root === 'diff') return 'diff';
+  const sharedLibrary = fallbackLibrarySchemaDomain(normalized);
+  if (sharedLibrary) return sharedLibrary;
   const library = /(^|\/)libraries\/([^/]+)\.xml$/.exec(normalized)?.[2];
   if (library) return library;
   return root;
 }
 
-export function getReferenceLanguageResources(corpus: ReferenceCorpus, request: Pick<ReferenceLanguageRequest, 'path' | 'content'>): ReferenceLanguageResources {
+export function getReferenceLanguageResources(corpus: ReferenceCorpus, request: Pick<ReferenceLanguageRequest, 'path' | 'content'>, workspace?: ModWorkspace | null): ReferenceLanguageResources {
   const registry = registryFor(corpus);
   const declared = declaredSchemaDomain(request.content);
   const fallback = fallbackSchemaDomain(request.path, request.content);
@@ -232,24 +241,19 @@ export function getReferenceLanguageResources(corpus: ReferenceCorpus, request: 
     schema: info ? getDomainIndex(info) : null,
     domain,
     scriptProperties: scriptIndexFor(corpus),
+    projectSymbols: projectReferenceSymbols(workspace),
   };
 }
 
-function referenceKind(attr: AttrSpec | undefined): 'faction' | 'ware' | 'sector' | 'macro' | null {
-  const type = `${attr?.type || ''} ${attr?.baseType || ''}`.toLowerCase();
-  if (type.includes('faction')) return 'faction';
-  if (type.includes('ware')) return 'ware';
-  if (type.includes('sector')) return 'sector';
-  if (type.includes('macro') || type.includes('component')) return 'macro';
-  return null;
-}
-
-function dynamicValues(corpus: ReferenceCorpus): ExpressionSuggestOptions['dynamicValues'] {
+function dynamicValues(corpus: ReferenceCorpus, projectSymbols: CanonicalSymbol[] = []): ExpressionSuggestOptions['dynamicValues'] {
+  const project = (kind: CanonicalSymbol['kind']) => projectSymbols
+    .filter(symbol => symbol.kind === kind)
+    .map(symbol => ({ id: symbol.id, label: symbol.name, documentation: `${symbol.name || symbol.id} · project` }));
   return {
-    faction: corpus.factions.map(value => ({ id: value.id, label: value.name, documentation: `${value.name} · ${value.source}` })),
-    ware: corpus.wares.map(value => ({ id: value.id, label: value.name, documentation: `${value.name} · ${value.group} · ${value.source}` })),
-    sector: corpus.sectors.map(value => ({ id: value.id, label: value.name, documentation: `${value.name} · ${value.source}` })),
-    macro: [...corpus.references.macros].map(id => ({ id })),
+    faction: [...project('faction'), ...corpus.factions.map(value => ({ id: value.id, label: value.name, documentation: `${value.name} · ${value.source}` }))],
+    ware: [...project('ware'), ...corpus.wares.map(value => ({ id: value.id, label: value.name, documentation: `${value.name} · ${value.group} · ${value.source}` }))],
+    sector: [...project('sector'), ...corpus.sectors.map(value => ({ id: value.id, label: value.name, documentation: `${value.name} · ${value.source}` }))],
+    macro: [...project('macro'), ...[...corpus.references.macros].map(id => ({ id }))],
   };
 }
 
@@ -263,26 +267,21 @@ function requiredSnippet(name: string, spec: ElementSpec | undefined): string {
   return required.length ? `${name} ${required.map((attr, index) => `${attr}="\${${index + 1}}"`).join(' ')}` : name;
 }
 
-function referenceItems(kind: NonNullable<ReturnType<typeof referenceKind>>, corpus: ReferenceCorpus, attr: AttrSpec | undefined): ReferenceCompletionItem[] {
+function referenceItems(
+  kind: NonNullable<ReturnType<typeof resolveReferenceBinding>>,
+  corpus: ReferenceCorpus,
+  attr: AttrSpec | undefined,
+  query = '',
+  projectSymbols: CanonicalSymbol[] = [],
+): ReferenceCompletionItem[] {
   const type = `${attr?.type || ''} ${attr?.baseType || ''}`.toLowerCase();
-  if (kind === 'faction') return corpus.factions.map((value, index) => ({
-    label: value.id, kind: 'Reference', detail: `${value.name} · ${value.source}`,
-    insertText: type.includes('expr') || type.includes('lookup') ? `faction.${value.id}` : value.id,
-    documentation: `Faction ${value.id}; category=${value.category}; isreal=${value.isreal}`,
-    sortText: String(index).padStart(5, '0'),
-  }));
-  if (kind === 'ware') return corpus.wares.map((value, index) => ({
-    label: value.id, kind: 'Reference', detail: `${value.name} · ${value.group} · ${value.source}`,
-    insertText: type.includes('expr') || type.includes('lookup') ? `ware.${value.id}` : value.id,
-    documentation: value.tags.length ? `Tags: ${value.tags.join(', ')}` : undefined,
-    sortText: String(index).padStart(5, '0'),
-  }));
-  if (kind === 'sector') return corpus.sectors.map((value, index) => ({
-    label: value.id, kind: 'Reference', detail: `${value.name} · ${value.source}`, insertText: value.id,
-    sortText: String(index).padStart(5, '0'),
-  }));
-  return [...corpus.references.macros].sort().map((id, index) => ({
-    label: id, kind: 'Reference', detail: 'Canonical X4 macro', insertText: id,
+  return suggestReferences(corpus, { kind, query, intent: 'reference', limit: 100, projectSymbols }).map((value, index) => ({
+    label: value.label,
+    kind: 'Reference',
+    detail: value.detail,
+    insertText: (type.includes('expr') || type.includes('lookup')) && (kind === 'faction' || kind === 'ware')
+      ? `${kind}.${value.insertText}` : value.insertText,
+    documentation: value.documentation,
     sortText: String(index).padStart(5, '0'),
   }));
 }
@@ -296,7 +295,7 @@ export function completeReferenceDocument(request: ReferenceLanguageRequest, res
     const attr = element?.attributes.get(context.inAttrValue);
     if (expressionAttribute(context.inAttrValue, attr)) {
       const variableTypes = buildProjectSymbols([{ path: request.path, content: request.content }], resources.scriptProperties).variableTypesFor(request.path);
-      const suggestions = suggestExpression(request.content, offset, resources.scriptProperties, { dynamicValues: dynamicValues(resources.corpus), variableTypes });
+      const suggestions = suggestExpression(request.content, offset, resources.scriptProperties, { dynamicValues: dynamicValues(resources.corpus, resources.projectSymbols), variableTypes });
       if (suggestions.length) return suggestions.map((suggestion, index) => ({
         label: suggestion.label,
         kind: suggestion.kind === 'function' ? 'Function' : suggestion.kind === 'reference' ? 'Reference' : 'Property',
@@ -310,8 +309,14 @@ export function completeReferenceDocument(request: ReferenceLanguageRequest, res
       label: value, kind: 'Enum', detail: `${context.inTag}@${context.inAttrValue}`, insertText: value,
       documentation: attr.documentation, sortText: String(index).padStart(5, '0'),
     }));
-    const kind = referenceKind(attr);
-    return kind ? referenceItems(kind, resources.corpus, attr) : [];
+    const kind = resolveReferenceBinding({
+      domain: resources.domain,
+      element: context.inTag,
+      attribute: context.inAttrValue,
+      type: attr?.type,
+      baseType: attr?.baseType,
+    });
+    return kind ? referenceItems(kind, resources.corpus, attr, context.attrValuePrefix, resources.projectSymbols) : [];
   }
 
   if (context.inTag) {
@@ -372,7 +377,7 @@ export function hoverReferenceDocument(request: ReferenceLanguageRequest, resour
     if (expressionAttribute(context.inAttrValue, attr)) {
       const variableTypes = buildProjectSymbols([{ path: request.path, content: request.content }], resources.scriptProperties).variableTypesFor(request.path);
       const leafStart = token.end - leaf.length;
-      const state = resolveExpressionState(request.content, leafStart, resources.scriptProperties, { dynamicValues: dynamicValues(resources.corpus), variableTypes });
+      const state = resolveExpressionState(request.content, leafStart, resources.scriptProperties, { dynamicValues: dynamicValues(resources.corpus, resources.projectSymbols), variableTypes });
       if (state?.datatype && resources.scriptProperties.model.datatypes.has(state.datatype)) {
         const property = resolveDatatypeProperties(resources.scriptProperties.model, state.datatype).find(candidate => propertyHead(candidate.name) === leaf);
         if (property) return {
@@ -382,10 +387,20 @@ export function hoverReferenceDocument(request: ReferenceLanguageRequest, resour
         };
       }
     }
-    const faction = resources.corpus.factions.find(value => value.id === leaf);
-    if (faction) return { kind: 'reference', label: faction.id, signature: `faction.${faction.id}`, documentation: faction.name, detail: faction.source };
-    const ware = resources.corpus.wares.find(value => value.id === leaf);
-    if (ware) return { kind: 'reference', label: ware.id, signature: `ware.${ware.id}`, documentation: ware.name, detail: `${ware.group} · ${ware.source}` };
+    const boundKind = resolveReferenceBinding({
+      domain: resources.domain,
+      element: context.inTag,
+      attribute: context.inAttrValue,
+      type: attr?.type,
+      baseType: attr?.baseType,
+    });
+    const reference = boundKind
+      ? [...(resources.projectSymbols || []), ...resources.corpus.symbols].find(symbol => symbol.kind === boundKind && symbol.id.toLowerCase() === leaf.toLowerCase())
+      : undefined;
+    if (reference) return {
+      kind: 'reference', label: reference.id, signature: `${reference.kind}.${reference.id}`,
+      documentation: reference.name || reference.detail, detail: reference.source,
+    };
     if (attr && leaf === context.inAttrValue) return {
       kind: 'attribute', label: leaf, signature: `${context.inTag}@${leaf}: ${attr.type || attr.baseType || 'string'}`,
       documentation: attr.documentation, detail: attr.required ? 'required' : 'optional',
@@ -452,12 +467,17 @@ export function runReferenceLanguageSelftest() {
     ]),
   };
   const corpus = {
-    root: 'fixture', generatedAt: '', signature: 'fixture', sourceFiles: [], wares: [], sectors: [], scriptProperties: [],
+    root: 'fixture', generatedAt: '', signature: 'fixture', sourceFiles: [], wares: [], jobs: [], aiScripts: [], sectors: [], scriptProperties: [],
     factions: [{ id: 'player', name: 'Player', source: 'base', category: 'player', isreal: false }, { id: 'argon', name: 'Argon', source: 'base', category: 'political', isreal: true }],
-    references: { macros: new Set<string>(), wares: new Set<string>(), factions: new Set<string>(), sectors: new Set<string>() },
+    symbols: [
+      { kind: 'faction', id: 'player', name: 'Player', source: 'base', path: 'libraries/factions.xml' },
+      { kind: 'faction', id: 'argon', name: 'Argon', source: 'base', path: 'libraries/factions.xml' },
+    ],
+    references: { macros: new Set<string>(), wares: new Set<string>(), factions: new Set<string>(), sectors: new Set<string>(), jobs: new Set<string>(), aiScripts: new Set<string>() },
   } as ReferenceCorpus;
   const resources: ReferenceLanguageResources = {
     corpus, registry: { roots: [], domains: [] }, schema, domain: 'md', scriptProperties: buildScriptPropertyIndexFromModel(model),
+    projectSymbols: [{ kind: 'faction', id: 'project_faction', name: 'Project Faction', source: 'project', path: 'libraries/factions.xml' }],
   };
   const child = cursor('<cue><|');
   ok('contextual child completion', completeReferenceDocument({ path: 'md/x.xml', ...child }, resources).map(item => item.label).join(',') === 'actions,conditions,cues');
@@ -466,16 +486,19 @@ export function runReferenceLanguageSelftest() {
   const afterActions = cursor('<cue><actions/><|');
   ok('particle completion respects skipped optional prefix', completeReferenceDocument({ path: 'md/x.xml', ...afterActions }, resources).map(item => item.label).join(',') === 'cues');
   const lookup = cursor('<set_value exact="faction.|"/>');
-  ok('canonical dynamic lookup completion', completeReferenceDocument({ path: 'md/x.xml', ...lookup }, resources).length === 2);
+  const lookupItems = completeReferenceDocument({ path: 'md/x.xml', ...lookup }, resources);
+  ok('canonical dynamic lookup completion', lookupItems.length === 3);
+  ok('project-defined symbols join document completion', lookupItems.some(item => item.label === 'project_faction' && /project/i.test(item.documentation || '')));
   const props = cursor('<set_value exact="faction.player.|"/>');
   ok('dynamic lookup resolves datatype', completeReferenceDocument({ path: 'md/x.xml', ...props }, resources).some(item => item.label === 'id' && item.kind === 'Property'));
   const hover = cursor('<set_value exact="faction.player.i|d"/>');
   const hoverResult = hoverReferenceDocument({ path: 'md/x.xml', ...hover }, resources);
   ok('typed property hover resolves signature', hoverResult?.kind === 'property' && hoverResult.signature === 'faction.id: string', hoverResult);
   const owner = cursor('<event_owner owner="|"/>');
-  ok('reference typed attribute completion', completeReferenceDocument({ path: 'md/x.xml', ...owner }, resources).length === 2);
+  ok('reference typed attribute completion', completeReferenceDocument({ path: 'md/x.xml', ...owner }, resources).length === 3);
   ok('declared schema wins', declaredSchemaDomain('<x xmlns:xsi="x" xsi:noNamespaceSchemaLocation="../md.xsd"/>') === 'md');
   ok('path fallback routes aiscript', fallbackSchemaDomain('aiscripts/test.xml', '<aiscript/>') === 'aiscripts');
+  ok('path fallback routes wares to libraries', fallbackSchemaDomain('libraries/wares.xml', '<wares/>') === 'libraries');
   let rejected = false;
   try { offsetAt('<x/>', 3, 0); } catch { rejected = true; }
   ok('invalid cursor rejected', rejected);

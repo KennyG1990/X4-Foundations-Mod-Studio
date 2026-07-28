@@ -24,6 +24,7 @@
     "test:reference-api": "node scripts/reference-api-integration.mjs",
     "test:reference-corpus": "tsx scripts/reference-corpus-check.ts",
     "test:schema-intelligence": "tsx scripts/schema-intelligence-check.ts",
+    "test:bulk-performance": "tsx scripts/bulk-transform-performance.ts",
     "test:reference-manifest": "tsx scripts/reference-manifest-check.ts",
     "test:reference-manifest-api": "node scripts/reference-manifest-api-integration.mjs",
     "test:extension-capabilities": "tsx vscode-extension/src/capabilities.ts",
@@ -33,6 +34,7 @@
     "test:artifact-pipeline": "tsx scripts/artifact-pipeline-check.ts"
   },
   "dependencies": {
+    "@codemirror/autocomplete": "^6.20.3",
     "@codemirror/commands": "^6.10.4",
     "@codemirror/lang-xml": "^6.1.0",
     "@codemirror/language": "^6.12.4",

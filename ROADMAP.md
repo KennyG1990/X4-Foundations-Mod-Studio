@@ -6789,3 +6789,38 @@ Registry probe (2026-07-25, agent, read-only) resolves that as **propagation lag
   That version number is skipped, not consumed by a failed upload; no cleanup required.
 Publish-before-commit is therefore satisfied for 0.0.40 (public confirmation preceded this commit). The two
 `0.0.35-runtime-copy-*.png` binary diffs are unrelated churn and are deliberately EXCLUDED from this commit.
+
+## 2026-07-28 — B99 corpus-guided autocomplete + safe bulk XML transforms / Open VSX 0.0.48 — VERIFIED
+
+The Forge now turns the configured unpacked X4 corpus into authoring-time intelligence rather than
+only after-the-fact validation. Canonical base/DLC/project wares, jobs, factions, macros, sectors, and
+AI scripts drive deterministic suggestions in Wares & Jobs, visual reference fields, the embedded
+CodeMirror editor, and native Antigravity XML providers. Existing IDs are collision-gated and route
+to XML Patching instead of creating duplicates. XPath selectors complete against effective overlayed
+documents. The same reference/schema engines remain authoritative for validation.
+
+The XML Patching workbench adds a bounded Bulk Transform path for the original real-user request:
+scan a corpus path, match parsed XPath, apply multiply/add with configurable rounding, preview every
+effective base/DLC result, simulate the emitted X4 diffs, stop on ambiguity/conflict/stale state, and
+atomically add the complete patch set to the workspace under the existing checkpoint/undo system.
+Re-runs are deterministic and non-compounding because every plan derives from vanilla effective
+values. The corpus and installed game remain read-only; generated patches still follow normal
+Compile/Deploy ownership.
+
+Evidence: corpus 14/14; schema intelligence 139/139; real-corpus API 81/81 over 32 factions,
+1,902 wares, 1,192 jobs, 178 AI scripts, 170 sectors, and 6,505 macros; 3.3 ms warm suggestion p95;
+bulk preview p95 48.6 ms at the 500-file cap; focused rendered e2e 1/1; full isolated e2e 27/27 with
+`[run-e2e] VERDICT: PASS`; runtime-discovered oracles 106/106; precommit, builds, package inspection,
+and staged sidecar probe 6/6 PASS. In the existing disposable Antigravity canvas, a host reload
+restored the persisted project, canonical `energycells` completion remained live, a real XL-hull
+preview produced 43 validated patches across 80 candidates, Apply advanced undo history, and Undo
+restored the prior canvas. X4 was closed throughout.
+
+Open VSX indexed stable 0.0.48. Its public VSIX is byte-identical to the locally tested package:
+17,903,956 bytes, SHA-256
+`7EA3F0A4946822D3E63052E7659D6AFE8CE3D4468F59069070BB3E5F4A75EA2B`. Fresh-eyes review found no
+release blocker. The remaining evidenced weakness is user-visible apply latency: generating 43
+patches took roughly 40 seconds without strong progress feedback, although it completed atomically
+and Undo passed. Suggested follow-up: explicit apply-stage progress/busy feedback.
+
+Suggested commit title: `release: 0.0.48 — corpus-guided autocomplete and safe bulk XML transforms`.

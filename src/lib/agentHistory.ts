@@ -105,6 +105,7 @@ export const LEDGER_QUIET_ROUTES: string[] = [
   '/api/agent/live/cue-telemetry',
   '/api/agent/quick-fixes',
   '/api/agent/project/validate-crossfile',
+  '/api/agent/bulk-transform/preview',
   '/api/gemini',
   '/api/gemini/analyze',
   '/api/gemini/analyze-log',
@@ -131,6 +132,7 @@ export const LEDGER_ROUTES: Array<{ method: string; path: string; kind: LedgerKi
   { method: 'POST', path: '/api/agent/workspace', kind: 'workspace' },
   { method: 'POST', path: '/api/agent/workspace/merge', kind: 'workspace' },
   { method: 'POST', path: '/api/agent/workspace/restore-parked', kind: 'workspace' },
+  { method: 'POST', path: '/api/agent/bulk-transform/apply', kind: 'workspace' },
   { method: 'POST', path: '/api/agent/generate', kind: 'generate' },
   { method: 'POST', path: '/api/agent/project/generate', kind: 'generate' },
   { method: 'POST', path: '/api/fs/snapshot', kind: 'snapshot' },
@@ -369,6 +371,12 @@ export function describeAction(input: {
   }
 
   if (kind === 'workspace') {
+    if (input.routePath === '/api/agent/bulk-transform/apply') {
+      if (httpFailed) return { title: `Bulk transform REFUSED — ${cleanReason(body)}`, outcome: { status: 'error', code: body?.error || body?.code } };
+      const count = numberish(body?.added ?? body?.plan?.matchedFiles);
+      const operation = String(body?.plan?.rule?.operation || request?.rule?.operation || 'numeric');
+      return { title: `Added ${plural(count, 'validated XML patch')} — canonical ${operation} transform`, outcome: { status: 'ok' } };
+    }
     if (httpFailed) return { title: `Workspace update REFUSED — ${cleanReason(body)}`, outcome: { status: 'error', code: body?.code } };
     const nodeCount = numberish(request?.workspace?.nodes?.length);
     const name = request?.workspace?.name ? ` "${request.workspace.name}"` : '';

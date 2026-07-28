@@ -44,6 +44,32 @@ export interface SectorReference {
   source: ReferenceSource;
 }
 
+export interface JobReference {
+  id: string;
+  name: string;
+  source: ReferenceSource;
+  path: string;
+}
+
+export interface AIScriptReference {
+  id: string;
+  name: string;
+  source: ReferenceSource;
+  path: string;
+}
+
+export type CanonicalSymbolKind = 'faction' | 'ware' | 'sector' | 'macro' | 'job' | 'aiscript';
+
+export interface CanonicalSymbol {
+  kind: CanonicalSymbolKind;
+  id: string;
+  name?: string;
+  source: ReferenceSource | 'project';
+  path: string;
+  selector?: string;
+  detail?: string;
+}
+
 export interface ScriptPropertyRecord {
   name: string;
   result: string;
@@ -70,17 +96,22 @@ export interface ReferenceCorpus {
   sourceFiles: string[];
   factions: FactionReference[];
   wares: WareReference[];
+  jobs: JobReference[];
+  aiScripts: AIScriptReference[];
   sectors: SectorReference[];
+  symbols: CanonicalSymbol[];
   scriptProperties: ScriptPropertyReference[];
   references: {
     macros: Set<string>;
     wares: Set<string>;
     factions: Set<string>;
     sectors: Set<string>;
+    jobs: Set<string>;
+    aiScripts: Set<string>;
   };
 }
 
-type ReferenceFileKind = 'factions' | 'wares' | 'scriptproperties' | 'localization' | 'map' | 'macro-index';
+type ReferenceFileKind = 'factions' | 'wares' | 'jobs' | 'aiscript' | 'scriptproperties' | 'localization' | 'map' | 'macro-index';
 interface ReferenceFile { absolute: string; relative: string; source: ReferenceSource; kind: ReferenceFileKind }
 
 let cache: { root: string; signature: string; corpus: ReferenceCorpus; checkedAt: number } | null = null;
@@ -130,8 +161,10 @@ function referenceKind(relativeInput: string): ReferenceFileKind | null {
   const inner = parts[0] === 'extensions' && parts.length > 2 ? parts.slice(2).join('/') : relative;
   if (inner === 'libraries/factions.xml') return 'factions';
   if (inner === 'libraries/wares.xml') return 'wares';
+  if (inner === 'libraries/jobs.xml') return 'jobs';
   if (inner === 'libraries/scriptproperties.xml') return 'scriptproperties';
   if (inner === 'index/macros.xml') return 'macro-index';
+  if (inner.startsWith('aiscripts/') && inner.endsWith('.xml')) return 'aiscript';
   if (inner.startsWith('t/') && /-l044\.xml$/i.test(inner)) return 'localization';
   if (inner.startsWith('maps/') && inner.endsWith('.xml')) return 'map';
   return null;
@@ -140,9 +173,18 @@ function referenceKind(relativeInput: string): ReferenceFileKind | null {
 function discoverReferenceFiles(rootInput: string): { files: ReferenceFile[]; manifestGeneration?: string } {
   const root = path.resolve(rootInput);
   if (!isDirectory(root)) return { files: [] };
-  const manifest = listReferenceManifestFiles(root, { consumer: 'reference-corpus' }, 10_000);
-  if (manifest) {
-    const files = manifest.files
+  // Query by both consumer and intrinsic location. Older persisted manifest generations
+  // predate jobs/AI-script classification; intrinsic queries keep corpus loading correct
+  // until the background refresh atomically replaces that generation.
+  const manifests = [
+    listReferenceManifestFiles(root, { consumer: 'reference-corpus' }, 20_000),
+    listReferenceManifestFiles(root, { q: 'libraries/jobs.xml' }, 1_000),
+    listReferenceManifestFiles(root, { domain: 'aiscripts', extension: '.xml' }, 20_000),
+  ].filter((value): value is NonNullable<typeof value> => Boolean(value));
+  if (manifests.length) {
+    const records = new Map<string, (typeof manifests)[number]['files'][number]>();
+    for (const manifest of manifests) for (const record of manifest.files) records.set(record.path.toLowerCase(), record);
+    const files = [...records.values()]
       .map(record => {
         const kind = referenceKind(record.path);
         if (!kind || (record.source !== 'base' && !/^ego_dlc_/i.test(record.source))) return null;
@@ -152,7 +194,7 @@ function discoverReferenceFiles(rootInput: string): { files: ReferenceFile[]; ma
       })
       .filter((file): file is ReferenceFile => Boolean(file))
       .sort((a, b) => (Number(a.source !== 'base') - Number(b.source !== 'base')) || a.source.localeCompare(b.source) || a.relative.localeCompare(b.relative));
-    if (files.length) return { files, manifestGeneration: manifest.generation };
+    if (files.length) return { files, manifestGeneration: manifests[0].generation };
   }
   const files: ReferenceFile[] = [];
   const seen = new Set<string>();
@@ -172,10 +214,12 @@ function discoverReferenceFiles(rootInput: string): { files: ReferenceFile[]; ma
   const addSource = (base: string, source: ReferenceSource) => {
     add(path.join(base, 'libraries', 'factions.xml'), source, 'factions');
     add(path.join(base, 'libraries', 'wares.xml'), source, 'wares');
+    add(path.join(base, 'libraries', 'jobs.xml'), source, 'jobs');
     add(path.join(base, 'libraries', 'scriptproperties.xml'), source, 'scriptproperties');
     add(path.join(base, 'index', 'macros.xml'), source, 'macro-index');
     addTree(path.join(base, 't'), source, 'localization', p => /-l044\.xml$/i.test(p));
     addTree(path.join(base, 'maps'), source, 'map');
+    addTree(path.join(base, 'aiscripts'), source, 'aiscript');
   };
 
   addSource(root, 'base');
@@ -251,9 +295,52 @@ function parseWares(files: ReferenceFile[], loc: LocalizationMap): WareReference
   return [...found.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
 
-function parseSectorsAndMacros(files: ReferenceFile[], loc: LocalizationMap): { sectors: SectorReference[]; macros: Set<string> } {
+function parseJobs(files: ReferenceFile[], loc: LocalizationMap): JobReference[] {
+  const found = new Map<string, JobReference>();
+  for (const file of files.filter(f => f.kind === 'jobs')) {
+    const doc = parseXml(fs.readFileSync(file.absolute, 'utf8'));
+    if (!doc) continue;
+    const nodes = doc.getElementsByTagName('job');
+    for (let i = 0; i < nodes.length; i++) {
+      const el = nodes[i];
+      const id = attrs(el, 'id').trim().toLowerCase();
+      if (!id || found.has(id)) continue;
+      const rawName = attrs(el, 'name');
+      found.set(id, {
+        id,
+        name: resolveLocName(rawName, loc) || (rawName && !/^\{\s*\d+\s*,/.test(rawName) ? rawName : labelFromId(id)),
+        source: file.source,
+        path: file.relative,
+      });
+    }
+  }
+  return [...found.values()].sort((a, b) => a.id.localeCompare(b.id));
+}
+
+function parseAIScripts(files: ReferenceFile[]): AIScriptReference[] {
+  const found = new Map<string, AIScriptReference>();
+  for (const file of files.filter(f => f.kind === 'aiscript')) {
+    const doc = parseXml(fs.readFileSync(file.absolute, 'utf8'));
+    if (!doc) continue;
+    const root = doc.documentElement;
+    if (String(root?.tagName || '').toLowerCase() !== 'aiscript') continue;
+    const id = attrs(root, 'name').trim().toLowerCase();
+    if (!id || found.has(id)) continue;
+    found.set(id, { id, name: labelFromId(id), source: file.source, path: file.relative });
+  }
+  return [...found.values()].sort((a, b) => a.id.localeCompare(b.id));
+}
+
+function parseSectorsAndMacros(files: ReferenceFile[], loc: LocalizationMap): {
+  sectors: SectorReference[];
+  macros: Set<string>;
+  macroDefinitions: Map<string, { source: ReferenceSource; path: string }>;
+} {
   const sectors = new Map<string, SectorReference>();
-  const macros = new Set<string>();
+  const macroDefinitions = new Map<string, { source: ReferenceSource; path: string }>();
+  const addMacro = (id: string, file: ReferenceFile) => {
+    if (id && !macroDefinitions.has(id)) macroDefinitions.set(id, { source: file.source, path: file.relative });
+  };
   for (const file of files.filter(f => f.kind === 'macro-index' || f.kind === 'map')) {
     const doc = parseXml(fs.readFileSync(file.absolute, 'utf8'));
     if (!doc) continue;
@@ -261,7 +348,7 @@ function parseSectorsAndMacros(files: ReferenceFile[], loc: LocalizationMap): { 
       const entries = doc.getElementsByTagName('entry');
       for (let i = 0; i < entries.length; i++) {
         const id = attrs(entries[i], 'name').trim().toLowerCase();
-        if (id) macros.add(id);
+        addMacro(id, file);
       }
     }
     const nodes = doc.getElementsByTagName('macro');
@@ -269,7 +356,7 @@ function parseSectorsAndMacros(files: ReferenceFile[], loc: LocalizationMap): { 
       const el = nodes[i];
       const id = attrs(el, 'name').trim().toLowerCase();
       if (!id) continue;
-      macros.add(id);
+      addMacro(id, file);
       if (attrs(el, 'class').toLowerCase() !== 'sector' || sectors.has(id)) continue;
       const identifications = el.getElementsByTagName('identification');
       const rawName = identifications.length ? attrs(identifications[0], 'name') : '';
@@ -280,7 +367,11 @@ function parseSectorsAndMacros(files: ReferenceFile[], loc: LocalizationMap): { 
       });
     }
   }
-  return { sectors: [...sectors.values()].sort((a, b) => a.id.localeCompare(b.id)), macros };
+  return {
+    sectors: [...sectors.values()].sort((a, b) => a.id.localeCompare(b.id)),
+    macros: new Set(macroDefinitions.keys()),
+    macroDefinitions,
+  };
 }
 
 function parsePropertyReferences(files: ReferenceFile[]): ScriptPropertyReference[] {
@@ -353,9 +444,19 @@ function buildCorpus(root: string, files: ReferenceFile[], signature: string, ma
   }
   const factions = parseFactions(files, loc);
   const wares = parseWares(files, loc);
-  const { sectors, macros } = parseSectorsAndMacros(files, loc);
+  const jobs = parseJobs(files, loc);
+  const aiScripts = parseAIScripts(files);
+  const { sectors, macros, macroDefinitions } = parseSectorsAndMacros(files, loc);
   const factionIds = new Set<string>();
   for (const f of factions) { factionIds.add(f.id); factionIds.add(`faction.${f.id}`); }
+  const symbols: CanonicalSymbol[] = [
+    ...factions.map(value => ({ kind: 'faction' as const, id: value.id, name: value.name, source: value.source, path: 'libraries/factions.xml', selector: `/factions/faction[@id='${value.id}']`, detail: `${value.category}${value.isreal ? ' · political' : ''}` })),
+    ...wares.map(value => ({ kind: 'ware' as const, id: value.id, name: value.name, source: value.source, path: 'libraries/wares.xml', selector: `/wares/ware[@id='${value.id}']`, detail: [value.group, ...value.tags].filter(Boolean).join(' · ') })),
+    ...jobs.map(value => ({ kind: 'job' as const, id: value.id, name: value.name, source: value.source, path: value.path, selector: `/jobs/job[@id='${value.id}']` })),
+    ...aiScripts.map(value => ({ kind: 'aiscript' as const, id: value.id, name: value.name, source: value.source, path: value.path })),
+    ...sectors.map(value => ({ kind: 'sector' as const, id: value.id, name: value.name, source: value.source, path: 'maps', selector: `//macro[@name='${value.id}']` })),
+    ...[...macroDefinitions].map(([id, provenance]) => ({ kind: 'macro' as const, id, source: provenance.source, path: provenance.path })),
+  ].sort((a, b) => a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id));
   return {
     root,
     generatedAt: new Date().toISOString(),
@@ -364,13 +465,18 @@ function buildCorpus(root: string, files: ReferenceFile[], signature: string, ma
     sourceFiles: files.map(f => f.relative),
     factions,
     wares,
+    jobs,
+    aiScripts,
     sectors,
+    symbols,
     scriptProperties: parsePropertyReferences(files),
     references: {
       macros,
       wares: new Set(wares.map(w => w.id)),
       factions: factionIds,
       sectors: new Set(sectors.map(s => s.id)),
+      jobs: new Set(jobs.map(job => job.id)),
+      aiScripts: new Set(aiScripts.map(script => script.id)),
     },
   };
 }
@@ -430,6 +536,8 @@ export function runReferenceCorpusSelftest(): {
     write('t/0001-l044.xml', '<language id="44"><page id="1"><t id="1">Argon Federation</t><t id="2">Energy Cells</t><t id="3">Test Sector</t></page></language>');
     write('libraries/factions.xml', '<factions><faction id="argon" name="{1,1}" tags="claimspace economic"/><faction id="ownerless" tags="hidden"/></factions>');
     write('libraries/wares.xml', '<wares><ware id="energycells" name="{1,2}" group="energy" tags="economy container"/></wares>');
+    write('libraries/jobs.xml', '<jobs><job id="argon_patrol" name="Argon Patrol"/></jobs>');
+    write('aiscripts/patrol.xml', '<aiscript name="order.patrol"/>');
     write('libraries/scriptproperties.xml', '<scriptproperties><datatype name="faction" type="dbdata"><property name="id" result="ID" type="string"/><property name="name" result="Name" type="string"/></datatype></scriptproperties>');
     write('index/macros.xml', '\uFEFF<?xml version="1.0" encoding="utf-8"?><index><entry name="ship_test_macro" value="assets/ship_test"/></index>');
     write('maps/test/sectors.xml', '<macros><macro name="Cluster_Test_Sector001_macro" class="sector"><properties><identification name="{1,3}"/></properties></macro></macros>');
@@ -439,12 +547,20 @@ export function runReferenceCorpusSelftest(): {
     ok('cache reused while signature unchanged', first === second);
     ok('base faction + derived category', first.factions.find(f => f.id === 'argon')?.isreal === true && first.factions.find(f => f.id === 'ownerless')?.category === 'system');
     ok('localized ware + sector', first.wares[0]?.name === 'Energy Cells' && first.sectors[0]?.name === 'Test Sector');
+    ok('job IDs indexed with provenance', first.jobs[0]?.id === 'argon_patrol' && first.jobs[0]?.source === 'base');
+    ok('AI script names indexed', first.aiScripts[0]?.id === 'order.patrol' && first.references.aiScripts.has('order.patrol'));
+    ok('normalized symbol index built', first.symbols.some(symbol => symbol.kind === 'ware' && symbol.id === 'energycells' && symbol.selector === "/wares/ware[@id='energycells']"));
     ok('macro catalog indexed', first.references.macros.has('ship_test_macro'));
     ok('faction datatype exposes id', first.scriptProperties.find(p => p.kind === 'datatype' && p.name === 'faction')?.properties.some(p => p.name === 'id' && p.type === 'string') === true);
     write('extensions/ego_dlc_test/libraries/factions.xml', '<diff><add sel="/factions"><faction id="dlcfaction" name="DLC" tags="economic"/></add></diff>');
+    write('extensions/ego_dlc_test/libraries/jobs.xml', '<diff><add sel="/jobs"><job id="dlc_patrol" name="DLC Patrol"/></add></diff>');
+    write('extensions/ego_dlc_test/aiscripts/dlc.xml', '<aiscript name="order.dlc"/>');
     write('extensions/ego_dlc_test/libraries/scriptproperties.xml', '<diff><add sel="/scriptproperties/datatype[@name=\'faction\']"><property name="dlcproperty" result="DLC value" type="string"/></add></diff>');
+    write('extensions/ego_dlc_test/index/macros.xml', '<diff><add sel="/index"><entry name="ship_dlc_macro" value="extensions/ego_dlc_test/assets/ship_dlc"/></add></diff>');
     const added = getReferenceCorpus(tmp, true);
     ok('DLC add appears after cache refresh', added !== second && added.factions.some(f => f.id === 'dlcfaction' && f.source === 'ego_dlc_test'));
+    ok('DLC jobs and scripts appear after refresh', added.jobs.some(job => job.id === 'dlc_patrol' && job.source === 'ego_dlc_test') && added.aiScripts.some(script => script.id === 'order.dlc' && script.source === 'ego_dlc_test'));
+    ok('DLC macro symbol preserves provenance', added.symbols.some(symbol => symbol.kind === 'macro' && symbol.id === 'ship_dlc_macro' && symbol.source === 'ego_dlc_test' && /extensions\/ego_dlc_test\/index\/macros\.xml/i.test(symbol.path)));
     ok('DLC scriptproperty overlays base datatype', added.scriptProperties.find(p => p.kind === 'datatype' && p.name === 'faction')?.properties.some(p => p.name === 'dlcproperty' && p.type === 'string') === true);
     fs.rmSync(path.join(tmp, 'extensions', 'ego_dlc_test'), { recursive: true, force: true });
     const removed = getReferenceCorpus(tmp, true);

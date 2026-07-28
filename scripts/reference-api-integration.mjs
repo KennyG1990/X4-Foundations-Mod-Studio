@@ -83,6 +83,15 @@ try {
   check('isolated server ready', ready, ready ? '' : output.slice(-500));
   if (!ready) throw new Error('server did not become ready');
 
+  const makeKey = async (label, scope) => {
+    const response = await request('/api/agent/keys', { method: 'POST', token, body: { label, scope, ttl: '1h' } });
+    const body = await response.json();
+    if (!response.ok || !body.token) throw new Error(`could not create ${scope} fixture key: ${JSON.stringify(body)}`);
+    return body.token;
+  };
+  const readToken = await makeKey('reference-integration-read', 'read');
+  const writeToken = await makeKey('reference-integration-write', 'write');
+
   const factions = await request('/api/reference/factions').then((response) => response.json());
   const factionMap = new Map(factions.map((faction) => [faction.id, faction]));
   check('exactly 32 factions', factions.length === 32, String(factions.length));
@@ -97,6 +106,17 @@ try {
 
   const wares = await request('/api/reference/wares').then((response) => response.json());
   check('wares include metadata', wares.length > 1000 && wares.some((ware) => ware.id && ware.name && ware.group && Array.isArray(ware.tags) && ware.source), String(wares.length));
+  const jobs = await request('/api/reference/jobs').then((response) => response.json());
+  check('jobs include base+DLC provenance', jobs.length > 1000 && jobs.some((job) => job.id === 'dummy_job' && job.source === 'base') && jobs.some((job) => /^ego_dlc_/.test(job.source)), String(jobs.length));
+  const aiScripts = await request('/api/reference/aiscripts').then((response) => response.json());
+  check('AI scripts include canonical names', aiScripts.length > 100 && aiScripts.some((script) => script.id === 'boarding.pod'), String(aiScripts.length));
+  const wareSuggestionResponse = await request('/api/reference/suggest?kind=ware&q=energyc&intent=reference&limit=10', { token });
+  const wareSuggestions = await wareSuggestionResponse.json();
+  check('shared suggestion endpoint ranks ware prefix', wareSuggestionResponse.status === 200 && wareSuggestions.items?.[0]?.label === 'energycells', JSON.stringify(wareSuggestions.items?.slice(0, 3) || wareSuggestions));
+  const collisionResponse = await request('/api/reference/suggest?kind=ware&q=energycells&intent=new-definition&limit=10', { token });
+  const collision = await collisionResponse.json();
+  check('new-definition suggestion exposes collision', collisionResponse.status === 200 && collision.items?.[0]?.label === 'energycells' && collision.items[0].exists === true && /already exists/i.test(collision.items[0].documentation || ''), JSON.stringify(collision.items?.[0] || collision));
+  check('suggest requires auth', (await request('/api/reference/suggest?kind=ware&q=energyc&limit=10')).status === 401);
   const sectors = await request('/api/reference/sectors').then((response) => response.json());
   check('sectors include macro ids and names', sectors.length > 100 && sectors.every((sector) => sector.id.endsWith('_macro') && sector.name), String(sectors.length));
 
@@ -122,6 +142,9 @@ try {
   const cueLabels = cueCompletion.body.map((item) => item.label);
   check('cue completion is schema-contextual', cueCompletion.response.status === 200 && ['conditions', 'actions', 'cues'].every((label) => cueLabels.includes(label)), cueLabels.slice(0, 20).join(','));
   check('cue completion is not a flat vocabulary', !cueLabels.includes('ware') && !cueLabels.includes('faction'), String(cueLabels.length));
+  const readScopedCompletionCursor = cursorDoc(`${mdHeader}<cues><cue name="Root"><|`);
+  const readScopedCompletion = await request('/api/reference/complete', { method: 'POST', token: readToken, body: { path: 'md/b74.xml', ...readScopedCompletionCursor } });
+  check('read-scoped agent key can use POST completion intelligence', readScopedCompletion.status === 200, `status=${readScopedCompletion.status}`);
   const afterConditions = await complete('md/b74.xml', `${mdHeader}<cues><cue name="Root"><conditions/><|`);
   const afterConditionLabels = afterConditions.body.map((item) => item.label);
   check('cue completion consumes prior sequence state', !afterConditionLabels.includes('conditions') && ['actions', 'delay', 'cues'].every((label) => afterConditionLabels.includes(label)), afterConditionLabels.join(','));
@@ -138,7 +161,7 @@ try {
   }
   const sortedWarm = [...warmLatencies].sort((a, b) => a - b);
   const warmP95 = sortedWarm[Math.max(0, Math.ceil(sortedWarm.length * 0.95) - 1)] || Infinity;
-  check('warm completion p95 under 100ms', warmLatencies.length === 20 && warmP95 < 100, `${warmP95.toFixed(1)}ms`);
+  check('warm completion p95 under 50ms', warmLatencies.length === 20 && warmP95 < 50, `${warmP95.toFixed(1)}ms`);
 
   const factionLookup = await complete('md/b74.xml', `${mdHeader}<cues><cue name="Root"><actions><set_value name="$x" exact="faction.|"/></actions></cue></cues></mdscript>`);
   check('faction lookup completes exactly canonical ids', factionLookup.body.length === 32 && factionLookup.body.some((item) => item.label === 'fallensplit') && !factionLookup.body.some((item) => item.label === 'riptide'), String(factionLookup.body.length));
@@ -184,6 +207,146 @@ try {
   check('diff API reports zero-match selector', deadDiffResponse.status === 200 && deadDiff.findings?.some((finding) => finding.code === 'DIFF_SELECTOR_ZERO'), JSON.stringify(deadDiff.findings || deadDiff));
   check('diff API requires authentication', (await request('/api/reference/simulate-diff', { method: 'POST', body: { path: 'libraries/factions.xml', content: '<diff/>' } })).status === 401);
   check('diff API rejects traversal', (await request('/api/reference/simulate-diff', { method: 'POST', token, body: { path: '../outside.xml', content: '<diff/>' } })).status === 403);
+
+  let bulkManifestReady = false;
+  let bulkManifestStatus = null;
+  // A cold scan covers the complete million-file unpacked corpus. On slower disks that
+  // legitimately takes well over the former fixed 60-second window, so readiness is
+  // deadline-based and reports the last observed scanner state instead of racing it.
+  const bulkManifestDeadline = Date.now() + Number(process.env.X4_FORGE_MANIFEST_WAIT_MS || 360_000);
+  while (Date.now() < bulkManifestDeadline) {
+    const manifestResponse = await request('/api/reference/manifest?q=assets%2Funits%2Fsize_xl%2Fmacros&extension=xml&limit=1');
+    const manifest = await manifestResponse.json().catch(() => ({}));
+    bulkManifestStatus = { httpStatus: manifestResponse.status, body: manifest };
+    if (manifestResponse.status === 200 && manifest.generation && manifest.total > 0) { bulkManifestReady = true; break; }
+    if (manifestResponse.status === 503 && /^(error|unavailable)$/.test(String(manifest.status?.state || ''))) break;
+    await sleep(1_000);
+  }
+  check('canonical manifest ready for bulk path enumeration', bulkManifestReady, bulkManifestReady ? '' : JSON.stringify(bulkManifestStatus));
+  const bulkRule = { pathPrefix: 'assets/units/size_xl/macros', selector: '/macros/macro/properties/hull/@max', operation: 'multiply', operand: 1.5, rounding: 'none', maxFiles: 500 };
+  const beforeBulk = await request('/api/agent/workspace', { token }).then((response) => response.json());
+  const bulkPreviewResponse = await request('/api/agent/bulk-transform/preview', { method: 'POST', token, body: { rule: bulkRule } });
+  const bulkPreview = await bulkPreviewResponse.json();
+  const afterPreview = await request('/api/agent/workspace', { token }).then((response) => response.json());
+  check('bulk preview resolves and simulates real canonical macro matches', bulkPreviewResponse.status === 200 && bulkPreview.ok === true && bulkPreview.rows?.length > 0 && bulkPreview.rows.every((row) => row.simulationOk), JSON.stringify({ status: bulkPreviewResponse.status, matched: bulkPreview.matchedFiles, findings: bulkPreview.findings }));
+  check('bulk preview reports every scanned logical file', Array.isArray(bulkPreview.files)
+    && bulkPreview.files.length === bulkPreview.candidateCount
+    && bulkPreview.files.filter((file) => file.status === 'matched').length === bulkPreview.matchedFiles
+    && bulkPreview.files.filter((file) => file.status === 'skipped').length === bulkPreview.skippedFiles,
+  JSON.stringify({ candidates: bulkPreview.candidateCount, files: bulkPreview.files?.length, matched: bulkPreview.matchedFiles, skipped: bulkPreview.skippedFiles }));
+  check('bulk preview preserves base and official DLC source provenance', bulkPreview.files?.some((file) => file.sources?.some((source) => source.source === 'base'))
+    && bulkPreview.files?.some((file) => file.sources?.some((source) => /^ego_dlc_/.test(source.source))),
+  JSON.stringify(bulkPreview.files?.filter((file) => file.sources?.some((source) => /^ego_dlc_/.test(source.source))).slice(0, 2) || []));
+  check('bulk preview writes nothing', beforeBulk.workspaceHash === afterPreview.workspaceHash && beforeBulk.version === afterPreview.version, `${beforeBulk.workspaceHash} -> ${afterPreview.workspaceHash}`);
+  const quantumResponse = await request('/api/agent/bulk-transform/preview', {
+    method: 'POST', token: readToken,
+    body: { rule: { ...bulkRule, operand: 1.337, rounding: 'ceil', roundingIncrement: 1000 } },
+  });
+  const quantumPreview = await quantumResponse.json();
+  check('bulk rounding quantum supports ceil-to-1000 hull transforms', quantumResponse.status === 200
+    && quantumPreview.rows?.length > 0
+    && quantumPreview.rows.every((row) => Number(row.newValue) % 1000 === 0),
+  JSON.stringify({ status: quantumResponse.status, sample: quantumPreview.rows?.slice(0, 3).map((row) => [row.oldValue, row.newValue]) }));
+  const invalidQuantum = await request('/api/agent/bulk-transform/preview', {
+    method: 'POST', token: readToken,
+    body: { rule: { ...bulkRule, rounding: 'ceil', roundingIncrement: 0 } },
+  });
+  const afterInvalidQuantum = await request('/api/agent/workspace', { token }).then((response) => response.json());
+  check('invalid rounding quantum blocks with zero mutation', invalidQuantum.status === 422 && afterInvalidQuantum.workspaceHash === beforeBulk.workspaceHash, `status=${invalidQuantum.status}`);
+  check('bulk preview requires authentication', (await request('/api/agent/bulk-transform/preview', { method: 'POST', body: { rule: bulkRule } })).status === 401);
+  const readScopedPreview = await request('/api/agent/bulk-transform/preview', { method: 'POST', token: readToken, body: { rule: bulkRule } });
+  check('read-scoped agent key can run no-write bulk preview', readScopedPreview.status === 200, `status=${readScopedPreview.status}`);
+  const readScopedApply = await request('/api/agent/bulk-transform/apply', { method: 'POST', token: readToken, body: { rule: bulkRule, expectedPlanHash: bulkPreview.planHash, expectedHead: bulkPreview.workspaceHash } });
+  check('read-scoped agent key cannot apply a bulk mutation', readScopedApply.status === 403, `status=${readScopedApply.status}`);
+  const stalePlanResponse = await request('/api/agent/bulk-transform/apply', { method: 'POST', token, body: { rule: bulkRule, expectedPlanHash: 'definitely-stale', expectedHead: beforeBulk.workspaceHash } });
+  const afterStale = await request('/api/agent/workspace', { token }).then((response) => response.json());
+  check('stale bulk plan is rejected with zero mutation', stalePlanResponse.status === 409 && afterStale.workspaceHash === beforeBulk.workspaceHash, `status=${stalePlanResponse.status}`);
+  const traversalBulk = await request('/api/agent/bulk-transform/preview', { method: 'POST', token, body: { rule: { ...bulkRule, pathPrefix: '../outside' } } });
+  check('bulk transform rejects traversal', traversalBulk.status === 400, `status=${traversalBulk.status}`);
+  const invalidXPathBulk = await request('/api/agent/bulk-transform/preview', { method: 'POST', token, body: { rule: { ...bulkRule, selector: '//*[' } } });
+  const invalidXPathBody = await invalidXPathBulk.json();
+  const afterInvalidXPath = await request('/api/agent/workspace', { token }).then((response) => response.json());
+  check('bulk transform rejects invalid XPath with zero mutation', invalidXPathBulk.status === 422
+    && invalidXPathBody.findings?.some((finding) => finding.code === 'BULK_SELECTOR_INVALID')
+    && afterInvalidXPath.workspaceHash === beforeBulk.workspaceHash,
+  JSON.stringify({ status: invalidXPathBulk.status, finding: invalidXPathBody.findings?.[0] }));
+  const zeroMatchBulk = await request('/api/agent/bulk-transform/preview', { method: 'POST', token, body: { rule: { ...bulkRule, selector: '/macros/macro/properties/definitely_missing/@max' } } });
+  const zeroMatchBody = await zeroMatchBulk.json();
+  const afterZeroMatch = await request('/api/agent/workspace', { token }).then((response) => response.json());
+  check('bulk transform rejects an all-file zero match with per-file skips and zero mutation', zeroMatchBulk.status === 422
+    && zeroMatchBody.findings?.some((finding) => finding.code === 'BULK_NO_MATCHES')
+    && zeroMatchBody.files?.length === zeroMatchBody.candidateCount
+    && zeroMatchBody.files?.every((file) => file.status === 'skipped')
+    && afterZeroMatch.workspaceHash === beforeBulk.workspaceHash,
+  JSON.stringify({ status: zeroMatchBulk.status, candidates: zeroMatchBody.candidateCount, files: zeroMatchBody.files?.length }));
+  const cappedBulk = await request('/api/agent/bulk-transform/preview', { method: 'POST', token, body: { rule: { ...bulkRule, maxFiles: 1 } } });
+  const cappedBody = await cappedBulk.json();
+  const afterCap = await request('/api/agent/workspace', { token }).then((response) => response.json());
+  check('bulk cap breach blocks all output and mutation', cappedBulk.status === 422 && cappedBody.droppedCount > 0 && cappedBody.rows?.length === 0 && afterCap.workspaceHash === beforeBulk.workspaceHash, JSON.stringify({ status: cappedBulk.status, dropped: cappedBody.droppedCount, rows: cappedBody.rows?.length }));
+  if (bulkPreview.ok) {
+    const applyResponse = await request('/api/agent/bulk-transform/apply', { method: 'POST', token: writeToken, body: { rule: bulkRule, expectedPlanHash: bulkPreview.planHash, expectedHead: bulkPreview.workspaceHash } });
+    const applied = await applyResponse.json();
+    check('bulk apply atomically updates workspace patch state', applyResponse.status === 200 && applied.applied === true && applied.workspace?.xmlPatches?.length === bulkPreview.matchedFiles, JSON.stringify({ status: applyResponse.status, patches: applied.workspace?.xmlPatches?.length, expected: bulkPreview.matchedFiles }));
+    const compileResponse = await request('/api/agent/compile', { method: 'POST', token, body: { workspace: applied.workspace } });
+    const compiled = await compileResponse.json();
+    const compiledTargets = bulkPreview.rows.every((row) => {
+      const content = compiled.files?.[row.targetFile];
+      return typeof content === 'string'
+        && content.includes(`<replace sel="${row.selector}">${row.newValue}</replace>`);
+    });
+    check('bulk-generated patches compile through the normal project path', compileResponse.status === 200
+      && compiled.validation?.ok === true
+      && compiledTargets,
+    JSON.stringify({ status: compileResponse.status, validation: compiled.validation?.summary, targets: bulkPreview.rows.length, compiledTargets }));
+
+    const corruptedWorkspace = structuredClone(applied.workspace);
+    corruptedWorkspace.xmlPatches[0].sel = '//*[';
+    const corruptCompileResponse = await request('/api/agent/compile', { method: 'POST', token, body: { workspace: corruptedWorkspace } });
+    const corruptCompiled = await corruptCompileResponse.json();
+    const corruptFinding = (corruptCompiled.diagnostics || []).find((finding) => finding.code === 'DIFF_SELECTOR_INVALID');
+    check('normal validation cites a deliberately corrupted generated selector', corruptCompileResponse.status === 200
+      && corruptCompiled.validation?.ok === false
+      && corruptFinding?.severity === 'error'
+      && corruptFinding?.filePath === corruptedWorkspace.xmlPatches[0].targetFile,
+    JSON.stringify(corruptFinding || corruptCompiled.validation));
+
+    const rerunPreviewResponse = await request('/api/agent/bulk-transform/preview', { method: 'POST', token, body: { rule: bulkRule } });
+    const rerunPreview = await rerunPreviewResponse.json();
+    const rerunApplyResponse = await request('/api/agent/bulk-transform/apply', { method: 'POST', token: writeToken, body: { rule: bulkRule, expectedPlanHash: rerunPreview.planHash, expectedHead: rerunPreview.workspaceHash } });
+    const rerunApplied = await rerunApplyResponse.json();
+    check('bulk rerun is idempotent and does not duplicate blocks', rerunPreviewResponse.status === 200 && rerunApplyResponse.status === 200 && rerunApplied.applied === false && rerunApplied.workspace?.xmlPatches?.length === bulkPreview.matchedFiles, JSON.stringify({ preview: rerunPreviewResponse.status, apply: rerunApplyResponse.status, applied: rerunApplied.applied, patches: rerunApplied.workspace?.xmlPatches?.length }));
+
+    const conflictWorkspace = structuredClone(rerunApplied.workspace);
+    conflictWorkspace.wares.push({
+      id: 'project_fuel', name: 'Project Fuel', description: 'Project-defined completion fixture',
+      transport: 'container', volume: 1, minPrice: 1, avgPrice: 1, maxPrice: 1,
+      prodTime: 1, prodAmount: 1, includeInBuild: true,
+    });
+    conflictWorkspace.xmlPatches.push({
+      id: 'manual_conflict', action: 'replace', sel: bulkPreview.rows[0].selector,
+      content: bulkPreview.rows[0].newValue, note: 'manual conflict fixture',
+      targetFile: bulkPreview.rows[0].targetFile, includeInBuild: true,
+    });
+    const seedConflictResponse = await request('/api/agent/workspace', { method: 'POST', token, body: { workspace: conflictWorkspace, expectedHead: rerunApplied.workspaceHash } });
+    const seededConflict = await seedConflictResponse.json();
+    const conflictPreviewResponse = await request('/api/agent/bulk-transform/preview', { method: 'POST', token, body: { rule: bulkRule } });
+    const conflictPreview = await conflictPreviewResponse.json();
+    const afterConflictPreview = await request('/api/agent/workspace', { token }).then((response) => response.json());
+    check('user-authored patch conflict blocks the whole plan with zero preview mutation', seedConflictResponse.status === 200
+      && conflictPreviewResponse.status === 422
+      && conflictPreview.findings?.some((finding) => finding.code === 'BULK_PATCH_CONFLICT')
+      && afterConflictPreview.workspaceHash === seededConflict.workspaceHash,
+    JSON.stringify({ seed: seedConflictResponse.status, preview: conflictPreviewResponse.status, conflicts: conflictPreview.conflicts?.length }));
+    const projectSuggestionResponse = await request('/api/reference/suggest?kind=ware&q=project_f&intent=reference&limit=10', { token });
+    const projectSuggestion = await projectSuggestionResponse.json();
+    check('project-defined symbols layer over the canonical suggestion API', projectSuggestionResponse.status === 200
+      && projectSuggestion.items?.some((item) => item.label === 'project_fuel' && item.source === 'project'),
+    JSON.stringify(projectSuggestion.items || projectSuggestion));
+    const projectCompletion = await complete('libraries/wares.xml', '<wares><ware id="fixture"><production><primary ware="project_f|"/></production></ware></wares>');
+    check('project-defined symbols flow through document completion', projectCompletion.response.status === 200
+      && projectCompletion.body?.some((item) => item.label === 'project_fuel' && /project/i.test(item.detail || '')),
+    JSON.stringify(projectCompletion.body || null));
+  }
 
   check('completion POST requires authentication', (await request('/api/reference/complete', { method: 'POST', body: { path: 'md/x.xml', content: '<x/>', line: 0, column: 0 } })).status === 401);
   check('invalid cursor rejected', (await request('/api/reference/complete', { method: 'POST', token, body: { path: 'md/x.xml', content: '<x/>', line: 9, column: 0 } })).status === 400);

@@ -61,7 +61,10 @@ test('template click summons the guided rail and walks all three steps', async (
   await expect(page.getByTestId('rail-deploy')).toBeVisible();
 
   // Step 3 via the chip: watcher status renders.
-  await page.getByTestId('rail-step-3').click();
+  // The performance HUD continuously re-renders the rail subtree; invoke the semantic
+  // button action directly so Playwright does not require a detached/replaced node to
+  // remain layout-stable between pointer down/up. The next assertion proves the action.
+  await page.getByTestId('rail-step-3').evaluate(element => (element as HTMLButtonElement).click());
   await expect(page.getByTestId('rail-game')).toBeVisible();
 
   // Dismiss → rail gone.
@@ -71,7 +74,8 @@ test('template click summons the guided rail and walks all three steps', async (
   // The loaded template synced to the EPHEMERAL server for real (no route theater):
   // its active workspace is now the welcome template, and nothing here touched the
   // live dev stack — isolation is the config's job, not this spec's.
-  await page.waitForTimeout(800);
-  const serverWs = await readServerWorkspace();
-  expect(serverWs.name).toBe('X4_Welcome_Message');
+  await expect.poll(async () => (await readServerWorkspace()).name, {
+    timeout: 15_000,
+    message: 'the selected template should finish its queued CAS save before the page closes',
+  }).toBe('X4_Welcome_Message');
 });

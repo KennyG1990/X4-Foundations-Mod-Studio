@@ -57,17 +57,24 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: 'npx tsx server.ts',
+      // Own the real long-lived Node process directly. `npx` adds a wrapper process on
+      // Windows, which can exit independently and leave Playwright with no useful reason
+      // when the child server disappears mid-suite.
+      command: 'node node_modules/tsx/dist/cli.mjs server.ts',
       url: `http://127.0.0.1:${E2E_API_PORT}/api/agent/schema`,
       reuseExistingServer: false,
       timeout: 120_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
       env: { ...ephemeralEnv, PORT: String(E2E_API_PORT) },
     },
     {
-      command: `npx vite --host 127.0.0.1 --port ${E2E_WEB_PORT} --strictPort`,
+      command: `node node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${E2E_WEB_PORT} --strictPort`,
       url: `http://127.0.0.1:${E2E_WEB_PORT}`,
       reuseExistingServer: false,
       timeout: 120_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
       env: ephemeralEnv,
     },
   ],

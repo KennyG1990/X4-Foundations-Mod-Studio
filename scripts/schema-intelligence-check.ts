@@ -13,6 +13,11 @@ import { runExpressionAstSelftest } from '../src/lib/expressionAst';
 import { runProjectSymbolsSelftest } from '../src/lib/projectSymbols';
 import { runDiffSimulatorSelftest } from '../src/lib/diffSimulator';
 import { runReferenceOverlaySelftest } from '../src/lib/referenceOverlay';
+import { runReferenceSuggestionsSelftest } from '../src/lib/referenceSuggestions';
+import { runReferenceBindingsSelftest } from '../src/lib/referenceBindings';
+import { runXPathCompletionSelftest } from '../src/lib/xpathCompletion';
+import { runBulkCorpusTransformSelftest } from '../src/lib/bulkCorpusTransform';
+import { runModDoctorReferenceSelftest } from '../src/lib/modDoctor';
 
 const scriptPropertyIndex = buildScriptPropertyIndex(SCRIPT_PROPERTIES_FIXTURE);
 
@@ -25,6 +30,11 @@ const suites = [
   ['diff-simulator', runDiffSimulatorSelftest()],
   ['reference-overlay', runReferenceOverlaySelftest()],
   ['reference-language', runReferenceLanguageSelftest()],
+  ['reference-suggestions', runReferenceSuggestionsSelftest()],
+  ['reference-bindings', runReferenceBindingsSelftest()],
+  ['xpath-completion', runXPathCompletionSelftest()],
+  ['bulk-corpus-transform', runBulkCorpusTransformSelftest()],
+  ['mod-doctor-reference', runModDoctorReferenceSelftest()],
   ['reference-literals', runReferenceLiteralLintSelftest()],
 ] as const;
 

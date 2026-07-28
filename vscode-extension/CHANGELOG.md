@@ -3,6 +3,12 @@
 The latest changes, newest first. (This page is generated automatically — see
 `release-notes.json` to edit the wording.)
 
+## 0.0.48 — 2026-07-28
+
+- Autocomplete in native Antigravity XML editors now opens while you type chained script expressions such as faction.player., not only after manually requesting suggestions. Project-defined ids keep their exact authored capitalization in both completion and hover results.
+- Duplicate ware and job ids now keep an EXISTS explanation and a visible Patch existing action after the authoritative corpus check finishes. The recovery action no longer disappears when the suggestion popup closes.
+- The corpus-authoring workflow is now covered end to end in Forge's isolated extension test stack: ware, faction, AI-script and macro suggestions; XPath completion; per-file base/DLC bulk preview; atomic apply; and exact undo all run through one verified user path.
+
 ## 0.0.46 — 2026-07-26
 
 - You can now deploy while X4 is running. Deploying used to fail with a file-in-use error whenever the game was open, because it re-copied every file including ones that had not changed — and the game holds an exclusive lock on the LuaSocket native library for the whole session. Unchanged files are now skipped (compared by size and content, never timestamps), so the one locked file no longer blocks anything. This turns a mod iteration from close-the-game, deploy, relaunch, reload-a-save into deploy and reload in-game.

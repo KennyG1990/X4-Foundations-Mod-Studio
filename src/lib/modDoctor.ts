@@ -46,7 +46,8 @@ const push = (
 export function runModDoctor(
   workspace: ModWorkspace,
   files: Record<string, string>,
-  modId: string
+  modId: string,
+  options: { canonicalAiScripts?: Set<string> } = {},
 ): ModDoctorDiagnostic[] {
   const diagnostics: ModDoctorDiagnostic[] = [];
   const settings = { ...DEFAULT_COMPILE_SETTINGS, ...(workspace.compileSettings || {}) };
@@ -322,7 +323,10 @@ export function runModDoctor(
         });
       }
 
-      const scriptNames = new Set(active(workspace.aiScripts).map(script => script.name));
+      const scriptNames = new Set([
+        ...active(workspace.aiScripts).map(script => script.name),
+        ...(options.canonicalAiScripts || []),
+      ]);
       if (job.taskScript && !scriptNames.has(job.taskScript)) {
         push(diagnostics, {
           severity: 'warning',
@@ -331,7 +335,7 @@ export function runModDoctor(
           domain: 'libraries',
           filePath,
           sourceRef: { kind: 'job', id: job.id, label: job.name },
-          message: `Job "${job.id || job.name}" references task script "${job.taskScript}", but no included AI script with that name exists in the workspace.`
+          message: `Job "${job.id || job.name}" references task script "${job.taskScript}", but it is absent from both the included workspace scripts and the configured canonical X4 corpus.`
         });
       }
     });
@@ -476,4 +480,23 @@ export function runModDoctor(
   }
 
   return diagnostics;
+}
+
+export function runModDoctorReferenceSelftest() {
+  const workspace = {
+    id: 'doctor_reference_fixture', name: 'Doctor Reference Fixture', version: '1.0.0', author: 'Forge', description: '',
+    nodes: [], links: [], uiWidgets: [], uiTheme: { backgroundColor: '#000', borderColor: '#000', accentColor: '#0ff', opacity: 1, showIcons: true },
+    compileSettings: { md: false, ui: false, ai: false, library: true, translations: false, patches: false },
+    jobs: [{ id: 'fixture_job', name: 'Fixture', faction: 'argon', shipClass: 'fighter', shipMacro: 'ship_arg_s_fighter_01_a_macro', galaxyQuota: 1, sectorQuota: 1, taskScript: 'order.patrol', rebuildOnDestroy: true, includeInBuild: true }],
+  } as ModWorkspace;
+  const files = { 'content.xml': '<content id="doctor_reference_fixture" name="Doctor Reference Fixture" author="Forge" version="100"/>', 'libraries/jobs.xml': '<jobs/>' };
+  const canonical = runModDoctor(workspace, files, 'doctor_reference_fixture', { canonicalAiScripts: new Set(['order.patrol']) });
+  const unknownWorkspace = { ...workspace, jobs: workspace.jobs!.map(job => ({ ...job, taskScript: 'order.definitely_missing' })) };
+  const unknown = runModDoctor(unknownWorkspace, files, 'doctor_reference_fixture', { canonicalAiScripts: new Set(['order.patrol']) });
+  const checks = [
+    { name: 'canonical AI task does not false-warn', pass: !canonical.some(finding => finding.code === 'job.task_script_missing') },
+    { name: 'unknown AI task remains an advisory warning', pass: unknown.some(finding => finding.code === 'job.task_script_missing' && finding.severity === 'warning') },
+  ];
+  const passed = checks.filter(check => check.pass).length;
+  return { allPassed: passed === checks.length, pass: passed === checks.length, passed, total: checks.length, checks };
 }

@@ -1,75 +1,66 @@
-# X4 Forge session handoff — 2026-07-25 · 0.0.43 published · deploy fixed, ledger shipped, friction pass 10/10
+# X4 Forge session handoff — 2026-07-28 · B99 / 0.0.48 VERIFIED and public
 
 ## One-line state
 
-Three releases shipped today (0.0.41 → 0.0.43, all published and store-verified); deployment survives a
-held Windows folder, the author chooses loose vs CAT/DAT, agents have an action history, and the
-ten-item user-friction brief is fully implemented — with **B81 (`/api/fs/read` root) still open and
-still the resident agent's #1**.
+B99 is complete: corpus-guided autocomplete and safe bulk XML transforms are implemented, fully
+validated, visibly proven in installed Antigravity, and published as stable X4 Forge Studio 0.0.48.
+B98 deployment work remains the next separate P0. X4 and installed mods were not touched.
 
-## What shipped today
+## Closed bounded task
 
-| Release | Contents |
-|---|---|
-| **0.0.41** | B83 locked-root deploy fallback · B84 deploy-format toggle + loose stale-removal + `schemaDir` blanking fix · B86 Agent Action Ledger |
-| **0.0.42** | Ledger fixes: errors NAME the error, coverage inverted to deny-list (6 → all mutating routes), node linkage |
-| **0.0.43** | B93 user-friction pass, 10/10 items across three waves; **closes B82** |
+- **B99 status:** `VERIFIED`.
+- **Plan and detailed evidence:** `docs/plans/2026-07-26-bulk-corpus-transform.md`.
+- **Public package:** `x4forge.x4-forge-studio` 0.0.48 on Open VSX.
+- **Artifact identity:** 17,903,956 bytes; SHA-256
+  `7EA3F0A4946822D3E63052E7659D6AFE8CE3D4468F59069070BB3E5F4A75EA2B`; public download and local
+  tested VSIX are byte-identical.
+- **Core behavior:** effective base+DLC/project reference completion for wares, jobs, factions,
+  sectors, macros, and AI scripts; collision-safe new-definition fields; shared webview/native editor
+  completion; effective-document XPath completion; bounded numeric bulk preview/apply with simulation,
+  caps, conflict detection, plan/head CAS, idempotence, checkpoint, and Undo.
+- **Proof:** corpus 14/14; schema intelligence 139/139; real-corpus API 81/81; warm completion p95
+  3.3 ms; 500-file bulk preview p95 48.6 ms; focused rendered e2e 1/1; full e2e 27/27 PASS; oracles
+  106/106; precommit/build/package/staged probe PASS.
+- **Installed-host proof:** the existing intentionally disposable Antigravity canvas survived a real
+  extension-host reload and restored the same project. Post-reload `energyc` completion ranked
+  canonical `energycells` first with source/provenance and Patch-existing behavior. A real 80-file XL
+  hull preview produced 43 green patches; Apply advanced undo history and Undo restored the canvas.
+- **Scope boundary:** no game launch, corpus mutation, installed-mod write, deployment, or AI/network
+  spending surface was involved.
 
-## The 0.0.43 API surface an agent should know
+## Remaining record boundary
 
-- **Discovery — stop port-scanning.** `~/.x4forge/latest.json` (and `instances/<pid>.json`) carry
-  `{port, token, pid, startedAt, cwd, mode}`, `0600`, pruned when the process dies. **Check `pid`
-  liveness if you cache it.**
-- **`GET /api/agent/status`** — port, workspace, roots, last deploy, readiness, ledger counts, and
-  canvas-vs-source staleness *with the exact call that fixes it*.
-- **`POST /api/agent/project/validate {root, path}`** — same shape as `mod-folder/import`; stop
-  building file lists by hand.
-- **`POST /api/agent/deploy-verify {dryRun: true}`** — added/overwritten/**deleted**/preserved with
-  sizes, writes nothing. `{autoReimport: true}` clears a stale canvas in one step.
-- **`POST /api/agent/check-expression {expression, variableTypes?}`** — one expression, no 34-file
-  payload. Live-proven: `$station.manager` → `legal:false`.
-- **`POST /api/fs/write`** returns a receipt: bytes, sha256, `byteExact`, CRLF/LF profile. You can
-  drop your own byte-exact readback.
-- **Wrong verb → 405 + `Allow`. Unknown API path → JSON 404.** No more SPA HTML on an API route.
+The repo-local backlog, roadmap, plan, release notes, and handoff are closed. The StarForge capability
+map and project AAR are outside the authorized workspace and still require Ken's explicit external
+write-gate response before they may be updated.
 
-## Gates (all green at close)
+## Dirty baseline to preserve
 
-typecheck · lint 0 errors · oracles **104/104** · routes **141/141** · **e2e 26/26 PASS** · precommit ·
-build. Store: `0.0.43` on both endpoints.
+- `KNOWN-BUGS.md` is unrelated untracked user work.
+- `vscode-extension/evidence/0.0.35-runtime-copy-live.png` and
+  `vscode-extension/evidence/0.0.35-runtime-copy-startup.png` are unrelated modified evidence.
+- Do not stage, overwrite, or restore those three paths.
 
-## Live hazards / do not repeat
+## Next bounded work
 
-- **A stale discovery record is worse than none.** The oracle harness once published into the real
-  `~/.x4forge` and exited, advertising a dead port. Every test harness now sets
-  `X4FORGE_DISCOVERY_DIR`; keep it that way for any new harness that boots a server.
-- **Never generate nested escapes (`\r\n`, XML) through a Python heredoc into JS** — collapsed to real
-  newlines twice today. Use `String.fromCharCode` / array `.join()`, or edit the file directly.
-- Test fixtures must be owned by the assertion that needs them; borrowing another section's fixture
-  produced an ordering-dependent failure.
-- Do not run `graphify update .` (B77). The **post-commit hook already runs graphify automatically** —
-  that is why the tracked evidence PNGs keep changing with nobody admitting to it. Those two PNGs stay
-  unstaged.
-- The installed sidecar always lags the repo; validating a repo fix against the installed extension
-  reproduces the OLD bug. Install first, then reload the window.
+B98: safely deploy when an installed mod root or payload is locked, preserving verified backup,
+exact synchronization, rollback, and the normal rename-based fast path. Reconcile its current state
+before changing it; do not conflate B98 with B99.
 
-## Eyeball queue (Ken, ~60 seconds)
+## Eyeball queue
 
-1. **Agent API → History**: rows now NAME errors (`Validated 1 file — 4 errors: Extension has no
-   content.xml… (+3 more)`), expand shows readable `ERR file:line — message [code]`, and node chips
-   focus the canvas.
-2. **Compile/Deploy wizard**: DEPLOY FORMAT toggle, Loose selected.
+No B99 Ken-eyeball item remains. The persistent canvas is an intentional disposable validation
+fixture and may be reloaded or changed for controlled Forge tests; use the already-open Antigravity
+instance rather than launching another copy. X4/live-mod checks remain separate and Ken-gated.
 
-## Open, in priority order
+## Commit question
 
-1. **B81 — `/api/fs/read` resolves the deployment, not the workspace.** The resident agent's #1; it
-   bypasses the API with Python on every edit, so its reads are invisible to the ledger. Needs
-   `root=workspace|deployment` + **error when the requested root lacks the file**, not silent fallthrough.
-2. **B88** validate-on-write (`strict:true`) · **B89** Lua gate (wire + extend; six modules already
-   exist) · **B90** edit-path byte fidelity → **gates B91** per-node editing · **B92** transactional
-   multi-edit.
-3. **B85** four deploy-format decisions · **B87** QOL/redundancy pass (start with the self-declared
-   deprecated `/api/agent/deploy`).
+B99 is at its verified release commit point. Suggested title:
+`release: 0.0.48 — corpus-guided autocomplete and safe bulk XML transforms`.
 
-## Commit point
+## Highest-risk current hazard
 
-`release: 0.0.43 — the user-friction pass, 10/10 items`
+Installed bulk Apply took roughly 40 seconds for 43 patches and initially looked idle. It completed
+atomically and Undo passed, but future work should add explicit stage/progress feedback. Do not confuse
+the Forge header `v1.0.322` with extension version 0.0.48; verify the extension details/version and
+post-reload behavior.

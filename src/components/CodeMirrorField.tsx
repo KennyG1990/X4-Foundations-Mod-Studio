@@ -17,10 +17,11 @@
 
 import React, { useEffect, useRef } from 'react';
 import { EditorState } from '@codemirror/state';
-import { EditorView, lineNumbers, highlightActiveLine, highlightActiveLineGutter, keymap } from '@codemirror/view';
+import { EditorView, lineNumbers, highlightActiveLine, highlightActiveLineGutter, hoverTooltip, keymap } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { bracketMatching, indentOnInput, foldGutter } from '@codemirror/language';
 import { xml } from '@codemirror/lang-xml';
+import { autocompletion, snippet, type CompletionContext } from '@codemirror/autocomplete';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { MergeView, unifiedMergeView } from '@codemirror/merge';
 import { lintGutter, setDiagnostics, type Diagnostic as CodeMirrorDiagnostic } from '@codemirror/lint';
@@ -35,6 +36,8 @@ export interface CodeMirrorFieldProps {
   diffMode?: 'split' | 'unified';
   /** Current-file findings from the Forge's continuous full-project validator. */
   diagnostics?: PackageDiagnostic[];
+  /** Mod-relative path used to route XSD grammar and corpus-aware completion/hover. */
+  filePath?: string;
   className?: string;
 }
 
@@ -52,7 +55,97 @@ const appTheme = EditorView.theme(
   { dark: true },
 );
 
-function baseExtensions(readOnly: boolean) {
+type ReferenceCompletionPayload = {
+  label: string;
+  kind: 'Element' | 'Attribute' | 'Enum' | 'Reference' | 'Property' | 'Function';
+  detail?: string;
+  insertText: string;
+  documentation?: string;
+  sortText?: string;
+};
+
+type ReferenceHoverPayload = {
+  signature: string;
+  documentation?: string;
+  detail?: string;
+};
+
+function completionStart(context: CompletionContext, kind: ReferenceCompletionPayload['kind']): number {
+  const text = context.state.doc.sliceString(0, context.pos);
+  const pattern = kind === 'Property' || kind === 'Function' ? /[A-Za-z0-9_?:-]*$/ : /[A-Za-z0-9_$?.:-]*$/;
+  return context.pos - (text.match(pattern)?.[0].length || 0);
+}
+
+function referenceLanguageExtensions(filePath: string) {
+  const completion = autocompletion({
+    activateOnTyping: true,
+    override: [async (context: CompletionContext) => {
+      const last = context.state.doc.sliceString(Math.max(0, context.pos - 1), context.pos);
+      if (!context.explicit && !/[A-Za-z0-9_.$?:<@'"-]/.test(last)) return null;
+      const line = context.state.doc.lineAt(context.pos);
+      const controller = new AbortController();
+      context.addEventListener('abort', () => controller.abort(), { onDocChange: true });
+      try {
+        const response = await fetch('/api/reference/complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: filePath, content: context.state.doc.toString(), line: line.number - 1, column: context.pos - line.from }),
+          signal: controller.signal,
+        });
+        if (!response.ok || context.aborted) return null;
+        const items = await response.json() as ReferenceCompletionPayload[];
+        if (!items.length || context.aborted) return null;
+        const from = completionStart(context, items[0].kind);
+        return {
+          from,
+          validFor: /^[A-Za-z0-9_$?.:-]*$/,
+          options: items.map((item, index) => ({
+            label: item.label,
+            type: item.kind === 'Element' ? 'class' : item.kind === 'Attribute' || item.kind === 'Property' ? 'property' : item.kind === 'Function' ? 'function' : item.kind === 'Enum' ? 'enum' : 'variable',
+            detail: item.detail,
+            info: item.documentation,
+            boost: -index,
+            apply: item.insertText.includes('${') ? snippet(item.insertText) : item.insertText,
+          })),
+        };
+      } catch { return null; }
+    }],
+  });
+  const hover = hoverTooltip(async (view, pos) => {
+    const line = view.state.doc.lineAt(pos);
+    try {
+      const response = await fetch('/api/reference/hover', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: filePath, content: view.state.doc.toString(), line: line.number - 1, column: pos - line.from }),
+      });
+      if (!response.ok) return null;
+      const item = await response.json() as ReferenceHoverPayload | null;
+      if (!item?.signature) return null;
+      const around = view.state.wordAt(pos);
+      return {
+        pos: around?.from ?? pos,
+        end: around?.to ?? pos,
+        above: true,
+        create() {
+          const dom = document.createElement('div');
+          dom.className = 'x4-reference-hover';
+          const signature = document.createElement('div');
+          signature.textContent = item.signature;
+          signature.style.cssText = 'font:600 11px ui-monospace,monospace;color:#67e8f9;margin-bottom:4px';
+          dom.appendChild(signature);
+          const docs = document.createElement('div');
+          docs.textContent = item.documentation || item.detail || '';
+          docs.style.cssText = 'max-width:420px;white-space:pre-wrap;font:10px ui-monospace,monospace;color:#cbd5e1';
+          dom.appendChild(docs);
+          return { dom };
+        },
+      };
+    } catch { return null; }
+  }, { hoverTime: 300 });
+  return [completion, hover];
+}
+
+function baseExtensions(readOnly: boolean, filePath?: string) {
   return [
     lineNumbers(),
     highlightActiveLine(),
@@ -69,6 +162,7 @@ function baseExtensions(readOnly: boolean) {
     EditorView.lineWrapping,
     EditorState.readOnly.of(readOnly),
     EditorView.editable.of(!readOnly),
+    ...(!readOnly && filePath ? referenceLanguageExtensions(filePath) : []),
   ];
 }
 
@@ -79,6 +173,7 @@ export default function CodeMirrorField({
   diffOriginal,
   diffMode = 'split',
   diagnostics = [],
+  filePath,
   className,
 }: CodeMirrorFieldProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -127,7 +222,7 @@ export default function CodeMirrorField({
       });
       viewRef.current = new EditorView({
         parent: host,
-        state: EditorState.create({ doc: value, extensions: [...baseExtensions(!editable), updateListener] }),
+        state: EditorState.create({ doc: value, extensions: [...baseExtensions(!editable, filePath), updateListener] }),
       });
     }
 
@@ -137,7 +232,7 @@ export default function CodeMirrorField({
     };
     // Deliberately NOT keyed on `value` — value-sync is handled below to preserve cursor.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDiff, diffMode, diffOriginal, editable, readOnly]);
+  }, [isDiff, diffMode, diffOriginal, editable, readOnly, filePath]);
 
   // Sync EXTERNAL value changes (file switch, workspace regen) into the plain editor without
   // rebuilding — only when it differs from what the editor already holds (avoids the

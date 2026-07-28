@@ -1,5 +1,18 @@
 {
   "_comment": "Plain-English release notes for the CHANGELOG (B60). ONE human step per release: add a version key with a few user-facing bullets — what a modder can now DO or what got better. Everything else (version list, dates, ordering, the shipped CHANGELOG.md) is generated automatically by `npm run changelog`. Versions with no entry here fall back to a cleaned-up commit subject.",
+  "0.0.48": [
+    "Autocomplete in native Antigravity XML editors now opens while you type chained script expressions such as faction.player., not only after manually requesting suggestions. Project-defined ids keep their exact authored capitalization in both completion and hover results.",
+    "Duplicate ware and job ids now keep an EXISTS explanation and a visible Patch existing action after the authoritative corpus check finishes. The recovery action no longer disappears when the suggestion popup closes.",
+    "The corpus-authoring workflow is now covered end to end in Forge's isolated extension test stack: ware, faction, AI-script and macro suggestions; XPath completion; per-file base/DLC bulk preview; atomic apply; and exact undo all run through one verified user path."
+  ],
+  "0.0.47": [
+    "Autocomplete now comes from the X4 installation you unpacked, including base-game and official DLC wares, jobs, factions, sectors, macros, and AI scripts. Type part of an id in Forge's visual fields or XML editor and choose the real canonical value instead of maintaining a hardcoded list.",
+    "Creating a ware or job now detects when that id already exists and offers to patch the canonical definition instead of silently creating a duplicate. Job editing also completes real faction ids, ship macros, and AI task scripts, and the generated jobs XML follows the game's documented structure.",
+    "Forge's embedded XML editor and Antigravity's native XML files now share the same schema-and-corpus completion backend. XML child elements, attributes, enum values, script-expression properties and functions, return types, and hover documentation all come from X4's XSD and scriptproperties grammar.",
+    "XPath fields in the XML patch workbench now suggest legal elements, attributes, predicate values, and canonical ids from the effective base-plus-DLC document, reducing selectors that look plausible but match nothing.",
+    "A new Canonical Bulk Transform workbench can preview bounded numeric changes across matching base and DLC XML files, simulate every generated diff, show provenance and conflicts, and add the complete validated patch set to the workspace atomically. Preview never writes; stale plans, traversal, ambiguous matches, and safety-cap overflow are blocked.",
+    "Fixed a workspace synchronization race where a slow startup read or overlapping autosave could replace a newer canvas edit or report a false write conflict. Server-applied bulk changes are now adopted without echoing a redundant second mutation."
+  ],
   "0.0.46": [
     "You can now deploy while X4 is running. Deploying used to fail with a file-in-use error whenever the game was open, because it re-copied every file including ones that had not changed — and the game holds an exclusive lock on the LuaSocket native library for the whole session. Unchanged files are now skipped (compared by size and content, never timestamps), so the one locked file no longer blocks anything. This turns a mod iteration from close-the-game, deploy, relaunch, reload-a-save into deploy and reload in-game.",
     "A file that genuinely changed and is locked still fails loudly, with the file named. That is deliberate: silently skipping a write you actually needed would leave you with a stale deployment and no error, which is worse than the failure it replaces.",

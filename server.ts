@@ -42,7 +42,8 @@ import {
   compileTFileXML,
   compileDiffDocument
 } from "./src/lib/modCompiler";
-import { runModDoctor } from "./src/lib/modDoctor";
+import { runModDoctor, runModDoctorReferenceSelftest } from "./src/lib/modDoctor";
+import { runBulkCorpusTransformSelftest } from "./src/lib/bulkCorpusTransform";
 import { buildX4ObjectIndex, filterX4ObjectIndex, runObjectIndexSelftest, type X4ObjectIndex } from "./src/lib/x4ObjectIndex";
 import { runProposalReviewSelftest } from "./src/lib/proposalReview";
 import { runIntentCheckSelftest, type IntentRequirement, type IntentCheckSpec } from "./src/lib/intentCheck";
@@ -98,6 +99,7 @@ import { buildMergedGalaxyMap, runGalaxyMapSelftest, type GalaxyMapSource } from
 import { classifyPath, indexCueReferences, runExtensionProjectSelftest, buildContentXml, type ExtensionProject } from "./src/lib/extensionProject";
 import { getAiSchemaIndex, getScriptPropertyIndex, registerValidationAgentRoutes } from "./src/server/validationRoutes";
 import { getCanonicalReferenceSets, initializeReferenceCorpus, registerReferenceRoutes, startCanonicalReferenceManifest } from "./src/server/referenceRoutes";
+import { registerBulkTransformRoutes } from "./src/server/bulkTransformRoutes";
 import { computeModDrift, fingerprintModFolder, flattenProjectValidation, getSchemaIndex, loadProjectFromDisk, runProjectValidation } from "./src/server/projectValidation";
 import { buildRemediationCapsules, runAgentLoopSelftest, runRepairLoop, type LoopDiagnostic } from "./src/lib/agentLoop";
 import { assessSourceSync, hashFolderFingerprint, runCompileFidelitySelftest } from "./src/lib/compileFidelity";
@@ -349,9 +351,12 @@ const PUBLIC_READONLY_GETS = new Set<string>([
   "/reference/coverage",
   "/reference/factions",
   "/reference/wares",
+  "/reference/jobs",
+  "/reference/aiscripts",
   "/reference/sectors",
   "/reference/scriptproperties",
   "/reference/file",
+  "/reference/effective-file",
   "/reference/search",
   "/reference/selftest",
 ]);
@@ -1888,9 +1893,9 @@ function rebuildObjectIndexNow(resolved: ResolvedXsdConfig, roots: string[], cac
 // via `new Set([...])`; xsdValidate only `.has()`-reads — verified 2026-07-18), so sharing the
 // cached sets is safe.
 /** Canonical reference sets from the configured unpacked root (never mod/workspace data). */
-function getReferenceSets(): { macros: Set<string>; wares: Set<string>; factions: Set<string>; sectors: Set<string> } {
-  const { macros, wares, factions, sectors } = getCanonicalReferenceSets();
-  return { macros, wares, factions, sectors };
+function getReferenceSets(): { macros: Set<string>; wares: Set<string>; factions: Set<string>; sectors: Set<string>; jobs: Set<string>; aiScripts: Set<string> } {
+  const { macros, wares, factions, sectors, jobs, aiScripts } = getCanonicalReferenceSets();
+  return { macros, wares, factions, sectors, jobs, aiScripts };
 }
 
 // B61: the learned jobs vocabulary (classes/orders/sizes) is expensive-ish to build (parse the ~15k-line
@@ -2973,8 +2978,8 @@ app.get("/api/agent/schema", (req, res) => {
         canonical_reference: {
           rootSetting: "X4_REFERENCE_ROOT environment variable or config.x4ReferenceRoot (Directory Settings)",
           purpose: "Read-only canonical IDs and script-property documentation from a loose/unpacked X4 root, merged as base plus every present official ego_dlc_* source.",
-          endpoints: ["/api/reference/factions", "/api/reference/wares", "/api/reference/sectors", "/api/reference/scriptproperties", "/api/reference/file", "/api/reference/search"],
-          note: "Unlike the Object Browser, canonical validation sets never include mod workspace or arbitrary extension data. Faction category/isreal are documented derived authoring fields; source records the first defining base/DLC file.",
+          endpoints: ["/api/reference/factions", "/api/reference/wares", "/api/reference/jobs", "/api/reference/aiscripts", "/api/reference/sectors", "/api/reference/scriptproperties", "/api/reference/file", "/api/reference/search", "/api/reference/suggest"],
+          note: "Canonical sets contain base plus official DLC data. /api/reference/suggest overlays active-project definitions for authenticated callers and applies deterministic context-aware ranking; the mixed Object Browser remains discovery rather than canonical authority.",
         },
         package_manifest: {
           always_outputs: ["content.xml", "README.md"],
@@ -3015,6 +3020,51 @@ app.get("/api/agent/schema", (req, res) => {
       },
       {
         method: "GET",
+        path: "/api/reference/jobs",
+        auth: false,
+        purpose: "List canonical base+DLC job IDs, names, first-definition source, and source path."
+      },
+      {
+        method: "GET",
+        path: "/api/reference/aiscripts",
+        auth: false,
+        purpose: "List canonical base+DLC AI-script names and source paths."
+      },
+      {
+        method: "GET",
+        path: "/api/reference/suggest?kind=ware&q=energyc&intent=reference&limit=25",
+        auth: true,
+        purpose: "Return bounded deterministic canonical plus active-project suggestions. Use intent=new-definition to surface existing-ID collisions instead of creating duplicates."
+      },
+      {
+        method: "GET",
+        path: "/api/reference/effective-file?path=libraries/wares.xml",
+        auth: false,
+        purpose: "Read the effective canonical XML after dependency-ordered official DLC overlays, with source layers and a cache signature."
+      },
+      {
+        method: "POST",
+        path: "/api/reference/xpath-complete",
+        auth: true,
+        body: { path: "libraries/wares.xml", selector: "/wares/ware[@id='energyc", cursor: 25, limit: 50 },
+        purpose: "Complete XPath elements, attributes, predicates, and canonical values against the selected effective document."
+      },
+      {
+        method: "POST",
+        path: "/api/agent/bulk-transform/preview",
+        auth: true,
+        body: { rule: { pathPrefix: "assets/units/size_xl/macros", selector: "/macros/macro/properties/hull/@max", operation: "multiply", operand: 1.5, rounding: "ceil", roundingIncrement: 100, maxFiles: 250 } },
+        purpose: "Read-only mandatory dry-run. Resolves effective base+DLC XML, transforms canonical numeric matches, simulates every proposed diff, reports conflicts/caps, and returns a guarded planHash plus workspaceHash."
+      },
+      {
+        method: "POST",
+        path: "/api/agent/bulk-transform/apply",
+        auth: true,
+        body: { rule: "the exact preview rule", expectedPlanHash: "planHash from preview", expectedHead: "workspaceHash from preview" },
+        purpose: "Recompute the preview, reject corpus/workspace drift or any failed row, then atomically merge generated patch blocks into workspace.xmlPatches. Never writes the corpus or game directory."
+      },
+      {
+        method: "GET",
         path: "/api/reference/sectors",
         auth: false,
         purpose: "List sector macro IDs and localized display names from base+DLC map macro files."
@@ -3035,7 +3085,7 @@ app.get("/api/agent/schema", (req, res) => {
         method: "GET",
         path: "/api/reference/search?q=argon&kind=faction",
         auth: false,
-        purpose: "Search canonical faction, ware, sector, and script-property records."
+        purpose: "Search canonical faction, ware, job, AI-script, sector, and script-property records."
       },
       {
         method: "POST",
@@ -4462,7 +4512,7 @@ function runFullWorkspaceValidation(ws: ModWorkspace, built?: { modId: string; f
   for (const skipped of diskSkipped) warnUnavailable('validation.disk_file_skipped', `Disk-backed validation skipped ${skipped.path}: ${skipped.reason}. The artifact still includes the file, so this is not a clean validation result.`, skipped.path);
   const combined: ServerDiagnostic[] = [
     ...unavailable,
-    ...runModDoctor(ws, files, modId).map((finding): ServerDiagnostic => ({
+    ...runModDoctor(ws, files, modId, { canonicalAiScripts: references?.aiScripts }).map((finding): ServerDiagnostic => ({
       severity: finding.severity,
       category: finding.category || "egosoft",
       code: finding.code || "doctor.finding",
@@ -6812,6 +6862,8 @@ const SELFTESTS: Record<string, () => unknown> = {
   "object-index-selftest": runObjectIndexSelftest,
   "reference-corpus-selftest": runReferenceCorpusSelftest,
   "reference-literal-lint-selftest": runReferenceLiteralLintSelftest,
+  "bulk-corpus-transform-selftest": runBulkCorpusTransformSelftest,
+  "mod-doctor-reference-selftest": runModDoctorReferenceSelftest,
   "proposal-review-selftest": runProposalReviewSelftest,
   "intent-check-selftest": runIntentCheckSelftest,
   "blueprint-selftest": runBlueprintSelftest,
@@ -6861,7 +6913,12 @@ app.get("/api/agent/selftest-index", (_req, res) => {
 });
 
 registerValidationAgentRoutes(app);
-registerReferenceRoutes(app);
+registerReferenceRoutes(app, () => activeWorkspace);
+registerBulkTransformRoutes(app, {
+  workspace: () => activeWorkspace,
+  workspaceHash: activeWorkspaceHash,
+  applyWorkspaceMutation: (incoming, options) => applyWorkspaceMutation(incoming, options),
+});
 
 
 // Drift report for one mod present in BOTH the workspace and deployed roots.
@@ -9304,7 +9361,8 @@ app.post("/api/agent/deploy-verify", (req, res) => {
     // Audit A3 (2026-07-09): runSchemaValidation removed from this gate — the PREFLIGHT
     // stage below runs the same XSD layer (and more) via runProjectValidation, so the
     // schema pass ran twice per deploy. Doctor + patch stay here; preflight owns schema.
-    const diagnostics = [...runModDoctor(ws, files, modId), ...runPatchDiagnostics(ws)];
+    const deployReferences = (() => { try { return getReferenceSets(); } catch { return undefined; } })();
+    const diagnostics = [...runModDoctor(ws, files, modId, { canonicalAiScripts: deployReferences?.aiScripts }), ...runPatchDiagnostics(ws)];
     const compileErrors = diagnostics.filter((d: any) => d.severity === 'error' && !(d.code === 'package.readiness' && hasCuesInEmitted));
     if (compileErrors.length > 0) {
       check('compile', 'Compile diagnostics', 'fail', compileErrors.slice(0, 3).map((d: any) => d.message).join(' | '));

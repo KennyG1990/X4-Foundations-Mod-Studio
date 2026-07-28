@@ -914,7 +914,7 @@ function registerLangProviders(context: vscode.ExtensionContext): void {
         }
         return undefined;
       },
-    }, "<", " ", "\""),
+    }, "<", " ", "\"", "'", "."),
 
     vscode.languages.registerHoverProvider(selector, {
       async provideHover(doc, pos) {

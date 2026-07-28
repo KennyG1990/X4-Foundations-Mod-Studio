@@ -265,17 +265,15 @@ export const compileJobsXML = (jobs: JobDef[]): string => {
   xml += `  <!-- XML Diff Patch adding new AI pilot squad to core jobs database: libraries/jobs.xml -->\n`;
   xml += `  <add sel="/jobs">\n`;
   jobs.forEach((item) => {
-    xml += `    <job id="${escapeXmlAttr(item.id)}" name="${escapeXmlAttr(item.name)}" active="true">\n`;
-    xml += `      <expiration min="7200" max="14400" />\n`;
+    xml += `    <job id="${escapeXmlAttr(item.id)}" name="${escapeXmlAttr(item.name)}" startactive="true">\n`;
     xml += `      <modifiers rebuild="${item.rebuildOnDestroy ? 'true' : 'false'}" />\n`;
-    xml += `      <ship>\n`;
-    xml += `        <select faction="${escapeXmlAttr(item.faction)}" tags="military ${escapeXmlAttr(item.shipClass)}" />\n`;
-    xml += `        <loadout>\n`;
-    xml += `          <level min="0.8" max="1.0" />\n`;
-    xml += `        </loadout>\n`;
-    xml += `      </ship>\n`;
     xml += `      <quota galaxy="${item.galaxyQuota}" sector="${item.sectorQuota}" />\n`;
-    xml += `      <task script="${escapeXmlAttr(item.taskScript)}" />\n`;
+    xml += `      <expirationtime min="7200" max="14400" />\n`;
+    if (item.taskScript) xml += `      <task task="${escapeXmlAttr(item.taskScript)}" />\n`;
+    xml += `      <ship macro="${escapeXmlAttr(item.shipMacro)}">\n`;
+    xml += `        <select faction="${escapeXmlAttr(item.faction)}" tags="[military, ${escapeXmlAttr(item.shipClass)}]" />\n`;
+    xml += `        <owner exact="${escapeXmlAttr(item.faction)}" overridenpc="true" />\n`;
+    xml += `      </ship>\n`;
     xml += `    </job>\n`;
   });
   xml += `  </add>\n`;

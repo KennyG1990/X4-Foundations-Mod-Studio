@@ -285,6 +285,7 @@ export default function PropertiesInspector({
                   {schema.type === 'reference' && (
                     <ObjectIndexPicker
                       kind={schema.refKind || 'macro'}
+                      endpoint={['ware', 'faction', 'job', 'macro'].includes(schema.refKind || 'macro') ? '/api/reference/suggest' : undefined}
                       value={(selectedNode.properties || {})[schema.key] || ''}
                       onChange={v => handlePropChange(schema.key, v)}
                       placeholder={schema.placeholder}

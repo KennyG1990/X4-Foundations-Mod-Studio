@@ -169,9 +169,16 @@ export default function App() {
     return sanitizeWorkspace(parsed);
   });
 
+  const workspaceRevisionRef = useRef(0);
+  const localWorkspaceDirtyRef = useRef(false);
+  const [workspaceSyncEpoch, setWorkspaceSyncEpoch] = useState(0);
   const setWorkspace = React.useCallback((value: React.SetStateAction<ModWorkspace>) => {
+    // Mark dirty synchronously, before React schedules the state updater. This closes the
+    // debounce window in which a slow poll could otherwise adopt stale server content.
+    localWorkspaceDirtyRef.current = true;
     setRawWorkspace(prev => {
       const next = typeof value === 'function' ? (value as (p: ModWorkspace) => ModWorkspace)(prev) : value;
+      workspaceRevisionRef.current += 1;
       return sanitizeWorkspace(next);
     });
   }, []);
@@ -466,6 +473,12 @@ export default function App() {
   // on every auto-sync so a concurrent writer produces an explicit 409, never a silent
   // last-writer-wins. Learned from poll GETs and from each own POST's response.
   const lastServerHashRef = useRef<string>('');
+  // Autosaves are serialized. A slow boot save and a quick user edit used to race with the
+  // same expectedHead: the newer write could succeed, then the older response raised a false
+  // 409 conflict. CAS protects against other writers; this queue protects ordering within this
+  // client. Polling also defers while the queue drains so it cannot learn an intermediate head.
+  const workspaceSyncChainRef = useRef<Promise<void>>(Promise.resolve());
+  const queuedWorkspaceSyncsRef = useRef(0);
   const [syncConflict, _setSyncConflict] = useState<boolean>(false);
   // ref mirror so the 3s poll closure sees the CURRENT conflict state (ADR-F1: while a
   // human is deciding a conflict, the poll must NOT adopt — adoption would silently pick
@@ -981,37 +994,80 @@ export default function App() {
       }
     };
 
-    const syncLocalEditsToServer = async () => {
+    const syncLocalEditsToServer = () => {
       persistLocalCache();
-      // B2 slice 3: ADR-F1's legacy deprecation round is OVER. Until the boot GET/poll has
-      // taught us the server head, we do NOT write — a blind boot save is exactly the
-      // blank-client clobber that destroyed live state on 2026-07-11 (and the server now
-      // rejects it anyway). The 3s poll learns the head, then the next edit syncs via CAS.
-      if (!lastServerHashRef.current) return;
-      try {
-        const response = await fetch("/api/agent/workspace", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ workspace, expectedHead: lastServerHashRef.current })
-        });
-        if (response.status === 409) {
-          // Someone else changed the server since we last saw it. NEVER overwrite silently —
-          // surface the conflict; the badge offers Adopt server / Keep mine (force).
-          setSyncConflict(true);
-          return;
-        }
-        const data = await response.json();
-        if (data && data.success && data.version) {
-          setLocalVersion(data.version);
-          localStorage.setItem('x4_mod_studio_version', String(data.version));
-          if (typeof data.workspaceHash === 'string' && data.workspaceHash) {
-            lastServerHashRef.current = data.workspaceHash;
+      // Server adoption updates React state too, but it is not a local edit and must not
+      // immediately echo back as a redundant, slow POST. Only dirty local content enters
+      // the serialized CAS queue.
+      if (!localWorkspaceDirtyRef.current) return;
+      const targetWorkspace = workspace;
+      const targetRevision = workspaceRevisionRef.current;
+      queuedWorkspaceSyncsRef.current += 1;
+      workspaceSyncChainRef.current = workspaceSyncChainRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          // B2 slice 3: ADR-F1's legacy deprecation round is OVER. Until the boot GET/poll has
+          // taught us the server head, we do NOT write — a blind boot save is exactly the
+          // blank-client clobber that destroyed live state on 2026-07-11 (and the server now
+          // rejects it anyway). The 3s poll learns the head, then the next edit syncs via CAS.
+          for (let wait = 0; wait < 50 && !lastServerHashRef.current; wait += 1) {
+            await new Promise(resolve => setTimeout(resolve, 100));
           }
-          setSyncConflict(false);
-        }
-      } catch {
-        console.warn("Could not synchronize local edits to server workspace space.");
-      }
+          if (!lastServerHashRef.current) {
+            console.warn('Could not synchronize local edits because the initial server head was not learned.');
+            return;
+          }
+          // A later workspace revision has its own queued save. Dropping this superseded
+          // target prevents a delayed boot/default save from running after server adoption.
+          if (workspaceRevisionRef.current !== targetRevision) return;
+          const targetHash = workspaceContentHash(sanitizeWorkspace(targetWorkspace));
+          let lastError: unknown;
+          for (let attempt = 0; attempt < 4; attempt += 1) {
+            try {
+              const response = await fetch("/api/agent/workspace", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ workspace: targetWorkspace, expectedHead: lastServerHashRef.current })
+              });
+              if (response.status === 409) {
+                // A lost success response is indistinguishable from an external writer until
+                // we read the new head. Equal content means this save already landed; any other
+                // head remains a real human-resolved conflict.
+                const latestResponse = await fetch("/api/agent/workspace");
+                const latest = latestResponse.ok ? await latestResponse.json() : null;
+                if (latest?.workspaceHash === targetHash) {
+                  lastServerHashRef.current = latest.workspaceHash;
+                  if (latest.version) {
+                    setLocalVersion(latest.version);
+                    localStorage.setItem('x4_mod_studio_version', String(latest.version));
+                  }
+                  if (workspaceContentHash(sanitizeWorkspace(workspaceRef.current)) === targetHash) localWorkspaceDirtyRef.current = false;
+                  setSyncConflict(false);
+                  return;
+                }
+                setSyncConflict(true);
+                return;
+              }
+              if (!response.ok) throw new Error(`Workspace sync failed (${response.status}).`);
+              const data = await response.json();
+              if (data && data.success && data.version) {
+                setLocalVersion(data.version);
+                localStorage.setItem('x4_mod_studio_version', String(data.version));
+                if (typeof data.workspaceHash === 'string' && data.workspaceHash) {
+                  lastServerHashRef.current = data.workspaceHash;
+                }
+                if (workspaceContentHash(sanitizeWorkspace(workspaceRef.current)) === targetHash) localWorkspaceDirtyRef.current = false;
+                setSyncConflict(false);
+              }
+              return;
+            } catch (error) {
+              lastError = error;
+              if (attempt < 3) await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
+            }
+          }
+          console.warn("Could not synchronize local edits to server workspace space after retries.", lastError);
+        })
+        .finally(() => { queuedWorkspaceSyncsRef.current = Math.max(0, queuedWorkspaceSyncsRef.current - 1); });
     };
 
     // QoL: 300ms (was 1000ms) — the agent API and AgentBridge live view read
@@ -1025,7 +1081,7 @@ export default function App() {
       clearTimeout(debounceTimer);
       document.removeEventListener('visibilitychange', flushOnHide);
     };
-  }, [workspace]);
+  }, [workspace, workspaceSyncEpoch]);
 
   const executeCompileModProject = async () => {
     setCompileStatus('compiling');
@@ -1070,13 +1126,42 @@ export default function App() {
   // Initial load and periodic background polling of the server workspace
   useEffect(() => {
     const fetchLatestServerWorkspace = async () => {
+      const requestWorkspaceRevision = workspaceRevisionRef.current;
       try {
         const response = await fetch("/api/agent/workspace");
         const data = await response.json();
         if (data && data.workspace && data.version) {
+          // Local state becomes dirty at the moment setWorkspace is called, not 300ms later
+          // when autosave starts. While dirty, a poll cannot adopt stale server content or
+          // advance a known CAS head past the unsaved edit. The first boot read may still
+          // teach a head to a client that has not learned one yet.
+          if (localWorkspaceDirtyRef.current) {
+            if (!lastServerHashRef.current && typeof data.workspaceHash === 'string' && data.workspaceHash) {
+              lastServerHashRef.current = data.workspaceHash;
+              // The original debounced save may already have exhausted its bounded wait.
+              // Wake the unchanged-but-dirty workspace so learning the first CAS head can
+              // never strand a local edit until the user types again.
+              setWorkspaceSyncEpoch(epoch => epoch + 1);
+            }
+            return;
+          }
+          // A queued write owns the next server head. A concurrent poll can only observe an
+          // intermediate state and must not overwrite the head or adopt it into the canvas.
+          if (queuedWorkspaceSyncsRef.current > 0) return;
+          // A server read that began before a local edit is stale as an adoption source. It
+          // may still teach the client the current CAS head, so the queued local edit can be
+          // written safely, but it must never replace the newer canvas with its old payload.
+          if (workspaceRevisionRef.current !== requestWorkspaceRevision) {
+            if (!lastServerHashRef.current && typeof data.workspaceHash === 'string' && data.workspaceHash) {
+              lastServerHashRef.current = data.workspaceHash;
+              if (localWorkspaceDirtyRef.current) setWorkspaceSyncEpoch(epoch => epoch + 1);
+            }
+            return;
+          }
           const storedVer = Number(localStorage.getItem('x4_mod_studio_version') || String(localVersion));
           if (data.version > storedVer && !syncConflictRef.current) {
             setWorkspace(data.workspace);
+            localWorkspaceDirtyRef.current = false;
             setLocalVersion(data.version);
             localStorage.setItem('x4_mod_studio_version', String(data.version));
             localStorage.setItem('x4_mod_studio_workspace', JSON.stringify(data.workspace));
@@ -1922,6 +2007,19 @@ export default function App() {
             <XMLPatchSystem
               workspace={workspace}
               setWorkspace={setWorkspace}
+              saveCheckpoint={saveCheckpoint}
+              onServerWorkspaceApplied={(nextWorkspace, metadata) => {
+                lastServerHashRef.current = metadata.workspaceHash;
+                setLocalVersion(metadata.version);
+                localStorage.setItem('x4_mod_studio_version', String(metadata.version));
+                setSyncConflict(false);
+                // The bulk route already committed this exact state through the server CAS
+                // path. Adopt it without marking it as another local edit; otherwise the
+                // ordinary autosave effect immediately echoes a redundant second mutation.
+                localWorkspaceDirtyRef.current = false;
+                workspaceRevisionRef.current += 1;
+                setRawWorkspace(sanitizeWorkspace(nextWorkspace));
+              }}
             />
           )}
 

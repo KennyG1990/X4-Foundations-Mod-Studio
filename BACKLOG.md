@@ -6,37 +6,6 @@
 
 ## P0 — Active
 
-### B99 · Bulk corpus transform — generate N diffs from one rule `SPECIFIED — awaiting Ken's go`
-
-**Not started. Do not build until Ken says go.** Full spec:
-`docs/plans/2026-07-26-bulk-corpus-transform.md`.
-
-**Origin (2026-07-26):** a real entry-level user asked for exactly this and could not find it — *"go
-into `assets/units/size_xl/macros`, look for every `<hull max="216000"/>`, multiply by X and generate
-a diff file for each"*. Today's honest answer is "script it, then validate with the Forge", which is
-correct and also an admission: the Forge owns the corpus, selectors, the diff simulator, the validator
-and deploy — everything except the loop. The loop is the only part the user cannot do, and it is the
-part they came for.
-
-**Reconcile says this is assembly, not new machinery:** `referenceManifest.ts` already indexes every
-corpus file by classified path (SQLite-backed); `simulateXmlDiff` already applies a diff against
-base+DLC; `resolveEffectiveReferenceDocument` already resolves DLC overlays. Searched for and absent:
-any bulk transform, arithmetic-on-a-matched-value, or multi-file diff emitter — `XMLPatchSystem.tsx`
-authors exactly one patch block at a time.
-
-**The four hard parts (why it is not a for-loop):**
-1. Re-runs must not compound — always transform from the **vanilla base value**, never the patched
-   one, or the user's mod drifts silently on every tweak.
-2. A DLC-overridden macro makes base-file patching **silently do nothing**; the effective layer must
-   be resolved and reported.
-3. Scale turns one bad selector into 200 broken patches → mandatory dry-run, per-diff simulation, and
-   all-or-nothing writes.
-4. Matching must be **XPath against parsed XML, never regex over text** — a banked hazard in this
-   codebase, and a silent wrong-match generator at this scale.
-
-**Three questions left for Ken, not assumed:** UI-first or API-first; how much expression power before
-it becomes a language; and whether output lands in a fresh mod or merges into an existing one.
-
 ### B98 · Deploy fails EBUSY whenever X4 is running — copying byte-identical files `in_progress` (P0, TOP)
 
 **[REPRODUCED 2026-07-26 by the mod agent, traced in source not guessed]** A real in-game verification

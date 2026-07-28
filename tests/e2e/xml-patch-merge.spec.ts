@@ -22,9 +22,16 @@ test('diff-to-patch three-pane merge synthesizes and adopts a patch block', asyn
 
   let synthPayload: { vanillaXml?: string; editedXml?: string; targetFile?: string } | null = null;
 
-  await page.route('**/api/patch/base-content**', async (route) => {
+  await page.route('**/api/reference/effective-file**', async (route) => {
     await route.fulfill({
-      json: { targetFile: 'libraries/wares.xml', packed: false, content: baseXml },
+      json: {
+        available: true,
+        relativePath: 'libraries/wares.xml',
+        signature: 'e2e-effective-wares',
+        sources: [{ source: 'base', path: 'libraries/wares.xml', mode: 'base' }],
+        findings: [],
+        content: baseXml,
+      },
     });
   });
 
@@ -78,12 +85,21 @@ test('diff-to-patch three-pane merge synthesizes and adopts a patch block', asyn
     editedXml,
   });
 
+  const saveResponsePromise = page.waitForResponse(response =>
+    response.url().endsWith('/api/agent/workspace')
+      && response.request().method() === 'POST'
+      && response.status() === 200,
+    { timeout: 20_000 },
+  );
   await page.getByRole('button', { name: 'Add to Workspace' }).click();
   await expect(workbench.locator('span').filter({ hasText: 'Diff→Patch synthesized' })).toBeVisible();
   await expect(workbench.getByText("/wares/ware[@id='energycells']/@volume")).toBeVisible();
-  await expect.poll(async () => {
-    const saved = await readServerWorkspace();
-    return saved.xmlPatches?.some((patch: { note?: string; sel?: string }) =>
-      patch.note === 'Diff→Patch synthesized' && patch.sel === "/wares/ware[@id='energycells']/@volume");
-  }).toBe(true);
+  const saveResponse = await saveResponsePromise;
+  const saveBody = await saveResponse.json();
+  const hasPatch = (candidate: { xmlPatches?: Array<{ note?: string; sel?: string }> }) =>
+    candidate.xmlPatches?.some(patch => patch.note === 'Diff→Patch synthesized'
+      && patch.sel === "/wares/ware[@id='energycells']/@volume") === true;
+  expect(hasPatch(saveBody.workspace)).toBe(true);
+  const saved = await readServerWorkspace();
+  expect(hasPatch(saved)).toBe(true);
 });

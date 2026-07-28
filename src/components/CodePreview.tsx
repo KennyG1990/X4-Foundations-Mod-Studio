@@ -1237,6 +1237,7 @@ export default function CodePreview({
                       value={isFileEditorActive ? editorContent : activeCodeText}
                       onChange={isFileEditorActive ? handleEditorContentChange : handleGeneratedDraftChange}
                       diagnostics={visibleDiagnostics}
+                      filePath={liveOverridePath}
                       className="h-full"
                     />
                   </React.Suspense>

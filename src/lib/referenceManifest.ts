@@ -70,7 +70,7 @@ const ASSET_EXTENSIONS = new Set([
 ]);
 const SCRIPT_EXTENSIONS = new Set(['.lua', '.js', '.ts', '.glsl']);
 const REFERENCE_CONSUMER_PATHS = new Set([
-  'libraries/factions.xml', 'libraries/wares.xml', 'libraries/scriptproperties.xml', 'index/macros.xml',
+  'libraries/factions.xml', 'libraries/wares.xml', 'libraries/jobs.xml', 'libraries/scriptproperties.xml', 'index/macros.xml',
 ]);
 const scanState = new Map<string, {
   generation: string; startedAt: string; files: number; bytes: number; error?: string; promise: Promise<ReferenceManifestSummary>;
@@ -126,6 +126,10 @@ export function classifyReferencePath(relativeInput: string): Omit<ReferenceMani
     role = 'canonical-data'; authority = 'canonical';
     const sourceRelative = source === 'base' ? lower : lower.split('/').slice(2).join('/');
     consumer = REFERENCE_CONSUMER_PATHS.has(sourceRelative) || domain === 'maps' ? 'reference-corpus' : 'unconsumed';
+  } else if (extension === '.xml' && official && domain === 'aiscripts') {
+    // The script files are executable examples, but their root `name` values are also
+    // the authoritative set accepted by job/task-script reference fields.
+    role = 'canonical-data'; authority = 'canonical'; consumer = 'reference-corpus';
   } else if (extension === '.xml' || SCRIPT_EXTENSIONS.has(extension)) {
     role = 'executable-example'; authority = 'advisory';
   } else if (ASSET_EXTENSIONS.has(extension)) {
@@ -315,7 +319,7 @@ export function queryReferenceManifest(rootInput: string, filters: {
  * cannot accidentally materialize the million-file corpus in the Node heap. */
 export function listReferenceManifestFiles(
   rootInput: string,
-  filters: { extension?: string; source?: string; domain?: string; role?: string; authority?: string; consumer?: string },
+  filters: { q?: string; extension?: string; source?: string; domain?: string; role?: string; authority?: string; consumer?: string },
   max = 100_000,
 ): { generation: string; files: ReferenceManifestFile[] } | null {
   if (!Object.values(filters).some(Boolean)) throw new Error('Reference manifest bulk reads require a filter.');
@@ -375,6 +379,8 @@ export async function runReferenceManifestSelftest(): Promise<{ pass: boolean; c
     await write('aiscripts/new.xml');
     const refreshed = await refreshReferenceManifest(corpusRoot);
     ok('refresh swaps generation', refreshed.generation !== firstGeneration && refreshed.totalFiles === 7);
+    const aiScript = queryReferenceManifest(corpusRoot, { domain: 'aiscripts', limit: 10 })?.files[0];
+    ok('official AI script is a canonical reference', aiScript?.authority === 'canonical' && aiScript.consumer === 'reference-corpus');
     const coverage = getReferenceCoverage(corpusRoot);
     ok('coverage indexed', Boolean(coverage?.byRole.some(row => row.key === 'grammar' && row.count === 1)));
   } finally {

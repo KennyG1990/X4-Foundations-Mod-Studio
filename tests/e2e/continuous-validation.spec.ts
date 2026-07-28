@@ -27,6 +27,10 @@ test('Forge code editor continuously renders red errors and amber warnings witho
   });
 
   await page.goto('/');
+  await page.waitForFunction((name: string) => {
+    const api = (window as Window & { __X4_E2E__?: { getWorkspace: () => { name?: string } } }).__X4_E2E__;
+    return api?.getWorkspace().name === name;
+  }, workspace.name);
   const healthCard = page.getByTestId('health-card');
   await healthCard.waitFor({ state: 'visible', timeout: 1_500 }).catch(() => undefined);
   if (await healthCard.isVisible()) await page.getByTestId('health-card-dismiss').click();

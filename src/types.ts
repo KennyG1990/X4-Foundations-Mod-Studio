@@ -176,6 +176,10 @@ export interface PatchBlock {
   attrType?: string;
   targetFile?: string;
   includeInBuild?: boolean;
+  /** B99 provenance: ignored by the XML compiler, used to make generated rules idempotent. */
+  generatedRuleId?: string;
+  generatedPlanHash?: string;
+  sourceSignature?: string;
 }
 
 // Complete Mod Workspace containing scripts and widgets state

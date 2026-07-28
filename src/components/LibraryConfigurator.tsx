@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   Trash,
   Plus,
@@ -15,7 +15,7 @@ import {
   BadgeAlert
 } from 'lucide-react';
 import { ModWorkspace } from '../types';
-import ObjectIndexPicker from './ObjectIndexPicker';
+import ObjectIndexPicker, { type IndexItem } from './ObjectIndexPicker';
 import { toast } from '../lib/uiDialogs';
 
 interface LibraryConfiguratorProps {
@@ -73,6 +73,11 @@ export default function LibraryConfigurator({ workspace, setWorkspace, saveCheck
   const [warningsExpanded, setWarningsExpanded] = useState<boolean>(true);
   // Inline "new item id" entry (replaces a blocking window.prompt). null = not adding.
   const [addingId, setAddingId] = useState<string | null>(null);
+  const [addingCollision, setAddingCollision] = useState<IndexItem | null>(null);
+  const [addingCommitBusy, setAddingCommitBusy] = useState(false);
+  // Invalidates in-flight commit lookups whenever the author edits/cancels/switches the add form.
+  // Without this token, a slow response for a previous id or tab could create the wrong definition.
+  const addingSessionRef = useRef(0);
 
   const wares = workspace.wares || [];
   const jobs = workspace.jobs || [];
@@ -430,7 +435,7 @@ export default function LibraryConfigurator({ workspace, setWorkspace, saveCheck
     if (!wId) return;
 
     const nWare: WareDef = {
-      id: wId.startsWith('ware_') ? wId : `ware_${wId}`,
+      id: wId,
       name: "Quantum Focus Crystals",
       description: "Highly volatile carbon lattices that refract focus laser beam emitters.",
       transport: 'container',
@@ -456,14 +461,14 @@ export default function LibraryConfigurator({ workspace, setWorkspace, saveCheck
     if (!jId) return;
 
     const nJob: JobDef = {
-      id: jId.startsWith('job_') ? jId : `job_${jId}`,
+      id: jId,
       name: "Demolition Patrol Squad",
       faction: 'yaki',
       shipClass: 'corvette',
       shipMacro: 'ship_split_m_corvette_01_a_macro',
       galaxyQuota: 6,
       sectorQuota: 2,
-      taskScript: 'hunter.escort.behavior',
+      taskScript: '',
       rebuildOnDestroy: true
     };
 
@@ -473,15 +478,67 @@ export default function LibraryConfigurator({ workspace, setWorkspace, saveCheck
   };
 
   // Inline-add controls (non-blocking, replaces window.prompt).
-  const beginAdd = () => setAddingId('');
-  const cancelAdd = () => setAddingId(null);
-  const commitAdd = () => {
-    const id = (addingId || '').trim();
-    if (id) {
-      if (activeSubTab === 'wares') handleCreateWare(id);
-      else handleCreateJob(id);
-    }
+  const beginAdd = () => {
+    addingSessionRef.current += 1;
+    setAddingCommitBusy(false);
+    setAddingId('');
+    setAddingCollision(null);
+  };
+  const cancelAdd = () => {
+    addingSessionRef.current += 1;
+    setAddingCommitBusy(false);
     setAddingId(null);
+    setAddingCollision(null);
+  };
+  const changeAddingId = (value: string) => {
+    addingSessionRef.current += 1;
+    setAddingCommitBusy(false);
+    setAddingId(value);
+    setAddingCollision(null);
+  };
+  const commitAdd = async () => {
+    const id = (addingId || '').trim();
+    const kind = activeSubTab === 'wares' ? 'ware' : 'job';
+    const projectCollision = (kind === 'ware' ? wares : jobs).some(item => item.id.toLowerCase() === id.toLowerCase());
+    if (!id || projectCollision) return;
+    const session = addingSessionRef.current;
+    setAddingCommitBusy(true);
+    try {
+      // The dropdown is advisory UI; this exact commit-time lookup is the authority gate.
+      // It closes the debounce/network race where Add could otherwise run before the
+      // collision badge had arrived.
+      const response = await fetch(`/api/reference/suggest?kind=${kind}&q=${encodeURIComponent(id)}&intent=new-definition&limit=10`);
+      if (!response.ok) throw new Error(`canonical lookup failed (${response.status})`);
+      const body = await response.json();
+      if (addingSessionRef.current !== session) return;
+      const exact = (Array.isArray(body.items) ? body.items : []).find((item: IndexItem) =>
+        String(item.insertText || item.id || item.label || '').trim().toLowerCase() === id.toLowerCase());
+      if (exact) {
+        setAddingCollision(exact);
+        toast(`"${id}" already exists in the X4 corpus. Patch the existing definition instead.`, 'warning');
+        return;
+      }
+      if (kind === 'ware') handleCreateWare(id);
+      else handleCreateJob(id);
+      addingSessionRef.current += 1;
+      setAddingId(null);
+      setAddingCollision(null);
+    } catch (error) {
+      if (addingSessionRef.current !== session) return;
+      toast(`Could not verify "${id}" against the canonical corpus; no definition was created. ${error instanceof Error ? error.message : String(error)}`, 'error');
+    } finally {
+      if (addingSessionRef.current === session) setAddingCommitBusy(false);
+    }
+  };
+
+  const patchExisting = (item: IndexItem) => {
+    const targetFile = item.path?.toLowerCase().includes('/libraries/')
+      ? item.path.slice(item.path.toLowerCase().indexOf('libraries/'))
+      : activeSubTab === 'wares' ? 'libraries/wares.xml' : 'libraries/jobs.xml';
+    window.dispatchEvent(new CustomEvent('xmlpatch-pretarget', {
+      detail: { targetFile, selector: item.selector || `/${activeSubTab}/${activeSubTab === 'wares' ? 'ware' : 'job'}[@id='${item.insertText || item.id || item.label || ''}']` },
+    }));
+    cancelAdd();
   };
 
   const handleDeleteActiveItem = () => {
@@ -619,17 +676,14 @@ ${renderWareProduction(item, '    ')}
 <diff>
   <!-- XML Diff Patch adding new AI pilot squad to core jobs database: libraries/jobs.xml -->
   <add sel="/jobs">
-    <job id="${item.id}" name="${item.name}" active="true font">
-      <expiration min="7200" max="14400" />
+    <job id="${item.id}" name="${item.name}" startactive="true">
       <modifiers rebuild="${item.rebuildOnDestroy ? 'true' : 'false'}" />
-      <ship>
-        <select faction="${item.faction}" tags="military ${item.shipClass}" />
-        <loadout>
-          <level min="0.8" max="1.0" />
-        </loadout>
-      </ship>
       <quota galaxy="${item.galaxyQuota}" sector="${item.sectorQuota}" />
-      <task script="${item.taskScript}" />
+      <expirationtime min="7200" max="14400" />
+${item.taskScript ? `      <task task="${item.taskScript}" />\n` : ''}      <ship macro="${item.shipMacro}">
+        <select faction="${item.faction}" tags="[military, ${item.shipClass}]" />
+        <owner exact="${item.faction}" overridenpc="true" />
+      </ship>
     </job>
   </add>
 </diff>`;
@@ -637,13 +691,14 @@ ${renderWareProduction(item, '    ')}
       return `<?xml version="1.0" encoding="utf-8"?>
 <jobs>
   <!-- Pure standalone XML Job config file -->
-  <job id="${item.id}" name="${item.name}" active="true">
-    <expiration min="7200" max="14400" />
-    <ship>
-      <select faction="${item.faction}" tags="${item.shipClass}" />
-    </ship>
+  <job id="${item.id}" name="${item.name}" startactive="true">
+    <modifiers rebuild="${item.rebuildOnDestroy ? 'true' : 'false'}" />
     <quota galaxy="${item.galaxyQuota}" sector="${item.sectorQuota}" />
-    <task script="${item.taskScript}" />
+    <expirationtime min="7200" max="14400" />
+${item.taskScript ? `    <task task="${item.taskScript}" />\n` : ''}    <ship macro="${item.shipMacro}">
+      <select faction="${item.faction}" tags="[military, ${item.shipClass}]" />
+      <owner exact="${item.faction}" overridenpc="true" />
+    </ship>
   </job>
 </jobs>`;
     }
@@ -679,7 +734,7 @@ ${renderWareProduction(item, '    ')}
           {/* Sub menu selector */}
           <div className="flex items-center border border-white/10 bg-black/45 p-0.5 rounded-md">
             <button
-              onClick={() => { setActiveSubTab('wares'); setActiveItemIndex(0); }}
+              onClick={() => { setActiveSubTab('wares'); setActiveItemIndex(0); cancelAdd(); }}
               className={`px-3 py-1 rounded text-[10px] uppercase font-bold transition-all cursor-pointer ${
                 activeSubTab === 'wares' ? 'bg-cyan-500/15 text-cyan-400 font-extrabold' : 'text-slate-400 hover:text-white'
               }`}
@@ -687,7 +742,7 @@ ${renderWareProduction(item, '    ')}
               wares.xml
             </button>
             <button
-              onClick={() => { setActiveSubTab('jobs'); setActiveItemIndex(0); }}
+              onClick={() => { setActiveSubTab('jobs'); setActiveItemIndex(0); cancelAdd(); }}
               className={`px-3 py-1 rounded text-[10px] uppercase font-bold transition-all cursor-pointer ${
                 activeSubTab === 'jobs' ? 'bg-cyan-500/15 text-cyan-400 font-extrabold' : 'text-slate-500 hover:text-white'
               }`}
@@ -715,25 +770,29 @@ ${renderWareProduction(item, '    ')}
           </div>
 
           {addingId !== null && (
-            <div className="p-2 border-b border-white/10 bg-[#0d1018] shrink-0 flex items-center gap-1.5">
-              <input
-                autoFocus
+            <div className="p-2 border-b border-white/10 bg-[#0d1018] shrink-0 space-y-1.5">
+              <div className="flex items-start gap-1.5">
+              <div className="flex-1 min-w-0">
+              <ObjectIndexPicker
                 value={addingId}
-                spellCheck={false}
-                onChange={e => setAddingId(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') commitAdd();
-                  else if (e.key === 'Escape') cancelAdd();
-                }}
+                onChange={changeAddingId}
+                kind={activeSubTab === 'wares' ? 'ware' : 'job'}
+                endpoint="/api/reference/suggest"
+                intent="new-definition"
+                autoFocus
+                onExactMatchChange={setAddingCollision}
+                onExistingSelect={patchExisting}
                 placeholder={activeSubTab === 'wares' ? 'ware_antimatter_capsules' : 'job_trader_hauler'}
-                className="flex-1 min-w-0 px-2 py-1 rounded bg-black border border-cyan-500/40 text-white font-mono text-[11px] focus:outline-none focus:border-cyan-400"
+                existingActionLabel="Patch existing"
               />
+              </div>
               <button
-                onClick={commitAdd}
-                title="Create (Enter)"
-                className="px-2 py-1 rounded bg-cyan-500/15 hover:bg-cyan-500/30 border border-cyan-400/30 text-cyan-300 text-[9px] font-bold uppercase font-mono"
+                onClick={() => void commitAdd()}
+                title="Create new definition"
+                disabled={Boolean(addingCollision) || addingCommitBusy}
+                className="px-2 py-1.5 rounded bg-cyan-500/15 hover:bg-cyan-500/30 border border-cyan-400/30 text-cyan-300 text-[9px] font-bold uppercase font-mono disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Add
+                {addingCommitBusy ? 'Checking…' : 'Add'}
               </button>
               <button
                 onClick={cancelAdd}
@@ -742,6 +801,22 @@ ${renderWareProduction(item, '    ')}
               >
                 Esc
               </button>
+              </div>
+              {addingCollision && (
+                <div className="flex items-center justify-between gap-2 rounded border border-amber-400/20 bg-amber-500/5 px-2 py-1.5">
+                  <p className="min-w-0 text-[9px] text-amber-300 leading-snug">
+                    <span className="mr-1 inline-flex rounded border border-amber-400/30 px-1 py-0.5 text-[8px] font-bold">EXISTS</span>
+                    <strong>{addingCollision.insertText || addingCollision.id || addingCollision.label}</strong> already exists in {addingCollision.source || 'the corpus'}. Patch it instead of creating a duplicate.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => patchExisting(addingCollision)}
+                    className="shrink-0 rounded border border-amber-400/30 bg-amber-500/10 px-2 py-1 text-[8px] font-bold uppercase text-amber-300 hover:bg-amber-500/20"
+                  >
+                    Patch existing {addingCollision.insertText || addingCollision.id || addingCollision.label}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -1105,6 +1180,7 @@ ${renderWareProduction(item, '    ')}
                             <div className="flex-1 min-w-0">
                               <ObjectIndexPicker
                                 kind="ware"
+                                endpoint="/api/reference/suggest"
                                 value={entry.ware}
                                 onChange={v => updatePrimaryWare(i, 'ware', v)}
                                 placeholder="Search ware…"
@@ -1195,7 +1271,7 @@ ${renderWareProduction(item, '    ')}
                       <label className="text-slate-400 block mb-1 uppercase text-[9px] tracking-wider font-bold">Owning Combatant Faction</label>
                       <ObjectIndexPicker
                         kind="faction"
-                        stripPrefix="faction."
+                        endpoint="/api/reference/suggest"
                         value={(activeItem as JobDef).faction}
                         onChange={v => handleUpdateActiveJobProp('faction', v)}
                         placeholder="Search factions… (stores the short code)"
@@ -1203,14 +1279,25 @@ ${renderWareProduction(item, '    ')}
                     </div>
                     <div>
                       <label className="text-slate-400 block mb-1 uppercase text-[9px] tracking-wider font-bold">Target Flight Code Behavior</label>
-                      <input
-                        type="text"
+                      <ObjectIndexPicker
+                        kind="aiscript"
+                        endpoint="/api/reference/suggest"
                         value={(activeItem as JobDef).taskScript}
-                        onChange={e => handleUpdateActiveJobProp('taskScript', e.target.value)}
-                        className="w-full p-2 rounded bg-black/50 border border-white/10 text-amber-500 font-bold"
-                        placeholder="e.g. hunter.escort.behavior"
+                        onChange={value => handleUpdateActiveJobProp('taskScript', value)}
+                        placeholder="Search canonical/project AI scripts…"
                       />
                     </div>
+                  </div>
+
+                  <div>
+                    <label className="text-slate-400 block mb-1 uppercase text-[9px] tracking-wider font-bold">Ship Macro</label>
+                    <ObjectIndexPicker
+                      kind="macro"
+                      endpoint="/api/reference/suggest"
+                      value={(activeItem as JobDef).shipMacro}
+                      onChange={value => handleUpdateActiveJobProp('shipMacro', value)}
+                      placeholder="Search canonical ship macros…"
+                    />
                   </div>
 
                   <div className="p-3 bg-black/35 rounded-lg border border-white/5 space-y-3">
