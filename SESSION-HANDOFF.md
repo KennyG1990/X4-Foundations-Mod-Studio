@@ -3,8 +3,8 @@
 ## One-line state
 
 B102 lossless complex-mod graph projection and B103 single-click Directory Settings links are VERIFIED in the
-installed Antigravity host and published as `x4forge.x4-forge-studio` 0.0.55. The release commit/push is the only
-remaining close operation for this handoff.
+installed Antigravity host, published as `x4forge.x4-forge-studio` 0.0.55, and committed/pushed on `main` in
+release commit `1ab65b5`.
 
 ## Closed acceptance evidence
 
@@ -45,11 +45,12 @@ remaining close operation for this handoff.
 - The oracle sweep's two aggregate endpoints exceed its short per-request timeout; their direct long-timeout
   probes are green. This is harness observability debt, not a product failure.
 
-## Commit question / dirty-scope warning
+## Commit close / dirty-scope warning
 
-Commit the authorized 0.0.55 release unit with the pre-written comprehensive message, then push `main` and prove
-`origin/main == HEAD`. Preserve unrelated `KNOWN-BUGS.md` and the two modified 0.0.35 evidence screenshots; do
-not stage `.tmp-b102-validation/`. This handoff itself ships in that release commit.
+Release commit `1ab65b5` was pushed to `origin/main`; the final close verified the remote ref matched the local
+release line. Unrelated `KNOWN-BUGS.md`, the two modified 0.0.35 evidence screenshots, and
+`.tmp-b102-validation/` remain intentionally outside the release. Policy rejected recursive deletion of the
+verified temporary harness folder, so it was not bypassed or staged.
 
 ## AAR outcome
 
