@@ -227,9 +227,9 @@ Important routes include:
 
 The in-app **AGENT API** panel documents the routes, shows live state, and exposes surgical workspace operations. It is focused on real agent operations, not demo-only test runs.
 
-## 💡 Case Study: Building "AI Influence" (Player2 AI Integration)
+## 💡 Case Study: Building "x4 AiLive" (Player2 AI Integration)
 
-To understand the power of X4 Forge, look at **AI Influence** (`x4_ai_influence`)—a complex extension that connects X4's live engine to a local **Player2 AI** server for real-time natural language diplomacy and fleet commands. 
+To understand the power of X4 Forge, look at **x4 AiLive** (`x4_ai_influence`)—a complex extension that connects X4's live engine to a local **Player2 AI** server for real-time natural language diplomacy and fleet commands. 
 
 Building a mod of this scale using traditional hand-written text editors would result in broken cues, XML syntax crashes, and silent UI failures. X4 Forge turned this ambitious concept into a stable, working reality:
 

@@ -311,7 +311,7 @@ the smallest safe source span and refuse stale, root-changing, reparenting, over
 
 Real acceptance fixture: DeadAir Dynamic Wars previews and loads as **1,424 graph nodes**, 1,420 links, four
 independently selectable MD files, 192 localized raw elements, **zero whole-cue collapses**, zero canonical
-mismatches, zero overlaps, and byte-identical no-edit output. The real AI Influence copy exposes 2,925 nodes
+mismatches, zero overlaps, and byte-identical no-edit output. The real x4 AiLive copy exposes 2,925 nodes
 with no opaque top-level cues. Installed Antigravity proved both a typed cue (`DynamicWarTimer`) and a localized
 `<include_actions>` node open as exact native XML tabs while remaining connected on the canvas.
 
@@ -376,7 +376,7 @@ it… not missing features — withheld knowledge."** All ten shipped across thr
 build. Store verified before commit: `0.0.43` on both the direct and latest endpoints.
 
 **Live proof on the running instance (v1.0.313, sidecar :61720), driven exactly as an agent would:**
-read `~/.x4forge/latest.json` → no port scan → `GET /api/agent/status` reported *AI Influence, 211
+read `~/.x4forge/latest.json` → no port scan → `GET /api/agent/status` reported *x4 AiLive, 211
 nodes*, `sourceSync: false` with the exact re-import call → `POST /api/agent/check-expression
 {"expression": "$station.manager"}` returned **`legal: false`, "segment 'manager' is unknown in
 scriptproperties.xml"** — the exact wrong property that had made the NPC census silently always empty.
@@ -1962,7 +1962,7 @@ Remaining trust items are per-feature (e.g. control-flow in-game confirmation), 
    - Test-geometry: the interactions spec right-clicked x=720 which sits UNDER the docked code editor at the
      1280px viewport since the G8 width fix → moved to free canvas (300,520) with an explanatory comment.
    - **⚠ G14 follow-up (logged):** failing e2e runs can CLOBBER the live server workspace (the finally-restore
-     dies with the browser) — tonight it reset Ken's loaded AI Influence workspace (restored via
+     dies with the browser) — tonight it reset Ken's loaded x4 AiLive workspace (restored via
      mod-folder/import + workspace POST, browser-verified). Tests need isolated workspace contexts.
 2. **✅ Drift as first-class state** — NEW `src/lib/modDrift.ts` (oracle 8/8, `GET /api/agent/mod-drift-selftest`):
    per-file hash/mtime comparison of the workspace vs deployed copies with honest canon HINTS (mtime is a hint,
@@ -1984,7 +1984,7 @@ Remaining trust items are per-feature (e.g. control-flow in-game confirmation), 
    honestly scoped: broaden the MODELED FIELD SET (so foreign files can pass the byte gate), not plumbing.
 
 *Verification: host tsc CLEAN, eslint CLEAN, **29/29 oracle sweep**, **e2e 10/10** (project-validate 6 +
-canvas 4, 23.7s), app browser-verified with the AI Influence workspace restored and rendering.*
+canvas 4, 23.7s), app browser-verified with the x4 AiLive workspace restored and rendering.*
 
 ### ✅ PASS 5 (2026-07-09 — LIVE MODE: the Play-In-Editor layer, Ken's original vision, 3 slices shipped)
 
@@ -1995,7 +1995,7 @@ debug log + the neural-link bridge every 2.5s and the GRAPH LIGHTS UP from the r
    the log watcher's per-cue fire/error counts onto canvas cue nodes: green **▶ hits** badge on firing cues,
    red **✗ errors** (pulsing) on erroring ones — silence is never a fault (no badge). NEW
    `POST /api/agent/live/cue-telemetry` (canvas posts its OWN cue names — works for undeployed workspaces;
-   `live` flag = log written <2 min ago). **Browser-verified with real data:** the AI Influence workspace's
+   `live` flag = log written <2 min ago). **Browser-verified with real data:** the x4 AiLive workspace's
    `Census_officers` library renders a green **▶ 12** from the last real game session's log.
 2. **✅ Slice 2 — game↔bridge chain freshness in the editor.** NEW `src/lib/bridgeLiveState.ts` (oracle 7/7) +
    `src/server/liveBridge.ts`: /health of the x4_neural_link bridge + READ-ONLY reads of its telemetry SQLite
@@ -2017,7 +2017,7 @@ worldsync → map), watch-action palette snippet, log tail streaming (fs.watch) 
 didn't fix it — the app under test SYNCS ITS OWN default workspace to the server on boot from a fresh browser
 profile, so merely running the suite replaced the user's loaded workspace. Fix: playwright `globalSetup`/
 `globalTeardown` (`tests/e2e/workspace-guard.ts`) snapshots the server workspace pre-suite and restores it
-post-suite, plus `workers: 1` for the shared-state race. **Proven: 10/10 passed AND the loaded AI Influence
+post-suite, plus `workers: 1` for the shared-state race. **Proven: 10/10 passed AND the loaded x4 AiLive
 workspace (152 nodes) survived the run intact** — previously it was reset to the default every time. The
 boot-sync behavior itself is the single-workspace architecture issue (one more datapoint for the
 one-project-model refactor).
@@ -2028,7 +2028,7 @@ research rig from the cross-session NPC-id investigation — never meant to ship
 handlers, panel); **the agent API endpoints (`/api/agent/npc-identity-probe/*`) and their selftest REMAIN**
 for agent-side use — say the word if those should go too. Also: the LIVE toggle now shows its label even when
 off (discoverability — Ken couldn't find it). Verified: tsc CLEAN, eslint CLEAN, e2e 10/10, Playtest panel
-browser-confirmed probe-free, workspace intact (AI Influence/152 nodes).
+browser-confirmed probe-free, workspace intact (x4 AiLive/152 nodes).
 
 ### ◐ PASS 6 IN PROGRESS (2026-07-09 — beta-UX bundles; INTERRUPTED by dev-server crash, needs `restart-studio.bat`)
 
@@ -2050,7 +2050,7 @@ died (the known tsx-watcher crash class, H-series — NOT a code error; last hos
   grounding caught a FALSE-POSITIVE class before shipping: imported mods carry events inside custom_condition
   rawXml blobs (Save_identity's `<check_any><event_game_started/>`), so the first listing offered 11 bogus
   checkinterval fixes on the PROVEN mod — fixed with conservative event detection (rawXml scanned for `<event_`;
-  any unreadable blob ⇒ "unknown", and unknown never produces a fix). Re-grounded: **0 fixes on AI Influence**.
+  any unreadable blob ⇒ "unknown", and unknown never produces a fix). Re-grounded: **0 fixes on x4 AiLive**.
   **Visual APPLY loop confirmed end-to-end** on a scratch workspace: flagged cue (red ring) → 🔧 One-click fixes
   at the TOP of the Properties Inspector (moved out of the collapsed Explain panel where it was buried) →
   APPLY FIX → checkinterval="1s" set, block disappears, red ring clears, server synced. Workspace restored from
@@ -2098,7 +2098,7 @@ died (the known tsx-watcher crash class, H-series — NOT a code error; last hos
   count parameterizes + clamps). Wizard UI on the G9 onboarding overlay ("Recipes — describe it, we build it").
   **Browser-verified end-to-end:** blank canvas → Bounty recipe → khaak/50000/notice → "Build my mod" →
   complete wired graph (cue→event→do_if owner check→reward→notice), named X4_Bounty_khaak, COMPILER: OK.
-  Gates: tsc CLEAN, eslint CLEAN, 21-oracle sweep green, workspace restored (AI Influence/218).
+  Gates: tsc CLEAN, eslint CLEAN, 21-oracle sweep green, workspace restored (x4 AiLive/218).
   **AAR (bundle D):** SUSTAIN — spec-before-build made this the cleanest bundle of the pass (zero re-plans);
   parameter sanitization AT THE BUILDER (lit/num/factionId) made hostile-answer safety free. IMPROVE — the
   onboarding overlay needed a truly-empty canvas to appear; the "Blank" template ships one starter node, so a
@@ -2237,7 +2237,7 @@ the three HARD-RULE sections + Agent Brain section are now synced into this repo
 - **A8 ✅** collectModLogMarkers now derives from collectModLuaFiles/findDeployedModDir — one dir-resolution.
 - **A4 ▢ deferred** (fix-engine convergence needs graph-mutating fix ops — spec'd, next audit round).
 *Verification: host tsc CLEAN, eslint CLEAN, **37/37 oracle sweep** (incl. probe via module), e2e suite passed
-with workspace guard holding (AI Influence/218 restored), knowledge graph updated.*
+with workspace guard holding (x4 AiLive/218 restored), knowledge graph updated.*
 **AAR (audit-fix pass):** SUSTAIN — measure-first made A1's win undeniable (10-16ms proof beats any code
 review); anchored-script excision for big blocks (GitHub precedent) worked twice more without truncation.
 IMPROVE — my first A7 attempt left a `false &&` dead block (the exact bloat under repair) before self-catching;
@@ -2399,7 +2399,7 @@ Second-pass review reproduced the defect instead of trusting the first analysis:
 `generateUILuaScript()` emitted widget metadata plus an EMPTY `onShowMenu`, UIBuilder previewed a different
 fuller program, and Canvas called graph-only heuristics `COMPILER`. It also found a stronger product lie:
 the "HUD Button" beginner template promised a visible HUD button with no construction/open path.
-**Built:** one shared package/preview emitter now uses the in-game-proven AI Influence lifecycle and APIs
+**Built:** one shared package/preview emitter now uses the in-game-proven x4 AiLive lifecycle and APIs
 present in the unpacked X4 9.00 corpus: lazy Helper, deferred/idempotent registration, namespaced
 `RegisterEvent`, queued early-open retry, `OpenMenu`, `onShowMenu`, `createFrameHandle`, fTable rows, and
 `frame:display()`. All nine designer widget types emit real Helper cells; excluded widgets do not ship;
@@ -3353,7 +3353,7 @@ dotted versions keep the EXACT prior behavior ("1.0.0"→"100", "1.2"→"120") s
 compiles to the same number — zero regression by construction. UI: the META tab's Version String field now
 shows a live preview — "→ content.xml version: N (shown in-game as vX.XX)" — so what ships is never a
 surprise. *Verified: mod-distribution oracle **26/26** (5 new cases: integer passthrough ×2, semver
-regression guard, garbage/empty defaults); host tsc CLEAN; real-mod regression — fresh AI Influence import
+regression guard, garbage/empty defaults); host tsc CLEAN; real-mod regression — fresh x4 AiLive import
 compiles to version="100" unchanged; UI preview rendering live (read from the DOM: "→ content.xml version:
 120 (shown in-game as v1.20)" on the active workspace).* AAR: clean — single attempt, no triggers; logged
 per the zero-trigger rule.
@@ -3760,7 +3760,7 @@ lints + a liveness-aware watcher are integrity-tier, not polish.
 
 #### ✅ SHIPPED 2026-06-25 — Watcher CUE LIVENESS (item B-4 above). The watcher now catches silent-dead cues.
 `getGameLogStatus` (server.ts) now reads the DEPLOYED mod's cue names (`collectDeployedModCueNames` — globs the
-mod folder's `md/*.xml`, resolving the metadata-name→folder-id drift, e.g. "AI Influence" → `x4_ai_influence`)
+mod folder's `md/*.xml`, resolving the metadata-name→folder-id drift, e.g. "x4 AiLive" → `x4_ai_influence`)
 and runs `parseLogTelemetry(tail, cueNames)` to report **which cues are firing vs silent**. Response gains
 `cueLiveness {totalCues, firingCount, silentCount, firing:[{name,hits,errors}], silent:[...]}`; a loaded mod with
 0 cues firing is escalated from a false "clean" to **`warnings`** with "⚠ loaded but INERT". Frontend
@@ -4000,7 +4000,7 @@ separate domain, out of scope for MD-passthrough elimination.)
   which folder/dir is open" gap. Verified showing `F:\…\x4_ai_influence`.
 - **Compile names the mod after the LOADED FOLDER, not the display title** — `effectiveModId` now derives the
   mod id from `basename(ws.sourceFolder)` (sanitized via `toSafeModId`) before falling back to `contentId`/name.
-  Fixes the oversight where loading `x4_ai_influence - Copy` compiled as "AI Influence" → would have hit
+  Fixes the oversight where loading `x4_ai_influence - Copy` compiled as "x4 AiLive" → would have hit
   `extensions/ai_influence` (or, via the copied content id, the ORIGINAL `x4_ai_influence` — destructive).
   **Verified:** loaded `…\extensions\x4_ai_influence - Copy` → toast "deployed to game extensions:
   …\extensions\**x4_ai_influence_copy**" (distinct, non-destructive). Also confirms the multi-script
@@ -4685,7 +4685,7 @@ schema, and the live-log watcher is the backstop, so it must not lie.
 
 **Live-log watcher (`game-log/status`) fixes:**
 - **False all-clear bug** — it matched log lines by `toSafeModId(workspace.name)` (e.g.
-  `ai_influence_test_mod` from the display name "AI Influence Test Mod"), but the real
+  `ai_influence_test_mod` from the display name "x4 AiLive Test Mod"), but the real
   extension folder is `ai_influence_test`. The substring filter never matched, so the mod's
   real errors were silently uncounted → a dangerous "0 issues". Now `analyzeGameLog` /
   `computeGameStates` match a SET of candidate ids (display name, space/underscore forms,
@@ -4773,9 +4773,9 @@ semantic warning until it's modeled). Both are the right next coverage steps.
 *Origin: GLM/Kilo gap analysis (`dev-docs/gap-analysis-roadmap-realignment.md`, v2) → Claude review (4 corrections) → **Claude live verification of every claimed gap against the running source** (the step GLM couldn't do; it is read-only and downgraded its own confidence to ~70%). This section records the VERIFIED picture. Additive only — nothing below this is stripped; #64/#65/#67, G9–G12, C2, model/game/host-gated items all stay.*
 
 ### Realigned North Star (additive, bounded)
-> Forge is complete when an AI agent can drive it via the API to build **a specific, bounded complex multi-file X4 extension — concretely, AI Influence** — end-to-end: MD scripts, Lua logic, UI addons, config, and manifest, with validation at every step (schema-grade where the schema exists, ◐ softer where it doesn't, honestly labeled), producing an installable extension that runs in-game.
+> Forge is complete when an AI agent can drive it via the API to build **a specific, bounded complex multi-file X4 extension — concretely, x4 AiLive** — end-to-end: MD scripts, Lua logic, UI addons, config, and manifest, with validation at every step (schema-grade where the schema exists, ◐ softer where it doesn't, honestly labeled), producing an installable extension that runs in-game.
 
-The original North Star (single MD file, human builder) is a **subset**, not replaced. "Any complex mod" is explicitly NOT the done-line (asymptotic); **AI Influence is the bounded, testable criterion.** Positioning (public framing, whether to surface AI openly) is decoupled and out of scope here — the capabilities are built because tedium-reduction + failure-prevention hold regardless.
+The original North Star (single MD file, human builder) is a **subset**, not replaced. "Any complex mod" is explicitly NOT the done-line (asymptotic); **x4 AiLive is the bounded, testable criterion.** Positioning (public framing, whether to surface AI openly) is decoupled and out of scope here — the capabilities are built because tedium-reduction + failure-prevention hold regardless.
 
 ### Verified gap verdict (Claude, live source — supersedes GLM's hypotheses)
 Confidence ~90% (source-decisive) vs GLM's ~70% (read-only). Evidence: `server.ts` routes, `src/types.ts` (`ModWorkspace`), `src/lib/contractGlue.ts`, `compositeBlocks.ts`, `modDoctor.ts`, `cueLineage.ts`.
@@ -4802,7 +4802,7 @@ Confidence ~90% (source-decisive) vs GLM's ~70% (read-only). Evidence: `server.t
 - **P3 — Agent multi-file orchestration (Tier 5):** project-level generation API + multi-file gen + Lua endpoint + packaging. *Depends on P0.*
 - **P4 — Third-party API palettization (Tier 4):** external API registry (kuertee/SirNukes) + ◐ validation.
 - **P5 — Cross-file validation (Tier 6):** cross-file cue refs + MD↔Lua event-contract match + dep validation. *Depends on P0.*
-- **P6 — Capstone (C2 redefined):** agent builds AI Influence via Forge API, compiles/installs/runs in-game, zero hand-editing, validation honestly labeled. When true, Forge is done. (Original C2 remains a subset milestone.)
+- **P6 — Capstone (C2 redefined):** agent builds x4 AiLive via Forge API, compiles/installs/runs in-game, zero hand-editing, validation honestly labeled. When true, Forge is done. (Original C2 remains a subset milestone.)
 
 **Active: P0**, built house-pattern (pure model + oracle + GET → UI/agent-API) so each increment is browser-validatable.
 
@@ -4818,11 +4818,11 @@ Confidence ~90% (source-decisive) vs GLM's ~70% (read-only). Evidence: `server.t
 **P1 DONE (2026-06-18) — transport remainder, rescoped small.** Added pure `src/lib/fileBridgeTransport.ts` plus shared `src/lib/contractEvents.ts`: validates safe file-bridge options, generates the bounded MD polling subgraph (`debug_to_file` request write → `do_while` poll loop → timeout event), XML-escapes payload expressions, normalizes bare poll/timeout numbers to seconds, and emits a Lua `ALLOWED_ACTIONS` whitelist guard. Wired a **File Bridge Poll** canvas pattern into `compositeBlocks.ts`; it inserts a cue + custom XML action node that compiles clean and uses the same contract event names. Extended the existing `contractGlue` seam instead of adding a third glue system: `ContractEndpoint.kind` now supports `file_bridge`, `generateContractMdScript` emits `Call_<id>` libraries with the file-poll subgraph, `generateHttpGlueLua` emits whitelisted poll/timeout handlers, `validateContract` checks file-bridge settings, `ContractEditor` exposes FILE endpoints with directory/request/response/poll/timeout fields, and workspace sanitize preserves the fileBridge config. The existing `contract-glue-sample` now includes HTTP + FILE examples.
   - Commands/results: `npm run typecheck` → exit 0. In-process `runContractGlueSelftest()` → **30/30**, `runFileBridgeTransportSelftest()` → **10/10**, `runCompositeBlocksSelftest()` → **23/23**. Live `GET http://localhost:3001/api/agent/contract-selftest` → **allPassed true, 30/30**; live `GET http://localhost:3001/api/agent/file-bridge-transport-selftest` → **allPassed true, 10/10**; live `GET http://localhost:3001/api/agent/composite-blocks-selftest` → **allPassed true, 23/23**; live `GET http://localhost:3001/api/agent/contract-glue-sample` → success, 3 endpoints, file-bridge Lua + MD present. `node scripts/oracle-sweep.mjs` → **44/44 green**. `npm run lint -- --format json --output-file .lint-p1-contract-filebridge.json` → exit 0, **0 errors / 645 warnings**. `npm run precommit:check` → exit 0; size guard passed (`server.ts` **5752 lines / 255583 bytes**, `src/lib/mdSemantics.ts` **578 lines / 31690 bytes**). `npm run test:canvas` → **1 passed** (real canvas interactions + perf guard). Browser proof via installed Chrome at `http://localhost:3000/`: Contracts tab creates/edits a FILE endpoint, file-bridge settings render (Directory/Request File/Response File/Poll/Timeout), Lua preview contains `ALLOWED_ACTIONS` + blocked-action guard, MD preview contains `debug_to_file` + `do_while` polling + request file, console errors **0**. Separate quick-add smoke showed **File Bridge Poll** visible. Historical note: #70 `E2E_Canvas` fixture leak was still open during this P1 run; fixed later in #70.
 
-**P2 DONE (2026-06-18) — Lua logic authoring, blocks-first.** Added pure `src/lib/luaLogicBlocks.ts`: typed structured Lua idiom blocks (`event_handler`, `djfhe_http_call`, `json_parse`, `response_poll`) compile to a complete `ai_influence_chat.lua` text script. The oracle proves the generated file contains the four required idioms and passes luaparse through the existing deterministic `luaStaticAnalysis` layer. Added public `GET /api/agent/lua-logic-blocks-selftest` (allowlisted). Extended the HUD & LUA UI editor instead of adding a parallel Lua editor: a **Structured Lua logic blocks** section inserts the AI Influence chat script into `workspace.customLua`; the existing text buffer now runs author-time luaparse analysis and reports syntax/errors inline while typing. This keeps P2 blocks-first while preserving the text surface for real Lua.
-  - Commands/results: `npm run typecheck` → exit 0. In-process `runLuaLogicBlocksSelftest()` → **7/7**, sample file `ai_influence_chat.lua`. Live `GET http://localhost:3001/api/agent/lua-logic-blocks-selftest` → **allPassed true, 7/7**. `node scripts/oracle-sweep.mjs` → **45/45 green**. `npm run lint -- --format json --output-file .lint-p2-lua-blocks.json` → exit 0, **0 errors / 648 warnings**. `npm run precommit:check` → exit 0; size guard passed (`server.ts` **5762 lines / 255945 bytes**, `src/lib/mdSemantics.ts` **578 lines / 31690 bytes**). `npm run test:canvas` → **1 passed**. Browser proof via installed Chrome at `http://localhost:3000/`: HUD & LUA UI → Lua Script Event Manager shows the AI Influence block; inserting it yields Lua containing `ai_influence_chat.lua`, `require("djfhe.http.request")`, and `poll_chat_response`; clean generated script reports **Lua analysis: 0 errors / 0 warnings / 0 findings**; replacing the buffer with `function broken(` immediately reports `lua.syntax_error`; console errors **0**. Honest caveat: author-time Lua validation is luaparse/static-analysis grade (◐), not schema-grade runtime proof; in-game execution remains P6/game-gated.
+**P2 DONE (2026-06-18) — Lua logic authoring, blocks-first.** Added pure `src/lib/luaLogicBlocks.ts`: typed structured Lua idiom blocks (`event_handler`, `djfhe_http_call`, `json_parse`, `response_poll`) compile to a complete `ai_influence_chat.lua` text script. The oracle proves the generated file contains the four required idioms and passes luaparse through the existing deterministic `luaStaticAnalysis` layer. Added public `GET /api/agent/lua-logic-blocks-selftest` (allowlisted). Extended the HUD & LUA UI editor instead of adding a parallel Lua editor: a **Structured Lua logic blocks** section inserts the x4 AiLive chat script into `workspace.customLua`; the existing text buffer now runs author-time luaparse analysis and reports syntax/errors inline while typing. This keeps P2 blocks-first while preserving the text surface for real Lua.
+  - Commands/results: `npm run typecheck` → exit 0. In-process `runLuaLogicBlocksSelftest()` → **7/7**, sample file `ai_influence_chat.lua`. Live `GET http://localhost:3001/api/agent/lua-logic-blocks-selftest` → **allPassed true, 7/7**. `node scripts/oracle-sweep.mjs` → **45/45 green**. `npm run lint -- --format json --output-file .lint-p2-lua-blocks.json` → exit 0, **0 errors / 648 warnings**. `npm run precommit:check` → exit 0; size guard passed (`server.ts` **5762 lines / 255945 bytes**, `src/lib/mdSemantics.ts` **578 lines / 31690 bytes**). `npm run test:canvas` → **1 passed**. Browser proof via installed Chrome at `http://localhost:3000/`: HUD & LUA UI → Lua Script Event Manager shows the x4 AiLive block; inserting it yields Lua containing `ai_influence_chat.lua`, `require("djfhe.http.request")`, and `poll_chat_response`; clean generated script reports **Lua analysis: 0 errors / 0 warnings / 0 findings**; replacing the buffer with `function broken(` immediately reports `lua.syntax_error`; console errors **0**. Honest caveat: author-time Lua validation is luaparse/static-analysis grade (◐), not schema-grade runtime proof; in-game execution remains P6/game-gated.
 
 **P3 DONE (2026-06-18) — agent multi-file orchestration API.** Added pure `src/lib/projectOrchestration.ts`: stateless helpers for `createAgentProject`, `createProjectFile`, deterministic `generateAgentProject({kind:'ai_influence_starter'})`, and `packageAgentProject`. The generated starter project is a real multi-file `ExtensionProject` with `content.xml` (deps), `md/<id>_main.xml`, `md/<id>_contract.xml`, `ui/<id>_contract.lua`, and `ui/ai_influence_chat.lua`; packaging validates structure, cross-file cue refs, and Lua parse errors before returning a file manifest. Fixed `extensionProject` cue indexing to include `<library name="...">` definitions, so contract call libraries resolve as project-local cross-file targets instead of being treated as external. Wired protected agent routes: `POST /api/agent/project/create`, `/file/create`, `/generate`, `/package`; added public `GET /api/agent/project-orchestration-selftest`; listed the new routes in `GET /api/agent/schema`.
-  - Commands/results: `npm run typecheck` → exit 0. In-process `runExtensionProjectSelftest()` → **27/27** and `runProjectOrchestrationSelftest()` → **9/9**. Live `GET http://localhost:3001/api/agent/project-orchestration-selftest` → **allPassed true, 9/9**. Protected API proof using `.studio-api-token`: `POST /api/agent/project/generate` → success, **5 files**; `POST /api/agent/project/package` on that project → success, `ok:true`, **5 files**, `unresolvedCueRefs:0`, `luaErrors:0`, includes `ui/ai_influence_chat.lua`. Browser-origin proof via Chrome at `http://localhost:3000/`: fetch `/api/agent/project/generate` + `/api/agent/project/package` with injected token → both **200**, package `ok:true`, **5 files**, `unresolvedCueRefs:0`, `luaErrors:0`, has chat Lua + contract MD, `/api/agent/schema` lists `/api/agent/project/generate`, console errors **0**. `node scripts/oracle-sweep.mjs` → **46/46 green**. `npm run lint -- --format json --output-file .lint-p3-project-api.json` → exit 0, **0 errors / 650 warnings**. `npm run precommit:check` → exit 0; size guard passed (`server.ts` **5848 lines / 259629 bytes**, `src/lib/mdSemantics.ts` **578 lines / 31690 bytes**). `npm run test:canvas` → **1 passed**. Honest caveat: this is deterministic project orchestration and packaging, not the P6 in-game AI Influence capstone.
+  - Commands/results: `npm run typecheck` → exit 0. In-process `runExtensionProjectSelftest()` → **27/27** and `runProjectOrchestrationSelftest()` → **9/9**. Live `GET http://localhost:3001/api/agent/project-orchestration-selftest` → **allPassed true, 9/9**. Protected API proof using `.studio-api-token`: `POST /api/agent/project/generate` → success, **5 files**; `POST /api/agent/project/package` on that project → success, `ok:true`, **5 files**, `unresolvedCueRefs:0`, `luaErrors:0`, includes `ui/ai_influence_chat.lua`. Browser-origin proof via Chrome at `http://localhost:3000/`: fetch `/api/agent/project/generate` + `/api/agent/project/package` with injected token → both **200**, package `ok:true`, **5 files**, `unresolvedCueRefs:0`, `luaErrors:0`, has chat Lua + contract MD, `/api/agent/schema` lists `/api/agent/project/generate`, console errors **0**. `node scripts/oracle-sweep.mjs` → **46/46 green**. `npm run lint -- --format json --output-file .lint-p3-project-api.json` → exit 0, **0 errors / 650 warnings**. `npm run precommit:check` → exit 0; size guard passed (`server.ts` **5848 lines / 259629 bytes**, `src/lib/mdSemantics.ts` **578 lines / 31690 bytes**). `npm run test:canvas` → **1 passed**. Honest caveat: this is deterministic project orchestration and packaging, not the P6 in-game x4 AiLive capstone.
 
 **P5 DONE (2026-06-18) — cross-file validation diagnostics.** Added pure `src/lib/projectCrossFileValidation.ts`: validates a whole `ExtensionProject` for structural issues, unresolved project-local cue refs, MD→Lua event coverage (`<raise_lua_event name="'ns.event'">` must have a Lua `RegisterEvent("ns.event", ...)`), Lua→MD event coverage (`AddUITriggeredEvent(ns, "control", ...)` must have an MD `<event_ui_triggered screen="'ns'" control="'control'" />`), and content.xml dependency sanity (parseable manifest, duplicate deps, self-dep). Wired public `GET /api/agent/project-crossfile-selftest` and protected `POST /api/agent/project/validate-crossfile`; the legacy `POST /api/agent/project/validate` and `packageAgentProject` now include the richer `crossFile` diagnostics. The validator caught a real generated-starter gap: Lua emitted `ai_influence.chat.error` but the MD scaffold only listened for `.response`; fixed `generateContractMdScript` to emit `On_<id>_error` listeners for HTTP/file-bridge contracts.
   - Commands/results: `npm run typecheck` → exit 0. In-process via `node --import tsx -e "..."`: `runProjectCrossFileSelftest()` → **8/8**, `runProjectOrchestrationSelftest()` → **10/10**. Live `GET http://localhost:3001/api/agent/project-crossfile-selftest` → **allPassed true, 8/8**; live `GET http://localhost:3001/api/agent/project-orchestration-selftest` → **allPassed true, 10/10**. `node scripts/oracle-sweep.mjs` → **47/47 green**. Browser-origin proof at `http://localhost:3000/` with injected token: `POST /api/agent/project/generate` → **200**, 5 files, `crossFileErrors:0`; `POST /api/agent/project/validate-crossfile` → **200**, `ok:true`, `errors:0`, `mdLuaMissingRegisters:0`, `luaMdMissingListeners:0`, dependency `djfhe_http`, generated contract MD includes `On_chat_error`, schema lists `/api/agent/project/validate-crossfile`. `npm run lint` → exit 0, **0 errors / 650 warnings**. `npm run precommit:check` → exit 0; size guard passed (`server.ts` **5885 lines / 261371 bytes**, `src/lib/mdSemantics.ts` **578 lines / 31690 bytes**). `npm run test:canvas` → **1 passed**. Browser smoke: fresh load on `:3000`, exact buttons `AGENT API`, `MD Scripts`, `Wares & Jobs`, `HUD & LUA UI` all opened, console errors **0**. Honest caveat: the in-app browser's read-only eval surface did not expose `fetch`/XHR constructors, so the protected POST browser-origin proof used the Playwright page context; this is still same-origin browser JS with the injected app token. Historical note: #70 E2E_Canvas fixture leak was still open during this P5 run; fixed later in #70.
@@ -4851,7 +4851,7 @@ Confidence ~90% (source-decisive) vs GLM's ~70% (read-only). Evidence: `server.t
 - **P3** — agent multi-file orchestration (`/api/agent/project/{create,file/create,generate,package}`); depends on P0 ✅. ✅ **DONE & VERIFIED**.
 - **P5** — cross-file validation (MD↔Lua event-contract match, cross-file cue refs as diagnostics); depends on P0 ✅. ✅ **DONE & VERIFIED**.
 - **P4** — third-party API palettization (kuertee/SirNukes registry; ◐ softer validation) + **dynamic loadable registry** (drop-in defs from 3 sources + derive-from-installed-mod) + **data-driven built-ins** (curated set migrated code→JSON; two-tier). ◐ **CORE + DYNAMIC + MIGRATION DONE & live-verified; host gates pending (Codex)** — see snapshots below.
-- **P6** — capstone: agent builds AI Influence via Forge API, runs in-game (game-gated; the done-criterion).
+- **P6** — capstone: agent builds x4 AiLive via Forge API, runs in-game (game-gated; the done-criterion).
 
 **#64 galaxy map remainder:** parser + read-only Phase 1 rendering UI + DLC/extension sector merge DONE. Phase 2 editor stays gated (valid≠placement).
 
@@ -6968,3 +6968,31 @@ installed/tested package at SHA-256
 
 Suggested commit title:
 `feat(studio): ship lossless responsive navigation and persistent layout customization`.
+
+## 2026-07-29 — B108 known-bugs hardening / OpenVSX 0.0.58 — VERIFIED
+
+Kimi K3's known-bugs report was reconciled finding by finding instead of accepted as a build list. FB-15 and
+FB-7/8/9/10 were disproved or policy material; FB-13 retained its proven B97 caller and gained full validation.
+The confirmed scope is closed: atomic workspace/file persistence and request-local receipts; explicit deploy
+identity plus full-project preflight; server-owned GitHub credentials with browser/API redaction and agent-key
+denial; bounded cache/parser/network inputs; AST-based cross-file Lua registration and indexed Lua/MD payload
+contracts; zero-advisory dependencies; and deterministic Windows quality CI. `KNOWN-BUGS.md` again contains only
+active defects and is currently empty.
+
+Validation repaired two harness defects without weakening production checks: synthetic reference selftests no
+longer depend on external corpus configuration, and isolated e2e carries the read-only canonical root while
+keeping mutable state disposable. Evidence: route stability 10/10 at 175/175; oracles 114/114; full e2e 43/43
+with stopped 3100/3101 stacks and unchanged live-state hashes; canonical corpus 14/14; 364,527-entry installed
+CAT; reference API 81/81 over 37 schema domains; particles 544/544; typecheck/lint/build/precommit green; audit
+zero vulnerabilities.
+
+Installed validation found and closed one late upgrade defect: legacy 0.0.57 discovery records could retain a
+bearer token when Windows reused the recorded PID. All discovery reads/writes now project onto public address
+metadata and migrate unknown legacy fields away. The rebuilt packaged server scrubbed the real legacy profile;
+Antigravity then visibly ran 0.0.58 / Studio v1.0.348 with managed sidecar 58753 answering its schema API and
+published only token-free records. OpenVSX serves stable
+0.0.58; its public 17,812,396-byte VSIX exactly matches the installed/tested artifact at SHA-256
+`4E703F203B32DBB7A9EDFB7C1A27705175371B638EEC17B68744F4D9A69F1009`.
+
+Suggested commit title:
+`fix(release): harden deploys, credentials, validation, and CI; publish X4 Forge Studio 0.0.58`.
