@@ -67,27 +67,41 @@ test('corpus authoring blocks collisions, completes XPath, previews, applies, an
 
   const planFor = async (rule: Record<string, unknown>) => {
     const envelope = await readServerWorkspaceEnvelope();
-    const rows = targetFiles.slice(0, 2).map((targetFile, index) => ({
-      targetFile, selector: String(rule.selector), oldValue: index ? '210000' : '216000',
-      newValue: index ? '315000' : '324000', sourceSignature: `e2e-source-${index}`,
-      sources: [{ source: index ? 'ego_dlc_test' : 'base', mode: index ? 'diff' : 'base' }],
+    const operations = Array.isArray(rule.operations) && rule.operations.length
+      ? rule.operations as Array<{ id: string; selector: string }>
+      : [{ id: 'operation-1', selector: String(rule.selector) }];
+    const changesFor = (fileIndex: number) => operations.map((operation, operationIndex) => ({
+      operationId: operation.id,
+      selector: operation.selector,
+      oldValue: operationIndex ? String(10 + fileIndex) : (fileIndex ? '210000' : '216000'),
+      newValue: operationIndex ? String(15 + fileIndex) : (fileIndex ? '315000' : '324000'),
+    }));
+    const rows = targetFiles.slice(0, 2).flatMap((targetFile, fileIndex) => changesFor(fileIndex).map((change, operationIndex) => ({
+      targetFile, selector: change.selector, oldValue: change.oldValue, newValue: change.newValue,
+      sourceSignature: `e2e-source-${fileIndex}`,
+      sources: [{ source: fileIndex ? 'ego_dlc_test' : 'base', mode: fileIndex ? 'diff' : 'base' }],
       simulationOk: true, findings: [],
       patch: {
-        id: `bulk_e2e_${index}`, sel: String(rule.selector), action: 'replace',
-        content: index ? '315000' : '324000', note: 'Bulk transform multiply from canonical value',
-        targetFile, includeInBuild: true, generatedRuleId: 'bulk-e2e', generatedPlanHash: 'plan-e2e', sourceSignature: `e2e-source-${index}`,
+        id: `bulk_e2e_${fileIndex}_${operationIndex}`, sel: change.selector, action: 'replace',
+        content: change.newValue, note: 'Bulk bundle transform from canonical value',
+        targetFile, includeInBuild: true, generatedRuleId: 'bulk-e2e', generatedPlanHash: 'plan-e2e', sourceSignature: `e2e-source-${fileIndex}`,
       },
-    }));
+    })));
     return {
       ok: true, rule, ruleId: 'bulk-e2e', planHash: 'plan-e2e', corpusGeneration: 'e2e-corpus',
       candidateCount: 3, matchedFiles: 2, skippedFiles: 1, droppedCount: 0,
       rows,
       files: [
-        ...rows.map(row => ({
-          targetFile: row.targetFile, status: 'matched', matchCount: 1,
-          oldValue: row.oldValue, newValue: row.newValue, sourceSignature: row.sourceSignature,
-          sources: row.sources, simulationOk: true, findings: [],
-        })),
+        ...targetFiles.slice(0, 2).map((targetFile, fileIndex) => {
+          const changes = changesFor(fileIndex);
+          return {
+            targetFile, status: 'matched', matchCount: changes.length,
+            oldValue: changes[0].oldValue, newValue: changes[0].newValue, changes,
+            sourceSignature: `e2e-source-${fileIndex}`,
+            sources: [{ source: fileIndex ? 'ego_dlc_test' : 'base', mode: fileIndex ? 'diff' : 'base' }],
+            simulationOk: true, findings: [],
+          };
+        }),
         {
           targetFile: targetFiles[2], status: 'skipped', matchCount: 0,
           sourceSignature: 'e2e-source-2', sources: [{ source: 'base', mode: 'base' }], findings: [],
@@ -111,7 +125,7 @@ test('corpus authoring blocks collisions, completes XPath, previews, applies, an
     const patched = { ...before.workspace, xmlPatches: plan.rows.map(row => row.patch) };
     await seedServerWorkspace(patched);
     const after = await readServerWorkspaceEnvelope();
-    await route.fulfill({ status: 200, json: { success: true, applied: true, added: 2, plan, ...after } });
+    await route.fulfill({ status: 200, json: { success: true, applied: true, added: plan.rows.length, plan, ...after } });
   });
 
   await page.goto('/');
@@ -184,10 +198,17 @@ test('corpus authoring blocks collisions, completes XPath, previews, applies, an
   await selector.fill('/macros/macro/properties/hull/@max');
   await page.getByTestId('bulk-rounding').selectOption('ceil');
   await page.getByTestId('bulk-rounding-increment').fill('1000');
+  await page.getByTestId('bulk-add-operation').click();
+  await page.getByTestId('bulk-selector-1').fill('/macros/macro/properties/recharge/@rate');
+  await page.getByTestId('bulk-operation-1').selectOption('add');
+  await page.getByLabel('Field 2 operand').fill('5');
 
   const beforePreview = await readServerWorkspaceEnvelope();
   await page.getByRole('button', { name: 'Preview against corpus', exact: true }).click();
   await expect(page.getByText('2 VALIDATED', { exact: true })).toBeVisible();
+  await expect(page.getByText('2 fields').first()).toBeVisible();
+  await page.getByText(targetFiles[0], { exact: true }).click();
+  await expect(page.getByText('combined atomic preview', { exact: false })).toBeVisible();
   await expect(page.getByText('216000')).toBeVisible();
   await expect(page.getByText('324000')).toBeVisible();
   await expect(page.getByText('0 matches', { exact: true })).toBeVisible();
@@ -196,8 +217,8 @@ test('corpus authoring blocks collisions, completes XPath, previews, applies, an
   expect(afterPreview.workspaceHash).toBe(beforePreview.workspaceHash);
   expect(afterPreview.version).toBe(beforePreview.version);
 
-  await page.getByRole('button', { name: 'Add 2 validated patches to workspace', exact: true }).click();
-  await expect.poll(async () => (await readServerWorkspace()).xmlPatches?.length || 0).toBe(2);
+  await page.getByRole('button', { name: 'Add 4 validated field patches to workspace', exact: true }).click();
+  await expect.poll(async () => (await readServerWorkspace()).xmlPatches?.length || 0).toBe(4);
   await expect(page.locator('button[title="Undo last action (Ctrl+Z)"]')).toBeEnabled();
   await page.locator('button[title="Undo last action (Ctrl+Z)"]').click();
   await expect.poll(async () => (await readServerWorkspace()).xmlPatches?.length || 0, { timeout: 20_000 }).toBe(0);

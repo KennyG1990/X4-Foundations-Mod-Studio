@@ -2,7 +2,7 @@
   "name": "x4-forge-studio",
   "displayName": "X4 Forge Studio",
   "description": "Visual modding studio for X4: Foundations â€” build, validate, and deploy mods with a node canvas and real-schema validation, no hand-written XML required.",
-  "version": "0.0.55",
+  "version": "0.0.56",
   "icon": "icon.png",
   "publisher": "x4forge",
   "license": "MIT",

@@ -8,6 +8,7 @@ import {
   createBulkTransformPlan,
   logicalReferencePath,
   mergeBulkTransformPatches,
+  type BulkTransformOperationRule,
   type BulkTransformRule,
 } from '../lib/bulkCorpusTransform';
 import type { ModWorkspace, PatchBlock } from '../types';
@@ -26,14 +27,29 @@ function errorText(error: unknown): string { return error instanceof Error ? err
 
 function parseRule(body: any): BulkTransformRule {
   if (!body?.rule || typeof body.rule !== 'object') throw new Error('Missing required rule object.');
+  const parseOperand = (value: any) => Array.isArray(value)
+    ? [Number(value[0]), Number(value[1])] as [number, number]
+    : Number(value);
+  const operations: BulkTransformOperationRule[] | undefined = Array.isArray(body.rule.operations)
+    ? body.rule.operations.map((operation: any, index: number) => ({
+        id: String(operation?.id || `operation-${index + 1}`),
+        selector: String(operation?.selector || ''),
+        operation: operation?.operation,
+        operand: parseOperand(operation?.operand),
+        rounding: operation?.rounding,
+        roundingIncrement: operation?.roundingIncrement === undefined ? 1 : Number(operation.roundingIncrement),
+      }))
+    : undefined;
+  const first = operations?.[0];
   return {
     pathPrefix: String(body.rule.pathPrefix || ''),
-    selector: String(body.rule.selector || ''),
-    operation: body.rule.operation,
-    operand: body.rule.operand,
-    rounding: body.rule.rounding,
-    roundingIncrement: body.rule.roundingIncrement === undefined ? 1 : Number(body.rule.roundingIncrement),
+    selector: String(first?.selector || body.rule.selector || ''),
+    operation: first?.operation || body.rule.operation,
+    operand: first?.operand ?? parseOperand(body.rule.operand),
+    rounding: first?.rounding || body.rule.rounding,
+    roundingIncrement: first?.roundingIncrement ?? (body.rule.roundingIncrement === undefined ? 1 : Number(body.rule.roundingIncrement)),
     maxFiles: Number(body.rule.maxFiles),
+    operations,
   };
 }
 
@@ -108,7 +124,7 @@ export function registerBulkTransformRoutes(app: Express, options: BulkTransform
       if (!plan.ok) return res.status(422).json({ error: 'bulk_plan_invalid', message: 'Bulk transform is not clean; zero workspace changes were applied.', plan });
       const xmlPatches = mergeBulkTransformPatches(workspace.xmlPatches || [], plan);
       const mutation = options.applyWorkspaceMutation({ xmlPatches }, { expectedHead, merge: true });
-      return res.status(mutation.status).json({ ...mutation.body, plan, added: plan.rows.length });
+      return res.status(mutation.status).json({ ...mutation.body, plan, added: plan.rows.length, matchedFiles: plan.matchedFiles });
     } catch (error) { return sendError(res, error); }
   });
 }

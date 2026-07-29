@@ -9,9 +9,44 @@ import { parseXMLToWorkspace } from '../../src/lib/xmlParser';
 import { mdStemFingerprint } from '../../src/lib/mdFileIdentity';
 import { applyNodeSelectionDocument, buildNodeSelectionDocument, isNodeSelectionFailure } from '../../src/lib/nodeSelectionDocument';
 import { seedServerWorkspace } from './ephemeral';
+import { validatePackageReadiness } from '../../src/lib/modCompiler';
 
 const API = 'http://127.0.0.1:3101';
 const auth = { Authorization: `Bearer ${E2E_TOKEN}` };
+
+test('package readiness distinguishes data-only, inert legacy MD, empty, and real MD projects', () => {
+  const patchOnly = {
+    ...buildTemplateWorkspace('welcome'),
+    nodes: [], links: [], uiWidgets: [], aiScripts: [], wares: [], jobs: [], tFiles: [],
+    xmlPatches: [{
+      id: 'data-only-patch', action: 'replace' as const, targetFile: 'libraries/wares.xml',
+      sel: "/wares/ware[@id='energycells']/price/@average", content: '12', note: 'data-only', includeInBuild: true,
+    }],
+  };
+  expect(validatePackageReadiness(patchOnly).some(finding => finding.code === 'package.md_missing_entrypoint')).toBe(false);
+  expect(validatePackageReadiness({
+    ...patchOnly,
+    mdOriginal: { path: 'md/legacy.xml', content: '<?xml version="1.0"?><mdscript name="Legacy"><cues/></mdscript>' },
+  })).toEqual(expect.arrayContaining([
+    expect.objectContaining({ code: 'package.md_inert_source', severity: 'warning', message: expect.stringContaining('do not need a cue') }),
+  ]));
+
+  const empty = { ...patchOnly, xmlPatches: [] };
+  expect(validatePackageReadiness(empty)).toEqual(expect.arrayContaining([
+    expect.objectContaining({ code: 'package.empty_extension', severity: 'error' }),
+  ]));
+
+  const realMdWithoutCue = {
+    ...empty,
+    nodes: [{
+      id: 'orphan', type: 'action' as const, xmlTag: 'debug_text', label: 'Orphan action',
+      x: 0, y: 0, properties: { text: 'x' }, propertiesSchema: [], inputs: [], outputs: [], includeInBuild: true,
+    }],
+  };
+  expect(validatePackageReadiness(realMdWithoutCue)).toEqual(expect.arrayContaining([
+    expect.objectContaining({ code: 'package.md_missing_entrypoint', severity: 'error' }),
+  ]));
+});
 
 test('patch-only projects emit no fake MD and materialization refuses stale overwrite', async ({ request }) => {
   expect(needsManifestMaterialization('libraries/wares.xml', true)).toBe(false);

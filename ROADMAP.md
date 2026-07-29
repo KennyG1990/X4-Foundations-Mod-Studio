@@ -6909,3 +6909,36 @@ memory-backed virtual tabs. X4 remained closed and no live game/mod directory wa
 
 Suggested eventual commit title:
 `feat(editor): unify native X4 file and graph-node authoring with lossless guarded synchronization`.
+
+## 2026-07-29 — B104/B105/B106 safe patch identity, atomic multi-field transforms, and honest data-only readiness / Open VSX 0.0.56 — VERIFIED
+
+Diff-to-Patch now owns one target-keyed session containing the target path, effective canonical bytes, source
+signature, and edited candidate. Abort/request tokens reject late responses, dirty drafts stay isolated per target,
+and both the client and `/api/agent/xpath-synth` refuse stale or mismatched source revisions. Switching an asset
+macro after `libraries/wares.xml` can no longer leave the wares document in the edited pane or synthesize against
+the wrong base.
+
+Bulk Transform now accepts a generic bounded bundle of 1–16 numeric operations. Related values such as shield
+recharge max/rate/delay/disruption stability and hull max are evaluated together, simulated as one effective-file
+diff, and applied through one checkpoint-backed workspace mutation. Duplicate, missing, ambiguous, nonnumeric,
+conflicting, stale, over-cap, or failed-simulation fields reject the entire bundle with zero partial writes.
+
+Package readiness now distinguishes data-only extensions from actual Mission Director programs. A patch-only mod
+does not need a cue and emits no placebo MD file. An imported inert legacy MD shell produces explicit remediation
+warning copy instead of a package-blocking error; modeled MD without a cue/library remains an error, malformed MD
+validation is unchanged, and a genuinely empty extension is still blocked.
+
+Evidence: typecheck PASS; lint PASS with 0 errors; schema intelligence 143/143 including bulk transform 15/15;
+precommit PASS; production build and extension stage/build PASS; staged sidecar probe 6/6; full isolated e2e
+`[run-e2e] VERDICT: PASS` at 34/34; ports 3000/3001/3100/3101/3110/3111 absent after teardown. Antigravity reports
+the installed extension as `x4forge.x4-forge-studio@0.0.56`; after host reload and one ordinary webview `Try Again`
+recovery, the existing Forge canvas rendered. Installed UI proof showed target switching and a second bulk field
+(`2/16`) without applying it. Installed sidecar proof passed XPath synthesis, bulk 15/15, and the full patch-only /
+legacy-inert-MD / real-MD / empty-extension severity matrix. X4 remained closed; no game, deployed-mod, or unpacked
+corpus data was written.
+
+Open VSX published stable 0.0.56. The public artifact is byte-identical to the locally installed/tested VSIX:
+17,794,689 bytes, SHA-256 `AF431B2E577BBEB865CAC45943BC4A29EEF97B5B07B5B46299102D376A8E5D11`.
+
+Suggested commit title:
+`release: 0.0.56 — isolate XML patch targets, bundle atomic transforms, and remove placebo-cue pressure`.

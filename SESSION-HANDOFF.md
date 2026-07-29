@@ -1,60 +1,52 @@
-# X4 Forge session handoff — 2026-07-29 · OpenVSX 0.0.55 verified
+# X4 Forge session handoff — 2026-07-29 · Open VSX 0.0.56 VERIFIED
 
 ## One-line state
 
-B102 lossless complex-mod graph projection and B103 single-click Directory Settings links are VERIFIED in the
-installed Antigravity host, published as `x4forge.x4-forge-studio` 0.0.55, and committed/pushed on `main` in
-release commit `1ab65b5`.
+B104 target-safe Diff-to-Patch, B105 atomic multi-field transforms, and B106 honest data-only readiness are fully
+verified in isolated runtime and installed Antigravity, publicly available as Open VSX 0.0.56, and ready for the
+release commit/push close.
 
-## Closed acceptance evidence
+## Delivered
 
-- DeadAir Dynamic Wars: four MD files, 1,424 graph nodes, 1,420 links, 192 localized raw elements, zero whole-cue
-  collapses, zero canonical mismatches, zero overlapping source spans, byte-identical no-edit round trip.
-- AI Influence: 2,925 graph nodes and zero opaque top-level cues.
-- Installed Antigravity: project preview, MD file selector, typed cue graph, typed selected-node native tab, and
-  localized raw selected-node native tab were all inspected in the existing Forge window.
-- Installed Antigravity: ordinary unmodified left clicks opened the X4 Unpacker Nexus page and Forge Discord;
-  the exact host allowlist rejects any other URL.
-- Focused contracts: node selection 15/15, imported layout 6/6, native external-link bridge 23/23.
-- Full isolated e2e: 32/32 PASS, `[run-e2e] VERDICT: PASS`; ephemeral ports 3100/3101 stopped and live port 55060
-  remained available.
-- Runtime oracle: 109/111 within the sweep timeout; both aggregate timeouts passed directly with longer budgets
-  (`api-selftest` six tests, `selftest` 10/10). `npm run precommit:check` PASS.
-- Package: `vscode-extension/x4-forge-studio-0.0.55.vsix`, 17,789,755 bytes, 2,090 files, staged probe 6/6.
-- Public release: `Published x4forge.x4-forge-studio v0.0.55`; version-specific cache-busted OpenVSX API returned
-  version 0.0.55 with publication timestamp 2026-07-29 04:54:53.
+- Diff-to-Patch binds base, candidate, source signature, and dirty draft to one target; late or stale responses and
+  mismatched synthesis are rejected with zero mutation.
+- Bulk Transform supports generic 1–16 operation bundles with combined simulation, one checkpoint-backed apply,
+  field-level preview, idempotence, and all-or-nothing failure rails.
+- Patch-only/data-only mods need no Mission Director cue and emit no fake MD file. Inert imported MD is warning-only;
+  real modeled MD without an entry point and genuinely empty extensions still block.
+- Extension/release version is 0.0.56 with generated public changelog.
 
-## Evidence files
+## Green evidence
 
-- `vscode-extension/evidence/0.0.55/deadair-project-preview.png`
-- `vscode-extension/evidence/0.0.55/deadair-md-file-selector.png`
-- `vscode-extension/evidence/0.0.55/deadair-typed-node-graph.png`
-- `vscode-extension/evidence/0.0.55/deadair-node-native-editor.png`
-- `vscode-extension/evidence/0.0.55/deadair-localized-raw-native-editor.png`
-- `vscode-extension/evidence/0.0.55/directory-settings-links.jpg`
-- `vscode-extension/evidence/0.0.55/single-click-x4-unpacker.jpg`
-- `vscode-extension/evidence/0.0.55/single-click-discord.jpg`
+- Static/focused: typecheck PASS; lint 0 errors; schema intelligence 143/143; bulk transform 15/15; precommit PASS.
+- Runtime: full isolated e2e structured VERDICT PASS, 34/34; staged sidecar probe 6/6.
+- Installed host: Antigravity reports `x4forge.x4-forge-studio@0.0.56`; existing Studio canvas rendered after reload
+  and one normal `Try Again` recovery. XML Patching target switching updated the patch target; Bulk Transform visibly
+  accepted a second operation (`2/16`) without applying it.
+- Installed sidecar: XPath synthesis selftest PASS; bulk 15/15; artifact pipeline confirms patch-only/no-fake-MD,
+  inert legacy MD warning-only, modeled MD missing entry point error, and empty-extension error.
+- Distribution: Open VSX 0.0.56 is publicly downloadable. Local and public VSIX are both 17,794,689 bytes with
+  SHA-256 `AF431B2E577BBEB865CAC45943BC4A29EEF97B5B07B5B46299102D376A8E5D11`.
+- Safety: X4 stayed closed; no game, deployed-mod, or unpacked-corpus write occurred; validation ports were clean.
 
-## Honest residuals
+## Dirty baseline / ownership
 
-- DeadAir's imported source currently reports six deterministic XSD findings. Inspection confirmed these are
-  source/schema findings (for example an attribute not declared by the loaded XSD), not dropped nodes or a failed
-  round trip. No in-game success claim is made for third-party source.
-- Native `x4forge-node:` payloads remain memory-backed across extension-host restart; B101 remains the bounded
-  descriptor-rehydration follow-up.
-- The oracle sweep's two aggregate endpoints exceed its short per-request timeout; their direct long-timeout
-  probes are green. This is harness observability debt, not a product failure.
+Preserve unrelated modified `vscode-extension/evidence/0.0.35-runtime-copy-live.png` and
+`vscode-extension/evidence/0.0.35-runtime-copy-startup.png`, untracked `KNOWN-BUGS.md`, and untracked
+`.tmp-b102-validation/`. They are not part of 0.0.56 and must remain excluded from the release commit.
 
-## Commit close / dirty-scope warning
+## AAR triggers
 
-Release commit `1ab65b5` was pushed to `origin/main`; the final close verified the remote ref matched the local
-release line. Unrelated `KNOWN-BUGS.md`, the two modified 0.0.35 evidence screenshots, and
-`.tmp-b102-validation/` remain intentionally outside the release. Policy rejected recursive deletion of the
-verified temporary harness folder, so it was not bypassed or staged.
+The first full e2e lost its isolated Vite process; trace-first diagnosis, a disposable stack probe, the exact first
+test, and one justified full rerun produced trustworthy 34/34. Antigravity initially showed its generic webview
+recovery screen after reload and recovered via `Try Again`. Two PowerShell evidence probes incorrectly piped
+directly after a block; assign block output before piping. Open VSX propagation lagged after accepting the upload;
+the agent correctly waited instead of republishing, then proved public hash parity.
 
-## AAR outcome
+## Commit point
 
-Non-clean triggers and lessons are recorded in `F:\StarForge\wiki\x4-forge\aar-log.md` and
-`F:\StarForge\wiki\workflow\aar-log.md`. The highest-risk evidenced weakness is that unsupported MD vocabulary
-is lossless but visually weaker as localized raw nodes; promote common raw tags by corpus frequency without ever
-removing the lossless escape hatch.
+Run the final precommit gate over this documented close, commit only the release-owned files, push `main`, and assert
+`origin/main == HEAD`.
+
+Suggested commit title:
+`release: 0.0.56 — isolate XML patch targets, bundle atomic transforms, and remove placebo-cue pressure`

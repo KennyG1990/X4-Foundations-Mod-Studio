@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   GitFork,
   Plus,
@@ -59,9 +59,16 @@ interface SynthesizedPatchOp {
 interface SynthesizedPatchResult {
   success?: boolean;
   targetFile?: string | null;
+  sourceSignature?: string | null;
   ops: SynthesizedPatchOp[];
   diffXml: string;
   warnings?: string[];
+}
+
+interface DiffTargetSession {
+  targetFile: string;
+  sourceSignature: string;
+  baseXml: string;
 }
 
 const MERGE_PANE_PREVIEW_LIMIT = 12000;
@@ -192,7 +199,8 @@ export default function XMLPatchSystem({ workspace, setWorkspace, saveCheckpoint
   const patchBlocks = workspace.xmlPatches || [];
   const filteredBlocks = patchBlocks.filter(b => !b.targetFile || b.targetFile === targetFile);
 
-  const [baseFileContent, setBaseFileContent] = useState<string | null>(null);
+  const [baseFileSession, setBaseFileSession] = useState<DiffTargetSession | null>(null);
+  const baseFileContent = baseFileSession?.targetFile === targetFile ? baseFileSession.baseXml : null;
   const [baseFileLoading, setBaseFileLoading] = useState<boolean>(false);
   const [baseFileError, setBaseFileError] = useState<string | null>(null);
   const [effectiveSources, setEffectiveSources] = useState<Array<{ source: string; mode: string }>>([]);
@@ -204,22 +212,24 @@ export default function XMLPatchSystem({ workspace, setWorkspace, saveCheckpoint
   // file and the studio synthesizes the minimal <diff> ops via
   // POST /api/agent/xpath-synth (engine: src/lib/xpathSynth.ts).
   const [dtEdited, setDtEdited] = useState<string>('');
-  const [dtSeededFor, setDtSeededFor] = useState<string | null>(null);
   const [dtBusy, setDtBusy] = useState(false);
   const [dtError, setDtError] = useState<string | null>(null);
   const [dtResult, setDtResult] = useState<SynthesizedPatchResult | null>(null);
+  const baseFileSessionRef = useRef<DiffTargetSession | null>(null);
+  const editedCandidateRef = useRef<string>('');
+  const dirtyDraftsRef = useRef<Map<string, string>>(new Map());
+  const effectiveFileRequestRef = useRef(0);
 
-  useEffect(() => {
-    if (baseFileContent && dtSeededFor !== targetFile) {
-      setDtEdited(baseFileContent);
-      setDtSeededFor(targetFile);
-      setDtResult(null);
-      setDtError(null);
-    }
-  }, [baseFileContent, targetFile, dtSeededFor]);
+  const updateEditedCandidate = (content: string) => {
+    editedCandidateRef.current = content;
+    setDtEdited(content);
+  };
 
   const runDiffToPatch = async () => {
-    if (!baseFileContent) return;
+    const session = baseFileSession;
+    if (!session || session.targetFile !== targetFile) return;
+    const requestTarget = session.targetFile;
+    const requestSignature = session.sourceSignature;
     setDtBusy(true);
     setDtError(null);
     setDtResult(null);
@@ -227,10 +237,22 @@ export default function XMLPatchSystem({ workspace, setWorkspace, saveCheckpoint
       const res = await fetch('/api/agent/xpath-synth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vanillaXml: baseFileContent, editedXml: dtEdited, targetFile })
+        body: JSON.stringify({
+          vanillaXml: session.baseXml,
+          editedXml: dtEdited,
+          targetFile: requestTarget,
+          sourceSignature: requestSignature,
+        })
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || `Synthesis failed (${res.status})`);
+      if (data.targetFile !== requestTarget || data.sourceSignature !== requestSignature) {
+        throw new Error('Synthesis response did not match the active target and source revision. Reload the target and try again.');
+      }
+      if (baseFileSessionRef.current?.targetFile !== requestTarget
+        || baseFileSessionRef.current?.sourceSignature !== requestSignature) {
+        throw new Error('The target changed while synthesis was running. No patch was adopted.');
+      }
       setDtResult(data);
     } catch (err) {
       setDtError(err.message || 'Patch synthesis failed.');
@@ -241,6 +263,13 @@ export default function XMLPatchSystem({ workspace, setWorkspace, saveCheckpoint
 
   const adoptSynthesizedOps = () => {
     if (!dtResult?.ops?.length) return;
+    if (!baseFileSession
+      || dtResult.targetFile !== baseFileSession.targetFile
+      || dtResult.sourceSignature !== baseFileSession.sourceSignature) {
+      setDtResult(null);
+      setDtError('The synthesized patch belongs to an older target or source revision. Synthesize again before adding it.');
+      return;
+    }
     const stamp = Date.now();
     const blocks: PatchBlock[] = dtResult.ops.map((op, i) => ({
       id: `dt_${stamp}_${i}`,
@@ -250,7 +279,8 @@ export default function XMLPatchSystem({ workspace, setWorkspace, saveCheckpoint
       note: 'Diff→Patch synthesized',
       pos: op.pos === 'before' ? ('before' as const) : undefined,
       attrType: op.attrType || undefined,
-      targetFile
+      targetFile: baseFileSession.targetFile,
+      sourceSignature: baseFileSession.sourceSignature,
     }));
     setWorkspace(prev => ({ ...prev, xmlPatches: [...(prev.xmlPatches || []), ...blocks] }));
     setDtResult(null);
@@ -276,7 +306,6 @@ export default function XMLPatchSystem({ workspace, setWorkspace, saveCheckpoint
       setTargetFile(target.targetFile);
       setPretargetSelector(target.selector || '');
       setRightPanelTab(target.selector ? 'patch' : 'difftool');
-      setDtSeededFor(null); // reseed the editable copy from the new file's vanilla content
     };
     if (pendingPretarget) apply(pendingPretarget);
     const handlePretarget = (ev: Event) => apply({
@@ -289,11 +318,23 @@ export default function XMLPatchSystem({ workspace, setWorkspace, saveCheckpoint
 
   useEffect(() => {
     if (!targetFile) return;
+    const previous = baseFileSessionRef.current;
+    if (previous && editedCandidateRef.current !== previous.baseXml) {
+      dirtyDraftsRef.current.set(previous.targetFile, editedCandidateRef.current);
+    }
+    const requestId = effectiveFileRequestRef.current + 1;
+    effectiveFileRequestRef.current = requestId;
+    const controller = new AbortController();
     setBaseFileLoading(true);
     setBaseFileError(null);
     setEffectiveSources([]);
-    setBaseFileContent(null);
-    fetch(`/api/reference/effective-file?path=${encodeURIComponent(targetFile)}`)
+    baseFileSessionRef.current = null;
+    setBaseFileSession(null);
+    updateEditedCandidate('');
+    setDtResult(null);
+    setDtError(null);
+    setDtBusy(false);
+    fetch(`/api/reference/effective-file?path=${encodeURIComponent(targetFile)}`, { signal: controller.signal })
       .then(res => {
         if (!res.ok) {
           return res.json().then(data => {
@@ -303,14 +344,29 @@ export default function XMLPatchSystem({ workspace, setWorkspace, saveCheckpoint
         return res.json();
       })
       .then(data => {
-        setBaseFileContent(data.content);
+        if (effectiveFileRequestRef.current !== requestId) return;
+        const relativePath = String(data.relativePath || '').replace(/\\/g, '/');
+        if (relativePath !== targetFile.replace(/\\/g, '/')) {
+          throw new Error(`Reference response target mismatch: expected ${targetFile}, received ${relativePath || '(missing path)'}.`);
+        }
+        const session: DiffTargetSession = {
+          targetFile,
+          sourceSignature: String(data.signature || ''),
+          baseXml: String(data.content || ''),
+        };
+        if (!session.sourceSignature) throw new Error('Reference response did not include a source signature.');
+        baseFileSessionRef.current = session;
+        setBaseFileSession(session);
+        updateEditedCandidate(dirtyDraftsRef.current.get(targetFile) ?? session.baseXml);
         setEffectiveSources(Array.isArray(data.sources) ? data.sources : []);
         setBaseFileLoading(false);
       })
       .catch(err => {
+        if (err?.name === 'AbortError' || effectiveFileRequestRef.current !== requestId) return;
         setBaseFileError(err.message);
         setBaseFileLoading(false);
       });
+    return () => controller.abort();
   }, [targetFile]);
 
   const parsedBaseDoc = useMemo(() => {
@@ -1446,7 +1502,7 @@ export default function XMLPatchSystem({ workspace, setWorkspace, saveCheckpoint
                     {dtBusy ? 'Synthesizing...' : 'Synthesize Patch'}
                   </button>
                   <button
-                    onClick={() => { setDtEdited(baseFileContent || ''); setDtResult(null); setDtError(null); }}
+                    onClick={() => { updateEditedCandidate(baseFileContent || ''); dirtyDraftsRef.current.delete(targetFile); setDtResult(null); setDtError(null); }}
                     disabled={!baseFileContent}
                     className="px-2.5 py-1.5 rounded bg-black/45 hover:bg-black/80 font-bold uppercase text-[9.5px] border border-white/10 text-slate-300 cursor-pointer transition-all disabled:opacity-50"
                   >
@@ -1480,7 +1536,7 @@ export default function XMLPatchSystem({ workspace, setWorkspace, saveCheckpoint
                   <textarea
                     data-testid="diff-patch-edited-xml"
                     value={dtEdited}
-                    onChange={e => { setDtEdited(e.target.value); setDtResult(null); setDtError(null); }}
+                    onChange={e => { updateEditedCandidate(e.target.value); setDtResult(null); setDtError(null); }}
                     spellCheck={false}
                     disabled={!baseFileContent}
                     placeholder={baseFileLoading ? 'Loading vanilla content...' : (baseFileError || 'No vanilla content available for this target.')}

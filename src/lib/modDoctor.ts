@@ -107,7 +107,7 @@ export function runModDoctor(
   validatePackageReadiness(workspace).forEach(diagnostic => {
     diagnostics.push({
       ...diagnostic,
-      code: 'package.readiness',
+      code: diagnostic.code || 'package.readiness',
       domain: 'manifest',
       filePath: 'content.xml'
     });

@@ -3,6 +3,12 @@
 The latest changes, newest first. (This page is generated automatically — see
 `release-notes.json` to edit the wording.)
 
+## 0.0.56 — 2026-07-29
+
+- Diff-to-Patch now keeps the base file, edited candidate, source revision, and generated patch locked to the same target. Switching files cannot leave wares XML under a ship macro or let a late response overwrite the active candidate, and unsaved per-target drafts survive target switches.
+- Bulk Transform can rebalance several numeric fields together as one atomic plan. Add, duplicate, or remove up to 16 XPath operations, inspect every old and new value per file, and apply only when the complete bundle matches and simulates cleanly; partial files produce zero changes.
+- Data-only mods no longer need a fake Mission Director cue. XML patches, wares, jobs, assets, UI, AI scripts, translations, and Lua output count as real extension content; an imported empty MD shell is now a clear cleanup warning while a truly empty extension or real broken MD logic still blocks packaging.
+
 ## 0.0.55 — 2026-07-29
 
 - The X4 Unpacker and Forge Discord controls in Directory Settings now open with one ordinary left click in Antigravity and VS Code. The extension host accepts only those two exact HTTPS destinations; Forge never opens either page automatically.

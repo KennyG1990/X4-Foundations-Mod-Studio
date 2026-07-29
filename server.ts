@@ -98,6 +98,7 @@ import { runUiCompilerSelftest } from "./src/lib/uiCompilerSelftest";
 import { analyzeOverrides, runOverrideMapSelftest, simulateLoadOrder } from "./src/lib/overrideMap";
 import { analyzeModDependencies, runModDependencyGraphSelftest, parseModManifest, type ModManifest } from "./src/lib/modDependencyGraph";
 import { buildMergedGalaxyMap, runGalaxyMapSelftest, type GalaxyMapSource } from "./src/lib/galaxyMap";
+import { resolveEffectiveReferenceDocument } from "./src/lib/referenceOverlay";
 import { classifyPath, indexCueReferences, runExtensionProjectSelftest, buildContentXml, type ExtensionProject } from "./src/lib/extensionProject";
 import { getAiSchemaIndex, getScriptPropertyIndex, registerValidationAgentRoutes } from "./src/server/validationRoutes";
 import { getCanonicalReferenceSets, initializeReferenceCorpus, registerReferenceRoutes, startCanonicalReferenceManifest } from "./src/server/referenceRoutes";
@@ -7245,6 +7246,27 @@ app.post("/api/agent/xpath-synth", (req, res) => {
     }
     let vanillaXml = typeof req.body?.vanillaXml === "string" ? req.body.vanillaXml : "";
     const targetFile = String(req.body?.targetFile || "").replace(/\\/g, "/").replace(/^\/+/, "").trim();
+    const sourceSignature = typeof req.body?.sourceSignature === "string" ? req.body.sourceSignature : null;
+    if (sourceSignature && targetFile) {
+      const resolved = resolveXsdConfig();
+      if (!resolved.x4ReferenceExists) {
+        return res.status(503).json({ error: "The unpacked reference corpus is unavailable; the target revision cannot be verified." });
+      }
+      const effective = resolveEffectiveReferenceDocument(resolved.x4ReferenceRoot, targetFile);
+      if (!effective.available || effective.content === undefined) {
+        return res.status(404).json({ error: `Could not resolve the effective canonical target ${targetFile}.` });
+      }
+      if (effective.signature !== sourceSignature || (vanillaXml && vanillaXml !== effective.content)) {
+        return res.status(409).json({
+          error: "xpath_source_changed",
+          message: "The target or canonical source revision changed after it was loaded. Reload the target before synthesizing.",
+          targetFile,
+          expectedSourceSignature: sourceSignature,
+          currentSourceSignature: effective.signature,
+        });
+      }
+      vanillaXml = effective.content;
+    }
     if (!vanillaXml && targetFile) {
       if (targetFile.includes(":") || targetFile.split("/").includes("..")) {
         return res.status(400).json({ error: "Invalid targetFile path." });
@@ -7267,7 +7289,7 @@ app.post("/api/agent/xpath-synth", (req, res) => {
       return res.status(400).json({ error: "Provide vanillaXml or a resolvable targetFile." });
     }
     const result = synthesizePatch(vanillaXml, editedXml);
-    return res.json({ success: true, targetFile: targetFile || null, ...result });
+    return res.json({ success: true, targetFile: targetFile || null, sourceSignature, ...result });
   } catch (error) {
     return res.status(400).json({ error: error.message || "xpath-synth failed" });
   }
@@ -8952,7 +8974,23 @@ function runCompileArtifactSelftest() {
       nodes: [{ id: 'a1', type: 'action', xmlTag: 'debug_text', label: 'orphan action', properties: { text: 'x' }, inputs: [], outputs: [] }],
       links: [], uiWidgets: [], uiTheme: {},
     });
-    record('modeled MD without a cue remains an error', validatePackageReadiness(malformedMdModel).some(finding => finding.severity === 'error' && finding.message.includes('no cue nodes')));
+    record('modeled MD without a cue remains an error', validatePackageReadiness(malformedMdModel).some(finding => finding.severity === 'error' && finding.code === 'package.md_missing_entrypoint'));
+
+    const legacyInertMd = sanitizeWorkspace({
+      ...patchOnly,
+      mdOriginal: { path: 'md/legacy.xml', content: '<?xml version="1.0"?><mdscript name="Legacy"><cues/></mdscript>' },
+    });
+    const legacyFindings = validatePackageReadiness(legacyInertMd);
+    record('data-only workspace with inert legacy MD is warning-only',
+      legacyFindings.some(finding => finding.code === 'package.md_inert_source' && finding.severity === 'warning')
+        && !legacyFindings.some(finding => finding.code === 'package.md_missing_entrypoint'));
+
+    const emptyWorkspace = sanitizeWorkspace({
+      id: 'empty', name: 'Empty', version: '1.0', author: 'Forge', description: 'empty extension',
+      nodes: [], links: [], uiWidgets: [], uiTheme: {},
+    });
+    record('genuinely empty extension remains blocked', validatePackageReadiness(emptyWorkspace)
+      .some(finding => finding.code === 'package.empty_extension' && finding.severity === 'error'));
 
     sourceWrite('content.xml', '<?xml version="1.0"?><content id="artifact_integration" name="Artifact Integration" version="100"/>');
     sourceWrite('md/source.xml', '<?xml version="1.0"?><mdscript name="ArtifactIntegration"><cues/></mdscript>');

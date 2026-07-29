@@ -41,6 +41,7 @@ test('diff-to-patch three-pane merge synthesizes and adopts a patch block', asyn
       json: {
         success: true,
         targetFile: 'libraries/wares.xml',
+        sourceSignature: 'e2e-effective-wares',
         ops: [
           {
             type: 'replace',
@@ -81,6 +82,7 @@ test('diff-to-patch three-pane merge synthesizes and adopts a patch block', asyn
   await expect(workbench.getByText("/wares/ware[@id='energycells']/@volume")).toBeVisible();
   expect(synthPayload).toMatchObject({
     targetFile: 'libraries/wares.xml',
+    sourceSignature: 'e2e-effective-wares',
     vanillaXml: baseXml,
     editedXml,
   });
@@ -102,4 +104,67 @@ test('diff-to-patch three-pane merge synthesizes and adopts a patch block', asyn
   expect(hasPatch(saveBody.workspace)).toBe(true);
   const saved = await readServerWorkspace();
   expect(hasPatch(saved)).toBe(true);
+});
+
+test('diff-to-patch keeps base, candidate, and late responses isolated by target', async ({ page }) => {
+  const workspace = { ...buildTemplateWorkspace('welcome'), xmlPatches: [] };
+  await seedServerWorkspace(workspace);
+  await page.addInitScript(() => {
+    localStorage.removeItem('x4_mod_studio_workspace');
+    localStorage.removeItem('x4_mod_studio_version');
+  });
+
+  const documents: Record<string, string> = {
+    'libraries/wares.xml': '<?xml version="1.0"?><wares><ware id="energycells" /></wares>',
+    'libraries/jobs.xml': '<?xml version="1.0"?><jobs><job id="late_job" /></jobs>',
+    'libraries/factions.xml': '<?xml version="1.0"?><factions><faction id="argon" /></factions>',
+  };
+  let releaseLateJobs: (() => void) | undefined;
+
+  await page.route('**/api/reference/effective-file**', async route => {
+    const target = new URL(route.request().url()).searchParams.get('path') || '';
+    if (target === 'libraries/jobs.xml') {
+      await new Promise<void>(resolve => { releaseLateJobs = resolve; });
+    }
+    const content = documents[target];
+    if (!content) return route.fulfill({ status: 404, json: { error: `No fixture for ${target}` } });
+    return route.fulfill({
+      json: {
+        available: true,
+        relativePath: target,
+        signature: `signature:${target}`,
+        sources: [{ source: 'base', path: target, mode: 'base' }],
+        findings: [],
+        content,
+      },
+    });
+  });
+
+  await page.goto('/');
+  await page.waitForFunction((name: string) => {
+    const api = (window as Window & { __X4_E2E__?: { getWorkspace: () => { name?: string } } }).__X4_E2E__;
+    return api?.getWorkspace().name === name;
+  }, workspace.name);
+  await page.getByRole('button', { name: 'XML Patching' }).click();
+  await page.getByRole('button', { name: 'Diff→Patch', exact: true }).click();
+
+  const targetInput = page.getByPlaceholder(/Search real base-game files/i);
+  const editedPane = page.getByTestId('diff-patch-edited-xml');
+  await expect(editedPane).toHaveValue(documents['libraries/wares.xml']);
+  const dirtyWares = documents['libraries/wares.xml'].replace('energycells', 'edited_energycells');
+  await editedPane.fill(dirtyWares);
+
+  await targetInput.fill('libraries/jobs.xml');
+  await expect(editedPane).toBeDisabled();
+  await expect.poll(() => Boolean(releaseLateJobs)).toBe(true);
+  await targetInput.fill('libraries/factions.xml');
+  await expect(editedPane).toHaveValue(documents['libraries/factions.xml']);
+  await expect(page.getByRole('button', { name: 'Synthesize Patch' })).toBeEnabled();
+
+  releaseLateJobs?.();
+  await page.waitForTimeout(100);
+  await expect(editedPane).toHaveValue(documents['libraries/factions.xml']);
+
+  await targetInput.fill('libraries/wares.xml');
+  await expect(editedPane).toHaveValue(dirtyWares);
 });

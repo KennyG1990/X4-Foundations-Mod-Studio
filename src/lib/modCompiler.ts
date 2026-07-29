@@ -7,7 +7,7 @@ import {
   ModWorkspace,
   generateMDXML,
   generateUILuaScript,
-  XMLDiagnostic,
+  PackageDiagnostic,
   AIBehaviorScript,
   JobDef,
   PatchBlock,
@@ -371,8 +371,45 @@ export const hasAnyMdDomain = (workspace: ModWorkspace): boolean => {
   return (workspace.passthroughFiles || []).some(file => /(^|[\\/])md[\\/].*\.xml$/i.test(file.path));
 };
 
-export const validatePackageReadiness = (workspace: ModWorkspace): XMLDiagnostic[] => {
-  const reports: XMLDiagnostic[] = [];
+/**
+ * True when the extension contains deployable authored behavior or data beyond its manifest.
+ * An inert legacy MD shell is deliberately not output: data-only mods do not need a placebo cue.
+ */
+export const hasEffectiveAuthoredOutput = (workspace: ModWorkspace): boolean => {
+  const enabled = (key: keyof NonNullable<ModWorkspace['compileSettings']>) => workspace.compileSettings?.[key] !== false;
+  const included = <T extends { includeInBuild?: boolean }>(items: T[] | undefined) => (items || []).some(item => item.includeInBuild !== false);
+  const sourceMd = [
+    ...(workspace.mdOriginal?.content ? [workspace.mdOriginal.content] : []),
+    ...(workspace.originalFiles || []).filter(file => file.kind === 'md' || /(^|[\\/])md[\\/].*\.xml$/i.test(file.path)).map(file => file.content),
+    ...(workspace.passthroughFiles || []).filter(file => /(^|[\\/])md[\\/].*\.xml$/i.test(file.path)).map(file => file.content || ''),
+  ];
+  const sourceHasMdEntry = sourceMd.some(content => /<(?:cue|library)\b/.test(content));
+  const passthroughHasPayload = (workspace.passthroughFiles || []).some(file => {
+    const normalized = file.path.replace(/\\/g, '/').toLowerCase();
+    if (normalized === 'content.xml' || /(^|\/)readme(?:\.[^/]*)?$/.test(normalized)) return false;
+    if (/^md\/.*\.xml$/.test(normalized)) return /<(?:cue|library)\b/.test(file.content || '');
+    return true;
+  });
+  const modeledOriginalHasPayload = (workspace.originalFiles || []).some(file => {
+    if (file.kind === 'content' || file.kind === 'readme') return false;
+    if (file.kind === 'md') return /<(?:cue|library)\b/.test(file.content || '');
+    return true;
+  });
+
+  return (enabled('md') && (hasGeneratedMdDomain(workspace) || sourceHasMdEntry))
+    || (enabled('ui') && included(workspace.uiWidgets))
+    || (enabled('ai') && included(workspace.aiScripts))
+    || (enabled('library') && (included(workspace.wares) || included(workspace.jobs)))
+    || (enabled('translations') && included(workspace.tFiles))
+    || (enabled('patches') && included(workspace.xmlPatches))
+    || !!workspace.customLua?.trim()
+    || !!workspace.integrationContract
+    || modeledOriginalHasPayload
+    || passthroughHasPayload;
+};
+
+export const validatePackageReadiness = (workspace: ModWorkspace): PackageDiagnostic[] => {
+  const reports: PackageDiagnostic[] = [];
   const modId = toSafeModId(workspace.name);
 
   if (!workspace.name?.trim()) {
@@ -419,10 +456,27 @@ export const validatePackageReadiness = (workspace: ModWorkspace): XMLDiagnostic
   const hasSourceEntryPoint = sourceMd.some(content => /<(?:cue|library)\b/.test(content));
   const hasValidContractMd = !!workspace.integrationContract
     && validateContract(workspace.integrationContract).every(finding => finding.severity !== 'error');
-  if (hasAnyMdDomain(workspace) && !hasGraphCue && !hasSourceEntryPoint && !hasValidContractMd) {
+  if (hasGeneratedMdDomain(workspace) && !hasGraphCue && !hasValidContractMd) {
     reports.push({
       severity: 'error',
-      message: 'Compiled MD package has no cue nodes. The extension can load, but the MD script has no executable entry point.',
+      code: 'package.md_missing_entrypoint',
+      message: 'Modeled Mission Director output has no cue or library entry point. Add real MD logic, or exclude the unused MD nodes from the build.',
+      category: 'egosoft'
+    });
+  } else if (hasAnyMdDomain(workspace) && !hasGraphCue && !hasSourceEntryPoint && !hasValidContractMd) {
+    reports.push({
+      severity: 'warning',
+      code: 'package.md_inert_source',
+      message: 'An imported MD file has no cue or library entry point. Data-only XML patch, wares, jobs, and asset mods do not need a cue—remove or exclude the unused MD file instead of adding a placebo cue.',
+      category: 'egosoft'
+    });
+  }
+
+  if (!hasEffectiveAuthoredOutput(workspace)) {
+    reports.push({
+      severity: 'error',
+      code: 'package.empty_extension',
+      message: 'The extension has no effective authored output. Add a data patch, ware/job/asset, UI, AI script, translation, Lua file, or real Mission Director cue/library before packaging.',
       category: 'egosoft'
     });
   }
