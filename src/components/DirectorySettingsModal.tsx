@@ -19,13 +19,28 @@ import {
   Search,
   Loader2,
   Users,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  ArrowUp,
+  ArrowDown,
+  Eye,
+  EyeOff,
+  RotateCcw,
+  PanelLeft
 } from 'lucide-react';
 import {
   openExternalUrlInNativeHost,
   X4_FORGE_DISCORD_URL,
   X4_UNPACKER_URL,
 } from '../lib/nativeEditor';
+import {
+  DEFAULT_STUDIO_LAYOUT,
+  SIDEBAR_NAV_ITEMS,
+  WORKSPACE_NAV_ITEMS,
+  toggleVisibleItem,
+  type SidebarTab,
+  type StudioLayoutPreferences,
+} from '../lib/studioLayout';
+import type { WorkspaceView } from '../lib/experienceMode';
 
 type AiTier = 'off' | 'explain' | 'assist' | 'cobuild';
 
@@ -74,6 +89,8 @@ interface DirectorySettingsModalProps {
   setAiTier: (t: AiTier) => void;
   /** Opens the AI provider/model/API-key modal. Reachable here at ALL tiers (incl. off). */
   onOpenAIConfig: () => void;
+  layoutPreferences: StudioLayoutPreferences;
+  setLayoutPreferences: React.Dispatch<React.SetStateAction<StudioLayoutPreferences>>;
 }
 
 // A4.1 — opt-in AI presence tiers. Off by default; determinism is never gated by this.
@@ -118,6 +135,35 @@ function DirectoryRow({
   );
 }
 
+function NavigationOrderList({ title, items, hidden, onToggle, onMove }: {
+  title: string;
+  items: Array<{ id: string; label: string }>;
+  hidden: readonly string[];
+  onToggle: (id: string) => void;
+  onMove: (id: string, delta: -1 | 1) => void;
+}) {
+  return (
+    <div className="rounded border border-white/10 bg-black/20 p-2 min-w-0">
+      <div className="mb-1.5 text-[9px] font-mono font-bold uppercase tracking-wider text-slate-400">{title}</div>
+      <div className="max-h-44 overflow-y-auto custom-scrollbar space-y-1">
+        {items.map((item, index) => {
+          const isHidden = hidden.includes(item.id);
+          return (
+            <div key={item.id} data-layout-item={item.id} className={`h-7 flex items-center gap-1 rounded border px-1.5 ${isHidden ? 'border-white/5 bg-black/20 text-slate-600' : 'border-white/10 bg-white/[0.025] text-slate-300'}`}>
+              <button type="button" onClick={() => onToggle(item.id)} className="w-6 h-6 grid place-items-center rounded hover:bg-white/5" title={isHidden ? `Show ${item.label}` : `Hide ${item.label}`} aria-label={isHidden ? `Show ${item.label}` : `Hide ${item.label}`}>
+                {isHidden ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3 text-cyan-400" />}
+              </button>
+              <span className="flex-1 min-w-0 truncate text-[9.5px] font-mono">{item.label}</span>
+              <button type="button" disabled={index === 0} onClick={() => onMove(item.id, -1)} className="w-6 h-6 grid place-items-center rounded hover:bg-white/5 disabled:opacity-20" title={`Move ${item.label} up`} aria-label={`Move ${item.label} up`}><ArrowUp className="w-3 h-3" /></button>
+              <button type="button" disabled={index === items.length - 1} onClick={() => onMove(item.id, 1)} className="w-6 h-6 grid place-items-center rounded hover:bg-white/5 disabled:opacity-20" title={`Move ${item.label} down`} aria-label={`Move ${item.label} down`}><ArrowDown className="w-3 h-3" /></button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function DirectorySettingsModal({
   isOpen,
   onClose,
@@ -127,7 +173,9 @@ export default function DirectorySettingsModal({
   setFilesystemPath,
   aiTier,
   setAiTier,
-  onOpenAIConfig
+  onOpenAIConfig,
+  layoutPreferences,
+  setLayoutPreferences,
 }: DirectorySettingsModalProps) {
   const [gamePath, setGamePath] = useState('');
   const [schemaPath, setSchemaPath] = useState('');
@@ -320,6 +368,18 @@ export default function DirectorySettingsModal({
   const count = (rows: CoverageRow[] | undefined, key: string) => rows?.find(row => row.key === key)?.count || 0;
   const number = (value: number) => new Intl.NumberFormat().format(value);
   const issuesFor = (field: DirectoryPathIssue['field']) => directoryIssues.filter(issue => issue.field === field);
+  const workspaceIds = WORKSPACE_NAV_ITEMS.map(item => item.id);
+  const toolIds = SIDEBAR_NAV_ITEMS.map(item => item.id);
+  const movePreferenceItem = <T extends WorkspaceView | SidebarTab>(key: 'workspaceOrder' | 'toolOrder', id: T, delta: -1 | 1) => {
+    setLayoutPreferences(previous => {
+      const order = [...previous[key]] as T[];
+      const index = order.indexOf(id);
+      const nextIndex = index + delta;
+      if (index < 0 || nextIndex < 0 || nextIndex >= order.length) return previous;
+      [order[index], order[nextIndex]] = [order[nextIndex], order[index]];
+      return { ...previous, [key]: order } as StudioLayoutPreferences;
+    });
+  };
 
   return (
     <div
@@ -327,7 +387,7 @@ export default function DirectorySettingsModal({
       onClick={onClose}
     >
       <div
-        className="w-[640px] max-h-[85vh] overflow-y-auto bg-[#0c0f16] border border-cyan-500/30 rounded-xl shadow-2xl"
+        className="w-[min(760px,calc(100vw-24px))] max-h-[90vh] overflow-y-auto bg-[#0c0f16] border border-cyan-500/30 rounded-xl shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -335,16 +395,55 @@ export default function DirectorySettingsModal({
           <div className="flex items-center gap-2">
             <SettingsIcon className="w-4 h-4 text-cyan-400" />
             <div>
-              <span className="font-bold text-white text-sm block">Directory Settings</span>
-              <span className="text-[10px] text-slate-400">Every folder the studio needs, in one place</span>
+              <span className="font-bold text-white text-sm block">Studio Settings</span>
+              <span className="text-[10px] text-slate-400">Layout, navigation, directories, corpus, and AI</span>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded hover:bg-white/5 text-slate-400 hover:text-white transition-all cursor-pointer">
+          <button onClick={onClose} aria-label="Close settings" className="p-1.5 rounded hover:bg-white/5 text-slate-400 hover:text-white transition-all cursor-pointer">
             <X className="w-4 h-4" />
           </button>
         </div>
 
         <div className="p-4 space-y-3">
+          <DirectoryRow
+            icon={<PanelLeft className="w-4 h-4" />}
+            title="Navigation & Layout"
+            tooltip="Customize the Studio shell without deleting any feature. Hidden destinations remain listed here, collapsed bars always keep a restore handle, and Reset Layout returns the complete default inventory."
+            testId="studio-layout-settings"
+          >
+            <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
+              <label className="space-y-1"><span className="text-slate-500 uppercase">Workspace bar</span><select data-testid="workspace-dock-select" value={layoutPreferences.workspaceDock} onChange={event => setLayoutPreferences(previous => ({ ...previous, workspaceDock: event.target.value as 'top' | 'bottom' }))} className="settings-select"><option value="top">Dock top</option><option value="bottom">Dock bottom</option></select></label>
+              <label className="space-y-1"><span className="text-slate-500 uppercase">Tool panel</span><select data-testid="tool-dock-select" value={layoutPreferences.toolDock} onChange={event => setLayoutPreferences(previous => ({ ...previous, toolDock: event.target.value as 'left' | 'right' }))} className="settings-select"><option value="left">Dock left</option><option value="right">Dock right</option></select></label>
+              <label className="space-y-1"><span className="text-slate-500 uppercase">Density</span><select data-testid="studio-density-select" value={layoutPreferences.density} onChange={event => setLayoutPreferences(previous => ({ ...previous, density: event.target.value as 'compact' | 'comfortable' }))} className="settings-select"><option value="compact">Compact</option><option value="comfortable">Comfortable</option></select></label>
+              <div className="flex items-end gap-1">
+                <button type="button" data-testid="toggle-workspace-bar" onClick={() => setLayoutPreferences(previous => ({ ...previous, workspaceBarCollapsed: !previous.workspaceBarCollapsed }))} className="settings-button">{layoutPreferences.workspaceBarCollapsed ? 'Show' : 'Hide'} workspace bar</button>
+                <button type="button" data-testid="toggle-side-panel" onClick={() => setLayoutPreferences(previous => ({ ...previous, sidePanelCollapsed: !previous.sidePanelCollapsed }))} className="settings-button">{layoutPreferences.sidePanelCollapsed ? 'Show' : 'Hide'} panel</button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <NavigationOrderList
+                title="Workspace tabs"
+                items={layoutPreferences.workspaceOrder.map(id => ({ id, label: WORKSPACE_NAV_ITEMS.find(item => item.id === id)?.label ?? id }))}
+                hidden={layoutPreferences.hiddenWorkspaceViews}
+                onToggle={(id) => setLayoutPreferences(previous => ({ ...previous, hiddenWorkspaceViews: toggleVisibleItem(previous.hiddenWorkspaceViews, id as WorkspaceView, workspaceIds) }))}
+                onMove={(id, delta) => movePreferenceItem('workspaceOrder', id as WorkspaceView, delta)}
+              />
+              <NavigationOrderList
+                title="Tool tabs"
+                items={layoutPreferences.toolOrder.map(id => ({ id, label: SIDEBAR_NAV_ITEMS.find(item => item.id === id)?.label ?? id }))}
+                hidden={layoutPreferences.hiddenTools}
+                onToggle={(id) => setLayoutPreferences(previous => ({ ...previous, hiddenTools: toggleVisibleItem(previous.hiddenTools, id as SidebarTab, toolIds) }))}
+                onMove={(id, delta) => movePreferenceItem('toolOrder', id as SidebarTab, delta)}
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-3 border-t border-white/5 pt-2">
+              <span className="text-[9px] text-slate-500">Drag tabs on the bars, or use these keyboard-accessible arrow controls. At least one destination always remains visible.</span>
+              <button type="button" data-testid="reset-studio-layout" onClick={() => setLayoutPreferences({ ...DEFAULT_STUDIO_LAYOUT, workspaceOrder: [...DEFAULT_STUDIO_LAYOUT.workspaceOrder], toolOrder: [...DEFAULT_STUDIO_LAYOUT.toolOrder] })} className="settings-button shrink-0"><RotateCcw className="w-3 h-3" /> Reset layout</button>
+            </div>
+          </DirectoryRow>
+
           {/* 1. Mod Workspace folder */}
           <DirectoryRow
             icon={<HardDrive className="w-4 h-4" />}

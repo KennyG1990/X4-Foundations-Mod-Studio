@@ -161,7 +161,8 @@ import { runWaresContentLintSelftest, learnWaresVocabulary, type WaresVocabulary
 import { runTFileLintSelftest, buildModTextIndex, lintTextReferences } from "./src/lib/tFileLint";
 import { runFactionsLintSelftest, lintFactionRelations } from "./src/lib/factionsLint";
 import { runGodLintSelftest, lintGodMacros } from "./src/lib/godLint";
-import { readActiveState, writeActiveState, parkState, listParked, readParked, runWorkspaceStateSelftest } from "./src/lib/workspaceState";
+import { atomicWriteJson, readActiveState, writeActiveState, parkState, listParked, readParked, runWorkspaceStateSelftest } from "./src/lib/workspaceState";
+import { normalizeStudioLayoutPreferences, type StudioLayoutPreferences } from "./src/lib/studioLayout";
 import { createAgentProject, createProjectFile, generateAgentProject, packageAgentProject, runProjectOrchestrationSelftest } from "./src/lib/projectOrchestration";
 import { runProjectCrossFileSelftest, validateProjectCrossFile } from "./src/lib/projectCrossFileValidation";
 import {
@@ -2199,6 +2200,23 @@ let workspaceVersion = Date.now();
 const STUDIO_STATE_DIR = process.env.X4_STATE_DIR?.trim()
   ? path.resolve(process.env.X4_STATE_DIR.trim())
   : path.join(process.cwd(), ".studio-state");
+const STUDIO_LAYOUT_STATE_FILE = path.join(STUDIO_STATE_DIR, "studio-layout.json");
+
+function readStudioLayoutState(): StudioLayoutPreferences | null {
+  try {
+    if (!fs.existsSync(STUDIO_LAYOUT_STATE_FILE)) return null;
+    return normalizeStudioLayoutPreferences(JSON.parse(fs.readFileSync(STUDIO_LAYOUT_STATE_FILE, "utf8")));
+  } catch (error) {
+    console.warn(`[layout] could not read ${STUDIO_LAYOUT_STATE_FILE}: ${(error as Error).message} — using safe defaults`);
+    return null;
+  }
+}
+
+function writeStudioLayoutState(raw: unknown): StudioLayoutPreferences {
+  const layout = normalizeStudioLayoutPreferences(raw);
+  atomicWriteJson(STUDIO_LAYOUT_STATE_FILE, layout);
+  return layout;
+}
 // Legacy (no-expectedHead) writes are only auto-accepted on true first contact: a fresh
 // install where nothing was ever persisted and nothing has been written this run.
 let hadPersistedStateAtBoot = false;
@@ -3461,6 +3479,24 @@ app.get("/api/schema/config", (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || "Failed to read schema config." });
+  }
+});
+
+// B107: packaged Antigravity sidecars bind a new localhost port after restart. Browser
+// localStorage is origin-scoped, so layout-only persistence there silently resets whenever
+// the port changes. Keep the normalized preference in the same durable, extension-owned
+// state root as the active workspace; X4_STATE_DIR also makes e2e writes disposable.
+app.get("/api/studio/layout", (_req, res) => {
+  return res.json({ layout: readStudioLayoutState() });
+});
+
+app.post("/api/studio/layout", (req, res) => {
+  try {
+    return res.json({ success: true, layout: writeStudioLayoutState(req.body?.layout) });
+  } catch (error) {
+    // Preference persistence must never break authoring or workspace state.
+    console.error("[layout] could not persist studio layout:", error);
+    return res.status(500).json({ success: false, error: "Could not persist Studio layout preferences." });
   }
 });
 

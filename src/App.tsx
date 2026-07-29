@@ -5,24 +5,17 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  GitFork,
   Trash,
-  Layout,
-  FileCode,
   Cpu,
   Undo2,
   Redo2,
   FolderGit2,
   Sparkles,
-  Scroll,
-  Package,
-  Globe,
-  BookOpen,
   Settings as SettingsGear,
-  Plug,
-  Map as MapIcon,
   Keyboard,
-  Bug
+  Bug,
+  Menu,
+  PanelLeftOpen
 } from 'lucide-react';
 import BugReportModal from './components/BugReportModal';
 import Sidebar from './components/Sidebar';
@@ -38,6 +31,7 @@ import AIHelper from './components/AIHelper';
 import AgentBridge from './components/AgentBridge';
 import AIConnectionModal from './components/AIConnectionModal';
 import DirectorySettingsModal from './components/DirectorySettingsModal';
+import WorkspaceNavigationBar from './components/WorkspaceNavigationBar';
 import FirstRunWizard from './components/FirstRunWizard';
 import { ttfm } from './lib/ttfm';
 import CompileConfirmationModal from './components/CompileConfirmationModal';
@@ -83,6 +77,17 @@ import {
   type ReadinessStageId,
   type ReadinessWatcherEvidence,
 } from './lib/readiness';
+import {
+  STUDIO_LAYOUT_KEY,
+  WORKSPACE_NAV_ITEMS,
+  moveOrderedItem,
+  normalizeStudioLayoutPreferences,
+  parseStudioLayoutPreferences,
+  visibleSidebarTabs,
+  visibleWorkspaceViews,
+  type SidebarTab,
+  type StudioLayoutPreferences,
+} from './lib/studioLayout';
 
 type ForgeE2EWindow = Window & {
   __X4_E2E__?: {
@@ -207,12 +212,19 @@ export default function App() {
   }, [loadSchemaLibrary]);
 
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('blueprint');
+  const [layoutPreferences, setLayoutPreferences] = useState<StudioLayoutPreferences>(() =>
+    parseStudioLayoutPreferences(localStorage.getItem(STUDIO_LAYOUT_KEY))
+  );
+  const layoutPreferencesRef = useRef(layoutPreferences);
+  const layoutSaveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const layoutTouchedRef = useRef(false);
+  const [isStudioMenuOpen, setIsStudioMenuOpen] = useState(false);
   const [experienceMode, setExperienceMode] = useState<ExperienceMode>(() => parseExperienceMode(localStorage.getItem(EXPERIENCE_MODE_KEY)));
   const [beginnerStep, setBeginnerStep] = useState<BeginnerStep>('idea');
   // B57s4: evidence deep links — ?panel=<sidebar tab> lands directly on that panel, so
   // agent walkthroughs, PROOF.md, and IDE surfaces can link straight to evidence. Unknown
   // values fall through to the default (never a crash path).
-  const [activeSidebarTab, setActiveSidebarTab] = useState<'script' | 'ui' | 'config' | 'filesystem' | 'git' | 'cues' | 'templates' | 'ai' | 'diagnostics' | 'playtest' | 'reference'>(() => {
+  const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab>(() => {
     try {
       const requested = new URLSearchParams(window.location.search).get('panel');
       const legal = ['script', 'ui', 'config', 'filesystem', 'git', 'cues', 'templates', 'ai', 'diagnostics', 'playtest', 'reference'] as const;
@@ -220,6 +232,57 @@ export default function App() {
     } catch { /* URL parsing must never break boot */ }
     return 'script';
   });
+
+  const persistStudioLayout = React.useCallback((layout: StudioLayoutPreferences) => {
+    try { localStorage.setItem(STUDIO_LAYOUT_KEY, JSON.stringify(layout)); } catch { /* server state remains authoritative */ }
+    layoutSaveChainRef.current = layoutSaveChainRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        const response = await fetch('/api/studio/layout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ layout }),
+          keepalive: true,
+        });
+        if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || `Layout save failed (${response.status}).`);
+      })
+      .catch(error => console.warn('Could not persist Studio layout on the Forge server.', error));
+  }, []);
+
+  const updateLayoutPreferences = React.useCallback((update: React.SetStateAction<StudioLayoutPreferences>) => {
+    layoutTouchedRef.current = true;
+    const next = normalizeStudioLayoutPreferences(typeof update === 'function' ? update(layoutPreferencesRef.current) : update);
+    layoutPreferencesRef.current = next;
+    setLayoutPreferences(next);
+    persistStudioLayout(next);
+  }, [persistStudioLayout]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const localFallback = layoutPreferences;
+    (async () => {
+      try {
+        const response = await fetch('/api/studio/layout');
+        const body = await response.json();
+        if (!response.ok) throw new Error(body?.error || `Layout request failed (${response.status}).`);
+        if (!cancelled && !layoutTouchedRef.current) {
+          const hydrated = normalizeStudioLayoutPreferences(body?.layout || localFallback);
+          layoutPreferencesRef.current = hydrated;
+          setLayoutPreferences(hydrated);
+          if (!body?.layout) persistStudioLayout(hydrated);
+        }
+      } catch (error) {
+        console.warn('Server-backed Studio layout is unavailable; using the local preference fallback.', error);
+        if (!cancelled && !layoutTouchedRef.current) {
+          layoutPreferencesRef.current = localFallback;
+          setLayoutPreferences(localFallback);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+    // User changes made before the request returns win via layoutTouchedRef.
+  }, [persistStudioLayout]);
+
   const [diagnosticsScope, setDiagnosticsScope] = useState<DiagnosticsScope>('scripts');
 
   // Lifted auto-save state to synchronize settings and prevent data clobbering on load
@@ -497,7 +560,8 @@ export default function App() {
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (isResizingLeft) {
-        const newWidth = Math.max(200, Math.min(550, e.clientX));
+        const pointerWidth = layoutPreferences.toolDock === 'right' ? window.innerWidth - e.clientX : e.clientX;
+        const newWidth = Math.max(240, Math.min(Math.min(550, window.innerWidth * 0.55), pointerWidth));
         setLeftSidebarWidth(newWidth);
       }
     };
@@ -519,7 +583,7 @@ export default function App() {
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };
-  }, [isResizingLeft]);
+  }, [isResizingLeft, layoutPreferences.toolDock]);
 
   // Active AI modeling status states
   const [activeAIProvider, setActiveAIProvider] = useState<string>('gemini');
@@ -561,6 +625,15 @@ export default function App() {
     }
   };
   const aiEnabled = aiTier !== 'off';
+
+  useEffect(() => {
+    try { localStorage.setItem(STUDIO_LAYOUT_KEY, JSON.stringify(layoutPreferences)); } catch { /* server state remains authoritative */ }
+    const workspaceTabs = visibleWorkspaceViews(layoutPreferences);
+    if (!workspaceTabs.includes(workspaceView)) setWorkspaceView(workspaceTabs[0]);
+    const toolTabs = visibleSidebarTabs(layoutPreferences, aiEnabled);
+    if (!toolTabs.includes(activeSidebarTab)) setActiveSidebarTab(toolTabs[0] ?? 'script');
+
+  }, [layoutPreferences, workspaceView, activeSidebarTab, aiEnabled]);
 
   // A4.7 — cancelable AI generation. The Builder runs several model passes (slow);
   // this lets the user abort instead of waiting out an uncancelable request.
@@ -1041,6 +1114,7 @@ export default function App() {
         setIsShortcutsOpen(prev => !prev);
       } else if (e.key === 'Escape') {
         setIsShortcutsOpen(false);
+        setIsStudioMenuOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -1421,6 +1495,14 @@ export default function App() {
     setSelectedWidget(null);
   };
 
+  const requestClearWorkspace = async () => {
+    const ok = await confirmDialog(
+      `Reset "${workspace.name || 'Current Workspace'}" to a blank project? A checkpoint is created first.`,
+      { okLabel: 'Reset workspace', cancelLabel: 'Keep workspace' },
+    );
+    if (ok) handleClearWorkspace();
+  };
+
   // Load sample presets
   const handleLoadPreset = (key: 'escort' | 'mission' | 'blank' | '__current') => {
     if (key === '__current') return; // label-only option for the loaded workspace; not a load action
@@ -1468,16 +1550,16 @@ export default function App() {
   }, [firstFlaggedNodeId]);
 
   return (
-    <div className="w-screen h-screen flex flex-col bg-[#0F1115] text-slate-300 font-sans">
+    <div className="w-full h-screen max-w-full overflow-hidden flex flex-col bg-[#0F1115] text-slate-300 font-sans">
       <FpsMeter />
       <HealthCardOverlay />
       <DialogHost />
       {/* Upper Technical Header */}
-      <header className="h-12 border-b border-white/10 bg-[#161920] px-4 flex items-center justify-between shrink-0 font-mono">
+      <header data-testid="studio-header" className="h-11 min-w-0 max-w-full border-b border-white/10 bg-[#161920] px-2 flex items-center gap-2 shrink-0 font-mono">
         
         {/* Workspace Brand and Logo */}
-        <div className="flex items-center gap-5">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0 shrink">
+          <div className="flex items-center gap-2 min-w-0">
             {/* X4 Forge mark: anvil + spark on a cyan→violet plate */}
             <svg viewBox="0 0 24 24" className="w-6 h-6 shrink-0" aria-label="X4 Forge logo">
               <defs>
@@ -1490,12 +1572,12 @@ export default function App() {
               <path d="M5 9h14v3h-5v2.2l3.2 2.8H6.8L10 14.2V12H5z" fill="#ffffff" />
               <path d="M17.6 3.1l.7 1.6 1.6.7-1.6.7-.7 1.6-.7-1.6-1.6-.7 1.6-.7z" fill="#fbbf24" />
             </svg>
-            <span className="font-semibold text-white tracking-tight shrink-0 select-none">
+            <span className="font-semibold text-white tracking-tight shrink-0 select-none text-[11px] sm:text-sm">
               X4 FORGE <span className="text-cyan-400/90 font-normal" title={__APP_BUILD__}>v{__APP_VERSION__}</span>
             </span>
             {workspace.sourceFolder && (
               <span
-                className="hidden lg:inline-flex items-center gap-1 ml-2 px-2 py-0.5 rounded bg-white/5 border border-white/10 text-[11px] text-slate-300 max-w-[460px] shrink min-w-0"
+                className="hidden min-[1900px]:inline-flex items-center gap-1 ml-2 px-2 py-0.5 rounded bg-white/5 border border-white/10 text-[11px] text-slate-300 max-w-[360px] shrink min-w-0"
                 title={'Open project folder: ' + workspace.sourceFolder}
               >
                 <span className="text-cyan-400/80 font-medium shrink-0">Open:</span>
@@ -1506,6 +1588,7 @@ export default function App() {
 
           {/* Full cross-domain search belongs to Expert; Beginner keeps one task path. */}
           {experienceMode === 'expert' && (
+            <div className="hidden lg:block min-w-0">
             <GlobalSearch
               workspace={workspace}
               workspaceView={workspaceView}
@@ -1514,193 +1597,18 @@ export default function App() {
               setSelectedNode={setSelectedNode}
               setSelectedWidget={setSelectedWidget}
             />
+            </div>
           )}
         </div>
 
-        {/* View Selection Mode Tabs */}
-        {experienceMode === 'expert' && (
-        <div id="view_selection_modes" className="flex items-center gap-1 p-1 rounded-md bg-black/45 border border-white/10">
-          {(() => {
-            const isActive = workspaceView === 'blueprint';
-            let btnClass = '';
-            let tooltip = '';
-            let indicatorDot = null;
-            
-            if (mdErrorCount > 0) {
-              // Red for errors
-              btnClass = isActive
-                ? 'bg-red-500/15 text-red-400 border border-red-500/50 shadow-[0_0_8px_rgba(239,68,68,0.15)] hover:bg-red-500/25'
-                : 'bg-red-500/5 text-red-400/80 hover:text-red-300 border border-red-500/20 hover:border-red-500/40';
-              tooltip = `Editor Diagnostics — ${mdErrorCount} live validation error${mdErrorCount > 1 ? 's' : ''} detected! Click to view workspace flow errors.`;
-              indicatorDot = (
-                <span className="relative flex h-2 w-2 shrink-0">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                </span>
-              );
-            } else if (mdWarningCount > 0) {
-              // Amber for warnings
-              btnClass = isActive
-                ? 'bg-amber-500/15 text-amber-400 border border-amber-500/40 shadow-[0_0_8px_rgba(245,158,11,0.1)] hover:bg-amber-500/25'
-                : 'bg-amber-500/5 text-amber-400/80 hover:text-amber-300 border border-amber-500/15 hover:border-amber-500/35';
-              tooltip = `Editor Diagnostics — ${mdWarningCount} live validation warning${mdWarningCount > 1 ? 's' : ''} active. Click to view rules advisory.`;
-              indicatorDot = (
-                <span className="relative flex h-2 w-2 shrink-0">
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-                </span>
-              );
-            } else {
-              // Green for valid
-              btnClass = isActive
-                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/40 shadow-[0_0_8px_rgba(16,185,129,0.1)] hover:bg-emerald-500/25'
-                : 'text-slate-400 hover:text-emerald-400 border border-transparent hover:border-emerald-500/20';
-              tooltip = "Editor Diagnostics — all live flowchart script validation checks satisfied (valid).";
-              indicatorDot = (
-                <span className="relative flex h-2 w-2 shrink-0">
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-              );
-            }
-            
-            return (
-              <button
-                onClick={() => { if (firstFlaggedNodeId) { jumpToFlaggedNode(); } else { setWorkspaceView('blueprint'); setActiveSidebarTab('script'); } }}
-                className={`px-2.5 py-1 rounded text-[11px] font-bold font-mono uppercase flex items-center gap-2 transition-all cursor-pointer ${btnClass}`}
-                title={firstFlaggedNodeId ? tooltip + ' — click to jump to the flagged node' : tooltip}
-              >
-                <GitFork className="w-3.5 h-3.5" />
-                {/* B29: labels collapse to icon-only below 2xl so the header fits 1280 */}
-                <span className="hidden min-[2150px]:inline">MD Scripts</span>
-                {indicatorDot}
-              </button>
-            );
-          })()}
-          
-          <button
-            onClick={() => { setWorkspaceView('aiscripts'); setActiveSidebarTab('script'); }}
-            className={`px-2.5 py-1 rounded text-[11px] font-bold font-mono uppercase flex items-center gap-1.5 transition-all cursor-pointer ${
-              workspaceView === 'aiscripts'
-                ? 'bg-cyan-600/20 text-cyan-400 border border-cyan-500/30'
-                : 'text-slate-400 hover:text-white border border-transparent'
-            }`}
-            title="AIScripts"
-          >
-            <Scroll className="w-3.5 h-3.5" />
-            <span className="hidden min-[2150px]:inline">AIScripts</span>
-          </button>
-
-          <button
-            onClick={() => { setWorkspaceView('libraries'); setActiveSidebarTab('config'); }}
-            className={`px-2.5 py-1 rounded text-[11px] font-bold font-mono uppercase flex items-center gap-1.5 transition-all cursor-pointer ${
-              workspaceView === 'libraries'
-                ? 'bg-cyan-600/20 text-cyan-400 border border-cyan-500/30'
-                : 'text-slate-400 hover:text-white border border-transparent'
-            }`}
-            title="Wares & Jobs"
-          >
-            <Package className="w-3.5 h-3.5" />
-            <span className="hidden min-[2150px]:inline">Wares & Jobs</span>
-          </button>
-
-          <button
-            onClick={() => { setWorkspaceView('ui-designer'); setActiveSidebarTab('ui'); }}
-            className={`px-2.5 py-1 rounded text-[11px] font-bold font-mono uppercase flex items-center gap-1.5 transition-all cursor-pointer ${
-              workspaceView === 'ui-designer'
-                ? 'bg-cyan-600/20 text-cyan-400 border border-cyan-500/30'
-                : 'text-slate-400 hover:text-white border border-transparent'
-            }`}
-            title="HUD & LUA UI"
-          >
-            <Layout className="w-3.5 h-3.5" />
-            <span className="hidden min-[2150px]:inline">HUD & LUA UI</span>
-          </button>
-
-          <button
-            onClick={() => { setWorkspaceView('xmlpatch'); setActiveSidebarTab('config'); }}
-            className={`px-2.5 py-1 rounded text-[11px] font-bold font-mono uppercase flex items-center gap-1.5 transition-all cursor-pointer ${
-              workspaceView === 'xmlpatch'
-                ? 'bg-cyan-600/20 text-cyan-400 border border-cyan-500/30'
-                : 'text-slate-400 hover:text-white border border-transparent'
-            }`}
-            title="XML Patching"
-          >
-            <FileCode className="w-3.5 h-3.5" />
-            <span className="hidden min-[2150px]:inline">XML Patching</span>
-          </button>
-
-          <button
-            onClick={() => { setWorkspaceView('project'); setActiveSidebarTab('config'); }}
-            className={`px-2.5 py-1 rounded text-[11px] font-bold font-mono uppercase flex items-center gap-1.5 transition-all cursor-pointer ${
-              workspaceView === 'project'
-                ? 'bg-cyan-600/20 text-cyan-400 border border-cyan-500/30'
-                : 'text-slate-400 hover:text-white border border-transparent'
-            }`}
-            title="Project"
-          >
-            <FolderGit2 className="w-3.5 h-3.5" />
-            <span className="hidden min-[2150px]:inline">Project</span>
-          </button>
-
-          <button
-            onClick={() => { setWorkspaceView('galaxy'); setActiveSidebarTab('reference'); }}
-            className={`px-2.5 py-1 rounded text-[11px] font-bold font-mono uppercase flex items-center gap-1.5 transition-all cursor-pointer ${
-              workspaceView === 'galaxy'
-                ? 'bg-cyan-600/20 text-cyan-400 border border-cyan-500/30'
-                : 'text-slate-400 hover:text-white border border-transparent'
-            }`}
-            title="Galaxy"
-          >
-            <MapIcon className="w-3.5 h-3.5" />
-            <span className="hidden min-[2150px]:inline">Galaxy</span>
-          </button>
-
-          <button
-            onClick={() => { setWorkspaceView('contracts'); setActiveSidebarTab('config'); }}
-            className={`px-2.5 py-1 rounded text-[11px] font-bold font-mono uppercase flex items-center gap-1.5 transition-all cursor-pointer ${
-              workspaceView === 'contracts'
-                ? 'bg-cyan-600/20 text-cyan-400 border border-cyan-500/30'
-                : 'text-slate-400 hover:text-white border border-transparent'
-            }`}
-            title="Contracts"
-          >
-            <Plug className="w-3.5 h-3.5" />
-            <span className="hidden min-[2150px]:inline">Contracts</span>
-          </button>
-
-          <button
-            onClick={() => { setWorkspaceView('translation'); setActiveSidebarTab('config'); }}
-            className={`px-2.5 py-1 rounded text-[11px] font-bold font-mono uppercase flex items-center gap-1.5 transition-all cursor-pointer ${
-              workspaceView === 'translation'
-                ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30'
-                : 'text-slate-400 hover:text-white border border-transparent'
-            }`}
-            title="Languages (t/)"
-          >
-            <Globe className="w-3.5 h-3.5" />
-            <span className="hidden min-[2150px]:inline">Languages (t/)</span>
-          </button>
-
-          <button
-            onClick={() => { setWorkspaceView('wiki'); setActiveSidebarTab('config'); }}
-            className={`px-2.5 py-1 rounded text-[11px] font-bold font-mono uppercase flex items-center gap-1.5 transition-all cursor-pointer ${
-              workspaceView === 'wiki'
-                ? 'bg-amber-600/20 text-amber-400 border border-amber-500/30'
-                : 'text-slate-400 hover:text-white border border-transparent'
-            }`}
-            title="X4 Wiki"
-          >
-            <BookOpen className="w-3.5 h-3.5" />
-            <span className="hidden min-[2150px]:inline">X4 Wiki</span>
-          </button>
-        </div>
-        )}
-
+        {/* Workspace navigation is rendered by WorkspaceNavigationBar below the compact header. */}
         {/* Preset & Project management utilities */}
-        <div className="flex items-center gap-1 min-[2150px]:gap-3">
+        <div className="ml-auto flex items-center gap-1 min-w-0 shrink-0">
           {/* History Undo/Redo Group */}
           <div className="flex items-center gap-1 bg-black/45 border border-white/10 p-1 rounded-md">
             <button
               onClick={handleUndo}
+              data-global-action="undo"
               disabled={pastStates.length === 0}
               className={`p-1 px-2 rounded font-mono text-[11px] flex items-center gap-1 transition-all ${
                 pastStates.length > 0
@@ -1714,6 +1622,7 @@ export default function App() {
             </button>
             <button
               onClick={handleRedo}
+              data-global-action="redo"
               disabled={futureStates.length === 0}
               className={`p-1 px-2 rounded font-mono text-[11px] flex items-center gap-1 transition-all ${
                 futureStates.length > 0
@@ -1728,6 +1637,7 @@ export default function App() {
             {/* B13: discoverable entry to the shortcuts list (also bound to "?") */}
             <button
               onClick={() => setIsShortcutsOpen(true)}
+              data-global-action="shortcuts"
               data-testid="shortcuts-open-btn"
               className="p-1 px-2 rounded font-mono text-[11px] text-slate-400 hover:text-cyan-400 hover:bg-cyan-500/10 cursor-pointer transition-all"
               title="Keyboard shortcuts (?)"
@@ -1736,7 +1646,7 @@ export default function App() {
             </button>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-black/35 rounded border border-white/10 p-1">
+          <div data-global-action="workspace-switcher" className="flex items-center gap-1.5 bg-black/35 rounded border border-white/10 p-1 min-w-0">
             <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider px-1 hidden min-[2150px]:inline">Workspace:</span>
             <select
               value="__current"
@@ -1785,7 +1695,7 @@ export default function App() {
             </select>
           </div>
 
-          {experienceMode === 'expert' && <NativeProjectFiles workspace={workspace} />}
+          {experienceMode === 'expert' && <div className="hidden min-[1200px]:block" data-global-action="native-project-files"><NativeProjectFiles workspace={workspace} /></div>}
 
           {/* B29: the conflict card / diverged badge moved OUT of the header into the fixed
               sync-status layer below — a header slot gets clipped on narrow windows, and the
@@ -1793,7 +1703,8 @@ export default function App() {
           {experienceMode === 'expert' && (
           <button
             onClick={() => setIsSyncModalOpen(true)}
-            className="px-3 py-1 border border-cyan-500/30 hover:border-cyan-500/80 bg-cyan-500/10 text-cyan-400 rounded font-mono text-[11px] hover:bg-cyan-500/20 transition-all flex items-center gap-1.5 cursor-pointer"
+            data-global-action="sync-mod"
+            className="flex px-2 py-1 border border-cyan-500/30 hover:border-cyan-500/80 bg-cyan-500/10 text-cyan-400 rounded font-mono text-[11px] hover:bg-cyan-500/20 transition-all items-center gap-1.5 cursor-pointer"
             title="Load existing mods or push updates to GitHub"
           >
             <FolderGit2 className="w-3.5 h-3.5" />
@@ -1804,7 +1715,8 @@ export default function App() {
           {experienceMode === 'expert' && aiEnabled && (
           <button
             onClick={() => setIsAIConfigOpen(true)}
-            className="px-3 py-1 border border-amber-500/25 hover:border-[#df9825] bg-amber-500/5 text-amber-400 rounded font-mono text-[11px] hover:bg-amber-500/15 transition-all flex flex-col justify-center items-start text-left cursor-pointer select-none leading-tight gap-0.5"
+            data-global-action="ai-settings"
+            className="hidden min-[1700px]:flex px-2 py-1 border border-amber-500/25 hover:border-[#df9825] bg-amber-500/5 text-amber-400 rounded font-mono text-[11px] hover:bg-amber-500/15 transition-all flex-col justify-center items-start text-left cursor-pointer select-none leading-tight gap-0.5"
             title={`Configure AI: Active Engine: ${activeAIProvider.toUpperCase()} | Model: ${activeAIModel} | Reasoning: ${activeReasoning}`}
           >
             <div className="flex items-center gap-1.5">
@@ -1825,7 +1737,8 @@ export default function App() {
           {experienceMode === 'expert' && (
           <button
             onClick={() => setIsAgentBridgeOpen(prev => !prev)}
-            className={`px-3 py-1 border rounded font-mono text-[11px] transition-all flex items-center gap-1.5 cursor-pointer ${
+            data-global-action="agent-api"
+            className={`flex px-2 py-1 border rounded font-mono text-[11px] transition-all items-center gap-1.5 cursor-pointer ${
               isAgentBridgeOpen
                 ? 'bg-cyan-600/20 text-cyan-400 border-cyan-500/50 hover:bg-cyan-600/30 font-bold'
                 : 'bg-black/40 text-slate-300 border-white/10 hover:border-cyan-400/40 hover:text-white'
@@ -1840,7 +1753,8 @@ export default function App() {
           <button
             data-testid="report-bug-button"
             onClick={() => setIsBugReportOpen(true)}
-            className="px-3 py-1 border border-amber-500/30 hover:border-amber-400/60 bg-black/40 text-amber-300 hover:text-amber-200 rounded font-mono text-[11px] transition-all flex items-center gap-1.5 cursor-pointer"
+            data-global-action="report-bug"
+            className="hidden min-[1100px]:flex px-2 py-1 border border-amber-500/30 hover:border-amber-400/60 bg-black/40 text-amber-300 hover:text-amber-200 rounded font-mono text-[11px] transition-all items-center gap-1.5 cursor-pointer"
             title="Report a bug — opens a pre-filled GitHub issue (no account? it can copy the report instead)"
           >
             <Bug className="w-3.5 h-3.5" />
@@ -1849,7 +1763,8 @@ export default function App() {
 
           <button
             onClick={() => setIsDirSettingsOpen(true)}
-            className="px-3 py-1 border border-white/10 hover:border-cyan-400/40 bg-black/40 text-slate-300 hover:text-white rounded font-mono text-[11px] transition-all flex items-center gap-1.5 cursor-pointer"
+            data-global-action="settings"
+            className="flex px-2 py-1 border border-white/10 hover:border-cyan-400/40 bg-black/40 text-slate-300 hover:text-white rounded font-mono text-[11px] transition-all items-center gap-1.5 cursor-pointer"
             title="Manage all folders the studio uses (Mod Workspace, X4 game path, schema)"
           >
             <SettingsGear className="w-3.5 h-3.5" />
@@ -1857,22 +1772,71 @@ export default function App() {
           </button>
 
           <button
-            onClick={handleClearWorkspace}
-            className="px-3 py-1 border border-red-500/10 hover:border-red-500/30 bg-red-500/5 text-red-400 rounded font-mono text-[11px] hover:bg-red-500/10 transition-all flex items-center gap-1 cursor-pointer"
+            onClick={requestClearWorkspace}
+            data-global-action="reset-workspace"
+            className="hidden min-[1700px]:flex px-2 py-1 border border-red-500/10 hover:border-red-500/30 bg-red-500/5 text-red-400 rounded font-mono text-[11px] hover:bg-red-500/10 transition-all items-center gap-1 cursor-pointer"
             title="Clean workspace back to blank state"
           >
             <Trash className="w-3.5 h-3.5" />
             <span className="hidden min-[2150px]:inline">RESET</span>
           </button>
+
+          {/* Every utility remains available at every width through this compact menu. */}
+          <div className="relative">
+            <button
+              type="button"
+              data-testid="studio-menu-button"
+              aria-haspopup="menu"
+              aria-expanded={isStudioMenuOpen}
+              onClick={() => setIsStudioMenuOpen(open => !open)}
+              className="h-8 w-8 grid place-items-center rounded border border-white/10 bg-black/40 text-slate-300 hover:text-cyan-300 hover:border-cyan-500/40"
+              title="Studio actions"
+            >
+              <Menu className="w-4 h-4" />
+            </button>
+            {isStudioMenuOpen && (
+              <div role="menu" data-testid="studio-menu" className="absolute right-0 top-9 z-[10000] w-64 rounded-lg border border-cyan-500/25 bg-[#0b0e14]/98 p-1.5 shadow-2xl">
+                {experienceMode === 'expert' && <div data-global-action="native-project-files" className="mb-1"><NativeProjectFiles workspace={workspace} /></div>}
+                {experienceMode === 'expert' && (
+                  <button role="menuitem" data-global-action="sync-mod" onClick={() => { setIsStudioMenuOpen(false); setIsSyncModalOpen(true); }} className="studio-menu-item"><FolderGit2 className="w-3.5 h-3.5" /> Sync Mod</button>
+                )}
+                {experienceMode === 'expert' && aiEnabled && (
+                  <button role="menuitem" data-global-action="ai-settings" onClick={() => { setIsStudioMenuOpen(false); setIsAIConfigOpen(true); }} className="studio-menu-item"><Sparkles className="w-3.5 h-3.5" /> AI Engine</button>
+                )}
+                {experienceMode === 'expert' && (
+                  <button role="menuitem" data-global-action="agent-api" onClick={() => { setIsStudioMenuOpen(false); setIsAgentBridgeOpen(open => !open); }} className="studio-menu-item"><Cpu className="w-3.5 h-3.5" /> Agent API</button>
+                )}
+                <button role="menuitem" data-global-action="report-bug" onClick={() => { setIsStudioMenuOpen(false); setIsBugReportOpen(true); }} className="studio-menu-item text-amber-300"><Bug className="w-3.5 h-3.5" /> Report Bug</button>
+                <button role="menuitem" data-global-action="settings" onClick={() => { setIsStudioMenuOpen(false); setIsDirSettingsOpen(true); }} className="studio-menu-item"><SettingsGear className="w-3.5 h-3.5" /> Studio Settings</button>
+                <button role="menuitem" data-global-action="reset-workspace" onClick={() => { setIsStudioMenuOpen(false); void requestClearWorkspace(); }} className="studio-menu-item text-red-300"><Trash className="w-3.5 h-3.5" /> Reset Workspace…</button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
+
+      {experienceMode === 'expert' && layoutPreferences.workspaceDock === 'top' && (
+        <WorkspaceNavigationBar
+          layout={layoutPreferences}
+          activeView={workspaceView}
+          onNavigate={(view) => {
+            const item = WORKSPACE_NAV_ITEMS.find(candidate => candidate.id === view)!;
+            if (view === 'blueprint' && firstFlaggedNodeId) jumpToFlaggedNode();
+            else { setWorkspaceView(view); setActiveSidebarTab(item.sidebarTab); }
+          }}
+          onMove={(view, target) => updateLayoutPreferences(previous => ({ ...previous, workspaceOrder: moveOrderedItem(previous.workspaceOrder, view, target) }))}
+          onToggleCollapsed={() => updateLayoutPreferences(previous => ({ ...previous, workspaceBarCollapsed: !previous.workspaceBarCollapsed }))}
+          mdErrorCount={mdErrorCount}
+          mdWarningCount={mdWarningCount}
+        />
+      )}
 
       <ReadinessLadder
         stages={readinessStages}
         onNavigate={navigateReadiness}
         onConfirmExperience={confirmCurrentExperience}
         trailing={(
-          <div data-testid="experience-mode-switch" className="flex items-center gap-1 rounded-md border border-white/10 bg-black/45 p-1">
+          <div data-testid="experience-mode-switch" data-global-action="experience-mode" className="flex items-center gap-1 rounded-md border border-white/10 bg-black/45 p-1">
             <button data-testid="mode-beginner" aria-pressed={experienceMode === 'beginner'} onClick={() => changeExperienceMode('beginner')} className={`rounded px-2 py-1 text-[9px] font-mono font-bold uppercase ${experienceMode === 'beginner' ? 'bg-cyan-600/25 text-cyan-300' : 'text-slate-500 hover:text-white'}`}>Beginner</button>
             <button data-testid="mode-expert" aria-pressed={experienceMode === 'expert'} onClick={() => changeExperienceMode('expert')} className={`rounded px-2 py-1 text-[9px] font-mono font-bold uppercase ${experienceMode === 'expert' ? 'bg-amber-600/25 text-amber-300' : 'text-slate-500 hover:text-white'}`}>Expert</button>
           </div>
@@ -1923,12 +1887,27 @@ export default function App() {
       <div className="flex flex-1 overflow-hidden">
         
         {/* Left Side: Drag control panel, property editor inspector */}
-        {experienceMode === 'expert' ? (
+        {experienceMode === 'expert' && layoutPreferences.sidePanelCollapsed ? (
+          <button
+            type="button"
+            data-testid="side-panel-restore"
+            onClick={() => updateLayoutPreferences(previous => ({ ...previous, sidePanelCollapsed: false }))}
+            className={`${layoutPreferences.toolDock === 'right' ? 'order-2 border-l' : 'order-0 border-r'} w-6 shrink-0 border-white/10 bg-[#10131a] text-cyan-400 hover:bg-cyan-500/10 grid place-items-center`}
+            title="Show side panel"
+          >
+            <PanelLeftOpen className="w-3.5 h-3.5" />
+          </button>
+        ) : experienceMode === 'expert' ? (
         <Sidebar
           width={leftSidebarWidth}
           aiEnabled={aiEnabled}
           activeTab={activeSidebarTab}
           setActiveTab={setActiveSidebarTab}
+          layoutPreferences={layoutPreferences}
+          onMoveTool={(tool, target) => updateLayoutPreferences(previous => ({ ...previous, toolOrder: moveOrderedItem(previous.toolOrder, tool, target) }))}
+          onToggleToolRail={() => updateLayoutPreferences(previous => ({ ...previous, toolRailCollapsed: !previous.toolRailCollapsed }))}
+          onTogglePanel={() => updateLayoutPreferences(previous => ({ ...previous, sidePanelCollapsed: true }))}
+          onOpenLayoutSettings={() => setIsDirSettingsOpen(true)}
           workspace={workspace}
           setWorkspace={(updater) => {
             // Save state checkpoint before doing adjustments from sidebar fields
@@ -2017,18 +1996,19 @@ export default function App() {
         )}
 
         {/* Left Resizer Handle */}
-        <div
-          className={`w-1 cursor-col-resize hover:bg-cyan-500/50 hover:w-1.5 transition-all bg-white/5 h-full relative z-40 select-none shrink-0 ${
+        {(experienceMode !== 'expert' || !layoutPreferences.sidePanelCollapsed) && <div
+          data-testid="side-panel-resizer"
+          className={`${layoutPreferences.toolDock === 'right' && experienceMode === 'expert' ? 'order-1' : 'order-0'} w-1 cursor-col-resize hover:bg-cyan-500/50 hover:w-1.5 transition-all bg-white/5 h-full relative z-40 select-none shrink-0 ${
             isResizingLeft ? 'bg-cyan-500 w-1.5' : ''
           }`}
           onMouseDown={(e) => {
             e.preventDefault();
             setIsResizingLeft(true);
           }}
-        />
+        />}
 
         {/* Center: Canvas editor viewport (Based on active workspace mode) */}
-        <main className="flex-1 flex flex-col h-full overflow-hidden border-r border-white/10 bg-[#0a0c10]">
+        <main data-testid="studio-workspace" className="order-0 min-w-0 flex-1 flex flex-col h-full overflow-hidden border-r border-white/10 bg-[#0a0c10]">
           
           {workspaceView === 'blueprint' ? (
             <Canvas
@@ -2115,6 +2095,22 @@ export default function App() {
         </main>
 
       </div>
+
+      {experienceMode === 'expert' && layoutPreferences.workspaceDock === 'bottom' && (
+        <WorkspaceNavigationBar
+          layout={layoutPreferences}
+          activeView={workspaceView}
+          onNavigate={(view) => {
+            const item = WORKSPACE_NAV_ITEMS.find(candidate => candidate.id === view)!;
+            if (view === 'blueprint' && firstFlaggedNodeId) jumpToFlaggedNode();
+            else { setWorkspaceView(view); setActiveSidebarTab(item.sidebarTab); }
+          }}
+          onMove={(view, target) => updateLayoutPreferences(previous => ({ ...previous, workspaceOrder: moveOrderedItem(previous.workspaceOrder, view, target) }))}
+          onToggleCollapsed={() => updateLayoutPreferences(previous => ({ ...previous, workspaceBarCollapsed: !previous.workspaceBarCollapsed }))}
+          mdErrorCount={mdErrorCount}
+          mdWarningCount={mdWarningCount}
+        />
+      )}
 
       {/* Embedded Intelligent AI Guide Drawer chatbot */}
       {experienceMode === 'expert' && aiEnabled && isAiFloatingVisible && (
@@ -2213,6 +2209,8 @@ export default function App() {
         setFilesystemPath={setFilesystemPath}
         aiTier={aiTier}
         setAiTier={setAiTier}
+        layoutPreferences={layoutPreferences}
+        setLayoutPreferences={updateLayoutPreferences}
         onOpenAIConfig={() => { setIsDirSettingsOpen(false); setIsAIConfigOpen(true); }}
       />
 

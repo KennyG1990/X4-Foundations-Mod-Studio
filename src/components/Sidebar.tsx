@@ -15,7 +15,6 @@ import {
   Sparkles,
   Info,
   BookOpen,
-  ChevronRight,
   PackageCheck,
   Folder,
   HardDrive,
@@ -25,7 +24,11 @@ import {
   Trash2,
   Activity,
   Terminal,
-  Database
+  Database,
+  Tags,
+  ChevronLeft,
+  ChevronRight,
+  PanelLeftClose
 } from 'lucide-react';
 import { 
   NODE_TEMPLATES,
@@ -52,6 +55,12 @@ import type { ArchitectStepView } from './BlueprintPanel';
 import VirtualizedNodeToolbox from './VirtualizedNodeToolbox';
 import type { DiagnosticsScope } from './DiagnosticsCenter';
 import { applyNodePropertyChange, isNodeSelectionFailure } from '../lib/nodeSelectionDocument';
+import {
+  SIDEBAR_NAV_ITEMS,
+  visibleSidebarTabs,
+  type SidebarTab,
+  type StudioLayoutPreferences,
+} from '../lib/studioLayout';
 
 interface SidebarProps {
   width?: number;
@@ -73,8 +82,13 @@ interface SidebarProps {
   architectRunDisabledReason?: string;
   /** A4.7 — abort the in-flight AI request (forwarded to AIHelper). */
   onAiCancel?: () => void;
-  activeTab: 'script' | 'ui' | 'config' | 'filesystem' | 'git' | 'cues' | 'templates' | 'ai' | 'diagnostics' | 'playtest' | 'reference';
-  setActiveTab: (tab: 'script' | 'ui' | 'config' | 'filesystem' | 'git' | 'cues' | 'templates' | 'ai' | 'diagnostics' | 'playtest' | 'reference') => void;
+  activeTab: SidebarTab;
+  setActiveTab: (tab: SidebarTab) => void;
+  layoutPreferences: StudioLayoutPreferences;
+  onMoveTool: (tool: SidebarTab, target: SidebarTab | number) => void;
+  onToggleToolRail: () => void;
+  onTogglePanel: () => void;
+  onOpenLayoutSettings: () => void;
   workspace: ModWorkspace;
   setWorkspace: React.Dispatch<React.SetStateAction<ModWorkspace>>;
   onAddNode: (template: Omit<MDNode, 'id' | 'x' | 'y'>) => void;
@@ -136,6 +150,97 @@ interface SidebarProps {
   setAutoSaveEnabled?: (val: boolean) => void;
 }
 
+const TOOL_ICONS: Record<SidebarTab, React.ComponentType<{ className?: string }>> = {
+  script: Layers,
+  cues: Compass,
+  ui: Layout,
+  config: Tags,
+  filesystem: FolderGit2,
+  git: GitBranch,
+  templates: Library,
+  ai: Sparkles,
+  playtest: Terminal,
+  diagnostics: Activity,
+  reference: Database,
+};
+
+const TOOL_TITLES: Record<SidebarTab, string> = {
+  script: 'MD Nodes',
+  cues: 'Cue Hierarchy',
+  ui: 'Menu Widgets',
+  config: 'Mod Meta',
+  filesystem: 'Filesystem',
+  git: 'Source Control',
+  templates: 'Templates',
+  ai: 'AI Co-pilot',
+  playtest: 'Playtest Workspace',
+  diagnostics: 'Diagnostics — continuous project, script, package & install checks',
+  reference: 'Local Object Browser',
+};
+
+function ToolRail({ activeTab, aiEnabled, layoutPreferences, onSelect, onMove, onCollapse, onOpenSettings }: {
+  activeTab: SidebarTab;
+  aiEnabled: boolean;
+  layoutPreferences: StudioLayoutPreferences;
+  onSelect: (tab: SidebarTab) => void;
+  onMove: (tool: SidebarTab, target: SidebarTab | number) => void;
+  onCollapse: () => void;
+  onOpenSettings: () => void;
+}) {
+  const [dragged, setDragged] = React.useState<SidebarTab | null>(null);
+  const visible = visibleSidebarTabs(layoutPreferences, aiEnabled);
+  const right = layoutPreferences.toolDock === 'right';
+  return (
+    <nav aria-label="Forge tools" data-testid="tool-rail" className={`w-[48px] bg-[#0a0c10] ${right ? 'border-l' : 'border-r'} border-white/5 flex flex-col items-center py-2 gap-1 shrink-0 overflow-y-auto custom-scrollbar`}>
+      {visible.map(id => {
+        const item = SIDEBAR_NAV_ITEMS.find(candidate => candidate.id === id)!;
+        const Icon = TOOL_ICONS[id];
+        const active = activeTab === id;
+        return (
+          <button
+            key={id}
+            id={`tab_${id}`}
+            data-sidebar-tab={id}
+            type="button"
+            draggable
+            onDragStart={() => setDragged(id)}
+            onDragEnd={() => setDragged(null)}
+            onDragOver={event => event.preventDefault()}
+            onDrop={event => {
+              event.preventDefault();
+              if (dragged && dragged !== id) {
+                const rect = event.currentTarget.getBoundingClientRect();
+                const remaining = layoutPreferences.toolOrder.filter(item => item !== dragged);
+                const targetIndex = remaining.indexOf(id);
+                onMove(dragged, targetIndex + (event.clientY > rect.top + rect.height / 2 ? 1 : 0));
+              }
+              setDragged(null);
+            }}
+            onClick={() => onSelect(id)}
+            aria-label={item.label.toUpperCase()}
+            aria-current={active ? 'page' : undefined}
+            className={`w-9 h-9 rounded-md flex flex-col items-center justify-center transition-colors cursor-pointer ${active
+              ? `${id === 'ai' ? 'text-amber-300 bg-amber-950/30 border-amber-500' : id === 'cues' ? 'text-purple-300 bg-purple-950/30 border-purple-500' : 'text-cyan-300 bg-cyan-950/25 border-cyan-500'} ${right ? 'border-r-2' : 'border-l-2'} font-bold`
+              : 'text-slate-500 hover:text-slate-200 hover:bg-white/5'}`}
+            title={`${TOOL_TITLES[id]} — drag to reorder`}
+          >
+            <Icon className="w-3.5 h-3.5 shrink-0" />
+            {layoutPreferences.density === 'comfortable' && <span className="text-[6.5px] font-mono uppercase font-bold mt-0.5 truncate w-full text-center">{item.label}</span>}
+          </button>
+        );
+      })}
+      <div className="mt-auto flex flex-col gap-1 pt-2">
+        <button type="button" onClick={onOpenSettings} data-testid="studio-settings-tool" className="w-8 h-8 grid place-items-center rounded text-slate-500 hover:text-cyan-300 hover:bg-white/5" title="Studio Settings — organize workspace and tool tabs">
+          <Settings className="w-3.5 h-3.5" />
+        </button>
+        <button type="button" onClick={onCollapse} data-testid="tool-rail-collapse" className="w-8 h-8 grid place-items-center rounded text-slate-500 hover:text-cyan-300 hover:bg-white/5" title="Hide tool rail">
+          {right ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+        </button>
+      </div>
+    </nav>
+  );
+}
+
 export default function Sidebar({
   width,
   aiEnabled = false,
@@ -153,6 +258,11 @@ export default function Sidebar({
   onAiCancel,
   activeTab,
   setActiveTab,
+  layoutPreferences,
+  onMoveTool,
+  onToggleToolRail,
+  onTogglePanel,
+  onOpenLayoutSettings,
   workspace,
   setWorkspace,
   onAddNode,
@@ -394,163 +504,33 @@ export default function Sidebar({
     <div
       id="side_panel"
       style={{ width }}
-      className="border-r border-white/5 bg-[#12141a] flex h-full text-slate-300 min-w-0"
+      data-tool-dock={layoutPreferences.toolDock}
+      className={`${layoutPreferences.toolDock === 'right' ? 'border-l flex-row-reverse order-2' : 'border-r order-0'} border-white/5 bg-[#12141a] flex h-full text-slate-300 min-w-0 max-w-[70vw]`}
     >
-      {/* Left Icon Strip */}
-      <div className="w-[52px] bg-[#0a0c10] border-r border-white/5 flex flex-col items-center py-4 gap-2.5 shrink-0">
-        <button
-          id="tab_script"
-          onClick={() => setActiveTab('script')}
-          className={`w-10 h-11 rounded-lg flex flex-col items-center justify-center transition-all duration-150 cursor-pointer ${
-            activeTab === 'script'
-              ? 'text-cyan-400 bg-cyan-950/20 border-l-2 border-cyan-500 font-bold'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-          }`}
-          title="MD Nodes"
-        >
-          <Layers className="w-4 h-4 shrink-0" />
-          <span className="text-[7.5px] font-mono tracking-tighter uppercase font-bold mt-1 text-center truncate w-full">NODES</span>
-        </button>
-
-        <button
-          id="tab_cues"
-          onClick={() => setActiveTab('cues')}
-          className={`w-10 h-11 rounded-lg flex flex-col items-center justify-center transition-all duration-150 cursor-pointer ${
-            activeTab === 'cues'
-              ? 'text-purple-400 bg-purple-950/20 border-l-2 border-purple-500 font-bold'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-          }`}
-          title="Cues"
-        >
-          <Compass className="w-4 h-4 shrink-0" />
-          <span className="text-[7.5px] font-mono tracking-tighter uppercase font-bold mt-1 text-center truncate w-full">CUES</span>
-        </button>
-
-        <button
-          id="tab_ui"
-          onClick={() => setActiveTab('ui')}
-          className={`w-10 h-11 rounded-lg flex flex-col items-center justify-center transition-all duration-150 cursor-pointer ${
-            activeTab === 'ui'
-              ? 'text-cyan-400 bg-cyan-950/20 border-l-2 border-cyan-500 font-bold'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-          }`}
-          title="Menu Widgets"
-        >
-          <Layout className="w-4 h-4 shrink-0" />
-          <span className="text-[7.5px] font-mono tracking-tighter uppercase font-bold mt-1 text-center truncate w-full">WIDGETS</span>
-        </button>
-
-        <button
-          id="tab_config"
-          onClick={() => setActiveTab('config')}
-          className={`w-10 h-11 rounded-lg flex flex-col items-center justify-center transition-all duration-150 cursor-pointer ${
-            activeTab === 'config'
-              ? 'text-cyan-400 bg-cyan-950/20 border-l-2 border-cyan-500 font-bold'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-          }`}
-          title="Mod Meta"
-        >
-          <Settings className="w-4 h-4 shrink-0" />
-          <span className="text-[7.5px] font-mono tracking-tighter uppercase font-bold mt-1 text-center truncate w-full">META</span>
-        </button>
-
-        <button
-          id="tab_filesystem"
-          onClick={() => setActiveTab('filesystem')}
-          className={`w-10 h-11 rounded-lg flex flex-col items-center justify-center transition-all duration-150 cursor-pointer ${
-            activeTab === 'filesystem'
-              ? 'text-cyan-400 bg-cyan-950/20 border-l-2 border-cyan-500 font-bold'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-          }`}
-          title="Filesystem"
-        >
-          <FolderGit2 className="w-4 h-4 shrink-0" />
-          <span className="text-[7.5px] font-mono tracking-tighter uppercase font-bold mt-1 text-center truncate w-full">FILES</span>
-        </button>
-
-        <button
-          id="tab_git"
-          onClick={() => setActiveTab('git')}
-          className={`w-10 h-11 rounded-lg flex flex-col items-center justify-center transition-all duration-150 cursor-pointer ${
-            activeTab === 'git'
-              ? 'text-cyan-400 bg-cyan-950/20 border-l-2 border-cyan-500 font-bold'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-          }`}
-          title="Source Control"
-        >
-          <GitBranch className="w-4 h-4 shrink-0" />
-          <span className="text-[7.5px] font-mono tracking-tighter uppercase font-bold mt-1 text-center truncate w-full">SOURCE</span>
-        </button>
-
-        <button
-          id="tab_templates"
-          onClick={() => setActiveTab('templates')}
-          className={`w-10 h-11 rounded-lg flex flex-col items-center justify-center transition-all duration-150 cursor-pointer ${
-            activeTab === 'templates'
-              ? 'text-cyan-400 bg-cyan-950/20 border-l-2 border-cyan-500 font-bold'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-          }`}
-          title="Templates"
-        >
-          <Library className="w-4 h-4 shrink-0" />
-          <span className="text-[7.5px] font-mono tracking-tighter uppercase font-bold mt-1 text-center truncate w-full">TEMPLATES</span>
-        </button>
-
-        {aiEnabled && (
-        <button
-          id="tab_ai"
-          onClick={() => setActiveTab('ai')}
-          className={`w-10 h-11 rounded-lg flex flex-col items-center justify-center transition-all duration-150 cursor-pointer ${
-            activeTab === 'ai'
-              ? 'text-amber-400 bg-amber-950/20 border-l-2 border-amber-500 font-bold'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-          }`}
-          title="AI Co-pilot"
-        >
-          <Sparkles className="w-4 h-4 shrink-0" />
-          <span className="text-[7.5px] font-mono tracking-tighter uppercase font-bold mt-1 text-center truncate w-full">CO-PILOT</span>
-        </button>
-        )}
-        <button
-          id="tab_playtest"
-          onClick={() => setActiveTab('playtest')}
-          className={`w-10 h-11 rounded-lg flex flex-col items-center justify-center transition-all duration-150 cursor-pointer ${
-            activeTab === 'playtest'
-              ? 'text-emerald-400 bg-emerald-950/20 border-l-2 border-emerald-500 font-bold'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-          }`}
-          title="Playtest Workspace"
-        >
-          <Terminal className="w-4 h-4 shrink-0" />
-          <span className="text-[7.5px] font-mono tracking-tighter uppercase font-bold mt-1 text-center truncate w-full font-mono">PLAYTEST</span>
-        </button>
-        <button
-          id="tab_diagnostics"
-          onClick={() => setActiveTab('diagnostics')}
-          className={`w-10 h-11 rounded-lg flex flex-col items-center justify-center transition-all duration-150 cursor-pointer ${
-            activeTab === 'diagnostics'
-              ? 'text-cyan-400 bg-cyan-950/20 border-l-2 border-cyan-500 font-bold'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-          }`}
-          title="Diagnostics — continuous project, script, package & install checks"
-        >
-          <Activity className="w-4 h-4 shrink-0" />
-          <span className="text-[7.5px] font-mono tracking-tighter uppercase font-bold mt-1 text-center truncate w-full">DIAGNOSE</span>
-        </button>
-        <button
-          id="tab_reference"
-          onClick={() => setActiveTab('reference')}
-          className={`w-10 h-11 rounded-lg flex flex-col items-center justify-center transition-all duration-150 cursor-pointer ${
-            activeTab === 'reference'
-              ? 'text-amber-400 bg-amber-950/20 border-l-2 border-amber-500 font-bold'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-          }`}
-          title="Local Object Browser"
-        >
-          <Database className="w-4 h-4 shrink-0" />
-          <span className="text-[7.5px] font-mono tracking-tighter uppercase font-bold mt-1 text-center truncate w-full font-mono">OBJECTS</span>
-        </button>
-      </div>
+      {/* Config-driven tool rail. Hidden tools remain recoverable in Settings. */}
+      {layoutPreferences.toolRailCollapsed ? (
+        <div className={`${layoutPreferences.toolDock === 'right' ? 'border-l' : 'border-r'} border-white/5 bg-[#0a0c10] w-6 shrink-0 flex flex-col items-center pt-2`}>
+          <button
+            type="button"
+            onClick={onToggleToolRail}
+            data-testid="tool-rail-restore"
+            className="w-5 h-8 grid place-items-center text-cyan-400 hover:bg-cyan-500/10 rounded"
+            title="Show tool rail"
+          >
+            {layoutPreferences.toolDock === 'right' ? <ChevronLeft className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+      ) : (
+        <ToolRail
+          activeTab={activeTab}
+          aiEnabled={aiEnabled}
+          layoutPreferences={layoutPreferences}
+          onSelect={setActiveTab}
+          onMove={onMoveTool}
+          onCollapse={onToggleToolRail}
+          onOpenSettings={onOpenLayoutSettings}
+        />
+      )}
 
       {/* Right Content Column */}
       <div className="flex-1 flex flex-col min-w-0 h-full bg-[#12141a]">
@@ -562,7 +542,7 @@ export default function Sidebar({
               {activeTab === 'script' && <Layers className="w-3.5 h-3.5 text-cyan-400" />}
               {activeTab === 'cues' && <Compass className="w-3.5 h-3.5 text-purple-400" />}
               {activeTab === 'ui' && <Layout className="w-3.5 h-3.5 text-cyan-400" />}
-              {activeTab === 'config' && <Settings className="w-3.5 h-3.5 text-cyan-400" />}
+              {activeTab === 'config' && <Tags className="w-3.5 h-3.5 text-cyan-400" />}
               {activeTab === 'filesystem' && <FolderGit2 className="w-3.5 h-3.5 text-cyan-400" />}
               {activeTab === 'git' && <GitBranch className="w-3.5 h-3.5 text-cyan-400" />}
               {activeTab === 'templates' && <Library className="w-3.5 h-3.5 text-cyan-400" />}
@@ -598,6 +578,7 @@ export default function Sidebar({
             </div>
           </div>
 
+          <div className="flex items-center gap-1">
           {activeTab === 'ai' && (
             <button
               onClick={() => setIsAiFloatingVisible(!isAiFloatingVisible)}
@@ -611,6 +592,10 @@ export default function Sidebar({
               {isAiFloatingVisible ? "Hide Float ✕" : "Show Float ⎋"}
             </button>
           )}
+          <button type="button" data-testid="side-panel-collapse" onClick={onTogglePanel} className="w-7 h-7 grid place-items-center rounded text-slate-500 hover:text-cyan-300 hover:bg-white/5" title="Hide side panel">
+            <PanelLeftClose className="w-3.5 h-3.5" />
+          </button>
+          </div>
         </div>
 
         {/* Main Content Pane */}

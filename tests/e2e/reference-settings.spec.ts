@@ -49,7 +49,7 @@ test('Directory Settings presents one corpus root, measured coverage, and the cr
   await page.goto('/');
   await page.getByTitle('Manage all folders the studio uses (Mod Workspace, X4 game path, schema)').click();
 
-  await expect(page.getByText('Directory Settings', { exact: true })).toBeVisible();
+  await expect(page.getByText('Studio Settings', { exact: true })).toBeVisible();
   await expect(page.getByText(/Could not load directory config from the server/)).toHaveCount(0);
 
   const corpus = page.getByTestId('x4-corpus-settings');

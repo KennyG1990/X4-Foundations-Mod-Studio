@@ -1,5 +1,70 @@
 @import "tailwindcss";
 
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.studio-menu-item {
+  width: 100%;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: rgb(203 213 225);
+  font: 700 10px/1.2 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-align: left;
+  cursor: pointer;
+}
+
+.studio-menu-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: white;
+}
+
+.settings-select {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  background: #0f1115;
+  color: rgb(203 213 225);
+  padding: 6px 7px;
+  outline: none;
+}
+
+.settings-select:focus {
+  border-color: rgba(6, 182, 212, 0.65);
+}
+
+.settings-button {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.025);
+  color: rgb(203 213 225);
+  padding: 5px 8px;
+  font: 700 9px/1.2 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.settings-button:hover {
+  border-color: rgba(6, 182, 212, 0.45);
+  color: rgb(103 232 249);
+}
+
 @keyframes flowPulse {
   to {
     stroke-dashoffset: -20;

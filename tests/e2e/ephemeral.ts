@@ -51,3 +51,21 @@ export async function readServerWorkspaceEnvelope(): Promise<any> {
   if (!res.ok) throw new Error(`ephemeral envelope read failed: ${res.status}`);
   return res.json();
 }
+
+/** Persist Studio shell preferences in the isolated server state root. */
+export async function seedServerLayout(layout: unknown): Promise<void> {
+  const res = await fetchEphemeral(`${API}/api/studio/layout`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${E2E_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ layout }),
+  });
+  if (!res.ok) throw new Error(`ephemeral layout seed failed: ${res.status} ${await res.text()}`);
+}
+
+export async function readServerLayout(): Promise<any> {
+  const res = await fetchEphemeral(`${API}/api/studio/layout`, {
+    headers: { Authorization: `Bearer ${E2E_TOKEN}` },
+  });
+  if (!res.ok) throw new Error(`ephemeral layout read failed: ${res.status} ${await res.text()}`);
+  return (await res.json()).layout;
+}

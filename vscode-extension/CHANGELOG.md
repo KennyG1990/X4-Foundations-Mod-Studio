@@ -3,6 +3,13 @@
 The latest changes, newest first. (This page is generated automatically — see
 `release-notes.json` to edit the wording.)
 
+## 0.0.57 — 2026-07-29
+
+- Forge now fits the window instead of extending the canvas into a large empty area. The header, workspace navigation, side tools, patch workbench, and editor surfaces adapt across desktop and narrow widths without hiding existing screens or actions.
+- Workspace tabs and side tools can be reordered, hidden, restored, and docked where you want them. Collapse either navigation bar for more canvas space, move the workspace bar to the bottom or the tool rail to the right, and keep the layout after a reload.
+- Studio Settings now contains the complete navigation inventory, compact or comfortable density, keyboard-friendly ordering controls, and one-click layout reset. Hiding the active screen always falls back to another visible screen, and corrupt or all-hidden preferences recover safely.
+- XML Patching keeps its full three-pane desktop workbench and gains a focused compact layout on smaller windows. Patch Tree, Patch Blocks, Preview, Applied Preview, and Diff-to-Patch remain directly reachable without horizontal page overflow.
+
 ## 0.0.56 — 2026-07-29
 
 - Diff-to-Patch now keeps the base file, edited candidate, source revision, and generated patch locked to the same target. Switching files cannot leave wares XML under a ship macro or let a late response overwrite the active candidate, and unsaved per-target drafts survive target switches.

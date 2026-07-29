@@ -207,6 +207,7 @@ export default function XMLPatchSystem({ workspace, setWorkspace, saveCheckpoint
   const [rightPanelTab, setRightPanelTab] = useState<'patch' | 'preview' | 'difftool'>('patch');
   const [pretargetSelector, setPretargetSelector] = useState<string>('');
   const [authoringMode, setAuthoringMode] = useState<'single' | 'bulk'>('single');
+  const [compactPane, setCompactPane] = useState<'tree' | 'blocks' | 'preview'>('blocks');
 
   // T4.2 Inc 2 — Diff→Patch merge view: the user edits a copy of the vanilla
   // file and the studio synthesizes the minimal <diff> ops via
@@ -283,6 +284,7 @@ export default function XMLPatchSystem({ workspace, setWorkspace, saveCheckpoint
       sourceSignature: baseFileSession.sourceSignature,
     }));
     setWorkspace(prev => ({ ...prev, xmlPatches: [...(prev.xmlPatches || []), ...blocks] }));
+    setCompactPane('tree');
     setDtResult(null);
     setRightPanelTab('patch');
   };
@@ -864,8 +866,8 @@ export default function XMLPatchSystem({ workspace, setWorkspace, saveCheckpoint
   return (
     <div id="xml_patch_workbench_view" className="flex-1 bg-[#0a0c10] flex flex-col h-full overflow-hidden text-slate-300">
       {/* Simulation HUD Controls bar */}
-      <div className="bg-[#161920]/90 border-b border-white/10 p-3 flex items-center justify-between font-mono text-xs">
-        <div className="flex items-center gap-2">
+      <div className="bg-[#161920]/90 border-b border-white/10 p-2 flex flex-wrap items-center gap-2 justify-between font-mono text-xs">
+        <div className="flex items-center gap-2 min-w-0">
           <GitFork className="w-4 h-4 text-emerald-400" />
           <span className="font-semibold text-slate-200 uppercase tracking-tight">XML DIFF INTERACTIVE WORKBENCH</span>
           <div className="ml-3 flex rounded border border-white/10 bg-black/30 p-0.5">
@@ -875,9 +877,9 @@ export default function XMLPatchSystem({ workspace, setWorkspace, saveCheckpoint
         </div>
         
         {/* Target file selectors */}
-        {authoringMode === 'single' && <div className="flex items-center gap-2 font-mono text-[11px]">
+        {authoringMode === 'single' && <div className="flex flex-1 min-w-[260px] justify-end items-center gap-2 font-mono text-[11px]">
           <span className="text-slate-500 uppercase font-bold text-[9.5px]">Target File:</span>
-          <div className="w-80">
+          <div className="w-[min(320px,55vw)] min-w-0">
             <ObjectIndexPicker
               endpoint="/api/agent/patch-targets"
               kind="patch-target"
@@ -899,12 +901,40 @@ export default function XMLPatchSystem({ workspace, setWorkspace, saveCheckpoint
         </div>}
       </div>
 
+      {authoringMode === 'single' && (
+        <div data-testid="xmlpatch-compact-tabs" className="min-[1500px]:hidden h-9 shrink-0 min-w-0 overflow-x-auto custom-scrollbar border-b border-white/10 bg-[#0d1016] p-1 flex items-center gap-1 font-mono">
+          <div className="flex-1 flex items-center justify-center gap-1 min-w-max">
+            {(['tree', 'blocks', 'preview'] as const).map(pane => (
+              <button key={pane} type="button" data-compact-pane={pane} onClick={() => setCompactPane(pane)} className={`h-7 px-3 rounded text-[9px] font-bold uppercase ${compactPane === pane ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30' : 'text-slate-500 border border-transparent hover:text-white'}`}>
+                {pane === 'tree' ? 'Patch Tree' : pane === 'blocks' ? 'Patch Blocks' : 'Preview & Diff'}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1 min-w-max border-l border-white/10 pl-1">
+            {([
+              ['patch', 'Patch XML'],
+              ['preview', 'Applied Preview'],
+              ['difftool', 'Diff→Patch'],
+            ] as const).map(([tab, label]) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => { setRightPanelTab(tab); setCompactPane('preview'); }}
+                className={`h-7 px-2 rounded text-[8.5px] font-bold uppercase ${rightPanelTab === tab && compactPane === 'preview' ? 'bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/30' : 'text-slate-500 border border-transparent hover:text-white'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {authoringMode === 'bulk' ? (
         <BulkTransformPanel workspace={workspace} setWorkspace={setWorkspace} saveCheckpoint={saveCheckpoint} onServerWorkspaceApplied={onServerWorkspaceApplied} />
       ) : (
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex min-w-0 overflow-hidden">
         {/* Left Side: Recipes and template insertions */}
-        <div className="w-80 border-r border-white/10 p-3.5 flex flex-col h-full bg-[#0d0f14]/80 overflow-y-auto space-y-4">
+        <div data-xmlpatch-pane="tree" className={`${compactPane === 'tree' ? 'flex' : 'hidden'} min-[1500px]:flex w-full min-[1500px]:w-80 border-r border-white/10 p-3.5 flex-col h-full bg-[#0d0f14]/80 overflow-y-auto space-y-4`}>
           {/* Tab switcher */}
           <div className="flex border-b border-white/10 mb-2 shrink-0">
             <button
@@ -1288,7 +1318,7 @@ export default function XMLPatchSystem({ workspace, setWorkspace, saveCheckpoint
         </div>
 
         {/* Center: Interactive Diff Blocks constructor */}
-        <div className="flex-1 flex flex-col border-r border-[#df9825]/10 overflow-hidden p-4">
+        <div data-xmlpatch-pane="blocks" className={`${compactPane === 'blocks' ? 'flex' : 'hidden'} min-[1500px]:flex min-w-0 flex-1 flex-col border-r border-[#df9825]/10 overflow-hidden p-3 min-[1500px]:p-4`}>
           <div className="flex items-center justify-between pb-2 border-b border-white/10 mb-3 shrink-0">
             <h2 className="text-xs font-mono font-bold text-slate-200 tracking-wider uppercase flex items-center gap-1.5">
               <Sliders className="w-4 h-4 text-emerald-400" />
@@ -1438,9 +1468,9 @@ export default function XMLPatchSystem({ workspace, setWorkspace, saveCheckpoint
         </div>
 
         {/* Right side code preview area */}
-        <div className="w-[450px] bg-[#0c0e14] border-l border-white/10 p-4 flex flex-col overflow-hidden">
+        <div data-xmlpatch-pane="preview" className={`${compactPane === 'preview' ? 'flex' : 'hidden'} min-[1500px]:flex w-full min-[1500px]:w-[450px] bg-[#0c0e14] border-l border-white/10 p-3 min-[1500px]:p-4 flex-col overflow-hidden`}>
           <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-3 shrink-0 font-mono text-xs gap-2">
-            <div className="flex items-center gap-1 bg-[#0F1115] border border-white/10 p-0.5 rounded shrink-0">
+            <div className="hidden min-[1500px]:flex items-center gap-1 bg-[#0F1115] border border-white/10 p-0.5 rounded shrink-0">
               <button
                 onClick={() => setRightPanelTab('patch')}
                 className={`px-2.5 py-1 text-[9.5px] font-mono font-bold uppercase rounded ${rightPanelTab === 'patch' ? 'bg-emerald-500 text-black' : 'text-slate-400 hover:text-slate-200'} cursor-pointer transition-all`}

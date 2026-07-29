@@ -6942,3 +6942,29 @@ Open VSX published stable 0.0.56. The public artifact is byte-identical to the l
 
 Suggested commit title:
 `release: 0.0.56 — isolate XML patch targets, bundle atomic transforms, and remove placebo-cue pressure`.
+
+## 2026-07-29 — B107 lossless responsive Studio shell / Open VSX 0.0.57 — VERIFIED
+
+Forge's navigation is now one lossless, responsive system rather than duplicated hardcoded bars. One normalized
+registry inventories all 10 workspace destinations, 11 side tools, and 12 global actions. Users can reorder,
+hide/reveal, collapse/restore, and dock workspace navigation top/bottom and the tool rail left/right; keyboard
+controls and safe normalization prevent corrupt or all-hidden preferences from stranding a screen. Meta now has
+a distinct tag icon, the single Studio Settings control follows the tool rail, and the duplicate workspace-bar
+gear is gone. XML Patch switches to explicit compact panes on narrow screens instead of forcing fixed columns.
+
+Layout preferences persist through the extension-owned server state, so a real Antigravity reload and sidecar
+port/origin change no longer resets the shell. No feature editor, workspace/mod data contract, compiler,
+validator, deploy behavior, or game data changed.
+
+Evidence: layout self-check 11/11; focused shell e2e 9/9; runtime oracles 111/111; full isolated e2e 43/43 with
+`[run-e2e] VERDICT: PASS`; typecheck, lint (0 errors), production build, extension stage/build, package audit,
+and staged sidecar probe 6/6 PASS. A separate Antigravity validation window visibly proved the distinct Meta and
+Settings controls, `NODES -> META -> CUES -> WIDGETS`, bottom workspace navigation, right-docked tool panel, and
+persistence after the sidecar changed port 58650 -> 65072. Ken's original Antigravity window remained open.
+
+Open VSX published stable 0.0.57. Its public 17,804,853-byte VSIX is byte-identical to the exact locally
+installed/tested package at SHA-256
+`EDD4D4FCAA787387418736E67986A7A19CC28BC32BA1108B80D8291D9B9A1759`.
+
+Suggested commit title:
+`feat(studio): ship lossless responsive navigation and persistent layout customization`.
