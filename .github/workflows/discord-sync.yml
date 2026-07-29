@@ -1,4 +1,4 @@
-name: Discord Release & Roadmap Sync
+name: Discord Release Sync
 
 on:
   release:
@@ -14,7 +14,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 10
 
       - name: Check if Push is a Release Commit
         id: release_check
@@ -26,7 +26,7 @@ jobs:
             echo "is_release=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Post Release Announcement to #changelog
+      - name: Post Release Announcement with Attached Changelog Text File
         if: steps.release_check.outputs.is_release == 'true'
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
@@ -40,19 +40,27 @@ jobs:
             exit 0
           fi
 
-          TITLE="${RELEASE_TITLE:-$COMMIT_MSG}"
-          BODY="${RELEASE_BODY:-$COMMIT_MSG}"
+          # Extract version from release title or commit message
+          VERSION=$(echo "${RELEASE_TITLE:-$COMMIT_MSG}" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' || echo "latest")
+          
+          # Generate changelog text file
+          CHANGELOG_FILE="changelog-${VERSION}.txt"
+          echo "### Changelog ${VERSION}" > "$CHANGELOG_FILE"
+          echo "" >> "$CHANGELOG_FILE"
+          
+          if [ -n "$RELEASE_BODY" ]; then
+            echo "$RELEASE_BODY" >> "$CHANGELOG_FILE"
+          else
+            git log -n 10 --pretty=format:"* %s (%h)" >> "$CHANGELOG_FILE"
+          fi
 
-          ANNOUNCEMENT="🚀 **X4 FORGE - RELEASE UPDATE**\n\nThanks to all testers and the community for your feedback and support!\n\n**Support the Project**:\n• **Patreon**: <https://patreon.com/>\n\n**Downloads & Release**:\n• **Open VSX Marketplace**: <https://open-vsx.org/extension/x4forge/x4-forge-studio>\n• **GitHub Release**: <https://github.com/KennyG1990/X4_Forge/releases>\n\n**Upgrade Instructions**:\nReload your editor window after installing to ensure the latest language server loads cleanly.\n\n\`\`\`markdown\n${BODY:0:1200}\n\`\`\`"
+          TEXT_CONTENT="**X4 FORGE - UPDATE ${VERSION}**\n\nThanks to all testers and the community for feedback and support!\n\n**Support me**:\nhttps://patreon.com/\n\n**Download**:\nOpen VSX: https://open-vsx.org/extension/x4forge/x4-forge-studio\n\n**To apply this update correctly**, reload your editor window after updating to ensure the latest extension engine loads cleanly."
 
-          PAYLOAD=$(jq -n \
-            --arg content "$ANNOUNCEMENT" \
-            '{ content: $content }')
+          PAYLOAD=$(jq -n --arg content "$TEXT_CONTENT" '{content: $content}')
 
           curl -s -H "Authorization: Bot $DISCORD_TOKEN" \
-               -H "Content-Type: application/json" \
-               -X POST \
-               -d "$PAYLOAD" \
+               -F "payload_json=$PAYLOAD" \
+               -F "files[0]=@$CHANGELOG_FILE" \
                "https://discord.com/api/v10/channels/$CHANNEL_ID/messages"
 
       - name: Check if ROADMAP.md Changed
