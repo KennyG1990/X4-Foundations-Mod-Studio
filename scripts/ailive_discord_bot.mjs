@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, Partials } from 'discord.js';
+import { Client, GatewayIntentBits, Partials, REST, Routes, SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { GoogleGenAI } from '@google/genai';
 import fs from 'fs';
 import path from 'path';
@@ -73,13 +73,9 @@ const client = new Client({
   partials: [Partials.Channel, Partials.Message]
 });
 
-client.once('clientReady', (c) => {
-  console.log(`🤖 x4 AiLive Community Assistant is ONLINE as ${c.user.tag}`);
-});
-
 // PATREON TIER COOLDOWN RESTRICTIONS:
 // Owner: 0 cooldown, unrestricted
-// Patreon ($5/mo): 5 minute cooldown
+// Patron / Patreon ($5/mo): 5 minute cooldown
 // Backer ($3/mo): 10 minute cooldown
 // Supporter ($1/mo): 30 minute cooldown
 // Non-backer: No access
@@ -92,8 +88,8 @@ function getPatreonTierInfo(member, isOwner) {
 
   const roleNames = member.roles.cache.map(r => r.name.toLowerCase());
 
-  if (roleNames.some(name => name.includes('patreon'))) {
-    return { allowed: true, cooldownMs: 5 * 60 * 1000, tierName: 'Patreon' };
+  if (roleNames.some(name => name.includes('patron') || name.includes('patreon'))) {
+    return { allowed: true, cooldownMs: 5 * 60 * 1000, tierName: 'Patron' };
   }
 
   if (roleNames.some(name => name.includes('backer'))) {
@@ -107,8 +103,97 @@ function getPatreonTierInfo(member, isOwner) {
   return { allowed: false, cooldownMs: 0, tierName: 'None' };
 }
 
+// SLASH COMMAND DEFINITIONS
+const commands = [
+  new SlashCommandBuilder()
+    .setName('status')
+    .setDescription('Check x4 AiLive Assistant status, active model health, and your Patreon tier cooldown'),
+  new SlashCommandBuilder()
+    .setName('faq')
+    .setDescription('Display frequently asked questions for x4 AiLive')
+].map(cmd => cmd.toJSON());
+
+client.once('clientReady', async (c) => {
+  console.log(`🤖 x4 AiLive Community Assistant is ONLINE as ${c.user.tag}`);
+
+  // Register Slash Commands
+  try {
+    const rest = new REST({ version: '10' }).setToken(DISCORD_TOKEN);
+    await rest.put(Routes.applicationCommands(c.user.id), { body: commands });
+    console.log('✅ Registered slash commands (/status, /faq) successfully');
+  } catch (e) {
+    console.warn('⚠️ Slash command registration failed:', e.message || e);
+  }
+});
+
+// INTERACTION LISTENER (SLASH COMMANDS)
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
+
+  const { commandName } = interaction;
+  const username = (interaction.user.username || '').toLowerCase();
+  const globalName = (interaction.user.globalName || '').toLowerCase();
+  const displayName = (interaction.member?.displayName || '').toLowerCase();
+  
+  const isOwner = username.includes('moshine') || 
+                  globalName.includes('moshine') || 
+                  displayName.includes('moshine') ||
+                  username.includes('hourly') ||
+                  globalName.includes('hourly');
+
+  const tierInfo = getPatreonTierInfo(interaction.member, isOwner);
+
+  if (commandName === 'status') {
+    const lastUserTime = userCooldowns.get(interaction.user.id);
+    const now = Date.now();
+    let cooldownText = 'Ready now (no active cooldown)';
+
+    if (tierInfo.cooldownMs > 0 && lastUserTime && (now - lastUserTime) < tierInfo.cooldownMs) {
+      const remainingMin = Math.ceil((tierInfo.cooldownMs - (now - lastUserTime)) / 60000);
+      cooldownText = `Active cooldown: ~${remainingMin} minutes remaining`;
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle('⚡ x4 AiLive Assistant Status')
+      .setColor(3447003)
+      .addFields(
+        { name: '🤖 AI Bot Health', value: 'Online & Ready (Gemini Model Cascade Active)', inline: false },
+        { name: '💜 Your Patreon Tier', value: `**${tierInfo.tierName}**`, inline: true },
+        { name: '⏱️ Cooldown Status', value: cooldownText, inline: true },
+        { name: '🔗 Support on Patreon', value: '<https://www.patreon.com/c/KennyG1990>', inline: false }
+      )
+      .setFooter({ text: 'x4 AiLive • Dynamic Dialogue & AI Diplomacy for X4' });
+
+    await interaction.reply({ embeds: [embed], flags: 64 });
+  } else if (commandName === 'faq') {
+    const embed = new EmbedBuilder()
+      .setTitle('🎮 x4 AiLive FAQ')
+      .setColor(10181046)
+      .addFields(
+        { name: '💬 How do I speak with NPCs in-game?', value: 'Simply walk up to any NPC in X4 Foundations and select **"Speak with AI"** from the dialogue interaction menu.', inline: false },
+        { name: '🤖 Do I need BepInEx or Shift+C?', value: 'No! x4 AiLive is a 100% native X4 extension. You do **NOT** need BepInEx or Shift+C.', inline: false },
+        { name: '🔗 Where do I download Player2?', value: 'Player2 AI Companion App:\n<https://player2.game>', inline: false },
+        { name: '📁 Installation Directory', value: 'Extract the `x4_ai_influence` folder into your `X4 Foundations/extensions/` directory.', inline: false }
+      )
+      .setFooter({ text: 'x4 AiLive Quick Reference' });
+
+    await interaction.reply({ embeds: [embed], flags: 64 });
+  }
+});
+
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
+
+  const msgLower = (message.content || '').toLowerCase();
+
+  // 1. SMART KEYWORD AUTO-RESPONDER INTERCEPTOR (Shift C / BepInEx FAQs)
+  if (msgLower.includes('shift c') || msgLower.includes('shift+c') || msgLower.includes('shift-c') || msgLower.includes('bepinex')) {
+    await message.reply(
+      `💡 **x4 AiLive Tip**: x4 AiLive is a **native X4 extension**! You do **NOT** need BepInEx or Shift+C.\n` +
+      `Simply walk up to any NPC in-game and select **"Speak with AI"** from the dialogue interaction menu.`
+    );
+    return;
+  }
 
   const isMentioned = message.mentions.has(client.user.id);
   const channelName = (message.channel.name || '').toLowerCase();
