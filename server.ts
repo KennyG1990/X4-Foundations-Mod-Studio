@@ -111,7 +111,7 @@ import { mdStemFingerprint, runMdFileIdentitySelftest } from "./src/lib/mdFileId
 import { layoutImportedGraphBatch, runImportedGraphLayoutSelftest } from "./src/lib/importedGraphLayout";
 import { runXmlSourceSpanSelftest } from "./src/lib/xmlSourceSpans";
 import { runNodeSelectionDocumentSelftest } from "./src/lib/nodeSelectionDocument";
-import { lintScriptPropertyChains } from "./src/lib/scriptProperties";
+import { buildScriptPropertyIndex, lintScriptPropertyChains, SCRIPT_PROPERTIES_FIXTURE } from "./src/lib/scriptProperties";
 import { publishInstance, unpublishInstance, latestPath, runInstanceDiscoverySelftest } from "./src/lib/instanceDiscovery";
 import { buildReleasePlan, buildZip, runModDistributionSelftest } from "./src/lib/modDistribution";
 import { aiKeyStatus, getStoredAiKey, setStoredAiKey } from "./src/server/aiKeyStore";
@@ -2073,14 +2073,19 @@ function resolvePatchBaseContent(targetFile: string): { content: string; source:
  * root element. Full XPath match-counting runs client-side; this surfaces the
  * highest-value server-checkable issues into /api/agent/compile and Mod Doctor.
  */
-function runPatchDiagnostics(ws: { xmlPatches?: PatchDiagnosticBlock[] }): ServerDiagnostic[] {
+type PatchBaseResolver = (targetFile: string) => ReturnType<typeof resolvePatchBaseContent>;
+
+function runPatchDiagnostics(
+  ws: { xmlPatches?: PatchDiagnosticBlock[] },
+  resolveBase: PatchBaseResolver = resolvePatchBaseContent,
+): ServerDiagnostic[] {
   const out: ServerDiagnostic[] = [];
   const patches: PatchDiagnosticBlock[] = (ws.xmlPatches || []).filter(p => p.includeInBuild !== false);
   if (!patches.length) return out;
   const baseCache = new Map<string, ReturnType<typeof resolvePatchBaseContent>>();
   for (const patch of patches) {
     const targetFile = (patch.targetFile || 'libraries/wares.xml').replace(/\\/g, '/');
-    if (!baseCache.has(targetFile)) baseCache.set(targetFile, resolvePatchBaseContent(targetFile));
+    if (!baseCache.has(targetFile)) baseCache.set(targetFile, resolveBase(targetFile));
     const base = baseCache.get(targetFile)!;
     if (!base) {
       out.push({
@@ -7191,8 +7196,10 @@ app.post("/api/agent/quick-fixes", (req, res) => {
 
 app.get("/api/agent/expression-suggest-selftest", (_req, res) => {
   try {
-    const spIndex = getScriptPropertyIndex();
-    if (!spIndex) return res.json({ allPassed: false, pass: false, passed: 0, total: 0, checks: [], error: "scriptproperty index unavailable" });
+    // A selftest must be hermetic. Real scriptproperties availability is covered by
+    // /scriptproperties-status and the corpus integration gate; this oracle exercises
+    // the suggestion engine against the canonical synthetic fixture owned by the parser.
+    const spIndex = buildScriptPropertyIndex(SCRIPT_PROPERTIES_FIXTURE);
     return res.json(runExpressionSuggestSelftest(spIndex));
   } catch (error) {
     return res.status(500).json({ pass: false, error: errorMessage(error) || "expression-suggest-selftest failed" });
@@ -8180,7 +8187,35 @@ app.get("/api/agent/reference-selftest", (req, res) => {
     // Keep its known-good universe explicit so an unconfigured external corpus cannot turn
     // the deliberately bad literals into false negatives. Real corpus loading has its own
     // reference-corpus selftest and integration gate.
-    const index = getSchemaIndex();
+    // This oracle is intentionally independent of a developer's configured X4 corpus.
+    // The real schema/corpus is exercised by the dedicated integration gates; here we
+    // need only the semantic attribute types that drive the three regression checks.
+    const emptyElementSpec = () => ({
+      attributes: new Map(),
+      openAttributes: true,
+      resolved: true,
+      children: new Set<string>(),
+      childSpecs: new Map(),
+      openChildren: true,
+      particles: [],
+    });
+    const createShip = emptyElementSpec();
+    createShip.attributes.set('macro', { required: false, type: 'macroname' });
+    const showHelp = emptyElementSpec();
+    showHelp.attributes.set('custom', { required: false, type: 'expression' });
+    showHelp.attributes.set('duration', { required: false, type: 'expression' });
+    const owner = emptyElementSpec();
+    owner.attributes.set('exact', { required: false, type: 'expression' });
+    const index: SchemaIndex = {
+      loaded: true,
+      sourceFiles: ['<reference-selftest-fixture>'],
+      elementCount: 3,
+      elements: new Map([
+        ['create_ship', createShip],
+        ['show_help', showHelp],
+        ['owner', owner],
+      ]),
+    };
     const references = {
       macros: new Set(['ship_arg_l_destroyer_01_a_macro']),
       factions: new Set(['faction.argon']),
@@ -8286,7 +8321,12 @@ app.get("/api/agent/patch-audit", (req, res) => {
         { id: 'p_rootmismatch', targetFile: 'libraries/wares.xml', sel: '/jobs/job', action: 'add', content: '<job/>', includeInBuild: true }
       ]
     };
-    const diagnostics = runPatchDiagnostics(ws);
+    // Keep this oracle independent of the user's game install. Runtime patch checks
+    // continue to use resolvePatchBaseContent; only the selftest injects a tiny base.
+    const fixtureResolver: PatchBaseResolver = (targetFile) => targetFile === 'libraries/wares.xml'
+      ? { content: '<wares/>', source: 'loose', sourcePath: '<patch-audit-fixture>' }
+      : null;
+    const diagnostics = runPatchDiagnostics(ws, fixtureResolver);
     const hasResolved = diagnostics.some(d => d.code === 'patch.target_resolved' && d.severity === 'info');
     const hasMissing = diagnostics.some(d => d.code === 'patch.target_unresolved' && d.severity === 'warning');
     const hasRootMismatch = diagnostics.some(d => d.code === 'patch.selector_root_mismatch' && d.severity === 'warning');

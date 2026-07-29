@@ -200,6 +200,9 @@ export function runAgentHistorySelftest(): { pass: boolean; checks: Array<{ name
     ok('identical payloads deduplicate by hash', blobA === blobB, `${blobA} vs ${blobB}`);
     const afterSecond = store.diskBytes();
     ok('re-writing identical content does not grow the store', afterSecond === afterFirst, `${afterFirst} -> ${afterSecond}`);
+    const unchangedDiff = unifiedDiff(bigPayload, bigPayload, 'big_probe.lua');
+    ok('identical large content produces only a bounded diff header', Buffer.byteLength(unchangedDiff, 'utf8') < 128,
+      `${Buffer.byteLength(unchangedDiff, 'utf8')} bytes`);
 
     // --- durability + no secrets on disk ----------------------------------------------------
     const reopened = new AgentHistoryStore({ root: path.join(scratch, 'history') });

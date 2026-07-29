@@ -179,9 +179,10 @@ Lane: FULL
 ## CLOSE
 
 - **Status:** PARTIAL — source, negative, isolated-runtime, real-corpus, packaged, installed-host, and public-artifact
-  gates passed, but the first public GitHub Quality run failed in Typecheck because it installed only root
-  dependencies while the root `tsconfig` includes extension sources. The corrective workflow installs both
-  lockfiles and must pass publicly before final shipment returns to VERIFIED.
+  gates passed. Public Quality exposed two local-state blind spots in sequence: the missing extension dependency
+  install, then three selftests coupled to host X4/schema configuration. Both are corrected locally, including an
+  empty-profile 114/114 oracle proof, but the hermetic correction must pass publicly before shipment returns to
+  VERIFIED.
 - **Remaining risks/deferred work:** none within B108. Existing unrelated backlog items B94-B98 and live game/mod
   experience work remain out of scope. The Antigravity CLI has a host-owned post-install crash, but independent
   CLI listing, installed metadata, rendered UI, live sidecar, and public hash proof establish the Forge result.
@@ -264,7 +265,19 @@ Lane: FULL
   `vscode-extension/src/extension.ts:19 Cannot find module 'vscode' or its corresponding type declarations`;
   later steps were correctly skipped. Root `npm ci` cannot install the separate extension dev dependency graph.
 - The workflow now runs `npm ci --prefix vscode-extension` after root install. Local execution of that exact
-  install plus root typecheck is required before the corrective push; the new public run is the release gate.
+  install plus root typecheck passed and was pushed as `f9ecdd9`.
+- [REPRODUCED] Corrective run `30499244809` passed both installs, audit, Typecheck, and Lint, then failed oracle
+  integration. An empty `X4_CONFIG_DIR` reproduced the exact mechanism locally: expression-suggest, reference,
+  and aggregate selftests were red because the former two read host schema/corpus state and patch-audit could not
+  resolve the user's game `libraries/wares.xml` on a clean runner.
+- Expression-suggest now builds its owned parser fixture; reference-selftest owns the three semantic attribute
+  specs it exercises; patch-audit injects a synthetic `<wares/>` resolver while production callers retain the real
+  loose/packed resolver. With an empty config profile, Typecheck and the runtime-discovered sweep pass 114/114.
+- [REPRODUCED] The subsequent exact local Quality replay failed the route assertion for bounded action history:
+  rewriting identical 312 KB content grew the history directory by 336,041 bytes. Content-addressed source blobs
+  deduplicated correctly, but `unifiedDiff` serialized every unchanged line as context and stored that source-sized
+  text under a new diff hash. The pure helper now emits only its bounded headers for identical inputs; an owned
+  oracle covers this mechanism, and route integration passes 175/175 with measured rewrite growth of 569 bytes.
 
-**Close:** B108 is PARTIAL during the corrective CI cycle. OpenVSX remains public and its artifact identity is
-verified; shipment closes only when the clean Windows Quality run is green and `origin/main == HEAD` is reproved.
+**Close:** B108 is PARTIAL during the hermetic CI correction cycle. OpenVSX remains public and its artifact identity
+is verified; shipment closes only when the clean Windows Quality run is green and `origin/main == HEAD` is reproved.

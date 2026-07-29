@@ -10,9 +10,11 @@ oracles 114/114; full e2e 43/43; real corpus 14/14; reference API 81/81; particl
 precommit is green. Installed Antigravity visibly runs 0.0.58 with a live managed sidecar, and real discovery
 records are token-free after the upgrade migration. OpenVSX's 17,812,396-byte public VSIX exactly matches the
 installed/tested package at SHA-256 `4E703F203B32DBB7A9EDFB7C1A27705175371B638EEC17B68744F4D9A69F1009`.
-The release source commit is pushed at `dd452f0` and `origin/main == HEAD` was proved. Its first public Quality
-run failed because the workflow omitted `npm ci --prefix vscode-extension`; the corrective workflow is now the
-only open B108 gate.
+The release source commit is pushed at `dd452f0`. Public run 30498947479 exposed the missing extension dependency
+install; corrective commit `f9ecdd9` fixed that stage, and public run 30499244809 then passed install, audit,
+Typecheck, and Lint before exposing three host-config-dependent selftests. During the exact local replay, route
+integration also reproduced an identical-content history diff growing by 336,041 bytes; the pure helper is fixed
+and the route proof is now 175/175 with 569-byte growth. The public hermetic correction is the only open B108 gate.
 
 ## Active bounded unit
 
@@ -37,8 +39,13 @@ only open B108 gate.
   public schema response, token-free real discovery files. Evidence is under `vscode-extension/evidence/0.0.58/`.
 - PASS public artifact: exact OpenVSX 0.0.58 metadata/download and local/public SHA-256 parity.
 - PASS final local: graph refresh, audit, lint, full oracle rerun, precommit, source commit, push, and remote equality.
-- FAILED public Quality run 30498947479: clean runner lacked extension `@types/vscode`. PENDING corrective
-  install-both-lockfiles commit and green public rerun.
+- FAILED public Quality run 30498947479: clean runner lacked extension `@types/vscode`; corrected in `f9ecdd9`.
+- FAILED public Quality run 30499244809: install, audit, Typecheck, and Lint passed, then oracle integration was
+  111/114 because expression, reference, and patch selftests read host configuration. The selftests now inject
+  owned fixtures; empty-profile reproduction is 114/114. PENDING green public rerun.
+- FAILED local exact-Quality replay: route history dedup check exposed an unchanged 312 KB rewrite generating a
+  336,041-byte context-only diff. `unifiedDiff` now emits only bounded headers for identical input; its owned oracle
+  and the 175/175 route rerun pass, with measured growth reduced to 569 bytes.
 - Antigravity and the 0.0.57 sidecar were active at baseline. Do not run state-touching validation until Ken
   answers whether Forge/X4 are running and the machine is quiet.
 - Latest read-only state: no X4 process, one unique Antigravity X4 Forge window, sidecar listening on 65072.
@@ -54,8 +61,9 @@ already-pushed durable close.
 
 ## Hot files / next command
 
-- Run `npm ci --prefix vscode-extension` plus root typecheck, commit the workflow correction, push, and require its
-  public Quality run to pass. Then clear `KNOWN-BUGS.md`, restore VERIFIED close wording, and reprove remote equality.
+- Run the remaining exact Quality steps after the empty-profile 114/114 proof, commit the hermetic selftests, push,
+  and require the public Quality run to pass. Then clear `KNOWN-BUGS.md`, restore VERIFIED close wording, and
+  reprove remote equality.
 
 ## Hazards / dead theories
 
@@ -69,5 +77,5 @@ already-pushed durable close.
 
 ## Commit question
 
-The detailed B108 source commit is pushed. Do not call shipment complete until the corrective clean Windows CI
-run passes; the first public run exposed a dependency-install blind spot that local state masked.
+The detailed B108 source and first CI correction commits are pushed. Do not call shipment complete until the
+hermetic clean Windows CI run passes; two successive public runs exposed local-state blind spots.

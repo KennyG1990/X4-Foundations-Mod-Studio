@@ -240,6 +240,10 @@ export function lineDelta(before: string, after: string): { added: number; remov
 
 /** A minimal unified diff, stored as a blob and shown only on "show raw". */
 export function unifiedDiff(before: string, after: string, filePath: string): string {
+  // An identical rewrite has no diff payload. Without this fast path the simple
+  // formatter emits every unchanged line as context, creating a second blob as
+  // large as the source even though the content-addressed source blob deduplicates.
+  if (before === after) return `--- a/${filePath}\n+++ b/${filePath}`;
   const a = before.length ? before.split(/\r?\n/) : [];
   const b = after.length ? after.split(/\r?\n/) : [];
   const out = [`--- a/${filePath}`, `+++ b/${filePath}`];
