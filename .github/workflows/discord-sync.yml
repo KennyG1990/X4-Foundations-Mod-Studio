@@ -16,22 +16,12 @@ jobs:
         with:
           fetch-depth: 10
 
-      - name: Check if Push is a Release Commit
-        id: release_check
-        run: |
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
-          if [[ "${{ github.event_name }}" == "release" ]] || [[ "$COMMIT_MSG" =~ ^[R|r]elease:? ]]; then
-            echo "is_release=true" >> $GITHUB_OUTPUT
-          else
-            echo "is_release=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Post Release Announcement with Attached Changelog Text File
-        if: steps.release_check.outputs.is_release == 'true'
+      - name: Post Update Announcement with Attached Changelog Text File
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           CHANNEL_ID: "1531779398234013890"
           COMMIT_MSG: ${{ github.event.head_commit.message }}
+          SHORT_SHA: ${{ github.sha }}
           RELEASE_TITLE: ${{ github.event.release.name }}
           RELEASE_BODY: ${{ github.event.release.body }}
         run: |
@@ -40,12 +30,12 @@ jobs:
             exit 0
           fi
 
-          # Extract version from release title or commit message
-          VERSION=$(echo "${RELEASE_TITLE:-$COMMIT_MSG}" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' || echo "latest")
+          # Format version or commit title
+          VERSION=$(echo "${RELEASE_TITLE:-$COMMIT_MSG}" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' || echo "Commit ${SHORT_SHA:0:7}")
           
           # Generate changelog text file
-          CHANGELOG_FILE="changelog-${VERSION}.txt"
-          echo "### Changelog ${VERSION}" > "$CHANGELOG_FILE"
+          CHANGELOG_FILE="changelog-${SHORT_SHA:0:7}.txt"
+          echo "### X4 Forge Commit & Release Changelog (${VERSION})" > "$CHANGELOG_FILE"
           echo "" >> "$CHANGELOG_FILE"
           
           if [ -n "$RELEASE_BODY" ]; then
@@ -54,9 +44,23 @@ jobs:
             git log -n 10 --pretty=format:"* %s (%h)" >> "$CHANGELOG_FILE"
           fi
 
-          TEXT_CONTENT="**X4 FORGE - UPDATE ${VERSION}**\n\nThanks to all testers and the community for feedback and support!\n\n**Support me**:\nhttps://patreon.com/\n\n**Download & Repository**:\n**Open VSX Marketplace**: https://open-vsx.org/extension/x4forge/x4-forge-studio\n**GitHub Repository**: https://github.com/KennyG1990/X4_Forge\n\n**To apply this update correctly**, reload your editor window after updating to ensure the latest extension engine loads cleanly."
+          # Create multi-line message content cleanly using a heredoc
+          cat << EOF > msg_content.txt
+**X4 FORGE - UPDATE (${VERSION})**
 
-          PAYLOAD=$(jq -n --arg content "$TEXT_CONTENT" '{content: $content}')
+Thanks to all testers and the community for feedback and support!
+
+**Support me**:
+https://patreon.com/
+
+**Download & Repository**:
+**Open VSX Marketplace**: https://open-vsx.org/extension/x4forge/x4-forge-studio
+**GitHub Repository**: https://github.com/KennyG1990/X4_Forge
+
+**To apply this update correctly**, reload your editor window after updating to ensure the latest extension engine loads cleanly.
+EOF
+
+          PAYLOAD=$(jq -n --rawfile content msg_content.txt '{content: $content}')
 
           curl -s -H "Authorization: Bot $DISCORD_TOKEN" \
                -F "payload_json=$PAYLOAD" \
@@ -79,22 +83,25 @@ jobs:
           CHANNEL_ID: "1531779414579478539"
         run: |
           if [ -z "$DISCORD_TOKEN" ]; then
-            echo "DISCORD_TOKEN secret is missing. Skipping Roadmap sync."
+            echo "DISCORD_TOKEN secret is missing. Skipping."
             exit 0
           fi
-          ROADMAP_CONTENT=$(head -n 40 ROADMAP.md)
+
+          ROADMAP_CONTENT=$(head -n 25 ROADMAP.md)
+          
           PAYLOAD=$(jq -n \
-            --arg title "🗺️ ROADMAP.md Updated" \
+            --arg title "🗺️ X4 Forge — Prototype Validation Roadmap" \
             --arg desc "$ROADMAP_CONTENT" \
             '{
               embeds: [{
                 title: $title,
                 description: $desc,
-                color: 15844367,
-                footer: { text: "Synced from repo ROADMAP.md" },
+                color: 3447003,
+                footer: { text: "X4 Forge Roadmap • Automated from GitHub" },
                 timestamp: (now | strftime("%Y-%m-%dT%H:%M:%SZ"))
               }]
             }')
+
           curl -s -H "Authorization: Bot $DISCORD_TOKEN" \
                -H "Content-Type: application/json" \
                -X POST \
