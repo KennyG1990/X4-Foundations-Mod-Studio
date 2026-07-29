@@ -1,0 +1,53 @@
+name: Sync GitHub Issues to Discord Forums
+
+on:
+  issues:
+    types: [opened, closed, reopened]
+
+jobs:
+  sync-to-discord:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync GitHub Issue to Discord Forum (Bugs & Feature Requests)
+        if: github.event.action == 'opened' || github.event.action == 'reopened'
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          BUG_FORUM_ID: "1531779148333453452"
+          FEATURE_FORUM_ID: "1531779159217405962"
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_NUM: ${{ github.event.issue.number }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          USER: ${{ github.event.issue.user.login }}
+          LABELS: ${{ toJson(github.event.issue.labels.*.name) }}
+        run: |
+          if [ -z "$DISCORD_TOKEN" ]; then
+            echo "DISCORD_TOKEN secret is missing. Skipping sync."
+            exit 0
+          fi
+
+          # Target #feature-requests if labeled feature/enhancement, otherwise #bug-reports
+          TARGET_FORUM_ID="$BUG_FORUM_ID"
+          ICON="🐛"
+          if echo "$LABELS" | grep -iqE "enhancement|feature"; then
+            TARGET_FORUM_ID="$FEATURE_FORUM_ID"
+            ICON="💡"
+          fi
+
+          TITLE="${ICON} [Issue #${ISSUE_NUM}] ${ISSUE_TITLE}"
+          TITLE="${TITLE:0:90}"
+          BODY_TEXT="**GitHub Issue #${ISSUE_NUM} Opened by @${USER}**\n\nLink: ${ISSUE_URL}\n\n>>> ${ISSUE_BODY:0:1500}"
+          
+          PAYLOAD=$(jq -n \
+            --arg name "$TITLE" \
+            --arg content "$BODY_TEXT" \
+            '{
+              name: $name,
+              message: { content: $content }
+            }')
+            
+          curl -s -H "Authorization: Bot $DISCORD_TOKEN" \
+               -H "Content-Type: application/json" \
+               -X POST \
+               -d "$PAYLOAD" \
+               "https://discord.com/api/v10/channels/$TARGET_FORUM_ID/threads"

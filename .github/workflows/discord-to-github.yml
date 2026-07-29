@@ -1,0 +1,70 @@
+name: Sync Discord Forums to GitHub Issues
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+jobs:
+  sync-discord-to-github:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Sync Discord Threads to GitHub Issues
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GUILD_ID: "1528637983429759217"
+          BUG_FORUM_ID: "1531779148333453452"
+          FEATURE_FORUM_ID: "1531779159217405962"
+        run: |
+          if [ -z "$DISCORD_TOKEN" ]; then
+            echo "DISCORD_TOKEN missing. Skipping."
+            exit 0
+          fi
+
+          sync_forum() {
+            FORUM_ID="$1"
+            LABEL="$2"
+            
+            THREADS=$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" \
+              "https://discord.com/api/v10/guilds/$GUILD_ID/threads/active" | jq -c ".threads[] | select(.parent_id == \"$FORUM_ID\")")
+
+            if [ -z "$THREADS" ]; then
+              return
+            fi
+
+            echo "$THREADS" | while read -r thread; do
+              if [ -z "$thread" ]; then continue; fi
+              THREAD_ID=$(echo "$thread" | jq -r '.id')
+              THREAD_NAME=$(echo "$thread" | jq -r '.name')
+
+              # Skip threads created from GitHub Issues
+              if [[ "$THREAD_NAME" == *"[Issue #"* ]]; then
+                continue
+              fi
+
+              # Check if GitHub issue already exists matching thread title
+              EXISTING=$(gh issue list --search "$THREAD_NAME" --json number -q '.[0].number')
+              if [ -n "$EXISTING" ]; then
+                echo "Issue #$EXISTING already exists for $THREAD_NAME"
+                continue
+              fi
+
+              echo "Creating GitHub Issue for Discord thread: $THREAD_NAME ($LABEL)"
+              gh issue create --title "[Discord] $THREAD_NAME" \
+                --body "Reported via Discord Forum.\n\nThread ID: $THREAD_ID\nThread Title: $THREAD_NAME" \
+                --label "$LABEL"
+            done
+          }
+
+          echo "Syncing Bug Reports..."
+          sync_forum "$BUG_FORUM_ID" "bug"
+
+          echo "Syncing Feature Requests..."
+          sync_forum "$FEATURE_FORUM_ID" "enhancement"
