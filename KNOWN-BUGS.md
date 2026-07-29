@@ -15,7 +15,9 @@ read the developer's X4/schema configuration. The selftests now own synthetic ex
 patch-base fixtures. An empty-profile reproduction passes 114/114. This remains active until the new public run
 passes. The exact local Quality replay also caught an identical-content history rewrite storing a source-sized
 unchanged diff; the diff helper now returns a bounded header and the 175/175 route gate proves 569-byte growth
-instead of 336,041 bytes.
+instead of 336,041 bytes. The third public run passed through all 114 oracles, then proved the workflow ran routes
+before producing their required Git-ignored `dist/server.cjs`; Quality now builds before the production-surface
+route probe.
 
 Kimi K3's 2026-07-29 findings were reconciled under B108. The confirmed defects have been repaired in the
 0.0.58 release and passed their local/installed/public-artifact gates. The late-discovered legacy discovery-token migration defect

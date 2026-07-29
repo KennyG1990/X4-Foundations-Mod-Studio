@@ -278,6 +278,11 @@ Lane: FULL
   deduplicated correctly, but `unifiedDiff` serialized every unchanged line as context and stored that source-sized
   text under a new diff hash. The pure helper now emits only its bounded headers for identical inputs; an owned
   oracle covers this mechanism, and route integration passes 175/175 with measured rewrite growth of 569 bytes.
+- [REPRODUCED] Public run `30499899687` passed dependency installs, audit, Typecheck, Lint, and the hermetic
+  114/114 oracle sweep, then failed route integration. That suite deliberately refuses to skip its production
+  server probe when `dist/server.cjs` is missing; `dist/` is Git-ignored, and Quality sequenced build after routes.
+  A developer's existing bundle masked the dependency. Quality now builds the production bundle before the route
+  suite that consumes it.
 
 **Close:** B108 is PARTIAL during the hermetic CI correction cycle. OpenVSX remains public and its artifact identity
 is verified; shipment closes only when the clean Windows Quality run is green and `origin/main == HEAD` is reproved.

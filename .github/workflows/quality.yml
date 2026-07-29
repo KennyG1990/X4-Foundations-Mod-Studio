@@ -46,8 +46,8 @@ jobs:
       - name: Run deterministic oracle integration
         run: npm run test:oracles
 
-      - name: Run isolated route integration
-        run: npm run test:routes
-
       - name: Build production bundle
         run: npm run build
+
+      - name: Run isolated route integration
+        run: npm run test:routes
