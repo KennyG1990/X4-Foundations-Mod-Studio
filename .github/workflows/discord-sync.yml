@@ -1,6 +1,8 @@
-name: Discord Changelog & Roadmap Sync
+name: Discord Release & Roadmap Sync
 
 on:
+  release:
+    types: [published]
   push:
     branches:
       - main
@@ -14,35 +16,39 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Sync Git Push to #changelog
+      - name: Check if Push is a Release Commit
+        id: release_check
+        run: |
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          if [[ "${{ github.event_name }}" == "release" ]] || [[ "$COMMIT_MSG" =~ ^[R|r]elease:? ]]; then
+            echo "is_release=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_release=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Post Release Announcement to #changelog
+        if: steps.release_check.outputs.is_release == 'true'
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           CHANNEL_ID: "1531779398234013890"
           COMMIT_MSG: ${{ github.event.head_commit.message }}
-          COMMIT_URL: ${{ github.event.head_commit.url }}
-          AUTHOR: ${{ github.event.head_commit.author.name }}
-          SHA: ${{ github.sha }}
+          RELEASE_TITLE: ${{ github.event.release.name }}
+          RELEASE_BODY: ${{ github.event.release.body }}
         run: |
           if [ -z "$DISCORD_TOKEN" ]; then
-            echo "DISCORD_TOKEN secret is missing. Skipping Discord notification."
+            echo "DISCORD_TOKEN secret is missing. Skipping."
             exit 0
           fi
-          SHORT_SHA="${SHA:0:7}"
+
+          TITLE="${RELEASE_TITLE:-$COMMIT_MSG}"
+          BODY="${RELEASE_BODY:-$COMMIT_MSG}"
+
+          ANNOUNCEMENT="🚀 **X4 FORGE - RELEASE UPDATE**\n\nThanks to all testers and the community for your feedback and support!\n\n**Support the Project**:\n• **Patreon**: <https://patreon.com/>\n\n**Downloads & Release**:\n• **Open VSX Marketplace**: <https://open-vsx.org/extension/x4forge/x4-forge-studio>\n• **GitHub Release**: <https://github.com/KennyG1990/X4_Forge/releases>\n\n**Upgrade Instructions**:\nReload your editor window after installing to ensure the latest language server loads cleanly.\n\n\`\`\`markdown\n${BODY:0:1200}\n\`\`\`"
+
           PAYLOAD=$(jq -n \
-            --arg title "🔨 New Commit to X4 Forge ($SHORT_SHA)" \
-            --arg url "$COMMIT_URL" \
-            --arg desc "$COMMIT_MSG" \
-            --arg author "$AUTHOR" \
-            '{
-              embeds: [{
-                title: $title,
-                url: $url,
-                description: $desc,
-                color: 3447003,
-                author: { name: $author },
-                timestamp: (now | strftime("%Y-%m-%dT%H:%M:%SZ"))
-              }]
-            }')
+            --arg content "$ANNOUNCEMENT" \
+            '{ content: $content }')
+
           curl -s -H "Authorization: Bot $DISCORD_TOKEN" \
                -H "Content-Type: application/json" \
                -X POST \
