@@ -23,26 +23,60 @@ if (!DISCORD_TOKEN) {
 
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
-// Load comprehensive documentation context for grounding
-let forgeDocsContext = '';
-try {
-  const readme = fs.existsSync('README.md') ? fs.readFileSync('README.md', 'utf-8') : '';
-  const roadmap = fs.existsSync('ROADMAP.md') ? fs.readFileSync('ROADMAP.md', 'utf-8') : '';
-  const backlog = fs.existsSync('BACKLOG.md') ? fs.readFileSync('BACKLOG.md', 'utf-8') : '';
+// DYNAMIC CODEBASE & DOCUMENTATION SCANNER FOR GROUNDING
+function buildCodebaseKnowledgeBase() {
+  const sections = [];
+
+  // 1. Read Documentation
+  if (fs.existsSync('README.md')) {
+    sections.push(`=== README.md ===\n${fs.readFileSync('README.md', 'utf-8').slice(0, 3500)}`);
+  }
+  if (fs.existsSync('ROADMAP.md')) {
+    sections.push(`=== ROADMAP.md ===\n${fs.readFileSync('ROADMAP.md', 'utf-8').slice(0, 2500)}`);
+  }
+  if (fs.existsSync('BACKLOG.md')) {
+    sections.push(`=== BACKLOG.md ===\n${fs.readFileSync('BACKLOG.md', 'utf-8').slice(0, 1500)}`);
+  }
+
+  // 2. Scan Codebase Files & API Endpoints
+  sections.push('=== LIVE CODEBASE ARCHITECTURE & API ROUTES ===');
   
-  forgeDocsContext = `AUTHENTICATED X4 FORGE KNOWLEDGE BASE (SOURCE OF TRUTH):
+  const targetFiles = [
+    'server.ts',
+    'src/types.ts',
+    'src/lib/modCompiler.ts',
+    'src/lib/xmlParser.ts',
+    'src/lib/mdSemantics.ts',
+    'src/lib/nativeEditor.ts'
+  ];
 
-=== X4 FORGE README SUMMARY ===
-${readme.slice(0, 4000)}
+  for (const filePath of targetFiles) {
+    if (fs.existsSync(filePath)) {
+      const fileContent = fs.readFileSync(filePath, 'utf-8');
+      
+      // Extract exported interfaces, functions, and API routes
+      const signatures = fileContent
+        .split('\n')
+        .filter(line => {
+          const l = line.trim();
+          return l.startsWith('export ') ||
+                 l.startsWith('app.get(') ||
+                 l.startsWith('app.post(') ||
+                 l.startsWith('function ') ||
+                 l.startsWith('interface ') ||
+                 l.startsWith('type ');
+        })
+        .slice(0, 45)
+        .join('\n');
 
-=== ACTIVE ROADMAP SUMMARY ===
-${roadmap.slice(0, 3000)}
+      sections.push(`--- File: ${filePath} ---\n${signatures}`);
+    }
+  }
 
-=== BACKLOG SUMMARY ===
-${backlog.slice(0, 2000)}`;
-} catch (e) {
-  forgeDocsContext = 'X4 Forge is a local visual workbench for building, validating, packaging, and deploying mods for X4: Foundations.';
+  return sections.join('\n\n');
 }
+
+const forgeDocsContext = buildCodebaseKnowledgeBase();
 
 const client = new Client({
   intents: [
@@ -104,14 +138,14 @@ client.on('messageCreate', async (message) => {
         systemPrompt = `OWNER / CREATOR OVERRIDE ENABLED:
 The user chatting with you is Moshine, the creator and maintainer of X4 Forge.
 - You have ZERO topic restrictions when talking to Moshine.
-- Provide comprehensive, accurate, and deeply helpful responses.
+- Provide comprehensive, accurate, and deeply helpful responses grounded in the codebase and docs.
 
 STRICT GROUNDING & HONESTY MANDATE:
-1. Ground your knowledge strictly in the provided X4 FORGE KNOWLEDGE BASE.
+1. Ground your knowledge strictly in the provided CODEBASE & DOCUMENTATION KNOWLEDGE BASE.
 2. DO NOT HALLUCINATE OR INVENT FEATURES. Never claim X4 Forge uses BepInEx (it is for native X4 Foundations extensions, MD XML, Lua UI, XPath patches, wares, and jobs).
-3. If you are unsure or if a feature is not explicitly documented in the knowledge base, STATE PLAINLY WHERE YOU ARE UNSURE rather than making up answers.
+3. If you are unsure or if a feature/API is not explicitly present in the codebase or docs, STATE PLAINLY WHERE YOU ARE UNSURE rather than making up answers.
 
-KNOWLEDGE BASE:
+AUTHENTICATED KNOWLEDGE BASE (DOCS + CODEBASE EXPORTS):
 ${forgeDocsContext}`;
       } else {
         systemPrompt = `STRICT MANDATE FOR FORGE CONCIERGE:
@@ -119,12 +153,12 @@ You are Forge Concierge, an automated technical support assistant strictly dedic
 
 STRICT GROUNDING & HONESTY MANDATE:
 1. You are strictly restricted to technical support for X4 Forge, Mission Director (MD) scripts, AI scripts, XML patching, wares, jobs, and studio errors.
-2. Ground your knowledge strictly in the provided X4 FORGE KNOWLEDGE BASE. DO NOT INVENT OR HALLUCINATE FEATURES.
-3. If you cannot accurately answer a question or are unsure, STATE PLAINLY WHERE YOU ARE UNSURE.
+2. Ground your knowledge strictly in the provided CODEBASE & DOCUMENTATION KNOWLEDGE BASE. DO NOT INVENT OR HALLUCINATE FEATURES.
+3. If you cannot accurately answer a question or are unsure based on the code/docs, STATE PLAINLY WHERE YOU ARE UNSURE.
 4. REJECT ALL OFF-TOPIC CONVERSATION (food, weather, jokes, general knowledge unrelated to X4/X4 Forge). If off-topic, reply:
    "I am Forge Concierge, an automated assistant dedicated exclusively to X4 Forge technical support. Please keep questions focused on X4 Forge and modding."
 
-KNOWLEDGE BASE:
+AUTHENTICATED KNOWLEDGE BASE (DOCS + CODEBASE EXPORTS):
 ${forgeDocsContext}`;
       }
 
@@ -149,7 +183,7 @@ ${forgeDocsContext}`;
       }
 
       if (!replyText) {
-        replyText = 'I received your query, but could not generate a response from the knowledge base.';
+        replyText = 'I received your query, but could not generate a response from the codebase knowledge base.';
       }
 
       if (replyText.length > 1950) {
