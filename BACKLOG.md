@@ -889,6 +889,17 @@ log line "auto-restarting (attempt 1/3)".
 
 ## P1 — Safety / architecture
 
+### B101 · Rehydrate virtual graph-node tabs after extension-host restart `spec'd` (P1)
+
+Installed B100 proof found one bounded lifecycle residual: `x4forge-node:` documents are intentionally
+memory-backed, so Antigravity may restore a virtual URI before the restarted provider has reconstructed
+its entry. The user sees a transient missing-document state until the graph node is selected again.
+Persist only a safe selection descriptor (workspace identity + node IDs + token), never editable XML as
+a second source of truth; on activation, ask the live Studio to rebuild the document from its current
+graph, refuse stale descriptors, and retain B100's structural/stale/opaque save guards. Acceptance:
+leave node tabs open, restart extensions, observe valid tabs rehydrate without a manual reselect; a
+changed workspace refuses the old token; no virtual payload survives as an independent authority.
+
 ### B1 · Workspace sync-trust slice — ✅ CLOSED 2026-07-09 → ROADMAP (badge verified live; residual: badge clipping polish → B13)
 ### B1-old spec (kept for context) — `done`
 The mutable-singleton + integer-version sync has caused two incident classes (e2e clobber; the 2026-07-09

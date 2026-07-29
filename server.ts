@@ -40,7 +40,9 @@ import {
   compileWaresXML,
   compileJobsXML,
   compileTFileXML,
-  compileDiffDocument
+  compileDiffDocument,
+  hasGeneratedMdDomain,
+  validatePackageReadiness
 } from "./src/lib/modCompiler";
 import { runModDoctor, runModDoctorReferenceSelftest } from "./src/lib/modDoctor";
 import { runBulkCorpusTransformSelftest } from "./src/lib/bulkCorpusTransform";
@@ -59,7 +61,7 @@ import { debugScan as catDatDebugScan, extractBaseGameFile as catDatExtractBaseG
 import { buildSchemaIndex, validateXmlAgainstSchema, runXsdValidateSelftest, type SchemaIndex } from "./src/lib/xsdValidate";
 import { runReferenceLanguageSelftest } from "./src/lib/referenceLanguage";
 import { isSameOrDescendant, runPathRolesSelftest, validateDirectoryRoles, validateProtectedWriteTargets, type DirectoryField } from "./src/lib/pathRoles";
-import { parseXMLToWorkspace, extractTopLevelCueXml } from "./src/lib/xmlParser";
+import { parseXMLToWorkspace, setSchemaTemplatesForImport } from "./src/lib/xmlParser";
 import type { SchemaLibrary } from "./src/lib/schemaTypes";
 import { generateHttpGlueLua, generateContractMdScript, validateContract, runContractGlueSelftest, type IntegrationContract } from "./src/lib/contractGlue";
 import { runFileBridgeTransportSelftest } from "./src/lib/fileBridgeTransport";
@@ -104,6 +106,10 @@ import { computeModDrift, fingerprintModFolder, flattenProjectValidation, getSch
 import { buildRemediationCapsules, runAgentLoopSelftest, runRepairLoop, type LoopDiagnostic } from "./src/lib/agentLoop";
 import { assessSourceSync, hashFolderFingerprint, runCompileFidelitySelftest } from "./src/lib/compileFidelity";
 import { workspaceContentHash, runWorkspaceIdentitySelftest } from "./src/lib/workspaceIdentity";
+import { mdStemFingerprint, runMdFileIdentitySelftest } from "./src/lib/mdFileIdentity";
+import { layoutImportedGraphBatch, runImportedGraphLayoutSelftest } from "./src/lib/importedGraphLayout";
+import { runXmlSourceSpanSelftest } from "./src/lib/xmlSourceSpans";
+import { runNodeSelectionDocumentSelftest } from "./src/lib/nodeSelectionDocument";
 import { lintScriptPropertyChains } from "./src/lib/scriptProperties";
 import { publishInstance, unpublishInstance, latestPath, runInstanceDiscoverySelftest } from "./src/lib/instanceDiscovery";
 import { buildReleasePlan, buildZip, runModDistributionSelftest } from "./src/lib/modDistribution";
@@ -140,6 +146,7 @@ import { AgentHistoryStore } from "./src/lib/agentHistoryStore";
 import { runAgentHistorySelftest } from "./src/lib/agentHistory.selftest";
 import { runBugReportSelftest } from "./src/lib/bugReport";
 import { buildArtifactPlan, hashArtifactFile, materializeArtifact, verifyMaterializedArtifact, type ArtifactPlan } from "./src/lib/artifactPipeline";
+import { buildProjectFileInventory, runProjectFileInventorySelftest } from "./src/lib/projectFileInventory";
 import { materializeCatalogArtifact } from "./src/lib/artifactPackager";
 import { dataPath, runDataDirSelftest } from "./src/lib/dataDir";
 import { discoverSchemaRegistry, getDomainIndex, runSchemaRegistrySelftest, schemaFilesSignature } from "./src/lib/schemaRegistry";
@@ -243,6 +250,10 @@ function loadCurrentSchemaLibrary(): SchemaLibrary {
 }
 
 let schemaLibrary: SchemaLibrary = loadCurrentSchemaLibrary();
+// The browser registers these templates after fetching /api/schema/library. Folder import,
+// round-trip checks, and agent compilation run server-side and need the SAME schema-driven
+// node catalogue; otherwise hundreds of legal MD tags degrade to raw nodes only on the API path.
+setSchemaTemplatesForImport(schemaLibrary.templates);
 let schemaTemplatesByTag = new Map(schemaLibrary.templates.map(template => [template.xmlTag, template]));
 let objectIndexCache: { key: string; builtAt: number; index: X4ObjectIndex } | null = null;
 // B64-P1: in-flight guard for the stale-while-revalidate background refresh — dedupes
@@ -263,12 +274,17 @@ function getStudioDb(): StudioDb | null {
 
 function reloadSchemaLibrary(): SchemaLibrary {
   schemaLibrary = loadCurrentSchemaLibrary();
+  setSchemaTemplatesForImport(schemaLibrary.templates);
   schemaTemplatesByTag = new Map(schemaLibrary.templates.map(template => [template.xmlTag, template]));
   objectIndexCache = null;
   return schemaLibrary;
 }
 
-app.use(express.json({ limit: "5mb" }));
+// A real schema-enriched complex MD graph is larger than the old 5 MiB ceiling before it
+// reaches any handler (AI Influence: 8.2 MiB / 2,018 nodes; DeadAir: 5.1 MiB / 1,196).
+// The API is authenticated and localhost-only; 32 MiB leaves bounded headroom while the
+// graph representation is compacted away from per-node schema-metadata duplication.
+app.use(express.json({ limit: "32mb" }));
 
 // Enable CORS only for this app's same-port localhost origins.
 app.use((req, res, next) => {
@@ -882,7 +898,7 @@ function buildWorkspaceFileManifest(workspaceInput: unknown, options: { includeP
   files["content.xml"] = contentXmlFor(modId, ws);
   files["README.md"] = `# ${ws.name || modId}\n\nGenerated by X4 Forge.\n\nInstall location:\n\n\`\`\`\nX4 Foundations/extensions/${modId}/\n\`\`\`\n\nRuntime reload during development: save files, then run \`refreshmd\` in X4's debug command input.\n`;
   
-  if (settings.md) {
+  if (settings.md && hasGeneratedMdDomain(ws)) {
     // MULTI-SCRIPT export: group cue nodes by their owning file stem (tagged on import) and emit
     // one <mdscript> per file at its original path, with its original <mdscript name>. Single-
     // script and freshly-built mods (cues without a stem) fall back to one file at the mod id.
@@ -3477,8 +3493,10 @@ app.post("/api/schema/config", (req, res) => {
     // with no schema (or an incomplete one). Schema-aware validation simply stays degraded
     // until md.xsd + common.xsd resolve. (Previously an unsatisfied schema 400'd the whole
     // save, blocking the other paths — the exact foot-gun this removes.)
+    const previousConfig = readXsdConfig();
+    const previousResolved = resolveXsdConfig(previousConfig);
     const nextConfig = {
-      ...readXsdConfig(),
+      ...previousConfig,
       ...(gamePath !== undefined ? { x4GamePath: gamePath } : {}),
       ...(modWorkspacePath !== undefined ? { modWorkspacePath } : {}),
       ...(filesystemPath !== undefined ? { filesystemPath } : {}),
@@ -3500,7 +3518,12 @@ app.post("/api/schema/config", (req, res) => {
     }
     writeXsdConfig(nextConfig);
     const library = reloadSchemaLibrary();
-    const manifest = startCanonicalReferenceManifest(true);
+    // Directory-setting saves are common (workspace/filesystem/game path edits) and must not
+    // force a million-file canonical-corpus rescan. The manifest already invalidates itself
+    // when its files change; an explicit effective root change is the only config mutation
+    // that needs a forced generation here.
+    const referenceRootChanged = path.resolve(previousResolved.x4ReferenceRoot) !== path.resolve(resolved.x4ReferenceRoot);
+    const manifest = startCanonicalReferenceManifest(referenceRootChanged);
     const schemaComplete = !!(resolved.mdExists && resolved.commonExists);
     const schemaWarning = schemaComplete
       ? null
@@ -3946,6 +3969,31 @@ app.post("/api/fs/write", (req, res) => {
     lastWriteReceipt = null;
     const targetPath = String(req.body?.path || '').trim();
     const incoming = req.body?.content ?? '';
+    // B100: optional compare-and-swap precondition for native-editor materialization.
+    // `null` means "the file must still be absent"; a hash means the existing bytes must
+    // still match the inventory the caller reviewed. Omitted preserves legacy behavior.
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'expectedSha256')) {
+      const rootPath = resolveXsdConfig().modWorkspacePath;
+      if (!rootPath) return res.status(400).json({ success: false, error: 'No Mod Workspace Folder configured.' });
+      const absolute = path.resolve(rootPath, targetPath);
+      if (!isPathWithin(absolute, rootPath)) return res.status(403).json({ success: false, error: 'Forbidden: Directory traversal detected.' });
+      const exists = fs.existsSync(absolute);
+      const expected = req.body.expectedSha256;
+      if (expected === null && exists) {
+        return res.status(409).json({ success: false, code: 'FILE_CHANGED', error: `Refused to create "${targetPath}": it appeared after the project inventory was read.` });
+      }
+      if (typeof expected === 'string') {
+        if (!exists || !fs.statSync(absolute).isFile()) {
+          return res.status(409).json({ success: false, code: 'FILE_CHANGED', error: `Refused to update "${targetPath}": the expected file no longer exists.` });
+        }
+        const currentHash = hashArtifactFile(absolute);
+        if (currentHash !== expected) {
+          return res.status(409).json({ success: false, code: 'FILE_CHANGED', error: `Refused to update "${targetPath}": its bytes changed after the project inventory was read.`, expectedSha256: expected, currentSha256: currentHash });
+        }
+      } else if (expected !== null) {
+        return res.status(400).json({ success: false, error: 'expectedSha256 must be a sha256 string, null, or omitted.' });
+      }
+    }
     // B88: judge the bytes first. strict:true refuses rather than warning — and refusing must mean
     // ZERO bytes written, so this runs before the guarded write, not after it.
     const validation = typeof incoming === 'string' ? validateIncomingBytes(targetPath, incoming) : { ran: [], ok: true, findings: [] };
@@ -4910,12 +4958,10 @@ function parseContentMeta(xml: string): { id?: string; name?: string; version?: 
   return { id: attr('id'), name: attr('name') || attr('id'), version: attr('version'), author: attr('author'), description: attr('description') };
 }
 
-/**
- * The mod's real extension id (folder name + content.xml id). Preserve the imported
- * content id when present so export deploys to the SAME folder with the SAME id, instead
- * of renaming it after the display title (toSafeModId("AI Influence Test Mod") =
- * "ai_influence_test_mod" ≠ the real "ai_influence_test"). New mods fall back to the title.
- */
+/** The artifact/deploy folder id. Imported projects stay targeted at the folder the user
+ * opened; content.xml identity is deliberately handled separately below because legitimate
+ * X4 extensions (including DeadAir Dynamic Wars) do not always use the folder name as their
+ * declared content id. */
 function effectiveModId(ws: any): string {
   // Name the mod after the FOLDER it was loaded from (sanitized to a valid X4 id), so compile
   // targets the directory you opened — not the content.xml display title. This keeps a copy
@@ -4930,19 +4976,27 @@ function effectiveModId(ws: any): string {
   return (typeof cid === 'string' && /^[A-Za-z][\w.-]*$/.test(cid)) ? cid : toSafeModId(ws?.name);
 }
 
+/** The id declared inside content.xml. Never silently rewrite an imported extension's
+ * canonical identity merely because its source/deploy folder has a different name. */
+function effectiveContentId(ws: any, artifactId: string): string {
+  const cid = ws && ws.contentId;
+  return (typeof cid === 'string' && /^[A-Za-z][\w.-]*$/.test(cid)) ? cid : artifactId;
+}
+
 /** content.xml to emit: the imported original bytes when the mod metadata is unedited (so
  *  <dependency> + formatting survive), otherwise the regenerated content.xml. */
 function contentXmlFor(modId: string, ws: any): string {
+  const contentId = effectiveContentId(ws, modId);
   const orig = ws && ws.contentOriginal;
   if (typeof orig === 'string' && orig) {
     const m = parseContentMeta(orig);
     const eq = (a: any, b: any) => String(a ?? '') === String(b ?? '');
-    if (eq(m.id, modId) && eq(m.id, ws.contentId) && eq(m.name, ws.name) && eq(m.version, ws.version)
+    if (eq(m.id, contentId) && eq(m.name, ws.name) && eq(m.version, ws.version)
         && eq(m.author, ws.author) && eq(m.description, ws.description)) {
       return orig; // unedited → verbatim
     }
   }
-  return generateContentXML(modId, ws);
+  return generateContentXML(contentId, ws);
 }
 
 function stableStringify(value: any): string {
@@ -4985,31 +5039,6 @@ function tFileFingerprint(tFile: any): string {
   });
 }
 
-function mdStemFingerprint(ws: any, stem: string): string {
-  const nodes = (ws?.nodes || [])
-    .filter((n: any) => n?.type === 'cue' && n?.properties?.mdFileStem === stem)
-    .map((n: any) => ({
-      id: n.id,
-      type: n.type,
-      xmlTag: n.xmlTag,
-      label: n.label,
-      includeInBuild: n.includeInBuild !== false,
-      properties: n.properties || {}
-    }))
-    .sort((a: any, b: any) => String(a.id).localeCompare(String(b.id)));
-  const ids = new Set(nodes.map((n: any) => n.id));
-  const links = (ws?.links || [])
-    .filter((l: any) => ids.has(l.sourceNodeId) && ids.has(l.targetNodeId))
-    .map((l: any) => ({
-      sourceNodeId: l.sourceNodeId,
-      sourcePortId: l.sourcePortId,
-      targetNodeId: l.targetNodeId,
-      targetPortId: l.targetPortId
-    }))
-    .sort((a: any, b: any) => stableStringify(a).localeCompare(stableStringify(b)));
-  return stableStringify({ stem, nodes, links });
-}
-
 function applyOriginalModeledFiles(ws: any, files: CompiledFileManifest): void {
   for (const original of ws?.originalFiles || []) {
     if (!original || typeof original.path !== 'string' || typeof original.content !== 'string') continue;
@@ -5018,10 +5047,19 @@ function applyOriginalModeledFiles(ws: any, files: CompiledFileManifest): void {
     if (files[rel] === undefined) continue;
     if (original.kind === 'content') {
       const originalId = parseContentMeta(original.content).id;
-      if (originalId === effectiveModId(ws) && (!original.fingerprint || original.fingerprint === contentFingerprint(ws))) files[rel] = original.content;
+      if (originalId === effectiveContentId(ws, effectiveModId(ws)) && (!original.fingerprint || original.fingerprint === contentFingerprint(ws))) files[rel] = original.content;
     } else if (original.kind === 'md') {
       const stem = original.stem || rel.replace(/^md\//i, '').replace(/\.xml$/i, '');
-      if (!original.fingerprint || original.fingerprint === mdStemFingerprint(ws, stem)) files[rel] = original.content;
+      const unchangedOrSourceSynchronized = !original.fingerprint || original.fingerprint === mdStemFingerprint(ws, stem);
+      if (unchangedOrSourceSynchronized) {
+        files[rel] = original.content;
+      } else if (original.graphRegenerable === false) {
+        // The graph now contains the full mixed semantic/raw projection, but the legacy
+        // whole-file serializer is not authoritative for this imported document. Guarded
+        // source-span edits update BOTH original.content and its fingerprint; a mismatch here
+        // therefore proves a graph-only mutation that would otherwise delete unmodelled XML.
+        throw new Error(`Refused lossy MD regeneration for ${rel}: this imported file contains syntax the whole-file graph serializer cannot reproduce. Apply the change through the guarded node/source editor so Forge can splice and validate the exact element.`);
+      }
     } else if (original.kind === 'tfile') {
       const tFile = (ws.tFiles || []).find((tf: any) => `t/${toTFileName(tf)}`.toLowerCase() === rel.toLowerCase());
       if (tFile && (!original.fingerprint || original.fingerprint === tFileFingerprint(tFile))) files[rel] = original.content;
@@ -5074,20 +5112,40 @@ function parseTFileXML(xml: string, fileName: string): any | null {
  */
 function mdElementCounts(xml: string): Map<string, number> {
   const counts = new Map<string, number>();
-  for (const m of xml.matchAll(/<([a-zA-Z_][\w.-]*)/g)) {
-    const tag = m[1];
-    if (tag === 'xml' || tag === 'mdscript') continue; // header/wrapper noise
-    counts.set(tag, (counts.get(tag) || 0) + 1);
+  const doc = new XmlDomParser().parseFromString(xml, 'text/xml');
+  const walk = (node: any) => {
+    for (const child of Array.from(node?.childNodes || []) as any[]) {
+      if (child?.nodeType !== 1) continue;
+      const tag = String(child.tagName || '');
+      if (tag && tag !== 'mdscript') counts.set(tag, (counts.get(tag) || 0) + 1);
+      walk(child);
+    }
+  };
+  walk(doc);
+  if (!counts.size && /<\w/.test(xml)) {
+    // The caller already passed the well-formedness gate. Keep a conservative fallback
+    // for an unexpected parser failure, but strip comments before counting so examples
+    // such as "<do_if>" in rationale text never masquerade as lost executable XML.
+    const withoutComments = xml.replace(/<!--[\s\S]*?-->/g, '');
+    for (const match of withoutComments.matchAll(/<([a-zA-Z_][\w.-]*)/g)) {
+      const tag = match[1];
+      if (tag !== 'xml' && tag !== 'mdscript') counts.set(tag, (counts.get(tag) || 0) + 1);
+    }
   }
   return counts;
 }
 function mdRoundTripPreservesElements(original: string, regenerated: string): boolean {
+  return mdRoundTripMissingElements(original, regenerated).length === 0;
+}
+function mdRoundTripMissingElements(original: string, regenerated: string): Array<{ tag: string; missing: number }> {
   const o = mdElementCounts(original);
   const r = mdElementCounts(regenerated);
+  const missing: Array<{ tag: string; missing: number }> = [];
   for (const [tag, n] of o) {
-    if ((r.get(tag) || 0) < n) return false; // regen dropped at least one <tag> → lossy
+    const count = n - (r.get(tag) || 0);
+    if (count > 0) missing.push({ tag, missing: count });
   }
-  return true;
+  return missing.sort((left, right) => right.missing - left.missing || left.tag.localeCompare(right.tag));
 }
 
 /**
@@ -5102,6 +5160,9 @@ const MD_DEFAULT_ATTRS = new Set(['namespace="this"', 'instantiate="false"', 'st
 function canonicalMd(xml: string): string {
   return String(xml || '')
     .replace(/<!--[\s\S]*?-->/g, '')
+    // XML permits a literal `>` inside attributes; serializers commonly normalize it to
+    // `&gt;`. They are the same value and must not make a faithful round-trip look different.
+    .replace(/&gt;/g, '>')
     .replace(/<([a-zA-Z_][\w.:-]*)((?:\s+[\w.:-]+\s*=\s*"[^"]*")*)\s*(\/?)>/g, (_m, tag, attrs, close) => {
       // Drop attributes that equal their X4 default — so a source that OMITS them and a regen
       // that ADDS them (e.g. namespace="this") canonicalize identically, and we keep the
@@ -5111,6 +5172,7 @@ function canonicalMd(xml: string): string {
       return `<${tag}${pairs.length ? ' ' + pairs.join(' ') : ''}${close ? '/' : ''}>`;
     })
     .replace(/>\s+</g, '><')
+    .replace(/<([a-zA-Z_][\w.:-]*)([^>]*)><\/\1>/g, '<$1$2/>')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -5132,51 +5194,37 @@ function importModFolder(absDir: string): { workspace: ModWorkspace; report: any
     } catch { /* */ }
   }
 
-  // editable MD: parse the first md/*.xml — but only adopt it as an editable node graph
-  // if regenerating from those nodes preserves every element (faithfulness guard). The
-  // node model doesn't represent every MD construct yet (<delay>, <library>, <params>, …);
-  // adopting a file we can't round-trip would silently delete them on export. On any loss
-  // we leave baseWorkspace null so the original file is preserved verbatim (passthrough).
-  // MULTI-SCRIPT: parse EVERY md/*.xml. Each file that round-trips faithfully (parse→regen
-  // preserves all elements) is merged into ONE node graph — cues are tagged with their owning
-  // script name (by the parser) + file stem (here) so export re-emits one <mdscript> per file at
-  // its original path. Files that don't round-trip stay passthrough. Removes the old
-  // "only the first md file is editable" limit (the root cause of multi-script mods being raw).
+  // MULTI-SCRIPT: parse EVERY md/*.xml into one mixed semantic/raw graph. The original source
+  // remains byte-authoritative. A file the legacy whole-file serializer cannot reproduce is
+  // still decomposed for the editor; its `graphRegenerable:false` contract prevents a later
+  // graph-only change from invoking that lossy serializer. Guarded node/source edits update
+  // exact source spans and refresh the file fingerprint, so they remain safe and compilable.
+  // One unsupported descendant must never collapse an otherwise understandable cue.
   const mdRels = relFiles.filter(f => /^md\/[^/]+\.xml$/i.test(f));
   const editableMdRels = new Set<string>();
+  const mdGraphRegenerable = new Map<string, boolean>();
+  const mdRegenerationGaps: Array<{ path: string; missing: Array<{ tag: string; missing: number }> }> = [];
+  const mdCanonicalMismatches: string[] = [];
   let mergedNodes: any[] = [];
   let mergedLinks: any[] = [];
+  let nextImportedMdY = 100;
   for (const rel of mdRels) {
     try {
       const mdText = fs.readFileSync(path.join(absDir, rel), 'utf8');
-      const parsed = parseXMLToWorkspace(mdText);
+      const parsed = parseXMLToWorkspace(mdText, { path: rel });
       if (!parsed || !Array.isArray(parsed.nodes) || parsed.nodes.length === 0) continue;
-      const regen = generateMDXML(sanitizeWorkspace({
+      const parsedWorkspace = sanitizeWorkspace({
         ...parsed,
         name: meta.name || parsed.name || path.basename(absDir),
-      } as any));
+      } as any);
+      const parsedScriptName = parsedWorkspace.nodes.find((node: any) => node.type === 'cue')?.properties?.mdScript || parsed.name;
+      const regen = generateMDXML(parsedWorkspace, undefined, String(parsedScriptName || parsed.name));
       const stem = rel.replace(/^md\//i, '').replace(/\.xml$/i, '');
-      if (!mdRoundTripPreservesElements(mdText, regen)) {
-        // Not faithfully decomposable into typed nodes → preserve each top-level cue as a lossless
-        // generic node (custom_xml_cue): still EDITABLE (renders on the canvas, round-trips verbatim),
-        // so NO passthrough. This is what takes node coverage to 100% of cues.
-        const mdName = (mdText.match(/<mdscript\b[^>]*\bname\s*=\s*"([^"]+)"/i) || [])[1] || stem;
-        const tops = extractTopLevelCueXml(mdText);
-        if (tops.length === 0) continue; // truly unparseable → leave passthrough
-        tops.forEach((t, k) => {
-          mergedNodes.push({
-            id: `${stem}__rawcue_${k}`, type: 'cue', label: `Cue (raw): ${t.name}`,
-            xmlTag: 'custom_xml_cue', x: 120, y: 100 + k * 220,
-            properties: { name: t.name, mdScript: mdName, mdFileStem: stem, rawXml: t.xml },
-            propertiesSchema: [],
-            inputs: [{ id: 'in_flow', name: 'Trigger Parent', type: 'parent' }],
-            outputs: [{ id: 'out_sub', name: 'Sub Cues', type: 'child' }],
-          } as any);
-        });
-        editableMdRels.add(rel.toLowerCase());
-        if (!baseWorkspace) baseWorkspace = parsed;
-        continue;
-      }
+      const missing = mdRoundTripMissingElements(mdText, regen);
+      const canonicalMatch = canonicalMd(mdText) === canonicalMd(regen);
+      mdGraphRegenerable.set(rel.toLowerCase(), missing.length === 0 && canonicalMatch);
+      if (missing.length) mdRegenerationGaps.push({ path: rel, missing });
+      if (!canonicalMatch) mdCanonicalMismatches.push(rel);
       // namespace node ids per file so two scripts never collide (parser ids are Date.now()-based)
       const idMap = new Map<string, string>();
       for (const n of parsed.nodes as any[]) {
@@ -5187,7 +5235,9 @@ function importModFolder(absDir: string): { workspace: ModWorkspace; report: any
         l.sourceNodeId = idMap.get(l.sourceNodeId) || l.sourceNodeId;
         l.targetNodeId = idMap.get(l.targetNodeId) || l.targetNodeId;
       }
-      mergedNodes = mergedNodes.concat(parsed.nodes);
+      const placed = layoutImportedGraphBatch(parsed.nodes, nextImportedMdY);
+      nextImportedMdY = placed.nextY;
+      mergedNodes = mergedNodes.concat(placed.nodes);
       mergedLinks = mergedLinks.concat(parsed.links || []);
       editableMdRels.add(rel.toLowerCase());
       if (!baseWorkspace) baseWorkspace = parsed;
@@ -5331,7 +5381,8 @@ function importModFolder(absDir: string): { workspace: ModWorkspace; report: any
         content: fs.readFileSync(path.join(absDir, rel), 'utf8'),
         kind: 'md',
         stem,
-        fingerprint: mdStemFingerprint(ws, stem)
+        fingerprint: mdStemFingerprint(ws, stem),
+        graphRegenerable: mdGraphRegenerable.get(lower) !== false
       });
     } catch { /* ignore unreadable originals */ }
   }
@@ -5447,6 +5498,16 @@ function importModFolder(absDir: string): { workspace: ModWorkspace; report: any
     folder: absDir,
     totalFiles: relFiles.length,
     counts,
+    graphNodeCount: ws.nodes.length,
+    // Whole-cue opacity is now a failure signal, not the normal preservation path. Local
+    // opaque nodes preserve only the smallest unsupported event/condition/action subtree.
+    opaqueNodeCount: ws.nodes.filter(node => ['custom_xml', 'custom_event', 'custom_condition', 'custom_xml_cue'].includes(node.xmlTag)).length,
+    opaqueTopLevelNodeCount: ws.nodes.filter(node => node.xmlTag === 'custom_xml_cue').length,
+    nonRegenerableMdFileCount: [...mdGraphRegenerable.values()].filter(value => !value).length,
+    mdRegenerationGaps,
+    mdCanonicalMismatches,
+    mdFileCount: mdRels.length,
+    graphMdFileCount: editableMdRels.size,
     classification,
     summary: `editable:${counts.editable || 0} generated:${counts.generated || 0} partial:${counts.partial || 0} passthrough:${counts.passthrough || 0} binary:${counts.binary || 0}`
   };
@@ -5535,7 +5596,10 @@ app.get("/api/agent/round-trip-selftest", (req, res) => {
     const customLua = `-- a hand-authored helper the studio does not model\nlocal m = {}\nreturn m\n`;
     const tFileXml = `<?xml version="1.0" encoding="utf-8"?>\n<language id="44">\n  <page id="10001" title="RoundTrip">\n    <t id="1001">Bounty Hunter</t>\n    <t id="1002">Destroy the target</t>\n  </page>\n</language>`;
     const files: Record<string, string> = {
-      'content.xml': `<?xml version="1.0" encoding="utf-8"?>\n<content id="roundtrip_test" name="RoundTrip_Test" author="tester" version="100" date="2026-06-11" save="0"/>`,
+      // Folder/id mismatch is legal and common in real X4 extensions. A no-edit build must
+      // preserve the declared id and original manifest bytes rather than renaming it after
+      // the artifact folder (the DeadAir Dynamic Wars regression).
+      'content.xml': `<?xml version="1.0" encoding="utf-8"?>\n<content id="roundtrip_manifest_id" name="RoundTrip_Test" author="tester" version="100" date="2026-06-11" save="0"/>`,
       'md/roundtrip_test.xml': mdXml,
       'libraries/god.xml': godXml,
       // G13: studio-emit wares/jobs should import as EDITABLE (parsed into WareDef/JobDef).
@@ -6503,6 +6567,38 @@ app.post("/api/agent/project/file/create", (req, res) => {
   }
 });
 
+/** B100: navigation/ownership metadata from the same artifact plan used by compile and deploy. */
+app.post("/api/agent/project/files", (req, res) => {
+  try {
+    const workspace = activeBuildWorkspace(req.body?.workspace ?? activeWorkspace);
+    const built = buildWorkspaceFileManifest(workspace);
+    const configuredRoot = resolveXsdConfig().modWorkspacePath;
+    const candidate = String(workspace.sourceFolder || workspace.sourceStamp?.dir || '').trim();
+    let sourceRoot: string | null = null;
+    if (configuredRoot) {
+      const root = path.resolve(configuredRoot);
+      const candidates = [candidate, path.join(root, built.modId)].filter(Boolean);
+      for (const sourceCandidate of candidates) {
+        const source = path.resolve(sourceCandidate);
+        if (source !== root && isPathWithin(source, root) && fs.existsSync(path.join(source, 'content.xml'))) {
+          sourceRoot = source;
+          break;
+        }
+      }
+    }
+    const inventory = buildProjectFileInventory(sourceRoot, built.files);
+    return res.status(inventory.ok ? 200 : 409).json({
+      ...inventory,
+      modId: built.modId,
+      // A safe relative target is returned even before first materialization. The
+      // write route remains the authority that resolves it under Mod Workspace.
+      sourceFolder: sourceRoot ? path.basename(sourceRoot) : (configuredRoot ? built.modId : null),
+    });
+  } catch (error: any) {
+    return res.status(500).json({ ok: false, error: error?.message || 'project file inventory failed' });
+  }
+});
+
 app.post("/api/agent/project/generate", (req, res) => {
   try {
     const spec = req.body?.spec || req.body || {};
@@ -6855,10 +6951,15 @@ const SELFTESTS: Record<string, () => unknown> = {
   "mod-patterns-selftest": runModPatternsSelftest,
   "compile-fidelity-selftest": runCompileFidelitySelftest,
   "workspace-identity-selftest": runWorkspaceIdentitySelftest,
+  "md-file-identity-selftest": runMdFileIdentitySelftest,
+  "imported-graph-layout-selftest": runImportedGraphLayoutSelftest,
+  "xml-source-spans-selftest": runXmlSourceSpanSelftest,
+  "node-selection-document-selftest": runNodeSelectionDocumentSelftest,
   "mod-distribution-selftest": runModDistributionSelftest,
   "override-map-selftest": runOverrideMapSelftest,
   "catdat-selftest": runCatDatSelftest,
   "artifact-pipeline-selftest": runCompileArtifactSelftest,
+  "project-file-inventory-selftest": runProjectFileInventorySelftest,
   "object-index-selftest": runObjectIndexSelftest,
   "reference-corpus-selftest": runReferenceCorpusSelftest,
   "reference-literal-lint-selftest": runReferenceLiteralLintSelftest,
@@ -7783,7 +7884,11 @@ app.get("/api/agent/md-audit", (req, res) => {
     let actionIndex = 0;
     let condIndex = 0;
     for (const tpl of (NODE_TEMPLATES as any[])) {
-      if (tpl.xmlTag === 'cue') continue;
+      // Cue templates are roots, not condition/action children.  In particular,
+      // `custom_xml_cue` is an internal lossless wrapper whose rawXml renders a
+      // real <cue>/<library>; placing its internal tag inside <conditions> turns
+      // the audit fixture itself into invalid X4 XML.
+      if (tpl.type === 'cue') continue;
       const id = `n_${tpl.xmlTag}_${actionIndex}_${condIndex}`;
       nodes.push({ ...tpl, id, x: 0, y: 0, properties: { ...tpl.properties }, includeInBuild: true });
       if (tpl.type === 'action') {
@@ -8832,6 +8937,23 @@ function runCompileArtifactSelftest() {
     fs.writeFileSync(filePath, content);
   };
   try {
+    const patchOnly = sanitizeWorkspace({
+      id: 'patch-only', name: 'Patch Only', version: '1.0', author: 'Forge', description: 'wares patch',
+      nodes: [], links: [], uiWidgets: [], uiTheme: {},
+      xmlPatches: [{ id: 'p1', action: 'replace', targetFile: 'libraries/wares.xml', sel: '/wares/ware[@id="energycells"]/@transport', content: 'container', note: 'fixture' }],
+    });
+    const patchManifest = buildWorkspaceFileManifest(patchOnly).files;
+    record('patch-only workspace has no MD readiness error', !validatePackageReadiness(patchOnly).some(finding => finding.message.includes('no cue nodes')));
+    record('patch-only workspace emits no synthetic MD file', !Object.keys(patchManifest).some(file => file.startsWith('md/')), Object.keys(patchManifest).join(', '));
+    record('patch-only workspace still emits its library diff', typeof patchManifest['libraries/wares.xml'] === 'string' && patchManifest['libraries/wares.xml'].includes('<diff>'));
+
+    const malformedMdModel = sanitizeWorkspace({
+      id: 'bad-md', name: 'Bad MD', version: '1.0', author: 'Forge', description: 'bad md',
+      nodes: [{ id: 'a1', type: 'action', xmlTag: 'debug_text', label: 'orphan action', properties: { text: 'x' }, inputs: [], outputs: [] }],
+      links: [], uiWidgets: [], uiTheme: {},
+    });
+    record('modeled MD without a cue remains an error', validatePackageReadiness(malformedMdModel).some(finding => finding.severity === 'error' && finding.message.includes('no cue nodes')));
+
     sourceWrite('content.xml', '<?xml version="1.0"?><content id="artifact_integration" name="Artifact Integration" version="100"/>');
     sourceWrite('md/source.xml', '<?xml version="1.0"?><mdscript name="ArtifactIntegration"><cues/></mdscript>');
     sourceWrite('assets/over-legacy-total.bin', Buffer.alloc((7 * 1024 * 1024) + 19, 0x6d));
@@ -8856,7 +8978,7 @@ function runCompileArtifactSelftest() {
     record('compile returns expected target', deployed === target, deployed);
     record('content.xml remains loose', fs.existsSync(path.join(target, 'content.xml')));
     const deployedContentId = fs.readFileSync(path.join(target, 'content.xml'), 'utf8').match(/<content\b[^>]*\bid="([^"]+)"/i)?.[1];
-    record('content.xml id matches effective deployment folder', deployedContentId === path.basename(target), `${deployedContentId} / ${path.basename(target)}`);
+    record('content.xml preserves declared id when deployment folder differs', deployedContentId === 'artifact_integration' && deployedContentId !== path.basename(target), `${deployedContentId} / ${path.basename(target)}`);
     record('catalog pair emitted', fs.existsSync(path.join(target, 'ext_01.cat')) && fs.existsSync(path.join(target, 'ext_01.dat')));
     record('stale loose payload removed by validated swap', !fs.existsSync(path.join(target, 'stale-loose.txt')));
     record('development metadata excluded from deploy', !fs.existsSync(path.join(target, '.git')));

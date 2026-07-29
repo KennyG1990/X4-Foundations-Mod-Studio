@@ -3,6 +3,16 @@
 The latest changes, newest first. (This page is generated automatically — see
 `release-notes.json` to edit the wording.)
 
+## 0.0.55 — 2026-07-29
+
+- The X4 Unpacker and Forge Discord controls in Directory Settings now open with one ordinary left click in Antigravity and VS Code. The extension host accepts only those two exact HTTPS destinations; Forge never opens either page automatically.
+- Large real mods now become complete Mission Director graphs instead of a handful of opaque cue wrappers. Forge recursively exposes cues, events, conditions, actions, nested branches, loops, and sub-cues; one unsupported element can no longer hide its entire enclosing cue.
+- Each imported Mission Director file has its own visible graph lane, collision removal keeps cards from stacking on the same coordinates, and a new graph-toolbar file picker switches between the full project and one MD script without dropping anything.
+- Unsupported or extension-defined elements remain localized at their real position as clearly named raw XML nodes such as XML: <include_actions>. Their exact subtree is editable, while stale saves, root-type changes, reparenting, and edits outside the selected span are refused.
+- The Load Mod Project preview now reports domains from the completed folder scan and distinguishes typed nodes, localized raw elements, and whole-cue collapses. DeadAir Dynamic Wars imports with 1,424 graph nodes, zero whole-cue collapses, zero canvas overlaps, and byte-identical no-edit output.
+- Imported extensions whose folder name differs from the id declared in content.xml now retain their original manifest bytes and canonical identity through a no-edit build. Forge no longer rewrites legitimate third-party metadata simply to match the deployment folder name.
+- Saving unrelated directory settings no longer launches a fresh million-file unpacked-corpus scan. The cached reference index refreshes when its configured corpus root or files actually change.
+
 ## 0.0.48 — 2026-07-28
 
 - Autocomplete in native Antigravity XML editors now opens while you type chained script expressions such as faction.player., not only after manually requesting suggestions. Project-defined ids keep their exact authored capitalization in both completion and hover results.

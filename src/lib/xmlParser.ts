@@ -6,7 +6,12 @@
 import { DOMParser as XmlDomParser, XMLSerializer as XmlDomSerializer } from '@xmldom/xmldom';
 import { ModWorkspace, MDNode, MDLink, NODE_TEMPLATES, X4_SHIP_MACROS, X4_STATION_MACROS } from '../types';
 import { isContainerTag } from './portSemantics';
+
+function elementChildrenOf(node: any): Element[] {
+  return Array.from(node?.childNodes || []).filter((child: any) => child?.nodeType === 1) as Element[];
+}
 import { checkXmlWellformed } from './xmlWellformed';
+import { indexXmlElementSpans, xmlElementSemanticPath } from './xmlSourceSpans';
 
 const DOMParserToUse = typeof window !== 'undefined' && window.DOMParser ? window.DOMParser : XmlDomParser;
 const XMLSerializerToUse = typeof window !== 'undefined' && window.XMLSerializer ? window.XMLSerializer : XmlDomSerializer;
@@ -89,7 +94,7 @@ export function extractTopLevelCueXml(xmlText: string): { name: string; xml: str
   } catch { return []; }
 }
 
-export function parseXMLToWorkspace(xmlText: string): ModWorkspace | null {
+export function parseXMLToWorkspace(xmlText: string, options: { path?: string } = {}): ModWorkspace | null {
   try {
     // Well-formedness gate FIRST. @xmldom/xmldom (the Node-side parser) does not emit a
     // <parsererror> element for a mismatched/unclosed tag — it warns and returns a partial
@@ -154,6 +159,13 @@ export function parseXMLToWorkspace(xmlText: string): ModWorkspace | null {
     }
 
     const serializer = new XMLSerializerToUse();
+    const indexedSpans = options.path ? indexXmlElementSpans(xmlText) : null;
+    const sourceForElement = (element: Element, modeled = true): MDNode['source'] | undefined => {
+      if (!indexedSpans || !options.path) return undefined;
+      const semanticPath = xmlElementSemanticPath(element);
+      const span = indexedSpans.get(semanticPath);
+      return span ? { path: options.path.replace(/\\/g, '/'), semanticPath, start: span.start, end: span.end, modeled } : undefined;
+    };
 
     // Pass 1: Parse all cues
     for (let i = 0; i < cuesList.length; i++) {
@@ -161,23 +173,37 @@ export function parseXMLToWorkspace(xmlText: string): ModWorkspace | null {
       const name = cue.getAttribute("name") || `cue_${i}`;
       const instantiate = cue.getAttribute("instantiate") || "false";
       const namespace = cue.getAttribute("namespace") || "this";
+      const cueAttributes = attributesToProperties(cue);
 
       // <delay> (md.xsd cue order: conditions, delay, actions) — model as editable cue
       // fields so timed cues round-trip instead of silently losing their timer.
-      const delayEl = Array.from(cue.children as HTMLCollectionOf<Element>).find((c: Element) => c.tagName === 'delay');
+      const delayEl = elementChildrenOf(cue).find((c: Element) => c.tagName === 'delay');
       const delayProps: Record<string, any> = delayEl ? {
         delayExact: delayEl.getAttribute('exact') || '',
         delayMin: delayEl.getAttribute('min') || '',
         delayMax: delayEl.getAttribute('max') || '',
       } : {};
+      const cueChildren = elementChildrenOf(cue);
+      const bodyIndexes = cueChildren
+        .map((child, index) => ['conditions', 'delay', 'actions'].includes(child.tagName) ? index : -1)
+        .filter(index => index >= 0);
+      const firstBodyIndex = bodyIndexes.length ? Math.min(...bodyIndexes) : Number.MAX_SAFE_INTEGER;
+      const cueHeaderXml = cueChildren
+        .filter((child, index) => !['conditions', 'delay', 'actions', 'cues'].includes(child.tagName) && index < firstBodyIndex)
+        .map((child: Element) => serializer.serializeToString(child as any))
+        .join('\n');
+      const cueTailXml = cueChildren
+        .filter((child, index) => !['conditions', 'delay', 'actions', 'cues'].includes(child.tagName) && index >= firstBodyIndex)
+        .map((child: Element) => serializer.serializeToString(child as any))
+        .join('\n');
 
       // <library> = a reusable-subroutine cue variant. Preserve its <documentation>/<params>
       // header verbatim; its <actions> flow through the normal action parser as editable boxes.
       const isLibrary = cue.tagName === 'library';
       const libProps: Record<string, any> = {};
       if (isLibrary) {
-        const paramsEl = Array.from(cue.children as HTMLCollectionOf<Element>).find((c: Element) => c.tagName === 'params');
-        const docEl = Array.from(cue.children as HTMLCollectionOf<Element>).find((c: Element) => c.tagName === 'documentation');
+        const paramsEl = elementChildrenOf(cue).find((c: Element) => c.tagName === 'params');
+        const docEl = elementChildrenOf(cue).find((c: Element) => c.tagName === 'documentation');
         libProps.isLibrary = 'true';
         // A library invoked via <run_actions ref="..."> REQUIRES purpose="run_actions" — the X4
         // engine refuses to run a purposeless library's actions ("library requires purpose
@@ -208,10 +234,17 @@ export function parseXMLToWorkspace(xmlText: string): ModWorkspace | null {
         xmlTag: 'cue',
         x,
         y,
-        properties: { name, instantiate, namespace, mdScript: modName, ...delayProps, ...libProps },
+        properties: {
+          ...cueAttributes, name, instantiate, namespace, mdScript: modName, ...delayProps, ...libProps,
+          hasConditionsElement: cueChildren.some(child => child.tagName === 'conditions'),
+          hasActionsElement: cueChildren.some(child => child.tagName === 'actions'),
+          ...(cueHeaderXml ? { cueHeaderXml } : {}),
+          ...(cueTailXml ? { cueTailXml } : {}),
+        },
         propertiesSchema: NODE_TEMPLATES[0].propertiesSchema,
         inputs: NODE_TEMPLATES[0].inputs,
         outputs: NODE_TEMPLATES[0].outputs
+        ,source: sourceForElement(cue, cue.getAttribute('data-x4forge-opaque') !== 'true')
       };
       
       nodes.push(cueNode);
@@ -249,9 +282,9 @@ export function parseXMLToWorkspace(xmlText: string): ModWorkspace | null {
       const cueNode = nodes.find(n => n.id === cueId)!;
 
       // Parse conditions
-      const conditionsElement = Array.from(cue.children as HTMLCollectionOf<Element>).find((c: Element) => c.tagName === "conditions");
+      const conditionsElement = elementChildrenOf(cue).find((c: Element) => c.tagName === "conditions");
       if (conditionsElement) {
-        const conditionChildren = Array.from(conditionsElement.children as HTMLCollectionOf<Element>);
+        const conditionChildren = elementChildrenOf(conditionsElement);
         let condIndex = 0;
         conditionChildren.forEach((child: Element) => {
           const tag = child.tagName;
@@ -263,16 +296,15 @@ export function parseXMLToWorkspace(xmlText: string): ModWorkspace | null {
           if (tag === 'event_cue_signalled') {
             nodeType = 'event';
             label = 'Event: Game Started';
-            properties = { cue: child.getAttribute("cue") || 'md.Setup.Start' };
+            properties = attributesToProperties(child);
           } else if (tag === 'event_object_destroyed') {
             nodeType = 'event';
             label = 'Event: Object Destroyed';
-            const ownerCheck = (child.getAttribute("faction") || 'any').replace('faction.', '');
-            properties = { object: child.getAttribute("object") || 'player.target', ownerCheck };
+            properties = attributesToProperties(child);
           } else if (tag === 'event_object_changed_sector') {
             nodeType = 'event';
             label = 'Event: Sector Entered';
-            properties = { object: child.getAttribute("object") || 'playership', sector: child.getAttribute("sector") || 'player.sector' };
+            properties = attributesToProperties(child);
           } else if (tag === 'check_value') {
             nodeType = 'condition';
             label = 'Check: Player Wealth';
@@ -285,17 +317,22 @@ export function parseXMLToWorkspace(xmlText: string): ModWorkspace | null {
               xmlTag = schemaTemplate.xmlTag;
               label = schemaTemplate.label;
               properties = attributesToProperties(child);
+              const rawChildren = Array.from(child.childNodes || [])
+                .map((nested: any) => serializer.serializeToString(nested))
+                .join('')
+                .trim();
+              if (rawChildren) properties.__rawChildrenXml = rawChildren;
             } else {
               if (tag.startsWith('event_')) {
                 nodeType = 'event';
                 xmlTag = 'custom_event';
-                label = 'Custom XML Event';
+                label = `Event: <${tag}>`;
               } else {
                 nodeType = 'condition';
                 xmlTag = 'custom_condition';
-                label = 'Custom XML Condition';
+                label = `Condition: <${tag}>`;
               }
-              properties = { rawXml: serializer.serializeToString(child as any) };
+              properties = { rawXml: serializer.serializeToString(child as any), sourceTag: tag };
             }
           }
 
@@ -313,6 +350,7 @@ export function parseXMLToWorkspace(xmlText: string): ModWorkspace | null {
               propertiesSchema: template.propertiesSchema,
               inputs: template.inputs,
               outputs: template.outputs
+              ,source: sourceForElement(child, xmlTag !== 'custom_event' && xmlTag !== 'custom_condition')
             };
             nodes.push(condNode);
 
@@ -331,9 +369,9 @@ export function parseXMLToWorkspace(xmlText: string): ModWorkspace | null {
       }
 
       // Parse actions
-      const actionsElement = Array.from(cue.children as HTMLCollectionOf<Element>).find((c: Element) => c.tagName === "actions");
+      const actionsElement = elementChildrenOf(cue).find((c: Element) => c.tagName === "actions");
       if (actionsElement) {
-        const actionChildren = Array.from(actionsElement.children as HTMLCollectionOf<Element>);
+        const actionChildren = elementChildrenOf(actionsElement);
         let actIndex = 0;
 
         // Build a single action node from an <actions> child element (returns null if untemplated).
@@ -353,10 +391,10 @@ export function parseXMLToWorkspace(xmlText: string): ModWorkspace | null {
             const spaceObj = child.getAttribute("sector") || child.getAttribute("zone") || child.getElementsByTagName("space")[0]?.getAttribute("object") || 'player.sector';
             const posEl = child.getElementsByTagName("position")[0];
             const coords = posEl ? `${posEl.getAttribute("x") || 0},${posEl.getAttribute("y") || 0},${posEl.getAttribute("z") || 0}` : '0,0,1000';
-            properties = { name, macro: matchingMacro, faction, sector: spaceObj, coords };
+            properties = { ...attributesToProperties(child), name, macro: matchingMacro, faction, sector: spaceObj, coords };
           } else if (tag === 'reward_player') {
             label = 'Reward Player';
-            const money = Number(child.getAttribute("money")) || 0;
+            const money = child.getAttribute("money") || '0';
             properties = { money };
           } else if (tag === 'play_sound') {
             label = 'Play Audio/Sound';
@@ -378,7 +416,7 @@ export function parseXMLToWorkspace(xmlText: string): ModWorkspace | null {
             const spaceObj = child.getAttribute("sector") || child.getAttribute("zone") || child.getElementsByTagName("space")[0]?.getAttribute("sector") || 'player.sector';
             const posEl = child.getElementsByTagName("position")[0];
             const coords = posEl ? `${posEl.getAttribute("x") || 0},${posEl.getAttribute("y") || 0},${posEl.getAttribute("z") || 0}` : '5000,0,5000';
-            properties = { name, macro: matchingMacro, faction, sector: spaceObj, coords };
+            properties = { ...attributesToProperties(child), name, macro: matchingMacro, faction, sector: spaceObj, coords };
           } else if (isContainerTag(tag)) {
             // control-flow container (do_if/do_while/…): keep its own attributes (e.g. value);
             // its body is parsed separately into out_body by the recursive walker below.
@@ -392,14 +430,44 @@ export function parseXMLToWorkspace(xmlText: string): ModWorkspace | null {
               xmlTag = schemaTemplate.xmlTag;
               label = schemaTemplate.label;
               properties = attributesToProperties(child);
+              // Many valid MD instructions own data children rather than executable action
+              // children: create_order/order/param, find_* match blocks, boarding marines,
+              // and extension-defined payloads. Keep those exact children on the parent node;
+              // otherwise an XSD-known node looks modeled while its payload vanishes on export.
+              const rawChildren = Array.from(child.childNodes || [])
+                .map((nested: any) => serializer.serializeToString(nested))
+                .join('')
+                .trim();
+              if (rawChildren) properties.__rawChildrenXml = rawChildren;
             } else {
               xmlTag = 'custom_xml';
-              label = 'Custom XML Action';
-              properties = { rawXml: serializer.serializeToString(child as any) };
+              label = `XML: <${tag}>`;
+              properties = { rawXml: serializer.serializeToString(child as any), sourceTag: tag };
             }
           }
 
-          const template = NODE_TEMPLATES.find(t => t.xmlTag === xmlTag) || schemaTemplatesByTag.get(xmlTag);
+          if (!isContainerTag(xmlTag) && xmlTag !== 'custom_xml') {
+            const rawChildren = Array.from(child.childNodes || [])
+              .map((nested: any) => serializer.serializeToString(nested))
+              .join('')
+              .trim();
+            if (rawChildren) properties.__rawChildrenXml = rawChildren;
+          }
+
+          const template = NODE_TEMPLATES.find(t => t.xmlTag === xmlTag)
+            || schemaTemplatesByTag.get(xmlTag)
+            || (isContainerTag(xmlTag) ? {
+              xmlTag,
+              label,
+              type: 'action' as const,
+              properties,
+              propertiesSchema: Object.keys(properties).map(key => ({ key, label: key, type: 'text' as const })),
+              inputs: [{ id: 'in_act', name: 'Action In', type: 'flow' as const }],
+              outputs: [
+                { id: 'out_body', name: 'Branch Body', type: 'child' as const },
+                { id: 'out_next', name: 'Next Action', type: 'flow' as const },
+              ],
+            } : undefined);
           if (!template) return null;
           const actNodeId = `${xmlTag}_${Date.now()}_${i}_${actIndex}`;
           actIndex++;
@@ -414,6 +482,7 @@ export function parseXMLToWorkspace(xmlText: string): ModWorkspace | null {
             propertiesSchema: template.propertiesSchema,
             inputs: template.inputs,
             outputs: template.outputs
+            ,source: sourceForElement(child, xmlTag !== 'custom_xml')
           };
           nodes.push(actNode);
           return actNode;
@@ -435,7 +504,7 @@ export function parseXMLToWorkspace(xmlText: string): ModWorkspace | null {
               targetPortId: 'in_act'
             });
             if (isContainerTag(node.xmlTag)) {
-              walkActions(Array.from(child.children || []), node.id, 'out_body');
+              walkActions(elementChildrenOf(child), node.id, 'out_body');
             }
             prevId = node.id;
             prevPort = 'out_next';

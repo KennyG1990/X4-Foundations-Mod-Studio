@@ -2,7 +2,7 @@
   "name": "x4-forge-studio",
   "displayName": "X4 Forge Studio",
   "description": "Visual modding studio for X4: Foundations â€” build, validate, and deploy mods with a node canvas and real-schema validation, no hand-written XML required.",
-  "version": "0.0.48",
+  "version": "0.0.55",
   "icon": "icon.png",
   "publisher": "x4forge",
   "license": "MIT",
@@ -155,8 +155,8 @@
         },
         "x4forge.twoWayEditing": {
           "type": "boolean",
-          "default": false,
-          "description": "EXPERIMENTAL: when an opened mod folder's XML changes on disk, offer to adopt the folder into the canvas via the guarded importer (a lossy import refuses instead of corrupting). Default off; adoption is always an explicit prompt."
+          "default": true,
+          "description": "When an opened mod folder's authored text changes on disk, offer to adopt the folder into the canvas via the guarded importer. Adoption is always explicit and compare-and-swap protected; a lossy import or concurrent canvas change refuses instead of overwriting."
         }
       }
     }

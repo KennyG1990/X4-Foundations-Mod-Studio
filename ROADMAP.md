@@ -214,6 +214,31 @@ refuses if the Lua changed without the marker changing.
 `{"consistency":[{"whenChanged":"ui/**","requireChanged":"AI_Influence.BUILD"}]}`.
 A discipline you have to remember is not a discipline.
 
+### 🔴 KB-12 · Validation cannot see the MD↔Lua wire contract, so a total outage validates clean
+
+**What happened.** `x4_ai_influence` sends its order sets from Lua to MD as a flat table of indexed keys
+(`v1`, `t1`, `c1`, …). A new feature claimed the key `g<n>`, which another feature already used for the
+station idcode. Every order the player gave was rejected for three builds. **Forge validation reported 27
+files, 0 structural errors, 0 schema errors, 0 `mdLuaMissingRegisters`, 0 `luaMdMissingListeners`.** Six
+project-side gates were also green.
+
+**Why nothing caught it.** Both halves are individually valid. Lua legally writes a string key; MD legally
+reads one. The defect only exists in the *relationship* between them, and the Forge models the register/
+listener wiring but not the **payload**.
+
+**What would have caught it** (implemented project-side as `tools/wiregate.py`, offered upstream): collect
+every `payload["<k>" .. n]` write in Lua and every `param3.{'$<k>' + $si}` read in MD, then classify each
+read as **global** (no `$sv ==` verb branch among its XML ancestors) or **verb-scoped**. Fail when a key is
+both. Also fail on write-with-no-read (a field silently discarded) and read-with-no-write (a field that never
+arrives). Ancestor classification needs a parent map over the parsed XML — ~60 lines total.
+
+**Why it belongs in the Forge.** `mdLuaMissingRegisters`/`luaMdMissingListeners` already assert that the two
+sides agree on *which cues talk*; this asserts they agree on *what they say*. Any mod passing structured data
+across the bridge has this exposure, and the failure mode is maximally deceptive: green validation, a clean
+log except one rejection line, and an NPC cheerfully confirming work it never did.
+
+**Severity: high.** It cost three builds of live testing and presented as five different behavioural bugs.
+
 ### ⚪ KB-10 · Carried defects (previously reported, still open)
 
 * **Import payload returns HTTP 200 on rejection** — 2 of 3 payload shapes return **200 with garbage** instead
@@ -275,6 +300,32 @@ little scared, I don't know what to do" into a two-second glance.
 ---
 
 ## Current State
+
+### 🚀 RELEASE 0.0.55 — lossless complex-mod graphs + single-click support links — published 2026-07-29
+
+**B102 VERIFIED — real Mission Director mods are visual programs again.** The importer no longer turns an
+entire cue or library into one opaque card when a descendant is unfamiliar. It recursively projects every
+executable element: XSD-known instructions are typed nodes and unsupported/extension-defined instructions are
+localized raw XML nodes at their real graph position. Imported bytes remain authoritative; node edits splice
+the smallest safe source span and refuse stale, root-changing, reparenting, overlapping, or outside-span saves.
+
+Real acceptance fixture: DeadAir Dynamic Wars previews and loads as **1,424 graph nodes**, 1,420 links, four
+independently selectable MD files, 192 localized raw elements, **zero whole-cue collapses**, zero canonical
+mismatches, zero overlaps, and byte-identical no-edit output. The real AI Influence copy exposes 2,925 nodes
+with no opaque top-level cues. Installed Antigravity proved both a typed cue (`DynamicWarTimer`) and a localized
+`<include_actions>` node open as exact native XML tabs while remaining connected on the canvas.
+
+**B103 VERIFIED — Directory Settings links are truly one-click.** The X4 Unpacker and Forge Discord controls
+now route through the origin-checked native host. Only those two exact HTTPS destinations are accepted. A normal
+left click opened each destination in the installed Antigravity candidate with no Ctrl key and no trusted-domain
+prompt.
+
+**Release proof:** root typecheck/build; native bridge 23/23; DeadAir layout 6/6; aggregate complex-import 10/10;
+staged sidecar 6/6; full isolated e2e **32/32 PASS** with structured verdict; every constituent oracle green
+(two slow aggregate endpoints separately green at 6/6 and 10/10); precommit green; installed-host screenshots
+under `vscode-extension/evidence/0.0.55/`. OpenVSX accepted and publicly served version `0.0.55` before commit.
+Detailed records: `docs/plans/2026-07-28-lossless-md-node-graph.md` and
+`docs/plans/2026-07-29-single-click-external-links.md`.
 
 ### 🚀 RELEASE 0.0.43 — the user-friction pass: 10/10 items — published to Open VSX 2026-07-25
 
@@ -6824,3 +6875,37 @@ patches took roughly 40 seconds without strong progress feedback, although it co
 and Undo passed. Suggested follow-up: explicit apply-stage progress/busy feedback.
 
 Suggested commit title: `release: 0.0.48 — corpus-guided autocomplete and safe bulk XML transforms`.
+
+## 2026-07-28 — B100 native Antigravity file + graph-node authoring / local 0.0.51 — VERIFIED
+
+Forge no longer embeds a competing general-purpose text editor. Real mod files open as ordinary
+Antigravity `file:` tabs, generated/source conflicts open in the native diff viewer, and the project
+inventory covers every compiled or preserved file while keeping binaries read-only. AIScript and
+Wares/Jobs visual builders remain, but their source handoff uses the IDE. META now reports one compact
+schema count with expandable resolved paths. Libraries/assets-only mods no longer receive fabricated MD
+output or a false no-cue package error.
+
+The graph remains the primary structured editor. Clicking one node opens an editable
+`x4forge-node:` XML document containing exactly that node; Ctrl/Shift-selection opens exactly the
+selected snippets. Supported attribute/value saves run through Forge's existing compiler and full-project
+validator, checkpoint, then merge into the graph. Imported MD edits splice exact source spans, preserving
+comments, whitespace, duplicate siblings, cue children, unrelated nodes, graph positions, ports, links,
+and bytes outside the edited span. Stale graph/source tokens, marker changes, reordering, tag/structure
+changes, opaque XML, malformed XML, and new deterministic errors refuse with zero mutation. The virtual
+documents reuse the canonical XSD/corpus completion, hover, and continuous diagnostic providers.
+
+Evidence: pure span/identity/selection 19/19; native bridge 15/15; oracle sweep 110/110; focused rendered
+native-authoring 3/3; full isolated e2e 30/30 with the structured PASS verdict; typecheck, lint (0 errors,
+522 warnings), production/extension builds, precommit, stage/package, and staged sidecar probe 6/6 pass.
+Installed Antigravity 0.0.51 visibly proved exact node tabs, safe save-back, corpus faction completion,
+structural refusal, zero graph mutation, and Revert clearing discarded diagnostics. Installed/staged
+extension controller SHA-256 is
+`4A016AA81079AFA44E873BD0D40ADB27C80BE4CB5D77FE3EB568F31472905BF1`. The final unpublished VSIX is
+17,778,031 bytes at SHA-256 `40D04E36599C5AD00CA6D6E0A9F3950510B0E4DDC1DEB6325E2A4D1CAB7F52C7`.
+
+Open VSX publication was not authorized and was not attempted; publish-before-commit therefore leaves
+this user-facing release candidate uncommitted. B101 records the observed restart-rehydration residual for
+memory-backed virtual tabs. X4 remained closed and no live game/mod directory was written.
+
+Suggested eventual commit title:
+`feat(editor): unify native X4 file and graph-node authoring with lossless guarded synchronization`.

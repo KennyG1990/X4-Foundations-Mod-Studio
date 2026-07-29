@@ -1,9 +1,15 @@
 import { expect, test } from '@playwright/test';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { E2E_TOKEN } from '../../playwright.config';
 import { readServerWorkspace } from './ephemeral';
 
 const workspacePath = 'D:\\X4ForgeMods';
 const filesystemPath = 'G:\\Games\\X4 Foundations\\extensions';
 const gamePath = 'G:\\Games\\X4 Foundations';
+const API = 'http://127.0.0.1:3101';
+const auth = { Authorization: `Bearer ${E2E_TOKEN}` };
 
 function modRoot(name: string) {
   return [{
@@ -162,4 +168,79 @@ test('Load Mod Project keeps a healthy source browsable when the other root fail
   const filesystemSource = page.getByTestId('project-source-filesystem');
   await expect(workspaceSource).toContainText('Workspace scan unavailable');
   await expect(filesystemSource.getByRole('button', { name: 'Select filesystem_mod from Filesystem' })).toBeVisible();
+});
+
+test('Load Mod Project visibly decomposes a complex multi-script project without collapsing or overlapping cues', async ({ page, request }) => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'x4forge-complex-project-load-'));
+  const staging = path.join(temp, 'staging');
+  const deployment = path.join(temp, 'deployment');
+  const mod = path.join(staging, 'complex_mod');
+  fs.mkdirSync(path.join(mod, 'md'), { recursive: true });
+  fs.mkdirSync(deployment, { recursive: true });
+  fs.writeFileSync(path.join(mod, 'content.xml'), '<content id="complex_manifest_id" name="Complex Mod" version="1"/>', 'utf8');
+  const lossyMd = (script: string, child: string) => `<?xml version="1.0" encoding="utf-8"?>
+<mdscript name="${script}"><cues><cue name="Init"><delay exact="1s"/><actions><set_value name="$first" exact="1"/></actions><delay exact="2s"/><actions><set_value name="$second" exact="2"/></actions>
+<cues><cue name="${child}"><actions><set_value name="$x" exact="1"/></actions></cue></cues>
+</cue></cues></mdscript>`;
+  fs.writeFileSync(path.join(mod, 'md', 'alpha.xml'), lossyMd('Alpha', 'AlphaChild'), 'utf8');
+  fs.writeFileSync(path.join(mod, 'md', 'beta.xml'), lossyMd('Beta', 'BetaChild'), 'utf8');
+
+  const originalResponse = await request.get(`${API}/api/schema/config`, { headers: auth });
+  expect(originalResponse.ok(), await originalResponse.text()).toBeTruthy();
+  const original = await originalResponse.json() as { config?: Record<string, unknown> };
+  const restore = {
+    modWorkspacePath: original.config?.modWorkspacePath || '',
+    filesystemPath: original.config?.filesystemPath || '',
+  };
+
+  try {
+    const configured = await request.post(`${API}/api/schema/config`, {
+      headers: auth,
+      data: { modWorkspacePath: staging, filesystemPath: deployment },
+    });
+    expect(configured.ok(), await configured.text()).toBeTruthy();
+    const configuredBody = await configured.json() as { manifest?: { state?: string; scanning?: unknown } };
+    expect(configuredBody.manifest?.state).toBe('ready');
+    expect(configuredBody.manifest?.scanning).toBeUndefined();
+
+    await page.goto('/');
+    const startupWalkaround = page.getByTestId('health-card');
+    if (await startupWalkaround.isVisible().catch(() => false)) await page.getByTestId('health-card-dismiss').click();
+    await page.getByTitle('Load existing mods or push updates to GitHub').click();
+    const source = page.getByTestId('project-source-workspace');
+    await source.getByRole('button', { name: 'Select complex_mod from Mod Workspace' }).click();
+    await expect(page.getByText('workspace: complex_mod', { exact: true })).toBeVisible();
+    await expect(page.getByText('Mission Director', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Detected in package', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText(/8 graph nodes/i)).toBeVisible();
+    await expect(page.getByText(/0 whole cues collapsed/i)).toBeVisible();
+
+    await page.getByRole('button', { name: 'Load Project', exact: true }).click();
+    await expect(page.getByText('Load Mod Project', { exact: true })).toHaveCount(0);
+    const scriptFilter = page.getByTestId('canvas-md-script-filter');
+    await expect(scriptFilter).toBeVisible();
+    await scriptFilter.selectOption('alpha');
+    await expect(page.locator('[data-testid^="canvas-node-alpha__cue_"]').first()).toBeVisible();
+    await expect(page.locator('[data-testid^="canvas-node-beta__"]')).toHaveCount(0);
+    await scriptFilter.selectOption('');
+    const alpha = page.locator('[data-testid^="canvas-node-alpha__cue_"]').first();
+    const beta = page.locator('[data-testid^="canvas-node-beta__cue_"]').first();
+    await expect(alpha).toBeVisible();
+    await expect(beta).toBeVisible();
+    const [alphaBox, betaBox] = await Promise.all([alpha.boundingBox(), beta.boundingBox()]);
+    expect(alphaBox).not.toBeNull();
+    expect(betaBox).not.toBeNull();
+    expect(Math.abs(alphaBox!.x - betaBox!.x) + Math.abs(alphaBox!.y - betaBox!.y)).toBeGreaterThan(40);
+
+    const roundTrip = await request.post(`${API}/api/agent/round-trip-check`, {
+      headers: auth,
+      data: { root: 'workspace', path: 'complex_mod' },
+    });
+    expect(roundTrip.ok(), await roundTrip.text()).toBeTruthy();
+    expect(await roundTrip.json()).toMatchObject({ lossless: true, strictLossless: true, droppedFiles: [] });
+  } finally {
+    const restored = await request.post(`${API}/api/schema/config`, { headers: auth, data: restore });
+    expect(restored.ok(), await restored.text()).toBeTruthy();
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
 });

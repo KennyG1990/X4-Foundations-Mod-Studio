@@ -9,14 +9,14 @@ import {
   Plus,
   Sparkles,
   Database,
-  HelpCircle,
-  Code2,
   GitPullRequest,
-  BadgeAlert
+  BadgeAlert,
+  ExternalLink
 } from 'lucide-react';
 import { ModWorkspace } from '../types';
 import ObjectIndexPicker, { type IndexItem } from './ObjectIndexPicker';
 import { toast } from '../lib/uiDialogs';
+import { openOrMaterializeInNativeEditor } from '../lib/nativeEditor';
 
 interface LibraryConfiguratorProps {
   workspace: ModWorkspace;
@@ -603,107 +603,6 @@ export default function LibraryConfigurator({ workspace, setWorkspace, saveCheck
     saveJobs(next);
   };
 
-  // Compile XML content cleanly
-  const renderWareAttributes = (item: WareDef) => {
-    const tagsAttr = item.tags ? ` tags="${item.tags}"` : '';
-    return `id="${item.id}" name="${item.name}" description="${item.description}" transport="${item.transport}" volume="${item.volume}"${tagsAttr}`;
-  };
-
-  const renderWareProduction = (item: WareDef, indent = '      ') => {
-    const method = item.productionMethod || 'default';
-    const nameAttr = item.productionName ? ` name="${item.productionName}"` : '';
-    const primaryWares = (item.primaryWares || []).filter(entry => entry.ware && Number(entry.amount) > 0);
-    if (primaryWares.length === 0) {
-      return `${indent}<production time="${item.prodTime}" amount="${item.prodAmount}" method="${method}"${nameAttr} />`;
-    }
-
-    const inputs = primaryWares
-      .map(entry => `${indent}    <ware ware="${entry.ware}" amount="${entry.amount}" />`)
-      .join('\n');
-    return `${indent}<production time="${item.prodTime}" amount="${item.prodAmount}" method="${method}"${nameAttr}>
-${indent}  <primary>
-${inputs}
-${indent}  </primary>
-${indent}</production>`;
-  };
-
-  const compileWaresXML = (): string => {
-    const item = wares[activeItemIndex] || wares[0];
-    // B13: never render a BLANK preview — an empty library shows the compiled skeleton
-    // with guidance, so the pane always teaches what this file will become.
-    if (!item) return `<?xml version="1.0" encoding="utf-8"?>
-<!-- libraries/wares.xml — no wares defined yet.
-     Click the "+" button in the sidebar to create your first ware;
-     its compiled XML will appear here. -->
-<wares>
-</wares>`;
-
-    if (isPatchMode) {
-      return `<?xml version="1.0" encoding="utf-8"?>
-<diff>
-  <!-- XML Diff Patch adding to core wares database file: libraries/wares.xml -->
-  <add sel="/wares">
-    <ware ${renderWareAttributes(item)}>
-      <price min="${item.minPrice}" average="${item.avgPrice}" max="${item.maxPrice}" />
-${renderWareProduction(item)}
-    </ware>
-  </add>
-</diff>`;
-    } else {
-      return `<?xml version="1.0" encoding="utf-8"?>
-<wares>
-  <!-- Pure XML wares definitions replacement list -->
-  <ware ${renderWareAttributes(item)}>
-    <price min="${item.minPrice}" average="${item.avgPrice}" max="${item.maxPrice}" />
-${renderWareProduction(item, '    ')}
-  </ware>
-</wares>`;
-    }
-  };
-
-  const compileJobsXML = (): string => {
-    const item = jobs[activeItemIndex] || jobs[0];
-    // B13: same skeleton-not-blank rule as the wares preview.
-    if (!item) return `<?xml version="1.0" encoding="utf-8"?>
-<!-- libraries/jobs.xml — no jobs defined yet.
-     Click the "+" button in the sidebar to create your first job;
-     its compiled XML will appear here. -->
-<jobs>
-</jobs>`;
-
-    if (isPatchMode) {
-      return `<?xml version="1.0" encoding="utf-8"?>
-<diff>
-  <!-- XML Diff Patch adding new AI pilot squad to core jobs database: libraries/jobs.xml -->
-  <add sel="/jobs">
-    <job id="${item.id}" name="${item.name}" startactive="true">
-      <modifiers rebuild="${item.rebuildOnDestroy ? 'true' : 'false'}" />
-      <quota galaxy="${item.galaxyQuota}" sector="${item.sectorQuota}" />
-      <expirationtime min="7200" max="14400" />
-${item.taskScript ? `      <task task="${item.taskScript}" />\n` : ''}      <ship macro="${item.shipMacro}">
-        <select faction="${item.faction}" tags="[military, ${item.shipClass}]" />
-        <owner exact="${item.faction}" overridenpc="true" />
-      </ship>
-    </job>
-  </add>
-</diff>`;
-    } else {
-      return `<?xml version="1.0" encoding="utf-8"?>
-<jobs>
-  <!-- Pure standalone XML Job config file -->
-  <job id="${item.id}" name="${item.name}" startactive="true">
-    <modifiers rebuild="${item.rebuildOnDestroy ? 'true' : 'false'}" />
-    <quota galaxy="${item.galaxyQuota}" sector="${item.sectorQuota}" />
-    <expirationtime min="7200" max="14400" />
-${item.taskScript ? `    <task task="${item.taskScript}" />\n` : ''}    <ship macro="${item.shipMacro}">
-      <select faction="${item.faction}" tags="[military, ${item.shipClass}]" />
-      <owner exact="${item.faction}" overridenpc="true" />
-    </ship>
-  </job>
-</jobs>`;
-    }
-  };
-
   const activeItem = activeSubTab === 'wares' ? wares[activeItemIndex] : jobs[activeItemIndex];
 
   return (
@@ -717,6 +616,19 @@ ${item.taskScript ? `    <task task="${item.taskScript}" />\n` : ''}    <ship ma
         
         {/* Toggle Mode button */}
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={async () => {
+              const projectPath = `libraries/${activeSubTab === 'wares' ? 'wares.xml' : 'jobs.xml'}`;
+              const result = await openOrMaterializeInNativeEditor(workspace, projectPath);
+              toast(result.message, result.ok ? 'success' : 'error');
+            }}
+            className="px-3 py-1 rounded text-[10px] uppercase font-bold border border-cyan-500/25 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 transition-all cursor-pointer flex items-center gap-1.5"
+            title={`Open libraries/${activeSubTab === 'wares' ? 'wares.xml' : 'jobs.xml'} as a real Antigravity file tab`}
+          >
+            <ExternalLink className="w-3 h-3" />
+            Open in Antigravity
+          </button>
           {/* XML Patch / Pure toggle */}
           <button
             onClick={() => setIsPatchMode(prev => !prev)}
@@ -1343,39 +1255,7 @@ ${item.taskScript ? `    <task task="${item.taskScript}" />\n` : ''}    <ship ma
           )}
         </div>
 
-        {/* Right side: Real-time XML / Diff Code editor view */}
-        <div className="w-96 bg-[#0c0e14] border-l border-white/10 p-4 flex flex-col overflow-hidden">
-          <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-3 shrink-0 font-mono text-xs">
-            <div className="flex items-center gap-1 text-cyan-400 font-semibold uppercase">
-              <Code2 className="w-4 h-4" />
-              <span>/libraries/{activeSubTab === 'wares' ? 'wares.xml' : 'jobs.xml'}</span>
-            </div>
-            
-            <button
-              onClick={() => copyToClipboard(activeSubTab === 'wares' ? compileWaresXML() : compileJobsXML())}
-              className="px-2 py-0.5 rounded bg-black/45 hover:bg-black/80 font-bold uppercase text-[9.5px] border border-white/10 text-slate-300 hover:text-cyan-400 cursor-pointer flex items-center gap-1"
-            >
-              Copy XML
-            </button>
-          </div>
-
-          <div className="flex-1 bg-black/50 rounded-lg p-3 font-mono text-[10.5px] text-slate-400 overflow-y-auto relative custom-scrollbar border border-white/5 leading-normal select-text selection:bg-cyan-500/25">
-            <pre className="whitespace-pre">
-              {activeSubTab === 'wares' ? compileWaresXML() : compileJobsXML()}
-            </pre>
-          </div>
-
-          <div className="mt-3 bg-cyan-900/10 border border-cyan-500/20 rounded p-2 text-[9.5px] leading-relaxed text-slate-400">
-            <HelpCircle className="w-3.5 h-3.5 text-cyan-400 inline mr-1" />
-            <span className="font-semibold text-cyan-400">XML Diff Selector Syntax:</span> In X4 Foundations, target selectors like <code className="text-cyan-400">sel="/wares"</code> inject values smoothly into existing game configurations without overwriting them.
-          </div>
-        </div>
       </div>
     </div>
   );
-
-  function copyToClipboard(text: string) {
-    navigator.clipboard.writeText(text);
-    alert("XML configuration code copied onto clipboard!");
-  }
 }

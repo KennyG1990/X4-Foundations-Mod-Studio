@@ -120,6 +120,10 @@ test('corpus authoring blocks collisions, completes XPath, previews, applies, an
     return api?.getWorkspace().name === name;
   }, workspace.name);
 
+  const healthCard = page.getByTestId('health-card');
+  await healthCard.waitFor({ state: 'visible', timeout: 1_500 }).catch(() => undefined);
+  if (await healthCard.isVisible()) await page.getByTestId('health-card-dismiss').click();
+
   await page.locator('button[title="Wares & Jobs"]').click();
   await page.getByRole('button', { name: 'ADD', exact: true }).click();
   const newWare = page.getByPlaceholder('ware_antimatter_capsules');

@@ -21,6 +21,11 @@ import {
   Users,
   Settings as SettingsIcon
 } from 'lucide-react';
+import {
+  openExternalUrlInNativeHost,
+  X4_FORGE_DISCORD_URL,
+  X4_UNPACKER_URL,
+} from '../lib/nativeEditor';
 
 type AiTier = 'off' | 'explain' | 'assist' | 'cobuild';
 
@@ -424,9 +429,12 @@ export default function DirectorySettingsModal({
               <div className="flex items-center justify-between gap-3">
                 <span><span className="font-semibold text-slate-200">Need an unpacked copy?</span> X4 Unpacker provides GUI and CLI extraction of base-game and DLC catalogues with patch ordering.</span>
                 <a
-                  href="https://www.nexusmods.com/x4foundations/mods/2142?tab=description"
+                  href={X4_UNPACKER_URL}
                   target="_blank"
                   rel="noreferrer noopener"
+                  onClick={(event) => {
+                    if (openExternalUrlInNativeHost(X4_UNPACKER_URL)) event.preventDefault();
+                  }}
                   className="shrink-0 inline-flex items-center gap-1 rounded border border-cyan-500/30 px-2 py-1 font-mono font-semibold text-cyan-300 hover:border-cyan-400 hover:text-cyan-200"
                   title="Open X4 Unpacker on Nexus Mods"
                 >
@@ -541,9 +549,12 @@ export default function DirectorySettingsModal({
               <div className="flex items-center justify-between gap-3">
                 <span><span className="font-semibold text-slate-200">Join the X4 Forge Discord.</span> Ask questions about Forge, discuss your workflow, share the mods you are building, and connect with other mod authors.</span>
                 <a
-                  href="https://discord.gg/9qvAvtXqWP"
+                  href={X4_FORGE_DISCORD_URL}
                   target="_blank"
                   rel="noreferrer noopener"
+                  onClick={(event) => {
+                    if (openExternalUrlInNativeHost(X4_FORGE_DISCORD_URL)) event.preventDefault();
+                  }}
                   className="shrink-0 inline-flex items-center gap-1 rounded border border-indigo-400/30 px-2 py-1 font-mono font-semibold text-indigo-300 hover:border-indigo-300 hover:text-indigo-200"
                   title="Open the X4 Forge Discord invite"
                 >

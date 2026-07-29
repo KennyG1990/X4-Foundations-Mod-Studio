@@ -21,8 +21,6 @@ import {
   Settings as SettingsGear,
   Plug,
   Map as MapIcon,
-  ChevronRight,
-  ChevronLeft,
   Keyboard,
   Bug
 } from 'lucide-react';
@@ -30,11 +28,12 @@ import BugReportModal from './components/BugReportModal';
 import Sidebar from './components/Sidebar';
 import FpsMeter from './components/FpsMeter';
 import HealthCardOverlay from './components/HealthCardOverlay';
-import DialogHost, { confirmDialog } from './lib/uiDialogs';
+import DialogHost, { confirmDialog, toast } from './lib/uiDialogs';
 import SyncModal from './components/SyncModal';
 import Canvas from './components/Canvas';
 import UIBuilder from './components/UIBuilder';
-import CodePreview, { EditorFile } from './components/CodePreview';
+import NativeProjectFiles from './components/NativeProjectFiles';
+import { openInNativeEditor, openNativeNodeSelection, postNativeNodeSelectionResult, type NativeNodeApplyRequest } from './lib/nativeEditor';
 import AIHelper from './components/AIHelper';
 import AgentBridge from './components/AgentBridge';
 import AIConnectionModal from './components/AIConnectionModal';
@@ -54,6 +53,7 @@ import GlobalSearch from './components/GlobalSearch';
 import ShortcutsOverlay from './components/ShortcutsOverlay';
 import { ModWorkspace, MDNode, UIWidget, PRESETS, NODE_TEMPLATES, sanitizeWorkspace, generateMDXML, validateModWorkspace, ChatMessage, PackageDiagnostic } from './types';
 import { workspaceContentHash } from './lib/workspaceIdentity';
+import { applyNodeSelectionDocument, buildNodeSelectionDocument, isNodeSelectionFailure } from './lib/nodeSelectionDocument';
 import type { SchemaLibrary } from './lib/schemaTypes';
 import { setSchemaTemplatesForImport } from './lib/xmlParser';
 import { resolveCueToNodeId } from './lib/liveLogNav';
@@ -225,16 +225,13 @@ export default function App() {
   // Lifted auto-save state to synchronize settings and prevent data clobbering on load
   const [autoSaveEnabled, setAutoSaveEnabled] = useState<boolean>(false);
 
-  // Diagnostics / Mod Doctor states moved to App level to share across Sidebar/CodePreview
+  // Diagnostics / Mod Doctor state shared by readiness and the diagnostics panel.
   const [diagnostics, setDiagnostics] = useState<PackageDiagnostic[]>([]);
-  const [bufferDiagnostics, setBufferDiagnostics] = useState<PackageDiagnostic[] | null>(null);
   const [diagnosticSource, setDiagnosticSource] = useState<'checking' | 'project' | 'local'>('checking');
   const [readinessWatcher, setReadinessWatcher] = useState<ReadinessWatcherEvidence>({ phase: 'loading' });
   const [experienceConfirmations, setExperienceConfirmations] = useState<Record<string, ExperienceConfirmation>>(
     () => parseExperienceConfirmations(localStorage.getItem(EXPERIENCE_CONFIRMATIONS_KEY))
   );
-
-  const [snapshotDiffWorkspace, setSnapshotDiffWorkspace] = useState<ModWorkspace | null>(null);
 
   const mdCode = React.useMemo(() => {
     try {
@@ -330,7 +327,7 @@ export default function App() {
     () => validateModWorkspace(workspace, mdCode),
     [workspace, mdCode]
   );
-  const effectiveDiagnostics = bufferDiagnostics ?? diagnostics;
+  const effectiveDiagnostics = diagnostics;
   const readinessStages = React.useMemo(() => buildReadinessStages({
     workspaceName: workspace.name,
     workspaceHash: readinessWorkspaceHash,
@@ -396,9 +393,11 @@ export default function App() {
 
   const [selectedNode, setSelectedNode] = useState<MDNode | null>(null);
   const [selectedCueIds, setSelectedCueIds] = useState<string[]>([]);
-  // Active MD script filter (file stem) shared by the code panel dropdown + the canvas; null = all.
+  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
+  const nativeSelectionOpenKeyRef = useRef<string>('');
+  const nativeApplyQueueRef = useRef<Promise<void>>(Promise.resolve());
+  // Active MD script filter (file stem) used by the canvas; null = all scripts.
   const [activeMdScript, setActiveMdScript] = useState<string | null>(null);
-  const [activeEditorFile, setActiveEditorFile] = useState<EditorFile | null>(null);
   const [selectedWidget, setSelectedWidget] = useState<UIWidget | null>(null);
 
   useEffect(() => {
@@ -431,6 +430,10 @@ export default function App() {
     if (selectedNode && !workspace.nodes.some(n => n.id === selectedNode.id)) {
       setSelectedNode(null);
     }
+    setSelectedNodeIds(current => {
+      const next = current.filter(id => workspace.nodes.some(node => node.id === id));
+      return next.length === current.length ? current : next;
+    });
     if (selectedWidget && !(workspace.uiWidgets || []).some(w => w.id === selectedWidget.id)) {
       setSelectedWidget(null);
     }
@@ -486,30 +489,10 @@ export default function App() {
   const syncConflictRef = useRef(false);
   const setSyncConflict = (v: boolean) => { syncConflictRef.current = v; _setSyncConflict(v); };
 
-  // Left & Right Sidebar Resizing States
+  // Left sidebar resizing state. Text files now use Antigravity's native tab area,
+  // so Forge no longer reserves a duplicate right-hand editor column.
   const [leftSidebarWidth, setLeftSidebarWidth] = useState<number>(320);
-  const [rightSidebarWidth, setRightSidebarWidth] = useState<number>(460);
-  // B48P2: the code pane starts COLLAPSED by default — the canvas is the product's core
-  // surface and gets the real estate; the persistent top bar (tabs+actions) stays either way.
-  // The user's last choice wins across sessions (localStorage), and expanding is one click on
-  // the pull-tab. Collapsed-by-default also means the editor engine's chunk isn't even
-  // downloaded until the pane is first opened (lazy import in CodePreview).
-  const [codeCollapsed, setCodeCollapsedState] = useState<boolean>(() => {
-    try { const saved = localStorage.getItem('x4_forge_code_collapsed'); return saved === null ? true : saved === '1'; }
-    catch { return true; }
-  });
-  const setCodeCollapsed: React.Dispatch<React.SetStateAction<boolean>> = (next) => {
-    setCodeCollapsedState(prev => {
-      const value = typeof next === 'function' ? (next as (p: boolean) => boolean)(prev) : next;
-      try { localStorage.setItem('x4_forge_code_collapsed', value ? '1' : '0'); } catch { /* private mode */ }
-      return value;
-    });
-  };
-  // The persistent editor TOP BAR element — CodePreview portals its tabs+actions here so
-  // the editor body stays a code-only entity, and the bar survives the editor's collapse.
-  const [editorBarEl, setEditorBarEl] = useState<HTMLDivElement | null>(null);
   const [isResizingLeft, setIsResizingLeft] = useState<boolean>(false);
-  const [isResizingRight, setIsResizingRight] = useState<boolean>(false);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -517,18 +500,13 @@ export default function App() {
         const newWidth = Math.max(200, Math.min(550, e.clientX));
         setLeftSidebarWidth(newWidth);
       }
-      if (isResizingRight) {
-        const newWidth = Math.max(300, Math.min(800, window.innerWidth - e.clientX));
-        setRightSidebarWidth(newWidth);
-      }
     };
 
     const handleMouseUp = () => {
       setIsResizingLeft(false);
-      setIsResizingRight(false);
     };
 
-    if (isResizingLeft || isResizingRight) {
+    if (isResizingLeft) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
       document.body.style.cursor = 'col-resize';
@@ -541,7 +519,7 @@ export default function App() {
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };
-  }, [isResizingLeft, isResizingRight]);
+  }, [isResizingLeft]);
 
   // Active AI modeling status states
   const [activeAIProvider, setActiveAIProvider] = useState<string>('gemini');
@@ -923,6 +901,106 @@ export default function App() {
     setPastStates(prev => [...prev.slice(-39), JSON.parse(JSON.stringify(target))]);
     setFutureStates([]);
   };
+
+  // The graph remains the structured-authoring authority. Selection opens a native
+  // virtual XML document; saving that document returns here for a lossless model merge.
+  useEffect(() => {
+    if (!selectedNodeIds.length) {
+      nativeSelectionOpenKeyRef.current = '';
+      return;
+    }
+    const document = buildNodeSelectionDocument(workspace, selectedNodeIds);
+    if (!document.ok) return;
+    const openKey = `${document.nodeIds.join('\0')}|${document.token}`;
+    if (nativeSelectionOpenKeyRef.current === openKey) return;
+    nativeSelectionOpenKeyRef.current = openKey;
+    openNativeNodeSelection({
+      title: document.title,
+      content: document.content,
+      token: document.token,
+      nodeIds: document.nodeIds,
+      readOnly: document.readOnly,
+      warnings: document.warnings,
+    });
+  }, [workspace, selectedNodeIds]);
+
+  useEffect(() => {
+    const validateWorkspace = async (candidate: ModWorkspace) => {
+      const compiledResponse = await fetch('/api/agent/compile', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace: candidate }),
+      });
+      const compiled = await compiledResponse.json() as { files?: Record<string, string>; error?: string };
+      if (!compiledResponse.ok || !compiled.files) throw new Error(compiled.error || `Compile failed (HTTP ${compiledResponse.status}).`);
+      const files = Object.entries(compiled.files).map(([path, content]) => ({ path, content }));
+      const validationResponse = await fetch('/api/agent/project/validate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project: { id: candidate.id, name: candidate.name, files } }),
+      });
+      const validation = await validationResponse.json() as { flat?: Array<{ severity: string; code?: string; filePath?: string; message: string }>; error?: string };
+      if (!validationResponse.ok) throw new Error(validation.error || `Validation failed (HTTP ${validationResponse.status}).`);
+      return validation.flat || [];
+    };
+
+    const processNativeApply = async (request: NativeNodeApplyRequest) => {
+      const baseWorkspace = workspaceRef.current;
+      const applied = applyNodeSelectionDocument(baseWorkspace, request.nodeIds, request.token, request.content);
+      if (isNodeSelectionFailure(applied)) {
+        postNativeNodeSelectionResult({ requestId: request.requestId, ok: false, message: applied.message });
+        return;
+      }
+      try {
+        const [beforeFindings, afterFindings] = await Promise.all([validateWorkspace(baseWorkspace), validateWorkspace(applied.workspace)]);
+        const signature = (finding: { code?: string; filePath?: string; message: string }) => `${finding.code || ''}|${finding.filePath || ''}|${finding.message}`;
+        const priorErrors = new Set(beforeFindings.filter(finding => finding.severity === 'error').map(signature));
+        const newErrors = afterFindings.filter(finding => finding.severity === 'error' && !priorErrors.has(signature(finding)));
+        if (newErrors.length) {
+          postNativeNodeSelectionResult({
+            requestId: request.requestId,
+            ok: false,
+            message: `Forge refused the node edit: ${newErrors[0].message}${newErrors.length > 1 ? ` (+${newErrors.length - 1} more new errors)` : ''}`,
+          });
+          return;
+        }
+        saveCheckpoint(baseWorkspace);
+        workspaceRef.current = applied.workspace;
+        setWorkspace(applied.workspace);
+        const refreshed = buildNodeSelectionDocument(applied.workspace, request.nodeIds);
+        const warnings = afterFindings.filter(finding => finding.severity === 'warning').length;
+        if (refreshed.ok) nativeSelectionOpenKeyRef.current = `${refreshed.nodeIds.join('\0')}|${refreshed.token}`;
+        postNativeNodeSelectionResult({
+          requestId: request.requestId,
+          ok: true,
+          message: `${applied.summary}${warnings ? ` ${warnings} project warning${warnings === 1 ? '' : 's'} remain visible.` : ''}`,
+          ...(refreshed.ok ? { token: refreshed.token, content: refreshed.content } : {}),
+          warnings,
+        });
+        toast(applied.summary, warnings ? 'warning' : 'success');
+      } catch (error) {
+        postNativeNodeSelectionResult({
+          requestId: request.requestId,
+          ok: false,
+          message: `Forge could not validate the node edit, so nothing was applied: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
+    };
+
+    const handleNativeApply = (event: MessageEvent) => {
+      if (event.source !== window.parent) return;
+      const request = event.data as NativeNodeApplyRequest;
+      if (!request || request.source !== 'x4forge-native-host' || request.type !== 'apply-node-selection') return;
+      nativeApplyQueueRef.current = nativeApplyQueueRef.current
+        .then(() => processNativeApply(request))
+        .catch(error => {
+          postNativeNodeSelectionResult({
+            requestId: request.requestId,
+            ok: false,
+            message: `Forge could not process the node edit, so nothing was applied: ${error instanceof Error ? error.message : String(error)}`,
+          });
+        });
+    };
+    window.addEventListener('message', handleNativeApply);
+    return () => window.removeEventListener('message', handleNativeApply);
+  }, []);
 
   const handleUndo = React.useCallback(() => {
     if (pastStates.length === 0) return;
@@ -1707,6 +1785,8 @@ export default function App() {
             </select>
           </div>
 
+          {experienceMode === 'expert' && <NativeProjectFiles workspace={workspace} />}
+
           {/* B29: the conflict card / diverged badge moved OUT of the header into the fixed
               sync-status layer below — a header slot gets clipped on narrow windows, and the
               conflict UI must be visible exactly when a conflict blocks sync. */}
@@ -1871,7 +1951,9 @@ export default function App() {
           onOpenDirectorySettings={() => setIsDirSettingsOpen(true)}
           schemaConfigVersion={schemaConfigVersion}
           onOpenEditorFile={(file) => {
-            setActiveEditorFile(file);
+            if (!openInNativeEditor(file.path)) {
+              toast('Native file tabs are available in the installed Antigravity/VS Code extension.', 'warning');
+            }
           }}
           autoSaveEnabled={autoSaveEnabled}
           setAutoSaveEnabled={setAutoSaveEnabled}
@@ -1913,7 +1995,6 @@ export default function App() {
           diagnostics={effectiveDiagnostics}
           diagnosticSource={diagnosticSource}
           diagnosticsScope={diagnosticsScope}
-          onSelectSnapshot={setSnapshotDiffWorkspace}
         />
         ) : (
           <BeginnerWorkspace
@@ -1961,7 +2042,15 @@ export default function App() {
               focusNodeRequest={focusNodeRequest}
               selectedCueIds={selectedCueIds}
               setSelectedCueIds={setSelectedCueIds}
+              selectedNodeIds={selectedNodeIds}
+              setSelectedNodeIds={setSelectedNodeIds}
               activeMdScript={activeMdScript}
+              onActiveMdScriptChange={(script) => {
+                setActiveMdScript(script);
+                setSelectedNode(null);
+                setSelectedCueIds([]);
+                setSelectedNodeIds([]);
+              }}
               packageDiagnostics={effectiveDiagnostics}
               diagnosticSource={diagnosticSource}
             />
@@ -2025,72 +2114,6 @@ export default function App() {
 
         </main>
 
-        {/* Right Resizer Handle — hidden when the code panel is collapsed (nothing to resize). */}
-        {experienceMode === 'expert' && !codeCollapsed && (
-          <div
-            className={`w-1 cursor-col-resize hover:bg-cyan-500/50 hover:w-1.5 transition-all bg-white/5 h-full relative z-40 select-none shrink-0 ${
-              isResizingRight ? 'bg-cyan-500 w-1.5' : ''
-            }`}
-            onMouseDown={(e) => {
-              e.preventDefault();
-              setIsResizingRight(true);
-            }}
-          />
-        )}
-
-        {/* Right Side: Real-time Synchronized compiler preview output (collapsible) */}
-        {experienceMode === 'expert' && (
-        <aside
-          className={`shrink-0 min-w-0 flex flex-col bg-[#12141a] border-l border-[#df9825]/10 relative transition-[width] duration-300 ease-in-out overflow-hidden ${codeCollapsed ? 'self-start rounded-bl-lg shadow-lg' : 'h-full'}`}
-          style={{ width: codeCollapsed ? 300 : rightSidebarWidth }}
-        >
-          {/* Drawer pull-tab — toggles the code BODY (the top bar below always persists). */}
-          <button
-            onClick={() => setCodeCollapsed(c => !c)}
-            title={codeCollapsed ? 'Show code editor' : 'Hide code editor'}
-            className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-50 w-5 h-14 rounded-md bg-[#1b1e26] border border-[#df9825]/30 flex items-center justify-center text-slate-400 hover:text-amber-300 hover:border-amber-400/60 shadow-lg transition-colors cursor-pointer"
-          >
-            {codeCollapsed ? <ChevronLeft className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-          </button>
-
-          {/* PERSISTENT EDITOR TOP BAR — CodePreview portals its tabs+actions here. This is
-              a separate element from the editor body; it never collapses with the editor. */}
-          {/* min-w-0 + hidden x-overflow: without these, the bar's intrinsic tab/button width
-              defeats the aside's inline width via flex min-content sizing (the collapsed
-              drawer silently stayed at full width — found in the B48P2 live drill). */}
-          <div ref={setEditorBarEl} className="shrink-0 w-full min-w-0 overflow-x-hidden bg-[#0b0d12]" />
-
-          {/* EDITOR BODY (code-only) — hidden when collapsed; the top bar above stays. */}
-          <div className={`flex-1 min-h-0 w-full overflow-hidden ${codeCollapsed ? 'hidden' : 'flex'}`}>
-          <CodePreview
-            topBarTarget={editorBarEl}
-            codeCollapsed={codeCollapsed}
-            setCodeCollapsed={setCodeCollapsed}
-            workspace={workspace}
-            setWorkspace={setWorkspace}
-            activeMdScript={activeMdScript}
-            setActiveMdScript={setActiveMdScript}
-            saveCheckpoint={saveCheckpoint}
-            modWorkspacePath={modWorkspacePath}
-            compileStatus={compileStatus}
-            compileMessage={compileMessage}
-            handleCompileModProject={handleCompileModProject}
-            activeEditorFile={activeEditorFile}
-            setActiveEditorFile={setActiveEditorFile}
-            selectedNode={selectedNode}
-            diagnostics={effectiveDiagnostics}
-            onBufferDiagnosticsChange={setBufferDiagnostics}
-            diagnosticSource={diagnosticSource}
-            snapshotDiffWorkspace={snapshotDiffWorkspace}
-            onClearSnapshotDiff={() => setSnapshotDiffWorkspace(null)}
-            selectedCueIds={selectedCueIds}
-            autoSaveEnabled={autoSaveEnabled}
-            setAutoSaveEnabled={setAutoSaveEnabled}
-          />
-          </div>
-        </aside>
-        )}
-
       </div>
 
       {/* Embedded Intelligent AI Guide Drawer chatbot */}
@@ -2153,6 +2176,13 @@ export default function App() {
         modWorkspacePath={modWorkspacePath}
         filesystemPath={filesystemPath}
         setAutoSaveEnabled={setAutoSaveEnabled}
+        onProjectLoaded={() => {
+          setSelectedNode(null);
+          setSelectedCueIds([]);
+          setSelectedNodeIds([]);
+          setActiveMdScript(null);
+          nativeSelectionOpenKeyRef.current = '';
+        }}
       />
 
       {/* AI Connection Provider Settings Modal */}

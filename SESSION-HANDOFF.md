@@ -1,66 +1,59 @@
-# X4 Forge session handoff — 2026-07-28 · B99 / 0.0.48 VERIFIED and public
+# X4 Forge session handoff — 2026-07-29 · OpenVSX 0.0.55 verified
 
 ## One-line state
 
-B99 is complete: corpus-guided autocomplete and safe bulk XML transforms are implemented, fully
-validated, visibly proven in installed Antigravity, and published as stable X4 Forge Studio 0.0.48.
-B98 deployment work remains the next separate P0. X4 and installed mods were not touched.
+B102 lossless complex-mod graph projection and B103 single-click Directory Settings links are VERIFIED in the
+installed Antigravity host and published as `x4forge.x4-forge-studio` 0.0.55. The release commit/push is the only
+remaining close operation for this handoff.
 
-## Closed bounded task
+## Closed acceptance evidence
 
-- **B99 status:** `VERIFIED`.
-- **Plan and detailed evidence:** `docs/plans/2026-07-26-bulk-corpus-transform.md`.
-- **Public package:** `x4forge.x4-forge-studio` 0.0.48 on Open VSX.
-- **Artifact identity:** 17,903,956 bytes; SHA-256
-  `7EA3F0A4946822D3E63052E7659D6AFE8CE3D4468F59069070BB3E5F4A75EA2B`; public download and local
-  tested VSIX are byte-identical.
-- **Core behavior:** effective base+DLC/project reference completion for wares, jobs, factions,
-  sectors, macros, and AI scripts; collision-safe new-definition fields; shared webview/native editor
-  completion; effective-document XPath completion; bounded numeric bulk preview/apply with simulation,
-  caps, conflict detection, plan/head CAS, idempotence, checkpoint, and Undo.
-- **Proof:** corpus 14/14; schema intelligence 139/139; real-corpus API 81/81; warm completion p95
-  3.3 ms; 500-file bulk preview p95 48.6 ms; focused rendered e2e 1/1; full e2e 27/27 PASS; oracles
-  106/106; precommit/build/package/staged probe PASS.
-- **Installed-host proof:** the existing intentionally disposable Antigravity canvas survived a real
-  extension-host reload and restored the same project. Post-reload `energyc` completion ranked
-  canonical `energycells` first with source/provenance and Patch-existing behavior. A real 80-file XL
-  hull preview produced 43 green patches; Apply advanced undo history and Undo restored the canvas.
-- **Scope boundary:** no game launch, corpus mutation, installed-mod write, deployment, or AI/network
-  spending surface was involved.
+- DeadAir Dynamic Wars: four MD files, 1,424 graph nodes, 1,420 links, 192 localized raw elements, zero whole-cue
+  collapses, zero canonical mismatches, zero overlapping source spans, byte-identical no-edit round trip.
+- AI Influence: 2,925 graph nodes and zero opaque top-level cues.
+- Installed Antigravity: project preview, MD file selector, typed cue graph, typed selected-node native tab, and
+  localized raw selected-node native tab were all inspected in the existing Forge window.
+- Installed Antigravity: ordinary unmodified left clicks opened the X4 Unpacker Nexus page and Forge Discord;
+  the exact host allowlist rejects any other URL.
+- Focused contracts: node selection 15/15, imported layout 6/6, native external-link bridge 23/23.
+- Full isolated e2e: 32/32 PASS, `[run-e2e] VERDICT: PASS`; ephemeral ports 3100/3101 stopped and live port 55060
+  remained available.
+- Runtime oracle: 109/111 within the sweep timeout; both aggregate timeouts passed directly with longer budgets
+  (`api-selftest` six tests, `selftest` 10/10). `npm run precommit:check` PASS.
+- Package: `vscode-extension/x4-forge-studio-0.0.55.vsix`, 17,789,755 bytes, 2,090 files, staged probe 6/6.
+- Public release: `Published x4forge.x4-forge-studio v0.0.55`; version-specific cache-busted OpenVSX API returned
+  version 0.0.55 with publication timestamp 2026-07-29 04:54:53.
 
-## Remaining record boundary
+## Evidence files
 
-The repo-local backlog, roadmap, plan, release notes, and handoff are closed. The StarForge capability
-map and project AAR are outside the authorized workspace and still require Ken's explicit external
-write-gate response before they may be updated.
+- `vscode-extension/evidence/0.0.55/deadair-project-preview.png`
+- `vscode-extension/evidence/0.0.55/deadair-md-file-selector.png`
+- `vscode-extension/evidence/0.0.55/deadair-typed-node-graph.png`
+- `vscode-extension/evidence/0.0.55/deadair-node-native-editor.png`
+- `vscode-extension/evidence/0.0.55/deadair-localized-raw-native-editor.png`
+- `vscode-extension/evidence/0.0.55/directory-settings-links.jpg`
+- `vscode-extension/evidence/0.0.55/single-click-x4-unpacker.jpg`
+- `vscode-extension/evidence/0.0.55/single-click-discord.jpg`
 
-## Dirty baseline to preserve
+## Honest residuals
 
-- `KNOWN-BUGS.md` is unrelated untracked user work.
-- `vscode-extension/evidence/0.0.35-runtime-copy-live.png` and
-  `vscode-extension/evidence/0.0.35-runtime-copy-startup.png` are unrelated modified evidence.
-- Do not stage, overwrite, or restore those three paths.
+- DeadAir's imported source currently reports six deterministic XSD findings. Inspection confirmed these are
+  source/schema findings (for example an attribute not declared by the loaded XSD), not dropped nodes or a failed
+  round trip. No in-game success claim is made for third-party source.
+- Native `x4forge-node:` payloads remain memory-backed across extension-host restart; B101 remains the bounded
+  descriptor-rehydration follow-up.
+- The oracle sweep's two aggregate endpoints exceed its short per-request timeout; their direct long-timeout
+  probes are green. This is harness observability debt, not a product failure.
 
-## Next bounded work
+## Commit question / dirty-scope warning
 
-B98: safely deploy when an installed mod root or payload is locked, preserving verified backup,
-exact synchronization, rollback, and the normal rename-based fast path. Reconcile its current state
-before changing it; do not conflate B98 with B99.
+Commit the authorized 0.0.55 release unit with the pre-written comprehensive message, then push `main` and prove
+`origin/main == HEAD`. Preserve unrelated `KNOWN-BUGS.md` and the two modified 0.0.35 evidence screenshots; do
+not stage `.tmp-b102-validation/`. This handoff itself ships in that release commit.
 
-## Eyeball queue
+## AAR outcome
 
-No B99 Ken-eyeball item remains. The persistent canvas is an intentional disposable validation
-fixture and may be reloaded or changed for controlled Forge tests; use the already-open Antigravity
-instance rather than launching another copy. X4/live-mod checks remain separate and Ken-gated.
-
-## Commit question
-
-B99 is at its verified release commit point. Suggested title:
-`release: 0.0.48 — corpus-guided autocomplete and safe bulk XML transforms`.
-
-## Highest-risk current hazard
-
-Installed bulk Apply took roughly 40 seconds for 43 patches and initially looked idle. It completed
-atomically and Undo passed, but future work should add explicit stage/progress feedback. Do not confuse
-the Forge header `v1.0.322` with extension version 0.0.48; verify the extension details/version and
-post-reload behavior.
+Non-clean triggers and lessons are recorded in `F:\StarForge\wiki\x4-forge\aar-log.md` and
+`F:\StarForge\wiki\workflow\aar-log.md`. The highest-risk evidenced weakness is that unsupported MD vocabulary
+is lossless but visually weaker as localized raw nodes; promote common raw tags by corpus frequency without ever
+removing the lossless escape hatch.

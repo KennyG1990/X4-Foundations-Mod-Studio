@@ -45,6 +45,14 @@ export interface MDNode {
   height?: number;
   color?: string;
   includeInBuild?: boolean;
+  /** Exact imported-source identity used by guarded node editing. Omitted for canvas-created nodes. */
+  source?: {
+    path: string;
+    semanticPath: string;
+    start: number;
+    end: number;
+    modeled: boolean;
+  };
 }
 
 // Connection wire representation between nodes
@@ -265,6 +273,10 @@ export interface OriginalModeledFile {
   kind: 'content' | 'md' | 'tfile' | 'readme';
   fingerprint?: string;
   stem?: string;
+  /** True only when the legacy whole-file graph serializer preserves every source element.
+   * Imported MD with false remains editable through guarded source-span operations, but a
+   * graph-only mutation must never fall back to lossy whole-file regeneration. */
+  graphRegenerable?: boolean;
 }
 
 export interface PassthroughFile {
@@ -726,14 +738,20 @@ export function templateFromSchemaElement(element: SchemaElement): Omit<MDNode, 
 
 export function renderGenericXMLNode(node: Pick<MDNode, 'xmlTag' | 'properties' | 'propertiesSchema'>, indent = ''): string {
   const attrKeys = (node.propertiesSchema || []).map(schema => schema.key);
-  const keys = attrKeys.length > 0 ? attrKeys : Object.keys(node.properties || {});
+  // Schema fields drive friendly ordering, but imported extension attributes outside the
+  // current XSD/card vocabulary are still real source and must survive regeneration.
+  const keys = [...new Set([...attrKeys, ...Object.keys(node.properties || {})])];
   const attrs = keys
-    .filter(key => key !== 'rawXml')
+    .filter(key => key !== 'rawXml' && !key.startsWith('__'))
     .map(key => [key, (node.properties || {})[key]] as const)
     .filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== '')
     .map(([key, value]) => `${key}="${escapeXMLAttribute(String(value))}"`)
     .join(' ');
 
+  const rawChildren = String((node.properties || {}).__rawChildrenXml || '').trim();
+  if (rawChildren) {
+    return `${indent}<${node.xmlTag}${attrs ? ` ${attrs}` : ''}>\n${reindentRawXmlBlock(rawChildren, `${indent}  `)}\n${indent}</${node.xmlTag}>`;
+  }
   return `${indent}<${node.xmlTag}${attrs ? ` ${attrs}` : ''} />`;
 }
 
@@ -743,6 +761,21 @@ function escapeXMLAttribute(value: string): string {
     .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+function patchRawChildAttributes(raw: string, tag: string, values: Record<string, string>): string {
+  const expression = new RegExp(`<${tag}\\b[^>]*>`, 'i');
+  return raw.replace(expression, opening => {
+    let next = opening;
+    for (const [name, value] of Object.entries(values)) {
+      const attr = new RegExp(`(\\s${name}\\s*=\\s*)(["'])(?:[\\s\\S]*?)\\2`, 'i');
+      const escaped = escapeXMLAttribute(value);
+      next = attr.test(next)
+        ? next.replace(attr, (_match, prefix, quote) => `${prefix}${quote}${escaped}${quote}`)
+        : next.replace(/(\/?>)$/, ` ${name}="${escaped}"$1`);
+    }
+    return next;
+  });
 }
 
 /**
@@ -825,6 +858,15 @@ export function generateMDXML(originalWorkspace: ModWorkspace, selectedCueIds?: 
     const inst = cue.properties.instantiate === 'true' ? ' instantiate="true"' : '';
     const ns = cue.properties.namespace ? ` namespace="${escapeXMLAttribute(String(cue.properties.namespace))}"` : '';
     const state = cue.properties.state && cue.properties.state !== 'active' ? ` state="${escapeXMLAttribute(String(cue.properties.state))}"` : '';
+    const cueInternal = new Set([
+      'name', 'instantiate', 'namespace', 'state', 'mdScript', 'mdFileStem', 'isLibrary',
+      'libPurpose', 'purpose', 'libParamsXml', 'libDocXml', 'cueHeaderXml', 'cueTailXml',
+      'hasConditionsElement', 'hasActionsElement', 'delayExact', 'delayMin', 'delayMax',
+    ]);
+    const extraCueAttrs = Object.entries(cue.properties || {})
+      .filter(([key, value]) => !cueInternal.has(key) && !key.startsWith('__') && value !== undefined && value !== null && String(value) !== '')
+      .map(([key, value]) => ` ${key}="${escapeXMLAttribute(String(value))}"`)
+      .join('');
 
     // <library> is a cue variant: name only (no instantiate/namespace/state), with an
     // optional <documentation>/<params> header preserved verbatim before the cue body.
@@ -834,16 +876,18 @@ export function generateMDXML(originalWorkspace: ModWorkspace, selectedCueIds?: 
     // was captured on import so the generated <library> keeps it (else the cue fails at runtime).
     const libPurpose = cue.properties.libPurpose ? ` purpose="${escapeXMLAttribute(String(cue.properties.libPurpose))}"` : '';
     let xml = isLib
-      ? `${indent}<library name="${escapeXMLAttribute(String(cueName))}"${libPurpose}>\n`
-      : `${indent}<cue name="${escapeXMLAttribute(String(cueName))}"${inst}${ns}${state}>\n`;
-    if (isLib) {
+      ? `${indent}<library name="${escapeXMLAttribute(String(cueName))}"${libPurpose}${extraCueAttrs}>\n`
+      : `${indent}<cue name="${escapeXMLAttribute(String(cueName))}"${inst}${ns}${state}${extraCueAttrs}>\n`;
+    if (cue.properties.cueHeaderXml) {
+      xml += `${reindent(cue.properties.cueHeaderXml, indentPlus)}\n`;
+    } else if (isLib) {
       if (cue.properties.libDocXml) xml += `${reindent(cue.properties.libDocXml, indentPlus)}\n`;
       if (cue.properties.libParamsXml) xml += `${reindent(cue.properties.libParamsXml, indentPlus)}\n`;
     }
     
     // Conditions block parsing (find all nodes connected to out_cond)
     const condLinks = workspace.links.filter(l => l.sourceNodeId === cue.id && l.sourcePortId === 'out_cond');
-    if (condLinks.length > 0) {
+    if (condLinks.length > 0 || cue.properties.hasConditionsElement === true) {
       xml += `${indentPlus}<conditions>\n`;
       condLinks.forEach(link => {
         const targetNode = workspace.nodes.find(n => n.id === link.targetNodeId);
@@ -852,8 +896,16 @@ export function generateMDXML(originalWorkspace: ModWorkspace, selectedCueIds?: 
             // B68: idempotent re-indent (was per-line `indentDouble + l` with no per-line dedent → runaway).
             const raw = targetNode.properties.rawXml || '';
             if (raw.trim()) xml += reindentRawXmlBlock(raw, indentDouble) + '\n';
+          } else if (targetNode.source && targetNode.xmlTag.startsWith('event_')) {
+            // Imported event variants often use attributes that the friendly card does not
+            // expose (group, object, param, custom event context). Their parsed attributes
+            // are authoritative; template defaults are only for newly-authored nodes.
+            xml += `${renderGenericXMLNode(targetNode, indentDouble)}\n`;
           } else if (targetNode.xmlTag === 'event_cue_signalled') {
-            xml += `${indentDouble}<event_cue_signalled cue="${escapeXMLAttribute(String(targetNode.properties.cue || 'md.Setup.Start'))}" />\n`;
+            const importedEmptyCue = !!targetNode.source && !targetNode.properties.cue;
+            xml += importedEmptyCue
+              ? `${indentDouble}<event_cue_signalled />\n`
+              : `${indentDouble}<event_cue_signalled cue="${escapeXMLAttribute(String(targetNode.properties.cue || 'md.Setup.Start'))}" />\n`;
           } else if (targetNode.xmlTag === 'event_object_destroyed') {
             // md.xsd: event_object_destroyed has no `faction` attribute; faction
             // filtering belongs in a follow-up condition, not here.
@@ -885,7 +937,10 @@ export function generateMDXML(originalWorkspace: ModWorkspace, selectedCueIds?: 
               else cmp = `exact="${amt}"`;
               xml += `${indentDouble}<check_value value="${escapeXMLAttribute(rawVal)}" ${cmp} />\n`;
             }
-          } else if (!CURATED_XML_TAGS.has(targetNode.xmlTag)) {
+          } else {
+            // Any schema-derived/long-tail condition not handled by a bespoke renderer is
+            // still a real X4 element. Attribute-only generic emission is the safe default;
+            // silently omitting a curated tag is never acceptable.
             xml += `${renderGenericXMLNode(targetNode, indentDouble)}\n`;
           }
         }
@@ -912,7 +967,7 @@ export function generateMDXML(originalWorkspace: ModWorkspace, selectedCueIds?: 
     // nest their out_body chain INSIDE the element; out_next continues the sibling
     // chain exactly as before. Cycle-safe via a single shared `emitSeen` set.
     const actLinks = workspace.links.filter(l => l.sourceNodeId === cue.id && l.sourcePortId === 'out_act');
-    if (actLinks.length > 0) {
+    if (actLinks.length > 0 || cue.properties.hasActionsElement === true) {
       xml += `${indentPlus}<actions>\n`;
       const emitSeen = new Set<string>();
 
@@ -944,9 +999,22 @@ export function generateMDXML(originalWorkspace: ModWorkspace, selectedCueIds?: 
           // the `sector` attribute + a <position> child. No `faction` attr, no <space>.
           const fac = node.properties.faction || 'player';
           const sector = node.properties.sector || 'player.sector';
-          xml += `${ind}<create_ship name="${escapeXMLAttribute(String(node.properties.name || '$EscortShip'))}" macro="${escapeXMLAttribute(String((node.properties.macro || '').split(' (')[0]))}" sector="${escapeXMLAttribute(String(sector))}">\n`;
-          xml += `${ind}  <owner exact="faction.${escapeXMLAttribute(String(fac))}" />\n`;
-          if (node.properties.coords) {
+          const extraAttrs = Object.entries(node.properties || {})
+            .filter(([key, value]) => !['name', 'macro', 'sector', 'faction', 'coords'].includes(key) && !key.startsWith('__') && value !== undefined && value !== null && String(value) !== '')
+            .map(([key, value]) => ` ${key}="${escapeXMLAttribute(String(value))}"`).join('');
+          xml += `${ind}<create_ship name="${escapeXMLAttribute(String(node.properties.name || '$EscortShip'))}" macro="${escapeXMLAttribute(String((node.properties.macro || '').split(' (')[0]))}" sector="${escapeXMLAttribute(String(sector))}"${extraAttrs}>\n`;
+          let preservedChildren = String(node.properties.__rawChildrenXml || '').trim();
+          if (preservedChildren) {
+            preservedChildren = patchRawChildAttributes(preservedChildren, 'owner', { exact: `faction.${String(fac)}` });
+            if (node.properties.coords) {
+              const [x = '0', y = '0', z = '0'] = String(node.properties.coords).split(',');
+              preservedChildren = patchRawChildAttributes(preservedChildren, 'position', { x, y, z });
+            }
+            xml += reindentRawXmlBlock(preservedChildren, `${ind}  `) + '\n';
+          } else {
+            xml += `${ind}  <owner exact="faction.${escapeXMLAttribute(String(fac))}" />\n`;
+          }
+          if (!preservedChildren && node.properties.coords) {
             const xyz = node.properties.coords.split(',');
             xml += `${ind}  <position x="${escapeXMLAttribute(String(xyz[0] || '0'))}" y="${escapeXMLAttribute(String(xyz[1] || '0'))}" z="${escapeXMLAttribute(String(xyz[2] || '0'))}" />\n`;
           }
@@ -966,13 +1034,27 @@ export function generateMDXML(originalWorkspace: ModWorkspace, selectedCueIds?: 
           // the `sector` attribute + a <position> child. No `faction` attr, no <space>.
           const fac = node.properties.faction || 'player';
           const sector = node.properties.sector || 'player.sector';
-          xml += `${ind}<create_station name="${escapeXMLAttribute(String(node.properties.name || '$Station'))}" macro="${escapeXMLAttribute(String((node.properties.macro || '').split(' (')[0]))}" owner="faction.${escapeXMLAttribute(String(fac))}" sector="${escapeXMLAttribute(String(sector))}">\n`;
-          if (node.properties.coords) {
+          const extraAttrs = Object.entries(node.properties || {})
+            .filter(([key, value]) => !['name', 'macro', 'owner', 'sector', 'faction', 'coords'].includes(key) && !key.startsWith('__') && value !== undefined && value !== null && String(value) !== '')
+            .map(([key, value]) => ` ${key}="${escapeXMLAttribute(String(value))}"`).join('');
+          xml += `${ind}<create_station name="${escapeXMLAttribute(String(node.properties.name || '$Station'))}" macro="${escapeXMLAttribute(String((node.properties.macro || '').split(' (')[0]))}" owner="faction.${escapeXMLAttribute(String(fac))}" sector="${escapeXMLAttribute(String(sector))}"${extraAttrs}>\n`;
+          let preservedChildren = String(node.properties.__rawChildrenXml || '').trim();
+          if (preservedChildren) {
+            if (node.properties.coords) {
+              const [x = '0', y = '0', z = '0'] = String(node.properties.coords).split(',');
+              preservedChildren = patchRawChildAttributes(preservedChildren, 'position', { x, y, z });
+            }
+            xml += reindentRawXmlBlock(preservedChildren, `${ind}  `) + '\n';
+          } else if (node.properties.coords) {
             const xyz = node.properties.coords.split(',');
             xml += `${ind}  <position x="${escapeXMLAttribute(String(xyz[0] || '0'))}" y="${escapeXMLAttribute(String(xyz[1] || '0'))}" z="${escapeXMLAttribute(String(xyz[2] || '0'))}" />\n`;
           }
           xml += `${ind}</create_station>\n`;
-        } else if (!CURATED_XML_TAGS.has(tag)) {
+        } else {
+          // Schema-driven actions vastly outnumber the small hand-curated card set. A tag
+          // without a bespoke renderer remains an ordinary attribute-based X4 element.
+          // The old CURATED_XML_TAGS exclusion silently emitted nothing for several valid
+          // cards and forced the importer to collapse their whole cue into raw XML.
           xml += `${renderGenericXMLNode(node, ind)}\n`;
         }
       };
@@ -989,6 +1071,10 @@ export function generateMDXML(originalWorkspace: ModWorkspace, selectedCueIds?: 
 
       actLinks.forEach(firstLink => emitChain(firstLink.targetNodeId, indentDouble));
       xml += `${indentPlus}</actions>\n`;
+    }
+
+    if (cue.properties.cueTailXml) {
+      xml += `${reindent(cue.properties.cueTailXml, indentPlus)}\n`;
     }
     
     // Recursive nesting for child cues (out_sub -> in_flow)
@@ -1867,6 +1953,16 @@ export function sanitizeWorkspace(ws: any): ModWorkspace {
       inputs: node.inputs || (template ? template.inputs : []),
       outputs: node.outputs || (template ? template.outputs : []),
       includeInBuild: typeof node.includeInBuild === 'boolean' ? node.includeInBuild : true
+      ,...(node.source && typeof node.source.path === 'string' && typeof node.source.semanticPath === 'string'
+        && Number.isInteger(node.source.start) && Number.isInteger(node.source.end) ? {
+          source: {
+            path: String(node.source.path).replace(/\\/g, '/').replace(/^\/+/, ''),
+            semanticPath: String(node.source.semanticPath),
+            start: Number(node.source.start),
+            end: Number(node.source.end),
+            modeled: node.source.modeled !== false,
+          }
+        } : {})
     };
   }).filter((n): n is MDNode => n !== null);
 
@@ -1895,7 +1991,8 @@ export function sanitizeWorkspace(ws: any): ModWorkspace {
         content: String(f.content),
         kind: ['content', 'md', 'tfile', 'readme'].includes(f.kind) ? f.kind : 'readme',
         ...(typeof f.fingerprint === 'string' ? { fingerprint: f.fingerprint } : {}),
-        ...(typeof f.stem === 'string' ? { stem: f.stem } : {})
+        ...(typeof f.stem === 'string' ? { stem: f.stem } : {}),
+        ...(typeof f.graphRegenerable === 'boolean' ? { graphRegenerable: f.graphRegenerable } : {})
       })),
     nodes: sanitizedNodes,
     links: Array.isArray(ws.links) ? ws.links : [],

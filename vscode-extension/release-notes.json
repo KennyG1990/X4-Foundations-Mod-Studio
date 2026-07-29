@@ -1,5 +1,32 @@
 {
   "_comment": "Plain-English release notes for the CHANGELOG (B60). ONE human step per release: add a version key with a few user-facing bullets — what a modder can now DO or what got better. Everything else (version list, dates, ordering, the shipped CHANGELOG.md) is generated automatically by `npm run changelog`. Versions with no entry here fall back to a cleaned-up commit subject.",
+  "0.0.55": [
+    "The X4 Unpacker and Forge Discord controls in Directory Settings now open with one ordinary left click in Antigravity and VS Code. The extension host accepts only those two exact HTTPS destinations; Forge never opens either page automatically.",
+    "Large real mods now become complete Mission Director graphs instead of a handful of opaque cue wrappers. Forge recursively exposes cues, events, conditions, actions, nested branches, loops, and sub-cues; one unsupported element can no longer hide its entire enclosing cue.",
+    "Each imported Mission Director file has its own visible graph lane, collision removal keeps cards from stacking on the same coordinates, and a new graph-toolbar file picker switches between the full project and one MD script without dropping anything.",
+    "Unsupported or extension-defined elements remain localized at their real position as clearly named raw XML nodes such as XML: <include_actions>. Their exact subtree is editable, while stale saves, root-type changes, reparenting, and edits outside the selected span are refused.",
+    "The Load Mod Project preview now reports domains from the completed folder scan and distinguishes typed nodes, localized raw elements, and whole-cue collapses. DeadAir Dynamic Wars imports with 1,424 graph nodes, zero whole-cue collapses, zero canvas overlaps, and byte-identical no-edit output.",
+    "Imported extensions whose folder name differs from the id declared in content.xml now retain their original manifest bytes and canonical identity through a no-edit build. Forge no longer rewrites legitimate third-party metadata simply to match the deployment folder name.",
+    "Saving unrelated directory settings no longer launches a fresh million-file unpacked-corpus scan. The cached reference index refreshes when its configured corpus root or files actually change."
+  ],
+  "0.0.51": [
+    "Reverting a refused structural edit in a native graph-node tab now clears the discarded diagnostics immediately and revalidates the restored node XML, so Antigravity's Problems count cannot remain stuck on errors that are no longer present.",
+    "This release contains the complete native selected-node authoring bridge from 0.0.50: single and multi-node XML tabs, validated save-back to the graph, exact source preservation, stale-state refusal, and corpus-backed IntelliSense."
+  ],
+  "0.0.50": [
+    "The node graph is still the primary structured editor, but selected nodes now open as real editable Antigravity XML tabs. Click one node to inspect only that snippet; Ctrl/Shift-click several nodes to see exactly those snippets together without opening or rewriting the whole Mission Director file.",
+    "Saving a node tab maps supported attribute and value changes back into the graph through Forge's existing compiler and full-project validator. Structural edits, removed identity markers, opaque raw XML, stale tabs, and newly introduced deterministic validation errors are refused without changing the graph.",
+    "Imported Mission Director files keep their original comments, whitespace, ordering, and unrelated node bytes when a selected snippet changes. Duplicate sibling elements are tracked by exact source position, and editing a cue no longer replaces or deletes its child conditions and actions.",
+    "Native node tabs use the same X4 schema, unpacked-corpus autocomplete, hover documentation, and continuous diagnostics as ordinary Antigravity XML files, so the visual graph and native IDE no longer require separate editing intelligence."
+  ],
+  "0.0.49": [
+    "Forge project files now open as real Antigravity editor tabs instead of being trapped inside duplicate embedded text boxes. XML, Lua, JSON, Markdown, and text files use the IDE's normal tabs, search, source control, Problems panel, and compatible editor extensions while Forge continues to supply X4-aware completion, hover, and validation.",
+    "The project-file picker now inventories every file Forge will package, distinguishes source files, generated files, binaries, and conflicts, and safely materializes generated XML into the Mod Workspace without overwriting a file that changed since it was inspected.",
+    "Forge can now hand comparisons to Antigravity's native two-pane diff viewer. The XML patch workbench compares effective vanilla XML with the edited candidate, and a conflicted project file compares workspace source with Forge-generated output, while X4 selector validation and patch synthesis remain in Forge.",
+    "Patch-only mods no longer receive a fabricated Mission Director package or a false missing-cue error. A wares, jobs, assets, or XML-diff-only extension can compile and deploy without adding an MD cue it does not need.",
+    "The META schema panel now reports one compact total with an expandable file list instead of permanently occupying the panel with individual schema paths, and Wares/Jobs plus AI Scripts keep their visual builders while handing source editing to Antigravity.",
+    "Forge's isolated test stack now isolates directory configuration as well as workspace state, so a failed test can no longer leave the installed Forge pointing at a deleted temporary folder."
+  ],
   "0.0.48": [
     "Autocomplete in native Antigravity XML editors now opens while you type chained script expressions such as faction.player., not only after manually requesting suggestions. Project-defined ids keep their exact authored capitalization in both completion and hover results.",
     "Duplicate ware and job ids now keep an EXISTS explanation and a visible Patch existing action after the authoritative corpus check finishes. The recovery action no longer disappears when the suggestion popup closes.",

@@ -35,7 +35,7 @@ test('Beginner exposes five tasks, preserves workspace and selection, and Expert
   await expect(page.locator('[data-testid^="beginner-step-"]')).toHaveCount(5);
   await expect(page.locator('#view_selection_modes')).toHaveCount(0);
   await expect(page.locator('#side_panel')).toHaveCount(0);
-  await expect(page.locator('#antigravity_ide_container')).toHaveCount(0);
+  await expect(page.getByTestId('native-project-files')).toHaveCount(0);
   await expect(page.getByTitle('Load existing mods or push updates to GitHub')).toHaveCount(0);
   await expect(page.getByTitle('Open External AI Agent API Control panel and documentation')).toHaveCount(0);
   await expect(page.getByTestId('mode-beginner')).toHaveAttribute('aria-pressed', 'true');
@@ -57,15 +57,13 @@ test('Beginner exposes five tasks, preserves workspace and selection, and Expert
   await page.getByTestId('mode-expert').click();
   await expect(page.locator('#view_selection_modes')).toBeVisible();
   await expect(page.locator('#side_panel')).toBeVisible();
-  // B48P2: the code pane starts COLLAPSED by default (canvas real estate) — Expert still owns
-  // the editor, it just opens via the pull-tab. Expand, then assert the editor container.
-  await page.getByTitle('Show code editor').click();
-  await expect(page.locator('#antigravity_ide_container')).toBeVisible();
+  await expect(page.getByTestId('native-project-files')).toBeVisible();
+  await expect(page.locator('#antigravity_ide_container')).toHaveCount(0);
   expect(await page.evaluate(() => (window as E2EWindow).__X4_E2E__!.getWorkspaceHash())).toBe(initialHash);
 
   await page.getByTestId('mode-beginner').click();
   await expect(page.getByText('PROPERTIES INSPECTOR', { exact: true })).toBeVisible();
-  await expect(page.locator('#antigravity_ide_container')).toHaveCount(0);
+  await expect(page.getByTestId('native-project-files')).toHaveCount(0);
   expect(await page.evaluate(() => (window as E2EWindow).__X4_E2E__!.getWorkspaceHash())).toBe(initialHash);
 });
 

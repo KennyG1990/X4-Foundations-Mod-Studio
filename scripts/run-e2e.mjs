@@ -96,8 +96,17 @@ if (process.argv.includes('--selftest')) {
 
 const args = process.argv.slice(2);
 const jsonPath = path.join(os.tmpdir(), `x4-e2e-report-${process.pid}.json`);
-const child = spawn('npx', ['playwright', 'test', '--reporter=list,json', ...args], {
-  shell: process.platform === 'win32',
+// Invoke the checked-in CLI with this exact Node runtime.  Spawning `npx` through
+// `shell:true` on Windows can crash before Playwright starts (0 tests, no JSON report),
+// and Node now warns that the unescaped shell argument path is unsafe.  There is no
+// package discovery to perform: @playwright/test is a declared dev dependency.
+const playwrightCli = path.join(process.cwd(), 'node_modules', '@playwright', 'test', 'cli.js');
+if (!fs.existsSync(playwrightCli)) {
+  console.error(`[run-e2e] Playwright CLI not found at ${playwrightCli}; run npm install first.`);
+  process.exit(1);
+}
+const child = spawn(process.execPath, [playwrightCli, 'test', '--reporter=list,json', ...args], {
+  shell: false,
   stdio: ['inherit', 'pipe', 'pipe'],
   env: { ...process.env, PLAYWRIGHT_JSON_OUTPUT_NAME: jsonPath },
 });

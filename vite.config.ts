@@ -136,8 +136,6 @@ export default defineConfig(() => {
                 // so without this it does a FULL PAGE RELOAD on every backend edit —
                 // the API server (tsx watch) restarts on its own and the page stays put.
                 '**/server.ts',
-                '**/install_mod.ts',
-                '**/use_agent_api.py',
                 // App/doc/tooling writes that shouldn't trigger reloads.
                 '**/.studio-api-token',
                 // B2s3 workspace persistence: the API writes active/parked state on every

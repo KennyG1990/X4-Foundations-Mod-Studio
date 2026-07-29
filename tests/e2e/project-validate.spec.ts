@@ -6,6 +6,9 @@
  * were verified by hand in-session, pinned so they can't silently regress.
  */
 import { expect, test, type APIRequestContext } from '@playwright/test';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { E2E_TOKEN } from '../../playwright.config';
 
 // B31s2: these requests ride baseURL (the ephemeral Vite → ephemeral API proxy), so the
@@ -16,8 +19,9 @@ function bearer(): Record<string, string> {
 
 async function validate(request: APIRequestContext, body: unknown) {
   const res = await request.post('/api/agent/project/validate', { headers: bearer(), data: body });
-  expect(res.ok()).toBeTruthy();
-  return res.json();
+  const responseBody = await res.text();
+  expect(res.ok(), responseBody).toBeTruthy();
+  return JSON.parse(responseBody);
 }
 
 const contentXml = { path: 'content.xml', kind: 'content', content: '<content id="t" name="T" version="100"/>' };
@@ -56,13 +60,38 @@ test('pitfall lints fire on the proven bug shapes and stay quiet on the proven-g
 });
 
 test('fromPath validation reads a real mod folder server-side', async ({ request }) => {
-  const v = await validate(request, { fromPath: 'x4_ai_influence' });
-  expect(v.source.mode).toBe('fromPath');
-  expect(v.source.loaded.length).toBeGreaterThan(5);
-  expect(v.summary.files).toBe(v.source.loaded.length);
-  // layers report availability honestly
-  expect(v.schema.mdAvailable).toBe(true);
-  expect(v.scriptProperties.available).toBe(true);
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'x4forge-from-path-'));
+  const staging = path.join(temp, 'staging');
+  const deployment = path.join(temp, 'deployment');
+  const mod = path.join(staging, 'from_path_fixture');
+  fs.mkdirSync(path.join(mod, 'md'), { recursive: true });
+  fs.mkdirSync(deployment, { recursive: true });
+  fs.writeFileSync(path.join(mod, 'content.xml'), '<content id="from_path_fixture" name="From Path Fixture" version="1"/>', 'utf8');
+  for (let index = 0; index < 6; index += 1) {
+    fs.writeFileSync(
+      path.join(mod, 'md', `fixture_${index}.xml`),
+      `<mdscript name="FromPath${index}"><cues><cue name="Cue${index}"/></cues></mdscript>`,
+      'utf8',
+    );
+  }
+
+  try {
+    const configured = await request.post('/api/schema/config', {
+      headers: bearer(),
+      data: { modWorkspacePath: staging, filesystemPath: deployment },
+    });
+    expect(configured.ok(), await configured.text()).toBeTruthy();
+
+    const v = await validate(request, { fromPath: 'from_path_fixture' });
+    expect(v.source.mode).toBe('fromPath');
+    expect(v.source.loaded.length).toBeGreaterThan(5);
+    expect(v.summary.files).toBe(v.source.loaded.length);
+    // layers report availability honestly
+    expect(v.schema.mdAvailable).toBe(true);
+    expect(v.scriptProperties.available).toBe(true);
+  } finally {
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
 });
 
 test('fromPath refuses paths outside the configured roots', async ({ request }) => {

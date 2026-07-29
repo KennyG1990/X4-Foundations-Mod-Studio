@@ -70,7 +70,7 @@ test('diff-to-patch three-pane merge synthesizes and adopts a patch block', asyn
 
   // Target the Edited XML pane directly (the three panes are already asserted by their labels
   // above). The prior `page.locator('textarea')` global count coupled this test to unrelated
-  // editors elsewhere on the page — B48 swapped CodePreview to CodeMirror (no textarea), which
+  // editors elsewhere on the page — native authoring removed the old embedded editor, which
   // legitimately changed that count. A stable testid keeps the test on the actual pane.
   const editedPane = page.getByTestId('diff-patch-edited-xml');
   await expect(editedPane).toBeVisible();

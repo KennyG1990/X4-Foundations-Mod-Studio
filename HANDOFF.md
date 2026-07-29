@@ -164,14 +164,14 @@ Root: `F:\DEV_ENV\X4_Forge` [VERIFIED listing 2026-07-11].
 | `config.json` (gitignored; `config.example.json` template) | Per-machine paths: game dir, XSD dir, mod workspace, extensions dir | |
 | `data/` (gitignored) | Server runtime state incl. `ai-keys.json` (SECRETS — never commit) | |
 | `graphify-out/graph.json` | Code knowledge graph (1160 nodes/2649 edges) — `graphify query/affected/path/explain` CLI | Regenerate after code changes: `graphify update .` |
-| `docs/plans/`, `dev-docs/` (gitignored), `forge-skills/` (gitignored) | Working docs | |
-| `assets/`, `public/`, `index.html`, `vite.config.ts`, `playwright.config.ts`, `tsconfig.json`, `eslint.config.js` | Frontend shell + tooling config | |
+| `docs/plans/`, `forge-skills/` (gitignored) | Durable plans + local reusable Forge development skills | |
+| `assets/`, `public-assets/`, `index.html`, `vite.config.ts`, `playwright.config.ts`, `tsconfig.json`, `eslint.config.js` | Frontend shell + tooling config | Vite deliberately uses `public-assets/`; legacy `public/` is ignored |
 
-**Suspicious/obsolete (safe to ignore, candidates for cleanup with Ken's OK):** root `pw-*.txt`
-(playwright debug dumps), `.tmp_schema_*.log`, `supervisor.log`, `temp_import/`, `public/_*.txt`
-test artifacts, `SESSION_CHANGELOG_2026-06-16.md` + `CALIBRATION-FINDINGS-2026-06-18.md` (historical),
-`install_mod.ts` [ASSUMPTION: legacy single-purpose script]. **Do not casually modify:** `server.ts`
-sync/CAS region, `src/lib/modCompiler.ts` fidelity paths, `tests/e2e/workspace-guard*`, anything in §23.
+**Generated-output cleanup:** `npm run clean -- --dry-run` previews the contained allowlist;
+`npm run clean` removes only reproducible build, staged-extension, VSIX, and test output. It preserves
+dependencies, config/secrets, runtime data/history, corpus caches, `graphify-out`, source, docs, and
+tracked release evidence. **Do not casually modify:** `server.ts` sync/CAS region,
+`src/lib/modCompiler.ts` fidelity paths, or anything in §23.
 
 ## 5. Architecture
 
@@ -531,8 +531,9 @@ parallel e2e workers (clobbered live work twice); trusting sandbox mirrors (mult
    before trusting a whole-mod "0 errors" on hand-deployed work. Severity: low (documentation honesty).
 5. **AI eval harness not built** (metrics defined only) — "hallucination reduced" remains unmeasured.
    Severity: low while AI stays opt-in-off.
-6. **Debt inventory:** root debris files (§4); `install_mod.ts` purpose unverified; dashboard/economy
-   panels etc. belong to the SEPARATE neural-link project — don't conflate.
+6. **Debt inventory:** dashboard/economy panels etc. belong to the SEPARATE neural-link project —
+   don't conflate. The verified 2026-07-28 repository cleanup removed the former root debris and
+   legacy direct-game installer.
 
 ## 20. Active Work in Progress (the uncommitted set — exact state)
 
@@ -637,8 +638,7 @@ never dress a hypothesis as a diagnosis (lived lesson: the "lossy compiler" misd
    without it.
 5. **B2 slice 3 scope** — per-mod state keying design is sketched (ADR-F1 rider) but unbuilt; does B12
    multi-workspace ride on it or wait? Development safe either way; decide at pickup.
-6. **`install_mod.ts` and root debris** — delete? Needs Ken's OK (cleanup batch).
-7. **Node engine floor** — unpinned. Low risk; pin in package.json `engines` when convenient.
+6. **Node engine floor** — unpinned. Low risk; pin in package.json `engines` when convenient.
 
 ## 25. Recommended Next Steps
 

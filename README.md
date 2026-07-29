@@ -509,6 +509,8 @@ npm run dev:web
 npm run build
 npm run start
 npm run lint
+npm run clean -- --dry-run
+npm run clean
 ```
 
 Notes:
@@ -518,6 +520,9 @@ Notes:
 - `restart-studio.bat` is the normal Windows launcher for the split local setup.
 - `npm run build` builds the frontend and bundled server output.
 - `npm run lint` currently runs `tsc --noEmit`.
+- `npm run clean -- --dry-run` previews reproducible build/package/test output only; `npm run clean`
+  removes that output without touching dependencies, configuration, runtime state, corpus caches,
+  graphs, source, or tracked evidence.
 
 ## Project Files
 
@@ -528,7 +533,6 @@ Notes:
 - `config.example.json` - path configuration template.
 - `.env.example` - environment variable template.
 - `restart-studio.bat` - Windows launcher for the local X4 Forge setup.
-- `install_mod.ts` - helper script for installing generated mod output.
 
 ## Current Known Caveats
 

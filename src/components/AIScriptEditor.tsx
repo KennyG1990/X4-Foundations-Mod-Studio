@@ -10,14 +10,13 @@ import {
   Compass,
   Settings,
   Sparkles,
-  Code2,
   Cpu,
-  HelpCircle,
-  Bot
+  Bot,
+  ExternalLink
 } from 'lucide-react';
 import { ModWorkspace } from '../types';
-import { promptDialog } from '../lib/uiDialogs';
-import { escapeXmlAttr, escapeXmlText } from '../lib/modCompiler';
+import { promptDialog, toast } from '../lib/uiDialogs';
+import { openOrMaterializeInNativeEditor } from '../lib/nativeEditor';
 
 interface AIScriptEditorProps {
   workspace: ModWorkspace;
@@ -299,88 +298,6 @@ export default function AIScriptEditor({ workspace, setWorkspace }: AIScriptEdit
     }
   };
 
-  // Compile individual script into standard Egosoft aiscripts.xsd conforming XML
-  const compileScriptToXML = (script: typeof activeScript): string => {
-    let xml = `<?xml version="1.0" encoding="utf-8"?>
-<aiscript name="${escapeXmlAttr(script.name)}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="aiscripts.xsd">
-  <!-- X4 Foundations Autopilot & Task Script Behavior -->
-  <!-- Generated visually using X4 Forge Behaviors Suite -->
-  <params>
-`;
-
-    script.params.forEach(p => {
-      xml += `    <param name="${escapeXmlAttr(p.name)}" type="${escapeXmlAttr(p.type)}" default="${escapeXmlAttr(p.defaultValue)}" comment="${escapeXmlAttr(p.comment)}" />\n`;
-    });
-
-    xml += `  </params>\n`;
-
-    if (script.interrupts.length > 0) {
-      xml += `  <interrupts>\n`;
-      script.interrupts.forEach(int => {
-        xml += `    <handler event="${escapeXmlAttr(int.event)}">\n`;
-        xml += `      <actions>\n`;
-        if (int.action === 'flee') {
-          xml += `        <run_script name="'move.flee'" />\n`;
-        } else if (int.action === 'dock_at_safety') {
-          xml += `        <run_script name="'move.dockat'" />\n`;
-        } else {
-          xml += `        <write_to_logbook text="'Interrupt event fired: ${escapeXmlAttr(int.event)}'" />\n`;
-        }
-        xml += `      </actions>\n`;
-        xml += `    </handler>\n`;
-      });
-      xml += `  </interrupts>\n`;
-    }
-
-    xml += `  <attention min="${escapeXmlAttr(script.attentionLevel)}">\n`;
-    xml += `    <actions>\n`;
-    xml += `      <label name="start" />\n`;
-
-    script.actions.forEach(act => {
-      xml += `      <!-- Action: ${escapeXmlText(act.label)} -->\n`;
-      switch (act.command) {
-        case 'move_to':
-          xml += `      <move_to object="this.ship" destination="${escapeXmlAttr(act.properties.destination || '$target')}" forceposition="false" finishonfound="true">\n`;
-          xml += `        <interrupt_after_time time="10s" />\n`;
-          xml += `      </move_to>\n`;
-          break;
-        case 'flee':
-          xml += `      <run_script name="'move.flee'" />\n`;
-          break;
-        case 'shoot':
-          xml += `      <shoot_at object="this.ship" target="${escapeXmlAttr(act.properties.target || '$enemy')}" turretmode="attackhostile" />\n`;
-          break;
-        case 'dock_at':
-          xml += `      <dock_at object="this.ship" station="${escapeXmlAttr(act.properties.station || '$station')}" />\n`;
-          break;
-        case 'wait':
-          if (act.properties.exact) {
-            xml += `      <wait exact="${escapeXmlAttr(act.properties.exact)}" />\n`;
-          } else {
-            xml += `      <wait min="${escapeXmlAttr(act.properties.min || '2s')}" max="${escapeXmlAttr(act.properties.max || '10s')}" />\n`;
-          }
-          break;
-        case 'find_objects':
-          xml += `      <find_object name="$targets" class="class.${escapeXmlAttr(act.properties.class || 'ship')}" space="player.sector" multiple="true" />\n`;
-          break;
-        case 'custom_xml':
-          xml += `      ${act.properties.rawXml || '<!-- custom nodes -->'}\n`;
-          break;
-      }
-    });
-
-    xml += `    </actions>\n`;
-    xml += `  </attention>\n`;
-    xml += `</aiscript>`;
-
-    return xml;
-  };
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    alert("AIScript XML code copied onto clipboard!");
-  };
-
   return (
     <div id="ai_script_editor_view" className="flex-1 bg-[#0a0c10] flex flex-col h-full overflow-hidden text-slate-300">
       {/* Simulation HUD Controls bar */}
@@ -392,6 +309,20 @@ export default function AIScriptEditor({ workspace, setWorkspace }: AIScriptEdit
         
         {/* Scripts selectors */}
         <div className="flex items-center gap-2">
+          {activeScript && !isPreset && (
+            <button
+              type="button"
+              onClick={async () => {
+                const result = await openOrMaterializeInNativeEditor(workspace, `aiscripts/${activeScript.name}.xml`);
+                toast(result.message, result.ok ? 'success' : 'error');
+              }}
+              className="px-2.5 py-1 rounded bg-cyan-500/10 border border-cyan-500/25 hover:bg-cyan-500/20 text-cyan-300 font-bold uppercase text-[10px] cursor-pointer transition-all flex items-center gap-1"
+              title={`Open aiscripts/${activeScript.name}.xml as a real Antigravity file tab`}
+            >
+              <ExternalLink className="w-3 h-3" />
+              Open in Antigravity
+            </button>
+          )}
           <button
             onClick={handleCreateNewScript}
             className="px-2.5 py-1 rounded bg-amber-500/10 border border-amber-500/25 hover:bg-amber-500/20 text-amber-400 font-bold uppercase text-[10px] cursor-pointer transition-all flex items-center gap-1"
@@ -935,33 +866,6 @@ export default function AIScriptEditor({ workspace, setWorkspace }: AIScriptEdit
               </div>
             </div>
 
-            {/* Right pane: Script XML Preview compiler */}
-            <div className="w-80 bg-[#0c0e14] border-l border-white/10 p-4 flex flex-col overflow-hidden flex-shrink-0">
-              <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-3 shrink-0 font-mono text-xs">
-                <div className="flex items-center gap-1.5 text-amber-500 font-semibold uppercase truncate">
-                  <Code2 className="w-4 h-4 text-amber-500 animate-pulse" />
-                  <span className="truncate">/aiscripts/{activeScript.name}.xml</span>
-                </div>
-
-                <button
-                  onClick={() => copyToClipboard(compileScriptToXML(activeScript))}
-                  className="px-2 py-0.5 rounded bg-black/45 hover:bg-black/80 font-bold uppercase text-[9.5px] border border-white/10 text-slate-300 hover:text-amber-400 cursor-pointer flex items-center gap-1 select-none"
-                >
-                  Copy XML
-                </button>
-              </div>
-
-              <div className="flex-1 bg-black/50 rounded-lg p-3 font-mono text-[10.5px] text-slate-400 overflow-y-auto relative custom-scrollbar border border-white/5 leading-normal select-text selection:bg-amber-500/25">
-                <pre className="whitespace-pre">
-                  {compileScriptToXML(activeScript)}
-                </pre>
-              </div>
-
-              <div className="mt-3 bg-amber-900/10 border border-amber-500/20 rounded p-2 text-[10px] leading-relaxed text-slate-400 select-none">
-                <HelpCircle className="w-3.5 h-3.5 text-amber-500 inline mr-1 shrink-0" />
-                <span className="font-semibold text-amber-400">NPC Task Scripts:</span> AIScripts execute strictly contextually on pilots loops (e.g. piloting behaviors), whereas Mission Director handles outer trigger notifications and sector creation.
-              </div>
-            </div>
           </>
         )}
       </div>

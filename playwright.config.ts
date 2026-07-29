@@ -29,6 +29,10 @@ const ephemeralEnv = {
   // API-only so it never starts a second embedded Vite/HMR server (port 24678).
   API_ONLY: 'true',
   X4_STATE_DIR: E2E_STATE_DIR,
+  // Config is mutable API state too. Keep schema/directory writes inside the same
+  // per-run sandbox so a failed test can never strand the installed Forge on a
+  // deleted temporary workspace.
+  X4_CONFIG_DIR: E2E_STATE_DIR,
   // Deterministic pages: no HMR socket, no watcher-triggered reloads mid-spec.
   DISABLE_HMR: 'true',
   // B93.1: the ephemeral stack must NOT publish its port into the user's real ~/.x4forge.

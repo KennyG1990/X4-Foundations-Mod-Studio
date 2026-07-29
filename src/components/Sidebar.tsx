@@ -51,6 +51,7 @@ import { MOD_PATTERNS, stampPatternIntoWorkspace } from '../lib/modPatterns';
 import type { ArchitectStepView } from './BlueprintPanel';
 import VirtualizedNodeToolbox from './VirtualizedNodeToolbox';
 import type { DiagnosticsScope } from './DiagnosticsCenter';
+import { applyNodePropertyChange, isNodeSelectionFailure } from '../lib/nodeSelectionDocument';
 
 interface SidebarProps {
   width?: number;
@@ -216,10 +217,18 @@ export default function Sidebar({
     commonExists?: boolean;
     loaded?: boolean;
     counts?: { events: number; conditions: number; actions: number; control_flow: number };
+    files?: Array<{
+      domain: string;
+      file: string;
+      sizeBytes: number;
+      includes: string[];
+      missingIncludes: string[];
+    }>;
     error?: string;
   }>({});
   const [schemaMessage, setSchemaMessage] = useState<string>('');
   const [schemaMessageType, setSchemaMessageType] = useState<'success' | 'error'>('success');
+  const [propertyEditError, setPropertyEditError] = useState<string>('');
 
   const compileSettings = workspace.compileSettings || {
     md: true,
@@ -298,9 +307,15 @@ export default function Sidebar({
 
   const loadSchemaConfig = React.useCallback(async () => {
     try {
-      const response = await fetch('/api/schema/config');
+      const [response, registryResponse] = await Promise.all([
+        fetch('/api/schema/config'),
+        fetch('/api/agent/schema-registry'),
+      ]);
       if (!response.ok) throw new Error('Schema config endpoint unavailable');
       const data = await response.json();
+      const registry = registryResponse.ok
+        ? await registryResponse.json() as { domains?: Array<{ domain: string; file: string; sizeBytes: number; includes?: string[]; missingIncludes?: string[] }> }
+        : { domains: [] };
       setSchemaDir(data.resolved?.schemaDir || '');
       setSchemaStatus({
         mdXsdPath: data.resolved?.mdXsdPath,
@@ -309,6 +324,13 @@ export default function Sidebar({
         commonExists: data.resolved?.commonExists,
         loaded: data.loaded,
         counts: data.schema_counts,
+        files: (registry.domains || []).map(file => ({
+          domain: file.domain,
+          file: file.file,
+          sizeBytes: file.sizeBytes,
+          includes: file.includes || [],
+          missingIncludes: file.missingIncludes || [],
+        })),
         error: data.error
       });
       setSchemaMessage('');
@@ -326,16 +348,14 @@ export default function Sidebar({
   // Property editor change handling
   const handlePropChange = (key: string, value: unknown) => {
     if (selectedNode) {
-      setWorkspace(prev => ({
-        ...prev,
-        nodes: prev.nodes.map(n => 
-          n.id === selectedNode.id 
-            ? { ...n, properties: { ...n.properties, [key]: value } }
-            : n
-        )
-      }));
-      // Update selected node state to sync preview
-      setSelectedNode(prev => prev ? { ...prev, properties: { ...prev.properties, [key]: value } } : null);
+      const applied = applyNodePropertyChange(workspace, selectedNode.id, key, value);
+      if (isNodeSelectionFailure(applied)) {
+        setPropertyEditError(applied.message);
+        return;
+      }
+      setPropertyEditError('');
+      setWorkspace(applied.workspace);
+      setSelectedNode(applied.workspace.nodes.find(node => node.id === selectedNode.id) || null);
     } else if (selectedWidget) {
       setWorkspace(prev => ({
         ...prev,
@@ -828,42 +848,44 @@ export default function Sidebar({
                 </p>
               </div>
 
-              <div className="space-y-1.5 rounded bg-black/30 border border-white/10 p-2 text-[10px]">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-slate-500 uppercase">md.xsd</span>
-                  <span className={schemaStatus.mdExists ? 'text-emerald-400' : 'text-red-400'}>
-                    {schemaStatus.mdExists ? 'found' : 'missing'}
+              <details className="group rounded bg-black/30 border border-white/10 text-[10px]">
+                <summary className="cursor-pointer list-none p-2 flex items-center justify-between gap-2 text-slate-300 hover:text-white">
+                  <span className="font-bold uppercase tracking-wider">
+                    {schemaStatus.files?.length
+                      ? `Found ${schemaStatus.files.length} schema files`
+                      : schemaStatus.mdExists || schemaStatus.commonExists
+                        ? 'Schema files found'
+                        : 'No schema files found'}
                   </span>
+                  <ChevronRight className="w-3.5 h-3.5 text-cyan-400 transition-transform group-open:rotate-90" />
+                </summary>
+                <div className="max-h-56 overflow-y-auto border-t border-white/10 p-2 space-y-2 custom-scrollbar">
+                  {(schemaStatus.files || []).length > 0 ? schemaStatus.files!.map(file => (
+                    <div key={`${file.domain}:${file.file}`} className="rounded border border-white/5 bg-black/25 p-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-cyan-300 font-bold uppercase">{file.domain}</span>
+                        <span className="text-slate-600">{Math.max(1, Math.round(file.sizeBytes / 1024))} KB</span>
+                      </div>
+                      <div className="mt-1 text-slate-500 break-all">{file.file}</div>
+                      {file.includes.length > 0 && (
+                        <div className="mt-1 text-slate-600">includes: {file.includes.join(', ')}</div>
+                      )}
+                      {file.missingIncludes.length > 0 && (
+                        <div className="mt-1 text-amber-300">missing: {file.missingIncludes.join(', ')}</div>
+                      )}
+                    </div>
+                  )) : (
+                    <div className="text-slate-500">No registry entries were returned.</div>
+                  )}
                 </div>
-                <div className="text-slate-400 break-all">{schemaStatus.mdXsdPath || 'Not resolved'}</div>
-
-                <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/5">
-                  <span className="text-slate-500 uppercase">common.xsd</span>
-                  <span className={schemaStatus.commonExists ? 'text-emerald-400' : 'text-red-400'}>
-                    {schemaStatus.commonExists ? 'found' : 'missing'}
-                  </span>
-                </div>
-                <div className="text-slate-400 break-all">{schemaStatus.commonXsdPath || 'Not resolved'}</div>
-              </div>
+              </details>
 
               {schemaStatus.counts && (
-                <div className="grid grid-cols-2 gap-1 text-[10px]">
-                  <div className="bg-black/30 border border-white/10 rounded p-1.5">
-                    <span className="text-slate-500 uppercase block">Events</span>
-                    <span className="text-white">{schemaStatus.counts.events}</span>
-                  </div>
-                  <div className="bg-black/30 border border-white/10 rounded p-1.5">
-                    <span className="text-slate-500 uppercase block">Actions</span>
-                    <span className="text-white">{schemaStatus.counts.actions}</span>
-                  </div>
-                  <div className="bg-black/30 border border-white/10 rounded p-1.5">
-                    <span className="text-slate-500 uppercase block">Conditions</span>
-                    <span className="text-white">{schemaStatus.counts.conditions}</span>
-                  </div>
-                  <div className="bg-black/30 border border-white/10 rounded p-1.5">
-                    <span className="text-slate-500 uppercase block">Control</span>
-                    <span className="text-white">{schemaStatus.counts.control_flow}</span>
-                  </div>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 rounded bg-black/30 border border-white/10 p-2 text-[9px] uppercase text-slate-500">
+                  <span>Events <strong className="text-white">{schemaStatus.counts.events}</strong></span>
+                  <span>Actions <strong className="text-white">{schemaStatus.counts.actions}</strong></span>
+                  <span>Conditions <strong className="text-white">{schemaStatus.counts.conditions}</strong></span>
+                  <span>Control <strong className="text-white">{schemaStatus.counts.control_flow}</strong></span>
                 </div>
               )}
 
@@ -1405,6 +1427,11 @@ export default function Sidebar({
           diagnostics={diagnostics}
           setWorkspaceView={setWorkspaceView}
         />
+        {propertyEditError && (
+          <div className="mx-3 mb-3 rounded border border-amber-500/40 bg-amber-950/30 px-3 py-2 text-[11px] leading-relaxed text-amber-200" role="status">
+            {propertyEditError}
+          </div>
+        )}
               </div>
 
       {/* Footer System Credits */}

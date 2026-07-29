@@ -94,7 +94,10 @@ export default function DirectoryExplorer({
     }
 
     try {
-      const response = await fetch('/api/fs/list');
+      // The Files panel is an authoring surface, so it always shows the editable
+      // Mod Workspace source. Deployed files remain available in Project Browser
+      // as a separate, read-only comparison source.
+      const response = await fetch('/api/fs/list?root=workspace');
       if (response.ok) {
         const tree = await response.json() as unknown;
         if (!Array.isArray(tree)) {
@@ -132,16 +135,24 @@ export default function DirectoryExplorer({
       saveCheckpoint();
       setActiveFilePath(file.path);
 
-      const response = await fetch(`/api/fs/read?root=filesystem&path=${encodeURIComponent(file.path)}`);
+      const response = await fetch(`/api/fs/read?root=workspace&path=${encodeURIComponent(file.path)}`);
       if (!response.ok) {
         throw new Error("Could not read file from server.");
       }
       const data = await response.json() as FileReadResponse;
       const fileText = typeof data.content === 'string' ? data.content : '';
+      const sourceFolderName = String(workspace.sourceFolder || '')
+        .replace(/\\/g, '/')
+        .replace(/\/$/, '')
+        .split('/')
+        .pop() || '';
+      const projectPath = sourceFolderName && file.path.startsWith(`${sourceFolderName}/`)
+        ? file.path.slice(sourceFolderName.length + 1)
+        : file.path;
 
       onOpenEditorFile?.({
         name: file.name,
-        path: file.path,
+        path: projectPath,
         content: fileText
       });
 

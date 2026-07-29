@@ -16,13 +16,15 @@ import {
   Search,
   Copy,
   PlusCircle,
-  FileText
+  FileText,
+  GitCompare
 } from 'lucide-react';
 import { ModWorkspace } from '../types';
 import { compileDiffDocument as compileSharedDiffDocument } from '../lib/modCompiler';
 import ObjectIndexPicker from './ObjectIndexPicker';
 import XPathInput from './XPathInput';
 import BulkTransformPanel from './BulkTransformPanel';
+import { openNativeTextDiff } from '../lib/nativeEditor';
 
 interface XMLPatchSystemProps {
   workspace: ModWorkspace;
@@ -790,6 +792,19 @@ export default function XMLPatchSystem({ workspace, setWorkspace, saveCheckpoint
     alert("Diff Patch XML document copied on clipboard!");
   };
 
+  const openNativeDiff = () => {
+    if (!baseFileContent) return;
+    const opened = openNativeTextDiff({
+      title: `X4 Patch Candidate — ${targetFile}`,
+      leftLabel: `${targetFile} (effective vanilla)`,
+      rightLabel: `${targetFile} (edited candidate)`,
+      leftContent: baseFileContent,
+      rightContent: dtEdited,
+      language: 'xml',
+    });
+    if (!opened) alert('Native diff viewing is available in the installed Antigravity/VS Code extension.');
+  };
+
   return (
     <div id="xml_patch_workbench_view" className="flex-1 bg-[#0a0c10] flex flex-col h-full overflow-hidden text-slate-300">
       {/* Simulation HUD Controls bar */}
@@ -1415,6 +1430,14 @@ export default function XMLPatchSystem({ workspace, setWorkspace, saveCheckpoint
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={openNativeDiff}
+                    disabled={!baseFileContent}
+                    title="Open the effective vanilla file and edited candidate in Antigravity's native diff viewer"
+                    className="px-2.5 py-1.5 rounded bg-cyan-500/10 hover:bg-cyan-500/20 font-bold uppercase text-[9.5px] border border-cyan-500/25 text-cyan-300 cursor-pointer transition-all disabled:opacity-50 flex items-center gap-1"
+                  >
+                    <GitCompare className="w-3 h-3" /> Native Diff
+                  </button>
                   <button
                     onClick={runDiffToPatch}
                     disabled={dtBusy || !baseFileContent}

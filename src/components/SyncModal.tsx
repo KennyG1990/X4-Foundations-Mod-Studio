@@ -38,6 +38,7 @@ interface SyncModalProps {
   modWorkspacePath?: string;
   filesystemPath?: string;
   setAutoSaveEnabled?: (val: boolean) => void;
+  onProjectLoaded?: () => void;
 }
 
 interface FSItem {
@@ -154,7 +155,8 @@ export default function SyncModal({
   setWorkspaceView,
   modWorkspacePath,
   filesystemPath,
-  setAutoSaveEnabled
+  setAutoSaveEnabled,
+  onProjectLoaded,
 }: SyncModalProps) {
   const [mode, setMode] = useState<'project' | 'file'>('project');
   const [statusBanner, setStatusBanner] = useState<{ type: 'success' | 'refused' | 'info'; msg: string } | null>(null);
@@ -196,6 +198,14 @@ export default function SyncModal({
   const selectedFileCount = previewReport?.importReport?.classification?.length
     ?? previewReport?.classification?.length
     ?? null;
+  const previewClassification = previewReport?.importReport?.classification || previewReport?.classification || [];
+  const detectedDomains = previewReport
+    ? DOMAIN_RULES.filter(rule => previewClassification.some((entry: any) => rule.test(String(entry?.path || '')))).map(rule => rule.label)
+    : (selectedCandidate?.domains || []);
+  const graphNodeCount = previewReport?.importReport?.graphNodeCount ?? previewReport?.graphNodeCount ?? null;
+  const opaqueNodeCount = previewReport?.importReport?.opaqueNodeCount ?? previewReport?.opaqueNodeCount ?? null;
+  const opaqueTopLevelNodeCount = previewReport?.importReport?.opaqueTopLevelNodeCount ?? previewReport?.opaqueTopLevelNodeCount ?? 0;
+  const localizedOpaqueNodeCount = Math.max(0, Number(opaqueNodeCount || 0) - Number(opaqueTopLevelNodeCount || 0));
 
   useEffect(() => {
     if (!isOpen) return;
@@ -326,6 +336,7 @@ export default function SyncModal({
       if (!res.ok || data.error) throw new Error(data.error || `Import failed (${res.status})`);
       saveCheckpoint();
       setWorkspace(data.workspace);
+      onProjectLoaded?.();
       setAutoSaveEnabled?.(false);
       if (setWorkspaceView) setWorkspaceView('blueprint');
       setStatusBanner({ type: 'success', msg: `Loaded ${selectedRoot} mod folder "${selectedPath}". ${data.report?.summary || ''}` });
@@ -704,7 +715,7 @@ export default function SyncModal({
               <div className="flex-1 overflow-y-auto scrollbar-thin p-4 space-y-4">
                 <section className="grid grid-cols-2 xl:grid-cols-3 gap-3">
                   {DOMAIN_RULES.slice(0, 5).map(d => {
-                    const active = !!selectedCandidate?.domains.includes(d.label);
+                    const active = detectedDomains.includes(d.label);
                     return (
                       <div key={d.key} className={`rounded-md border p-3 ${active ? 'bg-cyan-500/8 border-cyan-500/25' : 'bg-white/[0.025] border-white/8'}`}>
                         <div className="flex items-center gap-2">
@@ -737,6 +748,14 @@ export default function SyncModal({
                       </div>
                     ))}
                   </div>
+                  {graphNodeCount !== null && (
+                    <div className="mt-3 rounded border border-cyan-500/15 bg-cyan-500/[0.04] px-3 py-2 text-[10px] text-slate-400">
+                      <span className="font-mono font-bold text-cyan-200">{graphNodeCount} graph nodes</span>
+                      {opaqueNodeCount
+                        ? ` · ${localizedOpaqueNodeCount} localized raw element${localizedOpaqueNodeCount === 1 ? '' : 's'} · ${opaqueTopLevelNodeCount} whole cue${opaqueTopLevelNodeCount === 1 ? '' : 's'} collapsed`
+                        : ' · every MD element mapped to a typed node · 0 whole cues collapsed'}
+                    </div>
+                  )}
                 </section>
 
                 <section className="rounded-md border border-white/8 bg-black/25 p-4">
@@ -744,6 +763,16 @@ export default function SyncModal({
                   <div className="text-[11px] text-slate-400 leading-relaxed">
                     Whole-folder import preserves the mod ecosystem: `content.xml`, MD, libraries, translations, UI/Lua, unknown files, and packed artifacts. Editable domains become Forge models; unsupported domains stay passthrough so import/export does not silently destroy the package.
                   </div>
+                  {!!opaqueNodeCount && (
+                    <div className="mt-3 text-[10px] text-amber-200/80 leading-relaxed border border-amber-500/15 bg-amber-500/[0.04] rounded p-2">
+                      {opaqueTopLevelNodeCount > 0
+                        ? `${opaqueTopLevelNodeCount} whole cue${opaqueTopLevelNodeCount === 1 ? '' : 's'} could not be decomposed and remain lossless raw nodes. `
+                        : 'No whole cue was collapsed. '}
+                      {localizedOpaqueNodeCount > 0
+                        ? `${localizedOpaqueNodeCount} unsupported element${localizedOpaqueNodeCount === 1 ? '' : 's'} remain localized raw nodes at their real graph position; their enclosing cues and surrounding logic stay editable.`
+                        : 'All remaining MD elements are typed nodes.'}
+                    </div>
+                  )}
                   {previewReport?.droppedFiles?.length > 0 && (
                     <div className="mt-3 text-red-300 text-[11px] font-mono bg-red-500/10 border border-red-500/20 rounded p-2">
                       Dropped files detected: {previewReport.droppedFiles.slice(0, 5).join(', ')}
@@ -766,9 +795,9 @@ export default function SyncModal({
                 <div className="rounded border border-white/8 bg-black/25 p-3">
                   <div className="font-mono text-[10px] uppercase text-slate-400 mb-2">Detected Domains</div>
                   <div className="flex flex-wrap gap-1">
-                    {(selectedCandidate?.domains || []).length ? selectedCandidate!.domains.map(d => (
+                    {detectedDomains.length ? detectedDomains.map(d => (
                       <span key={d} className="font-mono text-[9px] text-cyan-200 bg-cyan-500/10 border border-cyan-500/20 rounded px-1.5 py-0.5">{d}</span>
-                    )) : <span className="text-[11px] text-slate-500">No project selected.</span>}
+                    )) : <span className="text-[11px] text-slate-500">{selectedPath ? 'No supported domains detected.' : 'No project selected.'}</span>}
                   </div>
                 </div>
                 <div className="rounded border border-white/8 bg-black/25 p-3">

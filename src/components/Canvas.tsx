@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   X, 
   RefreshCw, 
@@ -105,8 +105,11 @@ interface CanvasProps {
   focusNodeRequest: { nodeId: string; timestamp: number } | null;
   selectedCueIds: string[];
   setSelectedCueIds: React.Dispatch<React.SetStateAction<string[]>>;
+  selectedNodeIds: string[];
+  setSelectedNodeIds: React.Dispatch<React.SetStateAction<string[]>>;
   /** When set, only show cues from this MD script (file stem); null = all scripts. */
   activeMdScript?: string | null;
+  onActiveMdScriptChange?: (script: string | null) => void;
   packageDiagnostics?: PackageDiagnostic[];
   diagnosticSource?: DiagnosticSource;
 }
@@ -122,11 +125,19 @@ export default function Canvas({
   focusNodeRequest,
   selectedCueIds,
   setSelectedCueIds,
+  selectedNodeIds,
+  setSelectedNodeIds,
   activeMdScript = null,
+  onActiveMdScriptChange,
   packageDiagnostics = [],
   diagnosticSource = 'checking'
 }: CanvasProps) {
   const [zoom, setZoom] = useState<number>(1);
+  const mdScriptOptions = useMemo(() => [...new Set(
+    (workspace.nodes || [])
+      .map(node => String((node.properties as any)?.mdFileStem || '').trim())
+      .filter(Boolean),
+  )].sort((a, b) => a.localeCompare(b)), [workspace.nodes]);
   // Dependency-graph panel defaults CLOSED: open-by-default it floats at z-40 over the
   // canvas showing only its empty placeholder ("select a node…") while SILENTLY EATING
   // pointer events — node/port/delete clicks under its 320×380px footprint retried until
@@ -176,7 +187,6 @@ export default function Canvas({
   }, [liveMode, workspace.nodes]);
   // General multi-node selection (ANY node type) for alignment — parallel to the
   // cue-only `selectedCueIds`, so the cue-specific behaviour is untouched.
-  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
   const [panning, setPanning] = useState<{ x: number; y: number } | null>(null);
   const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -1125,6 +1135,21 @@ export default function Canvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeMdScript]);
 
+  // A project replacement keeps this Canvas component mounted, so its old camera would otherwise
+  // survive into the new mod. Large/complex imports then look empty when their nodes are outside the
+  // stale viewport. The source stamp changes only on an explicit import/re-import; ordinary node edits
+  // keep the same identity and therefore never steal the user's camera.
+  const projectIdentity = `${workspace.sourceFolder || ''}|${workspace.contentId || workspace.id || workspace.name || ''}|${workspace.sourceStamp?.at || ''}`;
+  const previousProjectIdentityRef = React.useRef(projectIdentity);
+  useEffect(() => {
+    if (previousProjectIdentityRef.current === projectIdentity) return;
+    previousProjectIdentityRef.current = projectIdentity;
+    const t = setTimeout(() => fitToNodes(nodesFilteredByCue), 0);
+    return () => clearTimeout(t);
+    // nodes are intentionally excluded: fit once for project adoption, not on each edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectIdentity]);
+
   // Trigger camera focus / fit when focusNodeRequest is updated from the Sidebar Tree
   useEffect(() => {
     if (focusNodeRequest) {
@@ -1594,6 +1619,22 @@ export default function Canvas({
           <RefreshCw className="w-3.5 h-3.5" />
           100%
         </button>
+
+        {mdScriptOptions.length > 1 && onActiveMdScriptChange && (
+          <select
+            data-testid="canvas-md-script-filter"
+            value={activeMdScript || ''}
+            onChange={(event) => onActiveMdScriptChange(event.target.value || null)}
+            title="Show the complete graph or isolate one Mission Director file"
+            aria-label="Mission Director file filter"
+            className="h-7 max-w-[190px] rounded border border-cyan-500/25 bg-[#0a0e14] px-2 text-[10px] font-mono font-bold text-cyan-200 outline-none hover:border-cyan-400/50 focus:border-cyan-400"
+          >
+            <option value="">ALL MD FILES ({mdScriptOptions.length})</option>
+            {mdScriptOptions.map(script => (
+              <option key={script} value={script}>{script}.xml</option>
+            ))}
+          </select>
+        )}
         
         <div className="h-5 w-px bg-white/10 mx-1" />
 

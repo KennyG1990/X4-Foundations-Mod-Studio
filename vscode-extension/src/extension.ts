@@ -28,6 +28,7 @@ import { xmlCursorContext } from "./langContext";
 import { findCueDefinition, findCueReferences, mdscriptNameOf, parseCueWord } from "./langNav";
 import { detectIdeCapabilities, formatIdeCapabilityReport } from "./capabilities";
 import { PanelBackendBinding, SharedBackendEnsure } from "./panelBinding";
+import { parseNativeEditorRequest, resolveExternalUrlLaunch, resolveNativeEditorFile, type NativeNodeSelectionRequest, type NativeNodeSelectionResult } from "./nativeEditorBridge";
 
 interface BackendHandle {
   baseUrl: string;
@@ -49,6 +50,130 @@ let output: vscode.OutputChannel;
 let statusItem: vscode.StatusBarItem;
 /** Set while deliberately stopping the sidecar so the exit handler stays quiet. */
 let stoppingDeliberately = false;
+
+class NativeDiffContentProvider implements vscode.TextDocumentContentProvider {
+  private readonly documents = new Map<string, string>();
+
+  create(label: string, content: string, language = "text"): vscode.Uri {
+    const extension = ({ xml: "xml", lua: "lua", json: "json", markdown: "md" } as Record<string, string>)[language] || "txt";
+    const safeLabel = label.replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "preview";
+    const uri = vscode.Uri.parse(`x4forge-preview:/${crypto.randomBytes(12).toString("hex")}/${safeLabel}.${extension}`);
+    this.documents.set(uri.toString(), content);
+    while (this.documents.size > 24) this.documents.delete(this.documents.keys().next().value as string);
+    return uri;
+  }
+
+  provideTextDocumentContent(uri: vscode.Uri): string | undefined {
+    return this.documents.get(uri.toString());
+  }
+}
+
+let nativeDiffProvider: NativeDiffContentProvider | null = null;
+
+interface NativeNodeEntry {
+  content: Uint8Array;
+  token: string;
+  nodeIds: string[];
+  title: string;
+  readOnly: boolean;
+  ctime: number;
+  mtime: number;
+}
+
+class NativeNodeFileSystemProvider implements vscode.FileSystemProvider {
+  private readonly entries = new Map<string, NativeNodeEntry>();
+  private readonly pending = new Map<string, { uri: vscode.Uri; resolve: (result: NativeNodeSelectionResult) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
+  private readonly changeEmitter = new vscode.EventEmitter<vscode.FileChangeEvent[]>();
+  readonly onDidChangeFile = this.changeEmitter.event;
+
+  create(request: NativeNodeSelectionRequest): vscode.Uri {
+    const key = crypto.createHash('sha1').update(request.nodeIds.join('\0')).digest('hex').slice(0, 12);
+    const token = request.token.replace(/[^a-z0-9_-]/gi, '').slice(0, 32) || 'selection';
+    const safeTitle = request.title.replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'selected-nodes.xml';
+    const uri = vscode.Uri.parse(`x4forge-node:/${key}/${token}/${safeTitle.endsWith('.xml') ? safeTitle : `${safeTitle}.xml`}`);
+    const now = Date.now();
+    const open = vscode.workspace.textDocuments.find(document => document.uri.toString() === uri.toString());
+    if (!open?.isDirty) {
+      const existing = this.entries.get(uri.toString());
+      this.entries.set(uri.toString(), {
+        content: Buffer.from(request.content, 'utf8'), token: request.token, nodeIds: request.nodeIds.slice(), title: request.title,
+        readOnly: request.readOnly, ctime: existing?.ctime || now, mtime: now,
+      });
+      if (existing) this.changeEmitter.fire([{ type: vscode.FileChangeType.Changed, uri }]);
+    }
+    while (this.entries.size > 40) {
+      const first = this.entries.keys().next().value as string;
+      if (vscode.workspace.textDocuments.some(document => document.uri.toString() === first && document.isDirty)) break;
+      this.entries.delete(first);
+    }
+    return uri;
+  }
+
+  metadata(uri: vscode.Uri): NativeNodeEntry | undefined { return this.entries.get(uri.toString()); }
+  watch(): vscode.Disposable { return new vscode.Disposable(() => undefined); }
+  stat(uri: vscode.Uri): vscode.FileStat {
+    const entry = this.entries.get(uri.toString());
+    if (!entry) throw vscode.FileSystemError.FileNotFound(uri);
+    return { type: vscode.FileType.File, ctime: entry.ctime, mtime: entry.mtime, size: entry.content.byteLength, permissions: entry.readOnly ? vscode.FilePermission.Readonly : undefined };
+  }
+  readDirectory(): [string, vscode.FileType][] { return []; }
+  createDirectory(): void { throw vscode.FileSystemError.NoPermissions('Node documents are virtual.'); }
+  readFile(uri: vscode.Uri): Uint8Array {
+    const entry = this.entries.get(uri.toString());
+    if (!entry) throw vscode.FileSystemError.FileNotFound(uri);
+    // VS Code/Antigravity's native Revert reloads provider bytes without reliably
+    // emitting onDidChangeTextDocument for virtual file-system documents. Clear
+    // diagnostics produced by the discarded dirty buffer, then validate the
+    // restored provider content after the editor has consumed this read.
+    const open = vscode.workspace.textDocuments.find(document => document.uri.toString() === uri.toString());
+    if (open?.isDirty && (diagCollection?.get(uri)?.length || 0) > 0) {
+      diagCollection?.delete(uri);
+      setTimeout(() => {
+        const restored = vscode.workspace.textDocuments.find(document => document.uri.toString() === uri.toString());
+        if (restored) scheduleNodeDocumentValidation(restored, 80);
+      }, 80);
+    }
+    return entry.content;
+  }
+  async writeFile(uri: vscode.Uri, content: Uint8Array): Promise<void> {
+    const entry = this.entries.get(uri.toString());
+    if (!entry) throw vscode.FileSystemError.FileNotFound(uri);
+    if (entry.readOnly) throw vscode.FileSystemError.NoPermissions('This selection contains opaque raw XML and is view-only.');
+    const activePanel = panel;
+    if (!activePanel) throw vscode.FileSystemError.Unavailable('The X4 Forge Studio panel is closed. Reopen it before saving node edits.');
+    const requestId = crypto.randomUUID();
+    const result = await new Promise<NativeNodeSelectionResult>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(requestId);
+        reject(new Error('Forge did not answer the node-save request within 30 seconds. Nothing was applied.'));
+      }, 30_000);
+      this.pending.set(requestId, { uri, resolve, reject, timer });
+      void activePanel.webview.postMessage({
+        source: 'x4forge-native-host', type: 'apply-node-selection', requestId,
+        content: Buffer.from(content).toString('utf8'), token: entry.token, nodeIds: entry.nodeIds,
+      });
+    });
+    if (!result.ok) throw vscode.FileSystemError.Unavailable(result.message);
+    entry.content = Buffer.from(result.content ?? Buffer.from(content).toString('utf8'), 'utf8');
+    entry.token = result.token || entry.token;
+    entry.mtime = Date.now();
+    this.changeEmitter.fire([{ type: vscode.FileChangeType.Changed, uri }]);
+    void vscode.window.setStatusBarMessage(`X4 Forge: ${result.message}`, 8000);
+  }
+  delete(): void { throw vscode.FileSystemError.NoPermissions('Node documents are virtual.'); }
+  rename(): void { throw vscode.FileSystemError.NoPermissions('Node documents are virtual.'); }
+
+  accept(result: NativeNodeSelectionResult): boolean {
+    const pending = this.pending.get(result.requestId);
+    if (!pending) return false;
+    clearTimeout(pending.timer);
+    this.pending.delete(result.requestId);
+    pending.resolve(result);
+    return true;
+  }
+}
+
+let nativeNodeProvider: NativeNodeFileSystemProvider | null = null;
 
 // ---------------------------------------------------------------------------
 // Small utilities
@@ -428,10 +553,13 @@ function webviewHtml(webview: vscode.Webview, forgeUrl: string, mode: string): s
   // The Forge page is served BY ITS OWN BACKEND (token pre-injected, all API calls
   // same-origin inside the frame) — the webview shell only needs to host the iframe.
   // Loopback http is a "potentially trustworthy" origin, so framing it is allowed.
+  const nonce = crypto.randomBytes(18).toString("base64");
+  const forgeOrigin = new URL(forgeUrl).origin;
   const csp = [
     "default-src 'none'",
     "frame-src http://127.0.0.1:* http://localhost:*",
     "style-src 'unsafe-inline'",
+    `script-src 'nonce-${nonce}'`,
   ].join("; ");
   return `<!DOCTYPE html>
 <html lang="en">
@@ -445,8 +573,24 @@ function webviewHtml(webview: vscode.Webview, forgeUrl: string, mode: string): s
   </style>
 </head>
 <body>
-  <iframe src="${forgeUrl}/" allow="clipboard-read; clipboard-write"></iframe>
+  <iframe id="forge-frame" src="${forgeUrl}/" allow="clipboard-read; clipboard-write"></iframe>
   <div class="badge">X4 Forge Studio — ${mode}</div>
+  <script nonce="${nonce}">
+    const vscode = acquireVsCodeApi();
+    const frame = document.getElementById('forge-frame');
+    const forgeOrigin = ${JSON.stringify(forgeOrigin)};
+    window.addEventListener('message', (event) => {
+      if (event.source !== frame.contentWindow || event.origin !== forgeOrigin) return;
+      const data = event.data;
+      if (!data || data.source !== 'x4forge-studio' || !['open-workspace-file', 'open-text-diff', 'open-node-selection', 'node-selection-result', 'open-external-url'].includes(data.type)) return;
+      vscode.postMessage(data);
+    });
+    window.addEventListener('message', (event) => {
+      const data = event.data;
+      if (!data || data.source !== 'x4forge-native-host' || data.type !== 'apply-node-selection') return;
+      frame.contentWindow.postMessage(data, forgeOrigin);
+    });
+  </script>
 </body>
 </html>`;
 }
@@ -466,15 +610,107 @@ function updateStatus(): void {
   statusItem.show();
 }
 
-function trackStudioPanel(nextPanel: vscode.WebviewPanel): void {
+function trackStudioPanel(context: vscode.ExtensionContext, nextPanel: vscode.WebviewPanel): void {
   panel = nextPanel;
   panelBinding.reset();
+  context.subscriptions.push(nextPanel.webview.onDidReceiveMessage((message) => void handleStudioMessage(context, message)));
   nextPanel.onDidDispose(() => {
     if (panel === nextPanel) {
       panel = null;
       panelBinding.reset();
     }
   });
+}
+
+async function handleStudioMessage(context: vscode.ExtensionContext, value: unknown): Promise<void> {
+  const request = parseNativeEditorRequest(value);
+  if (!request) return;
+  try {
+    if (request.type === "open-external-url") {
+      const launch = resolveExternalUrlLaunch(request.url);
+      if (!launch) throw new Error("The external page is not on Forge's allowlist.");
+      await new Promise<void>((resolve, reject) => {
+        const child = spawn(launch.executable, launch.args, { detached: true, stdio: "ignore", windowsHide: true });
+        child.once("error", reject);
+        child.once("spawn", () => {
+          child.unref();
+          resolve();
+        });
+      });
+      log(`external page opened: ${request.url}`);
+      return;
+    }
+    if (request.type === "node-selection-result") {
+      nativeNodeProvider?.accept(request);
+      return;
+    }
+    if (request.type === "open-node-selection") {
+      if (!nativeNodeProvider) throw new Error("The native node editor provider is not ready.");
+      const uri = nativeNodeProvider.create(request);
+      const document = await vscode.workspace.openTextDocument(uri);
+      await vscode.languages.setTextDocumentLanguage(document, 'xml');
+      await vscode.window.showTextDocument(document, { viewColumn: vscode.ViewColumn.Beside, preview: true, preserveFocus: true });
+      if (request.warnings.length) void vscode.window.showWarningMessage(`X4 Forge node view: ${request.warnings.join(' ')}`);
+      log(`native node selection opened: ${request.nodeIds.length} node(s) · ${request.title}${request.readOnly ? ' · read-only' : ''}`);
+      return;
+    }
+    if (request.type === "open-text-diff") {
+      if (!nativeDiffProvider) throw new Error("The native diff provider is not ready.");
+      const left = nativeDiffProvider.create(request.leftLabel, request.leftContent, request.language);
+      const right = nativeDiffProvider.create(request.rightLabel, request.rightContent, request.language);
+      await vscode.commands.executeCommand("vscode.diff", left, right, request.title, { preview: false });
+      log(`native diff opened: ${request.title}`);
+      return;
+    }
+    const handle = await ensureBackend(context);
+    if (!handle.owned || !handle.token) throw new Error("Native file opening requires the extension-managed Forge sidecar.");
+    const headers = { Authorization: `Bearer ${handle.token}` };
+    const [workspaceResponse, configResponse] = await Promise.all([
+      fetch(`${handle.baseUrl}/api/agent/workspace`, { headers }),
+      fetch(`${handle.baseUrl}/api/schema/config`, { headers }),
+    ]);
+    const workspaceData = (await workspaceResponse.json()) as { workspace?: { sourceFolder?: string } };
+    const configData = (await configResponse.json()) as { resolved?: { modWorkspacePath?: string }; config?: { modWorkspacePath?: string } };
+    if (!workspaceResponse.ok || !configResponse.ok) throw new Error("Forge could not resolve the active workspace and directory settings.");
+    const workspaceRoot = String(configData.resolved?.modWorkspacePath || configData.config?.modWorkspacePath || "").trim();
+    if (!workspaceRoot) throw new Error("No Mod Workspace folder is configured.");
+    const sourceFolder = request.sourceFolder
+      ? path.resolve(workspaceRoot, request.sourceFolder)
+      : String(workspaceData.workspace?.sourceFolder || "").trim();
+    if (!sourceFolder) throw new Error("This canvas has no source folder yet. Import or materialize it in the Mod Workspace first.");
+    const resolution = resolveNativeEditorFile(workspaceRoot, sourceFolder, request.path);
+    if ("code" in resolution) {
+      if (resolution.code === "binary_file") void vscode.window.showInformationMessage(`X4 Forge: ${resolution.message}`);
+      else throw new Error(resolution.message);
+      return;
+    }
+    const sourceRoot = fs.realpathSync(sourceFolder);
+    const alreadyMounted = (vscode.workspace.workspaceFolders || []).some((folder) => {
+      try { return fs.realpathSync(folder.uri.fsPath).toLowerCase() === sourceRoot.toLowerCase(); }
+      catch { return path.resolve(folder.uri.fsPath).toLowerCase() === sourceRoot.toLowerCase(); }
+    });
+    if (!alreadyMounted) {
+      const mounted = vscode.workspace.updateWorkspaceFolders(
+        vscode.workspace.workspaceFolders?.length || 0,
+        0,
+        { uri: vscode.Uri.file(sourceRoot), name: `X4 Mod: ${path.basename(sourceRoot)}` },
+      );
+      if (!mounted) throw new Error(`Antigravity refused to mount ${path.basename(sourceRoot)} as an IDE workspace folder.`);
+      log(`native project mounted: ${sourceRoot}`);
+    }
+    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(resolution.filePath));
+    const editor = await vscode.window.showTextDocument(document, { viewColumn: vscode.ViewColumn.Beside, preview: false, preserveFocus: false });
+    if (request.line !== undefined) {
+      const line = Math.min(request.line, Math.max(0, document.lineCount - 1));
+      const column = Math.min(request.column || 0, document.lineAt(line).text.length);
+      const position = new vscode.Position(line, column);
+      editor.selection = new vscode.Selection(position, position);
+      editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+    }
+    log(`native editor opened: ${resolution.relativePath}`);
+  } catch (error) {
+    showBackendError(`Studio request failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 function bindStudioPanel(handle: BackendHandle): boolean {
@@ -519,7 +755,7 @@ async function openStudio(context: vscode.ExtensionContext): Promise<void> {
     enableScripts: true,
     retainContextWhenHidden: true,
   });
-  trackStudioPanel(createdPanel);
+  trackStudioPanel(context, createdPanel);
   bindStudioPanel(handle);
 }
 
@@ -530,7 +766,14 @@ async function openStudio(context: vscode.ExtensionContext): Promise<void> {
 export function activate(context: vscode.ExtensionContext): void {
   output = vscode.window.createOutputChannel("X4 Forge");
   statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 50);
-  context.subscriptions.push(output, statusItem);
+  nativeDiffProvider = new NativeDiffContentProvider();
+  nativeNodeProvider = new NativeNodeFileSystemProvider();
+  context.subscriptions.push(
+    output,
+    statusItem,
+    vscode.workspace.registerTextDocumentContentProvider("x4forge-preview", nativeDiffProvider),
+    vscode.workspace.registerFileSystemProvider("x4forge-node", nativeNodeProvider, { isCaseSensitive: true, isReadonly: false }),
+  );
 
   log(`extension activated (host: ${vscode.env.appName} ${vscode.version})`);
   for (const line of formatIdeCapabilityReport(currentIdeCapabilities())) log(`capability: ${line}`);
@@ -547,7 +790,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerWebviewPanelSerializer("x4forge.studio", {
       async deserializeWebviewPanel(restoredPanel): Promise<void> {
         restoredPanel.webview.options = { enableScripts: true };
-        trackStudioPanel(restoredPanel);
+        trackStudioPanel(context, restoredPanel);
         try {
           await ensureBackend(context);
           restoredPanel.reveal(undefined, true);
@@ -845,16 +1088,20 @@ function completionKind(kind: ReferenceCompletionPayload["kind"]): vscode.Comple
 }
 
 function registerLangProviders(context: vscode.ExtensionContext): void {
-  const selector: vscode.DocumentSelector = [{ scheme: "file", pattern: "**/*.xml" }];
+  const selector: vscode.DocumentSelector = [
+    { scheme: "file", pattern: "**/*.xml" },
+    { scheme: "x4forge-node", language: "xml" },
+  ];
 
   context.subscriptions.push(
     vscode.languages.registerCompletionItemProvider(selector, {
       async provideCompletionItems(doc, pos) {
-        const root = modRootFor(doc.uri.fsPath);
-        if (!root) return undefined;
+        const nodeDocument = doc.uri.scheme === 'x4forge-node';
+        const root = nodeDocument ? null : modRootFor(doc.uri.fsPath);
+        if (!nodeDocument && !root) return undefined;
         const text = doc.getText();
         const ctx = xmlCursorContext(text, doc.offsetAt(pos));
-        const file = relModPath(root, doc.uri.fsPath);
+        const file = nodeDocument ? 'md/x4forge-node-selection.xml' : relModPath(root!, doc.uri.fsPath);
         const rootHint = ctx.rootTag || "";
 
         const modern = await referenceLanguagePost<ReferenceCompletionPayload[]>("complete", {
@@ -918,10 +1165,12 @@ function registerLangProviders(context: vscode.ExtensionContext): void {
 
     vscode.languages.registerHoverProvider(selector, {
       async provideHover(doc, pos) {
-        const root = modRootFor(doc.uri.fsPath);
-        if (!root) return undefined;
+        const nodeDocument = doc.uri.scheme === 'x4forge-node';
+        const root = nodeDocument ? null : modRootFor(doc.uri.fsPath);
+        if (!nodeDocument && !root) return undefined;
+        const file = nodeDocument ? 'md/x4forge-node-selection.xml' : relModPath(root!, doc.uri.fsPath);
         const modern = await referenceLanguagePost<ReferenceHoverPayload>("hover", {
-          path: relModPath(root, doc.uri.fsPath),
+          path: file,
           content: doc.getText(),
           line: pos.line,
           column: pos.character,
@@ -941,7 +1190,7 @@ function registerLangProviders(context: vscode.ExtensionContext): void {
         if (!before.includes("<")) return undefined; // hover element names only
         const ctx = xmlCursorContext(doc.getText(), doc.offsetAt(range.start));
         const data = await langGet<{ known: boolean; summary?: string; requiredAttrs: string[]; attrCount: number; semantics?: { description?: string; risk?: string; note?: string } }>(
-          "hover", { file: relModPath(root, doc.uri.fsPath), tag: word, root: ctx.rootTag || "" });
+          "hover", { file, tag: word, root: ctx.rootTag || "" });
         if (!data?.known) return undefined;
         const md = new vscode.MarkdownString();
         md.appendMarkdown(`**\`<${word}>\`**${data.summary ? ` — ${data.summary}` : ""}\n\n`);
@@ -1143,14 +1392,69 @@ function setRootValidationWarning(root: string, code: string, message: string): 
 }
 
 function isAuthoringDocument(doc: vscode.TextDocument): boolean {
-  return doc.uri.scheme === "file" && /\.(xml|lua)$/i.test(doc.uri.fsPath);
+  return (doc.uri.scheme === "file" && /\.(xml|lua)$/i.test(doc.uri.fsPath))
+    || (doc.uri.scheme === 'x4forge-node' && doc.languageId === 'xml');
 }
 
 function scheduleLiveValidation(context: vscode.ExtensionContext, doc: vscode.TextDocument, delayMs: number): void {
   if (!isAuthoringDocument(doc)) return;
+  if (doc.uri.scheme === 'x4forge-node') {
+    scheduleNodeDocumentValidation(doc, delayMs);
+    return;
+  }
   const root = modRootFor(doc.uri.fsPath);
   if (!root) return;
   scheduleLiveRootValidation(context, root, delayMs);
+}
+
+function scheduleNodeDocumentValidation(doc: vscode.TextDocument, delayMs: number): void {
+  const key = `node:${doc.uri.toString()}`;
+  const prior = liveTimers.get(key);
+  if (prior) clearTimeout(prior);
+  const generation = (liveGenerations.get(key) || 0) + 1;
+  liveGenerations.set(key, generation);
+  liveTimers.set(key, setTimeout(() => {
+    liveTimers.delete(key);
+    void validateNodeDocument(doc, key, generation);
+  }, delayMs));
+}
+
+async function validateNodeDocument(doc: vscode.TextDocument, key: string, generation: number): Promise<void> {
+  try {
+    if (!backend?.owned || !backend.token) return;
+    const pathName = 'md/x4forge-node-selection.xml';
+    const response = await fetch(`${backend.baseUrl}/api/agent/project/validate`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${backend.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project: { id: 'x4forge_node_selection', name: 'X4 Forge node selection', files: [
+        { path: 'content.xml', content: '<content id="x4forge_node_selection" name="X4 Forge node selection" version="1" />' },
+        { path: pathName, content: doc.getText() },
+      ] } }),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json() as { flat?: FlatFinding[] };
+    if (liveGenerations.get(key) !== generation) return;
+    const relevant = (data.flat || []).filter(finding => {
+      const code = String(finding.code || '').toLowerCase();
+      const message = String(finding.message || '').toLowerCase();
+      if (/manifest|package|doctor|readiness/.test(code) || /no mission cue|no executable entry point/.test(message)) return false;
+      return !finding.filePath || finding.filePath.replace(/\\/g, '/').toLowerCase() === pathName;
+    });
+    const mapped = mapFlatFindings(relevant, [pathName]);
+    const list = mapped.byFile.get(pathName) || [];
+    diagCollection?.set(doc.uri, list.map(item => {
+      const line = Math.min(item.line, Math.max(0, doc.lineCount - 1));
+      const diagnostic = new vscode.Diagnostic(new vscode.Range(line, 0, line, doc.lineAt(line).text.length), item.message, DIAG_SEVERITY[item.severity]);
+      diagnostic.source = 'x4forge';
+      if (item.code) diagnostic.code = item.code;
+      return diagnostic;
+    }));
+  } catch (error) {
+    if (liveGenerations.get(key) !== generation) return;
+    const diagnostic = new vscode.Diagnostic(new vscode.Range(0, 0, 0, 0), `X4 Forge could not validate this node document: ${error instanceof Error ? error.message : String(error)}`, vscode.DiagnosticSeverity.Warning);
+    diagnostic.source = 'x4forge';
+    diagCollection?.set(doc.uri, [diagnostic]);
+  }
 }
 
 function scheduleLiveRootValidation(context: vscode.ExtensionContext, root: string, delayMs = 650): void {
@@ -1275,10 +1579,11 @@ async function generateProof(context: vscode.ExtensionContext): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// B57s5 — two-way adopt (DEFAULT-OFF: x4forge.twoWayEditing). IDE file edits can be
+// B57s5 — two-way adopt (default-on: x4forge.twoWayEditing). IDE file edits can be
 // ADOPTED into the canvas via the server's guarded importer — never silently: every
 // adoption is an explicit user action; refusals surface their reason; adopt/refuse
-// counters accumulate the telemetry that gates any future default-on decision.
+// counters retain adoption/refusal observability; guarded import and conflict checks
+// remain authoritative even though the extension now enables this path by default.
 // ---------------------------------------------------------------------------
 
 let adoptWatcher: vscode.FileSystemWatcher | null = null;
@@ -1294,7 +1599,7 @@ function telemetryBump(context: vscode.ExtensionContext, key: "adoptCount" | "de
 function registerTwoWayEditing(context: vscode.ExtensionContext): void {
   const enabled = vscode.workspace.getConfiguration("x4forge").get<boolean>("twoWayEditing") === true;
   if (!enabled || adoptWatcher) return;
-  adoptWatcher = vscode.workspace.createFileSystemWatcher("**/{md,libraries,t,ui}/**/*.xml");
+  adoptWatcher = vscode.workspace.createFileSystemWatcher("**/*.{xml,lua,json,md,txt}");
   context.subscriptions.push(
     adoptWatcher,
     adoptWatcher.onDidChange((uri) => void offerAdopt(context, uri)),

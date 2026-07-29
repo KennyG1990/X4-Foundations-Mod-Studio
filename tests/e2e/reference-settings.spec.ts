@@ -83,6 +83,44 @@ test('Directory Settings presents one corpus root, measured coverage, and the cr
   expect(detectionRequests).toBe(0);
 });
 
+test('Directory Settings routes both external links through the installed-host bridge on one click', async ({ page }) => {
+  await page.route('**/api/schema/config', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      loaded: true,
+      config: { x4ReferenceRoot: unpackedRoot, xsdSchemaPath: '', x4GamePath: '', modWorkspacePath: 'D:\\X4ForgeMods', filesystemPath: '' },
+      resolved: { x4ReferenceRoot: unpackedRoot, x4ReferenceExists: true, mdExists: true, commonExists: true },
+      directorySafety: { safe: true, issues: [] },
+    }),
+  }));
+  await page.route('**/api/reference/coverage', route => route.fulfill({
+    status: 202,
+    contentType: 'application/json',
+    body: JSON.stringify({ status: { state: 'scanning' } }),
+  }));
+
+  await page.goto('/');
+  const appUrl = page.url();
+  await page.setContent(`
+    <script>
+      window.forgeMessages = [];
+      window.addEventListener('message', event => window.forgeMessages.push(event.data));
+    </script>
+    <iframe title="Forge extension frame" src="${appUrl}"></iframe>
+  `);
+  const forge = page.frameLocator('iframe[title="Forge extension frame"]');
+  await forge.getByTitle('Manage all folders the studio uses (Mod Workspace, X4 game path, schema)').click();
+
+  await forge.getByRole('link', { name: /Find X4 Unpacker/ }).click();
+  await forge.getByRole('link', { name: /Open Discord/ }).click();
+
+  await expect.poll(() => page.evaluate(() => (window as Window & { forgeMessages?: unknown[] }).forgeMessages || [])).toEqual([
+    { source: 'x4forge-studio', type: 'open-external-url', url: 'https://www.nexusmods.com/x4foundations/mods/2142?tab=description' },
+    { source: 'x4forge-studio', type: 'open-external-url', url: 'https://discord.gg/9qvAvtXqWP' },
+  ]);
+});
+
 test('Directory Settings auto-detects distinct development and deployed filesystem roles', async ({ page }) => {
   const game = 'G:\\SteamLibrary\\steamapps\\common\\X4 Foundations';
   const live = `${game}\\extensions`;
