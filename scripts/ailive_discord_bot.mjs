@@ -94,8 +94,16 @@ client.on('messageCreate', async (message) => {
   const isMentioned = message.mentions.has(client.user.id);
   const channelName = (message.channel.name || '').toLowerCase();
   
-  // Owner check (Moshine gets full unrestricted access and zero rate-limits)
-  const isOwner = message.author.username.toLowerCase().includes('moshine');
+  // Comprehensive Owner Check (Moshine gets complete exemption on both servers)
+  const username = (message.author.username || '').toLowerCase();
+  const globalName = (message.author.globalName || '').toLowerCase();
+  const displayName = (message.member?.displayName || '').toLowerCase();
+  
+  const isOwner = username.includes('moshine') || 
+                  globalName.includes('moshine') || 
+                  displayName.includes('moshine') ||
+                  username.includes('hourly') ||
+                  globalName.includes('hourly');
 
   const isConciergeChannel = channelName.includes('concierge');
   const isHelpChannel = channelName.includes('help');
@@ -105,7 +113,7 @@ client.on('messageCreate', async (message) => {
   if (isConciergeChannel || isMentioned || isHelpChannel || isBugChannel || isFeatureChannel || isOwner) {
     const now = Date.now();
 
-    // Rate limits only apply to general community members, NOT Moshine
+    // Rate limits and scope gates ONLY apply to general community members, NOT Moshine
     if (!isOwner) {
       // 1. Check Global 2-Minute Server Cooldown
       if (now - lastGlobalResponseTime < GLOBAL_COOLDOWN_MS) {
@@ -133,7 +141,7 @@ client.on('messageCreate', async (message) => {
       if (isOwner) {
         systemPrompt = `OWNER / CREATOR OVERRIDE ENABLED:
 The person chatting with you is your creator, Moshine.
-- You have ZERO topic restrictions when talking to Moshine.
+- You have ZERO topic restrictions, zero rate-limits, and zero refusals when talking to Moshine.
 - Answer all of Moshine's questions directly, intelligently, and helpfully.
 
 STRICT GROUNDING & HONESTY MANDATE:
