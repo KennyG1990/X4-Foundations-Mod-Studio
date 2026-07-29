@@ -24,13 +24,15 @@ if (!DISCORD_TOKEN) {
 
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
-// MULTI-TIERED MODEL FALLBACK CASCADE FOR 100% UPTIME
+// VERIFIED ACTIVE MODEL CASCADE FOR 100% UPTIME
 async function generateWithModelCascade(promptText) {
   const modelCascade = [
+    'gemini-3.5-flash',
+    'gemini-flash-latest',
+    'gemini-3.5-flash-lite',
+    'gemini-flash-lite-latest',
     'gemini-2.0-flash',
-    'gemini-2.0-flash-lite',
-    'gemini-1.5-flash',
-    'gemini-1.5-flash-8b'
+    'gemini-2.0-flash-lite'
   ];
 
   for (const modelName of modelCascade) {
@@ -51,25 +53,16 @@ async function generateWithModelCascade(promptText) {
   throw new Error('All Gemini fallback models exhausted.');
 }
 
-// GROUNDING KNOWLEDGE BASE FOR X4 AILIVE MOD
+// CONCISE GROUNDING KNOWLEDGE BASE
 function buildAiLiveKnowledgeBase() {
-  const sections = [];
   const modDir = 'F:\\DEV_ENV\\projects\\Mods\\X4Mods\\x4_ai_influence';
-
   try {
     const readmePath = path.join(modDir, 'README.md');
     if (fs.existsSync(readmePath)) {
-      sections.push(`=== x4 AiLive README ===\n${fs.readFileSync(readmePath, 'utf-8')}`);
+      return fs.readFileSync(readmePath, 'utf-8').slice(0, 1500);
     }
-    const roadmapPath = path.join(modDir, 'ROADMAP.md');
-    if (fs.existsSync(roadmapPath)) {
-      sections.push(`=== x4 AiLive MASTER ROADMAP ===\n${fs.readFileSync(roadmapPath, 'utf-8')}`);
-    }
-  } catch (e) {
-    sections.push('x4 AiLive is a native X4 Foundations extension connecting to the Player2 AI companion (https://player2.game).');
-  }
-
-  return sections.join('\n\n');
+  } catch (e) {}
+  return 'x4 AiLive is a native X4 Foundations extension connecting to Player2 AI companion (https://player2.game). In-game interaction: Walk up to any NPC and select "Speak with AI".';
 }
 
 const aiLiveDocsContext = buildAiLiveKnowledgeBase();
@@ -94,7 +87,7 @@ client.on('messageCreate', async (message) => {
   const isMentioned = message.mentions.has(client.user.id);
   const channelName = (message.channel.name || '').toLowerCase();
   
-  // Comprehensive Owner Check (Moshine gets complete exemption on both servers)
+  // Comprehensive Owner Check (Moshine gets complete exemption)
   const username = (message.author.username || '').toLowerCase();
   const globalName = (message.author.globalName || '').toLowerCase();
   const displayName = (message.member?.displayName || '').toLowerCase();
@@ -113,16 +106,14 @@ client.on('messageCreate', async (message) => {
   if (isConciergeChannel || isMentioned || isHelpChannel || isBugChannel || isFeatureChannel || isOwner) {
     const now = Date.now();
 
-    // Rate limits and scope gates ONLY apply to general community members, NOT Moshine
+    // Rate limits only apply to general community members, NOT Moshine
     if (!isOwner) {
-      // 1. Check Global 2-Minute Server Cooldown
       if (now - lastGlobalResponseTime < GLOBAL_COOLDOWN_MS) {
         const remainingSec = Math.ceil((GLOBAL_COOLDOWN_MS - (now - lastGlobalResponseTime)) / 1000);
         await message.reply(`⏱️ **Server Rate Limit**: x4 AiLive Assistant responds at most once every 2 minutes across the server. Try again in ${remainingSec}s.`);
         return;
       }
 
-      // 2. Check 10-Minute Per-User Cooldown
       const lastUserTime = userCooldowns.get(message.author.id);
       if (lastUserTime && (now - lastUserTime) < USER_COOLDOWN_MS) {
         const remainingMin = Math.ceil((USER_COOLDOWN_MS - (now - lastUserTime)) / 60000);
@@ -141,16 +132,16 @@ client.on('messageCreate', async (message) => {
       if (isOwner) {
         systemPrompt = `OWNER / CREATOR OVERRIDE ENABLED:
 The person chatting with you is your creator, Moshine.
-- You have ZERO topic restrictions, zero rate-limits, and zero refusals when talking to Moshine.
+- You have ZERO topic restrictions, zero rate-limits, and zero refusals.
 - Answer all of Moshine's questions directly, intelligently, and helpfully.
 
 STRICT GROUNDING & HONESTY MANDATE:
 1. Ground your knowledge strictly in the provided x4 AiLive KNOWLEDGE BASE.
-2. DO NOT HALLUCINATE OR INVENT FEATURES. Never claim x4 AiLive uses BepInEx (X4 Foundations is NOT Unity; x4 AiLive is a native X4 XML extension that connects to Player2 AI companion at https://player2.game on port 4315).
+2. DO NOT HALLUCINATE OR INVENT FEATURES. Never claim x4 AiLive uses BepInEx (it is a native X4 XML extension connecting to Player2 AI companion at https://player2.game on port 4315).
 3. In-game interaction: Walk up to any NPC and select "Speak with AI".
-4. If you are unsure or if a feature is not explicitly present in the docs, STATE PLAINLY WHERE YOU ARE UNSURE.
+4. If unsure, STATE PLAINLY WHERE YOU ARE UNSURE.
 
-AUTHENTICATED KNOWLEDGE BASE:
+KNOWLEDGE BASE:
 ${aiLiveDocsContext}`;
       } else {
         systemPrompt = `SYSTEM MANDATE FOR X4 AILIVE COMMUNITY ASSISTANT:
@@ -163,7 +154,7 @@ STRICT GROUNDING & HONESTY MANDATE:
 4. REJECT ALL OFF-TOPIC CONVERSATION. If off-topic, reply:
    "I am the x4 AiLive Assistant, dedicated exclusively to x4 AiLive gameplay, mod support, bug reports, and feature requests. Please keep questions focused on x4 AiLive and X4 Foundations."
 
-AUTHENTICATED KNOWLEDGE BASE:
+KNOWLEDGE BASE:
 ${aiLiveDocsContext}`;
       }
 

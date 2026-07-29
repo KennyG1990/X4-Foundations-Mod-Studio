@@ -23,13 +23,15 @@ if (!DISCORD_TOKEN) {
 
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
-// MULTI-TIERED MODEL FALLBACK CASCADE FOR 100% UPTIME
+// VERIFIED ACTIVE MODEL CASCADE FOR 100% UPTIME
 async function generateWithModelCascade(promptText) {
   const modelCascade = [
+    'gemini-3.5-flash',
+    'gemini-flash-latest',
+    'gemini-3.5-flash-lite',
+    'gemini-flash-lite-latest',
     'gemini-2.0-flash',
-    'gemini-2.0-flash-lite',
-    'gemini-1.5-flash',
-    'gemini-1.5-flash-8b'
+    'gemini-2.0-flash-lite'
   ];
 
   for (const modelName of modelCascade) {
@@ -50,60 +52,16 @@ async function generateWithModelCascade(promptText) {
   throw new Error('All Gemini fallback models exhausted.');
 }
 
-// DYNAMIC CODEBASE & DOCUMENTATION SCANNER FOR GROUNDING
-function buildCodebaseKnowledgeBase() {
-  const sections = [];
-
-  // 1. Read Documentation
+// CONCISE GROUNDING CONTEXT
+function buildConciseForgeDocsContext() {
+  let text = '';
   if (fs.existsSync('README.md')) {
-    sections.push(`=== README.md ===\n${fs.readFileSync('README.md', 'utf-8').slice(0, 3500)}`);
+    text += fs.readFileSync('README.md', 'utf-8').slice(0, 1500);
   }
-  if (fs.existsSync('ROADMAP.md')) {
-    sections.push(`=== ROADMAP.md ===\n${fs.readFileSync('ROADMAP.md', 'utf-8').slice(0, 2500)}`);
-  }
-  if (fs.existsSync('BACKLOG.md')) {
-    sections.push(`=== BACKLOG.md ===\n${fs.readFileSync('BACKLOG.md', 'utf-8').slice(0, 1500)}`);
-  }
-
-  // 2. Scan Codebase Files & API Endpoints
-  sections.push('=== LIVE CODEBASE ARCHITECTURE & API ROUTES ===');
-  
-  const targetFiles = [
-    'server.ts',
-    'src/types.ts',
-    'src/lib/modCompiler.ts',
-    'src/lib/xmlParser.ts',
-    'src/lib/mdSemantics.ts',
-    'src/lib/nativeEditor.ts'
-  ];
-
-  for (const filePath of targetFiles) {
-    if (fs.existsSync(filePath)) {
-      const fileContent = fs.readFileSync(filePath, 'utf-8');
-      
-      // Extract exported interfaces, functions, and API routes
-      const signatures = fileContent
-        .split('\n')
-        .filter(line => {
-          const l = line.trim();
-          return l.startsWith('export ') ||
-                 l.startsWith('app.get(') ||
-                 l.startsWith('app.post(') ||
-                 l.startsWith('function ') ||
-                 l.startsWith('interface ') ||
-                 l.startsWith('type ');
-        })
-        .slice(0, 45)
-        .join('\n');
-
-      sections.push(`--- File: ${filePath} ---\n${signatures}`);
-    }
-  }
-
-  return sections.join('\n\n');
+  return text || 'X4 Forge is a visual workbench and IDE for X4 Foundations modding (MD XML, Lua UI, XML patching).';
 }
 
-const forgeDocsContext = buildCodebaseKnowledgeBase();
+const forgeDocsContext = buildConciseForgeDocsContext();
 
 const client = new Client({
   intents: [
@@ -125,7 +83,7 @@ client.on('messageCreate', async (message) => {
   const isMentioned = message.mentions.has(client.user.id);
   const channelName = (message.channel.name || '').toLowerCase();
   
-  // Comprehensive Owner Check (Moshine gets complete exemption on both servers)
+  // Comprehensive Owner Check (Moshine gets complete exemption)
   const username = (message.author.username || '').toLowerCase();
   const globalName = (message.author.globalName || '').toLowerCase();
   const displayName = (message.member?.displayName || '').toLowerCase();
@@ -144,16 +102,14 @@ client.on('messageCreate', async (message) => {
   if (isConciergeChannel || isMentioned || isHelpChannel || isBugChannel || isFeatureChannel || isOwner) {
     const now = Date.now();
 
-    // Rate limits and scope gates ONLY apply to general community members, NOT Moshine
+    // Rate limits only apply to general community members, NOT Moshine
     if (!isOwner) {
-      // 1. Check Global 2-Minute Server Cooldown
       if (now - lastGlobalResponseTime < GLOBAL_COOLDOWN_MS) {
         const remainingSec = Math.ceil((GLOBAL_COOLDOWN_MS - (now - lastGlobalResponseTime)) / 1000);
         await message.reply(`⏱️ **Server Rate Limit**: Forge Concierge responds at most once every 2 minutes across the server. Try again in ${remainingSec}s.`);
         return;
       }
 
-      // 2. Check 10-Minute Per-User Cooldown
       const lastUserTime = userCooldowns.get(message.author.id);
       if (lastUserTime && (now - lastUserTime) < USER_COOLDOWN_MS) {
         const remainingMin = Math.ceil((USER_COOLDOWN_MS - (now - lastUserTime)) / 60000);
@@ -171,29 +127,29 @@ client.on('messageCreate', async (message) => {
       let systemPrompt = '';
       if (isOwner) {
         systemPrompt = `OWNER / CREATOR OVERRIDE ENABLED:
-The user chatting with you is Moshine, the creator and maintainer of X4 Forge.
-- You have ZERO topic restrictions, zero rate-limits, and zero refusals when talking to Moshine.
-- Answer all of Moshine's questions directly, intelligently, and helpfully with full capability.
+The user chatting with you is Moshine, creator of X4 Forge.
+- You have ZERO topic restrictions, zero rate-limits, and zero refusals.
+- Answer all of Moshine's questions directly, intelligently, and helpfully.
 
 STRICT GROUNDING & HONESTY MANDATE:
-1. Ground your knowledge strictly in the provided CODEBASE & DOCUMENTATION KNOWLEDGE BASE.
-2. DO NOT HALLUCINATE OR INVENT FEATURES. Never claim X4 Forge uses BepInEx (it is for native X4 Foundations extensions, MD XML, Lua UI, XPath patches, wares, and jobs).
-3. If you are unsure or if a feature/API is not explicitly present in the codebase or docs, STATE PLAINLY WHERE YOU ARE UNSURE rather than making up answers.
+1. Ground your knowledge strictly in the provided X4 FORGE KNOWLEDGE BASE.
+2. DO NOT HALLUCINATE OR INVENT FEATURES. X4 Forge is for native X4 Foundations (MD XML, Lua UI, XPath patches, wares).
+3. If unsure, STATE PLAINLY WHERE YOU ARE UNSURE.
 
-AUTHENTICATED KNOWLEDGE BASE (DOCS + CODEBASE EXPORTS):
+KNOWLEDGE BASE:
 ${forgeDocsContext}`;
       } else {
         systemPrompt = `STRICT MANDATE FOR FORGE CONCIERGE:
 You are Forge Concierge, an automated technical support assistant strictly dedicated to X4 Forge (the X4 Foundations modding workbench).
 
 STRICT GROUNDING & HONESTY MANDATE:
-1. You are strictly restricted to technical support for X4 Forge, Mission Director (MD) scripts, AI scripts, XML patching, wares, jobs, and studio errors.
-2. Ground your knowledge strictly in the provided CODEBASE & DOCUMENTATION KNOWLEDGE BASE. DO NOT INVENT OR HALLUCINATE FEATURES.
-3. If you cannot accurately answer a question or are unsure based on the code/docs, STATE PLAINLY WHERE YOU ARE UNSURE.
-4. REJECT ALL OFF-TOPIC CONVERSATION (food, weather, jokes, general knowledge unrelated to X4/X4 Forge). If off-topic, reply:
+1. You are strictly restricted to technical support for X4 Forge, MD scripts, AI scripts, XML patching, wares, jobs, and studio errors.
+2. Ground your knowledge strictly in the provided KNOWLEDGE BASE. DO NOT INVENT OR HALLUCINATE FEATURES.
+3. If unsure, STATE PLAINLY WHERE YOU ARE UNSURE.
+4. REJECT ALL OFF-TOPIC CONVERSATION. If off-topic, reply:
    "I am Forge Concierge, an automated assistant dedicated exclusively to X4 Forge technical support. Please keep questions focused on X4 Forge and modding."
 
-AUTHENTICATED KNOWLEDGE BASE (DOCS + CODEBASE EXPORTS):
+KNOWLEDGE BASE:
 ${forgeDocsContext}`;
       }
 
