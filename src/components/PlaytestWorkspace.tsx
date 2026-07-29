@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import type { ModWorkspace } from '../types';
 import { 
   Folder, 
   Terminal, 
@@ -110,12 +111,11 @@ const GAME_LOG_STATUS_LABELS: Record<GameLogStatus['status'], string> = {
 };
 
 interface PlaytestWorkspaceProps {
+  workspace: ModWorkspace;
   activeModId: string;
   modWorkspacePath: string;
   syncStatus: 'idle' | 'syncing' | 'success' | 'error';
   syncErrorMsg: string;
-  autoSaveEnabled: boolean;
-  setAutoSaveEnabled: (value: boolean) => void;
   saveToDirectory: (showFeedback: boolean) => Promise<void>;
   logInput: string;
   setLogInput: (text: string) => void;
@@ -130,12 +130,11 @@ interface PlaytestWorkspaceProps {
 }
 
 export default function PlaytestWorkspace({
+  workspace,
   activeModId,
   modWorkspacePath,
   syncStatus,
   syncErrorMsg,
-  autoSaveEnabled,
-  setAutoSaveEnabled,
   saveToDirectory,
   logInput,
   setLogInput,
@@ -209,7 +208,7 @@ export default function PlaytestWorkspace({
       const r = await fetch('/api/agent/deploy-verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(verifyPath.trim() ? { path: verifyPath.trim() } : {}),
+        body: JSON.stringify(verifyPath.trim() ? { path: verifyPath.trim() } : { workspace }),
       });
       setVerifyResult(await r.json());
     } catch (e: any) {
@@ -329,17 +328,7 @@ export default function PlaytestWorkspace({
               <span className="truncate" title="Direct location handle connection">📍 Staging Workspace: {modWorkspacePath}</span>
             </div>
             
-            <div className="flex items-center justify-between gap-4">
-              <label className="flex items-center gap-2 text-[10.5px] text-slate-300 cursor-pointer select-none">
-                <input 
-                  type="checkbox" 
-                  checked={autoSaveEnabled} 
-                  onChange={(e) => setAutoSaveEnabled(e.target.checked)}
-                  className="rounded accent-emerald-500 text-black border-white/20 cursor-pointer"
-                />
-                <span>Auto-sync on changes</span>
-              </label>
-
+            <div className="flex items-center justify-end gap-4">
               <button
                 onClick={() => saveToDirectory(true)}
                 disabled={syncStatus === 'syncing'}

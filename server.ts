@@ -118,6 +118,9 @@ import { aiKeyStatus, getStoredAiKey, setStoredAiKey } from "./src/server/aiKeyS
 import { runModDriftSelftest } from "./src/lib/modDrift";
 import { assessLuaStaleness, injectLuaVersionMarker, runLuaStalenessSelftest } from "./src/lib/luaStalenessCheck";
 import { registerGithubRoutes } from "./src/server/githubRoutes";
+import { runGithubCredentialStoreSelftest } from "./src/server/githubCredentialStore";
+import { runLocalWorkspaceCacheSelftest } from "./src/lib/localWorkspaceCache";
+import { runXmlInputLimitsSelftest } from "./src/lib/xmlInputLimits";
 import { registerGameDetectRoutes } from "./src/server/gameDetectRoutes";
 import { runGameDetectSelftest } from "./src/lib/gameDetect";
 import { runTtfmSelftest } from "./src/lib/ttfm";
@@ -161,7 +164,7 @@ import { runWaresContentLintSelftest, learnWaresVocabulary, type WaresVocabulary
 import { runTFileLintSelftest, buildModTextIndex, lintTextReferences } from "./src/lib/tFileLint";
 import { runFactionsLintSelftest, lintFactionRelations } from "./src/lib/factionsLint";
 import { runGodLintSelftest, lintGodMacros } from "./src/lib/godLint";
-import { atomicWriteJson, readActiveState, writeActiveState, parkState, listParked, readParked, runWorkspaceStateSelftest } from "./src/lib/workspaceState";
+import { atomicWriteFile, atomicWriteJson, readActiveState, writeActiveState, parkState, listParked, readParked, runWorkspaceStateSelftest } from "./src/lib/workspaceState";
 import { normalizeStudioLayoutPreferences, type StudioLayoutPreferences } from "./src/lib/studioLayout";
 import { createAgentProject, createProjectFile, generateAgentProject, packageAgentProject, runProjectOrchestrationSelftest } from "./src/lib/projectOrchestration";
 import { runProjectCrossFileSelftest, validateProjectCrossFile } from "./src/lib/projectCrossFileValidation";
@@ -3971,39 +3974,38 @@ function validateIncomingBytes(relativePath: string, content: string): {
   return { ran, ok: !findings.some(f => f.severity === 'error'), findings };
 }
 
-function writeWorkspaceFileGuarded(res: express.Response, relativePath: string, content: any): boolean {
+function writeWorkspaceFileGuarded(
+  res: express.Response,
+  relativePath: string,
+  content: any,
+): ReturnType<typeof describeWrittenBytes> | null {
   if (!relativePath) {
     res.status(400).json({ error: "Missing path parameter." });
-    return false;
+    return null;
   }
   const resolved = resolveXsdConfig();
   const rootPath = resolved.modWorkspacePath;
   if (!rootPath) {
     res.status(400).json({ error: "No Mod Workspace Folder configured." });
-    return false;
+    return null;
   }
-  if (rejectUnsafeDevelopmentWrite(res, resolved, ['modWorkspacePath'])) return false;
+  if (rejectUnsafeDevelopmentWrite(res, resolved, ['modWorkspacePath'])) return null;
 
   const safePath = path.resolve(rootPath, relativePath);
   if (!isPathWithin(safePath, rootPath)) {
     res.status(403).json({ error: "Forbidden: Directory traversal detected." });
-    return false;
+    return null;
   }
 
   const dir = path.dirname(safePath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(safePath, content, 'utf8');
-  // B93.7: stash the readback so the route can report exactly what landed.
-  lastWriteReceipt = describeWrittenBytes(String(content ?? ''), safePath);
-  return true;
+  const bytes = typeof content === 'string' || Buffer.isBuffer(content) ? content : String(content ?? '');
+  atomicWriteFile(safePath, bytes);
+  return describeWrittenBytes(String(content ?? ''), safePath);
 }
-
-/** Receipt for the most recent guarded write, consumed by the route that triggered it. */
-let lastWriteReceipt: ReturnType<typeof describeWrittenBytes> | null = null;
 
 app.post("/api/fs/write", (req, res) => {
   try {
-    lastWriteReceipt = null;
     const targetPath = String(req.body?.path || '').trim();
     const incoming = req.body?.content ?? '';
     // B100: optional compare-and-swap precondition for native-editor materialization.
@@ -4042,8 +4044,9 @@ app.post("/api/fs/write", (req, res) => {
         validation,
       });
     }
-    if (!writeWorkspaceFileGuarded(res, targetPath, incoming)) return;
-    return res.json({ success: true, written: lastWriteReceipt, validation });
+    const written = writeWorkspaceFileGuarded(res, targetPath, incoming);
+    if (!written) return;
+    return res.json({ success: true, written, validation });
   } catch (error) {
     return res.status(500).json({ error: error.message || "Failed to write file." });
   }
@@ -6962,6 +6965,9 @@ app.get("/api/agent/galaxy-map", (_req, res) => {
 const SELFTESTS: Record<string, () => unknown> = {
   "agent-history-selftest": runAgentHistorySelftest,
   "instance-discovery-selftest": runInstanceDiscoverySelftest,
+  "github-credential-store-selftest": runGithubCredentialStoreSelftest,
+  "local-workspace-cache-selftest": runLocalWorkspaceCacheSelftest,
+  "xml-input-limits-selftest": runXmlInputLimitsSelftest,
   "agent-keys-selftest": runAgentKeysSelftest,
   "schema-discovery-selftest": runSchemaDiscoverySelftest,
   "schema-registry-selftest": runSchemaRegistrySelftest,
@@ -8170,9 +8176,15 @@ app.get("/api/agent/reference-selftest", (req, res) => {
     });
     const { modId, files } = buildWorkspaceFileManifest(badWs);
     const md = files[`md/${modId}.xml`] || '';
-    // Schema-driven validation with real reference sets (macroname type -> macro index).
+    // This is a deterministic validator oracle, not a canonical-corpus integration test.
+    // Keep its known-good universe explicit so an unconfigured external corpus cannot turn
+    // the deliberately bad literals into false negatives. Real corpus loading has its own
+    // reference-corpus selftest and integration gate.
     const index = getSchemaIndex();
-    const references = getReferenceSets();
+    const references = {
+      macros: new Set(['ship_arg_l_destroyer_01_a_macro']),
+      factions: new Set(['faction.argon']),
+    };
     const diags = validateXmlAgainstSchema(md, index, { domain: 'mission_director', reportUnknownElements: true, references });
     // Also validate a raw bare-number duration to confirm the time-format net.
     const timeDiags = validateXmlAgainstSchema('<show_help custom="x" duration="8"/>', index, { references });
@@ -9240,7 +9252,14 @@ function runCompileArtifactSelftest() {
  * Compiles and deploys the workspace directly into the configured X4 Extensions directory.
  */
 app.post("/api/agent/deploy", (req, res) => {
-  const ws = sanitizeWorkspace(req.body.workspace || activeWorkspace);
+  if (!req.body?.workspace || typeof req.body.workspace !== 'object') {
+    return res.status(400).json({
+      success: false,
+      code: 'DEPLOY_TARGET_REQUIRED',
+      error: 'Deploy requires an explicit workspace object. The global active workspace is never an implicit deployment target.',
+    });
+  }
+  const ws = sanitizeWorkspace(req.body.workspace);
   try {
     // STALE-SOURCE GATE (P0 2026-07-09) — same protection as deploy-verify: never let an
     // out-of-date workspace overwrite a source folder that changed after it was imported.
@@ -9288,6 +9307,28 @@ app.post("/api/agent/deploy", (req, res) => {
           malformed,
         });
       }
+    }
+
+    // FB-13: compatibility does not mean weaker authority. Keep this live route and its
+    // response/deprecation contract, but refuse the same full-project errors as deploy-verify
+    // before staging or game bytes move.
+    const legacyValidation = buildDeployProjectValidation(ws);
+    if (!legacyValidation.preflight.ok) {
+      const summary = legacyValidation.preflight.summary;
+      return res.status(422).json({
+        success: false,
+        stage: 'preflight',
+        code: 'DEPLOY_VALIDATION_FAILED',
+        error: `Deploy blocked by full project validation: ${summary.schemaErrors} schema, ${summary.unresolvedCueRefs} cue, ${summary.crossFileErrors} cross-file, ${summary.aiscriptErrors} aiscript error(s).`,
+        validation: {
+          scope: 'full-project',
+          summary,
+          findings: [
+            ...legacyValidation.preflight.schema.findings,
+            ...legacyValidation.preflight.crossFile.findings,
+          ].slice(0, 20),
+        },
+      });
     }
 
     let stagingPath = '';
@@ -9362,6 +9403,30 @@ app.post("/api/agent/deploy", (req, res) => {
   }
 });
 
+function buildDeployProjectValidation(ws: any, emitted?: ReturnType<typeof buildWorkspaceFileManifest>) {
+  const manifest = emitted || buildWorkspaceFileManifest(ws);
+  const validationFiles = new Map<string, { path: string; kind: ReturnType<typeof classifyPath>; content: string }>(
+    Object.entries(manifest.files).map(([p, c]) => [p.toLowerCase(), { path: p, kind: classifyPath(p), content: String(c) }]),
+  );
+  const sourceStamp = (ws as any)?.sourceStamp as { dir?: string } | undefined;
+  const diskValidationSkipped: Array<{ path: string; reason: string }> = [];
+  if (sourceStamp?.dir && fs.existsSync(sourceStamp.dir)) {
+    const diskLoad = loadProjectFromDisk(sourceStamp.dir, manifest.modId);
+    diskValidationSkipped.push(...diskLoad.skipped);
+    for (const file of diskLoad.project.files) {
+      const key = file.path.toLowerCase();
+      if (!validationFiles.has(key)) validationFiles.set(key, { path: file.path, kind: file.kind, content: file.content });
+    }
+  }
+  const references = (() => { try { return getReferenceSets(); } catch { return undefined; } })();
+  const preflight = runProjectValidation({
+    id: manifest.modId,
+    name: manifest.modId,
+    files: [...validationFiles.values()],
+  } as any, { references, jobsVocabulary: getJobsVocabulary(), waresVocabulary: getWaresVocabulary() });
+  return { ...manifest, preflight, diskValidationSkipped };
+}
+
 /**
  * POST /api/agent/compile
  * Compiles a submitted workspace JSON body on-the-fly and runs the X4 Forge XML validator check.
@@ -9393,6 +9458,17 @@ app.post("/api/agent/deploy-verify", (req, res) => {
     return { ok: false, stage: stageId, checklist, ...payload };
   };
   try {
+    const reqPath = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
+    const hasWorkspace = !!req.body?.workspace && typeof req.body.workspace === 'object';
+    if ((!reqPath && !hasWorkspace) || (reqPath && hasWorkspace)) {
+      check('import', 'Mod source read', 'fail', reqPath && hasWorkspace
+        ? 'Choose exactly one deploy target: path or workspace, not both.'
+        : 'Deploy requires an explicit path or workspace. The global active workspace is never an implicit deployment target.');
+      return res.status(400).json(failWith('import', {
+        code: reqPath && hasWorkspace ? 'DEPLOY_TARGET_AMBIGUOUS' : 'DEPLOY_TARGET_REQUIRED',
+        error: checklist[0].detail,
+      }));
+    }
     const resolved = resolveXsdConfig();
     const x4GamePath = resolved.x4GamePath;
     const modWorkspacePath = resolved.modWorkspacePath;
@@ -9420,7 +9496,6 @@ app.post("/api/agent/deploy-verify", (req, res) => {
     // 1. Resolve workspace: fresh import-by-path if given, else the active workspace.
     let ws: any;
     let modSourceDir = '';
-    const reqPath = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
     if (reqPath) {
       const r = resolveModFolder(reqPath);
       if ('error' in r) {
@@ -9430,15 +9505,12 @@ app.post("/api/agent/deploy-verify", (req, res) => {
       modSourceDir = r.abs;
       ws = importModFolder(r.abs).workspace;
       check('import', 'Mod source read', 'pass', `fresh from ${reqPath} (${(ws.nodes || []).length} nodes)`);
-    } else if (req.body?.workspace && typeof req.body.workspace === 'object') {
+    } else if (hasWorkspace) {
       // UI convergence (audit R4): the editor panels send their CURRENT canvas workspace,
       // same contract the legacy /deploy accepted — without this, converged UI buttons
       // would silently deploy a stale server-side activeWorkspace.
       ws = sanitizeWorkspace(req.body.workspace);
       check('import', 'Mod source read', 'pass', `workspace from request "${ws.name}" (${(ws.nodes || []).length} nodes)`);
-    } else {
-      ws = sanitizeWorkspace(activeWorkspace);
-      check('import', 'Mod source read', 'pass', `active workspace "${ws.name}"`);
     }
 
     // 1a. STALE-SOURCE GATE (P0 2026-07-09): refuse to overwrite a source folder that
@@ -9569,26 +9641,11 @@ app.post("/api/agent/deploy-verify", (req, res) => {
     // 2b. PREFLIGHT — the FULL validation stack over the emitted manifest (same engine as
     // project/validate: structure, cue refs, MD↔Lua wiring, XSD md+aiscript, order-param
     // lint, scriptproperty chains, pitfall lints). Errors block; warnings surface.
-    const validationFiles = new Map<string, { path: string; kind: ReturnType<typeof classifyPath>; content: string }>(
-      Object.entries(files).map(([p, c]) => [p.toLowerCase(), { path: p, kind: classifyPath(p), content: String(c) }]),
+    const deployValidation = buildDeployProjectValidation(
+      sourceStamp?.dir || !modSourceDir ? ws : { ...ws, sourceStamp: { ...(sourceStamp || {}), dir: modSourceDir } },
+      { modId, files },
     );
-    let diskValidationSkipped: Array<{ path: string; reason: string }> = [];
-    const validationSourceDir = sourceStamp?.dir && fs.existsSync(sourceStamp.dir) ? sourceStamp.dir : modSourceDir;
-    if (validationSourceDir) {
-      const diskLoad = loadProjectFromDisk(validationSourceDir, modId);
-      diskValidationSkipped = diskLoad.skipped;
-      for (const file of diskLoad.project.files) {
-        const key = file.path.toLowerCase();
-        if (!validationFiles.has(key)) validationFiles.set(key, { path: file.path, kind: file.kind, content: file.content });
-      }
-    }
-    const manifestProject = {
-      id: modId,
-      name: modId,
-      files: [...validationFiles.values()],
-    };
-    const references = (() => { try { return getReferenceSets(); } catch { return undefined; } })();
-    const preflight = runProjectValidation(manifestProject as any, { references, jobsVocabulary: getJobsVocabulary(), waresVocabulary: getWaresVocabulary() });
+    const { preflight, diskValidationSkipped } = deployValidation;
     const pfWarnings = preflight.summary.schemaWarnings + preflight.summary.scriptPropertyWarnings + preflight.summary.mdPitfallWarnings + diskValidationSkipped.length;
     if (!preflight.ok) {
       check('preflight', 'Full validation (schema/cues/lints)', 'fail',
@@ -10628,13 +10685,12 @@ setupDevOrProd().then(() => {
     // said what it was, so callers were port-scanning to find us. Never fatal.
     const published = publishInstance({
       port: PORT,
-      token: STUDIO_API_TOKEN,
       pid: process.pid,
       startedAt: new Date().toISOString(),
       cwd: process.cwd(),
       mode: process.env.X4_FORGE_MODE?.trim() || (process.env.X4_DATA_DIR ? 'sidecar' : 'standalone'),
     });
-    if (published) console.log(`[discovery] port + token published to ${published.latestFile}`);
+    if (published) console.log(`[discovery] instance address published to ${published.latestFile}`);
     const releaseDiscovery = () => unpublishInstance(process.pid);
     process.on('exit', releaseDiscovery);
     for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {

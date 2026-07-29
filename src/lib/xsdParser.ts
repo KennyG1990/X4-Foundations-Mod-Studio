@@ -5,6 +5,7 @@ import { XMLParser } from 'fast-xml-parser';
 import { dataPath } from './dataDir';
 import { expandIncludeChain } from './schemaRegistry';
 import { schemaLibraryToTemplates, SchemaAttribute, SchemaCategory, SchemaElement, SchemaLibrary } from './schemaTypes';
+import { MAX_PROJECT_XML_DEPTH, SAFE_XML_ENTITY_OPTIONS } from './xmlInputLimits';
 
 type AnyNode = Record<string, any>;
 
@@ -18,7 +19,9 @@ const parser = new XMLParser({
   attributeNamePrefix: '',
   allowBooleanAttributes: true,
   commentPropName: '#comment',
-  trimValues: true
+  trimValues: true,
+  maxNestedTags: MAX_PROJECT_XML_DEPTH,
+  processEntities: SAFE_XML_ENTITY_OPTIONS,
 });
 
 export interface XsdConfig {

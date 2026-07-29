@@ -24,10 +24,24 @@
 import { spawn, spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 
-const PORT = Number(process.env.ROUTE_TEST_PORT || 8971);
+async function findFreePort() {
+  return await new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.unref();
+    probe.once('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const address = probe.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+      probe.close(error => error ? reject(error) : resolve(port));
+    });
+  });
+}
+
+const PORT = Number(process.env.ROUTE_TEST_PORT || await findFreePort());
 const BASE = `http://127.0.0.1:${PORT}`;
 const SESSION_TOKEN = 'route-int-selftest-token-' + process.pid;
 const tmp = path.join(os.tmpdir(), `x4-route-int-${process.pid}`);
@@ -134,7 +148,26 @@ async function main() {
   };
   const readKey = await mkKey('read');
   const writeKey = await mkKey('write');
-  ok('minted_read_and_write_keys', !!readKey && !!writeKey, `read=${!!readKey} write=${!!writeKey}`);
+  const deployKey = await mkKey('deploy');
+  ok('minted_read_write_and_deploy_keys', !!readKey && !!writeKey && !!deployKey, `read=${!!readKey} write=${!!writeKey} deploy=${!!deployKey}`);
+
+  // FB-17: GitHub credentials are server-owned and session-token-only.
+  const credentialInitial = await req('GET', '/api/github/credential', SESSION_TOKEN);
+  ok('github_credential_starts_unconfigured', credentialInitial.status === 200 && credentialInitial.json?.configured === false);
+  const githubLoadWithoutCredential = await req('POST', '/api/github/load', SESSION_TOKEN, { owner: 'x', repo: 'y', path: 'z' });
+  ok('github_load_without_credential_fails_before_network', githubLoadWithoutCredential.status === 401 && githubLoadWithoutCredential.json?.code === 'GITHUB_NOT_CONNECTED');
+  ok('agent_key_cannot_read_github_credential_status', (await req('GET', '/api/github/credential', readKey)).status === 403);
+  ok('deploy_key_cannot_spend_github_authority', (await req('POST', '/api/github/push', deployKey, { owner: 'x', repo: 'y', files: [{ path: 'x', content: 'y' }] })).status === 403);
+  const fakeGithubToken = 'ghp_route_integration_secret';
+  const credentialSet = await req('POST', '/api/github/credential', SESSION_TOKEN, { token: fakeGithubToken });
+  ok('studio_session_can_store_github_credential', credentialSet.status === 200 && credentialSet.json?.configured === true);
+  ok('github_credential_response_never_returns_secret', !String(credentialSet.raw || '').includes(fakeGithubToken));
+  const oversizedGithubPush = await req('POST', '/api/github/push', SESSION_TOKEN, {
+    owner: 'bounded', repo: 'request', files: Array.from({ length: 101 }, (_, i) => ({ path: `f${i}.txt`, content: 'x' })),
+  });
+  ok('oversized_github_push_rejected_before_network', oversizedGithubPush.status === 413 && oversizedGithubPush.json?.code === 'GITHUB_PUSH_TOO_LARGE');
+  const credentialDelete = await req('DELETE', '/api/github/credential', SESSION_TOKEN);
+  ok('github_disconnect_deletes_server_credential', credentialDelete.status === 200 && credentialDelete.json?.configured === false && !fs.existsSync(path.join(dataDir, 'github-credential.json')));
 
   // --- read-scope contract ---
   ok('read_key_200_read_get', (await req('GET', '/api/agent/workspace', readKey)).status === 200);
@@ -225,6 +258,27 @@ async function main() {
   ok('deploy_verify_rejects_unknown_format', badDeploy.status === 400 && badDeploy.json?.code === 'UNKNOWN_DEPLOY_FORMAT', `status=${badDeploy.status} code=${badDeploy.json?.code}`);
   ok('rejected_format_deploy_wrote_nothing', !fs.existsSync(path.join(liveExtensions, 'fixture')));
 
+  const noTargetVerify = await req('POST', '/api/agent/deploy-verify', SESSION_TOKEN, {});
+  ok('deploy_verify_requires_an_explicit_target', noTargetVerify.status === 400 && noTargetVerify.json?.code === 'DEPLOY_TARGET_REQUIRED', `status=${noTargetVerify.status} code=${noTargetVerify.json?.code}`);
+  const noTargetLegacy = await req('POST', '/api/agent/deploy', SESSION_TOKEN, {});
+  ok('legacy_deploy_requires_an_explicit_workspace', noTargetLegacy.status === 400 && noTargetLegacy.json?.code === 'DEPLOY_TARGET_REQUIRED', `status=${noTargetLegacy.status} code=${noTargetLegacy.json?.code}`);
+
+  const invalidLegacyName = 'legacy_invalid_fixture';
+  const invalidLegacy = await req('POST', '/api/agent/deploy', SESSION_TOKEN, {
+    workspace: {
+      id: invalidLegacyName,
+      name: invalidLegacyName,
+      nodes: [], links: [], uiWidgets: [],
+      passthroughFiles: [{
+        path: 'md/unanswered.xml',
+        reason: 'unmodeled',
+        content: '<mdscript name="Unanswered"><cues><cue name="Start"><actions><raise_lua_event name="\'route.missing_listener\'"/></actions></cue></cues></mdscript>',
+      }],
+    },
+  });
+  ok('legacy_deploy_runs_full_project_validation', invalidLegacy.status === 422 && invalidLegacy.json?.code === 'DEPLOY_VALIDATION_FAILED' && invalidLegacy.json?.validation?.summary?.crossFileErrors > 0, `status=${invalidLegacy.status} body=${JSON.stringify(invalidLegacy.json || {})}`);
+  ok('legacy_validation_failure_writes_nothing', !fs.existsSync(path.join(liveExtensions, invalidLegacyName)) && !fs.existsSync(path.join(safeWorkspace, '.forge-builds', 'loose', invalidLegacyName)));
+
   const restoreLoose = await req('POST', '/api/schema/config', SESSION_TOKEN, { deployFormat: 'loose' });
   ok('deploy_format_restored_to_loose', restoreLoose.status === 200 && restoreLoose.json?.config?.deployFormat === 'loose', `status=${restoreLoose.status}`);
 
@@ -234,7 +288,7 @@ async function main() {
   ok('discovery_file_published', fs.existsSync(discLatest), discLatest);
   const discRec = fs.existsSync(discLatest) ? JSON.parse(fs.readFileSync(discLatest, 'utf8')) : {};
   ok('discovery_carries_port', discRec.port === PORT, `port=${discRec.port}`);
-  ok('discovery_carries_token', discRec.token === SESSION_TOKEN);
+  ok('discovery_carries_no_session_token', !Object.prototype.hasOwnProperty.call(discRec, 'token'));
   ok('discovery_is_outside_mod_and_game_roots',
     !discRec.cwd || (!discLatest.includes('extensions') && !discLatest.includes('X4 Foundations')), discLatest);
 
@@ -294,6 +348,18 @@ async function main() {
     JSON.stringify(fs.readFileSync(path.join(safeWorkspace, 'crlf_probe.txt'), 'utf8')));
   ok('write_receipt_reports_line_endings', crlfWrite.json?.written?.lineEndings?.crlf === 2, JSON.stringify(crlfWrite.json?.written?.lineEndings));
   ok('write_receipt_carries_a_hash', /^[a-f0-9]{64}$/.test(String(crlfWrite.json?.written?.sha256 || '')));
+
+  const parallelBodies = ['request-a-' + crypto.randomUUID(), 'request-b-' + crypto.randomUUID()];
+  const [parallelA, parallelB] = await Promise.all([
+    req('POST', '/api/fs/write', SESSION_TOKEN, { path: 'parallel-a.txt', content: parallelBodies[0] }),
+    req('POST', '/api/fs/write', SESSION_TOKEN, { path: 'parallel-b.txt', content: parallelBodies[1] }),
+  ]);
+  const expectedParallelHashes = parallelBodies.map(body => crypto.createHash('sha256').update(body).digest('hex'));
+  ok('concurrent_write_receipts_are_request_local',
+    parallelA.status === 200 && parallelB.status === 200 &&
+      parallelA.json?.written?.sha256 === expectedParallelHashes[0] &&
+      parallelB.json?.written?.sha256 === expectedParallelHashes[1],
+    `a=${parallelA.json?.written?.sha256} b=${parallelB.json?.written?.sha256}`);
 
   // #4 a stale canvas must not be a dead end: the refusal names the exact unblocking call.
   const staleMod = path.join(safeWorkspace, 'stale_probe_mod');

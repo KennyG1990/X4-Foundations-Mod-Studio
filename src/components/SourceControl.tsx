@@ -23,6 +23,7 @@ import { parseXMLToWorkspace } from '../lib/xmlParser';
 import { ModWorkspace, generateMDXML, generateUIXML } from '../types';
 import { toTFileName } from '../lib/modCompiler';
 import { getAIHeaders } from '../lib/apiHelper';
+import { capLocalHistory } from '../lib/localWorkspaceCache';
 
 // Baseline layout of commits matching user screenshot exactly
 interface GitCommitItem {
@@ -149,15 +150,13 @@ export default function SourceControl({
   saveCheckpoint,
   setWorkspaceView
 }: SourceControlProps) {
-  // Remote GitHub integration credentials (consistent with SyncModal storage keys)
+  // Remote GitHub metadata may live in localStorage; the credential itself is server-owned.
   const [gitPat, setGitPat] = useState<string>(() => localStorage.getItem('x4_github_pat') || '');
   const [gitOwner, setGitOwner] = useState<string>(() => localStorage.getItem('x4_github_owner') || '');
   const [gitRepo, setGitRepo] = useState<string>(() => localStorage.getItem('x4_github_repo') || '');
   const [activeBranch, setActiveBranch] = useState<string>(() => localStorage.getItem('x4_github_branch') || 'main');
   
-  const [isGitHubConnected, setIsGitHubConnected] = useState<boolean>(() => {
-    return localStorage.getItem('x4_github_connected') === 'true' || !!localStorage.getItem('x4_github_pat');
-  });
+  const [isGitHubConnected, setIsGitHubConnected] = useState<boolean>(false);
   const [showConfig, setShowConfig] = useState<boolean>(false);
   const [syncLoading, setSyncLoading] = useState<boolean>(false);
   const [syncStatusMsg, setSyncStatusMsg] = useState<string>('');
@@ -167,6 +166,31 @@ export default function SourceControl({
   const [deviceFlow, setDeviceFlow] = useState<{ userCode: string; verificationUri: string } | null>(null);
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const legacy = localStorage.getItem('x4_github_pat') || '';
+      try {
+        const response = legacy
+          ? await fetch('/api/github/credential', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: legacy }),
+            })
+          : await fetch('/api/github/credential');
+        const body = await response.json();
+        if (!response.ok) throw new Error(body?.error || `Credential status failed (${response.status}).`);
+        if (legacy) localStorage.removeItem('x4_github_pat');
+        if (!cancelled) {
+          setGitPat('');
+          setIsGitHubConnected(body?.configured === true);
+          localStorage.setItem('x4_github_connected', body?.configured === true ? 'true' : 'false');
+        }
+      } catch (error) {
+        if (!cancelled) setSyncStatusMsg(`GitHub credential status unavailable: ${messageFromUnknown(error, String(error))}`);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Local workspace diffing / staging baseline
   const [gitBaseline, setGitBaseline] = useState<ModWorkspace | null>(() => {
@@ -209,7 +233,7 @@ export default function SourceControl({
       try {
         const parsed = JSON.parse(rawHistory);
         if (parsed && Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          return capLocalHistory(parsed);
         }
       } catch {}
     }
@@ -232,8 +256,10 @@ export default function SourceControl({
 
   // Persists local history on changes
   const saveHistory = (history: GitCommitItem[]) => {
-    setLocalHistory(history);
-    localStorage.setItem('x4_git_local_history', JSON.stringify(history));
+    const capped = capLocalHistory(history);
+    setLocalHistory(capped);
+    try { localStorage.setItem('x4_git_local_history', JSON.stringify(capped)); }
+    catch { /* the server/workspace cache remains authoritative */ }
   };
 
   // 1. Calculate Changed Files dynamically by comparing active workspace with baseline
@@ -481,9 +507,7 @@ Guidelines:
             body: JSON.stringify(clientId ? { client_id: clientId, device_code: start.device_code } : { device_code: start.device_code })
           }).then(r => r.json());
 
-          if (res.access_token) {
-            setGitPat(res.access_token);
-            localStorage.setItem('x4_github_pat', res.access_token);
+          if (res.connected) {
             if (res.login) {
               setGitOwner(res.login);
               localStorage.setItem('x4_github_owner', res.login);
@@ -526,21 +550,44 @@ Guidelines:
   };
 
   // Connects GitHub Credentials
-  const handleConnectGitHub = () => {
-    localStorage.setItem('x4_github_pat', gitPat);
-    localStorage.setItem('x4_github_owner', gitOwner);
-    localStorage.setItem('x4_github_repo', gitRepo);
-    localStorage.setItem('x4_github_branch', activeBranch);
-    localStorage.setItem('x4_github_connected', 'true');
-    setIsGitHubConnected(true);
-    setShowConfig(false);
-    setSyncStatusMsg('Linked with GitHub Repository successfully!');
+  const handleConnectGitHub = async () => {
+    if (!gitPat.trim()) {
+      setSyncStatusMsg('Enter a GitHub Personal Access Token first.');
+      return;
+    }
+    try {
+      const response = await fetch('/api/github/credential', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: gitPat }),
+      });
+      const body = await response.json();
+      if (!response.ok || body?.configured !== true) throw new Error(body?.error || 'Credential was not stored.');
+      localStorage.removeItem('x4_github_pat');
+      localStorage.setItem('x4_github_owner', gitOwner);
+      localStorage.setItem('x4_github_repo', gitRepo);
+      localStorage.setItem('x4_github_branch', activeBranch);
+      localStorage.setItem('x4_github_connected', 'true');
+      setGitPat('');
+      setIsGitHubConnected(true);
+      setShowConfig(false);
+      setSyncStatusMsg('Linked with GitHub Repository successfully!');
+    } catch (error) {
+      setSyncStatusMsg(`Connect failed: ${messageFromUnknown(error, String(error))}`);
+    }
   };
 
-  const handleDisconnectGitHub = () => {
-    localStorage.setItem('x4_github_connected', 'false');
-    setIsGitHubConnected(false);
-    setSyncStatusMsg('Disconnected from remote peer.');
+  const handleDisconnectGitHub = async () => {
+    try {
+      const response = await fetch('/api/github/credential', { method: 'DELETE' });
+      const body = await response.json();
+      if (!response.ok || body?.configured !== false) throw new Error(body?.error || 'Credential deletion failed.');
+      localStorage.removeItem('x4_github_pat');
+      localStorage.setItem('x4_github_connected', 'false');
+      setGitPat('');
+      setIsGitHubConnected(false);
+      setSyncStatusMsg('Disconnected from GitHub and deleted the stored credential.');
+    } catch (error) {
+      setSyncStatusMsg(`Disconnect failed: ${messageFromUnknown(error, String(error))}`);
+    }
   };
 
   // Pushes active files to real linked GitHub repository using custom express proxy endpoint
@@ -553,7 +600,7 @@ Guidelines:
   };
 
   const handlePushGitWorkspace = async () => {
-    if (!isGitHubConnected || !gitPat) {
+    if (!isGitHubConnected) {
       setSyncStatusMsg('Source control is not authenticated. Open settings to link GitHub.');
       return;
     }
@@ -570,7 +617,6 @@ Guidelines:
 </content>`;
 
       const payload = {
-        pat: gitPat,
         owner: gitOwner,
         repo: gitRepo,
         branch: activeBranch,
@@ -603,7 +649,7 @@ Guidelines:
 
   // ADVANCED GITHUB LOADER & MULTI-SNAP SYNCHRONIZER (Consolidated from SyncModal)
   const handleGitHubLoad = async () => {
-    if (!gitPat || !gitOwner || !gitRepo) {
+    if (!isGitHubConnected || !gitOwner || !gitRepo) {
       setSyncStatusMsg('Please enter your GitHub Credentials in settings first.');
       return;
     }
@@ -618,7 +664,6 @@ Guidelines:
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          pat: gitPat,
           owner: gitOwner,
           repo: gitRepo,
           branch: activeBranch,
@@ -755,7 +800,7 @@ Guidelines:
   };
 
   const handleGithubPushMulti = async (customCommitMsg?: string) => {
-    if (!gitPat || !gitOwner || !gitRepo) {
+    if (!isGitHubConnected || !gitOwner || !gitRepo) {
       setSyncStatusMsg('Authenticate GitHub peer in settings first.');
       return;
     }
@@ -807,7 +852,6 @@ This mod is generated with \`${workspace.nodes.length}\` logic gates and \`${wor
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          pat: gitPat,
           owner: gitOwner,
           repo: gitRepo,
           branch: activeBranch,
@@ -854,8 +898,8 @@ This mod is generated with \`${workspace.nodes.length}\` logic gates and \`${wor
 
   // Create a brand-new GitHub repo from the active mod, then push its initial files
   const handleCreateRepoFromMod = async () => {
-    if (!gitPat) {
-      setSyncStatusMsg('Enter a GitHub Personal Access Token in settings first.');
+    if (!isGitHubConnected) {
+      setSyncStatusMsg('Connect GitHub in settings first.');
       setShowConfig(true);
       return;
     }
@@ -868,7 +912,6 @@ This mod is generated with \`${workspace.nodes.length}\` logic gates and \`${wor
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          pat: gitPat,
           name: repoName,
           description: workspace.description || `X4 Foundations mod: ${workspace.name || repoName}`
         })
@@ -880,7 +923,6 @@ This mod is generated with \`${workspace.nodes.length}\` logic gates and \`${wor
       setGitRepo(res.repo);
       localStorage.setItem('x4_github_owner', res.owner);
       localStorage.setItem('x4_github_repo', res.repo);
-      localStorage.setItem('x4_github_pat', gitPat);
       localStorage.setItem('x4_github_branch', activeBranch);
       localStorage.setItem('x4_github_connected', 'true');
       setIsGitHubConnected(true);
@@ -899,14 +941,14 @@ This mod is generated with \`${workspace.nodes.length}\` logic gates and \`${wor
 
   // Load the targeted repo's files and summarize how they differ from the active workspace
   const handleScanRemoteDiff = async () => {
-    if (!isGitHubConnected || !gitPat || !gitOwner || !gitRepo) return;
+    if (!isGitHubConnected || !gitOwner || !gitRepo) return;
     setIsDiffLoading(true);
     setRemoteDiffChecked(true);
     try {
       const remote: RemoteLoadResult = await fetch('/api/github/load', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pat: gitPat, owner: gitOwner, repo: gitRepo, branch: activeBranch, path: 'ais_workspace.json' })
+        body: JSON.stringify({ owner: gitOwner, repo: gitRepo, branch: activeBranch, path: 'ais_workspace.json' })
       }).then(r => r.json());
 
       const items: { type: 'add' | 'remove' | 'modify'; text: string }[] = [];
@@ -1012,7 +1054,7 @@ This mod is generated with \`${workspace.nodes.length}\` logic gates and \`${wor
 
   // Fetch the REAL commit history of the connected repo (replaces the seeded placeholder log)
   const handleFetchRemoteCommits = async () => {
-    if (!isGitHubConnected || !gitPat || !gitOwner || !gitRepo) {
+    if (!isGitHubConnected || !gitOwner || !gitRepo) {
       setSyncStatusMsg('Authenticate GitHub peer in settings first.');
       return;
     }
@@ -1021,7 +1063,7 @@ This mod is generated with \`${workspace.nodes.length}\` logic gates and \`${wor
       const res: RemoteCommitResponse = await fetch('/api/github/commits', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pat: gitPat, owner: gitOwner, repo: gitRepo, branch: activeBranch })
+        body: JSON.stringify({ owner: gitOwner, repo: gitRepo, branch: activeBranch })
       }).then(r => r.json());
       if (res.error) throw new Error(res.error);
 
@@ -1549,13 +1591,13 @@ This mod is generated with \`${workspace.nodes.length}\` logic gates and \`${wor
             </h3>
             <p className="text-[10px] text-slate-400 leading-normal">
               Publishes "{workspace.name || 'this mod'}" as a new GitHub repository (named{' '}
-              <span className="text-emerald-300 font-mono">{toRepoName(workspace.name)}</span>) and pushes its initial files. Requires a PAT in settings.
+              <span className="text-emerald-300 font-mono">{toRepoName(workspace.name)}</span>) and pushes its initial files. Requires a connected GitHub account.
             </p>
             <button
               onClick={handleCreateRepoFromMod}
-              disabled={creatingRepo || !gitPat}
+              disabled={creatingRepo || !isGitHubConnected}
               className="w-full py-1.5 bg-emerald-600/20 hover:bg-emerald-600 border border-emerald-500/30 hover:border-transparent text-emerald-300 hover:text-black font-bold uppercase rounded transition-all cursor-pointer disabled:opacity-30 flex items-center justify-center gap-1.5"
-              title={gitPat ? 'Create and publish a new GitHub repository for this mod' : 'Add a GitHub PAT in settings first'}
+              title={isGitHubConnected ? 'Create and publish a new GitHub repository for this mod' : 'Connect GitHub in settings first'}
             >
               {creatingRepo ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Github className="w-3.5 h-3.5" />}
               Create &amp; Publish Repo
@@ -1745,12 +1787,7 @@ This mod is generated with \`${workspace.nodes.length}\` logic gates and \`${wor
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           
           {/* Action Row */}
-          <div className="p-2 border-b border-white/5 bg-[#0d1117] flex items-center justify-between text-[9px] font-mono text-slate-400 shrink-0 select-none">
-            <div className="flex items-center gap-1.5">
-              <span>Auto-sync</span>
-              <input type="checkbox" defaultChecked className="accent-cyan-500 cursor-pointer" />
-            </div>
-            
+          <div className="p-2 border-b border-white/5 bg-[#0d1117] flex items-center justify-end text-[9px] font-mono text-slate-400 shrink-0 select-none">
             <div className="flex items-center gap-2">
               <button onClick={handleFetchRemoteCommits} className="hover:text-cyan-400 flex items-center gap-0.5" title="Reload commit history from the remote repo">
                 <ArrowDown className="w-3 h-3" />

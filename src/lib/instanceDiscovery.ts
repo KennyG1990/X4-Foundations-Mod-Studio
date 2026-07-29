@@ -12,13 +12,13 @@
  *
  * This writes one well-known record per running instance:
  *
- *   ~/.x4forge/instances/<pid>.json   { port, token, pid, startedAt, cwd, mode }
+ *   ~/.x4forge/instances/<pid>.json   { port, pid, startedAt, cwd, mode, version? }
  *   ~/.x4forge/latest.json            a copy of the most recently started instance
  *
  * Deliberate choices:
- *  - PER-USER HOME, never a mod/game/workspace directory. This file carries a credential; writing
- *    it anywhere near shipped content is how secrets end up in a mod archive (and the B70 class of
- *    litter-in-the-game-folder incident).
+ *  - PER-USER HOME, never a mod/game/workspace directory. Discovery is address metadata only;
+ *    session credentials stay with the owning Studio/extension process and external agents use
+ *    named, scoped `x4fk_` keys.
  *  - 0600 where the platform honours it.
  *  - Records whose process is dead are pruned on startup, so a crashed instance can never send a
  *    caller to a port that is now something else entirely.
@@ -32,7 +32,6 @@ import path from 'path';
 
 export interface InstanceRecord {
   port: number;
-  token: string;
   pid: number;
   startedAt: string;
   cwd: string;
@@ -71,6 +70,37 @@ function writeRestricted(target: string, contents: string): void {
 }
 
 /**
+ * Accept only public address metadata from discovery files. Versions before 0.0.58 wrote the
+ * sidecar bearer token into these records; projecting onto the current schema both prevents that
+ * credential from being returned and gives startup pruning a deterministic migration path.
+ */
+function sanitizeRecord(value: unknown): InstanceRecord | null {
+  if (!value || typeof value !== 'object') return null;
+  const candidate = value as Record<string, unknown>;
+  if (typeof candidate.port !== 'number' || !Number.isFinite(candidate.port)) return null;
+  if (typeof candidate.pid !== 'number' || !Number.isFinite(candidate.pid)) return null;
+  if (typeof candidate.startedAt !== 'string' || typeof candidate.cwd !== 'string' || typeof candidate.mode !== 'string') return null;
+  const record: InstanceRecord = {
+    port: candidate.port,
+    pid: candidate.pid,
+    startedAt: candidate.startedAt,
+    cwd: candidate.cwd,
+    mode: candidate.mode,
+  };
+  if (typeof candidate.version === 'string') record.version = candidate.version;
+  return record;
+}
+
+function readSanitizedRecord(target: string): InstanceRecord | null {
+  const parsed = JSON.parse(fs.readFileSync(target, 'utf8')) as unknown;
+  const sanitized = sanitizeRecord(parsed);
+  if (!sanitized) return null;
+  const canonical = JSON.stringify(sanitized, null, 2);
+  if (JSON.stringify(parsed, null, 2) !== canonical) writeRestricted(target, canonical);
+  return sanitized;
+}
+
+/**
  * Remove records whose process is gone, so discovery cannot point at a dead port.
  *
  * `latest.json` is pruned too. A reader that trusts it blindly — which is the whole point of a
@@ -85,15 +115,17 @@ export function pruneDeadInstances(): number {
     if (fs.existsSync(dir)) {
       for (const name of fs.readdirSync(dir)) {
         if (!name.endsWith('.json')) continue;
+        const target = path.join(dir, name);
         const pid = Number(name.replace(/\.json$/, ''));
+        try { readSanitizedRecord(target); } catch { /* a torn record is handled by liveness below */ }
         if (pidAlive(pid)) continue;
-        try { fs.rmSync(path.join(dir, name), { force: true }); pruned++; } catch { /* best effort */ }
+        try { fs.rmSync(target, { force: true }); pruned++; } catch { /* best effort */ }
       }
     }
     const latestFile = latestPath();
     if (fs.existsSync(latestFile)) {
       let stale = true;
-      try { stale = !pidAlive(JSON.parse(fs.readFileSync(latestFile, 'utf8'))?.pid); } catch { stale = true; }
+      try { stale = !pidAlive(readSanitizedRecord(latestFile)?.pid ?? 0); } catch { stale = true; }
       if (stale) {
         const survivors = listInstances();
         if (survivors.length) writeRestricted(latestFile, JSON.stringify(survivors[0], null, 2));
@@ -113,7 +145,7 @@ export function listInstances(): InstanceRecord[] {
     for (const name of fs.readdirSync(dir)) {
       if (!name.endsWith('.json')) continue;
       try {
-        const rec = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8')) as InstanceRecord;
+        const rec = readSanitizedRecord(path.join(dir, name));
         if (rec && typeof rec.port === 'number' && pidAlive(rec.pid)) out.push(rec);
       } catch { /* a torn record must not hide the others */ }
     }
@@ -128,7 +160,9 @@ export function listInstances(): InstanceRecord[] {
 export function publishInstance(record: InstanceRecord): { instanceFile: string; latestFile: string } | null {
   try {
     pruneDeadInstances();
-    const body = JSON.stringify(record, null, 2);
+    const safeRecord = sanitizeRecord(record);
+    if (!safeRecord) return null;
+    const body = JSON.stringify(safeRecord, null, 2);
     const instanceFile = instancePath(record.pid);
     writeRestricted(instanceFile, body);
     const latestFile = latestPath();
@@ -150,7 +184,7 @@ export function unpublishInstance(pid: number): void {
       return;
     }
     let latest: InstanceRecord | null = null;
-    try { latest = JSON.parse(fs.readFileSync(latestPath(), 'utf8')); } catch { latest = null; }
+    try { latest = readSanitizedRecord(latestPath()); } catch { latest = null; }
     if (!latest || latest.pid === pid) writeRestricted(latestPath(), JSON.stringify(remaining[0], null, 2));
   } catch { /* shutdown must not throw */ }
 }
@@ -164,7 +198,7 @@ export function runInstanceDiscoverySelftest(): { pass: boolean; checks: Array<{
     process.env.X4FORGE_DISCOVERY_DIR = scratch;
 
     const mine: InstanceRecord = {
-      port: 54321, token: 'selftest-token', pid: process.pid,
+      port: 54321, pid: process.pid,
       startedAt: new Date(0).toISOString(), cwd: scratch, mode: 'standalone',
     };
     const written = publishInstance(mine);
@@ -173,7 +207,7 @@ export function runInstanceDiscoverySelftest(): { pass: boolean; checks: Array<{
 
     const latest = JSON.parse(fs.readFileSync(latestPath(), 'utf8'));
     ok('latest carries the port', latest.port === 54321, String(latest.port));
-    ok('latest carries the token', latest.token === 'selftest-token');
+    ok('discovery never carries a session credential', !Object.prototype.hasOwnProperty.call(latest, 'token'));
     ok('discovery lives OUTSIDE any mod/game directory', !/extensions|X4 Foundations/i.test(discoveryRoot()), discoveryRoot());
 
     if (process.platform !== 'win32') {
@@ -182,6 +216,18 @@ export function runInstanceDiscoverySelftest(): { pass: boolean; checks: Array<{
     } else {
       ok('record is owner-only (0600) [posix-only assertion]', true, 'skipped on win32');
     }
+
+    // Upgrade migration: legacy records must lose bearer tokens even when Windows has reused the
+    // recorded PID, because PID liveness alone cannot prove process identity.
+    const legacy = { ...mine, token: 'legacy-session-secret', futureSecret: 'also-private' };
+    writeRestricted(instancePath(process.pid), JSON.stringify(legacy, null, 2));
+    writeRestricted(latestPath(), JSON.stringify(legacy, null, 2));
+    pruneDeadInstances();
+    const migratedInstance = JSON.parse(fs.readFileSync(instancePath(process.pid), 'utf8'));
+    const migratedLatest = JSON.parse(fs.readFileSync(latestPath(), 'utf8'));
+    ok('startup strips legacy credentials from a live instance record', !('token' in migratedInstance) && !('futureSecret' in migratedInstance));
+    ok('startup strips legacy credentials from latest.json', !('token' in migratedLatest) && !('futureSecret' in migratedLatest));
+    ok('listed discovery records expose only public metadata', !('token' in (listInstances()[0] as InstanceRecord & { token?: string })));
 
     // A stale latest.json is the dangerous case: callers trust the well-known path blindly.
     writeRestricted(latestPath(), JSON.stringify({ ...mine, pid: 999999998, port: 8972 }, null, 2));

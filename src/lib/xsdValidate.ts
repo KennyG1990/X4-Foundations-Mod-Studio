@@ -19,6 +19,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { XMLParser } from 'fast-xml-parser';
+import { MAX_PROJECT_XML_DEPTH, SAFE_XML_ENTITY_OPTIONS } from './xmlInputLimits';
 
 export interface XsdDiagnostic {
   severity: 'error' | 'warning' | 'info';
@@ -85,7 +86,9 @@ const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '',
   allowBooleanAttributes: true,
-  trimValues: true
+  trimValues: true,
+  maxNestedTags: MAX_PROJECT_XML_DEPTH,
+  processEntities: SAFE_XML_ENTITY_OPTIONS,
 });
 const orderedParser = new XMLParser({
   ignoreAttributes: false,
@@ -93,6 +96,8 @@ const orderedParser = new XMLParser({
   allowBooleanAttributes: true,
   trimValues: true,
   preserveOrder: true,
+  maxNestedTags: MAX_PROJECT_XML_DEPTH,
+  processEntities: SAFE_XML_ENTITY_OPTIONS,
 });
 
 function arrayOf<T>(v: T | T[] | undefined): T[] {

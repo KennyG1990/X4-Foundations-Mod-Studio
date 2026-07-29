@@ -26,8 +26,6 @@ interface DiagnosticsCenterProps {
   saveCheckpoint?: (customTarget?: ModWorkspace) => void;
   modWorkspacePath: string;
   setWorkspaceView?: (view: any) => void;
-  autoSaveEnabled?: boolean;
-  setAutoSaveEnabled?: (val: boolean) => void;
   diagnostics: PackageDiagnostic[];
   diagnosticSource: 'checking' | 'project' | 'local';
   /** Jump to the Cues tab (the cue-health summary deep-links there). */
@@ -51,8 +49,6 @@ export default function DiagnosticsCenter({
   saveCheckpoint,
   modWorkspacePath,
   setWorkspaceView,
-  autoSaveEnabled,
-  setAutoSaveEnabled,
   diagnostics,
   diagnosticSource,
   onOpenCues,
@@ -101,8 +97,6 @@ export default function DiagnosticsCenter({
             modWorkspacePath={modWorkspacePath}
             setWorkspaceView={setWorkspaceView}
             forceTab="analyzer"
-            autoSaveEnabled={autoSaveEnabled}
-            setAutoSaveEnabled={setAutoSaveEnabled}
             aiEnabled={aiEnabled}
           />
         )}

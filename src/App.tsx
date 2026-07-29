@@ -47,6 +47,7 @@ import GlobalSearch from './components/GlobalSearch';
 import ShortcutsOverlay from './components/ShortcutsOverlay';
 import { ModWorkspace, MDNode, UIWidget, PRESETS, NODE_TEMPLATES, sanitizeWorkspace, generateMDXML, validateModWorkspace, ChatMessage, PackageDiagnostic } from './types';
 import { workspaceContentHash } from './lib/workspaceIdentity';
+import { persistWorkspaceCache } from './lib/localWorkspaceCache';
 import { applyNodeSelectionDocument, buildNodeSelectionDocument, isNodeSelectionFailure } from './lib/nodeSelectionDocument';
 import type { SchemaLibrary } from './lib/schemaTypes';
 import { setSchemaTemplatesForImport } from './lib/xmlParser';
@@ -284,9 +285,6 @@ export default function App() {
   }, [persistStudioLayout]);
 
   const [diagnosticsScope, setDiagnosticsScope] = useState<DiagnosticsScope>('scripts');
-
-  // Lifted auto-save state to synchronize settings and prevent data clobbering on load
-  const [autoSaveEnabled, setAutoSaveEnabled] = useState<boolean>(false);
 
   // Diagnostics / Mod Doctor state shared by readiness and the diagnostics panel.
   const [diagnostics, setDiagnostics] = useState<PackageDiagnostic[]>([]);
@@ -1135,13 +1133,11 @@ export default function App() {
   // Sync to local storage and do debounced sync with the server database
   useEffect(() => {
     const persistLocalCache = () => {
-      try {
-        localStorage.setItem('x4_mod_studio_workspace', JSON.stringify(workspace));
-      } catch (e) {
-        try { localStorage.removeItem('x4_mod_studio_workspace'); } catch { /* ignore */ }
+      const result = persistWorkspaceCache(localStorage, JSON.stringify(workspace));
+      if ('error' in result) {
         if (!quotaWarnedRef.current) {
           quotaWarnedRef.current = true;
-          console.warn('Workspace exceeds the localStorage cache limit — local cache skipped; the server copy remains the authority.', e);
+          console.warn('Workspace exceeds the localStorage cache limit — the last-known-good local cache was preserved; the server copy remains the authority.', result.error);
         }
       }
     };
@@ -1934,8 +1930,6 @@ export default function App() {
               toast('Native file tabs are available in the installed Antigravity/VS Code extension.', 'warning');
             }
           }}
-          autoSaveEnabled={autoSaveEnabled}
-          setAutoSaveEnabled={setAutoSaveEnabled}
           workspaceDirMode={workspaceDirMode}
           setWorkspaceDirMode={setWorkspaceDirMode}
           compileStatus={compileStatus}
@@ -2171,7 +2165,6 @@ export default function App() {
         setWorkspaceView={setWorkspaceView}
         modWorkspacePath={modWorkspacePath}
         filesystemPath={filesystemPath}
-        setAutoSaveEnabled={setAutoSaveEnabled}
         onProjectLoaded={() => {
           setSelectedNode(null);
           setSelectedCueIds([]);

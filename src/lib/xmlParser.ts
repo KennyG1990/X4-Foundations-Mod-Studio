@@ -11,6 +11,7 @@ function elementChildrenOf(node: any): Element[] {
   return Array.from(node?.childNodes || []).filter((child: any) => child?.nodeType === 1) as Element[];
 }
 import { checkXmlWellformed } from './xmlWellformed';
+import { assertXmlInputWithinLimits } from './xmlInputLimits';
 import { indexXmlElementSpans, xmlElementSemanticPath } from './xmlSourceSpans';
 
 const DOMParserToUse = typeof window !== 'undefined' && window.DOMParser ? window.DOMParser : XmlDomParser;
@@ -96,6 +97,7 @@ export function extractTopLevelCueXml(xmlText: string): { name: string; xml: str
 
 export function parseXMLToWorkspace(xmlText: string, options: { path?: string } = {}): ModWorkspace | null {
   try {
+    assertXmlInputWithinLimits(xmlText);
     // Well-formedness gate FIRST. @xmldom/xmldom (the Node-side parser) does not emit a
     // <parsererror> element for a mismatched/unclosed tag — it warns and returns a partial
     // tree — so a malformed file (e.g. <do_if>…</do_elseif>, which X4 rejects on load) would

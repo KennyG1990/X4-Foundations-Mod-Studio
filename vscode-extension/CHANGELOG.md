@@ -3,6 +3,14 @@
 The latest changes, newest first. (This page is generated automatically — see
 `release-notes.json` to edit the wording.)
 
+## 0.0.58 — 2026-07-29
+
+- Deploys now require an explicit project target, run the complete project validator before writing, and replace files atomically. A rejected project writes nothing, and each write receipt belongs only to the request that produced it.
+- Forge no longer publishes its Studio session credential in discovery files. GitHub credentials are kept by the local sidecar instead of browser storage, are removed when you disconnect, and cannot be used through a read or write agent key.
+- Cross-file checks now understand real Lua event registrations and the indexed payload contract used by X4 AI Influence. Commented-out registrations, event collisions, missing writers, and missing readers are reported deterministically before packaging.
+- Large or hostile XML and CAT inputs are bounded by explicit size, depth, entity, entry-count, and offset limits, while the installed game's largest catalog and the complete unpacked 9.00 schema corpus remain accepted.
+- Workspace recovery now sheds capped secondary history before risking the last known good canvas. Inert automatic-sync controls were removed so the interface only offers actions that actually work, and the dependency/Windows quality gates now run with zero known npm vulnerabilities.
+
 ## 0.0.57 — 2026-07-29
 
 - Forge now fits the window instead of extending the canvas into a large empty area. The header, workspace navigation, side tools, patch workbench, and editor surfaces adapt across desktop and narrow widths without hiding existing screens or actions.

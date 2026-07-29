@@ -146,8 +146,6 @@ interface SidebarProps {
   diagnosticSource: 'checking' | 'project' | 'local';
   diagnosticsScope?: DiagnosticsScope;
   onSelectSnapshot?: (snapWS: ModWorkspace | null) => void;
-  autoSaveEnabled?: boolean;
-  setAutoSaveEnabled?: (val: boolean) => void;
 }
 
 const TOOL_ICONS: Record<SidebarTab, React.ComponentType<{ className?: string }>> = {
@@ -307,9 +305,7 @@ export default function Sidebar({
   diagnostics,
   diagnosticSource,
   diagnosticsScope,
-  onSelectSnapshot,
-  autoSaveEnabled,
-  setAutoSaveEnabled
+  onSelectSnapshot
 }: SidebarProps) {
   const [nodeFilter, setNodeFilter] = useState<'all' | 'cue' | 'event' | 'condition' | 'action'>('all');
   const [schemaDir, setSchemaDir] = useState<string>('');
@@ -646,8 +642,6 @@ export default function Sidebar({
               modWorkspacePath={modWorkspacePath}
               setWorkspaceView={setWorkspaceView}
               forceTab="playtest"
-              autoSaveEnabled={autoSaveEnabled}
-              setAutoSaveEnabled={setAutoSaveEnabled}
             />
           </ErrorBoundary>
         )}
@@ -660,8 +654,6 @@ export default function Sidebar({
               saveCheckpoint={saveCheckpoint}
               modWorkspacePath={modWorkspacePath}
               setWorkspaceView={setWorkspaceView}
-              autoSaveEnabled={autoSaveEnabled}
-              setAutoSaveEnabled={setAutoSaveEnabled}
               diagnostics={diagnostics}
               diagnosticSource={diagnosticSource}
               requestedScope={diagnosticsScope}

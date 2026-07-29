@@ -38,8 +38,22 @@ export interface CatDatArchive {
   entries: CatEntry[];
 }
 
+export const MAX_CAT_MANIFEST_BYTES = 64 * 1024 * 1024;
+export const MAX_CAT_ENTRIES = 1_000_000;
+
+interface CatParseLimits {
+  maxManifestBytes?: number;
+  maxEntries?: number;
+}
+
 /** Parse a single `.cat` manifest into entries with computed byte offsets. */
-export function parseCat(catPath: string): CatEntry[] {
+export function parseCat(catPath: string, limits: CatParseLimits = {}): CatEntry[] {
+  const maxManifestBytes = limits.maxManifestBytes ?? MAX_CAT_MANIFEST_BYTES;
+  const maxEntries = limits.maxEntries ?? MAX_CAT_ENTRIES;
+  const manifestBytes = fs.statSync(catPath).size;
+  if (manifestBytes > maxManifestBytes) {
+    throw new Error(`CAT manifest is ${manifestBytes} bytes; the limit is ${maxManifestBytes} bytes: ${catPath}`);
+  }
   const text = fs.readFileSync(catPath, 'utf8');
   const lines = text.split(/\r?\n/);
   const entries: CatEntry[] = [];
@@ -51,6 +65,8 @@ export function parseCat(catPath: string): CatEntry[] {
     if (parts.length < 4) continue;
     const size = parseInt(parts[parts.length - 3], 10);
     if (!Number.isFinite(size) || size < 0) continue;
+    if (entries.length >= maxEntries) throw new Error(`CAT manifest exceeds the ${maxEntries}-entry limit: ${catPath}`);
+    if (!Number.isSafeInteger(offset + size)) throw new Error(`CAT entry offsets exceed JavaScript's safe integer range: ${catPath}`);
     const name = parts.slice(0, parts.length - 3).join(' ').replace(/\\/g, '/');
     const timestamp = parseInt(parts[parts.length - 2], 10);
     const md5 = parts[parts.length - 1].toLowerCase();
@@ -668,6 +684,19 @@ export function runCatDatSelftest(): { pass: boolean; checks: CatDatSelftestChec
 
     const arcs = findCatDatArchives([tmp]);
     ok('discovery: cat without dat ignored (2 archives found)', arcs.length === 2, 'got ' + arcs.length);
+
+    // FB-22: explicit manifest/entry/offset budgets fail closed without allocating huge fixtures.
+    let manifestLimitRejected = false;
+    try { parseCat(path.join(tmp, '01.cat'), { maxManifestBytes: 8 }); } catch { manifestLimitRejected = true; }
+    ok('cat manifest byte limit rejects oversized input', manifestLimitRejected);
+    let entryLimitRejected = false;
+    try { parseCat(path.join(tmp, '01.cat'), { maxEntries: 1 }); } catch { entryLimitRejected = true; }
+    ok('cat entry-count limit rejects oversized manifests', entryLimitRejected);
+    const overflowCat = path.join(tmp, 'overflow.cat');
+    fs.writeFileSync(overflowCat, `a 9007199254740990 0 ${'0'.repeat(32)}\nb 10 0 ${'0'.repeat(32)}\n`, 'utf8');
+    let offsetLimitRejected = false;
+    try { parseCat(overflowCat); } catch { offsetLimitRejected = true; }
+    ok('cat offset overflow is rejected', offsetLimitRejected);
 
     const over = extractGameFile([tmp], 'libraries/plain.xml');
     ok('override order: later archive wins for a shared path',

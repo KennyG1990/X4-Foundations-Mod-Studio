@@ -37,7 +37,6 @@ interface SyncModalProps {
   setWorkspaceView?: (view: 'blueprint' | 'ui-designer' | 'aiscripts' | 'libraries' | 'xmlpatch' | 'contracts' | 'translation' | 'wiki' | 'project' | 'galaxy') => void;
   modWorkspacePath?: string;
   filesystemPath?: string;
-  setAutoSaveEnabled?: (val: boolean) => void;
   onProjectLoaded?: () => void;
 }
 
@@ -155,7 +154,6 @@ export default function SyncModal({
   setWorkspaceView,
   modWorkspacePath,
   filesystemPath,
-  setAutoSaveEnabled,
   onProjectLoaded,
 }: SyncModalProps) {
   const [mode, setMode] = useState<'project' | 'file'>('project');
@@ -337,7 +335,6 @@ export default function SyncModal({
       saveCheckpoint();
       setWorkspace(data.workspace);
       onProjectLoaded?.();
-      setAutoSaveEnabled?.(false);
       if (setWorkspaceView) setWorkspaceView('blueprint');
       setStatusBanner({ type: 'success', msg: `Loaded ${selectedRoot} mod folder "${selectedPath}". ${data.report?.summary || ''}` });
       onClose();
@@ -360,7 +357,6 @@ export default function SyncModal({
         if (parsed && typeof parsed === 'object' && Array.isArray(parsed.nodes)) {
           saveCheckpoint();
           setWorkspace(parsed);
-          setAutoSaveEnabled?.(false);
           setStatusBanner({ type: 'success', msg: `Workspace JSON "${parsed.name || 'mod'}" loaded with ${parsed.nodes.length} visual nodes.` });
           onClose();
         } else {
@@ -413,7 +409,6 @@ export default function SyncModal({
         if (!reconstructed || reconstructed.nodes.length === 0) throw new Error('No compatible MD cues/events/actions were identified.');
         saveCheckpoint();
         setWorkspace(reconstructed);
-        setAutoSaveEnabled?.(false);
         if (setWorkspaceView) setWorkspaceView('blueprint');
         onClose();
       }

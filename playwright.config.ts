@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
@@ -22,6 +23,34 @@ const E2E_STATE_DIR = path.join(os.tmpdir(), `x4forge-e2e-state-${process.pid}`)
 // all 19 tests). Same class as vite.config's proxy 127.0.0.1 comment.
 const E2E_BASE_URL = process.env.PLAYWRIGHT_BASE_URL || `http://127.0.0.1:${E2E_WEB_PORT}`;
 
+/**
+ * Mutable directory settings stay in E2E_STATE_DIR, but canonical game data is a
+ * read-only test input and must remain available to corpus-backed diagnostics. Resolve
+ * it before X4_CONFIG_DIR is redirected. An explicit environment value wins; the
+ * repository's machine-local config may name the root directly or name its libraries
+ * directory as the schema source.
+ */
+function resolveE2eReferenceRoot(): string | undefined {
+  const candidates: string[] = [];
+  if (process.env.X4_REFERENCE_ROOT?.trim()) candidates.push(process.env.X4_REFERENCE_ROOT.trim());
+  try {
+    const configured = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'config.json'), 'utf8')) as {
+      x4ReferenceRoot?: string;
+      xsdSchemaPath?: string;
+    };
+    if (configured.x4ReferenceRoot?.trim()) candidates.push(configured.x4ReferenceRoot.trim());
+    if (configured.xsdSchemaPath?.trim() && path.basename(configured.xsdSchemaPath).toLowerCase() === 'libraries') {
+      candidates.push(path.dirname(configured.xsdSchemaPath));
+    }
+  } catch { /* an unconfigured machine fails corpus-dependent tests honestly */ }
+  candidates.push(path.join(process.cwd(), 'data', 'x4-unpacked'));
+  return candidates.map(candidate => path.resolve(candidate)).find(candidate => {
+    try { return fs.statSync(candidate).isDirectory(); } catch { return false; }
+  });
+}
+
+const E2E_REFERENCE_ROOT = resolveE2eReferenceRoot();
+
 const ephemeralEnv = {
   STUDIO_API_TOKEN: E2E_TOKEN,
   API_PORT: String(E2E_API_PORT),
@@ -33,6 +62,7 @@ const ephemeralEnv = {
   // per-run sandbox so a failed test can never strand the installed Forge on a
   // deleted temporary workspace.
   X4_CONFIG_DIR: E2E_STATE_DIR,
+  ...(E2E_REFERENCE_ROOT ? { X4_REFERENCE_ROOT: E2E_REFERENCE_ROOT } : {}),
   // Deterministic pages: no HMR socket, no watcher-triggered reloads mid-spec.
   DISABLE_HMR: 'true',
   // B93.1: the ephemeral stack must NOT publish its port into the user's real ~/.x4forge.

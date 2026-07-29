@@ -116,7 +116,7 @@ and gitignore the by-products.
 3. IMPLEMENT   patch through the Forge API, byte-exact readback, count-asserted anchors.
 4. VALIDATE    POST /api/agent/project/validate  → loop to ok:true
                + syntax gate, unit tests, wiring gate (see §6)
-5. DEPLOY      POST /api/agent/deploy-verify {autoReimport: true}
+5. DEPLOY      POST /api/agent/deploy-verify {path: "<mod folder>", autoReimport: true}
 6. PROVE       IN-GAME. Not optional. See §7.
 7. RECORD      write what you learned into the methods library.
 ```
@@ -190,7 +190,7 @@ Static gates prove *legality*. They cannot prove *behaviour*. So:
 | `GET /api/agent/schema` | self-documenting endpoint list (public) |
 | `GET /api/agent/workspace` | active workspace + `workspaceHash` |
 | `POST /api/agent/project/validate` | **authoritative** validation — loop to `ok:true` |
-| `POST /api/agent/deploy-verify` | 9-stage compile + deploy preflight |
+| `POST /api/agent/deploy-verify` | 10-stage compile + deploy preflight; requires explicit `path` or `workspace` |
 | `GET /api/agent/selftest-index` | the oracle list |
 | `GET /api/reference/status` | cheap authenticated probe — use for port discovery |
 

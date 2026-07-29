@@ -18,8 +18,6 @@ interface DiagnosticsHubProps {
   modWorkspacePath: string;
   setWorkspaceView?: (view: any) => void;
   forceTab?: 'analyzer' | 'playtest';
-  autoSaveEnabled?: boolean;
-  setAutoSaveEnabled?: (val: boolean) => void;
   /** A4.10 — gates the optional AI-polish affordance inside MDScanner. */
   aiEnabled?: boolean;
 }
@@ -35,8 +33,6 @@ export default function DiagnosticsHub({
   saveCheckpoint,
   modWorkspacePath,
   forceTab,
-  autoSaveEnabled: propAutoSaveEnabled,
-  setAutoSaveEnabled: propSetAutoSaveEnabled,
   aiEnabled = false
 }: DiagnosticsHubProps) {
   const [toolActiveTab, setToolActiveTab] = useState<'analyzer' | 'playtest'>('analyzer');
@@ -54,10 +50,6 @@ export default function DiagnosticsHub({
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
   const [syncErrorMsg, setSyncErrorMsg] = useState<string>('');
   
-  const [localAutoSaveEnabled, setLocalAutoSaveEnabled] = useState<boolean>(false);
-  const autoSaveEnabled = propAutoSaveEnabled !== undefined ? propAutoSaveEnabled : localAutoSaveEnabled;
-  const setAutoSaveEnabled = propSetAutoSaveEnabled !== undefined ? propSetAutoSaveEnabled : setLocalAutoSaveEnabled;
-
   // Log analysis state
   const [logInput, setLogInput] = useState<string>('');
   const [diagnosingLogs, setDiagnosingLogs] = useState<boolean>(false);
@@ -274,12 +266,11 @@ export default function DiagnosticsHub({
           />
         ) : (
           <PlaytestWorkspace
+            workspace={workspace}
             activeModId={toSafeModId(workspace.name)}
             modWorkspacePath={modWorkspacePath}
             syncStatus={syncStatus}
             syncErrorMsg={syncErrorMsg}
-            autoSaveEnabled={autoSaveEnabled}
-            setAutoSaveEnabled={setAutoSaveEnabled}
             saveToDirectory={saveToDirectory}
             logInput={logInput}
             setLogInput={setLogInput}

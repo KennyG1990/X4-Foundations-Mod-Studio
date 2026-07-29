@@ -9,12 +9,46 @@
  * auth middleware (none are in PUBLIC_READONLY_GETS).
  */
 
-import type { Express } from "express";
+import type { Express, Response } from "express";
+import { createGithubCredentialStore } from './githubCredentialStore';
+
+const credentialStore = createGithubCredentialStore();
+const MAX_PUSH_FILES = 100;
+const MAX_PUSH_BYTES = 10 * 1024 * 1024;
+const MAX_LOADED_FILE_BYTES = 10 * 1024 * 1024;
+
+function storedCredential(res: Response): string | null {
+  const token = credentialStore.get();
+  if (token) return token;
+  res.status(401).json({ error: 'GitHub is not connected. Connect in Source Control settings first.', code: 'GITHUB_NOT_CONNECTED' });
+  return null;
+}
 
 export function registerGithubRoutes(app: Express): void {
 
+  app.get('/api/github/credential', (_req, res) => {
+    return res.json({ configured: credentialStore.configured() });
+  });
+
+  app.post('/api/github/credential', (req, res) => {
+    try {
+      credentialStore.set(String(req.body?.token || ''));
+      return res.json({ configured: true });
+    } catch (error) {
+      return res.status(400).json({ configured: credentialStore.configured(), error: (error as Error).message });
+    }
+  });
+
+  app.delete('/api/github/credential', (_req, res) => {
+    credentialStore.clear();
+    return res.json({ configured: false, deleted: true });
+  });
+
   app.post("/api/github/load", async (req, res) => {
-    const { pat, owner, repo, path: filePath, branch } = req.body;
+    const { owner, repo, path: filePath, branch } = req.body;
+
+    const pat = storedCredential(res);
+    if (!pat) return;
 
     if (!owner || !repo || !filePath) {
       return res.status(400).json({ error: "Missing repo parameters (owner, repo, or path)." });
@@ -26,9 +60,7 @@ export function registerGithubRoutes(app: Express): void {
       "User-Agent": "x4-md-studio-proxy"
     };
 
-    if (pat) {
-      headers["Authorization"] = `token ${pat}`;
-    }
+    headers["Authorization"] = `token ${pat}`;
 
     try {
       const url = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}?ref=${branch || "main"}`;
@@ -47,7 +79,14 @@ export function registerGithubRoutes(app: Express): void {
         return res.status(400).json({ error: "Selected path is not a single file." });
       }
 
+      if (Number(data.size || 0) > MAX_LOADED_FILE_BYTES) {
+        return res.status(413).json({ error: `GitHub file exceeds the ${MAX_LOADED_FILE_BYTES}-byte load limit.`, code: 'GITHUB_FILE_TOO_LARGE' });
+      }
+
       const decoded = Buffer.from(data.content, "base64").toString("utf-8");
+      if (Buffer.byteLength(decoded, 'utf8') > MAX_LOADED_FILE_BYTES) {
+        return res.status(413).json({ error: `GitHub file exceeds the ${MAX_LOADED_FILE_BYTES}-byte load limit.`, code: 'GITHUB_FILE_TOO_LARGE' });
+      }
       return res.json({
         success: true,
         sha: data.sha,
@@ -61,16 +100,22 @@ export function registerGithubRoutes(app: Express): void {
   });
 
   app.post("/api/github/push", async (req, res) => {
-    const { pat, owner, repo, branch, commitMessage, files } = req.body;
+    const { owner, repo, branch, commitMessage, files } = req.body;
 
-    if (!pat) {
-      return res.status(400).json({ error: "GitHub Personal Access Token (PAT) is required." });
-    }
+    const pat = storedCredential(res);
+    if (!pat) return;
     if (!owner || !repo) {
       return res.status(400).json({ error: "Owner and repository name are required." });
     }
     if (!files || !Array.isArray(files) || files.length === 0) {
       return res.status(400).json({ error: "No files provided to push." });
+    }
+    if (files.length > MAX_PUSH_FILES) {
+      return res.status(413).json({ error: `GitHub push is limited to ${MAX_PUSH_FILES} files per request.`, code: 'GITHUB_PUSH_TOO_LARGE' });
+    }
+    const totalBytes = files.reduce((sum: number, file: any) => sum + Buffer.byteLength(String(file?.content ?? ''), 'utf8'), 0);
+    if (totalBytes > MAX_PUSH_BYTES) {
+      return res.status(413).json({ error: `GitHub push exceeds the ${MAX_PUSH_BYTES}-byte request limit.`, code: 'GITHUB_PUSH_TOO_LARGE' });
     }
 
     const selectedBranch = branch || "main";
@@ -158,11 +203,10 @@ export function registerGithubRoutes(app: Express): void {
    * so a mod-in-progress can be published as a fresh repo in one click.
    */
   app.post("/api/github/create", async (req, res) => {
-    const { pat, name, description, private: isPrivate } = req.body;
+    const { name, description, private: isPrivate } = req.body;
 
-    if (!pat) {
-      return res.status(400).json({ error: "GitHub Personal Access Token (PAT) is required." });
-    }
+    const pat = storedCredential(res);
+    if (!pat) return;
     if (!name) {
       return res.status(400).json({ error: "Repository name is required." });
     }
@@ -237,7 +281,7 @@ export function registerGithubRoutes(app: Express): void {
   /**
    * POST /api/github/device/poll
    * Polls GitHub for the device-flow access token. Returns { pending: true } until the
-   * user approves, then { access_token, login } once authorized.
+   * user approves, then stores the token server-side and returns status/login only.
    */
   app.post("/api/github/device/poll", async (req, res) => {
     const clientId = String(req.body?.client_id || process.env.GITHUB_CLIENT_ID || "").trim();
@@ -258,6 +302,7 @@ export function registerGithubRoutes(app: Express): void {
       const data: any = await response.json();
 
       if (data.access_token) {
+        credentialStore.set(String(data.access_token));
         // Fetch the authenticated user's login so the client can auto-fill the repo owner.
         let login: string | undefined;
         try {
@@ -273,7 +318,7 @@ export function registerGithubRoutes(app: Express): void {
         } catch {
           // Non-fatal; owner can be entered manually.
         }
-        return res.json({ access_token: data.access_token, token_type: data.token_type, scope: data.scope, login });
+        return res.json({ connected: true, token_type: data.token_type, scope: data.scope, login });
       }
 
       // Still waiting / throttled / expired — surface the GitHub error code to the poller.
@@ -289,9 +334,11 @@ export function registerGithubRoutes(app: Express): void {
    * reflects the actual mod repository instead of seeded placeholder data.
    */
   app.post("/api/github/commits", async (req, res) => {
-    const { pat, owner, repo, branch } = req.body;
-    if (!pat || !owner || !repo) {
-      return res.status(400).json({ error: "Missing pat, owner, or repo." });
+    const { owner, repo, branch } = req.body;
+    const pat = storedCredential(res);
+    if (!pat) return;
+    if (!owner || !repo) {
+      return res.status(400).json({ error: "Missing owner or repo." });
     }
     try {
       const url = `https://api.github.com/repos/${owner}/${repo}/commits?sha=${encodeURIComponent(branch || "main")}&per_page=50`;

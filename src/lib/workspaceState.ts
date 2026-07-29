@@ -13,6 +13,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import * as crypto from "crypto";
 
 export interface PersistedWorkspaceState {
   workspace: any;
@@ -69,13 +70,32 @@ export function slugifyWorkspaceName(name: string): string {
   return `${base}_${sum.toString(16)}`;
 }
 
-/** Write JSON via tmp+rename so a crash mid-write never leaves a torn file. */
-export function atomicWriteJson(file: string, data: unknown): void {
+interface AtomicWriteOptions {
+  /** Test-only seam: production callers never provide this. */
+  beforeRename?: (tmp: string, target: string) => void;
+}
+
+/**
+ * Write bytes via a sibling temp file + rename, cleaning the temp on every failure path.
+ * The destination is untouched until the complete temp file has been closed successfully.
+ */
+export function atomicWriteFile(file: string, data: string | Buffer, options: AtomicWriteOptions = {}): void {
   const dir = path.dirname(file);
   fs.mkdirSync(dir, { recursive: true });
-  const tmp = path.join(dir, `.tmp-${process.pid}-${Date.now()}-${path.basename(file)}`);
-  fs.writeFileSync(tmp, JSON.stringify(data), "utf8");
-  fs.renameSync(tmp, file);
+  const tmp = path.join(dir, `.${path.basename(file)}.${process.pid}.${Date.now()}.${crypto.randomBytes(6).toString('hex')}.tmp`);
+  try {
+    if (typeof data === 'string') fs.writeFileSync(tmp, data, 'utf8');
+    else fs.writeFileSync(tmp, data);
+    options.beforeRename?.(tmp, file);
+    fs.renameSync(tmp, file);
+  } finally {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* best-effort orphan cleanup */ }
+  }
+}
+
+/** Write JSON via the shared atomic byte writer. */
+export function atomicWriteJson(file: string, data: unknown): void {
+  atomicWriteFile(file, JSON.stringify(data));
 }
 
 /** A persisted state is adoptable only if it looks like a real workspace. */
@@ -173,6 +193,19 @@ export function runWorkspaceStateSelftest(): { pass: boolean; checks: Array<{ na
     origin: "selftest",
   });
   try {
+    // 0. atomic failure preserves the previous destination and leaves no temp file.
+    const atomicTarget = path.join(dir, 'atomic.txt');
+    fs.writeFileSync(atomicTarget, 'last-known-good', 'utf8');
+    let injectedFailure = false;
+    try {
+      atomicWriteFile(atomicTarget, 'replacement', {
+        beforeRename: () => { throw new Error('injected pre-rename failure'); },
+      });
+    } catch { injectedFailure = true; }
+    checks.push({ name: 'atomic_failure_is_reported', pass: injectedFailure });
+    checks.push({ name: 'atomic_failure_preserves_previous_bytes', pass: fs.readFileSync(atomicTarget, 'utf8') === 'last-known-good' });
+    checks.push({ name: 'atomic_failure_leaves_no_temp_file', pass: !fs.readdirSync(dir).some(name => name.startsWith('.atomic.txt.') && name.endsWith('.tmp')) });
+
     // 1. active round-trip
     const s1 = mkState("Alpha_Mod", [{ id: "n1" }, { id: "n2" }], 111);
     writeActiveState(dir, s1);

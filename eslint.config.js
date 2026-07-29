@@ -13,11 +13,19 @@ export default tseslint.config(
     files: ['**/*.{ts,tsx}'],
     plugins: { 'react-hooks': reactHooks },
     rules: {
-      ...reactHooks.configs.recommended.rules,
+      // Keep the established React Hooks 5 gate while the plugin is upgraded for
+      // ESLint 10 compatibility. The plugin's newer compiler rules are a separate,
+      // repo-wide migration rather than a dependency-remediation side effect.
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn',
       // The codebase predates typing discipline in endpoint glue; tighten over time.
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
-      'no-empty': ['error', { allowEmptyCatch: true }]
+      'no-empty': ['error', { allowEmptyCatch: true }],
+      // Added to eslint:recommended in ESLint 10. They expose substantial legacy
+      // cleanup and are not part of the previously enforced lint contract.
+      'no-useless-assignment': 'off',
+      'preserve-caught-error': 'off'
     }
   }
 );

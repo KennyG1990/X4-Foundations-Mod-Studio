@@ -21,12 +21,18 @@ import {
 import { parseModManifest, type ModDependency, type ModManifest } from './modDependencyGraph';
 import { classifyCueRef } from './cueLineage';
 import { normPath } from './xmlLite';
+import { parse } from 'luaparse';
+import { DOMParser } from '@xmldom/xmldom';
+import { stripLuaComments } from './luaStaticAnalysis';
 
 export type ProjectCrossFileFindingCode =
   | 'project.structure'
   | 'cue.unresolved'
   | 'md_lua.missing_register'
   | 'lua_md.missing_listener'
+  | 'md_lua.payload_collision'
+  | 'md_lua.payload_missing_writer'
+  | 'md_lua.payload_unused_writer'
   | 'dep.missing_content_xml'
   | 'dep.duplicate'
   | 'dep.self'
@@ -72,6 +78,7 @@ export interface ProjectCrossFileValidationResult {
     unresolvedCueRefs: number;
     mdLuaMissingRegisters: number;
     luaMdMissingListeners: number;
+    payloadContractErrors: number;
     dependencies: number;
   };
   findings: ProjectCrossFileFinding[];
@@ -140,15 +147,169 @@ function continuesWithConcat(content: string, endIndex: number): boolean {
   return /^\s*\.\./.test((content || '').slice(endIndex, endIndex + 8));
 }
 
-function parseLuaRegisteredEvents(content: string, file: string): ProjectEventRef[] {
-  const out: ProjectEventRef[] = [];
-  const re = /\bRegisterEvent\s*\(\s*["']([^"']+)["']/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(content || '')) !== null) {
-    const prefix = continuesWithConcat(content, re.lastIndex) || undefined;
-    out.push({ event: m[1], file, ...(prefix ? { prefix } : {}) });
+function walkLuaAst(node: any, visit: (node: any) => void): void {
+  if (!node || typeof node !== 'object') return;
+  visit(node);
+  for (const [key, value] of Object.entries(node)) {
+    if (key === 'loc' || key === 'range' || key === 'comments' || key === 'tokens' || key === 'globals') continue;
+    if (Array.isArray(value)) value.forEach(item => walkLuaAst(item, visit));
+    else if (value && typeof value === 'object') walkLuaAst(value, visit);
   }
+}
+
+function luaIdentifier(node: any): string | null {
+  return node?.type === 'Identifier' && typeof node.name === 'string' ? node.name : null;
+}
+
+function luaStringPrefix(node: any, strings: Map<string, string>): { value: string; prefix: boolean } | null {
+  if (!node) return null;
+  if (node.type === 'StringLiteral' && typeof node.value === 'string') return { value: node.value, prefix: false };
+  if (node.type === 'Identifier') {
+    const value = strings.get(node.name);
+    return value === undefined ? null : { value, prefix: false };
+  }
+  if (node.type === 'BinaryExpression' && node.operator === '..') {
+    const left = luaStringPrefix(node.left, strings);
+    if (!left) return null;
+    const right = luaStringPrefix(node.right, strings);
+    return right
+      ? { value: left.value + right.value, prefix: left.prefix || right.prefix }
+      : { value: left.value, prefix: true };
+  }
+  return null;
+}
+
+function parseLuaRegisteredEvents(content: string, file: string): ProjectEventRef[] {
+  let ast: any;
+  try {
+    ast = parse(content || '', { comments: false, locations: true, ranges: true, scope: true, luaVersion: '5.2', encodingMode: 'pseudo-latin1' });
+  } catch {
+    return [];
+  }
+
+  const strings = new Map<string, string>();
+  const registrars = new Set<string>(['RegisterEvent']);
+  walkLuaAst(ast, node => {
+    if (node.type !== 'LocalStatement' && node.type !== 'AssignmentStatement') return;
+    (node.variables || []).forEach((variable: any, index: number) => {
+      const name = luaIdentifier(variable);
+      const init = (node.init || [])[index];
+      if (!name || !init) return;
+      if (init.type === 'StringLiteral' && typeof init.value === 'string') strings.set(name, init.value);
+      const sourceName = luaIdentifier(init);
+      if (sourceName && registrars.has(sourceName)) registrars.add(name);
+    });
+  });
+
+  // Simple wrappers are common and deterministic: local function reg(event, fn)
+  // RegisterEvent(event, fn) end. Record which wrapper parameter becomes the event name.
+  const wrappers = new Map<string, number>();
+  walkLuaAst(ast, node => {
+    if (node.type !== 'FunctionDeclaration') return;
+    const wrapperName = luaIdentifier(node.identifier);
+    if (!wrapperName) return;
+    const params = (node.parameters || []).map(luaIdentifier);
+    walkLuaAst(node.body || [], child => {
+      if (child.type !== 'CallExpression' || !registrars.has(luaIdentifier(child.base) || '')) return;
+      const eventParam = luaIdentifier((child.arguments || [])[0]);
+      const index = params.indexOf(eventParam);
+      if (index >= 0) wrappers.set(wrapperName, index);
+    });
+  });
+
+  const out: ProjectEventRef[] = [];
+  const seen = new Set<string>();
+  walkLuaAst(ast, node => {
+    if (node.type !== 'CallExpression') return;
+    const callee = luaIdentifier(node.base);
+    if (!callee) return;
+    const argIndex = registrars.has(callee) ? 0 : wrappers.get(callee);
+    if (argIndex === undefined) return;
+    const value = luaStringPrefix((node.arguments || [])[argIndex], strings);
+    if (!value?.value) return;
+    const key = `${value.value}\0${value.prefix}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ event: value.value, file, ...(value.prefix ? { prefix: true } : {}) });
+  });
   return out;
+}
+
+interface PayloadReadSite { file: string; destination: string; branch?: string }
+interface PayloadWriteSite { file: string }
+
+/** Port of the observed x4_ai_influence wiregate invariant, scoped to its exact protocol shapes. */
+function validateIndexedPayloadContract(mdFiles: ExtensionProject['files'], luaFiles: ExtensionProject['files']): ProjectCrossFileFinding[] {
+  const reads = new Map<string, { global: PayloadReadSite[]; verb: PayloadReadSite[] }>();
+  const writes = new Map<string, PayloadWriteSite[]>();
+  const readPattern = /param3\.\{'\$([a-zA-Z]+)'\s*\+\s*\$si\}/g;
+  const writePattern = /payload\[\s*["']([a-zA-Z]+)["']\s*\.\.\s*payload\.n\s*\]/g;
+
+  for (const file of luaFiles) {
+    const code = stripLuaComments(file.content || '');
+    let match: RegExpExecArray | null;
+    while ((match = writePattern.exec(code)) !== null) {
+      const sites = writes.get(match[1]) || [];
+      sites.push({ file: file.path });
+      writes.set(match[1], sites);
+    }
+  }
+  for (const file of mdFiles) {
+    if (!(file.content || '').includes('param3')) continue;
+    let doc: Document;
+    try { doc = new DOMParser().parseFromString(file.content || '', 'text/xml') as unknown as Document; }
+    catch { continue; }
+    const elements = Array.from(doc.getElementsByTagName('*')) as Element[];
+    for (const element of elements) {
+      const attrs = Array.from(element.attributes || []);
+      for (const attr of attrs) {
+        let match: RegExpExecArray | null;
+        readPattern.lastIndex = 0;
+        while ((match = readPattern.exec(attr.value || '')) !== null) {
+          let branch: string | undefined;
+          let parent = element.parentNode as Element | null;
+          while (parent) {
+            if (parent.nodeType === 1 && (parent.tagName === 'do_if' || parent.tagName === 'do_elseif') && /\$sv\s*==/.test(parent.getAttribute('value') || '')) {
+              branch = parent.getAttribute('value') || undefined;
+              break;
+            }
+            parent = parent.parentNode as Element | null;
+          }
+          const bucket = reads.get(match[1]) || { global: [], verb: [] };
+          bucket[branch ? 'verb' : 'global'].push({ file: file.path, destination: element.getAttribute('name') || `<${element.tagName}>`, ...(branch ? { branch } : {}) });
+          reads.set(match[1], bucket);
+        }
+      }
+    }
+  }
+
+  // Do not infer a protocol from a generic use of `payload` or `param3`; at least one exact
+  // indexed key shape must exist somewhere in the project.
+  if (reads.size === 0 && writes.size === 0) return [];
+  const findings: ProjectCrossFileFinding[] = [];
+  for (const key of new Set([...reads.keys(), ...writes.keys()])) {
+    const read = reads.get(key) || { global: [], verb: [] };
+    const write = writes.get(key) || [];
+    if (read.global.length && read.verb.length) {
+      findings.push({
+        code: 'md_lua.payload_collision', severity: 'error', file: read.verb[0].file,
+        detail: `Indexed payload key "${key}<n>" is read globally (${read.global.map(site => site.destination).join(', ')}) and inside a verb branch (${read.verb.map(site => site.destination).join(', ')}). A global slot belongs to every step and cannot be reused by one verb.`,
+      });
+    }
+    if ((read.global.length || read.verb.length) && !write.length) {
+      findings.push({
+        code: 'md_lua.payload_missing_writer', severity: 'error', file: [...read.global, ...read.verb][0].file,
+        detail: `MD reads indexed payload key "${key}<n>", but no project Lua file writes payload["${key}" .. payload.n].`,
+      });
+    }
+    if (write.length && !(read.global.length || read.verb.length)) {
+      findings.push({
+        code: 'md_lua.payload_unused_writer', severity: 'error', file: write[0].file,
+        detail: `Lua writes indexed payload key "${key}<n>", but no project MD file reads param3.{'$${key}' + $si}.`,
+      });
+    }
+  }
+  return findings;
 }
 
 function parseLuaUiEmits(content: string, file: string): ProjectUiEventRef[] {
@@ -202,6 +363,8 @@ export function validateProjectCrossFile(project: ExtensionProject): ProjectCros
   const listened = mdFiles.flatMap(f => parseMdUiListeners(f.content || '', f.path));
   const registered = luaFiles.flatMap(f => parseLuaRegisteredEvents(f.content || '', f.path));
   const emitted = luaFiles.flatMap(f => parseLuaUiEmits(f.content || '', f.path));
+  const payloadFindings = validateIndexedPayloadContract(mdFiles, luaFiles);
+  findings.push(...payloadFindings);
 
   const registeredEvents = new Set(registered.map(r => r.event));
   const listenedEvents = new Set(listened.map(r => r.event));
@@ -326,6 +489,7 @@ export function validateProjectCrossFile(project: ExtensionProject): ProjectCros
       unresolvedCueRefs: cueIndex.unresolved.length,
       mdLuaMissingRegisters: missingRegisters.length,
       luaMdMissingListeners: missingListeners.length,
+      payloadContractErrors: payloadFindings.filter(f => f.severity === 'error').length,
       dependencies: manifest?.deps.length || 0,
     },
     findings,
@@ -429,6 +593,66 @@ export function runProjectCrossFileSelftest() {
   ok('dynamic_concat_register_satisfies_raised_event_by_prefix',
     !dynReg.findings.some(f => f.code === 'md_lua.missing_register'),
     dynReg.findings);
+
+  const commentedRegister: ExtensionProject = {
+    ...fixtureProject(),
+    files: fixtureProject().files.map(f => f.path === 'ui/chat.lua' ? {
+      ...f,
+      content: `-- RegisterEvent("ai_influence.chat", handler)\nlocal NS = "ai_influence"\nAddUITriggeredEvent(NS, "chat.response", {})`,
+    } : f),
+  };
+  const commentResult = validateProjectCrossFile(commentedRegister);
+  ok('register_event_text_in_a_comment_is_not_a_registration',
+    commentResult.findings.some(f => f.code === 'md_lua.missing_register' && f.event === 'ai_influence.chat'),
+    commentResult.mdLua.registered);
+
+  const aliasedRegister: ExtensionProject = {
+    ...fixtureProject(),
+    files: fixtureProject().files.map(f => f.path === 'ui/chat.lua' ? {
+      ...f,
+      content: `local NS = "ai_influence"\nlocal reg = RegisterEvent\nreg("ai_influence.chat", handler)\nAddUITriggeredEvent(NS, "chat.response", {})`,
+    } : f),
+  };
+  const aliasResult = validateProjectCrossFile(aliasedRegister);
+  ok('simple_register_event_alias_is_resolved_from_the_ast',
+    !aliasResult.findings.some(f => f.code === 'md_lua.missing_register'), aliasResult.mdLua.registered);
+
+  const wrappedRegister: ExtensionProject = {
+    ...fixtureProject(),
+    files: fixtureProject().files.map(f => f.path === 'ui/chat.lua' ? {
+      ...f,
+      content: `local NS = "ai_influence"\nlocal function reg(event, handler) RegisterEvent(event, handler) end\nreg("ai_influence.chat", handler)\nAddUITriggeredEvent(NS, "chat.response", {})`,
+    } : f),
+  };
+  const wrapperResult = validateProjectCrossFile(wrappedRegister);
+  ok('simple_register_event_wrapper_is_resolved_from_the_ast',
+    !wrapperResult.findings.some(f => f.code === 'md_lua.missing_register'), wrapperResult.mdLua.registered);
+
+  const payloadCollision = addFile(addFile(fixtureProject(), {
+    path: 'ui/orders.lua', kind: 'lua',
+    content: `payload["g" .. payload.n] = station\npayload["w" .. payload.n] = ware`,
+  }), {
+    path: 'md/orders.xml', kind: 'md',
+    content: `<mdscript name="Orders"><cues><cue name="Resolve"><actions>
+      <set_value name="$station" exact="event.param3.{'$g' + $si}"/>
+      <do_if value="$sv == 'wing'"><set_value name="$group" exact="event.param3.{'$g' + $si}"/></do_if>
+      <set_value name="$ware" exact="event.param3.{'$w' + $si}"/>
+    </actions></cue></cues></mdscript>`,
+  });
+  const collisionResult = validateProjectCrossFile(payloadCollision);
+  ok('indexed_payload_global_and_verb_collision_is_an_error',
+    collisionResult.findings.some(f => f.code === 'md_lua.payload_collision' && f.severity === 'error'),
+    collisionResult.findings);
+
+  const payloadGap = addFile(addFile(fixtureProject(), {
+    path: 'ui/orders.lua', kind: 'lua', content: `payload["q" .. payload.n] = value`,
+  }), {
+    path: 'md/orders.xml', kind: 'md',
+    content: `<mdscript name="Orders"><cues><cue name="Resolve"><actions><set_value name="$station" exact="event.param3.{'$g' + $si}"/></actions></cue></cues></mdscript>`,
+  });
+  const gapResult = validateProjectCrossFile(payloadGap);
+  ok('indexed_payload_read_without_writer_is_an_error', gapResult.findings.some(f => f.code === 'md_lua.payload_missing_writer'), gapResult.findings);
+  ok('indexed_payload_write_without_reader_is_an_error', gapResult.findings.some(f => f.code === 'md_lua.payload_unused_writer'), gapResult.findings);
 
   const brokenCue = addFile(fixtureProject(), {
     path: 'md/broken.xml',

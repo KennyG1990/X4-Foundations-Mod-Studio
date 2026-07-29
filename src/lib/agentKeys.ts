@@ -207,6 +207,8 @@ export const WRITE_SCOPE_POST_PATHS = new Set([
 
 /** Key management is session-token-only for EVERY scope. */
 export const KEY_MANAGEMENT_PREFIX = '/agent/keys';
+/** GitHub routes can spend the user's external repository authority via a stored credential. */
+export const GITHUB_SESSION_ONLY_PREFIX = '/github/';
 
 /**
  * Arbitrary command execution (dev-only run_command route + its async jobs) is
@@ -223,6 +225,7 @@ export const EXEC_PREFIX = '/run_command';
  */
 export function scopeAllows(scope: AgentKeyScope, method: string, reqPath: string): boolean {
   if (reqPath.startsWith(KEY_MANAGEMENT_PREFIX)) return false; // never via agent key
+  if (reqPath.startsWith(GITHUB_SESSION_ONLY_PREFIX)) return false; // stored user credential: Studio session only
   if (reqPath.startsWith(EXEC_PREFIX)) return false; // B64-SEC1: exec is session-token-only, even on GET
   const m = method.toUpperCase();
   if (m === 'GET' || m === 'HEAD' || m === 'OPTIONS') return true; // all scopes read
@@ -310,6 +313,11 @@ export function runAgentKeysSelftest(): { pass: boolean; checks: Array<{ name: s
   ok('no_scope_can_manage_keys',
     (['read', 'write', 'deploy'] as AgentKeyScope[]).every(
       (s) => scopeAllows(s, 'POST', '/agent/keys') === false && scopeAllows(s, 'GET', '/agent/keys') === false));
+  ok('no_scope_can_spend_stored_github_authority',
+    (['read', 'write', 'deploy'] as AgentKeyScope[]).every(
+      (s) => scopeAllows(s, 'GET', '/github/credential') === false &&
+             scopeAllows(s, 'POST', '/github/push') === false &&
+             scopeAllows(s, 'DELETE', '/github/credential') === false));
   // B64-SEC1: no agent-key scope may reach the dev-only exec route on ANY method (the
   // blanket-GET grant used to leak GET /run_command RCE to read keys). Session token only.
   ok('no_scope_can_exec_commands',
