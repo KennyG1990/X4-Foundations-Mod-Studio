@@ -56,7 +56,7 @@ jobs:
                   except Exception as e:
                       f.write(f'* {commit_msg} ({short_sha})')
 
-          msg_content = f'**X4 FORGE - UPDATE ({version})**\n\nThanks to all testers and the community for feedback and support!\n\n**Support me**:\n<https://patreon.com/>\n\n**Download & Repository**:\n**Open VSX Marketplace**: <https://open-vsx.org/extension/x4forge/x4-forge-studio>\n**GitHub Repository**: <https://github.com/KennyG1990/X4_Forge>\n\n**To apply this update correctly**, reload your editor window after updating to ensure the latest extension engine loads cleanly.'
+          msg_content = f'**X4 FORGE - UPDATE ({version})**\n\nThanks to all testers and the community for feedback and support!\n\n**Support me**:\n<https://www.patreon.com/c/KennyG1990/membership>\n\n**Download & Repository**:\n**Open VSX Marketplace**: <https://open-vsx.org/extension/x4forge/x4-forge-studio>\n**GitHub Repository**: <https://github.com/KennyG1990/X4_Forge>\n\n**To apply this update correctly**, reload your editor window after updating to ensure the latest extension engine loads cleanly.'
 
           payload = json.dumps({'content': msg_content})
 
