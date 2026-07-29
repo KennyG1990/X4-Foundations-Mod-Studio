@@ -10,10 +10,7 @@ dotenv.config();
 const DISCORD_TOKEN = process.env.AILIVE_DISCORD_TOKEN || process.env.DISCORD_TOKEN;
 const GEMINI_API_KEY = process.env.AILIVE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
 
-// ANTI-SPAM TIMERS (for general community users):
-const USER_COOLDOWN_MS = 10 * 60 * 1000;   // 10 minutes per user
-const GLOBAL_COOLDOWN_MS = 2 * 60 * 1000;  // 2 minutes global server-wide
-
+const GLOBAL_COOLDOWN_MS = 60 * 1000;  // 1 minute global server-wide throttle
 let lastGlobalResponseTime = 0;
 const userCooldowns = new Map();
 
@@ -80,8 +77,37 @@ client.once('clientReady', (c) => {
   console.log(`🤖 x4 AiLive Community Assistant is ONLINE as ${c.user.tag}`);
 });
 
+// PATREON TIER COOLDOWN RESTRICTIONS:
+// Owner: 0 cooldown, unrestricted
+// Patreon ($5/mo): 5 minute cooldown
+// Backer ($3/mo): 10 minute cooldown
+// Supporter ($1/mo): 30 minute cooldown
+// Non-backer: No access
+function getPatreonTierInfo(member, isOwner) {
+  if (isOwner) return { allowed: true, cooldownMs: 0, tierName: 'Owner' };
+
+  if (!member || !member.roles) {
+    return { allowed: false, cooldownMs: 0, tierName: 'None' };
+  }
+
+  const roleNames = member.roles.cache.map(r => r.name.toLowerCase());
+
+  if (roleNames.some(name => name.includes('patreon'))) {
+    return { allowed: true, cooldownMs: 5 * 60 * 1000, tierName: 'Patreon' };
+  }
+
+  if (roleNames.some(name => name.includes('backer'))) {
+    return { allowed: true, cooldownMs: 10 * 60 * 1000, tierName: 'Backer' };
+  }
+
+  if (roleNames.some(name => name.includes('supporter'))) {
+    return { allowed: true, cooldownMs: 30 * 60 * 1000, tierName: 'Supporter' };
+  }
+
+  return { allowed: false, cooldownMs: 0, tierName: 'None' };
+}
+
 client.on('messageCreate', async (message) => {
-  // Ignore messages from bots (including self)
   if (message.author.bot) return;
 
   const isMentioned = message.mentions.has(client.user.id);
@@ -104,20 +130,34 @@ client.on('messageCreate', async (message) => {
   const isFeatureChannel = channelName.includes('feature-requests');
 
   if (isConciergeChannel || isMentioned || isHelpChannel || isBugChannel || isFeatureChannel || isOwner) {
+    const tierInfo = getPatreonTierInfo(message.member, isOwner);
+
+    // Non-backers have zero access to Concierge LLM
+    if (!tierInfo.allowed) {
+      await message.reply(
+        `🔒 **Backers & Supporters Only**: x4 AiLive AI Assistant support is reserved exclusively for Patreon members.\n` +
+        `Support the project on Patreon to unlock AI support access:\n` +
+        `<https://www.patreon.com/c/KennyG1990>`
+      );
+      return;
+    }
+
     const now = Date.now();
 
-    // Rate limits only apply to general community members, NOT Moshine
     if (!isOwner) {
       if (now - lastGlobalResponseTime < GLOBAL_COOLDOWN_MS) {
         const remainingSec = Math.ceil((GLOBAL_COOLDOWN_MS - (now - lastGlobalResponseTime)) / 1000);
-        await message.reply(`⏱️ **Server Rate Limit**: x4 AiLive Assistant responds at most once every 2 minutes across the server. Try again in ${remainingSec}s.`);
+        await message.reply(`⏱️ **Server Rate Limit**: x4 AiLive Assistant responds at most once every minute server-wide. Try again in ${remainingSec}s.`);
         return;
       }
 
       const lastUserTime = userCooldowns.get(message.author.id);
-      if (lastUserTime && (now - lastUserTime) < USER_COOLDOWN_MS) {
-        const remainingMin = Math.ceil((USER_COOLDOWN_MS - (now - lastUserTime)) / 60000);
-        await message.reply(`⏱️ **User Rate Limit**: You can only ask 1 support question every 10 minutes. Please try again in ~${remainingMin} minutes.`);
+      if (lastUserTime && (now - lastUserTime) < tierInfo.cooldownMs) {
+        const remainingMin = Math.ceil((tierInfo.cooldownMs - (now - lastUserTime)) / 60000);
+        const cooldownMin = Math.round(tierInfo.cooldownMs / 60000);
+        await message.reply(
+          `⏱️ **${tierInfo.tierName} Cooldown**: As a **${tierInfo.tierName}**, your AI support cooldown is ${cooldownMin} minutes. Please try again in ~${remainingMin} minutes.`
+        );
         return;
       }
 
