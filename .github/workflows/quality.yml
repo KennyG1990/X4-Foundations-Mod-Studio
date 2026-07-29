@@ -31,6 +31,9 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
+      - name: Install extension type dependencies
+        run: npm ci --prefix vscode-extension
+
       - name: Reject high-severity dependency vulnerabilities
         run: npm audit --audit-level=high
 

@@ -1,4 +1,4 @@
-# X4 Forge session handoff — 2026-07-29 · B108 known-bugs hardening VERIFIED / 0.0.58 PUBLIC
+# X4 Forge session handoff — 2026-07-29 · B108 PARTIAL / 0.0.58 PUBLIC / CI CORRECTION
 
 ## One-line state
 
@@ -10,7 +10,9 @@ oracles 114/114; full e2e 43/43; real corpus 14/14; reference API 81/81; particl
 precommit is green. Installed Antigravity visibly runs 0.0.58 with a live managed sidecar, and real discovery
 records are token-free after the upgrade migration. OpenVSX's 17,812,396-byte public VSIX exactly matches the
 installed/tested package at SHA-256 `4E703F203B32DBB7A9EDFB7C1A27705175371B638EEC17B68744F4D9A69F1009`.
-The release commit containing this handoff must be pushed and verified as `origin/main == HEAD`.
+The release source commit is pushed at `dd452f0` and `origin/main == HEAD` was proved. Its first public Quality
+run failed because the workflow omitted `npm ci --prefix vscode-extension`; the corrective workflow is now the
+only open B108 gate.
 
 ## Active bounded unit
 
@@ -34,8 +36,9 @@ The release commit containing this handoff must be pushed and verified as `origi
 - PASS installed product: rendered version 0.0.58, rebuilt Studio v1.0.348, live sidecar port 58753/PID 16676,
   public schema response, token-free real discovery files. Evidence is under `vscode-extension/evidence/0.0.58/`.
 - PASS public artifact: exact OpenVSX 0.0.58 metadata/download and local/public SHA-256 parity.
-- PASS final: graph refresh, audit, lint, full oracle rerun, and precommit. PENDING only the authorized commit/push
-  at the instant this handoff is written.
+- PASS final local: graph refresh, audit, lint, full oracle rerun, precommit, source commit, push, and remote equality.
+- FAILED public Quality run 30498947479: clean runner lacked extension `@types/vscode`. PENDING corrective
+  install-both-lockfiles commit and green public rerun.
 - Antigravity and the 0.0.57 sidecar were active at baseline. Do not run state-touching validation until Ken
   answers whether Forge/X4 are running and the machine is quiet.
 - Latest read-only state: no X4 process, one unique Antigravity X4 Forge window, sidecar listening on 65072.
@@ -51,8 +54,8 @@ already-pushed durable close.
 
 ## Hot files / next command
 
-- Commit the complete B108 release close, push `main`, and prove `origin/main == HEAD`. The detailed suggested
-  title is `fix(release): harden deploys, credentials, validation, and CI; publish X4 Forge Studio 0.0.58`.
+- Run `npm ci --prefix vscode-extension` plus root typecheck, commit the workflow correction, push, and require its
+  public Quality run to pass. Then clear `KNOWN-BUGS.md`, restore VERIFIED close wording, and reprove remote equality.
 
 ## Hazards / dead theories
 
@@ -66,5 +69,5 @@ already-pushed durable close.
 
 ## Commit question
 
-OpenVSX serves the exact tested 0.0.58 VSIX, so this is the authorized commit point. Commit the complete B108
-close directly, push `main`, and prove `origin/main == HEAD`.
+The detailed B108 source commit is pushed. Do not call shipment complete until the corrective clean Windows CI
+run passes; the first public run exposed a dependency-install blind spot that local state masked.

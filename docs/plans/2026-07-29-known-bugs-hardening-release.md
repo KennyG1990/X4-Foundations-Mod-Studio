@@ -178,9 +178,10 @@ Lane: FULL
 
 ## CLOSE
 
-- **Status:** VERIFIED — every declared source, negative, isolated-runtime, real-corpus, packaged, installed-host,
-  and public-artifact gate passed. OpenVSX serves stable 0.0.58 and the downloaded VSIX matches the exact
-  installed/tested local artifact.
+- **Status:** PARTIAL — source, negative, isolated-runtime, real-corpus, packaged, installed-host, and public-artifact
+  gates passed, but the first public GitHub Quality run failed in Typecheck because it installed only root
+  dependencies while the root `tsconfig` includes extension sources. The corrective workflow installs both
+  lockfiles and must pass publicly before final shipment returns to VERIFIED.
 - **Remaining risks/deferred work:** none within B108. Existing unrelated backlog items B94-B98 and live game/mod
   experience work remain out of scope. The Antigravity CLI has a host-owned post-install crash, but independent
   CLI listing, installed metadata, rendered UI, live sidecar, and public hash proof establish the Forge result.
@@ -255,7 +256,15 @@ Lane: FULL
   `https://open-vsx.org/api/x4forge/x4-forge-studio/0.0.58/file/x4forge.x4-forge-studio-0.0.58.vsix`.
   The downloaded artifact is 17,812,396 bytes and has the same SHA-256 as the local installed/tested VSIX.
 - Final review classification: all 14 acceptance criteria are done and evidenced; reconciled exclusions remain
-  out of scope; no required item is partial, missed, or silently deferred.
+  out of scope except the reopened public CI portion of criterion 14, which is PARTIAL pending the corrective run.
 
-**Close:** B108 is VERIFIED and moved from `BACKLOG.md` to `ROADMAP.md`. The release commit containing this
-record is the authoritative source close; shipment closes only after `origin/main == HEAD` is proved.
+### Public CI correction
+
+- [REPRODUCED] GitHub Quality run `30498947479` failed at Typecheck with
+  `vscode-extension/src/extension.ts:19 Cannot find module 'vscode' or its corresponding type declarations`;
+  later steps were correctly skipped. Root `npm ci` cannot install the separate extension dev dependency graph.
+- The workflow now runs `npm ci --prefix vscode-extension` after root install. Local execution of that exact
+  install plus root typecheck is required before the corrective push; the new public run is the release gate.
+
+**Close:** B108 is PARTIAL during the corrective CI cycle. OpenVSX remains public and its artifact identity is
+verified; shipment closes only when the clean Windows Quality run is green and `origin/main == HEAD` is reproved.
