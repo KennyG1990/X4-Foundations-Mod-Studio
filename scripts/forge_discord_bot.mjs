@@ -9,17 +9,17 @@ dotenv.config();
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 
-if (!DISCORD_TOKEN) {
-  console.error('❌ ERROR: DISCORD_TOKEN is missing from environment or .env.local!');
-  process.exit(1);
-}
-
 // ANTI-SPAM TIMERS:
 const USER_COOLDOWN_MS = 10 * 60 * 1000;   // 10 minutes per user
 const GLOBAL_COOLDOWN_MS = 2 * 60 * 1000;  // 2 minutes global server-wide
 
 let lastGlobalResponseTime = 0;
 const userCooldowns = new Map();
+
+if (!DISCORD_TOKEN) {
+  console.error('❌ ERROR: DISCORD_TOKEN is missing from environment or .env.local!');
+  process.exit(1);
+}
 
 if (!GEMINI_API_KEY || GEMINI_API_KEY === 'MY_GEMINI_API_KEY') {
   console.warn('⚠️ WARNING: GEMINI_API_KEY is not set in .env.local! Get your free key at https://aistudio.google.com/');
@@ -55,12 +55,15 @@ client.on('messageCreate', async (message) => {
 
   const isMentioned = message.mentions.has(client.user.id);
   const channelName = (message.channel.name || '').toLowerCase();
+  
+  // Dedicated #concierge channel responds to ALL user messages without needing @ mention
+  const isConciergeChannel = channelName.includes('concierge');
   const isHelpChannel = channelName.includes('help');
   const isBugChannel = channelName.includes('bug-reports');
   const isFeatureChannel = channelName.includes('feature-requests');
 
-  // Process message if mentioned or posted in support channels
-  if (isMentioned || isHelpChannel || isBugChannel || isFeatureChannel) {
+  // Process message if in #concierge, or mentioned, or in support channels
+  if (isConciergeChannel || isMentioned || isHelpChannel || isBugChannel || isFeatureChannel) {
     const now = Date.now();
 
     // 1. Check Global 2-Minute Server Cooldown
@@ -79,7 +82,7 @@ client.on('messageCreate', async (message) => {
     }
 
     if (!GEMINI_API_KEY || GEMINI_API_KEY === 'MY_GEMINI_API_KEY') {
-      if (isMentioned) {
+      if (isConciergeChannel || isMentioned) {
         await message.reply('⚠️ Please set your `GEMINI_API_KEY` in `.env.local` to enable AI support responses! Get a free key at https://aistudio.google.com/');
       }
       return;
@@ -124,7 +127,7 @@ ${forgeDocsContext}`;
       }
     } catch (err) {
       console.error('Error calling Gemini API:', err);
-      if (isMentioned) {
+      if (isConciergeChannel || isMentioned) {
         await message.reply('Sorry, I encountered an issue processing your query with Gemini.');
       }
     }
