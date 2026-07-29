@@ -23,6 +23,33 @@ if (!DISCORD_TOKEN) {
 
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
+// MULTI-TIERED MODEL FALLBACK CASCADE FOR 100% UPTIME
+async function generateWithModelCascade(promptText) {
+  const modelCascade = [
+    'gemini-2.0-flash',
+    'gemini-2.0-flash-lite',
+    'gemini-1.5-flash',
+    'gemini-1.5-flash-8b'
+  ];
+
+  for (const modelName of modelCascade) {
+    try {
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: [
+          { role: 'user', parts: [{ text: promptText }] }
+        ]
+      });
+      if (response && response.text) {
+        return { text: response.text, modelUsed: modelName };
+      }
+    } catch (err) {
+      console.warn(`⚠️ Model ${modelName} unavailable/rate-limited (${err.message || err}). Trying next model...`);
+    }
+  }
+  throw new Error('All Gemini fallback models exhausted.');
+}
+
 // DYNAMIC CODEBASE & DOCUMENTATION SCANNER FOR GROUNDING
 function buildCodebaseKnowledgeBase() {
   const sections = [];
@@ -162,29 +189,8 @@ AUTHENTICATED KNOWLEDGE BASE (DOCS + CODEBASE EXPORTS):
 ${forgeDocsContext}`;
       }
 
-      let replyText = '';
-      try {
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.0-flash',
-          contents: [
-            { role: 'user', parts: [{ text: `${systemPrompt}\n\nUser Message (${message.author.username} in #${channelName}):\n${message.content}` }] }
-          ]
-        });
-        replyText = response.text || '';
-      } catch (geminiErr) {
-        console.error('Primary gemini-2.0-flash call failed, trying gemini-1.5-flash:', geminiErr);
-        const fallbackResponse = await ai.models.generateContent({
-          model: 'gemini-1.5-flash',
-          contents: [
-            { role: 'user', parts: [{ text: `${systemPrompt}\n\nUser Message (${message.author.username} in #${channelName}):\n${message.content}` }] }
-          ]
-        });
-        replyText = fallbackResponse.text || '';
-      }
-
-      if (!replyText) {
-        replyText = 'I received your query, but could not generate a response from the codebase knowledge base.';
-      }
+      const promptText = `${systemPrompt}\n\nUser Message (${message.author.username} in #${channelName}):\n${message.content}`;
+      const { text: replyText } = await generateWithModelCascade(promptText);
 
       if (replyText.length > 1950) {
         const chunks = replyText.match(/[\s\S]{1,1900}/g) || [replyText];
