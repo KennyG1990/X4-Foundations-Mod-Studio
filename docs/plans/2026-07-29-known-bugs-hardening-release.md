@@ -178,11 +178,9 @@ Lane: FULL
 
 ## CLOSE
 
-- **Status:** PARTIAL — source, negative, isolated-runtime, real-corpus, packaged, installed-host, and public-artifact
-  gates passed. Public Quality exposed two local-state blind spots in sequence: the missing extension dependency
-  install, then three selftests coupled to host X4/schema configuration. Both are corrected locally, including an
-  empty-profile 114/114 oracle proof, but the hermetic correction must pass publicly before shipment returns to
-  VERIFIED.
+- **Status:** VERIFIED — every declared source, negative, isolated-runtime, real-corpus, packaged, installed-host,
+  public-artifact, and clean Windows Quality gate passed. Public run `30500157383` completed the full corrected
+  chain through production build and isolated route integration.
 - **Remaining risks/deferred work:** none within B108. Existing unrelated backlog items B94-B98 and live game/mod
   experience work remain out of scope. The Antigravity CLI has a host-owned post-install crash, but independent
   CLI listing, installed metadata, rendered UI, live sidecar, and public hash proof establish the Forge result.
@@ -257,7 +255,7 @@ Lane: FULL
   `https://open-vsx.org/api/x4forge/x4-forge-studio/0.0.58/file/x4forge.x4-forge-studio-0.0.58.vsix`.
   The downloaded artifact is 17,812,396 bytes and has the same SHA-256 as the local installed/tested VSIX.
 - Final review classification: all 14 acceptance criteria are done and evidenced; reconciled exclusions remain
-  out of scope except the reopened public CI portion of criterion 14, which is PARTIAL pending the corrective run.
+  out of scope; no required item is partial, missed, or silently deferred.
 
 ### Public CI correction
 
@@ -283,6 +281,8 @@ Lane: FULL
   server probe when `dist/server.cjs` is missing; `dist/` is Git-ignored, and Quality sequenced build after routes.
   A developer's existing bundle masked the dependency. Quality now builds the production bundle before the route
   suite that consumes it.
+- VERIFIED public run `30500157383`: clean Windows dependency installs, zero-advisory audit, Typecheck, Lint,
+  hermetic oracles 114/114, production build, and isolated routes 175/175 all passed.
 
-**Close:** B108 is PARTIAL during the hermetic CI correction cycle. OpenVSX remains public and its artifact identity
-is verified; shipment closes only when the clean Windows Quality run is green and `origin/main == HEAD` is reproved.
+**Close:** B108 is VERIFIED. OpenVSX 0.0.58 is public with exact installed/tested artifact parity, the corrected
+clean Windows Quality run is green, and the close requires final `origin/main == HEAD` proof.

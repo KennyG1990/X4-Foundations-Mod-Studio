@@ -6994,5 +6994,12 @@ published only token-free records. OpenVSX serves stable
 0.0.58; its public 17,812,396-byte VSIX exactly matches the installed/tested artifact at SHA-256
 `4E703F203B32DBB7A9EDFB7C1A27705175371B638EEC17B68744F4D9A69F1009`.
 
+Public Quality then exposed three local-state assumptions in sequence rather than being waved through: the root
+type graph needed the extension lockfile installed; deterministic selftests needed owned fixtures; and the
+production route probe needed the Git-ignored bundle built first. The exact replay also caught and fixed a
+336,041-byte context-only diff on an unchanged 312 KB history rewrite (now 569-byte growth). Corrective public run
+`30500157383` passed the complete clean Windows chain: audit, Typecheck, Lint, oracles 114/114, production build,
+and routes 175/175.
+
 Suggested commit title:
 `fix(release): harden deploys, credentials, validation, and CI; publish X4 Forge Studio 0.0.58`.

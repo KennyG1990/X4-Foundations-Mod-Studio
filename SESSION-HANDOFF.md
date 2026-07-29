@@ -1,11 +1,11 @@
-# X4 Forge session handoff — 2026-07-29 · B108 PARTIAL / 0.0.58 PUBLIC / CI CORRECTION
+# X4 Forge session handoff — 2026-07-29 · B108 VERIFIED / 0.0.58 PUBLIC / QUALITY GREEN
 
 ## One-line state
 
 The task baseline was `7c0bd24`; three non-overlapping external bot commits advanced `origin/main` to `c512920`,
 then external docs commit `2e9f74f` captured the already-written B108 ROADMAP close from the shared worktree and
-was pushed. It captured no B108 source. B108 is PARTIAL pending a green public Quality run; the product release is
-X4 Forge Studio 0.0.58 is public. Route stability passed 10/10 at 175/175;
+was pushed. It captured no B108 source. B108 is VERIFIED. X4 Forge Studio 0.0.58 is public. Route stability
+passed 10/10 at 175/175;
 oracles 114/114; full e2e 43/43; real corpus 14/14; reference API 81/81; particles 544/544; audit is zero;
 precommit is green. Installed Antigravity visibly runs 0.0.58 with a live managed sidecar, and real discovery
 records are token-free after the upgrade migration. OpenVSX's 17,812,396-byte public VSIX exactly matches the
@@ -17,7 +17,9 @@ integration also reproduced an identical-content history diff growing by 336,041
 and the route proof is now 175/175 with 569-byte growth.
 Public run 30499899687 then passed through all 114 oracles and exposed the final clean-runner ordering defect:
 route integration requires the Git-ignored production bundle, but Quality built it afterward. Build now precedes
-routes; a new public run remains the only open B108 gate.
+routes.
+Public Quality run 30500157383 passed the complete clean Windows chain, including build-before-route and the real
+production-bundle probe. `KNOWN-BUGS.md` is empty again.
 
 ## Active bounded unit
 
@@ -45,13 +47,15 @@ routes; a new public run remains the only open B108 gate.
 - FAILED public Quality run 30498947479: clean runner lacked extension `@types/vscode`; corrected in `f9ecdd9`.
 - FAILED public Quality run 30499244809: install, audit, Typecheck, and Lint passed, then oracle integration was
   111/114 because expression, reference, and patch selftests read host configuration. The selftests now inject
-  owned fixtures; empty-profile reproduction is 114/114. PENDING green public rerun.
+  owned fixtures; empty-profile reproduction is 114/114.
 - FAILED local exact-Quality replay: route history dedup check exposed an unchanged 312 KB rewrite generating a
   336,041-byte context-only diff. `unifiedDiff` now emits only bounded headers for identical input; its owned oracle
   and the 175/175 route rerun pass, with measured growth reduced to 569 bytes.
 - FAILED public Quality run 30499899687: both installs, audit, Typecheck, Lint, and oracles 114/114 passed; route
   integration failed because `dist/server.cjs` is intentionally untracked and production build was sequenced after
-  the route probe. Quality now builds first. PENDING green public rerun.
+  the route probe. Quality now builds first.
+- PASS public Quality run 30500157383: clean Windows install, audit, Typecheck, Lint, oracles 114/114, production
+  build, and isolated routes 175/175 all passed.
 - Antigravity and the 0.0.57 sidecar were active at baseline. Do not run state-touching validation until Ken
   answers whether Forge/X4 are running and the machine is quiet.
 - Latest read-only state: no X4 process, one unique Antigravity X4 Forge window, sidecar listening on 65072.
@@ -67,8 +71,8 @@ already-pushed durable close.
 
 ## Hot files / next command
 
-- Replay production build before route integration, commit the workflow ordering correction, push, and require the
-  public Quality run to pass. Then clear `KNOWN-BUGS.md`, restore VERIFIED close wording, and reprove remote equality.
+- Commit and push this durable VERIFIED close, require its documentation-only Quality run to remain green, and
+  prove `origin/main == HEAD` with a clean worktree.
 
 ## Hazards / dead theories
 
@@ -82,5 +86,5 @@ already-pushed durable close.
 
 ## Commit question
 
-The detailed B108 source and two CI correction commits are pushed. Do not call shipment complete until the clean
-Windows CI run passes; three successive public runs exposed local-state and ordering blind spots.
+B108 is at a verified commit point. Suggested close title:
+`docs(release): record green public Quality gate for X4 Forge Studio 0.0.58`.
