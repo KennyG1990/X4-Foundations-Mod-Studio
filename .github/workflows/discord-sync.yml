@@ -16,7 +16,7 @@ jobs:
         with:
           fetch-depth: 10
 
-      - name: Post Update Announcement with Attached Changelog Text File
+      - name: Post Update Announcement to #updates
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           CHANNEL_ID: "1531779398234013890"
@@ -25,91 +25,95 @@ jobs:
           RELEASE_TITLE: ${{ github.event.release.name }}
           RELEASE_BODY: ${{ github.event.release.body }}
         run: |
-          set +e
-          if [ -z "$DISCORD_TOKEN" ]; then
-            echo "DISCORD_TOKEN secret is missing. Skipping."
-            exit 0
-          fi
+          python3 -c "
+          import os, re, json, subprocess
 
-          # Extract version if available or fallback to commit short SHA
-          VERSION=$(echo "${RELEASE_TITLE:-$COMMIT_MSG}" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' 2>/dev/null)
-          if [ -z "$VERSION" ]; then
-            VERSION="Commit ${SHORT_SHA:0:7}"
-          fi
-          
-          # Generate changelog text file
-          CHANGELOG_FILE="changelog-${SHORT_SHA:0:7}.txt"
-          echo "### X4 Forge Commit & Release Changelog (${VERSION})" > "$CHANGELOG_FILE"
-          echo "" >> "$CHANGELOG_FILE"
-          
-          if [ -n "$RELEASE_BODY" ]; then
-            echo "$RELEASE_BODY" >> "$CHANGELOG_FILE"
-          else
-            git log -n 10 --pretty=format:"* %s (%h)" >> "$CHANGELOG_FILE" 2>/dev/null
-          fi
+          token = os.environ.get('DISCORD_TOKEN')
+          if not token:
+              print('DISCORD_TOKEN secret is missing. Skipping step.')
+              exit(0)
 
-          # Create multi-line message content cleanly using a heredoc
-          cat << EOF > msg_content.txt
-**X4 FORGE - UPDATE (${VERSION})**
+          channel_id = os.environ.get('CHANNEL_ID')
+          commit_msg = os.environ.get('COMMIT_MSG', '')
+          short_sha = os.environ.get('SHORT_SHA', '')[:7]
+          rel_title = os.environ.get('RELEASE_TITLE', '')
+          rel_body = os.environ.get('RELEASE_BODY', '')
 
-Thanks to all testers and the community for feedback and support!
+          version = f'Commit {short_sha}'
+          match = re.search(r'v[0-9]+\.[0-9]+\.[0-9]+', rel_title or commit_msg)
+          if match:
+              version = match.group(0)
 
-**Support me**:
-https://patreon.com/
+          changelog_file = f'changelog-{short_sha}.txt'
+          with open(changelog_file, 'w', encoding='utf-8') as f:
+              f.write(f'### X4 Forge Commit & Release Changelog ({version})\n\n')
+              if rel_body:
+                  f.write(rel_body)
+              else:
+                  try:
+                      logs = subprocess.check_output(['git', 'log', '-n', '10', '--pretty=format:* %s (%h)']).decode('utf-8')
+                      f.write(logs)
+                  except Exception as e:
+                      f.write(f'* {commit_msg} ({short_sha})')
 
-**Download & Repository**:
-**Open VSX Marketplace**: https://open-vsx.org/extension/x4forge/x4-forge-studio
-**GitHub Repository**: https://github.com/KennyG1990/X4_Forge
+          msg_content = f'**X4 FORGE - UPDATE ({version})**\n\nThanks to all testers and the community for feedback and support!\n\n**Support me**:\nhttps://patreon.com/\n\n**Download & Repository**:\n**Open VSX Marketplace**: https://open-vsx.org/extension/x4forge/x4-forge-studio\n**GitHub Repository**: https://github.com/KennyG1990/X4_Forge\n\n**To apply this update correctly**, reload your editor window after updating to ensure the latest extension engine loads cleanly.'
 
-**To apply this update correctly**, reload your editor window after updating to ensure the latest extension engine loads cleanly.
-EOF
+          payload = json.dumps({'content': msg_content})
 
-          PAYLOAD=$(jq -n --rawfile content msg_content.txt '{content: $content}')
-
-          curl -s -f -H "Authorization: Bot $DISCORD_TOKEN" \
-               -F "payload_json=$PAYLOAD" \
-               -F "files[0]=@$CHANGELOG_FILE" \
-               "https://discord.com/api/v10/channels/$CHANNEL_ID/messages"
-
-      - name: Check if ROADMAP.md Changed
-        id: check_roadmap
-        run: |
-          set +e
-          if git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -q "^ROADMAP.md$"; then
-            echo "changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "changed=false" >> $GITHUB_OUTPUT
-          fi
+          cmd = [
+              'curl', '-s', '-H', f'Authorization: Bot {token}',
+              '-F', f'payload_json={payload}',
+              '-F', f'files[0]=@{changelog_file}',
+              f'https://discord.com/api/v10/channels/{channel_id}/messages'
+          ]
+          res = subprocess.run(cmd, capture_output=True, text=True)
+          print('Discord API Response:', res.stdout)
+          "
 
       - name: Sync ROADMAP.md to #roadmap
-        if: steps.check_roadmap.outputs.changed == 'true'
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           CHANNEL_ID: "1531779414579478539"
         run: |
-          set +e
-          if [ -z "$DISCORD_TOKEN" ]; then
-            echo "DISCORD_TOKEN secret is missing. Skipping."
-            exit 0
-          fi
+          python3 -c "
+          import os, json, subprocess
 
-          ROADMAP_CONTENT=$(head -n 25 ROADMAP.md)
-          
-          PAYLOAD=$(jq -n \
-            --arg title "🗺️ X4 Forge — Prototype Validation Roadmap" \
-            --arg desc "$ROADMAP_CONTENT" \
-            '{
-              embeds: [{
-                title: $title,
-                description: $desc,
-                color: 3447003,
-                footer: { text: "X4 Forge Roadmap • Automated from GitHub" },
-                timestamp: (now | strftime("%Y-%m-%dT%H:%M:%SZ"))
+          token = os.environ.get('DISCORD_TOKEN')
+          if not token:
+              print('DISCORD_TOKEN secret is missing. Skipping roadmap step.')
+              exit(0)
+
+          try:
+              changed = subprocess.check_output(['git', 'diff', '--name-only', 'HEAD~1', 'HEAD']).decode('utf-8')
+              if 'ROADMAP.md' not in changed:
+                  print('ROADMAP.md did not change in this commit. Skipping.')
+                  exit(0)
+          except Exception as e:
+              print('Diff check info:', e)
+
+          channel_id = os.environ.get('CHANNEL_ID')
+          roadmap_content = ''
+          if os.path.exists('ROADMAP.md'):
+              with open('ROADMAP.md', 'r', encoding='utf-8') as f:
+                  lines = f.readlines()[:25]
+                  roadmap_content = ''.join(lines)
+
+          payload = json.dumps({
+              'embeds': [{
+                  'title': '🗺️ X4 Forge — Prototype Validation Roadmap',
+                  'description': roadmap_content,
+                  'color': 3447003,
+                  'footer': {'text': 'X4 Forge Roadmap • Automated from GitHub'}
               }]
-            }')
+          })
 
-          curl -s -f -H "Authorization: Bot $DISCORD_TOKEN" \
-               -H "Content-Type: application/json" \
-               -X POST \
-               -d "$PAYLOAD" \
-               "https://discord.com/api/v10/channels/$CHANNEL_ID/messages"
+          cmd = [
+              'curl', '-s', '-H', f'Authorization: Bot {token}',
+              '-H', 'Content-Type: application/json',
+              '-X', 'POST',
+              '-d', payload,
+              f'https://discord.com/api/v10/channels/{channel_id}/messages'
+          ]
+          res = subprocess.run(cmd, capture_output=True, text=True)
+          print('Roadmap Sync Response:', res.stdout)
+          "
