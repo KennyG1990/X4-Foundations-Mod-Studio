@@ -9,7 +9,7 @@ Status: **PARTIAL — verified cleanup complete; one active-host profile remains
 
 ## PLAN
 
-- **Bounded unit:** clean `F:\DEV_ENV\X4_Forge` itself. Do not touch the installed Antigravity
+- **Bounded unit:** clean `<WORKSPACE_ROOT>` itself. Do not touch the installed Antigravity
   extension, unpacked X4 corpus, game installation, deployed mods, Mod Workspace, or any external
   StarForge/Agent Brain directory.
 - **Observed baseline:** `main` is at `7591c751e71b9e4695125cca5b9e045cdb525e48`. Pre-existing user

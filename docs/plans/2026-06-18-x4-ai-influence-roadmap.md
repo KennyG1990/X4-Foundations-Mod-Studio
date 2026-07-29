@@ -8,8 +8,8 @@
 ### Task 1: Product Roadmap
 
 **Files**:
-- Create: `F:\DEV_ENV\projects\Mods\X4Mods\x4_ai_influence\ROADMAP.md`
-- Create: `F:\DEV_ENV\projects\Mods\X4Mods\x4_ai_influence\README.md`
+- Create: `<MODS_ROOT>\x4_ai_influence\ROADMAP.md`
+- Create: `<MODS_ROOT>\x4_ai_influence\README.md`
 
 **Step 1: Document Product Boundary**
 - State that the old live `x4_ai_influence` folder is reference material only.
@@ -22,8 +22,8 @@
 ### Task 2: MVP Configuration
 
 **Files**:
-- Create: `F:\DEV_ENV\projects\Mods\X4Mods\x4_ai_influence\config\mod_config.json`
-- Create: `F:\DEV_ENV\projects\Mods\X4Mods\x4_ai_influence\config\action_whitelist.json`
+- Create: `<MODS_ROOT>\x4_ai_influence\config\mod_config.json`
+- Create: `<MODS_ROOT>\x4_ai_influence\config\action_whitelist.json`
 
 **Step 1: Implementation**
 - Add Administrator Nerra as the first representative.
@@ -37,7 +37,7 @@
 ### Task 3: Future Manifest
 
 **Files**:
-- Future create: `F:\DEV_ENV\projects\Mods\X4Mods\x4_ai_influence\content.xml`
+- Future create: `<MODS_ROOT>\x4_ai_influence\content.xml`
 
 **Step 1: Implementation**
 - Add hard dependency on `x4_neural_link`.
@@ -50,8 +50,8 @@
 ### Task 4: First Playable Slice
 
 **Files**:
-- Future create: `F:\DEV_ENV\projects\Mods\X4Mods\x4_ai_influence\md\ai_influence_main.xml`
-- Future create: `F:\DEV_ENV\projects\Mods\X4Mods\x4_ai_influence\ui\addons\x4_ai_influence\chat.lua`
+- Future create: `<MODS_ROOT>\x4_ai_influence\md\ai_influence_main.xml`
+- Future create: `<MODS_ROOT>\x4_ai_influence\ui\addons\x4_ai_influence\chat.lua`
 
 **Step 1: Stub UI**
 - Open chat with Administrator Nerra.
@@ -70,8 +70,8 @@
 ### Task 5: Memory and Safe Actions
 
 **Files**:
-- Future create: `F:\DEV_ENV\projects\Mods\X4Mods\x4_ai_influence\config\memory_schema.json`
-- Future create: `F:\DEV_ENV\projects\Mods\X4Mods\x4_ai_influence\config\prompt_templates.json`
+- Future create: `<MODS_ROOT>\x4_ai_influence\config\memory_schema.json`
+- Future create: `<MODS_ROOT>\x4_ai_influence\config\prompt_templates.json`
 
 **Step 1: Memory MVP**
 - Store one summarized interaction.

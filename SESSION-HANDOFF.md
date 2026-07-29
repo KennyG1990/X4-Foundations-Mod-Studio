@@ -34,7 +34,7 @@ excluded from the release commit.
 ## Recovery residue
 
 - A partial locked extension swap was moved, not deleted, to
-  `C:\Users\Moshi\AppData\Local\Temp\x4forge-partial-0.0.57-79ec68afb2804db988d39a3db00977a9`.
+  `<USER_HOME>\AppData\Local\Temp\x4forge-partial-0.0.57-79ec68afb2804db988d39a3db00977a9`.
 - The active installed extension was then restored from the exact final VSIX and its server bundle hash matched.
 
 ## AAR close

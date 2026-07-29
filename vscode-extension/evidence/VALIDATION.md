@@ -2,7 +2,7 @@
 
 Branch `claude/x4-forge-vscode-poc-806ef5` @ base 8050e03 + copied live delta (33 files,
 MD5-verified 0 mismatches against the main checkout's dirty tree) + B41 changes.
-Main checkout at F:\DEV_ENV\X4_Forge: **never written** this session.
+Main checkout at <WORKSPACE_ROOT>: **never written** this session.
 
 ## Product-side fixes required by this spike (both latent packaged-build defects)
 
@@ -43,7 +43,7 @@ Main checkout at F:\DEV_ENV\X4_Forge: **never written** this session.
   data/ / repo source / evidence files. Controller bundle: 0 machine-path literals,
   0 key-pattern matches.
 - ⚠ Known, pre-existing: `app/dist/server.cjs` carries the product's baked-in DEFAULT
-  paths (13 drive-path literals, e.g. `G:\SteamLibrary\...`, `C:\Users\ken\Documents\X4ForgeMods`) —
+  paths (13 drive-path literals, e.g. `<STEAM_LIBRARY>\...`, `C:\Users\ken\Documents\X4ForgeMods`) —
   server.ts defaults present in ANY Forge build, fine for Ken-machine testing, must be
   genericized before tester distribution (logged in BACKLOG residuals).
 
@@ -178,7 +178,7 @@ config for debugging the controller. Version → 0.0.3.
 
 ## B49 — Marketplace-prep blockers (agent half DONE 2026-07-16; publish awaits Ken's accounts)
 
-1. **Machine-path genericize:** runtime defaults were `G:\SteamLibrary\...` + `<game>\extensions\
+1. **Machine-path genericize:** runtime defaults were `<STEAM_LIBRARY>\...` + `<game>\extensions\
    x4_ai_influence\md` (xsdParser.ts) — now `''` (unconfigured → health card flags → B18 wizard)
    and `<cwd>\data\harvested-schemas`. Fixtures/placeholders scrubbed of usernames+drives.
    **Shipped-bundle scan:** client 0 traces; VSIX server.cjs: Moshi 0 · Users\ken 0 · DEV_ENV 0.

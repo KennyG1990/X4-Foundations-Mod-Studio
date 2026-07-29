@@ -2,12 +2,12 @@
 
 > ## 🧭 CANONICAL PROJECT — read this first
 >
-> **Canonical name:** **X4 Forge** · **Canonical directory:** `F:\DEV_ENV\X4_Forge` · **Repo:** `KennyG1990/X4_Forge`
+> **Canonical name:** **X4 Forge** · **Canonical directory:** `<WORKSPACE_ROOT>` · **Repo:** `KennyG1990/X4_Forge`
 >
 > Renamed & relocated **2026-06-25** from the old name **"X4 Foundations Mod Studio" / "X4 Mod Studio"** and the old path
-> `C:\Users\Moshi\.gemini\antigravity-ide\scratch\X4-Foundations-Mod-Studio`.
-> That old `C:\` folder is a **stale backup only — DO NOT develop there.** All work happens in `F:\DEV_ENV\X4_Forge`.
-> **If you find two ROADMAPs: this one (under `F:\DEV_ENV\X4_Forge`) is canon.** The old copy is marked DEPRECATED.
+> `<USER_HOME>\.gemini\antigravity-ide\scratch\X4-Foundations-Mod-Studio`.
+> That old `C:\` folder is a **stale backup only — DO NOT develop there.** All work happens in `<WORKSPACE_ROOT>`.
+> **If you find two ROADMAPs: this one (under `<WORKSPACE_ROOT>`) is canon.** The old copy is marked DEPRECATED.
 
 **Status:** Active · **Phase:** all capability tiers built (1–4, 37 passes) → code review / quality hardening → C2 in-game capstone · **Read [Current State](#current-state) first.** Everything below the *Archive* divider is append-only history kept for the audit trail; where it conflicts with Current State, Current State wins.
 
@@ -1508,7 +1508,7 @@ delta written before code:
 - **Oracle `schema-registry-selftest` 11/11** — synthetic fixtures ONLY (include chain,
   transitive chain, junk-XSD degrade-not-throw, missing-include reporting, DLC-copy preference,
   subdir discovery, empty-root) — env-dependent proof kept OUT of the oracle (B49 lesson).
-- **Live vs `F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00`:** **40 domains** — all 37
+- **Live vs `<X4_UNPACKED_CORPUS>`:** **40 domains** — all 37
   `libraries/` XSDs PLUS addon/coreaddon/cutscenes found deeper in the tree (the ui schemas
   phase 2 needs); 48 DLC duplicate copies correctly shadowed; **0 unresolved includes** across
   the whole corpus; spot indexes: md **1507** elements · factions 1354 · gamestarts 1417 ·
@@ -2149,7 +2149,7 @@ session runs on the supervisor and observes an edit-restart cycle without manual
 
 **Compliance confession first:** this engagement ran ~35 closed tasks with ZERO per-task AARs because the
 agent never loaded the PLAN → RECONCILE → DOCUMENT → IMPLEMENT → VALIDATE → REVIEW → DOCUMENT → AAR hard rule —
-it lives in `F:\DEV_ENV\CLAUDE.md` (authoritative) but the PROJECT mirror had lost it. **Root cause fixed:**
+it lives in `<DEV_ENV>\CLAUDE.md` (authoritative) but the PROJECT mirror had lost it. **Root cause fixed:**
 the three HARD-RULE sections + Agent Brain section are now synced into this repo's AGENTS.md + CLAUDE.md.
 
 **Points to sustain (name it so it repeats):**
@@ -3128,7 +3128,7 @@ gate everyone wants is one crisp server-computed verdict field away; spec that f
 ### ◐ B18 IMPLEMENTED (2026-07-11): first-run wizard + game autodetect — every backend stage live-proven
 Vision v2 Phase 1. Zero-typing setup is REAL on this machine: `GET /api/agent/detect-game` found Ken's
 actual install through the Steam registry → libraryfolders.vdf → appmanifest_392160 chain
-(G:\SteamLibrary\...\X4 Foundations) and proposed all config paths; `POST /api/agent/setup/harvest-schemas`
+(<STEAM_LIBRARY>\...\X4 Foundations) and proposed all config paths; `POST /api/agent/setup/harvest-schemas`
 extracted md.xsd (195KB) + common.xsd (1.7MB, full) + aiscripts.xsd (155KB) from the game's cat/dat archives
 into gitignored `data/harvested-schemas/`. Apply reuses the EXISTING user-confirmed `POST /api/schema/config`
 verbatim — this feature adds zero new config writers. Pieces: pure `src/lib/gameDetect.ts` (+10/10 oracle,
@@ -3703,14 +3703,14 @@ reading, the verdict should be "Runtime id only, session-bound," not "ambiguous.
 >
 > **Doc layout:** this Current State block is the source of truth. Below it, the most recent initiative sections are kept newest-relevant first (50th port-semantics, 52nd gap analysis, 53rd UX grind, then the 49th/51st detail sections), and everything under the *Archive* divider is append-only dated history. Where anything conflicts, this block wins.*
 
-### Project renamed & relocated — "X4 Mod Studio" → **X4 Forge**, moved to `F:\DEV_ENV\X4_Forge` (2026-06-25)
+### Project renamed & relocated — "X4 Mod Studio" → **X4 Forge**, moved to `<WORKSPACE_ROOT>` (2026-06-25)
 
-Canonized the project name and home. The studio now lives at `F:\DEV_ENV\X4_Forge` (sibling to the mod
-workspace at `F:\DEV_ENV\projects\Mods\X4Mods`); the old
-`C:\Users\Moshi\.gemini\antigravity-ide\scratch\X4-Foundations-Mod-Studio` copy is retained as a **stale backup only**.
+Canonized the project name and home. The studio now lives at `<WORKSPACE_ROOT>` (sibling to the mod
+workspace at `<MODS_ROOT>`); the old
+`<USER_HOME>\.gemini\antigravity-ide\scratch\X4-Foundations-Mod-Studio` copy is retained as a **stale backup only**.
 
 What changed:
-- **Move:** full tree copied to `F:\DEV_ENV\X4_Forge`. Source trees byte-identical (`diff -rq` clean except the launcher); `node_modules` 12186 files both sides; native `better-sqlite3` binary present.
+- **Move:** full tree copied to `<WORKSPACE_ROOT>`. Source trees byte-identical (`diff -rq` clean except the launcher); `node_modules` 12186 files both sides; native `better-sqlite3` binary present.
 - **Launcher de-hardcoded:** `RUN-ME-restart-server.cmd` now `call "%~dp0restart-studio.bat"` (was an absolute `C:\` path) — location-independent so a future move won't break it.
 - **Display-name normalization (20 files):** `X4 Foundations Mod Studio` / `X4: Foundations Mod Studio` / `X4:MD Studio` / `X4 Mod Studio` → **`X4 Forge`**; npm `name` `x4-forge` → `x4_forge`.
 - **Protected / untouched:** runtime file-bridge dir `x4_forge_bridge`, mod ids `x4_ai_influence` & `x4_neural_link`, and the game name "X4: Foundations".
@@ -5793,14 +5793,14 @@ Ken's call: **the game_agent_bridge stays a standalone tool** for AI agents to v
 The studio now drives the hardened game_agent_bridge directly — C2-as-a-feature. House pattern throughout:
 
 - **Engine** `src/lib/gameBridge.ts`: `summarizeBridgeReport` (defensive — old report shapes degrade honestly, malformed never throws) + `validateBridgePlan` (deliberately MINIMAL pre-flight; the bridge python validator stays authoritative) + `runGameBridgeSelftest` **9/9** over synthetic report/plan fixtures. Public `GET /api/agent/game-bridge-selftest` (also reports bridge install presence without asserting it).
-- **Server glue**: `GET /api/agent/game-bridge/status` (root/python/plans discovery; `gameBridgeRoot`/`gameBridgePython` configurable via config.json, defaults to F:\DEV_ENV\tools\game_agent_bridge); `POST /api/agent/game-bridge/run` (spawns the host python on a plan object — written to tmp after pre-flight — or a name locked to the bridge plans/ dir; 6-min timeout; parses the report off stdout; returns summary+report); `GET /api/agent/game-bridge/artifact` (read-only screenshot serving, locked to the bridge .tmp evidence dir).
+- **Server glue**: `GET /api/agent/game-bridge/status` (root/python/plans discovery; `gameBridgeRoot`/`gameBridgePython` configurable via config.json, defaults to <GAME_BRIDGE_TOOLS>); `POST /api/agent/game-bridge/run` (spawns the host python on a plan object — written to tmp after pre-flight — or a name locked to the bridge plans/ dir; 6-min timeout; parses the report off stdout; returns summary+report); `GET /api/agent/game-bridge/artifact` (read-only screenshot serving, locked to the bridge .tmp evidence dir).
 - **UI**: VERIFY IN GAME card on Playtest — plan picker (prefers the refreshmd template), dry-actions toggle, RUN, then PASSED/FAILED badge, per-assertion ✓/✗, errors, and clickable screenshot evidence thumbnails served through the artifact endpoint. (Fixed during verification: the controls row overflowed the narrow panel — flex-wrap + full-width select.)
 - **E2E verified live**: studio → spawn → bridge resolved the Steam app, honestly reported window-not-found with X4 closed (dry run), report parsed and summarized with the correct FAILED verdict — the evidence discipline surviving the whole pipeline. Status shows all 4 plans; full battery green incl. the new oracle (11 green selftests).
 - **Next**: with X4 running, RUN on x4_refreshmd_template through the card = the first fully robotic deploy→refresh→assert loop (T5 Inc 3 closing move + C2 evidence).
 
 ### Changelog — 2026-06-12 (42nd pass, Fable: game_agent_bridge hardened to ship standard)
 
-Ken revealed `F:\DEV_ENV\tools\game_agent_bridge` — a working Python harness that launches X4 via Steam, finds the real game window, captures screenshots from it, sends keys/clicks, and executes JSON run plans with an evidence pack per run (report.json + events.jsonl + numbered shots). Proven by existing runs (continue-game smoke with before/after screenshots). It hooks the `x4_ai_influence` in-game extension and tails the SAME debuglog the studio live feed watches. **This automates the human half of C2 and the T5 refresh loop.**
+Ken revealed `<GAME_BRIDGE_TOOLS>` — a working Python harness that launches X4 via Steam, finds the real game window, captures screenshots from it, sends keys/clicks, and executes JSON run plans with an evidence pack per run (report.json + events.jsonl + numbered shots). Proven by existing runs (continue-game smoke with before/after screenshots). It hooks the `x4_ai_influence` in-game extension and tails the SAME debuglog the studio live feed watches. **This automates the human half of C2 and the T5 refresh loop.**
 
 Hardened to house standard (all in the bridge repo, selftest-verified **16/16**):
 - **`type` step + CLI** — arbitrary Unicode text via SendInput KEYEVENTF_UNICODE, base64 across the shell boundary (enables in-game `/refreshmd`).
@@ -5910,7 +5910,7 @@ Four high-value additions that round the studio out from "mod authoring" into "m
 - **Problem:** modders must externally extract gigabytes of `.cat`/`.dat` to get vanilla macros/wares/scripts. High setup friction.
 - **Plan:** a Node-side reader for X4's catalog format (`.cat` = filename/size/offset/hash index; `.dat` = concatenated blob; inner XML is often PCK/zlib-compressed) that streams individual vanilla files on demand, cached in the SQLite layer, surfaced into the existing object-index/ware/faction pickers.
 - **Extends:** the SQLite persistence layer (cache store) and the existing pickers (`ObjectIndexPicker`, patch-target picker) — they become VFS-backed instead of hardcoded lists.
-- **Effort/risk:** **HIGH lift, keystone value.** Binary format + decompression + cache invalidation. The game root with the `.cat` files is one level above the already-mounted extensions folder (`G:\SteamLibrary\steamapps\common\X4 Foundations`). Recommend a read-only **spike first**: parse one `.cat`, list its entries, extract+decompress one known XML, prove the round-trip before wiring any UI.
+- **Effort/risk:** **HIGH lift, keystone value.** Binary format + decompression + cache invalidation. The game root with the `.cat` files is one level above the already-mounted extensions folder (`<X4_GAME_INSTALL_DIR>`). Recommend a read-only **spike first**: parse one `.cat`, list its entries, extract+decompress one known XML, prove the round-trip before wiring any UI.
 - **Honesty note:** the format is community-documented, not an Egosoft public contract — version the reader defensively and degrade gracefully if a future patch changes layout.
 
 ### T4.2 — Visual diff-to-patch builder (auto-XPath)
@@ -6348,7 +6348,7 @@ Agent-side buildable+validatable work is cleared (#36–#44, #52–#54 done). Re
 - **#56 LINT TRIAGE SECOND PASS DONE (2026-06-18):** component-focused, behavior-neutral typing pass after the server/lib security-adjacent first pass. `src/components/PackageModDoctor.tsx`: added local response-shape types for Extension Doctor, override-map, and selftest JSON; replaced `any` scan/map/catch usage; typed node-located diagnostics without changing dispatch behavior. `src/components/CodePreview.tsx` already carries the typed cleanup in the current tree; its remaining warnings are hook/dead-state cleanup, deliberately deferred for a behavior-aware pass. Results: fresh baseline before this pass `npm run lint -- --format json --output-file .lint-current.json` → **0 errors / 650 warnings**; after edits `npm run lint -- --format json --output-file .lint-after-56b.json` → **0 errors / 615 warnings** (`PackageModDoctor.tsx` **24→0**; `CodePreview.tsx` currently **32** remaining warnings, all hook/dead-state cleanup). Gates: `npm run typecheck` → exit 0; `node scripts/oracle-sweep.mjs` → **48/48 green**; `npm run precommit:check` → exit 0 (`server.ts` **5907 lines / 262530 bytes**, `src/lib/mdSemantics.ts` **578 lines / 31690 bytes**); `npx playwright test tests/e2e/canvas-interactions.spec.ts tests/e2e/xml-patch-merge.spec.ts --workers=1` → **2 passed (21.0s)**. Browser smoke at `http://localhost:3000/`: workspace `X4_My_Custom_Mod`; MD Scripts + Wares & Jobs + Package diagnostics + HUD/LUA templates + runtime-log inspector rendered; console errors **0**. Remaining #56 work: warnings still **615**, mostly `server.ts` any, component dead-state, and hook dependency warnings; continue in scoped batches.
 - **#56 LINT TRIAGE THIRD PASS DONE (2026-06-18):** continued component cleanup with `src/components/SourceControl.tsx`, replacing unbounded GitHub/device-flow/load/commit response `any` shapes with local interfaces, changing timer refs to `ReturnType<typeof setTimeout>`, converting catch blocks to `unknown` + `messageFromUnknown`, typing parsed translation pages/items, and removing unused locals/parameters. No GitHub behavior or UI flow changed. Results: pre-pass `npm run lint -- --format json --output-file .lint-next.json` → **0 errors / 615 warnings**; after edits `npm run lint -- --format json --output-file .lint-sourcecontrol.json` → **0 errors / 593 warnings** (`SourceControl.tsx` **22→0**). Gates: `npm run typecheck` → exit 0; `node scripts/oracle-sweep.mjs` → **48/48 green**; `npm run precommit:check` → exit 0 (`server.ts` **5907 lines / 262530 bytes**, `src/lib/mdSemantics.ts` **578 lines / 31690 bytes**); `npx playwright test tests/e2e/canvas-interactions.spec.ts tests/e2e/xml-patch-merge.spec.ts --workers=1` → **2 passed (13.9s)**. Browser smoke at `http://localhost:3000/`: workspace `X4_My_Custom_Mod`; MD Scripts rendered; Source → Remotes rendered; Wares & Jobs rendered; HUD/LUA templates + runtime-log inspector rendered; console errors **0**. Authoritative API workspace after smoke: `X4_My_Custom_Mod`, **4 nodes / 3 links**, no `customLua`. Remaining #56 work: warnings still **593**, led by `server.ts`, `CodePreview` hook/dead-state cleanup, and shared lib `any` warnings.
 - **#56 LINT TRIAGE FOURTH PASS DONE (2026-06-18):** continued security-adjacent component cleanup with `src/components/AgentBridge.tsx`, the in-app agent runtime surface. Replaced loose command/property `any` values with `AgentRuntimeValue` / `AgentRuntimeProperties`, declared the `window.AgentRuntime` / `window.AgentBridge.execute` API shape, added a shape guard for `/api/agent/workspace` polling responses before auto-apply, removed the `as any` node-template cast, removed the unused catch binding, and used `useCallback` so the existing runtime-exposure and polling effects have honest dependencies. Command grammar and global API names are unchanged. Results: pre-pass `npm run lint -- --format json --output-file .lint-fourth-baseline.json` → **0 errors / 593 warnings**; after edits `npm run lint -- --format json --output-file .lint-agentbridge-after.json` → **0 errors / 580 warnings** (`AgentBridge.tsx` **13→0**). Gates: `npm run typecheck` → exit 0; `node scripts/oracle-sweep.mjs` → **48/48 green**; `npm run precommit:check` → exit 0 (`server.ts` **5907 lines / 262530 bytes**, `src/lib/mdSemantics.ts` **578 lines / 31690 bytes**); `npx playwright test tests/e2e/canvas-interactions.spec.ts tests/e2e/xml-patch-merge.spec.ts --workers=1` → **2 passed (16.2s)**. Browser proof at `http://localhost:3000/`: Agent API panel opened; `window.AgentRuntime` exposed `addNode`, `execute`, `getCurrentWorkspace`, `updateNodeProperty`, `updateWidget`; `window.AgentBridge.execute` exposed; Surgical Execute tab rendered; rejected command `notARealAgentBridgeCommand` returned/logged failure and workspace counts stayed **1 node / 0 links / 0 widgets**; console errors **0**. Remaining #56 work: warnings still **580**, led by `server.ts`, `CodePreview` hook/dead-state cleanup, shared lib `any` warnings, and remaining component typing.
-- **#56 LINT TRIAGE FIFTH PASS DONE (2026-06-18):** continued component/file-explorer cleanup with `src/components/DirectoryExplorer.tsx`, replacing the cached filesystem tree, file handles, file-read response, error response, t-file page/item arrays, and catch blocks with local typed shapes; renamed the intentionally unused `workspaceView` prop to `_workspaceView`; and wrapped `handleRefreshDirectory` in `useCallback` so the refresh effect has its real dependency. Filesystem UI behavior and read/write endpoints are unchanged. Results: pre-pass `npm run lint -- --format json --output-file .lint-fifth-baseline.json` → **0 errors / 580 warnings**; after edits `npm run lint -- --format json --output-file .lint-directoryexplorer-after.json` → **0 errors / 567 warnings** (`DirectoryExplorer.tsx` **13→0**). Gates: `npm run typecheck` → exit 0; `node scripts/oracle-sweep.mjs` → **48/48 green**; `npm run precommit:check` → exit 0 (`server.ts` **5907 lines / 262530 bytes**, `src/lib/mdSemantics.ts` **578 lines / 31690 bytes**); `npx playwright test tests/e2e/canvas-interactions.spec.ts tests/e2e/xml-patch-merge.spec.ts --workers=1` → **2 passed (15.7s)**. Browser proof at `http://localhost:3000/`: Files panel opened; Refresh button, New File button, `Search Files...` input, `path://` breadcrumb, and directory tree rendered for `G:\SteamLibrary\steamapps\common\X4 Foundations\extensions`; refresh reported `Synced project filesystem!`; search input accepted and cleared a filter; footer showed `Active File: None Loaded` and `Server Connected`; console errors **0**. Remaining #56 work: warnings still **567**, led by `server.ts`, `CodePreview` hook/dead-state cleanup, shared lib `any` warnings, and remaining component/lib typing.
+- **#56 LINT TRIAGE FIFTH PASS DONE (2026-06-18):** continued component/file-explorer cleanup with `src/components/DirectoryExplorer.tsx`, replacing the cached filesystem tree, file handles, file-read response, error response, t-file page/item arrays, and catch blocks with local typed shapes; renamed the intentionally unused `workspaceView` prop to `_workspaceView`; and wrapped `handleRefreshDirectory` in `useCallback` so the refresh effect has its real dependency. Filesystem UI behavior and read/write endpoints are unchanged. Results: pre-pass `npm run lint -- --format json --output-file .lint-fifth-baseline.json` → **0 errors / 580 warnings**; after edits `npm run lint -- --format json --output-file .lint-directoryexplorer-after.json` → **0 errors / 567 warnings** (`DirectoryExplorer.tsx` **13→0**). Gates: `npm run typecheck` → exit 0; `node scripts/oracle-sweep.mjs` → **48/48 green**; `npm run precommit:check` → exit 0 (`server.ts` **5907 lines / 262530 bytes**, `src/lib/mdSemantics.ts` **578 lines / 31690 bytes**); `npx playwright test tests/e2e/canvas-interactions.spec.ts tests/e2e/xml-patch-merge.spec.ts --workers=1` → **2 passed (15.7s)**. Browser proof at `http://localhost:3000/`: Files panel opened; Refresh button, New File button, `Search Files...` input, `path://` breadcrumb, and directory tree rendered for `<X4_GAME_INSTALL_DIR>\extensions`; refresh reported `Synced project filesystem!`; search input accepted and cleared a filter; footer showed `Active File: None Loaded` and `Server Connected`; console errors **0**. Remaining #56 work: warnings still **567**, led by `server.ts`, `CodePreview` hook/dead-state cleanup, shared lib `any` warnings, and remaining component/lib typing.
 - **#56 LINT TRIAGE SIXTH PASS DONE (2026-06-18):** returned to the roadmap's engine-module priority with `src/lib/modCompiler.ts`, replacing loose compiler input/output `any` surfaces with existing domain types (`AIBehaviorScript`, `WareDef`, `JobDef`, `TFile`, `PatchBlock`) plus small local `DirectoryHandleLike` / `FileHandleLike` interfaces for the browser File System Access API calls. `toTFileName` now takes the actual minimal shape it uses (`fileName?`, `languageId?`) because existing callers pass partial t-file names. No emitted XML, package file names, snapshot behavior, or save behavior changed. Results: pre-pass `npm run lint -- --format json --output-file .lint-sixth-baseline.json` → **0 errors / 567 warnings**; after edits `npm run lint -- --format json --output-file .lint-modcompiler-after.json` → **0 errors / 537 warnings** (`modCompiler.ts` **30→0**). Gates: `npm run typecheck` → exit 0; `node scripts/oracle-sweep.mjs` → **48/48 green**; `npm run precommit:check` → exit 0 (`server.ts` **5907 lines / 262530 bytes**, `src/lib/mdSemantics.ts` **578 lines / 31690 bytes**); `npx playwright test tests/e2e/canvas-interactions.spec.ts tests/e2e/xml-patch-merge.spec.ts --workers=1` → **2 passed (14.7s)**. Browser proof at `http://localhost:3000/`: in-page same-origin `POST /api/agent/compile` against current workspace `X4_My_Custom_Mod` returned **200**, `success:true`, `modId:"x4_my_custom_mod"`, `file_count:3`, generated `content.xml`, `README.md`, and `md/x4_my_custom_mod.xml` containing `<mdscript name="X4_My_Custom_Mod">`; visible app was on the MOD CONFIG / EXTENSION PACKAGE COMPILER surface; console errors **0**. Remaining #56 work: warnings still **537**, led by `server.ts`, `CodePreview`, `xpathSynth`, `types.ts`, `App.tsx`, and other shared lib/component typing.
 - **#56 LINT TRIAGE SEVENTH PASS DONE (2026-06-18):** continued engine-module cleanup with `src/lib/xpathSynth.ts`, replacing xmldom `any` surfaces with explicit xmldom `Document` / `Element` / `Node` types, typed element/text/attribute helpers, typed diff recursion pairs, typed `selectOne`, converted selector errors and selftest catches to `unknown`, and removed the `null as any` selftest escape. The only cast left is the `xpath` library boundary (`xmldom` document → package-declared browser `Node`), isolated at the `xpathLib.select` call; runtime selector behavior is unchanged. Results: pre-pass `npm run lint -- --format json --output-file .lint-seventh-baseline.json` → **0 errors / 537 warnings**; after edits `npm run lint -- --format json --output-file .lint-xpathsynth-after.json` → **0 errors / 511 warnings** (`xpathSynth.ts` **26→0**). Gates: `npm run typecheck` → exit 0; `node scripts/oracle-sweep.mjs` → **48/48 green**; `npm run precommit:check` → exit 0 (`server.ts` **5907 lines / 262530 bytes**, `src/lib/mdSemantics.ts` **578 lines / 31690 bytes**); `npx playwright test tests/e2e/canvas-interactions.spec.ts tests/e2e/xml-patch-merge.spec.ts --workers=1` → **2 passed (14.2s)**. Browser proof at `http://localhost:3000/`: XML Patching area visible (`XML PATCHES TREE`); in-page `GET /api/agent/xpath-synth-selftest` returned **pass true, 12 checks**; in-page `POST /api/agent/xpath-synth` for `energycells` `volume="1"→"2"` returned **200**, `success:true`, one `replace` op at `/wares/ware[@id='energycells']/@volume`, and `<replace ...>2</replace>` diff XML; console errors **0**. Remaining #56 work: warnings still **511**, led by `server.ts`, `CodePreview`, `types.ts`, `App.tsx`, `mdSimulate`, `intentCheck`, and other shared lib/component typing.
 - **Oracle contract normalized (2026-06-18):** `runOverrideMapSelftest` and `runLiveFixesSelftest` (the last two returning the old `{pass, checks}`) now return the full house shape `{allPassed, pass, passed, total, checks}` — additive, no caller change (both consumed only via `res.json` in server.ts). Every selftest oracle now honors one contract; `scripts/oracle-sweep.mjs` no longer needs the `?? pass` fallback (kept for safety). Verified live: `override-map-selftest` 12/12, `live-fixes-selftest` 9/9, both `allPassed:true`.
@@ -6434,8 +6434,8 @@ layers — nothing dropped. No capability-map delta (governance, not capability)
 of head/tail of both mirrors; UNIVERSAL_AI_TASK_WORKFLOW.md host-read verified (370 lines, verbatim);
 HANDOFF.md grep shows zero remaining v2-chain references. Negative path: stale-mount copy hazard
 checked before cp (mount freshness proven by header read). **Remaining/BLOCKED:** copies OUTSIDE this
-repo are unreachable from this session — **Ken must update `F:\DEV_ENV\CLAUDE.md` (authoritative
-global) and any StarForge wiki workflow pages**, or mount F:\DEV_ENV next session; until then the
+repo are unreachable from this session — **Ken must update `<DEV_ENV>\CLAUDE.md` (authoritative
+global) and any StarForge wiki workflow pages**, or mount <DEV_ENV> next session; until then the
 global copy contradicts this repo (known, named canon lag).
 **Suggested commit title:** "workflow v3: adopt Universal AI Task Workflow + X4 Forge adapter (CLAUDE/AGENTS/GEMINI mirrors, HANDOFF refs)"
 **AAR:** triggers — reconcile changed scope (GEMINI.md had NO workflow; mirror drift itself was the
@@ -6447,10 +6447,10 @@ diffing the three mirrors would make drift structurally impossible; spec'd as a 
 places (3 mirrors + global) with manual sync — the exact class that bit us 2026-07-09; B30 is the
 bounded fix. Lessons banked here (project ledger entry pending StarForge access).
 
-**Addendum (same day):** the BLOCKED remainder is CLOSED — Ken granted F:\DEV_ENV + F:\StarForge
+**Addendum (same day):** the BLOCKED remainder is CLOSED — Ken granted <DEV_ENV> + F:\StarForge
 access; global `{CLAUDE,AGENTS,GEMINI}.md` rewritten as identical v3 mirrors (md5 9dc37679…, all
 three; they had THEMSELVES drifted — AGENTS/GEMINI lacked the 07-09 operator protocol), canonical
-`F:\DEV_ENV\UNIVERSAL_AI_TASK_WORKFLOW.md` placed (md5 1e2d6a69… matches repo + upload),
+`<DEV_ENV>\UNIVERSAL_AI_TASK_WORKFLOW.md` placed (md5 1e2d6a69… matches repo + upload),
 `wiki\workflow\agent-instructions.md` updated to a v3 summary (stale Codex peer-review rule removed),
 AAR ledger entries banked (global + x4-forge). Workflow v3 status upgraded: **VERIFIED with zero
 remaining canon lag.** Pre-existing damage found, preserved, flagged: global Karpathy section
@@ -6571,7 +6571,7 @@ a tabbed sidebar in the right-hand panel, toggling between **Patch XML** (raw co
 ### #23 — live-log error → cue → canvas alert + click-to-navigate (✅ DONE 2026-06-26)
 **Resources used (stuck to):** the x4-forge-**house** pattern (pure engine + oracle + allowlisted read-only
 endpoint + UI readout), x4-forge-**validate** (live proof), and Codex's committed **debug-watcher** as the
-error→cue backend. Canonical tree only (`F:\DEV_ENV\X4_Forge`); Codex's dev build is a separate copy (merge later).
+error→cue backend. Canonical tree only (`<WORKSPACE_ROOT>`); Codex's dev build is a separate copy (merge later).
 - **RECONCILE (caught real things before building):** (a) I was first pointed at the DEPRECATED scratch copy
   (`…/scratch/X4-Foundations-Mod-Studio`, `_DEPRECATED__MOVED_TO_F-DEV_ENV-X4_Forge.md`) — wrong tree. (b) The
   watcher already attributes errors→cues with `sourceRef`; the failing-cue chips already render in
@@ -6605,7 +6605,7 @@ error→cue backend. Canonical tree only (`F:\DEV_ENV\X4_Forge`); Codex's dev bu
 
 ## 🛠️ TOOL-IMPROVEMENT (2026-06-29) — MD/Lua scriptproperty validation now has a catalog to use
 The authoritative property catalog is available unpacked at
-`F:\DEV_ENV\Games\X4 Foundations\Files\unpacked\libraries\scriptproperties.xml` (~3.2k props). The Forge could
+`<DEV_ENV>\Games\X4 Foundations\Files\unpacked\libraries\scriptproperties.xml` (~3.2k props). The Forge could
 ingest it to validate MD `$obj.property` access (and flag `GetComponentData(x,"<field>")` against the entity
 property set) — catching wrong-but-XSD-legal accessors offline (e.g. `manager`/bare `controlentity` are NOT
 valid; `tradenpc`/`shiptrader`/`pilot`/`controlentity.default` are). This closes the same class as the UI-Lua
@@ -6632,7 +6632,7 @@ validation give FALSE confidence; log + fix.
 3. **Validates XSD STRUCTURE, not scriptproperty access / runtime semantics.** A wrong-but-XSD-legal property
    (`$ship.idcode`, `faction.{$fid}`, `controlentity.{controlpost.X}`, a bad `create_order id`, wrong
    `move.seekenemies` params) passes Forge validation and only fails in-game. The authoritative catalog is now
-   available at `F:\DEV_ENV\Games\X4 Foundations\Files\unpacked\libraries\scriptproperties.xml` (~3.2k props) — ingest
+   available at `<DEV_ENV>\Games\X4 Foundations\Files\unpacked\libraries\scriptproperties.xml` (~3.2k props) — ingest
    it to flag scriptproperty access offline. (Dovetails with the earlier UI-Lua-lint tool-improvement above.)
 
 4. **aiscript validation looks shallow.** Validating an `.aiscript`/order file (kind="aiscript") returned
@@ -6657,7 +6657,7 @@ its `.github/` blobs were already byte-identical), parents = extension tip + old
 (`2cc9131`), so old main's history stays reachable, NO force-push, NO history rewrite. `main`
 fast-forwarded onto it; GitHub default branch unchanged (community checklist keeps rendering).
 Old webapp's last code commit `ff38642` is abandoned-by-design (reachable in history). Primary
-checkout `F:\DEV_ENV\X4_Forge` tree swapped to the extension app; its node_modules needs
+checkout `<WORKSPACE_ROOT>` tree swapped to the extension app; its node_modules needs
 `npm install` before building there. SESSION-HANDOFF §1 rewritten same task (canon-lag rule).
 Validation: merge-commit tree hash == branch tree hash (git plumbing equality); ff-only on both
 refs (no forced update possible); origin==HEAD asserted on both after push; status clean both trees.
@@ -6665,7 +6665,7 @@ refs (no forced update possible); origin==HEAD asserted on both after push; stat
 ## ◐ PARTIAL — single-line consolidation: worktree/branch retirement (2026-07-20)
 Ken ended the dual-line arrangement for good ("stop this confusion"). Done + VERIFIED: fallback tag
 `legacy-webapp-main` = old webapp tip `2cc9131`, pushed; ALL live worktree state copied into the
-primary checkout `F:\DEV_ENV\X4_Forge` (node_modules ×2, `.studio-api-token`, `config.json`, `data/`
+primary checkout `<WORKSPACE_ROOT>` (node_modules ×2, `.studio-api-token`, `config.json`, `data/`
 incl. 15-Jul harvested schemas, e2e evidence logs, 19 .vsix release artifacts — spot-checked) and
 the unified checkout PROVEN working: `npm run typecheck` exit 0. SESSION-HANDOFF rewritten to the
 one-line era (invariant now against `origin/main`). PARTIAL residual: the three deletion commands

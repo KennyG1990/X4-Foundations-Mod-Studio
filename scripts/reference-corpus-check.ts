@@ -1,7 +1,7 @@
 import { getReferenceCorpus } from '../src/lib/referenceCorpus';
 import { suggestReferences } from '../src/lib/referenceSuggestions';
 
-const root = process.env.X4_REFERENCE_ROOT || 'F:\\Downskies\\x4unpackersuiteV1\\X4 unpacked 9.00';
+const root = process.env.X4_REFERENCE_ROOT || './data/x4-unpacked';
 const corpus = getReferenceCorpus(root, true);
 const macroSourceFiles = corpus.sourceFiles.filter((file) => file.toLowerCase().endsWith('index/macros.xml'));
 const requiredFactions = ['fallensplit', 'kaori', 'holyorderfanatic', 'loanshark', 'trinity'];

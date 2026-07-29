@@ -145,7 +145,7 @@ task is a lost task.
 
 ## 4. Repository and File Structure
 
-Root: `F:\DEV_ENV\X4_Forge` [VERIFIED listing 2026-07-11].
+Root: `<WORKSPACE_ROOT>` [VERIFIED listing 2026-07-11].
 
 | Path | Purpose | Notes |
 |---|---|---|
@@ -248,15 +248,15 @@ tracked release evidence. **Do not casually modify:** `server.ts` sync/CAS regio
 
 ## 7. Development Environment Setup
 
-All commands run from repo root `F:\DEV_ENV\X4_Forge` unless stated.
+All commands run from repo root `<WORKSPACE_ROOT>` unless stated.
 
 1. **Prereqs:** Windows, Node.js ≥20 [ASSUMPTION — engines not pinned in package.json; @types/node is 22],
-   git, X4: Foundations installed (Ken's install: `G:\SteamLibrary\steamapps\common\X4 Foundations`),
+   git, X4: Foundations installed (Ken's install: `<X4_GAME_INSTALL_DIR>`),
    extracted X4 XSD schemas (from the game's cat/dat archives — `scripts/x4_cat_extract.py` and the
-   unpacked corpus at `F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00` exist for this).
+   unpacked corpus at `<X4_UNPACKED_CORPUS>` exist for this).
 2. **Install:** `npm install`
 3. **Configure paths:** copy `config.example.json` → `config.json` and set `x4GamePath`, `xsdSchemaPath`,
-   `modWorkspacePath` (Ken's: `F:\DEV_ENV\projects\Mods\X4Mods`), `filesystemPath` (game `extensions/`).
+   `modWorkspacePath` (Ken's: `<MODS_ROOT>`), `filesystemPath` (game `extensions/`).
    Or use the in-app SETTINGS modal (writes the same file).
 4. **Secrets (optional):** copy `.env.example` → `.env.local`; AI provider keys can instead be entered
    in-app (stored server-side in `data/ai-keys.json`, gitignored).
@@ -567,14 +567,14 @@ set [VERIFIED — changes are comment-annotated with B13/audit tags instead].
   matching Node headers/VS build tools [ASSUMPTION — standard native-module caveat].
 - **X4: Foundations install** (required for deploy/in-game verify; read for catdat/schemas). Unavailable →
   authoring/validation still work, deploy targets missing.
-- **Extracted XSD schemas + unpacked game corpus** (`F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00`) —
+- **Extracted XSD schemas + unpacked game corpus** (`<X4_UNPACKED_CORPUS>`) —
   grounding data for validators/lints. Unavailable → schema features degrade.
 - **AI providers** (optional, off by default): Gemini/Anthropic/OpenAI/OpenRouter — cost implications
   borne by whoever's key; external agents must bring their own.
 - **GitHub** (optional): device-flow OAuth for mod repo sync.
 - **Related but SEPARATE projects (do not edit from here):** `x4_ai_influence` mod +
   `x4_neural_link` Python bridge (own ROADMAP, dashboard on :8713); Agent Brain vault
-  (`F:\DEV_ENV\Agent Brain Vault`); StarForge wiki canon (`F:\StarForge\wiki\`).
+  (`<DEV_ENV>\Agent Brain Vault`); StarForge wiki canon (`F:\StarForge\wiki\`).
 
 ## 22. Logging, Diagnostics, and Troubleshooting
 
@@ -696,7 +696,7 @@ design); audit #12.
 
 ```yaml
 project: X4 Forge (x4_forge)
-repo_path: F:\DEV_ENV\X4_Forge
+repo_path: <WORKSPACE_ROOT>
 branch: main
 commit: 37209c8cb6519fc199b08214f15d43d0992dbbf7
 status: active development; release track parked by owner; all gates green 2026-07-11

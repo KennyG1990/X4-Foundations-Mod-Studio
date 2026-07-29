@@ -17,7 +17,7 @@ store (namespace `x4forge`). GitHub and the store are two SEPARATE destinations:
 > SHAPE of a green run (captured from a 0.0.31-era release) — match the shape, not the exact
 > counts: file counts, VSIX size, and the oracle total grow with the product. Current published
 > version at time of writing: **0.0.38**. Run from a HOST shell (sandbox mirrors of this repo
-> are stale and lie). `<REPO>` = `F:\DEV_ENV\X4_Forge`.
+> are stale and lie). `<REPO>` = workspace root.
 
 ## What the pipeline actually builds (4 artifacts, in order)
 
@@ -122,7 +122,7 @@ green block. Then `git push origin main` and assert `HEAD == origin/main`.
 ## One-time facts
 - Namespace: `x4forge` · extension id: `x4forge.x4-forge-studio`
 - Store page: https://open-vsx.org/extension/x4forge/x4-forge-studio
-- Publish token: `OVSX_PAT` in `F:\DEV_ENV\X4_Forge\.env.local` (gitignored, never in chat)
+- Publish token: `OVSX_PAT` in `.env.local` (gitignored, never in chat)
 - Both IDEs use Open VSX by default (Antigravity, Cursor, VSCodium, Windsurf); stock VS Code
   does not (that would need the MS Marketplace, currently blocked on Azure billing).
 

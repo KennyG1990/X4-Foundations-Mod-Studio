@@ -55,7 +55,7 @@ async function generateWithModelCascade(promptText) {
 
 // CONCISE GROUNDING KNOWLEDGE BASE
 function buildAiLiveKnowledgeBase() {
-  const modDir = 'F:\\DEV_ENV\\projects\\Mods\\X4Mods\\x4_ai_influence';
+  const modDir = process.env.AILIVE_MOD_DIR || path.resolve(process.cwd(), '../x4_ai_influence');
   try {
     const readmePath = path.join(modDir, 'README.md');
     if (fs.existsSync(readmePath)) {

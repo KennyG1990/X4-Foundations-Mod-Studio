@@ -9,7 +9,7 @@
 Two independent planning passes **converged** on the root cause, the bounded first unit, the validation,
 and the deferrals — strong signal the structure is right (not a single-plan fallacy). They ALSO shared
 ONE factual error: both recommended Egosoft's first-party `XRCatTool.exe` in the game root. **Reality
-check FALSIFIED it** — the real X4 9.00 Steam install (`G:\SteamLibrary\...\X4 Foundations`) has only
+check FALSIFIED it** — the real X4 9.00 Steam install (`<STEAM_LIBRARY>\...\X4 Foundations`) has only
 `.cat`/`.dat` + `X4.exe`, no first-party unpacker. Lesson: convergence ≠ correctness; the filesystem
 decides. The tool position below is corrected to the verified reality (community unpacker).
 
@@ -68,7 +68,7 @@ One file: `src/components/DirectorySettingsModal.tsx` (the exact surface the Dis
   button. Recommend this FIRST; it works for most installs.
 - **Fallback = a COMMUNITY unpacker** (there is NO first-party tool in the install — verified). Recommend a
   named, trusted community tool + the tool-agnostic floor. **Ken names the tool** (he used the X4 Unpacker
-  Suite — `F:\Downskies\x4unpackersuiteV1`; he knows what's currently maintained + safe to recommend publicly
+  Suite — `<X4_UNPACKED_DIR>\x4unpackersuiteV1`; he knows what's currently maintained + safe to recommend publicly
   on the store). Do NOT ship an unverified/first-party tool name (both agents' XRCatTool assumption was false).
 - **Legal:** the app ships nothing copyrighted either way — harvest reads the user's own cat/dat; unpacking is
   the user extracting their own owned files with a tool they run. Naming a tool doesn't change our legal posture.

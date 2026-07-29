@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const root = process.env.X4_REFERENCE_ROOT || 'F:\\Downskies\\x4unpackersuiteV1\\X4 unpacked 9.00';
+const root = process.env.X4_REFERENCE_ROOT || './data/x4-unpacked';
 const port = Number(process.env.REFERENCE_API_TEST_PORT || 8973);
 const base = `http://127.0.0.1:${port}`;
 const token = `reference-api-integration-${process.pid}`;

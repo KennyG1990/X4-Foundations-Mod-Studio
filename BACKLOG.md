@@ -460,7 +460,7 @@ Real Discord user hit `md.xsd / common.xsd not found at this path` and couldn't 
 `docs/plans/2026-07-19-onboarding-schema-coldstart.md`. **Convergence:** both passes independently agreed on
 root cause + first unit + validation. **Reality-check catch:** both recommended Egosoft's first-party
 `XRCatTool.exe` in the game root — FALSIFIED (the real 9.00 install has only .cat/.dat + X4.exe; NO first-party
-unpacker). Corrected → community unpacker (Ken used the X4 Unpacker Suite, `F:\Downskies\x4unpackersuiteV1`).
+unpacker). Corrected → community unpacker (Ken used the X4 Unpacker Suite, `<X4_UNPACKED_DIR>\x4unpackersuiteV1`).
 - **Root cause:** every schema-setup failure branch (canHarvestSchemas=false, harvest 422, not-found, dismissed
   wizard, raw error) funnels into ONE inert surface — the DirectorySettingsModal schema row (:244), which only
   DIAGNOSES, never TREATS. Harvest capability exists but only the wizard calls it; the reliable unpack-and-point
@@ -754,7 +754,7 @@ sessions). **increment 2 (SPECIFIED, next):** wire the linter into the live vali
 WARNING capsules (one currency: validate/MCP/IDE), add `/api/agent/jobs-lint` GET + MCP tool if warranted;
 promote jobs to CORPUS_PROVEN_DOMAINS only after re-running the 604-clean proof server-side; then e2e (clean
 machine window) + publish (user-facing → changelog entry). Phase 3 = wares.xml (same pattern). Ground:
-`F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00\libraries\jobs.xml`.
+`<X4_UNPACKED_CORPUS>\libraries\jobs.xml`.
 
 ### B59 · Community patch ROUND 2 — a/b/c/d ✅ ALL BUILT 2026-07-17 → ROADMAP (Ken's goal a→b→c→d COMPLETE)
 **a ✅ Patch-day readiness · b ✅ galaxy reconcile+jobs starter · c ✅ UI-Extensions guide · d ✅ anti-hallucination copy** — old-vs-new selector drift (patchReadiness.ts oracle 10/10 +
@@ -1098,7 +1098,7 @@ exit 1, green tree exit 0. Add future mechanical-mistake patterns to the table.
 
 ### B30 · Mirror-drift gate — ✅ CLOSED 2026-07-12 (workflow v3, VERIFIED) → ROADMAP
 (precommit byte-compares the 3 in-repo mirrors; deliberate-divergence drill BLOCKED exit 1; green now.
-The GLOBAL F:\DEV_ENV\CLAUDE.md copy remains Ken's named canon-lag item — outside this repo's gate.)
+The GLOBAL <DEV_ENV>\CLAUDE.md copy remains Ken's named canon-lag item — outside this repo's gate.)
 
 ### B63 · Community round-4 features (ecosystem/overhaul gaps) — A1 ✅ SHIPPED; A2/A3/C1 open, B1 PILLAR (Ken decision)
 Research (pre-culled, 2 agents triangulated): `docs/research/2026-07-18-community-gap-map-round4.md`.

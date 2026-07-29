@@ -75,7 +75,7 @@ Status: **VERIFIED — released as X4 Forge Studio 0.0.48 on 2026-07-28**
 - Canonical macro IDs were correctly discovered from base and official DLC files, but their normalized
   symbol records discarded provenance and labelled every macro `base`. Preserve first-definition
   source/path metadata so completion never lies about DLC ownership.
-- Reconciliation against `F:\Downskies\edithulls.py` exposed one functional fidelity gap: that tool
+- Reconciliation against `<X4_UNPACKED_DIR>\edithulls.py` exposed one functional fidelity gap: that tool
   can round upward to a configurable quantum such as 100 or 1,000. Extend the bounded rule with a
   positive finite `roundingIncrement` (default 1) and apply nearest/floor/ceiling against that quantum.
   This remains generic corpus authoring; do not add hull- or ship-specific hard-coded filters.
@@ -217,7 +217,7 @@ one corpus-guided authoring engine and expose it through both interactive comple
 ### BASELINE AND OBSERVED CURRENT BEHAVIOUR
 
 - Installed Antigravity extension inspected read-only on 2026-07-28: X4 Forge `v1.0.316`, managed
-  sidecar on port 50657, configured corpus `F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00`.
+  sidecar on port 50657, configured corpus `<X4_UNPACKED_CORPUS>`.
 - The Wares & Jobs `ADD` control is currently a plain input described as **Create custom Ware asset
   ID**. It has no suggestions and accepts a canonical ID without first explaining that this would
   collide with an existing definition.

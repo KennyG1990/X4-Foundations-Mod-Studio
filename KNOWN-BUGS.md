@@ -25,7 +25,7 @@ Severity: 🔴 corrupts work or hides failure · 🟡 costs time · ⚪ cosmetic
 
 **Observed:** Forge 0.0.40, 2026-07-25, and still current 2026-07-28.
 
-`/api/fs/write` correctly routes to the **workspace** (`F:\DEV_ENV\projects\Mods\X4Mods`).
+`/api/fs/write` correctly routes to the **workspace** (`<MODS_ROOT>`).
 `/api/fs/read` resolves to the **deployment** (`G:\...\extensions`) and 404s on workspace-only files.
 
 **Why it is the worst one here.** A read-modify-write patch chain reads from G: and writes to F:. The
@@ -182,7 +182,7 @@ The sidecar does the right thing and logs it:
 
 ```
 port: 50657 (dynamically selected)
-[discovery] port + token published to C:\Users\Moshi\.x4forge\latest.json
+[discovery] port + token published to <USER_HOME>\.x4forge\latest.json
 ```
 
 But `AGENT-USING-THE-FORGE.md` does not mention `~/.x4forge/latest.json`, so an agent client written from

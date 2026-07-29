@@ -49,7 +49,7 @@ export interface ResolvedXsdConfig extends XsdConfig {
 }
 
 /** User-requested default; override with X4_REFERENCE_ROOT or config.x4ReferenceRoot. */
-export const DEFAULT_X4_REFERENCE_ROOT = 'F:\\Downskies\\x4unpackersuiteV1\\X4 unpacked 9.00';
+export const DEFAULT_X4_REFERENCE_ROOT = process.env.X4_REFERENCE_ROOT || './data/x4-unpacked';
 
 function arrayOf<T>(value: T | T[] | undefined): T[] {
   if (!value) return [];

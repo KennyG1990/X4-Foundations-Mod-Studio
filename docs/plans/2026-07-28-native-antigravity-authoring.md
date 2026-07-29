@@ -52,7 +52,7 @@ Deliver the migration in independently provable phases:
 
 ### Authoritative references
 
-- X4 schemas and corpus: `F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00`.
+- X4 schemas and corpus: `<X4_UNPACKED_CORPUS>`.
 - ADR-F2: raw XML remains available; visual authoring is never mandatory.
 - ADR-F4: source checkout and deploy artifact are separate ownership domains.
 - Capability map: B56/B57 native diagnostics, IntelliSense, real workspace folders, and guarded

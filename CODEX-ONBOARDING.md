@@ -176,7 +176,7 @@ co-located content via a `.forgekeep` list (so it never nukes the Python bridge,
 
 ### Environment
 - **OS:** Windows (paths are Windows; the primary shell is PowerShell, with a Git-Bash POSIX shell also
-  available). [VERIFIED — repo is on `F:\DEV_ENV\X4_Forge`.]
+  available). [VERIFIED — repo is on `<WORKSPACE_ROOT>`.]
 - **Node + tsx:** the backend runs under `tsx` (TypeScript execute) in watch mode; the frontend under Vite.
 - **Start the app:** `START-X4FORGE.cmd` (production-ish launcher) or the `dev` scripts. The app serves at
   **http://localhost:3000** (Vite), which **proxies `/api/*`** to the Node backend. All agent API calls this
@@ -411,7 +411,7 @@ opens the schema, the B10 structural rider is the one specified code task. [INFE
   directly. The graph is **code-only** — it excludes ROADMAP/docs/schemas/data.] [VERIFIED — CLAUDE.md
   "Code knowledge graph".]
 - **Agent Brain** — a semantic knowledge graph of Ken's past work across tools, at
-  `F:\DEV_ENV\Agent Brain Vault` (front door `AGENT_BRAIN.md`; verbatim notes in `notes/`; graph in
+  `<DEV_ENV>\Agent Brain Vault` (front door `AGENT_BRAIN.md`; verbatim notes in `notes/`; graph in
   `graphify-out/graph.json`). Query it BEFORE non-trivial work or when Ken references "something we did
   before." **[FLAG for Codex:** it's normally queried via a Claude-Code MCP server or a Python CLI
   (`_brain-tools/query_brain.py`) — you may not have the MCP, but the vault + the Python CLI are on disk.]

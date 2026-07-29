@@ -22,7 +22,7 @@ Status: IN PROGRESS
   nested element inside an opaque raw cue is not safe in this unit because the current compiler treats
   the top-level raw cue as the byte-owning artifact.
 - **Authoritative references:** the real read-only
-  `F:\DEV_ENV\projects\Mods\X4Mods\deadairdynamicwars` folder; ADR-F4 source/artifact ownership;
+  `<MODS_ROOT>\deadairdynamicwars` folder; ADR-F4 source/artifact ownership;
   B79/B80 dual-root project browser; B100 native source/node authoring; `importModFolder`,
   `SyncModal`, `Canvas`, and the round-trip checker.
 - **In scope:** distinct layout lanes for every imported MD file; automatic fit after the active project

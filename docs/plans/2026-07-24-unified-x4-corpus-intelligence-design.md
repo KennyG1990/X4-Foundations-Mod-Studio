@@ -4,7 +4,7 @@
 
 ## Observed corpus
 
-The configured `F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00` snapshot contains 1,028,384 files (33.2 GB): 9,884 XML, 88 XSD, 157 Lua, 849 JavaScript, and 1,422 TypeScript. Most remaining files are signatures, audio, textures, models, or compressed assets. The structured high-value slice includes 348 library XML files, 363 MD XML files, 182 AI-script XML files, 171 map XML files, 14 index XML files, 12 UI XML files, and 32 localization XML files across base plus present `ego_dlc_*` sources.
+The configured `<X4_UNPACKED_CORPUS>` snapshot contains 1,028,384 files (33.2 GB): 9,884 XML, 88 XSD, 157 Lua, 849 JavaScript, and 1,422 TypeScript. Most remaining files are signatures, audio, textures, models, or compressed assets. The structured high-value slice includes 348 library XML files, 363 MD XML files, 182 AI-script XML files, 171 map XML files, 14 index XML files, 12 UI XML files, and 32 localization XML files across base plus present `ego_dlc_*` sources.
 
 The 88 XSD files are 40 basenames and 52 unique contents. Base `libraries/` contains 37 canonical schemas; other files include MD/AI shims, UI schemas, and DLC variants. Therefore “load every XSD into one union” is incorrect. The manifest must preserve source, path role, content hash, include graph, and precedence.
 

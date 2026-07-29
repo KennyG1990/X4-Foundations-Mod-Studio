@@ -5,7 +5,7 @@
 > **WORKFLOW v3 (Ken's order, 2026-07-12):** the 8-step v2 workflow text is REPLACED by the
 > **Universal AI Task Workflow** (canonical copy: `UNIVERSAL_AI_TASK_WORKFLOW.md`, inlined below
 > verbatim) + the **X4 Forge Project Adapter**. The OPERATOR PROTOCOL is a separate, unchanged layer.
-> Ken must still update the global `F:\DEV_ENV\CLAUDE.md` and StarForge wiki copies (outside this repo).
+> Ken must still update the global `<DEV_ENV>\CLAUDE.md` and StarForge wiki copies (outside this repo).
 
 ## ⛔ OPERATOR PROTOCOL — the agent manages the operator too (Ken's order, 2026-07-09)
 
@@ -435,7 +435,7 @@ Legacy record symbols map: ✅ = VERIFIED · ◐ = PARTIAL · spec'd = SPECIFIED
 entries; new closes may keep the symbols but must include the explicit state word.
 
 **Authoritative references (ground before inventing):** the game's own XSDs + the unpacked vanilla
-corpus (`F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00`); DeadAir reference mods via the
+corpus (`<X4_UNPACKED_CORPUS>`); DeadAir reference mods via the
 `x4-reference-mods` skill; StarForge canon (`F:\StarForge\wiki\`); ADR ledger
 `F:\StarForge\wiki\x4-forge\decisions.md` — RECONCILE checks it; a design contradicting an ADR needs
 Ken's explicit sign-off, never a silent re-derivation.
@@ -506,7 +506,7 @@ graph (below) navigates the FORGE codebase, not mod content — use the Forge ag
 ## Building the `x4_ai_influence` mod — agent API allowed (UI-only mandate LIFTED 2026-06-24)
 
 **UPDATE 2026-06-24 (Ken): the old "build the mod ONLY through this Forge's UI" HARD RULE is REVERSED.** It
-contradicted `F:\DEV_ENV\CLAUDE.md`, which is authoritative — both now agree. You **may use the Forge agent API
+contradicted `<DEV_ENV>\CLAUDE.md`, which is authoritative — both now agree. You **may use the Forge agent API
 (`/api/agent/*`) to author, validate, and deploy** the `x4_ai_influence` mod (in-game MD/Lua/content), and use
 mouse clicks (Claude-in-Chrome / computer-use) for *validation*. Pure-canvas building was too slow. The Forge is
 still proven by building a real mod end-to-end — but via the API is fine; a UI gap found while building is worth
@@ -550,7 +550,7 @@ A human-navigable Obsidian copy is exported to `F:\StarForge\graphify\x4-forge\`
 ## Agent Brain — cross-session memory (query this BEFORE non-trivial work)
 
 A semantic knowledge graph of my past work across **Claude Code + Cowork + Gemini** lives at
-`F:\DEV_ENV\Agent Brain Vault`. It exists so I don't re-derive what a past session already solved
+`<DEV_ENV>\Agent Brain Vault`. It exists so I don't re-derive what a past session already solved
 (e.g. the X4 Neural Link skills/relation work).
 
 **THE ONE RULE:** before non-trivial work — or whenever Ken references something "we did before,"
@@ -559,11 +559,11 @@ re-reading raw files.**
 
 **First-class MCP — `claude-brain`.** Graphify's own server `graphify-mcp` serves the semantic
 graph. Registration lives in `Agent Brain Vault\_brain-tools\brain.mcp.json`; for Claude Code,
-merge it into `F:\DEV_ENV\.mcp.json` (Cowork: add as a connector). It points at
+merge it into `<DEV_ENV>\.mcp.json` (Cowork: add as a connector). It points at
 `Agent Brain Vault\graphify-out\graph.json`. Call its tools (discover via tools/list — query /
 explain / stats) for meaning-based recall. Phrase questions by MEANING, not filenames.
 - If no MCP is connected, fall back to the CLI:
-  `python "F:\DEV_ENV\Agent Brain Vault\_brain-tools\query_brain.py" --vault "F:\DEV_ENV\Agent Brain Vault" "<question>"`
+  `python "<DEV_ENV>\Agent Brain Vault\_brain-tools\query_brain.py" --vault "<DEV_ENV>\Agent Brain Vault" "<question>"`
 - Verbatim source notes: `Agent Brain Vault\notes\` (one per conversation).
 
 **Query `graph.json`, NOT Obsidian's Graph View** — that view is a shallow `[[wikilink]]` keyword
@@ -575,7 +575,7 @@ X"); StarForge `wiki/` = the canon (curated design). Distill durable brain findi
 
 **Refresh:** notes auto-refresh nightly (free, deterministic) via the `ClaudeBrain-normalize` task;
 the semantic graph needs a paid LLM pass — refresh with
-`/graphify "F:\DEV_ENV\Agent Brain Vault\notes" --update` (new/changed notes only — cheap).
+`/graphify "<DEV_ENV>\Agent Brain Vault\notes" --update` (new/changed notes only — cheap).
 
 **Honest limits:** coverage is partial (Cowork-heavy, ~27 Gemini transcripts; claude.ai web chat
 excluded) and the CURRENT live session is never in it yet. Treat as strong-but-incomplete.

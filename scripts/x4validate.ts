@@ -8,7 +8,7 @@
  * another tool. Same engine stack as POST /api/agent/project/validate.
  *
  * Usage (run from the X4 Forge repo root so config.json resolves):
- *   npm run validate:mod -- "F:\DEV_ENV\projects\Mods\X4Mods\x4_ai_influence"
+ *   npm run validate:mod -- "<MODS_ROOT>\x4_ai_influence"
  *   npm run validate:mod -- "<mod folder>" --json
  *
  * Exit codes: 0 = valid (no errors), 1 = validation errors, 2 = usage/load failure.

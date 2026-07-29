@@ -11,10 +11,10 @@ Usage:
 
 Examples:
     # Extract all UI files from 08.cat
-    python x4_cat_extract.py "G:/.../08.cat" "F:/DEV_ENV/x4-unpacked" --filter "ui/"
+    python x4_cat_extract.py "G:/.../08.cat" "<DEV_ENV>/x4-unpacked" --filter "ui/"
     
     # Extract everything from a cat file  
-    python x4_cat_extract.py "G:/.../08.cat" "F:/DEV_ENV/x4-unpacked"
+    python x4_cat_extract.py "G:/.../08.cat" "<DEV_ENV>/x4-unpacked"
 """
 
 import os

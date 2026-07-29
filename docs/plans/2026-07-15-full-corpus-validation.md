@@ -6,7 +6,7 @@ Lane: **FULL** (core validation-engine change — highest blast radius in the ap
 ## Bounded goal
 Validate every mod file type a modder actually creates/patches against its REAL game schema, and
 make "unknown X" reference checks comprehensive — using the unpacked game at
-`F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00` (39 XSDs in `libraries/`, 9,884 corpus XMLs).
+`<X4_UNPACKED_CORPUS>` (39 XSDs in `libraries/`, 9,884 corpus XMLs).
 
 ## Reconcile (verified 2026-07-15)
 - Today loads ONLY `md.xsd`+`common.xsd` (MD) + harvested `aiscripts.xsd`; schemaFiles is

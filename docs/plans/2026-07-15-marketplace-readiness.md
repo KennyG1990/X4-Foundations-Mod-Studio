@@ -10,8 +10,8 @@ Lane: FULL (publishing surface — outward-facing, Ken-gated at every push).
 - Current VSIX is functional but NOT publishable as-is (blockers below).
 
 ## Blockers before ANY public push (each is bounded)
-1. **Baked machine paths** — 13 drive-path literals (G:\SteamLibrary, C:\Users\ken,
-   F:\DEV_ENV\…) ship inside server.cjs as server.ts DEFAULTS. Genericize to empty/registry-
+1. **Baked machine paths** — 13 drive-path literals (<STEAM_LIBRARY>, C:\Users\ken,
+   <DEV_ENV>\…) ship inside server.cjs as server.ts DEFAULTS. Genericize to empty/registry-
    autodetect defaults (B18's detect flow already exists — first-run wizard covers fresh users).
 2. **Native-module portability** — `liveBridge.ts` STATICALLY imports better-sqlite3, so the
    bundle hard-crashes where the shipped win-x64 .node can't load. Fix = same lazy-degrade

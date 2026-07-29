@@ -4,7 +4,7 @@ import path from 'node:path';
 import { discoverSchemaRegistry, getDomainIndex } from '../src/lib/schemaRegistry';
 import { validateXmlAgainstSchema } from '../src/lib/xsdValidate';
 
-const root = path.resolve(process.argv[2] || process.env.X4_REFERENCE_ROOT || 'F:\\Downskies\\x4unpackersuiteV1\\X4 unpacked 9.00');
+const root = path.resolve(process.argv[2] || process.env.X4_REFERENCE_ROOT || './data/x4-unpacked');
 if (!fs.existsSync(root)) throw new Error(`Corpus root not found: ${root}`);
 
 const registry = discoverSchemaRegistry(path.join(root, 'libraries'));
