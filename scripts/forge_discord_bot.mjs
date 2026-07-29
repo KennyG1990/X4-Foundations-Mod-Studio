@@ -7,7 +7,7 @@ dotenv.config({ path: '.env.local' });
 dotenv.config();
 
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.AILIVE_GEMINI_API_KEY || '';
 
 // ANTI-SPAM TIMERS (for general community users):
 const USER_COOLDOWN_MS = 10 * 60 * 1000;   // 10 minutes per user
@@ -17,19 +17,31 @@ let lastGlobalResponseTime = 0;
 const userCooldowns = new Map();
 
 if (!DISCORD_TOKEN) {
-  console.error('❌ ERROR: DISCORD_TOKEN is missing from environment or .env.local!');
+  console.error('❌ ERROR: DISCORD_TOKEN is missing!');
   process.exit(1);
 }
 
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
-// Load documentation context for Gemini
+// Load comprehensive documentation context for grounding
 let forgeDocsContext = '';
 try {
-  const readme = fs.readFileSync('README.md', 'utf-8');
-  forgeDocsContext = `X4 FORGE DOCUMENTATION SUMMARY:\n${readme.slice(0, 4000)}`;
+  const readme = fs.existsSync('README.md') ? fs.readFileSync('README.md', 'utf-8') : '';
+  const roadmap = fs.existsSync('ROADMAP.md') ? fs.readFileSync('ROADMAP.md', 'utf-8') : '';
+  const backlog = fs.existsSync('BACKLOG.md') ? fs.readFileSync('BACKLOG.md', 'utf-8') : '';
+  
+  forgeDocsContext = `AUTHENTICATED X4 FORGE KNOWLEDGE BASE (SOURCE OF TRUTH):
+
+=== X4 FORGE README SUMMARY ===
+${readme.slice(0, 4000)}
+
+=== ACTIVE ROADMAP SUMMARY ===
+${roadmap.slice(0, 3000)}
+
+=== BACKLOG SUMMARY ===
+${backlog.slice(0, 2000)}`;
 } catch (e) {
-  forgeDocsContext = 'X4 Forge is an open-source visual IDE and extension for modding X4 Foundations.';
+  forgeDocsContext = 'X4 Forge is a local visual workbench for building, validating, packaging, and deploying mods for X4: Foundations.';
 }
 
 const client = new Client({
@@ -75,7 +87,7 @@ client.on('messageCreate', async (message) => {
       // 2. Check 10-Minute Per-User Cooldown
       const lastUserTime = userCooldowns.get(message.author.id);
       if (lastUserTime && (now - lastUserTime) < USER_COOLDOWN_MS) {
-        const remainingMin = Math.ceil((USER_COOLDOWN_MS - (lastUserTime)) / 60000);
+        const remainingMin = Math.ceil((USER_COOLDOWN_MS - (now - lastUserTime)) / 60000);
         await message.reply(`⏱️ **User Rate Limit**: You can only ask 1 tech support question every 10 minutes. Please try again in ~${remainingMin} minutes.`);
         return;
       }
@@ -84,48 +96,62 @@ client.on('messageCreate', async (message) => {
       userCooldowns.set(message.author.id, now);
     }
 
-    if (!GEMINI_API_KEY || GEMINI_API_KEY === 'MY_GEMINI_API_KEY') {
-      if (isConciergeChannel || isMentioned || isOwner) {
-        await message.reply('⚠️ Please set your `GEMINI_API_KEY` in `.env.local` to enable AI support responses!');
-      }
-      return;
-    }
-
     try {
       await message.channel.sendTyping();
 
       let systemPrompt = '';
       if (isOwner) {
         systemPrompt = `OWNER / CREATOR OVERRIDE ENABLED:
-The person chatting with you is your creator, Moshine.
+The user chatting with you is Moshine, the creator and maintainer of X4 Forge.
 - You have ZERO topic restrictions when talking to Moshine.
-- Answer all of Moshine's questions directly, intelligently, and helpfully with full capability.
+- Provide comprehensive, accurate, and deeply helpful responses.
 
-DOCUMENTATION CONTEXT:
+STRICT GROUNDING & HONESTY MANDATE:
+1. Ground your knowledge strictly in the provided X4 FORGE KNOWLEDGE BASE.
+2. DO NOT HALLUCINATE OR INVENT FEATURES. Never claim X4 Forge uses BepInEx (it is for native X4 Foundations extensions, MD XML, Lua UI, XPath patches, wares, and jobs).
+3. If you are unsure or if a feature is not explicitly documented in the knowledge base, STATE PLAINLY WHERE YOU ARE UNSURE rather than making up answers.
+
+KNOWLEDGE BASE:
 ${forgeDocsContext}`;
       } else {
         systemPrompt = `STRICT MANDATE FOR FORGE CONCIERGE:
-You are Forge Concierge, an automated technical support assistant strictly dedicated to X4 Forge.
+You are Forge Concierge, an automated technical support assistant strictly dedicated to X4 Forge (the X4 Foundations modding workbench).
 
-STRICT SCOPE BOUNDARIES:
-1. You are strictly restricted to answering technical support questions about X4 Forge, X4 Foundations modding, Mission Director (MD) scripts, AI scripts, XML patching, and studio errors.
-2. REJECT ALL OFF-TOPIC CONVERSATION, personal questions, casual chat, small talk.
-3. If a user asks anything off-topic, reply strictly with:
+STRICT GROUNDING & HONESTY MANDATE:
+1. You are strictly restricted to technical support for X4 Forge, Mission Director (MD) scripts, AI scripts, XML patching, wares, jobs, and studio errors.
+2. Ground your knowledge strictly in the provided X4 FORGE KNOWLEDGE BASE. DO NOT INVENT OR HALLUCINATE FEATURES.
+3. If you cannot accurately answer a question or are unsure, STATE PLAINLY WHERE YOU ARE UNSURE.
+4. REJECT ALL OFF-TOPIC CONVERSATION (food, weather, jokes, general knowledge unrelated to X4/X4 Forge). If off-topic, reply:
    "I am Forge Concierge, an automated assistant dedicated exclusively to X4 Forge technical support. Please keep questions focused on X4 Forge and modding."
 
-DOCUMENTATION CONTEXT:
+KNOWLEDGE BASE:
 ${forgeDocsContext}`;
       }
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
-        contents: [
-          { role: 'user', parts: [{ text: `${systemPrompt}\n\nUser Question (${message.author.username} in #${channelName}):\n${message.content}` }] }
-        ]
-      });
+      let replyText = '';
+      try {
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.0-flash',
+          contents: [
+            { role: 'user', parts: [{ text: `${systemPrompt}\n\nUser Message (${message.author.username} in #${channelName}):\n${message.content}` }] }
+          ]
+        });
+        replyText = response.text || '';
+      } catch (geminiErr) {
+        console.error('Primary gemini-2.0-flash call failed, trying gemini-1.5-flash:', geminiErr);
+        const fallbackResponse = await ai.models.generateContent({
+          model: 'gemini-1.5-flash',
+          contents: [
+            { role: 'user', parts: [{ text: `${systemPrompt}\n\nUser Message (${message.author.username} in #${channelName}):\n${message.content}` }] }
+          ]
+        });
+        replyText = fallbackResponse.text || '';
+      }
 
-      const replyText = response.text || 'I analyzed your request, but could not generate a response.';
-      
+      if (!replyText) {
+        replyText = 'I received your query, but could not generate a response from the knowledge base.';
+      }
+
       if (replyText.length > 1950) {
         const chunks = replyText.match(/[\s\S]{1,1900}/g) || [replyText];
         for (const chunk of chunks) {
@@ -137,7 +163,7 @@ ${forgeDocsContext}`;
     } catch (err) {
       console.error('Error calling Gemini API:', err);
       if (isConciergeChannel || isMentioned || isOwner) {
-        await message.reply('Sorry, I encountered an issue processing your query with Gemini.');
+        await message.reply(`⚠️ Unable to process query with Gemini API: ${err.message || 'Unknown API error'}`);
       }
     }
   }
