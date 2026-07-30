@@ -10,7 +10,7 @@
       "getting started modding",
       "new mod"
     ],
-    "fix": "To create a new mod in X4 Forge Studio:\n1. Open VS Code with X4 Forge Studio installed.\n2. Press Ctrl+Shift+P (or Cmd+Shift+P) and run 'X4 Forge: Create Mod Project' (or click 'New Mod Project' in the X4 Forge sidebar panel).\n3. Fill in your Mod ID (e.g. my_custom_mod), Display Name, and Author.\n4. Click 'Scaffold Mod' — X4 Forge automatically generates content.xml, folder structure (md/, aiscripts/, libraries/), and initializes real-time XSD schema validation.\n5. Open your new mod folder and start editing XML with full auto-completion!",
+    "fix": "To make or edit a mod using X4 Forge Studio:\n1. Open VS Code with X4 Forge Studio installed.\n2. Press Ctrl+Shift+P (or Cmd+Shift+P) and run 'X4 Forge: Open Mod Folder' (or click 'Sync Mod' / 'Open Workspace' in the Forge top menu).\n3. Point X4 Forge to your mod directory. If the folder is empty or new, Forge's backend automatically materializes a valid content.xml manifest and sets up the md/, aiscripts/, and libraries/ folder structure.\n4. Ensure your unpacked X4 game directory is set in Settings so X4 Forge can load Egosoft's md.xsd schemas and CAT/DAT archives for live auto-completion and validation.\n5. Write your XML patches and click 'Sync Mod' to compile, validate, and deploy directly to X4 Foundations/extensions/.",
     "category": "x4_forge",
     "matchCount": 0
   },
