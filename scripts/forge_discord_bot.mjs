@@ -206,8 +206,39 @@ const commands = [
     .addStringOption(opt => opt.setName('id').setDescription('Short issue ID').setRequired(true))
     .addStringOption(opt => opt.setName('title').setDescription('Human title of the issue').setRequired(true))
     .addStringOption(opt => opt.setName('keywords').setDescription('Comma-separated trigger keywords').setRequired(true))
-    .addStringOption(opt => opt.setName('fix').setDescription('Step-by-step fix resolution text').setRequired(true))
+    .addStringOption(opt => opt.setName('fix').setDescription('Step-by-step fix resolution text').setRequired(true)),
+  new SlashCommandBuilder()
+    .setName('daily')
+    .setDescription('Claim your free daily Credits reward & streak bonus'),
+  new SlashCommandBuilder()
+    .setName('balance')
+    .setDescription('Check your wallet Credits, bank savings, and active upgrades'),
+  new SlashCommandBuilder()
+    .setName('trivia')
+    .setDescription('Play X4 Foundations lore trivia (Zero LLM cost)')
+    .addIntegerOption(opt => opt.setName('bet').setDescription('Optional credit wager amount').setRequired(false)),
+  new SlashCommandBuilder()
+    .setName('mine')
+    .setDescription('Dispatch a virtual ship on a sector mining expedition for loot'),
+  new SlashCommandBuilder()
+    .setName('bank')
+    .setDescription('Deposit or withdraw credits from the Galactic Bank')
+    .addStringOption(opt => opt.setName('action').setDescription('deposit or withdraw').setRequired(true).addChoices({ name: 'deposit', value: 'deposit' }, { name: 'withdraw', value: 'withdraw' }))
+    .addIntegerOption(opt => opt.setName('amount').setDescription('Credit amount').setRequired(true)),
+  new SlashCommandBuilder()
+    .setName('shop')
+    .setDescription('View community shop items and cooldown reducers'),
+  new SlashCommandBuilder()
+    .setName('buy')
+    .setDescription('Buy a community upgrade perk')
+    .addStringOption(opt => opt.setName('item').setDescription('Shop item ID').setRequired(true).addChoices(
+      { name: 'cooldown_reducer (500 Cr)', value: 'cooldown_reducer' },
+      { name: 'trivia_mult (750 Cr)', value: 'trivia_mult' },
+      { name: 'hazard_shield (1000 Cr)', value: 'hazard_shield' }
+    ))
 ].map(cmd => cmd.toJSON());
+
+import { claimDaily, getAccount, depositBank, withdrawBank, runMiningExpedition, loadTriviaQuestions, processTriviaAnswer, buyShopItem } from './discord_economy.mjs';
 
 import { syncAllKnownFixes } from './ingest_repo_bugs.mjs';
 
@@ -314,6 +345,103 @@ client.on('interactionCreate', async (interaction) => {
 
       saveKnownFixes(knownFixes);
       await interaction.reply({ content: `✅ Verified Known Fix **${title}** (\`${id}\`) added successfully! Trigger keywords: \`${keywords.join(', ')}\``, flags: 64 });
+    } else if (commandName === 'daily') {
+      const res = claimDaily(interaction.user.id);
+      if (!res.ok) {
+        await interaction.reply({ content: `⏱️ ${res.error}`, flags: 64 });
+      } else {
+        const embed = new EmbedBuilder()
+          .setTitle('🎁 Daily Rewards Claimed!')
+          .setColor(5763719)
+          .addFields(
+            { name: '💰 Reward', value: `+${res.reward} Credits`, inline: true },
+            { name: '🔥 Streak', value: `${res.streak} Day(s)`, inline: true },
+            { name: '💳 Total Balance', value: `${res.totalCredits} Cr`, inline: true }
+          )
+          .setFooter({ text: 'Come back in 24 hours to keep your streak bonus!' });
+        await interaction.reply({ embeds: [embed] });
+      }
+    } else if (commandName === 'balance') {
+      const acc = getAccount(interaction.user.id);
+      const embed = new EmbedBuilder()
+        .setTitle(`💳 ${interaction.user.username}'s Account Balance`)
+        .setColor(3447003)
+        .addFields(
+          { name: '👛 Wallet Balance', value: `${acc.credits} Cr`, inline: true },
+          { name: '🏦 Bank Savings', value: `${acc.bank} Cr`, inline: true },
+          { name: '🔥 Daily Streak', value: `${acc.dailyStreak || 0} Days`, inline: true },
+          { name: '⏱️ Cooldown Reducer', value: `-${acc.upgrades?.cooldownReducerMinutes || 0} Minutes`, inline: true },
+          { name: '🎲 Trivia Multiplier', value: `${acc.upgrades?.triviaMultiplier || 1.0}x`, inline: true },
+          { name: '🛡️ Deflector Shield', value: acc.upgrades?.hazardShield ? 'Unlocked' : 'Locked', inline: true }
+        )
+        .setFooter({ text: 'Earn credits via /daily, /trivia, and /mine!' });
+      await interaction.reply({ embeds: [embed] });
+    } else if (commandName === 'mine') {
+      const res = runMiningExpedition(interaction.user.id);
+      if (!res.ok) {
+        await interaction.reply({ content: `⏱️ ${res.error}`, flags: 64 });
+      } else {
+        const embed = new EmbedBuilder()
+          .setTitle('🚀 Sector Mining Expedition Complete')
+          .setColor(res.earnedCredits > 0 ? 5763719 : 15548997)
+          .setDescription(res.yieldText)
+          .addFields(
+            { name: '💳 Total Wallet Balance', value: `${res.totalCredits} Cr`, inline: false }
+          );
+        await interaction.reply({ embeds: [embed] });
+      }
+    } else if (commandName === 'bank') {
+      const action = interaction.options.getString('action');
+      const amount = interaction.options.getInteger('amount');
+      const res = action === 'deposit' ? depositBank(interaction.user.id, amount) : withdrawBank(interaction.user.id, amount);
+
+      if (!res.ok) {
+        await interaction.reply({ content: `⛔ ${res.error}`, flags: 64 });
+      } else {
+        const embed = new EmbedBuilder()
+          .setTitle(`🏦 Galactic Bank ${action === 'deposit' ? 'Deposit' : 'Withdrawal'}`)
+          .setColor(3447003)
+          .addFields(
+            { name: '👛 Wallet Balance', value: `${res.credits} Cr`, inline: true },
+            { name: '🏦 Bank Balance (2% Daily Interest)', value: `${res.bank} Cr`, inline: true }
+          );
+        await interaction.reply({ embeds: [embed] });
+      }
+    } else if (commandName === 'shop') {
+      const embed = new EmbedBuilder()
+        .setTitle('🛒 Community Upgrade Shop')
+        .setColor(10181046)
+        .addFields(
+          { name: '⏱️ Cooldown Reducer (500 Cr)', value: 'Reduces your AI Concierge LLM cooldown by 2 minutes (`/buy item: cooldown_reducer`)', inline: false },
+          { name: '🎲 Trivia Payout Multiplier (750 Cr)', value: 'Permanently boosts trivia winnings to 1.5x (`/buy item: trivia_mult`)', inline: false },
+          { name: '🛡️ Deflector Shield (1000 Cr)', value: 'Protects your ships from pirate/Kha\'ak loot loss during mining expeditions (`/buy item: hazard_shield`)', inline: false }
+        )
+        .setFooter({ text: 'Earn credits with /daily, /mine, and /trivia!' });
+      await interaction.reply({ embeds: [embed] });
+    } else if (commandName === 'buy') {
+      const item = interaction.options.getString('item');
+      const res = buyShopItem(interaction.user.id, item);
+      if (!res.ok) {
+        await interaction.reply({ content: `⛔ ${res.error}`, flags: 64 });
+      } else {
+        await interaction.reply({ content: `🎉 **Upgrade Purchased!** You unlocked **${res.title}**! Remaining Wallet: **${res.credits} Cr**.` });
+      }
+    } else if (commandName === 'trivia') {
+      const questions = loadTriviaQuestions();
+      if (!questions.length) {
+        await interaction.reply({ content: 'No trivia questions available right now.', flags: 64 });
+        return;
+      }
+      const q = questions[Math.floor(Math.random() * questions.length)];
+      const bet = interaction.options.getInteger('bet') || 0;
+
+      const embed = new EmbedBuilder()
+        .setTitle(`🛰️ X4 Foundations Lore Trivia (Question ID: ${q.id})`)
+        .setColor(15844367)
+        .setDescription(`**${q.question}**\n\n` + q.options.map((opt, idx) => `**${idx + 1}.** ${opt}`).join('\n'))
+        .setFooter({ text: bet > 0 ? `Wager: ${bet} Cr • Payout: ${bet * 2} Cr` : 'Reward: +75 Cr for correct answer' });
+
+      await interaction.reply({ embeds: [embed] });
     }
   } catch (err) {
     console.warn('⚠️ Interaction error caught:', err.message || err);

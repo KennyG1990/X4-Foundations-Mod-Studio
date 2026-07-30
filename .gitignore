@@ -18,6 +18,7 @@ blob-report/
 # Server-side AI provider key store + other runtime data (harvested schemas, caches).
 data/*
 !data/known_fixes.json
+!data/trivia_questions.json
 # Per-machine paths (game install, schema folder) written by the Settings modal.
 # Copy config.example.json to config.json or just use the in-app Settings.
 config.json
