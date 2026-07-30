@@ -49,6 +49,9 @@ jobs:
       - name: Run deterministic oracle integration
         run: npm run test:oracles
 
+      - name: Prove fail-closed E2E flake policy
+        run: npm run test:e2e-policy
+
       - name: Build production bundle
         run: npm run build
 

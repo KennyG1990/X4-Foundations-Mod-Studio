@@ -19,6 +19,7 @@
     "precommit:check": "node scripts/precommit-check.mjs",
     "test:canvas": "node scripts/run-e2e.mjs tests/e2e/canvas-interactions.spec.ts tests/e2e/canvas-coverage.spec.ts",
     "test:e2e": "node scripts/run-e2e.mjs",
+    "test:e2e-policy": "node scripts/e2e-flake-policy-selftest.mjs",
     "test:routes": "node scripts/route-integration.mjs",
     "test:oracles": "node scripts/oracle-integration.mjs",
     "test:product-copy": "node scripts/product-copy-check.mjs",
