@@ -34,7 +34,7 @@ make each future implementation a bounded workflow task rather than an untracked
 | R16 User-extensible validation | OPEN | No `forge.rules.json`, declared wire-key, known-chain, or expected-register contract exists. | Same schema foundation as R1, then deterministic merge/provenance and invalid-rule failures. |
 | R17 True multi-workspace | PARTIAL | Named parked workspaces round-trip, but active authority is a shared singleton and is not client/token scoped. | Architecture/ADR task: workspace binding per session/key plus safe shared read surfaces. |
 | R18 Headless CLI | PARTIAL | `npm run validate:mod -- <path>` exists and runs the shared validator. There is no installed `forge` binary or CLI deploy-verify workflow. | Package a supported CLI entrypoint; add API discovery/auth and dry-run/deploy verification with explicit side effects. |
-| R19 CI | PARTIAL (B110-R19 local) | Windows Quality is implemented to run locked extension build/stage, the real 16-check packaged-sidecar probe, 12-check inspector policy, locked VSIX packaging, CRC/content inspection, and artifact retention after the existing root gates. Local clean-order replay passes; public clean-runner evidence is pending the implementation push. | Require exact-SHA public Quality success plus retained artifact inspection before VERIFIED. Evidence: `docs/plans/2026-07-30-packaged-vsix-ci.md`. |
+| R19 CI | VERIFIED (B110-R19) | Exact-SHA Windows Quality run `30570137452` passed locked root/extension installs and audits, root gates, extension build/stage, the real 16-check packaged-sidecar probe, 13-check inspector policy, locked VSIX packaging, final CRC/content inspection, and inspected-only artifact retention. Artifact `8770489130` is retained for 14 days. | Preserve the dependency order, rejection oracle, and inspected-only upload gate. Evidence: `docs/plans/2026-07-30-packaged-vsix-ci.md`. |
 | R20 Flake budget | PARTIAL | Route stability was proven 10/10 during B108 and CI gates one run. No documented quarantine threshold, owner, or expiry policy exists. | Write/enforce policy and produce a deliberately flaky fixture proving quarantine cannot hide product failures. |
 | R21 MCP fate | OPEN | The safe read/validate/compile MCP shim is bundled and exposed through a copy-config command, while repo `.mcp.json` registers only `claude-brain`. It remains optional but not automatically registered. | Product decision: explicit opt-in registration workflow or remove bundling; do not add filesystem writes without a separate scope/security design. |
 
@@ -42,11 +42,11 @@ make each future implementation a bounded workflow task rather than an untracked
 
 1. **B109 Release Center — VERIFIED / Open VSX 0.0.59:** closed the release-specific R7/R8/R12 work and supplied a
    concrete consumer for R3-style staged errors. Preserve its gates; do not rebuild it during B110.
-2. **Safety contract batch:** R3, R9, and R10 are VERIFIED; continue with R19, then R20. These improve every subsequent implementation and CI gate.
+2. **Safety contract batch:** R3, R9, R10, and R19 are VERIFIED; continue with R20. These improve every subsequent implementation and CI gate.
 3. **Validation truth batch:** R1 + R16 schema, then R6 UI, then R2 delta reporting.
 4. **Loss-prevention UX:** R11 and R14.
 5. **Architecture batch:** R8 remainder + R17, then R13 after workspace/session ownership is stable.
 6. **Tooling decisions:** R18 and R21.
 
-R3, R4, R5, R9, R10, R12, and R15 need no duplicate implementation. Their regression evidence remains part of the relevant
+R3, R4, R5, R9, R10, R12, R15, and R19 need no duplicate implementation. Their regression evidence remains part of the relevant
 full gates. Every row moved to `VERIFIED` must cite its task plan, acceptance results, and ROADMAP close.

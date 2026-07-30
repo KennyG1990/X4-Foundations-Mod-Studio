@@ -14,9 +14,9 @@ open; the rest partial. Execute only as bounded workflow tasks in the recorded o
 cleanup—and update each row after every implementation. Ledger:
 `docs/plans/2026-07-29-kimi-recommendations-ledger.md`.
 
-**Closed bounded units:** R3 uniform API failure envelope, R9 uniform timeout policy, and R10 managed-sidecar
-parent-death/orphan prevention — VERIFIED 2026-07-30; see ROADMAP and their task plans. **Active bounded unit:** R19
-packaged-VSIX CI is SPECIFIED in `docs/plans/2026-07-30-packaged-vsix-ci.md`. R20 flake policy follows it.
+**Closed bounded units:** R3 uniform API failure envelope, R9 uniform timeout policy, R10 managed-sidecar
+parent-death/orphan prevention, and R19 packaged-VSIX clean-runner CI — VERIFIED 2026-07-30; see ROADMAP and their
+task plans. **Next bounded unit:** R20 flake policy; specify it before implementation.
 
 **Post-Kimi authorized research program (queued; do not start before R1-R21 close):** reconcile
 `F:\Downskies\X4 Foundations Modding Tooling Research for IDE Extension Opportunities.md` and

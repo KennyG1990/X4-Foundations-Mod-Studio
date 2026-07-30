@@ -5,7 +5,7 @@ inspect, and retain the actual VSIX without publishing it.
 
 Task: B110 / Kimi R19 packaged-product CI
 Lane: FULL
-Status: **SPECIFIED**
+Status: **VERIFIED**
 
 ## PLAN
 
@@ -136,7 +136,8 @@ Status: **SPECIFIED**
 - Process cleanup -> ports 8972/8982/8983 free after their owned runs.
 - `graphify update .` -> PASS at 2,970 nodes / 6,942 edges / 155 communities. `npm run precommit:check` ->
   PASS (tripwires 0, canon mirrors, verdict 10/10, product-copy guard, typecheck). Final diff/port checks -> PASS.
-- Required clean Windows public Quality run and downloadable artifact -> pending implementation push.
+- Required clean Windows public Quality run and retained artifact metadata -> **PASS** on exact SHA
+  `c0505cdcf59aaa95ef90960a3528506558cdf942`: run `30570137452`, job `90964477954`.
 - First public Quality run `30569511806` / job `90962356914` -> **FAILED** only at final VSIX inspection after
   steps 1-17 passed; artifact upload correctly skipped. Public annotation/API evidence exposes exit 1 but not the
   rejected entry; unauthenticated log download -> 403.
@@ -146,11 +147,16 @@ Status: **SPECIFIED**
 - GitHub diagnostic negative -> missing VSIX exits 1 and emits `::error title=VSIX inspection failed::...` with the
   exact cause for public annotations. Post-correction `graphify update .` -> 2,972 nodes / 6,947 edges / 156
   communities; `npm run precommit:check` -> PASS.
+- Corrective public run critical steps 15-19 -> all SUCCESS: staged process probe, inspector selftest, locked VSIX
+  package, final-byte inspection, and upload. Retained artifact `8770489130`, name
+  `x4-forge-studio-c0505cdcf59aaa95ef90960a3528506558cdf942`, 17,509,178-byte outer artifact, expires
+  2026-08-13. Anonymous artifact-byte download -> expected GitHub 401; the exact VSIX was inspected inside the job
+  immediately before the successful upload, and the public artifact API proves the retained object and metadata.
 
 ## REVIEW
 
-- Requirements 1-5 -> locally done/evidenced. Package tool is exact/locked; both probe modes and all inspector
-  negatives pass.
+- Requirements 1-5 -> done/evidenced locally and on the clean Windows runner. Package tool is exact/locked; both
+  probe modes and all inspector negatives pass.
 - Requirement 6 -> workflow order makes inspection a prerequisite for artifact upload, with `if-no-files-found:error`
   and 14-day retention. There is no publish permission or command.
 - Fresh-eyes findings -> route integration remains after root build; stage remains after both root/extension builds;
@@ -162,12 +168,13 @@ Status: **SPECIFIED**
 
 ## CLOSE
 
-- Status: **PARTIAL** — implementation and all local acceptance methods pass; required exact-SHA clean Windows
-  Quality execution plus retained artifact evidence cannot exist until this implementation is committed/pushed.
-- Capability-map delta: pending public clean-runner proof; do not claim CI coverage from local replay alone.
-- Remaining risk/blocker: GitHub Actions may expose runner-only dependency, path, timeout, native-module, or YAML/action
-  behavior. The public run is the R19 authority.
-- Suggested implementation commit title: `ci(extension): build probe and inspect packaged VSIX`.
+- Status: **VERIFIED** — exact-SHA clean Windows Quality passed the complete dependency-ordered product chain and
+  retained only the inspected artifact.
+- Capability-map delta: recorded in `F:\StarForge\wiki\x4-forge\capability-map.md`.
+- Remaining boundary: anonymous GitHub artifact download requires authentication (401), so no separate post-upload
+  byte re-read was claimed. The in-job final-byte inspector is the upload prerequisite, and public artifact metadata
+  proves the successful retained object. Publication and installed-host behavior remain out of scope.
+- Suggested close commit title: `docs(ci): verify packaged VSIX clean-runner gate`.
 
 ## AAR
 
@@ -184,5 +191,7 @@ Status: **SPECIFIED**
 - **Improve tools:** package inspection needed a checked-in cross-platform oracle; runner shell archive listings were
   not strong enough for decompression/CRC/content policy.
 - **Highest-risk evidenced weakness:** Quality could be green while the distributable extension failed to compile,
-  stage, boot, package, or exclude secrets. The new chain closes that locally; public proof remains required.
-- **Lessons banked:** pending final public result; do not promote a locally green workflow to verified CI.
+  stage, boot, package, or exclude secrets. The exact-SHA public chain now closes that path and gates retention on
+  inspection.
+- **Lessons banked:** do not promote a locally green workflow to verified CI; scope build-path provenance checks by
+  first-party/vendor ownership, and emit exact CI annotations when privileged job logs may be unavailable.

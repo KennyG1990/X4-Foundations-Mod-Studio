@@ -7096,3 +7096,26 @@ rerun stayed healthy. R20 owns the already-planned flake/lifecycle policy rather
 
 Suggested commit title:
 `feat(extension): reap managed sidecars when the host dies`.
+
+## 2026-07-30 — B110-R19 packaged-VSIX clean-runner CI — VERIFIED
+
+The existing Windows Quality job now crosses the actual distributable-product boundary after the established root
+gates: locked extension dependencies and VSCE 3.9.2, extension compile, fresh packaged-app stage, real 16-check
+sidecar process probe, 13-check package-policy selftest, VSIX creation, dependency-free ZIP/CRC/content inspection,
+then 14-day artifact retention. Corpus-free runners receive an isolated faction/ware/script-property fixture while
+local canonical-corpus mode retains the exact 32-faction assertion.
+
+The final inspector rejects malformed/unsafe/duplicate entries, missing or empty controller/supervisor/server/UI/
+manifest/native-SQLite payloads, secrets, runtime state/config/logs, sourcemaps, excessive sizes, and embedded exact
+workspace/reference paths. Runner-home provenance remains forbidden in first-party entries but is not falsely
+applied to vendored `node_modules`; any CI rejection now emits its exact cause as a GitHub annotation.
+
+Evidence: local inspector 13/13, hermetic and canonical staged probes 16/16, 2,091-entry VSIX byte inspection,
+typecheck/lint/oracles 119/119/build/routes 243/243/precommit/graph green. Exact-SHA public Quality run
+`30570137452` / job `90964477954` passed all product steps and retained artifact `8770489130` (17,509,178-byte
+outer artifact, expires 2026-08-13). First public run `30569511806` failed closed at inspection and skipped upload,
+proving retention cannot bypass the oracle. No marketplace publish, installed-host mutation, game/mod operation, or
+external platform upload occurred.
+
+Suggested commit title:
+`docs(ci): verify packaged VSIX clean-runner gate`.
