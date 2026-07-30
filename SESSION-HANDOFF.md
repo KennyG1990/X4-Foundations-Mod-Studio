@@ -1,25 +1,8 @@
-# X4 Forge session handoff — 2026-07-29 · B108 VERIFIED / 0.0.58 PUBLIC / QUALITY GREEN
+# X4 Forge session handoff — 2026-07-29 · SMART KNOWN ISSUE BUILDER & DISCORD ENHANCEMENTS VERIFIED
 
 ## One-line state
 
-The task baseline was `7c0bd24`; three non-overlapping external bot commits advanced `origin/main` to `c512920`,
-then external docs commit `2e9f74f` captured the already-written B108 ROADMAP close from the shared worktree and
-was pushed. It captured no B108 source. B108 is VERIFIED. X4 Forge Studio 0.0.58 is public. Route stability
-passed 10/10 at 175/175;
-oracles 114/114; full e2e 43/43; real corpus 14/14; reference API 81/81; particles 544/544; audit is zero;
-precommit is green. Installed Antigravity visibly runs 0.0.58 with a live managed sidecar, and real discovery
-records are token-free after the upgrade migration. OpenVSX's 17,812,396-byte public VSIX exactly matches the
-installed/tested package at SHA-256 `4E703F203B32DBB7A9EDFB7C1A27705175371B638EEC17B68744F4D9A69F1009`.
-The release source commit is pushed at `dd452f0`. Public run 30498947479 exposed the missing extension dependency
-install; corrective commit `f9ecdd9` fixed that stage, and public run 30499244809 then passed install, audit,
-Typecheck, and Lint before exposing three host-config-dependent selftests. During the exact local replay, route
-integration also reproduced an identical-content history diff growing by 336,041 bytes; the pure helper is fixed
-and the route proof is now 175/175 with 569-byte growth.
-Public run 30499899687 then passed through all 114 oracles and exposed the final clean-runner ordering defect:
-route integration requires the Git-ignored production bundle, but Quality built it afterward. Build now precedes
-routes.
-Public Quality run 30500157383 passed the complete clean Windows chain, including build-before-route and the real
-production-bundle probe. `KNOWN-BUGS.md` is empty again.
+Rebranded public product names to `x4 AiLive` across all public readmes, content manifests, and GitHub workflows. Implemented and verified the Smart Known Issue Builder & Auto-Fix Interceptor engine across both Discord bots (`Forge Concierge#3242` and `X4AILive#2651`) backed by `data/known_fixes.json`, automated frequency tracking, and slash commands (`/status`, `/faq`, `/known-fixes`, `/add-fix`). Pushed clean commit `0da26f6` to `origin/main`.
 
 ## Active bounded unit
 
