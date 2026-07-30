@@ -1,16 +1,18 @@
 [
   {
     "id": "forge-create-first-mod",
-    "title": "First Steps to Create a Mod in X4 Forge Studio",
+    "title": "Creating a Mod from Scratch in X4 Forge Studio (From Nothing to Something)",
     "keywords": [
       "first step",
       "make a mod",
       "create a mod",
       "how to start modding",
       "getting started modding",
-      "new mod"
+      "new mod",
+      "from scratch",
+      "nothing to something"
     ],
-    "fix": "To make or edit a mod using X4 Forge Studio:\n1. Open VS Code with X4 Forge Studio installed.\n2. Press Ctrl+Shift+P (or Cmd+Shift+P) and run 'X4 Forge: Open Mod Folder' (or click 'Sync Mod' / 'Open Workspace' in the Forge top menu).\n3. Point X4 Forge to your mod directory. If the folder is empty or new, Forge's backend automatically materializes a valid content.xml manifest and sets up the md/, aiscripts/, and libraries/ folder structure.\n4. Ensure your unpacked X4 game directory is set in Settings so X4 Forge can load Egosoft's md.xsd schemas and CAT/DAT archives for live auto-completion and validation.\n5. Write your XML patches and click 'Sync Mod' to compile, validate, and deploy directly to X4 Foundations/extensions/.",
+    "fix": "To go from nothing to a working mod in X4 Forge Studio:\n1. First-Run Auto-Detect: On first boot, X4 Forge detects your X4 game directory (Steam/GOG) and extracts Egosoft's XSD schemas automatically.\n2. Three Ways to Create a Mod:\n   - Method A (Visual Canvas): Drag a Cue/Node from the Nodes Toolbox on the left sidebar. Forge initializes content.xml and serializes your nodes to XML.\n   - Method B (Stamp Proven Pattern): In the Patterns sidebar, pick a working formula (e.g. HTTP AI Integration, Station Listener) and click 'Stamp Pattern' for a 0-error starter mod.\n   - Method C (Empty Folder): Run 'X4 Forge: Open Mod Folder' (Ctrl+Shift+P). Point Forge to any empty folder — Forge automatically materializes content.xml and sets up md/, aiscripts/, and libraries/.\n3. Deploy: Click 'Sync Mod' in the top menu to compile, validate, and deploy directly to X4 Foundations/extensions/.",
     "category": "x4_forge",
     "matchCount": 0
   },

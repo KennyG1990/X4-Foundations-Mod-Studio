@@ -126,18 +126,19 @@ function buildConciseForgeDocsContext() {
   let text = `X4 FORGE STUDIO — EXACT EMPIRICAL VS CODE EXTENSION COMMANDS & UI WORKFLOW:
 X4 Forge Studio is a visual workbench and IDE extension inside VS Code for X4 Foundations modding.
 
-REGISTERED VS CODE EXTENSION COMMANDS:
-- 'X4 Forge: Open Studio' (x4forge.openStudio): Opens the React visual workbench panel inside VS Code.
-- 'X4 Forge: Open Mod Folder' (x4forge.openModFolder): Opens or sets the target mod workspace folder.
-- 'X4 Forge: Create Agent Key' (x4forge.createAgentKey): Mint an expiring API key for background AI agents.
-- 'X4 Forge: Show Logs' (x4forge.showLogs): Opens the X4 Forge output log channel.
+FIRST-RUN SETUP (NEW USER):
+- On boot, FirstRunWizard automatically detects X4 Foundations (Steam/GOG) and extracts Egosoft's XSD schemas (md.xsd, libraries.xsd) into the studio workspace in 1 click.
 
-HUMAN MODDER GETTING STARTED (CREATING / EDITING A MOD):
-1. Open VS Code with X4 Forge Studio installed.
-2. Run 'X4 Forge: Open Mod Folder' (Ctrl+Shift+P -> x4forge.openModFolder) or click 'Sync Mod' / 'Open Workspace' in the Forge Studio top menu.
-3. Select your mod folder. If the directory is new or missing content.xml, X4 Forge's backend automatically materializes content.xml and sets up the md/, aiscripts/, and libraries/ directory structure.
-4. Set your unpacked X4 game path in Settings (DirectorySettingsModal) to enable real-time md.xsd schema auto-completion, diagnostic checks, and CAT/DAT archive browsing.
-5. Author XML patches and click 'Sync Mod' to compile, validate, and deploy directly to X4 Foundations/extensions/.
+HOW A HUMAN USER GOES FROM NOTHING TO SOMETHING (3 CODE-BACKED WAYS):
+1. METHOD A — VISUAL BLUEPRINT CANVAS (Nodes Toolbox):
+   Open X4 Forge Studio -> Click 'Nodes / Blueprint' in the left sidebar -> Drag a Cue / Node onto the canvas. X4 Forge automatically initializes content.xml and serializes your nodes to valid Mission Director XML.
+2. METHOD B — STAMP PROVEN PATTERN (Mod Patterns):
+   Open X4 Forge Studio -> Click 'Patterns' in the left sidebar -> Select a proven formula (e.g. HTTP AI Integration, Station Listener, Group Watcher) -> Click 'Stamp Pattern'. Forge stamps a complete 0-error working mod template into your workspace.
+3. METHOD C — AUTO-MATERIALIZING EMPTY FOLDER:
+   Run 'X4 Forge: Open Mod Folder' (Ctrl+Shift+P -> x4forge.openModFolder) or click 'Sync Mod' / 'Open Workspace'. Point Forge to any empty folder — Forge automatically materializes content.xml and sets up the md/, aiscripts/, and libraries/ folder structure.
+
+DEPLOYMENT:
+Click 'Sync Mod' in the top menu bar to compile, validate, and deploy directly to X4 Foundations/extensions/.
 
 `;
   if (fs.existsSync('README.md')) {
