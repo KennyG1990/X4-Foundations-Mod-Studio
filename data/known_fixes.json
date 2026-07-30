@@ -30,5 +30,37 @@
     "fix": "x4 AiLive is serverless (ADR-009) and includes built-in HTTP transport (aic_http.lua). Ensure the extension folder in X4 Foundations/extensions/ is named exactly x4_ai_influence.",
     "category": "x4_ailive",
     "matchCount": 0
+  },
+  {
+    "id": "forge-xsd-validation",
+    "title": "XSD Schema Validation Setup",
+    "keywords": ["xsd error", "schema validation", "xml error", "md.xsd"],
+    "fix": "In X4 Forge Studio, set your X4 unpacked game path under Settings (or config.json). X4 Forge automatically parses Egosoft's official XSD schemas (md.xsd, libraries.xsd) to provide real-time XML auto-completion and validation.",
+    "category": "x4_forge",
+    "matchCount": 0
+  },
+  {
+    "id": "forge-cat-dat-extraction",
+    "title": "CAT/DAT Vanilla Game File Indexing",
+    "keywords": ["cat dat", "cat/dat", "extract vanilla", "cat file"],
+    "fix": "X4 Forge includes native CAT/DAT archive indexing built-in. Open the CAT/DAT Explorer panel in the left sidebar to search, preview, and extract vanilla game files directly.",
+    "category": "x4_forge",
+    "matchCount": 0
+  },
+  {
+    "id": "forge-sidecar-api-port",
+    "title": "Forge Sidecar Server Port Allocation",
+    "keywords": ["sidecar port", "forge server", "sidecar error", "sidecar connection"],
+    "fix": "X4 Forge Studio runs a lightweight local sidecar API server inside VS Code. If a port conflict occurs, run 'Developer: Reload Window' (Ctrl+Shift+P) to re-allocate a fresh dynamic port automatically.",
+    "category": "x4_forge",
+    "matchCount": 0
+  },
+  {
+    "id": "forge-openvsx-install",
+    "title": "X4 Forge Extension Installation",
+    "keywords": ["openvsx", "open vsx", "vsix install", "install forge"],
+    "fix": "Install X4 Forge Studio directly from the Open VSX Marketplace: https://open-vsx.org/extension/x4forge/x4-forge-studio or search 'X4 Forge Studio' in VS Code Extensions.",
+    "category": "x4_forge",
+    "matchCount": 0
   }
 ]
