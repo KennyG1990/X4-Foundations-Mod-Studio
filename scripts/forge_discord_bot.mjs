@@ -226,17 +226,47 @@ const commands = [
     .addStringOption(opt => opt.setName('action').setDescription('deposit or withdraw').setRequired(true).addChoices({ name: 'deposit', value: 'deposit' }, { name: 'withdraw', value: 'withdraw' }))
     .addIntegerOption(opt => opt.setName('amount').setDescription('Credit amount').setRequired(true)),
   new SlashCommandBuilder()
-    .setName('shop')
-    .setDescription('View community shop items and cooldown reducers'),
-  new SlashCommandBuilder()
     .setName('buy')
     .setDescription('Buy a community upgrade perk')
     .addStringOption(opt => opt.setName('item').setDescription('Shop item ID').setRequired(true).addChoices(
       { name: 'cooldown_reducer (500 Cr)', value: 'cooldown_reducer' },
       { name: 'trivia_mult (750 Cr)', value: 'trivia_mult' },
       { name: 'hazard_shield (1000 Cr)', value: 'hazard_shield' }
+    )),
+  new SlashCommandBuilder()
+    .setName('rp-start')
+    .setDescription('Create your persistent X4 pilot character')
+    .addStringOption(opt => opt.setName('faction').setDescription('Faction alignment').setRequired(true).addChoices(
+      { name: 'Argon Federation', value: 'Argon' },
+      { name: 'Teladi Company', value: 'Teladi' },
+      { name: 'Paranid Triumvirate', value: 'Paranid' },
+      { name: 'Split Dynasty', value: 'Split' },
+      { name: 'Terran Protectorate', value: 'Terran' }
     ))
+    .addStringOption(opt => opt.setName('archetype').setDescription('Career archetype').setRequired(true).addChoices(
+      { name: 'Teladi Trade Master (+20% Cargo, +10% Profit)', value: 'trader' },
+      { name: 'Split Vanguard Hunter (+15% Damage, +25% Salvage)', value: 'bounty' },
+      { name: 'Argon Pioneer Explorer (-30% Jumpgate Cost)', value: 'explorer' }
+    )),
+  new SlashCommandBuilder()
+    .setName('rp-profile')
+    .setDescription('Inspect your pilot profile, ship stats, and current sector'),
+  new SlashCommandBuilder()
+    .setName('rp-nav')
+    .setDescription('Jump to an adjacent X4 sector')
+    .addStringOption(opt => opt.setName('sector').setDescription('Target sector ID').setRequired(true).addChoices(
+      { name: 'Argon Prime', value: 'argon_prime' },
+      { name: 'The Reach', value: 'the_reach' },
+      { name: 'Grand Exchange I', value: 'grand_exchange_1' },
+      { name: 'Heretic\'s End', value: 'heretics_end' },
+      { name: 'Matrix #451 (Danger: Xenon Sector)', value: 'matrix_451' }
+    )),
+  new SlashCommandBuilder()
+    .setName('rp-hunt')
+    .setDescription('Engage sector hostiles in retro MUD turn-based space combat')
 ].map(cmd => cmd.toJSON());
+
+import { createPlayer, getPlayer, travelSector, engageCombat, SHIPS, ARCHETYPES } from './x4_muds_game.mjs';
 
 import { claimDaily, getAccount, depositBank, withdrawBank, runMiningExpedition, loadTriviaQuestions, processTriviaAnswer, buyShopItem } from './discord_economy.mjs';
 
@@ -442,6 +472,66 @@ client.on('interactionCreate', async (interaction) => {
         .setFooter({ text: bet > 0 ? `Wager: ${bet} Cr • Payout: ${bet * 2} Cr` : 'Reward: +75 Cr for correct answer' });
 
       await interaction.reply({ embeds: [embed] });
+    } else if (commandName === 'rp-start') {
+      const faction = interaction.options.getString('faction');
+      const archetype = interaction.options.getString('archetype');
+      const res = createPlayer(interaction.user.id, interaction.user.username, faction, archetype);
+      if (!res.ok) {
+        await interaction.reply({ content: `⛔ ${res.error}`, flags: 64 });
+      } else {
+        const p = res.player;
+        const embed = new EmbedBuilder()
+          .setTitle(`🚀 Welcome to X4 Sector Empire, Pilot ${p.username}!`)
+          .setColor(5763719)
+          .setDescription(`Your character has been created!\n\n**Faction**: ${p.faction}\n**Career Archetype**: ${ARCHETYPES[p.archetype]?.name}\n**Starting Ship**: ${SHIPS[p.shipClass]?.name}\n**Starting Wallet**: ${p.credits} Cr\n**Location**: Argon Prime`)
+          .setFooter({ text: 'Use /rp-nav to travel, /rp-hunt to fight, and /rp-profile to view stats!' });
+        await interaction.reply({ embeds: [embed] });
+      }
+    } else if (commandName === 'rp-profile') {
+      const p = getPlayer(interaction.user.id);
+      if (!p) {
+        await interaction.reply({ content: 'No pilot profile found! Create one with `/rp-start`.', flags: 64 });
+      } else {
+        const ship = SHIPS[p.shipClass] || SHIPS.S;
+        const embed = new EmbedBuilder()
+          .setTitle(`👨‍✈️ Pilot Profile: ${p.username}`)
+          .setColor(3447003)
+          .addFields(
+            { name: '🏛️ Faction Alignment', value: p.faction, inline: true },
+            { name: '🌟 Archetype', value: ARCHETYPES[p.archetype]?.name || p.archetype, inline: true },
+            { name: '🚀 Ship Class', value: ship.name, inline: true },
+            { name: '💳 Wallet Credits', value: `${p.credits} Cr`, inline: true },
+            { name: '🛡️ Shields / Hull', value: `${p.shields}/${p.maxShields} SHD | ${p.hull}/${p.maxHull} HUL`, inline: true },
+            { name: '📍 Location', value: p.currentSector.replace('_', ' ').toUpperCase(), inline: true },
+            { name: '⚔️ Hostiles Destroyed', value: `${p.kills} Confirmed Kills`, inline: true }
+          );
+        await interaction.reply({ embeds: [embed] });
+      }
+    } else if (commandName === 'rp-nav') {
+      const sectorId = interaction.options.getString('sector');
+      const res = travelSector(interaction.user.id, sectorId);
+      if (!res.ok) {
+        await interaction.reply({ content: `⛔ ${res.error}`, flags: 64 });
+      } else {
+        const embed = new EmbedBuilder()
+          .setTitle(`🛰️ Jumpgate Arrival: ${res.sector.name}`)
+          .setColor(3447003)
+          .setDescription(`Your ship traversed the jumpgate network and arrived safely in **${res.sector.name}**.\n\n**Controlling Faction**: ${res.sector.faction}\n**Connected Jumpgates**: ${res.sector.connected.join(', ')}`)
+          .setFooter({ text: 'Use /rp-hunt to search the sector for hostile targets!' });
+        await interaction.reply({ embeds: [embed] });
+      }
+    } else if (commandName === 'rp-hunt') {
+      const res = engageCombat(interaction.user.id);
+      if (!res.ok) {
+        await interaction.reply({ content: `⛔ ${res.error}`, flags: 64 });
+      } else {
+        const embed = new EmbedBuilder()
+          .setTitle('⚔️ Tactical Space Combat Log')
+          .setColor(res.isWin ? 5763719 : 15548997)
+          .setDescription(res.resultText)
+          .setFooter({ text: 'Inspect your pilot stats anytime with /rp-profile!' });
+        await interaction.reply({ embeds: [embed] });
+      }
     }
   } catch (err) {
     console.warn('⚠️ Interaction error caught:', err.message || err);
