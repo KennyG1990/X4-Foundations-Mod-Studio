@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/KennyG1990/X4_Forge/main/docs/schemas/forge.rules.schema.v1.json",
+  "title": "X4 Forge project validation rules",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "properties": {
+    "$schema": { "type": "string", "maxLength": 256 },
+    "version": { "const": 1 },
+    "suppressions": {
+      "type": "array",
+      "maxItems": 256,
+      "items": { "$ref": "#/$defs/suppression" }
+    },
+    "contracts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "knownChains": {
+          "type": "array",
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/knownChain" }
+        },
+        "wireKeys": {
+          "type": "array",
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/wireKey" }
+        },
+        "expectedRegisters": {
+          "type": "array",
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/expectedRegister" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9._-]{2,63}$"
+    },
+    "projectPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?![A-Za-z]:)(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+    },
+    "reviewedDeclaration": {
+      "type": "object",
+      "required": ["id", "owner", "reason", "reviewBy"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "owner": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "reason": { "type": "string", "minLength": 8, "maxLength": 512 },
+        "reviewBy": { "type": "string", "format": "date" }
+      }
+    },
+    "suppression": {
+      "allOf": [
+        { "$ref": "#/$defs/reviewedDeclaration" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "owner", "reason", "reviewBy", "code"],
+          "properties": {
+            "id": { "$ref": "#/$defs/id" },
+            "owner": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "reason": { "type": "string", "minLength": 8, "maxLength": 512 },
+            "reviewBy": { "type": "string", "format": "date" },
+            "code": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{2,128}$" },
+            "file": { "$ref": "#/$defs/projectPath" },
+            "sourceRef": { "type": "string", "minLength": 1, "maxLength": 512 }
+          },
+          "anyOf": [{ "required": ["file"] }, { "required": ["sourceRef"] }]
+        }
+      ]
+    },
+    "knownChain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "owner", "reason", "reviewBy", "chain"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "owner": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "reason": { "type": "string", "minLength": 8, "maxLength": 512 },
+        "reviewBy": { "type": "string", "format": "date" },
+        "chain": { "type": "string", "minLength": 2, "maxLength": 512 },
+        "file": { "$ref": "#/$defs/projectPath" }
+      }
+    },
+    "wireKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "key", "scope", "reason"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "key": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$" },
+        "scope": { "enum": ["global", "verb"] },
+        "requireReader": { "type": "boolean" },
+        "requireWriter": { "type": "boolean" },
+        "reason": { "type": "string", "minLength": 8, "maxLength": 512 }
+      }
+    },
+    "expectedRegister": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "event", "reason"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "event": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "file": { "$ref": "#/$defs/projectPath" },
+        "reason": { "type": "string", "minLength": 8, "maxLength": 512 }
+      }
+    }
+  }
+}

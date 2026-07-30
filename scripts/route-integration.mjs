@@ -367,11 +367,46 @@ async function main() {
     [
       '<?xml version="1.0" encoding="utf-8"?>',
       '<mdscript name="VP"><cues><cue name="VP_Start"><conditions><event_game_started/></conditions>',
-      '<actions><set_value name="$vp" exact="1"/></actions></cue></cues></mdscript>',
+      '<actions><set_value name="$offer" exact="event.param3.{\'$offer\' + $si}"/><raise_lua_event name="\'route.mod.open\'"/></actions></cue></cues></mdscript>',
     ].join('\n'),
   );
+  fs.mkdirSync(path.join(validateFixture, 'ui'), { recursive: true });
+  fs.writeFileSync(path.join(validateFixture, 'ui', 'main.lua'), [
+    'RegisterEvent("route.mod.open", function () end)',
+    'payload["offer" .. payload.n] = "ready"',
+    'AddUITriggeredEvent("route.mod", "log_" .. category)',
+  ].join('\n'));
+  const routeRuleReviewBy = new Date(Date.now() + 300 * 86_400_000).toISOString().slice(0, 10);
+  fs.writeFileSync(path.join(validateFixture, 'forge.rules.json'), JSON.stringify({
+    version: 1,
+    suppressions: [{
+      id: 'route-dynamic-listener', owner: 'route-test', reason: 'Dynamic listener is provided by the host runtime.',
+      reviewBy: routeRuleReviewBy, code: 'lua_md.missing_listener', file: 'ui/main.lua', sourceRef: 'route.mod.log_',
+    }],
+    contracts: {
+      wireKeys: [{ id: 'route-wire-offer', key: 'offer', scope: 'global', reason: 'Offer exists for every indexed step.' }],
+      expectedRegisters: [{ id: 'route-register-open', event: 'route.mod.open', file: 'ui/main.lua', reason: 'MD raises this bridge event.' }],
+    },
+  }, null, 2));
   const validateByPath = await req('POST', '/api/agent/project/validate', SESSION_TOKEN, { root: 'workspace', path: 'validate_path_mod' });
   ok('validate_accepts_root_and_path', validateByPath.status === 200 && validateByPath.json?.source?.mode === 'fromPath', `status=${validateByPath.status} mode=${validateByPath.json?.source?.mode}`);
+  ok('validate_loads_root_project_rules', validateByPath.json?.source?.loaded?.includes('forge.rules.json') && validateByPath.json?.rules?.present === true && validateByPath.json?.rules?.valid === true, JSON.stringify(validateByPath.json?.rules || {}));
+  ok('project_rule_contracts_keep_evidence', validateByPath.json?.rules?.matches?.length === 2, JSON.stringify(validateByPath.json?.rules?.matches || []));
+  ok('reviewed_warning_suppression_is_exact_and_visible', validateByPath.json?.summary?.suppressedWarnings === 1 && validateByPath.json?.rules?.suppressed?.[0]?.ruleId === 'route-dynamic-listener' && !validateByPath.json?.flat?.some(item => item.code === 'lua_md.missing_listener'), JSON.stringify(validateByPath.json?.rules?.suppressed || []));
+
+  const invalidRulesFixture = path.join(safeWorkspace, 'invalid_rules_mod');
+  fs.mkdirSync(invalidRulesFixture, { recursive: true });
+  fs.writeFileSync(path.join(invalidRulesFixture, 'content.xml'), '<content id="invalid_rules_mod" name="Invalid Rules" version="100"/>');
+  fs.writeFileSync(path.join(invalidRulesFixture, 'forge.rules.json'), '{"version":2,"suppressions":[]}');
+  const invalidRules = await req('POST', '/api/agent/project/validate', SESSION_TOKEN, { root: 'workspace', path: 'invalid_rules_mod' });
+  ok('invalid_project_rules_fail_shared_validation', invalidRules.status === 200 && invalidRules.json?.ok === false && invalidRules.json?.rules?.valid === false && invalidRules.json?.flat?.some(item => item.code === 'rules.unsupported_version'), JSON.stringify(invalidRules.json?.flat || []));
+
+  const oversizedRulesFixture = path.join(safeWorkspace, 'oversized_rules_mod');
+  fs.mkdirSync(oversizedRulesFixture, { recursive: true });
+  fs.writeFileSync(path.join(oversizedRulesFixture, 'content.xml'), '<content id="oversized_rules_mod" name="Oversized Rules" version="100"/>');
+  fs.writeFileSync(path.join(oversizedRulesFixture, 'forge.rules.json'), ' '.repeat(256 * 1024 + 1));
+  const oversizedRules = await req('POST', '/api/agent/project/validate', SESSION_TOKEN, { root: 'workspace', path: 'oversized_rules_mod' });
+  ok('oversized_disk_rules_cannot_degrade_to_absent', oversizedRules.status === 200 && oversizedRules.json?.ok === false && oversizedRules.json?.source?.loaded?.includes('forge.rules.json') && oversizedRules.json?.source?.skipped?.some(item => item.path === 'forge.rules.json') && oversizedRules.json?.flat?.some(item => item.code === 'rules.file_too_large'), JSON.stringify(oversizedRules.json?.flat || []));
   const validateWrongRoot = await req('POST', '/api/agent/project/validate', SESSION_TOKEN, { root: 'nonsense', path: 'root_collision_mod' });
   ok('validate_rejects_an_invalid_root', validateWrongRoot.status === 400, `status=${validateWrongRoot.status}`);
 

@@ -49,6 +49,13 @@ import { lintFactionRelations, type FactionLintFinding } from "../lib/factionsLi
 import { lintGodMacros, type GodLintFinding } from "../lib/godLint";
 import { lintReferenceLiterals, type ReferenceLiteralFinding } from "../lib/referenceLint";
 import { buildProjectSymbols, type ProjectVariableSymbol } from "../lib/projectSymbols";
+import {
+  applyProjectRuleSuppressions,
+  evaluateProjectRuleContracts,
+  parseProjectRules,
+  PROJECT_RULES_MAX_BYTES,
+  type ProjectRulesEvaluation,
+} from "../lib/projectRules";
 import { getAiOrderParamTypes, getAiSchemaIndex, getScriptPropertyIndex } from "./validationRoutes";
 
 /**
@@ -101,6 +108,10 @@ export interface ProjectValidationResult {
     referenceWarnings: number;
     diffErrors: number;
     diffWarnings: number;
+    rulesErrors: number;
+    rawWarnings: number;
+    suppressedWarnings: number;
+    activeWarnings: number;
   };
   structure: ReturnType<typeof validateProjectStructure>;
   cueIndex: ReturnType<typeof indexCueReferences>;
@@ -133,6 +144,8 @@ export interface ProjectValidationResult {
   godMacros: { findings: GodLintFinding[] };
   /** Canonical explicit-literal checks, including Lua Get*Data("literal", ...) calls. */
   references: { available: boolean; findings: ReferenceLiteralFinding[] };
+  /** Mod-declared validation truth from exact root forge.rules.json. */
+  rules: ProjectRulesEvaluation;
   /** Read-only application of each project <diff> against base + dependency-ordered official DLCs. */
   diffSimulation: {
     files: Array<{
@@ -176,6 +189,7 @@ export function runProjectValidation(
   project: ExtensionProject,
   opts: { references?: ProjectValidationReferences; jobsVocabulary?: JobsVocabulary; waresVocabulary?: WaresVocabulary } = {},
 ): ProjectValidationResult {
+  const parsedRules = parseProjectRules(project);
   const structure = validateProjectStructure(project);
 
   // B82 / B93.10 — XML WELL-FORMEDNESS RUNS FIRST, ALWAYS.
@@ -448,9 +462,14 @@ export function runProjectValidation(
   const diffWarnings = diffSimulation.reduce((count, file) => count
     + file.findings.filter(finding => finding.severity === 'warning').length
     + file.postApplyFindings.filter(finding => finding.severity === 'warning').length, 0);
-  return {
+  let rules = evaluateProjectRuleContracts(parsedRules, {
+    registered: crossFile.mdLua.registered,
+    payloadReads: crossFile.mdLua.payload.reads,
+    payloadWrites: crossFile.mdLua.payload.writes,
+  });
+  const result: ProjectValidationResult = {
     ok: structuralErrors === 0 && cueIndex.unresolved.length === 0 && crossFile.ok
-      && schemaErrors === 0 && aiscriptErrors === 0 && diffErrors === 0,
+      && schemaErrors === 0 && aiscriptErrors === 0 && diffErrors === 0 && rules.valid,
     summary: {
       files: project.files.length,
       structuralErrors,
@@ -475,6 +494,10 @@ export function runProjectValidation(
       referenceWarnings: referenceFindings.length,
       diffErrors,
       diffWarnings,
+      rulesErrors: rules.findings.length,
+      rawWarnings: 0,
+      suppressedWarnings: 0,
+      activeWarnings: 0,
     },
     structure,
     cueIndex,
@@ -497,8 +520,16 @@ export function runProjectValidation(
     factionRelations: { findings: factionFindings },
     godMacros: { findings: godFindings },
     references: { available: !!references, findings: referenceFindings },
+    rules,
     diffSimulation: { files: diffSimulation },
   };
+  const appliedRules = applyProjectRuleSuppressions(rules, flattenProjectValidationRaw(result));
+  rules = appliedRules.evaluation;
+  result.rules = rules;
+  result.summary.rawWarnings = rules.rawWarnings;
+  result.summary.suppressedWarnings = rules.suppressed.length;
+  result.summary.activeWarnings = rules.activeWarnings;
+  return result;
 }
 
 /* ------------------------------------------------------------------ *
@@ -516,7 +547,7 @@ export interface FlatProjectDiagnostic {
   line?: number;
 }
 
-export function flattenProjectValidation(result: ProjectValidationResult): FlatProjectDiagnostic[] {
+function flattenProjectValidationRaw(result: ProjectValidationResult): FlatProjectDiagnostic[] {
   const out: FlatProjectDiagnostic[] = [];
   for (const i of result.structure) {
     out.push({ severity: i.severity, code: `project.${i.code}`, filePath: i.path, message: i.detail });
@@ -578,6 +609,9 @@ export function flattenProjectValidation(result: ProjectValidationResult): FlatP
       out.push({ severity: finding.severity, code: `post-apply.${finding.code}`, filePath: file.path, sourceRef: finding.sourceRef, line: finding.line, message: `Post-apply: ${finding.message}` });
     }
   }
+  for (const finding of result.rules.findings) {
+    out.push({ severity: finding.severity, code: finding.code, filePath: finding.filePath, sourceRef: finding.sourceRef, message: finding.message });
+  }
   // De-dupe identical findings that reach the flat view via two layers (the cross-file
   // validator re-reports structure issues under its own code — same message, same file).
   const seen = new Set<string>();
@@ -589,12 +623,17 @@ export function flattenProjectValidation(result: ProjectValidationResult): FlatP
   });
 }
 
+/** Active diagnostic view after exact, warning-only project rules are applied. */
+export function flattenProjectValidation(result: ProjectValidationResult): FlatProjectDiagnostic[] {
+  return applyProjectRuleSuppressions(result.rules, flattenProjectValidationRaw(result)).active;
+}
+
 /* ------------------------------------------------------------------ *
  * Disk loading (fromPath / CLI).
  * ------------------------------------------------------------------ */
 
 // B46P2: ui/**/*.xml added — ui addon documents now route to addon/coreaddon.xsd.
-const LOADABLE_RE = /^(content\.xml|md\/[^/]+\.xml|aiscripts\/[^/]+\.xml|t\/[^/]+\.xml|libraries\/[^/]+\.xml|ui\/.+\.xml|(?:ui|lua|subst_lua)\/.+\.lua|[^/]+\.lua)$/i;
+const LOADABLE_RE = /^(content\.xml|forge\.rules\.json|md\/[^/]+\.xml|aiscripts\/[^/]+\.xml|t\/[^/]+\.xml|libraries\/[^/]+\.xml|ui\/.+\.xml|(?:ui|lua|subst_lua)\/.+\.lua|[^/]+\.lua)$/i;
 const MAX_FILES = 500;
 const MAX_FILE_BYTES = 4 * 1024 * 1024;
 const LOAD_SKIP_DIRS = new Set(['.git', '.hg', '.svn', '.claude', '.kilo', '.forge', '.snapshots', 'node_modules', '__pycache__']);
@@ -630,6 +669,15 @@ export function loadProjectFromDisk(rootDir: string, id?: string): DiskProjectLo
       if (!LOADABLE_RE.test(rel)) continue;
       let statSize = 0;
       try { statSize = fs.statSync(abs).size; } catch { continue; }
+      if (rel.toLowerCase() === 'forge.rules.json' && statSize > PROJECT_RULES_MAX_BYTES) {
+        // Preserve the file's existence in the project envelope so the shared rules
+        // parser emits a BLOCKING file_too_large finding. Treating it as a generic
+        // skipped file would silently turn an invalid rules file into "not present".
+        files.push({ path: rel, kind: classifyPath(rel), content: ' '.repeat(PROJECT_RULES_MAX_BYTES + 1) });
+        loaded.push(rel);
+        skipped.push({ path: rel, reason: `rules file exceeds ${PROJECT_RULES_MAX_BYTES} bytes` });
+        continue;
+      }
       if (statSize > MAX_FILE_BYTES) { skipped.push({ path: rel, reason: `file exceeds ${MAX_FILE_BYTES} bytes` }); continue; }
       try {
         const content = fs.readFileSync(abs, "utf8");

@@ -90,6 +90,10 @@ export interface ProjectCrossFileValidationResult {
     listened: ProjectUiEventRef[];
     missingRegisters: ProjectEventRef[];
     missingListeners: ProjectUiEventRef[];
+    payload: {
+      reads: Array<{ key: string; scope: 'global' | 'verb'; file: string; destination: string; branch?: string }>;
+      writes: Array<{ key: string; file: string }>;
+    };
   };
   deps: {
     manifest: ModManifest | null;
@@ -239,11 +243,15 @@ interface PayloadReadSite { file: string; destination: string; branch?: string }
 interface PayloadWriteSite { file: string }
 
 /** Port of the observed x4_ai_influence wiregate invariant, scoped to its exact protocol shapes. */
-function validateIndexedPayloadContract(mdFiles: ExtensionProject['files'], luaFiles: ExtensionProject['files']): ProjectCrossFileFinding[] {
+function validateIndexedPayloadContract(mdFiles: ExtensionProject['files'], luaFiles: ExtensionProject['files']): {
+  findings: ProjectCrossFileFinding[];
+  reads: Array<{ key: string; scope: 'global' | 'verb'; file: string; destination: string; branch?: string }>;
+  writes: Array<{ key: string; file: string }>;
+} {
   const reads = new Map<string, { global: PayloadReadSite[]; verb: PayloadReadSite[] }>();
   const writes = new Map<string, PayloadWriteSite[]>();
-  const readPattern = /param3\.\{'\$([a-zA-Z]+)'\s*\+\s*\$si\}/g;
-  const writePattern = /payload\[\s*["']([a-zA-Z]+)["']\s*\.\.\s*payload\.n\s*\]/g;
+  const readPattern = /param3\.\{'\$([A-Za-z][A-Za-z0-9_]*)'\s*\+\s*\$si\}/g;
+  const writePattern = /payload\[\s*["']([A-Za-z][A-Za-z0-9_]*)["']\s*\.\.\s*payload\.n\s*\]/g;
 
   for (const file of luaFiles) {
     const code = stripLuaComments(file.content || '');
@@ -285,7 +293,7 @@ function validateIndexedPayloadContract(mdFiles: ExtensionProject['files'], luaF
 
   // Do not infer a protocol from a generic use of `payload` or `param3`; at least one exact
   // indexed key shape must exist somewhere in the project.
-  if (reads.size === 0 && writes.size === 0) return [];
+  if (reads.size === 0 && writes.size === 0) return { findings: [], reads: [], writes: [] };
   const findings: ProjectCrossFileFinding[] = [];
   for (const key of new Set([...reads.keys(), ...writes.keys()])) {
     const read = reads.get(key) || { global: [], verb: [] };
@@ -309,7 +317,14 @@ function validateIndexedPayloadContract(mdFiles: ExtensionProject['files'], luaF
       });
     }
   }
-  return findings;
+  return {
+    findings,
+    reads: [...reads.entries()].flatMap(([key, sites]) => [
+      ...sites.global.map(site => ({ key, scope: 'global' as const, ...site })),
+      ...sites.verb.map(site => ({ key, scope: 'verb' as const, ...site })),
+    ]),
+    writes: [...writes.entries()].flatMap(([key, sites]) => sites.map(site => ({ key, ...site }))),
+  };
 }
 
 function parseLuaUiEmits(content: string, file: string): ProjectUiEventRef[] {
@@ -363,8 +378,8 @@ export function validateProjectCrossFile(project: ExtensionProject): ProjectCros
   const listened = mdFiles.flatMap(f => parseMdUiListeners(f.content || '', f.path));
   const registered = luaFiles.flatMap(f => parseLuaRegisteredEvents(f.content || '', f.path));
   const emitted = luaFiles.flatMap(f => parseLuaUiEmits(f.content || '', f.path));
-  const payloadFindings = validateIndexedPayloadContract(mdFiles, luaFiles);
-  findings.push(...payloadFindings);
+  const payload = validateIndexedPayloadContract(mdFiles, luaFiles);
+  findings.push(...payload.findings);
 
   const registeredEvents = new Set(registered.map(r => r.event));
   const listenedEvents = new Set(listened.map(r => r.event));
@@ -489,12 +504,12 @@ export function validateProjectCrossFile(project: ExtensionProject): ProjectCros
       unresolvedCueRefs: cueIndex.unresolved.length,
       mdLuaMissingRegisters: missingRegisters.length,
       luaMdMissingListeners: missingListeners.length,
-      payloadContractErrors: payloadFindings.filter(f => f.severity === 'error').length,
+      payloadContractErrors: payload.findings.filter(f => f.severity === 'error').length,
       dependencies: manifest?.deps.length || 0,
     },
     findings,
     cueIndex,
-    mdLua: { raised, registered, emitted, listened, missingRegisters, missingListeners },
+    mdLua: { raised, registered, emitted, listened, missingRegisters, missingListeners, payload: { reads: payload.reads, writes: payload.writes } },
     deps: { manifest, dependencies: manifest?.deps || [] },
   };
 }
@@ -643,16 +658,23 @@ export function runProjectCrossFileSelftest() {
   ok('indexed_payload_global_and_verb_collision_is_an_error',
     collisionResult.findings.some(f => f.code === 'md_lua.payload_collision' && f.severity === 'error'),
     collisionResult.findings);
+  ok('indexed_payload_evidence_preserves_reader_scope',
+    collisionResult.mdLua.payload.reads.some(read => read.key === 'g' && read.scope === 'global')
+      && collisionResult.mdLua.payload.reads.some(read => read.key === 'g' && read.scope === 'verb'),
+    collisionResult.mdLua.payload.reads);
 
   const payloadGap = addFile(addFile(fixtureProject(), {
-    path: 'ui/orders.lua', kind: 'lua', content: `payload["q" .. payload.n] = value`,
+    path: 'ui/orders.lua', kind: 'lua', content: `payload["q_key" .. payload.n] = value`,
   }), {
     path: 'md/orders.xml', kind: 'md',
-    content: `<mdscript name="Orders"><cues><cue name="Resolve"><actions><set_value name="$station" exact="event.param3.{'$g' + $si}"/></actions></cue></cues></mdscript>`,
+    content: `<mdscript name="Orders"><cues><cue name="Resolve"><actions><set_value name="$station" exact="event.param3.{'$g_key' + $si}"/></actions></cue></cues></mdscript>`,
   });
   const gapResult = validateProjectCrossFile(payloadGap);
   ok('indexed_payload_read_without_writer_is_an_error', gapResult.findings.some(f => f.code === 'md_lua.payload_missing_writer'), gapResult.findings);
   ok('indexed_payload_write_without_reader_is_an_error', gapResult.findings.some(f => f.code === 'md_lua.payload_unused_writer'), gapResult.findings);
+  ok('indexed_payload_evidence_accepts_identifier_keys',
+    gapResult.mdLua.payload.reads.some(read => read.key === 'g_key') && gapResult.mdLua.payload.writes.some(write => write.key === 'q_key'),
+    gapResult.mdLua.payload);
 
   const brokenCue = addFile(fixtureProject(), {
     path: 'md/broken.xml',

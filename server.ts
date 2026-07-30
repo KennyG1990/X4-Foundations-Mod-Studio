@@ -197,6 +197,7 @@ import { normalizeStudioLayoutPreferences, type StudioLayoutPreferences } from "
 import { normalizeReleasePreferences, type ReleasePreferences } from "./src/lib/releasePreferences";
 import { createAgentProject, createProjectFile, generateAgentProject, packageAgentProject, runProjectOrchestrationSelftest } from "./src/lib/projectOrchestration";
 import { runProjectCrossFileSelftest, validateProjectCrossFile } from "./src/lib/projectCrossFileValidation";
+import { runProjectRulesSelftest } from "./src/lib/projectRules";
 import {
   runExternalApiRegistrySelftest,
   EXTERNAL_API_REGISTRY,
@@ -3352,6 +3353,13 @@ app.get("/api/agent/schema", (req, res) => {
       },
       {
         method: "POST",
+        path: "/api/agent/project/validate",
+        auth: true,
+        body: { project: "ExtensionProject (inline)", fromPath: "or exact mod-folder path under a configured root", root: "workspace | filesystem" },
+        purpose: "Run the shared full-project referee. Exact root forge.rules.json v1 may declare reviewed warning suppressions, known property chains, indexed wire keys, and expected Lua registrations; errors are never suppressible."
+      },
+      {
+        method: "POST",
         path: "/api/agent/deploy",
         auth: true,
         body: { workspace: "optional ModWorkspace; defaults to active workspace" },
@@ -4679,7 +4687,7 @@ type FullWorkspaceValidation = {
 };
 
 function diagnosticCategory(code: string): string {
-  if (/^(xsd\.|schema\.|project\.)/.test(code)) return "syntax";
+  if (/^(xsd\.|schema\.|project\.|rules\.)/.test(code)) return "syntax";
   if (/^(reference\.|scriptproperty\.|tfile\.|jobs\.|wares\.|factions\.|god\.)/.test(code)) return "references";
   return "egosoft";
 }
@@ -7161,6 +7169,7 @@ const SELFTESTS: Record<string, () => unknown> = {
   "extension-project-selftest": runExtensionProjectSelftest,
   "project-orchestration-selftest": runProjectOrchestrationSelftest,
   "project-crossfile-selftest": runProjectCrossFileSelftest,
+  "project-rules-selftest": runProjectRulesSelftest,
   "external-api-registry-selftest": runExternalApiRegistrySelftest,
   "position-picker-selftest": runPositionPickerSelftest,
   "mod-drift-selftest": runModDriftSelftest,
@@ -9820,7 +9829,7 @@ app.post("/api/agent/deploy-verify", (req, res) => {
       { modId, files },
     );
     const { preflight, diskValidationSkipped } = deployValidation;
-    const pfWarnings = preflight.summary.schemaWarnings + preflight.summary.scriptPropertyWarnings + preflight.summary.mdPitfallWarnings + diskValidationSkipped.length;
+    const pfWarnings = preflight.summary.activeWarnings + diskValidationSkipped.length;
     if (!preflight.ok) {
       check('preflight', 'Full validation (schema/cues/lints)', 'fail',
         `${preflight.summary.schemaErrors} schema, ${preflight.summary.unresolvedCueRefs} cue, ${preflight.summary.crossFileErrors} cross-file, ${preflight.summary.aiscriptErrors} aiscript error(s)`);
@@ -9828,7 +9837,7 @@ app.post("/api/agent/deploy-verify", (req, res) => {
     }
     check('preflight', 'Full validation (schema/cues/lints)', pfWarnings > 0 ? 'warn' : 'pass',
       pfWarnings > 0
-        ? `0 errors; ${pfWarnings} warning(s) — ${preflight.summary.scriptPropertyWarnings} scriptproperty, ${preflight.summary.mdPitfallWarnings} pitfall, ${preflight.summary.schemaWarnings} schema, ${diskValidationSkipped.length} disk file(s) above/unavailable to the validation loader`
+        ? `0 errors; ${pfWarnings} active warning(s), ${preflight.summary.suppressedWarnings} reviewed suppression(s), ${diskValidationSkipped.length} disk file(s) above/unavailable to the validation loader`
         : '0 errors, 0 warnings across the full stack');
 
     // 3. Deploy — staging (writeSnapshots) + game extensions (clean), same as /deploy.

@@ -21,7 +21,7 @@
  */
 
 import path from "path";
-import { loadProjectFromDisk, runProjectValidation } from "../src/server/projectValidation";
+import { flattenProjectValidation, loadProjectFromDisk, runProjectValidation } from "../src/server/projectValidation";
 
 const args = process.argv.slice(2);
 const flags = new Set(args.filter(a => a.startsWith("--")));
@@ -35,7 +35,8 @@ if (!positional.length || flags.has("--help")) {
     "",
     "Runs: structure, cue references (cross-file), MD<->Lua event wiring,",
     "XSD validation (md.xsd + aiscripts.xsd incl. cat/dat harvest),",
-    "aiscript order-param lint, scriptproperty chain lint.",
+    "aiscript order-param lint, scriptproperty chain lint, and exact root",
+    "forge.rules.json v1 contracts/reviewed warning suppressions.",
     "",
     "Exit codes: 0 valid | 1 validation errors | 2 usage/load failure",
   ].join("\n"));
@@ -53,7 +54,7 @@ if (!load.project.files.length) {
 const result = runProjectValidation(load.project);
 
 if (flags.has("--json")) {
-  console.log(JSON.stringify({ target, loaded: load.loaded, skipped: load.skipped, ...result }, null, 2));
+  console.log(JSON.stringify({ target, loaded: load.loaded, skipped: load.skipped, ...result, flat: flattenProjectValidation(result) }, null, 2));
   process.exit(result.ok ? 0 : 1);
 }
 
@@ -69,14 +70,13 @@ console.log(`  cross-file errors:        ${s.crossFileErrors} (missing Lua regis
 console.log(`  schema errors/warnings:   ${s.schemaErrors}/${s.schemaWarnings} (md schema: ${result.schema.mdAvailable ? "loaded" : "UNAVAILABLE"}, aiscripts schema: ${result.schema.aiscriptAvailable ? "loaded" : "UNAVAILABLE"})`);
 console.log(`  aiscript lint errors:     ${s.aiscriptErrors}`);
 console.log(`  scriptproperty warnings:  ${s.scriptPropertyWarnings} (index: ${result.scriptProperties.available ? "loaded" : "UNAVAILABLE"})`);
+console.log(`  active/raw warnings:      ${s.activeWarnings}/${s.rawWarnings} (${s.suppressedWarnings} suppressed by reviewed project rules)`);
+console.log(`  project-rules errors:     ${s.rulesErrors} (forge.rules.json: ${result.rules.present ? (result.rules.valid ? `v${result.rules.version} valid` : "INVALID") : "not present"})`);
 console.log("  note: game-object reference checks (macros/wares/factions) run only inside the Forge.");
 
-const lines: string[] = [];
-for (const f of result.structure) lines.push(`[${f.severity}] structure: ${f.detail}`);
-for (const f of result.crossFile.findings) lines.push(`[${f.severity}] ${f.code}: ${f.detail}${f.file ? ` (${f.file})` : ""}`);
-for (const f of result.schema.findings) lines.push(`[${f.severity}] ${f.code || "schema"}: ${f.message}${f.filePath ? ` (${f.filePath}${f.line ? `:${f.line}` : ""})` : ""}`);
-for (const f of result.aiscript.findings) lines.push(`[${f.severity}] ${f.code}: ${f.detail}`);
-for (const f of result.scriptProperties.findings) lines.push(`[${f.severity}] ${f.code}: ${f.detail} (line ${f.line})`);
+const lines = flattenProjectValidation(result).map(f =>
+  `[${f.severity}] ${f.code || "validation"}: ${f.message}${f.filePath ? ` (${f.filePath}${f.line ? `:${f.line}` : ""})` : ""}`,
+);
 
 if (lines.length) {
   console.log(`\nFindings (${lines.length}):`);

@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<content id="project_rules_cli" name="Project Rules CLI Fixture" version="100" author="X4 Forge" description="Validates root rules loading through the CLI." />
