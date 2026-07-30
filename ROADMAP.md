@@ -7190,6 +7190,8 @@ staged app probe 16/16, and 2,091-entry VSIX inspection passed. Installed Antigr
 Diagnostics Center, warning-only suppression actions, and expanded deterministic guidance; the real DeadAir source
 was not mutated. Open VSX 0.0.60 downloaded byte-identical to local at 17,877,485 bytes and SHA-256
 `E356A54B691C2423173F501754916B07859B60512F9B37240CAE57035E25F19B`.
+Exact-SHA public Quality run `30589639514`, job `91028887606`, passed the complete clean Windows chain at
+`08792f141a3519e8b85a059232841887b9d842dd`; inspected artifact `8777900322` is retained through 2026-08-13.
 
 Suggested commit title:
 `feat(diagnostics): explain and safely suppress warnings`.

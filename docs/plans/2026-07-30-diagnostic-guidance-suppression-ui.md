@@ -133,6 +133,10 @@ diagnostic.
 - Open VSX -> `x4forge.x4-forge-studio` 0.0.60 published. Cache-busted public API exposed 0.0.60; downloaded public
   VSIX is byte-identical to local: 17,877,485 bytes, SHA-256
   `e356a54b691c2423173f501754916b07859b60512f9b37240cae57035e25f19b`.
+- Exact-SHA public Quality -> run `30589639514`, job `91028887606`, at implementation
+  `08792f141a3519e8b85a059232841887b9d842dd` completed `success`; every dependency audit, typecheck, lint, oracle,
+  flake-policy, build, route, extension build, staged sidecar, inspector rejection, packaging, byte inspection, and
+  artifact-retention step passed. Artifact `8777900322` is retained through 2026-08-13.
 
 ## REVIEW
 
