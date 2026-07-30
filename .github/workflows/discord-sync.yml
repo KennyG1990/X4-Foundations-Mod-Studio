@@ -70,10 +70,12 @@ jobs:
           print('Discord API Response:', res.stdout)
           "
 
-      - name: Sync ROADMAP.md to #roadmap
+      - name: Sync ROADMAP.md Diff to #roadmap
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           CHANNEL_ID: "1531779414579478539"
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          SHORT_SHA: ${{ github.sha }}
         run: |
           python3 -c "
           import os, json, subprocess
@@ -92,18 +94,36 @@ jobs:
               print('Diff check info:', e)
 
           channel_id = os.environ.get('CHANNEL_ID')
-          roadmap_content = ''
-          if os.path.exists('ROADMAP.md'):
-              with open('ROADMAP.md', 'r', encoding='utf-8') as f:
-                  lines = f.readlines()[:25]
-                  roadmap_content = ''.join(lines)
+          short_sha = os.environ.get('SHORT_SHA', '')[:7]
+          commit_msg = (os.environ.get('COMMIT_MSG') or '').splitlines()[0]
+
+          diff_text = ''
+          try:
+              raw_diff = subprocess.check_output(['git', 'diff', '-U0', 'HEAD~1', 'HEAD', '--', 'ROADMAP.md']).decode('utf-8', errors='replace')
+              diff_lines = []
+              for line in raw_diff.splitlines():
+                  if (line.startswith('+') and not line.startswith('+++')) or (line.startswith('-') and not line.startswith('---')):
+                      diff_lines.append(line)
+              
+              if diff_lines:
+                  diff_text = '\n'.join(diff_lines)
+              else:
+                  diff_text = '+ [ROADMAP.md updated]'
+          except Exception as e:
+              print('Error calculating diff:', e)
+              diff_text = f'+ Roadmap modified in commit {short_sha}'
+
+          if len(diff_text) > 3500:
+              diff_text = diff_text[:3500] + '\n... (diff truncated for size)'
+
+          embed_desc = f'**Commit**: \`{short_sha}\` — {commit_msg}\n\n**Roadmap Changes (Diff):**\n```diff\n{diff_text}\n```'
 
           payload = json.dumps({
               'embeds': [{
-                  'title': '🗺️ X4 Forge — Prototype Validation Roadmap',
-                  'description': roadmap_content,
+                  'title': f'🗺️ Roadmap Diff Update — {short_sha}',
+                  'description': embed_desc,
                   'color': 3447003,
-                  'footer': {'text': 'X4 Forge Roadmap • Automated from GitHub'}
+                  'footer': {'text': 'X4 Forge Roadmap • Automated Diff Sync'}
               }]
           })
 
