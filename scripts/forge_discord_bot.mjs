@@ -63,6 +63,35 @@ function matchKnownIssue(messageText) {
   return null;
 }
 
+// HELPER FOR KNOWN-FIXES EMBED
+function getKnownFixesEmbed() {
+  knownFixes = loadKnownFixes();
+  const fields = knownFixes.slice(0, 6).map(f => ({
+    name: `💡 ${f.title} (${f.matchCount || 0} matches)`,
+    value: `**Keywords**: ${f.keywords.join(', ')}\n**Fix**: ${f.fix}`,
+    inline: false
+  }));
+
+  return new EmbedBuilder()
+    .setTitle('🛠️ Top Recurring Known Fixes & Resolutions')
+    .setColor(3447003)
+    .addFields(fields.length ? fields : [{ name: 'No Issues Recorded', value: 'All issues clear!' }])
+    .setFooter({ text: 'X4 Forge Smart Auto-Fix Knowledge Base' });
+}
+
+// HELPER FOR FAQ EMBED
+function getFaqEmbed() {
+  return new EmbedBuilder()
+    .setTitle('🛠️ X4 Forge Studio FAQ')
+    .setColor(10181046)
+    .addFields(
+      { name: '📦 How do I install X4 Forge?', value: 'Download the extension directly from Open VSX Marketplace:\n<https://open-vsx.org/extension/x4forge/x4-forge-studio>', inline: false },
+      { name: '💻 Where is the source code?', value: 'GitHub Repository:\n<https://github.com/KennyG1990/X4_Forge>', inline: false },
+      { name: '🤖 How do I ask Concierge for AI support?', value: 'Mention @Forge Concierge in #concierge or support channels. Access is available to Patreon supporters and backers.', inline: false }
+    )
+    .setFooter({ text: 'X4 Forge Studio Quick Reference' });
+}
+
 // VERIFIED ACTIVE MODEL CASCADE FOR 100% UPTIME
 async function generateWithModelCascade(promptText) {
   const modelCascade = [
@@ -112,7 +141,7 @@ const client = new Client({
   partials: [Partials.Channel, Partials.Message]
 });
 
-// ROBUST ERROR GUARDS (Prevents unhandled 10062 interaction crashes)
+// ROBUST ERROR GUARDS
 process.on('unhandledRejection', (reason) => {
   console.warn('⚠️ Unhandled Promise Rejection intercepted:', reason?.message || reason);
 });
@@ -216,32 +245,9 @@ client.on('interactionCreate', async (interaction) => {
 
       await interaction.reply({ embeds: [embed], flags: 64 });
     } else if (commandName === 'faq') {
-      const embed = new EmbedBuilder()
-        .setTitle('🛠️ X4 Forge Studio FAQ')
-        .setColor(10181046)
-        .addFields(
-          { name: '📦 How do I install X4 Forge?', value: 'Download the extension directly from Open VSX Marketplace:\n<https://open-vsx.org/extension/x4forge/x4-forge-studio>', inline: false },
-          { name: '💻 Where is the source code?', value: 'GitHub Repository:\n<https://github.com/KennyG1990/X4_Forge>', inline: false },
-          { name: '🤖 How do I ask Concierge for AI support?', value: 'Mention @Forge Concierge in #concierge or support channels. Access is available to Patreon supporters and backers.', inline: false }
-        )
-        .setFooter({ text: 'X4 Forge Studio Quick Reference' });
-
-      await interaction.reply({ embeds: [embed], flags: 64 });
+      await interaction.reply({ embeds: [getFaqEmbed()], flags: 64 });
     } else if (commandName === 'known-fixes') {
-      knownFixes = loadKnownFixes();
-      const fields = knownFixes.slice(0, 5).map(f => ({
-        name: `💡 ${f.title} (${f.matchCount || 0} matches)`,
-        value: `**Keywords**: ${f.keywords.join(', ')}\n**Fix**: ${f.fix}`,
-        inline: false
-      }));
-
-      const embed = new EmbedBuilder()
-        .setTitle('🛠️ Top Recurring Known Fixes & Resolutions')
-        .setColor(3447003)
-        .addFields(fields.length ? fields : [{ name: 'No Issues Recorded', value: 'All issues clear!' }])
-        .setFooter({ text: 'X4 Forge Smart Auto-Fix Knowledge Base' });
-
-      await interaction.reply({ embeds: [embed], flags: 64 });
+      await interaction.reply({ embeds: [getKnownFixesEmbed()], flags: 64 });
     } else if (commandName === 'add-fix') {
       if (!isOwner) {
         await interaction.reply({ content: '⛔ Only the owner (Moshine) can add new verified fixes.', flags: 64 });
@@ -284,7 +290,19 @@ client.on('interactionCreate', async (interaction) => {
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
-  // 1. SMART KNOWN ISSUE AUTO-FIX INTERCEPTOR
+  const contentLower = (message.content || '').trim().toLowerCase();
+
+  // DIRECT COMMAND TEXT INTERCEPTORS
+  if (contentLower.startsWith('/known-fixes') || contentLower.startsWith('known-fixes') || contentLower.startsWith('known fixes')) {
+    await message.reply({ embeds: [getKnownFixesEmbed()] });
+    return;
+  }
+  if (contentLower.startsWith('/faq') || contentLower.startsWith('faq')) {
+    await message.reply({ embeds: [getFaqEmbed()] });
+    return;
+  }
+
+  // SMART KNOWN ISSUE AUTO-FIX INTERCEPTOR
   const matchedIssue = matchKnownIssue(message.content);
   if (matchedIssue) {
     await message.reply(
@@ -297,7 +315,7 @@ client.on('messageCreate', async (message) => {
   const isMentioned = message.mentions.has(client.user.id);
   const channelName = (message.channel.name || '').toLowerCase();
   
-  // Comprehensive Owner Check (Moshine gets complete exemption)
+  // Comprehensive Owner Check
   const username = (message.author.username || '').toLowerCase();
   const globalName = (message.author.globalName || '').toLowerCase();
   const displayName = (message.member?.displayName || '').toLowerCase();
@@ -316,7 +334,6 @@ client.on('messageCreate', async (message) => {
   if (isConciergeChannel || isMentioned || isHelpChannel || isBugChannel || isFeatureChannel || isOwner) {
     const tierInfo = getPatreonTierInfo(message.member, isOwner);
 
-    // Non-backers have zero access to Concierge LLM
     if (!tierInfo.allowed) {
       await message.reply(
         `🔒 **Backers & Supporters Only**: Forge Concierge AI support is reserved exclusively for Patreon members.\n` +

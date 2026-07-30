@@ -1,5 +1,13 @@
 [
   {
+    "id": "known-fixes-list",
+    "title": "Known Issues & Verified Resolutions Catalog",
+    "keywords": ["known-fixes", "known fixes", "known bugs", "known issues", "/known-fixes", "bug list"],
+    "fix": "Here are our top verified resolutions:\n1. **Outdated Hotkey / BepInEx**: Walk up to any NPC in-game and select 'Speak with AI' (No BepInEx / Shift+C needed).\n2. **Player2 Port 4315**: Ensure Player2 companion app is running from https://player2.game.\n3. **X4 Forge Extension Stale**: Press Ctrl+Shift+P -> 'Developer: Reload Window'.\n4. **XSD Schema Validation Setup**: Set your X4 unpacked game path under Settings in X4 Forge Studio.",
+    "category": "system",
+    "matchCount": 0
+  },
+  {
     "id": "shift-c-bepinex",
     "title": "Outdated Hotkey / BepInEx Assumption",
     "keywords": ["shift c", "shift+c", "shift-c", "bepinex"],
