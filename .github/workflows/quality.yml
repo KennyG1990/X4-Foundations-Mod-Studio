@@ -37,6 +37,9 @@ jobs:
       - name: Reject high-severity dependency vulnerabilities
         run: npm audit --audit-level=high
 
+      - name: Reject high-severity extension dependency vulnerabilities
+        run: npm audit --prefix vscode-extension --audit-level=high
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -51,3 +54,29 @@ jobs:
 
       - name: Run isolated route integration
         run: npm run test:routes
+
+      - name: Build extension controller and supervisor
+        run: npm run build --prefix vscode-extension
+
+      - name: Stage packaged application
+        run: npm run stage-app --prefix vscode-extension
+
+      - name: Probe staged packaged sidecar
+        run: npm run probe-app --prefix vscode-extension
+
+      - name: Prove VSIX inspector rejection policy
+        run: npm run inspect-package --prefix vscode-extension -- --selftest
+
+      - name: Package VSIX without publishing
+        run: npm run package --prefix vscode-extension -- --out x4-forge-studio-ci.vsix
+
+      - name: Inspect final VSIX bytes
+        run: npm run inspect-package --prefix vscode-extension -- x4-forge-studio-ci.vsix
+
+      - name: Retain inspected VSIX as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: x4-forge-studio-${{ github.sha }}
+          path: vscode-extension/x4-forge-studio-ci.vsix
+          if-no-files-found: error
+          retention-days: 14

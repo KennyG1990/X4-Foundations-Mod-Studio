@@ -4,44 +4,47 @@ Updated: 2026-07-30
 
 ## One-line state
 
-B110-R10 managed-sidecar parent-death/orphan prevention is VERIFIED; R19 packaged-VSIX CI is the next bounded Kimi
-safety-contract unit, followed by R20 flake policy.
+B110-R10 is VERIFIED and public Quality passed. B110-R19 packaged-VSIX CI is locally green but PARTIAL until its
+implementation commit receives exact-SHA public Quality plus retained-artifact evidence; R20 follows.
 
 ## Operator brief
 
 - Project: `F:\DEV_ENV\X4_Forge` (Forge application/Antigravity extension, not the live X4 mod).
-- Machine state: Ken confirmed quiet. All R10 runtime/UI validation used isolated temp state; no installed sidecar,
+- Machine state: Ken confirmed quiet. All R19 runtime validation used isolated temp state; no installed sidecar,
   real mod, game directory, Nexus, Steam, Open VSX, or live workspace was changed.
-- Eyeball queue: none for R10. It introduces no new visible control; packaged process behavior and full rendered
-  compatibility passed.
-- Commit question: verify the R10 close commit/push exists before R19. Its prewritten title is
-  `feat(extension): reap managed sidecars when the host dies`; preserve the four unrelated dirty/untracked files.
+- Eyeball queue: none for R19. It is a headless clean-runner/package gate with no visible product control.
+- Commit question: R10 commit `f28daf2` is pushed and public Quality `30568397225` passed. R19 is at its implementation
+  commit point; stage only R19 paths under title `ci(extension): build probe and inspect packaged VSIX`, then require
+  public proof before the VERIFIED close. Preserve the four unrelated dirty/untracked files.
 
 ## Current bounded task
 
-### B110-R10 status: VERIFIED
+### B110-R19 status: PARTIAL (public clean-runner gate pending)
 
 Implemented:
 
-- Packaged supervisor owns exactly one managed server and treats extension-host stdin loss as authority.
-- Nonce-authenticated graceful exit removes discovery; bounded fallback reaps only the exact spawned child tree.
-- Parent PID is diagnostic only; attach-first backends never enter the supervision path.
-- Product-copy screenshots now use per-run artifacts; layout persistence coalesces stale pending states.
+- Existing Windows Quality now includes locked VSCE 3.9.2, extension build/stage, R10 process probe, package policy,
+  final VSIX inspection, and 14-day artifact retention after the established root gates.
+- Staged probe creates an isolated reference fixture on corpus-free runners while keeping the canonical completion
+  assertion on this machine.
+- Final inspector parses/decompresses the archive, verifies CRC/size/path/required payload/native binding, and rejects
+  secret/runtime/map/build-machine content.
 
 Validation:
 
-- Parent contract 11/11; latest-value writer 3/3; staged packaged process drill 16/16.
-- Isolated routes 243/243; runtime-discovered oracles 119/119.
-- Focused Studio E2E 9/9; final instrumented full isolated E2E 46/46, zero failed/flaky/bad results.
-- Typecheck/lint/build/stage/extension build/package inspection passed. Final local VSIX SHA-256:
-  `A72BFB0E3EB9D32DBCF7EEBD02CF2FADB1180648CC6365919A869AE614EF0472`.
+- Inspector policy 12/12; hermetic staged probe 16/16; canonical staged probe 16/16.
+- Locked final VSIX inspection PASS: 2,091 entries / 17,860,949 bytes / local SHA-256
+  `85AD769A6E64A5EE76542B9BB0AF851C3126868CBBAB6CB6C2C903402546B8C1`.
+- Typecheck, lint 0/548, oracles 119/119, build, routes 243/243, extension audit/build/stage/package all pass locally.
+- Public implementation SHA/run/artifact: pending.
 
 ## Next action
 
-1. Verify R10's path-scoped commit/push and exact-SHA public CI.
-2. Begin B110-R19 as a new Full-lane task: reconcile the existing Windows Quality workflow and staged probe before
-   adding extension build/stage/package/VSIX inspection without publication.
-3. Close/document R19 independently; R20 follows.
+1. Commit/push only R19-owned paths; assert `origin/main == HEAD`.
+2. Wait for exact-SHA public Quality. Inspect its retained artifact metadata/download and rerun the checked-in
+   inspector on the public VSIX. A public failure returns to implementation; no rerun-only close.
+3. After public proof, move R19 to VERIFIED in ledger/ROADMAP/capability/AAR, overwrite this handoff, commit/push the
+   close, then begin R20.
 
 ## Live hazards and ownership
 
@@ -56,19 +59,14 @@ Validation:
 - Non-Windows `exec()` descendant reaping is not proven; never replace the safe single-process fallback with an
   unowned negative-PID group kill.
 
-## R10-owned paths
+## R19-owned paths
 
-- `src/lib/parentLiveness.ts`
-- `src/lib/latestValueWriteQueue.ts`
-- `src/App.tsx`
-- `server.ts`
-- `vscode-extension/src/sidecarSupervisor.ts`
-- `vscode-extension/src/extension.ts`
-- `vscode-extension/scripts/build-ext.mjs`
+- `.github/workflows/quality.yml`
+- `vscode-extension/package.json`
+- `vscode-extension/package-lock.json`
 - `vscode-extension/scripts/probe-staged-app.mjs`
-- `vscode-extension/.vscodeignore`
-- `tests/e2e/product-copy.spec.ts`
-- `docs/plans/2026-07-30-sidecar-parent-liveness.md`
+- `vscode-extension/scripts/inspect-vsix.mjs`
+- `docs/plans/2026-07-30-packaged-vsix-ci.md`
 - `docs/plans/2026-07-29-kimi-recommendations-ledger.md`
 - `BACKLOG.md`
 - `ROADMAP.md`
@@ -79,6 +77,6 @@ Validation:
 
 ## AAR state
 
-Triggered and recorded. Main triggers: first supervisor transport failed; generated-output build race; standing
-evidence writes; traced layout-save starvation; one unexplained late Vite exit followed by an instrumented 46/46;
-and one raw oracle command without its server. No rollback, product-data mutation, or acceptance weakening.
+Triggered. One wildcard search failed; first hermetic fixture probe was 15/16; first archive scan overgeneralized
+generic user paths. Corrections are tested; public-run triggers and final lessons remain open. No product-data
+mutation, publish, rollback, or acceptance weakening.

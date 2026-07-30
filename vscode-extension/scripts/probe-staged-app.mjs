@@ -10,11 +10,26 @@ const extensionRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
 const appRoot = path.join(extensionRoot, 'app');
 const serverPath = path.join(appRoot, 'dist', 'server.cjs');
 const supervisorPath = path.join(extensionRoot, 'out', 'sidecar-supervisor.js');
-const referenceRoot = process.env.X4_REFERENCE_ROOT || 'F:\\Downskies\\x4unpackersuiteV1\\X4 unpacked 9.00';
 const port = Number(process.env.X4_STAGED_PROBE_PORT || 8982);
 const base = `http://127.0.0.1:${port}`;
 const token = `staged-app-probe-${process.pid}`;
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'x4forge-staged-probe-'));
+const configuredReferenceRoot = process.env.X4_REFERENCE_ROOT?.trim();
+const localReferenceRoot = 'F:\\Downskies\\x4unpackersuiteV1\\X4 unpacked 9.00';
+let referenceRoot = configuredReferenceRoot || localReferenceRoot;
+let fixtureReference = false;
+if (!fs.existsSync(path.join(referenceRoot, 'libraries'))) {
+  fixtureReference = true;
+  referenceRoot = path.join(tmp, 'reference');
+  const libraries = path.join(referenceRoot, 'libraries');
+  fs.mkdirSync(libraries, { recursive: true });
+  fs.writeFileSync(path.join(libraries, 'factions.xml'), '<factions><faction id="ci_probe_faction" name="CI Probe Faction" tags="economic"/></factions>');
+  fs.writeFileSync(path.join(libraries, 'wares.xml'), '<wares><ware id="ci_probe_ware" name="CI Probe Ware" group="test" tags="economy"/></wares>');
+  fs.writeFileSync(path.join(libraries, 'scriptproperties.xml'), '<scriptproperties><datatype name="faction"><property name="id" result="ID" type="string"/></datatype></scriptproperties>');
+}
+const canonicalReference = !fixtureReference
+  && fs.existsSync(path.join(referenceRoot, 'extensions', 'ego_dlc_split'))
+  && fs.existsSync(path.join(referenceRoot, 'extensions', 'ego_dlc_timelines'));
 const checks = [];
 const check = (name, pass, detail = '') => {
   checks.push({ name, pass: Boolean(pass), detail });
@@ -66,6 +81,7 @@ try {
       STUDIO_API_TOKEN: token,
       X4_STATE_DIR: path.join(tmp, 'state'),
       X4_DATA_DIR: path.join(tmp, 'data'),
+      X4_CONFIG_DIR: path.join(tmp, 'config'),
       X4_REFERENCE_ROOT: referenceRoot,
       X4_XSD_PATH: path.join(referenceRoot, 'libraries'),
       X4FORGE_DISCOVERY_DIR: discoveryDir,
@@ -96,19 +112,28 @@ try {
   const config = await configResponse.json();
   check('authenticated directory config loads', configResponse.ok && config.resolved?.x4ReferenceExists === true, JSON.stringify(config.resolved || config));
 
-  const completionResponse = await fetch(`${base}/api/reference/complete`, {
-    method: 'POST', headers: auth,
-    body: JSON.stringify({
-      path: 'md/probe.xml',
-      content: '<mdscript><cues><cue name="Probe"><actions><set_value name="$x" exact="faction."/></actions></cue></cues></mdscript>',
-      line: 0,
-      column: 79,
-    }),
-  });
-  const completion = await completionResponse.json();
-  check('staged completion reaches canonical corpus', completionResponse.ok && Array.isArray(completion)
-    && completion.length === 32 && completion.some(item => item.label === 'fallensplit')
-    && !completion.some(item => item.label === 'riptide'), `status=${completionResponse.status} count=${Array.isArray(completion) ? completion.length : 'n/a'}`);
+  if (canonicalReference) {
+    const completionResponse = await fetch(`${base}/api/reference/complete`, {
+      method: 'POST', headers: auth,
+      body: JSON.stringify({
+        path: 'md/probe.xml',
+        content: '<mdscript><cues><cue name="Probe"><actions><set_value name="$x" exact="faction."/></actions></cue></cues></mdscript>',
+        line: 0,
+        column: 79,
+      }),
+    });
+    const completion = await completionResponse.json();
+    check('staged completion reaches canonical corpus', completionResponse.ok && Array.isArray(completion)
+      && completion.length === 32 && completion.some(item => item.label === 'fallensplit')
+      && !completion.some(item => item.label === 'riptide'),
+    `status=${completionResponse.status} count=${Array.isArray(completion) ? completion.length : 'n/a'} root=${referenceRoot}`);
+  } else {
+    const fixtureResponse = await fetch(`${base}/api/reference/factions`);
+    const factions = await fixtureResponse.json();
+    check('staged reference API reaches hermetic CI corpus', fixtureResponse.ok && Array.isArray(factions)
+      && factions.length === 1 && factions[0]?.id === 'ci_probe_faction',
+    `status=${fixtureResponse.status} count=${Array.isArray(factions) ? factions.length : 'n/a'} root=${referenceRoot}`);
+  }
 
   const supervisedPid = Number(/X4FORGE_SUPERVISED_PID=(\d+)/.exec(output)?.[1] || 0);
   check('supervisor reports exact owned server pid', supervisedPid > 0 && pidAlive(supervisedPid), String(supervisedPid));

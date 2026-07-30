@@ -175,12 +175,14 @@
     "build": "node scripts/build-ext.mjs",
     "stage-app": "node scripts/stage-app.mjs",
     "probe-app": "node scripts/probe-staged-app.mjs",
-    "package": "npx --yes @vscode/vsce package --allow-missing-repository",
+    "package": "vsce package --allow-missing-repository",
+    "inspect-package": "node scripts/inspect-vsix.mjs",
     "changelog": "node scripts/gen-changelog.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "3.9.2",
     "esbuild": "^0.25.0",
     "typescript": "~5.8.2"
   }

@@ -15,8 +15,15 @@ cleanup—and update each row after every implementation. Ledger:
 `docs/plans/2026-07-29-kimi-recommendations-ledger.md`.
 
 **Closed bounded units:** R3 uniform API failure envelope, R9 uniform timeout policy, and R10 managed-sidecar
-parent-death/orphan prevention — VERIFIED 2026-07-30; see ROADMAP and their task plans. **Next bounded unit:** R19
-packaged-VSIX CI. R20 flake policy follows it.
+parent-death/orphan prevention — VERIFIED 2026-07-30; see ROADMAP and their task plans. **Active bounded unit:** R19
+packaged-VSIX CI is SPECIFIED in `docs/plans/2026-07-30-packaged-vsix-ci.md`. R20 flake policy follows it.
+
+**Post-Kimi authorized research program (queued; do not start before R1-R21 close):** reconcile
+`F:\Downskies\X4 Foundations Modding Tooling Research for IDE Extension Opportunities.md` and
+`F:\Downskies\X4 Foundations Modding Tooling — Market Workflow & IDE-Opportunity Research.md` against the live
+Forge capability map and current community landscape. Separate outdated-tool replacement opportunities from
+high-rated-tool workflow patterns; challenge each against existing Forge infrastructure, then specify/implement only
+bounded improvements with stronger design and current evidence.
 
 ### B98 · Deploy fails EBUSY whenever X4 is running — copying byte-identical files `in_progress` (P0, TOP)
 
