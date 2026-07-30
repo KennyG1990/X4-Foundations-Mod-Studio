@@ -89,6 +89,12 @@ import {
   type SidebarTab,
   type StudioLayoutPreferences,
 } from './lib/studioLayout';
+import {
+  RELEASE_PREFERENCES_KEY,
+  normalizeReleasePreferences,
+  parseReleasePreferences,
+  type ReleasePreferences,
+} from './lib/releasePreferences';
 
 type ForgeE2EWindow = Window & {
   __X4_E2E__?: {
@@ -219,6 +225,12 @@ export default function App() {
   const layoutPreferencesRef = useRef(layoutPreferences);
   const layoutSaveChainRef = useRef<Promise<void>>(Promise.resolve());
   const layoutTouchedRef = useRef(false);
+  const [releasePreferences, setReleasePreferences] = useState<ReleasePreferences>(() =>
+    parseReleasePreferences(localStorage.getItem(RELEASE_PREFERENCES_KEY))
+  );
+  const releasePreferencesRef = useRef(releasePreferences);
+  const releasePreferencesSaveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const releasePreferencesTouchedRef = useRef(false);
   const [isStudioMenuOpen, setIsStudioMenuOpen] = useState(false);
   const [experienceMode, setExperienceMode] = useState<ExperienceMode>(() => parseExperienceMode(localStorage.getItem(EXPERIENCE_MODE_KEY)));
   const [beginnerStep, setBeginnerStep] = useState<BeginnerStep>('idea');
@@ -257,6 +269,55 @@ export default function App() {
     setLayoutPreferences(next);
     persistStudioLayout(next);
   }, [persistStudioLayout]);
+
+  const persistReleasePreferences = React.useCallback((preferences: ReleasePreferences) => {
+    try { localStorage.setItem(RELEASE_PREFERENCES_KEY, JSON.stringify(preferences)); } catch { /* server state remains authoritative */ }
+    releasePreferencesSaveChainRef.current = releasePreferencesSaveChainRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        const response = await fetch('/api/studio/release-preferences', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ preferences }),
+          keepalive: true,
+        });
+        if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || `Release preference save failed (${response.status}).`);
+      })
+      .catch(error => console.warn('Could not persist release packaging preferences on the Forge server.', error));
+  }, []);
+
+  const updateReleasePreferences = React.useCallback((update: React.SetStateAction<ReleasePreferences>) => {
+    releasePreferencesTouchedRef.current = true;
+    const next = normalizeReleasePreferences(typeof update === 'function' ? update(releasePreferencesRef.current) : update);
+    releasePreferencesRef.current = next;
+    setReleasePreferences(next);
+    persistReleasePreferences(next);
+  }, [persistReleasePreferences]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const localFallback = releasePreferences;
+    (async () => {
+      try {
+        const response = await fetch('/api/studio/release-preferences');
+        const body = await response.json();
+        if (!response.ok) throw new Error(body?.error || `Release preference request failed (${response.status}).`);
+        if (!cancelled && !releasePreferencesTouchedRef.current) {
+          const hydrated = normalizeReleasePreferences(body?.preferences || localFallback);
+          releasePreferencesRef.current = hydrated;
+          setReleasePreferences(hydrated);
+          if (!body?.preferences) persistReleasePreferences(hydrated);
+        }
+      } catch (error) {
+        console.warn('Server-backed release packaging preferences are unavailable; using the local fallback.', error);
+        if (!cancelled && !releasePreferencesTouchedRef.current) {
+          releasePreferencesRef.current = localFallback;
+          setReleasePreferences(localFallback);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [persistReleasePreferences]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1900,6 +1961,7 @@ export default function App() {
           activeTab={activeSidebarTab}
           setActiveTab={setActiveSidebarTab}
           layoutPreferences={layoutPreferences}
+          releasePreferences={releasePreferences}
           onMoveTool={(tool, target) => updateLayoutPreferences(previous => ({ ...previous, toolOrder: moveOrderedItem(previous.toolOrder, tool, target) }))}
           onToggleToolRail={() => updateLayoutPreferences(previous => ({ ...previous, toolRailCollapsed: !previous.toolRailCollapsed }))}
           onTogglePanel={() => updateLayoutPreferences(previous => ({ ...previous, sidePanelCollapsed: true }))}
@@ -2204,6 +2266,8 @@ export default function App() {
         setAiTier={setAiTier}
         layoutPreferences={layoutPreferences}
         setLayoutPreferences={updateLayoutPreferences}
+        releasePreferences={releasePreferences}
+        setReleasePreferences={updateReleasePreferences}
         onOpenAIConfig={() => { setIsDirSettingsOpen(false); setIsAIConfigOpen(true); }}
       />
 

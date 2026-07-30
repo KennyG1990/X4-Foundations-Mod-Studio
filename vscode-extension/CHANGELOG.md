@@ -3,6 +3,13 @@
 The latest changes, newest first. (This page is generated automatically — see
 `release-notes.json` to edit the wording.)
 
+## 0.0.59 — 2026-07-30
+
+- Package a mod for Nexus Mods through a dedicated guided flow that validates the complete disk-backed project, builds exactly one install-root ZIP, reopens every entry, and asks where to save the independently hash-verified result.
+- Prepare Steam Workshop releases through a separate guided flow that validates Workshop metadata and preview requirements, builds verified CAT/DAT staging plus a rollback ZIP, and hands the exact command to Egosoft's WorkshopTool without pressing Enter or uploading for you.
+- First publishes and updates now explain their different preview, change-note, version, and Workshop-id steps. Forge rejects payload drift after the official tool runs and only adopts the returned Workshop identity after a separate guarded confirmation.
+- Guided mode is the default and keeps every stage and troubleshooting explanation visible. An optional Settings-only Express mode shortens passed explanations but never skips validation, output selection, Steam authentication, legal prompts, or final verification.
+
 ## 0.0.58 — 2026-07-29
 
 - Deploys now require an explicit project target, run the complete project validator before writing, and replace files atomically. A rejected project writes nothing, and each write receipt belongs only to the request that produced it.

@@ -28,7 +28,19 @@ import { xmlCursorContext } from "./langContext";
 import { findCueDefinition, findCueReferences, mdscriptNameOf, parseCueWord } from "./langNav";
 import { detectIdeCapabilities, formatIdeCapabilityReport } from "./capabilities";
 import { PanelBackendBinding, SharedBackendEnsure } from "./panelBinding";
-import { parseNativeEditorRequest, resolveExternalUrlLaunch, resolveNativeEditorFile, type NativeNodeSelectionRequest, type NativeNodeSelectionResult } from "./nativeEditorBridge";
+import {
+  copyVerifiedReleaseArtifact,
+  inspectNativeWorkshopTool,
+  parseNativeEditorRequest,
+  resolveExternalUrlLaunch,
+  resolveNativeEditorFile,
+  resolveSteamTerminalRoot,
+  resolveVerifiedReleaseArtifact,
+  type NativeNodeSelectionRequest,
+  type NativeNodeSelectionResult,
+  type NativeReleaseRequest,
+  type NativeReleaseResult,
+} from "./nativeEditorBridge";
 
 interface BackendHandle {
   baseUrl: string;
@@ -582,12 +594,12 @@ function webviewHtml(webview: vscode.Webview, forgeUrl: string, mode: string): s
     window.addEventListener('message', (event) => {
       if (event.source !== frame.contentWindow || event.origin !== forgeOrigin) return;
       const data = event.data;
-      if (!data || data.source !== 'x4forge-studio' || !['open-workspace-file', 'open-text-diff', 'open-node-selection', 'node-selection-result', 'open-external-url'].includes(data.type)) return;
+      if (!data || data.source !== 'x4forge-studio' || !['open-workspace-file', 'open-text-diff', 'open-node-selection', 'node-selection-result', 'open-external-url', 'release-native-action'].includes(data.type)) return;
       vscode.postMessage(data);
     });
     window.addEventListener('message', (event) => {
       const data = event.data;
-      if (!data || data.source !== 'x4forge-native-host' || data.type !== 'apply-node-selection') return;
+      if (!data || data.source !== 'x4forge-native-host' || !['apply-node-selection', 'release-native-result'].includes(data.type)) return;
       frame.contentWindow.postMessage(data, forgeOrigin);
     });
   </script>
@@ -626,6 +638,10 @@ async function handleStudioMessage(context: vscode.ExtensionContext, value: unkn
   const request = parseNativeEditorRequest(value);
   if (!request) return;
   try {
+    if (request.type === "release-native-action") {
+      await handleNativeReleaseAction(context, request);
+      return;
+    }
     if (request.type === "open-external-url") {
       const launch = resolveExternalUrlLaunch(request.url);
       if (!launch) throw new Error("The external page is not on Forge's allowlist.");
@@ -709,8 +725,64 @@ async function handleStudioMessage(context: vscode.ExtensionContext, value: unkn
     }
     log(`native editor opened: ${resolution.relativePath}`);
   } catch (error) {
+    if (request.type === "release-native-action") {
+      postNativeReleaseResult({ requestId: request.requestId, ok: false, code: "NATIVE_RELEASE_FAILED", message: error instanceof Error ? error.message : String(error) });
+      return;
+    }
     showBackendError(`Studio request failed: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+function postNativeReleaseResult(result: Omit<NativeReleaseResult, "source" | "type">): void {
+  void panel?.webview.postMessage({ source: "x4forge-native-host", type: "release-native-result", ...result } satisfies NativeReleaseResult);
+}
+
+async function configuredModWorkspaceRoot(context: vscode.ExtensionContext): Promise<string> {
+  const handle = await ensureBackend(context);
+  const headers = handle.token ? { Authorization: `Bearer ${handle.token}` } : undefined;
+  const response = await fetch(`${handle.baseUrl}/api/schema/config`, { headers });
+  const body = await response.json() as { resolved?: { modWorkspacePath?: string }; config?: { modWorkspacePath?: string }; error?: string };
+  if (!response.ok) throw new Error(body.error || "Forge could not resolve the Mod Workspace folder.");
+  const root = String(body.resolved?.modWorkspacePath || body.config?.modWorkspacePath || "").trim();
+  if (!root) throw new Error("Configure a Mod Workspace Folder before exporting a release.");
+  return root;
+}
+
+async function handleNativeReleaseAction(context: vscode.ExtensionContext, envelope: NativeReleaseRequest): Promise<void> {
+  const request = envelope.request;
+  if (request.action === "select-preview") {
+    const selected = await vscode.window.showOpenDialog({ canSelectMany: false, canSelectFiles: true, canSelectFolders: false, title: "Select Steam Workshop preview", filters: { "PNG or JPEG image": ["png", "jpg", "jpeg"] } });
+    if (!selected?.[0]) return postNativeReleaseResult({ requestId: envelope.requestId, ok: false, cancelled: true, code: "SELECTION_CANCELLED", message: "Preview selection cancelled." });
+    const stat = fs.lstatSync(selected[0].fsPath);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 1024 * 1024) throw new Error("Select a regular PNG/JPG preview no larger than 1 MB.");
+    return postNativeReleaseResult({ requestId: envelope.requestId, ok: true, code: "PREVIEW_SELECTED", message: "Preview selected; Forge will validate its image structure and dimensions during preparation.", path: selected[0].fsPath, sizeBytes: stat.size });
+  }
+  if (request.action === "select-workshop-tool") {
+    const selected = await vscode.window.showOpenDialog({ canSelectMany: false, canSelectFiles: true, canSelectFolders: false, title: "Select Egosoft WorkshopTool.exe", filters: { "Egosoft Workshop Tool": ["exe"] } });
+    if (!selected?.[0]) return postNativeReleaseResult({ requestId: envelope.requestId, ok: false, cancelled: true, code: "SELECTION_CANCELLED", message: "WorkshopTool selection cancelled." });
+    const inspected = inspectNativeWorkshopTool(selected[0].fsPath);
+    if (!inspected.ok || !inspected.path) throw new Error(inspected.message);
+    return postNativeReleaseResult({ requestId: envelope.requestId, ok: true, code: "WORKSHOP_TOOL_SELECTED", message: inspected.message, path: inspected.path });
+  }
+
+  const workspaceRoot = await configuredModWorkspaceRoot(context);
+  if (request.action === "export-artifact") {
+    const source = resolveVerifiedReleaseArtifact(workspaceRoot, request.platform, request.sourcePath, request.sha256, request.sizeBytes);
+    if (source.ok === false) throw new Error(source.message);
+    const destination = await vscode.window.showSaveDialog({ title: `Save verified ${request.platform === "nexus" ? "Nexus" : "Steam rollback"} ZIP`, defaultUri: vscode.Uri.file(path.join(workspaceRoot, request.suggestedName)), filters: { "ZIP archive": ["zip"] }, saveLabel: "Save verified ZIP" });
+    if (!destination) return postNativeReleaseResult({ requestId: envelope.requestId, ok: false, cancelled: true, code: "EXPORT_CANCELLED", message: "Save cancelled; the verified internal artifact was not changed." });
+    const copied = copyVerifiedReleaseArtifact(source.sourcePath, destination.fsPath, source.sha256, source.sizeBytes);
+    if (copied.ok === false) throw new Error(copied.message);
+    return postNativeReleaseResult({ requestId: envelope.requestId, ok: true, code: "ARTIFACT_EXPORTED", message: `Saved ${path.basename(destination.fsPath)}; ${copied.sizeBytes} bytes and SHA-256 verified after the write.`, path: destination.fsPath, sha256: copied.sha256, sizeBytes: copied.sizeBytes });
+  }
+  const tool = inspectNativeWorkshopTool(request.toolPath);
+  if (!tool.ok) throw new Error(`Workshop command refused: ${tool.message}`);
+  const terminalRoot = resolveSteamTerminalRoot(workspaceRoot, request.stagedModPath);
+  if (terminalRoot.ok === false) throw new Error(terminalRoot.message);
+  const terminal = vscode.window.createTerminal({ name: "X4 Forge Steam Workshop", cwd: terminalRoot.cwd });
+  terminal.show(false);
+  terminal.sendText(request.command, false);
+  return postNativeReleaseResult({ requestId: envelope.requestId, ok: true, code: "STEAM_COMMAND_INSERTED", message: "The official WorkshopTool command is visible in a terminal but has not run. Review it, then press Enter yourself to authenticate/upload." });
 }
 
 function bindStudioPanel(handle: BackendHandle): boolean {

@@ -185,6 +185,7 @@ export const WRITE_SCOPE_POST_PREFIXES = [
   '/agent/workspace',
   '/agent/compile',
   '/agent/package',
+  '/agent/release/nexus/',
   '/agent/artifact/',
   '/agent/project/',
   '/agent/simulate',
@@ -209,6 +210,10 @@ export const WRITE_SCOPE_POST_PATHS = new Set([
 export const KEY_MANAGEMENT_PREFIX = '/agent/keys';
 /** GitHub routes can spend the user's external repository authority via a stored credential. */
 export const GITHUB_SESSION_ONLY_PREFIX = '/github/';
+/** Steam release preparation accepts an executable path and produces an external-tool command. */
+export const STEAM_RELEASE_SESSION_ONLY_PREFIX = '/agent/release/steam/';
+/** A user-output receipt claims a native/browser Save As completed; agents cannot assert that human-side fact. */
+export const RELEASE_EXPORT_RECEIPT_SESSION_ONLY_PATH = '/agent/release/export/receipt';
 
 /**
  * Arbitrary command execution (dev-only run_command route + its async jobs) is
@@ -226,6 +231,8 @@ export const EXEC_PREFIX = '/run_command';
 export function scopeAllows(scope: AgentKeyScope, method: string, reqPath: string): boolean {
   if (reqPath.startsWith(KEY_MANAGEMENT_PREFIX)) return false; // never via agent key
   if (reqPath.startsWith(GITHUB_SESSION_ONLY_PREFIX)) return false; // stored user credential: Studio session only
+  if (reqPath.startsWith(STEAM_RELEASE_SESSION_ONLY_PREFIX)) return false; // local executable selection: Studio session only
+  if (reqPath === RELEASE_EXPORT_RECEIPT_SESSION_ONLY_PATH) return false; // user-side Save As receipt: Studio session only
   if (reqPath.startsWith(EXEC_PREFIX)) return false; // B64-SEC1: exec is session-token-only, even on GET
   const m = method.toUpperCase();
   if (m === 'GET' || m === 'HEAD' || m === 'OPTIONS') return true; // all scopes read
@@ -318,6 +325,16 @@ export function runAgentKeysSelftest(): { pass: boolean; checks: Array<{ name: s
       (s) => scopeAllows(s, 'GET', '/github/credential') === false &&
              scopeAllows(s, 'POST', '/github/push') === false &&
              scopeAllows(s, 'DELETE', '/github/credential') === false));
+  ok('no_agent_key_scope_can_prepare_or_verify_steam_uploads',
+    (['read', 'write', 'deploy'] as AgentKeyScope[]).every(
+      (s) => scopeAllows(s, 'POST', '/agent/release/steam/prepare') === false &&
+             scopeAllows(s, 'POST', '/agent/release/steam/verify') === false &&
+             scopeAllows(s, 'POST', '/agent/release/steam/adopt') === false));
+  ok('no_agent_key_scope_can_claim_user_export_receipt',
+    (['read', 'write', 'deploy'] as AgentKeyScope[]).every(
+      (s) => scopeAllows(s, 'POST', RELEASE_EXPORT_RECEIPT_SESSION_ONLY_PATH) === false));
+  ok('write_scope_can_prepare_local_nexus_artifact',
+    scopeAllows('write', 'POST', '/agent/release/nexus/prepare') === true);
   // B64-SEC1: no agent-key scope may reach the dev-only exec route on ANY method (the
   // blanket-GET grant used to leak GET /run_command RCE to read keys). Session token only.
   ok('no_scope_can_exec_commands',

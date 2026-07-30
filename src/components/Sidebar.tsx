@@ -61,6 +61,7 @@ import {
   type SidebarTab,
   type StudioLayoutPreferences,
 } from '../lib/studioLayout';
+import type { ReleasePreferences } from '../lib/releasePreferences';
 
 interface SidebarProps {
   width?: number;
@@ -85,6 +86,7 @@ interface SidebarProps {
   activeTab: SidebarTab;
   setActiveTab: (tab: SidebarTab) => void;
   layoutPreferences: StudioLayoutPreferences;
+  releasePreferences: ReleasePreferences;
   onMoveTool: (tool: SidebarTab, target: SidebarTab | number) => void;
   onToggleToolRail: () => void;
   onTogglePanel: () => void;
@@ -257,6 +259,7 @@ export default function Sidebar({
   activeTab,
   setActiveTab,
   layoutPreferences,
+  releasePreferences,
   onMoveTool,
   onToggleToolRail,
   onTogglePanel,
@@ -642,6 +645,7 @@ export default function Sidebar({
               modWorkspacePath={modWorkspacePath}
               setWorkspaceView={setWorkspaceView}
               forceTab="playtest"
+              releasePreferences={releasePreferences}
             />
           </ErrorBoundary>
         )}

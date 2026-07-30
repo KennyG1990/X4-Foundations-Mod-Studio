@@ -31,6 +31,12 @@ export function runAgentHistorySelftest(): { pass: boolean; checks: Array<{ name
     // --- route allowlist: mutations in, read-only traffic out ---------------------------
     ok('write route is recorded as an edit', ledgerRouteKind('POST', '/api/fs/write') === 'edit');
     ok('deploy route is recorded as a deploy', ledgerRouteKind('POST', '/api/agent/deploy-verify') === 'deploy');
+    ok('platform release routes are recorded as package actions',
+      ledgerRouteKind('POST', '/api/agent/release/nexus/prepare') === 'package' &&
+      ledgerRouteKind('POST', '/api/agent/release/steam/prepare') === 'package' &&
+      ledgerRouteKind('POST', '/api/agent/release/steam/verify') === 'package' &&
+      ledgerRouteKind('POST', '/api/agent/release/steam/adopt') === 'package' &&
+      ledgerRouteKind('POST', '/api/agent/release/export/receipt') === 'package');
     ok('GET traffic is never recorded', ledgerRouteKind('GET', '/api/fs/write') === null);
     ok('reference reads are never recorded', ledgerRouteKind('POST', '/api/reference/factions') === null);
 

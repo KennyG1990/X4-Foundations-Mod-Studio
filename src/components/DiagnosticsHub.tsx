@@ -10,6 +10,7 @@ import { getAIHeaders, handleApiResponse } from '../lib/apiHelper';
 import { toSafeModId } from '../lib/modCompiler';
 import MDScanner from './MDScanner';
 import PlaytestWorkspace from './PlaytestWorkspace';
+import type { ReleasePreferences } from '../lib/releasePreferences';
 
 interface DiagnosticsHubProps {
   workspace: ModWorkspace;
@@ -20,6 +21,7 @@ interface DiagnosticsHubProps {
   forceTab?: 'analyzer' | 'playtest';
   /** A4.10 — gates the optional AI-polish affordance inside MDScanner. */
   aiEnabled?: boolean;
+  releasePreferences?: ReleasePreferences;
 }
 
 /**
@@ -33,7 +35,8 @@ export default function DiagnosticsHub({
   saveCheckpoint,
   modWorkspacePath,
   forceTab,
-  aiEnabled = false
+  aiEnabled = false,
+  releasePreferences,
 }: DiagnosticsHubProps) {
   const [toolActiveTab, setToolActiveTab] = useState<'analyzer' | 'playtest'>('analyzer');
 
@@ -269,6 +272,7 @@ export default function DiagnosticsHub({
             workspace={workspace}
             activeModId={toSafeModId(workspace.name)}
             modWorkspacePath={modWorkspacePath}
+            releasePreferences={releasePreferences}
             syncStatus={syncStatus}
             syncErrorMsg={syncErrorMsg}
             saveToDirectory={saveToDirectory}

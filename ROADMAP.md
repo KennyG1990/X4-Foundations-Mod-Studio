@@ -7003,3 +7003,32 @@ and routes 175/175.
 
 Suggested commit title:
 `fix(release): harden deploys, credentials, validation, and CI; publish X4 Forge Studio 0.0.58`.
+
+## 2026-07-30 — B109 guided verified Nexus + Steam Release Center / Open VSX 0.0.59 — VERIFIED
+
+X4 Forge now has two separate platform release experiences instead of the former generated-text-only generic ZIP.
+The Nexus flow resolves the complete explicit disk source, rejects stale/invalid projects, builds exactly one
+install-root ZIP, reopens every entry with CRC/SHA-256 verification, and prompts for a final destination whose bytes
+are re-read into a durable receipt. The Steam flow preserves extension-folder identity separately from Workshop
+identity, builds verified CAT/DAT staging plus a rollback ZIP, validates first-publish/update preview semantics,
+constructs the exact Egosoft `WorkshopTool.exe publishx4|update` command, inserts but never executes it, rejects
+post-tool payload or non-managed manifest drift, and adopts `ws_<id>` only through an explicit hash-CAS confirmation.
+
+Guided mode is the default and names each stage and failure. Settings-only Express begins local preparation with
+current/default inputs and shortens passed explanations, but never skips validation, output selection, Steam
+authentication/legal prompts, final verification, or the no-auto-upload boundary. Release Center remains visible
+without deploy-folder configuration so a fresh user can see its guidance and failure state.
+
+Evidence: platform release 24/24, distribution 31/31, native bridge 45/45, agent keys 25/25, history 67/67,
+preferences 5/5, isolated routes 227/227, focused rendered E2E 3/3, full isolated E2E 46/46, runtime-discovered
+oracles 115/115, typecheck/lint/build/precommit green, staged sidecar 6/6, exact installed Antigravity hashes,
+live sidecar 200/pass plus protected-route 401 negative, and saved installed-host screenshots for Nexus, Steam, and
+the Express setting. Open VSX accepted and serves 0.0.59; its public 17,840,878-byte VSIX exactly matches the
+installed/tested local artifact at SHA-256
+`859919BB8EF68469ADA404EFD224B350545EE1B1326F340B3DECD32BF3836910`.
+
+Real Steam Workshop and Nexus uploads were deliberately not automated or executed. `WorkshopTool.exe` is not
+installed locally; Steam authentication/legal acceptance and Nexus scanning remain user/platform authority.
+
+Suggested commit title:
+`feat(release): add guided verified Nexus and Steam packaging`.

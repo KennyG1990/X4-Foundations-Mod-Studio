@@ -18,6 +18,8 @@
  * error-severity diagnostic. The Forge never helps a modder ship a red build.
  */
 
+import crypto from 'node:crypto';
+import { constants as bufferConstants } from 'node:buffer';
 import * as zlib from 'zlib';
 import { toContentVersion } from './modCompiler';
 
@@ -51,6 +53,57 @@ export interface ZipEntry {
   data: Buffer;
 }
 
+export interface VerifiedZipEntry {
+  path: string;
+  size: number;
+  compressedSize: number;
+  crc32: number;
+  sha256: string;
+  method: 0 | 8;
+}
+
+export interface ZipVerificationResult {
+  ok: boolean;
+  entries: VerifiedZipEntry[];
+  errors: string[];
+}
+
+const ZIP32_MAX = 0xffffffff;
+const MAX_ZIP_BUFFER = Math.min(bufferConstants.MAX_LENGTH, ZIP32_MAX);
+
+/** A portable archive path: relative, forward-slash separated, and collision-safe on Windows. */
+export function normalizeZipPath(rawPath: string): string | null {
+  const candidate = String(rawPath || '');
+  if (!candidate || candidate.includes('\0') || candidate.includes('\\')) return null;
+  if (candidate.startsWith('/') || /^[a-zA-Z]:\//.test(candidate)) return null;
+  const parts = candidate.split('/');
+  if (parts.some(part => !part || part === '.' || part === '..')) return null;
+  return parts.join('/');
+}
+
+function validateZipEntries(entries: ZipEntry[]): Array<{ path: string; data: Buffer }> {
+  if (!Array.isArray(entries) || entries.length === 0) throw new Error('ZIP must contain at least one file.');
+  if (entries.length > 0xffff) throw new Error(`ZIP32 supports at most 65535 entries (got ${entries.length}).`);
+  const seen = new Set<string>();
+  let upperBound = 22;
+  return entries.map(entry => {
+    const normalized = normalizeZipPath(entry?.path);
+    if (!normalized) throw new Error(`Unsafe ZIP entry path: ${String(entry?.path || '(empty)')}`);
+    const key = normalized.toLocaleLowerCase('en-US');
+    if (seen.has(key)) throw new Error(`Duplicate or case-colliding ZIP entry path: ${normalized}`);
+    seen.add(key);
+    if (!Buffer.isBuffer(entry.data)) throw new Error(`ZIP entry data must be a Buffer: ${normalized}`);
+    const nameBytes = Buffer.byteLength(normalized, 'utf8');
+    if (nameBytes > 0xffff) throw new Error(`ZIP entry path is too long: ${normalized}`);
+    if (entry.data.length > ZIP32_MAX) throw new Error(`ZIP entry exceeds ZIP32 size limit: ${normalized}`);
+    // Worst case uses stored bytes. This is conservative and prevents Buffer/ZIP32 overflow
+    // before compression or allocation begins.
+    upperBound += 30 + nameBytes + entry.data.length + 46 + nameBytes;
+    if (upperBound > MAX_ZIP_BUFFER) throw new Error(`ZIP exceeds supported ZIP32/Node buffer size (${MAX_ZIP_BUFFER} bytes).`);
+    return { path: normalized, data: entry.data };
+  });
+}
+
 function dosDateTime(d = new Date()): { time: number; date: number } {
   return {
     time: (d.getHours() << 11) | (d.getMinutes() << 5) | Math.floor(d.getSeconds() / 2),
@@ -59,13 +112,14 @@ function dosDateTime(d = new Date()): { time: number; date: number } {
 }
 
 export function buildZip(entries: ZipEntry[]): Buffer {
+  const validated = validateZipEntries(entries);
   const { time, date } = dosDateTime();
   const localParts: Buffer[] = [];
   const centralParts: Buffer[] = [];
   let offset = 0;
 
-  for (const e of entries) {
-    const name = Buffer.from(e.path.replace(/\\/g, '/').replace(/^\/+/, ''), 'utf8');
+  for (const e of validated) {
+    const name = Buffer.from(e.path, 'utf8');
     const crc = crc32(e.data);
     const deflated = zlib.deflateRawSync(e.data, { level: 9 });
     // store wins when deflate would grow tiny files
@@ -109,11 +163,125 @@ export function buildZip(entries: ZipEntry[]): Buffer {
   const centralSize = centralParts.reduce((n, b) => n + b.length, 0);
   const eocd = Buffer.alloc(22);
   eocd.writeUInt32LE(0x06054b50, 0);         // end of central directory signature
-  eocd.writeUInt16LE(entries.length, 8);     // entries on this disk
-  eocd.writeUInt16LE(entries.length, 10);    // entries total
+  eocd.writeUInt16LE(validated.length, 8);   // entries on this disk
+  eocd.writeUInt16LE(validated.length, 10);  // entries total
   eocd.writeUInt32LE(centralSize, 12);
   eocd.writeUInt32LE(offset, 16);            // central directory offset
   return Buffer.concat([...localParts, ...centralParts, eocd]);
+}
+
+function findEocd(zip: Buffer): number {
+  const floor = Math.max(0, zip.length - 22 - 0xffff);
+  for (let offset = zip.length - 22; offset >= floor; offset--) {
+    if (zip.readUInt32LE(offset) === 0x06054b50) return offset;
+  }
+  return -1;
+}
+
+/**
+ * Reopen a ZIP from bytes and independently verify central/local headers, paths,
+ * decompression, CRC-32, sizes, and (optionally) the exact expected file hashes.
+ */
+export function verifyZipArchive(zip: Buffer, expectedEntries?: ZipEntry[]): ZipVerificationResult {
+  const errors: string[] = [];
+  const verified: VerifiedZipEntry[] = [];
+  try {
+    if (!Buffer.isBuffer(zip) || zip.length < 22) throw new Error('ZIP is truncated or empty.');
+    const eocdOffset = findEocd(zip);
+    if (eocdOffset < 0) throw new Error('ZIP end-of-central-directory record is missing.');
+    const disk = zip.readUInt16LE(eocdOffset + 4);
+    const centralDisk = zip.readUInt16LE(eocdOffset + 6);
+    const diskEntries = zip.readUInt16LE(eocdOffset + 8);
+    const totalEntries = zip.readUInt16LE(eocdOffset + 10);
+    const centralSize = zip.readUInt32LE(eocdOffset + 12);
+    const centralOffset = zip.readUInt32LE(eocdOffset + 16);
+    const commentLength = zip.readUInt16LE(eocdOffset + 20);
+    if (disk !== 0 || centralDisk !== 0 || diskEntries !== totalEntries) throw new Error('Multi-disk ZIP archives are not supported.');
+    if (eocdOffset + 22 + commentLength !== zip.length) throw new Error('ZIP has trailing or truncated comment bytes.');
+    if (centralOffset + centralSize !== eocdOffset) throw new Error('ZIP central-directory bounds do not match the archive.');
+
+    const seen = new Set<string>();
+    let totalUncompressed = 0;
+    let cursor = centralOffset;
+    for (let index = 0; index < totalEntries; index++) {
+      if (cursor + 46 > eocdOffset || zip.readUInt32LE(cursor) !== 0x02014b50) throw new Error(`ZIP central entry ${index + 1} is malformed.`);
+      const flags = zip.readUInt16LE(cursor + 8);
+      const method = zip.readUInt16LE(cursor + 10);
+      const expectedCrc = zip.readUInt32LE(cursor + 16);
+      const compressedSize = zip.readUInt32LE(cursor + 20);
+      const size = zip.readUInt32LE(cursor + 24);
+      const nameLength = zip.readUInt16LE(cursor + 28);
+      const extraLength = zip.readUInt16LE(cursor + 30);
+      const comment = zip.readUInt16LE(cursor + 32);
+      const localOffset = zip.readUInt32LE(cursor + 42);
+      const centralEnd = cursor + 46 + nameLength + extraLength + comment;
+      if (centralEnd > eocdOffset) throw new Error(`ZIP central entry ${index + 1} exceeds central-directory bounds.`);
+      if ((flags & 0x0001) !== 0) throw new Error(`Encrypted ZIP entry ${index + 1} is not supported.`);
+      if ((flags & 0x0800) === 0) throw new Error(`ZIP entry ${index + 1} does not declare UTF-8 path encoding.`);
+      if (method !== 0 && method !== 8) throw new Error(`Unsupported ZIP method ${method} at entry ${index + 1}.`);
+      totalUncompressed += size;
+      if (totalUncompressed > MAX_ZIP_BUFFER) throw new Error(`ZIP uncompressed content exceeds the supported ${MAX_ZIP_BUFFER}-byte bound.`);
+      const archivePath = zip.subarray(cursor + 46, cursor + 46 + nameLength).toString('utf8');
+      const normalized = normalizeZipPath(archivePath);
+      if (!normalized || normalized !== archivePath) throw new Error(`Unsafe ZIP entry path: ${archivePath || '(empty)'}`);
+      const key = normalized.toLocaleLowerCase('en-US');
+      if (seen.has(key)) throw new Error(`Duplicate or case-colliding ZIP entry path: ${normalized}`);
+      seen.add(key);
+
+      if (localOffset + 30 > centralOffset || zip.readUInt32LE(localOffset) !== 0x04034b50) throw new Error(`Local header is missing for ${normalized}.`);
+      const localFlags = zip.readUInt16LE(localOffset + 6);
+      const localMethod = zip.readUInt16LE(localOffset + 8);
+      const localCrc = zip.readUInt32LE(localOffset + 14);
+      const localCompressed = zip.readUInt32LE(localOffset + 18);
+      const localSize = zip.readUInt32LE(localOffset + 22);
+      const localNameLength = zip.readUInt16LE(localOffset + 26);
+      const localExtraLength = zip.readUInt16LE(localOffset + 28);
+      const localNameStart = localOffset + 30;
+      const payloadStart = localNameStart + localNameLength + localExtraLength;
+      const payloadEnd = payloadStart + compressedSize;
+      if (payloadEnd > centralOffset) throw new Error(`Compressed payload exceeds local-file bounds for ${normalized}.`);
+      const localName = zip.subarray(localNameStart, localNameStart + localNameLength).toString('utf8');
+      if (localFlags !== flags || localMethod !== method || localCrc !== expectedCrc || localCompressed !== compressedSize || localSize !== size || localName !== normalized) {
+        throw new Error(`Central/local header mismatch for ${normalized}.`);
+      }
+      const payload = zip.subarray(payloadStart, payloadEnd);
+      const restored = method === 8 ? zlib.inflateRawSync(payload, { maxOutputLength: Math.max(1, size) }) : Buffer.from(payload);
+      if (restored.length !== size) throw new Error(`Uncompressed size mismatch for ${normalized}.`);
+      const actualCrc = crc32(restored);
+      if (actualCrc !== expectedCrc) throw new Error(`CRC-32 mismatch for ${normalized}.`);
+      verified.push({
+        path: normalized,
+        size,
+        compressedSize,
+        crc32: actualCrc,
+        sha256: crypto.createHash('sha256').update(restored).digest('hex'),
+        method: method as 0 | 8,
+      });
+      cursor = centralEnd;
+    }
+    if (cursor !== eocdOffset) throw new Error('ZIP central-directory entry count/size mismatch.');
+
+    if (expectedEntries) {
+      const expected = validateZipEntries(expectedEntries);
+      const expectedByPath = new Map(expected.map(entry => [entry.path.toLocaleLowerCase('en-US'), {
+        path: entry.path,
+        size: entry.data.length,
+        sha256: crypto.createHash('sha256').update(entry.data).digest('hex'),
+      }]));
+      if (expectedByPath.size !== verified.length) errors.push(`ZIP contains ${verified.length} files; expected ${expectedByPath.size}.`);
+      for (const entry of verified) {
+        const wanted = expectedByPath.get(entry.path.toLocaleLowerCase('en-US'));
+        if (!wanted) errors.push(`Unexpected ZIP entry: ${entry.path}`);
+        else if (wanted.path !== entry.path || wanted.size !== entry.size || wanted.sha256 !== entry.sha256) errors.push(`ZIP entry verification mismatch: ${entry.path}`);
+      }
+      for (const wanted of expectedByPath.values()) {
+        if (!verified.some(entry => entry.path.toLocaleLowerCase('en-US') === wanted.path.toLocaleLowerCase('en-US'))) errors.push(`Missing ZIP entry: ${wanted.path}`);
+      }
+    }
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : String(error));
+  }
+  return { ok: errors.length === 0, entries: verified, errors };
 }
 
 /* ------------------------------------------------------------------ *
@@ -260,8 +428,30 @@ export function runModDistributionSelftest(): {
     const compSize = zip.readUInt32LE(18);
     const payload = zip.subarray(30 + nameLen, 30 + nameLen + compSize);
     const restored = method === 8 ? zlib.inflateRawSync(payload) : Buffer.from(payload);
-    ok('zip_first_entry_roundtrips', restored.toString() === '<content version="100"/>', `method=${method}`);
+  ok('zip_first_entry_roundtrips', restored.toString() === '<content version="100"/>', `method=${method}`);
   }
+  const reopened = verifyZipArchive(zip, [
+    { path: 'm/content.xml', data: Buffer.from('<content version="100"/>') },
+    { path: 'm/md/a.xml', data: Buffer.from('<mdscript name="A"><cues/></mdscript>') },
+  ]);
+  ok('zip_reopen_crc_hash_verification', reopened.ok && reopened.entries.length === 2, reopened.errors);
+  const corrupt = Buffer.from(zip);
+  corrupt[30 + Buffer.byteLength('m/content.xml') + 1] ^= 0xff;
+  ok('zip_corruption_rejected', verifyZipArchive(corrupt).ok === false);
+  let traversalRejected = false;
+  try { buildZip([{ path: '../escape.txt', data: Buffer.from('x') }]); } catch { traversalRejected = true; }
+  ok('zip_traversal_rejected_before_build', traversalRejected);
+  let duplicateRejected = false;
+  try {
+    buildZip([
+      { path: 'm/Readme.md', data: Buffer.from('a') },
+      { path: 'm/README.md', data: Buffer.from('b') },
+    ]);
+  } catch { duplicateRejected = true; }
+  ok('zip_case_collision_rejected_before_build', duplicateRejected);
+  let zipBoundRejected = false;
+  try { buildZip([{ path: `m/${'x'.repeat(0x10000)}`, data: Buffer.alloc(0) }]); } catch { zipBoundRejected = true; }
+  ok('zip_path_length_bound_rejected_before_build', zipBoundRejected);
 
   // version bumping — X4 integer convention + semver-ish + unknown-left-alone
   ok('bump_x4_integer_patch', bumpVersion('100', 'patch').version === '101');

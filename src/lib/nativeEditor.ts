@@ -61,7 +61,61 @@ export interface NativeExternalUrlRequest {
   url: typeof X4_UNPACKER_URL | typeof X4_FORGE_DISCORD_URL;
 }
 
+export type NativeReleaseAction =
+  | { action: 'select-preview' }
+  | { action: 'select-workshop-tool' }
+  | { action: 'export-artifact'; platform: 'nexus' | 'steam'; sourcePath: string; suggestedName: string; sha256: string; sizeBytes: number }
+  | { action: 'open-steam-terminal'; command: string; stagedModPath: string; toolPath: string };
+
+export interface NativeReleaseRequest {
+  source: 'x4forge-studio';
+  type: 'release-native-action';
+  requestId: string;
+  request: NativeReleaseAction;
+}
+
+export interface NativeReleaseResult {
+  source: 'x4forge-native-host';
+  type: 'release-native-result';
+  requestId: string;
+  ok: boolean;
+  cancelled?: boolean;
+  code: string;
+  message: string;
+  path?: string;
+  sha256?: string;
+  sizeBytes?: number;
+}
+
 const NATIVE_EXTERNAL_URLS = new Set<string>([X4_UNPACKER_URL, X4_FORGE_DISCORD_URL]);
+
+export function hasNativeReleaseHost(): boolean {
+  return typeof window !== 'undefined' && window.parent !== window;
+}
+
+export function requestNativeReleaseAction(request: NativeReleaseAction): Promise<NativeReleaseResult | null> {
+  if (!hasNativeReleaseHost()) return Promise.resolve(null);
+  const requestId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `release-${Date.now()}-${Math.random()}`;
+  return new Promise(resolve => {
+    const timer = window.setTimeout(() => {
+      window.removeEventListener('message', receive);
+      resolve({ source: 'x4forge-native-host', type: 'release-native-result', requestId, ok: false, code: 'NATIVE_RELEASE_TIMEOUT', message: 'The installed host did not answer the release request. Nothing was exported or launched.' });
+    }, 120_000);
+    const receive = (event: MessageEvent) => {
+      const candidate = event.data as Partial<NativeReleaseResult> | null;
+      if (event.source !== window.parent || !candidate || candidate.source !== 'x4forge-native-host'
+        || candidate.type !== 'release-native-result' || candidate.requestId !== requestId) return;
+      window.clearTimeout(timer);
+      window.removeEventListener('message', receive);
+      resolve(candidate as NativeReleaseResult);
+    };
+    window.addEventListener('message', receive);
+    const message: NativeReleaseRequest = { source: 'x4forge-studio', type: 'release-native-action', requestId, request };
+    window.parent.postMessage(message, '*');
+  });
+}
 
 interface NativeProjectFileEntry {
   path: string;

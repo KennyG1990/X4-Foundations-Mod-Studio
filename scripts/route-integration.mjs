@@ -738,6 +738,202 @@ async function main() {
   ok('hostile_large_payload_hash_identical_through_http_deploy', Boolean(largeEntry) && packedLargeHash === sourceLargeHash);
   ok('hostile_unicode_unknown_path_cataloged', catLines.some(line => line.startsWith('unknown/船/custom.noext ')));
 
+  // --- B109: platform release routes -----------------------------------------------------
+  // Complete disk-backed input, including a binary that cannot be reconstructed from a
+  // text-only browser manifest. Nexus must reopen/extract it; Steam must stage verified
+  // catalogs and stop before Egosoft's interactive upload boundary.
+  const releaseName = 'platform_release_fixture';
+  const releaseSource = path.join(safeWorkspace, releaseName);
+  fs.mkdirSync(path.join(releaseSource, 'md'), { recursive: true });
+  fs.mkdirSync(path.join(releaseSource, 'assets'), { recursive: true });
+  fs.writeFileSync(path.join(releaseSource, 'content.xml'), '<?xml version="1.0"?><content id="platform_release_fixture" name="Platform Release Fixture" version="100" author="Forge Route Test" description="Verified platform packaging fixture"/>');
+  fs.writeFileSync(path.join(releaseSource, 'md', 'release.xml'), '<?xml version="1.0"?><mdscript name="PlatformRelease"><cues/></mdscript>');
+  const releaseBinary = Buffer.from([0x00, 0xff, 0x01, 0x7f, 0x42]);
+  fs.writeFileSync(path.join(releaseSource, 'assets', 'opaque.bin'), releaseBinary);
+  const previewBytes = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
+  fs.writeFileSync(path.join(releaseSource, 'preview.png'), previewBytes);
+  fs.writeFileSync(path.join(releaseSource, 'preview.jpg'), 'unused alternate preview must not leak into Steam staging');
+  let releaseImport = await req('POST', '/api/agent/mod-folder/import', SESSION_TOKEN, { root: 'workspace', path: releaseName });
+  ok('release_fixture_imported_from_disk', releaseImport.status === 200 && !!releaseImport.json?.workspace, `status=${releaseImport.status}`);
+
+  const releaseRoot = path.join(safeWorkspace, '.forge-builds', 'releases');
+  const noWorkspaceRelease = await req('POST', '/api/agent/release/nexus/prepare', SESSION_TOKEN, {});
+  ok('nexus_release_requires_explicit_workspace', noWorkspaceRelease.status === 400 && noWorkspaceRelease.json?.code === 'WORKSPACE_REQUIRED' && noWorkspaceRelease.json?.failedStages?.includes('source'), `status=${noWorkspaceRelease.status}`);
+  ok('missing_workspace_release_writes_nothing', !fs.existsSync(releaseRoot));
+
+  fs.writeFileSync(path.join(releaseSource, 'after-import.txt'), 'stale source proof');
+  const staleRelease = await req('POST', '/api/agent/release/nexus/prepare', SESSION_TOKEN, { workspace: releaseImport.json.workspace });
+  ok('release_refuses_stale_imported_source', staleRelease.status === 409 && staleRelease.json?.code === 'RELEASE_SOURCE_STALE', `status=${staleRelease.status} code=${staleRelease.json?.code}`);
+  ok('stale_release_writes_nothing', !fs.existsSync(releaseRoot));
+  releaseImport = await req('POST', '/api/agent/mod-folder/import', SESSION_TOKEN, { root: 'workspace', path: releaseName });
+  ok('release_fixture_reimport_refreshes_source_stamp', releaseImport.status === 200 && !!releaseImport.json?.workspace, `status=${releaseImport.status}`);
+
+  const escapedReleaseRoot = path.join(tmp, 'escaped-release-root');
+  fs.mkdirSync(escapedReleaseRoot);
+  fs.mkdirSync(path.dirname(releaseRoot), { recursive: true });
+  fs.symlinkSync(escapedReleaseRoot, releaseRoot, process.platform === 'win32' ? 'junction' : 'dir');
+  const linkedReleaseOutput = await req('POST', '/api/agent/release/nexus/prepare', SESSION_TOKEN, { workspace: releaseImport.json.workspace });
+  ok('release_refuses_junction_output_root', linkedReleaseOutput.status === 409 && linkedReleaseOutput.json?.code === 'RELEASE_OUTPUT_ROOT_UNSAFE' && linkedReleaseOutput.json?.failedStages?.includes('output'), `status=${linkedReleaseOutput.status} code=${linkedReleaseOutput.json?.code}`);
+  ok('release_junction_writes_nothing_outside_workspace', fs.readdirSync(escapedReleaseRoot).length === 0);
+  fs.unlinkSync(releaseRoot);
+
+  const invalidReleaseWorkspace = { ...releaseImport.json.workspace, author: '   ', description: '   ' };
+  const invalidRelease = await req('POST', '/api/agent/release/nexus/prepare', SESSION_TOKEN, { workspace: invalidReleaseWorkspace });
+  ok('nexus_release_rejects_missing_manifest_metadata', invalidRelease.status === 422 && invalidRelease.json?.code === 'RELEASE_MANIFEST_INVALID', `status=${invalidRelease.status} code=${invalidRelease.json?.code}`);
+  ok('invalid_manifest_release_writes_no_zip', !fs.existsSync(path.join(releaseRoot, 'nexus')));
+
+  const nexusRelease = await req('POST', '/api/agent/release/nexus/prepare', SESSION_TOKEN, { workspace: releaseImport.json.workspace, bump: 'patch' });
+  ok('nexus_release_is_reopen_verified', nexusRelease.status === 200 && nexusRelease.json?.status === 'VERIFIED' && /^[a-f0-9]{64}$/.test(String(nexusRelease.json?.sha256 || '')), `status=${nexusRelease.status} state=${nexusRelease.json?.status}`);
+  ok('nexus_release_report_persisted', fs.existsSync(nexusRelease.json?.zipPath || '') && fs.existsSync(nexusRelease.json?.reportPath || ''));
+  const nexusExtract = path.join(tmp, 'nexus-extracted');
+  fs.mkdirSync(nexusExtract, { recursive: true });
+  const extract = process.platform === 'win32'
+    ? spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', 'Expand-Archive -LiteralPath $env:X4FORGE_ZIP -DestinationPath $env:X4FORGE_EXTRACT -Force'], { env: { ...process.env, X4FORGE_ZIP: nexusRelease.json?.zipPath || '', X4FORGE_EXTRACT: nexusExtract }, encoding: 'utf8' })
+    : spawnSync('unzip', ['-q', nexusRelease.json?.zipPath || '', '-d', nexusExtract], { encoding: 'utf8' });
+  ok('nexus_zip_extracts_with_independent_system_tool', extract.status === 0, String(extract.stderr || '').slice(-200));
+  const extractedBinary = path.join(nexusExtract, releaseName, 'assets', 'opaque.bin');
+  ok('nexus_extracted_binary_is_byte_identical', fs.existsSync(extractedBinary) && crypto.createHash('sha256').update(fs.readFileSync(extractedBinary)).digest('hex') === crypto.createHash('sha256').update(releaseBinary).digest('hex'));
+  ok('nexus_archive_has_single_mod_root', fs.readdirSync(nexusExtract).join(',') === releaseName, fs.readdirSync(nexusExtract).join(','));
+  const nexusExportResponse = await fetch(`${BASE}/api/agent/release/artifact/download`, {
+    method: 'POST', headers: { Authorization: `Bearer ${SESSION_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ platform: 'nexus', modId: releaseName, artifactPath: nexusRelease.json?.zipPath }),
+  });
+  const nexusExportBytes = Buffer.from(await nexusExportResponse.arrayBuffer());
+  ok('nexus_export_reopens_report_backed_artifact', nexusExportResponse.status === 200 && nexusExportBytes.equals(fs.readFileSync(nexusRelease.json.zipPath)) && nexusExportResponse.headers.get('x-x4-forge-sha256') === nexusRelease.json.sha256, `status=${nexusExportResponse.status}`);
+  const exportReceipt = await req('POST', '/api/agent/release/export/receipt', SESSION_TOKEN, { platform: 'nexus', modId: releaseName, method: 'browser-save', destination: 'platform_release_fixture_v101.zip', artifactPath: nexusRelease.json.zipPath, sha256: nexusRelease.json.sha256, sizeBytes: nexusRelease.json.sizeBytes });
+  ok('verified_export_receipt_is_recorded', exportReceipt.status === 200 && exportReceipt.json?.status === 'RECORDED' && exportReceipt.json?.sha256 === nexusRelease.json.sha256, `status=${exportReceipt.status}`);
+  const forgedExportReceipt = await req('POST', '/api/agent/release/export/receipt', SESSION_TOKEN, { platform: 'nexus', modId: releaseName, method: 'browser-save', destination: 'forged.zip', artifactPath: nexusRelease.json.zipPath, sha256: '0'.repeat(64), sizeBytes: nexusRelease.json.sizeBytes });
+  ok('forged_export_receipt_is_refused', forgedExportReceipt.status === 409 && forgedExportReceipt.json?.code === 'RELEASE_EXPORT_RECEIPT_MISMATCH', `status=${forgedExportReceipt.status} code=${forgedExportReceipt.json?.code}`);
+  const agentExportReceipt = await req('POST', '/api/agent/release/export/receipt', deployKey, { platform: 'nexus', modId: releaseName, method: 'browser-save', destination: 'agent-claimed.zip', artifactPath: nexusRelease.json.zipPath, sha256: nexusRelease.json.sha256, sizeBytes: nexusRelease.json.sizeBytes });
+  ok('agent_key_cannot_claim_user_export_receipt', agentExportReceipt.status === 403, `status=${agentExportReceipt.status}`);
+  const invalidExportReceipt = await req('POST', '/api/agent/release/export/receipt', SESSION_TOKEN, { platform: 'nexus', modId: releaseName, method: 'browser-save', destination: 'fixture.zip', sha256: 'not-a-hash', sizeBytes: 1 });
+  ok('invalid_export_receipt_is_refused', invalidExportReceipt.status === 400 && invalidExportReceipt.json?.code === 'RELEASE_EXPORT_RECEIPT_INVALID', `status=${invalidExportReceipt.status}`);
+  const pristineNexusZip = fs.readFileSync(nexusRelease.json.zipPath);
+  fs.appendFileSync(nexusRelease.json.zipPath, Buffer.from('substitution'));
+  const substitutedNexusExport = await req('POST', '/api/agent/release/artifact/download', SESSION_TOKEN, { platform: 'nexus', modId: releaseName, artifactPath: nexusRelease.json.zipPath });
+  ok('nexus_export_refuses_substituted_artifact', substitutedNexusExport.status === 409 && substitutedNexusExport.json?.code === 'RELEASE_ARTIFACT_VERIFICATION_FAILED', `status=${substitutedNexusExport.status}`);
+  fs.writeFileSync(nexusRelease.json.zipPath, pristineNexusZip);
+
+  ok('agent_key_cannot_select_or_probe_steam_tool', (await req('POST', '/api/agent/release/steam/prepare', deployKey, { workspace: releaseImport.json.workspace })).status === 403);
+  const overlongSteamName = 'a'.repeat(33);
+  const overlongSteamSource = path.join(safeWorkspace, overlongSteamName);
+  fs.mkdirSync(path.join(overlongSteamSource, 'md'), { recursive: true });
+  fs.mkdirSync(path.join(overlongSteamSource, 'assets'), { recursive: true });
+  fs.writeFileSync(path.join(overlongSteamSource, 'content.xml'), `<?xml version="1.0"?><content id="overlong_steam_fixture" name="Overlong Steam Fixture" version="100" author="Forge Route Test" description="Folder bound negative"/>`);
+  fs.writeFileSync(path.join(overlongSteamSource, 'md', 'main.xml'), '<?xml version="1.0"?><mdscript name="OverlongSteamFixture"><cues/></mdscript>');
+  fs.writeFileSync(path.join(overlongSteamSource, 'assets', 'payload.txt'), 'real payload keeps the platform negative past empty-extension validation');
+  const overlongSteamImport = await req('POST', '/api/agent/mod-folder/import', SESSION_TOKEN, { root: 'workspace', path: overlongSteamName });
+  const invalidSteamFolder = await req('POST', '/api/agent/release/steam/prepare', SESSION_TOKEN, { workspace: overlongSteamImport.json?.workspace });
+  ok('steam_release_rejects_overlong_workshop_folder', invalidSteamFolder.status === 422 && invalidSteamFolder.json?.code === 'STEAM_FOLDER_NAME_INVALID' && invalidSteamFolder.json?.failedStages?.includes('folder'), `status=${invalidSteamFolder.status} code=${invalidSteamFolder.json?.code}`);
+  ok('invalid_steam_folder_writes_no_staging', !fs.existsSync(path.join(releaseRoot, 'steam', 'a'.repeat(33))));
+  const noPreviewName = 'platform_release_no_preview';
+  const noPreviewSource = path.join(safeWorkspace, noPreviewName);
+  fs.mkdirSync(path.join(noPreviewSource, 'md'), { recursive: true });
+  fs.mkdirSync(path.join(noPreviewSource, 'assets'), { recursive: true });
+  fs.writeFileSync(path.join(noPreviewSource, 'content.xml'), '<?xml version="1.0"?><content id="platform_release_no_preview" name="No Preview Fixture" version="100" author="Forge Route Test" description="Missing preview negative"/>');
+  fs.writeFileSync(path.join(noPreviewSource, 'md', 'main.xml'), '<?xml version="1.0"?><mdscript name="NoPreviewFixture"><cues/></mdscript>');
+  fs.writeFileSync(path.join(noPreviewSource, 'assets', 'payload.txt'), 'real payload keeps the platform negative past empty-extension validation');
+  const noPreviewImport = await req('POST', '/api/agent/mod-folder/import', SESSION_TOKEN, { root: 'workspace', path: noPreviewName });
+  const steamMissingPreview = await req('POST', '/api/agent/release/steam/prepare', SESSION_TOKEN, { workspace: noPreviewImport.json?.workspace });
+  ok('steam_release_reports_missing_preview_stage', steamMissingPreview.status === 422 && steamMissingPreview.json?.code === 'STEAM_PREVIEW_REQUIRED', `status=${steamMissingPreview.status} code=${steamMissingPreview.json?.code}`);
+  const firstPublishMinor = await req('POST', '/api/agent/release/steam/prepare', SESSION_TOKEN, { workspace: releaseImport.json.workspace, minorUpdate: true });
+  ok('steam_first_publish_rejects_minor_before_staging', firstPublishMinor.status === 422 && firstPublishMinor.json?.code === 'STEAM_MINOR_UPDATE_NOT_APPLICABLE' && firstPublishMinor.json?.failedStages?.includes('version-mode'), `status=${firstPublishMinor.status} code=${firstPublishMinor.json?.code}`);
+
+  const steamWithoutTool = await req('POST', '/api/agent/release/steam/prepare', SESSION_TOKEN, { workspace: releaseImport.json.workspace });
+  ok('steam_local_artifacts_survive_missing_tool', steamWithoutTool.status === 200 && steamWithoutTool.json?.status === 'PARTIAL' && steamWithoutTool.json?.readyForUpload === false && steamWithoutTool.json?.failedStages?.includes('tool'), `status=${steamWithoutTool.status} state=${steamWithoutTool.json?.status}`);
+  const stagedPreviews = fs.readdirSync(steamWithoutTool.json?.targetPath || '').filter(name => /^preview\.(?:png|jpe?g)$/i.test(name));
+  ok('steam_stages_exactly_one_selected_preview', stagedPreviews.length === 1 && stagedPreviews[0] === 'preview.png', stagedPreviews.join(','));
+  ok('steam_backup_has_export_receipt', Number(steamWithoutTool.json?.backupSizeBytes) > 0 && /^[a-f0-9]{64}$/.test(String(steamWithoutTool.json?.backupHash || '')));
+  const steamExportResponse = await fetch(`${BASE}/api/agent/release/artifact/download`, {
+    method: 'POST', headers: { Authorization: `Bearer ${SESSION_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ platform: 'steam', modId: releaseName, artifactPath: steamWithoutTool.json?.backupPath }),
+  });
+  const steamExportBytes = Buffer.from(await steamExportResponse.arrayBuffer());
+  ok('steam_rollback_export_reopens_report_backed_artifact', steamExportResponse.status === 200 && steamExportBytes.equals(fs.readFileSync(steamWithoutTool.json.backupPath)), `status=${steamExportResponse.status}`);
+  ok('steam_missing_tool_still_builds_stage_and_backup', fs.existsSync(steamWithoutTool.json?.targetPath || '') && fs.existsSync(steamWithoutTool.json?.backupPath || ''));
+
+  const fixtureTool = path.join(safeWorkspace, 'tools', 'WorkshopTool.exe');
+  fs.mkdirSync(path.dirname(fixtureTool), { recursive: true });
+  const fixturePe = Buffer.alloc(132);
+  Buffer.from('MZ').copy(fixturePe, 0);
+  fixturePe.writeUInt32LE(128, 0x3c);
+  Buffer.from('PE\0\0', 'binary').copy(fixturePe, 128);
+  fs.writeFileSync(fixtureTool, fixturePe);
+  const steamReady = await req('POST', '/api/agent/release/steam/prepare', SESSION_TOKEN, { workspace: releaseImport.json.workspace, toolPath: fixtureTool });
+  ok('steam_release_ready_for_interactive_tool', steamReady.status === 200 && steamReady.json?.status === 'READY_FOR_INTERACTIVE_UPLOAD' && steamReady.json?.readyForUpload === true, `status=${steamReady.status} state=${steamReady.json?.status}`);
+  ok('steam_first_publish_command_uses_official_shape_without_repacking', steamReady.json?.command?.mode === 'publishx4' && steamReady.json?.command?.args?.[0] === 'publishx4' && !steamReady.json?.command?.args?.includes('-buildcat'), JSON.stringify(steamReady.json?.command || {}));
+  ok('steam_stage_contains_verified_catalogs_and_preview', fs.existsSync(path.join(steamReady.json?.targetPath || '', 'ext_01.cat')) && fs.existsSync(path.join(steamReady.json?.targetPath || '', 'ext_01.dat')) && fs.existsSync(path.join(steamReady.json?.targetPath || '', 'preview.png')));
+  const beforeWorkshop = await req('POST', '/api/agent/release/steam/verify', SESSION_TOKEN, { modId: releaseName });
+  ok('steam_post_tool_verify_rejects_missing_workshop_id', beforeWorkshop.status === 409 && beforeWorkshop.json?.code === 'STEAM_WORKSHOP_ID_MISSING', `status=${beforeWorkshop.status}`);
+
+  const steamContentPath = path.join(steamReady.json.targetPath, 'content.xml');
+  const originalSteamContent = fs.readFileSync(steamContentPath);
+  fs.rmSync(steamContentPath, { force: true });
+  const missingSteamContent = await req('POST', '/api/agent/release/steam/verify', SESSION_TOKEN, { modId: releaseName });
+  ok('steam_post_tool_verify_names_missing_manifest', missingSteamContent.status === 409 && missingSteamContent.json?.code === 'STEAM_CONTENT_MANIFEST_MISSING' && missingSteamContent.json?.failedStages?.includes('post-tool'), `status=${missingSteamContent.status} code=${missingSteamContent.json?.code}`);
+  fs.writeFileSync(steamContentPath, originalSteamContent);
+  fs.writeFileSync(steamContentPath, fs.readFileSync(steamContentPath, 'utf8').replace(/\bid="[^"]*"/, 'id="ws_123456789"'));
+  const workshopIdOnlyContent = fs.readFileSync(steamContentPath, 'utf8');
+  fs.writeFileSync(steamContentPath, workshopIdOnlyContent.replace('author="Forge Route Test"', 'author="Tampered Author"'));
+  const manifestDriftResult = await req('POST', '/api/agent/release/steam/verify', SESSION_TOKEN, { modId: releaseName });
+  ok('steam_post_tool_verify_rejects_non_workshop_manifest_drift', manifestDriftResult.status === 409 && manifestDriftResult.json?.code === 'STEAM_POST_TOOL_MANIFEST_DRIFT' && manifestDriftResult.json?.failedStages?.includes('post-tool'), `status=${manifestDriftResult.status} code=${manifestDriftResult.json?.code}`);
+  fs.writeFileSync(steamContentPath, workshopIdOnlyContent);
+  const unexpectedSteamPayload = path.join(steamReady.json.targetPath, 'unexpected-payload.txt');
+  fs.writeFileSync(unexpectedSteamPayload, 'must be rejected');
+  const addedWorkshopResult = await req('POST', '/api/agent/release/steam/verify', SESSION_TOKEN, { modId: releaseName });
+  ok('steam_post_tool_verify_rejects_added_payload', addedWorkshopResult.status === 409 && addedWorkshopResult.json?.code === 'STEAM_POST_TOOL_INTEGRITY_FAILED' && String(addedWorkshopResult.json?.error || '').includes('Unexpected staged payload'), `status=${addedWorkshopResult.status} code=${addedWorkshopResult.json?.code}`);
+  fs.rmSync(unexpectedSteamPayload, { force: true });
+  const steamDatPath = path.join(steamReady.json.targetPath, 'ext_01.dat');
+  const originalSteamDat = fs.readFileSync(steamDatPath);
+  const corruptSteamDat = Buffer.from(originalSteamDat);
+  corruptSteamDat[0] ^= 0xff;
+  fs.writeFileSync(steamDatPath, corruptSteamDat);
+  const corruptWorkshopResult = await req('POST', '/api/agent/release/steam/verify', SESSION_TOKEN, { modId: releaseName });
+  ok('steam_post_tool_verify_rejects_changed_payload', corruptWorkshopResult.status === 409 && corruptWorkshopResult.json?.code === 'STEAM_POST_TOOL_INTEGRITY_FAILED' && corruptWorkshopResult.json?.failedStages?.includes('post-tool'), `status=${corruptWorkshopResult.status}`);
+  fs.writeFileSync(steamDatPath, originalSteamDat);
+  const verifiedWorkshopResult = await req('POST', '/api/agent/release/steam/verify', SESSION_TOKEN, { modId: releaseName });
+  ok('steam_post_tool_verify_accepts_id_only_manifest_change', verifiedWorkshopResult.status === 200 && verifiedWorkshopResult.json?.status === 'VERIFIED_AFTER_WORKSHOP_TOOL' && verifiedWorkshopResult.json?.workshopId === 'ws_123456789', `status=${verifiedWorkshopResult.status}`);
+  ok('steam_source_manifest_adoption_remains_explicit', verifiedWorkshopResult.json?.sourceManifestAdoptionRequired === true);
+  const sourceManifestPath = path.join(releaseSource, 'content.xml');
+  const sourceBeforeAdoption = fs.readFileSync(sourceManifestPath);
+  const adoptionPreview = await req('POST', '/api/agent/release/steam/adopt', SESSION_TOKEN, { modId: releaseName, apply: false });
+  ok('steam_adoption_preview_is_non_mutating', adoptionPreview.status === 200 && adoptionPreview.json?.status === 'READY_TO_ADOPT' && adoptionPreview.json?.workshopId === 'ws_123456789' && fs.readFileSync(sourceManifestPath).equals(sourceBeforeAdoption), `status=${adoptionPreview.status} state=${adoptionPreview.json?.status}`);
+  fs.appendFileSync(sourceManifestPath, '\n<!-- concurrent source change -->');
+  const staleAdoption = await req('POST', '/api/agent/release/steam/adopt', SESSION_TOKEN, { modId: releaseName, apply: true, expectedSourceSha256: adoptionPreview.json?.beforeSha256, expectedWorkshopId: adoptionPreview.json?.workshopId });
+  ok('steam_adoption_refuses_source_changed_after_preview', staleAdoption.status === 409 && staleAdoption.json?.code === 'STEAM_ADOPTION_SOURCE_CHANGED' && staleAdoption.json?.failedStages?.includes('adoption'), `status=${staleAdoption.status} code=${staleAdoption.json?.code}`);
+  fs.writeFileSync(sourceManifestPath, sourceBeforeAdoption);
+  const adoptedWorkshop = await req('POST', '/api/agent/release/steam/adopt', SESSION_TOKEN, { modId: releaseName, apply: true, expectedSourceSha256: adoptionPreview.json?.beforeSha256, expectedWorkshopId: adoptionPreview.json?.workshopId });
+  ok('steam_adoption_writes_only_after_guarded_confirmation', adoptedWorkshop.status === 200 && adoptedWorkshop.json?.status === 'VERIFIED_AND_ADOPTED' && adoptedWorkshop.json?.sourceReimportRequired === true && /id="ws_123456789"/.test(fs.readFileSync(sourceManifestPath, 'utf8')), `status=${adoptedWorkshop.status} state=${adoptedWorkshop.json?.status}`);
+
+  const updateName = 'platform_release_update';
+  const updateSource = path.join(safeWorkspace, updateName);
+  fs.mkdirSync(path.join(updateSource, 'md'), { recursive: true });
+  fs.mkdirSync(path.join(updateSource, 'assets'), { recursive: true });
+  fs.writeFileSync(path.join(updateSource, 'content.xml'), '<?xml version="1.0"?><content id="ws_987654321" name="Platform Release Update" version="200" author="Forge Route Test" description="Existing Workshop update fixture"/>');
+  fs.writeFileSync(path.join(updateSource, 'md', 'update.xml'), '<?xml version="1.0"?><mdscript name="PlatformReleaseUpdate"><cues/></mdscript>');
+  fs.writeFileSync(path.join(updateSource, 'assets', 'payload.txt'), 'existing Workshop update payload');
+  const updateImport = await req('POST', '/api/agent/mod-folder/import', SESSION_TOKEN, { root: 'workspace', path: updateName });
+  ok('steam_update_fixture_imported_from_disk', updateImport.status === 200 && updateImport.json?.workspace?.contentId === 'ws_987654321', `status=${updateImport.status} contentId=${updateImport.json?.workspace?.contentId}`);
+  const nexusWorkshopIdentity = await req('POST', '/api/agent/release/nexus/prepare', SESSION_TOKEN, { workspace: updateImport.json.workspace });
+  const nexusWorkshopReport = nexusWorkshopIdentity.status === 200 ? JSON.parse(fs.readFileSync(nexusWorkshopIdentity.json.reportPath, 'utf8')) : null;
+  ok('nexus_uses_imported_folder_not_workshop_content_id', nexusWorkshopIdentity.status === 200 && nexusWorkshopIdentity.json?.folderName === updateName && nexusWorkshopReport?.entries?.every(entry => entry.path.startsWith(`${updateName}/`)), `status=${nexusWorkshopIdentity.status} body=${JSON.stringify(nexusWorkshopIdentity.json || {})}`);
+  const steamMinorUpdate = await req('POST', '/api/agent/release/steam/prepare', SESSION_TOKEN, { workspace: updateImport.json.workspace, toolPath: fixtureTool, changeNote: 'Deliberately unchanged version', minorUpdate: true });
+  ok('steam_existing_update_allows_omitted_preview', steamMinorUpdate.status === 200 && steamMinorUpdate.json?.status === 'READY_FOR_INTERACTIVE_UPLOAD' && steamMinorUpdate.json?.preview === null && steamMinorUpdate.json?.stages?.some(stage => stage.id === 'preview' && stage.status === 'skipped'), `status=${steamMinorUpdate.status} body=${JSON.stringify(steamMinorUpdate.json || {})}`);
+  ok('steam_deliberately_unchanged_update_uses_minor', steamMinorUpdate.json?.command?.mode === 'update' && steamMinorUpdate.json?.command?.args?.includes('-minor') && !steamMinorUpdate.json?.command?.args?.includes('-preview'), JSON.stringify(steamMinorUpdate.json?.command || {}));
+  ok('steam_update_preserves_folder_identity_separate_from_workshop_id', steamMinorUpdate.json?.folderName === updateName && path.basename(steamMinorUpdate.json?.targetPath || '') === updateName && steamMinorUpdate.json?.workshopId === 'ws_987654321', `folder=${steamMinorUpdate.json?.folderName} target=${steamMinorUpdate.json?.targetPath}`);
+  ok('steam_update_without_preview_stages_no_preview_file', typeof steamMinorUpdate.json?.targetPath === 'string' && fs.existsSync(steamMinorUpdate.json.targetPath) && !fs.readdirSync(steamMinorUpdate.json.targetPath).some(name => /^preview\.(?:png|jpe?g)$/i.test(name)));
+  const steamVersionedUpdate = await req('POST', '/api/agent/release/steam/prepare', SESSION_TOKEN, { workspace: updateImport.json.workspace, toolPath: fixtureTool, changeNote: 'Version already increased' });
+  ok('steam_normal_update_omits_minor', steamVersionedUpdate.status === 200 && steamVersionedUpdate.json?.command?.mode === 'update' && !steamVersionedUpdate.json?.command?.args?.includes('-minor'), JSON.stringify(steamVersionedUpdate.json?.command || {}));
+  const releaseHistory = await req('GET', '/api/agent/history?kind=package', SESSION_TOKEN);
+  const releaseHistoryRows = releaseHistory.json?.rows || [];
+  ok('platform_release_actions_are_in_agent_history', releaseHistory.status === 200
+    && releaseHistoryRows.length >= 12
+    && releaseHistoryRows.every(row => row.kind === 'package')
+    && releaseHistoryRows.some(row => row.outcome?.status === 'ok')
+    && releaseHistoryRows.some(row => row.outcome?.code === 'RELEASE_EXPORT_RECEIPT_MISMATCH')
+    && releaseHistoryRows.some(row => row.outcome?.code === 'STEAM_ADOPTION_SOURCE_CHANGED'),
+  JSON.stringify(releaseHistoryRows.map(row => ({ kind: row.kind, status: row.outcome?.status, code: row.outcome?.code }))));
+
   // --- fs/write path containment and positive safe-root write ---
   const safeFilesystemConfig = await req('POST', '/api/schema/config', SESSION_TOKEN, { ...deployedRolesConfig, filesystemPath: safeWorkspace });
   ok('optional_safe_filesystem_root_saved', safeFilesystemConfig.status === 200, `status=${safeFilesystemConfig.status}`);

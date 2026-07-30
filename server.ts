@@ -113,7 +113,20 @@ import { runXmlSourceSpanSelftest } from "./src/lib/xmlSourceSpans";
 import { runNodeSelectionDocumentSelftest } from "./src/lib/nodeSelectionDocument";
 import { buildScriptPropertyIndex, lintScriptPropertyChains, SCRIPT_PROPERTIES_FIXTURE } from "./src/lib/scriptProperties";
 import { publishInstance, unpublishInstance, latestPath, runInstanceDiscoverySelftest } from "./src/lib/instanceDiscovery";
-import { buildReleasePlan, buildZip, runModDistributionSelftest } from "./src/lib/modDistribution";
+import { buildPlayerReadme, bumpVersion, runModDistributionSelftest, setContentVersion, verifyZipArchive } from "./src/lib/modDistribution";
+import {
+  buildWorkshopCommand,
+  createNexusArchive,
+  inspectContentManifest,
+  inspectWorkshopPreview,
+  inspectWorkshopTool,
+  runPlatformReleaseSelftest,
+  steamCatalogMixErrors,
+  validateWorkshopManifestMutation,
+  validateReleaseManifest,
+  validateSteamFolderName,
+  type ReleaseStage,
+} from "./src/lib/platformRelease";
 import { aiKeyStatus, getStoredAiKey, setStoredAiKey } from "./src/server/aiKeyStore";
 import { runModDriftSelftest } from "./src/lib/modDrift";
 import { assessLuaStaleness, injectLuaVersionMarker, runLuaStalenessSelftest } from "./src/lib/luaStalenessCheck";
@@ -166,6 +179,7 @@ import { runFactionsLintSelftest, lintFactionRelations } from "./src/lib/faction
 import { runGodLintSelftest, lintGodMacros } from "./src/lib/godLint";
 import { atomicWriteFile, atomicWriteJson, readActiveState, writeActiveState, parkState, listParked, readParked, runWorkspaceStateSelftest } from "./src/lib/workspaceState";
 import { normalizeStudioLayoutPreferences, type StudioLayoutPreferences } from "./src/lib/studioLayout";
+import { normalizeReleasePreferences, type ReleasePreferences } from "./src/lib/releasePreferences";
 import { createAgentProject, createProjectFile, generateAgentProject, packageAgentProject, runProjectOrchestrationSelftest } from "./src/lib/projectOrchestration";
 import { runProjectCrossFileSelftest, validateProjectCrossFile } from "./src/lib/projectCrossFileValidation";
 import {
@@ -2209,6 +2223,7 @@ const STUDIO_STATE_DIR = process.env.X4_STATE_DIR?.trim()
   ? path.resolve(process.env.X4_STATE_DIR.trim())
   : path.join(process.cwd(), ".studio-state");
 const STUDIO_LAYOUT_STATE_FILE = path.join(STUDIO_STATE_DIR, "studio-layout.json");
+const RELEASE_PREFERENCES_STATE_FILE = path.join(STUDIO_STATE_DIR, "release-preferences.json");
 
 function readStudioLayoutState(): StudioLayoutPreferences | null {
   try {
@@ -2224,6 +2239,22 @@ function writeStudioLayoutState(raw: unknown): StudioLayoutPreferences {
   const layout = normalizeStudioLayoutPreferences(raw);
   atomicWriteJson(STUDIO_LAYOUT_STATE_FILE, layout);
   return layout;
+}
+
+function readReleasePreferencesState(): ReleasePreferences | null {
+  try {
+    if (!fs.existsSync(RELEASE_PREFERENCES_STATE_FILE)) return null;
+    return normalizeReleasePreferences(JSON.parse(fs.readFileSync(RELEASE_PREFERENCES_STATE_FILE, "utf8")));
+  } catch (error) {
+    console.warn(`[release-preferences] could not read ${RELEASE_PREFERENCES_STATE_FILE}: ${(error as Error).message} — using safe defaults`);
+    return null;
+  }
+}
+
+function writeReleasePreferencesState(raw: unknown): ReleasePreferences {
+  const preferences = normalizeReleasePreferences(raw);
+  atomicWriteJson(RELEASE_PREFERENCES_STATE_FILE, preferences);
+  return preferences;
 }
 // Legacy (no-expectedHead) writes are only auto-accepted on true first contact: a fresh
 // install where nothing was ever persisted and nothing has been written this run.
@@ -3505,6 +3536,19 @@ app.post("/api/studio/layout", (req, res) => {
     // Preference persistence must never break authoring or workspace state.
     console.error("[layout] could not persist studio layout:", error);
     return res.status(500).json({ success: false, error: "Could not persist Studio layout preferences." });
+  }
+});
+
+app.get("/api/studio/release-preferences", (_req, res) => {
+  return res.json({ preferences: readReleasePreferencesState() });
+});
+
+app.post("/api/studio/release-preferences", (req, res) => {
+  try {
+    return res.json({ success: true, preferences: writeReleasePreferencesState(req.body?.preferences) });
+  } catch (error) {
+    console.error("[release-preferences] could not persist release preferences:", error);
+    return res.status(500).json({ success: false, error: "Could not persist release packaging preferences." });
   }
 });
 
@@ -7004,6 +7048,7 @@ const SELFTESTS: Record<string, () => unknown> = {
   "xml-source-spans-selftest": runXmlSourceSpanSelftest,
   "node-selection-document-selftest": runNodeSelectionDocumentSelftest,
   "mod-distribution-selftest": runModDistributionSelftest,
+  "platform-release-selftest": runPlatformReleaseSelftest,
   "override-map-selftest": runOverrideMapSelftest,
   "catdat-selftest": runCatDatSelftest,
   "artifact-pipeline-selftest": runCompileArtifactSelftest,
@@ -9957,52 +10002,654 @@ app.post("/api/agent/artifact/build", (req, res) => {
   }
 });
 
-/**
- * POST /api/agent/package/release — B9 (2026-07-10): the "I shipped a mod" endpoint.
- * Compiles the workspace, runs the SAME diagnostics as /package, and — only on ZERO
- * errors — writes a Nexus-ready `<modId>/`-rooted zip (bumped content.xml version,
- * player install README inside) to `<modWorkspacePath>/releases/`.
- * Body: { workspace?, bump?: 'none'|'patch'|'minor' } (bump defaults to 'none').
- */
-app.post("/api/agent/package/release", (req, res) => {
-  const ws = sanitizeWorkspace(req.body?.workspace || activeWorkspace);
-  const bump = ['none', 'patch', 'minor'].includes(req.body?.bump) ? req.body.bump : 'none';
+type ReleaseBump = 'none' | 'patch' | 'minor';
+
+interface ReleaseBuildContext {
+  workspace: ModWorkspace;
+  modId: string;
+  folderName: string;
+  version: string;
+  manifestXml: string;
+  plan: ArtifactPlan;
+  stages: ReleaseStage[];
+  warnings: number;
+  cleanup(): void;
+}
+
+function releaseStage(id: string, label: string, status: ReleaseStage['status'], detail: string, evidence?: Record<string, unknown>): ReleaseStage {
+  return { id, label, status, detail, ...(evidence ? { evidence } : {}) };
+}
+
+function sendReleaseFailure(
+  res: express.Response,
+  httpStatus: number,
+  status: 'FAILED' | 'BLOCKED',
+  code: string,
+  error: string,
+  stages: ReleaseStage[],
+  extra: Record<string, unknown> = {},
+) {
+  return res.status(httpStatus).json({
+    ...extra,
+    success: false,
+    status,
+    code,
+    error,
+    stages,
+    failedStages: stages.filter(stage => stage.status === 'fail').map(stage => stage.id),
+  });
+}
+
+function configuredReleaseReadRoots(resolved: ReturnType<typeof resolveXsdConfig>): string[] {
+  return [resolved.modWorkspacePath, resolved.filesystemPath]
+    .filter((root): root is string => Boolean(root))
+    .map(root => path.resolve(root));
+}
+
+function releasePathIsAllowed(candidate: string, resolved: ReturnType<typeof resolveXsdConfig>): boolean {
+  const absolute = path.resolve(candidate);
+  return configuredReleaseReadRoots(resolved).some(root => absolute === root || isPathWithin(absolute, root));
+}
+
+function resolveReleaseOutputRoot(modWorkspacePath: string, platform: 'nexus' | 'steam', create: boolean): string {
+  const workspaceRoot = fs.realpathSync(modWorkspacePath);
+  let cursor = workspaceRoot;
+  for (const segment of ['.forge-builds', 'releases', platform]) {
+    cursor = path.join(cursor, segment);
+    if (!fs.existsSync(cursor)) {
+      if (create) fs.mkdirSync(cursor);
+      continue;
+    }
+    const stat = fs.lstatSync(cursor);
+    if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error(`Release output component is not a regular directory: ${cursor}`);
+  }
+  if (!isPathWithin(cursor, workspaceRoot) || cursor === workspaceRoot) throw new Error('Release output root escapes the configured Mod Workspace.');
+  return cursor;
+}
+
+function prepareReleaseBuild(
+  workspaceInput: unknown,
+  bump: ReleaseBump,
+  platform: 'nexus' | 'steam',
+  resolved: ReturnType<typeof resolveXsdConfig>,
+): ReleaseBuildContext | { status: number; code: string; error: string; stages: ReleaseStage[] } {
+  const stages: ReleaseStage[] = [];
+  let ephemeralSource = '';
+  const cleanup = () => {
+    if (ephemeralSource) fs.rmSync(ephemeralSource, { recursive: true, force: true });
+  };
   try {
-    const { modId, files } = buildWorkspaceFileManifest(ws);
-    const full = runFullWorkspaceValidation(ws, { modId, files });
-    const diagnostics = full.diagnostics;
-    const plan = buildReleasePlan({
-      modId, files, diagnostics, bump,
-      meta: { name: ws.name, author: ws.author, description: ws.description },
+    const workspace = activeBuildWorkspace(workspaceInput);
+    const stampedSource = typeof workspace.sourceStamp?.dir === 'string' ? path.resolve(workspace.sourceStamp.dir) : '';
+    let sourceRoot = '';
+    if (stampedSource) {
+      if (!releasePathIsAllowed(stampedSource, resolved)) {
+        return { status: 403, code: 'RELEASE_SOURCE_OUTSIDE_CONFIGURED_ROOTS', error: `Release source is outside configured project roots: ${stampedSource}`, stages: [releaseStage('source', 'Resolve complete source', 'fail', 'The imported disk source is outside the configured Mod Workspace and Filesystem roots.')] };
+      }
+      if (!fs.existsSync(stampedSource) || !fs.statSync(stampedSource).isDirectory()) {
+        return { status: 409, code: 'RELEASE_SOURCE_MISSING', error: `Imported release source is missing: ${stampedSource}`, stages: [releaseStage('source', 'Resolve complete source', 'fail', 'The imported source folder no longer exists. Re-import the mod before packaging.')] };
+      }
+      sourceRoot = stampedSource;
+      const currentSourceHash = hashFolderFingerprint(fingerprintModFolder(sourceRoot));
+      const sourceVerdict = assessSourceSync(workspace.sourceStamp, currentSourceHash, false);
+      if (!sourceVerdict.ok) {
+        return { status: 409, code: 'RELEASE_SOURCE_STALE', error: sourceVerdict.detail, stages: [releaseStage('source', 'Resolve complete source', 'fail', `${sourceVerdict.detail} Re-import the mod before packaging.`)] };
+      }
+      stages.push(releaseStage('source', 'Resolve complete source', 'pass', `Using disk-backed source ${sourceRoot}.`));
+    } else {
+      if ((workspace.passthroughFiles || []).some(file => file?.omitted)) {
+        return { status: 409, code: 'RELEASE_SOURCE_INCOMPLETE', error: 'The workspace omits passthrough bytes and has no disk source. Re-import the mod folder before packaging.', stages: [releaseStage('source', 'Resolve complete source', 'fail', 'Large or binary passthrough files were omitted from browser state and cannot be reconstructed safely.')] };
+      }
+      ephemeralSource = fs.mkdtempSync(path.join(os.tmpdir(), 'x4forge-release-source-'));
+      sourceRoot = ephemeralSource;
+      stages.push(releaseStage('source', 'Resolve complete source', 'warning', 'No imported disk source; packaging the complete in-memory workspace.'));
+    }
+
+    const built = buildWorkspaceFileManifest(workspace, { includePassthrough: !stampedSource });
+    const full = runFullWorkspaceValidation(workspace, built);
+    const blocking = full.diagnostics.filter(diagnostic => diagnostic.severity === 'error');
+    if (blocking.length > 0) {
+      cleanup();
+      return {
+        status: 422,
+        code: 'RELEASE_VALIDATION_FAILED',
+        error: `Release blocked: ${blocking.length} error diagnostic(s). Fix the reported errors before packaging.`,
+        stages: [...stages, releaseStage('validation', 'Validate project', 'fail', `${blocking.length} error diagnostic(s) block release.`, { blocking })],
+      };
+    }
+    const warnings = full.diagnostics.filter(diagnostic => diagnostic.severity === 'warning').length;
+    stages.push(releaseStage('validation', 'Validate project', warnings ? 'warning' : 'pass', warnings ? `${warnings} warning(s); zero errors.` : 'Full-project validation has zero errors.', { warnings }));
+
+    const currentManifest = built.files['content.xml'] || '';
+    const currentVersion = inspectContentManifest(currentManifest)?.version || '';
+    const bumped = bumpVersion(currentVersion, bump);
+    const manifestXml = bumped.changed ? setContentVersion(currentManifest, bumped.version) : currentManifest;
+    const manifest = validateReleaseManifest(manifestXml);
+    if (!manifest.ok || !manifest.meta) {
+      cleanup();
+      return {
+        status: 422,
+        code: 'RELEASE_MANIFEST_INVALID',
+        error: manifest.errors.join(' '),
+        stages: [...stages, releaseStage('manifest', 'Validate content.xml release metadata', 'fail', manifest.errors.join(' '), { errors: manifest.errors })],
+      };
+    }
+    stages.push(releaseStage('manifest', 'Validate content.xml release metadata', 'pass', `id=${manifest.meta.id}; version=${manifest.meta.version}; author and description present.`));
+
+    const generatedFiles = { ...built.files, 'content.xml': manifestXml };
+    const plan = buildArtifactPlan({
+      sourceRoot,
+      generatedFiles,
+      // Steam preview media is not game payload. Exclude every source candidate from
+      // CAT/DAT ownership, validate the user's one selected image, then add exactly that
+      // image to staging after catalog generation. Nexus keeps source media normally.
+      ...(platform === 'steam' ? { rules: { exclude: ['preview.png', 'preview.jpg', 'preview.jpeg'] } } : {}),
     });
     if (!plan.ok) {
-      return res.status(422).json({
-        success: false,
-        error: `Release blocked: ${plan.blocking!.length} error diagnostic(s). The Forge never packages a red build — fix them (Doctor / quick fixes), then release.`,
-        blocking: plan.blocking,
-      });
+      cleanup();
+      return {
+        status: 409,
+        code: 'RELEASE_ARTIFACT_PLAN_FAILED',
+        error: plan.errors.join('; '),
+        stages: [...stages, releaseStage('collect', 'Collect complete artifact', 'fail', plan.errors.join('; '), { errors: plan.errors })],
+      };
     }
-    const resolved = resolveXsdConfig();
-    if (resolved.modWorkspacePath && rejectUnsafeDevelopmentWrite(res, resolved, ['modWorkspacePath'])) return;
-    const baseDir = resolved.modWorkspacePath || process.cwd();
-    const releasesDir = path.join(baseDir, "releases");
-    if (!fs.existsSync(releasesDir)) fs.mkdirSync(releasesDir, { recursive: true });
-    const zipBuf = buildZip(plan.entries!);
-    const zipPath = path.join(releasesDir, plan.zipName!);
-    fs.writeFileSync(zipPath, zipBuf);
-    return res.json({
-      success: true,
-      modId: plan.modId,
-      version: plan.version,
-      zipPath,
-      sizeBytes: zipBuf.length,
-      fileCount: plan.entries!.length,
-      warnings: plan.warnings,
-      readme: plan.readme,
-    });
-  } catch (error: any) {
-    return res.status(500).json({ success: false, error: error?.message || "Failed to build release package." });
+    if (platform === 'steam') {
+      const mixErrors = steamCatalogMixErrors(plan);
+      if (mixErrors.length > 0) {
+        cleanup();
+        return { status: 409, code: 'STEAM_CATALOG_MIX_UNSAFE', error: mixErrors.join('; '), stages: [...stages, releaseStage('collect', 'Collect complete artifact', 'fail', mixErrors.join('; '))] };
+      }
+    }
+    stages.push(releaseStage('collect', 'Collect complete artifact', 'pass', `${plan.entries.length} included files; ${plan.totals.includedBytes} bytes; ${plan.excluded.length} excluded by named rules.`, { totals: plan.totals, excluded: plan.excluded }));
+    // Imported releases retain their exact extension-folder identity separately from
+    // content.xml identity. Egosoft replaces content.xml id with ws_<id> after first
+    // publish, but an update must keep using the original folder name.
+    const folderName = stampedSource ? path.basename(sourceRoot) : built.modId;
+    return { workspace, modId: built.modId, folderName, version: manifest.meta.version, manifestXml, plan, stages, warnings, cleanup };
+  } catch (error) {
+    cleanup();
+    return { status: 500, code: 'RELEASE_PREPARE_FAILED', error: errorMessage(error) || 'Release preparation failed.', stages: [...stages, releaseStage('prepare', 'Prepare release', 'fail', errorMessage(error) || 'Unknown preparation failure.')] };
   }
+}
+
+function replaceReleaseDirectory(stage: string, target: string, plan: ArtifactPlan): void {
+  const parent = path.dirname(target);
+  fs.mkdirSync(parent, { recursive: true });
+  const backup = path.join(parent, `.${path.basename(target)}.x4forge-release-backup-${process.pid}-${Date.now()}`);
+  let movedOld = false;
+  try {
+    if (fs.existsSync(target)) {
+      fs.renameSync(target, backup);
+      movedOld = true;
+    }
+    fs.renameSync(stage, target);
+    const verified = verifyMaterializedArtifact(plan, target);
+    if (!verified.ok) throw new Error(`Release directory verification failed after replacement: ${verified.errors.join('; ')}`);
+    if (movedOld) fs.rmSync(backup, { recursive: true, force: true });
+  } catch (error) {
+    try { if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true }); } catch { /* best effort */ }
+    if (movedOld && fs.existsSync(backup)) fs.renameSync(backup, target);
+    throw error;
+  } finally {
+    try { if (fs.existsSync(stage)) fs.rmSync(stage, { recursive: true, force: true }); } catch { /* best effort */ }
+  }
+}
+
+function nexusReleaseHandler(req: express.Request, res: express.Response) {
+  if (!req.body || !Object.prototype.hasOwnProperty.call(req.body, 'workspace')) {
+    return sendReleaseFailure(res, 400, 'FAILED', 'WORKSPACE_REQUIRED', 'Body must include the explicit workspace to package.', [releaseStage('source', 'Resolve complete source', 'fail', 'No explicit workspace was supplied.')]);
+  }
+  const bump: ReleaseBump = ['none', 'patch', 'minor'].includes(req.body?.bump) ? req.body.bump : 'none';
+  const resolved = resolveXsdConfig();
+  if (!resolved.modWorkspacePath) return sendReleaseFailure(res, 400, 'BLOCKED', 'MOD_WORKSPACE_REQUIRED', 'Configure a Mod Workspace Folder before packaging.', [releaseStage('output', 'Resolve release output root', 'fail', 'No Mod Workspace Folder is configured.')]);
+  if (rejectUnsafeDevelopmentWrite(res, resolved, ['modWorkspacePath'])) return;
+  const prepared = prepareReleaseBuild(req.body.workspace, bump, 'nexus', resolved);
+  if ('error' in prepared) return sendReleaseFailure(res, prepared.status, 'FAILED', prepared.code, prepared.error, prepared.stages);
+  try {
+    let releasesDir: string;
+    try {
+      releasesDir = resolveReleaseOutputRoot(resolved.modWorkspacePath, 'nexus', true);
+    } catch (error) {
+      const detail = errorMessage(error) || 'Release output root is unsafe.';
+      return sendReleaseFailure(res, 409, 'FAILED', 'RELEASE_OUTPUT_ROOT_UNSAFE', detail, [...prepared.stages, releaseStage('output', 'Resolve release output root', 'fail', detail)]);
+    }
+    const readme = buildPlayerReadme({
+      modId: prepared.folderName,
+      version: prepared.version,
+      name: prepared.workspace.name,
+      author: prepared.workspace.author,
+      description: prepared.workspace.description,
+    });
+    const archive = createNexusArchive(prepared.plan, prepared.folderName, readme);
+    if (!archive.ok) {
+      return sendReleaseFailure(res, 500, 'FAILED', 'NEXUS_ARCHIVE_FAILED', archive.errors.join('; '), [...prepared.stages, releaseStage('archive', 'Build Nexus ZIP', 'fail', archive.errors.join('; '))]);
+    }
+    const zipName = `${prepared.modId}_v${prepared.version.replace(/[^\w.-]+/g, '_')}.zip`;
+    const zipPath = path.join(releasesDir, zipName);
+    atomicWriteFile(zipPath, archive.zip);
+    const diskBytes = fs.readFileSync(zipPath);
+    const reopened = verifyZipArchive(diskBytes, archive.entries.map(entry => {
+      const source = archive.entries.find(candidate => candidate.path === entry.path)!;
+      const planned = artifactPlanToExpectedEntry(prepared.plan, prepared.folderName, entry.path, readme);
+      return { path: source.path, data: planned };
+    }));
+    if (!reopened.ok) {
+      fs.rmSync(zipPath, { force: true });
+      return sendReleaseFailure(res, 500, 'FAILED', 'NEXUS_REOPEN_FAILED', reopened.errors.join('; '), [...prepared.stages, releaseStage('archive', 'Build Nexus ZIP', 'pass', `${archive.entries.length} entries written.`), releaseStage('reopen', 'Reopen and verify ZIP', 'fail', reopened.errors.join('; '))]);
+    }
+    const sha256 = crypto.createHash('sha256').update(diskBytes).digest('hex');
+    const stages = [
+      ...prepared.stages,
+      releaseStage('archive', 'Build Nexus ZIP', 'pass', `${archive.entries.length} entries written under ${prepared.folderName}/.`),
+      releaseStage('reopen', 'Reopen and verify ZIP', 'pass', `CRC-32, uncompressed size, path safety, and SHA-256 verified for ${reopened.entries.length} entries.`),
+      releaseStage('output', 'Save verified output', 'pass', zipPath, { sha256, sizeBytes: diskBytes.length }),
+    ];
+    const reportPath = `${zipPath}.forge-release.json`;
+    atomicWriteJson(reportPath, { platform: 'nexus', status: 'VERIFIED', createdAt: new Date().toISOString(), modId: prepared.modId, folderName: prepared.folderName, version: prepared.version, zipPath, sha256, sizeBytes: diskBytes.length, entries: reopened.entries, stages, failedStages: [] });
+    return res.json({ success: true, status: 'VERIFIED', platform: 'nexus', modId: prepared.modId, folderName: prepared.folderName, version: prepared.version, zipPath, reportPath, sha256, sizeBytes: diskBytes.length, fileCount: reopened.entries.length, warnings: prepared.warnings, readme, stages, failedStages: [] });
+  } catch (error) {
+    const detail = errorMessage(error) || 'Unknown Nexus packaging failure.';
+    return sendReleaseFailure(res, 500, 'FAILED', 'NEXUS_RELEASE_FAILED', detail, [...prepared.stages, releaseStage('archive', 'Build Nexus ZIP', 'fail', detail)]);
+  } finally {
+    prepared.cleanup();
+  }
+}
+
+function artifactPlanToExpectedEntry(plan: ArtifactPlan, rootFolder: string, archivePath: string, readme: string): Buffer {
+  const relative = archivePath.slice(`${rootFolder}/`.length);
+  if (relative.toLocaleLowerCase('en-US') === 'readme_install.md' && !plan.entries.some(entry => entry.path.toLocaleLowerCase('en-US') === 'readme_install.md')) return Buffer.from(readme, 'utf8');
+  const entry = plan.entries.find(candidate => candidate.path === relative);
+  if (!entry) throw new Error(`Cannot map verified ZIP entry back to artifact plan: ${archivePath}`);
+  if (entry.content !== undefined) return Buffer.isBuffer(entry.content) ? Buffer.from(entry.content) : Buffer.from(entry.content, 'utf8');
+  if (entry.sourcePath) return fs.readFileSync(entry.sourcePath);
+  throw new Error(`Artifact entry has no readable bytes: ${entry.path}`);
+}
+
+app.post('/api/agent/release/nexus/prepare', nexusReleaseHandler);
+// B9 compatibility alias. It now uses the same explicit, disk-complete, reopen-verified engine.
+app.post('/api/agent/package/release', nexusReleaseHandler);
+
+app.post('/api/agent/release/steam/prepare', (req, res) => {
+  if (!req.body || !Object.prototype.hasOwnProperty.call(req.body, 'workspace')) {
+    return sendReleaseFailure(res, 400, 'FAILED', 'WORKSPACE_REQUIRED', 'Body must include the explicit workspace to package.', [releaseStage('source', 'Resolve complete source', 'fail', 'No explicit workspace was supplied.')]);
+  }
+  const bump: ReleaseBump = ['none', 'patch', 'minor'].includes(req.body?.bump) ? req.body.bump : 'none';
+  const resolved = resolveXsdConfig();
+  if (!resolved.modWorkspacePath) return sendReleaseFailure(res, 400, 'BLOCKED', 'MOD_WORKSPACE_REQUIRED', 'Configure a Mod Workspace Folder before packaging.', [releaseStage('output', 'Resolve release output root', 'fail', 'No Mod Workspace Folder is configured.')]);
+  if (rejectUnsafeDevelopmentWrite(res, resolved, ['modWorkspacePath'])) return;
+  const prepared = prepareReleaseBuild(req.body.workspace, bump, 'steam', resolved);
+  if ('error' in prepared) return sendReleaseFailure(res, prepared.status, 'FAILED', prepared.code, prepared.error, prepared.stages);
+  let scratchParent = '';
+  try {
+    const folderErrors = validateSteamFolderName(prepared.folderName);
+    if (folderErrors.length > 0) {
+      return sendReleaseFailure(res, 422, 'FAILED', 'STEAM_FOLDER_NAME_INVALID', folderErrors.join(' '), [...prepared.stages, releaseStage('folder', 'Validate Steam folder name', 'fail', folderErrors.join(' '), { folderName: prepared.folderName, errors: folderErrors })]);
+    }
+    prepared.stages.push(releaseStage('folder', 'Validate Steam folder name', 'pass', `${prepared.folderName} is lowercase, uses allowed characters, and is ${prepared.folderName.length}/32 characters.`));
+    const manifest = inspectContentManifest(prepared.manifestXml);
+    const isUpdate = Boolean(manifest?.workshopId);
+    if (req.body?.minorUpdate === true && !isUpdate) {
+      return sendReleaseFailure(res, 422, 'FAILED', 'STEAM_MINOR_UPDATE_NOT_APPLICABLE', 'The WorkshopTool -minor switch is valid only for an existing Workshop update.', [...prepared.stages, releaseStage('version-mode', 'Validate Workshop version mode', 'fail', 'This content.xml has no ws_<numeric> Workshop ID, so the release is a first publish and cannot use -minor.')]);
+    }
+    prepared.stages.push(releaseStage('version-mode', 'Validate Workshop version mode', 'pass', isUpdate
+      ? req.body?.minorUpdate === true
+        ? 'Existing Workshop update will use -minor because the author explicitly confirmed the published version is deliberately unchanged.'
+        : 'Existing Workshop update expects content.xml to contain a version newer than the last Workshop upload.'
+      : 'First Workshop publish; -minor is not applicable.'));
+    const sourcePreviewCandidates = ['preview.png', 'preview.jpg', 'preview.jpeg'].map(name => path.join(prepared.plan.sourceRoot, name));
+    const requestedPreview = String(req.body?.previewPath || '').trim();
+    const previewPath = requestedPreview
+      ? path.resolve(path.isAbsolute(requestedPreview) ? requestedPreview : path.join(prepared.plan.sourceRoot, requestedPreview))
+      : isUpdate ? '' : sourcePreviewCandidates.find(candidate => fs.existsSync(candidate)) || '';
+    if (!previewPath && !isUpdate) {
+      return sendReleaseFailure(res, 422, 'FAILED', 'STEAM_PREVIEW_REQUIRED', 'Select preview.png/.jpg inside a configured project root.', [...prepared.stages, releaseStage('preview', 'Validate Workshop preview', 'fail', 'No allowed preview image was selected or found in the mod root.')]);
+    }
+    if (previewPath && !releasePathIsAllowed(previewPath, resolved)) {
+      return sendReleaseFailure(res, 403, 'FAILED', 'STEAM_PREVIEW_OUTSIDE_CONFIGURED_ROOTS', 'The selected preview must be inside a configured project root.', [...prepared.stages, releaseStage('preview', 'Validate Workshop preview', 'fail', 'The selected preview is outside the configured Mod Workspace and Filesystem roots.')]);
+    }
+    const preview = previewPath ? inspectWorkshopPreview(previewPath) : null;
+    if (preview && !preview.ok) return sendReleaseFailure(res, 422, 'FAILED', 'STEAM_PREVIEW_INVALID', preview.errors.join(' '), [...prepared.stages, releaseStage('preview', 'Validate Workshop preview', 'fail', preview.errors.join(' '))], { preview });
+    if (preview) {
+      prepared.stages.push(releaseStage('preview', 'Validate Workshop preview', preview.warnings.length ? 'warning' : 'pass', preview.warnings.join(' ') || `${preview.width}x${preview.height} ${preview.format}; ${preview.sizeBytes} bytes.`, { preview }));
+    } else {
+      prepared.stages.push(releaseStage('preview', 'Validate Workshop preview', 'skipped', 'Existing Workshop update: no preview selected, so the current Workshop preview will remain unchanged.'));
+    }
+
+    let steamRoot: string;
+    try {
+      steamRoot = resolveReleaseOutputRoot(resolved.modWorkspacePath, 'steam', true);
+    } catch (error) {
+      const detail = errorMessage(error) || 'Release output root is unsafe.';
+      return sendReleaseFailure(res, 409, 'FAILED', 'RELEASE_OUTPUT_ROOT_UNSAFE', detail, [...prepared.stages, releaseStage('output', 'Resolve release output root', 'fail', detail)]);
+    }
+    scratchParent = fs.mkdtempSync(path.join(steamRoot, `.${prepared.modId}.x4forge-steam-next-`));
+    const scratchArtifact = path.join(scratchParent, prepared.folderName);
+    const packaged = materializeCatalogArtifact(prepared.plan, scratchArtifact);
+    if (!packaged.ok) return sendReleaseFailure(res, 500, 'FAILED', 'STEAM_CATALOG_BUILD_FAILED', packaged.errors.join('; '), [...prepared.stages, releaseStage('catalogs', 'Build and verify CAT/DAT', 'fail', packaged.errors.join('; '))]);
+    const previewName = preview ? `preview.${preview.format === 'jpeg' ? 'jpg' : 'png'}` : null;
+    if (preview && previewName) {
+      const stagedPreview = path.join(scratchArtifact, previewName);
+      if (path.resolve(previewPath) !== path.resolve(stagedPreview)) fs.copyFileSync(previewPath, stagedPreview);
+    }
+    const stagedPlan = buildArtifactPlan({ sourceRoot: scratchArtifact });
+    if (!stagedPlan.ok) throw new Error(`Steam staged artifact planning failed: ${stagedPlan.errors.join('; ')}`);
+    const stagedVerification = verifyMaterializedArtifact(stagedPlan, scratchArtifact);
+    if (!stagedVerification.ok) throw new Error(`Steam staged artifact verification failed: ${stagedVerification.errors.join('; ')}`);
+    prepared.stages.push(releaseStage('catalogs', 'Build and verify CAT/DAT', 'pass', `${packaged.catalogs.volumes.length} catalog volume(s); ${stagedPlan.entries.length} staged files verified.`));
+
+    const targetPath = path.join(steamRoot, prepared.folderName);
+    replaceReleaseDirectory(scratchArtifact, targetPath, stagedPlan);
+    fs.rmSync(scratchParent, { recursive: true, force: true });
+    scratchParent = '';
+    const targetVerification = verifyMaterializedArtifact(stagedPlan, targetPath);
+    if (!targetVerification.ok) throw new Error(`Steam target verification failed: ${targetVerification.errors.join('; ')}`);
+    prepared.stages.push(releaseStage('staging', 'Commit verified Steam staging folder', 'pass', targetPath, { files: stagedPlan.entries.length }));
+
+    const targetPlan = buildArtifactPlan({ sourceRoot: targetPath });
+    const backup = createNexusArchive(targetPlan, prepared.folderName);
+    if (!backup.ok) throw new Error(`Steam backup ZIP failed verification: ${backup.errors.join('; ')}`);
+    const backupPath = path.join(steamRoot, `${prepared.modId}_steam_backup_v${prepared.version}.zip`);
+    atomicWriteFile(backupPath, backup.zip);
+    const backupDisk = fs.readFileSync(backupPath);
+    const backupReopen = verifyZipArchive(backupDisk);
+    const backupHashesMatch = backupReopen.ok
+      && backupReopen.entries.length === backup.entries.length
+      && backupReopen.entries.every(entry => backup.entries.some(expected => expected.path === entry.path && expected.size === entry.size && expected.sha256 === entry.sha256));
+    if (!backupHashesMatch) {
+      fs.rmSync(backupPath, { force: true });
+      throw new Error(`Steam backup ZIP failed disk reopen verification: ${backupReopen.errors.join('; ') || 'entry hash mismatch'}`);
+    }
+    const backupHash = crypto.createHash('sha256').update(backupDisk).digest('hex');
+    prepared.stages.push(releaseStage('backup', 'Build verified rollback ZIP', 'pass', backupPath, { sha256: backupHash, sizeBytes: backupDisk.length }));
+
+    const toolPath = String(req.body?.toolPath || '').trim();
+    const toolInspection = inspectWorkshopTool(toolPath);
+    const toolReady = toolInspection.ok;
+    let command: ReturnType<typeof buildWorkshopCommand> | null = null;
+    if (toolReady) {
+      prepared.stages.push(releaseStage('tool', 'Locate Egosoft WorkshopTool', 'pass', `${toolInspection.path}; Windows PE header verified.`, { tool: toolInspection }));
+      try {
+        command = buildWorkshopCommand({
+          toolPath,
+          stagedModPath: targetPath,
+          ...(previewName ? { previewPath: path.join(targetPath, previewName) } : {}),
+          workshopId: manifest?.workshopId,
+          changeNote: req.body?.changeNote,
+          minorUpdate: req.body?.minorUpdate === true,
+        });
+        prepared.stages.push(releaseStage('command', 'Prepare interactive Workshop command', 'pass', command.display));
+      } catch (error) {
+        prepared.stages.push(releaseStage('command', 'Prepare interactive Workshop command', 'fail', errorMessage(error)));
+      }
+    } else {
+      prepared.stages.push(releaseStage('tool', 'Locate Egosoft WorkshopTool', 'fail', `${toolInspection.errors.join(' ')} Install the separate Egosoft X Tools product in Steam, then select WorkshopTool.exe.`, { tool: toolInspection }));
+      prepared.stages.push(releaseStage('command', 'Prepare interactive Workshop command', 'skipped', 'No upload command was produced because the official tool is unavailable.'));
+    }
+
+    const reportPath = path.join(steamRoot, `${prepared.modId}.forge-release.json`);
+    const integrityFiles = stagedPlan.entries
+      .filter(entry => entry.path.toLocaleLowerCase('en-US') !== 'content.xml')
+      .map(entry => ({ path: entry.path, size: entry.size, sha256: entry.sha256 }));
+    const readyForUpload = command !== null;
+    const status = readyForUpload ? 'READY_FOR_INTERACTIVE_UPLOAD' : 'PARTIAL';
+    const sourceManifestPathCandidate = prepared.workspace.sourceStamp?.dir ? path.join(prepared.plan.sourceRoot, 'content.xml') : '';
+    const sourceManifestStat = sourceManifestPathCandidate && fs.existsSync(sourceManifestPathCandidate) ? fs.lstatSync(sourceManifestPathCandidate) : null;
+    const sourceManifestPath = sourceManifestStat?.isFile() && !sourceManifestStat.isSymbolicLink() && sourceManifestStat.size <= 1024 * 1024 && releasePathIsAllowed(sourceManifestPathCandidate, resolved)
+      ? path.resolve(sourceManifestPathCandidate) : null;
+    const sourceManifestSha256 = sourceManifestPath ? hashArtifactFile(sourceManifestPath) : null;
+    atomicWriteJson(reportPath, {
+      platform: 'steam', status, createdAt: new Date().toISOString(), modId: prepared.modId, folderName: prepared.folderName, version: prepared.version,
+      targetPath, backupPath, backupHash, backupSizeBytes: backupDisk.length,
+      preview: preview && previewName ? { ...preview, stagedPath: path.join(targetPath, previewName) } : null,
+      preparedManifestXml: prepared.manifestXml,
+      sourceManifestPath, sourceManifestSha256, sourceManifestAdoptionAvailable: Boolean(sourceManifestPath),
+      toolPath: toolReady ? path.resolve(toolPath) : null, command, integrityFiles, stages: prepared.stages,
+      failedStages: prepared.stages.filter(stage => stage.status === 'fail').map(stage => stage.id),
+    });
+    return res.json({ success: true, status, platform: 'steam', readyForUpload, modId: prepared.modId, folderName: prepared.folderName, version: prepared.version, workshopId: manifest?.workshopId || null, targetPath, backupPath, backupHash, backupSizeBytes: backupDisk.length, reportPath, preview, command, sourceManifestAdoptionAvailable: Boolean(sourceManifestPath), warnings: prepared.warnings, stages: prepared.stages, failedStages: prepared.stages.filter(stage => stage.status === 'fail').map(stage => stage.id) });
+  } catch (error) {
+    const detail = errorMessage(error) || 'Unknown Steam preparation failure.';
+    return sendReleaseFailure(res, 500, 'FAILED', 'STEAM_RELEASE_FAILED', detail, [...prepared.stages, releaseStage('steam', 'Prepare Steam release', 'fail', detail)]);
+  } finally {
+    if (scratchParent) fs.rmSync(scratchParent, { recursive: true, force: true });
+    prepared.cleanup();
+  }
+});
+
+type ReleasePlatform = 'nexus' | 'steam';
+
+function verifyPreparedReleaseArtifact(platform: ReleasePlatform, modId: string, requestedPath: string, modWorkspacePath: string): { artifactPath: string; reportPath: string; sha256: string; sizeBytes: number } {
+  const releaseRoot = resolveReleaseOutputRoot(modWorkspacePath, platform, false);
+  const artifactPath = path.resolve(requestedPath);
+  const relativeArtifact = path.relative(releaseRoot, artifactPath);
+  if (!relativeArtifact || relativeArtifact.startsWith('..') || path.isAbsolute(relativeArtifact)) throw new Error('The requested artifact is outside the verified release root.');
+  const artifactStat = fs.lstatSync(artifactPath);
+  if (artifactStat.isSymbolicLink() || !artifactStat.isFile() || path.extname(artifactPath).toLowerCase() !== '.zip') throw new Error('The requested artifact is not a regular verified ZIP.');
+  const reportPath = platform === 'nexus' ? `${artifactPath}.forge-release.json` : path.join(releaseRoot, `${modId}.forge-release.json`);
+  const reportStat = fs.lstatSync(reportPath);
+  if (reportStat.isSymbolicLink() || !reportStat.isFile()) throw new Error('The Forge release report is missing or is not a regular file.');
+  const report = JSON.parse(fs.readFileSync(reportPath, 'utf8')) as Record<string, unknown>;
+  const recordedPath = path.resolve(String(platform === 'nexus' ? report.zipPath || '' : report.backupPath || ''));
+  const recordedHash = String(platform === 'nexus' ? report.sha256 || '' : report.backupHash || '').toLowerCase();
+  const recordedSize = Number(platform === 'nexus' ? report.sizeBytes : report.backupSizeBytes);
+  const actualHash = hashArtifactFile(artifactPath);
+  if (report.platform !== platform || report.modId !== modId || recordedPath !== artifactPath || !/^[a-f0-9]{64}$/.test(recordedHash)
+    || actualHash !== recordedHash || artifactStat.size !== recordedSize) {
+    throw new Error('The artifact no longer matches its Forge release report. Rebuild it before export.');
+  }
+  return { artifactPath, reportPath, sha256: recordedHash, sizeBytes: recordedSize };
+}
+
+app.post('/api/agent/release/artifact/download', (req, res) => {
+  const platform = req.body?.platform === 'steam' ? 'steam' : req.body?.platform === 'nexus' ? 'nexus' : '';
+  const modId = String(req.body?.modId || '').trim();
+  const requestedPath = String(req.body?.artifactPath || '').trim();
+  if (!platform || !/^[A-Za-z][\w.-]*$/.test(modId) || !requestedPath) {
+    return res.status(400).json({ success: false, code: 'RELEASE_ARTIFACT_REQUEST_INVALID', error: 'A platform, safe modId, and prepared artifact path are required.' });
+  }
+  const resolved = resolveXsdConfig();
+  if (!resolved.modWorkspacePath) return res.status(400).json({ success: false, code: 'MOD_WORKSPACE_REQUIRED', error: 'Configure a Mod Workspace Folder first.' });
+  try {
+    const verified = verifyPreparedReleaseArtifact(platform, modId, requestedPath, resolved.modWorkspacePath);
+    res.setHeader('X-X4-Forge-SHA256', verified.sha256);
+    res.setHeader('X-X4-Forge-Size', String(verified.sizeBytes));
+    return res.download(verified.artifactPath, path.basename(verified.artifactPath));
+  } catch (error) {
+    return res.status(409).json({ success: false, code: 'RELEASE_ARTIFACT_VERIFICATION_FAILED', error: errorMessage(error) || 'Could not verify the prepared release artifact.' });
+  }
+});
+
+app.post('/api/agent/release/export/receipt', (req, res) => {
+  const platform = req.body?.platform === 'steam' ? 'steam' : req.body?.platform === 'nexus' ? 'nexus' : '';
+  const modId = String(req.body?.modId || '').trim();
+  const method = req.body?.method === 'native-save' ? 'native-save' : req.body?.method === 'browser-save' ? 'browser-save' : '';
+  const destination = String(req.body?.destination || '').replace(/[\r\n\0]/g, ' ').trim().slice(0, 4096);
+  const artifactPath = String(req.body?.artifactPath || '').trim();
+  const sha256 = String(req.body?.sha256 || '').toLowerCase();
+  const sizeBytes = Number(req.body?.sizeBytes);
+  if (!platform || !/^[A-Za-z][\w.-]*$/.test(modId) || !method || !destination || !artifactPath || !/^[a-f0-9]{64}$/.test(sha256)
+    || !Number.isSafeInteger(sizeBytes) || sizeBytes <= 0 || sizeBytes > 0xffffffff) {
+    return res.status(400).json({ success: false, code: 'RELEASE_EXPORT_RECEIPT_INVALID', error: 'A complete verified export receipt is required.' });
+  }
+  const resolved = resolveXsdConfig();
+  if (!resolved.modWorkspacePath) return res.status(400).json({ success: false, code: 'MOD_WORKSPACE_REQUIRED', error: 'Configure a Mod Workspace Folder first.' });
+  try {
+    const verified = verifyPreparedReleaseArtifact(platform, modId, artifactPath, resolved.modWorkspacePath);
+    if (verified.sha256 !== sha256 || verified.sizeBytes !== sizeBytes) throw new Error('The saved-output receipt does not match the prepared artifact report.');
+    return res.json({ success: true, status: 'RECORDED', platform, modId, method, destination, artifactPath: verified.artifactPath, sha256, sizeBytes, recordedAt: new Date().toISOString() });
+  } catch (error) {
+    return res.status(409).json({ success: false, code: 'RELEASE_EXPORT_RECEIPT_MISMATCH', error: errorMessage(error) || 'The export receipt did not match a verified prepared artifact.' });
+  }
+});
+
+interface SteamReleaseReport extends Record<string, unknown> {
+  platform?: string;
+  status?: string;
+  modId?: string;
+  folderName?: string;
+  targetPath?: string;
+  sourceManifestPath?: string | null;
+  sourceManifestSha256?: string | null;
+  sourceManifestAdoptionAvailable?: boolean;
+  preparedManifestXml?: string;
+  workshopId?: string;
+  stages?: ReleaseStage[];
+  integrityFiles?: Array<{ path: string; size: number; sha256: string }>;
+}
+
+type SteamReportResolution =
+  | { ok: true; steamRoot: string; reportPath: string; targetPath: string; report: SteamReleaseReport }
+  | { ok: false; status: number; code: string; error: string };
+
+function resolveSteamReleaseReport(modWorkspacePath: string, modId: string): SteamReportResolution {
+  try {
+    const steamRoot = resolveReleaseOutputRoot(modWorkspacePath, 'steam', false);
+    const reportPath = path.join(steamRoot, `${modId}.forge-release.json`);
+    if (!fs.existsSync(reportPath)) return { ok: false, status: 404, code: 'STEAM_PREPARE_REPORT_MISSING', error: 'Run Steam preparation before continuing.' };
+    const reportStat = fs.lstatSync(reportPath);
+    if (!reportStat.isFile() || reportStat.isSymbolicLink()) return { ok: false, status: 409, code: 'STEAM_PREPARE_REPORT_INVALID', error: 'The Steam preparation report is not a regular file.' };
+    const report = JSON.parse(fs.readFileSync(reportPath, 'utf8')) as SteamReleaseReport;
+    const folderName = String(report.folderName || '');
+    const targetPath = path.resolve(String(report.targetPath || ''));
+    const expectedTargetPath = path.resolve(steamRoot, folderName);
+    const targetStat = targetPath && fs.existsSync(targetPath) ? fs.lstatSync(targetPath) : null;
+    if (report.platform !== 'steam' || report.modId !== modId || validateSteamFolderName(folderName).length > 0
+      || targetPath !== expectedTargetPath || !isPathWithin(targetPath, steamRoot)
+      || !targetStat?.isDirectory() || targetStat.isSymbolicLink()) {
+      return { ok: false, status: 409, code: 'STEAM_PREPARE_REPORT_INVALID', error: 'The Steam preparation report no longer identifies a safe verified staging folder. Rebuild it.' };
+    }
+    return { ok: true, steamRoot, reportPath, targetPath, report };
+  } catch (error) {
+    return { ok: false, status: 409, code: 'RELEASE_OUTPUT_ROOT_UNSAFE', error: errorMessage(error) || 'Release output root is unsafe.' };
+  }
+}
+
+app.post('/api/agent/release/steam/verify', (req, res) => {
+  const modId = String(req.body?.modId || '').trim();
+  if (!/^[A-Za-z][\w.-]*$/.test(modId)) return sendReleaseFailure(res, 400, 'FAILED', 'MOD_ID_REQUIRED', 'A safe modId from the Steam prepare report is required.', [releaseStage('post-tool', 'Resolve prepared Steam release', 'fail', 'The supplied modId is missing or unsafe.')]);
+  const resolved = resolveXsdConfig();
+  if (!resolved.modWorkspacePath) return sendReleaseFailure(res, 400, 'BLOCKED', 'MOD_WORKSPACE_REQUIRED', 'Configure a Mod Workspace Folder first.', [releaseStage('post-tool', 'Resolve prepared Steam release', 'fail', 'No Mod Workspace Folder is configured.')]);
+  const loaded = resolveSteamReleaseReport(resolved.modWorkspacePath, modId);
+  if (loaded.ok === false) return sendReleaseFailure(res, loaded.status, 'FAILED', loaded.code, loaded.error, [releaseStage('post-tool', 'Resolve prepared Steam release', 'fail', loaded.error)]);
+  const { reportPath, targetPath, report } = loaded;
+  try {
+    const contentPath = path.join(targetPath, 'content.xml');
+    const contentStat = fs.existsSync(contentPath) ? fs.lstatSync(contentPath) : null;
+    if (!contentStat?.isFile() || contentStat.isSymbolicLink()) {
+      return sendReleaseFailure(res, 409, 'FAILED', 'STEAM_CONTENT_MANIFEST_MISSING', 'WorkshopTool did not leave a regular staged content.xml to verify.', [...(report.stages || []), releaseStage('post-tool', 'Verify Workshop result', 'fail', 'The staged content.xml is missing, not a regular file, or was replaced by a symbolic link.')]);
+    }
+    const manifestValidation = validateReleaseManifest(fs.readFileSync(contentPath, 'utf8'));
+    if (!manifestValidation.ok || !manifestValidation.meta?.workshopId) {
+      return sendReleaseFailure(res, 409, 'FAILED', 'STEAM_WORKSHOP_ID_MISSING', 'WorkshopTool did not write a ws_<numeric> id into staged content.xml.', [...(report.stages || []), releaseStage('post-tool', 'Verify Workshop result', 'fail', 'No ws_<numeric> id found in staged content.xml. The upload may have failed or the legal agreement may still require acceptance.')]);
+    }
+    const manifestMutation = validateWorkshopManifestMutation(String(report.preparedManifestXml || ''), fs.readFileSync(contentPath, 'utf8'));
+    if (!manifestMutation.ok) {
+      return sendReleaseFailure(res, 409, 'FAILED', 'STEAM_POST_TOOL_MANIFEST_DRIFT', manifestMutation.errors.join(' '), [...(report.stages || []), releaseStage('post-tool', 'Verify Workshop result', 'fail', manifestMutation.errors.join(' '), { manifestMutation })], { manifestMutation });
+    }
+    const integrityErrors: string[] = [];
+    const expectedFiles = Array.isArray(report.integrityFiles) ? report.integrityFiles : [];
+    const actualPlan = buildArtifactPlan({ sourceRoot: targetPath });
+    if (!actualPlan.ok) integrityErrors.push(...actualPlan.errors.map(error => `Could not inspect staged payload after WorkshopTool: ${error}`));
+    const actualFiles = new Map(actualPlan.entries
+      .filter(entry => entry.path.toLocaleLowerCase('en-US') !== 'content.xml')
+      .map(entry => [entry.path, entry]));
+    const expectedPaths = new Set(expectedFiles.map(expected => String(expected.path)));
+    for (const expected of expectedFiles) {
+      const actual = actualFiles.get(String(expected.path));
+      if (!actual) integrityErrors.push(`Missing staged payload after WorkshopTool: ${expected.path}`);
+      else if (actual.size !== expected.size || actual.sha256 !== expected.sha256) integrityErrors.push(`Staged payload changed after WorkshopTool: ${expected.path}`);
+    }
+    for (const actualPath of actualFiles.keys()) if (!expectedPaths.has(actualPath)) integrityErrors.push(`Unexpected staged payload after WorkshopTool: ${actualPath}`);
+    if (integrityErrors.length > 0) return sendReleaseFailure(res, 409, 'FAILED', 'STEAM_POST_TOOL_INTEGRITY_FAILED', integrityErrors.join('; '), [...(report.stages || []), releaseStage('post-tool', 'Verify Workshop result', 'fail', integrityErrors.join('; '))], { errors: integrityErrors });
+    const stages = [...(report.stages || []), releaseStage('post-tool', 'Verify Workshop result', 'pass', `Workshop id ${manifestValidation.meta.workshopId} written; only ${manifestMutation.changedManagedAttributes.join(', ') || 'no'} Workshop-managed manifest attributes changed, and the exact ${expectedFiles.length}-file non-manifest payload remains byte-identical.`)];
+    const updated = { ...report, status: 'VERIFIED_AFTER_WORKSHOP_TOOL', verifiedAt: new Date().toISOString(), workshopId: manifestValidation.meta.workshopId, stages, failedStages: [] };
+    atomicWriteJson(reportPath, updated);
+    return res.json({ success: true, status: 'VERIFIED_AFTER_WORKSHOP_TOOL', platform: 'steam', modId, workshopId: manifestValidation.meta.workshopId, targetPath, reportPath, sourceManifestAdoptionRequired: report.sourceManifestAdoptionAvailable === true, sourceManifestAdoptionAvailable: report.sourceManifestAdoptionAvailable === true, stages, failedStages: [] });
+  } catch (error) {
+    const detail = errorMessage(error) || 'Steam post-tool verification failed.';
+    return sendReleaseFailure(res, 500, 'FAILED', 'STEAM_VERIFY_FAILED', detail, [releaseStage('post-tool', 'Verify Workshop result', 'fail', detail)]);
+  }
+});
+
+app.post('/api/agent/release/steam/adopt', (req, res) => {
+  const modId = String(req.body?.modId || '').trim();
+  if (!/^[A-Za-z][\w.-]*$/.test(modId)) return sendReleaseFailure(res, 400, 'FAILED', 'MOD_ID_REQUIRED', 'A safe modId from the verified Steam report is required.', [releaseStage('adoption', 'Adopt Workshop metadata into source', 'fail', 'The supplied modId is missing or unsafe.')]);
+  const resolved = resolveXsdConfig();
+  if (!resolved.modWorkspacePath) return sendReleaseFailure(res, 400, 'BLOCKED', 'MOD_WORKSPACE_REQUIRED', 'Configure a Mod Workspace Folder first.', [releaseStage('adoption', 'Adopt Workshop metadata into source', 'fail', 'No Mod Workspace Folder is configured.')]);
+  const loaded = resolveSteamReleaseReport(resolved.modWorkspacePath, modId);
+  if (loaded.ok === false) return sendReleaseFailure(res, loaded.status, 'FAILED', loaded.code, loaded.error, [releaseStage('adoption', 'Adopt Workshop metadata into source', 'fail', loaded.error)]);
+  const { reportPath, targetPath, report } = loaded;
+  const priorStages = report.stages || [];
+  if (report.status !== 'VERIFIED_AFTER_WORKSHOP_TOOL' && report.status !== 'VERIFIED_AND_ADOPTED') {
+    return sendReleaseFailure(res, 409, 'FAILED', 'STEAM_ADOPTION_NOT_VERIFIED', 'Verify the WorkshopTool result before adopting source metadata.', [...priorStages, releaseStage('adoption', 'Adopt Workshop metadata into source', 'fail', `Report status is ${report.status || 'unknown'}, not VERIFIED_AFTER_WORKSHOP_TOOL.`)]);
+  }
+  const sourceManifestPath = path.resolve(String(report.sourceManifestPath || ''));
+  const expectedPreparedSourceHash = String(report.sourceManifestSha256 || '').toLowerCase();
+  const sourceStat = sourceManifestPath && fs.existsSync(sourceManifestPath) ? fs.lstatSync(sourceManifestPath) : null;
+  if (report.sourceManifestAdoptionAvailable !== true || path.basename(sourceManifestPath).toLowerCase() !== 'content.xml'
+    || path.basename(path.dirname(sourceManifestPath)) !== report.folderName || !releasePathIsAllowed(sourceManifestPath, resolved)
+    || !sourceStat?.isFile() || sourceStat.isSymbolicLink() || sourceStat.size > 1024 * 1024 || !/^[a-f0-9]{64}$/.test(expectedPreparedSourceHash)) {
+    return sendReleaseFailure(res, 409, 'FAILED', 'STEAM_ADOPTION_SOURCE_UNAVAILABLE', 'The original disk-backed source manifest is unavailable, too large, or outside configured project roots.', [...priorStages, releaseStage('adoption', 'Adopt Workshop metadata into source', 'fail', 'Re-import the original mod folder and prepare the Steam release again.')]);
+  }
+  const stagedManifestPath = path.join(targetPath, 'content.xml');
+  const stagedStat = fs.existsSync(stagedManifestPath) ? fs.lstatSync(stagedManifestPath) : null;
+  if (!stagedStat?.isFile() || stagedStat.isSymbolicLink() || stagedStat.size > 1024 * 1024) {
+    return sendReleaseFailure(res, 409, 'FAILED', 'STEAM_ADOPTION_STAGED_MANIFEST_INVALID', 'The verified staged content.xml is unavailable or too large.', [...priorStages, releaseStage('adoption', 'Adopt Workshop metadata into source', 'fail', 'Re-run post-tool verification before adoption.')]);
+  }
+  const beforeBytes = fs.readFileSync(sourceManifestPath);
+  const afterBytes = fs.readFileSync(stagedManifestPath);
+  const beforeContent = beforeBytes.toString('utf8');
+  const afterContent = afterBytes.toString('utf8');
+  const beforeSha256 = crypto.createHash('sha256').update(beforeBytes).digest('hex');
+  const afterSha256 = crypto.createHash('sha256').update(afterBytes).digest('hex');
+  const stagedManifest = validateReleaseManifest(afterContent);
+  if (!stagedManifest.ok || !stagedManifest.meta?.workshopId || stagedManifest.meta.workshopId !== report.workshopId) {
+    return sendReleaseFailure(res, 409, 'FAILED', 'STEAM_ADOPTION_WORKSHOP_ID_MISMATCH', 'The staged manifest no longer matches the verified Workshop ID.', [...priorStages, releaseStage('adoption', 'Adopt Workshop metadata into source', 'fail', 'Re-run post-tool verification before adoption.')]);
+  }
+  const preview = {
+    sourceManifestPath,
+    workshopId: stagedManifest.meta.workshopId,
+    version: stagedManifest.meta.version,
+    beforeSha256,
+    afterSha256,
+    beforeContent,
+    afterContent,
+  };
+  if (req.body?.apply !== true) {
+    return res.json({ success: true, status: beforeSha256 === afterSha256 ? 'ALREADY_ADOPTED' : 'READY_TO_ADOPT', platform: 'steam', modId, ...preview, sourceWritePerformed: false, stages: [...priorStages, releaseStage('adoption-preview', 'Preview source Workshop metadata adoption', 'pass', beforeSha256 === afterSha256 ? 'Source content.xml already matches the verified staged manifest.' : 'No source write performed; review the before/after content and confirm explicitly.')], failedStages: [] });
+  }
+  const expectedSourceSha256 = String(req.body?.expectedSourceSha256 || '').toLowerCase();
+  const expectedWorkshopId = String(req.body?.expectedWorkshopId || '');
+  if (expectedSourceSha256 !== beforeSha256 || expectedSourceSha256 !== expectedPreparedSourceHash) {
+    return sendReleaseFailure(res, 409, 'FAILED', 'STEAM_ADOPTION_SOURCE_CHANGED', 'Source content.xml changed after Steam preparation or adoption preview. Re-import and prepare again.', [...priorStages, releaseStage('adoption', 'Adopt Workshop metadata into source', 'fail', 'The source SHA-256 no longer matches the guarded preparation baseline.')], { currentSourceSha256: beforeSha256 });
+  }
+  if (expectedWorkshopId !== stagedManifest.meta.workshopId) {
+    return sendReleaseFailure(res, 409, 'FAILED', 'STEAM_ADOPTION_CONFIRMATION_MISMATCH', 'The confirmed Workshop ID does not match the verified staged manifest.', [...priorStages, releaseStage('adoption', 'Adopt Workshop metadata into source', 'fail', 'Preview the adoption again before confirming.')]);
+  }
+  let writtenSha256 = '';
+  try {
+    atomicWriteFile(sourceManifestPath, afterBytes);
+    writtenSha256 = hashArtifactFile(sourceManifestPath);
+    if (writtenSha256 !== afterSha256) {
+      atomicWriteFile(sourceManifestPath, beforeBytes);
+      if (hashArtifactFile(sourceManifestPath) !== beforeSha256) throw new Error('Source adoption verification failed and rollback could not restore the original content.xml.');
+      throw new Error('Source content.xml did not match the verified staged manifest after the write; the original bytes were restored.');
+    }
+  } catch (error) {
+    const detail = errorMessage(error) || 'Source manifest adoption failed.';
+    return sendReleaseFailure(res, 500, 'FAILED', 'STEAM_ADOPTION_WRITE_FAILED', detail, [...priorStages, releaseStage('adoption', 'Adopt Workshop metadata into source', 'fail', detail)]);
+  }
+  const stages = [...priorStages, releaseStage('adoption', 'Adopt Workshop metadata into source', 'pass', `Workshop id ${stagedManifest.meta.workshopId} and release version ${stagedManifest.meta.version} written to ${sourceManifestPath}. Re-import is required before further packaging.`)];
+  const updated = { ...report, status: 'VERIFIED_AND_ADOPTED', adoptedAt: new Date().toISOString(), adoptedSourceSha256: writtenSha256, sourceManifestSha256: writtenSha256, sourceManifestAdoptionRequired: false, stages, failedStages: [] };
+  try {
+    atomicWriteJson(reportPath, updated);
+  } catch (error) {
+    const detail = errorMessage(error) || 'Could not update the Steam release report.';
+    const partialStages = [...stages, releaseStage('adoption-report', 'Record source adoption', 'fail', `${detail} Source content.xml was already written and verified; do not repeat the write.`)];
+    return res.json({ success: true, status: 'PARTIAL', code: 'STEAM_ADOPTION_REPORT_WRITE_FAILED', platform: 'steam', modId, ...preview, beforeContent: undefined, afterContent: undefined, sourceWritePerformed: beforeSha256 !== afterSha256, sourceReimportRequired: true, writtenSha256, error: `Source content.xml was written and verified, but the release report update failed: ${detail}`, stages: partialStages, failedStages: ['adoption-report'] });
+  }
+  return res.json({ success: true, status: 'VERIFIED_AND_ADOPTED', platform: 'steam', modId, ...preview, beforeContent: undefined, afterContent: undefined, sourceWritePerformed: beforeSha256 !== afterSha256, sourceReimportRequired: true, writtenSha256, stages, failedStages: [] });
 });
 
 function populateNodeMetadata(nodes: any[]): any[] {

@@ -25,7 +25,8 @@ import {
   Eye,
   EyeOff,
   RotateCcw,
-  PanelLeft
+  PanelLeft,
+  PackageCheck
 } from 'lucide-react';
 import {
   openExternalUrlInNativeHost,
@@ -41,6 +42,7 @@ import {
   type StudioLayoutPreferences,
 } from '../lib/studioLayout';
 import type { WorkspaceView } from '../lib/experienceMode';
+import type { ReleasePreferences } from '../lib/releasePreferences';
 
 type AiTier = 'off' | 'explain' | 'assist' | 'cobuild';
 
@@ -91,6 +93,8 @@ interface DirectorySettingsModalProps {
   onOpenAIConfig: () => void;
   layoutPreferences: StudioLayoutPreferences;
   setLayoutPreferences: React.Dispatch<React.SetStateAction<StudioLayoutPreferences>>;
+  releasePreferences: ReleasePreferences;
+  setReleasePreferences: React.Dispatch<React.SetStateAction<ReleasePreferences>>;
 }
 
 // A4.1 — opt-in AI presence tiers. Off by default; determinism is never gated by this.
@@ -176,6 +180,8 @@ export default function DirectorySettingsModal({
   onOpenAIConfig,
   layoutPreferences,
   setLayoutPreferences,
+  releasePreferences,
+  setReleasePreferences,
 }: DirectorySettingsModalProps) {
   const [gamePath, setGamePath] = useState('');
   const [schemaPath, setSchemaPath] = useState('');
@@ -442,6 +448,38 @@ export default function DirectorySettingsModal({
               <span className="text-[9px] text-slate-500">Drag tabs on the bars, or use these keyboard-accessible arrow controls. At least one destination always remains visible.</span>
               <button type="button" data-testid="reset-studio-layout" onClick={() => setLayoutPreferences({ ...DEFAULT_STUDIO_LAYOUT, workspaceOrder: [...DEFAULT_STUDIO_LAYOUT.workspaceOrder], toolOrder: [...DEFAULT_STUDIO_LAYOUT.toolOrder] })} className="settings-button shrink-0"><RotateCcw className="w-3 h-3" /> Reset layout</button>
             </div>
+          </DirectoryRow>
+
+          <DirectoryRow
+            icon={<PackageCheck className="w-4 h-4" />}
+            title="Release Packaging Mode"
+            tooltip="Guided mode explains and displays every required stage. Express mode collapses successful detail only; it never skips validation, confirmation, output selection, or Steam's interactive upload."
+            testId="release-mode-settings"
+          >
+            <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
+              <button
+                type="button"
+                data-testid="release-mode-guided"
+                onClick={() => setReleasePreferences({ version: 1, mode: 'guided', expressRiskAcknowledged: false })}
+                className={`settings-button ${releasePreferences.mode === 'guided' ? 'border-cyan-500 text-cyan-300' : ''}`}
+              >
+                Guided (recommended)
+              </button>
+              <button
+                type="button"
+                data-testid="release-mode-express"
+                onClick={() => setReleasePreferences({ version: 1, mode: 'express', expressRiskAcknowledged: true })}
+                className={`settings-button ${releasePreferences.mode === 'express' ? 'border-amber-500 text-amber-300' : ''}`}
+              >
+                Express
+              </button>
+            </div>
+            <p className="text-[9.5px] leading-relaxed text-slate-500">
+              Guided keeps instructions, stage explanations, and troubleshooting visible throughout packaging.
+              Express starts local preparation as soon as you click a platform using the current/default inputs and
+              hides passed-stage explanations. Failures stay expanded; validation, output selection, Steam
+              authentication, legal prompts, and final verification remain mandatory. Express never auto-uploads.
+            </p>
           </DirectoryRow>
 
           {/* 1. Mod Workspace folder */}

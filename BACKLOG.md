@@ -6,6 +6,14 @@
 
 ## P0 — Active
 
+### B110 · Kimi R1-R21 execution program `spec'd` (P1, DURABLE LEDGER)
+
+The complete recommendation set is now reconciled instead of living in the deleted KNOWN-BUGS addendum.
+Current verdict: R4/R5/R12 verified; R15 satisfied by the richer readiness ladder; R1/R2/R11/R13/R16/R21
+open; the rest partial. Execute only as bounded workflow tasks in the recorded order—never as a sweeping
+cleanup—and update each row after every implementation. Ledger:
+`docs/plans/2026-07-29-kimi-recommendations-ledger.md`.
+
 ### B98 · Deploy fails EBUSY whenever X4 is running — copying byte-identical files `in_progress` (P0, TOP)
 
 **[REPRODUCED 2026-07-26 by the mod agent, traced in source not guessed]** A real in-game verification
@@ -1115,4 +1123,3 @@ Research (pre-culled, 2 agents triangulated): `docs/research/2026-07-18-communit
 
 ### B63 round-4 continued — A2 (god.xml) REJECTED by reconcile; B1 pillar + object-index-maps prereq open
 **A2 REJECTED (corpus-falsified):** god.xml matchextension="false" is omitted by 495/496 vanilla locations (mod convention, not a rule) → cry-wolf; macro-resolution can't work either — only 18/151 god.xml macros are in index/macros.xml, the other 133 are sector/zone/cluster macros in maps/ which the object index (x4ObjectIndex scans index/*.xml only) doesn't include → would flag 133/151 vanilla macros. **PREREQ for a safe god.xml lint: extend x4ObjectIndex to also index maps/ sector/zone/cluster macros** (a bounded infra unit; also improves reference pickers + liveFixes macro-existence broadly). Then god.xml macro-resolution becomes clean (0-bar). **B1 (bulk-transform pillar) remains the strategic next-big-thing (Ken decision).** Round-4 net so far: A1 factions ✅; A2 falsified; a/d/e (round-3) falsified/covered — the EASY lint wins are genuinely mined.
-

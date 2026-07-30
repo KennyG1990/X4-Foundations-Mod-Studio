@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as crypto from "node:crypto";
 
 export interface NativeEditorRequest {
   source: "x4forge-studio";
@@ -53,7 +54,94 @@ export interface NativeExternalUrlRequest {
   url: typeof X4_UNPACKER_URL | typeof X4_FORGE_DISCORD_URL;
 }
 
-export type NativeStudioRequest = NativeEditorRequest | NativeTextDiffRequest | NativeNodeSelectionRequest | NativeNodeSelectionResult | NativeExternalUrlRequest;
+export type NativeReleaseAction =
+  | { action: "select-preview" }
+  | { action: "select-workshop-tool" }
+  | { action: "export-artifact"; platform: "nexus" | "steam"; sourcePath: string; suggestedName: string; sha256: string; sizeBytes: number }
+  | { action: "open-steam-terminal"; command: string; stagedModPath: string; toolPath: string };
+
+export interface NativeReleaseRequest {
+  source: "x4forge-studio";
+  type: "release-native-action";
+  requestId: string;
+  request: NativeReleaseAction;
+}
+
+export interface NativeReleaseResult {
+  source: "x4forge-native-host";
+  type: "release-native-result";
+  requestId: string;
+  ok: boolean;
+  cancelled?: boolean;
+  code: string;
+  message: string;
+  path?: string;
+  sha256?: string;
+  sizeBytes?: number;
+}
+
+function parseQuotedPowerShellCommand(command: string): string[] | null {
+  if (!command.startsWith('& ')) return null;
+  const tokens: string[] = [];
+  let cursor = 2;
+  while (cursor < command.length) {
+    while (command[cursor] === ' ') cursor++;
+    if (command[cursor] !== "'") return null;
+    cursor++;
+    let value = '';
+    let closed = false;
+    while (cursor < command.length) {
+      if (command[cursor] !== "'") { value += command[cursor++]; continue; }
+      if (command[cursor + 1] === "'") { value += "'"; cursor += 2; continue; }
+      cursor++;
+      closed = true;
+      break;
+    }
+    if (!closed) return null;
+    tokens.push(value);
+    if (cursor < command.length && command[cursor] !== ' ') return null;
+  }
+  return tokens;
+}
+
+function sameLocalPath(left: string, right: string): boolean {
+  const a = path.resolve(left);
+  const b = path.resolve(right);
+  return process.platform === 'win32' ? a.toLocaleLowerCase('en-US') === b.toLocaleLowerCase('en-US') : a === b;
+}
+
+export function validateWorkshopTerminalCommand(command: string, toolPath: string, stagedModPath: string): boolean {
+  if (!command || command.length > 16_384 || /[\r\n\0]/.test(command) || !toolPath || !stagedModPath) return false;
+  const tokens = parseQuotedPowerShellCommand(command);
+  if (!tokens || tokens.length < 4 || path.basename(tokens[0]).toLowerCase() !== 'workshoptool.exe'
+    || !sameLocalPath(tokens[0], toolPath) || (tokens[1] !== 'publishx4' && tokens[1] !== 'update')
+    || tokens[2] !== '-path' || !sameLocalPath(tokens[3], stagedModPath)) return false;
+  const mode = tokens[1];
+  let cursor = 4;
+  let previewSeen = false;
+  let changeNoteSeen = false;
+  let minorSeen = false;
+  while (cursor < tokens.length) {
+    const flag = tokens[cursor++];
+    if (flag === '-preview' && !previewSeen && cursor < tokens.length) {
+      const preview = tokens[cursor++];
+      const ext = path.extname(preview).toLowerCase();
+      if (!isInside(path.resolve(preview), path.resolve(stagedModPath)) || !['.png', '.jpg', '.jpeg'].includes(ext)) return false;
+      previewSeen = true;
+      continue;
+    }
+    if (flag === '-changenote' && mode === 'update' && !changeNoteSeen && cursor < tokens.length) {
+      if (!tokens[cursor++].trim()) return false;
+      changeNoteSeen = true;
+      continue;
+    }
+    if (flag === '-minor' && mode === 'update' && !minorSeen) { minorSeen = true; continue; }
+    return false;
+  }
+  return mode === 'publishx4' ? previewSeen && !changeNoteSeen && !minorSeen : changeNoteSeen;
+}
+
+export type NativeStudioRequest = NativeEditorRequest | NativeTextDiffRequest | NativeNodeSelectionRequest | NativeNodeSelectionResult | NativeExternalUrlRequest | NativeReleaseRequest;
 
 const MAX_DIFF_TEXT_BYTES = 8 * 1024 * 1024;
 const MAX_NODE_TEXT_BYTES = 1024 * 1024;
@@ -94,6 +182,32 @@ export function parseNativeEditorRequest(value: unknown): NativeStudioRequest | 
   if (!value || typeof value !== "object") return null;
   const candidate = value as Record<string, unknown>;
   if (candidate.source !== "x4forge-studio") return null;
+  if (candidate.type === "release-native-action") {
+    if (typeof candidate.requestId !== "string" || !candidate.request || typeof candidate.request !== "object") return null;
+    const request = candidate.request as Record<string, unknown>;
+    const requestId = candidate.requestId.replace(/[\r\n\0]/g, '').slice(0, 160);
+    if (!requestId) return null;
+    if (request.action === "select-preview" || request.action === "select-workshop-tool") {
+      return { source: "x4forge-studio", type: "release-native-action", requestId, request: { action: request.action } };
+    }
+    if (request.action === "export-artifact") {
+      if ((request.platform !== "nexus" && request.platform !== "steam") || typeof request.sourcePath !== "string"
+        || typeof request.suggestedName !== "string" || !/^[^\\/:*?"<>|\r\n]{1,180}\.zip$/i.test(request.suggestedName)
+        || typeof request.sha256 !== "string" || !/^[a-f0-9]{64}$/i.test(request.sha256)
+        || !Number.isSafeInteger(request.sizeBytes) || Number(request.sizeBytes) <= 0 || Number(request.sizeBytes) > 0xffffffff) return null;
+      return { source: "x4forge-studio", type: "release-native-action", requestId, request: {
+        action: "export-artifact", platform: request.platform, sourcePath: request.sourcePath.slice(0, 4096),
+        suggestedName: request.suggestedName, sha256: request.sha256.toLowerCase(), sizeBytes: Number(request.sizeBytes),
+      } };
+    }
+    if (request.action === "open-steam-terminal") {
+      if (typeof request.command !== "string" || typeof request.stagedModPath !== "string" || typeof request.toolPath !== "string"
+        || request.stagedModPath.length > 4096 || request.toolPath.length > 4096
+        || !validateWorkshopTerminalCommand(request.command, request.toolPath, request.stagedModPath)) return null;
+      return { source: "x4forge-studio", type: "release-native-action", requestId, request: { action: "open-steam-terminal", command: request.command, stagedModPath: request.stagedModPath, toolPath: request.toolPath } };
+    }
+    return null;
+  }
   if (candidate.type === "open-external-url") {
     if (typeof candidate.url !== "string" || !EXTERNAL_URLS.has(candidate.url)) return null;
     return {
@@ -157,6 +271,104 @@ export function parseNativeEditorRequest(value: unknown): NativeStudioRequest | 
 function isInside(candidate: string, root: string): boolean {
   const rel = path.relative(root, candidate);
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+}
+
+function fileSha256(filePath: string): string {
+  return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+}
+
+export type ReleaseArtifactResolution =
+  | { ok: true; sourcePath: string; platform: "nexus" | "steam"; sha256: string; sizeBytes: number }
+  | { ok: false; code: string; message: string };
+
+export function resolveVerifiedReleaseArtifact(
+  workspaceRootInput: string,
+  platform: "nexus" | "steam",
+  sourcePathInput: string,
+  expectedSha256: string,
+  expectedSize: number,
+): ReleaseArtifactResolution {
+  try {
+    const workspaceRoot = fs.realpathSync(workspaceRootInput);
+    const releaseRootInput = path.join(workspaceRoot, ".forge-builds", "releases", platform);
+    const releaseRoot = fs.realpathSync(releaseRootInput);
+    const candidate = path.resolve(sourcePathInput);
+    if (!isInside(candidate, releaseRoot) || candidate === releaseRoot) return { ok: false, code: "outside_release_root", message: "The requested ZIP is outside Forge's verified release root." };
+    const stat = fs.lstatSync(candidate);
+    if (stat.isSymbolicLink() || !stat.isFile() || path.extname(candidate).toLowerCase() !== ".zip") return { ok: false, code: "invalid_release_file", message: "Forge exports regular ZIP files only; links and other file types are refused." };
+    const realFile = fs.realpathSync(candidate);
+    if (!isInside(realFile, releaseRoot)) return { ok: false, code: "release_path_escape", message: "The release ZIP resolves outside Forge's verified release root." };
+    if (stat.size !== expectedSize || !/^[a-f0-9]{64}$/i.test(expectedSha256)) return { ok: false, code: "release_receipt_mismatch", message: "The prepared ZIP size or receipt is invalid. Rebuild it before export." };
+    const sha256 = fileSha256(realFile);
+    if (sha256 !== expectedSha256.toLowerCase()) return { ok: false, code: "release_hash_mismatch", message: "The prepared ZIP changed after verification. Rebuild it before export." };
+    return { ok: true, sourcePath: realFile, platform, sha256, sizeBytes: stat.size };
+  } catch (error) {
+    return { ok: false, code: "release_unavailable", message: `Forge could not reopen the prepared ZIP: ${error instanceof Error ? error.message : String(error)}` };
+  }
+}
+
+export function copyVerifiedReleaseArtifact(sourcePath: string, destinationPath: string, expectedSha256: string, expectedSize: number): ReleaseArtifactResolution {
+  const destination = path.resolve(destinationPath);
+  const parent = path.dirname(destination);
+  const temp = path.join(parent, `.${path.basename(destination)}.x4forge-export-${process.pid}-${Date.now()}`);
+  const backup = path.join(parent, `.${path.basename(destination)}.x4forge-backup-${process.pid}-${Date.now()}`);
+  let movedOld = false;
+  try {
+    if (path.extname(destination).toLowerCase() !== ".zip" || path.resolve(sourcePath) === destination) return { ok: false, code: "invalid_export_destination", message: "Choose a different .zip output file." };
+    if (fs.existsSync(destination)) {
+      const existing = fs.lstatSync(destination);
+      if (!existing.isFile() || existing.isSymbolicLink()) return { ok: false, code: "invalid_export_destination", message: "The selected output must be a regular .zip file, not a directory or link." };
+    }
+    fs.copyFileSync(sourcePath, temp, fs.constants.COPYFILE_EXCL);
+    const copied = fs.lstatSync(temp);
+    const copiedHash = fileSha256(temp);
+    if (!copied.isFile() || copied.isSymbolicLink() || copied.size !== expectedSize || copiedHash !== expectedSha256.toLowerCase()) throw new Error("The copied bytes did not match the verified receipt.");
+    if (fs.existsSync(destination)) { fs.renameSync(destination, backup); movedOld = true; }
+    fs.renameSync(temp, destination);
+    const finalStat = fs.lstatSync(destination);
+    const finalHash = fileSha256(destination);
+    if (!finalStat.isFile() || finalStat.isSymbolicLink() || finalStat.size !== expectedSize || finalHash !== expectedSha256.toLowerCase()) throw new Error("The final output did not match the verified receipt.");
+    if (movedOld) fs.rmSync(backup, { force: true });
+    return { ok: true, sourcePath: destination, platform: "nexus", sha256: finalHash, sizeBytes: finalStat.size };
+  } catch (error) {
+    try { if (fs.existsSync(temp)) fs.rmSync(temp, { force: true }); } catch { /* best effort */ }
+    try { if (movedOld && fs.existsSync(backup)) { if (fs.existsSync(destination)) fs.rmSync(destination, { force: true }); fs.renameSync(backup, destination); } } catch { /* best effort rollback */ }
+    return { ok: false, code: "release_export_failed", message: `Forge could not save the verified ZIP: ${error instanceof Error ? error.message : String(error)}` };
+  }
+}
+
+export function inspectNativeWorkshopTool(filePathInput: string): { ok: boolean; message: string; path?: string } {
+  try {
+    const inputStat = fs.lstatSync(filePathInput);
+    if (inputStat.isSymbolicLink()) throw new Error("Select the real WorkshopTool.exe file, not a link.");
+    const filePath = fs.realpathSync(filePathInput);
+    const stat = fs.lstatSync(filePath);
+    if (stat.isSymbolicLink() || !stat.isFile() || path.basename(filePath).toLowerCase() !== "workshoptool.exe") throw new Error("Select Egosoft WorkshopTool.exe from X Tools.");
+    const fd = fs.openSync(filePath, "r");
+    const dos = Buffer.alloc(64);
+    try {
+      if (fs.readSync(fd, dos, 0, dos.length, 0) !== dos.length || dos[0] !== 0x4d || dos[1] !== 0x5a) throw new Error("WorkshopTool.exe has no Windows executable header.");
+      const peOffset = dos.readUInt32LE(0x3c);
+      const pe = Buffer.alloc(4);
+      if (peOffset < 64 || peOffset + pe.length > stat.size || fs.readSync(fd, pe, 0, pe.length, peOffset) !== pe.length || pe.toString("ascii") !== "PE\0\0") throw new Error("WorkshopTool.exe has no valid PE signature.");
+    } finally { fs.closeSync(fd); }
+    return { ok: true, path: filePath, message: "WorkshopTool.exe selected; Windows PE header verified." };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+export function resolveSteamTerminalRoot(workspaceRootInput: string, stagedModPathInput: string): { ok: true; cwd: string } | { ok: false; message: string } {
+  try {
+    const workspaceRoot = fs.realpathSync(workspaceRootInput);
+    const steamRoot = fs.realpathSync(path.join(workspaceRoot, ".forge-builds", "releases", "steam"));
+    const staged = fs.realpathSync(stagedModPathInput);
+    const stat = fs.lstatSync(staged);
+    if (!stat.isDirectory() || stat.isSymbolicLink() || !isInside(staged, steamRoot) || staged === steamRoot) throw new Error("The Steam staging folder is outside Forge's verified release root.");
+    return { ok: true, cwd: staged };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 function safeRelativePath(input: string): string | null {

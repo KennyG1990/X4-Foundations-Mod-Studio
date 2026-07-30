@@ -1,79 +1,118 @@
-# X4 Forge session handoff — 2026-07-29 · ZERO-LLM DISCORD ECONOMY & GAMIFICATION VERIFIED
+# X4 Forge — Session Handoff
+
+Updated: 2026-07-30
 
 ## One-line state
 
-Implemented and deployed the 100% deterministic Zero-LLM Discord Economy & Gamification Subsystem across both support bots (`Forge Concierge#3242` and `X4AILive#2651`). Registered slash commands `/daily`, `/balance`, `/trivia`, `/mine`, `/bank`, and `/shop`/`/buy` backed by `data/trivia_questions.json` and `scripts/discord_economy.mjs` with $0 API cost. Grounded bot intelligence in 3 exact code-backed zero-to-mod workflows (`FirstRunWizard`, Node Toolbox canvas, `MOD_PATTERNS`). Pushed clean commit `40ce17d` to `origin/main`.
+B109 Guided Nexus + Steam Release Center is VERIFIED and publicly delivered as Open VSX 0.0.59 with exact
+public/local/installed artifact identity. The close commit/push is the current action; B110 Kimi R1-R21 is next.
 
-## Active bounded unit
+## Operator brief
 
-- Goal: reconcile Kimi R1-R21 durably, then complete B109 before executing the remaining recommendation batches.
-- Active records: `BACKLOG.md`, `docs/plans/2026-07-29-platform-release-center.md`,
-  `docs/plans/2026-07-29-platform-release-center-design.md`, and
-  `docs/plans/2026-07-29-kimi-recommendations-ledger.md`.
-- B109 Batch 1: complete binary-safe Nexus ZIP, verified Steam CAT/DAT staging and rollback ZIP, official
-  WorkshopTool command preparation, explicit-workspace/fresh-source gates, stage codes, post-tool verification,
-  scope/history rules, and route assertions.
-- B109 Batch 2: separate Nexus/Steam guided UI, normalized persistent Guided/Express preference, report-backed
-  export, correlated native file/save requests, rollback-safe receipt-verified native copy, exact WorkshopTool PE
-  basename/PE-structure selection, and visible terminal insertion without Enter. This is structural validation,
-  not publisher/signature proof; the real X Tools binary is absent.
-- Authored but unrun: report-backed export route assertions and `tests/e2e/release-center.spec.ts`.
-- Latest source review serializes output actions and distinguishes save success from receipt failure; all runtime
-  proof remains unrun.
-- Official-doc review added the missing Steam folder-name stage (lowercase legal characters, maximum 32).
-- Steam preview ownership now stages exactly one validated selected image, never every source `preview.*` candidate.
-- Out of scope until B109 closes: remaining Kimi execution batches B110 R1-R21.
+- Project: `F:\DEV_ENV\X4_Forge` (Forge application/Antigravity extension, not the live X4 mod).
+- Machine state at handoff: Antigravity is open on the X4_Forge workspace with the installed 0.0.59 extension and
+  an extension-owned sidecar on an ephemeral loopback port. No Steam/Nexus/Workshop upload was performed.
+- Eyeball queue: none for B109—the installed Nexus guide, Steam guide, and Settings Express explanation were
+  inspected and saved under `vscode-extension/evidence/b109-installed-*.jpg`.
+- Authorization queue: none for B109. Ken authorized Open VSX publication; Steam/Nexus mod publication remains
+  unrequested and out of scope.
+- Commit question: Open VSX and store verification are complete; create/push the pre-written B109 close commit now.
 
-## Validation state
+## Current bounded task
 
-- PASS: root `npm run typecheck` after latest Batch 2/test source.
-- PASS: root `npm run lint` with zero errors and the repository's existing 548-warning baseline.
-- PASS: focused new-file ESLint with zero warnings/errors.
-- PASS: release preferences 5/5; mod distribution 31/31; platform release 17/17; agent keys 24/24;
-  agent history 67/67; native bridge 38/38.
-- PASS: extension source build; route script syntax; `git diff --check` (line-ending notices only).
-- PASS: latest `graphify update .` -> 2,860 nodes / 6,700 edges / 154 communities.
-- NOT RUN: isolated `npm run test:routes`, focused Playwright, full e2e, production/extension packaging,
-  installed Antigravity, rendered UI, OpenVSX/public release.
-- Official WorkshopTool is not installed locally. No Steam/Nexus publication was attempted or authorized.
+### B109 status: VERIFIED; close commit/push in progress
 
-## Baseline / ownership
+Implemented:
 
-- Task began clean at `HEAD == origin/main == 72ec4aa77d2d99a79b308101c7d34b58b5966de2`.
-- Every current worktree change is B109/B110-owned; no unrelated user change was found at baseline.
-- Do not commit or push until the required runtime/rendered/installed gates are complete and the close is VERIFIED.
-- No real game directory, real mod, external account, Steam Workshop item, or Nexus page has been mutated.
+- Separate `Package for Nexus Mods` and `Package for Steam Workshop` guided flows.
+- Complete disk-backed, binary-safe Nexus ZIP with ZIP32/path/collision bounds, reopen CRC/SHA-256 validation,
+  one exact mod root, user-selected final save, and receipt-backed final-byte verification.
+- Steam CAT/DAT staging plus verified rollback ZIP; correct Egosoft `WorkshopTool.exe`; first/update preview rules;
+  explicit `-minor`; visible but never auto-executed command; post-tool payload/manifest verification; guarded
+  Workshop-id adoption.
+- Guided is default. Settings-only Express explains that validation, output selection, Steam authentication/legal
+  prompts, final verification, and no-auto-upload remain mandatory.
+- Release Center remains visible when deploy/staging configuration is absent so it can explain its own failures.
 
-## Eyeball queue
+Final artifact:
 
-Nothing is ready for Ken's eyeball yet because the UI has not been run. After fresh machine-quiet confirmation:
+- `vscode-extension\x4-forge-studio-0.0.59.vsix`
+- 2,090 entries; 17,840,878 bytes
+- SHA-256 `859919BB8EF68469ADA404EFD224B350545EE1B1326F340B3DECD32BF3836910`
+- Installed at `C:\Users\Moshi\.antigravity-ide\extensions\x4forge.x4-forge-studio-0.0.59`
+- Installed controller/server/JS/CSS hashes match staged source; manifest identity matches and Antigravity adds only
+  its expected `__metadata` top-level field.
 
-1. Open the isolated Release Center Playwright result and confirm the focused spec is green.
-2. Install the newly packaged VSIX in Antigravity, open Studio -> Playtest -> Release Center.
-3. Click `Package for Nexus Mods`; inspect the complete guide, stages, and Save As prompt.
-4. Click `Prepare for Steam Workshop`; inspect preview/tool pickers, command display, and terminal insertion.
-5. Confirm the terminal contains the command but has not executed it; do not press Enter or upload.
+Validation evidence:
 
-## Hot files / next command
+- Platform release 24/24; distribution 31/31; native bridge 45/45; agent keys 25/25; history 67/67;
+  release preferences 5/5.
+- Isolated routes 227/227, focused Release Center E2E 3/3, full E2E 46/46, oracle sweep 115/115.
+- Root typecheck/build, full lint (0 errors / 548 established warnings), graph refresh, and `git diff --check` passed.
+- Final 0.0.59 root build, changelog generation, fresh staging, extension build, staged sidecar probe 6/6, VSIX audit,
+  exact install, live public selftest 200/pass, protected config 401 negative, `git diff --check`, and the full
+  post-version-bump `npm run precommit:check` passed.
+- Open VSX publish succeeded; exact and latest endpoints report 0.0.59. The public artifact is exactly 17,840,878
+  bytes and matches the installed/tested local SHA-256
+  `859919BB8EF68469ADA404EFD224B350545EE1B1326F340B3DECD32BF3836910`.
+- Durable screenshots:
+  - `vscode-extension/evidence/b109-installed-nexus-guide.jpg`
+  - `vscode-extension/evidence/b109-installed-steam-guide.jpg`
+  - `vscode-extension/evidence/b109-installed-release-settings.jpg`
 
-- First ask/receive: `Forge, Antigravity, and X4 are idle; machine quiet.`
-- Then run `npm run test:routes` and inspect its structured assertions, teardown, ephemeral ports, and live-state
-  non-mutation before any Playwright or installed-host work.
-- Run the focused Release Center Playwright spec, then the full workflow gates in the documented plan.
+## First command / next action
 
-## Hazards / dead theories
+1. Run final `npm run precommit:check` after all close-document edits.
+2. Stage only the reconciled B109 code/docs/evidence plus the required StarForge documentation updates; preserve
+   `scripts/x4_muds_game.mjs` and unrelated pre-existing evidence modifications.
+3. Commit `feat(release): add guided verified Nexus and Steam packaging`, push `main`, and assert
+   `origin/main == HEAD`.
+4. Start B110 with the safety-contract batch (R3/R9/R10/R19/R20), updating the Kimi ledger after
+   every bounded implementation.
 
-- User-supplied `PublishTool.exe`/`X4Customizer.exe` guidance is incorrect for current official publishing.
-  The reconciled tool is `WorkshopTool.exe` from separate Egosoft X Tools.
-- Forge builds/verifies CAT/DAT itself. The emitted command intentionally omits WorkshopTool `-buildcat`.
-- Steam publication remains interactive and external; Forge never presses Enter, authenticates, accepts legal
-  agreements, or claims upload success before the post-tool `ws_<id>`/payload check.
-- Extension build recreates `vscode-extension/out`; serialize it before root typecheck or root TypeScript can
-  observe a transient missing `out/extension.js`.
-- Authored tests are not proof. Do not relabel B109 VERIFIED until HTTP, browser, packaged, installed, and rendered
-  gates actually pass.
+## Live hazards and ownership
 
-## Commit question
+- Do not press either release build button against the restored DeadAir Dynamic Wars workspace; it is real user data.
+  Artifact success/failure testing already passed in disposable fixtures.
+- Do not run an Egosoft Workshop command or publish a Steam/Nexus mod. `WorkshopTool.exe` is not installed locally.
+- Open VSX 0.0.59 is already published and verified; never republish the same version.
+- Preserve unrelated untracked `scripts/x4_muds_game.mjs` and all unrelated bot/economy work.
+- `C:\Users\Moshi\Desktop\SESSION-HANDOFFAG.md` is the preserved stale B108 buffer Ken asked to keep. It is not the
+  current handoff and must not be copied back over this file.
+- Existing modified 0.0.35 evidence images predate B109; do not claim or revert them.
 
-No commit point yet. B109 is PARTIAL: source/static work is green, but required machine-gated proof remains.
-Suggested close title once genuinely VERIFIED: `feat(release): add guided verified Nexus and Steam packaging`.
+## Hot files
+
+- `BACKLOG.md`
+- `docs/plans/2026-07-29-platform-release-center.md`
+- `docs/plans/2026-07-29-platform-release-center-design.md`
+- `docs/plans/2026-07-29-kimi-recommendations-ledger.md`
+- `src/components/ReleaseCenter.tsx`
+- `src/lib/platformRelease.ts`
+- `src/lib/releasePreferences.ts`
+- `src/lib/modDistribution.ts`
+- `server.ts`
+- `vscode-extension/src/nativeEditorBridge.ts`
+- `vscode-extension/src/extension.ts`
+- `scripts/route-integration.mjs`
+- `tests/e2e/release-center.spec.ts`
+- `vscode-extension/package.json`
+- `vscode-extension/release-notes.json`
+- `vscode-extension/CHANGELOG.md`
+
+## Dead theories / corrected assumptions
+
+- The official tool is `WorkshopTool.exe` from the separate Egosoft X Tools install, not `PublishTool.exe` or
+  `X4Customizer.exe` in the game folder.
+- Forge owns deterministic CAT/DAT generation; WorkshopTool owns interactive Steam authentication/upload.
+- Steam output is staging + rollback/report, not one generic package file.
+- Updates may omit preview; `-minor` requires an explicit unchanged-published-version acknowledgment.
+- The installed host may append `__metadata` to `package.json`; compare manifest identity and executable payload
+  hashes rather than demanding byte-identical manifest serialization.
+
+## AAR state
+
+Triggered and fully recorded in the B109 task record. Notable final-session triggers: retired CLI path, locked live
+extension folder, protected unsaved surface, Desktop copy destination, PowerShell pipeline syntax error, protected
+endpoint 401 used as a negative, the extra empty Antigravity welcome window requiring a second normal close, registry
+propagation lag, and a staged-review catch/recovery of a truncated whole-file BACKLOG rewrite before commit.
