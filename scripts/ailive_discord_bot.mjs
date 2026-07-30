@@ -297,7 +297,14 @@ client.on('messageCreate', async (message) => {
   const contentLower = (message.content || '').trim().toLowerCase();
 
   // DIRECT COMMAND TEXT INTERCEPTORS
-  if (contentLower.startsWith('/known-fixes') || contentLower.startsWith('known-fixes') || contentLower.startsWith('known fixes')) {
+  const isKnownFixesQuery = [
+    '/known-fixes', 'known-fixes', 'known fixes',
+    '/known-bugs', 'known-bugs', 'known bugs',
+    '/known-issues', 'known-issues', 'known issues',
+    'known defects', 'bug list', 'issue list'
+  ].some(alias => contentLower.startsWith(alias));
+
+  if (isKnownFixesQuery) {
     await message.reply({ embeds: [getKnownFixesEmbed()] });
     return;
   }
