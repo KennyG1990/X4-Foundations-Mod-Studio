@@ -163,6 +163,18 @@ import { AgentHistoryStore } from "./src/lib/agentHistoryStore";
 import { runAgentHistorySelftest } from "./src/lib/agentHistory.selftest";
 import { runBugReportSelftest } from "./src/lib/bugReport";
 import { normalizeApiFailureBody, runApiFailureEnvelopeSelftest } from "./src/lib/apiFailureEnvelope";
+import {
+  CLIENT_API_DEADLINE_MS,
+  CLIENT_LONG_API_DEADLINE_MS,
+  configureHttpServerDeadlines,
+  responseDeadlineFromEnv,
+  resolveRunJobTimeout,
+  runRequestDeadlineSelftest,
+  RUN_JOB_DEFAULT_TIMEOUT_MS,
+  RUN_JOB_MAX_TIMEOUT_MS,
+  RUN_JOB_MIN_TIMEOUT_MS,
+  SYNC_COMMAND_DEADLINE_MS,
+} from "./src/lib/requestDeadline";
 import { buildArtifactPlan, hashArtifactFile, materializeArtifact, verifyMaterializedArtifact, type ArtifactPlan } from "./src/lib/artifactPipeline";
 import { buildProjectFileInventory, runProjectFileInventorySelftest } from "./src/lib/projectFileInventory";
 import { materializeCatalogArtifact } from "./src/lib/artifactPackager";
@@ -310,6 +322,32 @@ app.use((req, res, next) => {
   return next();
 });
 
+// B110 / Kimi R9 — a route that never settles must become a truthful 504, not a socket
+// that spins forever. The test drill can use a shorter isolated deadline; real routes use
+// the documented 180-second ceiling, which outlasts the provider's 120-second abort.
+const API_RESPONSE_DEADLINE_MS = responseDeadlineFromEnv(process.env.FORGE_RESPONSE_TIMEOUT_MS);
+const TIMEOUT_DRILL_DELAY_MS = Number(process.env.FORGE_TIMEOUT_DRILL_MS || 0);
+const TIMEOUT_DRILL_RESPONSE_MS = responseDeadlineFromEnv(process.env.FORGE_TIMEOUT_DRILL_RESPONSE_MS);
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api')) return next();
+  const timeoutMs = req.path === '/api/agent/timeout-drill' && TIMEOUT_DRILL_DELAY_MS > 0
+    ? TIMEOUT_DRILL_RESPONSE_MS
+    : API_RESPONSE_DEADLINE_MS;
+  res.setTimeout(timeoutMs, () => {
+    if (res.writableEnded || res.destroyed) return;
+    if (res.headersSent) return res.destroy();
+    return res.status(504).json({
+      success: false,
+      status: 'FAILED',
+      code: 'REQUEST_DEADLINE_EXCEEDED',
+      error: `Request exceeded the ${timeoutMs} ms server response deadline.`,
+      failedStages: ['request_deadline'],
+      timeoutMs,
+    });
+  });
+  return next();
+});
+
 // A real schema-enriched complex MD graph is larger than the old 5 MiB ceiling before it
 // reaches any handler (AI Influence: 8.2 MiB / 2,018 nodes; DeadAir: 5.1 MiB / 1,196).
 // The API is authenticated and localhost-only; 32 MiB leaves bounded headroom while the
@@ -406,6 +444,7 @@ const PUBLIC_READONLY_GETS = new Set<string>([
   "/reference/search",
   "/reference/selftest",
 ]);
+if (TIMEOUT_DRILL_DELAY_MS > 0) PUBLIC_READONLY_GETS.add('/agent/timeout-drill');
 
 // B42: named, scoped, expiring agent keys (src/lib/agentKeys). The boot session token
 // keeps full, unscoped power and is the ONLY credential that can manage keys.
@@ -452,6 +491,14 @@ function authMiddleware(req: express.Request, res: express.Response, next: expre
 }
 
 app.use("/api", authMiddleware);
+
+// Test-only negative path. It does not exist unless the isolated route harness opts in.
+if (TIMEOUT_DRILL_DELAY_MS > 0) {
+  app.get('/api/agent/timeout-drill', async (_req, res) => {
+    await new Promise(resolve => setTimeout(resolve, TIMEOUT_DRILL_DELAY_MS));
+    if (!res.headersSent && !res.writableEnded) return res.json({ success: true });
+  });
+}
 
 // ---------------------------------------------------------------------------
 // B86 — AGENT ACTION LEDGER capture.
@@ -2988,7 +3035,7 @@ app.get("/api/agent/schema", (req, res) => {
   const currentConfig = readXsdConfig();
   const resolvedConfig = resolveXsdConfig();
   return res.json({
-    api_version: "2026-07-30.agent.v3",
+    api_version: "2026-07-30.agent.v4",
     description: "X4 Forge external agent contract. Use this to inspect supported workspace domains, valid values, compile outputs, and protected API routes before modifying the studio.",
     auth: {
       read_only_schema_is_public: true,
@@ -3010,6 +3057,20 @@ app.get("/api/agent/schema", (req, res) => {
         failedStages: ["Zero or more failed stage/checklist ids"],
       },
       compatibility: "Existing evidence and successful object/array response shapes are preserved; contradictory success:true is corrected on a recognized failure.",
+    },
+    request_deadlines: {
+      browser_api_default_ms: CLIENT_API_DEADLINE_MS,
+      browser_long_operation_ms: CLIENT_LONG_API_DEADLINE_MS,
+      server_response_ms: API_RESPONSE_DEADLINE_MS,
+      command_sync_ms: SYNC_COMMAND_DEADLINE_MS,
+      command_job: {
+        request_field: 'timeoutMs',
+        default_ms: RUN_JOB_DEFAULT_TIMEOUT_MS,
+        minimum_ms: RUN_JOB_MIN_TIMEOUT_MS,
+        maximum_ms: RUN_JOB_MAX_TIMEOUT_MS,
+        terminal_timeout_status: 'timed_out',
+        terminal_timeout_code: 'COMMAND_DEADLINE_EXCEEDED',
+      },
     },
     workspace_contract: {
       required_root_fields: ["id", "name", "version", "author", "description", "nodes", "links", "uiWidgets", "uiTheme"],
@@ -7057,6 +7118,7 @@ const SELFTESTS: Record<string, () => unknown> = {
   "god-lint-selftest": runGodLintSelftest,
   "bug-report-selftest": runBugReportSelftest,
   "api-failure-envelope-selftest": runApiFailureEnvelopeSelftest,
+  "request-deadline-selftest": runRequestDeadlineSelftest,
   "data-dir-selftest": runDataDirSelftest,
   "game-detect-selftest": runGameDetectSelftest,
   "path-roles-selftest": runPathRolesSelftest,
@@ -11269,18 +11331,50 @@ async function setupDevOrProd() {
 // packaged/production build (G5 security item, 2026-07-08) — under NODE_ENV=production
 // the route is not registered at all unless FORGE_ALLOW_RUN_COMMAND=true is set
 // explicitly. Dev workflow (restart-studio.bat / tsx watch) is unchanged.
+function terminateProcessTree(pid: number | undefined): void {
+  if (!pid) return;
+  void import('child_process').then(({ spawn }) => {
+    if (process.platform === 'win32') {
+      const killer = spawn('taskkill', ['/PID', String(pid), '/T', '/F'], {
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+      killer.unref();
+      return;
+    }
+    // exec() does not create an isolated process group on Unix. Killing -pid could target
+    // the Forge server's own group, so only kill the owned shell there.
+    try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ }
+  }).catch(() => { /* best effort; the exit/state contract still reports the timeout */ });
+}
+
 if (process.env.NODE_ENV !== "production" || process.env.FORGE_ALLOW_RUN_COMMAND === "true") {
   app.get("/api/run_command", async (req, res) => {
     const cmd = String(req.query.cmd || "");
     try {
       const { exec } = await import("child_process");
-      exec(cmd, (err, stdout, stderr) => {
+      let timedOut = false;
+      const child = exec(cmd, { maxBuffer: 8 * 1024 * 1024 }, (err, stdout, stderr) => {
+        clearTimeout(timer);
+        if (timedOut) {
+          return res.status(504).json({
+            error: `Command exceeded the ${SYNC_COMMAND_DEADLINE_MS} ms execution deadline.`,
+            code: 'COMMAND_DEADLINE_EXCEEDED',
+            timeoutMs: SYNC_COMMAND_DEADLINE_MS,
+            stdout,
+            stderr,
+          });
+        }
         res.json({
           error: err ? err.message : null,
           stdout,
           stderr
         });
       });
+      const timer = setTimeout(() => {
+        timedOut = true;
+        terminateProcessTree(child.pid);
+      }, SYNC_COMMAND_DEADLINE_MS);
     } catch (e) {
       res.status(500).json({ error: e.message || String(e) });
     }
@@ -11292,13 +11386,15 @@ if (process.env.NODE_ENV !== "production" || process.env.FORGE_ALLOW_RUN_COMMAND
   // a handle immediately; poll for status + output tail. Same dev-only gating; authed like
   // every non-allowlisted route.
   interface RunJob {
-    status: 'running' | 'done';
+    status: 'running' | 'done' | 'timed_out';
     exitCode: number | null;
     error: string | null;
     out: string;
     cmd: string;
     startedAt: string;
     endedAt?: string;
+    timeoutMs: number;
+    processExited: boolean;
   }
   const RUN_JOBS = new Map<string, RunJob>();
   let runJobSeq = 0;
@@ -11306,19 +11402,50 @@ if (process.env.NODE_ENV !== "production" || process.env.FORGE_ALLOW_RUN_COMMAND
   app.post("/api/run_command/job", async (req, res) => {
     const cmd = String(req.body?.cmd || "");
     if (!cmd.trim()) return res.status(400).json({ error: "Missing 'cmd' in body." });
+    const timeout = resolveRunJobTimeout(req.body?.timeoutMs);
+    if ('error' in timeout) return res.status(400).json({ code: 'INVALID_JOB_TIMEOUT', error: timeout.error });
     try {
       const { exec } = await import("child_process");
+      for (const [existingId, existing] of RUN_JOBS) {
+        if (RUN_JOBS.size < 20) break;
+        if (existing.status !== 'running') RUN_JOBS.delete(existingId);
+      }
+      if (RUN_JOBS.size >= 20) {
+        return res.status(429).json({
+          code: 'RUN_JOB_CAPACITY_REACHED',
+          error: 'All 20 command-job slots are still running. Wait for one to finish before starting another.',
+        });
+      }
       const id = `job_${Date.now()}_${++runJobSeq}`;
-      const job: RunJob = { status: 'running', exitCode: null, error: null, out: '', cmd, startedAt: new Date().toISOString() };
+      const job: RunJob = { status: 'running', exitCode: null, error: null, out: '', cmd, startedAt: new Date().toISOString(), timeoutMs: timeout.timeoutMs, processExited: false };
       RUN_JOBS.set(id, job);
-      if (RUN_JOBS.size > 20) { const oldest = RUN_JOBS.keys().next().value; if (oldest !== undefined) RUN_JOBS.delete(oldest); }
       const child = exec(cmd, { maxBuffer: 8 * 1024 * 1024 });
       const append = (chunk: unknown) => { job.out = (job.out + String(chunk)).slice(-65536); };
       child.stdout?.on('data', append);
       child.stderr?.on('data', append);
-      child.on('error', (e) => { job.error = e.message; });
-      child.on('exit', (code) => { job.status = 'done'; job.exitCode = code; job.endedAt = new Date().toISOString(); });
-      return res.json({ jobId: id, status: job.status, startedAt: job.startedAt });
+      const timer = setTimeout(() => {
+        if (job.status !== 'running') return;
+        job.status = 'timed_out';
+        job.error = `Command exceeded the ${job.timeoutMs} ms execution deadline.`;
+        job.endedAt = new Date().toISOString();
+        terminateProcessTree(child.pid);
+      }, job.timeoutMs);
+      child.on('error', (e) => {
+        if (job.status !== 'running') return;
+        job.error = e.message;
+        job.status = 'done';
+        job.endedAt = new Date().toISOString();
+        clearTimeout(timer);
+      });
+      child.on('exit', (code) => {
+        clearTimeout(timer);
+        job.processExited = true;
+        if (job.status !== 'running') return;
+        job.status = 'done';
+        job.exitCode = code;
+        job.endedAt = new Date().toISOString();
+      });
+      return res.json({ jobId: id, status: job.status, startedAt: job.startedAt, timeoutMs: job.timeoutMs });
     } catch (e: any) {
       return res.status(500).json({ error: e?.message || String(e) });
     }
@@ -11330,7 +11457,8 @@ if (process.env.NODE_ENV !== "production" || process.env.FORGE_ALLOW_RUN_COMMAND
     return res.json({
       status: job.status, exitCode: job.exitCode, error: job.error,
       cmd: job.cmd, startedAt: job.startedAt, endedAt: job.endedAt,
-      tail: job.out.slice(-4000),
+      ...(job.status === 'timed_out' ? { code: 'COMMAND_DEADLINE_EXCEEDED', failedStages: ['command'] } : {}),
+      timeoutMs: job.timeoutMs, processExited: job.processExited, tail: job.out.slice(-4000),
     });
   });
 }
@@ -11389,7 +11517,7 @@ app.use((req, res, next) => {
 
 initializeReferenceCorpus();
 setupDevOrProd().then(() => {
-  app.listen(PORT, "127.0.0.1", () => {
+  const httpServer = app.listen(PORT, "127.0.0.1", () => {
     console.log(`X4 Forge Dev Server running on http://127.0.0.1:${PORT}`);
     // B93.1: publish where we are. The sidecar's port changes every launch and nothing on disk
     // said what it was, so callers were port-scanning to find us. Never fatal.
@@ -11407,6 +11535,7 @@ setupDevOrProd().then(() => {
       process.on(signal, () => { releaseDiscovery(); process.exit(0); });
     }
   });
+  configureHttpServerDeadlines(httpServer);
 }).catch(err => {
   console.error("Server failure: ", err);
 });

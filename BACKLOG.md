@@ -14,8 +14,8 @@ open; the rest partial. Execute only as bounded workflow tasks in the recorded o
 cleanup—and update each row after every implementation. Ledger:
 `docs/plans/2026-07-29-kimi-recommendations-ledger.md`.
 
-**Closed bounded unit:** R3 uniform API failure envelope — VERIFIED 2026-07-30; see ROADMAP and
-`docs/plans/2026-07-30-uniform-api-failure-envelope.md`. **Next bounded unit:** R9 timeout policy.
+**Closed bounded units:** R3 uniform API failure envelope and R9 uniform timeout policy — VERIFIED 2026-07-30;
+see ROADMAP and their task plans. **Next bounded unit:** R10 sidecar parent-death/orphan prevention.
 
 ### B98 · Deploy fails EBUSY whenever X4 is running — copying byte-identical files `in_progress` (P0, TOP)
 

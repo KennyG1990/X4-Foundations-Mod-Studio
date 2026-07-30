@@ -24,7 +24,7 @@ make each future implementation a bounded workflow task rather than an untracked
 | R6 Self-explaining diagnostics | PARTIAL | Rule ids and `/api/agent/explain` exist; inline why-links and one-click mod-local suppression do not. | Build after R1 schema; route links through DiagnosticsCenter and guarded source write. |
 | R7 One transaction discipline | PARTIAL | Deploy replacement and guarded workspace writes are transactional/atomic. B109 removed the release ZIP's direct write and uses atomic file or verified sibling-directory replacement; a wider writer inventory is still required. | Inventory every remaining durable writer and close exceptions by category. |
 | R8 Request-addressed workspace identity | PARTIAL | B108 made deploy identity explicit; B109 requires an explicit workspace for both platform release prepare routes. Many other mutating routes still accept/fall back to the active singleton and clients/tokens are not workspace-scoped. | Route/caller matrix and response echo for remaining mutations; full client scoping belongs with R17. |
-| R9 Timeout policy | PARTIAL | AI calls, selected UI requests, discovery, and probes have deadlines; Express has no global request timeout, many fetches remain unbounded, and exec-job kill policy is not universal. | Shared client fetch wrapper, server timeout policy, bounded job termination, negative timeout drills. |
+| R9 Timeout policy | VERIFIED (B110-R9) | The existing browser fetch chokepoint now gives every same-origin API request a finite composed deadline, with a larger budget for known long work. Node header/body/keep-alive and Express response lifetimes are bounded. Both dev command routes terminate; async jobs validate/cap `timeoutMs`, retain running-job receipts, tree-kill on Windows, and expose `timed_out` machine truth. | Preserve the 14/14 policy oracle, 504 drill, and real sleeping-job termination checks. Evidence: `docs/plans/2026-07-30-timeout-policy.md`. |
 | R10 Sidecar liveness | PARTIAL | The extension restarts a child that dies while the host lives and removes discovery on clean shutdown. A host crash can still orphan the sidecar; no parent-death watchdog exists. | Parent PID contract and orphan-reap proof without killing an unrelated reused PID. |
 | R11 Conflict dialog v2 | OPEN | Current card still says `ADOPT SERVER` / `KEEP MINE`; decision data is limited to tooltips and no diff preview. | Timestamps, changed-file counts, explicit outcomes, text diff, destructive-choice tests. |
 | R12 Honest settings | VERIFIED (B108/B109) | Inert auto-sync settings were removed; the normalized Studio inventory repairs invalid settings and every current layout control has a live consumer. B109's Settings-only Express preference has normalization/selftests, changes the Release Center presentation, states every retained gate, and is visibly installed. | Preserve regression and installed-host coverage. |
@@ -42,11 +42,11 @@ make each future implementation a bounded workflow task rather than an untracked
 
 1. **B109 Release Center — VERIFIED / Open VSX 0.0.59:** closed the release-specific R7/R8/R12 work and supplied a
    concrete consumer for R3-style staged errors. Preserve its gates; do not rebuild it during B110.
-2. **Safety contract batch:** R3 is VERIFIED; continue with R9, R10, R19, R20. These improve every subsequent implementation and CI gate.
+2. **Safety contract batch:** R3 and R9 are VERIFIED; continue with R10, R19, R20. These improve every subsequent implementation and CI gate.
 3. **Validation truth batch:** R1 + R16 schema, then R6 UI, then R2 delta reporting.
 4. **Loss-prevention UX:** R11 and R14.
 5. **Architecture batch:** R8 remainder + R17, then R13 after workspace/session ownership is stable.
 6. **Tooling decisions:** R18 and R21.
 
-R3, R4, R5, R12, and R15 need no duplicate implementation. Their regression evidence remains part of the relevant
+R3, R4, R5, R9, R12, and R15 need no duplicate implementation. Their regression evidence remains part of the relevant
 full gates. Every row moved to `VERIFIED` must cite its task plan, acceptance results, and ROADMAP close.

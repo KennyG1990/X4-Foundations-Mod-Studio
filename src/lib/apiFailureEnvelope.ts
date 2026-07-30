@@ -8,7 +8,7 @@
 
 type JsonRecord = Record<string, unknown>;
 
-const FAILURE_STATUSES = new Set(['FAILED', 'BLOCKED', 'ERROR', 'REJECTED']);
+const FAILURE_STATUSES = new Set(['FAILED', 'BLOCKED', 'ERROR', 'REJECTED', 'TIMED_OUT']);
 const FAILED_STAGE_STATUSES = new Set(['FAIL', 'FAILED', 'ERROR', 'BLOCKED', 'REJECTED']);
 
 const HTTP_FALLBACK_CODES: Record<number, string> = {

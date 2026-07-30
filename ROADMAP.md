@@ -7049,3 +7049,25 @@ was touched. R9/R10/R19/R20 remain the safety-contract queue.
 
 Suggested commit title:
 `feat(api): standardize machine-readable failure responses`.
+
+## 2026-07-30 — B110-R9 uniform request and command timeout policy — VERIFIED
+
+Every browser same-origin API request now crosses a finite deadline in the existing auth/retry fetch chokepoint:
+30 seconds normally and 150 seconds for known AI, compile, validation, packaging, and other long operations. Caller
+cancellation remains authoritative and non-API traffic is unchanged. The Node listener now bounds headers, request
+bodies, and keep-alive, while Express turns an over-deadline response into a machine-readable 504 under the R3
+failure envelope.
+
+The dev-only command surfaces can no longer run forever. The legacy synchronous route has a 60-second deadline;
+async jobs default to 15 minutes, accept only 100 ms through 30 minutes, refuse capacity rather than forgetting a
+running receipt, and report `timed_out` / `COMMAND_DEADLINE_EXCEEDED`. Windows expiry uses `taskkill /T /F` and the
+external route test observes the owned process exit. Agent schema v4 publishes the complete contract.
+
+Evidence: request policy 14/14; failure-envelope regression 12/12; isolated routes 243/243 including the 504,
+invalid-limit/no-spawn, and five-second PowerShell tree-kill negatives; runtime oracles 117/117; full isolated E2E
+46/46 in 399.5 seconds with 0 flaky and ports 3100/3101 closed; typecheck, lint (0 errors / 548 established warnings),
+production build, precommit, graph refresh, and diff check passed. No real mod/game data, installed extension, live
+workspace, or external platform was touched.
+
+Suggested commit title:
+`feat(runtime): enforce request and command deadlines`.

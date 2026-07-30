@@ -95,7 +95,7 @@ async function main() {
     cwd: process.cwd(),
     shell: false,
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, PORT: String(PORT), NODE_ENV: 'development', STUDIO_API_TOKEN: SESSION_TOKEN, X4_STATE_DIR: stateDir, X4_DATA_DIR: dataDir, X4_CONFIG_DIR: configDir, X4_REFERENCE_ROOT: referenceRoot, X4FORGE_DISCOVERY_DIR: path.join(tmp, 'discovery') },
+    env: { ...process.env, PORT: String(PORT), NODE_ENV: 'development', STUDIO_API_TOKEN: SESSION_TOKEN, X4_STATE_DIR: stateDir, X4_DATA_DIR: dataDir, X4_CONFIG_DIR: configDir, X4_REFERENCE_ROOT: referenceRoot, X4FORGE_DISCOVERY_DIR: path.join(tmp, 'discovery'), FORGE_TIMEOUT_DRILL_MS: '300', FORGE_TIMEOUT_DRILL_RESPONSE_MS: '100' },
   });
   let serverOut = '';
   child.stdout.on('data', (d) => { serverOut += d; });
@@ -120,7 +120,30 @@ async function main() {
   ok('session_token_200_workspace', workspaceSuccess.status === 200);
   ok('success_object_shape_is_not_enveloped', !Object.prototype.hasOwnProperty.call(workspaceSuccess.json || {}, 'failedStages') && !Object.prototype.hasOwnProperty.call(workspaceSuccess.json || {}, 'code'), JSON.stringify(workspaceSuccess.json || {}));
   const agentSchema = await req('GET', '/api/agent/schema', null);
-  ok('failure_contract_is_discoverable', agentSchema.status === 200 && agentSchema.json?.api_version === '2026-07-30.agent.v3' && Array.isArray(agentSchema.json?.failure_contract?.top_level?.failedStages), JSON.stringify(agentSchema.json?.failure_contract || {}));
+  ok('failure_contract_is_discoverable', agentSchema.status === 200 && agentSchema.json?.api_version === '2026-07-30.agent.v4' && Array.isArray(agentSchema.json?.failure_contract?.top_level?.failedStages), JSON.stringify(agentSchema.json?.failure_contract || {}));
+  ok('deadline_contract_is_discoverable', agentSchema.json?.request_deadlines?.browser_api_default_ms === 30000 && agentSchema.json?.request_deadlines?.command_job?.maximum_ms === 1800000, JSON.stringify(agentSchema.json?.request_deadlines || {}));
+
+  const responseTimeoutStarted = Date.now();
+  const responseTimeout = await req('GET', '/api/agent/timeout-drill', null);
+  const responseTimeoutElapsed = Date.now() - responseTimeoutStarted;
+  ok('server_response_deadline_returns_504', responseTimeout.status === 504 && responseTimeout.json?.code === 'REQUEST_DEADLINE_EXCEEDED' && responseTimeout.json?.success === false && responseTimeout.json?.failedStages?.includes('request_deadline'), `status=${responseTimeout.status} elapsed=${responseTimeoutElapsed}ms`);
+  ok('server_response_deadline_preempts_handler', responseTimeoutElapsed < 300, `elapsed=${responseTimeoutElapsed}ms`);
+
+  const invalidJobTimeout = await req('POST', '/api/run_command/job', SESSION_TOKEN, { cmd: 'echo should-not-run', timeoutMs: 99 });
+  ok('invalid_job_timeout_rejected_before_spawn', invalidJobTimeout.status === 400 && invalidJobTimeout.json?.code === 'INVALID_JOB_TIMEOUT');
+  const sleepCommand = process.platform === 'win32'
+    ? 'powershell -NoProfile -NonInteractive -Command "Start-Sleep -Seconds 5"'
+    : 'sleep 5';
+  const timedJobStart = await req('POST', '/api/run_command/job', SESSION_TOKEN, { cmd: sleepCommand, timeoutMs: 200 });
+  let timedJob = null;
+  const timedJobDeadline = Date.now() + 3000;
+  while (timedJobStart.json?.jobId && Date.now() < timedJobDeadline) {
+    await sleep(50);
+    timedJob = await req('GET', `/api/run_command/job/${timedJobStart.json.jobId}`, SESSION_TOKEN);
+    if (timedJob.json?.status === 'timed_out' && timedJob.json?.processExited === true) break;
+  }
+  ok('async_job_deadline_is_reported', timedJobStart.status === 200 && timedJobStart.json?.timeoutMs === 200 && timedJob?.json?.status === 'timed_out' && timedJob?.json?.success === false && timedJob?.json?.code === 'COMMAND_DEADLINE_EXCEEDED' && timedJob?.json?.failedStages?.includes('command') && typeof timedJob?.json?.error === 'string', JSON.stringify(timedJob?.json || {}));
+  ok('async_job_process_exits_after_tree_kill', timedJob?.json?.processExited === true, JSON.stringify(timedJob?.json || {}));
 
   // --- public canonical reference API + raw-file containment ---
   const factions = await req('GET', '/api/reference/factions', null);
