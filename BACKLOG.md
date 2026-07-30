@@ -15,9 +15,8 @@ cleanup—and update each row after every implementation. Ledger:
 `docs/plans/2026-07-29-kimi-recommendations-ledger.md`.
 
 **Closed bounded units:** R3 uniform API failure envelope, R9 uniform timeout policy, R10 managed-sidecar
-parent-death/orphan prevention, and R19 packaged-VSIX clean-runner CI — VERIFIED 2026-07-30; see ROADMAP and their
-task plans. **Active bounded unit:** R20 fail-closed flake policy is PARTIAL (local gates green; exact-SHA public
-Quality pending) in `docs/plans/2026-07-30-e2e-flake-policy.md`.
+parent-death/orphan prevention, R19 packaged-VSIX clean-runner CI, and R20 fail-closed flake policy — VERIFIED
+2026-07-30; see ROADMAP and their task plans. **Next bounded unit:** specify the shared R1+R16 validation-rules schema.
 
 **Post-Kimi authorized research program (queued; do not start before R1-R21 close):** reconcile
 `F:\Downskies\X4 Foundations Modding Tooling Research for IDE Extension Opportunities.md` and

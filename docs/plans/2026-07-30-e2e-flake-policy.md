@@ -5,7 +5,7 @@ flaky fixture proving quarantine cannot turn a product failure green.
 
 Task: B110 / Kimi R20 flake budget
 Lane: FULL
-Status: **PARTIAL**
+Status: **VERIFIED**
 
 ## PLAN
 
@@ -124,14 +124,17 @@ Status: **PARTIAL**
 - Quality YAML parse/order -> PASS; policy selftest is after oracles and before build/routes/package/inspect/upload.
   Workflow permissions remain `contents: read`; run commands contain zero marketplace/publish/token command.
 - Baseline documentation SHA public Quality `30570581116` and Discord sync `30570582148` -> SUCCESS.
-- R20 exact-SHA public Quality with the new real policy fixture -> pending implementation commit/push.
+- R20 exact-SHA public Quality `30572006397` / job `90970783625` at
+  `681051fce7d8d1aa7f920fbff6f8b2115026273f` -> **SUCCESS**. The real fail-closed policy step passed, followed by
+  build, routes, extension build/stage, packaged sidecar probe, inspector selftest, VSIX package/final inspection,
+  and artifact retention. Artifact `8771216666` is retained through 2026-08-13.
 
 ## REVIEW
 
 - Requirements 1-5 -> locally done/evidenced. Exact one-retry ownership and official fail-on-flaky defense agree;
   quarantined flaky/failed reports remain red and name their owner/expiry in the receipt.
 - Requirement 6 -> full suite remains 46/46 with zero flakes and owned-port cleanup.
-- Requirement 7 -> workflow is parsed and ordered locally; public clean-runner proof remains required.
+- Requirement 7 -> workflow is parsed/ordered locally and the exact-SHA public clean runner passed it.
 - Fresh-eyes correction -> initial refactor preserved the old stdout fallback's ability to go green. That contradicted
   the specified missing-JSON negative. `verdictWithoutStructuredReport` now forces red while retaining parsed counts
   for diagnosis; pure matrix and policy selftest were rerun after the correction.
@@ -144,10 +147,10 @@ Status: **PARTIAL**
 
 ## CLOSE
 
-- Status: **PARTIAL** — all local acceptance methods pass; exact-SHA public Windows Quality must execute the real
-  policy fixture before R20 can become VERIFIED.
-- Capability-map delta: pending public clean-runner proof.
-- Suggested implementation commit title: `test(e2e): enforce zero-flake quarantine policy`.
+- Status: **VERIFIED** — local and public clean-runner policy tests prove a retry-passing/matched-quarantine test
+  remains red while clean product tests remain green.
+- Capability-map delta: recorded in `F:\StarForge\wiki\x4-forge\capability-map.md`.
+- Suggested close commit title: `docs(test): verify zero-flake policy`.
 
 ## AAR
 
@@ -162,4 +165,5 @@ Status: **PARTIAL**
   authoritative gate separately when a teardown-class exit appears and retain the exact isolated verdict.
 - **Highest-risk evidenced weakness:** a clean-looking stdout summary could previously substitute for missing JSON.
   R20 now makes the structured report mandatory for green and keeps stdout diagnostic-only.
-- **Lessons banked:** pending verified public result; quarantine must never be a success override.
+- **Lessons banked:** quarantine must never be a success override; structured truth is mandatory for green; red
+  fixtures need isolated output state.

@@ -35,18 +35,18 @@ make each future implementation a bounded workflow task rather than an untracked
 | R17 True multi-workspace | PARTIAL | Named parked workspaces round-trip, but active authority is a shared singleton and is not client/token scoped. | Architecture/ADR task: workspace binding per session/key plus safe shared read surfaces. |
 | R18 Headless CLI | PARTIAL | `npm run validate:mod -- <path>` exists and runs the shared validator. There is no installed `forge` binary or CLI deploy-verify workflow. | Package a supported CLI entrypoint; add API discovery/auth and dry-run/deploy verification with explicit side effects. |
 | R19 CI | VERIFIED (B110-R19) | Exact-SHA Windows Quality run `30570137452` passed locked root/extension installs and audits, root gates, extension build/stage, the real 16-check packaged-sidecar probe, 13-check inspector policy, locked VSIX packaging, final CRC/content inspection, and inspected-only artifact retention. Artifact `8770489130` is retained for 14 days. | Preserve the dependency order, rejection oracle, and inspected-only upload gate. Evidence: `docs/plans/2026-07-30-packaged-vsix-ci.md`. |
-| R20 Flake budget | PARTIAL (B110-R20 local) | The existing structured gate now owns one retry and zero actual flakes; exact-id quarantine metadata is capped at three entries/14 days with owner/reason/issue/date enforcement and never changes red to green. Pure policy is 26/26, the real retry-flaky fixture proves matched quarantine still red (8/8), and full E2E is 46/46 with zero flakes. | Require exact-SHA public Quality execution of the real policy fixture before VERIFIED. Evidence: `docs/plans/2026-07-30-e2e-flake-policy.md`. |
+| R20 Flake budget | VERIFIED (B110-R20) | The structured gate owns one retry and zero actual flakes; exact-id quarantine metadata is capped at three entries/14 days with owner/reason/issue/date enforcement and never changes red to green. Pure policy is 26/26, the real retry-flaky fixture proves matched quarantine still red (8/8), full E2E is 46/46 with zero flakes, and exact-SHA public Quality `30572006397` passed the policy plus downstream package gates. | Preserve the zero-flake verdict, expiry limits, isolated fixture, and clean-runner policy step. Evidence: `docs/plans/2026-07-30-e2e-flake-policy.md`. |
 | R21 MCP fate | OPEN | The safe read/validate/compile MCP shim is bundled and exposed through a copy-config command, while repo `.mcp.json` registers only `claude-brain`. It remains optional but not automatically registered. | Product decision: explicit opt-in registration workflow or remove bundling; do not add filesystem writes without a separate scope/security design. |
 
 ## Implementation order
 
 1. **B109 Release Center — VERIFIED / Open VSX 0.0.59:** closed the release-specific R7/R8/R12 work and supplied a
    concrete consumer for R3-style staged errors. Preserve its gates; do not rebuild it during B110.
-2. **Safety contract batch:** R3, R9, R10, and R19 are VERIFIED; continue with R20. These improve every subsequent implementation and CI gate.
+2. **Safety contract batch:** R3, R9, R10, R19, and R20 are VERIFIED. Preserve their gates.
 3. **Validation truth batch:** R1 + R16 schema, then R6 UI, then R2 delta reporting.
 4. **Loss-prevention UX:** R11 and R14.
 5. **Architecture batch:** R8 remainder + R17, then R13 after workspace/session ownership is stable.
 6. **Tooling decisions:** R18 and R21.
 
-R3, R4, R5, R9, R10, R12, R15, and R19 need no duplicate implementation. Their regression evidence remains part of the relevant
+R3, R4, R5, R9, R10, R12, R15, R19, and R20 need no duplicate implementation. Their regression evidence remains part of the relevant
 full gates. Every row moved to `VERIFIED` must cite its task plan, acceptance results, and ROADMAP close.

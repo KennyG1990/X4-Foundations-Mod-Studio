@@ -7119,3 +7119,26 @@ external platform upload occurred.
 
 Suggested commit title:
 `docs(ci): verify packaged VSIX clean-runner gate`.
+
+## 2026-07-30 — B110-R20 fail-closed E2E flake budget — VERIFIED
+
+The existing structured Playwright gate now owns one diagnostic retry and an actual flake budget of zero. A first-
+fail/second-pass test is classified `flaky` and remains red through both the Forge verdict and Playwright's
+`--fail-on-flaky-tests`; callers cannot override retries, the flaky verdict, or the JSON reporter. Missing structured
+JSON is always red, with stdout retained only for diagnostic counts. Every run writes an atomic machine-readable
+receipt naming counts, stable test ids, policy state, quarantine matches, source, and final truth.
+
+`scripts/e2e-quarantine.json` is exact-id ownership metadata, never an allowlist: at most three active entries, each
+with owner/reason/issue/creation/expiry and a maximum 14-day lifetime. Malformed, duplicate, wildcard, future,
+expired, overlong, or over-budget entries fail before Playwright starts. A real isolated fixture fails attempt zero,
+passes retry one, then runs again with matching valid metadata; both inner gates stay red and the outer policy oracle
+passes 8/8. Fixture output lives under OS temp and cannot alter tracked Playwright state.
+
+Evidence: pure policy/verdict matrix 26/26; real policy fixture 8/8; full isolated E2E 46/46 with 0 failed/flaky/bad/
+quarantined and ports closed; oracles 119/119; routes 243/243; typecheck/lint/build/precommit/graph/workflow review
+green. Exact-SHA public Quality `30572006397` / job `90970783625` at `681051f` passed the real policy step and every
+downstream packaged-product gate, retaining artifact `8771216666` through 2026-08-13. No product, installed host,
+game/mod, store, or release behavior changed.
+
+Suggested commit title:
+`docs(test): verify zero-flake policy`.
