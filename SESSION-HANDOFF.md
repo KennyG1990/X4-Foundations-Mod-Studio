@@ -4,119 +4,75 @@ Updated: 2026-07-30
 
 ## One-line state
 
-B109 Guided Nexus + Steam Release Center is VERIFIED, publicly delivered as Open VSX 0.0.59, committed/pushed at
-`583c47aecaa27f4e91fb26766787deaf2936c74e`, and green in public CI. B110 Kimi R1-R21 is the next bounded task.
+B110-R3 uniform API failure envelope is VERIFIED in the working tree; R9 timeout policy is the next bounded Kimi
+safety-contract unit. The R3 close still needs its path-scoped commit/push.
 
 ## Operator brief
 
 - Project: `F:\DEV_ENV\X4_Forge` (Forge application/Antigravity extension, not the live X4 mod).
-- Machine state at handoff: Antigravity is open on the X4_Forge workspace with the installed 0.0.59 extension and
-  an extension-owned sidecar on an ephemeral loopback port. No Steam/Nexus/Workshop upload was performed.
-- Eyeball queue: none for B109—the installed Nexus guide, Steam guide, and Settings Express explanation were
-  inspected and saved under `vscode-extension/evidence/b109-installed-*.jpg`.
-- Authorization queue: none for B109. Ken authorized Open VSX publication; Steam/Nexus mod publication remains
-  unrequested and out of scope.
-- Commit question: B109 implementation is committed/pushed. This final handoff/CI addendum is the session-close
-  documentation commit point; after it lands, begin B110 in a fresh session.
+- Machine state: Ken confirmed quiet before validation. All task validation used isolated temp state; no installed
+  sidecar, real mod, game directory, Nexus, Steam, or Open VSX state was changed.
+- Eyeball queue: none for R3. It has no new visible UI; the applicable rendered-host compatibility gate passed
+  through the full isolated E2E suite 46/46.
+- Commit question: R3 is VERIFIED but not yet committed at this handoff write. Commit only the R3-owned paths; the
+  pre-existing evidence images and untracked Kimi/MUDS files are not task-owned.
 
 ## Current bounded task
 
-### B109 status: VERIFIED, published, committed, and public-CI green
+### B110-R3 status: VERIFIED
 
 Implemented:
 
-- Separate `Package for Nexus Mods` and `Package for Steam Workshop` guided flows.
-- Complete disk-backed, binary-safe Nexus ZIP with ZIP32/path/collision bounds, reopen CRC/SHA-256 validation,
-  one exact mod root, user-selected final save, and receipt-backed final-byte verification.
-- Steam CAT/DAT staging plus verified rollback ZIP; correct Egosoft `WorkshopTool.exe`; first/update preview rules;
-  explicit `-minor`; visible but never auto-executed command; post-tool payload/manifest verification; guarded
-  Workshop-id adoption.
-- Guided is default. Settings-only Express explains that validation, output selection, Steam authentication/legal
-  prompts, final verification, and no-auto-upload remain mandatory.
-- Release Center remains visible when deploy/staging configuration is absent so it can explain its own failures.
+- `src/lib/apiFailureEnvelope.ts` centralizes failure detection and additive machine truth.
+- Every recognized JSON API failure has `success:false`, stable `code`, non-empty top-level `error`, and
+  `failedStages`, including HTTP-200 operational failures.
+- Existing B109 BLOCKED/PARTIAL behavior and successful object/array shapes remain intact.
+- `/api/agent/schema` is now `2026-07-30.agent.v3` and documents the contract.
 
-Final artifact:
+Validation:
 
-- `vscode-extension\x4-forge-studio-0.0.59.vsix`
-- 2,090 entries; 17,840,878 bytes
-- SHA-256 `859919BB8EF68469ADA404EFD224B350545EE1B1326F340B3DECD32BF3836910`
-- Installed at `C:\Users\Moshi\.antigravity-ide\extensions\x4forge.x4-forge-studio-0.0.59`
-- Installed controller/server/JS/CSS hashes match staged source; manifest identity matches and Antigravity adds only
-  its expected `__metadata` top-level field.
+- Pure failure-envelope selftest 12/12.
+- Isolated routes 237/237, including HTTP-200 malformed deploy refusal and zero-write assertion.
+- Runtime-discovered isolated oracles 116/116.
+- Full isolated E2E 46/46 in 372 seconds; authoritative verdict PASS; ports 3100/3101 closed afterward.
+- Typecheck PASS; lint PASS at 0 errors / 548 established warnings; production build PASS; precommit PASS.
+- Graphify refresh: 2,918 nodes / 6,849 edges / 142 communities; `git diff --check` PASS.
 
-Validation evidence:
+## Next action
 
-- Platform release 24/24; distribution 31/31; native bridge 45/45; agent keys 25/25; history 67/67;
-  release preferences 5/5.
-- Isolated routes 227/227, focused Release Center E2E 3/3, full E2E 46/46, oracle sweep 115/115.
-- Root typecheck/build, full lint (0 errors / 548 established warnings), graph refresh, and `git diff --check` passed.
-- Final 0.0.59 root build, changelog generation, fresh staging, extension build, staged sidecar probe 6/6, VSIX audit,
-  exact install, live public selftest 200/pass, protected config 401 negative, `git diff --check`, and the full
-  post-version-bump `npm run precommit:check` passed.
-- Open VSX publish succeeded; exact and latest endpoints report 0.0.59. The public artifact is exactly 17,840,878
-  bytes and matches the installed/tested local SHA-256
-  `859919BB8EF68469ADA404EFD224B350545EE1B1326F340B3DECD32BF3836910`.
-- Git commit/push -> PASS: `583c47aecaa27f4e91fb26766787deaf2936c74e`, with `origin/main == HEAD` after push.
-- Public workflows -> PASS: Quality run `30516977829` and Discord Release Sync run `30516977832` both completed
-  successfully for the B109 commit.
-- Durable screenshots:
-  - `vscode-extension/evidence/b109-installed-nexus-guide.jpg`
-  - `vscode-extension/evidence/b109-installed-steam-guide.jpg`
-  - `vscode-extension/evidence/b109-installed-release-settings.jpg`
-
-## First command / next action
-
-1. Start a fresh session: this session crossed the degradation threshold during close and must not begin new code.
-2. Read BACKLOG + this handoff + the Kimi ledger; confirm the prior close is present on `origin/main`.
-3. Start B110 with the safety-contract batch (R3/R9/R10/R19/R20), updating the Kimi ledger after
-   every bounded implementation.
+1. Review/stage only the R3-owned paths, commit `feat(api): standardize machine-readable failure responses`, push,
+   and assert `origin/main == HEAD`.
+2. Begin B110-R9 as a fresh bounded Full-lane task: reconcile existing client/server/job deadlines before writing.
+3. Do not bundle R10/R19/R20 into R9; update the Kimi ledger after each close.
 
 ## Live hazards and ownership
 
-- Do not press either release build button against the restored DeadAir Dynamic Wars workspace; it is real user data.
-  Artifact success/failure testing already passed in disposable fixtures.
-- Do not run an Egosoft Workshop command or publish a Steam/Nexus mod. `WorkshopTool.exe` is not installed locally.
-- Open VSX 0.0.59 is already published and verified; never republish the same version.
-- Preserve unrelated untracked `scripts/x4_muds_game.mjs` and all unrelated bot/economy work.
-- `C:\Users\Moshi\Desktop\SESSION-HANDOFFAG.md` is the preserved stale B108 buffer Ken asked to keep. It is not the
-  current handoff and must not be copied back over this file.
-- Existing modified 0.0.35 evidence images predate B109; do not claim or revert them.
+- Preserve unrelated modified files:
+  - `vscode-extension/evidence/0.0.35-runtime-copy-live.png`
+  - `vscode-extension/evidence/0.0.35-runtime-copy-startup.png`
+- Preserve unrelated untracked files:
+  - `Note for Kimi.md`
+  - `scripts/x4_muds_game.mjs`
+- Do not publish a new extension version for this internal API unit without a separately scoped release task.
+- Raw `node scripts/oracle-sweep.mjs` assumes `localhost:3001`; when no server is running it reports every fetch red.
+  Use `npm run test:oracles` for the isolated owned harness.
 
-## Hot files
+## R3-owned paths
 
-- `BACKLOG.md`
-- `docs/plans/2026-07-29-platform-release-center.md`
-- `docs/plans/2026-07-29-platform-release-center-design.md`
-- `docs/plans/2026-07-29-kimi-recommendations-ledger.md`
-- `src/components/ReleaseCenter.tsx`
-- `src/lib/platformRelease.ts`
-- `src/lib/releasePreferences.ts`
-- `src/lib/modDistribution.ts`
+- `src/lib/apiFailureEnvelope.ts`
 - `server.ts`
-- `vscode-extension/src/nativeEditorBridge.ts`
-- `vscode-extension/src/extension.ts`
 - `scripts/route-integration.mjs`
-- `tests/e2e/release-center.spec.ts`
-- `vscode-extension/package.json`
-- `vscode-extension/release-notes.json`
-- `vscode-extension/CHANGELOG.md`
-
-## Dead theories / corrected assumptions
-
-- The official tool is `WorkshopTool.exe` from the separate Egosoft X Tools install, not `PublishTool.exe` or
-  `X4Customizer.exe` in the game folder.
-- Forge owns deterministic CAT/DAT generation; WorkshopTool owns interactive Steam authentication/upload.
-- Steam output is staging + rollback/report, not one generic package file.
-- Updates may omit preview; `-minor` requires an explicit unchanged-published-version acknowledgment.
-- The installed host may append `__metadata` to `package.json`; compare manifest identity and executable payload
-  hashes rather than demanding byte-identical manifest serialization.
+- `docs/plans/2026-07-30-uniform-api-failure-envelope.md`
+- `docs/plans/2026-07-29-kimi-recommendations-ledger.md`
+- `BACKLOG.md`
+- `ROADMAP.md`
+- `SESSION-HANDOFF.md`
+- `F:\StarForge\wiki\x4-forge\capability-map.md`
+- `F:\StarForge\wiki\x4-forge\aar-log.md`
+- `F:\StarForge\wiki\workflow\aar-log.md`
 
 ## AAR state
 
-Triggered and fully recorded in the B109 task record. Notable final-session triggers: retired CLI path, locked live
-extension folder, protected unsaved surface, Desktop copy destination, PowerShell pipeline syntax error, protected
-endpoint 401 used as a negative, the extra empty Antigravity welcome window requiring a second normal close, registry
-propagation lag, and a staged-review catch/recovery of a truncated whole-file BACKLOG rewrite before commit.
-The unauthenticated GitHub single-run endpoint also returned 404 after the commit; the working commit-filtered public
-run list proved both workflows green. Two close-stage mistakes triggered the required degradation call and fresh-session
-boundary before B110.
+Triggered and recorded in the task plan plus both AAR ledgers. Triggers: plan reconciliation, three failed
+exploratory search batches, fresh-eyes correction of contradictory `success:true`, and the raw oracle sweep targeting
+an absent server before the isolated harness passed.

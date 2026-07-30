@@ -6,13 +6,16 @@
 
 ## P0 — Active
 
-### B110 · Kimi R1-R21 execution program `spec'd` (P1, DURABLE LEDGER)
+### B110 · Kimi R1-R21 execution program `in_progress` (P1, DURABLE LEDGER)
 
 The complete recommendation set is now reconciled instead of living in the deleted KNOWN-BUGS addendum.
-Current verdict: R4/R5/R12 verified; R15 satisfied by the richer readiness ladder; R1/R2/R11/R13/R16/R21
+Current verdict: R3/R4/R5/R12 verified; R15 satisfied by the richer readiness ladder; R1/R2/R11/R13/R16/R21
 open; the rest partial. Execute only as bounded workflow tasks in the recorded order—never as a sweeping
 cleanup—and update each row after every implementation. Ledger:
 `docs/plans/2026-07-29-kimi-recommendations-ledger.md`.
+
+**Closed bounded unit:** R3 uniform API failure envelope — VERIFIED 2026-07-30; see ROADMAP and
+`docs/plans/2026-07-30-uniform-api-failure-envelope.md`. **Next bounded unit:** R9 timeout policy.
 
 ### B98 · Deploy fails EBUSY whenever X4 is running — copying byte-identical files `in_progress` (P0, TOP)
 

@@ -7032,3 +7032,20 @@ installed locally; Steam authentication/legal acceptance and Nexus scanning rema
 
 Suggested commit title:
 `feat(release): add guided verified Nexus and Steam packaging`.
+
+## 2026-07-30 — B110-R3 uniform machine-readable API failure envelope — VERIFIED
+
+Every recognized JSON API failure now carries top-level `success:false`, a stable route/HTTP/stage `code`, a
+non-empty `error`, and deduplicated `failedStages`. One pre-auth response middleware covers authentication,
+route handlers, 404/405 routing, and legacy operational failures that intentionally retain HTTP 200. Existing
+B109 BLOCKED/PARTIAL semantics and successful object/array response shapes remain intact. The public agent schema
+is version `2026-07-30.agent.v3` and documents the contract.
+
+Evidence: pure failure-envelope oracle 12/12; runtime-discovered oracle sweep 116/116; isolated routes 237/237,
+including a malformed HTTP-200 deploy refusal with zero writes; full isolated E2E 46/46 with the authoritative
+PASS verdict and ports 3100/3101 closed; typecheck, lint (0 errors / 548 established warnings), production build,
+precommit, graph refresh, and diff check passed. No real mod/game data, installed extension, or external platform
+was touched. R9/R10/R19/R20 remain the safety-contract queue.
+
+Suggested commit title:
+`feat(api): standardize machine-readable failure responses`.

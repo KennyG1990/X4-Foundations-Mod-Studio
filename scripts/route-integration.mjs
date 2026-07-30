@@ -112,13 +112,20 @@ async function main() {
   ok('server_came_up', true);
 
   // --- auth basics ---
-  ok('no_token_401', (await req('GET', '/api/agent/workspace', null)).status === 401);
+  const noToken = await req('GET', '/api/agent/workspace', null);
+  ok('no_token_401', noToken.status === 401);
+  ok('failure_envelope_covers_auth', noToken.json?.success === false && noToken.json?.status === 'FAILED' && noToken.json?.code === 'API_UNAUTHORIZED' && typeof noToken.json?.error === 'string' && Array.isArray(noToken.json?.failedStages), JSON.stringify(noToken.json));
   ok('bogus_token_401', (await req('GET', '/api/agent/workspace', 'not-a-real-token')).status === 401);
-  ok('session_token_200_workspace', (await req('GET', '/api/agent/workspace', SESSION_TOKEN)).status === 200);
+  const workspaceSuccess = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  ok('session_token_200_workspace', workspaceSuccess.status === 200);
+  ok('success_object_shape_is_not_enveloped', !Object.prototype.hasOwnProperty.call(workspaceSuccess.json || {}, 'failedStages') && !Object.prototype.hasOwnProperty.call(workspaceSuccess.json || {}, 'code'), JSON.stringify(workspaceSuccess.json || {}));
+  const agentSchema = await req('GET', '/api/agent/schema', null);
+  ok('failure_contract_is_discoverable', agentSchema.status === 200 && agentSchema.json?.api_version === '2026-07-30.agent.v3' && Array.isArray(agentSchema.json?.failure_contract?.top_level?.failedStages), JSON.stringify(agentSchema.json?.failure_contract || {}));
 
   // --- public canonical reference API + raw-file containment ---
   const factions = await req('GET', '/api/reference/factions', null);
   ok('reference_factions_public_and_canonical', factions.status === 200 && factions.json?.[0]?.id === 'routefixture');
+  ok('success_array_shape_is_not_enveloped', Array.isArray(factions.json) && !Object.prototype.hasOwnProperty.call(factions.json, 'failedStages'));
   const rawFaction = await req('GET', '/api/reference/file?path=libraries/factions.xml', null);
   ok('reference_file_returns_real_raw_file', rawFaction.status === 200 && rawFaction.raw.includes('routefixture'));
   const referenceTraversal = await req('GET', '/api/reference/file?path=../outside.xml', null);
@@ -260,8 +267,24 @@ async function main() {
 
   const noTargetVerify = await req('POST', '/api/agent/deploy-verify', SESSION_TOKEN, {});
   ok('deploy_verify_requires_an_explicit_target', noTargetVerify.status === 400 && noTargetVerify.json?.code === 'DEPLOY_TARGET_REQUIRED', `status=${noTargetVerify.status} code=${noTargetVerify.json?.code}`);
+  ok('existing_failure_fields_are_preserved', noTargetVerify.json?.error?.includes('explicit path or workspace') && noTargetVerify.json?.failedStages?.includes('import'), JSON.stringify(noTargetVerify.json));
   const noTargetLegacy = await req('POST', '/api/agent/deploy', SESSION_TOKEN, {});
   ok('legacy_deploy_requires_an_explicit_workspace', noTargetLegacy.status === 400 && noTargetLegacy.json?.code === 'DEPLOY_TARGET_REQUIRED', `status=${noTargetLegacy.status} code=${noTargetLegacy.json?.code}`);
+
+  // Kimi R3 reproduced class: deploy-verify has deliberate HTTP-200 operational failures.
+  // Generic clients still need top-level failure truth and must never log "ok" over refusal.
+  const malformedVerifyId = 'failure_envelope_malformed';
+  const malformedVerify = await req('POST', '/api/agent/deploy-verify', SESSION_TOKEN, {
+    workspace: {
+      id: malformedVerifyId,
+      name: malformedVerifyId,
+      nodes: [], links: [], uiWidgets: [],
+      passthroughFiles: [{ path: 'md/broken.xml', reason: 'unmodeled', content: '<mdscript><cues><cue name="Broken"></cues></mdscript>' }],
+    },
+  });
+  ok('http_200_deploy_failure_keeps_legacy_status', malformedVerify.status === 200 && malformedVerify.json?.ok === false, `status=${malformedVerify.status}`);
+  ok('http_200_deploy_failure_has_machine_envelope', malformedVerify.json?.success === false && malformedVerify.json?.code === 'WELLFORMED_FAILED' && typeof malformedVerify.json?.error === 'string' && malformedVerify.json.error.length > 0 && malformedVerify.json?.failedStages?.includes('wellformed'), JSON.stringify(malformedVerify.json));
+  ok('http_200_deploy_failure_writes_nothing', !fs.existsSync(path.join(liveExtensions, malformedVerifyId)) && !fs.existsSync(path.join(safeWorkspace, '.forge-builds', 'loose', malformedVerifyId)));
 
   const invalidLegacyName = 'legacy_invalid_fixture';
   const invalidLegacy = await req('POST', '/api/agent/deploy', SESSION_TOKEN, {
@@ -296,9 +319,11 @@ async function main() {
   const wrongVerb = await req('GET', '/api/agent/deploy-verify', SESSION_TOKEN);
   ok('wrong_verb_returns_405', wrongVerb.status === 405 && wrongVerb.json?.code === 'METHOD_NOT_ALLOWED', `status=${wrongVerb.status}`);
   ok('wrong_verb_names_allowed_methods', Array.isArray(wrongVerb.json?.allow) && wrongVerb.json.allow.includes('POST'), JSON.stringify(wrongVerb.json?.allow));
+  ok('failure_envelope_preserves_405_contract', wrongVerb.json?.success === false && wrongVerb.json?.status === 'FAILED' && Array.isArray(wrongVerb.json?.failedStages) && typeof wrongVerb.json?.error === 'string', JSON.stringify(wrongVerb.json));
   const noRoute = await req('GET', '/api/agent/definitely-not-a-route', SESSION_TOKEN);
   ok('unknown_endpoint_returns_json_404', noRoute.status === 404 && noRoute.json?.code === 'UNKNOWN_ENDPOINT', `status=${noRoute.status}`);
   ok('unknown_endpoint_is_not_the_spa_html', !String(noRoute.raw || '').includes('<!doctype'), (noRoute.raw || '').slice(0, 40));
+  ok('failure_envelope_preserves_404_contract', noRoute.json?.success === false && noRoute.json?.status === 'FAILED' && Array.isArray(noRoute.json?.failedStages) && typeof noRoute.json?.error === 'string', JSON.stringify(noRoute.json));
 
   // #2 never 200 on a degenerate result.
   fs.mkdirSync(path.join(safeWorkspace, 'not_a_mod', 'inner_mod'), { recursive: true });

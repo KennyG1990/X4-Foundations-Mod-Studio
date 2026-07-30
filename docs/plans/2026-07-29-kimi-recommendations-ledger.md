@@ -18,7 +18,7 @@ make each future implementation a bounded workflow task rather than an untracked
 | --- | --- | --- | --- |
 | R1 Zero-warning culture | OPEN | No mod-local suppression manifest or review-date policy exists. | Define versioned `forge.rules.json` schema, expiry/review behavior, and zero-cry-wolf tests. |
 | R2 Validation delta | OPEN | No persisted last-green validation baseline or new/resolved-warning delta exists. Agent history records runs but is not a comparison baseline. | Content-addressed last-green summaries per mod and deploy checklist delta. |
-| R3 One-line machine verdict | PARTIAL | Staged deploy responses are clearer. B109's new platform release routes now return named stage arrays and stable failure codes, but the contract is not uniform across the wider API. | Generalize the B109 stage envelope, run a route census, and add compatibility tests. |
+| R3 One-line machine verdict | VERIFIED (B110-R3) | `src/lib/apiFailureEnvelope.ts` and one pre-auth Express middleware now give every recognized JSON failure top-level `success:false`, stable `code`, non-empty `error`, and `failedStages`, including legacy HTTP-200 operational failures. Existing B109 `BLOCKED`/`PARTIAL` semantics and success object/array shapes are preserved; `/api/agent/schema` v3 documents the contract. | Preserve the 12/12 oracle and isolated route compatibility coverage. Evidence: `docs/plans/2026-07-30-uniform-api-failure-envelope.md`. |
 | R4 Parse Lua registrations | VERIFIED (B108) | Cross-file registration discovery uses the existing Lua AST engine and has comment/alias negatives. | Preserve regression coverage only. |
 | R5 Wire contract | VERIFIED (B108) | Indexed Lua payload writes and MD reads, verb/global collisions, and missing readers/writers are enforced in project validation. | Preserve real-mod contract fixtures. |
 | R6 Self-explaining diagnostics | PARTIAL | Rule ids and `/api/agent/explain` exist; inline why-links and one-click mod-local suppression do not. | Build after R1 schema; route links through DiagnosticsCenter and guarded source write. |
@@ -42,11 +42,11 @@ make each future implementation a bounded workflow task rather than an untracked
 
 1. **B109 Release Center — VERIFIED / Open VSX 0.0.59:** closed the release-specific R7/R8/R12 work and supplied a
    concrete consumer for R3-style staged errors. Preserve its gates; do not rebuild it during B110.
-2. **Safety contract batch:** R3, R9, R10, R19, R20. These improve every subsequent implementation and CI gate.
+2. **Safety contract batch:** R3 is VERIFIED; continue with R9, R10, R19, R20. These improve every subsequent implementation and CI gate.
 3. **Validation truth batch:** R1 + R16 schema, then R6 UI, then R2 delta reporting.
 4. **Loss-prevention UX:** R11 and R14.
 5. **Architecture batch:** R8 remainder + R17, then R13 after workspace/session ownership is stable.
 6. **Tooling decisions:** R18 and R21.
 
-R4, R5, R12, and R15 need no duplicate implementation. Their regression evidence remains part of the relevant
+R3, R4, R5, R12, and R15 need no duplicate implementation. Their regression evidence remains part of the relevant
 full gates. Every row moved to `VERIFIED` must cite its task plan, acceptance results, and ROADMAP close.

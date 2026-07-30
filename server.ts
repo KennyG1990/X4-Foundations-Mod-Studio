@@ -162,6 +162,7 @@ import {
 import { AgentHistoryStore } from "./src/lib/agentHistoryStore";
 import { runAgentHistorySelftest } from "./src/lib/agentHistory.selftest";
 import { runBugReportSelftest } from "./src/lib/bugReport";
+import { normalizeApiFailureBody, runApiFailureEnvelopeSelftest } from "./src/lib/apiFailureEnvelope";
 import { buildArtifactPlan, hashArtifactFile, materializeArtifact, verifyMaterializedArtifact, type ArtifactPlan } from "./src/lib/artifactPipeline";
 import { buildProjectFileInventory, runProjectFileInventorySelftest } from "./src/lib/projectFileInventory";
 import { materializeCatalogArtifact } from "./src/lib/artifactPackager";
@@ -298,6 +299,16 @@ function reloadSchemaLibrary(): SchemaLibrary {
   objectIndexCache = null;
   return schemaLibrary;
 }
+
+// B110 / Kimi R3 — one additive failure contract for every JSON API surface. Mount before
+// auth so 401/403 responses are covered too. Success responses keep the exact same object
+// or array by reference; route-specific failure evidence is retained.
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api')) return next();
+  const originalJson = res.json.bind(res);
+  res.json = ((body: unknown) => originalJson(normalizeApiFailureBody(res.statusCode, body))) as typeof res.json;
+  return next();
+});
 
 // A real schema-enriched complex MD graph is larger than the old 5 MiB ceiling before it
 // reaches any handler (AI Influence: 8.2 MiB / 2,018 nodes; DeadAir: 5.1 MiB / 1,196).
@@ -2977,7 +2988,7 @@ app.get("/api/agent/schema", (req, res) => {
   const currentConfig = readXsdConfig();
   const resolvedConfig = resolveXsdConfig();
   return res.json({
-    api_version: "2026-06-10.agent.v2",
+    api_version: "2026-07-30.agent.v3",
     description: "X4 Forge external agent contract. Use this to inspect supported workspace domains, valid values, compile outputs, and protected API routes before modifying the studio.",
     auth: {
       read_only_schema_is_public: true,
@@ -2988,6 +2999,17 @@ app.get("/api/agent/schema", (req, res) => {
         "The browser app receives the same token via injected window.__STUDIO_API_TOKEN__."
       ],
       curl_header: "Authorization: Bearer $(Get-Content .studio-api-token)"
+    },
+    failure_contract: {
+      applies_to: "Every recognized JSON failure, including legacy operational failures returned with HTTP 200.",
+      top_level: {
+        success: false,
+        status: "FAILED unless the route already supplies a more specific status such as BLOCKED",
+        code: "Route-specific stable code, or a stable API_/stage fallback",
+        error: "Non-empty human-readable one-line summary",
+        failedStages: ["Zero or more failed stage/checklist ids"],
+      },
+      compatibility: "Existing evidence and successful object/array response shapes are preserved; contradictory success:true is corrected on a recognized failure.",
     },
     workspace_contract: {
       required_root_fields: ["id", "name", "version", "author", "description", "nodes", "links", "uiWidgets", "uiTheme"],
@@ -7034,6 +7056,7 @@ const SELFTESTS: Record<string, () => unknown> = {
   "factions-lint-selftest": runFactionsLintSelftest,
   "god-lint-selftest": runGodLintSelftest,
   "bug-report-selftest": runBugReportSelftest,
+  "api-failure-envelope-selftest": runApiFailureEnvelopeSelftest,
   "data-dir-selftest": runDataDirSelftest,
   "game-detect-selftest": runGameDetectSelftest,
   "path-roles-selftest": runPathRolesSelftest,
