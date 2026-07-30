@@ -1,8 +1,8 @@
-# X4 Forge session handoff — 2026-07-29 · SMART KNOWN ISSUE BUILDER & DISCORD ENHANCEMENTS VERIFIED
+# X4 Forge session handoff — 2026-07-29 · AUTOMATED BUG INGESTION & DISCORD AUTO-FIX VERIFIED
 
 ## One-line state
 
-Rebranded public product names to `x4 AiLive` across all public readmes, content manifests, and GitHub workflows. Implemented and verified the Smart Known Issue Builder & Auto-Fix Interceptor engine across both Discord bots (`Forge Concierge#3242` and `X4AILive#2651`) backed by `data/known_fixes.json`, automated frequency tracking, and slash commands (`/status`, `/faq`, `/known-fixes`, `/add-fix`). Pushed clean commit `0da26f6` to `origin/main`.
+Rebranded public product names to `x4 AiLive` across all public readmes, content manifests, and GitHub workflows. Implemented and verified the Smart Known Issue Builder & Auto-Fix Interceptor engine across both Discord bots (`Forge Concierge#3242` and `X4AILive#2651`) backed by `data/known_fixes.json`, automated frequency tracking, and slash commands (`/status`, `/faq`, `/known-fixes`, `/add-fix`). Implemented automated bug ingestion engine (`scripts/ingest_repo_bugs.mjs`) harvesting known defects and resolutions from `KNOWN-BUGS.md`, `ROADMAP.md`, `BACKLOG.md`, and GitHub Issues API every 15 minutes. Pushed clean commit `e29e36c` to `origin/main`.
 
 ## Active bounded unit
 
