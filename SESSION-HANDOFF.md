@@ -4,8 +4,8 @@ Updated: 2026-07-30
 
 ## One-line state
 
-B110-R3 uniform API failure envelope is VERIFIED in the working tree; R9 timeout policy is the next bounded Kimi
-safety-contract unit. The R3 close still needs its path-scoped commit/push.
+B110-R3 uniform API failure envelope is VERIFIED, committed, and pushed at
+`daee984e0b10e83b16de175aff8437f78626c837`; R9 timeout policy is the next bounded Kimi safety-contract unit.
 
 ## Operator brief
 
@@ -14,8 +14,9 @@ safety-contract unit. The R3 close still needs its path-scoped commit/push.
   sidecar, real mod, game directory, Nexus, Steam, or Open VSX state was changed.
 - Eyeball queue: none for R3. It has no new visible UI; the applicable rendered-host compatibility gate passed
   through the full isolated E2E suite 46/46.
-- Commit question: R3 is VERIFIED but not yet committed at this handoff write. Commit only the R3-owned paths; the
-  pre-existing evidence images and untracked Kimi/MUDS files are not task-owned.
+- Commit question: the R3 implementation close is committed/pushed and `origin/main == HEAD`. This updated handoff
+  is the small session-close documentation commit; the pre-existing evidence images and untracked Kimi/MUDS files
+  remain outside task ownership.
 
 ## Current bounded task
 
@@ -37,13 +38,12 @@ Validation:
 - Full isolated E2E 46/46 in 372 seconds; authoritative verdict PASS; ports 3100/3101 closed afterward.
 - Typecheck PASS; lint PASS at 0 errors / 548 established warnings; production build PASS; precommit PASS.
 - Graphify refresh: 2,918 nodes / 6,849 edges / 142 communities; `git diff --check` PASS.
+- Git implementation commit/push: `daee984e0b10e83b16de175aff8437f78626c837`; `origin/main == HEAD` after push.
 
 ## Next action
 
-1. Review/stage only the R3-owned paths, commit `feat(api): standardize machine-readable failure responses`, push,
-   and assert `origin/main == HEAD`.
-2. Begin B110-R9 as a fresh bounded Full-lane task: reconcile existing client/server/job deadlines before writing.
-3. Do not bundle R10/R19/R20 into R9; update the Kimi ledger after each close.
+1. Begin B110-R9 as a fresh bounded Full-lane task: reconcile existing client/server/job deadlines before writing.
+2. Do not bundle R10/R19/R20 into R9; update the Kimi ledger after each close.
 
 ## Live hazards and ownership
 
