@@ -4,8 +4,8 @@ Updated: 2026-07-30
 
 ## One-line state
 
-B109 Guided Nexus + Steam Release Center is VERIFIED and publicly delivered as Open VSX 0.0.59 with exact
-public/local/installed artifact identity. The close commit/push is the current action; B110 Kimi R1-R21 is next.
+B109 Guided Nexus + Steam Release Center is VERIFIED, publicly delivered as Open VSX 0.0.59, committed/pushed at
+`583c47aecaa27f4e91fb26766787deaf2936c74e`, and green in public CI. B110 Kimi R1-R21 is the next bounded task.
 
 ## Operator brief
 
@@ -16,11 +16,12 @@ public/local/installed artifact identity. The close commit/push is the current a
   inspected and saved under `vscode-extension/evidence/b109-installed-*.jpg`.
 - Authorization queue: none for B109. Ken authorized Open VSX publication; Steam/Nexus mod publication remains
   unrequested and out of scope.
-- Commit question: Open VSX and store verification are complete; create/push the pre-written B109 close commit now.
+- Commit question: B109 implementation is committed/pushed. This final handoff/CI addendum is the session-close
+  documentation commit point; after it lands, begin B110 in a fresh session.
 
 ## Current bounded task
 
-### B109 status: VERIFIED; close commit/push in progress
+### B109 status: VERIFIED, published, committed, and public-CI green
 
 Implemented:
 
@@ -55,6 +56,9 @@ Validation evidence:
 - Open VSX publish succeeded; exact and latest endpoints report 0.0.59. The public artifact is exactly 17,840,878
   bytes and matches the installed/tested local SHA-256
   `859919BB8EF68469ADA404EFD224B350545EE1B1326F340B3DECD32BF3836910`.
+- Git commit/push -> PASS: `583c47aecaa27f4e91fb26766787deaf2936c74e`, with `origin/main == HEAD` after push.
+- Public workflows -> PASS: Quality run `30516977829` and Discord Release Sync run `30516977832` both completed
+  successfully for the B109 commit.
 - Durable screenshots:
   - `vscode-extension/evidence/b109-installed-nexus-guide.jpg`
   - `vscode-extension/evidence/b109-installed-steam-guide.jpg`
@@ -62,12 +66,9 @@ Validation evidence:
 
 ## First command / next action
 
-1. Run final `npm run precommit:check` after all close-document edits.
-2. Stage only the reconciled B109 code/docs/evidence plus the required StarForge documentation updates; preserve
-   `scripts/x4_muds_game.mjs` and unrelated pre-existing evidence modifications.
-3. Commit `feat(release): add guided verified Nexus and Steam packaging`, push `main`, and assert
-   `origin/main == HEAD`.
-4. Start B110 with the safety-contract batch (R3/R9/R10/R19/R20), updating the Kimi ledger after
+1. Start a fresh session: this session crossed the degradation threshold during close and must not begin new code.
+2. Read BACKLOG + this handoff + the Kimi ledger; confirm the prior close is present on `origin/main`.
+3. Start B110 with the safety-contract batch (R3/R9/R10/R19/R20), updating the Kimi ledger after
    every bounded implementation.
 
 ## Live hazards and ownership
@@ -116,3 +117,6 @@ Triggered and fully recorded in the B109 task record. Notable final-session trig
 extension folder, protected unsaved surface, Desktop copy destination, PowerShell pipeline syntax error, protected
 endpoint 401 used as a negative, the extra empty Antigravity welcome window requiring a second normal close, registry
 propagation lag, and a staged-review catch/recovery of a truncated whole-file BACKLOG rewrite before commit.
+The unauthenticated GitHub single-run endpoint also returned 404 after the commit; the working commit-filtered public
+run list proved both workflows green. Two close-stage mistakes triggered the required degradation call and fresh-session
+boundary before B110.

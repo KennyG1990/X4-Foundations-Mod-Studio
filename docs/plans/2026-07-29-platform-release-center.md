@@ -391,6 +391,10 @@ existing runtime-oracle and route-integration harnesses.
   latest endpoint reported 0.0.59. The slower versions list still lagged, as documented by the release runbook.
 - Public artifact parity -> **PASS** with an in-memory download: public and local artifacts are both 17,840,878 bytes
   and SHA-256 `859919BB8EF68469ADA404EFD224B350545EE1B1326F340B3DECD32BF3836910`.
+- Git close -> **PASS**: implementation commit `583c47aecaa27f4e91fb26766787deaf2936c74e` pushed to `main` and
+  `origin/main == HEAD` immediately after push.
+- Public CI -> **PASS** for the implementation commit: Quality run `30516977829` and Discord Release Sync run
+  `30516977832` both completed successfully.
 
 ## REVIEW
 
@@ -503,6 +507,10 @@ existing runtime-oracle and route-integration harnesses.
   tool had truncated its output, deleting 775 unrelated lines in the worktree. Staged diff review caught it before
   commit. BACKLOG was reconstructed from `HEAD` in six bounded read-only chunks, the seven-line B110 entry was
   reinserted, and the staged diff now contains only that open-work addition plus one trailing blank-line removal.
+  The first public-CI poll then used GitHub's unauthenticated single-run endpoint, which returned 404; the loop failed
+  to stop on the request error and printed five empty states. The commit-filtered public run-list endpoint was the
+  working authority and proved both workflows green. Together with the backlog truncation, this crossed the operator
+  degradation threshold; B110 is deferred to a fresh session rather than started in the degraded close stretch.
 - **Sustain:** graph-first call mapping and ADR-F4 prevented another incomplete packaging path.
 - **Improve work/approach:** query indexed stores and targeted roots first; treat user-supplied third-party tool syntax
   as a hypothesis until primary documentation is checked; make platform-gate fixtures valid at all earlier shared
