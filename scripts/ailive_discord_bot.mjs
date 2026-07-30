@@ -196,8 +196,24 @@ const commands = [
     .addStringOption(opt => opt.setName('fix').setDescription('Step-by-step fix resolution text').setRequired(true))
 ].map(cmd => cmd.toJSON());
 
+import { syncAllKnownFixes } from './ingest_repo_bugs.mjs';
+
 client.once('clientReady', async (c) => {
   console.log(`🤖 x4 AiLive Community Assistant is ONLINE as ${c.user.tag}`);
+
+  // Automated Known Bug & Issue Ingestion Sync
+  try {
+    await syncAllKnownFixes();
+    setInterval(async () => {
+      try {
+        await syncAllKnownFixes();
+      } catch (e) {
+        console.warn('⚠️ Automated bug ingestion background sync warning:', e.message);
+      }
+    }, 15 * 60 * 1000);
+  } catch (e) {
+    console.warn('⚠️ Initial bug ingestion warning:', e.message);
+  }
 
   try {
     const rest = new REST({ version: '10' }).setToken(DISCORD_TOKEN);

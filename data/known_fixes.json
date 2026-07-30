@@ -2,7 +2,14 @@
   {
     "id": "known-fixes-list",
     "title": "Known Issues & Verified Resolutions Catalog",
-    "keywords": ["known-fixes", "known fixes", "known bugs", "known issues", "/known-fixes", "bug list"],
+    "keywords": [
+      "known-fixes",
+      "known fixes",
+      "known bugs",
+      "known issues",
+      "/known-fixes",
+      "bug list"
+    ],
     "fix": "Here are our top verified resolutions:\n1. **Outdated Hotkey / BepInEx**: Walk up to any NPC in-game and select 'Speak with AI' (No BepInEx / Shift+C needed).\n2. **Player2 Port 4315**: Ensure Player2 companion app is running from https://player2.game.\n3. **X4 Forge Extension Stale**: Press Ctrl+Shift+P -> 'Developer: Reload Window'.\n4. **XSD Schema Validation Setup**: Set your X4 unpacked game path under Settings in X4 Forge Studio.",
     "category": "system",
     "matchCount": 0
@@ -10,7 +17,12 @@
   {
     "id": "shift-c-bepinex",
     "title": "Outdated Hotkey / BepInEx Assumption",
-    "keywords": ["shift c", "shift+c", "shift-c", "bepinex"],
+    "keywords": [
+      "shift c",
+      "shift+c",
+      "shift-c",
+      "bepinex"
+    ],
     "fix": "x4 AiLive is a native X4 extension! You do NOT need BepInEx or Shift+C. Simply walk up to any NPC in-game and select 'Speak with AI' from the dialogue menu.",
     "category": "x4_ailive",
     "matchCount": 0
@@ -18,7 +30,12 @@
   {
     "id": "player2-port-4315",
     "title": "Player2 AI Companion Connection Refused",
-    "keywords": ["port 4315", "player2 connection", "player2 closed", "companion app"],
+    "keywords": [
+      "port 4315",
+      "player2 connection",
+      "player2 closed",
+      "companion app"
+    ],
     "fix": "Ensure the free Player2 AI Companion app is running on your machine (https://player2.game). x4 AiLive communicates locally over http://127.0.0.1:4315.",
     "category": "x4_ailive",
     "matchCount": 0
@@ -26,7 +43,11 @@
   {
     "id": "extension-reload-window",
     "title": "X4 Forge Extension Update Not Applied",
-    "keywords": ["reload window", "update not loading", "extension stale"],
+    "keywords": [
+      "reload window",
+      "update not loading",
+      "extension stale"
+    ],
     "fix": "After updating X4 Forge Studio in VS Code / Open VSX, press Ctrl+Shift+P (or Cmd+Shift+P) and run 'Developer: Reload Window' to ensure the latest extension backend engine loads cleanly.",
     "category": "x4_forge",
     "matchCount": 0
@@ -34,7 +55,11 @@
   {
     "id": "djfhe-http-missing",
     "title": "DJFHE HTTP Transport Missing Warning",
-    "keywords": ["djfhe", "djfhe_http", "http transport unavailable"],
+    "keywords": [
+      "djfhe",
+      "djfhe_http",
+      "http transport unavailable"
+    ],
     "fix": "x4 AiLive is serverless (ADR-009) and includes built-in HTTP transport (aic_http.lua). Ensure the extension folder in X4 Foundations/extensions/ is named exactly x4_ai_influence.",
     "category": "x4_ailive",
     "matchCount": 0
@@ -42,7 +67,12 @@
   {
     "id": "forge-xsd-validation",
     "title": "XSD Schema Validation Setup",
-    "keywords": ["xsd error", "schema validation", "xml error", "md.xsd"],
+    "keywords": [
+      "xsd error",
+      "schema validation",
+      "xml error",
+      "md.xsd"
+    ],
     "fix": "In X4 Forge Studio, set your X4 unpacked game path under Settings (or config.json). X4 Forge automatically parses Egosoft's official XSD schemas (md.xsd, libraries.xsd) to provide real-time XML auto-completion and validation.",
     "category": "x4_forge",
     "matchCount": 0
@@ -50,7 +80,12 @@
   {
     "id": "forge-cat-dat-extraction",
     "title": "CAT/DAT Vanilla Game File Indexing",
-    "keywords": ["cat dat", "cat/dat", "extract vanilla", "cat file"],
+    "keywords": [
+      "cat dat",
+      "cat/dat",
+      "extract vanilla",
+      "cat file"
+    ],
     "fix": "X4 Forge includes native CAT/DAT archive indexing built-in. Open the CAT/DAT Explorer panel in the left sidebar to search, preview, and extract vanilla game files directly.",
     "category": "x4_forge",
     "matchCount": 0
@@ -58,7 +93,12 @@
   {
     "id": "forge-sidecar-api-port",
     "title": "Forge Sidecar Server Port Allocation",
-    "keywords": ["sidecar port", "forge server", "sidecar error", "sidecar connection"],
+    "keywords": [
+      "sidecar port",
+      "forge server",
+      "sidecar error",
+      "sidecar connection"
+    ],
     "fix": "X4 Forge Studio runs a lightweight local sidecar API server inside VS Code. If a port conflict occurs, run 'Developer: Reload Window' (Ctrl+Shift+P) to re-allocate a fresh dynamic port automatically.",
     "category": "x4_forge",
     "matchCount": 0
@@ -66,9 +106,374 @@
   {
     "id": "forge-openvsx-install",
     "title": "X4 Forge Extension Installation",
-    "keywords": ["openvsx", "open vsx", "vsix install", "install forge"],
+    "keywords": [
+      "openvsx",
+      "open vsx",
+      "vsix install",
+      "install forge"
+    ],
     "fix": "Install X4 Forge Studio directly from the Open VSX Marketplace: https://open-vsx.org/extension/x4forge/x4-forge-studio or search 'X4 Forge Studio' in VS Code Extensions.",
     "category": "x4_forge",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-release-passed-their",
+    "title": "release and passed their local/installed/public-artifact gat",
+    "keywords": [
+      "release",
+      "passed",
+      "their",
+      "localinstalledpublicartifact"
+    ],
+    "fix": "release and passed their local/installed/public-artifact gates. The late-discovered legacy discovery-token migration defect",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/KNOWN-BUGS.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-import-payload-returns",
+    "title": "**Import payload returns HTTP 200 on rejection** ",
+    "keywords": [
+      "import",
+      "payload",
+      "returns",
+      "http",
+      "rejection"
+    ],
+    "fix": "**Import payload returns HTTP 200 on rejection** — 2 of 3 payload shapes return **200 with garbage** instead",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-unstable-node-across",
+    "title": "**Unstable node IDs** across imports ",
+    "keywords": [
+      "unstable",
+      "node",
+      "across",
+      "imports"
+    ],
+    "fix": "**Unstable node IDs** across imports — makes graph-level automation unreliable.",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-wizard-visuals",
+    "title": "**Wizard visuals ",
+    "keywords": [
+      "wizard",
+      "visuals"
+    ],
+    "fix": "**Wizard visuals — SEEN** (screenshots): centered \"Welcome to X4 Forge\" modal, \"Found X4:",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-freshboot-acceptance",
+    "title": "**Fresh-boot acceptance ",
+    "keywords": [
+      "freshboot",
+      "acceptance"
+    ],
+    "fix": "**Fresh-boot acceptance — PROVEN**: one click, zero typing, ~15s (<2min bar): detect →",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-eventuitriggered-event-without",
+    "title": "**`event_ui_triggered` (any `event_*`) cue without `instanti",
+    "keywords": [
+      "eventuitriggered",
+      "event",
+      "without",
+      "instanti"
+    ],
+    "fix": "**`event_ui_triggered` (any `event_*`) cue without `instantiate=\"true\"` → WARN.** Such a cue fires ONCE then",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-instantiated-that-sets",
+    "title": "**Instantiated cue that sets local `$vars` but lacks `namesp",
+    "keywords": [
+      "instantiated",
+      "that",
+      "sets",
+      "local",
+      "vars",
+      "lacks",
+      "namesp"
+    ],
+    "fix": "**Instantiated cue that sets local `$vars` but lacks `namespace=\"this\"` → WARN.** Per-instance scoping.",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-silent-killer",
+    "title": "**★ The silent killer ",
+    "keywords": [
+      "silent",
+      "killer"
+    ],
+    "fix": "**★ The silent killer — Lua-table key access off `event.param3`.** When a cue does `$x = event.param3` (a Lua",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-status-heuristic-erroronly",
+    "title": "**Status heuristic is error-only → misses SILENT failures.**",
+    "keywords": [
+      "status",
+      "heuristic",
+      "erroronly",
+      "misses",
+      "silent",
+      "failures"
+    ],
+    "fix": "**Status heuristic is error-only → misses SILENT failures.** \"No recent errors mentioning `ai_influence`\" is",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-livetailing-panel-needs",
+    "title": "**Not live-tailing.** The panel needs manual Refresh/Browse ",
+    "keywords": [
+      "livetailing",
+      "panel",
+      "needs",
+      "manual",
+      "refreshbrowse"
+    ],
+    "fix": "**Not live-tailing.** The panel needs manual Refresh/Browse and shows a summary, not the rolling tail. It",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-marker-dependence-rootcause",
+    "title": "**Marker dependence.** \"ROOT-CAUSE (live) ",
+    "keywords": [
+      "marker",
+      "dependence",
+      "rootcause",
+      "live"
+    ],
+    "fix": "**Marker dependence.** \"ROOT-CAUSE (live) — markers not seen\" assumes the mod emits debug markers; most don't.",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-marker-scan-collectmodlogmarkers",
+    "title": "**Marker scan (`collectModLogMarkers`)** ",
+    "keywords": [
+      "marker",
+      "scan",
+      "collectmodlogmarkers"
+    ],
+    "fix": "**Marker scan (`collectModLogMarkers`)** — reads the deployed mod's `ui/**/*.lua` and extracts the actual",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-runtimefault-attribution-countmodruntimeerrors",
+    "title": "**Runtime-fault attribution (`countModRuntimeErrors`)** ",
+    "keywords": [
+      "runtimefault",
+      "attribution",
+      "countmodruntimeerrors"
+    ],
+    "fix": "**Runtime-fault attribution (`countModRuntimeErrors`)** — a genuine engine/Lua fault (e.g.",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-frontend-playtestworkspacetsx-renders",
+    "title": "**Frontend (`PlaytestWorkspace.tsx`)** renders a red `RUNTIM",
+    "keywords": [
+      "frontend",
+      "playtestworkspacetsx",
+      "renders",
+      "runtim"
+    ],
+    "fix": "**Frontend (`PlaytestWorkspace.tsx`)** renders a red `RUNTIME` panel (`data-testid=mod-runtime-errors`) with the",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-benignnoise-exclusion-20260626",
+    "title": "**Benign-noise exclusion (2026-06-26 follow-on)** ",
+    "keywords": [
+      "benignnoise",
+      "exclusion",
+      "20260626",
+      "followon"
+    ],
+    "fix": "**Benign-noise exclusion (2026-06-26 follow-on)** — X4 logs `[error] [FileIO] Failed to verify the file",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-validated-ways-20260626",
+    "title": "**VALIDATED two ways (2026-06-26)",
+    "keywords": [
+      "validated",
+      "ways",
+      "20260626"
+    ],
+    "fix": "**VALIDATED two ways (2026-06-26):** (1) Forge diagnostics — `GET /api/agent/game-log/status?modId=ai_influence`",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-navigate-proven-pattern",
+    "title": "**Navigate (proven pattern, App.tsx ~L627)",
+    "keywords": [
+      "navigate",
+      "proven",
+      "pattern",
+      "apptsx",
+      "l627"
+    ],
+    "fix": "**Navigate (proven pattern, App.tsx ~L627):** `setSelectedNode(node)` + `setFocusNodeRequest({nodeId,",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-highlight-redyellow-rings",
+    "title": "**Highlight (red/yellow rings)",
+    "keywords": [
+      "highlight",
+      "redyellow",
+      "rings"
+    ],
+    "fix": "**Highlight (red/yellow rings):** the Canvas already highlights nodes from the `diagnostics: PackageDiagnostic[]`",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-done-verified",
+    "title": "**✅ G1 DONE & VERIFIED** ",
+    "keywords": [
+      "done",
+      "verified"
+    ],
+    "fix": "**✅ G2 DONE & VERIFIED** — `mdCompileSelftest.ts` (`runCompileSelftest`, public `GET /api/agent/compile-selftest`) compiles representative graphs and asserts the EMITTED XML (not node shape) for check_value (expression / operand+min / bare), reward_player, set_value, show_help (custom + duration unit), create_ship (owner child, no faction attr), and do_if body-nesting. **12/12 green.** This is the regression net that would have caught G1.",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-controlflow-doif-output",
+    "title": "Control-flow (`do_if` etc.) output is structurally correct b",
+    "keywords": [
+      "controlflow",
+      "doif",
+      "output",
+      "structurally",
+      "correct"
+    ],
+    "fix": "Control-flow (`do_if` etc.) output is structurally correct by inspection and passes selftests, but — as Ken noted — has **not been confirmed running in X4** the way the cue/event path has. That verification is the C2 capstone (excluded from this list by request) but remains the gating step before trusting control-flow end-to-end.",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-local-token-model",
+    "title": "**Local API token model** (sessionStorage + global `fetch` p",
+    "keywords": [
+      "local",
+      "token",
+      "model",
+      "sessionstorage",
+      "global",
+      "fetch"
+    ],
+    "fix": "**Local API token model** (sessionStorage + global `fetch` patch, `main.tsx:12`): fine for a localhost-only tool; only becomes a risk if the app is ever bound beyond localhost. A *deployment-config* decision, not a current flaw.",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-extension-doctor-exposure",
+    "title": "**Extension Doctor exposure**",
+    "keywords": [
+      "extension",
+      "doctor",
+      "exposure"
+    ],
+    "fix": "**Extension Doctor exposure**: powerful enough (scans installed extensions, can touch restricted content) that public exposure needs explicit scope + permission semantics. Address at release-gating time.",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-saveapply-boundaries",
+    "title": "**Save/apply boundaries**",
+    "keywords": [
+      "saveapply",
+      "boundaries"
+    ],
+    "fix": "**Save/apply boundaries**: \"test driving\" mutates real workspace state (localStorage + `/api/agent/workspace` sync). For public release users will expect clearer save/apply/discard semantics. Product decision, not a bug.",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-provider-localstorage-codex",
+    "title": "**AI provider API key in the DOM / localStorage** (Codex, 20",
+    "keywords": [
+      "provider",
+      "localstorage",
+      "codex"
+    ],
+    "fix": "**AI provider API key in the DOM / localStorage** (Codex, 2026-06-16): the key lives in `localStorage.user_<provider>_key` and appears as a password-input value in `AIConnectionModal` when open — readable by any page script. Fine for a localhost single-user dev tool, but a real concern if Forge ever goes multi-user, remote, or plugin-heavy (a malicious plugin/injected script could exfiltrate it). Revisit at release-gating: server-held key, OS keychain, or a credential broker. Not a current defect for local use.",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-alreadydone-reviewer-missed",
+    "title": "**Already-done, reviewer missed it**",
+    "keywords": [
+      "alreadydone",
+      "reviewer",
+      "missed"
+    ],
+    "fix": "**Already-done, reviewer missed it**: Gemini's \"auto-hide minimap when panel is narrow\" is G8b, shipped (`showMinimap = editorWidth >= 560`, task #74). If it isn't visibly firing, that's a threshold check, not net-new work.",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-public-17812396byte-vsix",
+    "title": "; its public 17,812,396-byte VSIX exactly matches the instal",
+    "keywords": [
+      "public",
+      "17812396byte",
+      "vsix",
+      "exactly",
+      "matches",
+      "instal"
+    ],
+    "fix": "; its public 17,812,396-byte VSIX exactly matches the installed/tested artifact at SHA-256",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
     "matchCount": 0
   }
 ]
