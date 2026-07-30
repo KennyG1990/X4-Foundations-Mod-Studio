@@ -1,73 +1,74 @@
-# X4 Forge session handoff — 2026-07-29 · AUTOMATED BUG INGESTION & DISCORD AUTO-FIX VERIFIED
+# X4 Forge session handoff — 2026-07-29 · ZERO-TO-MOD CODE-GROUNDED BOT INTELLIGENCE VERIFIED
 
 ## One-line state
 
-Rebranded public product names to `x4 AiLive` across all public readmes, content manifests, and GitHub workflows. Implemented and verified the Smart Known Issue Builder & Auto-Fix Interceptor engine across both Discord bots (`Forge Concierge#3242` and `X4AILive#2651`) backed by `data/known_fixes.json`, automated frequency tracking, and slash commands (`/status`, `/faq`, `/known-fixes`, `/add-fix`). Implemented automated bug ingestion engine (`scripts/ingest_repo_bugs.mjs`) harvesting known defects and resolutions from `KNOWN-BUGS.md`, `ROADMAP.md`, `BACKLOG.md`, and GitHub Issues API every 15 minutes. Pushed clean commit `e29e36c` to `origin/main`.
+Rebranded public product names to `x4 AiLive` across all public readmes, content manifests, and GitHub workflows. Implemented and verified the Smart Known Issue Builder & Auto-Fix Interceptor engine across both Discord bots (`Forge Concierge#3242` and `X4AILive#2651`) backed by `data/known_fixes.json`, automated frequency tracking, slash commands (`/status`, `/faq`, `/known-fixes`, `/add-fix`), and 15-minute automated bug ingestion (`scripts/ingest_repo_bugs.mjs`). Grounded bot intelligence in 3 exact code-backed zero-to-mod workflows (`FirstRunWizard`, Node Toolbox canvas, `MOD_PATTERNS`). Pushed clean commit `48ebb48` to `origin/main`.
 
 ## Active bounded unit
 
-- Plan/record: `docs/plans/2026-07-29-known-bugs-hardening-release.md`.
-- Implemented FB-2/12/13/14/16/17/18/19/20/21 and the valid FB-22 bounds. Their source/focused defects are
-  removed from `KNOWN-BUGS.md`; the oracle determinism defect found during validation is also repaired and removed.
-- Stop boundary remains unrelated B94-B98, addendum/MCP strategy, and real game/mod mutation.
+- Goal: reconcile Kimi R1-R21 durably, then complete B109 before executing the remaining recommendation batches.
+- Active records: `BACKLOG.md`, `docs/plans/2026-07-29-platform-release-center.md`,
+  `docs/plans/2026-07-29-platform-release-center-design.md`, and
+  `docs/plans/2026-07-29-kimi-recommendations-ledger.md`.
+- B109 Batch 1: complete binary-safe Nexus ZIP, verified Steam CAT/DAT staging and rollback ZIP, official
+  WorkshopTool command preparation, explicit-workspace/fresh-source gates, stage codes, post-tool verification,
+  scope/history rules, and route assertions.
+- B109 Batch 2: separate Nexus/Steam guided UI, normalized persistent Guided/Express preference, report-backed
+  export, correlated native file/save requests, rollback-safe receipt-verified native copy, exact WorkshopTool PE
+  selection, and visible terminal insertion without Enter.
+- Authored but unrun: report-backed export route assertions and `tests/e2e/release-center.spec.ts`.
+- Out of scope until B109 closes: remaining Kimi execution batches B110 R1-R21.
 
 ## Validation state
 
-- PASS: audit 0 vulnerabilities; typecheck; lint 0 errors (550 existing warnings); production build.
-- PASS focused: workspace 14/14, GitHub store 7/7, cache 4/4, cross-file 19/19, CAT/DAT 15/15,
-  XML limits 4/4, agent keys 22/22, discovery 16/16 including live-PID legacy credential migration.
-- PASS route stability: 10/10 consecutive runs, 175/175 assertions each; dynamic ports, isolated state,
-  teardown and temp-root cleanup verified.
-- PASS oracle sweep: 114/114 after repairing the synthetic reference fixture's external configuration dependency.
-- PASS e2e: 43/43 structured verdict; disposable ports stopped and live state hashes unchanged.
-- PASS live schema/catalog acceptance: corpus 14/14, largest CAT 364,527 entries, reference API 81/81,
-  schema particles 544/544.
-- PASS build/package: root build; extension stage/build; staged probe 6/6; 0.0.58 VSIX package inspection.
-- PASS installed product: rendered version 0.0.58, rebuilt Studio v1.0.348, live sidecar port 58753/PID 16676,
-  public schema response, token-free real discovery files. Evidence is under `vscode-extension/evidence/0.0.58/`.
-- PASS public artifact: exact OpenVSX 0.0.58 metadata/download and local/public SHA-256 parity.
-- PASS final local: graph refresh, audit, lint, full oracle rerun, precommit, source commit, push, and remote equality.
-- FAILED public Quality run 30498947479: clean runner lacked extension `@types/vscode`; corrected in `f9ecdd9`.
-- FAILED public Quality run 30499244809: install, audit, Typecheck, and Lint passed, then oracle integration was
-  111/114 because expression, reference, and patch selftests read host configuration. The selftests now inject
-  owned fixtures; empty-profile reproduction is 114/114.
-- FAILED local exact-Quality replay: route history dedup check exposed an unchanged 312 KB rewrite generating a
-  336,041-byte context-only diff. `unifiedDiff` now emits only bounded headers for identical input; its owned oracle
-  and the 175/175 route rerun pass, with measured growth reduced to 569 bytes.
-- FAILED public Quality run 30499899687: both installs, audit, Typecheck, Lint, and oracles 114/114 passed; route
-  integration failed because `dist/server.cjs` is intentionally untracked and production build was sequenced after
-  the route probe. Quality now builds first.
-- PASS public Quality run 30500157383: clean Windows install, audit, Typecheck, Lint, oracles 114/114, production
-  build, and isolated routes 175/175 all passed.
-- Antigravity and the 0.0.57 sidecar were active at baseline. Do not run state-touching validation until Ken
-  answers whether Forge/X4 are running and the machine is quiet.
-- Latest read-only state: no X4 process, one unique Antigravity X4 Forge window, sidecar listening on 65072.
-  This does not prove the IDE is idle or authorize replacing the installed extension.
+- PASS: root `npm run typecheck` after latest Batch 2/test source.
+- PASS: root `npm run lint` with zero errors and the repository's existing 548-warning baseline.
+- PASS: focused new-file ESLint with zero warnings/errors.
+- PASS: release preferences 5/5; mod distribution 31/31; platform release 14/14; agent keys 24/24;
+  agent history 67/67; native bridge 36/36.
+- PASS: extension source build; route script syntax; `git diff --check` (line-ending notices only).
+- PASS: `graphify update .` -> 2,858 nodes / 6,696 edges / 149 communities.
+- NOT RUN: isolated `npm run test:routes`, focused Playwright, full e2e, production/extension packaging,
+  installed Antigravity, rendered UI, OpenVSX/public release.
+- Official WorkshopTool is not installed locally. No Steam/Nexus publication was attempted or authorized.
 
 ## Baseline / ownership
 
-The task began clean at `7c0bd24eb1effa2faaa66248d533cb2ffbbbbaa5`. Before the B108 source commit,
-`HEAD == origin/main == 2e9f74f`; earlier bot/workflow files do not overlap B108. `2e9f74f` accidentally includes
-the B108 ROADMAP close because the external agent staged that shared file during this task. Every remaining
-worktree change is B108-owned; the final commit brings implementation and evidence into agreement with that
-already-pushed durable close.
+- Task began clean at `HEAD == origin/main == 72ec4aa77d2d99a79b308101c7d34b58b5966de2`.
+- Every current worktree change is B109/B110-owned; no unrelated user change was found at baseline.
+- Do not commit or push until the required runtime/rendered/installed gates are complete and the close is VERIFIED.
+- No real game directory, real mod, external account, Steam Workshop item, or Nexus page has been mutated.
+
+## Eyeball queue
+
+Nothing is ready for Ken's eyeball yet because the UI has not been run. After fresh machine-quiet confirmation:
+
+1. Open the isolated Release Center Playwright result and confirm the focused spec is green.
+2. Install the newly packaged VSIX in Antigravity, open Studio -> Playtest -> Release Center.
+3. Click `Package for Nexus Mods`; inspect the complete guide, stages, and Save As prompt.
+4. Click `Prepare for Steam Workshop`; inspect preview/tool pickers, command display, and terminal insertion.
+5. Confirm the terminal contains the command but has not executed it; do not press Enter or upload.
 
 ## Hot files / next command
 
-- Commit and push this durable VERIFIED close, require its documentation-only Quality run to remain green, and
-  prove `origin/main == HEAD` with a clean worktree.
+- First ask/receive: `Forge, Antigravity, and X4 are idle; machine quiet.`
+- Then run `npm run test:routes` and inspect its structured assertions, teardown, ephemeral ports, and live-state
+  non-mutation before any Playwright or installed-host work.
+- Run the focused Release Center Playwright spec, then the full workflow gates in the documented plan.
 
 ## Hazards / dead theories
 
-- FB-15 remains disproved by the dirty guard. Archive discovery is already bounded. Legacy deploy has a B97
-  caller and was hardened rather than retired. Auto-sync controls were removed, not activated.
-- ESLint 10/React Hooks 7 add repo-wide recommended rules; the config deliberately retains the prior enforced
-  contract. Treat a future compiler-rule migration as separate work.
-- CI must stay Windows-based with the 600-warning ceiling. FB-20 requires 10 local route runs and at least 5/5
-  consecutive green before the new gate is trusted.
-- Module execution alone does not invoke exported selftests; call the exported `run*Selftest` function.
+- User-supplied `PublishTool.exe`/`X4Customizer.exe` guidance is incorrect for current official publishing.
+  The reconciled tool is `WorkshopTool.exe` from separate Egosoft X Tools.
+- Forge builds/verifies CAT/DAT itself. The emitted command intentionally omits WorkshopTool `-buildcat`.
+- Steam publication remains interactive and external; Forge never presses Enter, authenticates, accepts legal
+  agreements, or claims upload success before the post-tool `ws_<id>`/payload check.
+- Extension build recreates `vscode-extension/out`; serialize it before root typecheck or root TypeScript can
+  observe a transient missing `out/extension.js`.
+- Authored tests are not proof. Do not relabel B109 VERIFIED until HTTP, browser, packaged, installed, and rendered
+  gates actually pass.
 
 ## Commit question
 
-B108 is at a verified commit point. Suggested close title:
-`docs(release): record green public Quality gate for X4 Forge Studio 0.0.58`.
+No commit point yet. B109 is PARTIAL: source/static work is green, but required machine-gated proof remains.
+Suggested close title once genuinely VERIFIED: `feat(release): add guided verified Nexus and Steam packaging`.
