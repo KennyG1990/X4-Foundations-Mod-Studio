@@ -100,10 +100,19 @@ export function findEmbeddedMachinePath(bytes, roots) {
   return null;
 }
 
-function buildMachineRoots() {
+function buildMachinePathPolicy() {
   const cwd = path.resolve(process.cwd());
   const repo = path.basename(cwd).toLowerCase() === 'vscode-extension' ? path.dirname(cwd) : cwd;
-  return [...new Set([cwd, repo, os.homedir(), process.env.GITHUB_WORKSPACE, process.env.X4_REFERENCE_ROOT].filter(Boolean))];
+  const allEntries = [...new Set([cwd, repo, process.env.GITHUB_WORKSPACE, process.env.X4_REFERENCE_ROOT].filter(Boolean))];
+  const firstPartyOnly = [...new Set([os.homedir()].filter(root => root && !allEntries.includes(root)))];
+  return { allEntries, firstPartyOnly };
+}
+
+export function findForbiddenEmbeddedMachinePath(entryName, bytes, policy) {
+  const alwaysForbidden = findEmbeddedMachinePath(bytes, policy.allEntries);
+  if (alwaysForbidden) return alwaysForbidden;
+  const isVendoredDependency = /^extension\/app\/node_modules(?:\/|$)/i.test(entryName);
+  return isVendoredDependency ? null : findEmbeddedMachinePath(bytes, policy.firstPartyOnly);
 }
 
 export function inspectEntryMetadata(entries, archiveSize) {
@@ -153,11 +162,11 @@ export function inspectVsixBytes(bytes) {
   const entries = readVsixEntries(bytes);
   const result = inspectEntryMetadata(entries, bytes.length);
   if (!result.pass) return result;
-  const machineRoots = buildMachineRoots();
+  const machinePathPolicy = buildMachinePathPolicy();
   for (const entry of entries) {
     if (entry.name.endsWith('/')) continue;
     const content = extractEntry(bytes, entry);
-    const embeddedRoot = findEmbeddedMachinePath(content, machineRoots);
+    const embeddedRoot = findForbiddenEmbeddedMachinePath(entry.name, content, machinePathPolicy);
     if (embeddedRoot) result.errors.push(`${entry.name}: embedded build-machine path ${embeddedRoot}`);
   }
   result.pass = result.errors.length === 0;
@@ -191,9 +200,21 @@ function runSelftest() {
     && findEmbeddedMachinePath(Buffer.from('example /Users/alice/project'), ['C:\\Users\\ci\\work']) === null;
   if (embeddedPass) passed++;
   console.log(`${embeddedPass ? 'PASS' : 'FAIL'} exact_embedded_machine_root_rejects_without_generic_user_path_cry_wolf`);
-  const total = cases.length + 1;
+  const scopedPolicy = { allEntries: ['D:\\a\\X4_Forge'], firstPartyOnly: ['C:\\Users\\runneradmin'] };
+  const scopedPass = findForbiddenEmbeddedMachinePath('extension/out/extension.js', Buffer.from('C:\\Users\\runneradmin\\source.ts'), scopedPolicy) === 'C:\\Users\\runneradmin'
+    && findForbiddenEmbeddedMachinePath('extension/app/node_modules/vendor/native.node', Buffer.from('C:\\Users\\runneradmin\\build'), scopedPolicy) === null
+    && findForbiddenEmbeddedMachinePath('extension/app/node_modules/vendor/index.js', Buffer.from('D:\\a\\X4_Forge\\secret.txt'), scopedPolicy) === 'D:\\a\\X4_Forge';
+  if (scopedPass) passed++;
+  console.log(`${scopedPass ? 'PASS' : 'FAIL'} vendor_home_allowed_but_first_party_home_and_workspace_rejected`);
+  const total = cases.length + 2;
   console.log(`[vsix-inspector selftest] ${passed}/${total} ${passed === total ? 'PASS' : 'FAIL'}`);
   return passed === total;
+}
+
+function emitGithubError(message) {
+  if (process.env.GITHUB_ACTIONS !== 'true') return;
+  const escaped = String(message).replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
+  console.error(`::error title=VSIX inspection failed::${escaped}`);
 }
 
 if (process.argv.includes('--selftest')) {
@@ -210,13 +231,18 @@ try {
   const bytes = fs.readFileSync(file);
   const result = inspectVsixBytes(bytes);
   if (!result.pass) {
-    for (const error of result.errors) console.error(`FAIL ${error}`);
+    for (const error of result.errors) {
+      console.error(`FAIL ${error}`);
+      emitGithubError(error);
+    }
     console.error(`[vsix-inspector] FAIL ${file}`);
     process.exit(1);
   }
   console.log(`[vsix-inspector] PASS ${result.entryCount} entries, ${result.unpackedBytes} unpacked bytes, ${bytes.length} archive bytes`);
   console.log(`[vsix-inspector] ${file}`);
 } catch (error) {
-  console.error(`[vsix-inspector] FAIL ${error instanceof Error ? error.message : String(error)}`);
+  const message = error instanceof Error ? error.message : String(error);
+  emitGithubError(message);
+  console.error(`[vsix-inspector] FAIL ${message}`);
   process.exit(1);
 }

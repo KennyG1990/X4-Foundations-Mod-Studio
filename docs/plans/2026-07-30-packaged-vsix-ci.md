@@ -85,6 +85,21 @@ Status: **SPECIFIED**
 4. Run local package gates and regressions; fresh-eyes review workflow permissions/order/negative coverage.
 5. Document close, commit/push only R19 paths, then require exact-SHA public clean-runner and artifact evidence.
 
+### Replan after first public runner
+
+- Exact-SHA Quality run `30569511806` / job `90962356914` passed steps 1-17, including the real staged probe,
+  inspector selftest, and VSIX package, then failed step 18 `Inspect final VSIX bytes`; artifact upload correctly
+  skipped. GitHub's public annotations expose only exit 1 while the unsigned job-log endpoint returns 403, so the
+  offending entry is not observable from the run.
+- The exact-root policy currently applies `os.homedir()` to third-party `node_modules` bytes. CI dependency binaries
+  and generated wrappers may legitimately contain the runner's well-known home path; this repeats the locally
+  reproduced vendor-content false-positive class, not evidence of first-party source/config leakage.
+- **Acceptance correction:** repository/workspace/reference roots remain forbidden in every entry. The runner home
+  remains forbidden in first-party package entries but is excluded from vendored `extension/app/node_modules/**`.
+  Add selftests for both sides and emit GitHub error annotations containing exact inspector failures so any remaining
+  clean-runner-only rejection is diagnosable without privileged log download. This narrows an overbroad oracle; it
+  does not weaken required-payload, secret/state, traversal, CRC, size, or first-party path-leak checks.
+
 ## IMPLEMENT
 
 - Pinned `@vscode/vsce` 3.9.2 in the extension manifest/lockfile and changed `package` to the locked local binary.
@@ -122,6 +137,15 @@ Status: **SPECIFIED**
 - `graphify update .` -> PASS at 2,970 nodes / 6,942 edges / 155 communities. `npm run precommit:check` ->
   PASS (tripwires 0, canon mirrors, verdict 10/10, product-copy guard, typecheck). Final diff/port checks -> PASS.
 - Required clean Windows public Quality run and downloadable artifact -> pending implementation push.
+- First public Quality run `30569511806` / job `90962356914` -> **FAILED** only at final VSIX inspection after
+  steps 1-17 passed; artifact upload correctly skipped. Public annotation/API evidence exposes exit 1 but not the
+  rejected entry; unauthenticated log download -> 403.
+- Corrected scoped machine-path oracle -> selftest **13/13 PASS**. It rejects the exact workspace root in all
+  entries and home paths in first-party entries, allows only a vendor dependency's runner-home provenance, and
+  preserves all other archive rejection policy. Existing 2,091-entry VSIX inspection -> PASS.
+- GitHub diagnostic negative -> missing VSIX exits 1 and emits `::error title=VSIX inspection failed::...` with the
+  exact cause for public annotations. Post-correction `graphify update .` -> 2,972 nodes / 6,947 edges / 156
+  communities; `npm run precommit:check` -> PASS.
 
 ## REVIEW
 
@@ -151,6 +175,9 @@ Status: **SPECIFIED**
   needs XSDs; the first package scan overgeneralized `/Users/*` and falsely rejected 16 vendor files. No acceptance
   weakening: the fixture proves the reference API while real-corpus mode retains completion; machine-path scanning
   now targets exact build roots and includes a negative against generic-user-path cry wolf.
+- The first public runner then failed only on the final content scan. GitHub hid the precise unsigned log, exposing
+  an observability gap; the correction scopes runner-home provenance out of vendor dependencies while retaining
+  repository/workspace roots everywhere and adds exact public error annotations.
 - **Sustain:** reuse the actual local product chain in CI and inspect the final compressed bytes, not source intent.
 - **Improve work/approach:** distinguish corpus access from schema-backed language completion when designing minimal
   clean-runner fixtures. Derive sensitive machine roots from the running environment rather than broad examples.
