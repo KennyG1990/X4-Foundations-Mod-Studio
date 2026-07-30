@@ -123,11 +123,21 @@ async function generateWithModelCascade(promptText) {
 
 // CONCISE GROUNDING CONTEXT
 function buildConciseForgeDocsContext() {
-  let text = '';
+  let text = `X4 FORGE STUDIO — USER QUICKSTART & MODDING WORKFLOW:
+X4 Forge Studio is a visual workbench and IDE extension inside VS Code for X4 Foundations modding.
+
+HUMAN MODDER GETTING STARTED (CREATING A MOD):
+1. Open VS Code with X4 Forge Studio installed.
+2. Press Ctrl+Shift+P (or Cmd+Shift+P) and select 'X4 Forge: Create Mod Project' (or click 'New Mod Project' in the X4 Forge sidebar panel).
+3. Enter your Mod ID (e.g. my_custom_mod), Display Name, and Author.
+4. Click 'Scaffold Mod'. X4 Forge automatically generates content.xml, folder structure (md/, aiscripts/, libraries/), and initializes real-time XSD schema validation.
+5. Edit XML files with live XSD auto-completion, diagnostic checks, CAT/DAT archive browsing, and 1-click deployment to X4 Foundations/extensions/.
+
+`;
   if (fs.existsSync('README.md')) {
     text += fs.readFileSync('README.md', 'utf-8').slice(0, 1500);
   }
-  return text || 'X4 Forge is a visual workbench and IDE for X4 Foundations modding (MD XML, Lua UI, XML patching).';
+  return text;
 }
 
 const forgeDocsContext = buildConciseForgeDocsContext();

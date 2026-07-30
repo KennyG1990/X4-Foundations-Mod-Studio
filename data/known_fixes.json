@@ -1,5 +1,20 @@
 [
   {
+    "id": "forge-create-first-mod",
+    "title": "First Steps to Create a Mod in X4 Forge Studio",
+    "keywords": [
+      "first step",
+      "make a mod",
+      "create a mod",
+      "how to start modding",
+      "getting started modding",
+      "new mod"
+    ],
+    "fix": "To create a new mod in X4 Forge Studio:\n1. Open VS Code with X4 Forge Studio installed.\n2. Press Ctrl+Shift+P (or Cmd+Shift+P) and run 'X4 Forge: Create Mod Project' (or click 'New Mod Project' in the X4 Forge sidebar panel).\n3. Fill in your Mod ID (e.g. my_custom_mod), Display Name, and Author.\n4. Click 'Scaffold Mod' — X4 Forge automatically generates content.xml, folder structure (md/, aiscripts/, libraries/), and initializes real-time XSD schema validation.\n5. Open your new mod folder and start editing XML with full auto-completion!",
+    "category": "x4_forge",
+    "matchCount": 0
+  },
+  {
     "id": "known-fixes-list",
     "title": "Known Issues & Verified Resolutions Catalog",
     "keywords": [
