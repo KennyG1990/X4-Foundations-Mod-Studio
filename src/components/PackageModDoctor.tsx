@@ -7,6 +7,7 @@ import React, { useState, useMemo } from 'react';
 import { Terminal, CheckCircle, AlertTriangle, Sparkles, Boxes, RefreshCw, FileCode, X, Layers, Crown, Copy, ShieldCheck } from 'lucide-react';
 import { ModWorkspace, PackageDiagnostic, generateMDXML } from '../types';
 import { critiqueWorkspace } from '../lib/mdCritic';
+import DiagnosticGuidance from './DiagnosticGuidance';
 
 interface PackageModDoctorProps {
   workspace: ModWorkspace;
@@ -16,6 +17,7 @@ interface PackageModDoctorProps {
    *  selftests; 'install' = the cross-mod Install Diagnostics (Extension Doctor);
    *  'all' (default) = both, for standalone use. */
   focus?: 'package' | 'install' | 'all';
+  onSuppressionCommitted?: (sourceHash: string) => void;
 }
 
 interface ExtensionOpenTarget {
@@ -84,7 +86,8 @@ export default function PackageModDoctor({
   workspace,
   diagnostics,
   diagnosticSource,
-  focus = 'all'
+  focus = 'all',
+  onSuppressionCommitted,
 }: PackageModDoctorProps) {
   const showPackage = focus !== 'install';
   const showInstall = focus !== 'package';
@@ -287,7 +290,7 @@ export default function PackageModDoctor({
   };
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-[#080a0e] p-3 space-y-3 shrink-0 font-mono text-xs">
+    <div className="flex flex-col h-full min-h-0 overflow-y-auto bg-[#080a0e] p-3 space-y-3 shrink-0 font-mono text-xs scrollbar-thin">
       {showPackage && (<>
       {/* Header Info Card */}
       <div className="bg-[#12141a]/90 border border-white/5 rounded-lg p-3 space-y-2.5">
@@ -635,7 +638,7 @@ export default function PackageModDoctor({
 
       {/* Issues list container (package diagnostics detail) */}
       {showPackage && (
-      <div className="flex-1 overflow-y-auto space-y-2 min-h-0 pr-1 transition-all scrollbar-thin">
+      <div className="shrink-0 space-y-2 min-h-0 pr-1 transition-all">
         {diagnostics.length === 0 ? (
           diagnosticSource === 'local' ? (
             <div className="text-amber-300/90 text-[10.5px] leading-normal flex flex-col items-center justify-center text-center gap-2 bg-amber-500/5 p-4 rounded-lg border border-amber-500/20 font-sans font-medium h-32">
@@ -686,6 +689,11 @@ export default function PackageModDoctor({
                         SOURCE: {diag.sourceRef.kind}{diag.sourceRef.label ? ` / ${diag.sourceRef.label}` : ''}{diag.sourceRef.id ? ` / ${diag.sourceRef.id}` : ''} →
                       </span>
                     )}
+                    <DiagnosticGuidance
+                      diagnostic={diag}
+                      workspace={workspace}
+                      onSuppressionCommitted={onSuppressionCommitted}
+                    />
                   </div>
                 </div>
               );

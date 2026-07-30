@@ -33,6 +33,7 @@ interface DiagnosticsCenterProps {
   /** A4.10 — gates the optional AI-polish affordance in the Scripts (MDScanner) view. */
   aiEnabled?: boolean;
   requestedScope?: DiagnosticsScope;
+  onSuppressionCommitted?: (sourceHash: string) => void;
 }
 
 export type DiagnosticsScope = 'scripts' | 'package' | 'install';
@@ -54,6 +55,7 @@ export default function DiagnosticsCenter({
   onOpenCues,
   aiEnabled = false,
   requestedScope = 'scripts',
+  onSuppressionCommitted,
 }: DiagnosticsCenterProps) {
   const [scope, setScope] = useState<DiagnosticsScope>(requestedScope);
 
@@ -88,7 +90,7 @@ export default function DiagnosticsCenter({
       </div>
 
       {/* Scope viewport */}
-      <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="flex-1 overflow-hidden min-h-0">
         {scope === 'scripts' && (
           <DiagnosticsHub
             workspace={workspace}
@@ -102,7 +104,7 @@ export default function DiagnosticsCenter({
         )}
 
         {scope === 'package' && (
-          <div className="flex flex-col h-full min-h-0 overflow-y-auto">
+          <div className="flex flex-col h-full min-h-0 overflow-hidden">
             {/* Cue health SUMMARY only — the full tree lives in the CUES tab. */}
             {(() => {
               const lf = analyzeCueLineage(workspace.nodes || [], workspace.links || []).findings;
@@ -123,12 +125,15 @@ export default function DiagnosticsCenter({
                 </button>
               );
             })()}
-            <PackageModDoctor
-              workspace={workspace}
-              diagnostics={diagnostics}
-              diagnosticSource={diagnosticSource}
-              focus="package"
-            />
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <PackageModDoctor
+                workspace={workspace}
+                diagnostics={diagnostics}
+                diagnosticSource={diagnosticSource}
+                focus="package"
+                onSuppressionCommitted={onSuppressionCommitted}
+              />
+            </div>
           </div>
         )}
 
@@ -138,6 +143,7 @@ export default function DiagnosticsCenter({
             diagnostics={diagnostics}
             diagnosticSource={diagnosticSource}
             focus="install"
+            onSuppressionCommitted={onSuppressionCommitted}
           />
         )}
       </div>

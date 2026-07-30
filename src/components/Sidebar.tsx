@@ -147,6 +147,7 @@ interface SidebarProps {
   diagnostics: PackageDiagnostic[];
   diagnosticSource: 'checking' | 'project' | 'local';
   diagnosticsScope?: DiagnosticsScope;
+  onSuppressionCommitted?: (sourceHash: string) => void;
   onSelectSnapshot?: (snapWS: ModWorkspace | null) => void;
 }
 
@@ -308,6 +309,7 @@ export default function Sidebar({
   diagnostics,
   diagnosticSource,
   diagnosticsScope,
+  onSuppressionCommitted,
   onSelectSnapshot
 }: SidebarProps) {
   const [nodeFilter, setNodeFilter] = useState<'all' | 'cue' | 'event' | 'condition' | 'action'>('all');
@@ -598,7 +600,9 @@ export default function Sidebar({
         </div>
 
         {/* Main Content Pane */}
-        <div className={`flex-1 overflow-y-auto min-w-0 min-h-0 ${activeTab === 'filesystem' || activeTab === 'git' || activeTab === 'cues' || activeTab === 'ai' ? 'p-0' : 'p-3 space-y-3'}`}>
+        <div className={`flex-1 min-w-0 min-h-0 ${activeTab === 'diagnostics'
+          ? 'p-0 overflow-hidden'
+          : `overflow-y-auto ${activeTab === 'filesystem' || activeTab === 'git' || activeTab === 'cues' || activeTab === 'ai' ? 'p-0' : 'p-3 space-y-3'}`}`}>
         {activeTab === 'cues' && (
           <CueViewer
             workspace={workspace}
@@ -663,6 +667,7 @@ export default function Sidebar({
               requestedScope={diagnosticsScope}
               onOpenCues={() => setActiveTab('cues')}
               aiEnabled={aiEnabled}
+              onSuppressionCommitted={onSuppressionCommitted}
             />
           </ErrorBoundary>
         )}

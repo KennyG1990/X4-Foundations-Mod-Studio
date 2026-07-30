@@ -351,6 +351,7 @@ export default function App() {
   // Diagnostics / Mod Doctor state shared by readiness and the diagnostics panel.
   const [diagnostics, setDiagnostics] = useState<PackageDiagnostic[]>([]);
   const [diagnosticSource, setDiagnosticSource] = useState<'checking' | 'project' | 'local'>('checking');
+  const [diagnosticRevision, setDiagnosticRevision] = useState(0);
   const [readinessWatcher, setReadinessWatcher] = useState<ReadinessWatcherEvidence>({ phase: 'loading' });
   const [experienceConfirmations, setExperienceConfirmations] = useState<Record<string, ExperienceConfirmation>>(
     () => parseExperienceConfirmations(localStorage.getItem(EXPERIENCE_CONFIRMATIONS_KEY))
@@ -413,7 +414,7 @@ export default function App() {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [workspace, mdCode]);
+  }, [workspace, mdCode, diagnosticRevision]);
 
   const readinessWorkspaceHash = React.useMemo(
     () => workspaceContentHash(sanitizeWorkspace(workspace)),
@@ -2031,6 +2032,12 @@ export default function App() {
           diagnostics={effectiveDiagnostics}
           diagnosticSource={diagnosticSource}
           diagnosticsScope={diagnosticsScope}
+          onSuppressionCommitted={(sourceHash) => {
+            setWorkspace(previous => previous.sourceStamp
+              ? { ...previous, sourceStamp: { ...previous.sourceStamp, hash: sourceHash, at: new Date().toISOString() } }
+              : previous);
+            setDiagnosticRevision(value => value + 1);
+          }}
         />
         ) : (
           <BeginnerWorkspace

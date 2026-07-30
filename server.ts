@@ -75,6 +75,7 @@ import { computeActionCensus, runActionCensusSelftest } from "./src/lib/actionCe
 import { createSpendMeter, estimateCallUsd, runAiSpendMeterSelftest } from "./src/lib/aiSpendMeter";
 import { runModPatternsSelftest } from "./src/lib/modPatterns";
 import { runExplainSelftest, explainWorkspace } from "./src/lib/mdExplain";
+import { explainDiagnostic, runDiagnosticExplainSelftest } from "./src/lib/diagnosticExplain";
 import { runCriticSelftest, critiqueWorkspace } from "./src/lib/mdCritic";
 import { runXmlWellformedSelftest, checkXmlWellformed } from "./src/lib/xmlWellformed";
 import { runVanillaUiReferenceSelftest, profileMenuLua, deriveSchemaEvidence } from "./src/lib/vanillaUiReference";
@@ -197,7 +198,14 @@ import { normalizeStudioLayoutPreferences, type StudioLayoutPreferences } from "
 import { normalizeReleasePreferences, type ReleasePreferences } from "./src/lib/releasePreferences";
 import { createAgentProject, createProjectFile, generateAgentProject, packageAgentProject, runProjectOrchestrationSelftest } from "./src/lib/projectOrchestration";
 import { runProjectCrossFileSelftest, validateProjectCrossFile } from "./src/lib/projectCrossFileValidation";
-import { runProjectRulesSelftest } from "./src/lib/projectRules";
+import {
+  PROJECT_RULES_PATH,
+  PROJECT_RULES_MAX_BYTES,
+  parseProjectRules,
+  runProjectRulesSelftest,
+  type ProjectRulesV1,
+  type WarningSuppressionRule,
+} from "./src/lib/projectRules";
 import {
   runExternalApiRegistrySelftest,
   EXTERNAL_API_REGISTRY,
@@ -534,6 +542,8 @@ function ledgerMiddleware(req: express.Request, res: express.Response, next: exp
   const startedAt = Date.now();
   const fullPath = `${req.baseUrl || ''}${req.path}`;
   let before: { text?: string; bytes: number; binary: boolean; existed: boolean } | null = null;
+  let editRequested = '';
+  let editAbsolute = '';
   // B86.1: snapshot the canvas node ids BEFORE the call, so a workspace-replacing action can
   // report which nodes it actually changed rather than "all of them".
   let nodesBefore: Map<string, string> | null = null;
@@ -553,11 +563,24 @@ function ledgerMiddleware(req: express.Request, res: express.Response, next: exp
   // is no diff and no undo. Oversized files are hashed by size only, never read into memory.
   if (kind === 'edit') {
     try {
-      const requested = String((req.body as any)?.path || '');
       const resolvedRoot = resolveXsdConfig().modWorkspacePath;
+      if (fullPath === '/api/agent/project-rules/suppress' && resolvedRoot) {
+        const sourceValue = String((req.body as any)?.workspace?.sourceStamp?.dir || (req.body as any)?.workspace?.sourceFolder || '').trim();
+        if (sourceValue) {
+          const source = path.resolve(path.isAbsolute(sourceValue) ? sourceValue : path.join(resolvedRoot, sourceValue));
+          if (source !== path.resolve(resolvedRoot) && isPathWithin(source, resolvedRoot)) {
+            editAbsolute = path.join(source, PROJECT_RULES_PATH);
+            editRequested = path.relative(resolvedRoot, editAbsolute).replace(/\\/g, '/');
+          }
+        }
+      } else {
+        editRequested = String((req.body as any)?.path || '');
+        if (resolvedRoot && editRequested) editAbsolute = path.resolve(resolvedRoot, editRequested);
+      }
+      const requested = editRequested;
       if (requested && resolvedRoot) {
-        const target = path.resolve(resolvedRoot, requested);
-        if (target.startsWith(path.resolve(resolvedRoot)) && fs.existsSync(target) && fs.statSync(target).isFile()) {
+        const target = editAbsolute || path.resolve(resolvedRoot, requested);
+        if (isPathWithin(target, resolvedRoot) && fs.existsSync(target) && fs.statSync(target).isFile()) {
           const size = fs.statSync(target).size;
           if (size <= MAX_DIFFABLE_BYTES) {
             const buffer = fs.readFileSync(target);
@@ -590,10 +613,14 @@ function ledgerMiddleware(req: express.Request, res: express.Response, next: exp
       let fileEffect: { added: number; overwritten: number; deleted: number; preserved: number; bytes: number } | undefined;
 
       if (kind === 'edit') {
-        const requested = String((req.body as any)?.path || '');
+        const requested = editRequested;
         if (requested) files.push(requested);
         const after = (req.body as any)?.content;
-        const afterText = typeof after === 'string' ? after : undefined;
+        let afterText = typeof after === 'string' ? after : undefined;
+        if (afterText === undefined && res.statusCode < 400 && editAbsolute && fs.existsSync(editAbsolute) && fs.statSync(editAbsolute).isFile() && fs.statSync(editAbsolute).size <= MAX_DIFFABLE_BYTES) {
+          const buffer = fs.readFileSync(editAbsolute);
+          if (!looksBinary(buffer)) afterText = buffer.toString('utf8');
+        }
         binary = !!before?.binary || (afterText === undefined && after !== undefined);
         bytes = { before: before?.bytes, after: afterText !== undefined ? Buffer.byteLength(afterText, 'utf8') : undefined };
         if (res.statusCode < 400 && !binary && afterText !== undefined) {
@@ -774,6 +801,8 @@ type ServerDiagnostic = {
   nodeId?: string;
   message: string;
   sourceRef?: { kind: string; id?: string; label?: string };
+  /** Exact active flattenProjectValidation scope. Only these warnings may enter the reviewed suppression flow. */
+  suppressionScope?: { code: string; file?: string; sourceRef?: string };
 };
 
 type PatchDiagnosticBlock = Pick<PatchBlock, "id" | "sel" | "targetFile" | "includeInBuild"> & {
@@ -4763,6 +4792,13 @@ function runFullWorkspaceValidation(ws: ModWorkspace, built?: { modId: string; f
       line: finding.line,
       message: finding.message,
       sourceRef: finding.sourceRef ? { kind: "project", label: finding.sourceRef } : undefined,
+      ...(finding.severity === 'warning' && finding.code && (finding.filePath || finding.sourceRef) ? {
+        suppressionScope: {
+          code: finding.code,
+          ...(finding.filePath ? { file: finding.filePath.replace(/\\/g, '/') } : {}),
+          ...(finding.sourceRef ? { sourceRef: finding.sourceRef } : {}),
+        },
+      } : {}),
     })),
   ];
   const seen = new Set<string>();
@@ -6875,6 +6911,214 @@ app.post("/api/agent/project/validate", (req, res) => {
   }
 });
 
+type ExactSuppressionScope = { code: string; file?: string; sourceRef?: string };
+type SuppressionTarget = {
+  sourceRoot: string;
+  rulesPath: string;
+  relativeRulesPath: string;
+};
+
+function normalizedSuppressionScope(value: unknown): ExactSuppressionScope | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const code = typeof record.code === 'string' ? record.code.trim() : '';
+  const file = typeof record.file === 'string' ? record.file.trim().replace(/\\/g, '/') : '';
+  const sourceRef = typeof record.sourceRef === 'string' ? record.sourceRef.trim() : '';
+  if (!code || (!file && !sourceRef)) return null;
+  return { code, ...(file ? { file } : {}), ...(sourceRef ? { sourceRef } : {}) };
+}
+
+function sameSuppressionScope(left: ExactSuppressionScope | undefined, right: ExactSuppressionScope): boolean {
+  return !!left && left.code === right.code && (left.file || '') === (right.file || '') && (left.sourceRef || '') === (right.sourceRef || '');
+}
+
+function resolveSuppressionTarget(workspace: ModWorkspace): { target?: SuppressionTarget; status?: number; code?: string; error?: string } {
+  const resolved = resolveXsdConfig();
+  if (!resolved.modWorkspacePath) return { status: 400, code: 'MOD_WORKSPACE_REQUIRED', error: 'Configure an isolated Mod Workspace Folder before adding project rules.' };
+  const rootPath = path.resolve(resolved.modWorkspacePath);
+  if (!fs.existsSync(rootPath) || !fs.statSync(rootPath).isDirectory()) {
+    return { status: 409, code: 'MOD_WORKSPACE_MISSING', error: 'The configured Mod Workspace Folder does not exist.' };
+  }
+  const sourceValue = String((workspace as any)?.sourceStamp?.dir || (workspace as any)?.sourceFolder || '').trim();
+  if (!sourceValue) {
+    return { status: 409, code: 'IMPORTED_SOURCE_REQUIRED', error: 'Suppressions require an imported disk-backed mod inside the configured Mod Workspace.' };
+  }
+  const sourceRoot = path.resolve(path.isAbsolute(sourceValue) ? sourceValue : path.join(rootPath, sourceValue));
+  if (sourceRoot === rootPath || !isPathWithin(sourceRoot, rootPath)) {
+    return { status: 403, code: 'SOURCE_OUTSIDE_MOD_WORKSPACE', error: 'The imported mod source is outside the configured Mod Workspace; no rules file was written.' };
+  }
+  if (!fs.existsSync(sourceRoot) || !fs.statSync(sourceRoot).isDirectory() || !fs.existsSync(path.join(sourceRoot, 'content.xml'))) {
+    return { status: 409, code: 'IMPORTED_SOURCE_MISSING', error: 'The imported mod source is missing or has no root content.xml. Re-import it before adding a suppression.' };
+  }
+  const realRoot = fs.realpathSync(rootPath);
+  const realSource = fs.realpathSync(sourceRoot);
+  if (realSource === realRoot || !isPathWithin(realSource, realRoot)) {
+    return { status: 403, code: 'SOURCE_SYMLINK_ESCAPE', error: 'The imported mod source resolves outside the configured Mod Workspace; no rules file was written.' };
+  }
+  const rulesPath = path.join(sourceRoot, PROJECT_RULES_PATH);
+  if (fs.existsSync(rulesPath)) {
+    const stat = fs.lstatSync(rulesPath);
+    if (stat.isSymbolicLink() || !stat.isFile()) {
+      return { status: 409, code: 'RULES_TARGET_UNSAFE', error: 'forge.rules.json must be a regular file, not a link or directory.' };
+    }
+  }
+  const relativeRulesPath = path.relative(rootPath, rulesPath).replace(/\\/g, '/');
+  return { target: { sourceRoot, rulesPath, relativeRulesPath } };
+}
+
+function defaultRulesDocument(): ProjectRulesV1 {
+  return { version: 1, suppressions: [], contracts: { knownChains: [], wireKeys: [], expectedRegisters: [] } };
+}
+
+function loadRulesDocument(target: SuppressionTarget, now: Date): {
+  raw: Record<string, unknown>;
+  expectedSha256: string | null;
+  evaluation: ReturnType<typeof parseProjectRules>;
+} {
+  if (!fs.existsSync(target.rulesPath)) {
+    const raw = defaultRulesDocument() as unknown as Record<string, unknown>;
+    return {
+      raw,
+      expectedSha256: null,
+      evaluation: parseProjectRules({ id: 'rules-preview', name: 'rules-preview', files: [{ path: PROJECT_RULES_PATH, kind: 'other', content: JSON.stringify(raw) }] }, { now }),
+    };
+  }
+  const stat = fs.statSync(target.rulesPath);
+  if (stat.size > PROJECT_RULES_MAX_BYTES) {
+    const content = ' '.repeat(PROJECT_RULES_MAX_BYTES + 1);
+    return {
+      raw: {}, expectedSha256: hashArtifactFile(target.rulesPath),
+      evaluation: parseProjectRules({ id: 'rules-preview', name: 'rules-preview', files: [{ path: PROJECT_RULES_PATH, kind: 'other', content }] }, { now }),
+    };
+  }
+  const content = fs.readFileSync(target.rulesPath, 'utf8');
+  const evaluation = parseProjectRules({ id: 'rules-preview', name: 'rules-preview', files: [{ path: PROJECT_RULES_PATH, kind: 'other', content }] }, { now });
+  let raw: Record<string, unknown> = {};
+  try {
+    const parsed = JSON.parse(content);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) raw = parsed;
+  } catch { /* evaluation carries the blocking diagnostic */ }
+  return { raw, expectedSha256: hashArtifactFile(target.rulesPath), evaluation };
+}
+
+function suggestedSuppressionId(scope: ExactSuppressionScope, existing: Set<string>): string {
+  const stem = `suppress-${scope.code}-${scope.file || scope.sourceRef || 'warning'}`
+    .toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[^a-z]+/, '').replace(/-+/g, '-').slice(0, 56) || 'suppress-warning';
+  let candidate = stem.length >= 3 ? stem : 'suppress-warning';
+  let suffix = 2;
+  while (existing.has(candidate)) candidate = `${stem.slice(0, 58)}-${suffix++}`.slice(0, 64);
+  return candidate;
+}
+
+function suppressionPreparation(workspaceInput: unknown, scopeInput: unknown, now = new Date()): {
+  ok: true;
+  workspace: ModWorkspace;
+  scope: ExactSuppressionScope;
+  target: SuppressionTarget;
+  rules: ReturnType<typeof loadRulesDocument>;
+  defaults: { id: string; owner: string; reason: string; reviewBy: string };
+} | { ok: false; status: number; code: string; error: string; details?: unknown } {
+  const workspace = activeBuildWorkspace(workspaceInput);
+  const scope = normalizedSuppressionScope(scopeInput);
+  if (!scope) return { ok: false, status: 400, code: 'EXACT_SCOPE_REQUIRED', error: 'A suppression needs an exact diagnostic code and exact file and/or source reference.' };
+  const resolvedTarget = resolveSuppressionTarget(workspace);
+  if (!resolvedTarget.target) return { ok: false, status: resolvedTarget.status || 409, code: resolvedTarget.code || 'RULES_TARGET_UNAVAILABLE', error: resolvedTarget.error || 'Rules target unavailable.' };
+
+  const full = runFullWorkspaceValidation(workspace);
+  const current = full.diagnostics.find(diagnostic => diagnostic.severity === 'warning' && sameSuppressionScope(diagnostic.suppressionScope, scope));
+  if (!current) {
+    return { ok: false, status: 409, code: 'DIAGNOSTIC_NOT_SUPPRESSIBLE', error: 'This exact active full-project warning was not reproduced. Errors and non-project warnings cannot be suppressed.' };
+  }
+
+  const rules = loadRulesDocument(resolvedTarget.target, now);
+  if (!rules.evaluation.valid || !rules.evaluation.config) {
+    return { ok: false, status: 409, code: 'RULES_FILE_INVALID', error: 'The existing forge.rules.json is invalid; repair it before adding another suppression.', details: rules.evaluation.findings };
+  }
+  const duplicate = rules.evaluation.config.suppressions.find(rule => sameSuppressionScope(rule, scope));
+  if (duplicate) return { ok: false, status: 409, code: 'SUPPRESSION_ALREADY_EXISTS', error: `Rule "${duplicate.id}" already declares this exact suppression scope.` };
+  const existingIds = new Set([
+    ...rules.evaluation.config.suppressions.map(rule => rule.id),
+    ...rules.evaluation.config.contracts.knownChains.map(rule => rule.id),
+    ...rules.evaluation.config.contracts.wireKeys.map(rule => rule.id),
+    ...rules.evaluation.config.contracts.expectedRegisters.map(rule => rule.id),
+  ]);
+  const review = new Date(now.getTime() + 90 * 86_400_000).toISOString().slice(0, 10);
+  return {
+    ok: true, workspace, scope, target: resolvedTarget.target, rules,
+    defaults: {
+      id: suggestedSuppressionId(scope, existingIds),
+      owner: '',
+      reason: `Reviewed this exact ${scope.code} warning for the named source.`,
+      reviewBy: review,
+    },
+  };
+}
+
+app.post('/api/agent/project-rules/prepare-suppression', (req, res) => {
+  try {
+    const prepared = suppressionPreparation(req.body?.workspace, req.body?.scope);
+    if ('status' in prepared) return res.status(prepared.status).json({ success: false, code: prepared.code, error: prepared.error, ...(prepared.details ? { details: prepared.details } : {}) });
+    return res.json({
+      success: true,
+      target: prepared.target.relativeRulesPath,
+      scope: prepared.scope,
+      expectedSha256: prepared.rules.expectedSha256,
+      defaults: prepared.defaults,
+      existingSuppressions: prepared.rules.evaluation.config?.suppressions.length || 0,
+      explanation: explainDiagnostic({ severity: 'warning', code: prepared.scope.code, filePath: prepared.scope.file, message: 'Exact warning selected for reviewed suppression.' }),
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, code: 'SUPPRESSION_PREPARE_FAILED', error: errorMessage(error) || 'Suppression preparation failed.' });
+  }
+});
+
+app.post('/api/agent/project-rules/suppress', (req, res) => {
+  try {
+    const resolved = resolveXsdConfig();
+    if (rejectUnsafeDevelopmentWrite(res, resolved, ['modWorkspacePath'])) return;
+    if (!Object.prototype.hasOwnProperty.call(req.body || {}, 'expectedSha256')) {
+      return res.status(400).json({ success: false, code: 'EXPECTED_HASH_REQUIRED', error: 'Prepare the suppression first and send its expectedSha256 value.' });
+    }
+    const prepared = suppressionPreparation(req.body?.workspace, req.body?.scope);
+    if ('status' in prepared) return res.status(prepared.status).json({ success: false, code: prepared.code, error: prepared.error, ...(prepared.details ? { details: prepared.details } : {}) });
+    const expected = req.body.expectedSha256;
+    if (expected !== prepared.rules.expectedSha256) {
+      return res.status(409).json({ success: false, code: 'RULES_FILE_CHANGED', error: 'forge.rules.json changed after the confirmation was prepared. Review the current file and try again.', expectedSha256: expected, currentSha256: prepared.rules.expectedSha256 });
+    }
+    const review = req.body?.review || {};
+    const rule: WarningSuppressionRule = {
+      id: String(review.id || '').trim(),
+      owner: String(review.owner || '').trim(),
+      reason: String(review.reason || '').trim(),
+      reviewBy: String(review.reviewBy || '').trim(),
+      code: prepared.scope.code,
+      ...(prepared.scope.file ? { file: prepared.scope.file } : {}),
+      ...(prepared.scope.sourceRef ? { sourceRef: prepared.scope.sourceRef } : {}),
+    };
+    const candidate = JSON.parse(JSON.stringify(prepared.rules.raw)) as Record<string, unknown>;
+    candidate.version = 1;
+    candidate.suppressions = [...(Array.isArray(candidate.suppressions) ? candidate.suppressions : []), rule];
+    if (!candidate.contracts || typeof candidate.contracts !== 'object' || Array.isArray(candidate.contracts)) {
+      candidate.contracts = { knownChains: [], wireKeys: [], expectedRegisters: [] };
+    }
+    const content = `${JSON.stringify(candidate, null, 2)}\n`;
+    const evaluation = parseProjectRules({ id: 'rules-commit', name: 'rules-commit', files: [{ path: PROJECT_RULES_PATH, kind: 'other', content }] });
+    if (!evaluation.valid) {
+      return res.status(422).json({ success: false, code: 'INVALID_SUPPRESSION_REVIEW', error: 'The reviewed suppression does not satisfy forge.rules.json v1.', details: evaluation.findings });
+    }
+    const currentSha256 = fs.existsSync(prepared.target.rulesPath) ? hashArtifactFile(prepared.target.rulesPath) : null;
+    if (currentSha256 !== expected) {
+      return res.status(409).json({ success: false, code: 'RULES_FILE_CHANGED', error: 'forge.rules.json changed before the write. Nothing was written.', expectedSha256: expected, currentSha256 });
+    }
+    const written = writeWorkspaceFileGuarded(res, prepared.target.relativeRulesPath, content);
+    if (!written) return;
+    const sourceHash = hashFolderFingerprint(fingerprintModFolder(prepared.target.sourceRoot));
+    return res.json({ success: true, status: 'VERIFIED', target: prepared.target.relativeRulesPath, rule, written, sourceHash });
+  } catch (error) {
+    return res.status(500).json({ success: false, code: 'SUPPRESSION_WRITE_FAILED', error: errorMessage(error) || 'Suppression write failed.' });
+  }
+});
+
 // B59a — patch-day readiness: does a mod's <diff> selectors still match after a game update?
 // Reads the mod's diff patches, evaluates each selector against the OLD and NEW vanilla files
 // (extractBaseGameFile with two game roots), reports which will silently miss. Additive/read-only.
@@ -7170,6 +7414,7 @@ const SELFTESTS: Record<string, () => unknown> = {
   "project-orchestration-selftest": runProjectOrchestrationSelftest,
   "project-crossfile-selftest": runProjectCrossFileSelftest,
   "project-rules-selftest": runProjectRulesSelftest,
+  "diagnostic-explain-selftest": runDiagnosticExplainSelftest,
   "external-api-registry-selftest": runExternalApiRegistrySelftest,
   "position-picker-selftest": runPositionPickerSelftest,
   "mod-drift-selftest": runModDriftSelftest,
@@ -7637,13 +7882,22 @@ app.get("/api/agent/explain-selftest", (_req, res) => {
   }
 });
 
-// Deterministic explanation of a posted {nodes, links} graph (no AI). Authed POST.
+// Deterministic explanation of either a posted {nodes, links} graph or one
+// {diagnostic}. Additive diagnostic mode keeps agents and the rendered UI on the
+// same non-AI guidance contract.
 app.post("/api/agent/explain", (req, res) => {
   try {
+    if (req.body?.diagnostic && typeof req.body.diagnostic === 'object') {
+      const diagnostic = req.body.diagnostic;
+      if (!['error', 'warning', 'info'].includes(diagnostic.severity) || typeof diagnostic.message !== 'string') {
+        return res.status(400).json({ success: false, error: 'diagnostic must include severity (error|warning|info) and message.' });
+      }
+      return res.json({ success: true, mode: 'diagnostic', explanation: explainDiagnostic(diagnostic) });
+    }
     const { nodes, links } = req.body || {};
-    res.json({ success: true, ...explainWorkspace(nodes || [], links || []) });
+    return res.json({ success: true, mode: 'workspace', ...explainWorkspace(nodes || [], links || []) });
   } catch (error) {
-    res.status(500).json({ success: false, error: error?.message || "explain failed" });
+    return res.status(500).json({ success: false, error: error?.message || "explain failed" });
   }
 });
 

@@ -199,11 +199,13 @@ export const READ_SCOPE_POST_PATHS = new Set([
   '/reference/xpath-complete',
   '/reference/simulate-diff',
   '/agent/bulk-transform/preview',
+  '/agent/project-rules/prepare-suppression',
 ]);
 
 /** Exact mutation routes added outside the older broad workspace prefixes. */
 export const WRITE_SCOPE_POST_PATHS = new Set([
   '/agent/bulk-transform/apply',
+  '/agent/project-rules/suppress',
 ]);
 
 /** Key management is session-token-only for EVERY scope. */
@@ -305,6 +307,7 @@ export function runAgentKeysSelftest(): { pass: boolean; checks: Array<{ name: s
     scopeAllows('read', 'POST', '/reference/complete') === true &&
     scopeAllows('read', 'POST', '/reference/xpath-complete') === true &&
     scopeAllows('read', 'POST', '/agent/bulk-transform/preview') === true &&
+    scopeAllows('read', 'POST', '/agent/project-rules/prepare-suppression') === true &&
     scopeAllows('read', 'POST', '/agent/bulk-transform/apply') === false &&
     scopeAllows('read', 'POST', '/reference/complete/extra') === false);
   ok('write_scope_allows_workspace_compile_only',
@@ -315,6 +318,7 @@ export function runAgentKeysSelftest(): { pass: boolean; checks: Array<{ name: s
     scopeAllows('write', 'POST', '/fs/write') === false &&
     scopeAllows('write', 'POST', '/ai/keys') === false &&
     scopeAllows('write', 'POST', '/agent/bulk-transform/apply') === true &&
+    scopeAllows('write', 'POST', '/agent/project-rules/suppress') === true &&
     scopeAllows('write', 'POST', '/agent/bulk-transform/apply/extra') === false);
   ok('deploy_scope_full_power', scopeAllows('deploy', 'POST', '/agent/deploy') === true);
   ok('no_scope_can_manage_keys',

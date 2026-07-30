@@ -105,6 +105,7 @@ export const LEDGER_QUIET_ROUTES: string[] = [
   '/api/agent/live/cue-telemetry',
   '/api/agent/quick-fixes',
   '/api/agent/project/validate-crossfile',
+  '/api/agent/project-rules/prepare-suppression',
   '/api/agent/bulk-transform/preview',
   '/api/gemini',
   '/api/gemini/analyze',
@@ -114,6 +115,7 @@ export const LEDGER_QUIET_ROUTES: string[] = [
 /** Exact-path kind mapping. Anything mutating and unlisted still records, as kind `action`. */
 export const LEDGER_ROUTES: Array<{ method: string; path: string; kind: LedgerKind }> = [
   { method: 'POST', path: '/api/fs/write', kind: 'edit' },
+  { method: 'POST', path: '/api/agent/project-rules/suppress', kind: 'edit' },
   { method: 'POST', path: '/api/fs/create', kind: 'edit' },
   { method: 'POST', path: '/api/fs/delete-dir', kind: 'edit' },
   { method: 'POST', path: '/api/agent/project/file/create', kind: 'edit' },

@@ -1403,6 +1403,12 @@ export type PackageDiagnostic = XMLDiagnostic & {
   code?: string;
   domain?: string;
   filePath?: string;
+  /** Server-proven exact scope accepted by forge.rules.json. Absent means this finding is not suppressible. */
+  suppressionScope?: {
+    code: string;
+    file?: string;
+    sourceRef?: string;
+  };
   sourceRef?: {
     kind: string;
     id?: string;

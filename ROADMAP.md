@@ -7169,3 +7169,27 @@ inert schema field.
 
 Suggested commit title:
 `docs(validation): verify project rules contract`.
+
+## 2026-07-30 — B110-R6 deterministic diagnostic guidance and guarded exact suppression — VERIFIED
+
+Every full-project/package diagnostic now exposes a deterministic `Why?` card with code-specific cause, impact, and
+next action; unknown codes degrade honestly to labeled shared-fallback guidance. The same contract is available to
+agents through diagnostic mode on `/api/agent/explain`. Suppression is deliberately narrower: only an active warning
+carrying validator-owned exact code plus file/source scope offers the action. Errors and Mod Doctor-only warnings do
+not.
+
+The guided prepare/commit flow re-runs full validation, confines the target to an imported source under the configured
+isolated Mod Workspace, rejects link/traversal/live-root targets, parses existing rules, previews exact scope, requires
+reviewed metadata, validates the complete candidate, checks both prepared and immediate pre-write SHA-256, and uses
+the existing atomic guarded writer. Success revalidates instead of optimistically hiding the row; suppression
+provenance remains in the shared referee and the agent ledger records the write.
+
+Evidence: explanation 8/8, rules 20/20, routes 248/248, oracles 121/121, focused suppression E2E 2/2, focused Studio
+shell 9/9, decisive full E2E 48/48 with zero failed/flaky/bad/quarantined results, build/type/lint/precommit/graph,
+staged app probe 16/16, and 2,091-entry VSIX inspection passed. Installed Antigravity 0.0.60 visibly showed the
+Diagnostics Center, warning-only suppression actions, and expanded deterministic guidance; the real DeadAir source
+was not mutated. Open VSX 0.0.60 downloaded byte-identical to local at 17,877,485 bytes and SHA-256
+`E356A54B691C2423173F501754916B07859B60512F9B37240CAE57035E25F19B`.
+
+Suggested commit title:
+`feat(diagnostics): explain and safely suppress warnings`.

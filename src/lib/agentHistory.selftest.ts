@@ -30,6 +30,8 @@ export function runAgentHistorySelftest(): { pass: boolean; checks: Array<{ name
   try {
     // --- route allowlist: mutations in, read-only traffic out ---------------------------
     ok('write route is recorded as an edit', ledgerRouteKind('POST', '/api/fs/write') === 'edit');
+    ok('reviewed suppression write is an edit', ledgerRouteKind('POST', '/api/agent/project-rules/suppress') === 'edit');
+    ok('suppression preparation is read-only and quiet', ledgerRouteKind('POST', '/api/agent/project-rules/prepare-suppression') === null);
     ok('deploy route is recorded as a deploy', ledgerRouteKind('POST', '/api/agent/deploy-verify') === 'deploy');
     ok('platform release routes are recorded as package actions',
       ledgerRouteKind('POST', '/api/agent/release/nexus/prepare') === 'package' &&

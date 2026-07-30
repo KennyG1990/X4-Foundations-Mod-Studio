@@ -9,16 +9,17 @@
 ### B110 · Kimi R1-R21 execution program `in_progress` (P1, DURABLE LEDGER)
 
 The complete recommendation set is now reconciled instead of living in the deleted KNOWN-BUGS addendum.
-Current verdict: R3/R4/R5/R12 verified; R15 satisfied by the richer readiness ladder; R1/R2/R11/R13/R16/R21
-open; the rest partial. Execute only as bounded workflow tasks in the recorded order—never as a sweeping
+Current verdict: R1/R3/R4/R5/R6/R9/R10/R12/R15/R16/R19/R20 verified; R2/R11/R13/R21 open; the rest partial.
+Execute only as bounded workflow tasks in the recorded order—never as a sweeping
 cleanup—and update each row after every implementation. Ledger:
 `docs/plans/2026-07-29-kimi-recommendations-ledger.md`.
 
 **Closed bounded units:** R3 uniform API failure envelope, R9 uniform timeout policy, R10 managed-sidecar
 parent-death/orphan prevention, R19 packaged-VSIX clean-runner CI, and R20 fail-closed flake policy — VERIFIED
 2026-07-30; see ROADMAP and their task plans. R1+R16 shared validation rules are also VERIFIED on exact-SHA public
-Quality; see `docs/plans/2026-07-30-project-rules-schema.md`. **Next bounded unit:** R6 self-explaining diagnostics
-and guarded one-click exact suppression, reusing the verified rules schema.
+Quality; see `docs/plans/2026-07-30-project-rules-schema.md`. R6 deterministic diagnostic guidance and guarded exact
+suppression is VERIFIED in `docs/plans/2026-07-30-diagnostic-guidance-suppression-ui.md` and Open VSX 0.0.60.
+**Next bounded unit:** R2 content-addressed last-green validation baselines and new/resolved diagnostic delta.
 
 **Post-Kimi authorized research program (queued; do not start before R1-R21 close):** reconcile
 `F:\Downskies\X4 Foundations Modding Tooling Research for IDE Extension Opportunities.md` and

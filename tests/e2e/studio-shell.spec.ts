@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { buildTemplateWorkspace } from '../../src/lib/modTemplates';
+import { workspaceContentHash } from '../../src/lib/workspaceIdentity';
+import { sanitizeWorkspace } from '../../src/types';
 import {
   GLOBAL_ACTION_IDS,
   DEFAULT_STUDIO_LAYOUT,
@@ -14,7 +16,9 @@ type E2EWindow = Window & {
 };
 
 async function bootExpert(page: Page, layout?: unknown) {
-  await seedServerWorkspace(buildTemplateWorkspace('welcome'));
+  const seededWorkspace = buildTemplateWorkspace('welcome');
+  const seededHash = workspaceContentHash(sanitizeWorkspace(seededWorkspace));
+  await seedServerWorkspace(seededWorkspace);
   await seedServerLayout(layout === undefined ? DEFAULT_STUDIO_LAYOUT : layout);
   await page.addInitScript(({ key, value }) => {
     localStorage.setItem('x4_forge_experience_mode', 'expert');
@@ -26,6 +30,14 @@ async function bootExpert(page: Page, layout?: unknown) {
   }, { key: STUDIO_LAYOUT_KEY, value: layout });
   await page.goto('/');
   await expect(page.getByTestId('studio-workspace')).toBeVisible();
+  // Rendering the shell is not proof that its asynchronous boot read has adopted the
+  // seeded server workspace. Wait for that authoritative content before measuring
+  // navigation immutability, otherwise a legitimate late boot adoption looks like a
+  // shell action changed project data and flakes under a busy full-suite run.
+  await expect.poll(
+    () => page.evaluate(() => (window as E2EWindow).__X4_E2E__!.getWorkspaceHash()),
+    { timeout: 15_000 },
+  ).toBe(seededHash);
   const health = page.getByTestId('health-card');
   await health.waitFor({ state: 'visible', timeout: 1_500 }).catch(() => undefined);
   if (await health.isVisible()) await page.getByTestId('health-card-dismiss').click();

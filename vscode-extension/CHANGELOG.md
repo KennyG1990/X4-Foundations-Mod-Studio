@@ -3,6 +3,13 @@
 The latest changes, newest first. (This page is generated automatically — see
 `release-notes.json` to edit the wording.)
 
+## 0.0.60 — 2026-07-30
+
+- Open Why on any package diagnostic to see its deterministic cause, likely impact, and next action without sending project data to an AI service.
+- Suppress only an active validator warning with an exact code, file, and source. Forge shows that scope before writing and requires an owner, meaningful reason, and bounded review date so exceptions stay accountable.
+- A suppression is re-proved against the current full-project validation and compare-and-swap protected. Errors, stale files, unsafe project roots, expired metadata, and warnings that already disappeared are refused without changing forge.rules.json.
+- Package diagnostics now keep the full finding list and its actions above the footer at supported window sizes instead of collapsing the list into a zero-height scroll region.
+
 ## 0.0.59 — 2026-07-30
 
 - Package a mod for Nexus Mods through a dedicated guided flow that validates the complete disk-backed project, builds exactly one install-root ZIP, reopens every entry, and asks where to save the independently hash-verified result.
