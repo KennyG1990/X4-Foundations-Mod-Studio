@@ -5,7 +5,7 @@ existing shared project validator, without creating a second validation engine o
 
 Task: B110 / Kimi R1 zero-warning culture + R16 user-extensible validation
 Lane: FULL
-Status: **PARTIAL — implementation and local acceptance VERIFIED; exact-SHA public Quality pending**
+Status: **VERIFIED**
 
 ## PLAN
 
@@ -142,7 +142,11 @@ Status: **PARTIAL — implementation and local acceptance VERIFIED; exact-SHA pu
   from July 23/28, before both runs, so the standing live workspace was not touched.
 - Negative/rollback -> invalid/expired/unmet/oversized rules fail without suppression; errors remain visible; no-file
   projects remain compatible. All fixtures were repo-owned or temporary and route/E2E stacks self-cleaned.
-- Exact-SHA Windows Quality -> PENDING after implementation commit/push.
+- Exact-SHA Windows Quality -> PASS: run `30574645399`, job `90979730922`, exact head
+  `5262348e19d89afb1eade5ba4e9504dc3e9f6b9a`; all 23 steps completed successfully, including locked installs,
+  audits, type/lint/oracles/build/routes, extension build/stage/probe, VSIX package/final-byte inspection, and
+  inspected-only retention. Artifact `8772238373` is 17,515,672 bytes and retained through 2026-08-13. Discord
+  Release Sync `30574645262` also passed.
 
 ## REVIEW
 
@@ -163,10 +167,9 @@ Status: **PARTIAL — implementation and local acceptance VERIFIED; exact-SHA pu
 
 ## CLOSE
 
-- **Status:** PARTIAL only because the pushed exact-SHA public Windows Quality result is not available yet. All local
-  implementation and declared acceptance methods are VERIFIED.
-- **Capability-map delta:** pending final public gate; the new capability is one shared, fail-closed mod-local rules
-  contract, not a parallel validator.
+- **Status:** VERIFIED. Every declared local method and the exact-SHA public Windows packaged-product gate passed.
+- **Capability-map delta:** one shared, fail-closed mod-local validation-rules contract is now VERIFIED; this extends
+  the existing referee and does not create a parallel validator.
 - **Remaining risk:** JSON Schema captures structure but review-horizon semantics are enforced by the runtime parser;
   both are tested. The schema's stable raw-GitHub URL becomes externally resolvable only after push.
 - **Suggested implementation commit title:** `feat(validation): add fail-closed project rules`

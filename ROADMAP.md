@@ -7142,3 +7142,30 @@ game/mod, store, or release behavior changed.
 
 Suggested commit title:
 `docs(test): verify zero-flake policy`.
+
+## 2026-07-30 — B110-R1/R16 fail-closed mod-local validation rules — VERIFIED
+
+X4 Forge now consumes an optional exact-root `forge.rules.json` version 1 through the existing shared project
+referee. General warning suppressions require a unique ID, owner, meaningful reason, bounded review date, exact
+diagnostic code, and exact file and/or source reference. Known-good property chains are exact and optionally file-
+scoped. Errors are never suppressible; any malformed, unsupported, expired, overbroad, duplicate, unmet, or oversized
+rules declaration disables all suppression and makes project validation red.
+
+The same file turns mod knowledge into asserted contracts: indexed wire keys require the declared global/verb MD
+reader and Lua writer by default, while expected Lua events require an exact AST-observed registration or satisfying
+AST-proven dynamic prefix. Results retain rule-to-source evidence, unmatched reviewed declarations, complete
+suppressed diagnostics, and raw/suppressed/active warning counts. Disk/inline API, CLI, compile, release, deploy, and
+readiness all reuse that referee; no parallel validator exists. The disk loader specifically preserves oversized root
+rules as a blocking `rules.file_too_large` result rather than silently degrading to "not present."
+
+Evidence: Draft 2020-12 schema/fixture PASS; pure rules 20/20; cross-file evidence 21/21; CLI exact-root fixture
+exit 0; isolated routes 248/248 including unsupported-version and oversized-disk negatives; runtime oracles 120/120;
+typecheck/lint (0 errors / 548 established warnings)/build/precommit/graph green; final post-review isolated E2E
+46/46 with zero failed/flaky/bad/quarantined and ports closed. Exact-SHA public Quality run `30574645399`, job
+`90979730922`, passed all 23 steps at `5262348e19d89afb1eade5ba4e9504dc3e9f6b9a`; inspected artifact
+`8772238373` is retained through 2026-08-13. No real mod/game, installed host, store, or external platform was
+mutated. Unit annotations remain with the separate corpus-grounded Kimi order/unit work rather than shipping an
+inert schema field.
+
+Suggested commit title:
+`docs(validation): verify project rules contract`.

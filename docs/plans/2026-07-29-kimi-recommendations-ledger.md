@@ -16,7 +16,7 @@ make each future implementation a bounded workflow task rather than an untracked
 
 | ID | Current status | Observed current state | Remaining bounded unit |
 | --- | --- | --- | --- |
-| R1 Zero-warning culture | OPEN | No mod-local suppression manifest or review-date policy exists. | Define versioned `forge.rules.json` schema, expiry/review behavior, and zero-cry-wolf tests. |
+| R1 Zero-warning culture | VERIFIED (B110-R1/R16) | Optional exact-root `forge.rules.json` v1 provides exact warning-only suppressions with unique IDs, owner/reason, a bounded review date, active/raw/suppressed counts, unmatched metadata, and complete provenance. Expired/malformed/overbroad/oversized rules fail closed and errors are never suppressible. | Preserve the 20/20 policy oracle, 248/248 external disk/API matrix, CLI fixture, and zero-flake full suite. Evidence: `docs/plans/2026-07-30-project-rules-schema.md`. |
 | R2 Validation delta | OPEN | No persisted last-green validation baseline or new/resolved-warning delta exists. Agent history records runs but is not a comparison baseline. | Content-addressed last-green summaries per mod and deploy checklist delta. |
 | R3 One-line machine verdict | VERIFIED (B110-R3) | `src/lib/apiFailureEnvelope.ts` and one pre-auth Express middleware now give every recognized JSON failure top-level `success:false`, stable `code`, non-empty `error`, and `failedStages`, including legacy HTTP-200 operational failures. Existing B109 `BLOCKED`/`PARTIAL` semantics and success object/array shapes are preserved; `/api/agent/schema` v3 documents the contract. | Preserve the 12/12 oracle and isolated route compatibility coverage. Evidence: `docs/plans/2026-07-30-uniform-api-failure-envelope.md`. |
 | R4 Parse Lua registrations | VERIFIED (B108) | Cross-file registration discovery uses the existing Lua AST engine and has comment/alias negatives. | Preserve regression coverage only. |
@@ -31,7 +31,7 @@ make each future implementation a bounded workflow task rather than an untracked
 | R13 One poller/SSE | OPEN | Independent polling remains in App readiness/workspace, AgentBridge, Canvas, CueViewer, GuidedRail, Playtest, and device-flow logic. | Classify continuous subscriptions versus bounded workflows; build one scheduler for continuous reads, leave OAuth workflow polling isolated. |
 | R14 Undo destructive ops | PARTIAL | B86 can revert guarded file writes through the ledger. Import, adopt-server-state, and deploy are deliberately non-revertible; deploy has rollback only during the transaction. | Define recoverable snapshots and CAS semantics per destructive action; do not pretend rollback equals later undo. |
 | R15 Ambient readiness | VERIFIED BY EQUIVALENT (B36) | A persistent five-stage readiness ladder is always below the header, shows status/evidence, and routes clicks to owning surfaces. It is richer than a single chip. | No new chip; preserve the ladder and add release evidence through B109. |
-| R16 User-extensible validation | OPEN | No `forge.rules.json`, declared wire-key, known-chain, or expected-register contract exists. | Same schema foundation as R1, then deterministic merge/provenance and invalid-rule failures. |
+| R16 User-extensible validation | VERIFIED (B110-R1/R16) | The same strict v1 file declares exact known scriptproperty chains, indexed wire keys/scopes, and expected Lua registrations. Contracts merge with existing AST/payload evidence in the shared referee, preserve rule-to-source matches, and fail validation when evidence is absent. | Preserve shared-engine/API/CLI/compile/release/deploy coverage; unit annotations remain with the separate corpus-grounded order/unit recommendation. Evidence: `docs/plans/2026-07-30-project-rules-schema.md`. |
 | R17 True multi-workspace | PARTIAL | Named parked workspaces round-trip, but active authority is a shared singleton and is not client/token scoped. | Architecture/ADR task: workspace binding per session/key plus safe shared read surfaces. |
 | R18 Headless CLI | PARTIAL | `npm run validate:mod -- <path>` exists and runs the shared validator. There is no installed `forge` binary or CLI deploy-verify workflow. | Package a supported CLI entrypoint; add API discovery/auth and dry-run/deploy verification with explicit side effects. |
 | R19 CI | VERIFIED (B110-R19) | Exact-SHA Windows Quality run `30570137452` passed locked root/extension installs and audits, root gates, extension build/stage, the real 16-check packaged-sidecar probe, 13-check inspector policy, locked VSIX packaging, final CRC/content inspection, and inspected-only artifact retention. Artifact `8770489130` is retained for 14 days. | Preserve the dependency order, rejection oracle, and inspected-only upload gate. Evidence: `docs/plans/2026-07-30-packaged-vsix-ci.md`. |
@@ -43,10 +43,10 @@ make each future implementation a bounded workflow task rather than an untracked
 1. **B109 Release Center — VERIFIED / Open VSX 0.0.59:** closed the release-specific R7/R8/R12 work and supplied a
    concrete consumer for R3-style staged errors. Preserve its gates; do not rebuild it during B110.
 2. **Safety contract batch:** R3, R9, R10, R19, and R20 are VERIFIED. Preserve their gates.
-3. **Validation truth batch:** R1 + R16 schema, then R6 UI, then R2 delta reporting.
+3. **Validation truth batch:** R1 + R16 schema VERIFIED; next R6 UI, then R2 delta reporting.
 4. **Loss-prevention UX:** R11 and R14.
 5. **Architecture batch:** R8 remainder + R17, then R13 after workspace/session ownership is stable.
 6. **Tooling decisions:** R18 and R21.
 
-R3, R4, R5, R9, R10, R12, R15, R19, and R20 need no duplicate implementation. Their regression evidence remains part of the relevant
+R1, R3, R4, R5, R9, R10, R12, R15, R16, R19, and R20 need no duplicate implementation. Their regression evidence remains part of the relevant
 full gates. Every row moved to `VERIFIED` must cite its task plan, acceptance results, and ROADMAP close.

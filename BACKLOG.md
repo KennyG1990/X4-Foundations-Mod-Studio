@@ -16,8 +16,9 @@ cleanup—and update each row after every implementation. Ledger:
 
 **Closed bounded units:** R3 uniform API failure envelope, R9 uniform timeout policy, R10 managed-sidecar
 parent-death/orphan prevention, R19 packaged-VSIX clean-runner CI, and R20 fail-closed flake policy — VERIFIED
-2026-07-30; see ROADMAP and their task plans. **Active bounded unit:** R1+R16 shared validation-rules schema and
-engine integration — SPECIFIED in `docs/plans/2026-07-30-project-rules-schema.md`.
+2026-07-30; see ROADMAP and their task plans. R1+R16 shared validation rules are also VERIFIED on exact-SHA public
+Quality; see `docs/plans/2026-07-30-project-rules-schema.md`. **Next bounded unit:** R6 self-explaining diagnostics
+and guarded one-click exact suppression, reusing the verified rules schema.
 
 **Post-Kimi authorized research program (queued; do not start before R1-R21 close):** reconcile
 `F:\Downskies\X4 Foundations Modding Tooling Research for IDE Extension Opportunities.md` and
