@@ -1,6 +1,7 @@
 import { Client, GatewayIntentBits, Partials, REST, Routes, SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { GoogleGenAI } from '@google/genai';
 import fs from 'fs';
+import path from 'path';
 import dotenv from 'dotenv';
 
 dotenv.config({ path: '.env.local' });
@@ -19,6 +20,48 @@ if (!DISCORD_TOKEN) {
 }
 
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+
+// SMART KNOWN ISSUE KNOWLEDGE BASE (data/known_fixes.json)
+const KNOWN_FIXES_PATH = path.resolve('data/known_fixes.json');
+
+function loadKnownFixes() {
+  try {
+    if (fs.existsSync(KNOWN_FIXES_PATH)) {
+      return JSON.parse(fs.readFileSync(KNOWN_FIXES_PATH, 'utf-8'));
+    }
+  } catch (e) {
+    console.warn('⚠️ Could not load data/known_fixes.json:', e.message);
+  }
+  return [];
+}
+
+function saveKnownFixes(fixes) {
+  try {
+    const dir = path.dirname(KNOWN_FIXES_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(KNOWN_FIXES_PATH, JSON.stringify(fixes, null, 2), 'utf-8');
+  } catch (e) {
+    console.error('❌ Could not save data/known_fixes.json:', e);
+  }
+}
+
+let knownFixes = loadKnownFixes();
+
+function matchKnownIssue(messageText) {
+  const lowerText = (messageText || '').toLowerCase();
+  for (const fixItem of knownFixes) {
+    if (fixItem.keywords && Array.isArray(fixItem.keywords)) {
+      for (const kw of fixItem.keywords) {
+        if (lowerText.includes(kw.toLowerCase())) {
+          fixItem.matchCount = (fixItem.matchCount || 0) + 1;
+          saveKnownFixes(knownFixes);
+          return fixItem;
+        }
+      }
+    }
+  }
+  return null;
+}
 
 // VERIFIED ACTIVE MODEL CASCADE FOR 100% UPTIME
 async function generateWithModelCascade(promptText) {
@@ -69,12 +112,13 @@ const client = new Client({
   partials: [Partials.Channel, Partials.Message]
 });
 
+// ROBUST ERROR GUARDS (Prevents unhandled 10062 interaction crashes)
+process.on('unhandledRejection', (reason) => {
+  console.warn('⚠️ Unhandled Promise Rejection intercepted:', reason?.message || reason);
+});
+client.on('error', (err) => console.warn('⚠️ Discord Client Error:', err.message || err));
+
 // PATREON TIER COOLDOWN RESTRICTIONS:
-// Owner: 0 cooldown, unrestricted
-// Patron / Patreon ($5/mo): 5 minute cooldown
-// Backer ($3/mo): 10 minute cooldown
-// Supporter ($1/mo): 30 minute cooldown
-// Non-backer: No access
 function getPatreonTierInfo(member, isOwner) {
   if (isOwner) return { allowed: true, cooldownMs: 0, tierName: 'Owner' };
 
@@ -106,17 +150,26 @@ const commands = [
     .setDescription('Check Forge Concierge AI bot status, active model health, and your Patreon tier cooldown'),
   new SlashCommandBuilder()
     .setName('faq')
-    .setDescription('Display frequently asked questions for X4 Forge Studio')
+    .setDescription('Display frequently asked questions for X4 Forge Studio'),
+  new SlashCommandBuilder()
+    .setName('known-fixes')
+    .setDescription('Display top recurring community issues and verified resolutions'),
+  new SlashCommandBuilder()
+    .setName('add-fix')
+    .setDescription('Add or update a verified known fix (Owner Only)')
+    .addStringOption(opt => opt.setName('id').setDescription('Short issue ID').setRequired(true))
+    .addStringOption(opt => opt.setName('title').setDescription('Human title of the issue').setRequired(true))
+    .addStringOption(opt => opt.setName('keywords').setDescription('Comma-separated trigger keywords').setRequired(true))
+    .addStringOption(opt => opt.setName('fix').setDescription('Step-by-step fix resolution text').setRequired(true))
 ].map(cmd => cmd.toJSON());
 
 client.once('clientReady', async (c) => {
   console.log(`🤖 Forge Concierge Support Bot is ONLINE as ${c.user.tag}`);
 
-  // Register Slash Commands
   try {
     const rest = new REST({ version: '10' }).setToken(DISCORD_TOKEN);
     await rest.put(Routes.applicationCommands(c.user.id), { body: commands });
-    console.log('✅ Registered slash commands (/status, /faq) successfully');
+    console.log('✅ Registered slash commands (/status, /faq, /known-fixes, /add-fix) successfully');
   } catch (e) {
     console.warn('⚠️ Slash command registration failed:', e.message || e);
   }
@@ -139,45 +192,107 @@ client.on('interactionCreate', async (interaction) => {
 
   const tierInfo = getPatreonTierInfo(interaction.member, isOwner);
 
-  if (commandName === 'status') {
-    const lastUserTime = userCooldowns.get(interaction.user.id);
-    const now = Date.now();
-    let cooldownText = 'Ready now (no active cooldown)';
+  try {
+    if (commandName === 'status') {
+      const lastUserTime = userCooldowns.get(interaction.user.id);
+      const now = Date.now();
+      let cooldownText = 'Ready now (no active cooldown)';
 
-    if (tierInfo.cooldownMs > 0 && lastUserTime && (now - lastUserTime) < tierInfo.cooldownMs) {
-      const remainingMin = Math.ceil((tierInfo.cooldownMs - (now - lastUserTime)) / 60000);
-      cooldownText = `Active cooldown: ~${remainingMin} minutes remaining`;
+      if (tierInfo.cooldownMs > 0 && lastUserTime && (now - lastUserTime) < tierInfo.cooldownMs) {
+        const remainingMin = Math.ceil((tierInfo.cooldownMs - (now - lastUserTime)) / 60000);
+        cooldownText = `Active cooldown: ~${remainingMin} minutes remaining`;
+      }
+
+      const embed = new EmbedBuilder()
+        .setTitle('⚡ X4 Forge Concierge Status')
+        .setColor(3447003)
+        .addFields(
+          { name: '🤖 AI Bot Health', value: 'Online & Ready (Gemini Model Cascade Active)', inline: false },
+          { name: '💜 Your Patreon Tier', value: `**${tierInfo.tierName}**`, inline: true },
+          { name: '⏱️ Cooldown Status', value: cooldownText, inline: true },
+          { name: '🔗 Support on Patreon', value: '<https://www.patreon.com/c/KennyG1990>', inline: false }
+        )
+        .setFooter({ text: 'X4 Forge • Visual Workbench for X4 Foundations Modders' });
+
+      await interaction.reply({ embeds: [embed], flags: 64 });
+    } else if (commandName === 'faq') {
+      const embed = new EmbedBuilder()
+        .setTitle('🛠️ X4 Forge Studio FAQ')
+        .setColor(10181046)
+        .addFields(
+          { name: '📦 How do I install X4 Forge?', value: 'Download the extension directly from Open VSX Marketplace:\n<https://open-vsx.org/extension/x4forge/x4-forge-studio>', inline: false },
+          { name: '💻 Where is the source code?', value: 'GitHub Repository:\n<https://github.com/KennyG1990/X4_Forge>', inline: false },
+          { name: '🤖 How do I ask Concierge for AI support?', value: 'Mention @Forge Concierge in #concierge or support channels. Access is available to Patreon supporters and backers.', inline: false }
+        )
+        .setFooter({ text: 'X4 Forge Studio Quick Reference' });
+
+      await interaction.reply({ embeds: [embed], flags: 64 });
+    } else if (commandName === 'known-fixes') {
+      knownFixes = loadKnownFixes();
+      const fields = knownFixes.slice(0, 5).map(f => ({
+        name: `💡 ${f.title} (${f.matchCount || 0} matches)`,
+        value: `**Keywords**: ${f.keywords.join(', ')}\n**Fix**: ${f.fix}`,
+        inline: false
+      }));
+
+      const embed = new EmbedBuilder()
+        .setTitle('🛠️ Top Recurring Known Fixes & Resolutions')
+        .setColor(3447003)
+        .addFields(fields.length ? fields : [{ name: 'No Issues Recorded', value: 'All issues clear!' }])
+        .setFooter({ text: 'X4 Forge Smart Auto-Fix Knowledge Base' });
+
+      await interaction.reply({ embeds: [embed], flags: 64 });
+    } else if (commandName === 'add-fix') {
+      if (!isOwner) {
+        await interaction.reply({ content: '⛔ Only the owner (Moshine) can add new verified fixes.', flags: 64 });
+        return;
+      }
+
+      const id = interaction.options.getString('id');
+      const title = interaction.options.getString('title');
+      const keywordsRaw = interaction.options.getString('keywords');
+      const fix = interaction.options.getString('fix');
+
+      const keywords = keywordsRaw.split(',').map(k => k.trim()).filter(Boolean);
+
+      knownFixes = loadKnownFixes();
+      const existingIdx = knownFixes.findIndex(f => f.id === id);
+
+      const newItem = {
+        id,
+        title,
+        keywords,
+        fix,
+        category: 'x4_forge',
+        matchCount: existingIdx >= 0 ? knownFixes[existingIdx].matchCount || 0 : 0
+      };
+
+      if (existingIdx >= 0) {
+        knownFixes[existingIdx] = newItem;
+      } else {
+        knownFixes.push(newItem);
+      }
+
+      saveKnownFixes(knownFixes);
+      await interaction.reply({ content: `✅ Verified Known Fix **${title}** (\`${id}\`) added successfully! Trigger keywords: \`${keywords.join(', ')}\``, flags: 64 });
     }
-
-    const embed = new EmbedBuilder()
-      .setTitle('⚡ X4 Forge Concierge Status')
-      .setColor(3447003)
-      .addFields(
-        { name: '🤖 AI Bot Health', value: 'Online & Ready (Gemini Model Cascade Active)', inline: false },
-        { name: '💜 Your Patreon Tier', value: `**${tierInfo.tierName}**`, inline: true },
-        { name: '⏱️ Cooldown Status', value: cooldownText, inline: true },
-        { name: '🔗 Support on Patreon', value: '<https://www.patreon.com/c/KennyG1990>', inline: false }
-      )
-      .setFooter({ text: 'X4 Forge • Visual Workbench for X4 Foundations Modders' });
-
-    await interaction.reply({ embeds: [embed], flags: 64 });
-  } else if (commandName === 'faq') {
-    const embed = new EmbedBuilder()
-      .setTitle('🛠️ X4 Forge Studio FAQ')
-      .setColor(10181046)
-      .addFields(
-        { name: '📦 How do I install X4 Forge?', value: 'Download the extension directly from Open VSX Marketplace:\n<https://open-vsx.org/extension/x4forge/x4-forge-studio>', inline: false },
-        { name: '💻 Where is the source code?', value: 'GitHub Repository:\n<https://github.com/KennyG1990/X4_Forge>', inline: false },
-        { name: '🤖 How do I ask Concierge for AI support?', value: 'Mention @Forge Concierge in #concierge or support channels. Access is available to Patreon supporters and backers.', inline: false }
-      )
-      .setFooter({ text: 'X4 Forge Studio Quick Reference' });
-
-    await interaction.reply({ embeds: [embed], flags: 64 });
+  } catch (err) {
+    console.warn('⚠️ Interaction error caught:', err.message || err);
   }
 });
 
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
+
+  // 1. SMART KNOWN ISSUE AUTO-FIX INTERCEPTOR
+  const matchedIssue = matchKnownIssue(message.content);
+  if (matchedIssue) {
+    await message.reply(
+      `💡 **Known Issue Detected: ${matchedIssue.title}**\n\n` +
+      `**Verified Resolution**:\n${matchedIssue.fix}`
+    );
+    return;
+  }
 
   const isMentioned = message.mentions.has(client.user.id);
   const channelName = (message.channel.name || '').toLowerCase();

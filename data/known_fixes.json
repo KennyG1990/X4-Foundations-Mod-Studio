@@ -1,0 +1,34 @@
+[
+  {
+    "id": "shift-c-bepinex",
+    "title": "Outdated Hotkey / BepInEx Assumption",
+    "keywords": ["shift c", "shift+c", "shift-c", "bepinex"],
+    "fix": "x4 AiLive is a native X4 extension! You do NOT need BepInEx or Shift+C. Simply walk up to any NPC in-game and select 'Speak with AI' from the dialogue menu.",
+    "category": "x4_ailive",
+    "matchCount": 0
+  },
+  {
+    "id": "player2-port-4315",
+    "title": "Player2 AI Companion Connection Refused",
+    "keywords": ["port 4315", "player2 connection", "player2 closed", "companion app"],
+    "fix": "Ensure the free Player2 AI Companion app is running on your machine (https://player2.game). x4 AiLive communicates locally over http://127.0.0.1:4315.",
+    "category": "x4_ailive",
+    "matchCount": 0
+  },
+  {
+    "id": "extension-reload-window",
+    "title": "X4 Forge Extension Update Not Applied",
+    "keywords": ["reload window", "update not loading", "extension stale"],
+    "fix": "After updating X4 Forge Studio in VS Code / Open VSX, press Ctrl+Shift+P (or Cmd+Shift+P) and run 'Developer: Reload Window' to ensure the latest extension backend engine loads cleanly.",
+    "category": "x4_forge",
+    "matchCount": 0
+  },
+  {
+    "id": "djfhe-http-missing",
+    "title": "DJFHE HTTP Transport Missing Warning",
+    "keywords": ["djfhe", "djfhe_http", "http transport unavailable"],
+    "fix": "x4 AiLive is serverless (ADR-009) and includes built-in HTTP transport (aic_http.lua). Ensure the extension folder in X4 Foundations/extensions/ is named exactly x4_ai_influence.",
+    "category": "x4_ailive",
+    "matchCount": 0
+  }
+]

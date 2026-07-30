@@ -16,7 +16,8 @@ blob-report/
 # Per-session auth token the API server writes on boot.
 .studio-api-token
 # Server-side AI provider key store + other runtime data (harvested schemas, caches).
-data/
+data/*
+!data/known_fixes.json
 # Per-machine paths (game install, schema folder) written by the Settings modal.
 # Copy config.example.json to config.json or just use the in-app Settings.
 config.json
