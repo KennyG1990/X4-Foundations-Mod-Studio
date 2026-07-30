@@ -1,8 +1,8 @@
-# X4 Forge session handoff — 2026-07-29 · ZERO-TO-MOD CODE-GROUNDED BOT INTELLIGENCE VERIFIED
+# X4 Forge session handoff — 2026-07-29 · ZERO-LLM DISCORD ECONOMY & GAMIFICATION VERIFIED
 
 ## One-line state
 
-Rebranded public product names to `x4 AiLive` across all public readmes, content manifests, and GitHub workflows. Implemented and verified the Smart Known Issue Builder & Auto-Fix Interceptor engine across both Discord bots (`Forge Concierge#3242` and `X4AILive#2651`) backed by `data/known_fixes.json`, automated frequency tracking, slash commands (`/status`, `/faq`, `/known-fixes`, `/add-fix`), and 15-minute automated bug ingestion (`scripts/ingest_repo_bugs.mjs`). Grounded bot intelligence in 3 exact code-backed zero-to-mod workflows (`FirstRunWizard`, Node Toolbox canvas, `MOD_PATTERNS`). Pushed clean commit `48ebb48` to `origin/main`.
+Implemented and deployed the 100% deterministic Zero-LLM Discord Economy & Gamification Subsystem across both support bots (`Forge Concierge#3242` and `X4AILive#2651`). Registered slash commands `/daily`, `/balance`, `/trivia`, `/mine`, `/bank`, and `/shop`/`/buy` backed by `data/trivia_questions.json` and `scripts/discord_economy.mjs` with $0 API cost. Grounded bot intelligence in 3 exact code-backed zero-to-mod workflows (`FirstRunWizard`, Node Toolbox canvas, `MOD_PATTERNS`). Pushed clean commit `40ce17d` to `origin/main`.
 
 ## Active bounded unit
 
@@ -15,8 +15,13 @@ Rebranded public product names to `x4 AiLive` across all public readmes, content
   scope/history rules, and route assertions.
 - B109 Batch 2: separate Nexus/Steam guided UI, normalized persistent Guided/Express preference, report-backed
   export, correlated native file/save requests, rollback-safe receipt-verified native copy, exact WorkshopTool PE
-  selection, and visible terminal insertion without Enter.
+  basename/PE-structure selection, and visible terminal insertion without Enter. This is structural validation,
+  not publisher/signature proof; the real X Tools binary is absent.
 - Authored but unrun: report-backed export route assertions and `tests/e2e/release-center.spec.ts`.
+- Latest source review serializes output actions and distinguishes save success from receipt failure; all runtime
+  proof remains unrun.
+- Official-doc review added the missing Steam folder-name stage (lowercase legal characters, maximum 32).
+- Steam preview ownership now stages exactly one validated selected image, never every source `preview.*` candidate.
 - Out of scope until B109 closes: remaining Kimi execution batches B110 R1-R21.
 
 ## Validation state
@@ -24,10 +29,10 @@ Rebranded public product names to `x4 AiLive` across all public readmes, content
 - PASS: root `npm run typecheck` after latest Batch 2/test source.
 - PASS: root `npm run lint` with zero errors and the repository's existing 548-warning baseline.
 - PASS: focused new-file ESLint with zero warnings/errors.
-- PASS: release preferences 5/5; mod distribution 31/31; platform release 14/14; agent keys 24/24;
-  agent history 67/67; native bridge 36/36.
+- PASS: release preferences 5/5; mod distribution 31/31; platform release 17/17; agent keys 24/24;
+  agent history 67/67; native bridge 38/38.
 - PASS: extension source build; route script syntax; `git diff --check` (line-ending notices only).
-- PASS: `graphify update .` -> 2,858 nodes / 6,696 edges / 149 communities.
+- PASS: latest `graphify update .` -> 2,860 nodes / 6,700 edges / 154 communities.
 - NOT RUN: isolated `npm run test:routes`, focused Playwright, full e2e, production/extension packaging,
   installed Antigravity, rendered UI, OpenVSX/public release.
 - Official WorkshopTool is not installed locally. No Steam/Nexus publication was attempted or authorized.
