@@ -63,6 +63,16 @@ let statusItem: vscode.StatusBarItem;
 /** Set while deliberately stopping the sidecar so the exit handler stays quiet. */
 let stoppingDeliberately = false;
 
+function requestManagedSidecarStop(child: ChildProcess): void {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  if (child.stdin?.writable) child.stdin.end();
+  else child.kill();
+  const fallback = setTimeout(() => {
+    if (child.exitCode === null && child.signalCode === null) child.kill();
+  }, 2500);
+  fallback.unref();
+}
+
 class NativeDiffContentProvider implements vscode.TextDocumentContentProvider {
   private readonly documents = new Map<string, string>();
 
@@ -367,6 +377,7 @@ async function spawnSidecar(context: vscode.ExtensionContext): Promise<BackendHa
 
   const port = await findFreePort();
   const token = crypto.randomBytes(32).toString("hex");
+  const parentNonce = crypto.randomBytes(32).toString('hex');
   const stateDir = resolveStateDir(context);
   fs.mkdirSync(stateDir, { recursive: true });
   // B51: persist the user's Directory Settings (config.json) in global storage, NOT the
@@ -388,14 +399,20 @@ async function spawnSidecar(context: vscode.ExtensionContext): Promise<BackendHa
     nodeArgs.push(`--${debugMode}=127.0.0.1:${debugPort}`);
   }
 
-  log(`spawning sidecar: ${nodeExe} (${nodeVersion}) ${nodeArgs.join(" ")} dist/server.cjs`.replace(/\s+/g, " "));
+  const supervisorPath = path.join(__dirname, 'sidecar-supervisor.js');
+  if (!fs.existsSync(supervisorPath)) {
+    throw new Error(`Managed sidecar supervisor is missing: ${supervisorPath}. Rebuild the extension package.`);
+  }
+  const serverPath = path.join(appRoot.root, 'dist', 'server.cjs');
+  log(`spawning supervised sidecar: ${nodeExe} (${nodeVersion}) ${supervisorPath} ${serverPath} ${nodeArgs.join(" ")}`.replace(/\s+/g, " "));
   log(`  app root: ${appRoot.root} (${appRoot.source})`);
   log(`  port: ${port} (dynamically selected)  state dir: ${stateDir}`);
   if (debugPort) log(`  DEBUG: node inspector on 127.0.0.1:${debugPort} (${debugMode})`);
 
-  const child = spawn(nodeExe, [...nodeArgs, path.join("dist", "server.cjs")], {
+  const child = spawn(nodeExe, [supervisorPath, serverPath, ...nodeArgs], {
     cwd: appRoot.root,
     windowsHide: true,
+    stdio: ['pipe', 'pipe', 'pipe'],
     env: {
       ...process.env,
       NODE_ENV: "production",
@@ -404,6 +421,9 @@ async function spawnSidecar(context: vscode.ExtensionContext): Promise<BackendHa
       X4_STATE_DIR: stateDir,
       X4_CONFIG_DIR: configDir, // B51: config.json persists across extension updates
       X4_DATA_DIR: dataDir,     // B53: AI/agent keys, spend meter, harvested schemas persist too
+      X4_FORGE_PARENT_MODE: 'pipe-v1',
+      X4_FORGE_PARENT_PID: String(process.pid),
+      X4_FORGE_PARENT_NONCE: parentNonce,
       // Defense-in-depth: never allow the dev-only shell route in this shell.
       FORGE_ALLOW_RUN_COMMAND: "",
     },
@@ -458,7 +478,7 @@ async function spawnSidecar(context: vscode.ExtensionContext): Promise<BackendHa
   }
   stoppingDeliberately = true;
   try {
-    child.kill();
+    requestManagedSidecarStop(child);
   } finally {
     stoppingDeliberately = false;
   }
@@ -518,7 +538,7 @@ async function ensureBackendOnce(context: vscode.ExtensionContext): Promise<Back
     if (backend.owned && backend.child && backend.child.exitCode === null) {
       stoppingDeliberately = true;
       try {
-        backend.child.kill();
+        requestManagedSidecarStop(backend.child);
       } finally {
         stoppingDeliberately = false;
       }
@@ -546,13 +566,14 @@ async function ensureBackendOnce(context: vscode.ExtensionContext): Promise<Back
 function stopOwnedSidecar(reason: string): boolean {
   if (!backend?.owned || !backend.child) return false;
   log(`stopping owned sidecar (${reason})`);
+  const owned = backend;
+  backend = null;
   stoppingDeliberately = true;
   try {
-    backend.child.kill();
+    requestManagedSidecarStop(owned.child!);
   } finally {
     stoppingDeliberately = false;
   }
-  backend = null;
   updateStatus();
   return true;
 }

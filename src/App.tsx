@@ -89,6 +89,7 @@ import {
   type SidebarTab,
   type StudioLayoutPreferences,
 } from './lib/studioLayout';
+import { createLatestValueWriteQueue, type LatestValueWriteQueue } from './lib/latestValueWriteQueue';
 import {
   RELEASE_PREFERENCES_KEY,
   normalizeReleasePreferences,
@@ -223,7 +224,18 @@ export default function App() {
     parseStudioLayoutPreferences(localStorage.getItem(STUDIO_LAYOUT_KEY))
   );
   const layoutPreferencesRef = useRef(layoutPreferences);
-  const layoutSaveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const layoutSaveQueueRef = useRef<LatestValueWriteQueue<StudioLayoutPreferences> | null>(null);
+  if (!layoutSaveQueueRef.current) {
+    layoutSaveQueueRef.current = createLatestValueWriteQueue(async layout => {
+      const response = await fetch('/api/studio/layout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ layout }),
+        keepalive: true,
+      });
+      if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || `Layout save failed (${response.status}).`);
+    }, error => console.warn('Could not persist Studio layout on the Forge server.', error));
+  }
   const layoutTouchedRef = useRef(false);
   const [releasePreferences, setReleasePreferences] = useState<ReleasePreferences>(() =>
     parseReleasePreferences(localStorage.getItem(RELEASE_PREFERENCES_KEY))
@@ -248,18 +260,7 @@ export default function App() {
 
   const persistStudioLayout = React.useCallback((layout: StudioLayoutPreferences) => {
     try { localStorage.setItem(STUDIO_LAYOUT_KEY, JSON.stringify(layout)); } catch { /* server state remains authoritative */ }
-    layoutSaveChainRef.current = layoutSaveChainRef.current
-      .catch(() => undefined)
-      .then(async () => {
-        const response = await fetch('/api/studio/layout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ layout }),
-          keepalive: true,
-        });
-        if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || `Layout save failed (${response.status}).`);
-      })
-      .catch(error => console.warn('Could not persist Studio layout on the Forge server.', error));
+    layoutSaveQueueRef.current?.submit(layout);
   }, []);
 
   const updateLayoutPreferences = React.useCallback((update: React.SetStateAction<StudioLayoutPreferences>) => {

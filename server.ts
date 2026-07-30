@@ -175,6 +175,8 @@ import {
   RUN_JOB_MIN_TIMEOUT_MS,
   SYNC_COMMAND_DEADLINE_MS,
 } from "./src/lib/requestDeadline";
+import { runParentLivenessSelftest, watchParentIpc } from "./src/lib/parentLiveness";
+import { runLatestValueWriteQueueSelftest } from "./src/lib/latestValueWriteQueue";
 import { buildArtifactPlan, hashArtifactFile, materializeArtifact, verifyMaterializedArtifact, type ArtifactPlan } from "./src/lib/artifactPipeline";
 import { buildProjectFileInventory, runProjectFileInventorySelftest } from "./src/lib/projectFileInventory";
 import { materializeCatalogArtifact } from "./src/lib/artifactPackager";
@@ -7119,6 +7121,8 @@ const SELFTESTS: Record<string, () => unknown> = {
   "bug-report-selftest": runBugReportSelftest,
   "api-failure-envelope-selftest": runApiFailureEnvelopeSelftest,
   "request-deadline-selftest": runRequestDeadlineSelftest,
+  "parent-liveness-selftest": runParentLivenessSelftest,
+  "latest-value-write-queue-selftest": runLatestValueWriteQueueSelftest,
   "data-dir-selftest": runDataDirSelftest,
   "game-detect-selftest": runGameDetectSelftest,
   "path-roles-selftest": runPathRolesSelftest,
@@ -11530,7 +11534,15 @@ setupDevOrProd().then(() => {
     });
     if (published) console.log(`[discovery] instance address published to ${published.latestFile}`);
     const releaseDiscovery = () => unpublishInstance(process.pid);
-    process.on('exit', releaseDiscovery);
+    const parentWatch = watchParentIpc(process.env, process, contract => {
+      console.error(`[parent-liveness] supervisor reported extension parent loss; shutting down sidecar owned by parent pid ${contract.parentPid}.`);
+      releaseDiscovery();
+      process.exit(0);
+    });
+    if (parentWatch.active) {
+      console.log(`[parent-liveness] watching extension parent pipe (pid ${parentWatch.contract?.parentPid}, mode ${parentWatch.contract?.mode}).`);
+    }
+    process.on('exit', () => { parentWatch.release(); releaseDiscovery(); });
     for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
       process.on(signal, () => { releaseDiscovery(); process.exit(0); });
     }

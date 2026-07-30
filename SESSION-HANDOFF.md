@@ -4,46 +4,44 @@ Updated: 2026-07-30
 
 ## One-line state
 
-B110-R9 uniform timeout policy is VERIFIED locally and ready for its scoped commit/push; R10 sidecar parent-death
-and orphan prevention is the next bounded Kimi safety-contract unit.
+B110-R10 managed-sidecar parent-death/orphan prevention is VERIFIED; R19 packaged-VSIX CI is the next bounded Kimi
+safety-contract unit, followed by R20 flake policy.
 
 ## Operator brief
 
 - Project: `F:\DEV_ENV\X4_Forge` (Forge application/Antigravity extension, not the live X4 mod).
-- Machine state: Ken confirmed quiet. All R9 runtime/UI validation used isolated temp state; no installed sidecar,
+- Machine state: Ken confirmed quiet. All R10 runtime/UI validation used isolated temp state; no installed sidecar,
   real mod, game directory, Nexus, Steam, Open VSX, or live workspace was changed.
-- Eyeball queue: none for R9. It introduces no new visible control; full rendered compatibility passed 46/46.
-- Commit question: R9 is at the verified commit point. Stage only the R9-owned paths listed below; preserve the four
-  unrelated dirty/untracked files. After push, assert `origin/main == HEAD` and check the exact public CI SHA.
+- Eyeball queue: none for R10. It introduces no new visible control; packaged process behavior and full rendered
+  compatibility passed.
+- Commit question: verify the R10 close commit/push exists before R19. Its prewritten title is
+  `feat(extension): reap managed sidecars when the host dies`; preserve the four unrelated dirty/untracked files.
 
 ## Current bounded task
 
-### B110-R9 status: VERIFIED
+### B110-R10 status: VERIFIED
 
 Implemented:
 
-- `src/lib/requestDeadline.ts` centralizes browser/server/command budgets and 14 deterministic checks.
-- Every same-origin browser API fetch has a composed 30-second default or 150-second long-operation deadline.
-- Node HTTP and Express response lifetimes are bounded; expiry returns an R3-enveloped 504.
-- Sync commands stop at 60 seconds. Async jobs default to 15 minutes, cap at 30 minutes, refuse invalid limits and
-  full running capacity, terminate on timeout, and return stable machine evidence.
-- `/api/agent/schema` v4 publishes the deadline contract.
+- Packaged supervisor owns exactly one managed server and treats extension-host stdin loss as authority.
+- Nonce-authenticated graceful exit removes discovery; bounded fallback reaps only the exact spawned child tree.
+- Parent PID is diagnostic only; attach-first backends never enter the supervision path.
+- Product-copy screenshots now use per-run artifacts; layout persistence coalesces stale pending states.
 
 Validation:
 
-- Pure request policy 14/14; R3 regression 12/12.
-- Isolated routes 243/243, including 504 preemption, invalid-limit/no-spawn, and real PowerShell tree-kill proof.
-- Runtime-discovered isolated oracles 117/117.
-- Full isolated E2E 46/46 in 399.5 seconds; 0 failed/flaky; ports 3100/3101 closed afterward.
-- Typecheck PASS; lint PASS at 0 errors / 548 established warnings; production build and precommit PASS.
-- Graphify: 2,934 nodes / 6,883 edges / 142 communities; diff check PASS.
+- Parent contract 11/11; latest-value writer 3/3; staged packaged process drill 16/16.
+- Isolated routes 243/243; runtime-discovered oracles 119/119.
+- Focused Studio E2E 9/9; final instrumented full isolated E2E 46/46, zero failed/flaky/bad results.
+- Typecheck/lint/build/stage/extension build/package inspection passed. Final local VSIX SHA-256:
+  `A72BFB0E3EB9D32DBCF7EEBD02CF2FADB1180648CC6365919A869AE614EF0472`.
 
 ## Next action
 
-1. Commit/push only R9-owned paths and verify exact-SHA public CI.
-2. Begin B110-R10 as a new Full-lane task: reconcile extension sidecar spawn/discovery/shutdown with a parent PID
-   watchdog and PID-reuse-safe identity proof.
-3. Do not bundle R19/R20 into R10; update the Kimi ledger after each close.
+1. Verify R10's path-scoped commit/push and exact-SHA public CI.
+2. Begin B110-R19 as a new Full-lane task: reconcile the existing Windows Quality workflow and staged probe before
+   adding extension build/stage/package/VSIX inspection without publication.
+3. Close/document R19 independently; R20 follows.
 
 ## Live hazards and ownership
 
@@ -54,18 +52,23 @@ Validation:
   - `Note for Kimi.md`
   - `scripts/x4_muds_game.mjs`
 - Do not publish a new extension version for these internal safety units without a separately scoped release task.
-- Raw `node scripts/oracle-sweep.mjs` assumes `localhost:3001`; use `npm run test:oracles` when no server is running.
+- Raw `node scripts/oracle-sweep.mjs` assumes a running target; use `npm run test:oracles` when no server is running.
 - Non-Windows `exec()` descendant reaping is not proven; never replace the safe single-process fallback with an
   unowned negative-PID group kill.
 
-## R9-owned paths
+## R10-owned paths
 
-- `src/lib/requestDeadline.ts`
-- `src/lib/apiFailureEnvelope.ts`
-- `src/main.tsx`
+- `src/lib/parentLiveness.ts`
+- `src/lib/latestValueWriteQueue.ts`
+- `src/App.tsx`
 - `server.ts`
-- `scripts/route-integration.mjs`
-- `docs/plans/2026-07-30-timeout-policy.md`
+- `vscode-extension/src/sidecarSupervisor.ts`
+- `vscode-extension/src/extension.ts`
+- `vscode-extension/scripts/build-ext.mjs`
+- `vscode-extension/scripts/probe-staged-app.mjs`
+- `vscode-extension/.vscodeignore`
+- `tests/e2e/product-copy.spec.ts`
+- `docs/plans/2026-07-30-sidecar-parent-liveness.md`
 - `docs/plans/2026-07-29-kimi-recommendations-ledger.md`
 - `BACKLOG.md`
 - `ROADMAP.md`
@@ -76,5 +79,6 @@ Validation:
 
 ## AAR state
 
-Triggered and recorded. Triggers: one PowerShell search quoting failure, the first typecheck's unsupported Node exec
-option and union-access errors, and fresh-eyes removal of a new lint warning. No rollback or acceptance weakening.
+Triggered and recorded. Main triggers: first supervisor transport failed; generated-output build race; standing
+evidence writes; traced layout-save starvation; one unexplained late Vite exit followed by an instrumented 46/46;
+and one raw oracle command without its server. No rollback, product-data mutation, or acceptance weakening.

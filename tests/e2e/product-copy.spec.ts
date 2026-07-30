@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { buildTemplateWorkspace } from '../../src/lib/modTemplates';
 import { seedServerWorkspace } from './ephemeral';
 
-test('startup and LIVE diagnostics expose only generic optional-runtime copy', async ({ page }) => {
+test('startup and LIVE diagnostics expose only generic optional-runtime copy', async ({ page }, testInfo) => {
   await seedServerWorkspace(buildTemplateWorkspace('welcome'));
   await page.addInitScript(() => {
     localStorage.removeItem('x4_mod_studio_workspace');
@@ -40,7 +40,7 @@ test('startup and LIVE diagnostics expose only generic optional-runtime copy', a
   await expect(card.getByText('Optional runtime integration', { exact: true })).toBeVisible();
   await expect(card).toContainText('core Forge authoring and validation are unaffected');
   await expect(card).not.toContainText(/neural[ _-]?link|x4_neural_link|x4_ai_influence/i);
-  await page.screenshot({ path: 'vscode-extension/evidence/0.0.35-runtime-copy-startup.png', fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath('runtime-copy-startup.png'), fullPage: true });
   await page.getByTestId('health-card-dismiss').click();
 
   const live = page.getByTestId('canvas-live-toggle');
@@ -50,5 +50,5 @@ test('startup and LIVE diagnostics expose only generic optional-runtime copy', a
   expect(title).not.toMatch(/neural[ _-]?link|x4_neural_link|x4_ai_influence/i);
   await live.hover();
   await page.waitForTimeout(1_200);
-  await page.screenshot({ path: 'vscode-extension/evidence/0.0.35-runtime-copy-live.png', fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath('runtime-copy-live.png'), fullPage: true });
 });

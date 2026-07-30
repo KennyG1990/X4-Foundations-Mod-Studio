@@ -7071,3 +7071,28 @@ workspace, or external platform was touched.
 
 Suggested commit title:
 `feat(runtime): enforce request and command deadlines`.
+
+## 2026-07-30 — B110-R10 managed-sidecar parent liveness — VERIFIED
+
+Extension-owned Forge sidecars now run through a compiled, packaged supervisor whose stdin pipe is owned by the
+extension host. The supervisor owns exactly one server child. Pipe loss—not a reusable Windows PID—is authoritative;
+the parent PID is diagnostic only. A random nonce authenticates graceful parent-loss IPC so the server removes its
+discovery record, and a 750 ms fallback force-reaps only the supervisor's exact child tree. Attached Forge backends
+remain external and untouched; existing unexpected-exit restart semantics remain in the extension controller.
+
+The staged packaged-product drill passed 16/16: real server boot, canonical-corpus response, exact child PID, live
+claimed parent, pipe-loss exit within three seconds, parent still alive, discovery removed, invalid contract exit 64
+before spawn, stubborn-child spawn, exact forced reap, and parent survival. Parent policy passed 11/11. A required
+full-suite trace also exposed an unbounded queue of stale Studio layout writes; persistence now serializes the
+in-flight state plus only the newest pending state (3/3), and the durable fresh-origin case passes rendered tests.
+
+Evidence: routes 243/243, runtime oracles 119/119, focused Studio E2E 9/9, final instrumented full E2E 46/46 with
+zero failed/flaky/bad results, typecheck/lint/build/precommit/graph, root stage and extension build. Local VSIX
+`x4-forge-studio-0.0.59-r10-final.vsix` contains 2,091 entries / 17,860,935 bytes with required supervisor/controller/
+server payloads and zero forbidden secrets/maps/machine paths; SHA-256
+`A72BFB0E3EB9D32DBCF7EEBD02CF2FADB1180648CC6365919A869AE614EF0472`. No installed host, game/mod, store, or
+external platform was changed. One earlier full run lost Vite after test 38 without a crash event; the instrumented
+rerun stayed healthy. R20 owns the already-planned flake/lifecycle policy rather than treating that as R10 success.
+
+Suggested commit title:
+`feat(extension): reap managed sidecars when the host dies`.

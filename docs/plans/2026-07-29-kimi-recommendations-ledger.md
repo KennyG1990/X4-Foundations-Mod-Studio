@@ -25,7 +25,7 @@ make each future implementation a bounded workflow task rather than an untracked
 | R7 One transaction discipline | PARTIAL | Deploy replacement and guarded workspace writes are transactional/atomic. B109 removed the release ZIP's direct write and uses atomic file or verified sibling-directory replacement; a wider writer inventory is still required. | Inventory every remaining durable writer and close exceptions by category. |
 | R8 Request-addressed workspace identity | PARTIAL | B108 made deploy identity explicit; B109 requires an explicit workspace for both platform release prepare routes. Many other mutating routes still accept/fall back to the active singleton and clients/tokens are not workspace-scoped. | Route/caller matrix and response echo for remaining mutations; full client scoping belongs with R17. |
 | R9 Timeout policy | VERIFIED (B110-R9) | The existing browser fetch chokepoint now gives every same-origin API request a finite composed deadline, with a larger budget for known long work. Node header/body/keep-alive and Express response lifetimes are bounded. Both dev command routes terminate; async jobs validate/cap `timeoutMs`, retain running-job receipts, tree-kill on Windows, and expose `timed_out` machine truth. | Preserve the 14/14 policy oracle, 504 drill, and real sleeping-job termination checks. Evidence: `docs/plans/2026-07-30-timeout-policy.md`. |
-| R10 Sidecar liveness | PARTIAL | The extension restarts a child that dies while the host lives and removes discovery on clean shutdown. A host crash can still orphan the sidecar; no parent-death watchdog exists. | Parent PID contract and orphan-reap proof without killing an unrelated reused PID. |
+| R10 Sidecar liveness | VERIFIED (B110-R10) | Managed sidecars run through a packaged supervisor owned by the extension-host stdin pipe. Parent PID is diagnostic only; nonce-authenticated IPC permits graceful server/discovery cleanup and a bounded fallback reaps only the exact spawned child tree. Attach-first backends remain external. | Preserve the 11/11 contract oracle and 16/16 staged live-parent/pipe-loss/invalid-contract/stubborn-child drill. Evidence: `docs/plans/2026-07-30-sidecar-parent-liveness.md`. |
 | R11 Conflict dialog v2 | OPEN | Current card still says `ADOPT SERVER` / `KEEP MINE`; decision data is limited to tooltips and no diff preview. | Timestamps, changed-file counts, explicit outcomes, text diff, destructive-choice tests. |
 | R12 Honest settings | VERIFIED (B108/B109) | Inert auto-sync settings were removed; the normalized Studio inventory repairs invalid settings and every current layout control has a live consumer. B109's Settings-only Express preference has normalization/selftests, changes the Release Center presentation, states every retained gate, and is visibly installed. | Preserve regression and installed-host coverage. |
 | R13 One poller/SSE | OPEN | Independent polling remains in App readiness/workspace, AgentBridge, Canvas, CueViewer, GuidedRail, Playtest, and device-flow logic. | Classify continuous subscriptions versus bounded workflows; build one scheduler for continuous reads, leave OAuth workflow polling isolated. |
@@ -42,11 +42,11 @@ make each future implementation a bounded workflow task rather than an untracked
 
 1. **B109 Release Center — VERIFIED / Open VSX 0.0.59:** closed the release-specific R7/R8/R12 work and supplied a
    concrete consumer for R3-style staged errors. Preserve its gates; do not rebuild it during B110.
-2. **Safety contract batch:** R3 and R9 are VERIFIED; continue with R10, R19, R20. These improve every subsequent implementation and CI gate.
+2. **Safety contract batch:** R3, R9, and R10 are VERIFIED; continue with R19, then R20. These improve every subsequent implementation and CI gate.
 3. **Validation truth batch:** R1 + R16 schema, then R6 UI, then R2 delta reporting.
 4. **Loss-prevention UX:** R11 and R14.
 5. **Architecture batch:** R8 remainder + R17, then R13 after workspace/session ownership is stable.
 6. **Tooling decisions:** R18 and R21.
 
-R3, R4, R5, R9, R12, and R15 need no duplicate implementation. Their regression evidence remains part of the relevant
+R3, R4, R5, R9, R10, R12, and R15 need no duplicate implementation. Their regression evidence remains part of the relevant
 full gates. Every row moved to `VERIFIED` must cite its task plan, acceptance results, and ROADMAP close.

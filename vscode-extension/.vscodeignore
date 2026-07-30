@@ -1,6 +1,7 @@
 # Ship ONLY the compiled controller, the staged app, and the manifest/docs.
 **
 !out/extension.js
+!out/sidecar-supervisor.js
 !app/**
 !package.json
 !README.md
