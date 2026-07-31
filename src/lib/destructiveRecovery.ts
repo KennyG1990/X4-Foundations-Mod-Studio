@@ -39,6 +39,8 @@ interface RecoveryBase {
 export interface WorkspaceRecoveryRecord extends RecoveryBase {
   kind: 'workspace';
   status: 'ready' | 'used';
+  /** ADR-F5 authority. Missing only on pre-migration receipts, which cannot be replayed. */
+  workspaceId?: string;
   beforeWorkspace: unknown;
   beforeHash: string;
 }
@@ -74,7 +76,8 @@ function isRecord(value: unknown): value is DestructiveRecoveryRecord {
   if (row.schema !== RECOVERY_SCHEMA || !validId(String(row.id || ''))) return false;
   if (!['workspace', 'deploy'].includes(String(row.kind)) || !['preparing', 'ready', 'used'].includes(String(row.status))) return false;
   if (!row.createdAt || !row.expiresAt || !row.expectedCurrentHash || !row.summary) return false;
-  if (row.kind === 'workspace') return row.beforeWorkspace !== undefined && typeof row.beforeHash === 'string';
+  if (row.kind === 'workspace') return row.beforeWorkspace !== undefined && typeof row.beforeHash === 'string' &&
+    (row.workspaceId === undefined || /^ws_[a-f0-9]{24}$/i.test(row.workspaceId));
   return typeof row.targetRoot === 'string' && typeof row.targetPath === 'string' && typeof row.modId === 'string'
     && typeof row.beforeFingerprint === 'string' && typeof row.beforeBytes === 'number' && typeof row.priorExisted === 'boolean';
 }
@@ -144,11 +147,13 @@ export class DestructiveRecoveryStore {
   }
 
   createWorkspace(input: {
+    workspaceId: string;
     beforeWorkspace: unknown;
     beforeHash: string;
     expectedCurrentHash: string;
     summary: string;
   }): WorkspaceRecoveryRecord {
+    if (!/^ws_[a-f0-9]{24}$/i.test(input.workspaceId)) throw new Error('Workspace recovery workspaceId is malformed.');
     const serialized = JSON.stringify(input.beforeWorkspace);
     const bytes = Buffer.byteLength(serialized, 'utf8');
     if (bytes > this.maxWorkspaceBytes) throw new Error(`Workspace recovery exceeds ${this.maxWorkspaceBytes} bytes.`);
@@ -159,6 +164,7 @@ export class DestructiveRecoveryStore {
       id: this.newId('workspace'),
       kind: 'workspace',
       status: 'ready',
+      workspaceId: input.workspaceId,
       createdAt: new Date(now).toISOString(),
       expiresAt: new Date(now + this.maxAgeMs).toISOString(),
       summary: input.summary,
@@ -258,7 +264,7 @@ export function runDestructiveRecoverySelftest(): {
   let now = Date.parse('2026-07-30T00:00:00Z');
   try {
     const store = new DestructiveRecoveryStore({ root, maxEntries: 3, maxAgeMs: 1_000, maxWorkspaceBytes: 256, maxDeployBytes: 64, now: () => now });
-    const workspace = store.createWorkspace({ beforeWorkspace: { name: 'before', nodes: [], links: [] }, beforeHash: 'before', expectedCurrentHash: 'after', summary: 'forced overwrite' });
+    const workspace = store.createWorkspace({ workspaceId: 'ws_111111111111111111111111', beforeWorkspace: { name: 'before', nodes: [], links: [] }, beforeHash: 'before', expectedCurrentHash: 'after', summary: 'forced overwrite' });
     const readWorkspace = store.read(workspace.id);
     ok('workspace_roundtrip', readWorkspace.ok && readWorkspace.record.kind === 'workspace' && readWorkspace.record.expectedCurrentHash === 'after');
     store.markUsed(workspace.id);
@@ -268,7 +274,7 @@ export function runDestructiveRecoverySelftest(): {
     try { store.markUsed(workspace.id); } catch { replayRejected = true; }
     ok('replay_rejected', replayRejected);
     let oversizedRejected = false;
-    try { store.createWorkspace({ beforeWorkspace: { huge: 'x'.repeat(300) }, beforeHash: 'a', expectedCurrentHash: 'b', summary: 'large' }); } catch { oversizedRejected = true; }
+    try { store.createWorkspace({ workspaceId: 'ws_111111111111111111111111', beforeWorkspace: { huge: 'x'.repeat(300) }, beforeHash: 'a', expectedCurrentHash: 'b', summary: 'large' }); } catch { oversizedRejected = true; }
     ok('oversized_workspace_rejected', oversizedRejected);
 
     const deploy = store.prepareDeployment({ priorExisted: true, targetRoot: root, targetPath: path.join(root, 'mod'), modId: 'mod', beforeFingerprint: 'old', beforeBytes: 12, summary: 'deploy mod' });

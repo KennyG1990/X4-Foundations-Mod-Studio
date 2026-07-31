@@ -115,10 +115,13 @@ test('Directory Settings routes both external links through the installed-host b
   await forge.getByRole('link', { name: /Find X4 Unpacker/ }).click();
   await forge.getByRole('link', { name: /Open Discord/ }).click();
 
-  await expect.poll(() => page.evaluate(() => (window as Window & { forgeMessages?: unknown[] }).forgeMessages || [])).toEqual([
+  await expect.poll(() => page.evaluate(() => ((window as Window & { forgeMessages?: any[] }).forgeMessages || [])
+    .filter(message => message?.type === 'open-external-url'))).toEqual([
     { source: 'x4forge-studio', type: 'open-external-url', url: 'https://www.nexusmods.com/x4foundations/mods/2142?tab=description' },
     { source: 'x4forge-studio', type: 'open-external-url', url: 'https://discord.gg/9qvAvtXqWP' },
   ]);
+  await expect.poll(() => page.evaluate(() => ((window as Window & { forgeMessages?: any[] }).forgeMessages || [])
+    .some(message => message?.type === 'workspace-authority-changed' && /^ws_[a-f0-9]{24}$/i.test(String(message.workspaceId || ''))))).toBe(true);
 });
 
 test('Directory Settings auto-detects distinct development and deployed filesystem roles', async ({ page }) => {

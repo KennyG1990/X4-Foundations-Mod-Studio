@@ -44,6 +44,9 @@ async function findFreePort() {
 const PORT = Number(process.env.ROUTE_TEST_PORT || await findFreePort());
 const BASE = `http://127.0.0.1:${PORT}`;
 const SESSION_TOKEN = 'route-int-selftest-token-' + process.pid;
+const CLIENT_ID = `client_route_${process.pid}_${Date.now().toString(36)}`;
+const SECOND_CLIENT_ID = `client_route_other_${process.pid}_${Date.now().toString(36)}`;
+let WORKSPACE_ID = '';
 const tmp = path.join(os.tmpdir(), `x4-route-int-${process.pid}`);
 const stateDir = path.join(tmp, 'state');
 const dataDir = path.join(tmp, 'data');
@@ -51,6 +54,15 @@ const configDir = path.join(tmp, 'config');
 fs.mkdirSync(stateDir, { recursive: true });
 fs.mkdirSync(dataDir, { recursive: true });
 fs.mkdirSync(configDir, { recursive: true });
+const LEGACY_UNBOUND_KEY = `x4fk_${'1'.repeat(64)}`;
+fs.writeFileSync(path.join(dataDir, 'agent-keys.json'), JSON.stringify({
+  version: 1,
+  keys: [{
+    id: 'key_legacy_unbound', label: 'legacy-unbound', scope: 'read',
+    tokenHash: crypto.createHash('sha256').update(LEGACY_UNBOUND_KEY).digest('hex'),
+    createdAt: Date.now(), expiresAt: null, lastUsedAt: null, useCount: 0, revokedAt: null,
+  }],
+}));
 const referenceRoot = path.join(tmp, 'reference');
 fs.mkdirSync(path.join(referenceRoot, 'libraries'), { recursive: true });
 fs.writeFileSync(path.join(referenceRoot, 'libraries', 'factions.xml'), '<factions><faction id="routefixture" name="Route Fixture" tags="economic"/></factions>');
@@ -74,9 +86,12 @@ function killTree(pid) {
   else { try { process.kill(-pid, 'SIGKILL'); } catch { try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ } } }
 }
 
-async function req(method, urlPath, token, body) {
+async function req(method, urlPath, token, body, options = {}) {
   const headers = {};
   if (token) headers['Authorization'] = `Bearer ${token}`;
+  const workspaceId = Object.prototype.hasOwnProperty.call(options, 'workspaceId') ? options.workspaceId : WORKSPACE_ID;
+  if (token && workspaceId) headers['x-workspace-id'] = workspaceId;
+  if (token === SESSION_TOKEN) headers['x-client-id'] = options.clientId || CLIENT_ID;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   try {
     const res = await fetch(BASE + urlPath, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
@@ -137,9 +152,36 @@ async function main() {
   ok('no_token_401', noToken.status === 401);
   ok('failure_envelope_covers_auth', noToken.json?.success === false && noToken.json?.status === 'FAILED' && noToken.json?.code === 'API_UNAUTHORIZED' && typeof noToken.json?.error === 'string' && Array.isArray(noToken.json?.failedStages), JSON.stringify(noToken.json));
   ok('bogus_token_401', (await req('GET', '/api/agent/workspace', 'not-a-real-token')).status === 401);
+  const bootstrap = await req('POST', '/api/agent/workspaces/bootstrap', SESSION_TOKEN, { clientId: CLIENT_ID });
+  WORKSPACE_ID = String(bootstrap.json?.workspaceId || '');
+  ok('workspace_bootstrap_returns_immutable_id', bootstrap.status === 200 && /^ws_[a-f0-9]{24}$/i.test(WORKSPACE_ID), JSON.stringify(bootstrap.json || {}));
   const workspaceSuccess = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
   ok('session_token_200_workspace', workspaceSuccess.status === 200);
   ok('success_object_shape_is_not_enveloped', !Object.prototype.hasOwnProperty.call(workspaceSuccess.json || {}, 'failedStages') && !Object.prototype.hasOwnProperty.call(workspaceSuccess.json || {}, 'code'), JSON.stringify(workspaceSuccess.json || {}));
+
+  // ADR-F5: two same-name workspaces and two tabs are independent authorities.
+  const secondCreate = await req('POST', '/api/agent/workspaces', SESSION_TOKEN, {
+    clientId: SECOND_CLIENT_ID,
+    workspace: { ...workspaceSuccess.json.workspace, name: workspaceSuccess.json.workspace.name, description: 'second tab', nodes: [] },
+  }, { clientId: SECOND_CLIENT_ID });
+  const SECOND_WORKSPACE_ID = String(secondCreate.json?.workspaceId || '');
+  ok('same_name_workspace_gets_distinct_immutable_id', secondCreate.status === 201 && /^ws_[a-f0-9]{24}$/i.test(SECOND_WORKSPACE_ID) && SECOND_WORKSPACE_ID !== WORKSPACE_ID && secondCreate.json?.workspace?.name === workspaceSuccess.json?.workspace?.name, JSON.stringify({ first: WORKSPACE_ID, second: SECOND_WORKSPACE_ID }));
+  const firstBeforeIsolation = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const secondBeforeIsolation = await req('GET', '/api/agent/workspace', SESSION_TOKEN, undefined, { workspaceId: SECOND_WORKSPACE_ID, clientId: SECOND_CLIENT_ID });
+  const [firstWrite, secondWrite] = await Promise.all([
+    req('POST', '/api/agent/workspace', SESSION_TOKEN, { workspace: { ...firstBeforeIsolation.json.workspace, description: 'first tab isolated' }, expectedHead: firstBeforeIsolation.json.workspaceHash }),
+    req('POST', '/api/agent/workspace', SESSION_TOKEN, { workspace: { ...secondBeforeIsolation.json.workspace, description: 'second tab isolated' }, expectedHead: secondBeforeIsolation.json.workspaceHash }, { workspaceId: SECOND_WORKSPACE_ID, clientId: SECOND_CLIENT_ID }),
+  ]);
+  ok('concurrent_different_workspace_cas_both_succeed', firstWrite.status === 200 && secondWrite.status === 200 && firstWrite.json?.workspaceId === WORKSPACE_ID && secondWrite.json?.workspaceId === SECOND_WORKSPACE_ID);
+  const firstAfterIsolation = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const secondAfterIsolation = await req('GET', '/api/agent/workspace', SESSION_TOKEN, undefined, { workspaceId: SECOND_WORKSPACE_ID, clientId: SECOND_CLIENT_ID });
+  ok('workspace_reads_do_not_cross', firstAfterIsolation.json?.workspace?.description === 'first tab isolated' && secondAfterIsolation.json?.workspace?.description === 'second tab isolated');
+  const firstCompile = await req('POST', '/api/agent/compile', SESSION_TOKEN, {});
+  const secondCompile = await req('POST', '/api/agent/compile', SESSION_TOKEN, {}, { workspaceId: SECOND_WORKSPACE_ID, clientId: SECOND_CLIENT_ID });
+  ok('workspace_compile_echoes_independent_authority', firstCompile.json?.workspaceId === WORKSPACE_ID && secondCompile.json?.workspaceId === SECOND_WORKSPACE_ID);
+  ok('stateful_route_missing_identity_fails_named', (await req('GET', '/api/agent/workspace', SESSION_TOKEN, undefined, { workspaceId: '' })).json?.code === 'WORKSPACE_ID_REQUIRED');
+  ok('stateful_route_unknown_identity_fails_named', (await req('GET', '/api/agent/workspace', SESSION_TOKEN, undefined, { workspaceId: 'ws_ffffffffffffffffffffffff' })).json?.code === 'WORKSPACE_NOT_FOUND');
+  ok('legacy_unbound_key_denied_workspace_state', (await req('GET', '/api/agent/workspace', LEGACY_UNBOUND_KEY, undefined, { workspaceId: WORKSPACE_ID })).json?.code === 'WORKSPACE_BINDING_REQUIRED');
   const agentSchema = await req('GET', '/api/agent/schema', null);
   ok('failure_contract_is_discoverable', agentSchema.status === 200 && agentSchema.json?.api_version === '2026-07-30.agent.v4' && Array.isArray(agentSchema.json?.failure_contract?.top_level?.failedStages), JSON.stringify(agentSchema.json?.failure_contract || {}));
   ok('deadline_contract_is_discoverable', agentSchema.json?.request_deadlines?.browser_api_default_ms === 30000 && agentSchema.json?.request_deadlines?.command_job?.maximum_ms === 1800000, JSON.stringify(agentSchema.json?.request_deadlines || {}));
@@ -217,6 +259,9 @@ async function main() {
   const writeKey = await mkKey('write');
   const deployKey = await mkKey('deploy');
   ok('minted_read_write_and_deploy_keys', !!readKey && !!writeKey && !!deployKey, `read=${!!readKey} write=${!!writeKey} deploy=${!!deployKey}`);
+  ok('workspace_bound_key_cannot_forge_other_identity', (await req('GET', '/api/agent/workspace', readKey, undefined, { workspaceId: SECOND_WORKSPACE_ID })).json?.code === 'WORKSPACE_BINDING_MISMATCH');
+  const secondHistoryIsolation = await req('GET', '/api/agent/history', SESSION_TOKEN, undefined, { workspaceId: SECOND_WORKSPACE_ID, clientId: SECOND_CLIENT_ID });
+  ok('history_is_scoped_to_workspace_identity', secondHistoryIsolation.status === 200 && (secondHistoryIsolation.json?.rows || []).every(row => row.workspaceId === SECOND_WORKSPACE_ID));
 
   // FB-17: GitHub credentials are server-owned and session-token-only.
   const credentialInitial = await req('GET', '/api/github/credential', SESSION_TOKEN);
@@ -283,6 +328,8 @@ async function main() {
   const workspaceHistory = await req('GET', '/api/agent/history?kind=workspace', SESSION_TOKEN);
   const forcedWorkspaceRow = (workspaceHistory.json?.rows || []).find(row => row.recoveryId === forcedLocal.json?.recovery?.id);
   ok('forced_workspace_history_is_truthfully_revertible', forcedWorkspaceRow?.revertible === true && forcedWorkspaceRow?.recoveryKind === 'workspace', JSON.stringify(forcedWorkspaceRow || {}));
+  const crossWorkspaceRecovery = await req('POST', `/api/agent/history/${forcedWorkspaceRow?.id}/revert`, SESSION_TOKEN, {}, { workspaceId: SECOND_WORKSPACE_ID, clientId: SECOND_CLIENT_ID });
+  ok('cross_workspace_recovery_is_invisible', crossWorkspaceRecovery.status === 404);
   const undoForcedWorkspace = await req('POST', `/api/agent/history/${forcedWorkspaceRow?.id}/revert`, SESSION_TOKEN, {});
   ok('forced_workspace_recovery_restores_prior_head', undoForcedWorkspace.status === 200 && undoForcedWorkspace.json?.workspace?.name === serverCopy.name, JSON.stringify(undoForcedWorkspace.json || {}));
   const replayForcedWorkspace = await req('POST', `/api/agent/history/${forcedWorkspaceRow?.id}/revert`, SESSION_TOKEN, {});

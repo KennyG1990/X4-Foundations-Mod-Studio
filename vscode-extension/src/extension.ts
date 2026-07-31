@@ -53,6 +53,9 @@ interface BackendHandle {
   token?: string;
   /** Node inspector port when spawned under --inspect (B43); 0 when not debugging. */
   debugPort?: number;
+  /** ADR-F5 explicit authority for extension-native API calls. */
+  clientId?: string;
+  workspaceId?: string;
 }
 
 let backend: BackendHandle | null = null;
@@ -63,6 +66,37 @@ let output: vscode.OutputChannel;
 let statusItem: vscode.StatusBarItem;
 /** Set while deliberately stopping the sidecar so the exit handler stays quiet. */
 let stoppingDeliberately = false;
+
+function backendApiHeaders(handle: BackendHandle, json = false): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (handle.token) headers.Authorization = `Bearer ${handle.token}`;
+  if (handle.clientId) headers['x-client-id'] = handle.clientId;
+  if (handle.workspaceId) headers['x-workspace-id'] = handle.workspaceId;
+  if (json) headers['Content-Type'] = 'application/json';
+  return headers;
+}
+
+async function bindBackendWorkspace(context: vscode.ExtensionContext, handle: BackendHandle): Promise<void> {
+  if (!handle.owned || !handle.token) return;
+  handle.clientId ||= `client_extension_${process.pid}_${Date.now().toString(36)}`;
+  const saved = context.globalState.get<string>('x4forge.workspaceId') || '';
+  const attempt = async (workspaceId: string) => {
+    const response = await fetch(`${handle.baseUrl}/api/agent/workspaces/bootstrap`, {
+      method: 'POST',
+      headers: backendApiHeaders(handle, true),
+      body: JSON.stringify({ clientId: handle.clientId, ...(workspaceId ? { workspaceId } : {}) }),
+    });
+    return { response, body: await response.json() as { workspaceId?: string; code?: string; error?: string } };
+  };
+  let result = await attempt(saved);
+  if (!result.response.ok && saved && ['WORKSPACE_NOT_FOUND', 'WORKSPACE_ID_INVALID'].includes(String(result.body.code || ''))) {
+    result = await attempt('');
+  }
+  if (!result.response.ok || !result.body.workspaceId) throw new Error(result.body.error || `workspace bootstrap failed (${result.response.status})`);
+  handle.workspaceId = result.body.workspaceId;
+  await context.globalState.update('x4forge.workspaceId', handle.workspaceId);
+  log(`workspace authority bound: ${handle.workspaceId}`);
+}
 
 function requestManagedSidecarStop(child: ChildProcess): void {
   if (child.exitCode !== null || child.signalCode !== null) return;
@@ -466,6 +500,7 @@ async function spawnSidecar(context: vscode.ExtensionContext): Promise<BackendHa
       );
     }
     if (await probeForge(handle.baseUrl, 1500)) {
+      await bindBackendWorkspace(context, handle);
       log(`sidecar ready at ${handle.baseUrl}`);
       return handle;
     }
@@ -616,7 +651,7 @@ function webviewHtml(webview: vscode.Webview, forgeUrl: string, mode: string): s
     window.addEventListener('message', (event) => {
       if (event.source !== frame.contentWindow || event.origin !== forgeOrigin) return;
       const data = event.data;
-      if (!data || data.source !== 'x4forge-studio' || !['open-workspace-file', 'open-text-diff', 'open-node-selection', 'node-selection-result', 'open-external-url', 'release-native-action'].includes(data.type)) return;
+      if (!data || data.source !== 'x4forge-studio' || !['open-workspace-file', 'open-text-diff', 'open-node-selection', 'node-selection-result', 'open-external-url', 'release-native-action', 'workspace-authority-changed'].includes(data.type)) return;
       vscode.postMessage(data);
     });
     window.addEventListener('message', (event) => {
@@ -657,6 +692,31 @@ function trackStudioPanel(context: vscode.ExtensionContext, nextPanel: vscode.We
 }
 
 async function handleStudioMessage(context: vscode.ExtensionContext, value: unknown): Promise<void> {
+  const authority = value as { source?: unknown; type?: unknown; workspaceId?: unknown } | null;
+  if (authority?.source === 'x4forge-studio' && authority.type === 'workspace-authority-changed') {
+    const workspaceId = String(authority.workspaceId || '');
+    if (!/^ws_[a-f0-9]{24}$/i.test(workspaceId)) {
+      log('workspace authority change refused: malformed workspace id');
+      return;
+    }
+    try {
+      const handle = await ensureBackend(context);
+      if (!handle.owned || !handle.token || !handle.clientId) return;
+      const response = await fetch(`${handle.baseUrl}/api/agent/workspaces/bootstrap`, {
+        method: 'POST',
+        headers: backendApiHeaders(handle, true),
+        body: JSON.stringify({ clientId: handle.clientId, workspaceId }),
+      });
+      const body = await response.json() as { workspaceId?: string; error?: string };
+      if (!response.ok || body.workspaceId !== workspaceId) throw new Error(body.error || `HTTP ${response.status}`);
+      handle.workspaceId = workspaceId;
+      await context.globalState.update('x4forge.workspaceId', workspaceId);
+      log(`workspace authority selected by Studio tab: ${workspaceId}`);
+    } catch (error) {
+      log(`workspace authority change failed closed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return;
+  }
   const request = parseNativeEditorRequest(value);
   if (!request) return;
   try {
@@ -702,7 +762,7 @@ async function handleStudioMessage(context: vscode.ExtensionContext, value: unkn
     }
     const handle = await ensureBackend(context);
     if (!handle.owned || !handle.token) throw new Error("Native file opening requires the extension-managed Forge sidecar.");
-    const headers = { Authorization: `Bearer ${handle.token}` };
+    const headers = backendApiHeaders(handle);
     const [workspaceResponse, configResponse] = await Promise.all([
       fetch(`${handle.baseUrl}/api/agent/workspace`, { headers }),
       fetch(`${handle.baseUrl}/api/schema/config`, { headers }),
@@ -954,7 +1014,7 @@ export function activate(context: vscode.ExtensionContext): void {
         if (!ttl) return;
         const res = await fetch(`${handle.baseUrl}/api/agent/keys`, {
           method: "POST",
-          headers: { Authorization: `Bearer ${handle.token}`, "Content-Type": "application/json" },
+          headers: backendApiHeaders(handle, true),
           body: JSON.stringify({ label: label.trim(), scope: scope.label, ttl: ttl.label }),
         });
         const data = (await res.json()) as { token?: string; error?: string };
@@ -1316,6 +1376,7 @@ async function copyMcpConfig(context: vscode.ExtensionContext): Promise<void> {
           env: {
             X4FORGE_URL: handle.baseUrl,
             X4FORGE_KEY: "<paste an agent key here — run 'X4 Forge: Create Agent Key' (write scope recommended)>",
+            X4FORGE_WORKSPACE_ID: handle.workspaceId || '<workspace id>',
           },
         },
       },
@@ -1341,7 +1402,7 @@ async function writeAgentBrief(context: vscode.ExtensionContext, modPath: string
   const handle = await ensureBackend(context);
   if (!handle.owned || !handle.token) return false;
   const res = await fetch(`${handle.baseUrl}/api/agent/project/brief?fromPath=${encodeURIComponent(fromPath)}`, {
-    headers: { Authorization: `Bearer ${handle.token}` },
+    headers: backendApiHeaders(handle),
   });
   const data = (await res.json()) as { agentsMd?: string; notesMd?: string; error?: string };
   if (!res.ok || !data.agentsMd || !data.notesMd) throw new Error(data.error || `HTTP ${res.status}`);
@@ -1655,7 +1716,7 @@ async function generateProof(context: vscode.ExtensionContext): Promise<void> {
       ? path.basename(modFolders[0].uri.fsPath)
       : (await vscode.window.showInputBox({ prompt: "Mod folder name for the proof (blank = active workspace only)" }))?.trim() || "";
     const res = await fetch(`${handle.baseUrl}/api/agent/proof?fromPath=${encodeURIComponent(fromPath)}`, {
-      headers: { Authorization: `Bearer ${handle.token}` },
+      headers: backendApiHeaders(handle),
     });
     const data = (await res.json()) as { markdown?: string; error?: string };
     if (!res.ok || !data.markdown) throw new Error(data.error || `HTTP ${res.status}`);
@@ -1724,7 +1785,7 @@ async function offerAdopt(context: vscode.ExtensionContext, uri: vscode.Uri): Pr
 async function adoptFolderIntoCanvas(context: vscode.ExtensionContext, folderName: string): Promise<void> {
   try {
     if (!backend?.owned || !backend.token) throw new Error("no owned sidecar");
-    const auth = { Authorization: `Bearer ${backend.token}`, "Content-Type": "application/json" };
+    const auth = backendApiHeaders(backend, true);
     const wsRes = await fetch(`${backend.baseUrl}/api/agent/workspace`, { headers: auth });
     const wsData = (await wsRes.json()) as { version?: number };
     const importRes = await fetch(`${backend.baseUrl}/api/agent/mod-folder/import`, {

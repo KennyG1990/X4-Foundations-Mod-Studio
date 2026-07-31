@@ -1,6 +1,6 @@
 /** Authenticated preview/apply routes for bounded canonical bulk XML transforms. */
 
-import type { Express, Response } from 'express';
+import type { Express, Request, Response } from 'express';
 import { resolveXsdConfig } from '../lib/xsdParser';
 import { listReferenceManifestFiles } from '../lib/referenceManifest';
 import { resolveEffectiveReferenceDocument } from '../lib/referenceOverlay';
@@ -16,9 +16,10 @@ import type { ModWorkspace, PatchBlock } from '../types';
 type MutationResult = { status: number; body: any };
 
 interface BulkTransformRouteOptions {
-  workspace: () => ModWorkspace;
-  workspaceHash: () => string;
-  applyWorkspaceMutation: (incoming: any, options: { expectedHead?: string; merge?: boolean }) => MutationResult;
+  workspace: (req: Request) => ModWorkspace;
+  workspaceId: (req: Request) => string;
+  workspaceHash: (req: Request) => string;
+  applyWorkspaceMutation: (req: Request, incoming: any, options: { expectedHead?: string; merge?: boolean }) => MutationResult;
 }
 
 const MAX_MANIFEST_ROWS = 50_000;
@@ -98,9 +99,9 @@ function sendError(res: Response, error: unknown) {
 export function registerBulkTransformRoutes(app: Express, options: BulkTransformRouteOptions): void {
   app.post('/api/agent/bulk-transform/preview', (req, res) => {
     try {
-      const workspace = options.workspace();
+      const workspace = options.workspace(req);
       const plan = buildPlan(parseRule(req.body), workspace);
-      return res.status(plan.ok ? 200 : 422).json({ ...plan, applied: false, workspaceHash: options.workspaceHash() });
+      return res.status(plan.ok ? 200 : 422).json({ ...plan, applied: false, workspaceId: options.workspaceId(req), workspaceHash: options.workspaceHash(req) });
     } catch (error) { return sendError(res, error); }
   });
 
@@ -110,7 +111,7 @@ export function registerBulkTransformRoutes(app: Express, options: BulkTransform
       const expectedHead = String(req.body?.expectedHead || '').trim();
       if (!expectedPlanHash) return res.status(400).json({ error: 'Missing required expectedPlanHash from preview.' });
       if (!expectedHead) return res.status(400).json({ error: 'Missing required expectedHead from preview.' });
-      const workspace = options.workspace();
+      const workspace = options.workspace(req);
       const plan = buildPlan(parseRule(req.body), workspace);
       if (plan.planHash !== expectedPlanHash) {
         return res.status(409).json({
@@ -123,8 +124,8 @@ export function registerBulkTransformRoutes(app: Express, options: BulkTransform
       }
       if (!plan.ok) return res.status(422).json({ error: 'bulk_plan_invalid', message: 'Bulk transform is not clean; zero workspace changes were applied.', plan });
       const xmlPatches = mergeBulkTransformPatches(workspace.xmlPatches || [], plan);
-      const mutation = options.applyWorkspaceMutation({ xmlPatches }, { expectedHead, merge: true });
-      return res.status(mutation.status).json({ ...mutation.body, plan, added: plan.rows.length, matchedFiles: plan.matchedFiles });
+      const mutation = options.applyWorkspaceMutation(req, { xmlPatches }, { expectedHead, merge: true });
+      return res.status(mutation.status).json({ ...mutation.body, workspaceId: options.workspaceId(req), plan, added: plan.rows.length, matchedFiles: plan.matchedFiles });
     } catch (error) { return sendError(res, error); }
   });
 }

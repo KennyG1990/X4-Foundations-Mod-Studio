@@ -9,8 +9,7 @@
 ### B110 · Kimi R1-R21 execution program `in_progress` (P1, DURABLE LEDGER)
 
 The complete recommendation set is now reconciled instead of living in the deleted KNOWN-BUGS addendum.
-Current verdict: R1/R2/R3/R4/R5/R6/R7/R9/R10/R11/R12/R14/R15/R16/R19/R20 verified;
-R13/R21 open; R8/R17/R18 partial.
+Current verdict: R1-R12 except R13, plus R14-R17/R19/R20 verified; R13/R21 open; R18 partial.
 Execute only as bounded workflow tasks in the recorded order—never as a sweeping
 cleanup—and update each row after every implementation. Ledger:
 `docs/plans/2026-07-29-kimi-recommendations-ledger.md`.
@@ -28,10 +27,16 @@ public-byte parity and exact-SHA Quality `30592259549`.
 normal Antigravity, where a real disposable 409, destructive overwrite recovery, exact restore, and replay refusal
 were visibly proven. See their plans and ROADMAP closes.
 
-**Active bounded unit:** R8 request-addressed workspace identity + R17 true multi-workspace. Ken approved ADR-F5:
-an immutable server-owned workspace identity may supersede ADR-F1's mod-ID-only addressing while preserving
-content-addressed CAS. Reconcile and write the ADR/plan before implementation; bind stateful requests, clients, and
-keys to explicit workspace authority while retaining safe stateless/read compatibility.
+**Closed architecture unit:** R8 request-addressed identity + R17 true multi-workspace are `VERIFIED` on
+2026-07-31. A bounded atomic registry owns immutable IDs and per-record CAS; Studio tabs and agent keys carry
+explicit authority; duplicate names, migration/restart, history/recovery/readiness isolation, and denial paths are
+green. Stable Open VSX 0.0.63 is installed/rendered in Antigravity and its 17,907,329 public bytes exactly match the
+inspected local VSIX. Evidence: `docs/plans/2026-07-31-workspace-authority.md`.
+
+**Active bounded unit:** R13 one scheduler for continuous polling. Reconcile every timer/subscription owner after
+R8/R17 authority: consolidate continuous readiness/workspace/diagnostic reads behind one scheduler while keeping
+bounded OAuth/device and operation-status workflows isolated by contract. Specify before implementation and prove
+unmount, pause/backoff, timeout, stale-response, and no-duplicate-request behavior.
 
 **Post-Kimi authorized research program (queued; do not start before R1-R21 close):** reconcile
 `F:\Downskies\X4 Foundations Modding Tooling Research for IDE Extension Opportunities.md` and

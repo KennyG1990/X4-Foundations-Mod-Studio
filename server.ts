@@ -195,7 +195,8 @@ import { runWaresContentLintSelftest, learnWaresVocabulary, type WaresVocabulary
 import { runTFileLintSelftest, buildModTextIndex, lintTextReferences } from "./src/lib/tFileLint";
 import { runFactionsLintSelftest, lintFactionRelations } from "./src/lib/factionsLint";
 import { runGodLintSelftest, lintGodMacros } from "./src/lib/godLint";
-import { atomicWriteFile, atomicWriteJson, readActiveState, writeActiveState, parkState, listParked, readParked, runWorkspaceStateSelftest } from "./src/lib/workspaceState";
+import { atomicWriteFile, atomicWriteJson, runWorkspaceStateSelftest } from "./src/lib/workspaceState";
+import { WorkspaceRegistry, runWorkspaceRegistrySelftest, validWorkspaceId, type WorkspaceRecord } from "./src/lib/workspaceRegistry";
 import {
   ValidationBaselineStore,
   compareValidationWarnings,
@@ -386,7 +387,7 @@ app.use((req, res, next) => {
   if (origin && allowedOrigins.has(origin)) {
     res.header("Access-Control-Allow-Origin", origin);
   }
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, x-ai-provider, x-custom-api-key");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, x-ai-provider, x-custom-api-key, x-workspace-id, x-client-id");
   res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE");
   if (req.method === "OPTIONS") {
     return res.sendStatus(200);
@@ -408,7 +409,6 @@ const PUBLIC_READONLY_GETS = new Set<string>([
   "/agent/catdat-debug",
   "/agent/round-trip-selftest",
   "/agent/patch-audit",
-  "/agent/diagnostics",
   "/agent/api-selftest",
   "/agent/log-selftest",
   "/agent/reference-selftest",
@@ -499,6 +499,79 @@ function recordValidationBaseline(
   }
 }
 const agentKeyStore = createAgentKeyStore({ file: AGENT_KEYS_FILE });
+// Declared before auth middleware, initialized after DEFAULT_WORKSPACE is defined.
+// eslint-disable-next-line prefer-const
+let workspaceRegistry: WorkspaceRegistry;
+
+type RequestActor = { kind: 'agent' | 'studio'; label: string; scope?: AgentKeyScope; workspaceId?: string };
+
+function requestedWorkspaceIdentity(req: express.Request): { workspaceId: string; clientId: string; conflict?: string } {
+  const candidates = [req.headers['x-workspace-id'], req.query?.workspaceId, req.body?.workspaceId]
+    .flatMap(value => Array.isArray(value) ? value : [value])
+    .map(value => String(value || '').trim())
+    .filter(Boolean);
+  const distinct = [...new Set(candidates)];
+  const clientId = String(req.headers['x-client-id'] || req.query?.clientId || req.body?.clientId || '').trim();
+  return {
+    workspaceId: distinct[0] || '',
+    clientId,
+    ...(distinct.length > 1 ? { conflict: 'Conflicting workspaceId values were supplied in the request.' } : {}),
+  };
+}
+
+function statefulWorkspaceRoute(req: express.Request): boolean {
+  const path = req.path;
+  return path === '/agent/status' || path === '/agent/diagnostics' || path === '/agent/readiness' ||
+    path === '/agent/proof' || path === '/agent/health-card' || path === '/fs/restore-snapshot' ||
+    (path === '/agent/workspace' || path.startsWith('/agent/workspace/')) || path.startsWith('/agent/history') ||
+    path.startsWith('/agent/bulk-transform/');
+}
+
+function resolveWorkspaceAuthority(req: express.Request, res: express.Response, required = true): WorkspaceRecord | null {
+  const attached = (req as any).__workspaceRecord as WorkspaceRecord | undefined;
+  if (attached) return attached;
+  const identity = requestedWorkspaceIdentity(req);
+  if (identity.conflict) {
+    res.status(400).json({ code: 'WORKSPACE_ID_CONFLICT', error: identity.conflict });
+    return null;
+  }
+  if (!identity.workspaceId) {
+    if (!required) return null;
+    res.status(400).json({
+      code: 'WORKSPACE_ID_REQUIRED',
+      error: 'This stateful route requires an explicit workspaceId (x-workspace-id header, query, or body).',
+    });
+    return null;
+  }
+  if (!validWorkspaceId(identity.workspaceId)) {
+    res.status(400).json({ code: 'WORKSPACE_ID_INVALID', error: 'workspaceId is malformed.' });
+    return null;
+  }
+  const actor = (req as any).__actor as RequestActor | undefined;
+  if (actor?.kind === 'studio' && !/^client_[a-z0-9_-]{8,80}$/i.test(identity.clientId)) {
+    res.status(400).json({ code: 'CLIENT_ID_REQUIRED', error: 'Studio workspace requests require a tab-scoped clientId.' });
+    return null;
+  }
+  if (actor?.kind === 'agent') {
+    if (!actor.workspaceId) {
+      res.status(403).json({ code: 'WORKSPACE_BINDING_REQUIRED', error: 'This legacy agent key is not bound to a workspace and cannot access workspace state.' });
+      return null;
+    }
+    if (actor.workspaceId !== identity.workspaceId) {
+      res.status(403).json({ code: 'WORKSPACE_BINDING_MISMATCH', error: 'This agent key is bound to a different workspace.', workspaceId: actor.workspaceId });
+      return null;
+    }
+  }
+  const found = workspaceRegistry.lookup(identity.workspaceId);
+  if (found.ok === false) {
+    res.status(found.code === 'WORKSPACE_NOT_FOUND' ? 404 : 400).json({ code: found.code, error: found.error });
+    return null;
+  }
+  (req as any).__workspaceRecord = found.record;
+  (req as any).__workspaceId = found.record.workspaceId;
+  (req as any).__clientId = identity.clientId || undefined;
+  return found.record;
+}
 
 function authMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
   if (req.method === "GET" && PUBLIC_READONLY_GETS.has(req.path)) {
@@ -514,7 +587,7 @@ function authMiddleware(req: express.Request, res: express.Response, next: expre
   if (token === STUDIO_API_TOKEN) {
     // B86: record WHO acted, never WHAT they authenticated with. Only the actor kind and a
     // human label are ever attached; the token itself never leaves this function.
-    (req as any).__actor = { kind: 'studio', label: 'Studio UI' };
+    (req as any).__actor = { kind: 'studio', label: 'Studio UI' } satisfies RequestActor;
     return next(); // session token: full power, unchanged fast path
   }
 
@@ -532,7 +605,7 @@ function authMiddleware(req: express.Request, res: express.Response, next: expre
       });
     }
     agentKeyStore.touch(v.id!);
-    (req as any).__actor = { kind: 'agent', label: v.label || 'unnamed key' };
+    (req as any).__actor = { kind: 'agent', label: v.label || 'unnamed key', scope: v.scope, workspaceId: v.workspaceId } satisfies RequestActor;
     return next();
   }
 
@@ -540,6 +613,13 @@ function authMiddleware(req: express.Request, res: express.Response, next: expre
 }
 
 app.use("/api", authMiddleware);
+app.use("/api", (req, res, next) => {
+  const identity = requestedWorkspaceIdentity(req);
+  if (statefulWorkspaceRoute(req) || identity.workspaceId || identity.conflict) {
+    if (!resolveWorkspaceAuthority(req, res, statefulWorkspaceRoute(req))) return;
+  }
+  next();
+});
 
 // Test-only negative path. It does not exist unless the isolated route harness opts in.
 if (TIMEOUT_DRILL_DELAY_MS > 0) {
@@ -591,10 +671,11 @@ function ledgerMiddleware(req: express.Request, res: express.Response, next: exp
   // precisely the uselessness this panel exists to avoid. Hash the workspace before and after
   // and drop the row when nothing actually changed.
   let workspaceHashBefore = '';
+  const ledgerWorkspace = (req as any).__workspaceRecord as WorkspaceRecord | undefined;
   if (kind === 'workspace' || kind === 'generate') {
     try {
-      nodesBefore = new Map((activeWorkspace?.nodes || []).map((n: any) => [String(n.id), JSON.stringify(n)]));
-      workspaceHashBefore = workspaceContentHash(sanitizeWorkspace(activeWorkspace));
+      nodesBefore = new Map(((ledgerWorkspace?.workspace as any)?.nodes || []).map((n: any) => [String(n.id), JSON.stringify(n)]));
+      workspaceHashBefore = ledgerWorkspace ? workspaceHash(ledgerWorkspace) : '';
     } catch { nodesBefore = null; }
   }
 
@@ -718,7 +799,8 @@ function ledgerMiddleware(req: express.Request, res: express.Response, next: exp
       // straight to the node an action changed.
       let touchedNodes: Array<{ id: string; label?: string }> | undefined;
       try {
-        const current: any[] = (activeWorkspace?.nodes || []) as any[];
+        const latest = ledgerWorkspace ? workspaceRegistry.lookup(ledgerWorkspace.workspaceId) : null;
+        const current: any[] = latest?.ok ? (((latest.record.workspace as any)?.nodes || []) as any[]) : [];
         if (nodesBefore) {
           const changed = current.filter(n => nodesBefore!.get(String(n.id)) !== JSON.stringify(n));
           const removed = [...nodesBefore.keys()].filter(id => !current.some(n => String(n.id) === id));
@@ -747,7 +829,10 @@ function ledgerMiddleware(req: express.Request, res: express.Response, next: exp
       // A workspace sync that changed nothing is not an action worth a row.
       if (kind === 'workspace' && workspaceHashBefore) {
         let after = '';
-        try { after = workspaceContentHash(sanitizeWorkspace(activeWorkspace)); } catch { after = ''; }
+        try {
+          const latest = ledgerWorkspace ? workspaceRegistry.lookup(ledgerWorkspace.workspaceId) : null;
+          after = latest?.ok ? workspaceHash(latest.record) : '';
+        } catch { after = ''; }
         if (after && after === workspaceHashBefore) return;
       }
 
@@ -764,6 +849,8 @@ function ledgerMiddleware(req: express.Request, res: express.Response, next: exp
       const row: LedgerRow = {
         id: `${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}`,
         ts: new Date().toISOString(),
+        ...(ledgerWorkspace ? { workspaceId: ledgerWorkspace.workspaceId } : {}),
+        ...((req as any).__clientId ? { clientId: String((req as any).__clientId) } : {}),
         agent: ledgerActor(req),
         kind,
         title: described.title,
@@ -822,7 +909,9 @@ app.post("/api/agent/keys", (req, res) => {
   if (!(ttlName in AGENT_KEY_TTLS)) {
     return res.status(400).json({ error: `Invalid 'ttl' — use ${Object.keys(AGENT_KEY_TTLS).join(" | ")}.` });
   }
-  const { token, record } = agentKeyStore.create(label, scope, AGENT_KEY_TTLS[ttlName]);
+  const workspace = resolveWorkspaceAuthority(req, res, true);
+  if (!workspace) return;
+  const { token, record } = agentKeyStore.create(label, scope, AGENT_KEY_TTLS[ttlName], workspace.workspaceId);
   const { tokenHash: _hidden, ...safe } = record;
   // The plaintext token appears in THIS response only — it is never persisted or listed.
   return res.json({ token, record: { ...safe, hashPrefix: record.tokenHash.slice(0, 8) } });
@@ -868,6 +957,20 @@ type LastDeployInfo = {
 };
 
 let lastDeployInfo: LastDeployInfo | null = null;
+const lastDeployByWorkspaceId = new Map<string, LastDeployInfo>();
+
+function recordSuccessfulDeploy(req: express.Request, info: LastDeployInfo): LastDeployInfo {
+  // Keep the explicit-mod diagnostic routes backward compatible while ensuring every
+  // addressed workspace's readiness/status surface only observes its own deployment.
+  lastDeployInfo = info;
+  const record = (req as any).__workspaceRecord as WorkspaceRecord | undefined;
+  if (record) lastDeployByWorkspaceId.set(record.workspaceId, info);
+  return info;
+}
+
+function deployInfoForWorkspace(record: WorkspaceRecord): LastDeployInfo | null {
+  return lastDeployByWorkspaceId.get(record.workspaceId) || null;
+}
 type ArtifactBuildReport = {
   mode: 'loose' | 'catalog';
   sourceRoot: string;
@@ -1537,8 +1640,8 @@ function countModRuntimeErrors(tail: string, markers: string[]): { count: number
   return { count, markerLines: markerIdx.size, samples };
 }
 
-function getGameLogStatus(modIdInput?: string) {
-  const raw = String(modIdInput || lastDeployInfo?.workspaceName || activeWorkspace.name || '');
+function getGameLogStatus(modIdInput?: string, workspaceName?: string, deployInfo: LastDeployInfo | null = lastDeployInfo) {
+  const raw = String(modIdInput || deployInfo?.workspaceName || workspaceName || '');
   const modId = toSafeModId(raw); // primary id for display
   // Candidate identifiers the log line might actually use — covers the display name, its
   // space/underscore forms, and the common display-name→folder-id drift (a trailing "_mod"
@@ -1564,7 +1667,7 @@ function getGameLogStatus(modIdInput?: string) {
   ].filter(s => s && s.length >= 3)));
   const candidates = findDebugLogCandidates();
   const selectedLogPath = candidates.find(candidate => fs.existsSync(candidate) && fs.statSync(candidate).isFile());
-  const relevantLastDeploy = lastDeployInfo?.modId === modId ? lastDeployInfo : null;
+  const relevantLastDeploy = deployInfo?.modId === modId ? deployInfo : null;
 
   if (!selectedLogPath) {
     return {
@@ -1722,8 +1825,8 @@ function classifyTimelineLine(line: string, lineNumber: number, modIds: string[]
   return null;
 }
 
-function buildDebugWatcherBrief(modIdInput?: string, expectedInput: string[] = []) {
-  const status: any = getGameLogStatus(modIdInput);
+function buildDebugWatcherBrief(modIdInput?: string, expectedInput: string[] = [], workspaceName?: string, deployInfo: LastDeployInfo | null = lastDeployInfo) {
+  const status: any = getGameLogStatus(modIdInput, workspaceName, deployInfo);
   if (!status.selectedLogPath || !fs.existsSync(status.selectedLogPath)) {
     return {
       ok: status.status !== "error",
@@ -1740,7 +1843,7 @@ function buildDebugWatcherBrief(modIdInput?: string, expectedInput: string[] = [
 
   const modId = status.modId || toSafeModId(String(modIdInput || ""));
   const bareId = String(modId).replace(/_mod$/, "");
-  const raw = String(modIdInput || lastDeployInfo?.workspaceName || activeWorkspace.name || "");
+  const raw = String(modIdInput || deployInfo?.workspaceName || workspaceName || "");
   const modIds = Array.from(new Set([
     modId,
     raw.toLowerCase().trim(),
@@ -2344,19 +2447,8 @@ const DEFAULT_WORKSPACE: ModWorkspace = {
   }
 };
 
-let activeWorkspace: ModWorkspace = JSON.parse(JSON.stringify(DEFAULT_WORKSPACE));
-// Track version counter to help with client-side merge prompts
-// P0 2026-07-09: Date.now() seed, NOT 1 — a restart-reset counter closed the client's
-// "adopt server workspace when version > stored" gate forever (browser localStorage held a
-// higher number from before the restart), silently pinning the canvas to an ancient graph.
-// A monotonic-across-restarts seed keeps the adoption gate working after every restart.
-let workspaceVersion = Date.now();
-
-// B2 slice 3 (ADR-F1): the active workspace survives restarts on disk. A restart with a
-// blank client attached clobbered real state on 2026-07-11 — the in-memory singleton is a
-// counted incident class, not a style choice.
-// B31s1: X4_STATE_DIR lets an EPHEMERAL instance (e2e, drills) keep its own persisted
-// state without touching this checkout's — isolation by construction, not by restore.
+// ADR-F5: X4_STATE_DIR holds an immutable-ID registry. Legacy active.json/parked files are
+// migration inputs only; no process-global active workspace exists after boot.
 const STUDIO_STATE_DIR = process.env.X4_STATE_DIR?.trim()
   ? path.resolve(process.env.X4_STATE_DIR.trim())
   : path.join(process.cwd(), ".studio-state");
@@ -2394,62 +2486,20 @@ function writeReleasePreferencesState(raw: unknown): ReleasePreferences {
   atomicWriteJson(RELEASE_PREFERENCES_STATE_FILE, preferences);
   return preferences;
 }
-// Legacy (no-expectedHead) writes are only auto-accepted on true first contact: a fresh
-// install where nothing was ever persisted and nothing has been written this run.
-let hadPersistedStateAtBoot = false;
-let anyCommitSinceBoot = false;
-let activeWorkspaceSavedAt = new Date().toISOString();
-let activeWorkspaceOrigin = 'boot-default';
-{
-  const saved = readActiveState(STUDIO_STATE_DIR);
-  if (saved) {
-    activeWorkspace = saved.workspace as ModWorkspace;
-    // Monotonic across restarts: never fall below what clients already saw.
-    workspaceVersion = Math.max(Date.now(), saved.version + 1);
-    hadPersistedStateAtBoot = true;
-    activeWorkspaceSavedAt = saved.savedAt;
-    activeWorkspaceOrigin = saved.origin;
-    console.log(`[state] restored persisted workspace "${activeWorkspace.name}" (v${saved.version}, saved ${saved.savedAt})`);
-  }
+workspaceRegistry = new WorkspaceRegistry({
+  root: STUDIO_STATE_DIR,
+  defaultWorkspace: JSON.parse(JSON.stringify(DEFAULT_WORKSPACE)),
+});
+console.log(`[state] workspace registry ready: ${workspaceRegistry.list().length} record(s), default ${workspaceRegistry.defaultWorkspaceId}`);
+
+function workspaceHash(record: WorkspaceRecord): string {
+  return record.head;
 }
 
-/**
- * B2s3 chokepoint: every REAL writer of the active workspace commits through here so
- * persistence and park-on-switch can't be bypassed. (The selftest save/restore swap is
- * the deliberate exception — test-scoped, restores in the same request.)
- * Loading a DIFFERENT mod parks the previous state instead of destroying it.
- */
-function commitActiveWorkspace(next: ModWorkspace, origin: string): void {
-  const committedAt = new Date().toISOString();
-  const nameSwitched = Boolean(next?.name && activeWorkspace?.name && next.name !== activeWorkspace.name);
-  if (nameSwitched) {
-    // Don't park the pristine boot sample — parking is for real prior work only.
-    const isPristineDefault = JSON.stringify(activeWorkspace) === JSON.stringify(DEFAULT_WORKSPACE);
-    if (!isPristineDefault) {
-      parkState(STUDIO_STATE_DIR, {
-        workspace: activeWorkspace,
-        version: workspaceVersion,
-        savedAt: committedAt,
-        origin: `parked-on-switch:${origin}`,
-      });
-    }
-  }
-  activeWorkspace = next;
-  workspaceVersion++;
-  anyCommitSinceBoot = true;
-  activeWorkspaceSavedAt = committedAt;
-  activeWorkspaceOrigin = origin;
-  try {
-    writeActiveState(STUDIO_STATE_DIR, {
-      workspace: activeWorkspace,
-      version: workspaceVersion,
-      savedAt: committedAt,
-      origin,
-    });
-  } catch (e) {
-    // Persistence failure must never fail the write itself — but say it loudly.
-    console.error("[state] could not persist active workspace:", e);
-  }
+function requestWorkspace(req: express.Request): WorkspaceRecord {
+  const record = (req as any).__workspaceRecord as WorkspaceRecord | undefined;
+  if (!record) throw new Error('Workspace authority middleware did not attach a record.');
+  return record;
 }
 
 // -----------------------------------------------------
@@ -3574,8 +3624,10 @@ app.get("/api/agent/schema", (req, res) => {
       }
     ],
     current_state: {
-      workspace_version: workspaceVersion,
-      active_workspace_domains: summarizeWorkspaceDomains(activeWorkspace),
+      workspace_registry: {
+        count: workspaceRegistry.list().length,
+        addressing: 'explicit-workspace-id',
+      },
       config: {
         has_x4_game_path: Boolean(currentConfig.x4GamePath),
         has_mod_workspace_path: Boolean(currentConfig.modWorkspacePath),
@@ -4359,10 +4411,11 @@ app.post("/api/agent/check-expression", (req, res) => {
   }
 });
 
-app.get("/api/agent/status", (_req, res) => {
+app.get("/api/agent/status", (req, res) => {
   try {
     const resolved = resolveXsdConfig();
-    const ws = activeWorkspace;
+    const record = requestWorkspace(req);
+    const ws = record.workspace as ModWorkspace;
     const sourceDir = typeof (ws as any)?.sourceStamp?.dir === 'string' ? (ws as any).sourceStamp.dir : '';
 
     // Is the canvas stale relative to the folder it was imported from? This is the exact question
@@ -4396,10 +4449,11 @@ app.get("/api/agent/status", (_req, res) => {
       startedAt: SERVER_STARTED_AT,
       discoveryFile: latestPath(),
       workspace: {
+        workspaceId: record.workspaceId,
         name: ws?.name,
         id: ws?.id,
-        version: workspaceVersion,
-        contentHash: (() => { try { return workspaceContentHash(sanitizeWorkspace(ws)); } catch { return undefined; } })(),
+        version: record.version,
+        contentHash: workspaceHash(record),
         nodes: (ws?.nodes || []).length,
         sourceFolder: sourceDir || undefined,
       },
@@ -4411,14 +4465,14 @@ app.get("/api/agent/status", (_req, res) => {
         referenceRoot: resolved.x4ReferenceRoot || null,
         schemaDir: resolved.schemaDir || null,
       },
-      lastDeploy: lastDeployInfo || null,
+      lastDeploy: deployInfoForWorkspace(record),
       deployFormat: (() => { const r = resolveDeployFormat(undefined); return { format: r.format, source: r.source }; })(),
       readiness: {
         schemaLoaded: !!schemaLibrary.loaded,
         schemaElements: schemaLibrary.events.length + schemaLibrary.actions.length + schemaLibrary.conditions.length,
         referenceCorpus: (() => { try { const s = getReferenceSets(); return { factions: s?.factions?.size ?? 0, wares: s?.wares?.size ?? 0 }; } catch { return null; } })(),
       },
-      history: (() => { try { const rows = agentHistoryStore.readAll(); return { entries: rows.length, lastAction: rows.length ? rows[rows.length - 1].title : null, failures: agentHistoryStore.failures }; } catch { return null; } })(),
+      history: (() => { try { const rows = agentHistoryStore.readAll().filter(row => row.workspaceId === record.workspaceId); return { entries: rows.length, lastAction: rows.length ? rows[rows.length - 1].title : null, failures: agentHistoryStore.failures }; } catch { return null; } })(),
     });
   } catch (error: any) {
     return res.status(500).json({ ok: false, error: error?.message || 'status failed' });
@@ -4427,7 +4481,8 @@ app.get("/api/agent/status", (_req, res) => {
 
 app.get("/api/agent/history", (req, res) => {
   try {
-    const rows = filterRows(agentHistoryStore.readAll(), {
+    const record = requestWorkspace(req);
+    const rows = filterRows(agentHistoryStore.readAll().filter(row => row.workspaceId === record.workspaceId), {
       kind: req.query.kind ? String(req.query.kind) : undefined,
       outcome: req.query.outcome ? String(req.query.outcome) : undefined,
       file: req.query.file ? String(req.query.file) : undefined,
@@ -4435,6 +4490,7 @@ app.get("/api/agent/history", (req, res) => {
     });
     return res.json({
       ok: true,
+      workspaceId: record.workspaceId,
       rows,
       total: rows.length,
       // A silently broken ledger should be visible, not merely absent.
@@ -4450,8 +4506,9 @@ app.get("/api/agent/history", (req, res) => {
 /** Payload bytes, deliberately behind an explicit action so rows stay small. */
 app.get("/api/agent/history/:id/raw", (req, res) => {
   try {
+    const record = requestWorkspace(req);
     const row = agentHistoryStore.find(String(req.params.id));
-    if (!row) return res.status(404).json({ ok: false, error: 'No such history entry.' });
+    if (!row || row.workspaceId !== record.workspaceId) return res.status(404).json({ ok: false, error: 'No such history entry in this workspace.' });
     const which = String(req.query.which || 'diff');
     const ref = which === 'before' ? row.beforeBlob
       : which === 'after' ? row.afterBlob
@@ -4460,7 +4517,7 @@ app.get("/api/agent/history/:id/raw", (req, res) => {
     if (!ref) return res.status(404).json({ ok: false, error: `This entry has no stored "${which}" payload.` });
     const blob = agentHistoryStore.readBlob(ref);
     if (!blob) return res.status(410).json({ ok: false, error: 'The stored payload has been rotated out of history.' });
-    return res.json({ ok: true, id: row.id, which, bytes: blob.length, content: blob.toString('utf8') });
+    return res.json({ ok: true, workspaceId: record.workspaceId, id: row.id, which, bytes: blob.length, content: blob.toString('utf8') });
   } catch (error: any) {
     return res.status(500).json({ ok: false, error: error?.message || 'Failed to read payload.' });
   }
@@ -4468,8 +4525,9 @@ app.get("/api/agent/history/:id/raw", (req, res) => {
 
 app.post("/api/agent/history/:id/revert", (req, res) => {
   try {
+    let record = requestWorkspace(req);
     const row = agentHistoryStore.find(String(req.params.id));
-    if (!row) return res.status(404).json({ ok: false, error: 'No such history entry.' });
+    if (!row || row.workspaceId !== record.workspaceId) return res.status(404).json({ ok: false, error: 'No such history entry in this workspace.' });
     const rule = revertibility(row.kind, row.outcome, !!row.beforeBlob, !!row.recoveryId);
     if (!rule.revertible) {
       return res.status(409).json({ ok: false, code: 'NOT_REVERTIBLE', error: rule.reason });
@@ -4479,7 +4537,8 @@ app.post("/api/agent/history/:id/revert", (req, res) => {
       if (found.ok === false) return res.status(found.code === 'RECOVERY_NOT_FOUND' ? 404 : 409).json({ ok: false, code: found.code, error: found.error });
       if (found.record.status !== 'ready') return res.status(409).json({ ok: false, code: 'RECOVERY_ALREADY_USED', error: 'This recovery was already used or never reached ready state.' });
       if (found.record.kind === 'workspace') {
-        const currentHead = activeWorkspaceHash();
+        if (found.record.workspaceId !== record.workspaceId) return res.status(403).json({ ok: false, code: 'RECOVERY_WORKSPACE_MISMATCH', error: 'Workspace recovery belongs to a different workspace.' });
+        const currentHead = workspaceHash(record);
         if (currentHead !== found.record.expectedCurrentHash) {
           return res.status(409).json({
             ok: false,
@@ -4495,13 +4554,13 @@ app.post("/api/agent/history/:id/revert", (req, res) => {
         }
         (req as any).__revertOf = row.id;
         (req as any).__revertOfTitle = row.title;
-        const replacedWorkspace = activeWorkspace;
-        commitActiveWorkspace(previousWorkspace, `recovery:${found.record.id}`);
+        const replacedWorkspace = record.workspace as ModWorkspace;
+        record = workspaceRegistry.commit(record.workspaceId, previousWorkspace, `recovery:${found.record.id}`);
         try {
           destructiveRecoveryStore.markUsed(found.record.id);
         } catch (consumeError) {
           try {
-            commitActiveWorkspace(replacedWorkspace, `recovery-rollback:${found.record.id}`);
+            record = workspaceRegistry.commit(record.workspaceId, replacedWorkspace, `recovery-rollback:${found.record.id}`);
           } catch (rollbackError) {
             throw new Error(
               `Workspace recovery applied but its one-use receipt failed: ${consumeError instanceof Error ? consumeError.message : String(consumeError)}; ` +
@@ -4515,9 +4574,10 @@ app.post("/api/agent/history/:id/revert", (req, res) => {
           revertedTo: row.id,
           recoveryId: found.record.id,
           recoveryKind: 'workspace',
-          workspace: activeWorkspace,
-          version: workspaceVersion,
-          workspaceHash: activeWorkspaceHash(),
+          workspaceId: record.workspaceId,
+          workspace: record.workspace,
+          version: record.version,
+          workspaceHash: workspaceHash(record),
         });
       }
       const resolved = resolveXsdConfig();
@@ -4720,6 +4780,7 @@ app.post("/api/fs/snapshot", (req, res) => {
 // Server Filesystem restore snapshot endpoint
 app.post("/api/fs/restore-snapshot", (req, res) => {
   try {
+    const record = requestWorkspace(req);
     const { modId, snapshotName } = req.body;
     if (!modId || !snapshotName) {
       return res.status(400).json({ error: "Missing modId or snapshotName parameter." });
@@ -4742,9 +4803,9 @@ app.post("/api/fs/restore-snapshot", (req, res) => {
       return res.status(400).json({ error: "Invalid snapshot format." });
     }
     
-    commitActiveWorkspace(parsed.workspace, 'restore-snapshot');
+    const committed = workspaceRegistry.commit(record.workspaceId, sanitizeWorkspace(parsed.workspace), 'restore-snapshot');
 
-    return res.json({ success: true, workspace: activeWorkspace });
+    return res.json({ success: true, workspaceId: committed.workspaceId, workspace: committed.workspace, version: committed.version, workspaceHash: workspaceHash(committed) });
   } catch (error) {
     return res.status(500).json({ error: error.message || "Failed to restore snapshot." });
   }
@@ -4820,29 +4881,61 @@ app.get("/api/schema/element/:tag", (req, res) => {
   return res.json(element);
 });
 
-/**
- * GET /api/agent/workspace
- * Retrieves the currently active, synchronized workspace state.
- */
-// B1 sync-trust: content hash of the active workspace, cached per version so the 3s
-// client poll never re-stringifies a 200KB workspace needlessly.
-let cachedWorkspaceHash: { version: number; hash: string } | null = null;
-function activeWorkspaceHash(): string {
-  if (!cachedWorkspaceHash || cachedWorkspaceHash.version !== workspaceVersion) {
-    cachedWorkspaceHash = { version: workspaceVersion, hash: workspaceContentHash(sanitizeWorkspace(activeWorkspace)) };
+/** ADR-F5 bootstrap/list/create surfaces. Selection remains tab-local; the server never
+ * stores a process-global "active" pointer. */
+app.get('/api/agent/workspaces', (req, res) => {
+  const actor = (req as any).__actor as RequestActor | undefined;
+  const rows = workspaceRegistry.list();
+  if (actor?.kind === 'agent') {
+    if (!actor.workspaceId) return res.status(403).json({ code: 'WORKSPACE_BINDING_REQUIRED', error: 'This legacy agent key is not bound to a workspace.' });
+    return res.json({ workspaces: rows.filter(row => row.workspaceId === actor.workspaceId), defaultWorkspaceId: actor.workspaceId });
   }
-  return cachedWorkspaceHash.hash;
-}
+  return res.json({ workspaces: rows, defaultWorkspaceId: workspaceRegistry.defaultWorkspaceId });
+});
+
+app.post('/api/agent/workspaces/bootstrap', (req, res) => {
+  const actor = (req as any).__actor as RequestActor | undefined;
+  const clientId = String(req.body?.clientId || req.headers['x-client-id'] || '').trim();
+  if (actor?.kind === 'studio' && !/^client_[a-z0-9_-]{8,80}$/i.test(clientId)) {
+    return res.status(400).json({ code: 'CLIENT_ID_REQUIRED', error: 'Bootstrap requires a tab-scoped clientId.' });
+  }
+  const requested = String(req.body?.workspaceId || actor?.workspaceId || workspaceRegistry.defaultWorkspaceId).trim();
+  if (actor?.kind === 'agent' && !actor.workspaceId) {
+    return res.status(403).json({ code: 'WORKSPACE_BINDING_REQUIRED', error: 'This legacy agent key is not bound to a workspace.' });
+  }
+  if (actor?.kind === 'agent' && requested !== actor.workspaceId) {
+    return res.status(403).json({ code: 'WORKSPACE_BINDING_MISMATCH', error: 'This agent key is bound to a different workspace.', workspaceId: actor.workspaceId });
+  }
+  const found = workspaceRegistry.lookup(requested);
+  if (found.ok === false) return res.status(found.code === 'WORKSPACE_NOT_FOUND' ? 404 : 400).json({ code: found.code, error: found.error });
+  return res.json({ ...workspaceRegistry.summary(found.record), workspace: found.record.workspace, clientId: clientId || null });
+});
+
+app.post('/api/agent/workspaces', (req, res) => {
+  const actor = (req as any).__actor as RequestActor | undefined;
+  if (actor?.kind !== 'studio') return res.status(403).json({ code: 'STUDIO_SESSION_REQUIRED', error: 'Only the Studio session can create workspaces.' });
+  const clientId = String(req.body?.clientId || req.headers['x-client-id'] || '').trim();
+  if (!/^client_[a-z0-9_-]{8,80}$/i.test(clientId)) return res.status(400).json({ code: 'CLIENT_ID_REQUIRED', error: 'Workspace creation requires a tab-scoped clientId.' });
+  try {
+    const workspace = sanitizeWorkspace(req.body?.workspace || { ...DEFAULT_WORKSPACE, name: String(req.body?.name || 'Untitled_Workspace') });
+    const record = workspaceRegistry.create(workspace, `studio:create:${clientId}`);
+    return res.status(201).json({ ...workspaceRegistry.summary(record), workspace: record.workspace, clientId });
+  } catch (error) {
+    return res.status(/full|limit|exceeds/i.test(errorMessage(error)) ? 507 : 500).json({ code: 'WORKSPACE_CREATE_FAILED', error: errorMessage(error) || 'Workspace creation failed.' });
+  }
+});
 
 app.get("/api/agent/workspace", (req, res) => {
+  const record = requestWorkspace(req);
   return res.json({
-    workspace: activeWorkspace,
-    version: workspaceVersion,
+    workspaceId: record.workspaceId,
+    workspace: record.workspace,
+    version: record.version,
     // B1: lets the client DETECT canvas↔server divergence instead of trusting the bare
     // version counter (the stale-canvas incident class). Hash both sides post-sanitize.
-    workspaceHash: activeWorkspaceHash(),
-    lastUpdated: activeWorkspaceSavedAt,
-    origin: activeWorkspaceOrigin,
+    workspaceHash: workspaceHash(record),
+    lastUpdated: record.savedAt,
+    origin: record.origin,
   });
 });
 
@@ -4981,10 +5074,19 @@ function summarizeDiagnostics(diags: any[]) {
  * @param incoming   either a full workspace or (when merge) a partial set of top-level fields
  * @param opts.merge JSON-merge-patch semantics over the active workspace
  */
-function applyWorkspaceMutation(incoming: any, opts: { expectedVersion?: number; expectedHead?: string; dryRun?: boolean; merge?: boolean; force?: boolean }): { status: number; body: any } {
+function applyWorkspaceMutation(
+  record: WorkspaceRecord,
+  incoming: any,
+  opts: { expectedVersion?: number; expectedHead?: string; dryRun?: boolean; merge?: boolean; force?: boolean },
+  registry: WorkspaceRegistry = workspaceRegistry,
+  recoveryStore: DestructiveRecoveryStore = destructiveRecoveryStore,
+): { status: number; body: any } {
   if (!incoming || typeof incoming !== 'object') {
     return { status: 400, body: { error: "Missing or invalid workspace payload." } };
   }
+  const currentWorkspace = sanitizeWorkspace(record.workspace);
+  const currentVersion = record.version;
+  const currentHead = workspaceHash(record);
   // B2 slice 3: ADR-F1's legacy-write deprecation round ENDS here. A write that names
   // neither expectedHead nor expectedVersion is blind last-writer-wins — the exact
   // mechanism of the 2026-07-11 boot-blank clobber. It now requires an explicit
@@ -4992,26 +5094,28 @@ function applyWorkspaceMutation(incoming: any, opts: { expectedVersion?: number;
   // (fresh install: nothing persisted, nothing written this run). Dry runs stay open.
   const isLegacyWrite = !(typeof opts.expectedHead === 'string' && opts.expectedHead.length > 0)
     && typeof opts.expectedVersion !== 'number';
-  const firstContact = !hadPersistedStateAtBoot && !anyCommitSinceBoot;
+  const firstContact = registry.isLegacyFirstContact(record.workspaceId);
   if (isLegacyWrite && !opts.force && !opts.dryRun && !firstContact) {
     return {
       status: 409,
       body: {
         error: 'legacy_write_rejected',
         message: "Blind write rejected: no expectedHead/expectedVersion supplied. GET /api/agent/workspace first and send its workspaceHash as expectedHead (CAS), or pass force:true to deliberately overwrite (last-writer-wins).",
-        currentHead: activeWorkspaceHash(),
-        currentVersion: workspaceVersion,
+        workspaceId: record.workspaceId,
+        currentHead,
+        currentVersion,
       }
     };
   }
   // Optimistic concurrency: reject stale writes when expectedVersion is supplied.
-  if (typeof opts.expectedVersion === 'number' && opts.expectedVersion !== workspaceVersion) {
+  if (typeof opts.expectedVersion === 'number' && opts.expectedVersion !== currentVersion) {
     return {
       status: 409,
       body: {
         error: 'version_conflict',
-        message: `Stale write rejected: expectedVersion ${opts.expectedVersion} != current ${workspaceVersion}. Re-fetch /api/agent/workspace and retry.`,
-        currentVersion: workspaceVersion
+        message: `Stale write rejected: expectedVersion ${opts.expectedVersion} != current ${currentVersion}. Re-fetch /api/agent/workspace and retry.`,
+        workspaceId: record.workspaceId,
+        currentVersion,
       }
     };
   }
@@ -5022,14 +5126,13 @@ function applyWorkspaceMutation(incoming: any, opts: { expectedVersion?: number;
   // last-writer-wins overwrite (the clobber class behind the SPEC-#66 incident).
   // Version numbers can lie across restarts; content hashes cannot.
   if (typeof opts.expectedHead === 'string' && opts.expectedHead.length > 0) {
-    const currentHead = activeWorkspaceHash();
     if (opts.expectedHead !== currentHead) {
       let conflictPreview: ReturnType<typeof buildWorkspaceConflictPreview> | undefined;
       try {
-        const proposed = sanitizeWorkspace(opts.merge ? { ...activeWorkspace, ...incoming } : incoming);
+        const proposed = sanitizeWorkspace(opts.merge ? { ...currentWorkspace, ...incoming } : incoming);
         conflictPreview = buildWorkspaceConflictPreview(
           buildWorkspaceFileManifest(proposed).files,
-          buildWorkspaceFileManifest(activeWorkspace).files,
+          buildWorkspaceFileManifest(currentWorkspace).files,
         );
       } catch { /* heads still prove the conflict; preview degrades honestly */ }
       return {
@@ -5039,19 +5142,20 @@ function applyWorkspaceMutation(incoming: any, opts: { expectedVersion?: number;
           message: `Content conflict: expectedHead ${opts.expectedHead} != current ${currentHead}. The workspace changed since you read it — re-fetch, reconcile, and retry (or omit expectedHead to force last-writer-wins).`,
           currentHead,
           expectedHead: opts.expectedHead,
-          currentVersion: workspaceVersion,
+          workspaceId: record.workspaceId,
+          currentVersion,
           conflict: {
             detectedAt: new Date().toISOString(),
             server: {
               head: currentHead,
-              version: workspaceVersion,
-              savedAt: activeWorkspaceSavedAt,
-              origin: activeWorkspaceOrigin,
-              name: activeWorkspace?.name || 'Untitled',
+              version: currentVersion,
+              savedAt: record.savedAt,
+              origin: record.origin,
+              name: currentWorkspace?.name || 'Untitled',
             },
             local: {
-              head: workspaceContentHash(sanitizeWorkspace(opts.merge ? { ...activeWorkspace, ...incoming } : incoming)),
-              name: String((opts.merge ? { ...activeWorkspace, ...incoming } : incoming)?.name || 'Untitled'),
+              head: workspaceContentHash(sanitizeWorkspace(opts.merge ? { ...currentWorkspace, ...incoming } : incoming)),
+              name: String((opts.merge ? { ...currentWorkspace, ...incoming } : incoming)?.name || 'Untitled'),
             },
             ...(conflictPreview ? { preview: conflictPreview } : { previewUnavailable: 'The file-level comparison could not be compiled.' }),
           },
@@ -5059,7 +5163,7 @@ function applyWorkspaceMutation(incoming: any, opts: { expectedVersion?: number;
       };
     }
   }
-  const merged = opts.merge ? { ...activeWorkspace, ...incoming } : incoming;
+  const merged = opts.merge ? { ...currentWorkspace, ...incoming } : incoming;
   const nextWorkspace = sanitizeWorkspace(merged);
   const diagnostics = computeWorkspaceDiagnostics(nextWorkspace);
 
@@ -5068,7 +5172,8 @@ function applyWorkspaceMutation(incoming: any, opts: { expectedVersion?: number;
       status: 200,
       body: {
         success: true, dryRun: true, applied: false,
-        version: workspaceVersion,
+        workspaceId: record.workspaceId,
+        version: currentVersion,
         diagnosticsSummary: summarizeDiagnostics(diagnostics),
         diagnostics,
         previewWorkspace: nextWorkspace
@@ -5076,14 +5181,15 @@ function applyWorkspaceMutation(incoming: any, opts: { expectedVersion?: number;
     };
   }
 
-  const isDifferent = JSON.stringify(nextWorkspace) !== JSON.stringify(activeWorkspace);
+  const isDifferent = JSON.stringify(nextWorkspace) !== JSON.stringify(currentWorkspace);
   let recovery: ReturnType<DestructiveRecoveryStore['createWorkspace']> | undefined;
   if (isDifferent) {
     if (opts.force) {
       try {
-        recovery = destructiveRecoveryStore.createWorkspace({
-          beforeWorkspace: activeWorkspace,
-          beforeHash: activeWorkspaceHash(),
+        recovery = recoveryStore.createWorkspace({
+          workspaceId: record.workspaceId,
+          beforeWorkspace: currentWorkspace,
+          beforeHash: currentHead,
           expectedCurrentHash: workspaceContentHash(nextWorkspace),
           summary: `Restore server workspace before forced overwrite by ${String(nextWorkspace?.name || 'Untitled')}`,
         });
@@ -5094,25 +5200,27 @@ function applyWorkspaceMutation(incoming: any, opts: { expectedVersion?: number;
             success: false,
             code: 'RECOVERY_PREPARE_FAILED',
             error: `Forced overwrite refused because its recovery could not be made durable: ${error instanceof Error ? error.message : String(error)}`,
-            currentHead: activeWorkspaceHash(),
-            currentVersion: workspaceVersion,
+            workspaceId: record.workspaceId,
+            currentHead,
+            currentVersion,
           },
         };
       }
     }
     // B2s3: all real writes go through the chokepoint (persist + park-on-switch).
-    commitActiveWorkspace(nextWorkspace, opts.force ? 'api:forced' : (isLegacyWrite ? 'api:legacy-first-contact' : 'api:cas'));
+    record = registry.commit(record.workspaceId, nextWorkspace, opts.force ? 'api:forced' : (isLegacyWrite ? 'api:legacy-first-contact' : 'api:cas'));
   }
   return {
     status: 200,
     body: {
       success: true, applied: isDifferent,
       message: isDifferent ? 'Workspace updated; version bumped.' : 'Workspace already in sync.',
-      version: workspaceVersion,
+      workspaceId: record.workspaceId,
+      version: record.version,
       // B2 slice 2: writers track the post-write head so their NEXT CAS write carries it.
-      workspaceHash: activeWorkspaceHash(),
+      workspaceHash: workspaceHash(record),
       diagnosticsSummary: summarizeDiagnostics(diagnostics),
-      workspace: activeWorkspace,
+      workspace: record.workspace,
       ...(recovery ? { recovery: {
         id: recovery.id,
         kind: recovery.kind,
@@ -5131,11 +5239,12 @@ function applyWorkspaceMutation(incoming: any, opts: { expectedVersion?: number;
  * `expectedVersion` (409 on mismatch) and `dryRun` (validate without applying).
  */
 app.post("/api/agent/workspace", (req, res) => {
+  const record = requestWorkspace(req);
   const { workspace, expectedVersion, expectedHead, dryRun, force } = req.body || {};
   if (!workspace) {
     return res.status(400).json({ error: "Missing required 'workspace' body parameter." });
   }
-  const r = applyWorkspaceMutation(workspace, { expectedVersion, expectedHead, dryRun, force: force === true });
+  const r = applyWorkspaceMutation(record, workspace, { expectedVersion, expectedHead, dryRun, force: force === true });
   return res.status(r.status).json(r.body);
 });
 
@@ -5146,11 +5255,12 @@ app.post("/api/agent/workspace", (req, res) => {
  * `expectedVersion` and `dryRun` controls.
  */
 app.post("/api/agent/workspace/merge", (req, res) => {
+  const record = requestWorkspace(req);
   const { changes, expectedVersion, expectedHead, dryRun, force } = req.body || {};
   if (!changes || typeof changes !== 'object') {
     return res.status(400).json({ error: "Missing required 'changes' object (top-level workspace fields to merge)." });
   }
-  const r = applyWorkspaceMutation(changes, { expectedVersion, expectedHead, dryRun, merge: true, force: force === true });
+  const r = applyWorkspaceMutation(record, changes, { expectedVersion, expectedHead, dryRun, merge: true, force: force === true });
   return res.status(r.status).json(r.body);
 });
 
@@ -5159,7 +5269,14 @@ app.post("/api/agent/workspace/merge", (req, res) => {
  * B2s3: states parked when a different mod was loaded (park-on-switch). Read-only list.
  */
 app.get("/api/agent/workspace/parked", (req, res) => {
-  return res.json({ parked: listParked(STUDIO_STATE_DIR) });
+  const current = requestWorkspace(req);
+  return res.json({
+    workspaceId: current.workspaceId,
+    parked: workspaceRegistry.list().filter(row => row.workspaceId !== current.workspaceId).map(row => ({
+      ...row,
+      nodeCount: (workspaceRegistry.lookup(row.workspaceId).ok ? ((workspaceRegistry.lookup(row.workspaceId) as any).record.workspace.nodes || []).length : 0),
+    })),
+  });
 });
 
 /**
@@ -5168,17 +5285,12 @@ app.get("/api/agent/workspace/parked", (req, res) => {
  * restore is never destructive either), then activates the parked workspace.
  */
 app.post("/api/agent/workspace/restore-parked", (req, res) => {
-  const name = String(req.body?.name || "").trim();
-  if (!name) return res.status(400).json({ error: "Missing required 'name' body parameter." });
-  const parked = readParked(STUDIO_STATE_DIR, name);
-  if (!parked) return res.status(404).json({ error: `No parked state named "${name}".` });
-  commitActiveWorkspace(parked.workspace as ModWorkspace, 'restore-parked');
-  return res.json({
-    success: true,
-    workspace: activeWorkspace,
-    version: workspaceVersion,
-    workspaceHash: activeWorkspaceHash(),
-  });
+  requestWorkspace(req); // proves authority over the currently selected tab workspace
+  const targetWorkspaceId = String(req.body?.targetWorkspaceId || '').trim();
+  if (!targetWorkspaceId) return res.status(400).json({ code: 'TARGET_WORKSPACE_ID_REQUIRED', error: "Missing required 'targetWorkspaceId' body parameter." });
+  const target = workspaceRegistry.lookup(targetWorkspaceId);
+  if (target.ok === false) return res.status(target.code === 'WORKSPACE_NOT_FOUND' ? 404 : 400).json({ code: target.code, error: target.error });
+  return res.json({ success: true, ...workspaceRegistry.summary(target.record), workspace: target.record.workspace });
 });
 
 /**
@@ -5187,8 +5299,9 @@ app.post("/api/agent/workspace/restore-parked", (req, res) => {
  */
 app.get("/api/agent/diagnostics", (req, res) => {
   try {
-    const diagnostics = computeWorkspaceDiagnostics(activeWorkspace);
-    return res.json({ version: workspaceVersion, summary: summarizeDiagnostics(diagnostics), diagnostics });
+    const record = requestWorkspace(req);
+    const diagnostics = computeWorkspaceDiagnostics(record.workspace as ModWorkspace);
+    return res.json({ workspaceId: record.workspaceId, version: record.version, summary: summarizeDiagnostics(diagnostics), diagnostics });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'diagnostics failed' });
   }
@@ -5237,7 +5350,8 @@ registerNpcIdentityProbeRoutes(app, { findDebugLogCandidates, readTail, errorMes
 app.post("/api/agent/log-diagnose", (req, res) => {
   try {
     const tail = String(req.body?.tail || "");
-    const rawMod = String(req.body?.modId || activeWorkspace.name || "");
+    const rawMod = String(req.body?.modId || "").trim();
+    if (!rawMod) return res.status(400).json({ code: 'MOD_ID_REQUIRED', error: 'log-diagnose requires an explicit modId.' });
     const modIds = Array.from(new Set([toSafeModId(rawMod), rawMod.toLowerCase().trim(), toSafeModId(rawMod).replace(/_mod$/, "")].filter(s => s && s.length >= 3)));
     const { issues } = analyzeGameLog(tail, modIds);
     const activeIssues = issues.filter(i => i.matchesActiveMod);
@@ -6991,7 +7105,9 @@ app.post("/api/agent/project/file/create", (req, res) => {
 /** B100: navigation/ownership metadata from the same artifact plan used by compile and deploy. */
 app.post("/api/agent/project/files", (req, res) => {
   try {
-    const workspace = activeBuildWorkspace(req.body?.workspace ?? activeWorkspace);
+    const record = req.body?.workspace ? null : resolveWorkspaceAuthority(req, res, true);
+    if (!req.body?.workspace && !record) return;
+    const workspace = activeBuildWorkspace(req.body?.workspace ?? record!.workspace);
     const built = buildWorkspaceFileManifest(workspace);
     const configuredRoot = resolveXsdConfig().modWorkspacePath;
     const candidate = String(workspace.sourceFolder || workspace.sourceStamp?.dir || '').trim();
@@ -7010,6 +7126,7 @@ app.post("/api/agent/project/files", (req, res) => {
     const inventory = buildProjectFileInventory(sourceRoot, built.files);
     return res.status(inventory.ok ? 200 : 409).json({
       ...inventory,
+      ...(record ? { workspaceId: record.workspaceId } : {}),
       modId: built.modId,
       // A safe relative target is returned even before first materialization. The
       // write route remains the authority that resolves it under Mod Workspace.
@@ -7432,18 +7549,18 @@ app.get("/api/agent/project/brief", (req, res) => {
 // B57s2 — the readiness ladder as MACHINE truth for agents: the same buildReadinessStages
 // the studio header uses, fed entirely from server-side evidence. The `experience` stage is
 // user-screen-gated by design — the server reports it honestly un-confirmed (ADR-G3).
-function computeServerReadiness() {
-  const ws = sanitizeWorkspace(activeWorkspace);
+function computeServerReadiness(record: WorkspaceRecord) {
+  const ws = sanitizeWorkspace(record.workspace);
   const mdCode = generateMDXML(ws);
   const graphDiagnostics = validateModWorkspace(ws, mdCode);
   const { modId, files } = buildWorkspaceFileManifest(ws);
   // The stage builder only counts severities; adapt server diagnostics to its shape.
   const packageDiagnostics = runFullWorkspaceValidation(ws, { modId, files }).diagnostics
     .map(d => ({ severity: d.severity, message: d.message, category: "egosoft" as const }));
-  const brief = buildDebugWatcherBrief(modId, []);
+  const brief = buildDebugWatcherBrief(modId, [], ws.name, deployInfoForWorkspace(record));
   const stages = buildReadinessStages({
     workspaceName: ws.name,
-    workspaceHash: activeWorkspaceHash(),
+    workspaceHash: workspaceHash(record),
     graphDiagnostics,
     packageDiagnostics,
     diagnosticSource: "project",
@@ -7455,8 +7572,10 @@ function computeServerReadiness() {
 
 app.get("/api/agent/readiness", (req, res) => {
   try {
-    const { ws, modId, stages } = computeServerReadiness();
+    const record = requestWorkspace(req);
+    const { ws, modId, stages } = computeServerReadiness(record);
     return res.json({
+      workspaceId: record.workspaceId,
       workspace: ws.name,
       modId,
       stages,
@@ -7472,8 +7591,9 @@ app.get("/api/agent/readiness", (req, res) => {
 // state — there is no path to author evidence into it.
 app.get("/api/agent/proof", (req, res) => {
   try {
+    const record = requestWorkspace(req);
     const fromPath = String(req.query.fromPath || "").trim();
-    const { ws, stages, watcherVerdict } = computeServerReadiness();
+    const { ws, stages, watcherVerdict } = computeServerReadiness(record);
     let folderBlock = "_no fromPath given — folder validation skipped_";
     if (fromPath) {
       const resolvedFolder = resolveModFolder(fromPath);
@@ -7518,7 +7638,8 @@ Generated: ${new Date().toISOString()}
 ${stageLines}
 
 Watcher verdict: \`${watcherVerdict ?? "unavailable"}\`
-Workspace content hash: \`${activeWorkspaceHash()}\`
+Workspace ID: \`${record.workspaceId}\`
+Workspace content hash: \`${workspaceHash(record)}\`
 
 ## Mod folder validation
 ${folderBlock}
@@ -7665,6 +7786,7 @@ const SELFTESTS: Record<string, () => unknown> = {
   "lua-staleness-selftest": runLuaStalenessSelftest,
   "lua-runtime-log-selftest": runLuaRuntimeLogSelftest,
   "workspace-persistence-selftest": runWorkspaceStateSelftest,
+  "workspace-registry-selftest": runWorkspaceRegistrySelftest,
   "ui-compiler-selftest": runUiCompilerSelftest,
   "node-toolbox-selftest": runNodeToolboxSelftest,
   "readiness-selftest": runReadinessSelftest,
@@ -7685,11 +7807,12 @@ app.get("/api/agent/selftest-index", (_req, res) => {
 });
 
 registerValidationAgentRoutes(app);
-registerReferenceRoutes(app, () => activeWorkspace);
+registerReferenceRoutes(app, req => ((req as any).__workspaceRecord as WorkspaceRecord | undefined)?.workspace as ModWorkspace | undefined);
 registerBulkTransformRoutes(app, {
-  workspace: () => activeWorkspace,
-  workspaceHash: activeWorkspaceHash,
-  applyWorkspaceMutation: (incoming, options) => applyWorkspaceMutation(incoming, options),
+  workspace: req => requestWorkspace(req).workspace as ModWorkspace,
+  workspaceId: req => requestWorkspace(req).workspaceId,
+  workspaceHash: req => workspaceHash(requestWorkspace(req)),
+  applyWorkspaceMutation: (req, incoming, options) => applyWorkspaceMutation(requestWorkspace(req), incoming, options),
 });
 
 
@@ -7832,15 +7955,16 @@ app.get("/api/agent/expression-suggest-selftest", (_req, res) => {
 // Startup walkaround card (beta-UX D1): the whole environment at a glance. Probes are
 // gathered here (cheap/cached services only — never triggers a cold object-index build);
 // the pure engine turns them into rows. Honest: a probe that can't run reports unknown.
-app.get("/api/agent/health-card", async (_req, res) => {
+app.get("/api/agent/health-card", async (req, res) => {
   try {
+    const record = requestWorkspace(req);
     const resolved = resolveXsdConfig();
     const mdIndex = (() => { try { return getSchemaIndex(); } catch { return null; } })();
     const aiIndex = (() => { try { return getAiSchemaIndex(); } catch { return null; } })();
     const spIndex = getScriptPropertyIndex();
     const bridge = await getBridgeLiveState();
     const logPath = findDebugLogCandidates().find(c => { try { return fs.statSync(c).isFile(); } catch { return false; } });
-    const ws = sanitizeWorkspace(activeWorkspace);
+    const ws = sanitizeWorkspace(record.workspace);
     const modId = (() => { try { return effectiveModId(ws); } catch { return ''; } })();
     const drift = modId ? computeModDrift(modId) : null;
     const tail = logPath ? readTail(logPath, 256 * 1024) : '';
@@ -7858,7 +7982,7 @@ app.get("/api/agent/health-card", async (_req, res) => {
       activeModDrift: drift ? { verdict: drift.verdict, summary: drift.summary } : null,
       luaStaleness: lua ? { restartRequired: lua.restartRequired, instrumented: lua.instrumented, summary: lua.summary } : null,
     });
-    return res.json({ ...card, activeMod: modId || null });
+    return res.json({ ...card, workspaceId: record.workspaceId, activeMod: modId || null });
   } catch (error) {
     return res.status(500).json({ error: errorMessage(error) || "health-card failed" });
   }
@@ -8632,47 +8756,41 @@ app.get("/api/agent/md-audit", (req, res) => {
   }
 });
 
-// Public read-only self-test for the agent mutation API. Snapshots and restores
-// the live workspace/version so it never leaves a side effect.
-app.get("/api/agent/api-selftest", (req, res) => {
-  const savedWs = activeWorkspace;
-  const savedVer = workspaceVersion;
+// Public read-only self-test for the agent mutation API. ADR-F5 runs against a disposable
+// registry/recovery root; the live registry is never swapped or restored.
+app.get("/api/agent/api-selftest", (_req, res) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'x4forge-api-selftest-'));
   try {
+    const registry = new WorkspaceRegistry({ root: path.join(root, 'state'), defaultWorkspace: DEFAULT_WORKSPACE });
+    const recovery = new DestructiveRecoveryStore({ root: path.join(root, 'recoveries') });
+    let record = registry.lookup(registry.defaultWorkspaceId);
+    if (record.ok === false) throw new Error(record.error);
+    const savedWs = record.record.workspace as ModWorkspace;
+    const savedVer = record.record.version;
     const results: any[] = [];
-    // 1. dry-run replace: must NOT apply, version unchanged.
-    const dry = applyWorkspaceMutation({ ...savedWs, version: '9.9.9' }, { dryRun: true });
-    results.push({ test: 'dryRun', pass: dry.status === 200 && dry.body.applied === false && workspaceVersion === savedVer, detail: { applied: dry.body.applied, version: workspaceVersion } });
-    // 2. stale write: expectedVersion wrong -> 409.
-    const stale = applyWorkspaceMutation({ ...savedWs }, { expectedVersion: savedVer + 999 });
-    results.push({ test: 'versionConflict', pass: stale.status === 409 && stale.body.error === 'version_conflict', detail: { status: stale.status } });
-    // 3. merge with correct expectedVersion: applies, version bumps.
-    const merge = applyWorkspaceMutation({ version: '7.7.7' }, { expectedVersion: savedVer, merge: true });
-    results.push({ test: 'mergeApply', pass: merge.status === 200 && merge.body.applied === true && workspaceVersion === savedVer + 1 && activeWorkspace.version === '7.7.7', detail: { applied: merge.body.applied, newVersion: workspaceVersion, mergedVersion: activeWorkspace.version } });
-    // 4. B2s3 legacy gate: a blind write (no head, no version, no force) is rejected.
-    const legacy = applyWorkspaceMutation({ ...savedWs, version: '8.8.8' }, {});
-    results.push({ test: 'legacyRejected', pass: legacy.status === 409 && legacy.body.error === 'legacy_write_rejected', detail: { status: legacy.status, error: legacy.body.error } });
-    // 5. B2s3 force valve: the same blind write with force:true is a deliberate overwrite.
-    const forced = applyWorkspaceMutation({ ...savedWs, version: '8.8.9' }, { force: true });
-    results.push({ test: 'forceAccepted', pass: forced.status === 200 && forced.body.applied === true, detail: { status: forced.status } });
-    // 6. B2s3 first-contact allowance: on a fresh install (nothing persisted, nothing
-    // committed) a legacy write is allowed once. Simulated by flag swap, restored below.
-    const savedBootFlag = hadPersistedStateAtBoot; const savedCommitFlag = anyCommitSinceBoot;
-    hadPersistedStateAtBoot = false; anyCommitSinceBoot = false;
-    const firstContact = applyWorkspaceMutation({ ...savedWs, version: '9.0.1' }, {});
-    hadPersistedStateAtBoot = savedBootFlag; anyCommitSinceBoot = savedCommitFlag;
-    results.push({ test: 'firstContactLegacyAllowed', pass: firstContact.status === 200 && firstContact.body.applied === true, detail: { status: firstContact.status } });
+    const dry = applyWorkspaceMutation(record.record, { ...savedWs, version: '9.9.9' }, { dryRun: true }, registry, recovery);
+    results.push({ test: 'dryRun', pass: dry.status === 200 && dry.body.applied === false && registry.lookup(record.record.workspaceId).ok && (registry.lookup(record.record.workspaceId) as any).record.version === savedVer });
+    const stale = applyWorkspaceMutation(record.record, { ...savedWs }, { expectedVersion: savedVer + 999 }, registry, recovery);
+    results.push({ test: 'versionConflict', pass: stale.status === 409 && stale.body.error === 'version_conflict' });
+    const merge = applyWorkspaceMutation(record.record, { version: '7.7.7' }, { expectedVersion: savedVer, merge: true }, registry, recovery);
+    record = registry.lookup(record.record.workspaceId);
+    results.push({ test: 'mergeApply', pass: merge.status === 200 && merge.body.applied === true && record.ok && (record.record.workspace as any).version === '7.7.7' });
+    if (record.ok === false) throw new Error(record.error);
+    const legacy = applyWorkspaceMutation(record.record, { ...savedWs, version: '8.8.8' }, {}, registry, recovery);
+    results.push({ test: 'legacyRejected', pass: legacy.status === 409 && legacy.body.error === 'legacy_write_rejected' });
+    const forced = applyWorkspaceMutation(record.record, { ...savedWs, version: '8.8.9' }, { force: true }, registry, recovery);
+    results.push({ test: 'forceAccepted', pass: forced.status === 200 && forced.body.applied === true && forced.body.recovery?.id });
+    const firstRoot = path.join(root, 'first-contact');
+    const firstRegistry = new WorkspaceRegistry({ root: firstRoot, defaultWorkspace: DEFAULT_WORKSPACE });
+    const first = firstRegistry.lookup(firstRegistry.defaultWorkspaceId);
+    if (first.ok === false) throw new Error(first.error);
+    const firstContact = applyWorkspaceMutation(first.record, { ...first.record.workspace, version: '9.0.1' }, {}, firstRegistry, recovery);
+    results.push({ test: 'firstContactLegacyAllowed', pass: firstContact.status === 200 && firstContact.body.applied === true });
     return res.json({ allPassed: results.every(r => r.pass), results });
   } catch (error) {
-    return res.status(500).json({ error: error.message || 'api-selftest failed' });
+    return res.status(500).json({ error: errorMessage(error) || 'api-selftest failed' });
   } finally {
-    // Always restore live state. Deliberately RAW (not commitActiveWorkspace): this swap
-    // is test-scoped and must not park anything — but the mid-test commit persisted test
-    // junk to disk, so re-persist the restored truth or a later restart adopts the junk.
-    activeWorkspace = savedWs;
-    workspaceVersion = savedVer;
-    try {
-      writeActiveState(STUDIO_STATE_DIR, { workspace: savedWs, version: savedVer, savedAt: new Date().toISOString(), origin: 'api-selftest-restore' });
-    } catch { /* persistence failure never fails the selftest response */ }
+    try { fs.rmSync(root, { recursive: true, force: true }); } catch { /* test cleanup */ }
   }
 });
 
@@ -10324,20 +10442,20 @@ app.post("/api/agent/deploy", (req, res) => {
       message = `Successfully deployed to game extensions: ${deployedPath}`;
     }
 
-    lastDeployInfo = {
+    const successfulDeploy = recordSuccessfulDeploy(req, {
       modId,
       workspaceName: ws.name,
       workspaceHash: workspaceContentHash(sanitizeWorkspace(ws)),
       deployedAt: new Date().toISOString(),
       stagingPath: stagingPath || undefined,
       deployedPath: deployedPath || undefined
-    };
+    });
 
     return res.json({
       success: true,
       message,
       deployedPath: deployedPath || stagingPath,
-      lastDeploy: lastDeployInfo,
+      lastDeploy: successfulDeploy,
       artifact: lastArtifactReport,
       // B97: tell callers in the RESPONSE, do not retire the route. A live agent is calling this
       // today; silently removing it would break working tooling mid-session with no warning.
@@ -10468,7 +10586,7 @@ app.post("/api/agent/deploy-verify", (req, res) => {
     } else if (hasWorkspace) {
       // UI convergence (audit R4): the editor panels send their CURRENT canvas workspace,
       // same contract the legacy /deploy accepted — without this, converged UI buttons
-      // would silently deploy a stale server-side activeWorkspace.
+      // would otherwise silently deploy stale server-side state.
       ws = sanitizeWorkspace(req.body.workspace);
       check('import', 'Mod source read', 'pass', `workspace from request "${ws.name}" (${(ws.nodes || []).length} nodes)`);
     }
@@ -10777,15 +10895,13 @@ app.post("/api/agent/deploy-verify", (req, res) => {
       }
     }
 
-    // Post-deploy convergence (P0): refresh the source stamp to the post-write state (a
-    // content-changing deploy legitimately changes the folder hash) and adopt this
-    // workspace as active with a version bump so polling clients converge on it — the
-    // canvas that just deployed can immediately deploy again without a false stale-block.
+    // Post-deploy convergence: refresh the returned source stamp to the post-write state.
+    // ADR-F5 forbids a deploy route from mutating a process-global workspace; the caller
+    // may commit this returned workspace through the ordinary addressed CAS route.
     if (ok && sourceStamp?.dir) {
       try {
         if (fs.existsSync(sourceStamp.dir)) {
           (ws as any).sourceStamp = { dir: sourceStamp.dir, hash: hashFolderFingerprint(fingerprintModFolder(sourceStamp.dir)), at: new Date().toISOString() };
-          commitActiveWorkspace(ws, 'deploy-verify');
         }
       } catch { /* convergence is best-effort; the gate stays safe either way */ }
     }
@@ -10794,14 +10910,14 @@ app.post("/api/agent/deploy-verify", (req, res) => {
     // Failed byte/doctor gates are attempted writes, not successful deploy evidence.
     // Preserve the prior successful record instead of painting the readiness ladder green.
     if (ok) {
-      lastDeployInfo = {
+      recordSuccessfulDeploy(req, {
         modId,
         workspaceName: ws.name,
         workspaceHash: workspaceContentHash(sanitizeWorkspace(ws)),
         deployedAt,
         stagingPath: stagingPath || undefined,
         deployedPath: deployedPath || undefined,
-      };
+      });
     }
     const baselinePromotion = ok
       ? recordValidationBaseline(modId, preflightContentHash, preflightDiagnostics)
@@ -10816,6 +10932,7 @@ app.post("/api/agent/deploy-verify", (req, res) => {
     );
     return res.json({
       ok, stage: 'done', modId, deployedPath, stagingPath, bytesConfirmed, deployedBytes,
+      workspace: ws,
       ...(deploymentRecovery ? { recovery: {
         id: deploymentRecovery.id,
         kind: deploymentRecovery.kind,
@@ -10865,7 +10982,9 @@ app.post("/api/agent/deploy-verify", (req, res) => {
 });
 
 app.post("/api/agent/compile", (req, res) => {
-  const ws = sanitizeWorkspace(req.body.workspace || activeWorkspace);
+  const record = req.body?.workspace ? null : resolveWorkspaceAuthority(req, res, true);
+  if (!req.body?.workspace && !record) return;
+  const ws = sanitizeWorkspace(req.body?.workspace || record!.workspace);
   try {
     const built = buildWorkspaceFileManifest(ws);
     const modId = built.modId;
@@ -10906,6 +11025,7 @@ app.post("/api/agent/compile", (req, res) => {
 
     return res.json({
       success: true,
+      ...(record ? { workspaceId: record.workspaceId } : {}),
       modId,
       file_count: Object.keys(files).length,
       files: {
@@ -10945,7 +11065,9 @@ app.post("/api/agent/compile", (req, res) => {
  * Agent-friendly alias for compile that returns the complete package file manifest.
  */
 app.post("/api/agent/package", (req, res) => {
-  const ws = sanitizeWorkspace(req.body.workspace || activeWorkspace);
+  const record = req.body?.workspace ? null : resolveWorkspaceAuthority(req, res, true);
+  if (!req.body?.workspace && !record) return;
+  const ws = sanitizeWorkspace(req.body?.workspace || record!.workspace);
   try {
     const { modId, files } = buildWorkspaceFileManifest(ws);
     const full = runFullWorkspaceValidation(ws, { modId, files });
@@ -10957,6 +11079,7 @@ app.post("/api/agent/package", (req, res) => {
 
     return res.json({
       success: true,
+      ...(record ? { workspaceId: record.workspaceId } : {}),
       modId,
       file_count: Object.keys(files).length,
       files,
@@ -10983,7 +11106,9 @@ app.post("/api/agent/package", (req, res) => {
 });
 
 app.post("/api/agent/artifact/build", (req, res) => {
-  const ws = sanitizeWorkspace(req.body?.workspace || activeWorkspace);
+  const record = req.body?.workspace ? null : resolveWorkspaceAuthority(req, res, true);
+  if (!req.body?.workspace && !record) return;
+  const ws = sanitizeWorkspace(req.body?.workspace || record!.workspace);
   const format = req.body?.format === 'loose' ? 'loose' : req.body?.format === undefined || req.body?.format === 'catalog' ? 'catalog' : null;
   if (!format) return res.status(400).json({ success: false, error: 'format must be "loose" or "catalog".' });
   try {
@@ -10996,6 +11121,7 @@ app.post("/api/agent/artifact/build", (req, res) => {
     const full = runFullWorkspaceValidation(ws, built);
     return res.json({
       success: true,
+      ...(record ? { workspaceId: record.workspaceId } : {}),
       modId: built.modId,
       format,
       artifactPath,
@@ -11701,7 +11827,11 @@ app.post("/api/agent/generate", async (req, res) => {
   if (!prompt) {
     return res.status(400).json({ error: "Missing 'prompt' body parameter." });
   }
-  const baseWorkspace = sanitizeWorkspace(currentWorkspace || activeWorkspace);
+  const applyGenerated = req.body.apply !== false;
+  const addressed = ((req as any).__workspaceRecord as WorkspaceRecord | undefined) ||
+    ((applyGenerated || !currentWorkspace) ? resolveWorkspaceAuthority(req, res, true) : null);
+  if ((applyGenerated || !currentWorkspace) && !addressed) return;
+  const baseWorkspace = sanitizeWorkspace(currentWorkspace || addressed!.workspace);
 
   try {
     console.log(`[AI-STUDIO] Starting Phased Cognitive Prompt Interpretation Workflow...`);
@@ -12039,9 +12169,11 @@ Apply corrections to the nodes, properties, and links to resolve every finding. 
     // generate committed here unconditionally, so the canvas sync adopted the
     // change before the user approved (the approval step was not the first
     // mutation point). External agents keep the documented apply-by-default.
-    const applyGenerated = req.body.apply !== false;
     if (applyGenerated) {
-      commitActiveWorkspace(combinedWorkspace, 'ai-generate');
+      const latest = workspaceRegistry.lookup(addressed!.workspaceId);
+      if (latest.ok === false) return res.status(404).json({ code: latest.code, error: latest.error, generatedWorkspace: combinedWorkspace });
+      const mutation = applyWorkspaceMutation(latest.record, combinedWorkspace, { expectedHead: String(req.body?.expectedHead || '').trim() });
+      if (mutation.status !== 200) return res.status(mutation.status).json({ ...mutation.body, generatedWorkspace: combinedWorkspace });
     }
 
     console.log(`[AI-STUDIO] Phased interpretation complete. Delivered blueprint named: ${combinedWorkspace.name}`);
@@ -12126,9 +12258,10 @@ Use real X4 Mission Director xmlTags. Each requirement: {id, label (plain Englis
 
     return res.json({
       success: true,
+      ...(addressed ? { workspaceId: addressed.workspaceId } : {}),
       message: resultMessage,
       applied: applyGenerated,
-      version: workspaceVersion,
+      version: addressed ? (workspaceRegistry.lookup(addressed.workspaceId).ok ? (workspaceRegistry.lookup(addressed.workspaceId) as any).record.version : addressed.version) : undefined,
       workspace: combinedWorkspace,
       diagnostics: finalDiagnostics,
       requirements: intentRequirements,

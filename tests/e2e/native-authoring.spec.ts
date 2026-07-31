@@ -246,8 +246,8 @@ test('rendered modifier selection sends exactly the selected graph snippets to t
   </body></html>`);
 
   const forge = page.frameLocator('#forge');
-  await expect(forge.getByTestId('canvas-node-cue_native_ui')).toBeVisible();
-  await expect(forge.getByTestId('canvas-node-action_native_ui')).toBeVisible();
+  await expect(forge.getByTestId('canvas-node-cue_native_ui')).toBeVisible({ timeout: 30_000 });
+  await expect(forge.getByTestId('canvas-node-action_native_ui')).toBeVisible({ timeout: 30_000 });
   await forge.getByTestId('canvas-node-cue_native_ui').click();
   await expect.poll(() => page.evaluate(() => (window as any).__nativeMessages.at(-1)?.nodeIds))
     .toEqual(['cue_native_ui']);

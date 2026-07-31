@@ -43,6 +43,10 @@ export interface LedgerOutcome {
 export interface LedgerRow {
   id: string;
   ts: string;
+  /** ADR-F5: immutable authority for workspace-bound actions. Missing only on legacy/global rows. */
+  workspaceId?: string;
+  /** Tab provenance for Studio actions; never an authentication credential. */
+  clientId?: string;
   agent: LedgerActor;
   kind: LedgerKind;
   title: string;

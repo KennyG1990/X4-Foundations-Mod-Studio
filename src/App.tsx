@@ -21,13 +21,13 @@ import BugReportModal from './components/BugReportModal';
 import Sidebar from './components/Sidebar';
 import FpsMeter from './components/FpsMeter';
 import HealthCardOverlay from './components/HealthCardOverlay';
-import DialogHost, { confirmDialog, toast } from './lib/uiDialogs';
+import DialogHost, { confirmDialog, promptDialog, toast } from './lib/uiDialogs';
 import SyncModal from './components/SyncModal';
 import WorkspaceConflictDialog, { type WorkspaceConflictDetail } from './components/WorkspaceConflictDialog';
 import Canvas from './components/Canvas';
 import UIBuilder from './components/UIBuilder';
 import NativeProjectFiles from './components/NativeProjectFiles';
-import { openInNativeEditor, openNativeNodeSelection, postNativeNodeSelectionResult, type NativeNodeApplyRequest } from './lib/nativeEditor';
+import { notifyNativeWorkspaceAuthority, openInNativeEditor, openNativeNodeSelection, postNativeNodeSelectionResult, type NativeNodeApplyRequest } from './lib/nativeEditor';
 import AIHelper from './components/AIHelper';
 import AgentBridge from './components/AgentBridge';
 import AIConnectionModal from './components/AIConnectionModal';
@@ -132,6 +132,14 @@ const BLANK_WORKSPACE: ModWorkspace = {
   }
 };
 
+function selectedWorkspaceId(): string {
+  return window.__X4_WORKSPACE_CONTEXT__?.getWorkspaceId() || '';
+}
+
+function workspaceLocalKey(suffix: 'workspace' | 'version', workspaceId = selectedWorkspaceId()): string {
+  return `x4_mod_studio_${suffix}:${workspaceId || 'unbound'}`;
+}
+
 export default function App() {
   const [schemaTemplates, setSchemaTemplates] = useState<Omit<MDNode, 'id' | 'x' | 'y'>[]>([]);
   // A4.5/A4.2 — the live md.xsd-derived valid tag set, so the AI review's unknown-tag
@@ -159,7 +167,7 @@ export default function App() {
 
   const [rawWorkspace, setRawWorkspace] = useState<ModWorkspace>(() => {
     // Attempt local storage sync
-    const stored = localStorage.getItem('x4_mod_studio_workspace');
+    const stored = localStorage.getItem(workspaceLocalKey('workspace')) || localStorage.getItem('x4_mod_studio_workspace');
     const parsed = stored ? JSON.parse(stored) : BLANK_WORKSPACE;
     
     // Merge legacy localStorage items for backwards compatibility:
@@ -570,7 +578,7 @@ export default function App() {
     }
   }, [workspace, selectedNode, selectedWidget]);
 
-  const [localVersion, setLocalVersion] = useState<number>(1);
+  const [localVersion, setLocalVersion] = useState<number>(() => Number(localStorage.getItem(workspaceLocalKey('version')) || 1));
   const [isAgentBridgeOpen, setIsAgentBridgeOpen] = useState<boolean>(false);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState<boolean>(false);
   const [isAIConfigOpen, setIsAIConfigOpen] = useState<boolean>(false);
@@ -602,6 +610,8 @@ export default function App() {
   const [deployChecklist, setDeployChecklist] = useState<Array<{ id: string; label: string; status: 'pass' | 'warn' | 'fail' | 'skipped'; detail: string }>>([]);
   // B1 sync-trust: persistent canvas↔server content divergence gets a visible badge.
   const [syncDiverged, setSyncDiverged] = useState<boolean>(false);
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string>(() => selectedWorkspaceId());
+  useEffect(() => { notifyNativeWorkspaceAuthority(currentWorkspaceId); }, [currentWorkspaceId]);
   const syncMissesRef = useRef(0);
   // B2 slice 2 (ADR-F1): the last server head this client saw — attached as expectedHead
   // on every auto-sync so a concurrent writer produces an explicit 409, never a silent
@@ -613,6 +623,10 @@ export default function App() {
   // client. Polling also defers while the queue drains so it cannot learn an intermediate head.
   const workspaceSyncChainRef = useRef<Promise<void>>(Promise.resolve());
   const queuedWorkspaceSyncsRef = useRef(0);
+  // Invalidates responses from writes/conflicts that started before an explicit authority
+  // switch or human conflict choice. HTTP headers keep the server write correctly scoped;
+  // this epoch keeps an old response from reopening or corrupting the newly selected UI.
+  const syncAuthorityEpochRef = useRef(0);
   const [syncConflict, _setSyncConflict] = useState<boolean>(false);
   const [syncConflictDetail, setSyncConflictDetail] = useState<WorkspaceConflictDetail | null>(null);
   const [syncConflictExpanded, setSyncConflictExpanded] = useState(true);
@@ -1232,6 +1246,7 @@ export default function App() {
       if (!localWorkspaceDirtyRef.current) return;
       const targetWorkspace = workspace;
       const targetRevision = workspaceRevisionRef.current;
+      const targetAuthorityEpoch = syncAuthorityEpochRef.current;
       queuedWorkspaceSyncsRef.current += 1;
       workspaceSyncChainRef.current = workspaceSyncChainRef.current
         .catch(() => undefined)
@@ -1250,6 +1265,7 @@ export default function App() {
           // A later workspace revision has its own queued save. Dropping this superseded
           // target prevents a delayed boot/default save from running after server adoption.
           if (workspaceRevisionRef.current !== targetRevision) return;
+          if (syncAuthorityEpochRef.current !== targetAuthorityEpoch) return;
           const targetHash = workspaceContentHash(sanitizeWorkspace(targetWorkspace));
           let lastError: unknown;
           for (let attempt = 0; attempt < 4; attempt += 1) {
@@ -1260,17 +1276,19 @@ export default function App() {
                 body: JSON.stringify({ workspace: targetWorkspace, expectedHead: lastServerHashRef.current })
               });
               const responseData = await response.json().catch(() => null);
+              if (syncAuthorityEpochRef.current !== targetAuthorityEpoch) return;
               if (response.status === 409) {
                 // A lost success response is indistinguishable from an external writer until
                 // we read the new head. Equal content means this save already landed; any other
                 // head remains a real human-resolved conflict.
                 const latestResponse = await fetch("/api/agent/workspace");
                 const latest = latestResponse.ok ? await latestResponse.json() : null;
+                if (syncAuthorityEpochRef.current !== targetAuthorityEpoch) return;
                 if (latest?.workspaceHash === targetHash) {
                   lastServerHashRef.current = latest.workspaceHash;
                   if (latest.version) {
                     setLocalVersion(latest.version);
-                    localStorage.setItem('x4_mod_studio_version', String(latest.version));
+                    localStorage.setItem(workspaceLocalKey('version'), String(latest.version));
                   }
                   if (workspaceContentHash(sanitizeWorkspace(workspaceRef.current)) === targetHash) localWorkspaceDirtyRef.current = false;
                   setSyncConflict(false);
@@ -1306,7 +1324,7 @@ export default function App() {
               const data = responseData;
               if (data && data.success && data.version) {
                 setLocalVersion(data.version);
-                localStorage.setItem('x4_mod_studio_version', String(data.version));
+                localStorage.setItem(workspaceLocalKey('version'), String(data.version));
                 if (typeof data.workspaceHash === 'string' && data.workspaceHash) {
                   lastServerHashRef.current = data.workspaceHash;
                 }
@@ -1351,6 +1369,27 @@ export default function App() {
       const deployData = await deployRes.json();
       setDeployChecklist(Array.isArray(deployData.checklist) ? deployData.checklist : []);
       if (deployRes.ok && deployData.ok) {
+        if (deployData.workspace && typeof deployData.workspace === 'object') {
+          const convergenceRes = await fetch('/api/agent/workspace', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ workspace: deployData.workspace, expectedHead: lastServerHashRef.current }),
+          });
+          const convergence = await convergenceRes.json().catch(() => ({}));
+          if (!convergenceRes.ok || !convergence?.success) {
+            setCompileStatus('error');
+            setCompileMessage(`Deployment succeeded, but this tab could not adopt the refreshed source state (${convergence?.error || convergenceRes.status}). Reload the server copy before deploying again.`);
+            return;
+          }
+          setWorkspace(deployData.workspace);
+          localWorkspaceDirtyRef.current = false;
+          if (convergence.version) {
+            setLocalVersion(convergence.version);
+            localStorage.setItem(workspaceLocalKey('version'), String(convergence.version));
+          }
+          if (convergence.workspaceHash) lastServerHashRef.current = String(convergence.workspaceHash);
+          localStorage.setItem(workspaceLocalKey('workspace'), JSON.stringify(deployData.workspace));
+        }
         setCompileStatus('success');
         setCompileMessage(`Deployed + verified "${deployData.modId}" to ${deployData.deployedPath || deployData.stagingPath}` +
           (deployData.stagingPath && deployData.deployedPath ? ' (+ staging)' : ''));
@@ -1384,6 +1423,7 @@ export default function App() {
       try {
         const response = await fetch("/api/agent/workspace");
         const data = await response.json();
+        if (data?.workspaceId && data.workspaceId !== selectedWorkspaceId()) return;
         if (data && data.workspace && data.version) {
           // Local state becomes dirty at the moment setWorkspace is called, not 300ms later
           // when autosave starts. While dirty, a poll cannot adopt stale server content or
@@ -1412,13 +1452,13 @@ export default function App() {
             }
             return;
           }
-          const storedVer = Number(localStorage.getItem('x4_mod_studio_version') || String(localVersion));
+          const storedVer = Number(localStorage.getItem(workspaceLocalKey('version')) || String(localVersion));
           if (data.version > storedVer && !syncConflictRef.current) {
             setWorkspace(data.workspace);
             localWorkspaceDirtyRef.current = false;
             setLocalVersion(data.version);
-            localStorage.setItem('x4_mod_studio_version', String(data.version));
-            localStorage.setItem('x4_mod_studio_workspace', JSON.stringify(data.workspace));
+            localStorage.setItem(workspaceLocalKey('version'), String(data.version));
+            localStorage.setItem(workspaceLocalKey('workspace'), JSON.stringify(data.workspace));
             // B2 slice 2: adoption is also learning the head (this branch returns early —
             // missing this line left the CAS ref empty after every adoption).
             if (typeof data.workspaceHash === 'string' && data.workspaceHash) lastServerHashRef.current = data.workspaceHash;
@@ -1461,10 +1501,11 @@ export default function App() {
     fetchLatestServerWorkspace();
     const interval = setInterval(fetchLatestServerWorkspace, 3000);
     return () => clearInterval(interval);
-  }, [localVersion, setWorkspace]);
+  }, [localVersion, setWorkspace, currentWorkspaceId]);
 
   // B1: adopt the server workspace explicitly (badge click) — the user's choice, never silent.
   const adoptServerWorkspace = async () => {
+    syncAuthorityEpochRef.current += 1;
     setSyncConflictBusy('server');
     setSyncConflictError('');
     try {
@@ -1477,9 +1518,9 @@ export default function App() {
         localWorkspaceDirtyRef.current = false;
         if (data.version) {
           setLocalVersion(data.version);
-          localStorage.setItem('x4_mod_studio_version', String(data.version));
+          localStorage.setItem(workspaceLocalKey('version'), String(data.version));
         }
-        localStorage.setItem('x4_mod_studio_workspace', JSON.stringify(data.workspace));
+        localStorage.setItem(workspaceLocalKey('workspace'), JSON.stringify(data.workspace));
         if (typeof data.workspaceHash === 'string' && data.workspaceHash) lastServerHashRef.current = data.workspaceHash;
         syncMissesRef.current = 0;
         setSyncDiverged(false);
@@ -1492,8 +1533,8 @@ export default function App() {
     }
   };
 
-  // B12: parked-workspace switcher (rides B2s3's park-on-switch server state).
-  const [parkedList, setParkedList] = useState<Array<{ name: string; slug: string; nodeCount: number; contentSummary?: string }>>([]);
+  // ADR-F5 workspace switcher. Each tab owns its selected immutable ID; duplicate names are safe.
+  const [parkedList, setParkedList] = useState<Array<{ workspaceId: string; name: string; nodeCount: number; contentSummary?: string }>>([]);
   const refreshParkedList = async () => {
     try {
       const data = await fetch('/api/agent/workspace/parked').then(r => r.json());
@@ -1503,19 +1544,23 @@ export default function App() {
   // Ready before interaction: on boot, and whenever a switch/load may have parked
   // something (workspace name change). onFocus refresh stays as a liveness bonus.
   useEffect(() => { refreshParkedList(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [workspace.name]);
-  const restoreParkedWorkspace = async (name: string) => {
+  const restoreParkedWorkspace = async (targetWorkspaceId: string) => {
     try {
       const response = await fetch('/api/agent/workspace/restore-parked', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ targetWorkspaceId }),
       });
       const data = await response.json();
       if (data?.success && data.workspace) {
         saveCheckpoint();
+        syncAuthorityEpochRef.current += 1;
+        window.__X4_WORKSPACE_CONTEXT__?.selectWorkspace(String(data.workspaceId));
+        setCurrentWorkspaceId(String(data.workspaceId));
         setWorkspace(data.workspace);
-        if (data.version) { setLocalVersion(data.version); localStorage.setItem('x4_mod_studio_version', String(data.version)); }
-        localStorage.setItem('x4_mod_studio_workspace', JSON.stringify(data.workspace));
+        localWorkspaceDirtyRef.current = false;
+        if (data.version) { setLocalVersion(data.version); localStorage.setItem(workspaceLocalKey('version', data.workspaceId), String(data.version)); }
+        localStorage.setItem(workspaceLocalKey('workspace', data.workspaceId), JSON.stringify(data.workspace));
         if (typeof data.workspaceHash === 'string' && data.workspaceHash) lastServerHashRef.current = data.workspaceHash;
         syncMissesRef.current = 0;
         setSyncDiverged(false);
@@ -1525,10 +1570,42 @@ export default function App() {
     } catch { /* server unreachable — the canvas stays as-is */ }
   };
 
+  const createWorkspace = async () => {
+    const name = await promptDialog('Name the new independent workspace.', 'Untitled_Workspace', { okLabel: 'Create workspace' });
+    if (!name?.trim()) return;
+    try {
+      const clientId = window.__X4_WORKSPACE_CONTEXT__?.clientId || '';
+      const response = await fetch('/api/agent/workspaces', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, name: name.trim() }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data?.workspaceId || !data?.workspace) throw new Error(data?.error || `Workspace creation failed (${response.status}).`);
+      syncAuthorityEpochRef.current += 1;
+      window.__X4_WORKSPACE_CONTEXT__?.selectWorkspace(String(data.workspaceId));
+      setCurrentWorkspaceId(String(data.workspaceId));
+      saveCheckpoint();
+      setWorkspace(data.workspace);
+      localWorkspaceDirtyRef.current = false;
+      setLocalVersion(Number(data.version || Date.now()));
+      lastServerHashRef.current = String(data.workspaceHash || '');
+      localStorage.setItem(workspaceLocalKey('workspace', data.workspaceId), JSON.stringify(data.workspace));
+      localStorage.setItem(workspaceLocalKey('version', data.workspaceId), String(data.version || Date.now()));
+      setSyncConflict(false);
+      setSyncDiverged(false);
+      await refreshParkedList();
+      toast(`Created independent workspace "${data.workspace.name}".`, 'success');
+    } catch (error) {
+      toast(error instanceof Error ? error.message : String(error), 'error');
+    }
+  };
+
   // B2 slice 2: "Keep mine" — the explicit force valve (ADR-F1: last-writer-wins is
   // chosen by a human, never by silence). B2s3: the choice is now spelled force:true —
   // the server rejects blind no-head writes outright.
   const forceKeepMine = async () => {
+    syncAuthorityEpochRef.current += 1;
     setSyncConflictBusy('local');
     setSyncConflictError('');
     try {
@@ -1541,7 +1618,7 @@ export default function App() {
       const data = await response.json();
       if (!response.ok || !data?.success) throw new Error(data?.error || `Forced overwrite failed (${response.status}).`);
       if (data?.success) {
-        if (data.version) { setLocalVersion(data.version); localStorage.setItem('x4_mod_studio_version', String(data.version)); }
+        if (data.version) { setLocalVersion(data.version); localStorage.setItem(workspaceLocalKey('version'), String(data.version)); }
         if (typeof data.workspaceHash === 'string' && data.workspaceHash) lastServerHashRef.current = data.workspaceHash;
         setSyncConflict(false);
         setSyncDiverged(false);
@@ -1777,15 +1854,15 @@ export default function App() {
               onChange={async (e) => {
                 const pick = e.target.value;
                 if (pick === '__current') return;
-                // B12: parked workspaces — switching PARKS the current state server-side
-                // (B2s3 park-on-switch), so nothing is ever lost either direction.
-                if (pick.startsWith('parked:')) {
-                  const name = pick.slice('parked:'.length);
+                if (pick === '__new') { await createWorkspace(); return; }
+                if (pick.startsWith('workspace:')) {
+                  const targetWorkspaceId = pick.slice('workspace:'.length);
+                  const target = parkedList.find(row => row.workspaceId === targetWorkspaceId);
                   const ok = await confirmDialog(
-                    `Switch to the parked workspace "${name}"? The current canvas ("${workspace.name || 'Untitled'}") is parked first — switch back the same way.`,
+                    `Switch this tab to "${target?.name || targetWorkspaceId}"? The current workspace remains saved under ${currentWorkspaceId}.`,
                     { okLabel: 'Switch workspace', cancelLabel: 'Stay here' },
                   );
-                  if (ok) await restoreParkedWorkspace(name);
+                  if (ok) await restoreParkedWorkspace(targetWorkspaceId);
                   return;
                 }
                 // B13 guard (2026-07-09): a preset pick REPLACES the whole canvas — twice
@@ -1800,12 +1877,12 @@ export default function App() {
               className="bg-[#0F1115] border border-white/10 p-1 rounded text-[10px] font-mono text-slate-300 focus:outline-none focus:border-cyan-500 cursor-pointer max-w-[130px] min-[2150px]:max-w-none truncate"
             >
               {/* H6: show the actually-loaded workspace, not a stale "Blank Workspace" label */}
-              <option value="__current">{workspace.name || 'Current Workspace'}</option>
-              {/* B12: parked server states — switch without losing anything. */}
-              {parkedList.filter(p => p.name !== workspace.name).length > 0 && (
-                <optgroup label="Parked workspaces">
-                  {parkedList.filter(p => p.name !== workspace.name).map(p => (
-                    <option key={p.slug} value={`parked:${p.name}`}>{p.name} ({p.contentSummary ?? `${p.nodeCount} nodes`})</option>
+              <option value="__current">{workspace.name || 'Current Workspace'} · {currentWorkspaceId.slice(-6)}</option>
+              <option value="__new">＋ New independent workspace…</option>
+              {parkedList.filter(p => p.workspaceId !== currentWorkspaceId).length > 0 && (
+                <optgroup label="Other workspaces">
+                  {parkedList.filter(p => p.workspaceId !== currentWorkspaceId).map(p => (
+                    <option key={p.workspaceId} value={`workspace:${p.workspaceId}`}>{p.name} · {p.workspaceId.slice(-6)} ({p.contentSummary ?? `${p.nodeCount} nodes`})</option>
                   ))}
                 </optgroup>
               )}
@@ -2195,7 +2272,7 @@ export default function App() {
               onServerWorkspaceApplied={(nextWorkspace, metadata) => {
                 lastServerHashRef.current = metadata.workspaceHash;
                 setLocalVersion(metadata.version);
-                localStorage.setItem('x4_mod_studio_version', String(metadata.version));
+                localStorage.setItem(workspaceLocalKey('version'), String(metadata.version));
                 setSyncConflict(false);
                 // The bulk route already committed this exact state through the server CAS
                 // path. Adopt it without marking it as another local edit; otherwise the

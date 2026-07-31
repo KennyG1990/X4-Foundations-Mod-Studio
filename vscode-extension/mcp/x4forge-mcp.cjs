@@ -11,7 +11,7 @@
  *    deploy tools are deliberately NOT exposed here at all).
  *  - No AI-spend path exists through these tools (generate is not exposed; the Forge
  *    additionally requires external agents to bring their own AI keys).
- *  - Config: X4FORGE_URL (default http://127.0.0.1:3000) + X4FORGE_KEY (the agent key).
+ *  - Config: X4FORGE_URL + X4FORGE_KEY + the key-bound X4FORGE_WORKSPACE_ID.
  *
  * Wire format: newline-delimited JSON-RPC 2.0 (MCP stdio transport).
  */
@@ -22,6 +22,7 @@ const readline = require("node:readline");
 
 const BASE = (process.env.X4FORGE_URL || "http://127.0.0.1:3000").replace(/\/+$/, "");
 const KEY = (process.env.X4FORGE_KEY || "").trim();
+const WORKSPACE_ID = (process.env.X4FORGE_WORKSPACE_ID || "").trim();
 
 const SERVER_INFO = { name: "x4forge", version: "0.1.0" };
 const PROTOCOL_VERSION = "2024-11-05";
@@ -53,7 +54,7 @@ const TOOLS = [
   },
   {
     name: "get_workspace",
-    description: "Read the Forge's ACTIVE visual workspace (nodes, links, name/version) — the current state of what the user is building on the canvas.",
+    description: "Read the explicitly bound Forge workspace (nodes, links, name/version). Authority comes from X4FORGE_WORKSPACE_ID plus the key binding.",
     inputSchema: { type: "object", properties: {} },
     handler: async () => {
       const d = await forge("GET", "/api/agent/workspace");
@@ -63,7 +64,7 @@ const TOOLS = [
   },
   {
     name: "compile_workspace",
-    description: "Compile the ACTIVE workspace to its mod package (md XML, content.xml, …) and return the generated file list plus the validator diagnostics for the emitted files.",
+    description: "Compile the explicitly bound workspace to its mod package and return the generated file list plus validator diagnostics.",
     inputSchema: { type: "object", properties: {} },
     handler: async () => {
       const d = await forge("POST", "/api/agent/compile", {});
@@ -179,6 +180,7 @@ const TOOLS = [
 async function forge(method, apiPath, body) {
   const headers = { "Content-Type": "application/json" };
   if (KEY) headers.Authorization = `Bearer ${KEY}`;
+  if (WORKSPACE_ID) headers["x-workspace-id"] = WORKSPACE_ID;
   const res = await fetch(`${BASE}${apiPath}`, {
     method,
     headers,
@@ -188,7 +190,7 @@ async function forge(method, apiPath, body) {
   try { data = await res.json(); } catch { /* non-JSON error body */ }
   if (!res.ok) {
     const msg = (data && data.error) || `HTTP ${res.status}`;
-    throw new Error(`Forge API ${apiPath}: ${msg}${res.status === 401 ? " (is X4FORGE_KEY set to a valid agent key?)" : ""}${res.status === 403 ? " (the agent key's scope does not allow this tool)" : ""}`);
+    throw new Error(`Forge API ${apiPath}: ${msg}${res.status === 401 ? " (is X4FORGE_KEY set to a valid agent key?)" : ""}${res.status === 403 ? " (check key scope and its workspace binding)" : ""}${data?.code === 'WORKSPACE_ID_REQUIRED' ? " (set X4FORGE_WORKSPACE_ID to the key-bound workspace)" : ""}`);
   }
   return data;
 }

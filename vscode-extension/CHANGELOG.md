@@ -3,7 +3,14 @@
 The latest changes, newest first. (This page is generated automatically — see
 `release-notes.json` to edit the wording.)
 
-## 0.0.62 — 2026-07-31
+## 0.0.63 — 2026-07-31
+
+- Each Studio tab now binds to an immutable workspace identity instead of whichever project another tab used most recently.
+- Create and switch independent workspaces from the header. Duplicate project names stay safe because identity comes from a server-owned ID, not the display name.
+- Agent keys, history, recovery, validation readiness, compilation, and packaging now stay inside the workspace they were issued for; missing or mismatched authority is refused without changing another project.
+- Existing active and parked projects migrate once into the bounded workspace registry and retain the same IDs and content across restarts.
+
+## 0.0.62 — 2026-07-30
 
 - Workspace conflicts now show both copy names, real save/edit times, content heads, changed-file counts, and bounded text diffs before you choose a winner.
 - Using the server copy first creates a local Undo checkpoint. Overwriting the server first creates a bounded, expiring recovery that appears honestly in Agent History.
@@ -487,4 +494,3 @@ The latest changes, newest first. (This page is generated automatically — see
 - Enhance AI integration and support
 - Initialize X4 Foundations Mod Studio project
 - Initial commit
-

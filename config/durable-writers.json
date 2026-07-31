@@ -1,13 +1,13 @@
 {
   "version": 1,
-  "sourceFingerprint": "14bf391c7713470667cd475bff5ecc3c93b10052a63489e9e74a882c9c770643",
+  "sourceFingerprint": "da2aa7a574219347452d2088bdad63d0fbb370db92c0b0861ba2d3b5ce90a5b3",
   "policy": "Every raw production filesystem mutation source is count-pinned here. Authoritative files use atomic sibling promotion; stronger tree, archive, append-log, SQLite, retention, ephemeral, and fixture contracts remain explicit exceptions.",
   "writers": [
     {
       "file": "server.ts",
-      "calls": { "writeFileSync": 30, "renameSync": 10, "copyFileSync": 4, "mkdirSync": 32, "rmSync": 37, "unlinkSync": 4, "chmodSync": 2, "mkdtempSync": 8 },
+      "calls": { "writeFileSync": 30, "renameSync": 10, "copyFileSync": 4, "mkdirSync": 32, "rmSync": 38, "unlinkSync": 4, "chmodSync": 2, "mkdtempSync": 9 },
       "categories": ["mixed", "authoritative-atomic", "verified-tree-transaction", "isolated-artifact-stage", "retention-cleanup", "fixture-only"],
-      "owners": ["writeWorkspaceFileGuarded and fs/create", "snapshot create/prune/delete/restore", "copyRegularTree and synchronizeRegularTree", "replaceValidatedDeployment and recovery", "compileWorkspaceToFolder scratch cleanup", "replaceReleaseDirectory", "Nexus and Steam release handlers", "embedded route/artifact selftests"],
+      "owners": ["writeWorkspaceFileGuarded and fs/create", "snapshot create/prune/delete/restore", "copyRegularTree and synchronizeRegularTree", "replaceValidatedDeployment and recovery", "compileWorkspaceToFolder scratch cleanup", "replaceReleaseDirectory", "Nexus and Steam release handlers", "embedded route/artifact/workspace API selftests"],
       "rationale": "The composition root contains guarded atomic source/snapshot writes, verified deployment/release directory transactions, isolated compilation/release materializers, bounded snapshot/artifact retention, and embedded scratch-only route fixtures.",
       "failureContract": "Authoritative files preserve prior bytes; tree promotion rolls back; scratch trees never target configured live roots; retention deletes only named bounded artifacts."
     },
@@ -165,6 +165,14 @@
       "failureContract": "Complete bytes and requested restricted mode exist before rename; failure preserves the destination and cleans the unique temp."
     },
     {
+      "file": "src/lib/workspaceRegistry.ts",
+      "calls": { "writeFileSync": 1, "mkdirSync": 1, "rmSync": 2, "mkdtempSync": 1 },
+      "categories": ["authoritative-atomic", "fixture-only"],
+      "owners": ["WorkspaceRegistry.create rollback", "runWorkspaceRegistrySelftest"],
+      "rationale": "Registry index and records use the shared atomic writer; raw removal rolls back an unindexed new record, while the remaining calls build corruption and migration fixtures in a unique temporary root.",
+      "failureContract": "A record is never visible without an indexed ID; failed index promotion removes only the newly created unindexed record, and fixture mutations never reach configured state."
+    },
+    {
       "file": "src/lib/x4CatDat.ts",
       "calls": { "writeFileSync": 7, "renameSync": 2, "mkdirSync": 1, "rmSync": 3, "writeSync": 1, "mkdtempSync": 1 },
       "categories": ["isolated-artifact-stage", "fixture-only"],
@@ -264,10 +272,10 @@
   "hostStores": [
     {
       "file": "src/App.tsx",
-      "calls": { "localStorageSet": 16 },
+      "calls": { "localStorageSet": 20 },
       "categories": ["browser-cache", "browser-preference"],
-      "owners": ["Studio layout/release preferences", "workspace revision cache", "experience confirmations"],
-      "rationale": "Browser storage mirrors server-owned workspace/release state or retains non-authoritative UI preferences and acknowledgements.",
+      "owners": ["Studio layout/release preferences", "workspace-ID-scoped revision and content cache", "experience confirmations"],
+      "rationale": "Browser storage mirrors server-owned workspace/release state by immutable ID or retains non-authoritative UI preferences and acknowledgements.",
       "failureContract": "Authoritative state remains on the server; preference failures keep current in-memory behavior and never authorize a write."
     },
     {
@@ -336,19 +344,19 @@
     },
     {
       "file": "src/main.tsx",
-      "calls": { "sessionStorageSet": 1 },
+      "calls": { "sessionStorageSet": 3, "sessionStorageRemove": 1 },
       "categories": ["browser-session"],
-      "owners": ["injected Studio session token handoff"],
-      "rationale": "Keeps the server-injected session token within the current browser tab rather than durable local storage.",
-      "failureContract": "Failure leaves API calls unauthorized; the token is never downgraded into persistent browser storage."
+      "owners": ["injected Studio session token handoff", "tab-scoped client and workspace identity"],
+      "rationale": "Keeps the server-injected token and generated client/workspace selection within the current browser tab rather than durable local storage.",
+      "failureContract": "Failure leaves API calls unauthorized or forces a fresh server bootstrap; a stale workspace selection is removed only after the server refuses it and is never downgraded into persistent storage."
     },
     {
       "file": "vscode-extension/src/extension.ts",
-      "calls": { "globalStateUpdate": 1 },
+      "calls": { "globalStateUpdate": 3 },
       "categories": ["extension-global-state"],
-      "owners": ["two-way-editing telemetry counters"],
-      "rationale": "Stores non-authoritative adoption/decline/refusal/conflict counters in the IDE host's managed global state.",
-      "failureContract": "The fire-and-forget telemetry write never changes authorization, source state, or conflict handling."
+      "owners": ["managed-sidecar workspace selection", "two-way-editing telemetry counters"],
+      "rationale": "Stores the last selected immutable workspace ID for restart bootstrap plus non-authoritative adoption/decline/refusal/conflict counters in IDE-managed global state.",
+      "failureContract": "Workspace selection is accepted only after the authenticated backend binds the ID; persistence failure fails that host handoff or falls back to safe bootstrap on restart, while telemetry never changes authorization or source state."
     }
   ],
   "browserOutputs": [

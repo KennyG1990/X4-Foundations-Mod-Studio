@@ -1,7 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { buildTemplateWorkspace } from '../../src/lib/modTemplates';
-import { E2E_TOKEN } from '../../playwright.config';
-import { readServerWorkspace, seedServerWorkspace } from './ephemeral';
+import { ephemeralWorkspaceHeaders, readServerWorkspace, seedServerWorkspace } from './ephemeral';
 
 type ConflictE2EWindow = Window & {
   __X4_E2E__?: {
@@ -123,7 +122,7 @@ test('explicit local overwrite wins and records a durable recovery', async ({ pa
   await expect.poll(async () => (await readServerWorkspace()).name).toBe(keptLocal.name);
 
   const history = await request.get('http://127.0.0.1:3101/api/agent/history?kind=workspace', {
-    headers: { Authorization: `Bearer ${E2E_TOKEN}` },
+    headers: await ephemeralWorkspaceHeaders(),
   });
   expect(history.ok()).toBeTruthy();
   const rows = (await history.json()).rows as Array<{ title?: string; recoveryKind?: string; revertible?: boolean }>;

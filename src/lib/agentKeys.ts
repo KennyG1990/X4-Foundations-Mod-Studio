@@ -30,6 +30,8 @@ export interface AgentKeyRecord {
   id: string;
   label: string;
   scope: AgentKeyScope;
+  /** ADR-F5: immutable workspace authority. Missing only on pre-migration legacy keys. */
+  workspaceId?: string;
   /** sha256 hex of the plaintext key. Never the key itself. */
   tokenHash: string;
   createdAt: number;
@@ -45,11 +47,12 @@ export interface AgentKeyVerify {
   id?: string;
   label?: string;
   scope?: AgentKeyScope;
+  workspaceId?: string;
   reason?: 'unknown' | 'expired' | 'revoked';
 }
 
 export interface AgentKeyStore {
-  create(label: string, scope: AgentKeyScope, ttlMs: number | null): { token: string; record: AgentKeyRecord };
+  create(label: string, scope: AgentKeyScope, ttlMs: number | null, workspaceId?: string): { token: string; record: AgentKeyRecord };
   verify(token: string, atMs?: number): AgentKeyVerify;
   revoke(id: string): boolean;
   /** Safe listing — records only (hashes included are non-reversible, but we still trim them for display). */
@@ -81,6 +84,7 @@ function isAgentKeyRecord(value: unknown): value is AgentKeyRecord {
   const nullableNumber = (candidate: unknown) => candidate === null || (typeof candidate === 'number' && Number.isFinite(candidate));
   return typeof row.id === 'string' && typeof row.label === 'string' &&
     (row.scope === 'read' || row.scope === 'write' || row.scope === 'deploy') &&
+    (row.workspaceId === undefined || /^ws_[a-f0-9]{24}$/i.test(row.workspaceId)) &&
     typeof row.tokenHash === 'string' && /^[a-f0-9]{64}$/.test(row.tokenHash) &&
     typeof row.createdAt === 'number' && Number.isFinite(row.createdAt) &&
     nullableNumber(row.expiresAt) && nullableNumber(row.lastUsedAt) && nullableNumber(row.revokedAt) &&
@@ -110,7 +114,7 @@ export function createAgentKeyStore(opts: StoreOptions): AgentKeyStore {
     try {
       const raw = fs.readFileSync(opts.file, 'utf8');
       const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== 'object' || parsed.version !== 1 || !Array.isArray(parsed.keys) || !parsed.keys.every(isAgentKeyRecord)) {
+      if (!parsed || typeof parsed !== 'object' || ![1, 2].includes(parsed.version) || !Array.isArray(parsed.keys) || !parsed.keys.every(isAgentKeyRecord)) {
         throw new Error('agent key store has an invalid shape');
       }
       records = parsed.keys;
@@ -125,18 +129,22 @@ export function createAgentKeyStore(opts: StoreOptions): AgentKeyStore {
   function save(next: AgentKeyRecord[]): void {
     if (!opts.file) return;
     if (loadError) throw new Error(`Agent key store is unreadable; refusing to overwrite it: ${loadError}`);
-    writeJson(opts.file, { version: 1, keys: next }, { mode: 0o600 });
+    writeJson(opts.file, { version: 2, keys: next }, { mode: 0o600 });
   }
   load();
 
   return {
-    create(label: string, scope: AgentKeyScope, ttlMs: number | null) {
+    create(label: string, scope: AgentKeyScope, ttlMs: number | null, workspaceId?: string) {
+      if (workspaceId !== undefined && !/^ws_[a-f0-9]{24}$/i.test(workspaceId)) {
+        throw new Error('Agent key workspaceId is malformed.');
+      }
       const at = now();
       const token = AGENT_KEY_PREFIX + randomHex(32);
       const record: AgentKeyRecord = {
         id: `key_${at.toString(36)}_${randomHex(4)}`,
         label: String(label || 'unnamed').slice(0, 60),
         scope,
+        ...(workspaceId ? { workspaceId } : {}),
         tokenHash: hashAgentKey(token),
         createdAt: at,
         expiresAt: ttlMs === null ? null : at + Math.max(60_000, ttlMs),
@@ -158,7 +166,7 @@ export function createAgentKeyStore(opts: StoreOptions): AgentKeyStore {
       if (!rec) return { ok: false, reason: 'unknown' };
       if (rec.revokedAt !== null) return { ok: false, reason: 'revoked' };
       if (rec.expiresAt !== null && at >= rec.expiresAt) return { ok: false, reason: 'expired' };
-      return { ok: true, id: rec.id, label: rec.label, scope: rec.scope };
+      return { ok: true, id: rec.id, label: rec.label, scope: rec.scope, workspaceId: rec.workspaceId };
     },
 
     revoke(id: string): boolean {
@@ -294,6 +302,12 @@ export function runAgentKeysSelftest(): { pass: boolean; checks: Array<{ name: s
   const v1 = store.verify(made.token, T0 + 1000);
   ok('create_verify_green', v1.ok === true && v1.scope === 'write' && v1.label === 'codex');
   ok('token_has_prefix', made.token.startsWith(AGENT_KEY_PREFIX));
+  const bound = store.create('bound', 'write', AGENT_KEY_TTLS['1h'], 'ws_111111111111111111111111');
+  const boundVerify = store.verify(bound.token, T0 + 1000);
+  ok('workspace_binding_roundtrip', boundVerify.ok === true && boundVerify.workspaceId === 'ws_111111111111111111111111' && store.list().find(row => row.id === bound.record.id)?.workspaceId === boundVerify.workspaceId);
+  let malformedBindingRejected = false;
+  try { store.create('bad binding', 'read', null, 'not-a-workspace'); } catch { malformedBindingRejected = true; }
+  ok('malformed_workspace_binding_rejected', malformedBindingRejected);
 
   // no plaintext at rest
   ok('record_stores_hash_not_plaintext',

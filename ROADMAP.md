@@ -7262,3 +7262,24 @@ and computer control was released.
 
 Suggested commit title:
 `feat(recovery): verify explainable conflicts and destructive undo`.
+
+## 2026-07-31 — B110-R8/R17 immutable workspace authority and true multi-workspace — VERIFIED
+
+The process-global active workspace is gone. A bounded atomic registry owns immutable server-generated workspace
+IDs, one record/head/revision per ID, and exact one-time migration from active plus parked state. Duplicate names are
+safe. Every stateful request resolves explicit authority; browser tabs carry independent client/workspace identity,
+agent keys bind to one workspace, and history, recovery, readiness, compilation, packaging, extension-native calls,
+and curated MCP calls cannot cross that boundary. Shared corpus/machine reads and genuinely inline/path-addressed
+operations remain stateless by explicit policy.
+
+Evidence: registry/authority negatives plus isolated routes 289/289; runtime oracles 126/126; canvas 4/4; focused
+same-name two-tab isolation; decisive full E2E 51/51 with zero failed/flaky/bad/quarantined; root typecheck, lint at
+0 errors / 581 baseline warnings, production/extension builds, extension panel 9/9 and native bridge checks, MCP
+10-tool inventory, Graphify refresh at 3,152 nodes / 7,413 edges / 154 communities, staged sidecar 16/16, final
+precommit, and 2,091-entry stable VSIX inspection. Normal Antigravity has 0.0.63 installed; Forge v1.0.391 visibly
+rendered the workspace selector while the packaged sidecar bound `ws_f61166c42849c757cf219c37` and migrated five
+records. Open VSX public/local bytes match at 17,907,329 bytes and SHA-256
+`50032222BC22190D25D3314837E52E4370C4059F053D1D9BB6EA087DE4DA52E5`.
+
+Suggested commit title:
+`feat(workspaces): isolate clients with immutable authority`.

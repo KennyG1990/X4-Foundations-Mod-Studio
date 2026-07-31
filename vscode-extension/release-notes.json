@@ -1,5 +1,11 @@
 {
   "_comment": "Plain-English release notes for the CHANGELOG (B60). ONE human step per release: add a version key with a few user-facing bullets — what a modder can now DO or what got better. Everything else (version list, dates, ordering, the shipped CHANGELOG.md) is generated automatically by `npm run changelog`. Versions with no entry here fall back to a cleaned-up commit subject.",
+  "0.0.63": [
+    "Each Studio tab now binds to an immutable workspace identity instead of whichever project another tab used most recently.",
+    "Create and switch independent workspaces from the header. Duplicate project names stay safe because identity comes from a server-owned ID, not the display name.",
+    "Agent keys, history, recovery, validation readiness, compilation, and packaging now stay inside the workspace they were issued for; missing or mismatched authority is refused without changing another project.",
+    "Existing active and parked projects migrate once into the bounded workspace registry and retain the same IDs and content across restarts."
+  ],
   "0.0.62": [
     "Workspace conflicts now show both copy names, real save/edit times, content heads, changed-file counts, and bounded text diffs before you choose a winner.",
     "Using the server copy first creates a local Undo checkpoint. Overwriting the server first creates a bounded, expiring recovery that appears honestly in Agent History.",

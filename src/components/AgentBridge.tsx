@@ -95,7 +95,7 @@ export default function AgentBridge({
   interface AgentKeyRow {
     id: string; label: string; scope: 'read' | 'write' | 'deploy';
     createdAt: number; expiresAt: number | null; lastUsedAt: number | null;
-    useCount: number; revokedAt: number | null; hashPrefix: string;
+    useCount: number; revokedAt: number | null; hashPrefix: string; workspaceId?: string;
   }
   const [agentKeys, setAgentKeys] = useState<AgentKeyRow[]>([]);
   const [keysError, setKeysError] = useState<string>('');
@@ -523,6 +523,8 @@ export default function AgentBridge({
 
   const appOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://example.com';
   const authCurlHeader = `-H "Authorization: Bearer $(Get-Content .studio-api-token)"`;
+  const workspaceId = window.__X4_WORKSPACE_CONTEXT__?.getWorkspaceId() || '<workspace-id>';
+  const workspaceCurlHeader = `-H "x-workspace-id: ${workspaceId}"`;
 
   const toggleEndpoint = (key: string) => {
     setCollapsedEndpoints(prev => ({ ...prev, [key]: !prev[key] }));
@@ -1015,15 +1017,16 @@ export default function AgentBridge({
                 {!collapsedEndpoints.getWorkspace && (
                   <div className="p-3 border-t border-white/5 space-y-2 bg-[#0a0c11]">
                     <p className="text-[10px] text-slate-400 font-sans leading-relaxed">
-                      Retrieves the current JSON representation of the user's nodes, wires, widgets, translations, AI scripts, wares, jobs, XML patches, and UI theme.
+                      Retrieves the explicitly addressed workspace. Mod names are editable; the immutable workspace ID is the authority.
                     </p>
                     <div className="relative">
                       <pre className="bg-[#10141f] p-2 rounded text-[10px] text-cyan-300 overflow-x-auto w-full select-all">
                         {`curl -X GET "${appOrigin}/api/agent/workspace" \\
-     ${authCurlHeader}`}
+     ${authCurlHeader} \\
+     ${workspaceCurlHeader}`}
                       </pre>
                       <button 
-                        onClick={() => handleCopy(`curl -X GET "${appOrigin}/api/agent/workspace" ${authCurlHeader}`, 'curl_getws')}
+                        onClick={() => handleCopy(`curl -X GET "${appOrigin}/api/agent/workspace" ${authCurlHeader} ${workspaceCurlHeader}`, 'curl_getws')}
                         className="absolute right-2 top-2 p-1 rounded bg-black/45 hover:bg-black text-slate-400 hover:text-white transition-all cursor-pointer"
                       >
                         {copiedTextId === 'curl_getws' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -1055,6 +1058,7 @@ export default function AgentBridge({
                       <pre className="bg-[#10141f] p-2 rounded text-[9px] text-cyan-300 overflow-y-auto max-h-32 select-all">
                         {`curl -X POST "${appOrigin}/api/agent/workspace" \\
      ${authCurlHeader} \\
+     ${workspaceCurlHeader} \\
      -H "Content-Type: application/json" \\
      -d '{
        "workspace": {
@@ -1064,10 +1068,12 @@ export default function AgentBridge({
          "uiWidgets": [...],
          "uiTheme": {...}
        }
+     },
+     "expectedHead": "<head from GET>"
      }'`}
                       </pre>
                       <button 
-                        onClick={() => handleCopy(`curl -X POST "${appOrigin}/api/agent/workspace" ${authCurlHeader} -H "Content-Type: application/json" -d '{"workspace": {"name": "My_AI_Mod", "nodes": [], "links": [], "uiWidgets": []}}'`, 'curl_postws')}
+                        onClick={() => handleCopy(`curl -X POST "${appOrigin}/api/agent/workspace" ${authCurlHeader} ${workspaceCurlHeader} -H "Content-Type: application/json" -d '{"workspace": {"name": "My_AI_Mod", "nodes": [], "links": [], "uiWidgets": []}, "expectedHead": "<head from GET>"}'`, 'curl_postws')}
                         className="absolute right-2 top-2 p-1 rounded bg-black/45 hover:bg-black text-slate-400 hover:text-white transition-all cursor-pointer"
                       >
                         {copiedTextId === 'curl_postws' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -1265,7 +1271,7 @@ export default function AgentBridge({
               </div>
               <p className="text-slate-500 text-[10px]">
                 read = inspect only · write = edit/compile/validate/package (no deploys, no spend) ·
-                deploy = everything. Key management itself always requires the studio itself.
+                deploy = everything. Every new key is bound to <code>{workspaceId}</code>; key management itself always requires the Studio.
               </p>
             </div>
 
@@ -1295,7 +1301,7 @@ export default function AgentBridge({
                   </button>
                 </div>
                 <p className="text-[10px] text-amber-200/70 font-mono">
-                  Use: <code>Authorization: Bearer {'<key>'}</code> against this studio’s /api.
+                  Use both <code>Authorization: Bearer {'<key>'}</code> and <code>x-workspace-id: {workspaceId}</code>.
                 </p>
               </div>
             )}
@@ -1323,6 +1329,7 @@ export default function AgentBridge({
                         <span className={`font-bold ${dead ? '' : 'text-white'}`}>{k.label}</span>
                         <span className={`px-1.5 rounded border ${k.scope === 'deploy' ? 'border-red-500/40 text-red-300' : k.scope === 'write' ? 'border-cyan-500/40 text-cyan-300' : 'border-emerald-500/40 text-emerald-300'}`}>{k.scope}</span>
                         <span>#{k.hashPrefix}</span>
+                        <span>{k.workspaceId ? `workspace ${k.workspaceId.slice(-6)}` : 'legacy unbound'}</span>
                         <span>
                           {k.revokedAt !== null ? 'REVOKED'
                             : k.expiresAt === null ? 'never expires'

@@ -87,6 +87,15 @@ export interface NativeReleaseResult {
   sizeBytes?: number;
 }
 
+export function notifyNativeWorkspaceAuthority(workspaceId: string): void {
+  if (!hasNativeReleaseHost() || !/^ws_[a-f0-9]{24}$/i.test(workspaceId)) return;
+  window.parent.postMessage({
+    source: 'x4forge-studio',
+    type: 'workspace-authority-changed',
+    workspaceId,
+  }, '*');
+}
+
 const NATIVE_EXTERNAL_URLS = new Set<string>([X4_UNPACKER_URL, X4_FORGE_DISCORD_URL]);
 
 export function hasNativeReleaseHost(): boolean {

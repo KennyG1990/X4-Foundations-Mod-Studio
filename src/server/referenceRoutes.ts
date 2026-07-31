@@ -93,7 +93,7 @@ function sendCorpusError(res: Response, error: unknown): Response {
   return res.status(500).json({ error: message || 'Reference corpus request failed.' });
 }
 
-export function registerReferenceRoutes(app: Express, workspaceProvider?: () => ModWorkspace | null | undefined): void {
+export function registerReferenceRoutes(app: Express, workspaceProvider?: (req: Request) => ModWorkspace | null | undefined): void {
   app.get('/api/reference/effective-file', (req, res) => {
     try {
       const corpus = load(req);
@@ -154,7 +154,7 @@ export function registerReferenceRoutes(app: Express, workspaceProvider?: () => 
     try {
       const request = languageRequest(req);
       const corpus = load(req);
-      return res.json(completeReferenceDocument(request, getReferenceLanguageResources(corpus, request, workspaceProvider?.())));
+      return res.json(completeReferenceDocument(request, getReferenceLanguageResources(corpus, request, workspaceProvider?.(req))));
     } catch (error) { return sendCorpusError(res, error); }
   });
 
@@ -162,7 +162,7 @@ export function registerReferenceRoutes(app: Express, workspaceProvider?: () => 
     try {
       const request = languageRequest(req);
       const corpus = load(req);
-      return res.json(hoverReferenceDocument(request, getReferenceLanguageResources(corpus, request, workspaceProvider?.())));
+      return res.json(hoverReferenceDocument(request, getReferenceLanguageResources(corpus, request, workspaceProvider?.(req))));
     } catch (error) { return sendCorpusError(res, error); }
   });
 
@@ -256,7 +256,7 @@ export function registerReferenceRoutes(app: Express, workspaceProvider?: () => 
         query: q,
         intent: intentInput as ReferenceSuggestionIntent,
         limit: Number(req.query.limit || 25),
-        projectSymbols: projectReferenceSymbols(workspaceProvider?.()),
+        projectSymbols: projectReferenceSymbols(workspaceProvider?.(req)),
       });
       return res.json({ generation: corpus.manifestGeneration || corpus.signature, kind, query: q, intent: intentInput, items });
     } catch (error) { return sendCorpusError(res, error); }

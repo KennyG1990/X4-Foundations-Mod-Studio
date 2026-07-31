@@ -15,6 +15,11 @@ try {
 declare global {
   interface Window {
     __STUDIO_API_TOKEN__?: string;
+    __X4_WORKSPACE_CONTEXT__?: {
+      clientId: string;
+      getWorkspaceId(): string;
+      selectWorkspace(workspaceId: string): void;
+    };
   }
 }
 
@@ -25,6 +30,27 @@ if (injectedToken) {
 
 // Override fetch globally before rendering the app safely.
 const originalFetch = window.fetch;
+const CLIENT_ID_KEY = 'x4forge_client_id';
+const WORKSPACE_ID_KEY = 'x4forge_workspace_id';
+function generateClientId(): string {
+  if (typeof crypto?.randomUUID === 'function') return `client_${crypto.randomUUID().replace(/-/g, '')}`;
+  if (typeof crypto?.getRandomValues === 'function') {
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    return `client_${Array.from(bytes, value => value.toString(16).padStart(2, '0')).join('')}`;
+  }
+  return `client_${Date.now().toString(36)}_${Math.random().toString(36).slice(2).padEnd(12, '0')}`;
+}
+const generatedClientId = generateClientId();
+const clientId = sessionStorage.getItem(CLIENT_ID_KEY) || generatedClientId;
+sessionStorage.setItem(CLIENT_ID_KEY, clientId);
+window.__X4_WORKSPACE_CONTEXT__ = {
+  clientId,
+  getWorkspaceId: () => sessionStorage.getItem(WORKSPACE_ID_KEY) || '',
+  selectWorkspace: (workspaceId: string) => {
+    if (!/^ws_[a-f0-9]{24}$/i.test(workspaceId)) throw new Error('Refused malformed workspaceId.');
+    sessionStorage.setItem(WORKSPACE_ID_KEY, workspaceId);
+  },
+};
 
 // H3 boot-race: Vite (3000) starts proxying before the tsx API (3001) finishes
 // transpiling server.ts (~2-3s), so early /api calls hit the proxy's soft 503
@@ -57,9 +83,11 @@ const customFetch = async function(this: any, input: RequestInfo | URL, init?: R
   // that happens to contain '/api/' (a plugin/analytics script). Resolve against the
   // app origin and require both same-origin AND an /api/ path prefix.
   let isApi = false;
+  let isWorkspaceBootstrap = false;
   try {
     const u = new URL(url, location.origin);
     isApi = u.origin === location.origin && u.pathname.startsWith('/api/');
+    isWorkspaceBootstrap = u.origin === location.origin && u.pathname === '/api/agent/workspaces/bootstrap';
   } catch { isApi = false; } // unparseable URL → never treat as our API
   const deadlineMs = clientRequestDeadlineMs(input, location.origin);
   const upstreamSignal = init?.signal || (input instanceof Request ? input.signal : undefined);
@@ -69,26 +97,17 @@ const customFetch = async function(this: any, input: RequestInfo | URL, init?: R
   try {
     if (isApi) {
       const token = sessionStorage.getItem('studio_session_token');
-      if (token) {
-        init = init || {};
-        init.headers = init.headers || {};
-        if (init.headers instanceof Headers) {
-          init.headers.set('Authorization', `Bearer ${token}`);
-        } else if (Array.isArray(init.headers)) {
-          const authIdx = init.headers.findIndex(([k]) => k.toLowerCase() === 'authorization');
-          if (authIdx !== -1) {
-            init.headers[authIdx] = ['Authorization', `Bearer ${token}`];
-          } else {
-            init.headers.push(['Authorization', `Bearer ${token}`]);
-          }
-        } else {
-          (init.headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
-        }
-      }
+      const headers = new Headers(input instanceof Request ? input.headers : undefined);
+      new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
+      if (token) headers.set('Authorization', `Bearer ${token}`);
+      headers.set('x-client-id', clientId);
+      const workspaceId = window.__X4_WORKSPACE_CONTEXT__?.getWorkspaceId() || '';
+      if (workspaceId) headers.set('x-workspace-id', workspaceId);
+      init = { ...init, headers };
     }
 
     // Fast path: anything that isn't an idempotent /api GET goes straight through.
-    if (!isApi || methodOf(input, init) !== 'GET') {
+    if (!isApi || (methodOf(input, init) !== 'GET' && !isWorkspaceBootstrap)) {
       return originalFetch.call(this, input, init);
     }
 
@@ -133,8 +152,35 @@ try {
   }
 }
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+async function bootstrapAndRender(): Promise<void> {
+  const attempt = async (workspaceId: string) => {
+    const response = await window.fetch('/api/agent/workspaces/bootstrap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId, ...(workspaceId ? { workspaceId } : {}) }),
+    });
+    const body = await response.json();
+    return { response, body };
+  };
+  let selected = window.__X4_WORKSPACE_CONTEXT__?.getWorkspaceId() || '';
+  let boot = await attempt(selected);
+  if (!boot.response.ok && selected && ['WORKSPACE_NOT_FOUND', 'WORKSPACE_ID_INVALID'].includes(String(boot.body?.code || ''))) {
+    sessionStorage.removeItem(WORKSPACE_ID_KEY);
+    selected = '';
+    boot = await attempt('');
+  }
+  if (!boot.response.ok || !boot.body?.workspaceId) {
+    throw new Error(boot.body?.error || `Workspace bootstrap failed (${boot.response.status}).`);
+  }
+  window.__X4_WORKSPACE_CONTEXT__?.selectWorkspace(String(boot.body.workspaceId));
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+}
+
+void bootstrapAndRender().catch(error => {
+  const root = document.getElementById('root');
+  if (root) root.textContent = `X4 Forge could not open a workspace: ${error instanceof Error ? error.message : String(error)}`;
+});
