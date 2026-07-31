@@ -1,0 +1,40 @@
+{
+  "players": {},
+  "sectors": {
+    "argon_prime": {
+      "id": "argon_prime",
+      "name": "Argon Prime",
+      "faction": "Argon",
+      "connected": ["the_reach", "second_flashpoint"],
+      "market": { "energy_cells": 12, "food_rations": 55, "advanced_electronics": 320 }
+    },
+    "the_reach": {
+      "id": "the_reach",
+      "name": "The Reach",
+      "faction": "Argon",
+      "connected": ["argon_prime", "grand_exchange_1"],
+      "market": { "energy_cells": 8, "food_rations": 40, "advanced_electronics": 380 }
+    },
+    "grand_exchange_1": {
+      "id": "grand_exchange_1",
+      "name": "Grand Exchange I",
+      "faction": "Teladi",
+      "connected": ["the_reach", "heretics_end"],
+      "market": { "energy_cells": 15, "food_rations": 60, "advanced_electronics": 290 }
+    },
+    "heretics_end": {
+      "id": "heretics_end",
+      "name": "Heretic's End",
+      "faction": "Neutral",
+      "connected": ["grand_exchange_1", "matrix_451"],
+      "market": { "energy_cells": 18, "food_rations": 75, "advanced_electronics": 450 }
+    },
+    "matrix_451": {
+      "id": "matrix_451",
+      "name": "Matrix #451",
+      "faction": "Xenon",
+      "connected": ["heretics_end"],
+      "market": {}
+    }
+  }
+}

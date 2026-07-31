@@ -1,0 +1,1371 @@
+[
+  {
+    "id": "forge-create-first-mod",
+    "title": "Creating a Mod from Scratch in X4 Forge Studio (From Nothing to Something)",
+    "keywords": [
+      "first step",
+      "make a mod",
+      "create a mod",
+      "how to start modding",
+      "getting started modding",
+      "new mod",
+      "from scratch",
+      "nothing to something"
+    ],
+    "fix": "To go from nothing to a working mod in X4 Forge Studio:\n1. First-Run Auto-Detect: On first boot, X4 Forge detects your X4 game directory (Steam/GOG) and extracts Egosoft's XSD schemas automatically.\n2. Three Ways to Create a Mod:\n   - Method A (Visual Canvas): Drag a Cue/Node from the Nodes Toolbox on the left sidebar. Forge initializes content.xml and serializes your nodes to XML.\n   - Method B (Stamp Proven Pattern): In the Patterns sidebar, pick a working formula (e.g. HTTP AI Integration, Station Listener) and click 'Stamp Pattern' for a 0-error starter mod.\n   - Method C (Empty Folder): Run 'X4 Forge: Open Mod Folder' (Ctrl+Shift+P). Point Forge to any empty folder — Forge automatically materializes content.xml and sets up md/, aiscripts/, and libraries/.\n3. Deploy: Click 'Sync Mod' in the top menu to compile, validate, and deploy directly to X4 Foundations/extensions/.",
+    "category": "x4_forge",
+    "matchCount": 0
+  },
+  {
+    "id": "known-fixes-list",
+    "title": "Known Issues & Verified Resolutions Catalog",
+    "keywords": [
+      "known-fixes",
+      "known fixes",
+      "known bugs",
+      "known issues",
+      "/known-fixes",
+      "bug list"
+    ],
+    "fix": "Here are our top verified resolutions:\n1. **Outdated Hotkey / BepInEx**: Walk up to any NPC in-game and select 'Speak with AI' (No BepInEx / Shift+C needed).\n2. **Player2 Port 4315**: Ensure Player2 companion app is running from https://player2.game.\n3. **X4 Forge Extension Stale**: Press Ctrl+Shift+P -> 'Developer: Reload Window'.\n4. **XSD Schema Validation Setup**: Set your X4 unpacked game path under Settings in X4 Forge Studio.",
+    "category": "system",
+    "matchCount": 0
+  },
+  {
+    "id": "shift-c-bepinex",
+    "title": "Outdated Hotkey / BepInEx Assumption",
+    "keywords": [
+      "shift c",
+      "shift+c",
+      "shift-c",
+      "bepinex"
+    ],
+    "fix": "x4 AiLive is a native X4 extension! You do NOT need BepInEx or Shift+C. Simply walk up to any NPC in-game and select 'Speak with AI' from the dialogue menu.",
+    "category": "x4_ailive",
+    "matchCount": 0
+  },
+  {
+    "id": "player2-port-4315",
+    "title": "Player2 AI Companion Connection Refused",
+    "keywords": [
+      "port 4315",
+      "player2 connection",
+      "player2 closed",
+      "companion app"
+    ],
+    "fix": "Ensure the free Player2 AI Companion app is running on your machine (https://player2.game). x4 AiLive communicates locally over http://127.0.0.1:4315.",
+    "category": "x4_ailive",
+    "matchCount": 0
+  },
+  {
+    "id": "extension-reload-window",
+    "title": "X4 Forge Extension Update Not Applied",
+    "keywords": [
+      "reload window",
+      "update not loading",
+      "extension stale"
+    ],
+    "fix": "After updating X4 Forge Studio in VS Code / Open VSX, press Ctrl+Shift+P (or Cmd+Shift+P) and run 'Developer: Reload Window' to ensure the latest extension backend engine loads cleanly.",
+    "category": "x4_forge",
+    "matchCount": 0
+  },
+  {
+    "id": "djfhe-http-missing",
+    "title": "DJFHE HTTP Transport Missing Warning",
+    "keywords": [
+      "djfhe",
+      "djfhe_http",
+      "http transport unavailable"
+    ],
+    "fix": "x4 AiLive is serverless (ADR-009) and includes built-in HTTP transport (aic_http.lua). Ensure the extension folder in X4 Foundations/extensions/ is named exactly x4_ai_influence.",
+    "category": "x4_ailive",
+    "matchCount": 0
+  },
+  {
+    "id": "forge-xsd-validation",
+    "title": "XSD Schema Validation Setup",
+    "keywords": [
+      "xsd error",
+      "schema validation",
+      "xml error",
+      "md.xsd"
+    ],
+    "fix": "In X4 Forge Studio, set your X4 unpacked game path under Settings (or config.json). X4 Forge automatically parses Egosoft's official XSD schemas (md.xsd, libraries.xsd) to provide real-time XML auto-completion and validation.",
+    "category": "x4_forge",
+    "matchCount": 0
+  },
+  {
+    "id": "forge-cat-dat-extraction",
+    "title": "CAT/DAT Vanilla Game File Indexing",
+    "keywords": [
+      "cat dat",
+      "cat/dat",
+      "extract vanilla",
+      "cat file"
+    ],
+    "fix": "X4 Forge includes native CAT/DAT archive indexing built-in. Open the CAT/DAT Explorer panel in the left sidebar to search, preview, and extract vanilla game files directly.",
+    "category": "x4_forge",
+    "matchCount": 0
+  },
+  {
+    "id": "forge-sidecar-api-port",
+    "title": "Forge Sidecar Server Port Allocation",
+    "keywords": [
+      "sidecar port",
+      "forge server",
+      "sidecar error",
+      "sidecar connection"
+    ],
+    "fix": "X4 Forge Studio runs a lightweight local sidecar API server inside VS Code. If a port conflict occurs, run 'Developer: Reload Window' (Ctrl+Shift+P) to re-allocate a fresh dynamic port automatically.",
+    "category": "x4_forge",
+    "matchCount": 0
+  },
+  {
+    "id": "forge-openvsx-install",
+    "title": "X4 Forge Extension Installation",
+    "keywords": [
+      "openvsx",
+      "open vsx",
+      "vsix install",
+      "install forge"
+    ],
+    "fix": "Install X4 Forge Studio directly from the Open VSX Marketplace: https://open-vsx.org/extension/x4forge/x4-forge-studio or search 'X4 Forge Studio' in VS Code Extensions.",
+    "category": "x4_forge",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-release-passed-their",
+    "title": "release and passed their local/installed/public-artifact gat",
+    "keywords": [
+      "release",
+      "passed",
+      "their",
+      "localinstalledpublicartifact"
+    ],
+    "fix": "release and passed their local/installed/public-artifact gates. The late-discovered legacy discovery-token migration defect",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/KNOWN-BUGS.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-import-payload-returns",
+    "title": "**Import payload returns HTTP 200 on rejection** ",
+    "keywords": [
+      "import",
+      "payload",
+      "returns",
+      "http",
+      "rejection"
+    ],
+    "fix": "**Import payload returns HTTP 200 on rejection** — 2 of 3 payload shapes return **200 with garbage** instead",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-unstable-node-across",
+    "title": "**Unstable node IDs** across imports ",
+    "keywords": [
+      "unstable",
+      "node",
+      "across",
+      "imports"
+    ],
+    "fix": "**Unstable node IDs** across imports — makes graph-level automation unreliable.",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-wizard-visuals",
+    "title": "**Wizard visuals ",
+    "keywords": [
+      "wizard",
+      "visuals"
+    ],
+    "fix": "**Wizard visuals — SEEN** (screenshots): centered \"Welcome to X4 Forge\" modal, \"Found X4:",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-freshboot-acceptance",
+    "title": "**Fresh-boot acceptance ",
+    "keywords": [
+      "freshboot",
+      "acceptance"
+    ],
+    "fix": "**Fresh-boot acceptance — PROVEN**: one click, zero typing, ~15s (<2min bar): detect →",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-eventuitriggered-event-without",
+    "title": "**`event_ui_triggered` (any `event_*`) cue without `instanti",
+    "keywords": [
+      "eventuitriggered",
+      "event",
+      "without",
+      "instanti"
+    ],
+    "fix": "**`event_ui_triggered` (any `event_*`) cue without `instantiate=\"true\"` → WARN.** Such a cue fires ONCE then",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-instantiated-that-sets",
+    "title": "**Instantiated cue that sets local `$vars` but lacks `namesp",
+    "keywords": [
+      "instantiated",
+      "that",
+      "sets",
+      "local",
+      "vars",
+      "lacks",
+      "namesp"
+    ],
+    "fix": "**Instantiated cue that sets local `$vars` but lacks `namespace=\"this\"` → WARN.** Per-instance scoping.",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-silent-killer",
+    "title": "**★ The silent killer ",
+    "keywords": [
+      "silent",
+      "killer"
+    ],
+    "fix": "**★ The silent killer — Lua-table key access off `event.param3`.** When a cue does `$x = event.param3` (a Lua",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-status-heuristic-erroronly",
+    "title": "**Status heuristic is error-only → misses SILENT failures.**",
+    "keywords": [
+      "status",
+      "heuristic",
+      "erroronly",
+      "misses",
+      "silent",
+      "failures"
+    ],
+    "fix": "**Status heuristic is error-only → misses SILENT failures.** \"No recent errors mentioning `ai_influence`\" is",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-livetailing-panel-needs",
+    "title": "**Not live-tailing.** The panel needs manual Refresh/Browse ",
+    "keywords": [
+      "livetailing",
+      "panel",
+      "needs",
+      "manual",
+      "refreshbrowse"
+    ],
+    "fix": "**Not live-tailing.** The panel needs manual Refresh/Browse and shows a summary, not the rolling tail. It",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-marker-dependence-rootcause",
+    "title": "**Marker dependence.** \"ROOT-CAUSE (live) ",
+    "keywords": [
+      "marker",
+      "dependence",
+      "rootcause",
+      "live"
+    ],
+    "fix": "**Marker dependence.** \"ROOT-CAUSE (live) — markers not seen\" assumes the mod emits debug markers; most don't.",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-marker-scan-collectmodlogmarkers",
+    "title": "**Marker scan (`collectModLogMarkers`)** ",
+    "keywords": [
+      "marker",
+      "scan",
+      "collectmodlogmarkers"
+    ],
+    "fix": "**Marker scan (`collectModLogMarkers`)** — reads the deployed mod's `ui/**/*.lua` and extracts the actual",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-runtimefault-attribution-countmodruntimeerrors",
+    "title": "**Runtime-fault attribution (`countModRuntimeErrors`)** ",
+    "keywords": [
+      "runtimefault",
+      "attribution",
+      "countmodruntimeerrors"
+    ],
+    "fix": "**Runtime-fault attribution (`countModRuntimeErrors`)** — a genuine engine/Lua fault (e.g.",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-frontend-playtestworkspacetsx-renders",
+    "title": "**Frontend (`PlaytestWorkspace.tsx`)** renders a red `RUNTIM",
+    "keywords": [
+      "frontend",
+      "playtestworkspacetsx",
+      "renders",
+      "runtim"
+    ],
+    "fix": "**Frontend (`PlaytestWorkspace.tsx`)** renders a red `RUNTIME` panel (`data-testid=mod-runtime-errors`) with the",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-benignnoise-exclusion-20260626",
+    "title": "**Benign-noise exclusion (2026-06-26 follow-on)** ",
+    "keywords": [
+      "benignnoise",
+      "exclusion",
+      "20260626",
+      "followon"
+    ],
+    "fix": "**Benign-noise exclusion (2026-06-26 follow-on)** — X4 logs `[error] [FileIO] Failed to verify the file",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-validated-ways-20260626",
+    "title": "**VALIDATED two ways (2026-06-26)",
+    "keywords": [
+      "validated",
+      "ways",
+      "20260626"
+    ],
+    "fix": "**VALIDATED two ways (2026-06-26):** (1) Forge diagnostics — `GET /api/agent/game-log/status?modId=ai_influence`",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-navigate-proven-pattern",
+    "title": "**Navigate (proven pattern, App.tsx ~L627)",
+    "keywords": [
+      "navigate",
+      "proven",
+      "pattern",
+      "apptsx",
+      "l627"
+    ],
+    "fix": "**Navigate (proven pattern, App.tsx ~L627):** `setSelectedNode(node)` + `setFocusNodeRequest({nodeId,",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-highlight-redyellow-rings",
+    "title": "**Highlight (red/yellow rings)",
+    "keywords": [
+      "highlight",
+      "redyellow",
+      "rings"
+    ],
+    "fix": "**Highlight (red/yellow rings):** the Canvas already highlights nodes from the `diagnostics: PackageDiagnostic[]`",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-done-verified",
+    "title": "**✅ G1 DONE & VERIFIED** ",
+    "keywords": [
+      "done",
+      "verified"
+    ],
+    "fix": "**✅ G2 DONE & VERIFIED** — `mdCompileSelftest.ts` (`runCompileSelftest`, public `GET /api/agent/compile-selftest`) compiles representative graphs and asserts the EMITTED XML (not node shape) for check_value (expression / operand+min / bare), reward_player, set_value, show_help (custom + duration unit), create_ship (owner child, no faction attr), and do_if body-nesting. **12/12 green.** This is the regression net that would have caught G1.",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-controlflow-doif-output",
+    "title": "Control-flow (`do_if` etc.) output is structurally correct b",
+    "keywords": [
+      "controlflow",
+      "doif",
+      "output",
+      "structurally",
+      "correct"
+    ],
+    "fix": "Control-flow (`do_if` etc.) output is structurally correct by inspection and passes selftests, but — as Ken noted — has **not been confirmed running in X4** the way the cue/event path has. That verification is the C2 capstone (excluded from this list by request) but remains the gating step before trusting control-flow end-to-end.",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-local-token-model",
+    "title": "**Local API token model** (sessionStorage + global `fetch` p",
+    "keywords": [
+      "local",
+      "token",
+      "model",
+      "sessionstorage",
+      "global",
+      "fetch"
+    ],
+    "fix": "**Local API token model** (sessionStorage + global `fetch` patch, `main.tsx:12`): fine for a localhost-only tool; only becomes a risk if the app is ever bound beyond localhost. A *deployment-config* decision, not a current flaw.",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-extension-doctor-exposure",
+    "title": "**Extension Doctor exposure**",
+    "keywords": [
+      "extension",
+      "doctor",
+      "exposure"
+    ],
+    "fix": "**Extension Doctor exposure**: powerful enough (scans installed extensions, can touch restricted content) that public exposure needs explicit scope + permission semantics. Address at release-gating time.",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-saveapply-boundaries",
+    "title": "**Save/apply boundaries**",
+    "keywords": [
+      "saveapply",
+      "boundaries"
+    ],
+    "fix": "**Save/apply boundaries**: \"test driving\" mutates real workspace state (localStorage + `/api/agent/workspace` sync). For public release users will expect clearer save/apply/discard semantics. Product decision, not a bug.",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-provider-localstorage-codex",
+    "title": "**AI provider API key in the DOM / localStorage** (Codex, 20",
+    "keywords": [
+      "provider",
+      "localstorage",
+      "codex"
+    ],
+    "fix": "**AI provider API key in the DOM / localStorage** (Codex, 2026-06-16): the key lives in `localStorage.user_<provider>_key` and appears as a password-input value in `AIConnectionModal` when open — readable by any page script. Fine for a localhost single-user dev tool, but a real concern if Forge ever goes multi-user, remote, or plugin-heavy (a malicious plugin/injected script could exfiltrate it). Revisit at release-gating: server-held key, OS keychain, or a credential broker. Not a current defect for local use.",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-alreadydone-reviewer-missed",
+    "title": "**Already-done, reviewer missed it**",
+    "keywords": [
+      "alreadydone",
+      "reviewer",
+      "missed"
+    ],
+    "fix": "**Already-done, reviewer missed it**: Gemini's \"auto-hide minimap when panel is narrow\" is G8b, shipped (`showMinimap = editorWidth >= 560`, task #74). If it isn't visibly firing, that's a threshold check, not net-new work.",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_forge-public-17812396byte-vsix",
+    "title": "; its public 17,812,396-byte VSIX exactly matches the instal",
+    "keywords": [
+      "public",
+      "17812396byte",
+      "vsix",
+      "exactly",
+      "matches",
+      "instal"
+    ],
+    "fix": "; its public 17,812,396-byte VSIX exactly matches the installed/tested artifact at SHA-256",
+    "category": "x4_forge",
+    "source": "Doc: X4_Forge/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-history-kens-session",
+    "title": "**HISTORY (Ken's session, live save)",
+    "keywords": [
+      "history",
+      "kens",
+      "session",
+      "live",
+      "save"
+    ],
+    "fix": "**HISTORY (Ken's session, live save):** `/api/ops/contractor_claims` → **Alliance of the Word claimed the",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-defect-fixed-route",
+    "title": "**Defect 1 (fixed en route)",
+    "keywords": [
+      "defect",
+      "fixed",
+      "route"
+    ],
+    "fix": "**Defect 1 (fixed en route):** governor rates were constructor-only — the daemon's decision drivers kept the",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-defect-constitutiongrade-caught",
+    "title": "**Defect 2 (constitution-grade, caught live, fixed + oracle'",
+    "keywords": [
+      "defect",
+      "constitutiongrade",
+      "caught",
+      "live",
+      "fixed",
+      "oracle"
+    ],
+    "fix": "**Defect 2 (constitution-grade, caught live, fixed + oracle'd):** contractor_candidates offered op-LESS jobs",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-validated-cited",
+    "title": "**VALIDATED (cited)",
+    "keywords": [
+      "validated",
+      "cited"
+    ],
+    "fix": "VALIDATED (cited): Forge `project/validate` on all 15 files (11 MD/content + ui.xml + 3 Lua): **structuralErrors 0,",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-found-right-tool",
+    "title": "**Found by the right tool, late",
+    "keywords": [
+      "found",
+      "right",
+      "tool",
+      "late"
+    ],
+    "fix": "**Found by the right tool, late:** Ken pointed at the Forge's debug-watcher, which had the answer on screen:",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-mechanism-gotcha-level",
+    "title": "**Mechanism (the #127 gotcha, one level deeper)",
+    "keywords": [
+      "mechanism",
+      "gotcha",
+      "level",
+      "deeper"
+    ],
+    "fix": "**Mechanism (the #127 gotcha, one level deeper):** the static Registry cue initializes `$ByJob` ONLY on",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-fixed-defense-depth",
+    "title": "**Fixed (defense in depth, 10 guarded touch points)",
+    "keywords": [
+      "fixed",
+      "defense",
+      "depth",
+      "guarded",
+      "touch",
+      "points"
+    ],
+    "fix": "**Fixed (defense in depth, 10 guarded touch points):** `Registry_heal` cue (10s self-heal — recreates the",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-fixed-pieces",
+    "title": "**Fixed (3 pieces)",
+    "keywords": [
+      "fixed",
+      "pieces"
+    ],
+    "fix": "**Fixed (3 pieces):** (1) `_VERB_TO_JT` hoisted to a class invariant — the job type always FOLLOWS the final",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-enroute-courtesy-wrapper",
+    "title": "En-route fix, courtesy of the #123 wrapper",
+    "keywords": [
+      "enroute",
+      "courtesy",
+      "wrapper"
+    ],
+    "fix": "En-route fix, courtesy of the #123 wrapper: first reconcile draft hit UNIQUE(save_id,job_key) — the 500",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-defect-trivial-duration",
+    "title": "**DEFECT (trivial duration)",
+    "keywords": [
+      "defect",
+      "trivial",
+      "duration"
+    ],
+    "fix": "**DEFECT (trivial duration):** patrol completed in ~1 MINUTE — my Destinations entry hardcodes",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-defect-economic-doctrine",
+    "title": "**DEFECT (economic doctrine ",
+    "keywords": [
+      "defect",
+      "economic",
+      "doctrine"
+    ],
+    "fix": "**DEFECT (economic doctrine — Ken):** \"these factions are broke and they're issuing 250k for a patrol...",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-board-evidence-also",
+    "title": "Board evidence also logged",
+    "keywords": [
+      "board",
+      "evidence",
+      "also",
+      "logged"
+    ],
+    "fix": "Board evidence also logged: duplicate same-name patrol offers (announce/re-list seam) + the flat-70k",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-accepted-escort-bound",
+    "title": "Ken accepted an escort and the bound \"convoy\" was ANT Fighte",
+    "keywords": [
+      "accepted",
+      "escort",
+      "bound",
+      "convoy",
+      "fighte"
+    ],
+    "fix": "Ken accepted an escort and the bound \"convoy\" was ANT Fighter Squadron Eclipse Vanguard. Root cause: my",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-lesson-canonworthy-third",
+    "title": "LESSON (canon-worthy, third instance today)",
+    "keywords": [
+      "lesson",
+      "canonworthy",
+      "third",
+      "instance",
+      "today"
+    ],
+    "fix": "LESSON (canon-worthy, third instance today): the engine ignores unknown ATTRIBUTES silently (purpose=) but",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-positive-sidefindings-from",
+    "title": "Positive side-findings from the same screenshot",
+    "keywords": [
+      "positive",
+      "sidefindings",
+      "from",
+      "same",
+      "screenshot"
+    ],
+    "fix": "Positive side-findings from the same screenshot: urgency-derived window LIVE (Time left 1:44:59 = 5h-window",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-strip-order",
+    "title": "**Strip (Ken order)",
+    "keywords": [
+      "strip",
+      "order"
+    ],
+    "fix": "**Strip (Ken order):** `[TEST] Declare war on me` wheel choice + ForceWar_handler removed from",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-abort-reputation-order",
+    "title": "**Abort reputation (Ken order)",
+    "keywords": [
+      "abort",
+      "reputation",
+      "order"
+    ],
+    "fix": "**Abort reputation (Ken order):** MD Aborted cue now applies `add_faction_relation -0.02",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-validated-live-cited",
+    "title": "VALIDATED LIVE (cited, debuglog 5380.18–5380.28 after F5/F9 ",
+    "keywords": [
+      "validated",
+      "live",
+      "cited",
+      "debuglog",
+      "538018538028",
+      "after",
+      "f5f9"
+    ],
+    "fix": "VALIDATED LIVE (cited, debuglog 5380.18–5380.28 after F5/F9 reload): `opord poll: POST sent` → bridge instrument",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-unexplained-watch-item",
+    "title": "⚠ UNEXPLAINED (watch item)",
+    "keywords": [
+      "unexplained",
+      "watch",
+      "item"
+    ],
+    "fix": "⚠ UNEXPLAINED (watch item): during the PREVIOUS reload window, two polls returned pending=1 but On_Assign never",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-closed-20260701-naturalcadence",
+    "title": "✅ CLOSED 2026-07-01 (natural-cadence proof, zero manual driv",
+    "keywords": [
+      "closed",
+      "20260701",
+      "naturalcadence",
+      "proof",
+      "zero",
+      "manual",
+      "driv"
+    ],
+    "fix": "✅ CLOSED 2026-07-01 (natural-cadence proof, zero manual driving): opord_poll.log shows 10 game polls at ~120s",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-proven-live-endtoend",
+    "title": "✅ PROVEN LIVE end-to-end to the order (all real components, ",
+    "keywords": [
+      "proven",
+      "live",
+      "endtoend",
+      "order",
+      "real",
+      "components"
+    ],
+    "fix": "✅ PROVEN LIVE end-to-end to the order (all real components, no stubs): injected hostile event via",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-defect-blocks-shipmoves",
+    "title": "✗ NEW DEFECT (◐ blocks the ship-moves proof)",
+    "keywords": [
+      "defect",
+      "blocks",
+      "shipmoves",
+      "proof"
+    ],
+    "fix": "✗ NEW DEFECT (◐ blocks the ship-moves proof): post-quickload, the game's `PollOpordOrders` NEVER reaches the",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-diag-residue-intentional",
+    "title": "DIAG RESIDUE (intentional, remove when #70 closes)",
+    "keywords": [
+      "diag",
+      "residue",
+      "intentional",
+      "remove",
+      "when",
+      "closes"
+    ],
+    "fix": "DIAG RESIDUE (intentional, remove when #70 closes): the TEMP poll-logger in `router.opord_orders_pending`;",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-gotchas-banked",
+    "title": "GOTCHAS BANKED",
+    "keywords": [
+      "gotchas",
+      "banked"
+    ],
+    "fix": "GOTCHAS BANKED: (a) host file-tool edits don't always trip the run+watch watcher — `touch` the file via the",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-keystone-flipped-player",
+    "title": "✅ **THE KEYSTONE ◐ IS FLIPPED for the player surfaces.** For",
+    "keywords": [
+      "keystone",
+      "flipped",
+      "player",
+      "surfaces"
+    ],
+    "fix": "✅ **THE KEYSTONE ◐ IS FLIPPED for the player surfaces.** Foregrounded X4 (computer-use) on the live save with the",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-cadence-context",
+    "title": "Cadence context",
+    "keywords": [
+      "cadence",
+      "context"
+    ],
+    "fix": "Cadence context: daemon's first post-gameload strategic tick delivered the batch; forced /api/ops/decision_tick",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-fixed-real-ingame",
+    "title": "✗→FIXED two REAL in-game load errors found by the Forge debu",
+    "keywords": [
+      "fixed",
+      "real",
+      "ingame",
+      "load",
+      "errors",
+      "found",
+      "forge",
+      "debu"
+    ],
+    "fix": "✗→FIXED two REAL in-game load errors found by the Forge debug-log watcher (game-log/status: 16 issues = 11",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-reloadverified-20260701",
+    "title": "✅ RELOAD-VERIFIED 2026-07-01 21",
+    "keywords": [
+      "reloadverified",
+      "20260701"
+    ],
+    "fix": "✅ RELOAD-VERIFIED 2026-07-01 21:06Z (quicksave F5 → quickload F9 driven via computer-use, per Ken's method):",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-still-open-next",
+    "title": "◐ STILL OPEN (next keystone)",
+    "keywords": [
+      "still",
+      "open",
+      "next",
+      "keystone"
+    ],
+    "fix": "◐ STILL OPEN (next keystone): the full OPORD live-loop proof — Shift+V debug threat → operation forms → Player2",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-found-live-forced",
+    "title": "FOUND live (forced /api/ops/scheduled_scene on the active sa",
+    "keywords": [
+      "found",
+      "live",
+      "forced",
+      "apiopsscheduledscene",
+      "active"
+    ],
+    "fix": "FOUND live (forced /api/ops/scheduled_scene on the active save, argon↔antigone): emitted",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-validated-cited-name",
+    "title": "VALIDATED (cited by name)",
+    "keywords": [
+      "validated",
+      "cited",
+      "name"
+    ],
+    "fix": "VALIDATED (cited by name): relation_move_validator_selftest **7/7** (new check `out_of_band_cur_not_amplified`:",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-exposure-note",
+    "title": "⚠ EXPOSURE NOTE",
+    "keywords": [
+      "exposure",
+      "note"
+    ],
+    "fix": "⚠ EXPOSURE NOTE: the daemon's first post-gameload strategic tick (pre-fix) may have delivered ONE amplified",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-endpoint-post-v1roleraganalyze",
+    "title": "**Endpoint** `POST /v1/rolerag/analyze` accepts `local_facts",
+    "keywords": [
+      "endpoint",
+      "post",
+      "v1roleraganalyze",
+      "accepts",
+      "localfacts"
+    ],
+    "fix": "**Endpoint** `POST /v1/rolerag/analyze` accepts `local_facts` for validation; debug `POST /v1/warphase/test`.",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-verified-live-v1roleraganalyze",
+    "title": "**VERIFIED (live, `/v1/rolerag/analyze`)",
+    "keywords": [
+      "verified",
+      "live",
+      "v1roleraganalyze"
+    ],
+    "fix": "**VERIFIED (live, `/v1/rolerag/analyze`):** with `local_facts=[Vigilant]`, \"tell me about the Vigilant\" →",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-perskill-reader-rebuilt",
+    "title": "**Per-skill reader REBUILT + live-verified.** `GetComponentD",
+    "keywords": [
+      "perskill",
+      "reader",
+      "rebuilt",
+      "liveverified",
+      "getcomponentd"
+    ],
+    "fix": "**Per-skill reader REBUILT + live-verified.** `GetComponentData(npc,\"skills\")` was gone from every copy/",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-forge-roundtrip-found",
+    "title": "**Forge round-trip bug (found by deploying the real mod, the",
+    "keywords": [
+      "forge",
+      "roundtrip",
+      "found",
+      "deploying",
+      "real"
+    ],
+    "fix": "**Forge round-trip bug (found by deploying the real mod, then FIXED in the Forge).** Node→MD regen dropped",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-chat-autoopenonload",
+    "title": "**Chat auto-open-on-load ",
+    "keywords": [
+      "chat",
+      "autoopenonload"
+    ],
+    "fix": "**Chat auto-open-on-load — ◐ REGRESSED (the `_openRequested` gate is NOT holding).** Gated",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-economy-production-half",
+    "title": "**Economy (#10, production half) ✅** ",
+    "keywords": [
+      "economy",
+      "production",
+      "half"
+    ],
+    "fix": "**Economy (#10, production half) ✅** — `GetContainedStationsByOwner(fid,nil,true)` → union station",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-shipsfleets-liveverified-ingame",
+    "title": "**Ships/Fleets (#9) ✅ LIVE-VERIFIED in-game** ",
+    "keywords": [
+      "shipsfleets",
+      "liveverified",
+      "ingame"
+    ],
+    "fix": "**Ships/Fleets (#9) ✅ LIVE-VERIFIED in-game** — two parts: (a) the **conversation NPC's own",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-hardwon-gotcha-cost",
+    "title": "**HARD-WON GOTCHA (cost the whole census ~6 reload cycles)",
+    "keywords": [
+      "hardwon",
+      "gotcha",
+      "cost",
+      "whole",
+      "census",
+      "reload",
+      "cycles"
+    ],
+    "fix": "**HARD-WON GOTCHA (cost the whole census ~6 reload cycles):** the enumerator MUST be called with a",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-live-numbers-save",
+    "title": "**Live numbers (save game_301276512, verified on dashboard)",
+    "keywords": [
+      "live",
+      "numbers",
+      "save",
+      "game301276512",
+      "verified",
+      "dashboard"
+    ],
+    "fix": "**Live numbers (save game_301276512, verified on dashboard):** xenon 1990 ships (1810 fight / 180 mine /",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-validation-path-used",
+    "title": "**Validation path used",
+    "keywords": [
+      "validation",
+      "path",
+      "used"
+    ],
+    "fix": "**Validation path used:** authored via Forge workspace + `/api/agent/deploy`; reloaded the live game by",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-losses-other-half",
+    "title": "**War losses (#10 other half) ✅ LIVE-VERIFIED in-game** ",
+    "keywords": [
+      "losses",
+      "other",
+      "half",
+      "liveverified",
+      "ingame"
+    ],
+    "fix": "**War losses (#10 other half) ✅ LIVE-VERIFIED in-game** — instead of hooking galaxy-wide",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-tier3-strategic-deriver",
+    "title": "**Tier-3 strategic deriver (#11) ✅ LIVE-VERIFIED (keystone)*",
+    "keywords": [
+      "tier3",
+      "strategic",
+      "deriver",
+      "liveverified",
+      "keystone"
+    ],
+    "fix": "**Tier-3 strategic deriver (#11) ✅ LIVE-VERIFIED (keystone)** — the Strategic Pressures table and the",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-deliberately-fabricated-each",
+    "title": "*Deliberately NOT fabricated (each needs its own substrate, ",
+    "keywords": [
+      "deliberately",
+      "fabricated",
+      "each",
+      "needs",
+      "substrate"
+    ],
+    "fix": "*Deliberately NOT fabricated (each needs its own substrate, scoped next):* **piracy_pressure** (no piracy/",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-lifecycle-statuses-deterministic",
+    "title": "N2 = lifecycle statuses + deterministic acceptance scoring (",
+    "keywords": [
+      "lifecycle",
+      "statuses",
+      "deterministic",
+      "acceptance",
+      "scoring"
+    ],
+    "fix": "N2 = lifecycle statuses + deterministic acceptance scoring (§3,§6)",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-rich-contextjson-refusalacceptbrokenadjustrelati",
+    "title": "N3 = rich context_json + refusal/accept/broken→adjust_relati",
+    "keywords": [
+      "rich",
+      "contextjson",
+      "refusalacceptbrokenadjustrelati"
+    ],
+    "fix": "N3 = rich context_json + refusal/accept/broken→adjust_relationship + OPORD task-state-follows-agreement (§4,§5,§7)",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-world-events-state",
+    "title": "N4 = world events on state TRANSITIONS only + dashboard agre",
+    "keywords": [
+      "world",
+      "events",
+      "state",
+      "transitions",
+      "only",
+      "dashboard",
+      "agre"
+    ],
+    "fix": "N4 = world events on state TRANSITIONS only + dashboard agreements panel + health warnings (§9,§10)",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-start-bridge-from",
+    "title": "Start bridge from staged and live `x4_neural_link`.",
+    "keywords": [
+      "start",
+      "bridge",
+      "from",
+      "staged",
+      "live",
+      "x4neurallink"
+    ],
+    "fix": "Start bridge from staged and live `x4_neural_link`.",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-invokerestmethod-http",
+    "title": "`Invoke-RestMethod http",
+    "keywords": [
+      "invokerestmethod",
+      "http"
+    ],
+    "fix": "`Invoke-RestMethod http://127.0.0.1:8713/health` returns bridge status.",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-synthetic-post-v1request",
+    "title": "Synthetic `POST /v1/request` accepted.",
+    "keywords": [
+      "synthetic",
+      "post",
+      "v1request",
+      "accepted"
+    ],
+    "fix": "Synthetic `POST /v1/request` accepted.",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-v1responseid-returns-processed",
+    "title": "`GET /v1/response/{id}` returns the processed response.",
+    "keywords": [
+      "v1responseid",
+      "returns",
+      "processed",
+      "response"
+    ],
+    "fix": "`GET /v1/response/{id}` returns the processed response.",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-v1updatespool-returns-processed",
+    "title": "`GET /v1/updates_pool` returns the processed response.",
+    "keywords": [
+      "v1updatespool",
+      "returns",
+      "processed",
+      "response"
+    ],
+    "fix": "`GET /v1/updates_pool` returns the processed response.",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-duplicate-request-idempotent",
+    "title": "Duplicate request IDs are idempotent while pending or comple",
+    "keywords": [
+      "duplicate",
+      "request",
+      "idempotent",
+      "while",
+      "pending",
+      "comple"
+    ],
+    "fix": "Duplicate request IDs are idempotent while pending or complete.",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-unsafe-request-like",
+    "title": "Unsafe request IDs like `../bad` are rejected.",
+    "keywords": [
+      "unsafe",
+      "request",
+      "like",
+      "rejected"
+    ],
+    "fix": "Unsafe request IDs like `../bad` are rejected.",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-faction-diplomacy-modules",
+    "title": "No faction diplomacy modules are imported.",
+    "keywords": [
+      "faction",
+      "diplomacy",
+      "modules",
+      "imported"
+    ],
+    "fix": "No faction diplomacy modules are imported.",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-ordergate-never-checked",
+    "title": "`ordergate` never checked that supplied params were *declare",
+    "keywords": [
+      "ordergate",
+      "never",
+      "checked",
+      "that",
+      "supplied",
+      "params",
+      "were",
+      "declare"
+    ],
+    "fix": "`ordergate` never checked that supplied params were *declared* (X4 ignores unknown names → runs on default)",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-gates-were-being",
+    "title": "the 12 gates were being run from the **deployed** tree, vali",
+    "keywords": [
+      "gates",
+      "were",
+      "being",
+      "from",
+      "deployed",
+      "tree",
+      "vali"
+    ],
+    "fix": "the 12 gates were being run from the **deployed** tree, validating the previous build (FB-9)",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-deploypy-printed-fidelity",
+    "title": "`deploy.py` printed `FIDELITY OK` over a deploy that never h",
+    "keywords": [
+      "deploypy",
+      "printed",
+      "fidelity",
+      "over",
+      "deploy",
+      "that",
+      "never"
+    ],
+    "fix": "`deploy.py` printed `FIDELITY OK` over a deploy that never happened, and resolved its gate paths from the",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/ROADMAP.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-grounding-proven-live",
+    "title": "**U1 (P3-a) grounding PROVEN in a live wheel conversation",
+    "keywords": [
+      "grounding",
+      "proven",
+      "live",
+      "wheel",
+      "conversation"
+    ],
+    "fix": "**U1 (P3-a) grounding PROVEN in a live wheel conversation:** typed \"My name is Commander Vega. What sector",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/BACKLOG.md",
+    "matchCount": 0
+  },
+  {
+    "id": "doc-x4_ai_influence-defect-specd",
+    "title": "**DEFECT D-B `spec'd` ",
+    "keywords": [
+      "defect",
+      "specd"
+    ],
+    "fix": "**DEFECT D-B `spec'd` — direct chat is SLOW (~10-13s) while the bridge runs:** the direct :4315 lane and the",
+    "category": "x4_ailive",
+    "source": "Doc: x4_ai_influence/BACKLOG.md",
+    "matchCount": 0
+  }
+]

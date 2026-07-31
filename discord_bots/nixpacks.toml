@@ -1,0 +1,2 @@
+[start]
+cmd = "node forge_discord_bot.mjs & node ailive_discord_bot.mjs"

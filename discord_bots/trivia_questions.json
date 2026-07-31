@@ -1,0 +1,72 @@
+[
+  {
+    "id": "t1",
+    "question": "Which faction is known for worshipping the 'Three-Fold Path' and piloting ships with unique tri-fold symmetry?",
+    "options": ["Paranid", "Teladi", "Argon", "Split"],
+    "correctIndex": 0,
+    "explanation": "The Paranid religion revolves around geometry, numbers, and the Three-Fold Path."
+  },
+  {
+    "id": "t2",
+    "question": "What is the primary profit-obsessed faction in X4 Foundations?",
+    "options": ["Boron", "Teladi Company", "Terran Protectorate", "Free Families"],
+    "correctIndex": 1,
+    "explanation": "The Teladi Company lives and breathes profit and trade credits above all else."
+  },
+  {
+    "id": "t3",
+    "question": "Which rare mineral yields high credits per unit when mined in resource fields?",
+    "options": ["Ore", "Silicon", "Nividium", "Ice"],
+    "correctIndex": 2,
+    "explanation": "Nividium is a high-value rare mineral mined from select asteroid fields."
+  },
+  {
+    "id": "t4",
+    "question": "In X4 Foundations modding, what XML schema file governs Mission Director scripts?",
+    "options": ["aiscripts.xsd", "md.xsd", "libraries.xsd", "content.xsd"],
+    "correctIndex": 1,
+    "explanation": "md.xsd defines the schema rules for all Mission Director XML scripts."
+  },
+  {
+    "id": "t5",
+    "question": "What is the file name of the manifest required inside every X4 extension folder?",
+    "options": ["mod.json", "manifest.xml", "content.xml", "info.txt"],
+    "correctIndex": 2,
+    "explanation": "content.xml is the required Egosoft manifest defining mod ID, title, and version."
+  },
+  {
+    "id": "t6",
+    "question": "What local AI companion app connects x4 AiLive directly to local LLMs with 0 setup?",
+    "options": ["Player2", "SteamVR", "BepInEx", "ModOrganizer"],
+    "correctIndex": 0,
+    "explanation": "Player2 (player2.game) runs locally on port 4315 to provide serverless AI dialogue."
+  },
+  {
+    "id": "t7",
+    "question": "Which hostile cybernetic faction threatens the entire galaxy with red-hulled drone ships?",
+    "options": ["Kha'ak", "Xenon", "Yaki", "Vigor Syndicate"],
+    "correctIndex": 1,
+    "explanation": "The Xenon are an autonomous terraformer AI that turned rogue and hostile."
+  },
+  {
+    "id": "t8",
+    "question": "What sector is home to the central Teladi Trade Station in vanilla X4?",
+    "options": ["Grand Exchange I", "Argon Prime", "Heretic's End", "Second Flashpoint"],
+    "correctIndex": 0,
+    "explanation": "Grand Exchange I is the signature Teladi sector where Player HQ is often located."
+  },
+  {
+    "id": "t9",
+    "question": "In X4 Mission Director XML, what tag represents the top-level container for logic cues?",
+    "options": ["<actions>", "<cues>", "<events>", "<conditions>"],
+    "correctIndex": 1,
+    "explanation": "The <cues> element holds all child <cue> logic blocks inside an <mdscript>."
+  },
+  {
+    "id": "t10",
+    "question": "What is the capital ship class designated for massive carrier operations in X4?",
+    "options": ["Destroyer (L)", "Frigate (M)", "Carrier (XL)", "Corvette (M)"],
+    "correctIndex": 2,
+    "explanation": "XL Carriers launch fighter wings and repair fleet ships in major sector battles."
+  }
+]
