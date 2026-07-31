@@ -9,7 +9,9 @@
 ### B110 · Kimi R1-R21 execution program `in_progress` (P1, DURABLE LEDGER)
 
 The complete recommendation set is now reconciled instead of living in the deleted KNOWN-BUGS addendum.
-Current verdict: R1/R2/R3/R4/R5/R6/R9/R10/R12/R15/R16/R19/R20 verified; R11/R13/R21 open; the rest partial.
+Current verdict: R1/R2/R3/R4/R5/R6/R9/R10/R12/R15/R16/R19/R20 verified; R11/R14 implemented,
+publicly packaged, and isolated-installed-runtime proven but signed-in visual proof remains partial; R13/R21 open;
+R7/R8/R17/R18 partial.
 Execute only as bounded workflow tasks in the recorded order—never as a sweeping
 cleanup—and update each row after every implementation. Ledger:
 `docs/plans/2026-07-29-kimi-recommendations-ledger.md`.
@@ -22,8 +24,11 @@ suppression is VERIFIED in `docs/plans/2026-07-30-diagnostic-guidance-suppressio
 **Closed validation-truth unit:** R2 content-addressed last-green validation baselines and new/resolved warning delta
 is VERIFIED in `docs/plans/2026-07-30-validation-delta-baselines.md`, installed/published as Open VSX 0.0.61, with
 public-byte parity and exact-SHA Quality `30592259549`.
-**Next bounded unit:** reconcile/specify R11 conflict dialog v2 with R14 recoverable destructive operations before
-implementation; do not confuse transaction-time rollback with later user undo.
+**Active bounded unit:** R11 conflict dialog v2 with R14 recoverable destructive operations is `PARTIAL` in
+`docs/plans/2026-07-30-conflict-recovery.md`. Implementation and isolated gates are green; stable Open VSX 0.0.62
+is public with exact local/store byte parity. Remaining: standing-gated Antigravity install/reload, real rendered
+conflict + Agent History evidence, durable close records, precommit, commit, and push. Transaction rollback remains
+separate from later hash-bound recovery.
 
 **Post-Kimi authorized research program (queued; do not start before R1-R21 close):** reconcile
 `F:\Downskies\X4 Foundations Modding Tooling Research for IDE Extension Opportunities.md` and

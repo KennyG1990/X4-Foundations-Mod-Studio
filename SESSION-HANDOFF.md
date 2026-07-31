@@ -4,41 +4,46 @@ Updated: 2026-07-30
 
 ## One-line state
 
-B110-R2 content-addressed last-green validation delta is VERIFIED, installed/published as Open VSX 0.0.61, and
-passed exact-SHA Quality. The next bounded Kimi unit is R11 conflict dialog v2 plus R14 recoverable destructive ops.
+B110-R11/R14 source, negative paths, isolated runtime, stable 0.0.62 package, public byte parity, and disposable
+installed Antigravity runtime are complete; the signed-in normal-profile visual gate remains `PARTIAL` behind the
+explicit standing-install approval. Commit/push the exact public source, then implement Kimi R7 writer discipline.
 
 ## Operator brief
 
 - Project: `F:\DEV_ENV\X4_Forge` (Forge application/Antigravity extension, not the live X4 mod).
-- Machine state: Ken explicitly released the machine. Installed-host proof used the existing DeadAir workspace
-  read-only; no validation baseline was recorded, no deploy ran, and no real mod/game file was written.
-- Eyeball queue: none for R2. Installed Antigravity evidence is
-  `vscode-extension/evidence/0.0.61-validation-delta-antigravity.png`.
-- Commit question: implementation `b1aa571176100b3de4b9a8b63c3b23e992c1b95f` is pushed and exact-SHA Quality
-  `30592259549` passed. Commit/push this durable evidence close before starting R11/R14.
+- Machine state: Computer Use is released. The disposable Antigravity proof process tree is fully stopped. The game
+  and real mod were not touched. Ask again before validation-heavy/e2e work.
+- Eyeball queue:
+  - R11/R14 — after Ken says `go install 0.0.62`, install the exact VSIX into the normal signed-in Antigravity
+    profile, reload, open X4 Forge Studio, trigger the conflict only against a disposable state root, inspect the
+    conflict consequences and Agent History recovery, and save a 0.0.62 evidence screenshot.
+- Commit question: 0.0.62 is already public. Commit and push the accurately PARTIAL R11/R14 source after
+  `npm run precommit:check`; never include the two modified 0.0.35 images or `Note for Kimi.md`.
 
-## B110-R2 close: VERIFIED
+## B110-R11/R14 close: PARTIAL
 
-- One bounded atomic server-owned store keeps deterministic last-green validation snapshots per mod. Explicit green
-  project validation and fully successful non-dry deploy may promote; compile/package polling, dry-run, failure, and
-  corrupt-state paths cannot.
-- Project validation, compile/package, deploy preflight, and Diagnostics Center compare the same flattened full-
-  project warning currency. The UI exposes honest no-baseline and new/resolved/unchanged states.
-- Evidence: delta selftest 6/6; routes 261/261; focused E2E 2/2; oracles 122/122; decisive full E2E 48/48 in 443.8s
-  with zero failed/flaky/bad/quarantined and ports closed; typecheck/lint/build/precommit/graph; staged probe 16/16;
-  VSIX inspection 2,091 entries PASS.
-- Installed Antigravity registry reports `x4forge.x4-forge-studio@0.0.61`; host reload started managed sidecar
-  `:61473` and visibly rendered `Since last green`. Public/local 0.0.61 parity is 17,881,788 bytes, SHA-256
-  `2AE39B02565B0C559C113A574F7FE76BD3B8987B7258B0B0CD2F599A326B838A`.
-- Exact-SHA public Quality run `30592259549`, job `91036917495`, passed every clean Windows product step at
-  `b1aa571176100b3de4b9a8b63c3b23e992c1b95f`; inspected artifact `8778825824` is retained through 2026-08-14.
+- Real workspace save provenance, both content heads, deterministic bounded file/text conflict evidence, explicit
+  Cancel/adopt/overwrite consequences, progress/error/outcome truth, and local Undo on server adoption are built.
+- Forced workspace overwrite and successful verified deploy have bounded, expiring, one-use durable recovery
+  receipts with post-state CAS, payload hashes, path/size confinement, rollback-safe receipt finalization, and
+  honest Agent History revertibility. Failed/dry deploys never claim recovery.
+- Evidence: typecheck PASS; lint 0 errors/555 pre-existing warnings; routes 275/275; oracles 124/124; artifact
+  pipeline 52/52; build PASS; full E2E 50/50 with zero failed/flaky/bad; staged product 16/16; VSIX 2,091 entries.
+- Open VSX 0.0.62 exactly matches local bytes: 17,893,929 bytes, SHA-256
+  `A1A4776FC7521A5174D50D4DADCF9FDCA59BBC74E3673CEBCCAF3E554E5BF1ED`.
+- Disposable Antigravity IDE 1.107.0 installed that exact VSIX, loaded Forge `v1.0.389`, and started its isolated
+  sidecar on port 62690. Fresh-profile login covered the editor, so the visual gate remains partial. Receipt:
+  `vscode-extension/evidence/0.0.62-installed-antigravity-runtime.txt`.
 
-## Next action
+## Current next action
 
-1. Begin R11+R14 as a new Full-lane bounded unit: reconcile every adopt/import/deploy conflict or destructive action,
-   distinguish transaction rollback from later undo, then document timestamps/counts/diff/outcome/CAS acceptance.
-2. Continue Kimi order: R8+R17, R13, R18+R21, final recommendation reconciliation.
-3. Only after R1-R21 closes, execute the queued two-document community-tool research program in `BACKLOG.md`.
+1. Run precommit, stage only task-owned R11/R14 files, commit `feat(recovery): explain conflicts and undo destructive
+   actions`, push main, and assert `origin/main == HEAD`.
+2. R7 Full lane: inventory every durable production writer; retain existing workspace/deploy/release/SQLite/history
+   transaction authorities; migrate uncatalogued authoritative/credential/config writers to the shared atomic
+   contract; add a source-enforced inventory and negative crash/failure fixtures.
+3. Continue Kimi order: R8/R17, R13, R18/R21.
+4. Only after Kimi R1-R21 closes, reconcile and implement the two queued Downskies community-tool research documents.
 
 ## Live hazards and ownership
 
@@ -46,13 +51,12 @@ passed exact-SHA Quality. The next bounded Kimi unit is R11 conflict dialog v2 p
   - `vscode-extension/evidence/0.0.35-runtime-copy-live.png`
   - `vscode-extension/evidence/0.0.35-runtime-copy-startup.png`
 - Preserve unrelated untracked `Note for Kimi.md`.
-- `.tmp_public_x4-forge-studio-0.0.61.vsix` is ignored verification output containing the exact public replay bytes.
-- The first full E2E outer wrapper timed out before its receipt and left the isolated stack; only exact 3100/3101
-  trees were stopped. The decisive rerun passed 48/48 and closed both ports.
-- Use `bin\antigravity-ide.cmd`, not the GUI executable, for extension install; prove registry and live host because
-  unrelated analytics teardown can fault after a successful install.
-- A retry-pass is red. Do not rerun a flaky gate to manufacture green.
+- The normal Antigravity installation remains 0.0.61 until the explicit standing-config gate; do not infer approval.
+- Retained rollback package: `%TEMP%\x4forge-public-0.0.61.vsix`, SHA-256
+  `2AE39B02565B0C559C113A574F7FE76BD3B8987B7258B0B0CD2F599A326B838A`.
+- E2E is serial and owns only ephemeral ports 3100/3101. Always verify teardown and live workspace invariance.
+- R11/R14 AAR hazards are recorded in `docs/plans/2026-07-30-conflict-recovery.md`.
 
 ## Suggested close commit title
 
-`docs(validation): verify warning delta release`
+`feat(recovery): explain conflicts and undo destructive actions`

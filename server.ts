@@ -108,6 +108,8 @@ import { computeModDrift, fingerprintModFolder, flattenProjectValidation, getSch
 import { buildRemediationCapsules, runAgentLoopSelftest, runRepairLoop, type LoopDiagnostic } from "./src/lib/agentLoop";
 import { assessSourceSync, hashFolderFingerprint, runCompileFidelitySelftest } from "./src/lib/compileFidelity";
 import { workspaceContentHash, runWorkspaceIdentitySelftest } from "./src/lib/workspaceIdentity";
+import { buildWorkspaceConflictPreview, runWorkspaceConflictSelftest } from "./src/lib/workspaceConflict";
+import { DestructiveRecoveryStore, runDestructiveRecoverySelftest, type DeploymentRecoveryRecord } from "./src/lib/destructiveRecovery";
 import { mdStemFingerprint, runMdFileIdentitySelftest } from "./src/lib/mdFileIdentity";
 import { layoutImportedGraphBatch, runImportedGraphLayoutSelftest } from "./src/lib/importedGraphLayout";
 import { runXmlSourceSpanSelftest } from "./src/lib/xmlSourceSpans";
@@ -559,6 +561,7 @@ if (TIMEOUT_DRILL_DELAY_MS > 0) {
 // break the work it records, so every step is wrapped and faults are counted, not thrown.
 // ---------------------------------------------------------------------------
 const agentHistoryStore = new AgentHistoryStore();
+const destructiveRecoveryStore = new DestructiveRecoveryStore({ root: dataPath('recoveries') });
 
 function ledgerActor(req: express.Request): { kind: 'agent' | 'studio'; label: string } {
   const actor = (req as any).__actor;
@@ -754,7 +757,10 @@ function ledgerMiddleware(req: express.Request, res: express.Response, next: exp
         routePath: fullPath,
         nodes: touchedNodes,
       });
-      const rule = revertibility(kind, described.outcome, !!beforeBlob);
+      const recovery = captured?.recovery && typeof captured.recovery.id === 'string'
+        ? captured.recovery as { id: string; kind?: 'workspace' | 'deploy'; expectedCurrentHash?: string; expiresAt?: string }
+        : undefined;
+      const rule = revertibility(kind, described.outcome, !!beforeBlob, !!recovery);
       const row: LedgerRow = {
         id: `${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}`,
         ts: new Date().toISOString(),
@@ -772,6 +778,12 @@ function ledgerMiddleware(req: express.Request, res: express.Response, next: exp
         ...(binary ? { binary } : {}),
         ...(diagnosticsBlob ? { diagnosticsBlob, diagnosticsCount } : {}),
         ...(fileEffect ? { fileEffect } : {}),
+        ...(recovery ? {
+          recoveryId: recovery.id,
+          recoveryKind: recovery.kind,
+          recoveryExpectedHash: recovery.expectedCurrentHash,
+          recoveryExpiresAt: recovery.expiresAt,
+        } : {}),
         ...(touchedNodes && touchedNodes.length ? { nodes: touchedNodes } : {}),
         revertible: rule.revertible,
         ...(rule.reason ? { revertReason: rule.reason } : {}),
@@ -2386,6 +2398,8 @@ function writeReleasePreferencesState(raw: unknown): ReleasePreferences {
 // install where nothing was ever persisted and nothing has been written this run.
 let hadPersistedStateAtBoot = false;
 let anyCommitSinceBoot = false;
+let activeWorkspaceSavedAt = new Date().toISOString();
+let activeWorkspaceOrigin = 'boot-default';
 {
   const saved = readActiveState(STUDIO_STATE_DIR);
   if (saved) {
@@ -2393,6 +2407,8 @@ let anyCommitSinceBoot = false;
     // Monotonic across restarts: never fall below what clients already saw.
     workspaceVersion = Math.max(Date.now(), saved.version + 1);
     hadPersistedStateAtBoot = true;
+    activeWorkspaceSavedAt = saved.savedAt;
+    activeWorkspaceOrigin = saved.origin;
     console.log(`[state] restored persisted workspace "${activeWorkspace.name}" (v${saved.version}, saved ${saved.savedAt})`);
   }
 }
@@ -2404,6 +2420,7 @@ let anyCommitSinceBoot = false;
  * Loading a DIFFERENT mod parks the previous state instead of destroying it.
  */
 function commitActiveWorkspace(next: ModWorkspace, origin: string): void {
+  const committedAt = new Date().toISOString();
   const nameSwitched = Boolean(next?.name && activeWorkspace?.name && next.name !== activeWorkspace.name);
   if (nameSwitched) {
     // Don't park the pristine boot sample — parking is for real prior work only.
@@ -2412,7 +2429,7 @@ function commitActiveWorkspace(next: ModWorkspace, origin: string): void {
       parkState(STUDIO_STATE_DIR, {
         workspace: activeWorkspace,
         version: workspaceVersion,
-        savedAt: new Date().toISOString(),
+        savedAt: committedAt,
         origin: `parked-on-switch:${origin}`,
       });
     }
@@ -2420,11 +2437,13 @@ function commitActiveWorkspace(next: ModWorkspace, origin: string): void {
   activeWorkspace = next;
   workspaceVersion++;
   anyCommitSinceBoot = true;
+  activeWorkspaceSavedAt = committedAt;
+  activeWorkspaceOrigin = origin;
   try {
     writeActiveState(STUDIO_STATE_DIR, {
       workspace: activeWorkspace,
       version: workspaceVersion,
-      savedAt: new Date().toISOString(),
+      savedAt: committedAt,
       origin,
     });
   } catch (e) {
@@ -4443,9 +4462,87 @@ app.post("/api/agent/history/:id/revert", (req, res) => {
   try {
     const row = agentHistoryStore.find(String(req.params.id));
     if (!row) return res.status(404).json({ ok: false, error: 'No such history entry.' });
-    const rule = revertibility(row.kind, row.outcome, !!row.beforeBlob);
+    const rule = revertibility(row.kind, row.outcome, !!row.beforeBlob, !!row.recoveryId);
     if (!rule.revertible) {
       return res.status(409).json({ ok: false, code: 'NOT_REVERTIBLE', error: rule.reason });
+    }
+    if (row.recoveryId) {
+      const found = destructiveRecoveryStore.read(row.recoveryId);
+      if (found.ok === false) return res.status(found.code === 'RECOVERY_NOT_FOUND' ? 404 : 409).json({ ok: false, code: found.code, error: found.error });
+      if (found.record.status !== 'ready') return res.status(409).json({ ok: false, code: 'RECOVERY_ALREADY_USED', error: 'This recovery was already used or never reached ready state.' });
+      if (found.record.kind === 'workspace') {
+        const currentHead = activeWorkspaceHash();
+        if (currentHead !== found.record.expectedCurrentHash) {
+          return res.status(409).json({
+            ok: false,
+            code: 'RECOVERY_STALE',
+            error: 'Workspace recovery refused because the server changed after the destructive action.',
+            expectedCurrentHash: found.record.expectedCurrentHash,
+            currentHash: currentHead,
+          });
+        }
+        const previousWorkspace = sanitizeWorkspace(found.record.beforeWorkspace);
+        if (workspaceContentHash(previousWorkspace) !== found.record.beforeHash) {
+          return res.status(409).json({ ok: false, code: 'RECOVERY_CORRUPT', error: 'Workspace recovery payload does not match its recorded pre-state hash.' });
+        }
+        (req as any).__revertOf = row.id;
+        (req as any).__revertOfTitle = row.title;
+        const replacedWorkspace = activeWorkspace;
+        commitActiveWorkspace(previousWorkspace, `recovery:${found.record.id}`);
+        try {
+          destructiveRecoveryStore.markUsed(found.record.id);
+        } catch (consumeError) {
+          try {
+            commitActiveWorkspace(replacedWorkspace, `recovery-rollback:${found.record.id}`);
+          } catch (rollbackError) {
+            throw new Error(
+              `Workspace recovery applied but its one-use receipt failed: ${consumeError instanceof Error ? consumeError.message : String(consumeError)}; ` +
+              `rollback also failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`,
+            );
+          }
+          throw new Error(`Workspace recovery receipt failed, so the restore was rolled back: ${consumeError instanceof Error ? consumeError.message : String(consumeError)}`);
+        }
+        return res.json({
+          ok: true,
+          revertedTo: row.id,
+          recoveryId: found.record.id,
+          recoveryKind: 'workspace',
+          workspace: activeWorkspace,
+          version: workspaceVersion,
+          workspaceHash: activeWorkspaceHash(),
+        });
+      }
+      const resolved = resolveXsdConfig();
+      if (!resolved.x4GamePath) return res.status(409).json({ ok: false, code: 'RECOVERY_TARGET_UNAVAILABLE', error: 'X4 Game Installation path is no longer configured.' });
+      const extensionsPath = path.join(resolved.x4GamePath, 'extensions');
+      try {
+        (req as any).__revertOf = row.id;
+        (req as any).__revertOfTitle = row.title;
+        const restored = restoreDeploymentRecovery(
+          found.record,
+          extensionsPath,
+          found.record.expectedCurrentHash,
+          destructiveRecoveryStore,
+          () => destructiveRecoveryStore.markUsed(found.record.id),
+        );
+        return res.json({
+          ok: true,
+          revertedTo: row.id,
+          recoveryId: found.record.id,
+          recoveryKind: 'deploy',
+          deployedPath: restored.targetPath,
+          restoredFingerprint: restored.restoredFingerprint,
+          priorExisted: found.record.priorExisted,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const stale = /changed after|configured X4 extensions directory changed|no longer exists/i.test(message);
+        return res.status(stale ? 409 : 500).json({
+          ok: false,
+          code: stale ? 'RECOVERY_STALE' : 'RECOVERY_FAILED',
+          error: message,
+        });
+      }
     }
     const previous = agentHistoryStore.readBlob(row.beforeBlob!);
     if (!previous) {
@@ -4741,7 +4838,8 @@ app.get("/api/agent/workspace", (req, res) => {
     // B1: lets the client DETECT canvas↔server divergence instead of trusting the bare
     // version counter (the stale-canvas incident class). Hash both sides post-sanitize.
     workspaceHash: activeWorkspaceHash(),
-    lastUpdated: new Date().toISOString()
+    lastUpdated: activeWorkspaceSavedAt,
+    origin: activeWorkspaceOrigin,
   });
 });
 
@@ -4923,6 +5021,14 @@ function applyWorkspaceMutation(incoming: any, opts: { expectedVersion?: number;
   if (typeof opts.expectedHead === 'string' && opts.expectedHead.length > 0) {
     const currentHead = activeWorkspaceHash();
     if (opts.expectedHead !== currentHead) {
+      let conflictPreview: ReturnType<typeof buildWorkspaceConflictPreview> | undefined;
+      try {
+        const proposed = sanitizeWorkspace(opts.merge ? { ...activeWorkspace, ...incoming } : incoming);
+        conflictPreview = buildWorkspaceConflictPreview(
+          buildWorkspaceFileManifest(proposed).files,
+          buildWorkspaceFileManifest(activeWorkspace).files,
+        );
+      } catch { /* heads still prove the conflict; preview degrades honestly */ }
       return {
         status: 409,
         body: {
@@ -4931,6 +5037,21 @@ function applyWorkspaceMutation(incoming: any, opts: { expectedVersion?: number;
           currentHead,
           expectedHead: opts.expectedHead,
           currentVersion: workspaceVersion,
+          conflict: {
+            detectedAt: new Date().toISOString(),
+            server: {
+              head: currentHead,
+              version: workspaceVersion,
+              savedAt: activeWorkspaceSavedAt,
+              origin: activeWorkspaceOrigin,
+              name: activeWorkspace?.name || 'Untitled',
+            },
+            local: {
+              head: workspaceContentHash(sanitizeWorkspace(opts.merge ? { ...activeWorkspace, ...incoming } : incoming)),
+              name: String((opts.merge ? { ...activeWorkspace, ...incoming } : incoming)?.name || 'Untitled'),
+            },
+            ...(conflictPreview ? { preview: conflictPreview } : { previewUnavailable: 'The file-level comparison could not be compiled.' }),
+          },
         }
       };
     }
@@ -4953,7 +5074,29 @@ function applyWorkspaceMutation(incoming: any, opts: { expectedVersion?: number;
   }
 
   const isDifferent = JSON.stringify(nextWorkspace) !== JSON.stringify(activeWorkspace);
+  let recovery: ReturnType<DestructiveRecoveryStore['createWorkspace']> | undefined;
   if (isDifferent) {
+    if (opts.force) {
+      try {
+        recovery = destructiveRecoveryStore.createWorkspace({
+          beforeWorkspace: activeWorkspace,
+          beforeHash: activeWorkspaceHash(),
+          expectedCurrentHash: workspaceContentHash(nextWorkspace),
+          summary: `Restore server workspace before forced overwrite by ${String(nextWorkspace?.name || 'Untitled')}`,
+        });
+      } catch (error) {
+        return {
+          status: 507,
+          body: {
+            success: false,
+            code: 'RECOVERY_PREPARE_FAILED',
+            error: `Forced overwrite refused because its recovery could not be made durable: ${error instanceof Error ? error.message : String(error)}`,
+            currentHead: activeWorkspaceHash(),
+            currentVersion: workspaceVersion,
+          },
+        };
+      }
+    }
     // B2s3: all real writes go through the chokepoint (persist + park-on-switch).
     commitActiveWorkspace(nextWorkspace, opts.force ? 'api:forced' : (isLegacyWrite ? 'api:legacy-first-contact' : 'api:cas'));
   }
@@ -4966,7 +5109,15 @@ function applyWorkspaceMutation(incoming: any, opts: { expectedVersion?: number;
       // B2 slice 2: writers track the post-write head so their NEXT CAS write carries it.
       workspaceHash: activeWorkspaceHash(),
       diagnosticsSummary: summarizeDiagnostics(diagnostics),
-      workspace: activeWorkspace
+      workspace: activeWorkspace,
+      ...(recovery ? { recovery: {
+        id: recovery.id,
+        kind: recovery.kind,
+        createdAt: recovery.createdAt,
+        expiresAt: recovery.expiresAt,
+        summary: recovery.summary,
+        expectedCurrentHash: recovery.expectedCurrentHash,
+      } } : {}),
     }
   };
 }
@@ -7493,6 +7644,8 @@ const SELFTESTS: Record<string, () => unknown> = {
   "project-rules-selftest": runProjectRulesSelftest,
   "diagnostic-explain-selftest": runDiagnosticExplainSelftest,
   "validation-delta-selftest": runValidationDeltaSelftest,
+  "workspace-conflict-selftest": runWorkspaceConflictSelftest,
+  "destructive-recovery-selftest": runDestructiveRecoverySelftest,
   "external-api-registry-selftest": runExternalApiRegistrySelftest,
   "position-picker-selftest": runPositionPickerSelftest,
   "mod-drift-selftest": runModDriftSelftest,
@@ -9015,6 +9168,190 @@ function regularTreeFingerprint(rootPath: string): string {
   return digest.digest('hex');
 }
 
+function regularTreeBytes(rootPath: string): number {
+  let bytes = 0;
+  for (const entry of inspectRegularTree(rootPath)) {
+    if (entry.type !== 'file') continue;
+    bytes += fs.statSync(path.join(rootPath, ...entry.path.split('/'))).size;
+  }
+  return bytes;
+}
+
+function sameResolvedPath(left: string, right: string): boolean {
+  const a = path.resolve(left);
+  const b = path.resolve(right);
+  return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
+}
+
+function samePathName(left: string, right: string): boolean {
+  return process.platform === 'win32' ? left.toLowerCase() === right.toLowerCase() : left === right;
+}
+
+function assertDeploymentRecoveryTarget(record: DeploymentRecoveryRecord, currentTargetRoot: string): void {
+  const targetRoot = path.resolve(record.targetRoot);
+  const targetPath = path.resolve(record.targetPath);
+  if (!sameResolvedPath(targetRoot, currentTargetRoot)) {
+    throw new Error('Recovery refused because the configured X4 extensions directory changed after deployment.');
+  }
+  if (!sameResolvedPath(path.dirname(targetPath), targetRoot) || !samePathName(path.basename(targetPath), record.modId)) {
+    throw new Error('Recovery record has an invalid or escaped deployment target.');
+  }
+}
+
+function expectedRegularFiles(rootPath: string): Array<{ path: string; size: number; sha256: string }> {
+  return inspectRegularTree(rootPath)
+    .filter((entry): entry is RegularTreeEntry & { type: 'file' } => entry.type === 'file')
+    .map(entry => {
+      const filePath = path.join(rootPath, ...entry.path.split('/'));
+      return { path: entry.path, size: fs.statSync(filePath).size, sha256: hashArtifactFile(filePath) };
+    });
+}
+
+/**
+ * Persist and verify the exact pre-deploy tree before the real extensions directory is touched.
+ * A changing source tree, a reparse point, a size cap, or an unavailable recovery store fails
+ * closed: deploy never starts without a durable receipt.
+ */
+function prepareDeploymentRecoveryReceipt(
+  targetRoot: string,
+  targetPath: string,
+  modId: string,
+  store: DestructiveRecoveryStore = destructiveRecoveryStore,
+): DeploymentRecoveryRecord {
+  const resolvedRoot = path.resolve(targetRoot);
+  const resolvedTarget = path.resolve(targetPath);
+  if (!sameResolvedPath(path.dirname(resolvedTarget), resolvedRoot)) throw new Error('Deployment target escaped the extensions directory.');
+  const priorExisted = fs.existsSync(resolvedTarget);
+  if (priorExisted) {
+    const stat = fs.lstatSync(resolvedTarget);
+    if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error('Deployment target is not a regular directory.');
+  }
+  const beforeFingerprint = priorExisted ? regularTreeFingerprint(resolvedTarget) : 'absent';
+  const beforeBytes = priorExisted ? regularTreeBytes(resolvedTarget) : 0;
+  const record = store.prepareDeployment({
+    priorExisted,
+    targetRoot: resolvedRoot,
+    targetPath: resolvedTarget,
+    modId,
+    beforeFingerprint,
+    beforeBytes,
+    summary: priorExisted ? `Restore the deployment of ${modId} that existed before this deploy` : `Remove the first deployment of ${modId}`,
+  });
+  try {
+    if (priorExisted) {
+      const payload = store.payloadPath(record.id);
+      copyRegularTree(resolvedTarget, payload);
+      const payloadFingerprint = regularTreeFingerprint(payload);
+      const sourceFingerprintAfterCopy = regularTreeFingerprint(resolvedTarget);
+      if (payloadFingerprint !== beforeFingerprint || sourceFingerprintAfterCopy !== beforeFingerprint) {
+        throw new Error('Deployment changed while its recovery snapshot was being captured.');
+      }
+      if (regularTreeBytes(payload) !== beforeBytes) throw new Error('Deployment recovery snapshot byte count did not verify.');
+    }
+    return record;
+  } catch (error) {
+    store.abandon(record.id);
+    throw error;
+  }
+}
+
+/** Exact regular-tree replacement used by a later deployment undo. */
+function replaceRegularTreeExact(sourceRoot: string, targetPath: string, hooks: DeploymentTransactionHooks = {}): void {
+  const parent = path.dirname(targetPath);
+  fs.mkdirSync(parent, { recursive: true });
+  const nonce = `${process.pid}-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+  const stage = path.join(parent, `.${path.basename(targetPath)}.x4forge-recovery-next-${nonce}`);
+  const backup = path.join(parent, `.${path.basename(targetPath)}.x4forge-recovery-backup-${nonce}`);
+  const rename = hooks.rename || ((oldPath: string, newPath: string) => fs.renameSync(oldPath, newPath));
+  const expected = expectedRegularFiles(sourceRoot);
+  const expectedFingerprint = regularTreeFingerprint(sourceRoot);
+  let movedOld = false;
+  try {
+    copyRegularTree(sourceRoot, stage);
+    verifyRegularTreeMirror(sourceRoot, stage);
+    if (fs.existsSync(targetPath)) {
+      try {
+        rename(targetPath, backup);
+        movedOld = true;
+      } catch (error) {
+        if (!isLockedRootRenameError(error)) throw error;
+        replaceLockedDeploymentInPlace(stage, backup, targetPath, expected, hooks);
+        if (regularTreeFingerprint(targetPath) !== expectedFingerprint) throw new Error('Deployment recovery fingerprint did not verify after locked-root restore.');
+        return;
+      }
+    }
+    rename(stage, targetPath);
+    verifyExpectedFiles(targetPath, expected);
+    if (regularTreeFingerprint(targetPath) !== expectedFingerprint) throw new Error('Deployment recovery fingerprint did not verify after restore.');
+    hooks.beforeFinalize?.();
+    if (movedOld) fs.rmSync(backup, { recursive: true, force: true });
+  } catch (error) {
+    try { if (fs.existsSync(stage)) fs.rmSync(stage, { recursive: true, force: true }); } catch { /* best effort */ }
+    if (movedOld) {
+      try {
+        if (fs.existsSync(targetPath)) fs.rmSync(targetPath, { recursive: true, force: true });
+        if (fs.existsSync(backup)) rename(backup, targetPath);
+      } catch (rollbackError) {
+        throw new Error(`${error instanceof Error ? error.message : String(error)}; recovery rollback also failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`);
+      }
+    }
+    throw error;
+  }
+}
+
+function restoreDeploymentRecovery(
+  record: DeploymentRecoveryRecord,
+  currentTargetRoot: string,
+  expectedCurrentHash = record.expectedCurrentHash,
+  store: DestructiveRecoveryStore = destructiveRecoveryStore,
+  consume?: () => void,
+): { targetPath: string; restoredFingerprint: string } {
+  assertDeploymentRecoveryTarget(record, currentTargetRoot);
+  if (!fs.existsSync(record.targetPath)) throw new Error('Recovery refused because the deployed mod no longer exists.');
+  const targetStat = fs.lstatSync(record.targetPath);
+  if (targetStat.isSymbolicLink() || !targetStat.isDirectory()) throw new Error('Recovery refused because the deployed mod target is not a regular directory.');
+  const currentFingerprint = regularTreeFingerprint(record.targetPath);
+  if (currentFingerprint !== expectedCurrentHash) {
+    throw new Error(`Recovery refused because deployed bytes changed after the recorded action (expected ${expectedCurrentHash}, got ${currentFingerprint}).`);
+  }
+
+  if (record.priorExisted) {
+    const payload = store.payloadPath(record.id);
+    if (!fs.existsSync(payload) || regularTreeFingerprint(payload) !== record.beforeFingerprint || regularTreeBytes(payload) !== record.beforeBytes) {
+      throw new Error('Deployment recovery payload is missing or does not match its recorded pre-state.');
+    }
+    replaceRegularTreeExact(payload, record.targetPath, { beforeFinalize: consume });
+    const restoredFingerprint = regularTreeFingerprint(record.targetPath);
+    if (restoredFingerprint !== record.beforeFingerprint) throw new Error('Restored deployment does not match the recorded pre-state.');
+    return { targetPath: record.targetPath, restoredFingerprint };
+  }
+
+  if (record.beforeFingerprint !== 'absent' || record.beforeBytes !== 0) throw new Error('First-deploy recovery record is inconsistent.');
+  const quarantineRoot = store.payloadPath(record.id);
+  const quarantine = path.join(quarantineRoot, 'removed-current');
+  fs.mkdirSync(quarantineRoot, { recursive: true });
+  if (fs.existsSync(quarantine)) throw new Error('First-deploy recovery quarantine is already occupied.');
+  fs.renameSync(record.targetPath, quarantine);
+  if (fs.existsSync(record.targetPath)) {
+    try { fs.renameSync(quarantine, record.targetPath); } catch { /* reported by the invariant below */ }
+    throw new Error('First-deploy recovery could not remove the deployed target atomically.');
+  }
+  try {
+    consume?.();
+  } catch (error) {
+    try {
+      fs.renameSync(quarantine, record.targetPath);
+    } catch (rollbackError) {
+      throw new Error(
+        `First-deploy recovery receipt failed: ${error instanceof Error ? error.message : String(error)}; ` +
+        `rollback also failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`,
+      );
+    }
+    throw new Error(`First-deploy recovery receipt failed, so the removal was rolled back: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return { targetPath: record.targetPath, restoredFingerprint: 'absent' };
+}
+
 function synchronizeRegularTree(sourceRoot: string, targetRoot: string): void {
   const desired = inspectRegularTree(sourceRoot);
   const current = inspectRegularTree(targetRoot);
@@ -9179,6 +9516,8 @@ interface DeploymentTransactionHooks {
   afterFallbackBackupCopy?: (backupPath: string) => void;
   /** Test seam for proving rollback after the fallback has changed target bytes. */
   afterFallbackApply?: (targetPath: string) => void;
+  /** Runs after target verification while the prior target is still rollback-capable. */
+  beforeFinalize?: () => void;
 }
 
 function isLockedRootRenameError(error: unknown): boolean {
@@ -9210,6 +9549,7 @@ function replaceLockedDeploymentInPlace(
     hooks.afterFallbackApply?.(targetPath);
     verifyExpectedFiles(targetPath, expected);
     verifyRegularTreeMirror(stage, targetPath);
+    hooks.beforeFinalize?.();
     fs.rmSync(stage, { recursive: true, force: true });
     fs.rmSync(backup, { recursive: true, force: true });
   } catch (error) {
@@ -9586,6 +9926,105 @@ function runCompileArtifactSelftest() {
     record('runtime-owned state preserved', fs.readFileSync(path.join(target, 'runtime', 'state.db'), 'utf8') === 'deployed mutable state');
     record('valid forgekeep top-level path preserved', fs.readFileSync(path.join(target, 'preserved', 'state.bin'), 'utf8') === 'forgekeep state');
     record('unsafe forgekeep paths ignored', !fs.existsSync(path.join(deployRoot, 'outside')) && !fs.existsSync(path.join(deployRoot, 'C:', 'escape')));
+
+    // R14: a verified deploy gets a durable, one-use, hash-bound pre-state. These fixtures use
+    // only this selftest's temp tree and temp recovery store — never the configured game path.
+    const recoveryStore = new DestructiveRecoveryStore({ root: path.join(root, 'recoveries') });
+    fs.writeFileSync(path.join(target, 'recovery-before.txt'), 'before deploy');
+    const beforeRecoveryFingerprint = regularTreeFingerprint(target);
+    const recoveryReceipt = prepareDeploymentRecoveryReceipt(deployRoot, target, path.basename(target), recoveryStore);
+    fs.rmSync(path.join(target, 'recovery-before.txt'));
+    fs.writeFileSync(path.join(target, 'recovery-after.txt'), 'after deploy');
+    const readyRecovery = recoveryStore.finalizeDeployment(recoveryReceipt.id, regularTreeFingerprint(target));
+    const restoredRecovery = restoreDeploymentRecovery(
+      readyRecovery,
+      deployRoot,
+      readyRecovery.expectedCurrentHash,
+      recoveryStore,
+      () => recoveryStore.markUsed(readyRecovery.id),
+    );
+    record('verified deploy recovery restores exact prior tree', restoredRecovery.restoredFingerprint === beforeRecoveryFingerprint && regularTreeFingerprint(target) === beforeRecoveryFingerprint);
+    const usedRecovery = recoveryStore.read(readyRecovery.id);
+    record('verified deploy recovery is one use', usedRecovery.ok && usedRecovery.record.status === 'used');
+
+    const staleReceipt = prepareDeploymentRecoveryReceipt(deployRoot, target, path.basename(target), recoveryStore);
+    fs.writeFileSync(path.join(target, 'stale-action.txt'), 'recorded action');
+    const staleReady = recoveryStore.finalizeDeployment(staleReceipt.id, regularTreeFingerprint(target));
+    fs.writeFileSync(path.join(target, 'external-change.txt'), 'newer writer');
+    const staleFingerprint = regularTreeFingerprint(target);
+    let staleRejected = false;
+    try { restoreDeploymentRecovery(staleReady, deployRoot, staleReady.expectedCurrentHash, recoveryStore); } catch (error) { staleRejected = /changed after/.test(String(error)); }
+    record('deploy recovery rejects a stale post-state', staleRejected && regularTreeFingerprint(target) === staleFingerprint);
+    recoveryStore.abandon(staleReceipt.id);
+    fs.rmSync(path.join(target, 'stale-action.txt'), { force: true });
+    fs.rmSync(path.join(target, 'external-change.txt'), { force: true });
+
+    const corruptReceipt = prepareDeploymentRecoveryReceipt(deployRoot, target, path.basename(target), recoveryStore);
+    fs.writeFileSync(path.join(target, 'corrupt-action.txt'), 'recorded action');
+    const corruptReady = recoveryStore.finalizeDeployment(corruptReceipt.id, regularTreeFingerprint(target));
+    fs.writeFileSync(path.join(recoveryStore.payloadPath(corruptReady.id), 'content.xml'), '<corrupt/>');
+    const corruptPostFingerprint = regularTreeFingerprint(target);
+    let corruptRejected = false;
+    try { restoreDeploymentRecovery(corruptReady, deployRoot, corruptReady.expectedCurrentHash, recoveryStore); } catch (error) { corruptRejected = /payload/.test(String(error)); }
+    record('deploy recovery rejects a corrupt pre-state payload', corruptRejected && regularTreeFingerprint(target) === corruptPostFingerprint);
+    recoveryStore.abandon(corruptReceipt.id);
+    fs.rmSync(path.join(target, 'corrupt-action.txt'), { force: true });
+
+    const consumeFailureReceipt = prepareDeploymentRecoveryReceipt(deployRoot, target, path.basename(target), recoveryStore);
+    fs.writeFileSync(path.join(target, 'consume-failure-action.txt'), 'must survive failed receipt finalization');
+    const consumeFailureReady = recoveryStore.finalizeDeployment(consumeFailureReceipt.id, regularTreeFingerprint(target));
+    const consumeFailurePostFingerprint = regularTreeFingerprint(target);
+    let consumeFailureRolledBack = false;
+    try {
+      restoreDeploymentRecovery(
+        consumeFailureReady,
+        deployRoot,
+        consumeFailureReady.expectedCurrentHash,
+        recoveryStore,
+        () => { throw new Error('simulated recovery receipt write failure'); },
+      );
+    } catch (error) {
+      consumeFailureRolledBack = /receipt write failure/.test(String(error));
+    }
+    record('deploy recovery receipt failure restores the post-action tree', consumeFailureRolledBack && regularTreeFingerprint(target) === consumeFailurePostFingerprint);
+    recoveryStore.abandon(consumeFailureReceipt.id);
+    fs.rmSync(path.join(target, 'consume-failure-action.txt'), { force: true });
+
+    const firstTarget = path.join(deployRoot, 'first_deploy_fixture');
+    const firstReceipt = prepareDeploymentRecoveryReceipt(deployRoot, firstTarget, 'first_deploy_fixture', recoveryStore);
+    fs.mkdirSync(firstTarget, { recursive: true });
+    fs.writeFileSync(path.join(firstTarget, 'content.xml'), '<content id="first_deploy_fixture"/>');
+    const firstReady = recoveryStore.finalizeDeployment(firstReceipt.id, regularTreeFingerprint(firstTarget));
+    const firstRestored = restoreDeploymentRecovery(
+      firstReady,
+      deployRoot,
+      firstReady.expectedCurrentHash,
+      recoveryStore,
+      () => recoveryStore.markUsed(firstReady.id),
+    );
+    record('first-deploy recovery removes the new target atomically', firstRestored.restoredFingerprint === 'absent' && !fs.existsSync(firstTarget));
+
+    const firstFailureTarget = path.join(deployRoot, 'first_deploy_receipt_failure');
+    const firstFailureReceipt = prepareDeploymentRecoveryReceipt(deployRoot, firstFailureTarget, 'first_deploy_receipt_failure', recoveryStore);
+    fs.mkdirSync(firstFailureTarget, { recursive: true });
+    fs.writeFileSync(path.join(firstFailureTarget, 'content.xml'), '<content id="first_deploy_receipt_failure"/>');
+    const firstFailureReady = recoveryStore.finalizeDeployment(firstFailureReceipt.id, regularTreeFingerprint(firstFailureTarget));
+    const firstFailureFingerprint = regularTreeFingerprint(firstFailureTarget);
+    let firstFailureRolledBack = false;
+    try {
+      restoreDeploymentRecovery(
+        firstFailureReady,
+        deployRoot,
+        firstFailureReady.expectedCurrentHash,
+        recoveryStore,
+        () => { throw new Error('simulated first-deploy receipt write failure'); },
+      );
+    } catch (error) {
+      firstFailureRolledBack = /receipt write failure/.test(String(error));
+    }
+    record('first-deploy receipt failure restores the deployed target', firstFailureRolledBack && regularTreeFingerprint(firstFailureTarget) === firstFailureFingerprint);
+    recoveryStore.abandon(firstFailureReceipt.id);
+    fs.rmSync(firstFailureTarget, { recursive: true, force: true });
 
     const catalogEntries = parseCat(path.join(target, 'ext_01.cat'));
     const large = catalogEntries.find(entry => entry.name === 'assets/over-legacy-total.bin');
@@ -9972,6 +10411,7 @@ app.post("/api/agent/deploy-verify", (req, res) => {
     }
     return { ok: false, stage: stageId, checklist, ...payload };
   };
+  let pendingDeployRecovery: DeploymentRecoveryRecord | undefined;
   try {
     const reqPath = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
     const hasWorkspace = !!req.body?.workspace && typeof req.body.workspace === 'object';
@@ -10228,6 +10668,16 @@ app.post("/api/agent/deploy-verify", (req, res) => {
         note: 'Nothing was written. Re-send without dryRun to apply exactly this effect.',
       });
     }
+    const deploymentTarget = path.join(extensionsPath, effectiveModId(activeBuildWorkspace(ws)));
+    try {
+      pendingDeployRecovery = prepareDeploymentRecoveryReceipt(extensionsPath, deploymentTarget, modId);
+    } catch (error) {
+      check('deploy', 'Written to staging + extensions', 'fail', 'Deploy refused because its pre-state recovery could not be made durable.');
+      return res.status(507).json(failWith('deploy', {
+        code: 'RECOVERY_PREPARE_FAILED',
+        error: `Deploy refused before touching the extensions directory: ${error instanceof Error ? error.message : String(error)}`,
+      }));
+    }
     const deployedPath = compileWorkspaceToFolder(ws, extensionsPath, 'store', false, deployFormat);
     const formatReport = describeDeployFormat(deployFormat, lastArtifactReport);
 
@@ -10273,6 +10723,54 @@ app.post("/api/agent/deploy-verify", (req, res) => {
 
     const ok = bytesConfirmed && blocking.length === 0;
     const deployedAt = new Date().toISOString();
+    const deployedFingerprint = regularTreeFingerprint(deployedPath);
+    let deploymentRecovery: DeploymentRecoveryRecord | undefined;
+    let deploymentRollback: { applied: true; restoredFingerprint: string; reason: string } | undefined;
+    if (pendingDeployRecovery) {
+      if (ok) {
+        try {
+          deploymentRecovery = destructiveRecoveryStore.finalizeDeployment(pendingDeployRecovery.id, deployedFingerprint);
+        } catch (error) {
+          try {
+            const restored = restoreDeploymentRecovery(pendingDeployRecovery, extensionsPath, deployedFingerprint);
+            destructiveRecoveryStore.abandon(pendingDeployRecovery.id);
+            const deployCheck = checklist.find(item => item.id === 'deploy');
+            if (deployCheck) {
+              deployCheck.status = 'fail';
+              deployCheck.detail += ' Recovery receipt finalization failed, so the deployment was rolled back exactly.';
+            }
+            return res.status(507).json(failWith('deploy', {
+              code: 'RECOVERY_FINALIZE_FAILED',
+              error: `Deployment passed its runtime checks but was rolled back because recovery finalization failed: ${error instanceof Error ? error.message : String(error)}`,
+              rollback: { applied: true, restoredFingerprint: restored.restoredFingerprint },
+            }));
+          } catch (rollbackError) {
+            return res.status(500).json(failWith('deploy', {
+              code: 'RECOVERY_FINALIZE_AND_ROLLBACK_FAILED',
+              error: `Deployment recovery finalization failed and exact rollback also failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`,
+            }));
+          }
+        }
+      } else {
+        try {
+          const finalized = destructiveRecoveryStore.finalizeDeployment(pendingDeployRecovery.id, deployedFingerprint);
+          const restored = restoreDeploymentRecovery(finalized, extensionsPath);
+          destructiveRecoveryStore.markUsed(finalized.id);
+          deploymentRollback = {
+            applied: true,
+            restoredFingerprint: restored.restoredFingerprint,
+            reason: 'Post-deploy byte or extension-doctor checks failed.',
+          };
+          const deployCheck = checklist.find(item => item.id === 'deploy');
+          if (deployCheck) deployCheck.detail += ' The failed deployment was rolled back to its exact pre-state.';
+        } catch (error) {
+          return res.status(500).json(failWith('deploy', {
+            code: 'FAILED_DEPLOY_ROLLBACK_FAILED',
+            error: `Deployment failed its post-write checks and exact rollback failed: ${error instanceof Error ? error.message : String(error)}`,
+          }));
+        }
+      }
+    }
 
     // Post-deploy convergence (P0): refresh the source stamp to the post-write state (a
     // content-changing deploy legitimately changes the folder hash) and adopt this
@@ -10313,6 +10811,14 @@ app.post("/api/agent/deploy-verify", (req, res) => {
     );
     return res.json({
       ok, stage: 'done', modId, deployedPath, stagingPath, bytesConfirmed, deployedBytes,
+      ...(deploymentRecovery ? { recovery: {
+        id: deploymentRecovery.id,
+        kind: deploymentRecovery.kind,
+        expectedCurrentHash: deploymentRecovery.expectedCurrentHash,
+        expiresAt: deploymentRecovery.expiresAt,
+        summary: deploymentRecovery.summary,
+      } } : {}),
+      ...(deploymentRollback ? { rollback: deploymentRollback } : {}),
       checklist,
       validationDelta,
       baselinePromotion,
@@ -10330,7 +10836,26 @@ app.post("/api/agent/deploy-verify", (req, res) => {
       },
     });
   } catch (error: any) {
-    return res.status(500).json({ ok: false, stage: 'exception', error: error?.message || 'deploy-verify failed' });
+    let rollback: { applied: boolean; detail: string } | undefined;
+    if (pendingDeployRecovery) {
+      try {
+        const exists = fs.existsSync(pendingDeployRecovery.targetPath);
+        const currentFingerprint = exists ? regularTreeFingerprint(pendingDeployRecovery.targetPath) : 'absent';
+        if (currentFingerprint === pendingDeployRecovery.beforeFingerprint) {
+          destructiveRecoveryStore.abandon(pendingDeployRecovery.id);
+          rollback = { applied: false, detail: 'The deploy transaction failed before changing the target; the unused recovery receipt was removed.' };
+        } else if (exists) {
+          const restored = restoreDeploymentRecovery(pendingDeployRecovery, pendingDeployRecovery.targetRoot, currentFingerprint);
+          destructiveRecoveryStore.abandon(pendingDeployRecovery.id);
+          rollback = { applied: true, detail: `The exceptional deploy was rolled back to ${restored.restoredFingerprint}.` };
+        } else {
+          rollback = { applied: false, detail: 'The deploy failed with its target missing; automatic recovery refused because no post-state hash could be proven.' };
+        }
+      } catch (rollbackError) {
+        rollback = { applied: false, detail: `Automatic recovery also failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}` };
+      }
+    }
+    return res.status(500).json({ ok: false, stage: 'exception', error: error?.message || 'deploy-verify failed', ...(rollback ? { rollback } : {}) });
   }
 });
 

@@ -23,6 +23,7 @@ import FpsMeter from './components/FpsMeter';
 import HealthCardOverlay from './components/HealthCardOverlay';
 import DialogHost, { confirmDialog, toast } from './lib/uiDialogs';
 import SyncModal from './components/SyncModal';
+import WorkspaceConflictDialog, { type WorkspaceConflictDetail } from './components/WorkspaceConflictDialog';
 import Canvas from './components/Canvas';
 import UIBuilder from './components/UIBuilder';
 import NativeProjectFiles from './components/NativeProjectFiles';
@@ -185,11 +186,13 @@ export default function App() {
 
   const workspaceRevisionRef = useRef(0);
   const localWorkspaceDirtyRef = useRef(false);
+  const localWorkspaceUpdatedAtRef = useRef(new Date().toISOString());
   const [workspaceSyncEpoch, setWorkspaceSyncEpoch] = useState(0);
   const setWorkspace = React.useCallback((value: React.SetStateAction<ModWorkspace>) => {
     // Mark dirty synchronously, before React schedules the state updater. This closes the
     // debounce window in which a slow poll could otherwise adopt stale server content.
     localWorkspaceDirtyRef.current = true;
+    localWorkspaceUpdatedAtRef.current = new Date().toISOString();
     setRawWorkspace(prev => {
       const next = typeof value === 'function' ? (value as (p: ModWorkspace) => ModWorkspace)(prev) : value;
       workspaceRevisionRef.current += 1;
@@ -611,11 +614,23 @@ export default function App() {
   const workspaceSyncChainRef = useRef<Promise<void>>(Promise.resolve());
   const queuedWorkspaceSyncsRef = useRef(0);
   const [syncConflict, _setSyncConflict] = useState<boolean>(false);
+  const [syncConflictDetail, setSyncConflictDetail] = useState<WorkspaceConflictDetail | null>(null);
+  const [syncConflictExpanded, setSyncConflictExpanded] = useState(true);
+  const [syncConflictBusy, setSyncConflictBusy] = useState<'server' | 'local' | ''>('');
+  const [syncConflictError, setSyncConflictError] = useState('');
   // ref mirror so the 3s poll closure sees the CURRENT conflict state (ADR-F1: while a
   // human is deciding a conflict, the poll must NOT adopt — adoption would silently pick
   // the server side and discard the local edit, which is exactly what CAS exists to stop).
   const syncConflictRef = useRef(false);
-  const setSyncConflict = (v: boolean) => { syncConflictRef.current = v; _setSyncConflict(v); };
+  const setSyncConflict = (v: boolean) => {
+    syncConflictRef.current = v;
+    _setSyncConflict(v);
+    if (v) setSyncConflictExpanded(true);
+    else {
+      setSyncConflictBusy('');
+      setSyncConflictError('');
+    }
+  };
 
   // Left sidebar resizing state. Text files now use Antigravity's native tab area,
   // so Forge no longer reserves a duplicate right-hand editor column.
@@ -1244,6 +1259,7 @@ export default function App() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ workspace: targetWorkspace, expectedHead: lastServerHashRef.current })
               });
+              const responseData = await response.json().catch(() => null);
               if (response.status === 409) {
                 // A lost success response is indistinguishable from an external writer until
                 // we read the new head. Equal content means this save already landed; any other
@@ -1260,11 +1276,34 @@ export default function App() {
                   setSyncConflict(false);
                   return;
                 }
+                const conflict = responseData?.conflict as WorkspaceConflictDetail | undefined;
+                setSyncConflictDetail(conflict ? {
+                  ...conflict,
+                  server: {
+                    ...conflict.server,
+                    ...(latest?.workspaceHash ? { head: latest.workspaceHash } : {}),
+                    ...(latest?.version ? { version: latest.version } : {}),
+                    ...(latest?.lastUpdated ? { savedAt: latest.lastUpdated } : {}),
+                    ...(latest?.origin ? { origin: latest.origin } : {}),
+                  },
+                  local: { ...conflict.local, updatedAt: localWorkspaceUpdatedAtRef.current },
+                } : {
+                  detectedAt: new Date().toISOString(),
+                  server: {
+                    head: latest?.workspaceHash || responseData?.currentHead || 'unknown',
+                    version: latest?.version || responseData?.currentVersion,
+                    savedAt: latest?.lastUpdated,
+                    origin: latest?.origin,
+                    name: latest?.workspace?.name,
+                  },
+                  local: { head: targetHash, name: targetWorkspace.name, updatedAt: localWorkspaceUpdatedAtRef.current },
+                  previewUnavailable: 'The server proved divergent content heads but could not provide a file-level preview.',
+                });
                 setSyncConflict(true);
                 return;
               }
               if (!response.ok) throw new Error(`Workspace sync failed (${response.status}).`);
-              const data = await response.json();
+              const data = responseData;
               if (data && data.success && data.version) {
                 setLocalVersion(data.version);
                 localStorage.setItem('x4_mod_studio_version', String(data.version));
@@ -1426,10 +1465,16 @@ export default function App() {
 
   // B1: adopt the server workspace explicitly (badge click) — the user's choice, never silent.
   const adoptServerWorkspace = async () => {
+    setSyncConflictBusy('server');
+    setSyncConflictError('');
     try {
-      const data = await fetch("/api/agent/workspace").then(r => r.json());
+      const response = await fetch("/api/agent/workspace");
+      const data = await response.json();
+      if (!response.ok || !data?.workspace) throw new Error(data?.error || `Server workspace read failed (${response.status}).`);
       if (data?.workspace) {
+        saveCheckpoint(workspaceRef.current);
         setWorkspace(data.workspace);
+        localWorkspaceDirtyRef.current = false;
         if (data.version) {
           setLocalVersion(data.version);
           localStorage.setItem('x4_mod_studio_version', String(data.version));
@@ -1439,8 +1484,12 @@ export default function App() {
         syncMissesRef.current = 0;
         setSyncDiverged(false);
         setSyncConflict(false);
+        toast(`Used server copy "${data.workspace.name || 'Untitled'}". Undo restores your previous canvas.`, 'success');
       }
-    } catch { /* leave the badge up — nothing adopted */ }
+    } catch (error) {
+      setSyncConflictError(`Server copy was not applied: ${error instanceof Error ? error.message : String(error)}`);
+      setSyncConflictBusy('');
+    }
   };
 
   // B12: parked-workspace switcher (rides B2s3's park-on-switch server state).
@@ -1480,6 +1529,8 @@ export default function App() {
   // chosen by a human, never by silence). B2s3: the choice is now spelled force:true —
   // the server rejects blind no-head writes outright.
   const forceKeepMine = async () => {
+    setSyncConflictBusy('local');
+    setSyncConflictError('');
     try {
       const response = await fetch("/api/agent/workspace", {
         method: "POST",
@@ -1488,14 +1539,22 @@ export default function App() {
         body: JSON.stringify({ workspace: workspaceRef.current, force: true })
       });
       const data = await response.json();
+      if (!response.ok || !data?.success) throw new Error(data?.error || `Forced overwrite failed (${response.status}).`);
       if (data?.success) {
         if (data.version) { setLocalVersion(data.version); localStorage.setItem('x4_mod_studio_version', String(data.version)); }
         if (typeof data.workspaceHash === 'string' && data.workspaceHash) lastServerHashRef.current = data.workspaceHash;
         setSyncConflict(false);
         setSyncDiverged(false);
         syncMissesRef.current = 0;
+        localWorkspaceDirtyRef.current = false;
+        toast(data?.recovery?.id
+          ? `Server now uses your canvas. Recovery ${String(data.recovery.id).slice(0, 18)}… is available in History.`
+          : 'Server now uses your canvas.', 'success');
       }
-    } catch { /* conflict card stays up */ }
+    } catch (error) {
+      setSyncConflictError(`Server was not overwritten: ${error instanceof Error ? error.message : String(error)}`);
+      setSyncConflictBusy('');
+    }
   };
 
   // Command node addition handler
@@ -1909,42 +1968,29 @@ export default function App() {
       {/* B29: viewport-anchored sync-status layer — can NEVER be clipped by header overflow.
           Persistent until resolved (unlike the transient toast stack), so it lives in its own
           fixed slot just below the header, above everything but dialogs. */}
-      {(syncConflict || syncDiverged) && (
+      {syncConflict ? (
+        <WorkspaceConflictDialog
+          detail={syncConflictDetail}
+          expanded={syncConflictExpanded}
+          busy={syncConflictBusy}
+          error={syncConflictError}
+          onExpand={() => setSyncConflictExpanded(true)}
+          onCancel={() => { setSyncConflictExpanded(false); setSyncConflictError(''); }}
+          onUseServer={() => void adoptServerWorkspace()}
+          onKeepLocal={() => void forceKeepMine()}
+        />
+      ) : syncDiverged ? (
         <div data-testid="sync-status-layer" className="fixed top-14 right-3 z-[9999]">
-          {syncConflict ? (
-            // B2 slice 2: explicit write conflict — another writer changed the server since
-            // this canvas last saw it. A HUMAN picks the winner; nothing is silent.
-            <div data-testid="sync-conflict-card" className="flex items-center gap-1.5 px-2.5 py-1.5 border border-red-500/50 bg-[#1a0d0d]/95 rounded-lg shadow-2xl font-mono text-[10px] text-red-200 whitespace-nowrap">
-              <span className="font-bold">⚠ WRITE CONFLICT</span>
-              <button
-                onClick={adoptServerWorkspace}
-                data-testid="conflict-adopt-btn"
-                className="px-2 py-0.5 rounded bg-cyan-600/40 border border-cyan-400/40 hover:bg-cyan-600/60 text-cyan-100 font-bold cursor-pointer"
-                title="Discard this canvas's unsent changes and take the server's copy."
-              >
-                ADOPT SERVER
-              </button>
-              <button
-                onClick={forceKeepMine}
-                data-testid="conflict-keep-btn"
-                className="px-2 py-0.5 rounded bg-amber-600/40 border border-amber-400/40 hover:bg-amber-600/60 text-amber-100 font-bold cursor-pointer"
-                title="Overwrite the server with this canvas (last-writer-wins, chosen deliberately)."
-              >
-                KEEP MINE
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={adoptServerWorkspace}
-              data-testid="sync-diverged-badge"
-              className="px-3 py-1.5 border border-amber-500/50 bg-[#1a140d]/95 text-amber-300 rounded-lg shadow-2xl font-mono text-[11px] hover:bg-amber-500/25 transition-all flex items-center gap-1.5 cursor-pointer animate-pulse whitespace-nowrap"
-              title="Your canvas content differs from the server copy (persistently, not just mid-edit). Click to adopt the server workspace — or keep editing and your next change syncs up normally."
-            >
-              ⚠ CANVAS ≠ SERVER — ADOPT
-            </button>
-          )}
+          <button
+            onClick={() => void adoptServerWorkspace()}
+            data-testid="sync-diverged-badge"
+            className="px-3 py-1.5 border border-amber-500/50 bg-[#1a140d]/95 text-amber-300 rounded-lg shadow-2xl font-mono text-[11px] hover:bg-amber-500/25 transition-all flex items-center gap-1.5 cursor-pointer animate-pulse whitespace-nowrap"
+            title="Your canvas content differs from the server copy (persistently, not just mid-edit). Click to use the server workspace; Undo restores the current canvas."
+          >
+            ⚠ CANVAS ≠ SERVER — REVIEW
+          </button>
         </div>
-      )}
+      ) : null}
 
       {/* Main Workspace split panel areas */}
       <div className="flex flex-1 overflow-hidden">

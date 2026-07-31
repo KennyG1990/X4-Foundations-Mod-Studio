@@ -1,0 +1,37 @@
+X4 Forge Studio 0.0.62 — isolated installed Antigravity runtime evidence
+Date: 2026-07-30 (America/New_York)
+
+Package installed:
+  F:\DEV_ENV\X4_Forge\vscode-extension\x4-forge-studio-0.0.62.vsix
+Package SHA-256:
+  A1A4776FC7521A5174D50D4DADCF9FDCA59BBC74E3673CEBCCAF3E554E5BF1ED
+
+Isolation:
+  user data: %TEMP%\x4forge-antigravity-0.0.62-proof\user-data
+  extensions: %TEMP%\x4forge-antigravity-0.0.62-proof\extensions
+  workspace: %TEMP%\x4forge-antigravity-0.0.62-proof\fixture
+  normal Antigravity profile and normal extension root were not modified.
+
+Deterministic install query:
+  x4forge.x4-forge-studio@0.0.62
+
+Observed installed-host runtime:
+  host: Antigravity IDE 1.107.0
+  window: fixture - Antigravity IDE - X4 Forge Studio
+  Forge product version: v1.0.389
+  managed sidecar: ready on isolated loopback port 62690
+  Forge webview accessibility tree: loaded through the installed extension host
+  isolated configured state/config/data roots: under the disposable user-data directory
+
+Visual limitation:
+  Antigravity's mandatory fresh-profile Google login/onboarding overlay remained above the
+  editor. The installed webview and sidecar were machine-observable, but this run is NOT
+  claimed as eyes-on proof of the rendered Forge conflict/History experience.
+
+Teardown:
+  isolated Antigravity process count after close: 0
+  normal installed extension remained: x4forge.x4-forge-studio@0.0.61
+
+Final outstanding gate:
+  After explicit standing-config approval, update the normal Antigravity installation to
+  0.0.62, reload the existing signed-in host, and capture the rendered conflict/History UI.

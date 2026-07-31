@@ -70,6 +70,11 @@ export interface LedgerRow {
    * script purely because the Forge would not answer "what did you add, overwrite and delete".
    */
   fileEffect?: { added: number; overwritten: number; deleted: number; preserved: number; bytes: number };
+  /** B110-R14: one-time CAS recovery receipt owned by the bounded recovery store. */
+  recoveryId?: string;
+  recoveryKind?: 'workspace' | 'deploy';
+  recoveryExpectedHash?: string;
+  recoveryExpiresAt?: string;
   revertible: boolean;
   revertReason?: string;
   /** Set on a `revert` row: the id of the entry it undid. */
@@ -185,20 +190,24 @@ export function ledgerRouteKind(method: string, path: string): LedgerKind | null
  * during the transaction. Saying "use the backup" would be a lie; the honest instruction is to
  * redeploy from a previous workspace state.
  */
-export function revertibility(kind: LedgerKind, outcome: LedgerOutcome, hasBeforeBlob: boolean): { revertible: boolean; reason?: string } {
+export function revertibility(kind: LedgerKind, outcome: LedgerOutcome, hasBeforeBlob: boolean, hasRecovery: boolean = false): { revertible: boolean; reason?: string } {
   if (kind === 'edit') {
     if (outcome.status === 'error') return { revertible: false, reason: 'The edit failed, so there is nothing to undo.' };
     if (!hasBeforeBlob) return { revertible: false, reason: 'No previous content was captured (the file did not exist before this write).' };
     return { revertible: true };
   }
   if (kind === 'deploy') {
+    if (outcome.status !== 'error' && hasRecovery) return { revertible: true };
     return {
       revertible: false,
-      reason: 'Deploys write to the game directory and cannot be undone from here. The deploy transaction removes its own backup once it succeeds — redeploy from a previous workspace state instead.',
+      reason: outcome.status === 'error'
+        ? 'The deploy did not complete, so there is no successful deployment to undo.'
+        : 'This deploy has no retained recovery snapshot. Transaction rollback protects a failed deploy but is not later undo.',
     };
   }
+  if (kind === 'workspace' && outcome.status !== 'error' && hasRecovery) return { revertible: true };
   if (kind === 'revert') return { revertible: false, reason: 'A revert is itself a recorded step; revert the newer entry instead.' };
-  if (kind === 'import') return { revertible: false, reason: 'Import replaces the working canvas. Re-import from the source folder to change it.' };
+  if (kind === 'import') return { revertible: false, reason: 'The import API returns a candidate workspace. Studio checkpoints the canvas before applying it; use local Undo there.' };
   if (kind === 'package') return { revertible: false, reason: 'Packaging produces a build artifact and changes no source.' };
   return { revertible: false, reason: 'This action changed no files.' };
 }

@@ -88,6 +88,27 @@ async function req(method, urlPath, token, body) {
   }
 }
 
+function regularTreeHash(root) {
+  const digest = crypto.createHash('sha256');
+  const walk = (dir, relativeDir = '') => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const relative = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
+      const absolute = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        digest.update(`D\0${relative}\0`);
+        walk(absolute, relative);
+      } else if (entry.isFile()) {
+        const bytes = fs.readFileSync(absolute);
+        digest.update(`F\0${relative}\0${bytes.length}\0`);
+        digest.update(crypto.createHash('sha256').update(bytes).digest());
+        digest.update('\0');
+      }
+    }
+  };
+  walk(root);
+  return digest.digest('hex');
+}
+
 let child;
 async function main() {
   const tsxCli = path.join(process.cwd(), 'node_modules', 'tsx', 'dist', 'cli.mjs');
@@ -167,6 +188,10 @@ async function main() {
     'incomplete backup never mutates target',
     'non-lock rename error fails without fallback',
     'non-lock rename error leaves target unchanged',
+    'verified deploy recovery restores exact prior tree',
+    'deploy recovery rejects a stale post-state',
+    'deploy recovery rejects a corrupt pre-state payload',
+    'first-deploy recovery removes the new target atomically',
   ];
   ok('artifact_selftest_public_and_green', artifactSelftest.status === 200 && artifactSelftest.json?.pass === true, `status=${artifactSelftest.status} summary=${artifactSelftest.json?.summary}`);
   ok('artifact_selftest_proves_locked_root_transaction', requiredArtifactChecks.every(name => artifactChecks.get(name) === true), JSON.stringify(Object.fromEntries(requiredArtifactChecks.map(name => [name, artifactChecks.get(name)]))));
@@ -228,6 +253,28 @@ async function main() {
   };
   const safeConfig = await req('POST', '/api/schema/config', SESSION_TOKEN, deployedRolesConfig);
   ok('isolated_workspace_and_deployed_filesystem_saved', safeConfig.status === 200 && safeConfig.json?.directorySafety?.safe === true, `status=${safeConfig.status}`);
+
+  // R11/R14: workspace conflicts carry evidence and each destructive choice has an honest
+  // recovery path. All state lives under this harness's ephemeral state/data directories.
+  const initialWorkspace = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const repeatWorkspace = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  ok('workspace_saved_time_is_real_not_read_time', initialWorkspace.json?.lastUpdated === repeatWorkspace.json?.lastUpdated && typeof initialWorkspace.json?.origin === 'string');
+  const serverCopy = { id: 'conflict-server', name: 'Conflict Server', version: '1.0', author: 'Route', description: 'server copy', nodes: [], links: [], uiWidgets: [], uiTheme: {}, xmlPatches: [{ id: 'server-patch', action: 'add', targetFile: 'libraries/wares.xml', sel: '/wares', content: '<ware id="server"/>', note: '' }] };
+  const localCopy = { ...serverCopy, id: 'conflict-local', name: 'Conflict Local', description: 'local copy', xmlPatches: [{ id: 'local-patch', action: 'add', targetFile: 'libraries/wares.xml', sel: '/wares', content: '<ware id="local"/>', note: '' }] };
+  const serverWrite = await req('POST', '/api/agent/workspace', SESSION_TOKEN, { workspace: serverCopy, expectedHead: initialWorkspace.json?.workspaceHash });
+  ok('workspace_cas_write_establishes_server_copy', serverWrite.status === 200 && serverWrite.json?.success === true, `status=${serverWrite.status}`);
+  const conflictWrite = await req('POST', '/api/agent/workspace', SESSION_TOKEN, { workspace: localCopy, expectedHead: initialWorkspace.json?.workspaceHash });
+  ok('workspace_conflict_returns_both_real_heads', conflictWrite.status === 409 && conflictWrite.json?.conflict?.server?.head === serverWrite.json?.workspaceHash && typeof conflictWrite.json?.conflict?.local?.head === 'string', JSON.stringify(conflictWrite.json?.conflict || {}));
+  ok('workspace_conflict_returns_file_level_delta', conflictWrite.json?.conflict?.preview?.counts?.changed > 0 && Array.isArray(conflictWrite.json?.conflict?.preview?.files), JSON.stringify(conflictWrite.json?.conflict?.preview?.counts || {}));
+  const forcedLocal = await req('POST', '/api/agent/workspace', SESSION_TOKEN, { workspace: localCopy, force: true });
+  ok('forced_workspace_overwrite_returns_recovery', forcedLocal.status === 200 && forcedLocal.json?.recovery?.kind === 'workspace' && forcedLocal.json?.recovery?.expectedCurrentHash === forcedLocal.json?.workspaceHash, JSON.stringify(forcedLocal.json?.recovery || {}));
+  const workspaceHistory = await req('GET', '/api/agent/history?kind=workspace', SESSION_TOKEN);
+  const forcedWorkspaceRow = (workspaceHistory.json?.rows || []).find(row => row.recoveryId === forcedLocal.json?.recovery?.id);
+  ok('forced_workspace_history_is_truthfully_revertible', forcedWorkspaceRow?.revertible === true && forcedWorkspaceRow?.recoveryKind === 'workspace', JSON.stringify(forcedWorkspaceRow || {}));
+  const undoForcedWorkspace = await req('POST', `/api/agent/history/${forcedWorkspaceRow?.id}/revert`, SESSION_TOKEN, {});
+  ok('forced_workspace_recovery_restores_prior_head', undoForcedWorkspace.status === 200 && undoForcedWorkspace.json?.workspace?.name === serverCopy.name, JSON.stringify(undoForcedWorkspace.json || {}));
+  const replayForcedWorkspace = await req('POST', `/api/agent/history/${forcedWorkspaceRow?.id}/revert`, SESSION_TOKEN, {});
+  ok('workspace_recovery_replay_is_rejected', replayForcedWorkspace.status === 409 && replayForcedWorkspace.json?.code === 'RECOVERY_ALREADY_USED', `status=${replayForcedWorkspace.status} code=${replayForcedWorkspace.json?.code}`);
 
   // The deployed filesystem role is browse/import-only. Generic edits always land in the
   // isolated workspace even while filesystemPath points at the live extensions directory.
@@ -479,6 +526,7 @@ async function main() {
   // #4 autoReimport actually unblocks the deploy the guard refused.
   const autoDeploy = await req('POST', '/api/agent/deploy-verify', SESSION_TOKEN, { workspace: staleImport.json?.workspace, autoReimport: true });
   ok('auto_reimport_unblocks_the_deploy', autoDeploy.status === 200 && autoDeploy.json?.ok === true, `status=${autoDeploy.status} stage=${autoDeploy.json?.stage}`);
+  ok('verified_deploy_returns_ready_recovery', autoDeploy.json?.recovery?.kind === 'deploy' && /^[a-f0-9]{64}$/.test(String(autoDeploy.json?.recovery?.expectedCurrentHash || '')), JSON.stringify(autoDeploy.json?.recovery || {}));
   ok('successful_deploy_promotes_last_green_baseline', autoDeploy.json?.baselinePromotion?.recorded === true && (autoDeploy.json?.checklist || []).some(c => c.id === 'baseline' && c.status === 'pass'), JSON.stringify(autoDeploy.json?.baselinePromotion));
   ok('auto_reimport_is_reported_not_silent',
     (autoDeploy.json?.checklist || []).some(c => c.id === 'source-sync' && /re-imported/i.test(c.detail || '')),
@@ -488,6 +536,22 @@ async function main() {
   const histAfterDeploy = await req('GET', '/api/agent/history?kind=deploy', SESSION_TOKEN);
   const deployRow = (histAfterDeploy.json?.rows || [])[0];
   ok('deploy_row_records_file_effect', !!deployRow?.fileEffect, JSON.stringify(deployRow?.fileEffect));
+  ok('verified_deploy_row_is_truthfully_revertible', deployRow?.revertible === true && deployRow?.recoveryId === autoDeploy.json?.recovery?.id, JSON.stringify(deployRow || {}));
+
+  // A post-write doctor failure must roll back immediately and must not advertise later undo.
+  const targetBeforeFailedDeploy = regularTreeHash(dryTarget);
+  const duplicateDir = path.join(liveExtensions, 'duplicate_stale_probe');
+  fs.mkdirSync(duplicateDir, { recursive: true });
+  fs.writeFileSync(path.join(duplicateDir, 'content.xml'), '<content id="stale_probe_mod" name="Duplicate" version="100"/>');
+  const failedDeploy = await req('POST', '/api/agent/deploy-verify', SESSION_TOKEN, { workspace: staleImport.json?.workspace, autoReimport: true });
+  ok('failed_post_write_deploy_rolls_back_exactly', failedDeploy.status === 200 && failedDeploy.json?.ok === false && failedDeploy.json?.rollback?.applied === true && regularTreeHash(dryTarget) === targetBeforeFailedDeploy, JSON.stringify(failedDeploy.json?.rollback || {}));
+  ok('failed_deploy_exposes_no_later_recovery', !failedDeploy.json?.recovery, JSON.stringify(failedDeploy.json?.recovery || null));
+  fs.rmSync(duplicateDir, { recursive: true, force: true });
+
+  const undoDeploy = await req('POST', `/api/agent/history/${deployRow?.id}/revert`, SESSION_TOKEN, {});
+  ok('deployment_history_undo_restores_absent_pre_state', undoDeploy.status === 200 && undoDeploy.json?.priorExisted === false && !fs.existsSync(dryTarget), JSON.stringify(undoDeploy.json || {}));
+  const replayDeploy = await req('POST', `/api/agent/history/${deployRow?.id}/revert`, SESSION_TOKEN, {});
+  ok('deployment_recovery_replay_is_rejected', replayDeploy.status === 409 && replayDeploy.json?.code === 'RECOVERY_ALREADY_USED', `status=${replayDeploy.status} code=${replayDeploy.json?.code}`);
 
   // --- B93 wave 3: catch what is LEGAL and does NOTHING ------------------------------------
   // #10 the exact shape that killed a subsystem for weeks while structuralErrors stayed 0:

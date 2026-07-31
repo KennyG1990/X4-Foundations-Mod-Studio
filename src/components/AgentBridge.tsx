@@ -177,13 +177,16 @@ export default function AgentBridge({
       const r = await fetch(`/api/agent/history/${row.id}/revert`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
       const d = await r.json();
       if (!r.ok || d?.ok === false) throw new Error(d?.error || `HTTP ${r.status}`);
+      if (isModWorkspace(d?.workspace)) setWorkspace(d.workspace);
+      if (typeof d?.version === 'number') setLocalVersion(d.version);
+      setHistoryError('');
       await loadHistory();
     } catch (e) {
       setHistoryError(`Revert failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setRevertBusy('');
     }
-  }, [loadHistory]);
+  }, [loadHistory, setLocalVersion, setWorkspace]);
 
   const createAgentKey = useCallback(async () => {
     setKeysError('');
@@ -860,7 +863,13 @@ export default function AgentBridge({
                             disabled={revertBusy === row.id}
                             className="text-[10px] font-mono px-2 py-1 rounded border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 disabled:opacity-50 cursor-pointer"
                           >
-                            {revertBusy === row.id ? 'Reverting…' : 'Revert to here'}
+                            {revertBusy === row.id
+                              ? 'Restoring…'
+                              : row.recoveryKind === 'deploy'
+                                ? 'Restore prior deployment'
+                                : row.recoveryKind === 'workspace'
+                                  ? 'Undo forced overwrite'
+                                  : 'Revert to here'}
                           </button>
                         ) : (
                           <div className="text-[9.5px] font-mono text-slate-500 italic">{row.revertReason}</div>

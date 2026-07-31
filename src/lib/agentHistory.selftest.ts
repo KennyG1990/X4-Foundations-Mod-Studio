@@ -254,11 +254,12 @@ export function runAgentHistorySelftest(): { pass: boolean; checks: Array<{ name
     ok('an edit with no previous content is not revertible', revertibility('edit', { status: 'ok' }, false).revertible === false);
     ok('a failed edit is not revertible', revertibility('edit', { status: 'error' }, true).revertible === false);
     const deployRule = revertibility('deploy', { status: 'ok' }, true);
-    ok('deploys are explicitly non-revertible', deployRule.revertible === false);
-    // The reason must not promise a backup that the deploy transaction already deleted.
-    ok('deploy reason does not promise a surviving backup',
-      /redeploy from a previous workspace state/i.test(deployRule.reason || '') && !/use the (existing )?backup/i.test(deployRule.reason || ''),
+    ok('deploys without retained recovery are explicitly non-revertible', deployRule.revertible === false);
+    ok('deploy reason does not promise a surviving transaction backup',
+      /no retained recovery snapshot/i.test(deployRule.reason || '') && !/use the (existing )?backup/i.test(deployRule.reason || ''),
       deployRule.reason);
+    ok('a successful deploy with a recovery receipt is revertible', revertibility('deploy', { status: 'ok' }, false, true).revertible === true);
+    ok('a forced workspace overwrite with recovery is revertible', revertibility('workspace', { status: 'ok' }, false, true).revertible === true);
 
     // --- encode/decode round trip -----------------------------------------------------------------
     const sample: LedgerRow = {

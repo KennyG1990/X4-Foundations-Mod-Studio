@@ -3,6 +3,13 @@
 The latest changes, newest first. (This page is generated automatically — see
 `release-notes.json` to edit the wording.)
 
+## 0.0.62 — 2026-07-31
+
+- Workspace conflicts now show both copy names, real save/edit times, content heads, changed-file counts, and bounded text diffs before you choose a winner.
+- Using the server copy first creates a local Undo checkpoint. Overwriting the server first creates a bounded, expiring recovery that appears honestly in Agent History.
+- Successful verified deploys now retain a hash-bound recovery for the exact previous deployment. Recovery refuses safely after later changes, on corrupt or expired data, or after it has already been used.
+- Failed and dry-run deploys never advertise a later Undo. Post-write validation failures roll back to the exact pre-deploy tree, including first-deployment removal and locked-root handling.
+
 ## 0.0.61 — 2026-07-30
 
 - Validation now shows what changed since the last accepted green result: new warnings, resolved warnings, and warnings that stayed the same.
