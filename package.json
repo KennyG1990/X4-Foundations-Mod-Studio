@@ -35,7 +35,8 @@
     "test:extension-native-bridge": "tsx vscode-extension/src/nativeEditorBridge.selftest.ts",
     "test:schema-particle-corpus": "tsx scripts/schema-particle-corpus-check.ts",
     "test:diff-overlay-corpus": "tsx scripts/diff-overlay-corpus-check.ts",
-    "test:artifact-pipeline": "tsx scripts/artifact-pipeline-check.ts"
+    "test:artifact-pipeline": "tsx scripts/artifact-pipeline-check.ts",
+    "test:writers": "node scripts/durable-writer-audit.mjs --selftest && node scripts/durable-writer-audit.mjs && tsx vscode-extension/src/durableWrite.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

@@ -516,7 +516,7 @@ querying the bridge DB — tests results, not the build. The Python bridge is no
 ## Code knowledge graph (graphify)
 
 A precomputed knowledge graph of this codebase lives at `graphify-out/graph.json`
-(**1160 nodes · 2649 edges · 51 communities**, AST-extracted, code-only). Use it to
+(**3106 nodes · 7272 edges · 146 communities**, AST-extracted, code-only). Use it to
 orient and reason about structure **before** grepping the whole tree — it answers
 relationship questions that grep/LSP can't cheaply: blast radius, shortest paths,
 and what a symbol connects to.
@@ -531,8 +531,8 @@ graphify path    "Canvas.tsx" "xsdParser.ts"  # shortest dependency path between
 graphify explain "ModWorkspace"            # a node + its neighbors (degree, community, edges)
 ```
 
-Core abstractions (god nodes): `ModWorkspace` (67 edges), `MDNode` (38),
-`generateMDXML()` (33), `compileAndSaveAll()` (21), `validateModWorkspace()` (15).
+Core abstractions (god nodes): `ok()` (106 edges), `ModWorkspace` (100), `MDNode` (52),
+`runProjectValidation()` (39), and `generateMDXML()` (36).
 
 **Keep it fresh.** After changing code, rebuild deterministically (no LLM, free, seconds):
 

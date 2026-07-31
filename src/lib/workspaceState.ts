@@ -70,9 +70,11 @@ export function slugifyWorkspaceName(name: string): string {
   return `${base}_${sum.toString(16)}`;
 }
 
-interface AtomicWriteOptions {
+export interface AtomicWriteOptions {
   /** Test-only seam: production callers never provide this. */
   beforeRename?: (tmp: string, target: string) => void;
+  /** Create the complete sibling temp with this mode before promotion (for credential files). */
+  mode?: number;
 }
 
 /**
@@ -84,8 +86,11 @@ export function atomicWriteFile(file: string, data: string | Buffer, options: At
   fs.mkdirSync(dir, { recursive: true });
   const tmp = path.join(dir, `.${path.basename(file)}.${process.pid}.${Date.now()}.${crypto.randomBytes(6).toString('hex')}.tmp`);
   try {
-    if (typeof data === 'string') fs.writeFileSync(tmp, data, 'utf8');
-    else fs.writeFileSync(tmp, data);
+    if (typeof data === 'string') fs.writeFileSync(tmp, data, { encoding: 'utf8', flag: 'wx', ...(options.mode === undefined ? {} : { mode: options.mode }) });
+    else fs.writeFileSync(tmp, data, { flag: 'wx', ...(options.mode === undefined ? {} : { mode: options.mode }) });
+    // writeFile's mode is creation-only. Enforce the completed temp before it can replace
+    // an existing destination whose previous permissions may have been broader.
+    if (options.mode !== undefined) fs.chmodSync(tmp, options.mode);
     options.beforeRename?.(tmp, file);
     fs.renameSync(tmp, file);
   } finally {
@@ -94,8 +99,8 @@ export function atomicWriteFile(file: string, data: string | Buffer, options: At
 }
 
 /** Write JSON via the shared atomic byte writer. */
-export function atomicWriteJson(file: string, data: unknown): void {
-  atomicWriteFile(file, JSON.stringify(data));
+export function atomicWriteJson(file: string, data: unknown, options: AtomicWriteOptions = {}): void {
+  atomicWriteFile(file, JSON.stringify(data), options);
 }
 
 /** A persisted state is adoptable only if it looks like a real workspace. */
@@ -205,6 +210,14 @@ export function runWorkspaceStateSelftest(): { pass: boolean; checks: Array<{ na
     checks.push({ name: 'atomic_failure_is_reported', pass: injectedFailure });
     checks.push({ name: 'atomic_failure_preserves_previous_bytes', pass: fs.readFileSync(atomicTarget, 'utf8') === 'last-known-good' });
     checks.push({ name: 'atomic_failure_leaves_no_temp_file', pass: !fs.readdirSync(dir).some(name => name.startsWith('.atomic.txt.') && name.endsWith('.tmp')) });
+
+    // 0b. Restricted files are promoted with the requested mode and never reuse a fixed
+    // temp name (two consecutive writes leave no shared temp artifact).
+    const restrictedTarget = path.join(dir, 'restricted.json');
+    atomicWriteJson(restrictedTarget, { version: 1 }, { mode: 0o600 });
+    atomicWriteJson(restrictedTarget, { version: 2 }, { mode: 0o600 });
+    checks.push({ name: 'atomic_restricted_mode', pass: process.platform === 'win32' || (fs.statSync(restrictedTarget).mode & 0o777) === 0o600 });
+    checks.push({ name: 'atomic_unique_temp_no_litter', pass: !fs.readdirSync(dir).some(name => name.startsWith('.restricted.json.') && name.endsWith('.tmp')) });
 
     // 1. active round-trip
     const s1 = mkState("Alpha_Mod", [{ id: "n1" }, { id: "n2" }], 111);

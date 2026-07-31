@@ -163,7 +163,7 @@ Root: `<WORKSPACE_ROOT>` [VERIFIED listing 2026-07-11].
 | `START-X4FORGE.cmd` | Production launcher (built single server) | |
 | `config.json` (gitignored; `config.example.json` template) | Per-machine paths: game dir, XSD dir, mod workspace, extensions dir | |
 | `data/` (gitignored) | Server runtime state incl. `ai-keys.json` (SECRETS — never commit) | |
-| `graphify-out/graph.json` | Code knowledge graph (1160 nodes/2649 edges) — `graphify query/affected/path/explain` CLI | Regenerate after code changes: `graphify update .` |
+| `graphify-out/graph.json` | Code knowledge graph (3106 nodes/7272 edges) — `graphify query/affected/path/explain` CLI | Regenerate after code changes: `graphify update .` |
 | `docs/plans/`, `forge-skills/` (gitignored) | Durable plans + local reusable Forge development skills | |
 | `assets/`, `public-assets/`, `index.html`, `vite.config.ts`, `playwright.config.ts`, `tsconfig.json`, `eslint.config.js` | Frontend shell + tooling config | Vite deliberately uses `public-assets/`; legacy `public/` is ignored |
 

@@ -1,0 +1,383 @@
+{
+  "version": 1,
+  "sourceFingerprint": "14bf391c7713470667cd475bff5ecc3c93b10052a63489e9e74a882c9c770643",
+  "policy": "Every raw production filesystem mutation source is count-pinned here. Authoritative files use atomic sibling promotion; stronger tree, archive, append-log, SQLite, retention, ephemeral, and fixture contracts remain explicit exceptions.",
+  "writers": [
+    {
+      "file": "server.ts",
+      "calls": { "writeFileSync": 30, "renameSync": 10, "copyFileSync": 4, "mkdirSync": 32, "rmSync": 37, "unlinkSync": 4, "chmodSync": 2, "mkdtempSync": 8 },
+      "categories": ["mixed", "authoritative-atomic", "verified-tree-transaction", "isolated-artifact-stage", "retention-cleanup", "fixture-only"],
+      "owners": ["writeWorkspaceFileGuarded and fs/create", "snapshot create/prune/delete/restore", "copyRegularTree and synchronizeRegularTree", "replaceValidatedDeployment and recovery", "compileWorkspaceToFolder scratch cleanup", "replaceReleaseDirectory", "Nexus and Steam release handlers", "embedded route/artifact selftests"],
+      "rationale": "The composition root contains guarded atomic source/snapshot writes, verified deployment/release directory transactions, isolated compilation/release materializers, bounded snapshot/artifact retention, and embedded scratch-only route fixtures.",
+      "failureContract": "Authoritative files preserve prior bytes; tree promotion rolls back; scratch trees never target configured live roots; retention deletes only named bounded artifacts."
+    },
+    {
+      "file": "src/lib/agentHistory.selftest.ts",
+      "calls": { "appendFileSync": 1, "rmSync": 1, "mkdtempSync": 1 },
+      "categories": ["fixture-only"],
+      "owners": ["runAgentHistorySelftest"],
+      "rationale": "Creates a torn JSONL tail only inside a unique temporary fixture.",
+      "failureContract": "Fixture cleanup is best effort and production history is never opened."
+    },
+    {
+      "file": "src/lib/agentHistoryStore.ts",
+      "calls": { "writeFileSync": 1, "appendFileSync": 1, "renameSync": 3, "mkdirSync": 2, "rmSync": 1 },
+      "categories": ["append-ledger", "authoritative-atomic", "retention-cleanup"],
+      "owners": ["AgentHistoryStore.writeBlob", "AgentHistoryStore.append", "AgentHistoryStore.rotateIfNeeded"],
+      "rationale": "Content-addressed blobs use write-then-rename while ledger rows are append-only JSONL with bounded rotated segments.",
+      "failureContract": "Torn final rows are ignored by the reader; blob hashes never name partial bytes; history failure never fabricates revertibility."
+    },
+    {
+      "file": "src/lib/agentKeys.ts",
+      "calls": { "writeFileSync": 1, "rmSync": 2 },
+      "categories": ["authoritative-atomic", "fixture-only"],
+      "owners": ["createAgentKeyStore", "runAgentKeysSelftest"],
+      "rationale": "Production key state delegates to restricted atomic JSON; remaining raw writes corrupt and clean only a temporary negative fixture.",
+      "failureContract": "Create, revoke, and prune commit or keep prior memory/disk state; audit touch failure rolls memory back without changing authority."
+    },
+    {
+      "file": "src/lib/artifactPackager.ts",
+      "calls": { "copyFileSync": 1, "mkdirSync": 2, "rmSync": 1, "mkdtempSync": 1 },
+      "categories": ["isolated-artifact-stage"],
+      "owners": ["materializeCatalogArtifact", "copyVerified"],
+      "rationale": "Writes only a caller-created empty artifact stage and hash-verifies every copied loose file before promotion elsewhere.",
+      "failureContract": "Any copy/hash/catalog error marks the stage failed; callers discard the isolated tree and never promote it."
+    },
+    {
+      "file": "src/lib/artifactPipeline.ts",
+      "calls": { "writeFileSync": 1, "copyFileSync": 1, "mkdirSync": 2 },
+      "categories": ["isolated-artifact-stage"],
+      "owners": ["materializeArtifact"],
+      "rationale": "Materializes a complete plan only into a new or empty stage and reopens every destination for size and SHA verification.",
+      "failureContract": "A partial stage returns failure and is never accepted or promoted by deployment/release callers."
+    },
+    {
+      "file": "src/lib/db.ts",
+      "calls": { "mkdirSync": 1, "rmSync": 1, "mkdtempSync": 1 },
+      "categories": ["sqlite-transaction", "fixture-only"],
+      "owners": ["openStudioDb", "dbSelfTest"],
+      "rationale": "Creates the cache directory; database durability is separately inventoried as WAL plus explicit transactions and generation visibility.",
+      "failureContract": "Database open/migration failure degrades to the in-memory cache; the selftest root is disposable."
+    },
+    {
+      "file": "src/lib/destructiveRecovery.ts",
+      "calls": { "writeFileSync": 2, "mkdirSync": 3, "rmSync": 4, "mkdtempSync": 1 },
+      "categories": ["verified-tree-transaction", "retention-cleanup", "fixture-only"],
+      "owners": ["DestructiveRecoveryStore", "runDestructiveRecoverySelftest"],
+      "rationale": "Recovery metadata is atomic JSON; payload trees are exact pre-state copies; raw writes construct corrupt/restore fixtures only.",
+      "failureContract": "A receipt is never advertised until payload and record verify; corrupt, expired, oversized, stale, and replayed receipts refuse."
+    },
+    {
+      "file": "src/lib/instanceDiscovery.ts",
+      "calls": { "rmSync": 5, "mkdtempSync": 1 },
+      "categories": ["ephemeral-atomic", "retention-cleanup"],
+      "owners": ["publishInstance", "pruneDeadInstances", "unpublishInstance"],
+      "rationale": "Address-only discovery records use restricted atomic writes; raw calls remove dead or shutting-down instance pointers.",
+      "failureContract": "Discovery failure is fail-soft for server startup, but torn records cannot replace a valid record and dead PIDs are never returned."
+    },
+    {
+      "file": "src/lib/pathRoles.ts",
+      "calls": { "writeFileSync": 1, "mkdirSync": 3, "rmSync": 1, "mkdtempSync": 1, "symlinkSync": 1 },
+      "categories": ["fixture-only"],
+      "owners": ["runPathRolesSelftest"],
+      "rationale": "Builds only temporary fake game/live/corpus path-role fixtures.",
+      "failureContract": "No configured path is read or written and the unique temporary root is removed."
+    },
+    {
+      "file": "src/lib/platformRelease.ts",
+      "calls": { "writeFileSync": 7, "mkdirSync": 1, "rmSync": 1, "mkdtempSync": 1 },
+      "categories": ["fixture-only"],
+      "owners": ["runPlatformReleaseSelftest"],
+      "rationale": "Raw writes create bounded manifest, binary, image, and executable-signature fixtures in a temporary root.",
+      "failureContract": "Production release preparation is read-only in this module; all fixture bytes are deleted after the oracle."
+    },
+    {
+      "file": "src/lib/projectFileInventory.ts",
+      "calls": { "writeFileSync": 4, "mkdirSync": 3, "rmSync": 1, "mkdtempSync": 1 },
+      "categories": ["fixture-only"],
+      "owners": ["runProjectFileInventorySelftest"],
+      "rationale": "Creates a disposable mod-tree fixture to prove hashing and exclusion behavior.",
+      "failureContract": "The scanner is read-only in production and cleanup targets only its unique temp root."
+    },
+    {
+      "file": "src/lib/referenceCorpus.ts",
+      "calls": { "writeFileSync": 1, "mkdirSync": 1, "rmSync": 2 },
+      "categories": ["fixture-only"],
+      "owners": ["runReferenceCorpusSelftest"],
+      "rationale": "Creates and removes a disposable vanilla/DLC reference corpus fixture.",
+      "failureContract": "Production corpus indexing is read-only and cache invalidation never mutates the corpus."
+    },
+    {
+      "file": "src/lib/referenceManifest.ts",
+      "calls": {
+        "writeFileAsync": 1,
+        "mkdirAsync": 1,
+        "rmAsync": 1,
+        "mkdtempAsync": 1
+      },
+      "categories": [
+        "fixture-only"
+      ],
+      "owners": [
+        "runReferenceManifestSelftest"
+      ],
+      "rationale": "Asynchronous filesystem mutations build and remove only a unique temporary reference-manifest fixture.",
+      "failureContract": "Production manifest generation is read-only and the fixture root is never a configured corpus or workspace."
+    },
+    {
+      "file": "src/lib/referenceOverlay.ts",
+      "calls": { "writeFileSync": 1, "mkdirSync": 1, "rmSync": 2, "mkdtempSync": 1 },
+      "categories": ["fixture-only"],
+      "owners": ["runReferenceOverlaySelftest"],
+      "rationale": "Builds a disposable base/DLC overlay fixture and removes one DLC to prove refresh.",
+      "failureContract": "Production overlay resolution is read-only; the temp root is always cleaned."
+    },
+    {
+      "file": "src/lib/schemaRegistry.ts",
+      "calls": { "writeFileSync": 1, "mkdirSync": 1, "rmSync": 1, "mkdtempSync": 1 },
+      "categories": ["fixture-only"],
+      "owners": ["runSchemaRegistrySelftest"],
+      "rationale": "Writes only temporary XSD include/import fixtures.",
+      "failureContract": "Schema discovery is read-only in production and fixture cleanup is confined to its temp root."
+    },
+    {
+      "file": "src/lib/schemaRouting.ts",
+      "calls": { "writeFileSync": 1, "rmSync": 1, "mkdtempSync": 1 },
+      "categories": ["fixture-only"],
+      "owners": ["runSchemaRoutingSelftest"],
+      "rationale": "Writes only generated XSD routing fixtures in a unique temporary directory.",
+      "failureContract": "Production routing reads supplied schemas and never mutates them."
+    },
+    {
+      "file": "src/lib/validationDelta.ts",
+      "calls": { "writeFileSync": 1, "rmSync": 1, "mkdtempSync": 1 },
+      "categories": ["authoritative-atomic", "fixture-only"],
+      "owners": ["ValidationBaselineStore", "runValidationDeltaSelftest"],
+      "rationale": "Production baselines delegate to atomic JSON; the raw write deliberately corrupts a temp fixture.",
+      "failureContract": "Corrupt state is unavailable and refuses overwrite; promotion occurs only after explicitly green validation."
+    },
+    {
+      "file": "src/lib/workspaceState.ts",
+      "calls": { "writeFileSync": 5, "renameSync": 1, "mkdirSync": 1, "rmSync": 2, "unlinkSync": 1, "chmodSync": 1, "mkdtempSync": 1 },
+      "categories": ["authoritative-atomic", "retention-cleanup", "fixture-only"],
+      "owners": ["atomicWriteFile", "parkState", "runWorkspaceStateSelftest"],
+      "rationale": "This is the shared sibling-temp atomic authority; extra raw calls exercise corruption/failure and prune old parked states.",
+      "failureContract": "Complete bytes and requested restricted mode exist before rename; failure preserves the destination and cleans the unique temp."
+    },
+    {
+      "file": "src/lib/x4CatDat.ts",
+      "calls": { "writeFileSync": 7, "renameSync": 2, "mkdirSync": 1, "rmSync": 3, "writeSync": 1, "mkdtempSync": 1 },
+      "categories": ["isolated-artifact-stage", "fixture-only"],
+      "owners": ["writeCatDatCatalogs", "runCatDatSelftest"],
+      "rationale": "Catalog volumes are streamed to exclusive temp files inside an isolated artifact stage, then renamed; remaining raw writes are parser fixtures.",
+      "failureContract": "Partial CAT/DAT temps are removed; callers verify the complete staged catalogs before any tree promotion."
+    },
+    {
+      "file": "src/lib/xsdParser.ts",
+      "calls": { "writeFileSync": 5, "mkdirSync": 4, "rmSync": 2 },
+      "categories": ["authoritative-atomic", "fixture-only"],
+      "owners": ["writeXsdConfig", "runSchemaDiscoverySelftest"],
+      "rationale": "Production config delegates to atomic replacement; raw calls create valid/corrupt temporary XSD/config fixtures.",
+      "failureContract": "A failed settings save preserves prior config bytes; fixture corruption never reaches the normal config root."
+    },
+    {
+      "file": "src/lib/xsdValidate.ts",
+      "calls": { "writeFileSync": 1, "rmSync": 1, "mkdtempSync": 1 },
+      "categories": ["fixture-only"],
+      "owners": ["runXsdSelftest"],
+      "rationale": "Writes only a temporary schema fixture for validator coverage.",
+      "failureContract": "Production schema validation is read-only and cleanup is temp-root confined."
+    },
+    {
+      "file": "src/server/aiKeyStore.ts",
+      "calls": { "writeFileSync": 1, "rmSync": 1, "mkdtempSync": 1 },
+      "categories": ["authoritative-atomic", "fixture-only"],
+      "owners": ["createAiKeyStore", "runAiKeyStoreSelftest"],
+      "rationale": "Production credentials use restricted atomic JSON; the raw write creates a corrupt negative fixture only.",
+      "failureContract": "Corrupt stores refuse mutation and failed promotion preserves every previous credential."
+    },
+    {
+      "file": "src/server/gameDetectRoutes.ts",
+      "calls": { "mkdirSync": 1 },
+      "categories": ["authoritative-atomic"],
+      "owners": ["harvest-schemas route"],
+      "rationale": "Creates the bounded harvested-schema root; every schema file is written through atomic sibling promotion.",
+      "failureContract": "A failed extraction/write is reported missing and cannot leave a torn schema file."
+    },
+    {
+      "file": "src/server/githubCredentialStore.ts",
+      "calls": { "rmSync": 2, "chmodSync": 1, "mkdtempSync": 1 },
+      "categories": ["authoritative-atomic", "retention-cleanup"],
+      "owners": ["createGithubCredentialStore"],
+      "rationale": "Credential values use restricted atomic JSON; raw calls enforce mode and explicitly delete the credential on user request.",
+      "failureContract": "Set failure preserves prior credential; delete reports failure and never returns a false configured state."
+    },
+    {
+      "file": "src/server/npcIdentityProbe.ts",
+      "calls": { "writeFileSync": 6, "rmSync": 1, "mkdtempSync": 1 },
+      "categories": ["fixture-only"],
+      "owners": ["runNpcIdentityProbeSelftest"],
+      "rationale": "Writes only disposable plain/gzip/corrupt save fixtures for identity correlation.",
+      "failureContract": "Production identity probes read user-selected saves only and never mutate them."
+    },
+    {
+      "file": "vscode-extension/src/durableWrite.ts",
+      "calls": { "writeFileSync": 5, "renameSync": 3, "mkdirSync": 1, "rmSync": 5, "mkdtempSync": 1 },
+      "categories": ["extension-workspace-atomic", "fixture-only"],
+      "owners": ["replaceFileSetAtomically", "atomicWriteFile", "runDurableWriteSelftest"],
+      "rationale": "This is the extension-host sibling-stage and multi-file rollback authority; raw calls also drive its isolated failure fixture.",
+      "failureContract": "All bytes stage first; partial promotion restores every previous file and preserves an unrecoverable backup instead of deleting it."
+    },
+    {
+      "file": "vscode-extension/src/extension.ts",
+      "calls": { "mkdirSync": 3 },
+      "categories": ["extension-workspace-atomic"],
+      "owners": ["spawnSidecar"],
+      "rationale": "Creates isolated extension global-storage state/config/data roots before the managed sidecar starts.",
+      "failureContract": "Directory creation failure prevents sidecar startup and is surfaced through the extension error path."
+    },
+    {
+      "file": "vscode-extension/src/modFolder.ts",
+      "calls": { "writeFileSync": 8, "mkdirSync": 5, "rmSync": 1, "mkdtempSync": 1 },
+      "categories": ["extension-workspace-atomic", "fixture-only"],
+      "owners": ["writeRecommendations", "writeXmlAssociations", "runModFolderSelftest"],
+      "rationale": "Production JSON files delegate to the extension atomic helper; remaining raw mutations construct merge/corruption fixtures.",
+      "failureContract": "Failed promotion preserves existing VS Code settings/recommendations and temporary fixtures never use a real mod."
+    },
+    {
+      "file": "vscode-extension/src/nativeEditorBridge.selftest.ts",
+      "calls": { "writeFileSync": 7, "mkdirSync": 4, "rmSync": 1, "mkdtempSync": 1 },
+      "categories": ["fixture-only"],
+      "owners": ["runNativeEditorBridgeSelftest"],
+      "rationale": "Creates only disposable release ZIP/tool/command fixtures.",
+      "failureContract": "No native dialog or user output path is touched and the unique temporary root is removed."
+    },
+    {
+      "file": "vscode-extension/src/nativeEditorBridge.ts",
+      "calls": { "renameSync": 3, "copyFileSync": 1, "rmSync": 3 },
+      "categories": ["verified-release-export"],
+      "owners": ["exportVerifiedReleaseArtifact"],
+      "rationale": "User-selected release ZIP export copies to an exclusive sibling temp, checks receipt hash/size, backs up an existing target, promotes, reopens, and rolls back.",
+      "failureContract": "Any mismatch or promotion error reports failure and restores the prior selected output; final success names verified bytes only."
+    }
+  ],
+  "hostStores": [
+    {
+      "file": "src/App.tsx",
+      "calls": { "localStorageSet": 16 },
+      "categories": ["browser-cache", "browser-preference"],
+      "owners": ["Studio layout/release preferences", "workspace revision cache", "experience confirmations"],
+      "rationale": "Browser storage mirrors server-owned workspace/release state or retains non-authoritative UI preferences and acknowledgements.",
+      "failureContract": "Authoritative state remains on the server; preference failures keep current in-memory behavior and never authorize a write."
+    },
+    {
+      "file": "src/components/AIConnectionModal.tsx",
+      "calls": { "localStorageRemove": 1 },
+      "categories": ["browser-cache"],
+      "owners": ["legacy Google OAuth cleanup"],
+      "rationale": "Removes obsolete browser OAuth identity metadata after the server-owned credential migration.",
+      "failureContract": "Removal failure cannot expose a current provider credential because tokens are no longer stored there."
+    },
+    {
+      "file": "src/components/DiagnosticGuidance.tsx",
+      "calls": { "localStorageSet": 1 },
+      "categories": ["browser-preference"],
+      "owners": ["suppression reviewer convenience"],
+      "rationale": "Caches only the last reviewer label; the guarded server route revalidates every suppression authority field.",
+      "failureContract": "Failure loses convenience text only and cannot weaken validation or commit a suppression."
+    },
+    {
+      "file": "src/components/Sidebar.tsx",
+      "calls": { "localStorageSet": 1 },
+      "categories": ["browser-preference"],
+      "owners": ["workspace directory display mode"],
+      "rationale": "Stores a presentation preference with no source, deployment, credential, or authority meaning.",
+      "failureContract": "Failure falls back to the default display mode without changing project data."
+    },
+    {
+      "file": "src/components/SourceControl.tsx",
+      "calls": { "localStorageSet": 18, "localStorageRemove": 3 },
+      "categories": ["browser-cache", "browser-preference"],
+      "owners": ["Git UI baseline/history cache", "GitHub repository preference and legacy-token cleanup"],
+      "rationale": "Caches display history and repository selections; credentials are server-owned and browser PAT remnants are deletion-only.",
+      "failureContract": "Browser cache failure cannot perform Git or network mutation and server routes re-check credentials and requested operations."
+    },
+    {
+      "file": "src/components/VirtualizedNodeToolbox.tsx",
+      "calls": { "localStorageSet": 1 },
+      "categories": ["browser-preference"],
+      "owners": ["toolbox view preference"],
+      "rationale": "Stores only virtualized toolbox presentation state.",
+      "failureContract": "Failure retains the current session state or restores the default view."
+    },
+    {
+      "file": "src/components/XMLPatchSystem.tsx",
+      "calls": { "localStorageSet": 3 },
+      "categories": ["browser-cache"],
+      "owners": ["custom XML snippet library"],
+      "rationale": "Stores user-authored snippet convenience data that is not compiled or deployed without a later explicit project action.",
+      "failureContract": "Storage exceptions surface through the owning UI path and cannot mutate workspace or deployed files."
+    },
+    {
+      "file": "src/lib/apiHelper.ts",
+      "calls": { "localStorageSet": 3, "localStorageRemove": 3 },
+      "categories": ["browser-preference", "browser-cache"],
+      "owners": ["AI provider/model preferences", "legacy provider-key cleanup"],
+      "rationale": "Keeps non-secret provider/model choices and deletes legacy browser key values; current credentials are server-owned.",
+      "failureContract": "Preference failure uses defaults; key cleanup failure never makes browser keys authoritative or eligible for implicit dispatch."
+    },
+    {
+      "file": "src/lib/modBlueprint.ts",
+      "calls": { "localStorageSet": 1 },
+      "categories": ["browser-cache"],
+      "owners": ["blueprint draft cache"],
+      "rationale": "Caches an uncommitted blueprint draft for browser continuity.",
+      "failureContract": "Failure can lose the draft cache but cannot create, compile, deploy, or publish a mod."
+    },
+    {
+      "file": "src/main.tsx",
+      "calls": { "sessionStorageSet": 1 },
+      "categories": ["browser-session"],
+      "owners": ["injected Studio session token handoff"],
+      "rationale": "Keeps the server-injected session token within the current browser tab rather than durable local storage.",
+      "failureContract": "Failure leaves API calls unauthorized; the token is never downgraded into persistent browser storage."
+    },
+    {
+      "file": "vscode-extension/src/extension.ts",
+      "calls": { "globalStateUpdate": 1 },
+      "categories": ["extension-global-state"],
+      "owners": ["two-way-editing telemetry counters"],
+      "rationale": "Stores non-authoritative adoption/decline/refusal/conflict counters in the IDE host's managed global state.",
+      "failureContract": "The fire-and-forget telemetry write never changes authorization, source state, or conflict handling."
+    }
+  ],
+  "browserOutputs": [
+    {
+      "file": "src/components/AgentBridge.tsx",
+      "calls": { "anchorDownload": 1 },
+      "categories": ["browser-file-output"],
+      "owners": ["workspace manifest JSON download"],
+      "rationale": "Hands a non-authoritative JSON representation of the current workspace to the browser download manager after an explicit user action.",
+      "failureContract": "Download failure cannot mutate the server workspace, compiled artifacts, deployment state, credentials, or game files."
+    },
+    {
+      "file": "src/components/ReleaseCenter.tsx",
+      "calls": { "showSaveFilePicker": 1, "createWritable": 1, "anchorDownload": 1 },
+      "categories": ["browser-file-output", "verified-release-export"],
+      "owners": ["verified Nexus and Steam artifact export"],
+      "rationale": "Exports only server-prepared artifacts whose size and SHA-256 match the release receipt; the File System Access path reopens and reverifies saved bytes while the fallback is explicitly an unreceipted browser handoff.",
+      "failureContract": "Picker cancellation or write/hash failure preserves the verified internal artifact and reports no successful export; browser-download fallback states that the final destination cannot be reopened or receipted."
+    }
+  ],
+  "database": {
+    "file": "src/lib/db.ts",
+    "category": "sqlite-transaction",
+    "owners": ["openStudioDb", "bindGamePath", "recordSourceStamps", "cacheObjectIndex", "cacheExtensions", "appendReferenceFiles", "completeReferenceGeneration"],
+    "failureContract": "SQLite WAL owns page durability; migrations, game-root rebinding, multi-row replacements, and their visibility metadata use explicit transactions; long reference scans stay invisible until their generation becomes ready; the database is a disposable cache and falls back to memory.",
+    "mutationStatements": 47,
+    "transactionCalls": 7,
+    "statementRuns": 14,
+    "execCalls": 14,
+    "pragmaCalls": 2
+  }
+}

@@ -404,7 +404,7 @@ opens the schema, the B10 structural rider is the one specified code task. [INFE
 
 - **graphify code graph** — `graphify-out/graph.json` (+ `graph.html`, `GRAPH_REPORT.md`): a precomputed
   AST-extracted knowledge graph of THIS codebase (~1,160 nodes / 2,649 edges at last build; god nodes:
-  `ModWorkspace`, `MDNode`, `generateMDXML()`, `compileAndSaveAll()`, `validateModWorkspace()`). Answers
+  `ModWorkspace`, `MDNode`, `runProjectValidation()`, `generateMDXML()`, `resolveXsdConfig()`). Answers
   blast-radius / shortest-path / "what connects to X" cheaper than grep. Rebuild after code changes with
   `graphify update .` (deterministic, no LLM, seconds). **[FLAG for Codex:** the `graphify` CLI is installed
   for this environment but may not be in yours; the `graph.json` file itself is in the repo and readable

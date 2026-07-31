@@ -29,6 +29,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { atomicWriteFile } from './workspaceState';
 
 export interface InstanceRecord {
   port: number;
@@ -63,10 +64,7 @@ export function pidAlive(pid: number): boolean {
 }
 
 function writeRestricted(target: string, contents: string): void {
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  fs.writeFileSync(target, contents, { encoding: 'utf8', mode: 0o600 });
-  // writeFileSync's mode only applies at creation; enforce it on an existing file too.
-  try { fs.chmodSync(target, 0o600); } catch { /* platform may not support it */ }
+  atomicWriteFile(target, contents, { mode: 0o600 });
 }
 
 /**

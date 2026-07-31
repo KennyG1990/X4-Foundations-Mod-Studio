@@ -5,8 +5,6 @@
 
 import {
   ModWorkspace,
-  generateMDXML,
-  generateUILuaScript,
   PackageDiagnostic,
   AIBehaviorScript,
   JobDef,
@@ -14,8 +12,7 @@ import {
   TFile,
   WareDef
 } from '../types';
-import { generateHttpGlueLua, generateContractMdScript, validateContract } from './contractGlue';
-import { generateLayoutLua, pixelLayoutToGrid, type PixelWidget } from './uiLayout';
+import { validateContract } from './contractGlue';
 import { analyzeLuaFiles } from './luaStaticAnalysis';
 import { DOMParser as XmlDOMParser } from '@xmldom/xmldom';
 
@@ -35,25 +32,6 @@ function isWellFormedXmlFragment(content: string): boolean {
     }).parseFromString(`<root>${raw}</root>`, 'text/xml');
   } catch { fatal = true; }
   return !fatal;
-}
-
-interface WritableFileHandle {
-  write(content: string): Promise<void>;
-  close(): Promise<void>;
-}
-
-interface FileHandleLike {
-  kind?: string;
-  getFile(): Promise<{ text(): Promise<string> }>;
-  createWritable(): Promise<WritableFileHandle>;
-}
-
-interface DirectoryHandleLike {
-  kind?: string;
-  getFileHandle(filename: string, options?: { create?: boolean }): Promise<FileHandleLike>;
-  getDirectoryHandle(dirname: string, options?: { create?: boolean }): Promise<DirectoryHandleLike>;
-  entries(): AsyncIterableIterator<[string, FileHandleLike | DirectoryHandleLike]>;
-  removeEntry(filename: string): Promise<void>;
 }
 
 interface TFileNameInput {
@@ -334,26 +312,6 @@ export const compileDiffDocument = (patches: PatchBlock[], targetFile: string): 
   return xml;
 };
 
-export const writeTextFile = async (directoryHandle: DirectoryHandleLike, filename: string, content: string) => {
-  const fileHandle = await directoryHandle.getFileHandle(filename, { create: true });
-  const writable = await fileHandle.createWritable();
-  await writable.write(content);
-  await writable.close();
-};
-
-export const writeTextFileAtPath = async (baseHandle: DirectoryHandleLike, filePath: string, content: string) => {
-  const parts = filePath.split('/');
-  let currentDir = baseHandle;
-  for (let i = 0; i < parts.length - 1; i++) {
-    currentDir = await currentDir.getDirectoryHandle(parts[i], { create: true });
-  }
-  const filename = parts[parts.length - 1];
-  const fileHandle = await currentDir.getFileHandle(filename, { create: true });
-  const writable = await fileHandle.createWritable();
-  await writable.write(content);
-  await writable.close();
-};
-
 /**
  * True when the modeled workspace owns a generated Mission Director document.
  * Source-owned MD passthrough/original files are deliberately excluded: the artifact
@@ -505,213 +463,4 @@ export const validatePackageReadiness = (workspace: ModWorkspace): PackageDiagno
   }
 
   return reports;
-};
-
-const MAX_SNAPSHOTS = 30;
-
-/**
- * Writes a timestamped JSON snapshot of the workspace into <modDir>/.snapshots/.
- * Used to build a durable, rollback-able version history alongside the mod.
- * Non-fatal: a snapshot failure never blocks a compile.
- */
-export const writeSnapshot = async (targetDir: DirectoryHandleLike, workspace: ModWorkspace): Promise<void> => {
-  try {
-    const snapDir = await targetDir.getDirectoryHandle('.snapshots', { create: true });
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    await writeTextFile(
-      snapDir,
-      `snapshot_${stamp}.json`,
-      JSON.stringify({ savedAt: new Date().toISOString(), name: workspace.name, workspace }, null, 2)
-    );
-    // Prune oldest snapshots beyond the cap (names sort chronologically by ISO stamp).
-    const names: string[] = [];
-    for await (const [name, handle] of snapDir.entries()) {
-      if (handle.kind === 'file' && name.startsWith('snapshot_') && name.endsWith('.json')) {
-        names.push(name);
-      }
-    }
-    names.sort();
-    for (let i = 0; i < names.length - MAX_SNAPSHOTS; i++) {
-      await snapDir.removeEntry(names[i]);
-    }
-  } catch (err) {
-    console.warn('Snapshot write failed (non-fatal):', err);
-  }
-};
-
-/** Lists available snapshots for a mod, newest first. */
-export const listSnapshots = async (dirHandle: DirectoryHandleLike, modId: string): Promise<{ name: string; savedAt: string }[]> => {
-  try {
-    const modDir = await dirHandle.getDirectoryHandle(modId);
-    const snapDir = await modDir.getDirectoryHandle('.snapshots');
-    const out: { name: string; savedAt: string }[] = [];
-    for await (const [name, handle] of snapDir.entries()) {
-      if (handle.kind === 'file' && name.endsWith('.json')) {
-        out.push({ name, savedAt: name.replace('snapshot_', '').replace('.json', '') });
-      }
-    }
-    return out.sort((a, b) => b.name.localeCompare(a.name));
-  } catch {
-    return [];
-  }
-};
-
-/** Reads a single snapshot back into a workspace object for restore. */
-export const readSnapshot = async (dirHandle: DirectoryHandleLike, modId: string, snapshotName: string): Promise<ModWorkspace | null> => {
-  try {
-    const modDir = await dirHandle.getDirectoryHandle(modId);
-    const snapDir = await modDir.getDirectoryHandle('.snapshots');
-    const fileHandle = await snapDir.getFileHandle(snapshotName);
-    const file = await fileHandle.getFile();
-    const parsed = JSON.parse(await file.text());
-    return parsed.workspace || parsed;
-  } catch {
-    return null;
-  }
-};
-
-export const compileAndSaveAll = async (
-  originalWorkspace: ModWorkspace,
-  dirHandle: DirectoryHandleLike,
-  mode: 'candy' | 'store',
-  options: { snapshot?: boolean } = {}
-): Promise<{ success: boolean; message: string }> => {
-  if (!dirHandle) {
-    throw new Error('No directory linked.');
-  }
-
-  // Filter out any items the user has excluded from the current build output
-  const activeNodes = (originalWorkspace.nodes || []).filter(n => n.includeInBuild !== false);
-  const activeWidgets = (originalWorkspace.uiWidgets || []).filter(w => w.includeInBuild !== false);
-  const activeAiScripts = (originalWorkspace.aiScripts || []).filter(s => s.includeInBuild !== false);
-  const activeWares = (originalWorkspace.wares || []).filter(w => w.includeInBuild !== false);
-  const activeJobs = (originalWorkspace.jobs || []).filter(j => j.includeInBuild !== false);
-  const activeTFiles = (originalWorkspace.tFiles || []).filter(f => f.includeInBuild !== false);
-  const activeXmlPatches = (originalWorkspace.xmlPatches || []).filter(p => p.includeInBuild !== false);
-
-  const workspace = {
-    ...originalWorkspace,
-    nodes: activeNodes,
-    uiWidgets: activeWidgets,
-    aiScripts: activeAiScripts,
-    wares: activeWares,
-    jobs: activeJobs,
-    tFiles: activeTFiles,
-    xmlPatches: activeXmlPatches
-  };
-
-  const errors = validatePackageReadiness(workspace).filter(r => r.severity === 'error');
-  if (errors.length > 0) {
-    throw new Error(errors.map(e => e.message).join(' '));
-  }
-
-  const modId = toSafeModId(workspace.name);
-  
-  // Decide whether the target handle is the mod root directly (candy) or if we create/use a subfolder (candy store)
-  let targetDir = dirHandle;
-  if (mode === 'store') {
-    targetDir = await dirHandle.getDirectoryHandle(modId, { create: true });
-  }
-
-  // 1. Manifest content.xml and README.md
-  await writeTextFile(targetDir, 'content.xml', generateContentXML(modId, workspace));
-  await writeTextFile(targetDir, 'README.md', `# ${workspace.name || modId}\n\nGenerated by X4 Forge.\n\nInstall location:\n\n\`\`\`\nX4 Foundations/extensions/${modId}/\n\`\`\`\n\nRuntime reload during development: save files, then run \`refreshmd\` in X4's debug command input.\n`);
-
-  // 2. Mission Director (md) script. Patch/library/UI-only extensions do not need MD and
-  // must not acquire a synthetic empty md/<mod>.xml merely because Forge compiled them.
-  let directorDir: DirectoryHandleLike | null = null;
-  if (hasGeneratedMdDomain(workspace)) {
-    directorDir = await targetDir.getDirectoryHandle('md', { create: true });
-    await writeTextFile(directorDir, `${modId}.xml`, generateMDXML(workspace));
-  }
-  // Lever 2: MD bridge cues for the HTTP integration contract (paired with ui/<modId>_http.lua).
-  if (workspace.integrationContract && validateContract(workspace.integrationContract).filter(fd => fd.severity === 'error').length === 0) {
-    directorDir ??= await targetDir.getDirectoryHandle('md', { create: true });
-    await writeTextFile(directorDir, `${modId}_http.xml`, generateContractMdScript(workspace.integrationContract, `${modId}_http`));
-  }
-
-  // 3. UI — X4-correct: extension-root ui.xml registering Lua entries under ui/.
-  //    Includes the generated HTTP-integration glue (Lever 2) when a valid contract exists.
-  const contract = workspace.integrationContract;
-  const contractValid = !!contract && validateContract(contract).filter(fd => fd.severity === 'error').length === 0;
-  const hasWidgets = !!workspace.uiWidgets?.length;
-  const hasCustomLua = typeof workspace.customLua === 'string' && workspace.customLua.trim().length > 0;
-  // Bridge: derive the engine-correct responsive grid layout from the free-form designer widgets.
-  let responsiveLayoutLua = '';
-  if (hasWidgets) { try { responsiveLayoutLua = generateLayoutLua(pixelLayoutToGrid((workspace.uiWidgets || []) as PixelWidget[], `${modId}_layout`), modId); } catch { responsiveLayoutLua = ''; } }
-  const hasLayout = responsiveLayoutLua.length > 0;
-  if (hasWidgets || contractValid || hasCustomLua || hasLayout) {
-    const uiFiles: string[] = [];
-    if (hasWidgets) uiFiles.push(`ui/${modId}.lua`);
-    if (contractValid) uiFiles.push(`ui/${modId}_http.lua`);
-    if (hasCustomLua) uiFiles.push(`ui/${modId}_custom.lua`);
-    if (hasLayout) uiFiles.push(`ui/${modId}_layout.lua`);
-    const uiIndex = `<?xml version="1.0" encoding="utf-8"?>\n<addon name="${modId}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../ui/core/addon.xsd">\n  <environment type="menus">\n${uiFiles.map(p => `    <file name="${p}" />`).join("\n")}\n  </environment>\n</addon>`;
-    await writeTextFile(targetDir, 'ui.xml', uiIndex);
-    const uiDir = await targetDir.getDirectoryHandle('ui', { create: true });
-    if (hasWidgets) await writeTextFile(uiDir, `${modId}.lua`, generateUILuaScript(workspace, modId));
-    if (contractValid) await writeTextFile(uiDir, `${modId}_http.lua`, generateHttpGlueLua(contract!));
-    if (hasCustomLua) await writeTextFile(uiDir, `${modId}_custom.lua`, workspace.customLua!);
-    if (hasLayout) await writeTextFile(uiDir, `${modId}_layout.lua`, responsiveLayoutLua);
-  }
-
-  // 4. AIScripts behavior trees. #65: namespace the mod's own scripts (collision-safe),
-  // matching the agent/manifest export path. Operate on copies — never rename the user's
-  // live workspace models. Imported scripts (namespaced:true) keep their final name.
-  if (workspace.aiScripts?.length) {
-    const aiDir = await targetDir.getDirectoryHandle('aiscripts', { create: true });
-    for (const script of workspace.aiScripts) {
-      const finalName = namespaceAiScriptName(script.name, modId, script.namespaced === true);
-      const emit = finalName === script.name ? script : { ...script, name: finalName };
-      const fileName = finalName.endsWith('.xml') ? finalName : `${finalName}.xml`;
-      await writeTextFile(aiDir, fileName, compileScriptToXML(emit));
-    }
-  }
-
-  // 5. Libraries (Wares / Jobs)
-  if (workspace.wares?.length || workspace.jobs?.length) {
-    const libDir = await targetDir.getDirectoryHandle('libraries', { create: true });
-    if (workspace.wares?.length) {
-      await writeTextFile(libDir, 'wares.xml', compileWaresXML(workspace.wares));
-    }
-    if (workspace.jobs?.length) {
-      await writeTextFile(libDir, 'jobs.xml', compileJobsXML(workspace.jobs));
-    }
-  }
-
-  // 6. Translation files
-  if (workspace.tFiles?.length) {
-    const tDir = await targetDir.getDirectoryHandle('t', { create: true });
-    for (const tFile of workspace.tFiles) {
-      await writeTextFile(tDir, toTFileName(tFile), compileTFileXML(tFile));
-    }
-  }
-
-  // 7. XML diff patches grouped by file
-  if (workspace.xmlPatches?.length) {
-    const patchesByFile: Record<string, PatchBlock[]> = {};
-    workspace.xmlPatches.forEach((patch) => {
-      const file = patch.targetFile || 'libraries/wares.xml';
-      if (!patchesByFile[file]) {
-        patchesByFile[file] = [];
-      }
-      patchesByFile[file].push(patch);
-    });
-
-    for (const [filePath, filePatches] of Object.entries(patchesByFile)) {
-      await writeTextFileAtPath(targetDir, filePath, compileDiffDocument(filePatches, filePath));
-    }
-  }
-
-  // 8. Version snapshot (rollback history) inside the mod folder, when requested.
-  if (options.snapshot && mode === 'store') {
-    await writeSnapshot(targetDir, workspace);
-  }
-
-  return {
-    success: true,
-    message: mode === 'store' 
-      ? `Successfully compiled extension inside subdirectory extensions/${modId}/`
-      : `Successfully compiled extension directly into connected folder at root.`
-  };
 };

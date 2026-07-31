@@ -22,6 +22,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { atomicWriteJson, type AtomicWriteOptions } from './workspaceState';
 
 export type AgentKeyScope = 'read' | 'write' | 'deploy';
 
@@ -74,40 +75,57 @@ export function hashAgentKey(token: string): string {
   return crypto.createHash('sha256').update(token, 'utf8').digest('hex');
 }
 
+function isAgentKeyRecord(value: unknown): value is AgentKeyRecord {
+  if (!value || typeof value !== 'object') return false;
+  const row = value as Partial<AgentKeyRecord>;
+  const nullableNumber = (candidate: unknown) => candidate === null || (typeof candidate === 'number' && Number.isFinite(candidate));
+  return typeof row.id === 'string' && typeof row.label === 'string' &&
+    (row.scope === 'read' || row.scope === 'write' || row.scope === 'deploy') &&
+    typeof row.tokenHash === 'string' && /^[a-f0-9]{64}$/.test(row.tokenHash) &&
+    typeof row.createdAt === 'number' && Number.isFinite(row.createdAt) &&
+    nullableNumber(row.expiresAt) && nullableNumber(row.lastUsedAt) && nullableNumber(row.revokedAt) &&
+    typeof row.useCount === 'number' && Number.isInteger(row.useCount) && row.useCount >= 0;
+}
+
 interface StoreOptions {
   /** JSON persistence path; empty string = in-memory only (tests). */
   file: string;
   now?: () => number;
   /** Injected randomness for deterministic tests; default crypto.randomBytes. */
   randomHex?: (bytes: number) => string;
+  /** Test seam for deterministic pre-promotion failure. */
+  writeJson?: (file: string, value: unknown, options?: AtomicWriteOptions) => void;
 }
 
 export function createAgentKeyStore(opts: StoreOptions): AgentKeyStore {
   const now = opts.now || (() => Date.now());
   const randomHex = opts.randomHex || ((n: number) => crypto.randomBytes(n).toString('hex'));
+  const writeJson = opts.writeJson || atomicWriteJson;
   let records: AgentKeyRecord[] = [];
+  let loadError: string | null = null;
 
-  // ---- persistence (atomic write, tolerant read — same posture as workspaceState) ----
+  // ---- persistence (atomic write; missing is first boot, malformed/unreadable fails closed) ----
   function load(): void {
     if (!opts.file) return;
     try {
       const raw = fs.readFileSync(opts.file, 'utf8');
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed?.keys)) records = parsed.keys;
-    } catch {
-      /* first boot or unreadable — start empty; never crash auth on a bad file */
+      if (!parsed || typeof parsed !== 'object' || parsed.version !== 1 || !Array.isArray(parsed.keys) || !parsed.keys.every(isAgentKeyRecord)) {
+        throw new Error('agent key store has an invalid shape');
+      }
+      records = parsed.keys;
+    } catch (error: unknown) {
+      const code = typeof error === 'object' && error !== null && 'code' in error
+        ? (error as { code?: unknown }).code
+        : undefined;
+      if (code !== 'ENOENT') loadError = error instanceof Error ? error.message : String(error);
+      /* first boot or unreadable — existing keys fail closed; mutations refuse overwrite */
     }
   }
-  function save(): void {
+  function save(next: AgentKeyRecord[]): void {
     if (!opts.file) return;
-    try {
-      fs.mkdirSync(path.dirname(opts.file), { recursive: true });
-      const tmp = `${opts.file}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify({ version: 1, keys: records }, null, 2), 'utf8');
-      fs.renameSync(tmp, opts.file);
-    } catch {
-      /* persistence best-effort; in-memory keys still work this session */
-    }
+    if (loadError) throw new Error(`Agent key store is unreadable; refusing to overwrite it: ${loadError}`);
+    writeJson(opts.file, { version: 1, keys: next }, { mode: 0o600 });
   }
   load();
 
@@ -126,8 +144,9 @@ export function createAgentKeyStore(opts: StoreOptions): AgentKeyStore {
         useCount: 0,
         revokedAt: null,
       };
-      records.push(record);
-      save();
+      const next = [...records, record];
+      save(next);
+      records = next;
       return { token, record };
     },
 
@@ -145,8 +164,9 @@ export function createAgentKeyStore(opts: StoreOptions): AgentKeyStore {
     revoke(id: string): boolean {
       const rec = records.find((r) => r.id === id);
       if (!rec || rec.revokedAt !== null) return false;
-      rec.revokedAt = now();
-      save();
+      const next = records.map(row => row.id === id ? { ...row, revokedAt: now() } : row);
+      save(next);
+      records = next;
       return true;
     },
 
@@ -157,21 +177,29 @@ export function createAgentKeyStore(opts: StoreOptions): AgentKeyStore {
     touch(id: string, atMs?: number) {
       const rec = records.find((r) => r.id === id);
       if (!rec) return;
-      rec.lastUsedAt = atMs ?? now();
-      rec.useCount += 1;
-      save();
+      const next = records.map(row => row.id === id ? { ...row, lastUsedAt: atMs ?? now(), useCount: row.useCount + 1 } : row);
+      try {
+        save(next);
+        records = next;
+      } catch {
+        // Touch is audit metadata, not authorization state. Keep memory/disk consistent
+        // and allow the already-authorized request without fabricating a durable touch.
+      }
     },
 
     prune(atMs?: number, keepRevokedMs = 30 * 86_400_000): number {
       const at = atMs ?? now();
       const before = records.length;
-      records = records.filter((r) => {
+      const next = records.filter((r) => {
         if (r.revokedAt !== null) return at - r.revokedAt < keepRevokedMs;
         if (r.expiresAt !== null && at >= r.expiresAt) return false;
         return true;
       });
-      if (records.length !== before) save();
-      return before - records.length;
+      if (next.length !== before) {
+        save(next);
+        records = next;
+      }
+      return before - next.length;
     },
   };
 }
@@ -361,6 +389,39 @@ export function runAgentKeysSelftest(): { pass: boolean; checks: Array<{ name: s
     ok('persistence_round_trip', s2.verify(k.token, T0).ok === true);
     const fileRaw = fs.readFileSync(tmpFile, 'utf8');
     ok('file_never_contains_plaintext', !fileRaw.includes(k.token));
+
+    const injected = createAgentKeyStore({
+      file: tmpFile,
+      now: () => T0 + 1,
+      writeJson: () => { throw new Error('injected durable failure'); },
+    });
+    const beforeInjected = JSON.stringify(injected.list());
+    let createFailed = false;
+    try { injected.create('must-not-exist', 'read', null); } catch (error) { createFailed = /injected durable failure/.test(String(error)); }
+    ok('failed_create_rolls_back_memory', createFailed && JSON.stringify(injected.list()) === beforeInjected);
+    let revokeFailed = false;
+    try { injected.revoke(k.record.id); } catch (error) { revokeFailed = /injected durable failure/.test(String(error)); }
+    ok('failed_revoke_rolls_back_memory', revokeFailed && injected.verify(k.token, T0 + 1).ok === true);
+    injected.touch(k.record.id, T0 + 2);
+    ok('failed_touch_rolls_back_audit_without_blocking_auth', JSON.stringify(injected.list()) === beforeInjected);
+
+    const writeInvalidStore = (text: string) => fs.writeFileSync(tmpFile, text, 'utf8');
+    writeInvalidStore('{corrupt');
+    const corrupt = createAgentKeyStore({ file: tmpFile, now: () => T0 + 3 });
+    const corruptBytes = fs.readFileSync(tmpFile, 'utf8');
+    let corruptCreateRejected = false;
+    try { corrupt.create('must-not-overwrite', 'read', null); } catch (error) { corruptCreateRejected = /refusing to overwrite/.test(String(error)); }
+    ok('corrupt_store_refuses_mutation', corruptCreateRejected && fs.readFileSync(tmpFile, 'utf8') === corruptBytes);
+    writeInvalidStore('{"keys":"not-an-array"}');
+    const invalidShape = createAgentKeyStore({ file: tmpFile, now: () => T0 + 4 });
+    let invalidShapeRejected = false;
+    try { invalidShape.create('must-not-overwrite-shape', 'read', null); } catch (error) { invalidShapeRejected = /invalid shape/.test(String(error)); }
+    ok('invalid_shape_refuses_mutation', invalidShapeRejected && fs.readFileSync(tmpFile, 'utf8') === '{"keys":"not-an-array"}');
+    writeInvalidStore('{"version":1,"keys":[{"id":"broken"}]}');
+    const invalidRecord = createAgentKeyStore({ file: tmpFile, now: () => T0 + 5 });
+    let invalidRecordRejected = false;
+    try { invalidRecord.create('must-not-overwrite-record', 'read', null); } catch (error) { invalidRecordRejected = /invalid shape/.test(String(error)); }
+    ok('invalid_record_refuses_mutation', invalidRecordRejected && invalidRecord.verify(k.token, T0 + 5).reason === 'unknown');
     try { fs.rmSync(tmpFile, { force: true }); } catch { /* ignore */ }
   } catch (e) {
     ok('persistence_round_trip', false, String(e));

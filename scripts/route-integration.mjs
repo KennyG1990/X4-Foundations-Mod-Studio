@@ -144,6 +144,18 @@ async function main() {
   ok('failure_contract_is_discoverable', agentSchema.status === 200 && agentSchema.json?.api_version === '2026-07-30.agent.v4' && Array.isArray(agentSchema.json?.failure_contract?.top_level?.failedStages), JSON.stringify(agentSchema.json?.failure_contract || {}));
   ok('deadline_contract_is_discoverable', agentSchema.json?.request_deadlines?.browser_api_default_ms === 30000 && agentSchema.json?.request_deadlines?.command_job?.maximum_ms === 1800000, JSON.stringify(agentSchema.json?.request_deadlines || {}));
 
+  // R7: a corrupt persistent spend ledger must be explicit in the readout and must stop
+  // the paid-call chokepoint before provider selection/key lookup/network dispatch.
+  const aiUsageFile = path.join(dataDir, 'ai-usage.json');
+  fs.writeFileSync(aiUsageFile, '{corrupt');
+  const corruptUsage = await req('GET', '/api/ai/usage', SESSION_TOKEN);
+  ok('corrupt_spend_meter_is_explicit_in_readout', corruptUsage.status === 200 && corruptUsage.json?.meterAvailable === false && typeof corruptUsage.json?.meterError === 'string', JSON.stringify(corruptUsage.json || {}));
+  const refusedPaidCall = await req('POST', '/api/gemini', SESSION_TOKEN, { prompt: 'R7 meter failure fixture' });
+  ok('corrupt_spend_meter_refuses_before_provider_dispatch', refusedPaidCall.status === 500 && /spend meter unavailable.*refused before network dispatch/i.test(refusedPaidCall.json?.error || ''), JSON.stringify(refusedPaidCall.json || {}));
+  fs.unlinkSync(aiUsageFile);
+  const firstRunUsage = await req('GET', '/api/ai/usage', SESSION_TOKEN);
+  ok('missing_spend_meter_is_valid_first_run', firstRunUsage.status === 200 && firstRunUsage.json?.meterAvailable === true && firstRunUsage.json?.totalToday === 0, JSON.stringify(firstRunUsage.json || {}));
+
   const responseTimeoutStarted = Date.now();
   const responseTimeout = await req('GET', '/api/agent/timeout-drill', null);
   const responseTimeoutElapsed = Date.now() - responseTimeoutStarted;

@@ -7218,3 +7218,47 @@ sidecar `:61473`. Open VSX 0.0.61 public/local bytes match at 17,881,788 bytes a
 
 Suggested commit title:
 `feat(validation): persist and surface warning deltas`.
+
+## 2026-07-31 — B110-R7 durable-writer discipline — VERIFIED
+
+All production durable mutation primitives are now source-inventoried rather than governed by convention alone.
+The precommit gate pins 31 raw filesystem sources, 11 host-store sources, 2 browser-output sources, 47 SQLite
+mutation statements, 7 transactions, 14 statement runs, 14 execs, and 2 pragmas, with owner, authority, rationale,
+and failure contract. New or stale sources, call-count/fingerprint drift, unknown categories, or incomplete contracts
+fail the build. The uncalled browser filesystem compiler/snapshot stack was removed instead of legitimized beside
+the server artifact authority.
+
+Authoritative server and packaged-extension files now use unique sibling-temp atomic replacement or rollback-safe
+sets. Agent/API keys restore in-memory truth when persistence fails. Capped AI spending rejects corrupt, unreadable,
+unwritable, or future-dated state and atomically reserves call count plus estimated USD before provider dispatch.
+SQLite cache rows and their generation/identity metadata share transactions, with injected-failure proof.
+
+Evidence: writer policy 14/14; extension writer 8/8; spend 24/24; DB 11/11; routes 278/278; runtime-discovered
+oracles 125/125; full isolated E2E 50/50 in 537.7 seconds with zero failed/flaky/bad/quarantined; ports 3100/3101
+closed and normal installed sidecar unchanged; extension/root build, typecheck, lint at 0 errors / 555 baseline
+warnings, production build, staged product 16/16, disposable final VSIX inspection (2,091 entries), precommit, and
+Graphify refresh at 3,106 nodes / 7,272 edges / 146 communities. No live mod, game, provider, or profile state was
+used. Environment policy left one inert uninstalled validation VSIX in `%TEMP%` after rejecting exact-file cleanup.
+
+Suggested commit title:
+`refactor(persistence): enforce durable writer discipline`.
+
+## 2026-07-31 — B110-R11/R14 explainable conflicts and destructive recovery — VERIFIED
+
+Workspace conflicts now expose real local/server provenance, content heads, timestamps, deterministic changed-file
+counts, bounded text diffs, explicit consequences, Cancel/review, progress/failure truth, and persistent outcomes.
+Adopting the server creates local Undo. Forced workspace overwrite and successful verified deploy create bounded,
+expiring, one-use recoveries exposed through Agent History; restore is exact post-state CAS and refuses stale,
+corrupt, expired, replayed, over-cap, path-escaping, locked, or unavailable state without false success.
+
+Stable Open VSX 0.0.62 remained byte-identical to the inspected local release at
+`A1A4776FC7521A5174D50D4DADCF9FDCA59BBC74E3673CEBCCAF3E554E5BF1ED`. The exact package is installed in the
+normal signed-in Antigravity profile. Forge `v1.0.389` visibly rendered a real disposable-writer HTTP 409; overwrite
+created recovery `workspace-ms8ftx4o-955fe2b96f22e59b`; Agent History visibly offered `Undo forced overwrite`;
+restore returned exact prior head `84ecfbdf2bf847a5`; replay failed 409 `RECOVERY_ALREADY_USED`. Screenshots and a
+machine receipt live under `vscode-extension/evidence/0.0.62-installed-antigravity-*`. Temporary settings/service
+state were removed, port 3000 stopped, normal managed sidecar 50755 and the prior DeadAir workspace were restored,
+and computer control was released.
+
+Suggested commit title:
+`feat(recovery): verify explainable conflicts and destructive undo`.

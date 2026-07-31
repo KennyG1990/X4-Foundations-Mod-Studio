@@ -148,11 +148,19 @@ function checkProductCopy() {
   if (result.status !== 0) throw new Error(`product-copy guard failed with exit ${result.status ?? "unknown"}`);
 }
 
+function checkDurableWriters() {
+  console.log("[precommit] durable writer inventory");
+  const result = spawnSync("npm run test:writers", { cwd: root, shell: true, stdio: "inherit" });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(`durable writer inventory failed with exit ${result.status ?? "unknown"}`);
+}
+
 try {
   checkTripwires();
   checkMirrorDrift();
   checkE2eVerdict();
   checkProductCopy();
+  checkDurableWriters();
   runTypecheck();
   checkLargeFiles();
   console.log("[precommit] OK");

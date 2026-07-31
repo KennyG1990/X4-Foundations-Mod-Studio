@@ -1,0 +1,42 @@
+X4 Forge Studio 0.0.62 — installed Antigravity conflict/recovery evidence
+Date: 2026-07-31 EDT
+Host: normal Antigravity IDE profile, installed extension x4forge.x4-forge-studio@0.0.62
+Rendered app build: X4 Forge v1.0.389
+VSIX: vscode-extension/x4-forge-studio-0.0.62.vsix
+VSIX bytes: 17893929
+VSIX SHA-256: A1A4776FC7521A5174D50D4DADCF9FDCA59BBC74E3673CEBCCAF3E554E5BF1ED
+
+Isolation
+- The visual workflow used a disposable state/config/data/discovery tree under the OS temp directory.
+- The temporary server listened only on 127.0.0.1:3000 with a task-scoped session token.
+- No real mod, game extension, or normal Forge workspace was written.
+- The temporary workspace attach setting was removed after validation.
+- The temporary server was stopped; port 3000 was verified closed. The inert disposable directory remains under the OS temp directory because the execution policy rejected its verified recursive cleanup command.
+- Antigravity was restored to its normal managed 0.0.62 sidecar (observed on port 50755) and the prior DeadAir workspace.
+
+Installed visual/runtime result
+1. Antigravity's installed-extension registry reported x4forge.x4-forge-studio@0.0.62 and the installed package metadata reported version 0.0.62.
+2. The installed extension attached to the disposable server and rendered X4 Forge v1.0.389.
+3. A local canvas node was moved while the server was offline, leaving an unsaved local head.
+4. After restart, an authenticated external writer advanced the server head from dac6d106bd45f2bd to 84ecfbdf2bf847a5.
+5. A second local node move sent the stale expected head and produced the real HTTP 409 CAS conflict.
+6. The installed UI rendered both heads, origins/timestamps, file-level modified counts, and explicit "Use server copy" / "Overwrite server with my canvas" choices. Nothing was overwritten before the choice.
+7. Choosing "Overwrite server with my canvas" returned recovery workspace-ms8ftx4o-955fe2b96f22e59b and surfaced it in Agent API -> History as "Undo forced overwrite".
+8. POST /api/agent/history/ms8ftx4w-53722ef9/revert restored exact server hash 84ecfbdf2bf847a5 and description "R11 external-writer conflict fixture".
+9. A second use of the same recovery failed closed with HTTP 409 / RECOVERY_ALREADY_USED.
+
+Evidence images
+- 0.0.62-installed-antigravity-conflict.jpg
+  SHA-256: 053D10DCB3830124705A4A94DF45920D950736520512469FC98031683C023DB4
+- 0.0.62-installed-antigravity-recovery-history.jpg
+  SHA-256: A42F4BD6A0AF0970C162787DA7EEEA492762F8865A6DF6F80C1A2D97DE318324
+- 0.0.62-installed-antigravity-recovery-consumed.jpg
+  SHA-256: 8C9BFD661497A5CC694AD3527058EE29E09B335501938150B82B8F3CCDDD9EA9
+
+Non-product fixture correction / AAR trigger
+- The first disposable server launch used vscode-extension/app/dist as cwd, so server.cjs looked for dist/dist/index.html and rendered "Internal Server Error".
+- This was a reproduced harness launch error, not an installed-product defect. Restarting the identical packaged server with vscode-extension/app as cwd rendered successfully.
+- The corrected launch also set X4FORGE_DISCOVERY_DIR to the disposable tree; future isolated launches must set state, config, data, and discovery roots together.
+- Cleanup was attempted only after resolving the exact temp path and verifying that it was beneath the OS temp root, but the command policy rejected recursive removal. No process uses the retained fixture and it contains no real mod or game data.
+
+Final result: VERIFIED for the installed Antigravity conflict dialog, explicit overwrite choice, durable History recovery, exact restore, and one-use failure behavior.

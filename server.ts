@@ -72,7 +72,7 @@ import { runLuaRuntimeLogSelftest } from "./src/lib/luaRuntimeLog";
 import { runCueLineageSelftest } from "./src/lib/cueLineage";
 import { runSemanticsSelftest, listSemantics, semanticsForNode, getElementSemantics } from "./src/lib/mdSemantics";
 import { computeActionCensus, runActionCensusSelftest } from "./src/lib/actionCensus";
-import { createSpendMeter, estimateCallUsd, runAiSpendMeterSelftest } from "./src/lib/aiSpendMeter";
+import { createSpendMeter, estimateCallUsd, parseSpendCap, runAiSpendMeterSelftest } from "./src/lib/aiSpendMeter";
 import { runModPatternsSelftest } from "./src/lib/modPatterns";
 import { runExplainSelftest, explainWorkspace } from "./src/lib/mdExplain";
 import { explainDiagnostic, runDiagnosticExplainSelftest } from "./src/lib/diagnosticExplain";
@@ -130,7 +130,7 @@ import {
   validateSteamFolderName,
   type ReleaseStage,
 } from "./src/lib/platformRelease";
-import { aiKeyStatus, getStoredAiKey, setStoredAiKey } from "./src/server/aiKeyStore";
+import { aiKeyStatus, getStoredAiKey, setStoredAiKey, runAiKeyStoreSelftest } from "./src/server/aiKeyStore";
 import { runModDriftSelftest } from "./src/lib/modDrift";
 import { assessLuaStaleness, injectLuaVersionMarker, runLuaStalenessSelftest } from "./src/lib/luaStalenessCheck";
 import { registerGithubRoutes } from "./src/server/githubRoutes";
@@ -266,7 +266,7 @@ function loadStudioApiToken(): string {
     // First run on this checkout; create a local-only token below.
   }
   const token = crypto.randomBytes(32).toString("hex");
-  fs.writeFileSync(TOKEN_FILE, token, { encoding: "utf8" });
+  atomicWriteFile(TOKEN_FILE, token, { mode: 0o600 });
   return token;
 }
 
@@ -2547,14 +2547,21 @@ function isAppUiRequest(req: express.Request): boolean {
 // B25: the spend meter — every paid call passes this chokepoint; a runaway day
 // soft-stops at AI_DAILY_CALL_CAP total calls (default 300, 0 disables). Usage
 // persists in data/ai-usage.json; GET /api/ai/usage is the readout.
-const AI_DAILY_CALL_CAP = Number(process.env.AI_DAILY_CALL_CAP ?? 300);
+const AI_DAILY_CALL_CAP = parseSpendCap(process.env.AI_DAILY_CALL_CAP, 300);
 // B64-SEC4: OPTIONAL dollar backstop (estimated). 0/unset = disabled = legacy behavior.
-const AI_DAILY_USD_CAP = Number(process.env.AI_DAILY_USD_CAP ?? 0);
+const AI_DAILY_USD_CAP = parseSpendCap(process.env.AI_DAILY_USD_CAP, 0);
 const AI_USAGE_FILE = dataPath("ai-usage.json"); // B53
 const aiSpendMeter = createSpendMeter(
   {
-    load: () => { try { return fs.readFileSync(AI_USAGE_FILE, "utf8"); } catch { return null; } },
-    save: (t) => { try { fs.mkdirSync(path.dirname(AI_USAGE_FILE), { recursive: true }); fs.writeFileSync(AI_USAGE_FILE, t, "utf8"); } catch { /* best-effort */ } },
+    load: () => {
+      try {
+        return fs.readFileSync(AI_USAGE_FILE, "utf8");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+        throw error;
+      }
+    },
+    save: (t) => atomicWriteFile(AI_USAGE_FILE, t),
   },
   AI_DAILY_CALL_CAP,
   undefined,
@@ -2569,16 +2576,23 @@ async function callMultiProviderAI(
   jsonSchema?: any
 ): Promise<string> {
   const provider = (req.headers["x-ai-provider"] as string) || "gemini";
+  const model = (req.headers["x-ai-model"] as string) || "";
+  const reasoning = (req.headers["x-ai-reasoning"] as string) || "none";
+  const estInTokens = Math.ceil((systemInstruction.length + prompt.length) / 4);
+  const estimatedUsd = estimateCallUsd(model, estInTokens, 4000);
   {
-    const gate = aiSpendMeter.check(provider);
+    const gate = aiSpendMeter.check(provider, estimatedUsd);
     if (!gate.allowed) {
-      aiSpendMeter.recordRefusal(provider);
+      if (gate.stoppedBy !== 'meter') aiSpendMeter.recordRefusal(provider);
+      if (gate.stoppedBy === 'meter') {
+        throw new Error(`AI spend meter unavailable; paid provider call refused before network dispatch (${gate.meterError || 'usage state could not be verified'}). Repair or remove the corrupt usage file, or restore write access to its data directory.`);
+      }
       if (gate.stoppedBy === 'usd') {
         throw new Error(`Daily AI spend cap reached (~$${gate.usdToday.toFixed(2)}/$${gate.usdCap.toFixed(2)} estimated). This is the runaway-DOLLAR backstop — raise AI_DAILY_USD_CAP (or set 0 to disable) and restart if today's spend is intentional.`);
       }
       throw new Error(`Daily AI call cap reached (${gate.usedToday}/${gate.cap}). This is the runaway-spend backstop — raise AI_DAILY_CALL_CAP (or set 0 to disable) and restart if today's use is intentional.`);
     }
-    aiSpendMeter.record(provider);
+    aiSpendMeter.reserve(provider, estimatedUsd);
   }
   const customKeyHeader = (req.headers["x-custom-api-key"] as string) || "";
   const envFallbackAllowed = isAppUiRequest(req);
@@ -2590,15 +2604,9 @@ async function callMultiProviderAI(
   // key (app-UI only — agents don't spend the user's credits) → .env (app-UI only).
   const storedKey = envFallbackAllowed ? getStoredAiKey(provider) : "";
   const customKey = customKeyHeader || storedKey;
-  const model = (req.headers["x-ai-model"] as string) || "";
-  const reasoning = (req.headers["x-ai-reasoning"] as string) || "none";
-  // B64-SEC4: attribute a coarse estimated USD cost to this call (per-provider rollup in
-  // data/ai-usage.json, readable via GET /api/ai/usage). Estimate only — a runaway-dollar
-  // backstop, not accounting: input≈chars/4, output≈the ~4k per-call budget cap.
-  try {
-    const estInTokens = Math.ceil((systemInstruction.length + prompt.length) / 4);
-    aiSpendMeter.recordCost(provider, estimateCallUsd(model, estInTokens, 4000));
-  } catch { /* metering is best-effort, never fatal */ }
+  // B64-SEC4: the call count and coarse estimated USD cost were reserved together above,
+  // before network dispatch. A configured cap therefore cannot be bypassed by a second-write
+  // failure between the call and cost dimensions.
 
   if (provider === "claude") {
     const claudeKey = customKey || (envFallbackAllowed ? process.env.ANTHROPIC_API_KEY : undefined);
@@ -4588,11 +4596,7 @@ app.post("/api/fs/create", (req, res) => {
     if (type === 'directory') {
       fs.mkdirSync(safePath, { recursive: true });
     } else {
-      const dir = path.dirname(safePath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      fs.writeFileSync(safePath, '', 'utf8');
+      atomicWriteFile(safePath, '');
     }
     
     return res.json({ success: true, path: cleanName });
@@ -4680,7 +4684,7 @@ app.post("/api/fs/snapshot", (req, res) => {
     }
     if (!modUniqueId) {
       modUniqueId = `mod_${crypto.randomBytes(8).toString('hex')}`;
-      fs.writeFileSync(modIdFile, modUniqueId, 'utf8');
+      atomicWriteFile(modIdFile, modUniqueId);
     }
 
     const snapDir = path.join(modDir, '.snapshots');
@@ -4689,7 +4693,7 @@ app.post("/api/fs/snapshot", (req, res) => {
     }
 
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    fs.writeFileSync(
+    atomicWriteFile(
       path.join(snapDir, `snapshot_${stamp}.json`),
       JSON.stringify({
         savedAt: new Date().toISOString(),
@@ -4697,7 +4701,6 @@ app.post("/api/fs/snapshot", (req, res) => {
         modId: modUniqueId,
         workspace
       }, null, 2),
-      'utf8'
     );
 
     // Prune oldest snapshots beyond 30 limit
@@ -7609,6 +7612,7 @@ const SELFTESTS: Record<string, () => unknown> = {
   "ttfm-selftest": runTtfmSelftest,
   "action-census-selftest": runActionCensusSelftest,
   "ai-spend-meter-selftest": runAiSpendMeterSelftest,
+  "ai-key-store-selftest": runAiKeyStoreSelftest,
   "mod-patterns-selftest": runModPatternsSelftest,
   "compile-fidelity-selftest": runCompileFidelitySelftest,
   "workspace-identity-selftest": runWorkspaceIdentitySelftest,
@@ -7894,7 +7898,7 @@ app.post("/api/agent/lua-staleness/instrument", (req, res) => {
         results.push({ path: f.path, action: "SKIPPED (instrumented source failed luaparse — file left untouched)", error: errorMessage(err) });
         continue;
       }
-      fs.writeFileSync(f.absPath, injected.source, "utf8");
+      atomicWriteFile(f.absPath, injected.source);
       results.push({ path: f.path, action: "instrumented", hash: injected.hash });
     }
     return res.json({ modId, prefix, results, note: "Markers log at next game boot; the watcher then reports resident-vs-disk staleness." });
@@ -9814,9 +9818,10 @@ function compileWorkspaceToFolder(
     if (!modUniqueId) {
       modUniqueId = `mod_${crypto.randomBytes(8).toString('hex')}`;
       try {
-        fs.writeFileSync(modIdFile, modUniqueId, 'utf8');
+        atomicWriteFile(modIdFile, modUniqueId);
       } catch (err) {
         console.warn('Failed to write .studio-mod-id:', err);
+        modUniqueId = '';
       }
     }
 
@@ -9827,10 +9832,10 @@ function compileWorkspaceToFolder(
         fs.mkdirSync(snapDir, { recursive: true });
       }
       const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-      fs.writeFileSync(
+      if (!modUniqueId) throw new Error('Snapshot skipped because .studio-mod-id was not durable.');
+      atomicWriteFile(
         path.join(snapDir, `snapshot_${stamp}.json`),
         JSON.stringify({ savedAt: new Date().toISOString(), name: ws.name, modId: modUniqueId, workspace: ws }, null, 2),
-        'utf8'
       );
       const names = fs.readdirSync(snapDir).filter(name => name.startsWith('snapshot_') && name.endsWith('.json'));
       names.sort();

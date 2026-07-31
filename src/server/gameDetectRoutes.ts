@@ -29,6 +29,7 @@ import { parseLibraryFolders, proposeSetup, X4_STEAM_APPID, X4_STEAM_REL_DIR } f
 import { inspectGameInstall } from "../lib/pathRoles";
 import { dataPath } from "../lib/dataDir";
 import { findCatDatArchives, parseCat, readEntryText } from "../lib/x4CatDat";
+import { atomicWriteFile } from "../lib/workspaceState";
 
 interface GameDetectDeps {
   /** cat/dat extractor: (gamePath, 'libraries/md.xsd') → ExtractMatch | null */
@@ -180,8 +181,7 @@ export function registerGameDetectRoutes(app: Express, deps: GameDetectDeps): vo
             const text = readEntryText(datPath, entry);
             if (!text) { missing.push(rel); continue; }
             const dest = path.join(outDir, ...rel.split("/")); // preserve the game's dir tree
-            fs.mkdirSync(path.dirname(dest), { recursive: true });
-            fs.writeFileSync(dest, text, "utf8");
+            atomicWriteFile(dest, text);
             files.push({ name: rel, bytes: Buffer.byteLength(text, "utf8") });
           } catch { missing.push(rel); }
         }
@@ -191,8 +191,7 @@ export function registerGameDetectRoutes(app: Express, deps: GameDetectDeps): vo
           const hit = deps.extractBaseGameFile(gamePath, rel);
           if (hit && hit.text) {
             const dest = path.join(outDir, ...rel.split("/"));
-            fs.mkdirSync(path.dirname(dest), { recursive: true });
-            fs.writeFileSync(dest, hit.text, "utf8");
+            atomicWriteFile(dest, hit.text);
             files.push({ name: rel, bytes: Buffer.byteLength(hit.text, "utf8") });
           } else { missing.push(rel); }
         }

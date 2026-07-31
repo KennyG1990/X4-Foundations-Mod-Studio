@@ -5,6 +5,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { atomicWriteFile } from "./durableWrite";
 
 /** Ecosystem suggestions written into the mod folder (never forced installs — s5 gate). */
 export const RECOMMENDED_EXTENSIONS = ["redhat.vscode-xml", "sumneko.lua"];
@@ -16,8 +17,7 @@ export function writeRecommendations(modPath: string, recs: string[] = RECOMMEND
   let existing: { recommendations?: string[]; [k: string]: unknown } = {};
   try { existing = JSON.parse(fs.readFileSync(file, "utf8")); } catch { /* absent or invalid → fresh */ }
   const merged = Array.from(new Set([...(Array.isArray(existing.recommendations) ? existing.recommendations : []), ...recs]));
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify({ ...existing, recommendations: merged }, null, 2)}\n`, "utf8");
+  atomicWriteFile(file, `${JSON.stringify({ ...existing, recommendations: merged }, null, 2)}\n`);
   return file;
 }
 
@@ -97,8 +97,7 @@ export function writeXmlAssociations(modPath: string, associations: XmlAssociati
   const prior = Array.isArray(existing["xml.fileAssociations"]) ? existing["xml.fileAssociations"] as XmlAssociation[] : [];
   const merged = [...prior.filter(p => !associations.some(a => a.pattern === p.pattern)), ...associations]
     .sort((a, b) => a.pattern.localeCompare(b.pattern));
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify({ ...existing, "xml.fileAssociations": merged }, null, 2)}\n`, "utf8");
+  atomicWriteFile(file, `${JSON.stringify({ ...existing, "xml.fileAssociations": merged }, null, 2)}\n`);
   return file;
 }
 

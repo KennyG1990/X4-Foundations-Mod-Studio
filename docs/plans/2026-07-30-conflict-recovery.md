@@ -2,7 +2,7 @@
 
 Task: B110-R11/R14 conflict dialog v2 and later undo for destructive workspace/deploy choices
 Lane: FULL
-Status: PARTIAL — automated and packaged-product gates green; installed 0.0.62 visual check pending
+Status: VERIFIED
 
 ## PLAN
 
@@ -95,8 +95,8 @@ Status: PARTIAL — automated and packaged-product gates green; installed 0.0.62
 - Extend-versus-replace: extend. The CAS, atomic state, deploy transaction, and history ledger are proven and do not
   have three recurring worst-risk citations in this role. The card presentation and missing recovery chain are gaps,
   not evidence that those authorities should be replaced.
-- Capability-map delta: pending close; expected delta is real conflict evidence plus bounded CAS recovery for
-  workspace/deploy destructive choices.
+- Capability-map delta: recorded at close — real conflict evidence plus bounded one-use CAS recovery for
+  workspace/deploy destructive choices and installed-host proof.
 - Plan changes from the ledger wording: import is not currently non-undoable in the Studio—it already checkpoints the
   canvas. The task preserves/proves that behavior and corrects the ledger/history language. Deploy undo remains a
   separate post-success recovery; existing rollback is retained and never relabeled.
@@ -142,20 +142,25 @@ Status: PARTIAL — automated and packaged-product gates green; installed 0.0.62
     bytes), staged-product probe 16/16, VSIX inspection 2,091 entries / 60,352,725 unpacked bytes.
   - Open VSX publish -> VERIFIED public 0.0.62: local/store artifacts both 17,893,929 bytes with SHA-256
     `A1A4776FC7521A5174D50D4DADCF9FDCA59BBC74E3673CEBCCAF3E554E5BF1ED`.
-  - Disposable installed Antigravity runtime -> PASS/PARTIAL visual: the exact VSIX installed as
-    `x4forge.x4-forge-studio@0.0.62` under isolated user-data/extension roots; Antigravity IDE 1.107.0 loaded
-    Forge `v1.0.389` and started its managed sidecar on isolated port 62690. The fresh-profile login overlay
-    covered the editor, so this is installed-runtime evidence, not eyes-on rendered-surface evidence. Receipt:
-    `vscode-extension/evidence/0.0.62-installed-antigravity-runtime.txt`.
+  - Normal signed-in Antigravity -> VERIFIED: exact public-parity `x4forge.x4-forge-studio@0.0.62` installed and
+    reloaded; Forge `v1.0.389` rendered in the real host. A disposable server state/config/data/discovery fixture
+    produced a real HTTP 409 between local and external writers. The installed dialog visibly showed both heads,
+    provenance/times, file counts, consequences, Cancel/review, Use server copy, and Overwrite server.
+  - Installed recovery -> VERIFIED: overwrite created history `ms8ftx4w-53722ef9` and recovery
+    `workspace-ms8ftx4o-955fe2b96f22e59b`; Agent History rendered `Undo forced overwrite`; restore returned the exact
+    prior server hash `84ecfbdf2bf847a5`; replay failed 409 `RECOVERY_ALREADY_USED`. Evidence:
+    `vscode-extension/evidence/0.0.62-installed-antigravity-conflict.jpg`,
+    `vscode-extension/evidence/0.0.62-installed-antigravity-recovery-history.jpg`,
+    `vscode-extension/evidence/0.0.62-installed-antigravity-recovery-consumed.jpg`, and
+    `vscode-extension/evidence/0.0.62-installed-antigravity-conflict-recovery.txt`.
 - Negative/rollback result: corrupt/expired/replayed workspace receipt, stale workspace head, stale deploy target,
   corrupt deploy payload, first-deploy removal, failed post-write deploy rollback, locked-root rollback, recovery
   receipt-write rollback, traversal/path-role rejection, dry-run nonpromotion, and no-ready-recovery failure paths pass
   in the isolated selftests/route matrix.
-- Visual/live result when applicable: PARTIAL. The normal signed-in Antigravity profile still has the preceding
-  0.0.61 (`v1.0.387`), so that observation was correctly rejected as evidence for this change. A disposable
-  Antigravity install proved the exact 0.0.62 VSIX and managed sidecar (`v1.0.389`), then fully stopped; its mandatory
-  fresh-profile login overlay prevented eyes-on Forge rendering. Normal-profile install/reload and eyes-on 0.0.62
-  conflict/History proof remain pending behind the standing-config write gate.
+- Visual/live result when applicable: VERIFIED. The normal signed-in Antigravity profile renders 0.0.62 / Forge
+  `v1.0.389`; the conflict and History recovery surfaces were inspected in-host against disposable state. Temporary
+  workspace settings were removed, the disposable port-3000 service stopped, normal port 50755 resumed, and the
+  prior DeadAir workspace was visibly restored. Computer control was released immediately after proof.
 
 ## REVIEW
 
@@ -167,7 +172,8 @@ Status: PARTIAL — automated and packaged-product gates green; installed 0.0.62
   5. Deploy later recovery -> done, isolated existing/first-deploy/stale/corrupt/locked evidence.
   6. Failed/dry deploy and failed-restore truth -> done, including review-added receipt failure rollback.
   7. Honest Agent History revertibility -> done, selftest/route/E2E evidenced.
-  8. Real installed UI -> partial pending 0.0.62 installation and screenshot.
+  8. Real installed UI -> done; exact package, rendered conflict, recovery action, successful restore, and replay
+     refusal are evidenced.
 - Fresh-eyes findings: one blocking transaction-boundary defect was found and corrected before close: marking a
   receipt used after the target changed could report failure after mutation. Receipt finalization now executes while
   rollback bytes are retained, with explicit negative fixtures. `reviewctl` was unavailable; manual diff review,
@@ -175,11 +181,10 @@ Status: PARTIAL — automated and packaged-product gates green; installed 0.0.62
 
 ## CLOSE
 
-- Status: PARTIAL
-- Remaining risks/deferred work: install public 0.0.62 into Antigravity after explicit approval, capture the real
-  conflict/History surface, run precommit, update durable
-  ledgers/capability map/handoff, then commit/push. Recovery is intentionally bounded and refuses after later writes;
-  it is not source control or arbitrary external-edit undo.
+- Status: VERIFIED
+- Remaining risks/deferred work: recovery is intentionally bounded and refuses after later writes; it is not source
+  control or arbitrary external-edit undo. One inert disposable visual-fixture directory remains under `%TEMP%`
+  because recursive cleanup was policy-blocked; live settings, port, and workspace were restored.
 - Suggested commit title: `feat(recovery): explain conflicts and undo destructive actions`
 
 ## AAR
@@ -200,4 +205,7 @@ Status: PARTIAL — automated and packaged-product gates green; installed 0.0.62
 - Highest-risk evidenced weakness: recovery receipt finalization originally happened after state mutation, allowing
   false-failure reporting on a rare durable-store write error. Fixed with rollback-capable finalization and negative
   deployment fixtures; workspace rollback is explicit and reports a combined failure if restoration also fails.
-- Global/project lessons banked: pending durable AAR ledger update at VERIFIED close.
+- Additional installed-proof triggers: the first disposable server launch used the staged-app directory as cwd and
+  produced `dist/dist/index.html`; relaunching from `vscode-extension/app` reproduced the correct packaged contract.
+  The first launch also omitted `X4FORGE_DISCOVERY_DIR`; the corrected fixture isolated state, config, data, and
+  discovery together. Global/project lessons are banked at VERIFIED close.

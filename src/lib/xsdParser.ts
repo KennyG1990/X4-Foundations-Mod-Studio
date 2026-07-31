@@ -3,6 +3,7 @@ import os from 'os';
 import path from 'path';
 import { XMLParser } from 'fast-xml-parser';
 import { dataPath } from './dataDir';
+import { atomicWriteFile } from './workspaceState';
 import { expandIncludeChain } from './schemaRegistry';
 import { schemaLibraryToTemplates, SchemaAttribute, SchemaCategory, SchemaElement, SchemaLibrary } from './schemaTypes';
 import { MAX_PROJECT_XML_DEPTH, SAFE_XML_ENTITY_OPTIONS } from './xmlInputLimits';
@@ -326,7 +327,7 @@ export function readXsdConfig(): XsdConfig {
 }
 
 export function writeXsdConfig(config: XsdConfig): void {
-  fs.writeFileSync(configPath(), `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+  atomicWriteFile(configPath(), `${JSON.stringify(config, null, 2)}\n`);
 }
 
 export function resolveXsdConfig(config = readXsdConfig()): ResolvedXsdConfig {

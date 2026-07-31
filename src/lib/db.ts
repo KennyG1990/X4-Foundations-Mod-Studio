@@ -136,13 +136,15 @@ export function openStudioDb(cacheDir?: string): StudioDb | null {
     raw.exec('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);');
     const existing = getMeta(raw, 'schema_version');
     if (existing !== String(SCHEMA_VERSION)) {
-      if (existing !== null) {
-        // It's a cache, not a store: on any schema change drop + recreate the data
-        // tables (DDL above runs IF NOT EXISTS, so recreate explicitly).
-        raw.exec('DROP TABLE IF EXISTS object_index; DROP TABLE IF EXISTS extensions; DROP TABLE IF EXISTS ext_files; DROP TABLE IF EXISTS reference_files; DROP TABLE IF EXISTS reference_classes; DROP TABLE IF EXISTS reference_generations; DELETE FROM source_mtime; DELETE FROM meta;');
-      }
-      raw.exec(SCHEMA_DDL);
-      setMeta(raw, 'schema_version', String(SCHEMA_VERSION));
+      raw.transaction(() => {
+        if (existing !== null) {
+          // It's a cache, not a store: on any schema change drop + recreate the data
+          // tables (DDL above runs IF NOT EXISTS, so recreate explicitly).
+          raw.exec('DROP TABLE IF EXISTS object_index; DROP TABLE IF EXISTS extensions; DROP TABLE IF EXISTS ext_files; DROP TABLE IF EXISTS reference_files; DROP TABLE IF EXISTS reference_classes; DROP TABLE IF EXISTS reference_generations; DELETE FROM source_mtime; DELETE FROM meta;');
+        }
+        raw.exec(SCHEMA_DDL);
+        setMeta(raw, 'schema_version', String(SCHEMA_VERSION));
+      })();
       if (existing !== null) {
         // This is a disposable cache migration. Reclaim pages held by the old
         // million-row manifest now so the compact layout has a real disk win.
@@ -187,7 +189,11 @@ export function setDbMeta(db: StudioDb, key: string, value: string) {
 export function bindGamePath(db: StudioDb, gamePath: string) {
   const prev = getMeta(db.raw, 'game_path');
   if (prev !== null && prev !== gamePath) {
-    db.raw.exec('DELETE FROM object_index; DELETE FROM extensions; DELETE FROM ext_files; DELETE FROM source_mtime;');
+    db.raw.transaction(() => {
+      db.raw.exec('DELETE FROM object_index; DELETE FROM extensions; DELETE FROM ext_files; DELETE FROM source_mtime;');
+      setMeta(db.raw, 'game_path', gamePath);
+    })();
+    return;
   }
   setMeta(db.raw, 'game_path', gamePath);
 }
@@ -233,9 +239,9 @@ export function cacheObjectIndex(db: StudioDb, rows: DbObjectRow[], builtAt?: st
     for (const r of all) {
       insert.run(r.kind, r.id, r.name, r.source_mod ?? null, r.source_file ?? null, r.macro ?? null, r.dlc ?? null, r.detail ?? null);
     }
+    setMeta(db.raw, 'object_index_built_at', builtAt || new Date().toISOString());
   });
   tx(rows);
-  setMeta(db.raw, 'object_index_built_at', builtAt || new Date().toISOString());
 }
 
 /** Full table read backing the cold-boot restore path. */
@@ -293,9 +299,9 @@ export function cacheExtensions(db: StudioDb, exts: DbExtensionRow[], files: DbE
     db.raw.exec('DELETE FROM extensions; DELETE FROM ext_files;');
     for (const e of exts) insExt.run(e.folder, e.content_id, e.name ?? null, e.version ?? null, e.enabled ? 1 : 0, JSON.stringify(e.deps || []));
     for (const f of files) insFile.run(f.folder, f.rel_path, f.is_diff ? 1 : 0, JSON.stringify(f.selectors || []), f.hash ?? null);
+    setMeta(db.raw, 'extensions_built_at', new Date().toISOString());
   });
   tx();
-  setMeta(db.raw, 'extensions_built_at', new Date().toISOString());
 }
 
 /** The Extension Doctor "check 3" as a single indexed GROUP BY (per ROADMAP). */
@@ -558,6 +564,43 @@ export function dbSelfTest(): { available: boolean; reason?: string; pass?: bool
     const contested = contestedPaths(db);
     const missing = unresolvedDependencies(db);
 
+    // R7 fresh-eyes: extension rows and their built-at visibility marker are one cache generation.
+    const extensionMetaBefore = getDbMeta(db, 'extensions_built_at');
+    db.raw.exec(`CREATE TRIGGER fail_extension_meta BEFORE UPDATE ON meta
+      WHEN NEW.key = 'extensions_built_at' BEGIN SELECT RAISE(ABORT, 'injected extension metadata failure'); END;`);
+    let extensionRollbackReported = false;
+    try {
+      cacheExtensions(db,
+        [{ folder: 'replacement', content_id: 'replacement', enabled: true, deps: [] }],
+        [{ folder: 'replacement', rel_path: 'content.xml', is_diff: false, selectors: [] }],
+      );
+    } catch (error) { extensionRollbackReported = /injected extension metadata failure/.test(String(error)); }
+    db.raw.exec('DROP TRIGGER fail_extension_meta;');
+    const extensionFoldersAfter = (db.raw.prepare('SELECT folder FROM extensions ORDER BY folder').all() as Array<{ folder: string }>)
+      .map((row) => String(row.folder));
+    const extensionFilesAfter = db.raw.prepare('SELECT folder, rel_path FROM ext_files ORDER BY folder, rel_path').all() as Array<{ folder: string; rel_path: string }>;
+    const extensionRollbackPreserved = extensionMetaBefore === getDbMeta(db, 'extensions_built_at') &&
+      extensionFoldersAfter.join(',') === 'mod_a,mod_b' &&
+      extensionFilesAfter.length === 3 && !extensionFilesAfter.some(row => row.folder === 'replacement');
+
+    // R7: coupled cache replacement and its visibility metadata must rollback together.
+    db.raw.exec(`CREATE TRIGGER fail_object_meta BEFORE UPDATE ON meta
+      WHEN NEW.key = 'object_index_built_at' BEGIN SELECT RAISE(ABORT, 'injected object metadata failure'); END;`);
+    let objectRollbackReported = false;
+    try { cacheObjectIndex(db, [{ kind: 'ship', id: 'replacement', name: 'Must Roll Back' }]); }
+    catch (error) { objectRollbackReported = /injected object metadata failure/.test(String(error)); }
+    db.raw.exec('DROP TRIGGER fail_object_meta;');
+    const objectRollbackPreserved = objectIndexCounts(db)['ship'] === 2 && !objectExists(db, 'ship', 'replacement');
+
+    // R7: changing the bound game root must not clear caches unless its new identity commits.
+    db.raw.exec(`CREATE TRIGGER fail_game_path_meta BEFORE UPDATE ON meta
+      WHEN NEW.key = 'game_path' BEGIN SELECT RAISE(ABORT, 'injected game path failure'); END;`);
+    let gamePathRollbackReported = false;
+    try { bindGamePath(db, 'H:/must-not-commit'); }
+    catch (error) { gamePathRollbackReported = /injected game path failure/.test(String(error)); }
+    db.raw.exec('DROP TRIGGER fail_game_path_meta;');
+    const gamePathRollbackPreserved = objectIndexCounts(db)['ship'] === 2 && getDbMeta(db, 'game_path') === 'G:/test/X4';
+
     const checks: Record<string, boolean> = {
       counts: counts['ship'] === 2 && counts['ware'] === 1 && counts['faction'] === 1,
       query: q.length === 2 && q.every(r => r.kind === 'ship'),
@@ -566,6 +609,9 @@ export function dbSelfTest(): { available: boolean; reason?: string; pass?: bool
       missingDep: missing.length === 1 && missing[0].dep_id === 'ghost_dep' && !missing[0].optional,
       mtimeHit: sourcesUnchanged(db, [{ path: '01.cat', mtime: 12345 }]),
       mtimeMiss: !sourcesUnchanged(db, [{ path: '01.cat', mtime: 99999 }]),
+      extensionReplacementRollback: extensionRollbackReported && extensionRollbackPreserved,
+      objectReplacementRollback: objectRollbackReported && objectRollbackPreserved,
+      gamePathRebindRollback: gamePathRollbackReported && gamePathRollbackPreserved,
       gamePathWipe: (() => {
         bindGamePath(db, 'H:/other/X4'); // changed path must wipe the cache
         return objectIndexCounts(db)['ship'] === undefined;

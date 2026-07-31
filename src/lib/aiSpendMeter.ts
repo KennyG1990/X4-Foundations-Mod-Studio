@@ -39,19 +39,24 @@ export interface SpendCheck {
   usdToday: number;
   usdCap: number;
   /** Which limit stopped the call when !allowed ('call' | 'usd' | null). */
-  stoppedBy: 'call' | 'usd' | null;
+  stoppedBy: 'call' | 'usd' | 'meter' | null;
+  /** False means a configured safety cap could not prove or reserve its durable state. */
+  meterAvailable: boolean;
+  meterError?: string;
 }
 
 export interface SpendMeter {
   /** Is another call allowed right now? Never throws. */
-  check(provider: string): SpendCheck;
+  check(provider: string, pendingUsd?: number): SpendCheck;
   /** Count one outgoing call. */
   record(provider: string): void;
+  /** Atomically reserve one outgoing call and its estimated cost before dispatch. */
+  reserve(provider: string, usd: number): void;
   /** B64-SEC4: attribute an estimated USD cost to a provider (additive). */
   recordCost(provider: string, usd: number): void;
   /** Count one refused call. */
   recordRefusal(provider: string): void;
-  snapshot(): { day: string; cap: number; usdCap: number; calls: Record<string, number>; refused: Record<string, number>; usd: Record<string, number>; totalToday: number; totalUsdToday: number };
+  snapshot(): { day: string; cap: number; usdCap: number; calls: Record<string, number>; refused: Record<string, number>; usd: Record<string, number>; totalToday: number; totalUsdToday: number; meterAvailable: boolean; meterError?: string };
 }
 
 /**
@@ -73,10 +78,29 @@ export function estimateCallUsd(model: string, inputTokens: number, outputTokens
   return Number.isFinite(usd) ? usd : 0;
 }
 
+/** Parse an opt-in cap without allowing malformed configuration to disable its fallback. */
+export function parseSpendCap(raw: string | undefined, fallback: number): number {
+  if (raw === undefined || raw.trim() === '') return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
 const dayOf = (ms: number): string => {
   const d = new Date(ms);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
+
+function isLocalDayStamp(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const parsed = new Date(year, month - 1, day);
+  return parsed.getFullYear() === year && parsed.getMonth() === month - 1 && parsed.getDate() === day;
+}
+
+function isCounterMap(value: unknown): value is Record<string, number> {
+  return !!value && typeof value === 'object' && !Array.isArray(value) &&
+    Object.values(value as Record<string, unknown>).every(count => typeof count === 'number' && Number.isFinite(count) && count >= 0);
+}
 
 export function createSpendMeter(
   store: SpendStore,
@@ -85,51 +109,109 @@ export function createSpendMeter(
   dailyUsdCap = 0, // B64-SEC4: 0 = disabled (legacy behavior — no dollar stop)
 ): SpendMeter {
   const empty = (day: string): DayUsage => ({ day, calls: {}, refused: {}, usd: {} });
-  const load = (): DayUsage => {
+  const meterRequired = dailyCallCap > 0 || dailyUsdCap > 0;
+  const load = (): { usage: DayUsage; available: boolean; error?: string } => {
     const today = dayOf(now());
     try {
-      const parsed = JSON.parse(store.load() || 'null') as DayUsage | null;
-      if (parsed && parsed.day === today && parsed.calls) { if (!parsed.usd) parsed.usd = {}; return parsed; }
-    } catch { /* corrupt file → fresh day */ }
-    return empty(today);
+      const text = store.load();
+      if (text === null) return { usage: empty(today), available: true };
+      const parsed = JSON.parse(text) as DayUsage | null;
+      const valid = !!parsed && isLocalDayStamp(parsed.day) && isCounterMap(parsed.calls) &&
+        isCounterMap(parsed.refused) && (parsed.usd === undefined || isCounterMap(parsed.usd));
+      if (valid && parsed.day === today) {
+        return { usage: { ...parsed, usd: parsed.usd || {} }, available: true };
+      }
+      // Only a proven PRIOR day may roll over. A future row means the host clock moved
+      // backwards (or the ledger was tampered with); treating it as zero would bypass a cap.
+      if (valid && parsed.day < today) return { usage: empty(today), available: true };
+      if (valid && parsed.day > today) throw new Error(`usage file day ${parsed.day} is ahead of local day ${today}`);
+      throw new Error('usage file has an invalid shape');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return meterRequired
+        ? { usage: empty(today), available: false, error: message }
+        : { usage: empty(today), available: true, error: message };
+    }
   };
-  const save = (u: DayUsage) => { try { store.save(JSON.stringify(u)); } catch { /* metering is best-effort, never fatal */ } };
+  const save = (u: DayUsage) => {
+    try {
+      store.save(JSON.stringify(u));
+    } catch (error) {
+      if (meterRequired) {
+        throw new Error(`AI spend meter could not reserve durable usage: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  };
   const total = (u: DayUsage) => Object.values(u.calls).reduce((a, b) => a + b, 0);
   const totalUsd = (u: DayUsage) => Object.values(u.usd || {}).reduce((a, b) => a + b, 0);
 
   return {
-    check(_provider): SpendCheck {
-      const u = load();
+    check(_provider, pendingUsd = 0): SpendCheck {
+      const loaded = load();
+      const u = loaded.usage;
       const usedToday = total(u);
       const usdToday = totalUsd(u);
+      if (!loaded.available) {
+        return { allowed: false, usedToday, cap: dailyCallCap, usdToday, usdCap: dailyUsdCap, stoppedBy: 'meter', meterAvailable: false, meterError: loaded.error };
+      }
       // The call cap is TOTAL calls per local day across providers — the runaway-loop
       // backstop, not a budget planner. <=0 disables the stop. B64-SEC4 adds an OPTIONAL
       // dollar backstop (dailyUsdCap>0); either limit hitting stops the call.
       const callOk = dailyCallCap <= 0 || usedToday < dailyCallCap;
-      const usdOk = dailyUsdCap <= 0 || usdToday < dailyUsdCap;
+      const boundedPendingUsd = Number.isFinite(pendingUsd) ? Math.max(0, pendingUsd) : Number.POSITIVE_INFINITY;
+      const usdOk = dailyUsdCap <= 0 || usdToday + boundedPendingUsd <= dailyUsdCap;
       const stoppedBy: SpendCheck['stoppedBy'] = callOk ? (usdOk ? null : 'usd') : 'call';
-      return { allowed: callOk && usdOk, usedToday, cap: dailyCallCap, usdToday, usdCap: dailyUsdCap, stoppedBy };
+      return { allowed: callOk && usdOk, usedToday, cap: dailyCallCap, usdToday, usdCap: dailyUsdCap, stoppedBy, meterAvailable: true };
     },
     record(provider) {
-      const u = load();
+      const loaded = load();
+      if (!loaded.available) throw new Error(`AI spend meter is unavailable: ${loaded.error || 'unknown persistence error'}`);
+      const u = loaded.usage;
       u.calls[provider] = (u.calls[provider] || 0) + 1;
+      save(u);
+    },
+    reserve(provider, usd) {
+      const loaded = load();
+      if (!loaded.available) throw new Error(`AI spend meter is unavailable: ${loaded.error || 'unknown persistence error'}`);
+      const u = loaded.usage;
+      u.calls[provider] = (u.calls[provider] || 0) + 1;
+      if (usd > 0) {
+        u.usd = u.usd || {};
+        u.usd[provider] = (u.usd[provider] || 0) + usd;
+      }
       save(u);
     },
     recordCost(provider, usd) {
       if (!(usd > 0)) return;
-      const u = load();
+      const loaded = load();
+      if (!loaded.available) throw new Error(`AI spend meter is unavailable: ${loaded.error || 'unknown persistence error'}`);
+      const u = loaded.usage;
       u.usd = u.usd || {};
       u.usd[provider] = (u.usd[provider] || 0) + usd;
       save(u);
     },
     recordRefusal(provider) {
-      const u = load();
+      const loaded = load();
+      if (!loaded.available) throw new Error(`AI spend meter is unavailable: ${loaded.error || 'unknown persistence error'}`);
+      const u = loaded.usage;
       u.refused[provider] = (u.refused[provider] || 0) + 1;
       save(u);
     },
     snapshot() {
-      const u = load();
-      return { day: u.day, cap: dailyCallCap, usdCap: dailyUsdCap, calls: { ...u.calls }, refused: { ...u.refused }, usd: { ...(u.usd || {}) }, totalToday: total(u), totalUsdToday: totalUsd(u) };
+      const loaded = load();
+      const u = loaded.usage;
+      return {
+        day: u.day,
+        cap: dailyCallCap,
+        usdCap: dailyUsdCap,
+        calls: { ...u.calls },
+        refused: { ...u.refused },
+        usd: { ...(u.usd || {}) },
+        totalToday: total(u),
+        totalUsdToday: totalUsd(u),
+        meterAvailable: loaded.available,
+        ...(loaded.error ? { meterError: loaded.error } : {}),
+      };
     },
   };
 }
@@ -165,7 +247,35 @@ export function runAiSpendMeterSelftest(): {
   ok('cap_zero_never_stops', unlimited.check('gemini').allowed === true);
 
   text = '{corrupt';
-  ok('corrupt_store_degrades_fresh', createSpendMeter(store, 5, () => clock).check('x').allowed === true);
+  const corruptCapped = createSpendMeter(store, 5, () => clock).check('x');
+  ok('corrupt_store_fails_closed_when_capped', corruptCapped.allowed === false && corruptCapped.stoppedBy === 'meter' && corruptCapped.meterAvailable === false);
+  const corruptSnapshot = createSpendMeter(store, 5, () => clock).snapshot();
+  ok('corrupt_store_is_explicit_in_readout', corruptSnapshot.meterAvailable === false && /JSON/.test(corruptSnapshot.meterError || ''));
+  text = JSON.stringify({ day: '2020-01-01' });
+  ok('malformed_prior_day_cannot_reset_cap', createSpendMeter(store, 5, () => clock).check('x').meterAvailable === false);
+  const tomorrow = dayOf(clock + 24 * 3600 * 1000);
+  text = JSON.stringify({ day: tomorrow, calls: { gemini: 2 }, refused: {}, usd: { gemini: 0.25 } });
+  const futureDated = createSpendMeter(store, 5, () => clock).check('x');
+  ok('future_dated_ledger_fails_closed_when_capped', futureDated.allowed === false && futureDated.stoppedBy === 'meter' && /ahead|future/i.test(futureDated.meterError || ''));
+  ok('corrupt_store_degrades_only_when_caps_disabled', createSpendMeter(store, 0, () => clock, 0).check('x').allowed === true);
+  const readFailure = createSpendMeter({ load: () => { throw new Error('read denied'); }, save: () => undefined }, 5, () => clock).check('x');
+  ok('read_failure_fails_closed_when_capped', readFailure.allowed === false && readFailure.stoppedBy === 'meter' && /read denied/.test(readFailure.meterError || ''));
+  let writeFailureBlocked = false;
+  try {
+    createSpendMeter({ load: () => null, save: () => { throw new Error('disk full'); } }, 5, () => clock).record('gemini');
+  } catch (error) { writeFailureBlocked = /could not reserve durable usage.*disk full/.test(String(error)); }
+  ok('write_failure_blocks_reservation_when_capped', writeFailureBlocked);
+  let combinedReservationWrites = 0;
+  let combinedText: string | null = null;
+  const combined = createSpendMeter({
+    load: () => combinedText,
+    save: (next) => { combinedReservationWrites += 1; combinedText = next; },
+  }, 5, () => clock, 1);
+  combined.reserve('gemini', 0.25);
+  ok('call_and_cost_reserve_in_one_durable_write', combinedReservationWrites === 1 && combined.snapshot().calls.gemini === 1 && combined.snapshot().usd.gemini === 0.25);
+  let disabledWriteThrew = false;
+  try { createSpendMeter({ load: () => null, save: () => { throw new Error('disk full'); } }, 0, () => clock, 0).record('gemini'); } catch { disabledWriteThrew = true; }
+  ok('write_failure_is_nonblocking_only_when_caps_disabled', disabledWriteThrew === false);
 
   // B64-SEC4: dollar attribution + optional USD cap (additive, default-off).
   ok('estimate_uses_model_pricing',
@@ -173,6 +283,8 @@ export function runAiSpendMeterSelftest(): {
     Math.abs(estimateCallUsd('gemini-2.5-flash', 0, 1e6) - 1.2) < 1e-9,
     `opus=${estimateCallUsd('claude-opus', 1e6, 0)} flash=${estimateCallUsd('gemini-2.5-flash', 0, 1e6)}`);
   ok('unknown_model_uses_default', Math.abs(estimateCallUsd('mystery-model', 1e6, 0) - 3) < 1e-9);
+  ok('invalid_call_cap_uses_safe_fallback', parseSpendCap('not-a-number', 300) === 300 && parseSpendCap('-1', 300) === 300);
+  ok('explicit_zero_cap_remains_disabled', parseSpendCap('0', 300) === 0);
   {
     let t2: string | null = null;
     const s2: SpendStore = { load: () => t2, save: (t) => { t2 = t; } };
@@ -182,6 +294,7 @@ export function runAiSpendMeterSelftest(): {
     ok('usd_default_off_never_stops', createSpendMeter(s2, 1000, () => ck, 0).check('claude').allowed === true);
     um.record('claude'); um.recordCost('claude', 0.6);
     ok('usd_under_cap_allows', um.check('claude').allowed === true && Math.abs(um.snapshot().totalUsdToday - 0.6) < 1e-9);
+    ok('pending_cost_that_would_cross_cap_is_refused', um.check('claude', 0.41).allowed === false && um.check('claude', 0.4).allowed === true);
     um.record('claude'); um.recordCost('claude', 0.6); // total $1.20 ≥ $1 cap
     const stopped = um.check('claude');
     ok('usd_cap_stops_and_attributes', stopped.allowed === false && stopped.stoppedBy === 'usd' && Math.abs(um.snapshot().usd['claude'] - 1.2) < 1e-9,

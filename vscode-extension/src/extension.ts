@@ -24,6 +24,7 @@ import * as net from "node:net";
 import * as path from "node:path";
 import { mapFlatFindings, type FlatFinding } from "./diagnosticsMap";
 import { buildXmlAssociations, listModFolders, writeRecommendations, writeXmlAssociations } from "./modFolder";
+import { atomicWriteFile, replaceFileSetAtomically } from "./durableWrite";
 import { xmlCursorContext } from "./langContext";
 import { findCueDefinition, findCueReferences, mdscriptNameOf, parseCueWord } from "./langNav";
 import { detectIdeCapabilities, formatIdeCapabilityReport } from "./capabilities";
@@ -1344,8 +1345,10 @@ async function writeAgentBrief(context: vscode.ExtensionContext, modPath: string
   });
   const data = (await res.json()) as { agentsMd?: string; notesMd?: string; error?: string };
   if (!res.ok || !data.agentsMd || !data.notesMd) throw new Error(data.error || `HTTP ${res.status}`);
-  fs.writeFileSync(path.join(modPath, "AGENTS.md"), data.agentsMd, "utf8");
-  fs.writeFileSync(path.join(modPath, "X4_NOTES.md"), data.notesMd, "utf8");
+  replaceFileSetAtomically([
+    { file: path.join(modPath, "AGENTS.md"), data: data.agentsMd },
+    { file: path.join(modPath, "X4_NOTES.md"), data: data.notesMd },
+  ]);
   log(`agent brief written for "${fromPath}" (AGENTS.md + X4_NOTES.md)`);
   return true;
 }
@@ -1658,7 +1661,7 @@ async function generateProof(context: vscode.ExtensionContext): Promise<void> {
     if (!res.ok || !data.markdown) throw new Error(data.error || `HTTP ${res.status}`);
     const target = modFolders.length === 1 ? modFolders[0].uri.fsPath : null;
     if (target) {
-      fs.writeFileSync(path.join(target, "PROOF.md"), data.markdown, "utf8");
+      atomicWriteFile(path.join(target, "PROOF.md"), data.markdown);
       const doc = await vscode.workspace.openTextDocument(path.join(target, "PROOF.md"));
       await vscode.window.showTextDocument(doc, { preview: true });
       log(`PROOF.md written to ${target}`);

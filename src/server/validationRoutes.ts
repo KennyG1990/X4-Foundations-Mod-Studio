@@ -27,6 +27,7 @@ import { ORDER_PARAM_TYPES, runAiscriptLintSelftest } from "../lib/aiscriptLint"
 import { runMdPitfallSelftest } from "../lib/mdPitfallLints";
 import { getReferenceCorpus } from "../lib/referenceCorpus";
 import { getReferenceScriptPropertyIndex } from "../lib/referenceLanguage";
+import { atomicWriteFile } from "../lib/workspaceState";
 
 function errText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -60,8 +61,7 @@ export function getAiSchemaIndex(): SchemaIndex | null {
     if (!fs.existsSync(cachedXsd)) {
       const hit = catDatExtractBaseGameFile(resolved.x4GamePath, "libraries/aiscripts.xsd");
       if (!hit || !hit.text) return null;
-      fs.mkdirSync(cacheDir, { recursive: true });
-      fs.writeFileSync(cachedXsd, hit.text, "utf8");
+      atomicWriteFile(cachedXsd, hit.text);
     }
     return buildSchemaIndex([cachedXsd, resolved.commonXsdPath].filter(Boolean));
   } catch {
