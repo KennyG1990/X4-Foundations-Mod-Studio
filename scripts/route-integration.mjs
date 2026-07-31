@@ -474,10 +474,12 @@ async function main() {
   ok('dry_run_lists_files_it_would_add', Array.isArray(dry.json?.effect?.added) && dry.json.effect.added.length > 0, `added=${(dry.json?.effect?.added || []).length}`);
   ok('dry_run_reports_deletions_explicitly', Array.isArray(dry.json?.effect?.deleted), JSON.stringify((dry.json?.effect?.deleted || []).slice(0, 3)));
   ok('dry_run_wrote_nothing', fs.existsSync(dryTarget) === beforeDry, `targetExisted=${beforeDry} now=${fs.existsSync(dryTarget)}`);
+  ok('dry_run_does_not_promote_validation_baseline', dry.json?.baselinePromotion?.recorded === false && dry.json?.validationDelta?.status === 'no_baseline', JSON.stringify(dry.json?.baselinePromotion));
 
   // #4 autoReimport actually unblocks the deploy the guard refused.
   const autoDeploy = await req('POST', '/api/agent/deploy-verify', SESSION_TOKEN, { workspace: staleImport.json?.workspace, autoReimport: true });
   ok('auto_reimport_unblocks_the_deploy', autoDeploy.status === 200 && autoDeploy.json?.ok === true, `status=${autoDeploy.status} stage=${autoDeploy.json?.stage}`);
+  ok('successful_deploy_promotes_last_green_baseline', autoDeploy.json?.baselinePromotion?.recorded === true && (autoDeploy.json?.checklist || []).some(c => c.id === 'baseline' && c.status === 'pass'), JSON.stringify(autoDeploy.json?.baselinePromotion));
   ok('auto_reimport_is_reported_not_silent',
     (autoDeploy.json?.checklist || []).some(c => c.id === 'source-sync' && /re-imported/i.test(c.detail || '')),
     JSON.stringify((autoDeploy.json?.checklist || []).find(c => c.id === 'source-sync')));
@@ -521,6 +523,50 @@ async function main() {
   });
   ok('wellformed_xml_produces_no_wellformedness_error',
     (cleanCheck.json?.flat || []).filter(d => /wellformed/i.test(String(d.code || ''))).length === 0);
+
+  // Kimi R2 — a deliberate last-green baseline, never the editor's most recent poll.
+  const deltaBaseProject = {
+    id: 'validation_delta_probe', name: 'validation_delta_probe', files: [
+      { path: 'content.xml', kind: 'content', content: '<content id="validation_delta_probe" name="Validation Delta Probe" version="100"/>' },
+    ],
+  };
+  const baselineFile = path.join(dataDir, 'validation-baselines.json');
+  const baselineBytesBeforeDelta = fs.existsSync(baselineFile) ? fs.readFileSync(baselineFile, 'utf8') : '';
+  const deltaFirst = await req('POST', '/api/agent/project/validate', SESSION_TOKEN, { project: deltaBaseProject });
+  ok('validation_delta_first_run_is_not_false_clean', deltaFirst.status === 200 && deltaFirst.json?.validationDelta?.status === 'no_baseline', JSON.stringify(deltaFirst.json?.validationDelta));
+  ok('background_validation_does_not_create_baseline', (fs.existsSync(baselineFile) ? fs.readFileSync(baselineFile, 'utf8') : '') === baselineBytesBeforeDelta);
+  const deltaRecord = await req('POST', '/api/agent/project/validate', SESSION_TOKEN, { project: deltaBaseProject, recordBaseline: true });
+  ok('green_validation_records_baseline_explicitly', deltaRecord.status === 200 && deltaRecord.json?.baselinePromotion?.recorded === true && fs.existsSync(baselineFile), JSON.stringify(deltaRecord.json?.baselinePromotion));
+  const recordedBaselineBytes = fs.readFileSync(baselineFile, 'utf8');
+  const deltaWarningProject = {
+    ...deltaBaseProject,
+    files: [...deltaBaseProject.files, {
+      path: 'ui/main.lua', kind: 'lua',
+      content: 'AddUITriggeredEvent("validation_delta_probe", "event_" .. category)',
+    }],
+  };
+  const deltaAdded = await req('POST', '/api/agent/project/validate', SESSION_TOKEN, { project: deltaWarningProject });
+  ok('validation_delta_reports_new_warning', deltaAdded.status === 200 && deltaAdded.json?.ok === true && deltaAdded.json?.validationDelta?.counts?.new > 0, JSON.stringify(deltaAdded.json?.validationDelta));
+  ok('comparison_only_validation_preserves_baseline', fs.readFileSync(baselineFile, 'utf8') === recordedBaselineBytes);
+  const deltaWarningRecord = await req('POST', '/api/agent/project/validate', SESSION_TOKEN, { project: deltaWarningProject, recordBaseline: true });
+  ok('changed_green_warning_set_can_be_accepted_deliberately', deltaWarningRecord.status === 200 && deltaWarningRecord.json?.baselinePromotion?.recorded === true, JSON.stringify(deltaWarningRecord.json?.baselinePromotion));
+  const deltaResolved = await req('POST', '/api/agent/project/validate', SESSION_TOKEN, { project: deltaBaseProject });
+  ok('validation_delta_reports_resolved_warning', deltaResolved.status === 200 && deltaResolved.json?.validationDelta?.counts?.resolved > 0, JSON.stringify(deltaResolved.json?.validationDelta));
+  const beforeFailedPromotion = fs.readFileSync(baselineFile, 'utf8');
+  const rejectedPromotion = await req('POST', '/api/agent/project/validate', SESSION_TOKEN, {
+    project: { id: 'validation_delta_probe', name: 'validation_delta_probe', files: [{ path: 'md/broken.xml', kind: 'md', content: '<mdscript><cues></mdscript>' }] },
+    recordBaseline: true,
+  });
+  ok('erroring_validation_cannot_replace_last_green', rejectedPromotion.status === 200 && rejectedPromotion.json?.ok === false && rejectedPromotion.json?.baselinePromotion?.recorded === false && fs.readFileSync(baselineFile, 'utf8') === beforeFailedPromotion, JSON.stringify(rejectedPromotion.json?.baselinePromotion));
+  const otherModDelta = await req('POST', '/api/agent/project/validate', SESSION_TOKEN, { project: { ...deltaBaseProject, id: 'validation_delta_other', name: 'validation_delta_other' } });
+  ok('validation_baselines_are_isolated_per_mod', otherModDelta.json?.validationDelta?.status === 'no_baseline', JSON.stringify(otherModDelta.json?.validationDelta));
+  const validBaselineBytes = fs.readFileSync(baselineFile, 'utf8');
+  fs.writeFileSync(baselineFile, '{corrupt', 'utf8');
+  const corruptBaseline = await req('POST', '/api/agent/project/validate', SESSION_TOKEN, { project: deltaBaseProject });
+  ok('corrupt_baseline_is_unavailable_not_clean', corruptBaseline.status === 200 && corruptBaseline.json?.validationDelta?.status === 'unavailable', JSON.stringify(corruptBaseline.json?.validationDelta));
+  const corruptPromotion = await req('POST', '/api/agent/project/validate', SESSION_TOKEN, { project: deltaBaseProject, recordBaseline: true });
+  ok('corrupt_baseline_refuses_silent_overwrite', corruptPromotion.status === 409 && corruptPromotion.json?.code === 'VALIDATION_BASELINE_RECORD_FAILED' && fs.readFileSync(baselineFile, 'utf8') === '{corrupt', `status=${corruptPromotion.status}`);
+  fs.writeFileSync(baselineFile, validBaselineBytes, 'utf8');
 
   // #8 one expression, no 34-file payload.
   const exprBad = await req('POST', '/api/agent/check-expression', SESSION_TOKEN, { expression: '$faction.noexist' });

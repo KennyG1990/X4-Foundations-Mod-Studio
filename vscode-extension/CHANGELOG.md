@@ -3,6 +3,13 @@
 The latest changes, newest first. (This page is generated automatically — see
 `release-notes.json` to edit the wording.)
 
+## 0.0.61 — 2026-07-30
+
+- Validation now shows what changed since the last accepted green result: new warnings, resolved warnings, and warnings that stayed the same.
+- Background editor checks compare without moving the baseline. A green validation advances it only when explicitly requested, and a successful verified deploy records it after every deploy gate passes.
+- First runs and damaged baseline data never masquerade as clean. Forge says when no baseline exists, refuses to overwrite corrupt state, and keeps failed validations and dry-run deploys from changing the last-green record.
+- The same content-addressed comparison appears in the Studio Validation panel, project-validation API, package responses, and deploy checklist.
+
 ## 0.0.60 — 2026-07-30
 
 - Open Why on any package diagnostic to see its deterministic cause, likely impact, and next action without sending project data to an AI service.

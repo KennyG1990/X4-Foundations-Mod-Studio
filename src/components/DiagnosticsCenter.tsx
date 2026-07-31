@@ -9,6 +9,7 @@ import { ModWorkspace, PackageDiagnostic } from '../types';
 import { analyzeCueLineage } from '../lib/cueLineage';
 import DiagnosticsHub from './DiagnosticsHub';
 import PackageModDoctor from './PackageModDoctor';
+import type { ValidationDeltaResult } from '../lib/validationDelta';
 
 /**
  * H7 — unified Diagnostics hub. One coherent home for the previously scattered
@@ -28,6 +29,7 @@ interface DiagnosticsCenterProps {
   setWorkspaceView?: (view: any) => void;
   diagnostics: PackageDiagnostic[];
   diagnosticSource: 'checking' | 'project' | 'local';
+  validationDelta?: ValidationDeltaResult | null;
   /** Jump to the Cues tab (the cue-health summary deep-links there). */
   onOpenCues?: () => void;
   /** A4.10 — gates the optional AI-polish affordance in the Scripts (MDScanner) view. */
@@ -52,6 +54,7 @@ export default function DiagnosticsCenter({
   setWorkspaceView,
   diagnostics,
   diagnosticSource,
+  validationDelta,
   onOpenCues,
   aiEnabled = false,
   requestedScope = 'scripts',
@@ -130,6 +133,7 @@ export default function DiagnosticsCenter({
                 workspace={workspace}
                 diagnostics={diagnostics}
                 diagnosticSource={diagnosticSource}
+                validationDelta={validationDelta}
                 focus="package"
                 onSuppressionCommitted={onSuppressionCommitted}
               />
@@ -142,6 +146,7 @@ export default function DiagnosticsCenter({
             workspace={workspace}
             diagnostics={diagnostics}
             diagnosticSource={diagnosticSource}
+            validationDelta={validationDelta}
             focus="install"
             onSuppressionCommitted={onSuppressionCommitted}
           />

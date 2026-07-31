@@ -194,6 +194,15 @@ import { runTFileLintSelftest, buildModTextIndex, lintTextReferences } from "./s
 import { runFactionsLintSelftest, lintFactionRelations } from "./src/lib/factionsLint";
 import { runGodLintSelftest, lintGodMacros } from "./src/lib/godLint";
 import { atomicWriteFile, atomicWriteJson, readActiveState, writeActiveState, parkState, listParked, readParked, runWorkspaceStateSelftest } from "./src/lib/workspaceState";
+import {
+  ValidationBaselineStore,
+  compareValidationWarnings,
+  createValidationBaselineSnapshot,
+  runValidationDeltaSelftest,
+  validationProjectContentHash,
+  type ValidationDeltaResult,
+  type ValidationWarningInput,
+} from "./src/lib/validationDelta";
 import { normalizeStudioLayoutPreferences, type StudioLayoutPreferences } from "./src/lib/studioLayout";
 import { normalizeReleasePreferences, type ReleasePreferences } from "./src/lib/releasePreferences";
 import { createAgentProject, createProjectFile, generateAgentProject, packageAgentProject, runProjectOrchestrationSelftest } from "./src/lib/projectOrchestration";
@@ -460,6 +469,33 @@ if (TIMEOUT_DRILL_DELAY_MS > 0) PUBLIC_READONLY_GETS.add('/agent/timeout-drill')
 // B42: named, scoped, expiring agent keys (src/lib/agentKeys). The boot session token
 // keeps full, unscoped power and is the ONLY credential that can manage keys.
 const AGENT_KEYS_FILE = dataPath("agent-keys.json"); // B53: survives extension updates via X4_DATA_DIR
+const validationBaselineStore = new ValidationBaselineStore(dataPath("validation-baselines.json"));
+
+function validationDeltaFor(
+  modId: string,
+  files: Array<{ path: string; content?: string }>,
+  diagnostics: ValidationWarningInput[],
+): { contentHash: string; delta: ValidationDeltaResult } {
+  const contentHash = validationProjectContentHash(files);
+  return {
+    contentHash,
+    delta: compareValidationWarnings(modId, contentHash, diagnostics, validationBaselineStore.read(modId)),
+  };
+}
+
+function recordValidationBaseline(
+  modId: string,
+  contentHash: string,
+  diagnostics: ValidationWarningInput[],
+): { recorded: true; recordedAt: string; contentHash: string } | { recorded: false; reason: string } {
+  try {
+    const snapshot = createValidationBaselineSnapshot(modId, contentHash, diagnostics);
+    validationBaselineStore.record(snapshot);
+    return { recorded: true, recordedAt: snapshot.recordedAt, contentHash: snapshot.contentHash };
+  } catch (error) {
+    return { recorded: false, reason: errorMessage(error) || 'Validation baseline could not be recorded.' };
+  }
+}
 const agentKeyStore = createAgentKeyStore({ file: AGENT_KEYS_FILE });
 
 function authMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
@@ -3384,8 +3420,8 @@ app.get("/api/agent/schema", (req, res) => {
         method: "POST",
         path: "/api/agent/project/validate",
         auth: true,
-        body: { project: "ExtensionProject (inline)", fromPath: "or exact mod-folder path under a configured root", root: "workspace | filesystem" },
-        purpose: "Run the shared full-project referee. Exact root forge.rules.json v1 may declare reviewed warning suppressions, known property chains, indexed wire keys, and expected Lua registrations; errors are never suppressible."
+        body: { project: "ExtensionProject (inline)", fromPath: "or exact mod-folder path under a configured root", root: "workspace | filesystem", recordBaseline: "optional true; green validations only" },
+        purpose: "Run the shared full-project referee and compare warnings with the persisted last-green baseline. recordBaseline:true deliberately advances that baseline only when validation is green. Exact root forge.rules.json v1 may declare reviewed warning suppressions, known property chains, indexed wire keys, and expected Lua registrations; errors are never suppressible."
       },
       {
         method: "POST",
@@ -4713,6 +4749,7 @@ type FullWorkspaceValidation = {
   diagnostics: ServerDiagnostic[];
   validation: ReturnType<typeof runProjectValidation>;
   diskSkipped: Array<{ path: string; reason: string }>;
+  projectFiles: ExtensionProject['files'];
 };
 
 function diagnosticCategory(code: string): string {
@@ -4808,7 +4845,19 @@ function runFullWorkspaceValidation(ws: ModWorkspace, built?: { modId: string; f
     seen.add(key);
     return true;
   });
-  return { diagnostics, validation, diskSkipped };
+  return { diagnostics, validation, diskSkipped, projectFiles: project.files };
+}
+
+function projectValidationWarnings(full: FullWorkspaceValidation): ValidationWarningInput[] {
+  return [
+    ...flattenProjectValidation(full.validation),
+    ...full.diskSkipped.map(skipped => ({
+      severity: 'warning',
+      code: 'validation.disk_file_skipped',
+      filePath: skipped.path,
+      message: `Disk-backed validation skipped ${skipped.path}: ${skipped.reason}.`,
+    })),
+  ];
 }
 
 /** Compute the same full diagnostic set used by compile and agents. */
@@ -6903,9 +6952,37 @@ app.post("/api/agent/project/validate", (req, res) => {
     // B56s1: `flat` = the one-list diagnostic view (B55P1 currency) — consumed by the
     // extension's Problems-panel projection. Additive; existing consumers unaffected.
     const flat = flattenProjectValidation(result);
+    const { contentHash, delta: validationDelta } = validationDeltaFor(project.id || project.name, project.files, flat);
+    let baselinePromotion: ReturnType<typeof recordValidationBaseline> | undefined;
+    if (req.body?.recordBaseline === true) {
+      baselinePromotion = result.ok
+        ? recordValidationBaseline(project.id || project.name, contentHash, flat)
+        : { recorded: false, reason: 'Validation has active errors; the last-green baseline was not changed.' };
+      if ('reason' in baselinePromotion && result.ok) {
+        return res.status(409).json({
+          ...result,
+          flat,
+          capsules: buildRemediationCapsules(flat),
+          source,
+          validationDelta,
+          baselinePromotion,
+          code: 'VALIDATION_BASELINE_RECORD_FAILED',
+          error: baselinePromotion.reason,
+          ...(drift ? { drift } : {}),
+        });
+      }
+    }
     // B57s2: `capsules` = the SAME remediation packet the in-app repair loop feeds its
     // model — one currency for our loop, the IDE, and external agents. Additive.
-    return res.json({ ...result, flat, capsules: buildRemediationCapsules(flat), source, ...(drift ? { drift } : {}) });
+    return res.json({
+      ...result,
+      flat,
+      capsules: buildRemediationCapsules(flat),
+      source,
+      validationDelta,
+      ...(baselinePromotion ? { baselinePromotion } : {}),
+      ...(drift ? { drift } : {}),
+    });
   } catch (error) {
     return res.status(500).json({ error: errorMessage(error) || "project validate failed" });
   }
@@ -7415,6 +7492,7 @@ const SELFTESTS: Record<string, () => unknown> = {
   "project-crossfile-selftest": runProjectCrossFileSelftest,
   "project-rules-selftest": runProjectRulesSelftest,
   "diagnostic-explain-selftest": runDiagnosticExplainSelftest,
+  "validation-delta-selftest": runValidationDeltaSelftest,
   "external-api-registry-selftest": runExternalApiRegistrySelftest,
   "position-picker-selftest": runPositionPickerSelftest,
   "mod-drift-selftest": runModDriftSelftest,
@@ -9861,7 +9939,7 @@ function buildDeployProjectValidation(ws: any, emitted?: ReturnType<typeof build
     name: manifest.modId,
     files: [...validationFiles.values()],
   } as any, { references, jobsVocabulary: getJobsVocabulary(), waresVocabulary: getWaresVocabulary() });
-  return { ...manifest, preflight, diskValidationSkipped };
+  return { ...manifest, preflight, diskValidationSkipped, validationFiles: [...validationFiles.values()] };
 }
 
 /**
@@ -9884,7 +9962,7 @@ app.post("/api/agent/deploy-verify", (req, res) => {
     ['config', 'Paths configured'], ['import', 'Mod source read'], ['source-sync', 'Canvas in sync with source folder'], ['wellformed', 'XML well-formed'],
     ['compile', 'Compile diagnostics'], ['preflight', 'Full validation (schema/cues/lints)'],
     ['deploy', 'Written to staging + extensions'], ['bytes', 'Deployed bytes confirmed'],
-    ['doctor', 'Extension doctor'], ['drift', 'Workspace/deployed sync'],
+    ['doctor', 'Extension doctor'], ['drift', 'Workspace/deployed sync'], ['baseline', 'Last-green validation baseline'],
   ];
   const failWith = (stageId: string, payload: Record<string, unknown>) => {
     let hit = false;
@@ -10083,16 +10161,35 @@ app.post("/api/agent/deploy-verify", (req, res) => {
       { modId, files },
     );
     const { preflight, diskValidationSkipped } = deployValidation;
+    const preflightDiagnostics: ValidationWarningInput[] = [
+      ...flattenProjectValidation(preflight),
+      ...diskValidationSkipped.map(skipped => ({
+        severity: 'warning',
+        code: 'validation.disk_file_skipped',
+        filePath: skipped.path,
+        message: `Disk-backed validation skipped ${skipped.path}: ${skipped.reason}.`,
+      })),
+    ];
+    const { contentHash: preflightContentHash, delta: validationDelta } = validationDeltaFor(
+      modId,
+      deployValidation.validationFiles,
+      preflightDiagnostics,
+    );
     const pfWarnings = preflight.summary.activeWarnings + diskValidationSkipped.length;
     if (!preflight.ok) {
       check('preflight', 'Full validation (schema/cues/lints)', 'fail',
         `${preflight.summary.schemaErrors} schema, ${preflight.summary.unresolvedCueRefs} cue, ${preflight.summary.crossFileErrors} cross-file, ${preflight.summary.aiscriptErrors} aiscript error(s)`);
-      return res.json(failWith('preflight', { modId, preflight: { summary: preflight.summary, findings: [...preflight.schema.findings, ...preflight.crossFile.findings].slice(0, 10) } }));
+      return res.json(failWith('preflight', { modId, validationDelta, preflight: { summary: preflight.summary, findings: [...preflight.schema.findings, ...preflight.crossFile.findings].slice(0, 10) } }));
     }
+    const deltaDetail = validationDelta.status === 'compared'
+      ? `${validationDelta.counts.new} new, ${validationDelta.counts.resolved} resolved since ${validationDelta.baseline.recordedAt}`
+      : validationDelta.status === 'no_baseline'
+        ? 'no last-green baseline yet'
+        : `baseline unavailable: ${validationDelta.baseline.reason}`;
     check('preflight', 'Full validation (schema/cues/lints)', pfWarnings > 0 ? 'warn' : 'pass',
       pfWarnings > 0
-        ? `0 errors; ${pfWarnings} active warning(s), ${preflight.summary.suppressedWarnings} reviewed suppression(s), ${diskValidationSkipped.length} disk file(s) above/unavailable to the validation loader`
-        : '0 errors, 0 warnings across the full stack');
+        ? `0 errors; ${pfWarnings} active warning(s), ${preflight.summary.suppressedWarnings} reviewed suppression(s), ${diskValidationSkipped.length} disk file(s) above/unavailable to the validation loader; ${deltaDetail}`
+        : `0 errors, 0 warnings across the full stack; ${deltaDetail}`);
 
     // 3. Deploy — staging (writeSnapshots) + game extensions (clean), same as /deploy.
     let stagingPath = '';
@@ -10126,6 +10223,8 @@ app.post("/api/agent/deploy-verify", (req, res) => {
         deployFormat: { mode: deployFormat },
         effect: preview,
         checklist,
+        validationDelta,
+        baselinePromotion: { recorded: false, reason: 'Dry-run deploys never change the last-green baseline.' },
         note: 'Nothing was written. Re-send without dryRun to apply exactly this effect.',
       });
     }
@@ -10201,9 +10300,22 @@ app.post("/api/agent/deploy-verify", (req, res) => {
         deployedPath: deployedPath || undefined,
       };
     }
+    const baselinePromotion = ok
+      ? recordValidationBaseline(modId, preflightContentHash, preflightDiagnostics)
+      : { recorded: false as const, reason: 'Deploy byte or extension-doctor gates failed; the last-green baseline was not changed.' };
+    check(
+      'baseline',
+      'Last-green validation baseline',
+      baselinePromotion.recorded ? 'pass' : 'warn',
+      baselinePromotion.recorded
+        ? `Recorded ${baselinePromotion.contentHash.slice(0, 12)} after every deploy gate passed.`
+        : 'reason' in baselinePromotion ? baselinePromotion.reason : 'Validation baseline was not recorded.',
+    );
     return res.json({
       ok, stage: 'done', modId, deployedPath, stagingPath, bytesConfirmed, deployedBytes,
       checklist,
+      validationDelta,
+      baselinePromotion,
       // B84: what format was written, why it was chosen, and what it means — in the payload
       // so every surface (wizard, IDE, agent) can say the same plain thing.
       deployFormat: { ...formatReport, source: formatChoice.source },
@@ -10256,6 +10368,11 @@ app.post("/api/agent/compile", (req, res) => {
     const uiIndexPath = `ui.xml`;
     const uiLuaPath = `ui/${modId}.lua`;
     const full = runFullWorkspaceValidation(ws, { modId, files });
+    const validationDelta = validationDeltaFor(
+      modId,
+      full.projectFiles,
+      projectValidationWarnings(full),
+    ).delta;
 
     return res.json({
       success: true,
@@ -10272,6 +10389,7 @@ app.post("/api/agent/compile", (req, res) => {
         ui_index_xml: files[uiIndexPath] || ""
       },
       diagnostics: full.diagnostics,
+      validationDelta,
       validation: {
         scope: "full-project",
         ok: full.validation.ok,
@@ -10301,6 +10419,11 @@ app.post("/api/agent/package", (req, res) => {
   try {
     const { modId, files } = buildWorkspaceFileManifest(ws);
     const full = runFullWorkspaceValidation(ws, { modId, files });
+    const validationDelta = validationDeltaFor(
+      modId,
+      full.projectFiles,
+      projectValidationWarnings(full),
+    ).delta;
 
     return res.json({
       success: true,
@@ -10308,6 +10431,7 @@ app.post("/api/agent/package", (req, res) => {
       file_count: Object.keys(files).length,
       files,
       diagnostics: full.diagnostics,
+      validationDelta,
       validation: {
         scope: "full-project",
         ok: full.validation.ok,

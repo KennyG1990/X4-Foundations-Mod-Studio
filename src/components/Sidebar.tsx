@@ -62,6 +62,7 @@ import {
   type StudioLayoutPreferences,
 } from '../lib/studioLayout';
 import type { ReleasePreferences } from '../lib/releasePreferences';
+import type { ValidationDeltaResult } from '../lib/validationDelta';
 
 interface SidebarProps {
   width?: number;
@@ -146,6 +147,7 @@ interface SidebarProps {
 
   diagnostics: PackageDiagnostic[];
   diagnosticSource: 'checking' | 'project' | 'local';
+  validationDelta?: ValidationDeltaResult | null;
   diagnosticsScope?: DiagnosticsScope;
   onSuppressionCommitted?: (sourceHash: string) => void;
   onSelectSnapshot?: (snapWS: ModWorkspace | null) => void;
@@ -309,6 +311,7 @@ export default function Sidebar({
   diagnostics,
   diagnosticSource,
   diagnosticsScope,
+  validationDelta,
   onSuppressionCommitted,
   onSelectSnapshot
 }: SidebarProps) {
@@ -664,6 +667,7 @@ export default function Sidebar({
               setWorkspaceView={setWorkspaceView}
               diagnostics={diagnostics}
               diagnosticSource={diagnosticSource}
+              validationDelta={validationDelta}
               requestedScope={diagnosticsScope}
               onOpenCues={() => setActiveTab('cues')}
               aiEnabled={aiEnabled}

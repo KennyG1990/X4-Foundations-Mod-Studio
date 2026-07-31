@@ -58,6 +58,7 @@ import { vetTaskProposal, nextActiveTask } from './lib/architectLoop';
 import { getE2EPerfCounters, resetE2EPerfCounters, type E2EPerfCounters } from './lib/e2ePerfCounters';
 import type { ArchitectStepView } from './components/BlueprintPanel';
 import type { DiagnosticsScope } from './components/DiagnosticsCenter';
+import type { ValidationDeltaResult } from './lib/validationDelta';
 import ReadinessLadder from './components/ReadinessLadder';
 import BeginnerWorkspace from './components/BeginnerWorkspace';
 import { toSafeModId } from './lib/modCompiler';
@@ -351,6 +352,7 @@ export default function App() {
   // Diagnostics / Mod Doctor state shared by readiness and the diagnostics panel.
   const [diagnostics, setDiagnostics] = useState<PackageDiagnostic[]>([]);
   const [diagnosticSource, setDiagnosticSource] = useState<'checking' | 'project' | 'local'>('checking');
+  const [validationDelta, setValidationDelta] = useState<ValidationDeltaResult | null>(null);
   const [diagnosticRevision, setDiagnosticRevision] = useState(0);
   const [readinessWatcher, setReadinessWatcher] = useState<ReadinessWatcherEvidence>({ phase: 'loading' });
   const [experienceConfirmations, setExperienceConfirmations] = useState<Record<string, ExperienceConfirmation>>(
@@ -391,12 +393,13 @@ export default function App() {
           body: JSON.stringify({ workspace }),
           signal: controller.signal,
         });
-        const data = await handleApiResponse<{ diagnostics?: PackageDiagnostic[]; validation?: { scope?: string } }>(response, 'Full project validation failed.');
+        const data = await handleApiResponse<{ diagnostics?: PackageDiagnostic[]; validation?: { scope?: string }; validationDelta?: ValidationDeltaResult }>(response, 'Full project validation failed.');
         if (data.validation?.scope !== 'full-project') {
           throw new Error('The connected Forge backend does not expose full-project live validation. Restart or update the backend.');
         }
         if (!cancelled) {
           setDiagnostics(data.diagnostics || []);
+          setValidationDelta(data.validationDelta || null);
           setDiagnosticSource('project');
         }
       } catch (err) {
@@ -404,6 +407,7 @@ export default function App() {
         console.warn('Full project validation unavailable; falling back to local MD diagnostics:', err);
         if (!cancelled) {
           setDiagnostics(localReports);
+          setValidationDelta(null);
           setDiagnosticSource('local');
         }
       }
@@ -2031,6 +2035,7 @@ export default function App() {
           architectRunDisabledReason={architectCanRun ? undefined : 'No AI key set — add one in Settings → AI Assistant → Configure AI engine.'}
           diagnostics={effectiveDiagnostics}
           diagnosticSource={diagnosticSource}
+          validationDelta={validationDelta}
           diagnosticsScope={diagnosticsScope}
           onSuppressionCommitted={(sourceHash) => {
             setWorkspace(previous => previous.sourceStamp

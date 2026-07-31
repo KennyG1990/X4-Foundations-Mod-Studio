@@ -8,11 +8,13 @@ import { Terminal, CheckCircle, AlertTriangle, Sparkles, Boxes, RefreshCw, FileC
 import { ModWorkspace, PackageDiagnostic, generateMDXML } from '../types';
 import { critiqueWorkspace } from '../lib/mdCritic';
 import DiagnosticGuidance from './DiagnosticGuidance';
+import type { ValidationDeltaResult } from '../lib/validationDelta';
 
 interface PackageModDoctorProps {
   workspace: ModWorkspace;
   diagnostics: PackageDiagnostic[];
   diagnosticSource: 'checking' | 'project' | 'local';
+  validationDelta?: ValidationDeltaResult | null;
   /** H7: which diagnostics scope to render. 'package' = this mod's build/critic/
    *  selftests; 'install' = the cross-mod Install Diagnostics (Extension Doctor);
    *  'all' (default) = both, for standalone use. */
@@ -86,6 +88,7 @@ export default function PackageModDoctor({
   workspace,
   diagnostics,
   diagnosticSource,
+  validationDelta,
   focus = 'all',
   onSuppressionCommitted,
 }: PackageModDoctorProps) {
@@ -319,6 +322,33 @@ export default function PackageModDoctor({
             <span className="w-2 h-2 rounded-full bg-amber-500 block shrink-0" />
             <span>{warnings.length} Warnings</span>
           </div>
+        </div>
+
+        <div
+          data-testid="validation-delta-card"
+          className={`rounded border p-2 text-[9.5px] leading-relaxed ${
+            validationDelta?.status === 'compared'
+              ? validationDelta.counts.new > 0
+                ? 'border-amber-500/25 bg-amber-500/5 text-amber-200'
+                : 'border-emerald-500/20 bg-emerald-500/5 text-emerald-200'
+              : validationDelta?.status === 'unavailable'
+                ? 'border-red-500/25 bg-red-500/5 text-red-200'
+                : 'border-slate-500/20 bg-slate-500/5 text-slate-300'
+          }`}
+        >
+          <div className="font-bold uppercase tracking-wide">Since last green</div>
+          {diagnosticSource === 'checking' ? (
+            <div className="mt-0.5 text-slate-400">Comparison pending…</div>
+          ) : validationDelta?.status === 'compared' ? (
+            <div className="mt-0.5">
+              {validationDelta.counts.new} new · {validationDelta.counts.resolved} resolved · {validationDelta.counts.unchanged} unchanged warning(s)
+              <div className="text-slate-400">Baseline {validationDelta.baseline.recordedAt ? new Date(validationDelta.baseline.recordedAt).toLocaleString() : 'recorded'}</div>
+            </div>
+          ) : validationDelta?.status === 'unavailable' ? (
+            <div className="mt-0.5">Baseline unavailable — {validationDelta.baseline.reason || 'the stored comparison could not be trusted.'}</div>
+          ) : (
+            <div className="mt-0.5 text-slate-400">No last-green baseline yet. A successful deploy records one; background checks do not.</div>
+          )}
         </div>
 
         {diagnostics.length > 0 && (

@@ -131,6 +131,12 @@ test('Diagnostics Center renders deterministic Why guidance and the reviewed sup
         suppressionScope: { code: 'scriptproperty.unknown', file: 'md/example.xml', sourceRef: '$ship.cargo.unknown' },
       }],
       validation: { scope: 'full-project', ok: true },
+      validationDelta: {
+        status: 'compared', modId: 'x4_welcome_message', currentContentHash: 'b'.repeat(64),
+        baseline: { status: 'available', contentHash: 'a'.repeat(64), recordedAt: '2026-07-30T12:00:00.000Z' },
+        counts: { current: 3, baseline: 2, new: 2, resolved: 1, unchanged: 1 },
+        newWarnings: [], resolvedWarnings: [],
+      },
     }),
   }));
   await page.route('**/api/agent/project-rules/prepare-suppression', route => route.fulfill({
@@ -146,6 +152,8 @@ test('Diagnostics Center renders deterministic Why guidance and the reviewed sup
 
   await page.getByTestId('readiness-stage-package').click();
   await expect(page.getByTestId('diagnostics-scope-package')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('validation-delta-card')).toContainText('2 new · 1 resolved · 1 unchanged');
+  await expect(page.getByTestId('validation-delta-card')).toContainText('Since last green');
   const why = page.getByTestId('diagnostic-why-scriptproperty.unknown');
   await expect(why).toBeVisible();
   await why.scrollIntoViewIfNeeded();

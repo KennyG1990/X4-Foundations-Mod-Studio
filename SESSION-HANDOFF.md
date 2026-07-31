@@ -4,44 +4,43 @@ Updated: 2026-07-30
 
 ## One-line state
 
-B110-R6 deterministic diagnostic guidance and guarded exact warning suppression is VERIFIED locally, installed in
-Antigravity, and published on Open VSX 0.0.60 with public/local byte parity. R2 validation delta is next.
+B110-R2 validation delta is implemented, locally/packaged/installed-host verified, and published as byte-identical
+Open VSX 0.0.61. The release-source commit and exact-SHA Quality gate are the only remaining R2 close steps.
 
 ## Operator brief
 
 - Project: `F:\DEV_ENV\X4_Forge` (Forge application/Antigravity extension, not the live X4 mod).
 - Machine state: Ken explicitly released the machine. Installed-host proof used the existing DeadAir workspace
-  read-only; no suppression dialog was opened there and no real mod/game file was written. Antigravity remains open
-  in Expert -> Diagnostics -> Validation with one `Why?` explanation expanded.
-- Eyeball queue: none for R6; the installed-host cause/impact/next-action card was directly observed and captured at
-  `vscode-extension/evidence/0.0.60-diagnostic-guidance-antigravity.png`.
-- Commit question: implementation `08792f141a3519e8b85a059232841887b9d842dd` is pushed and exact-SHA Quality
-  `30589639514` passed. The durable evidence close is committed/pushed at this session's final commit point; verify
-  current `origin/main == HEAD` before beginning R2.
+  read-only; no validation baseline was recorded, no deploy ran, and no real mod/game file was written.
+- Eyeball queue: none for the implemented R2 state. Antigravity visibly renders the honest no-baseline card at
+  `vscode-extension/evidence/0.0.61-validation-delta-antigravity.png`; compared-count rendering is covered by E2E.
+- Commit question: Open VSX 0.0.61 is public and byte-identical to the inspected local VSIX. Commit/push the exact
+  published source now, then require exact-SHA public Quality before marking R2 VERIFIED.
 
-## B110-R6 close: VERIFIED
+## B110-R2 current state: PARTIAL
 
-- Every package/full-project diagnostic has deterministic cause, impact, and next action in both the UI and
-  diagnostic mode on `/api/agent/explain`; unknown codes use an honest generic fallback.
-- Only active validator-owned exact warnings offer suppression. Prepare is read-only; commit re-proves the warning,
-  confines the target to an imported source under the isolated Mod Workspace, validates existing/candidate rules,
-  checks two SHA-256 CAS points, atomically writes, and revalidates. Errors and Mod Doctor-only warnings cannot be
-  suppressed.
-- Explanation 8/8; rules 20/20; routes 248/248; oracles 121/121; focused suppression 2/2; focused shell final 9/9;
-  decisive full E2E 48/48 with zero retry/flaky/bad/quarantine; build/type/lint/precommit/graph; staged app 16/16;
+- `src/lib/validationDelta.ts` owns deterministic project/warning identities, bounded per-mod snapshots, added/
+  resolved/unchanged comparison, fail-closed parsing, and atomic persistence.
+- Explicit green `/api/agent/project/validate` and a fully successful non-dry deploy may promote. Compile/package,
+  background polling, failed validation/deploy, and deploy dry-run compare only. Corrupt state remains unavailable
+  and refuses overwrite.
+- Project validation, compile/package, deploy preflight, and Diagnostics Center now use the same flattened full-
+  project warning currency. The UI exposes `Since last green` with honest no-baseline and compared-count states.
+- Evidence: delta selftest 6/6; routes 261/261; focused E2E 2/2; oracles 122/122; decisive full E2E 48/48 in 443.8s
+  with zero failed/flaky/bad/quarantined and ports closed; typecheck/lint/build/precommit/graph; staged probe 16/16;
   VSIX inspection 2,091 entries PASS.
-- Installed Antigravity 0.0.60 ran a managed sidecar on `:58528` and visibly rendered the required diagnostic UX.
-  Open VSX 0.0.60 public/local parity: 17,877,485 bytes, SHA-256
-  `e356a54b691c2423173f501754916b07859b60512f9b37240cae57035e25f19b`.
-- Exact-SHA public Quality run `30589639514`, job `91028887606`, passed every clean Windows product gate at
-  `08792f141a3519e8b85a059232841887b9d842dd`; artifact `8777900322` is retained through 2026-08-13.
+- Installed Antigravity registry reports `x4forge.x4-forge-studio@0.0.61`; a host reload started managed sidecar
+  `:61473` and visibly rendered the R2 card. Public/local 0.0.61 parity is 17,881,788 bytes, SHA-256
+  `2AE39B02565B0C559C113A574F7FE76BD3B8987B7258B0B0CD2F599A326B838A`.
 
 ## Next action
 
-1. Begin B110-R2 as a new Full-lane bounded unit: content-addressed per-mod last-green validation baseline plus
-   new/resolved diagnostic delta, including deploy-checklist presentation and stale-baseline negatives.
-2. Continue Kimi order: R11+R14, R8+R17, R13, R18+R21, final recommendation reconciliation.
-3. Only after R1-R21 closes, execute the queued two-document community-tool research program in `BACKLOG.md`.
+1. Stage only R2-owned paths, commit `feat(validation): persist and surface warning deltas`, push `main`, and assert
+   `origin/main == HEAD`.
+2. Wait for the exact-SHA public Quality run and inspected artifact. Then update R2 to VERIFIED in the task plan,
+   Kimi ledger, BACKLOG/ROADMAP, capability map, AAR ledgers, and this handoff; commit/push that durable close.
+3. Begin the next bounded Kimi unit: R11 conflict dialog v2 plus R14 recoverable destructive operations.
+4. Continue R8+R17, R13, R18+R21, final Kimi reconciliation, then the queued two-document research program.
 
 ## Live hazards and ownership
 
@@ -49,11 +48,13 @@ Antigravity, and published on Open VSX 0.0.60 with public/local byte parity. R2 
   - `vscode-extension/evidence/0.0.35-runtime-copy-live.png`
   - `vscode-extension/evidence/0.0.35-runtime-copy-startup.png`
 - Preserve unrelated untracked `Note for Kimi.md`.
-- Concurrent Discord work advanced `main == origin/main` to `99cf4e48a9ca84af844b681036ef26514c5557eb`; it is
-  already committed and must not be rewritten. The R6 diff is separable.
-- `.tmp_public_x4-forge-studio-0.0.60.vsix` is ignored verification output containing the public replay bytes.
+- `.tmp_public_x4-forge-studio-0.0.61.vsix` is ignored verification output containing the exact public replay bytes.
+- The first full E2E outer wrapper timed out before its receipt and left the isolated stack; only the exact 3100/3101
+  trees were stopped. The decisive 600-second-budget rerun passed 48/48 and closed both ports.
+- The GUI executable can return exit 0 without installing. Use `bin\antigravity-ide.cmd`; its registry/list result and
+  live reloaded host are authoritative even if unrelated analytics teardown exits 134 after success.
 - A retry-pass is red. Do not rerun a flaky gate to manufacture green.
 
 ## Suggested close commit title
 
-`feat(diagnostics): explain and safely suppress warnings`
+`feat(validation): persist and surface warning deltas`
