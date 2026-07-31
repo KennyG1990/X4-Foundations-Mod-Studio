@@ -23,44 +23,107 @@ jobs:
           BUG_FORUM_ID: "1531779148333453452"
           FEATURE_FORUM_ID: "1531779159217405962"
         run: |
-          if [ -z "$DISCORD_TOKEN" ]; then
+          set -euo pipefail
+
+          if [ -z "${DISCORD_TOKEN:-}" ]; then
             echo "DISCORD_TOKEN missing. Skipping."
             exit 0
           fi
 
+          BOT_USER_ID=$(curl --fail --silent --show-error --retry 3 \
+            -H "Authorization: Bot $DISCORD_TOKEN" \
+            "https://discord.com/api/v10/users/@me" | jq -r '.id // empty')
+
+          if [ -z "$BOT_USER_ID" ]; then
+            echo "Unable to resolve the Discord bot user ID; refusing to import threads without an origin guard."
+            exit 1
+          fi
+
+          ACTIVE_THREADS=$(curl --fail --silent --show-error --retry 3 \
+            -H "Authorization: Bot $DISCORD_TOKEN" \
+            "https://discord.com/api/v10/guilds/$GUILD_ID/threads/active")
+
           sync_forum() {
             FORUM_ID="$1"
             LABEL="$2"
-            
-            THREADS=$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" \
-              "https://discord.com/api/v10/guilds/$GUILD_ID/threads/active" | jq -c ".threads[] | select(.parent_id == \"$FORUM_ID\")")
+
+            THREADS=$(echo "$ACTIVE_THREADS" | jq -c ".threads[]? | select(.parent_id == \"$FORUM_ID\")")
 
             if [ -z "$THREADS" ]; then
               return
             fi
 
-            echo "$THREADS" | while read -r thread; do
-              if [ -z "$thread" ]; then continue; fi
+            while IFS= read -r thread; do
+              if [ -z "$thread" ]; then
+                continue
+              fi
+
               THREAD_ID=$(echo "$thread" | jq -r '.id')
-              THREAD_NAME=$(echo "$thread" | jq -r '.name')
+              THREAD_NAME=$(echo "$thread" | jq -r '.name // ""')
+              THREAD_OWNER_ID=$(echo "$thread" | jq -r '.owner_id // empty')
 
-              # Skip threads created from GitHub Issues
-              if [[ "$THREAD_NAME" == *"[Issue #"* ]]; then
+              # Primary loop guard: GitHub-to-Discord threads are created by this bot.
+              if [ -n "$THREAD_OWNER_ID" ] && [ "$THREAD_OWNER_ID" = "$BOT_USER_ID" ]; then
+                echo "Skipping bot-owned mirror thread $THREAD_ID: $THREAD_NAME"
                 continue
               fi
 
-              # Check if GitHub issue already exists matching thread title
-              EXISTING=$(gh issue list --search "$THREAD_NAME" --json number -q '.[0].number')
+              # Legacy loop guard for mirror threads created before the owner check existed.
+              # Handles both historical "[Issue #12]" and "[#12]" title formats.
+              if [[ "$THREAD_NAME" =~ \[Issue[[:space:]]*#[0-9]+\] ]] || \
+                 [[ "$THREAD_NAME" =~ \[#[0-9]+\] ]]; then
+                echo "Skipping GitHub-referenced mirror thread $THREAD_ID: $THREAD_NAME"
+                continue
+              fi
+
+              STARTER=$(curl --fail --silent --show-error --retry 3 \
+                -H "Authorization: Bot $DISCORD_TOKEN" \
+                "https://discord.com/api/v10/channels/$THREAD_ID/messages/$THREAD_ID" 2>/dev/null || true)
+
+              if [ -z "$STARTER" ]; then
+                STARTER=$(curl --fail --silent --show-error --retry 3 \
+                  -H "Authorization: Bot $DISCORD_TOKEN" \
+                  "https://discord.com/api/v10/channels/$THREAD_ID/messages?limit=1" 2>/dev/null | jq -c '.[0] // {}' || echo '{}')
+              fi
+
+              STARTER_AUTHOR_BOT=$(echo "$STARTER" | jq -r '.author.bot // false')
+              STARTER_CONTENT=$(echo "$STARTER" | jq -r '.content // ""')
+
+              if [ "$STARTER_AUTHOR_BOT" = "true" ]; then
+                echo "Skipping bot-authored mirror thread $THREAD_ID: $THREAD_NAME"
+                continue
+              fi
+
+              if [[ "$STARTER_CONTENT" == *"GitHub Issue #"* ]] && \
+                 [[ "$STARTER_CONTENT" == *"github.com/"*"/issues/"* ]]; then
+                echo "Skipping starter message that identifies a GitHub issue mirror: $THREAD_ID"
+                continue
+              fi
+
+              # Exact idempotency check. Titles can be edited or truncated; Discord thread IDs cannot.
+              EXISTING=$(gh issue list --state all \
+                --search "\"Thread ID: $THREAD_ID\" in:body" \
+                --limit 1 --json number -q '.[0].number // empty')
               if [ -n "$EXISTING" ]; then
-                echo "Issue #$EXISTING already exists for $THREAD_NAME"
+                echo "Issue #$EXISTING already exists for Discord thread $THREAD_ID"
                 continue
               fi
 
-              echo "Creating GitHub Issue for Discord thread: $THREAD_NAME ($LABEL)"
+              BODY=$(cat <<EOF
+          Reported via Discord Forum.
+
+          <!-- discord-forum-origin:$GUILD_ID/$FORUM_ID/$THREAD_ID -->
+
+          Thread ID: $THREAD_ID
+          Thread Title: $THREAD_NAME
+          EOF
+              )
+
+              echo "Creating GitHub issue for human Discord thread: $THREAD_NAME ($LABEL)"
               gh issue create --title "[Discord] $THREAD_NAME" \
-                --body "Reported via Discord Forum.\n\nThread ID: $THREAD_ID\nThread Title: $THREAD_NAME" \
+                --body "$BODY" \
                 --label "$LABEL"
-            done
+            done <<< "$THREADS"
           }
 
           echo "Syncing Bug Reports..."
