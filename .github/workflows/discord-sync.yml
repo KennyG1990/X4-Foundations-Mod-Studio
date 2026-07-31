@@ -21,6 +21,7 @@ jobs:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           CHANNEL_ID: "1531779398234013890"
           COMMIT_MSG: ${{ github.event.head_commit.message }}
+          COMMIT_AUTHOR: ${{ github.event.head_commit.author.username || github.actor }}
           SHORT_SHA: ${{ github.sha }}
           RELEASE_TITLE: ${{ github.event.release.name }}
           RELEASE_BODY: ${{ github.event.release.body }}
@@ -35,6 +36,7 @@ jobs:
 
           channel_id = os.environ.get('CHANNEL_ID')
           commit_msg = os.environ.get('COMMIT_MSG', '')
+          author = os.environ.get('COMMIT_AUTHOR', 'developer')
           short_sha = os.environ.get('SHORT_SHA', '')[:7]
           rel_title = os.environ.get('RELEASE_TITLE', '')
           rel_body = os.environ.get('RELEASE_BODY', '')
@@ -51,12 +53,12 @@ jobs:
                   f.write(rel_body)
               else:
                   try:
-                      logs = subprocess.check_output(['git', 'log', '-n', '10', '--pretty=format:* %s (%h)']).decode('utf-8')
+                      logs = subprocess.check_output(['git', 'log', '-n', '10', '--pretty=format:* %s (%h) by @%an']).decode('utf-8')
                       f.write(logs)
                   except Exception as e:
-                      f.write(f'* {commit_msg} ({short_sha})')
+                      f.write(f'* {commit_msg} ({short_sha}) by @{author}')
 
-          msg_content = f'**X4 FORGE - UPDATE ({version})**\n\nThanks to all testers and the community for feedback and support!\n\n**Support me**:\n<https://www.patreon.com/c/KennyG1990>\n\n**Download & Repository**:\n**Open VSX Marketplace**: <https://open-vsx.org/extension/x4forge/x4-forge-studio>\n**GitHub Repository**: <https://github.com/KennyG1990/X4_Forge>\n\n**To apply this update correctly**, reload your editor window after updating to ensure the latest extension engine loads cleanly.'
+          msg_content = f'**X4 FORGE - UPDATE ({version}) by @{author}**\n\nThanks to all testers and the community for feedback and support!\n\n**Support me**:\n<https://www.patreon.com/c/KennyG1990>\n\n**Download & Repository**:\n**Open VSX Marketplace**: <https://open-vsx.org/extension/x4forge/x4-forge-studio>\n**GitHub Repository**: <https://github.com/KennyG1990/X4_Forge>\n\n**To apply this update correctly**, reload your editor window after updating to ensure the latest extension engine loads cleanly.'
 
           payload = json.dumps({'content': msg_content})
 
@@ -75,6 +77,7 @@ jobs:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           CHANNEL_ID: "1531779414579478539"
           COMMIT_MSG: ${{ github.event.head_commit.message }}
+          COMMIT_AUTHOR: ${{ github.event.head_commit.author.username || github.actor }}
           SHORT_SHA: ${{ github.sha }}
         run: |
           python3 -c "
@@ -96,6 +99,7 @@ jobs:
           channel_id = os.environ.get('CHANNEL_ID')
           short_sha = os.environ.get('SHORT_SHA', '')[:7]
           commit_msg = (os.environ.get('COMMIT_MSG') or '').splitlines()[0]
+          author = os.environ.get('COMMIT_AUTHOR', 'developer')
 
           diff_text = ''
           try:
@@ -116,7 +120,7 @@ jobs:
           if len(diff_text) > 3500:
               diff_text = diff_text[:3500] + '\n... (diff truncated for size)'
 
-          embed_desc = f'**Commit**: \`{short_sha}\` — {commit_msg}\n\n**Roadmap Changes (Diff):**\n```diff\n{diff_text}\n```'
+          embed_desc = f'**Author**: @{author}\n**Commit**: \`{short_sha}\` — {commit_msg}\n\n**Roadmap Changes (Diff):**\n```diff\n{diff_text}\n```'
 
           payload = json.dumps({
               'embeds': [{
