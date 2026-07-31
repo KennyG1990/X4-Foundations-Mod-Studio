@@ -9,7 +9,7 @@
 ### B110 · Kimi R1-R21 execution program `in_progress` (P1, DURABLE LEDGER)
 
 The complete recommendation set is now reconciled instead of living in the deleted KNOWN-BUGS addendum.
-Current verdict: R1/R3/R4/R5/R6/R9/R10/R12/R15/R16/R19/R20 verified; R11/R13/R21 open; R2 and the rest partial.
+Current verdict: R1/R2/R3/R4/R5/R6/R9/R10/R12/R15/R16/R19/R20 verified; R11/R13/R21 open; the rest partial.
 Execute only as bounded workflow tasks in the recorded order—never as a sweeping
 cleanup—and update each row after every implementation. Ledger:
 `docs/plans/2026-07-29-kimi-recommendations-ledger.md`.
@@ -19,10 +19,11 @@ parent-death/orphan prevention, R19 packaged-VSIX clean-runner CI, and R20 fail-
 2026-07-30; see ROADMAP and their task plans. R1+R16 shared validation rules are also VERIFIED on exact-SHA public
 Quality; see `docs/plans/2026-07-30-project-rules-schema.md`. R6 deterministic diagnostic guidance and guarded exact
 suppression is VERIFIED in `docs/plans/2026-07-30-diagnostic-guidance-suppression-ui.md` and Open VSX 0.0.60.
-**Active bounded unit:** R2 content-addressed last-green validation baselines and new/resolved warning delta is
-`PARTIAL`: implementation, deterministic negatives, full E2E, packaged probe, and installed Antigravity 0.0.61
-proof passed. Open VSX public-byte parity plus post-push exact-SHA Quality remain before VERIFIED. Acceptance and
-evidence record: `docs/plans/2026-07-30-validation-delta-baselines.md`.
+**Closed validation-truth unit:** R2 content-addressed last-green validation baselines and new/resolved warning delta
+is VERIFIED in `docs/plans/2026-07-30-validation-delta-baselines.md`, installed/published as Open VSX 0.0.61, with
+public-byte parity and exact-SHA Quality `30592259549`.
+**Next bounded unit:** reconcile/specify R11 conflict dialog v2 with R14 recoverable destructive operations before
+implementation; do not confuse transaction-time rollback with later user undo.
 
 **Post-Kimi authorized research program (queued; do not start before R1-R21 close):** reconcile
 `F:\Downskies\X4 Foundations Modding Tooling Research for IDE Extension Opportunities.md` and

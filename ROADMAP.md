@@ -7195,3 +7195,26 @@ Exact-SHA public Quality run `30589639514`, job `91028887606`, passed the comple
 
 Suggested commit title:
 `feat(diagnostics): explain and safely suppress warnings`.
+
+## 2026-07-30 — B110-R2 content-addressed last-green validation delta — VERIFIED
+
+X4 Forge now keeps one bounded, atomic, server-owned last-green validation snapshot per mod. Project and warning
+identities are deterministic across file order, slash direction, and path case. Explicit green project validation
+or a fully successful non-dry deploy may advance the snapshot; compile/package polling, dry runs, failed validation,
+and failed deploys compare only. Corrupt or unsupported state returns `unavailable` and refuses overwrite rather
+than fabricating a clean baseline.
+
+Project validation, compile/package, deploy preflight, and Diagnostics Center all compare the same flattened full-
+project warning currency and expose new/resolved/unchanged counts plus bounded samples. The installed UI renders an
+honest `Since last green` state; no baseline was seeded into the real read-only DeadAir workspace.
+
+Evidence: policy selftest 6/6; isolated routes 261/261; focused E2E 2/2; oracles 122/122; decisive full isolated E2E
+48/48 in 443.8 seconds with zero failed/flaky/bad/quarantined and ports closed; typecheck/lint/build/precommit/graph;
+staged sidecar 16/16; 2,091-entry VSIX inspection. Installed Antigravity 0.0.61 visibly rendered the card on managed
+sidecar `:61473`. Open VSX 0.0.61 public/local bytes match at 17,881,788 bytes and SHA-256
+`2AE39B02565B0C559C113A574F7FE76BD3B8987B7258B0B0CD2F599A326B838A`. Exact-SHA public Quality run
+`30592259549`, job `91036917495`, passed at `b1aa571176100b3de4b9a8b63c3b23e992c1b95f`; inspected artifact
+`8778825824` is retained through 2026-08-14.
+
+Suggested commit title:
+`feat(validation): persist and surface warning deltas`.

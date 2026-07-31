@@ -2,7 +2,7 @@
 
 Task: B110-R2 content-addressed last-green validation baseline and new/resolved warning delta
 Lane: FULL
-Status: PARTIAL — implementation and all local/product/installed-host gates passed; public-byte and exact-SHA CI close pending
+Status: VERIFIED — released as Open VSX 0.0.61; exact-SHA public Quality passed
 
 ## PLAN
 
@@ -71,8 +71,11 @@ Status: PARTIAL — implementation and all local/product/installed-host gates pa
   - packaged VSIX inspection -> PASS, 2,091 entries, 60,297,221 unpacked bytes, 17,881,788 archive bytes;
     SHA-256 `2AE39B02565B0C559C113A574F7FE76BD3B8987B7258B0B0CD2F599A326B838A`.
   - precommit -> PASS; graph refreshed to 3,091 nodes / 7,218 edges / 158 communities; diff check PASS.
-  - Open VSX publish client -> accepted `x4forge.x4-forge-studio` 0.0.61; version-specific public indexing and
-    byte replay remain pending at this record point.
+  - Open VSX -> PASS. Version-specific 0.0.61 metadata exposed the release; downloaded public bytes exactly matched
+    local at 17,881,788 bytes and SHA-256
+    `2AE39B02565B0C559C113A574F7FE76BD3B8987B7258B0B0CD2F599A326B838A`.
+  - exact-SHA public Quality -> PASS. Run `30592259549`, job `91036917495`, completed every clean Windows product
+    step at `b1aa571176100b3de4b9a8b63c3b23e992c1b95f`; artifact `8778825824` is retained through 2026-08-14.
 - Negative/rollback result: failed validation did not promote; background compile/package and dry-run did not
   promote; per-mod stores stayed isolated; corrupt/unsupported state returned unavailable and refused overwrite;
   first comparison stayed `no_baseline`; exact added/resolved warning transitions passed.
@@ -93,17 +96,16 @@ Status: PARTIAL — implementation and all local/product/installed-host gates pa
   6. Corrupt/unsupported fail-closed state -> done and externally tested.
   7. Shared deploy/Mod Doctor semantics and visible language -> done; installed no-baseline state and E2E counts
      are evidenced separately.
-  8. Public-byte parity and exact-SHA clean-runner CI -> partial, pending store propagation and post-push run.
+  8. Public-byte parity and exact-SHA clean-runner CI -> done and evidenced.
 - Fresh-eyes findings: the first implementation compared unlike warning sets across compile and explicit
   validation. It was corrected to flatten the same full-project validator output everywhere, then all decisive
   gates were rerun. The installed-host check intentionally did not seed the real DeadAir baseline.
 
 ## CLOSE
 
-- Status: PARTIAL
-- Remaining risks/deferred work: Open VSX must expose and replay exact 0.0.61 bytes; the published source must be
-  committed/pushed and exact-SHA public Quality must pass before R2 becomes VERIFIED. Baseline history/trend charts
-  and cross-device sync remain out of scope.
+- Status: VERIFIED
+- Remaining risks/deferred work: baseline history/trend charts and cross-device sync remain deliberately out of
+  scope. The persistent server data file is local operational state and must remain bounded/fail-closed.
 - Suggested commit title: `feat(validation): persist and surface warning deltas`
 
 ## AAR
@@ -121,4 +123,5 @@ Status: PARTIAL — implementation and all local/product/installed-host gates pa
 - Highest-risk evidenced weakness: an automatic background promotion or a corrupt-store overwrite would erase the
   exact regression signal R2 is meant to preserve. Explicit green/deploy-only promotion plus fail-closed atomic state
   and external negative tests close that path.
-- Global/project lessons banked: pending final ledger writes with the public-byte and exact-SHA CI evidence.
+- Global/project lessons banked: global and X4 Forge AAR ledgers record shared-warning currency, explicit promotion,
+  full-suite wrapper budgets, installed-CLI false success, and public-store propagation handling.
