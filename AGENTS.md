@@ -17,7 +17,7 @@ them is part of the agent's job, enforced like any workflow step:
 
 1. **SESSION-START BRIEF.** Before work, read `BACKLOG.md` + **`SESSION-HANDOFF.md`** (the outgoing
    agent's working-state transfer: hot files, live hazards, dead theories, next unit's first command — it
-   supersedes Agent-Brain queries for "where were we"). Call the `agent-brain` `recall` tool before non-trivial tasks to check whether it was already solved in a past session across any agent. Then state in one block: WHICH project this
+   supersedes Agent-Brain queries for "where were we"). Call the `agent-brain` `recall` tool before non-trivial tasks to check whether it was already solved in a past session across any agent. When recall returns a hit, read the note before summarizing it — report what the conversation actually said, and if the match came from a file path or IDE header rather than the discussion, state that the recall was weak instead of inferring content. Then state in one block: WHICH project this
    session is (he runs 3–4 in parallel and thrashes — one line of state kills the confusion), the
    **eyeball queue** (every PARTIAL item gated on a 30-second Ken-check, listed, each with a
    click-by-click script — lesson 2026-07-12), and the **commit question** ("was the last close
