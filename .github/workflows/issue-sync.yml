@@ -30,7 +30,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Repository variables may override the original Forge Discord configuration.
           GUILD_ID="${CONFIG_GUILD_ID:-1528637983429759217}"
           BUG_FORUM_ID="${CONFIG_BUG_FORUM_ID:-1531779148333453452}"
           FEATURE_FORUM_ID="${CONFIG_FEATURE_FORUM_ID:-1531779159217405962}"
@@ -90,10 +89,39 @@ jobs:
             gh api -X POST "repos/$REPOSITORY/issues/$ISSUE_NUM/comments" -f body="$mapping" >/dev/null
           }
 
+          recover_unmapped_thread() {
+            local repo_name="${REPOSITORY#*/}"
+            local active candidate
+            active=$(curl --fail --silent --show-error --retry 3 \
+              -H "Authorization: Bot $DISCORD_TOKEN" \
+              "https://discord.com/api/v10/guilds/$GUILD_ID/threads/active")
+            candidate=$(echo "$active" | jq -r \
+              --arg current "[$repo_name #$ISSUE_NUM]" \
+              --arg legacy "[Issue #$ISSUE_NUM]" \
+              '.threads[]? | select((((.name // "") | contains($current))) or (((.name // "") | contains($legacy)))) | [.id, .parent_id] | @tsv' \
+              | head -n 1)
+
+            if [ -z "$candidate" ]; then
+              return 1
+            fi
+
+            THREAD_ID=$(printf '%s' "$candidate" | cut -f1)
+            RECOVERED_FORUM_ID=$(printf '%s' "$candidate" | cut -f2)
+            record_mapping "github" "$GUILD_ID" "$RECOVERED_FORUM_ID" "$THREAD_ID"
+            echo "Recovered existing Discord thread $THREAD_ID and recorded its missing mapping."
+            return 0
+          }
+
           create_discord_thread() {
             if [ -z "$GUILD_ID" ] || [ -z "$BUG_FORUM_ID" ] || [ -z "$FEATURE_FORUM_ID" ]; then
               echo "Discord repository variables are incomplete; cannot create a mirror thread."
               exit 1
+            fi
+
+            # If Discord succeeded during an earlier attempt but GitHub failed before recording the
+            # mapping, adopt that exact issue-number thread rather than creating a duplicate.
+            if recover_unmapped_thread; then
+              return
             fi
 
             TARGET_FORUM_ID="$BUG_FORUM_ID"
@@ -136,8 +164,6 @@ jobs:
             echo "Mapped GitHub issue #$ISSUE_NUM <-> Discord thread $THREAD_ID"
           }
 
-          # The source Discord thread is stored in a Discord-origin issue body. GitHub-origin
-          # issues store the mapping in an issue comment after the thread is created.
           SYNC_LINE=$(extract_sync_line "${ISSUE_BODY:-}")
           if [ -z "$SYNC_LINE" ]; then
             COMMENTS=$(gh api --paginate "repos/$REPOSITORY/issues/$ISSUE_NUM/comments" --jq '.[].body' || true)
@@ -150,14 +176,12 @@ jobs:
             THREAD_ID=$(sync_field thread)
             ORIGIN=$(sync_field origin)
             MAPPED_GUILD_ID=$(sync_field guild)
-            MAPPED_FORUM_ID=$(sync_field forum)
             GUILD_ID="${MAPPED_GUILD_ID:-$GUILD_ID}"
           fi
 
           case "$ACTION" in
             opened)
               if [ -n "$THREAD_ID" ]; then
-                # Discord-origin issues already have their canonical source thread. Never echo-create.
                 echo "Issue #$ISSUE_NUM already maps to Discord thread $THREAD_ID (origin=$ORIGIN)"
               else
                 create_discord_thread
