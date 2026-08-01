@@ -1,622 +1,422 @@
 # X4 Forge
 
-X4 Forge is a local visual workbench for building, validating, packaging, and deploying mods for **X4: Foundations**.
+**Build serious X4: Foundations mods without turning your project into a maze of disconnected XML files, hand-written XPath guesses, deployment scripts, and repeated in-game failures.**
 
-It is designed for the part of X4 modding that usually turns into scattered XML files, hand-written Mission Director scripts, XPath guesses, extracted game data, forum archaeology, and trial-and-error in the `extensions/` folder. X4 Forge brings that workflow into one app: visual authoring, schema-aware editing, live diagnostics, package generation, cross-mod conflict checks, GitHub publishing, AI-assisted generation, and an agent API for automation.
+X4 Forge is a visual modding studio and IDE extension built specifically for **X4: Foundations**. It brings the parts of X4 mod development that normally live across text editors, schema folders, unpacked game files, command-line scripts, debug logs, and the `extensions/` directory into one connected workspace.
 
-The goal is simple: build a real X4 extension inside X4 Forge, compile it, validate it, deploy it, and run it in-game with no manual file surgery.
+You can design Mission Director logic visually, edit real XML with X4-aware completion, inspect existing mods as navigable graphs, build safe diff patches against the actual game corpus, validate an entire project before it reaches the game, package releases, deploy with rollback protection, and trace runtime evidence back to the source that produced it.
 
-## For AI agents
+The goal is not to hide X4 modding behind a toy interface. The goal is to give modders a professional authoring environment where the generated files remain visible, editable, explainable, and under their control.
 
-If you are an AI agent, start with the document that matches your job:
+> **Author → Validate → Package → Deploy → Prove in X4 → Iterate without losing work**
 
-| Your job | Read |
-|---|---|
-| **Build a mod** through the Forge | **[AGENT-USING-THE-FORGE.md](AGENT-USING-THE-FORGE.md)** — connect, patch, validate, deploy, prove in-game, plus the seven traps that cost real debugging time |
-| Develop the Forge itself | [AGENTS.md](AGENTS.md) (workflow) and [CODEX-ONBOARDING.md](CODEX-ONBOARDING.md) (architecture) |
-| Fix a known Forge defect | [ROADMAP.md](ROADMAP.md) § KNOWN BUGS — each entry carries a reproduction |
+## Get X4 Forge Studio
 
-## What Problems It Solves
+X4 Forge Studio is available as a VS Code-compatible extension through Open VSX:
 
-X4 modding is powerful, but the normal workflow has sharp edges:
+**[Install X4 Forge Studio](https://open-vsx.org/extension/x4forge/x4-forge-studio)**
 
-- Mission Director XML is easy to break and hard to visualize.
-- XPath diff patches can silently target nothing or the wrong node.
-- Game references such as wares, macros, ships, factions, and sounds are hard to discover.
-- UI/Lua integration needs exact file placement and engine conventions.
-- Several mods can patch the same vanilla file without obvious conflict signals.
-- Generated mods often look successful even when the package is incomplete or invalid.
-- External AI agents need structured APIs, not screen scraping.
+The extension runs the Forge backend locally and opens the full Studio inside the editor. Your projects, game files, validation data, credentials, and generated artifacts remain on your machine.
 
-X4 Forge is built around those risks. It treats the local game install, XSD schemas, package manifest, and generated files as the source of truth, then keeps the UI, compiler, diagnostics, and API tied to that evidence.
-
-## Who Should Use It
-
-Use this if you want to:
-
-- Build Mission Director mods visually instead of writing every cue by hand.
-- Create and inspect package-ready X4 extension files.
-- Validate generated XML against real schemas and local game data.
-- Work with X4 UI/Lua, contracts, t-files, wares, jobs, AI scripts, and XML patches from one app.
-- Audit your installed mods for conflicts and dependency problems.
-- Use AI to draft mod structures while still keeping the output visible and editable.
-- Let external tools or agents read, diagnose, patch, compile, or deploy the current workspace through a local API.
-
-This is not a Blender replacement and it does not author 3D assets. It focuses on the X4 extension surface: Mission Director, AI scripts, XML patches, wares/jobs, translations, UI/Lua, contracts, packaging, validation, and deployment.
-
-## Core Workflow
-
-X4 Forge validates this chain:
-
-```text
-Author -> Compile -> Validate -> Package -> Deploy -> Run in X4 -> Round-trip
- graph      XML        checks      mod dir   extensions  in-game    import
-```
-
-In practice:
-
-1. Configure your X4 paths in **SETTINGS**.
-2. Build the mod in the visual editors.
-3. Watch diagnostics while you author.
-4. Inspect generated XML and package files.
-5. Run Mod Doctor, Extension Doctor, and relevant selftests.
-6. Sync/deploy the generated extension.
-7. Test in X4.
-8. Import or round-trip files back into X4 Forge when needed.
-
-## Major Features
-
-### Visual Mission Director Authoring
-
-- Node-based MD canvas for cue structure and logic.
-- Schema-driven MD element coverage for a broad MD vocabulary.
-- Curated node templates for common events, conditions, and actions.
-- Connectors for trigger parents, conditions, actions, and sub-cues.
-- Generated `md/<modid>.xml` preview.
-- Editable generated XML with parser-backed apply for full MD XML.
-- Cue hierarchy previews and selected-node subtree previews.
-- Dependency graph and cue-lineage analysis.
-
-Use this when you want to design mission flow visually, then inspect the exact XML the game will receive.
-
-### Validation And Diagnostics
-
-- Real XSD validation against local schema data.
-- Semantic validation for references and time formats.
-- Package diagnostics before deployment.
-- Click-to-navigate diagnostics where supported.
-- Cue-lineage checks for missing/dangling structural relationships.
-- Mod Doctor for active package health.
-- Deterministic Lua rules (in Extension Doctor): djfhe transport hazards, broad `package.path`, and an **X4 UI validator** against the known-working menu configuration — flags a menu that builds a frame but is never opened via `OpenMenu(name)` (so it would never render in-game), and calls to non-existent X4 UI functions (`RegisterLayout`, `AddUITrigger`, `OpenUIFrame`, …).
-- `md-audit` and selftest endpoints for quick verification.
-
-The point is not just to generate files. The point is to know whether the generated files are credible before you load the game.
-
-### Game Data And Object Indexing
-
-- Reads local X4 data from loose files and packed `.cat/.dat` archives.
-- Handles `.pck` alias resolution and compressed entry decoding.
-- Indexes game objects such as ships, macros, wares, factions, and sounds.
-- Feeds pickers and reference validation so you do not have to guess IDs.
-- Supports base-file resolution for XML patch work.
-
-This turns the installed game into an active reference database.
-
-### XML Patching
-
-- Build X4-standard `<diff>` patches.
-- Target real base files from the game install or enabled extensions.
-- Validate XPath selectors.
-- Detect zero, one, or many XPath matches.
-- Preview patch output and applied effects.
-- Support add/replace/remove operations and add positions.
-- Use diff-to-patch tools to synthesize safer patch operations from edits.
-
-Use this for libraries such as `wares.xml`, `jobs.xml`, and other vanilla file modifications where full-file overrides would be risky.
-
-### Wares, Jobs, T-Files, And AI Scripts
-
-- Author ware and job data as workspace domains.
-- Generate translation files under `t/`.
-- Work with AI scripts under `aiscripts/`.
-- Keep these domains in the package manifest alongside MD, UI, and patches.
-- Preserve imported domains where editable graph coverage is not yet complete.
-
-These editors are intended to keep the whole extension in one workspace instead of scattering state across unrelated tools.
-
-### HUD, Lua UI, And Layout Tools
-
-- HUD and Lua UI authoring surface.
-- Widget library for common UI elements.
-- Layout GUI designer.
-- Lua script event manager.
-- Syntax-validated Lua editor.
-- Responsive grid descriptor bridge for layout compilation.
-- Packaged `ui.xml` and Lua entry points where supported.
-- Vetted Lua snippet library.
-- Generates **real, openable** standalone-menu Lua: the verified `register (Helper.registerMenu) -> OpenMenu(name) -> onShowMenu -> Helper.createFrameHandle -> frame:display()` pattern (the only mechanism X4 actually uses to show a standalone window), with designer buttons wired to `AddUITriggeredEvent` for Lua→MD. No placeholder/invented API. Pattern grounded in the SirNukes Simple Menu API.
-
-The UI/Lua surface is an authoring + packaging workflow whose generated menu code follows the engine's real open mechanism. Runtime widget construction (pixel-level render of the hardest ftable cases) still needs in-game verification.
-
-### Contracts And External Integration
-
-- Define HTTP/JSON contracts between X4-side Lua/MD and an external local process.
-- Validate endpoint request and response shapes.
-- Generate X4-side glue Lua.
-- Generate matching MD scaffolds.
-- Support `ui_event` style connections from Lua widgets into MD cues.
-
-X4 Forge owns the X4 side of the integration and the contract. It does not build or host your external service.
-
-### Extension Doctor And Override Analysis
-
-- Scan installed extensions.
-- Detect missing dependencies and duplicate IDs.
-- Find cross-mod file and selector conflicts.
-- Resolve base content from vanilla and extension data.
-- Show load-order winners.
-- Drill into override claims so you can see which mod rewrites what.
-
-This is for the common problem where a mod is technically valid by itself but behaves differently because another extension wins the same file or node.
-
-### Third-Party API Awareness
-
-Many real extensions depend on community library mods (for example SirNukes' `sn_mod_support_apis` and kuertee's UI extensions) that expose their own Mission Director cues, Lua events, and Lua globals. The game schema knows nothing about these, so the most common silent break is using such an API without declaring its `content.xml` dependency — in-game it simply no-ops.
-
-X4 Forge keeps a curated, loadable registry of these APIs and uses it to:
-
-- Detect when a project uses a known API (heuristic literal-token scan of your MD/Lua).
-- Warn when a used API has no `content.xml` dependency declared, including transitive dependencies (for example kuertee depends on `sn_mod_support_apis`).
-- Flag Windows-only components (named pipes, hotkeys) and unknown members under a known namespace.
-
-The registry is **data, not code**, so you can extend it without rebuilding:
-
-- Drop a JSON definition in `data/api-registry/` (see `data/api-registry/README.md` and `schema.json`).
-- Point `apiRegistryPath` in `config.json` at any folder of definitions.
-- Register one at runtime via `POST /api/agent/external-api/register`.
-- Or let Forge derive a draft from an installed mod: `GET /api/agent/external-api/derive?ext=<extension_folder>` reads the mod's loose and packed files and returns a starting definition to refine.
-
-This layer is honestly **softer than schema validation** — it is curated, heuristic, and intentionally not exhaustive — so its findings are labelled accordingly (an unknown symbol is informational, never a hard error).
-
-### Logs And Debugging
-
-- Parse X4 debug log text into structured entries.
-- Correlate deterministic X4 Forge markers back to cue names.
-- Summarize per-cue activity and errors.
-- Support backend live log-file tailing.
-- Bind log evidence to visual diagnostics where available.
-
-This is meant to reduce the gap between "the XML compiled" and "the mod actually fired in-game."
-
-### Source Control And GitHub
-
-- GitHub device-flow connection.
-- Create a repository from the current mod.
-- Push generated files.
-- Load remote workspace data.
-- Show real commit history.
-- Generate AI-assisted commit summaries when a provider is configured.
-- Use snapshots/version history inside the local workspace.
-
-This helps turn a local mod experiment into something that can be versioned, reviewed, and shared.
-
-### AI Guide
-
-- In-app AI Guide for assistant chat and Builder Action Port generation.
-- Supports configured providers such as Gemini, OpenRouter, OpenAI, and Anthropic.
-- Generates proposed visual workspaces from natural-language prompts.
-- Keeps the generated workspace visible as nodes and XML for inspection.
-
-Builder and Architect generation use the constrained preview route: provider work can use the network and spend the configured AI budget, but the returned workspace remains a proposal until `Confirm & Apply`.
-
-### Agent API
-
-The local API lets external tools inspect and modify the workspace without scraping the UI.
-
-Important routes include:
-
-- `GET /api/agent/schema`
-- `GET /api/agent/workspace`
-- `POST /api/agent/workspace`
-- `POST /api/agent/workspace/merge`
-- `POST /api/agent/compile`
-- `POST /api/agent/package`
-- `POST /api/agent/deploy`
-- `POST /api/agent/project/validate/check` (never advances the validation baseline)
-- `POST /api/agent/generate/preview` (never applies the generated workspace)
-- `POST /api/agent/generate` (legacy apply-capable route; apply requires both read hashes and returns both post-write hashes)
-- Diagnostic and selftest routes under `/api/agent/*`
-
-The in-app **AGENT API** panel documents the routes, shows live state, and exposes surgical workspace operations. It is focused on real agent operations, not demo-only test runs.
-
-## 💡 Case Study: Building "x4 AiLive" (Player2 AI Integration)
-
-To understand the power of X4 Forge, look at **x4 AiLive** (`x4_ai_influence`)—a complex extension that connects X4's live engine to a local **Player2 AI** server for real-time natural language diplomacy and fleet commands. 
-
-Building a mod of this scale using traditional hand-written text editors would result in broken cues, XML syntax crashes, and silent UI failures. X4 Forge turned this ambitious concept into a stable, working reality:
-
-* **Visual MD Cue Mapping:** The intricate dialogue trees, suggestions pre-fetchers, and state-synchronization loops in `ai_influence_conversation.xml` and `ai_influence_chat.xml` were wired visually on the Forge MD canvas. The compiler automatically generated clean XML, preventing syntax and trigger-casing errors.
-* **Lua UI & Standalone Menu Compilation:** The custom comm-link panels (`aic_menu.lua` and `aic_uix.lua`) were compiled using Forge's layout compiler, ensuring they registered correctly with the engine's strict `Helper.registerMenu -> OpenMenu` workflow rather than silently failing to render.
-* **API Dependency Verification:** The Extension Doctor audited the mod's `content.xml`, verifying load-order priority and flagging required dependencies like `x4_neural_link` (the core bridge) and `djfhe_http` (the HTTP transport library).
-* **Deterministic Reference Audits:** When writing the economy and military action executors (`ai_influence_contract.xml`), X4 Forge checked all ware, faction, and macro IDs against the game's actual unpacked assets, catching misspelled references (like `energy_cells` instead of `energycells`) before launch.
-* **Real-time Log Correlation:** When debugging the HTTP response loop, the developer tail-correlated X4's runtime debug logs back to the visual canvas cues, tracing exactly where transaction payloads were parsed or rejected.
+Windows is the primary supported environment because X4 itself, its installation layout, and the current deployment workflow are Windows-focused.
 
 ---
 
-## Quick Start
+## What X4 Forge Can Do
+
+### Build Mission Director logic visually
+
+Mission Director scripts can become difficult to reason about once cues, conditions, actions, loops, signals, and sub-cues spread across a large file. X4 Forge turns that structure into a navigable graph without taking the XML away from you.
+
+- Create and connect cues, events, conditions, actions, branches, loops, and sub-cues.
+- Navigate cue hierarchy, lineage, dependencies, and signal relationships.
+- Switch between a full-project graph and individual MD files.
+- Inspect and edit the generated XML at any time.
+- Import large existing mods into complete graph lanes instead of collapsing whole cues into opaque placeholders.
+- Preserve unsupported or extension-defined elements as localized raw XML nodes at their real position in the graph.
+- Apply guarded selected-node edits while refusing stale, reparented, or out-of-scope mutations.
+
+The graph is not a separate simplified representation. It is tied to the source and designed to round-trip without quietly rewriting unrelated content.
+
+### Edit XML with knowledge of the actual game
+
+A normal XML editor understands XML. X4 Forge is designed to understand **X4 XML**.
+
+- Load X4 schemas from the configured game or unpacked corpus.
+- Complete legal child elements, attributes, enums, and typed script-expression chains.
+- Suggest canonical factions, wares, sectors, macros, jobs, and AI scripts.
+- Show hover documentation, types, provenance, and near-match suggestions.
+- Preserve the exact capitalization of project-defined identifiers.
+- Validate effective base-game and DLC documents instead of pretending every file exists in isolation.
+- Surface findings in the Studio, native editor diagnostics, and the IDE Problems panel.
+
+The local X4 installation becomes a live reference source rather than a folder you manually grep whenever you forget an identifier.
+
+### Create safe XML diff patches
+
+X4's diff system is powerful, but a selector that matches nothing—or matches too much—can fail silently or damage far more than intended. The XML Patching workbench makes those operations inspectable before they become mod files.
+
+- Target real files from the base game, official DLC, and configured extensions.
+- Build add, replace, and remove operations using parsed XML rather than regex over source text.
+- Validate XPath selectors and report zero, single, or ambiguous matches.
+- Preview the effective document before and after the patch.
+- Convert edited candidates into X4-standard diff operations.
+- Keep base files, edited candidates, revisions, and generated patches locked to the same target.
+- Run multi-operation numeric bulk transforms across bounded corpus paths.
+- Simulate every emitted patch before applying anything.
+- Reject stale plans, path traversal, invalid selectors, nonnumeric matches, conflicts, and partial bundles.
+- Apply accepted changes atomically with checkpoints and Undo.
+
+This makes large rebalance work possible without turning one bad selector into hundreds of broken files.
+
+### Work across the rest of the X4 extension surface
+
+X4 Forge is not limited to Mission Director.
+
+It supports project domains including:
+
+- AI scripts under `aiscripts/`
+- Wares and jobs
+- Translation files under `t/`
+- XML patches and library changes
+- HUD and Lua UI work
+- Layout and widget authoring
+- Contracts between X4-side Lua/MD and local services
+- Package metadata and `content.xml`
+- Data-only extensions that do not need a fake MD cue
+
+The project manifest keeps these domains together so a real extension can be compiled and packaged as one coherent project rather than maintained through unrelated tools.
+
+### Build real X4 UI and Lua integration
+
+X4 UI work is unforgiving: a script can parse correctly, create a frame, and still never appear because the registration or opening sequence is wrong.
+
+X4 Forge includes:
+
+- Lua editing and syntax checks
+- A HUD and UI authoring surface
+- A widget library and layout tools
+- Lua event management and MD↔Lua binding checks
+- Packaging for `ui.xml` and Lua entry points
+- Validation for known X4 UI lifecycle mistakes
+- Generation based on the real standalone-menu sequence: register the menu, call `OpenMenu`, build the frame in `onShowMenu`, and display it
+
+The Forge does not claim that static checks replace running X4. It shortens the distance between "this code looks valid" and "this menu actually opens in-game."
+
+### Validate the whole project, not just the file you are looking at
+
+Many expensive X4 defects are legal XML. A cue references something that does not exist. A Lua event has no listener. A patch selects zero nodes. A file is valid by itself but incompatible with the package around it.
+
+X4 Forge combines multiple deterministic checks:
+
+- XML well-formedness
+- XSD validation
+- X4 reference and identifier validation
+- Script-property and expression checks
+- Cue-lineage and cross-file checks
+- MD↔Lua event and payload analysis
+- Package completeness checks
+- Patch simulation and selector analysis
+- Installed-extension dependency and override analysis
+- Bounded parsing for large or hostile XML and catalog inputs
+
+Diagnostics can explain **why** a finding exists, what it is likely to break, and what action is available. Validation also tracks changes from the last accepted green result so you can distinguish new warnings from existing debt.
+
+When an exception is genuinely intentional, Forge supports narrowly scoped, accountable suppressions tied to the exact code, file, and source—with an owner, reason, and review date. It does not turn suppression into a global "ignore this class of problem" switch.
+
+### Inspect installed mods and find conflicts
+
+A mod can be correct on its own and still behave incorrectly because another extension wins the same file, selector, or dependency relationship.
+
+Extension Doctor can:
+
+- Scan installed extensions
+- Detect duplicate extension IDs and missing dependencies
+- Resolve base content through vanilla, DLC, and extension layers
+- Identify file and selector conflicts
+- Show load-order winners
+- Inspect override claims and competing patches
+- Track curated third-party API definitions that the vanilla schema cannot describe
+
+Third-party API awareness is intentionally softer than schema validation. Curated or heuristic findings are labelled accordingly rather than presented as certainty.
+
+### Package and publish releases with evidence
+
+Forge treats release packaging as a controlled build, not a folder zip.
+
+- Build complete disk-backed projects.
+- Reopen and verify generated artifacts.
+- Produce install-root ZIPs for Nexus Mods.
+- Prepare Steam Workshop staging with CAT/DAT output, metadata checks, preview requirements, rollback archives, and the exact WorkshopTool handoff.
+- Keep first-publish and update workflows distinct.
+- Verify returned Workshop identity before adopting it into the project.
+- Preserve independent hashes for produced artifacts.
+
+Forge does not upload, accept legal prompts, or press Enter on your behalf. It prepares the release, proves what it built, and keeps the irreversible steps visible to you.
+
+### Deploy without gambling with the current installation
+
+Deployment is where a development tool can do the most damage, so Forge is deliberately conservative.
+
+- Preview the exact add, overwrite, delete, and preserve plan before writing.
+- Validate the complete project first.
+- Deploy loose files or supported CAT/DAT output.
+- Apply changes atomically when possible.
+- Maintain verified backups and exact rollback paths.
+- Skip byte-identical locked files so normal iterations can continue while X4 is running.
+- Fail loudly when a changed locked file cannot be replaced.
+- Clean abandoned transaction folders that could otherwise appear as duplicate extensions.
+- Retain a hash-bound recovery for the previous verified deployment.
+- Refuse recovery when later changes make it unsafe.
+
+A failed or dry-run deploy does not advertise an Undo that does not exist.
+
+### Debug what happened after the files reached X4
+
+Compilation is not proof that a cue fired or a script behaved correctly. X4 Forge includes runtime-oriented tools to reduce that gap.
+
+- Tail and parse X4 debug logs.
+- Separate engine-shaped failures from mod-authored diagnostic text.
+- Correlate known markers and source references.
+- Summarize active issues and cue activity.
+- Generate proof artifacts for a project.
+- Keep deployment and validation evidence attached to the workspace that produced it.
+
+The game remains the final authority for runtime behaviour. Forge is built to make that authority easier to observe and connect back to source.
+
+### Keep multiple projects separate and recoverable
+
+X4 Forge supports independent workspaces with server-owned identities. Two projects with the same display name are still distinct, and one Studio tab cannot silently inherit whichever project another tab used most recently.
+
+- Create, park, restore, and switch workspaces.
+- Keep validation baselines, agent keys, action history, compilation, packaging, and recovery scoped to the correct workspace.
+- Show both sides of a write conflict with timestamps, content heads, changed-file counts, and bounded diffs.
+- Create an Undo checkpoint before adopting another copy.
+- Create bounded recovery before overwriting server state.
+- Refuse missing or mismatched workspace authority instead of guessing.
+
+This is particularly important when human editing, IDE buffers, the Forge canvas, and external agents can all touch the same project.
+
+### Use AI without surrendering authority
+
+The in-app AI Guide can use configured providers to propose project structures and builder actions from natural language.
+
+- Generated work remains visible as nodes and XML.
+- Preview routes do not apply the workspace.
+- Builder and Architect results remain proposals until **Confirm & Apply**.
+- Deterministic validation still judges the output.
+- Provider use can consume network access and the configured AI budget, but it does not replace the project's source-of-truth checks.
+
+AI can help draft. It does not get to quietly redefine what a valid X4 mod is.
+
+### Let coding agents use the Forge as a tool
+
+X4 Forge exposes a local, scoped Agent API for tools that need more than screen scraping.
+
+Agents can inspect schemas, references, capabilities, workspaces, validation results, files, compilation state, package plans, deployment plans, history, and selected guarded mutation surfaces.
+
+The API includes:
+
+- Scoped, expiring agent keys
+- Explicit read, write, and deploy authority
+- Machine-readable status and capability discovery
+- Validation and preview routes that do not mutate state
+- Compare-and-swap guards for stale writes
+- Action history with readable summaries and file effects
+- Revert and recovery paths where the operation can be made safe
+- Exact route and capability contracts for CLI, CI, and MCP-oriented integrations
+
+For an agent building a mod through the Forge, start with **[AGENT-USING-THE-FORGE.md](AGENT-USING-THE-FORGE.md)**.
+
+---
+
+## Why Use It Instead of a Normal Editor?
+
+A normal editor is excellent at editing text. X4 Forge is built around the entire modding chain.
+
+With a conventional workflow, you often have to answer these questions yourself:
+
+- Is this identifier real in my installed game version?
+- Does this XPath match the effective DLC-overlaid document?
+- Did this file survive packaging?
+- Did deployment remove something I did not own?
+- Did the current Studio tab act on the project I thought it did?
+- Is this warning new, or was it already present in the last known-good build?
+- Did the game reject the file, or did the cue simply never fire?
+- Can I undo this agent-written change without overwriting newer work?
+
+X4 Forge is valuable because it makes those questions part of the tool instead of leaving them as personal rituals that every modder has to rediscover.
+
+It does not promise that X4 modding becomes effortless. It makes the work **visible, testable, repeatable, and substantially harder to destroy by accident**.
+
+---
+
+## What X4 Forge Does Not Do
+
+X4 Forge is not a 3D modelling suite and does not replace Blender or asset-creation tools.
+
+It does not guarantee that schema-valid code behaves correctly in-game. X4 runtime testing is still required.
+
+It does not automatically trust generated code, AI output, community API guesses, or a green HTTP response. Mutations are judged against project state, schemas, reference data, validation rules, and read-back evidence where available.
+
+It does not require unrelated gameplay mods or transport extensions. X4 Forge is its own development tool; the mods you create or inspect are separate projects.
+
+---
+
+## Core Workflow
+
+```text
+Author
+  ↓
+Inspect the generated source
+  ↓
+Validate the complete project
+  ↓
+Build and verify the package
+  ↓
+Preview deployment effects
+  ↓
+Deploy with recovery protection
+  ↓
+Run and prove the behaviour in X4
+  ↓
+Bring the evidence back into the next edit
+```
+
+A typical session looks like this:
+
+1. Configure the X4 installation, schema/corpus, workspace, and deployment paths.
+2. Create a project or load an existing extension.
+3. Work visually, in the Forge code surfaces, or directly in the native IDE editor.
+4. Use completion, reference lookup, diagnostics, and project validation while editing.
+5. Inspect generated and preserved files before packaging.
+6. Run package diagnostics and Extension Doctor where relevant.
+7. Preview deployment and resolve any stale workspace or conflict state.
+8. Deploy, test in X4, and inspect runtime evidence.
+9. Commit the project when the evidence matches the intended behaviour.
+
+---
+
+## Quick Start for Users
+
+1. Install **[X4 Forge Studio from Open VSX](https://open-vsx.org/extension/x4forge/x4-forge-studio)** in VS Code, Antigravity, or another compatible editor.
+2. Open a trusted local workspace.
+3. Run **X4 Forge: Open Studio** from the Command Palette or use the X4 Forge activity-bar view.
+4. Open **Settings** and point the Forge at your X4 installation, mod workspace, and reference/schema data.
+5. Create a project or load an existing mod folder.
+6. Validate before the first deploy.
+
+The extension can also:
+
+- Open a mod folder in the IDE workspace
+- Create scoped agent keys
+- Copy MCP configuration for coding agents
+- Refresh project agent briefs
+- Generate a proof artifact
+- Check installed-mod conflicts
+- Show or stop the managed backend sidecar
+
+Workspace Trust is required because Forge compiles projects, writes local files, and can deploy into the game installation.
+
+---
+
+## Running the Repository Locally
 
 ### Requirements
 
-- Windows is the primary target environment.
-- Node.js and npm.
-- A local X4: Foundations install.
-- Optional: extracted X4 schemas if you want to point directly at schema files.
-- Optional: AI provider key for AI Guide generation.
-- Optional: GitHub OAuth app client ID for GitHub integration.
+- Windows
+- Node.js and npm
+- A local X4: Foundations installation for real corpus and deployment testing
 
-### Install
+Optional integrations include an AI provider key for AI Guide features and GitHub authentication for repository operations.
+
+### Install dependencies
 
 ```powershell
 npm install
 ```
 
-### Run X4 Forge
+### Start the development environment
 
-On Windows, the easiest route is:
-
-```text
+```powershell
 restart-studio.bat
 ```
 
-To run the **built app** (one server, no dev tooling/watchers — builds on first run):
-
-```text
-START-X4FORGE.cmd
-```
-
-Or run the servers directly:
+Or run the services directly:
 
 ```powershell
 npm run dev:api
 npm run dev:web
 ```
 
-Default local addresses:
-
-- UI: `http://localhost:3000`
-- API: `http://127.0.0.1:3001`
-
-The Vite UI proxies `/api` calls to the API server.
-
-### Configure Paths
-
-Open `http://localhost:3000`, then use **SETTINGS** to configure:
-
-- X4 game path
-- XSD schema path
-- Mod workspace path
-
-The app writes machine-local paths to `config.json`. That file is gitignored.
-
-You can also start from:
+### Build the production application
 
 ```powershell
-copy config.example.json config.json
-```
-
-Then edit `config.json` by hand if needed.
-
-## How To Use The App
-
-### 1. Start With A Workspace
-
-Use a blank workspace, a preset, an imported workspace, or AI-assisted generation.
-
-Set basic metadata such as:
-
-- Mod name
-- Version
-- Author
-- Description
-
-The mod name becomes the basis for generated file names and package IDs, so keep it stable once you start packaging.
-
-### 2. Build Mission Logic
-
-Use **MD Scripts** and the node canvas to create:
-
-- Cues
-- Events
-- Conditions
-- Actions
-- Sub-cues
-- Signal/listen relationships
-
-Use the generated XML preview to inspect what the graph compiles into.
-
-### 3. Add Supporting Domains
-
-Use the other tabs as needed:
-
-- **AIScripts** for pilot behavior scripts.
-- **Wares & Jobs** for economy and job data.
-- **HUD & LUA UI** for UI widgets, Lua code, and layout work.
-- **XML Patching** for safe vanilla file modifications.
-- **Contracts** for X4-to-external-process integration.
-- **Languages (t/)** for translation strings.
-- **X4 Wiki** and object/reference tools for lookup.
-
-### 4. Validate Continuously
-
-Watch:
-
-- Compiler status
-- Mod Doctor diagnostics
-- Schema validation
-- Reference validation
-- Cue-lineage signals
-- Patch selector checks
-- Extension Doctor findings
-
-Treat a green UI as a useful signal, not a substitute for in-game testing. The final authority for runtime behavior is still X4.
-
-### 5. Inspect Generated Files
-
-Use the code preview and package views to inspect generated artifacts such as:
-
-- `content.xml`
-- `md/<modid>.xml`
-- `aiscripts/*.xml`
-- `libraries/*.xml`
-- `t/0001-l044.xml`
-- `ui.xml`
-- `ui/*.lua`
-- README/package metadata
-
-### 6. Package Or Deploy
-
-Use compile/package/deploy flows to create the extension file manifest and write it to the configured target. If deploying to the live X4 `extensions/` folder, confirm the generated mod folder is clean and contains the expected `content.xml`.
-
-### 7. Test In Game
-
-Launch X4, enable the extension if needed, and verify:
-
-- The extension loads.
-- The cue or UI behavior actually triggers.
-- Logs show expected markers.
-- No runtime errors appear in the debug log.
-
-If runtime behavior fails, use X4 Forge diagnostics, generated XML, and log correlation to narrow the problem.
-
-### 8. Round-Trip When Needed
-
-Import existing workspace JSON, MD XML, or package files when you need to inspect or revise existing work. Round-trip support is strongest for MD and preserved package domains; editable graph breadth for every domain is still an active roadmap item.
-
-## AI Provider Setup
-
-AI is optional. X4 Forge works as a visual authoring and validation app without it.
-
-You can configure keys in either place:
-
-1. In the app through **AI ENGINE** / provider settings.
-2. In `.env.local`.
-
-To use `.env.local`:
-
-```powershell
-copy .env.example .env.local
-```
-
-Then fill only the providers you use:
-
-```env
-GEMINI_API_KEY=""
-OPENROUTER_API_KEY=""
-OPENAI_API_KEY=""
-ANTHROPIC_API_KEY=""
-```
-
-Restart X4 Forge after changing `.env.local`.
-
-## GitHub Setup
-
-GitHub integration is optional.
-
-To enable one-click GitHub connection:
-
-1. Create a GitHub OAuth App.
-2. Enable Device Flow.
-3. Put the client ID in `.env.local`:
-
-```env
-GITHUB_CLIENT_ID=""
-```
-
-The client ID is public, but it is still machine-specific configuration, so it stays out of the repository.
-
-## Local Security Model
-
-X4 Forge is built for local development, but it still protects keys and privileged routes.
-
-| Location | Purpose | Committed? |
-|---|---|---|
-| `.env.local` | Provider keys, GitHub client ID, optional stable studio token | No |
-| Browser localStorage | Keys entered in the in-app provider modal | No |
-| `.studio-api-token` | Local API bearer token | No |
-| `config.json` | Machine-local game/schema/workspace paths | No |
-
-Runtime behavior:
-
-- The API binds locally.
-- Privileged `/api/*` routes require a bearer token. The explicitly allowlisted read-only schema,
-  reference, diagnostic, and selftest GETs are public on localhost and are inventoried by the route audit.
-- The browser receives the token during local startup.
-- Provider keys in `.env.local` are reserved for app-origin requests.
-- External agents must provide their own AI key through `x-custom-api-key`.
-- Keys are sent only to the selected provider endpoint.
-
-If the server restarts and API calls start returning token errors, reload the browser page so it repeats the token handshake.
-
-## Agent API Basics
-
-The API is for real automation: external tools can read state, compile, package, deploy, and write workspace changes.
-
-Use the bearer token from `.studio-api-token`:
-
-```powershell
-$token = Get-Content .studio-api-token -Raw
-$clientId = "client_powershell_$(Get-Random)"
-$registryHeaders = @{
-  Authorization = "Bearer $($token.Trim())"
-  "x-client-id" = $clientId
-}
-$registry = Invoke-RestMethod -Uri "http://localhost:3000/api/agent/workspaces" -Headers $registryHeaders
-$workspaceId = $registry.defaultWorkspaceId
-$headers = @{
-  Authorization = "Bearer $($token.Trim())"
-  "x-client-id" = $clientId
-  "x-workspace-id" = $workspaceId
-}
-Invoke-RestMethod -Uri "http://localhost:3000/api/agent/workspace" -Headers $headers
-```
-
-`workspace.read@2` returns two change identities. `workspaceHash` is the durable legacy CAS head used by
-`expectedHead`; `snapshotHash` also covers authoritative editor-only and source-fidelity fields. Safe writers should
-send both values back as `expectedHead` and `expectedSnapshotHash`. A mismatch returns `409` without overwriting;
-`force:true` remains the explicit destructive override with recovery evidence.
-
-The legacy applying `POST /api/agent/generate` follows the same paired rule. Applying calls require both hashes,
-reject an already-stale request before provider work, complete provider/validation work before the single mutation
-boundary, recheck there, and return the authoritative post-write `workspaceHash` and `snapshotHash`. A timed-out or
-disconnected request cannot commit. The canonical `/api/agent/generate/preview` route remains non-applying.
-
-For AI generation from an external script, include your own provider key:
-
-```powershell
-$token = Get-Content .studio-api-token -Raw
-$clientId = "client_powershell_$(Get-Random)"
-$registryHeaders = @{ Authorization = "Bearer $($token.Trim())"; "x-client-id" = $clientId }
-$registry = Invoke-RestMethod -Uri "http://localhost:3000/api/agent/workspaces" -Headers $registryHeaders
-$headers = @{
-  Authorization = "Bearer $($token.Trim())"
-  "x-client-id" = $clientId
-  "x-workspace-id" = $registry.defaultWorkspaceId
-  "Content-Type" = "application/json"
-  "x-ai-provider" = "openrouter"
-  "x-ai-model" = "deepseek/deepseek-chat"
-  "x-custom-api-key" = "<your-provider-key>"
-}
-$body = @{ prompt = "Create a patrol mission with a reward cue."; apply = $false } | ConvertTo-Json
-Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/agent/generate/preview" -Headers $headers -Body $body
-```
-
-The in-app **AGENT API** panel contains route examples and live state.
-
-`GET /api/agent/schema` also returns the additive `forge.capability.v1` contract: stable capability IDs,
-descriptor versions, minimum input/output schemas, effects, access, constrained API bindings, and honest
-`connected` / `partial` / `disconnected` surface projections. The hash covers the canonical contract payload;
-metadata describes current enforcement but does not grant authority. Inspect it without starting the UI:
-
-```powershell
-npm run capabilities -- --json
-npm run capabilities -- project.validate --json
-```
-
-Unknown capability IDs or descriptor versions are refused. MCP keeps its curated tool inventory, narrows it
-monotonically to compatible live `id@version` descriptors, fails closed on a malformed current contract, and uses
-the static inventory only before a valid current contract has established authority. Its tool surface advertises
-and emits list-change notifications under the
-[2024-11-05 MCP tools contract](https://modelcontextprotocol.io/specification/2024-11-05/server/tools); it does
-not emit annotations introduced in later protocol revisions.
-POST analysis descriptors disclose that Agent History writes audit rows/blobs and may rotate its oldest retained
-segment even when the primary project/workspace operation is non-mutating.
-
-Route/capability exposure changes use a two-step reviewed manifest flow. Generation cannot update the tracked
-manifest, and promotion requires the exact reviewed candidate hash:
-
-```powershell
-npm run test:capabilities -- --generate-candidate
-# Review test-results/forge-route-dispositions.candidate.json against config/forge-route-dispositions.json.
-npm run test:capabilities -- --promote-candidate <reviewed-sha256>
-```
-
-The manifest also locks a normalized signature of the complete curated MCP module, not only the ten parsed tool
-entries. Any MCP source change therefore requires an explicit MCP audit-version bump before promotion, while each
-tool must still map to the exact declared capability `id@version` and HTTP method/path set.
-
-## Standalone CLI Validation
-
-The full deterministic validation stack (structure, cross-file cues, MD↔Lua event wiring,
-md.xsd + aiscripts.xsd, order-param lint, scriptproperty chains) runs without the UI:
-
-```powershell
-npm run validate:mod -- "F:\path\to\your\mod_folder"
-npm run validate:mod -- "F:\path\to\your\mod_folder" --json
-```
-
-Exit code 0 = valid, 1 = validation errors, 2 = usage/load failure — CI-friendly. The same
-verdict is available over the constrained API without inlining every file:
-`POST /api/agent/project/validate/check { "fromPath": "<mod folder name>" }` (resolved inside the configured mod workspace /
-extensions roots). Game-object reference checks (macros/wares/factions) need the Forge's
-object index and run only in the app, so the standalone CLI projection is explicitly marked partial in the
-capability contract.
-
-## Common Development Commands
-
-```powershell
-npm install
-npm run dev
-npm run dev:api
-npm run dev:web
 npm run build
 npm run start
-npm run lint
-npm run clean -- --dry-run
-npm run clean
 ```
 
-Notes:
+### Useful validation commands
 
-- `npm run dev` starts the API watcher.
-- `npm run dev:web` starts the Vite UI.
-- `restart-studio.bat` is the normal Windows launcher for the split local setup and explicitly enables the
-  authenticated host-tool command routes. Bare `npm run dev`, `npm run dev:api`, and `npm start` leave those
-  arbitrary-command routes absent unless `FORGE_ALLOW_RUN_COMMAND=true` is deliberately supplied.
-- `npm run build` builds the frontend and bundled server output.
-- `npm run lint` runs ESLint over the shipped server and web source; `npm run typecheck` runs `tsc --noEmit`.
-- `npm run clean -- --dry-run` previews reproducible build/package/test output only; `npm run clean`
-  removes that output without touching dependencies, configuration, runtime state, corpus caches,
-  graphs, source, or tracked evidence.
+```powershell
+npm run typecheck
+npm run lint
+npm run test:routes
+npm run test:oracles
+npm run test:e2e
+npm run test:reference-corpus
+npm run test:schema-intelligence
+npm run test:artifact-pipeline
+```
 
-## Project Files
+Additional focused checks live under `scripts/`, `tests/`, and `vscode-extension/scripts/`.
 
-- `src/` - React app, components, types, and client-side logic.
-- `server.ts` - local API server, package/build endpoints, diagnostics, selftests.
-- `BACKLOG.md` - open specified and in-progress work only.
-- `ROADMAP.md` - append-only verified delivery history.
-- `SESSION-HANDOFF.md` - the current working-state transfer at commit points and session close.
-- `HANDOFF.md` - full onboarding for contributors and coding agents.
-- `config.example.json` - path configuration template.
-- `.env.example` - environment variable template.
-- `restart-studio.bat` - Windows launcher for the local X4 Forge setup.
+Machine-local paths belong in `config.json`, which is ignored by Git. Start from `config.example.json` when configuring a repository checkout manually.
 
-## Current Known Caveats
+---
 
-- Final in-game behavior still needs X4 verification. X4 Forge can prove a lot about structure, schema, and packaging, but it cannot honestly certify runtime behavior without the game.
-- Some domains round-trip as preserved package data before they become fully editable graph models.
-- Runtime Lua UI construction is powerful but still needs careful in-game verification for advanced ftable/widget patterns.
-- The app is a local development tool, not a hosted multi-user service.
+## For Contributors and Agents
 
-## Why Use It
+Use the document that matches the job:
 
-Use X4 Forge because it compresses the hard parts of X4 text-mod development into one visible loop:
+| Job | Start here |
+|---|---|
+| Build an X4 mod through the Forge | **[AGENT-USING-THE-FORGE.md](AGENT-USING-THE-FORGE.md)** |
+| Develop X4 Forge itself | **[AGENTS.md](AGENTS.md)** and **[CODEX-ONBOARDING.md](CODEX-ONBOARDING.md)** |
+| Review current implementation history | **[ROADMAP.md](ROADMAP.md)** |
+| Find genuinely open work | **[BACKLOG.md](BACKLOG.md)**, reconciled against current code and release records |
+| Inspect user-facing changes | **[vscode-extension/CHANGELOG.md](vscode-extension/CHANGELOG.md)** |
 
-- You can author visually.
-- You can inspect the generated files.
-- You can validate against schemas and local game data.
-- You can detect package and cross-mod problems earlier.
-- You can use AI without hiding the result.
-- You can automate through a structured local API.
-- You can deploy with a clearer idea of what will land in `extensions/`.
+Repository documents contain a long implementation history. When an old backlog entry conflicts with shipped code or release evidence, verify the current implementation before rebuilding anything.
 
-The selling point is not that it writes XML for you. The selling point is that it makes the modding chain visible, testable, and repeatable.
+---
+
+## Technology
+
+- React 19
+- TypeScript
+- Vite
+- Express
+- CodeMirror 6
+- SQLite through `better-sqlite3`
+- X4 XSD and corpus-backed analysis
+- Playwright end-to-end testing
+- VS Code-compatible extension host and webviews
+
+Everything runs locally. No hosted Forge service is required.
+
+---
+
+## Project Status
+
+X4 Forge Studio is publicly distributed and actively developed. It has moved well beyond an early visual-editor prototype into a broad X4 authoring, validation, packaging, deployment, recovery, and automation environment.
+
+The project still treats real installed-host tests and in-game evidence as necessary gates. Features can be implemented and pass isolated tests while remaining unpublished when the packaged IDE experience does not meet the same standard.
+
+That distinction is deliberate: **working in the repository is not automatically the same as proven in the product.**
+
+---
+
+## License
+
+MIT
