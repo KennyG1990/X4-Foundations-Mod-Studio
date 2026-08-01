@@ -27,6 +27,7 @@ errors += require(
         "types: [opened, closed, reopened]",
         "record_mapping \"github\"",
         "issues/$ISSUE_NUM/comments",
+        "recover_unmapped_thread",
         "patch_thread_state \"$THREAD_ID\" false false",
         "patch_thread_state \"$THREAD_ID\" true true",
         "discord-sync:v1 origin=$origin",
