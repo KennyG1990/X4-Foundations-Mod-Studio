@@ -18,7 +18,7 @@
  * summary that deep-links here.
  */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   GitCommit,
   ChevronRight,
@@ -33,8 +33,10 @@ import {
 } from 'lucide-react';
 import { ModWorkspace, MDNode } from '../types';
 import { analyzeCueLineage } from '../lib/cueLineage';
-import { parseLogTelemetry, type CueTelemetry } from '../lib/logTelemetry';
+import { parseLogTelemetry, type CueTelemetry, type LogEntry } from '../lib/logTelemetry';
 import { classifyLiveFixes, applyLiveFix, type LiveFix } from '../lib/liveFixes';
+import { fetchPollingJson, pollingResourceKey } from '../lib/continuousPolling';
+import { useContinuousPolling } from '../lib/useContinuousPolling';
 
 interface CueTreeNode {
   id: string;
@@ -53,6 +55,14 @@ interface CueViewerProps {
   /** Enables Live-Fix Apply (mechanical fixes run through the normal undo-able path). */
   setWorkspace?: React.Dispatch<React.SetStateAction<ModWorkspace>>;
 }
+
+interface CueViewerTailResponse {
+  success?: boolean;
+  error?: string;
+  telemetry?: { cues?: CueTelemetry[]; entries?: LogEntry[] };
+}
+
+const EMPTY_LIVE_ENTRIES: LogEntry[] = [];
 
 export default function CueViewer({
   workspace,
@@ -120,51 +130,99 @@ export default function CueViewer({
   // Playtest watcher uses (game-log/status → log-file-tail). The paste box is
   // an offline IMPORT for logs from other machines/sessions, not a watcher.
   const [liveMode, setLiveMode] = useState(false);
-  const [liveTele, setLiveTele] = useState<Map<string, CueTelemetry> | null>(null);
-  const [liveStatus, setLiveStatus] = useState('');
-  const [liveEntries, setLiveEntries] = useState<any[]>([]);
+  const workspaceAuthority = window.__X4_WORKSPACE_CONTEXT__?.getWorkspaceId() || 'unbound';
+  const [liveEvidence, setLiveEvidence] = useState<{
+    authority: string;
+    telemetry: Map<string, CueTelemetry>;
+    entries: LogEntry[];
+  } | null>(null);
+  const [liveStatusState, setLiveStatusState] = useState<{ authority: string; text: string } | null>(null);
+  const [liveLogTarget, setLiveLogTarget] = useState<{ workspaceAuthority: string; path: string }>({
+    workspaceAuthority: '',
+    path: '',
+  });
   const [fixMsg, setFixMsg] = useState('');
   const [logText, setLogText] = useState('');
   const [showLog, setShowLog] = useState(false);
-  const liveTick = useRef(0);
-
+  const liveCueNames = useMemo(() => allCues.map(cue => String(cue.properties?.name || '')).filter(Boolean), [allCues]);
+  const liveCueIdentity = `${window.__X4_WORKSPACE_CONTEXT__?.getWorkspaceId() || 'unbound'}|${JSON.stringify(liveCueNames)}`;
+  const liveLogPath = liveLogTarget.workspaceAuthority === workspaceAuthority ? liveLogTarget.path : '';
+  const liveTailAuthority = `${liveCueIdentity}|${liveLogPath}`;
+  const liveTele = liveEvidence?.authority === liveTailAuthority ? liveEvidence.telemetry : null;
+  const liveEntries = liveEvidence?.authority === liveTailAuthority ? liveEvidence.entries : EMPTY_LIVE_ENTRIES;
+  const liveStatus = liveStatusState?.authority === liveTailAuthority
+    ? liveStatusState.text
+    : liveMode ? (liveLogPath ? 'connecting to selected debug log…' : 'locating debug log…') : '';
+  React.useLayoutEffect(() => {
+    setLiveEvidence(null);
+    setLiveStatusState(null);
+    setFixMsg('');
+  }, [liveMode, liveCueIdentity]);
   useEffect(() => {
-    if (!liveMode) { setLiveTele(null); setLiveStatus(''); setLiveEntries([]); setFixMsg(''); return; }
-    let stopped = false;
-    const poll = async () => {
-      const tick = ++liveTick.current;
-      try {
-        const st = await fetch('/api/agent/game-log/status').then(r => r.json());
-        const logPath = st && st.selectedLogPath;
-        if (!logPath) {
-          if (!stopped && tick === liveTick.current) {
-            setLiveTele(null);
-            setLiveStatus('no debuglog found — configure the X4 log path (see the Playtest watcher)');
-          }
-          return;
-        }
-        const cueNames = allCues.map(c => String(c.properties?.name || '')).filter(Boolean);
-        const tail = await fetch('/api/agent/log-file-tail', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: logPath, cueNames })
-        }).then(r => r.json());
-        if (stopped || tick !== liveTick.current) return;
-        if (tail.success && tail.telemetry) {
-          setLiveTele(new Map((tail.telemetry.cues || []).map((c: CueTelemetry) => [c.name, c])));
-          setLiveEntries(tail.telemetry.entries || []);
-          setLiveStatus('live · ' + String(logPath).split(/[\\/]/).pop() + ' · ' + ((tail.telemetry.entries || []).length) + ' recent entries');
-        } else {
-          setLiveStatus(tail.error || 'tail failed');
-        }
-      } catch (e) {
-        if (!stopped) setLiveStatus('feed unavailable: ' + String((e && e.message) || e));
+    if (!liveMode) {
+      setLiveEvidence(null);
+      setLiveStatusState(null);
+      setLiveLogTarget({ workspaceAuthority: '', path: '' });
+      setFixMsg('');
+    }
+  }, [liveMode]);
+  useContinuousPolling<{ selectedLogPath?: string }>({
+    enabled: liveMode,
+    resourceKey: `cue-viewer-log-status:${workspaceAuthority}`,
+    contract: 'GET /api/agent/game-log/status',
+    intervalMs: 10000,
+    run: signal => fetchPollingJson('/api/agent/game-log/status', undefined, signal),
+    onResult: status => {
+      const nextPath = status.selectedLogPath || '';
+      const nextAuthority = `${liveCueIdentity}|${nextPath}`;
+      if (liveLogPath !== nextPath) {
+        setLiveEvidence(null);
+        setLiveStatusState(null);
+        setFixMsg('');
       }
-    };
-    poll();
-    const t = window.setInterval(poll, 10000);
-    return () => { stopped = true; window.clearInterval(t); };
-  }, [liveMode, allCues]);
+      setLiveLogTarget({ workspaceAuthority, path: nextPath });
+      if (!nextPath) {
+        setLiveEvidence(null);
+        setLiveStatusState({ authority: nextAuthority, text: 'no debuglog found — configure the X4 log path (see the Playtest watcher)' });
+      }
+    },
+    onError: error => {
+      const emptyAuthority = `${liveCueIdentity}|`;
+      setLiveLogTarget({ workspaceAuthority, path: '' });
+      setLiveEvidence(null);
+      setLiveStatusState({ authority: emptyAuthority, text: `feed unavailable: ${error.message}` });
+    },
+  });
+  const liveTailBody = JSON.stringify({ path: liveLogPath, cueNames: liveCueNames });
+  useContinuousPolling<CueViewerTailResponse>({
+    enabled: liveMode && !!liveLogPath,
+    resourceKey: pollingResourceKey('cue-viewer-log-tail', `${workspaceAuthority}|${liveLogPath}|${liveCueIdentity}`),
+    contract: `POST /api/agent/log-file-tail ${liveTailBody}`,
+    intervalMs: 10000,
+    run: signal => fetchPollingJson('/api/agent/log-file-tail', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: liveTailBody,
+    }, signal),
+    onResult: tail => {
+      if (tail?.success && tail.telemetry) {
+        const entries = tail.telemetry.entries || [];
+        setLiveEvidence({
+          authority: liveTailAuthority,
+          telemetry: new Map((tail.telemetry.cues || []).map((cue: CueTelemetry) => [cue.name, cue])),
+          entries,
+        });
+        setLiveStatusState({ authority: liveTailAuthority, text: 'live · ' + String(liveLogPath).split(/[\\/]/).pop() + ' · ' + entries.length + ' recent entries' });
+      } else {
+        setLiveEvidence(null);
+        setLiveStatusState({ authority: liveTailAuthority, text: tail?.error || 'tail failed' });
+      }
+    },
+    onError: error => {
+      setLiveEvidence(null);
+      setLiveStatusState({ authority: liveTailAuthority, text: `feed unavailable: ${error.message}` });
+    },
+  });
 
   const pastedTele = useMemo(() => {
     if (!logText.trim()) return new Map<string, CueTelemetry>();
@@ -452,6 +510,7 @@ export default function CueViewer({
         <div className="flex items-center gap-3 flex-wrap">
           <button
             onClick={() => setLiveMode(v => !v)}
+            data-testid="cue-live-toggle"
             title="Watch the live X4 debuglog — the same feed the Playtest watcher uses — and light up cues in real time"
             className={`flex items-center gap-1 text-[9px] font-bold uppercase cursor-pointer ${liveMode ? 'text-emerald-300' : 'text-slate-400 hover:text-emerald-300'}`}
           >
@@ -465,7 +524,7 @@ export default function CueViewer({
           </button>
         </div>
         {liveMode && (
-          <div className="text-[8.5px] font-mono text-slate-500 truncate" title={liveStatus}>
+          <div data-testid="cue-live-status" className="text-[8.5px] font-mono text-slate-500 truncate" title={liveStatus}>
             {liveStatus || 'connecting to debuglog feed…'}
           </div>
         )}

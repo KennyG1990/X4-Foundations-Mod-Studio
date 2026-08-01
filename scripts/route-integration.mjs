@@ -46,6 +46,24 @@ const BASE = `http://127.0.0.1:${PORT}`;
 const SESSION_TOKEN = 'route-int-selftest-token-' + process.pid;
 const CLIENT_ID = `client_route_${process.pid}_${Date.now().toString(36)}`;
 const SECOND_CLIENT_ID = `client_route_other_${process.pid}_${Date.now().toString(36)}`;
+const routeTestNode = {
+  id: 'cue_preview_fixture', type: 'cue', label: 'Preview Cue', xmlTag: 'cue', x: 100, y: 100,
+  properties: { name: 'PreviewCue', namespace: 'this', instantiate: 'false' },
+};
+const routeTestWorkspace = {
+  name: 'Preview_Fixture', version: '1.0.0', author: 'Route Test', description: 'Preview constraint fixture',
+  nodes: [routeTestNode], links: [], uiWidgets: [],
+  uiTheme: { backgroundColor: '#000000', borderColor: '#ffffff', accentColor: '#00ffff', opacity: 1, showIcons: true },
+};
+const ROUTE_TEST_AI_RESPONSES = [
+  JSON.stringify({ name: routeTestWorkspace.name, version: routeTestWorkspace.version, author: routeTestWorkspace.author, description: routeTestWorkspace.description, nodes: routeTestWorkspace.nodes }),
+  JSON.stringify({ links: [] }),
+  JSON.stringify({ uiWidgets: [], uiTheme: routeTestWorkspace.uiTheme }),
+  JSON.stringify(routeTestWorkspace),
+  JSON.stringify(routeTestWorkspace),
+  JSON.stringify(routeTestWorkspace),
+  JSON.stringify({ requirements: [] }),
+];
 let WORKSPACE_ID = '';
 const tmp = path.join(os.tmpdir(), `x4-route-int-${process.pid}`);
 const stateDir = path.join(tmp, 'state');
@@ -77,6 +95,50 @@ fs.writeFileSync(path.join(gameRoot, 'X4.exe'), 'fixture');
 
 const checks = [];
 const ok = (name, pass, detail) => { checks.push({ name, pass: !!pass, detail }); console.log(`${pass ? '  ok  ' : ' FAIL '}${name}${detail ? `  [${detail}]` : ''}`); };
+
+function schemaErrors(schema, value, at = '$') {
+  const errors = [];
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return [`${at}: schema is missing`];
+  const branches = Array.isArray(schema.anyOf) ? schema.anyOf : [];
+  if (branches.length && !branches.some(branch => schemaErrors(branch, value, at).length === 0)) {
+    errors.push(`${at}: no anyOf branch matched`);
+  }
+  const types = Array.isArray(schema.type) ? schema.type : schema.type ? [schema.type] : [];
+  const matches = type => type === 'object'
+    ? value !== null && typeof value === 'object' && !Array.isArray(value)
+    : type === 'array' ? Array.isArray(value)
+      : type === 'number' ? typeof value === 'number' && Number.isFinite(value)
+        : type === 'integer' ? Number.isInteger(value)
+          : type === 'null' ? value === null
+            : typeof value === type;
+  if (types.length && !types.some(matches)) {
+    errors.push(`${at}: expected ${types.join('|')}`);
+    return errors;
+  }
+  if (Array.isArray(schema.enum) && !schema.enum.some(item => JSON.stringify(item) === JSON.stringify(value))) {
+    errors.push(`${at}: value is outside enum`);
+  }
+  if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+    const properties = schema.properties && typeof schema.properties === 'object' && !Array.isArray(schema.properties)
+      ? schema.properties : {};
+    for (const key of schema.required || []) {
+      if (!Object.hasOwn(value, key)) errors.push(`${at}.${key}: required`);
+    }
+    for (const [key, child] of Object.entries(properties)) {
+      if (Object.hasOwn(value, key)) errors.push(...schemaErrors(child, value[key], `${at}.${key}`));
+    }
+    const unknown = Object.keys(value).filter(key => !Object.hasOwn(properties, key));
+    if (schema.additionalProperties === false) {
+      for (const key of unknown) errors.push(`${at}.${key}: undeclared`);
+    } else if (schema.additionalProperties && typeof schema.additionalProperties === 'object') {
+      for (const key of unknown) errors.push(...schemaErrors(schema.additionalProperties, value[key], `${at}.${key}`));
+    }
+  }
+  if (Array.isArray(value) && schema.items) {
+    value.forEach((item, index) => errors.push(...schemaErrors(schema.items, item, `${at}[${index}]`)));
+  }
+  return errors;
+}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -131,7 +193,22 @@ async function main() {
     cwd: process.cwd(),
     shell: false,
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, PORT: String(PORT), NODE_ENV: 'development', STUDIO_API_TOKEN: SESSION_TOKEN, X4_STATE_DIR: stateDir, X4_DATA_DIR: dataDir, X4_CONFIG_DIR: configDir, X4_REFERENCE_ROOT: referenceRoot, X4FORGE_DISCOVERY_DIR: path.join(tmp, 'discovery'), FORGE_TIMEOUT_DRILL_MS: '300', FORGE_TIMEOUT_DRILL_RESPONSE_MS: '100' },
+    env: {
+      ...process.env,
+      PORT: String(PORT),
+      NODE_ENV: 'development',
+      FORGE_ALLOW_RUN_COMMAND: 'true',
+      STUDIO_API_TOKEN: SESSION_TOKEN,
+      X4_STATE_DIR: stateDir,
+      X4_DATA_DIR: dataDir,
+      X4_CONFIG_DIR: configDir,
+      X4_REFERENCE_ROOT: referenceRoot,
+      X4FORGE_DISCOVERY_DIR: path.join(tmp, 'discovery'),
+      FORGE_TIMEOUT_DRILL_MS: '300',
+      FORGE_TIMEOUT_DRILL_RESPONSE_MS: '100',
+      FORGE_ROUTE_TEST_MODE: '1',
+      FORGE_ROUTE_TEST_AI_RESPONSES: JSON.stringify(ROUTE_TEST_AI_RESPONSES),
+    },
   });
   let serverOut = '';
   child.stdout.on('data', (d) => { serverOut += d; });
@@ -185,6 +262,97 @@ async function main() {
   const agentSchema = await req('GET', '/api/agent/schema', null);
   ok('failure_contract_is_discoverable', agentSchema.status === 200 && agentSchema.json?.api_version === '2026-07-30.agent.v4' && Array.isArray(agentSchema.json?.failure_contract?.top_level?.failedStages), JSON.stringify(agentSchema.json?.failure_contract || {}));
   ok('deadline_contract_is_discoverable', agentSchema.json?.request_deadlines?.browser_api_default_ms === 30000 && agentSchema.json?.request_deadlines?.command_job?.maximum_ms === 1800000, JSON.stringify(agentSchema.json?.request_deadlines || {}));
+  const capabilityContract = agentSchema.json?.capability_contract;
+  const capabilityResponses = new Map([
+    ['workspace.read', workspaceSuccess],
+    ['workspace.compile', firstCompile],
+  ]);
+  const assertCapabilityOutput = (id, response) => {
+    const descriptor = capabilityContract?.capabilities?.find(capability => capability?.id === id);
+    const errors = descriptor ? schemaErrors(descriptor.outputSchema, response?.json) : ['descriptor missing'];
+    ok(`capability_${id.replaceAll('.', '_')}_output_envelope`,
+      response?.status >= 200 && response.status < 300 && errors.length === 0,
+      JSON.stringify({ status: response?.status, errors }));
+    return { id, method: descriptor?.apiBindings?.find(binding => binding?.role === 'primary')?.method,
+      path: descriptor?.apiBindings?.find(binding => binding?.role === 'primary')?.path,
+      status: response?.status, required: descriptor?.outputSchema?.required || [], errors };
+  };
+  const capabilityIds = Array.isArray(capabilityContract?.capabilities)
+    ? capabilityContract.capabilities.map(capability => capability?.id)
+    : [];
+  ok('capability_contract_is_versioned_and_hashed',
+    capabilityContract?.schemaVersion === 'forge.capability.v1' &&
+    /^[a-f0-9]{64}$/.test(String(capabilityContract?.contractHash || '')) &&
+    capabilityIds.length === 11 && new Set(capabilityIds).size === capabilityIds.length,
+    JSON.stringify({ schemaVersion: capabilityContract?.schemaVersion, contractHash: capabilityContract?.contractHash, capabilityIds }));
+  const validationCapability = capabilityContract?.capabilities?.find(capability => capability?.id === 'project.validate');
+  ok('capability_validation_aliases_share_one_id',
+    JSON.stringify(validationCapability?.surfaces?.mcp?.map(projection => projection?.id)) === JSON.stringify(['validate_mod', 'author_check', 'stage_and_validate']) &&
+    validationCapability?.surfaces?.mcp?.every(projection => projection?.status === 'partial' && typeof projection?.note === 'string') &&
+    validationCapability?.apiBindings?.[0]?.path === '/api/agent/project/validate/check' &&
+    validationCapability?.apiBindings?.[0]?.fixedBody?.recordBaseline === false &&
+    validationCapability?.inputSchema?.properties?.recordBaseline?.enum?.[0] === false &&
+    validationCapability?.inputSchema?.anyOf?.some(branch => branch?.required?.[0] === 'project') &&
+    validationCapability?.inputSchema?.anyOf?.some(branch => branch?.required?.[0] === 'fromPath'),
+    JSON.stringify(validationCapability || {}));
+  const previewCapability = capabilityContract?.capabilities?.find(capability => capability?.id === 'workspace.generate.preview');
+  ok('capability_generation_is_discovery_only_preview',
+    previewCapability?.apiBindings?.[0]?.path === '/api/agent/generate/preview' &&
+    previewCapability?.apiBindings?.[0]?.fixedBody?.apply === false &&
+    previewCapability?.inputSchema?.properties?.diagnostics === undefined &&
+    previewCapability?.effects?.includes('spend') &&
+    previewCapability?.surfaces?.mcp?.length === 0,
+    JSON.stringify(previewCapability || {}));
+  ok('capability_contract_has_no_volatile_timestamp',
+    capabilityContract && !Object.hasOwn(capabilityContract, 'generatedAt') && !Object.hasOwn(capabilityContract, 'timestamp'));
+  ok('capability_outputs_have_versioned_minimum_envelopes',
+    capabilityContract?.capabilities?.every(capability =>
+      capability?.outputSchema?.type === 'object' &&
+      Array.isArray(capability?.outputSchema?.required) &&
+      capability.outputSchema.required.length > 0 &&
+      capability.outputSchema.required.every(key => Object.hasOwn(capability.outputSchema.properties || {}, key))));
+  const missingFieldErrors = schemaErrors({ type: 'object', properties: { value: { type: 'string' } }, required: ['value'], additionalProperties: false }, {});
+  const wrongTypeErrors = schemaErrors({ type: 'object', properties: { value: { type: 'string' } }, required: ['value'], additionalProperties: false }, { value: 1 });
+  ok('capability_output_schema_oracle_rejects_missing_and_wrong_type',
+    missingFieldErrors.some(error => error.includes('required')) && wrongTypeErrors.some(error => error.includes('expected string')),
+    JSON.stringify({ missingFieldErrors, wrongTypeErrors }));
+  const patchCapability = capabilityContract?.capabilities?.find(capability => capability?.id === 'patch.readiness.analyze');
+  ok('capability_surface_gaps_are_explicit',
+    validationCapability?.surfaces?.cli?.some(projection => projection?.id === 'validate:mod' && projection?.status === 'partial') &&
+    validationCapability?.surfaces?.builtInHarness?.every(projection => projection?.status === 'disconnected') &&
+    patchCapability?.surfaces?.ui?.some(projection => projection?.status === 'disconnected') &&
+    previewCapability?.surfaces?.builtInHarness?.some(projection => projection?.status === 'connected'));
+  const invalidCapabilityValidation = await req('POST', '/api/agent/project/validate/check', SESSION_TOKEN, { project: { files: [] }, unexpected: true });
+  ok('capability_validation_rejects_undeclared_input', invalidCapabilityValidation.status === 400 && invalidCapabilityValidation.json?.code === 'CAPABILITY_INPUT_INVALID');
+  const previewBefore = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const hostilePreview = await req('POST', '/api/agent/generate/preview', SESSION_TOKEN, {
+    prompt: '__FORGE_ROUTE_TEST_PREVIEW__',
+    currentWorkspace: previewBefore.json?.workspace,
+    apply: true,
+  });
+  capabilityResponses.set('workspace.generate.preview', hostilePreview);
+  const previewAfter = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  ok('capability_preview_route_forces_hostile_apply_false',
+    hostilePreview.status === 200 && hostilePreview.json?.success === true && hostilePreview.json?.applied === false,
+    JSON.stringify({ status: hostilePreview.status, applied: hostilePreview.json?.applied, error: hostilePreview.json?.error }));
+  ok('capability_preview_route_leaves_workspace_head_unchanged',
+    previewBefore.status === 200 && previewAfter.status === 200 &&
+    previewBefore.json?.workspaceHash === previewAfter.json?.workspaceHash && previewBefore.json?.version === previewAfter.json?.version,
+    JSON.stringify({ before: previewBefore.json?.workspaceHash, after: previewAfter.json?.workspaceHash }));
+  const elementExplain = await req('GET', '/api/agent/lang/element-explain?file=md%2Fx.xml&tag=set_value', null);
+  capabilityResponses.set('schema.element.explain', elementExplain);
+  ok('capability_element_explain_primary_returns_declared_envelope',
+    elementExplain.status === 200 && elementExplain.json?.tag === 'set_value' &&
+    typeof elementExplain.json?.known === 'boolean' && Array.isArray(elementExplain.json?.requiredAttrs) &&
+    typeof elementExplain.json?.attrCount === 'number' && Array.isArray(elementExplain.json?.attrs),
+    JSON.stringify(elementExplain.json || {}));
+  const invalidElementExplain = await req('GET', '/api/agent/lang/element-explain?tag=set_value&root=undeclared', null);
+  ok('capability_element_explain_rejects_undeclared_query',
+    invalidElementExplain.status === 400 && invalidElementExplain.json?.code === 'CAPABILITY_INPUT_INVALID');
+  const readinessCapabilityResponse = await req('GET', '/api/agent/readiness', SESSION_TOKEN);
+  capabilityResponses.set('readiness.read', readinessCapabilityResponse);
+  const schemaDomainsCapabilityResponse = await req('GET', '/api/agent/schema-registry', null);
+  capabilityResponses.set('schema.domains.list', schemaDomainsCapabilityResponse);
 
   // R7: a corrupt persistent spend ledger must be explicit in the readout and must stop
   // the paid-call chokepoint before provider selection/key lookup/network dispatch.
@@ -192,6 +360,40 @@ async function main() {
   fs.writeFileSync(aiUsageFile, '{corrupt');
   const corruptUsage = await req('GET', '/api/ai/usage', SESSION_TOKEN);
   ok('corrupt_spend_meter_is_explicit_in_readout', corruptUsage.status === 200 && corruptUsage.json?.meterAvailable === false && typeof corruptUsage.json?.meterError === 'string', JSON.stringify(corruptUsage.json || {}));
+  const unknownInputWorkspaceId = 'ws_missing_input_precedence';
+  const invalidCapabilityPreview = await req('POST', '/api/agent/generate/preview', SESSION_TOKEN,
+    { prompt: 'must not dispatch', diagnostics: [] }, { workspaceId: unknownInputWorkspaceId });
+  ok('capability_preview_rejects_ignored_diagnostics_before_authority_or_provider',
+    invalidCapabilityPreview.status === 400 && invalidCapabilityPreview.json?.code === 'CAPABILITY_INPUT_INVALID',
+    JSON.stringify(invalidCapabilityPreview.json || {}));
+  const invalidPromptPreview = await req('POST', '/api/agent/generate/preview', SESSION_TOKEN, { prompt: { disguised: 'provider work' }, apply: false });
+  ok('capability_preview_rejects_non_string_prompt_before_spend_boundary',
+    invalidPromptPreview.status === 400 && invalidPromptPreview.json?.code === 'CAPABILITY_INPUT_INVALID' &&
+    /string prompt/i.test(invalidPromptPreview.json?.error || ''),
+    JSON.stringify(invalidPromptPreview.json || {}));
+  const invalidLegacyBody = await req('POST', '/api/agent/generate', SESSION_TOKEN, [], { workspaceId: unknownInputWorkspaceId });
+  ok('legacy_generation_rejects_non_object_body_before_authority_or_spend',
+    invalidLegacyBody.status === 400 && invalidLegacyBody.json?.code === 'CAPABILITY_INPUT_INVALID' &&
+    /JSON object body/i.test(invalidLegacyBody.json?.error || ''),
+    JSON.stringify(invalidLegacyBody.json || {}));
+  const invalidLegacyPrompt = await req('POST', '/api/agent/generate', SESSION_TOKEN,
+    { prompt: { disguised: 'provider work' }, apply: false }, { workspaceId: unknownInputWorkspaceId });
+  ok('legacy_generation_rejects_non_string_prompt_before_authority_or_spend',
+    invalidLegacyPrompt.status === 400 && invalidLegacyPrompt.json?.code === 'CAPABILITY_INPUT_INVALID' &&
+    /string prompt/i.test(invalidLegacyPrompt.json?.error || ''),
+    JSON.stringify(invalidLegacyPrompt.json || {}));
+  const invalidLegacyWorkspace = await req('POST', '/api/agent/generate', SESSION_TOKEN,
+    { prompt: 'must not dispatch', currentWorkspace: [], apply: false }, { workspaceId: unknownInputWorkspaceId });
+  ok('legacy_generation_rejects_non_object_workspace_before_authority_or_spend',
+    invalidLegacyWorkspace.status === 400 && invalidLegacyWorkspace.json?.code === 'CAPABILITY_INPUT_INVALID' &&
+    /currentWorkspace must be a JSON object/i.test(invalidLegacyWorkspace.json?.error || ''),
+    JSON.stringify(invalidLegacyWorkspace.json || {}));
+  const invalidLegacyApply = await req('POST', '/api/agent/generate', SESSION_TOKEN,
+    { prompt: 'must not dispatch', apply: 'false' }, { workspaceId: unknownInputWorkspaceId });
+  ok('legacy_generation_rejects_non_boolean_apply_before_authority_or_spend',
+    invalidLegacyApply.status === 400 && invalidLegacyApply.json?.code === 'CAPABILITY_INPUT_INVALID' &&
+    /apply must be boolean/i.test(invalidLegacyApply.json?.error || ''),
+    JSON.stringify(invalidLegacyApply.json || {}));
   const refusedPaidCall = await req('POST', '/api/gemini', SESSION_TOKEN, { prompt: 'R7 meter failure fixture' });
   ok('corrupt_spend_meter_refuses_before_provider_dispatch', refusedPaidCall.status === 500 && /spend meter unavailable.*refused before network dispatch/i.test(refusedPaidCall.json?.error || ''), JSON.stringify(refusedPaidCall.json || {}));
   fs.unlinkSync(aiUsageFile);
@@ -310,6 +512,23 @@ async function main() {
   };
   const safeConfig = await req('POST', '/api/schema/config', SESSION_TOKEN, deployedRolesConfig);
   ok('isolated_workspace_and_deployed_filesystem_saved', safeConfig.status === 200 && safeConfig.json?.directorySafety?.safe === true, `status=${safeConfig.status}`);
+  const extensionDoctorCapabilityResponse = await req('GET', '/api/agent/extension-doctor', SESSION_TOKEN);
+  capabilityResponses.set('extensions.conflicts.analyze', extensionDoctorCapabilityResponse);
+
+  const patchModRoot = path.join(safeWorkspace, 'patch_capability');
+  const patchOldRoot = path.join(tmp, 'patch-old');
+  const patchNewRoot = path.join(tmp, 'patch-new');
+  fs.mkdirSync(path.join(patchModRoot, 'libraries'), { recursive: true });
+  fs.mkdirSync(path.join(patchOldRoot, 'libraries'), { recursive: true });
+  fs.mkdirSync(path.join(patchNewRoot, 'libraries'), { recursive: true });
+  fs.writeFileSync(path.join(patchModRoot, 'content.xml'), '<content id="patch_capability" name="Patch Capability" version="100"/>');
+  fs.writeFileSync(path.join(patchModRoot, 'libraries', 'wares.xml'), '<diff><replace sel="/wares/ware[@id=\'routeware\']"><ware id="routeware"/></replace></diff>');
+  const patchBaseXml = '<wares><ware id="routeware" name="Route Ware"/></wares>';
+  fs.writeFileSync(path.join(patchOldRoot, 'libraries', 'wares.xml'), patchBaseXml);
+  fs.writeFileSync(path.join(patchNewRoot, 'libraries', 'wares.xml'), patchBaseXml);
+  const patchQuery = new URLSearchParams({ fromPath: 'patch_capability', oldRoot: patchOldRoot, newRoot: patchNewRoot });
+  const patchReadinessCapabilityResponse = await req('GET', `/api/agent/patch-readiness?${patchQuery}`, SESSION_TOKEN);
+  capabilityResponses.set('patch.readiness.analyze', patchReadinessCapabilityResponse);
 
   // R11/R14: workspace conflicts carry evidence and each destructive choice has an honest
   // recovery path. All state lives under this harness's ephemeral state/data directories.
@@ -326,11 +545,13 @@ async function main() {
   const forcedLocal = await req('POST', '/api/agent/workspace', SESSION_TOKEN, { workspace: localCopy, force: true });
   ok('forced_workspace_overwrite_returns_recovery', forcedLocal.status === 200 && forcedLocal.json?.recovery?.kind === 'workspace' && forcedLocal.json?.recovery?.expectedCurrentHash === forcedLocal.json?.workspaceHash, JSON.stringify(forcedLocal.json?.recovery || {}));
   const workspaceHistory = await req('GET', '/api/agent/history?kind=workspace', SESSION_TOKEN);
+  capabilityResponses.set('history.list', workspaceHistory);
   const forcedWorkspaceRow = (workspaceHistory.json?.rows || []).find(row => row.recoveryId === forcedLocal.json?.recovery?.id);
   ok('forced_workspace_history_is_truthfully_revertible', forcedWorkspaceRow?.revertible === true && forcedWorkspaceRow?.recoveryKind === 'workspace', JSON.stringify(forcedWorkspaceRow || {}));
   const crossWorkspaceRecovery = await req('POST', `/api/agent/history/${forcedWorkspaceRow?.id}/revert`, SESSION_TOKEN, {}, { workspaceId: SECOND_WORKSPACE_ID, clientId: SECOND_CLIENT_ID });
   ok('cross_workspace_recovery_is_invisible', crossWorkspaceRecovery.status === 404);
   const undoForcedWorkspace = await req('POST', `/api/agent/history/${forcedWorkspaceRow?.id}/revert`, SESSION_TOKEN, {});
+  capabilityResponses.set('history.revert', undoForcedWorkspace);
   ok('forced_workspace_recovery_restores_prior_head', undoForcedWorkspace.status === 200 && undoForcedWorkspace.json?.workspace?.name === serverCopy.name, JSON.stringify(undoForcedWorkspace.json || {}));
   const replayForcedWorkspace = await req('POST', `/api/agent/history/${forcedWorkspaceRow?.id}/revert`, SESSION_TOKEN, {});
   ok('workspace_recovery_replay_is_rejected', replayForcedWorkspace.status === 409 && replayForcedWorkspace.json?.code === 'RECOVERY_ALREADY_USED', `status=${replayForcedWorkspace.status} code=${replayForcedWorkspace.json?.code}`);
@@ -655,6 +876,16 @@ async function main() {
   };
   const baselineFile = path.join(dataDir, 'validation-baselines.json');
   const baselineBytesBeforeDelta = fs.existsSync(baselineFile) ? fs.readFileSync(baselineFile, 'utf8') : '';
+  const constrainedCheck = await req('POST', '/api/agent/project/validate/check', SESSION_TOKEN, {
+    project: deltaBaseProject,
+    recordBaseline: true,
+  });
+  capabilityResponses.set('project.validate', constrainedCheck);
+  ok('capability_validation_adapter_forces_no_baseline_write',
+    constrainedCheck.status === 200 &&
+    constrainedCheck.json?.baselinePromotion === undefined &&
+    (fs.existsSync(baselineFile) ? fs.readFileSync(baselineFile, 'utf8') : '') === baselineBytesBeforeDelta,
+    JSON.stringify(constrainedCheck.json?.baselinePromotion));
   const deltaFirst = await req('POST', '/api/agent/project/validate', SESSION_TOKEN, { project: deltaBaseProject });
   ok('validation_delta_first_run_is_not_false_clean', deltaFirst.status === 200 && deltaFirst.json?.validationDelta?.status === 'no_baseline', JSON.stringify(deltaFirst.json?.validationDelta));
   ok('background_validation_does_not_create_baseline', (fs.existsSync(baselineFile) ? fs.readFileSync(baselineFile, 'utf8') : '') === baselineBytesBeforeDelta);
@@ -1226,6 +1457,40 @@ async function main() {
     fileOverrides: { 'C:/escape.xml': '<mdscript/>' },
   });
   ok('compile_live_buffer_windows_absolute_path_rejected', windowsAbsoluteOverride.status === 400, `status=${windowsAbsoluteOverride.status}`);
+  const undeclaredCompileInput = await req('POST', '/api/agent/compile', SESSION_TOKEN, { unexpected: true });
+  ok('compile_rejects_undeclared_top_level_input',
+    undeclaredCompileInput.status === 400 && undeclaredCompileInput.json?.code === 'CAPABILITY_INPUT_INVALID' &&
+    /unknown compile field/i.test(String(undeclaredCompileInput.json?.error || '')),
+    JSON.stringify(undeclaredCompileInput.json || {}));
+  const nonObjectCompileBody = await req('POST', '/api/agent/compile', SESSION_TOKEN, [], { workspaceId: 'ws_missing_compile_precedence' });
+  ok('compile_rejects_non_object_body_before_workspace_authority',
+    nonObjectCompileBody.status === 400 && nonObjectCompileBody.json?.code === 'CAPABILITY_INPUT_INVALID' &&
+    /JSON object body/i.test(String(nonObjectCompileBody.json?.error || '')),
+    JSON.stringify(nonObjectCompileBody.json || {}));
+  const nonObjectCompileWorkspace = await req('POST', '/api/agent/compile', SESSION_TOKEN, { workspace: 'invalid' });
+  ok('compile_rejects_non_object_inline_workspace',
+    nonObjectCompileWorkspace.status === 400 && nonObjectCompileWorkspace.json?.code === 'CAPABILITY_INPUT_INVALID' &&
+    /workspace must be a JSON object/i.test(String(nonObjectCompileWorkspace.json?.error || '')),
+    JSON.stringify(nonObjectCompileWorkspace.json || {}));
+  const invalidOverrideBeforeAuthority = await req('POST', '/api/agent/compile', SESSION_TOKEN,
+    { fileOverrides: { 'md/fixture.xml': 42 } }, { workspaceId: 'ws_missing_compile_precedence' });
+  ok('compile_rejects_malformed_override_before_workspace_authority',
+    invalidOverrideBeforeAuthority.status === 400 && invalidOverrideBeforeAuthority.json?.code === 'CAPABILITY_INPUT_INVALID' &&
+    /content must be a string/i.test(String(invalidOverrideBeforeAuthority.json?.error || '')),
+    JSON.stringify(invalidOverrideBeforeAuthority.json || {}));
+  const nonStringOverride = await req('POST', '/api/agent/compile', SESSION_TOKEN, {
+    workspace: { id: 'fixture', name: 'fixture', nodes: [], links: [], uiWidgets: [] },
+    fileOverrides: { 'md/fixture.xml': 42 },
+  });
+  ok('compile_rejects_non_string_override_content',
+    nonStringOverride.status === 400 && /content must be a string/i.test(String(nonStringOverride.json?.error || '')),
+    JSON.stringify(nonStringOverride.json || {}));
+
+  const capabilityOutputReport = (capabilityContract?.capabilities || [])
+    .map(capability => assertCapabilityOutput(capability.id, capabilityResponses.get(capability.id)));
+  ok('all_canonical_capability_outputs_exercised',
+    capabilityOutputReport.length === 11 && capabilityResponses.size === 11 && capabilityOutputReport.every(row => row.status >= 200 && row.status < 300 && row.errors.length === 0),
+    JSON.stringify(capabilityOutputReport));
 
   // --- PRODUCTION SURFACE ---------------------------------------------------------------------
   // The API-honesty guard shipped GREEN on every dev assertion and was BROKEN in production: the
@@ -1236,11 +1501,46 @@ async function main() {
   if (!fs.existsSync(distServer)) {
     ok('production_surface_probed', false, 'dist/server.cjs missing — run npm run build. NOT silently skipped.');
   } else {
+    const defaultClosedPort = await findFreePort();
+    const defaultClosedToken = `${SESSION_TOKEN}-default-closed`;
+    const defaultClosedEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
+      !['NODE_ENV', 'FORGE_ALLOW_RUN_COMMAND'].includes(key.toUpperCase())));
+    const defaultClosedChild = spawn(process.execPath, [distServer], {
+      cwd: process.cwd(), shell: false, stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...defaultClosedEnv, PORT: String(defaultClosedPort), API_ONLY: 'true', STUDIO_API_TOKEN: defaultClosedToken,
+             X4_STATE_DIR: path.join(tmp, 'state-default-closed'), X4_DATA_DIR: path.join(tmp, 'data-default-closed'),
+             X4_CONFIG_DIR: path.join(tmp, 'config-default-closed'), X4_REFERENCE_ROOT: referenceRoot,
+             X4FORGE_DISCOVERY_DIR: path.join(tmp, 'discovery-default-closed') },
+    });
+    try {
+      let defaultClosedUp = false;
+      for (let i = 0; i < 60; i++) {
+        await sleep(500);
+        try { const r = await fetch(`http://127.0.0.1:${defaultClosedPort}/api/agent/schema`); if (r.status) { defaultClosedUp = true; break; } } catch { /* not yet */ }
+      }
+      let defaultClosedEvidence = null;
+      if (defaultClosedUp) {
+        const base = `http://127.0.0.1:${defaultClosedPort}`;
+        const headers = { Authorization: `Bearer ${defaultClosedToken}` };
+        const responses = [
+          await fetch(`${base}/api/run_command`, { headers }),
+          await fetch(`${base}/api/run_command/job`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: '{}' }),
+          await fetch(`${base}/api/run_command/job/not-present`, { headers }),
+        ];
+        defaultClosedEvidence = await Promise.all(responses.map(async response => ({ status: response.status, body: await response.json() })));
+      }
+      ok('packaged_server_without_node_env_or_opt_in_has_no_run_command_routes',
+        defaultClosedUp && defaultClosedEvidence?.every(item => item.status === 404 && item.body?.code === 'UNKNOWN_ENDPOINT'),
+        JSON.stringify({ serverUp: defaultClosedUp, responses: defaultClosedEvidence }));
+    } finally {
+      killTree(defaultClosedChild.pid);
+    }
+
     const prodPort = PORT + 3;
     const prodToken = SESSION_TOKEN + '-prod';
     const prodChild = spawn(process.execPath, [distServer], {
       cwd: process.cwd(), shell: false, stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, PORT: String(prodPort), NODE_ENV: 'production', STUDIO_API_TOKEN: prodToken,
+      env: { ...process.env, PORT: String(prodPort), NODE_ENV: 'production', FORGE_ALLOW_RUN_COMMAND: '', STUDIO_API_TOKEN: prodToken,
              X4_STATE_DIR: stateDir, X4_DATA_DIR: dataDir, X4_CONFIG_DIR: configDir, X4_REFERENCE_ROOT: referenceRoot,
              X4FORGE_DISCOVERY_DIR: path.join(tmp, 'discovery-prod') },
     });
@@ -1259,12 +1559,45 @@ async function main() {
         const unknown = await fetch(`${base}/api/agent/definitely-not-a-route`, { headers: h });
         const unknownBody = await unknown.text();
         ok('prod_unknown_route_is_json_404', unknown.status === 404 && !unknownBody.includes('<!doctype'), `status=${unknown.status}`);
+        const disabledSyncCommand = await fetch(`${base}/api/run_command?cmd=echo+must-not-run`, { headers: h });
+        const disabledAsyncCommand = await fetch(`${base}/api/run_command/job`, {
+          method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+        });
+        const disabledJobRead = await fetch(`${base}/api/run_command/job/not-present`, { headers: h });
+        ok('prod_run_command_routes_absent_without_explicit_opt_in',
+          disabledSyncCommand.status === 404 && disabledAsyncCommand.status === 404 && disabledJobRead.status === 404,
+          JSON.stringify({ sync: disabledSyncCommand.status, start: disabledAsyncCommand.status, read: disabledJobRead.status }));
         const shell = await fetch(`${base}/`);
         const shellBody = await shell.text();
         ok('prod_app_shell_still_loads', shell.status === 200 && shellBody.includes('<!doctype'), `status=${shell.status}`);
       }
     } finally {
       killTree(prodChild.pid);
+    }
+    const optInPort = await findFreePort();
+    const optInToken = `${prodToken}-opt-in`;
+    const optInChild = spawn(process.execPath, [distServer], {
+      cwd: process.cwd(), shell: false, stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, PORT: String(optInPort), NODE_ENV: 'production', FORGE_ALLOW_RUN_COMMAND: 'true', STUDIO_API_TOKEN: optInToken,
+             X4_STATE_DIR: path.join(tmp, 'state-prod-opt-in'), X4_DATA_DIR: path.join(tmp, 'data-prod-opt-in'),
+             X4_CONFIG_DIR: path.join(tmp, 'config-prod-opt-in'), X4_REFERENCE_ROOT: referenceRoot,
+             X4FORGE_DISCOVERY_DIR: path.join(tmp, 'discovery-prod-opt-in') },
+    });
+    try {
+      let optInUp = false;
+      for (let i = 0; i < 60; i++) {
+        await sleep(500);
+        try { const r = await fetch(`http://127.0.0.1:${optInPort}/api/agent/schema`); if (r.status) { optInUp = true; break; } } catch { /* not yet */ }
+      }
+      const optInResponse = optInUp
+        ? await fetch(`http://127.0.0.1:${optInPort}/api/run_command/job`, {
+          method: 'POST', headers: { Authorization: `Bearer ${optInToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+        })
+        : null;
+      ok('prod_run_command_routes_register_only_with_explicit_opt_in', optInResponse?.status === 400,
+        JSON.stringify({ serverUp: optInUp, status: optInResponse?.status }));
+    } finally {
+      killTree(optInChild.pid);
     }
   }
 }

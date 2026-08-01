@@ -13,11 +13,14 @@
  * Dismissible at any step (veteran floor — never modal, never mandatory).
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { X, Wrench, Rocket, Gamepad2, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
 import type { ModWorkspace } from '../types';
 import type { RailGuide } from '../lib/modTemplates';
 import { ttfm } from '../lib/ttfm';
+import { toSafeModId } from '../lib/modCompiler';
+import { fetchPollingJson } from '../lib/continuousPolling';
+import { useContinuousPolling } from '../lib/useContinuousPolling';
 
 interface GuidedRailProps {
   title: string;
@@ -36,42 +39,36 @@ const GuidedRail: React.FC<GuidedRailProps> = ({ title, guide, getWorkspace, onC
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [deploy, setDeploy] = useState<DeployState>({ phase: 'idle' });
   const [watcher, setWatcher] = useState<string>('Waiting for the game…');
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Step 3: poll the debug-watcher brief so "did the game see it" is LIVE, not a claim.
-  useEffect(() => {
-    if (step !== 3) { if (pollRef.current) clearInterval(pollRef.current); return; }
-    const poll = async () => {
-      try {
-        const res = await fetch('/api/agent/debug-watcher/brief');
-        const b = await res.json();
-        if (!res.ok) { setWatcher('Log watcher unavailable.'); return; }
-        // B19s2: the SERVER computes the verdict — the rail renders it, guessing nothing.
-        // (The previous code read fields that never existed on the brief's top level and
-        // therefore always reported "clean" — the exact heuristic this field kills.)
-        const verdict = b?.verdict as { state?: string; detail?: string; errorCount?: number } | undefined;
-        if (!verdict?.state) { setWatcher('Log watcher unavailable (no verdict field — old API?).'); return; }
-        if (verdict.state === 'loaded_clean') {
-          // B20: the funnel's finish line — the game confirmed the mod, clean.
-          if (ttfm.mark('game_confirmed')) {
-            const total = ttfm.totalMs();
-            if (total !== null) { setWatcher(`Your mod is IN THE GAME and clean (${Math.round(total / 60000)} min from first boot). ${guide?.gameCheck || ''}`); return; }
-          }
-          setWatcher('Mod loaded and clean. ' + (guide?.gameCheck || 'Load a save and watch for your change.'));
-        } else if (verdict.state === 'loaded_with_errors') {
-          setWatcher(`${verdict.detail} Check the canvas badges.`);
-        } else {
-          // no_log / stale / not_seen — the verdict's detail already says what to do next.
-          setWatcher(verdict.detail || 'Waiting for the game…');
+  const activeModId = toSafeModId(getWorkspace().name);
+  const watcherUrl = `/api/agent/debug-watcher/brief?modId=${encodeURIComponent(activeModId)}`;
+  React.useLayoutEffect(() => {
+    setWatcher(step === 3 ? 'Checking this mod in the game…' : 'Waiting for the game…');
+  }, [activeModId, step]);
+  // Step 3: subscribe to the same addressed watcher resource as App. The SERVER
+  // computes the verdict — the rail renders it and guesses nothing.
+  useContinuousPolling<{ verdict?: { state?: string; detail?: string; errorCount?: number } }>({
+    enabled: step === 3,
+    resourceKey: `debug-watcher-brief:${activeModId}`,
+    contract: `GET ${watcherUrl}`,
+    intervalMs: 5000,
+    run: signal => fetchPollingJson(watcherUrl, undefined, signal),
+    onResult: brief => {
+      const verdict = brief?.verdict;
+      if (!verdict?.state) { setWatcher('Log watcher unavailable (no verdict field — old API?).'); return; }
+      if (verdict.state === 'loaded_clean') {
+        if (ttfm.mark('game_confirmed')) {
+          const total = ttfm.totalMs();
+          if (total !== null) { setWatcher(`Your mod is IN THE GAME and clean (${Math.round(total / 60000)} min from first boot). ${guide?.gameCheck || ''}`); return; }
         }
-      } catch {
-        setWatcher('Log watcher unavailable.');
+        setWatcher('Mod loaded and clean. ' + (guide?.gameCheck || 'Load a save and watch for your change.'));
+      } else if (verdict.state === 'loaded_with_errors') {
+        setWatcher(`${verdict.detail} Check the canvas badges.`);
+      } else {
+        setWatcher(verdict.detail || 'Waiting for the game…');
       }
-    };
-    poll();
-    pollRef.current = setInterval(poll, 5000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [step, guide]);
+    },
+    onError: () => setWatcher('Log watcher unavailable.'),
+  });
 
   const runDeploy = async () => {
     setDeploy({ phase: 'running' });

@@ -217,6 +217,10 @@ test('corpus authoring blocks collisions, completes XPath, previews, applies, an
   expect(afterPreview.workspaceHash).toBe(beforePreview.workspaceHash);
   expect(afterPreview.version).toBe(beforePreview.version);
 
+  // The startup walkaround fetch is intentionally independent of this workflow and may
+  // resolve after the initial 1.5 s dismissal probe on slower full-suite runs. Exercise
+  // its real dismiss control again instead of forcing a click through the visible card.
+  if (await healthCard.isVisible()) await page.getByTestId('health-card-dismiss').click();
   await page.getByRole('button', { name: 'Add 4 validated field patches to workspace', exact: true }).click();
   await expect.poll(async () => (await readServerWorkspace()).xmlPatches?.length || 0).toBe(4);
   await expect(page.locator('button[title="Undo last action (Ctrl+Z)"]')).toBeEnabled();

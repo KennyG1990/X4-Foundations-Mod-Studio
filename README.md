@@ -207,7 +207,7 @@ This helps turn a local mod experiment into something that can be versioned, rev
 - Generates proposed visual workspaces from natural-language prompts.
 - Keeps the generated workspace visible as nodes and XML for inspection.
 
-Current caveat: the Builder Action Port can visibly update the canvas before `Confirm & Apply`. That approval behavior is tracked in the roadmap and should be fixed so generation remains a true proposal until confirmation.
+Builder and Architect generation use the constrained preview route: provider work can use the network and spend the configured AI budget, but the returned workspace remains a proposal until `Confirm & Apply`.
 
 ### Agent API
 
@@ -222,7 +222,9 @@ Important routes include:
 - `POST /api/agent/compile`
 - `POST /api/agent/package`
 - `POST /api/agent/deploy`
-- `POST /api/agent/generate`
+- `POST /api/agent/project/validate/check` (never advances the validation baseline)
+- `POST /api/agent/generate/preview` (never applies the generated workspace)
+- `POST /api/agent/generate` (legacy apply-capable route)
 - Diagnostic and selftest routes under `/api/agent/*`
 
 The in-app **AGENT API** panel documents the routes, shows live state, and exposes surgical workspace operations. It is focused on real agent operations, not demo-only test runs.
@@ -446,7 +448,8 @@ X4 Forge is built for local development, but it still protects keys and privileg
 Runtime behavior:
 
 - The API binds locally.
-- `/api/*` routes require a bearer token.
+- Privileged `/api/*` routes require a bearer token. The explicitly allowlisted read-only schema,
+  reference, diagnostic, and selftest GETs are public on localhost and are inventoried by the route audit.
 - The browser receives the token during local startup.
 - Provider keys in `.env.local` are reserved for app-origin requests.
 - External agents must provide their own AI key through `x-custom-api-key`.
@@ -462,7 +465,18 @@ Use the bearer token from `.studio-api-token`:
 
 ```powershell
 $token = Get-Content .studio-api-token -Raw
-$headers = @{ Authorization = "Bearer $($token.Trim())" }
+$clientId = "client_powershell_$(Get-Random)"
+$registryHeaders = @{
+  Authorization = "Bearer $($token.Trim())"
+  "x-client-id" = $clientId
+}
+$registry = Invoke-RestMethod -Uri "http://localhost:3000/api/agent/workspaces" -Headers $registryHeaders
+$workspaceId = $registry.defaultWorkspaceId
+$headers = @{
+  Authorization = "Bearer $($token.Trim())"
+  "x-client-id" = $clientId
+  "x-workspace-id" = $workspaceId
+}
 Invoke-RestMethod -Uri "http://localhost:3000/api/agent/workspace" -Headers $headers
 ```
 
@@ -470,18 +484,55 @@ For AI generation from an external script, include your own provider key:
 
 ```powershell
 $token = Get-Content .studio-api-token -Raw
+$clientId = "client_powershell_$(Get-Random)"
+$registryHeaders = @{ Authorization = "Bearer $($token.Trim())"; "x-client-id" = $clientId }
+$registry = Invoke-RestMethod -Uri "http://localhost:3000/api/agent/workspaces" -Headers $registryHeaders
 $headers = @{
   Authorization = "Bearer $($token.Trim())"
+  "x-client-id" = $clientId
+  "x-workspace-id" = $registry.defaultWorkspaceId
   "Content-Type" = "application/json"
   "x-ai-provider" = "openrouter"
   "x-ai-model" = "deepseek/deepseek-chat"
   "x-custom-api-key" = "<your-provider-key>"
 }
-$body = @{ prompt = "Create a patrol mission with a reward cue." } | ConvertTo-Json
-Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/agent/generate" -Headers $headers -Body $body
+$body = @{ prompt = "Create a patrol mission with a reward cue."; apply = $false } | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/agent/generate/preview" -Headers $headers -Body $body
 ```
 
 The in-app **AGENT API** panel contains route examples and live state.
+
+`GET /api/agent/schema` also returns the additive `forge.capability.v1` contract: stable capability IDs,
+descriptor versions, minimum input/output schemas, effects, access, constrained API bindings, and honest
+`connected` / `partial` / `disconnected` surface projections. The hash covers the canonical contract payload;
+metadata describes current enforcement but does not grant authority. Inspect it without starting the UI:
+
+```powershell
+npm run capabilities -- --json
+npm run capabilities -- project.validate --json
+```
+
+Unknown capability IDs or descriptor versions are refused. MCP keeps its curated tool inventory, narrows it
+monotonically to compatible live `id@version` descriptors, fails closed on a malformed current contract, and uses
+the static inventory only before a valid current contract has established authority. Its tool surface advertises
+and emits list-change notifications under the
+[2024-11-05 MCP tools contract](https://modelcontextprotocol.io/specification/2024-11-05/server/tools); it does
+not emit annotations introduced in later protocol revisions.
+POST analysis descriptors disclose that Agent History writes audit rows/blobs and may rotate its oldest retained
+segment even when the primary project/workspace operation is non-mutating.
+
+Route/capability exposure changes use a two-step reviewed manifest flow. Generation cannot update the tracked
+manifest, and promotion requires the exact reviewed candidate hash:
+
+```powershell
+npm run test:capabilities -- --generate-candidate
+# Review test-results/forge-route-dispositions.candidate.json against config/forge-route-dispositions.json.
+npm run test:capabilities -- --promote-candidate <reviewed-sha256>
+```
+
+The manifest also locks a normalized signature of the complete curated MCP module, not only the ten parsed tool
+entries. Any MCP source change therefore requires an explicit MCP audit-version bump before promotion, while each
+tool must still map to the exact declared capability `id@version` and HTTP method/path set.
 
 ## Standalone CLI Validation
 
@@ -494,10 +545,11 @@ npm run validate:mod -- "F:\path\to\your\mod_folder" --json
 ```
 
 Exit code 0 = valid, 1 = validation errors, 2 = usage/load failure — CI-friendly. The same
-verdict is available over the API with no payload: `POST /api/agent/project/validate
-{ "fromPath": "<mod folder name>" }` (resolved inside the configured mod workspace /
+verdict is available over the constrained API without inlining every file:
+`POST /api/agent/project/validate/check { "fromPath": "<mod folder name>" }` (resolved inside the configured mod workspace /
 extensions roots). Game-object reference checks (macros/wares/factions) need the Forge's
-object index and run only in the app.
+object index and run only in the app, so the standalone CLI projection is explicitly marked partial in the
+capability contract.
 
 ## Common Development Commands
 
@@ -517,9 +569,11 @@ Notes:
 
 - `npm run dev` starts the API watcher.
 - `npm run dev:web` starts the Vite UI.
-- `restart-studio.bat` is the normal Windows launcher for the split local setup.
+- `restart-studio.bat` is the normal Windows launcher for the split local setup and explicitly enables the
+  authenticated host-tool command routes. Bare `npm run dev`, `npm run dev:api`, and `npm start` leave those
+  arbitrary-command routes absent unless `FORGE_ALLOW_RUN_COMMAND=true` is deliberately supplied.
 - `npm run build` builds the frontend and bundled server output.
-- `npm run lint` currently runs `tsc --noEmit`.
+- `npm run lint` runs ESLint over the shipped server and web source; `npm run typecheck` runs `tsc --noEmit`.
 - `npm run clean -- --dry-run` previews reproducible build/package/test output only; `npm run clean`
   removes that output without touching dependencies, configuration, runtime state, corpus caches,
   graphs, source, or tracked evidence.
@@ -528,8 +582,10 @@ Notes:
 
 - `src/` - React app, components, types, and client-side logic.
 - `server.ts` - local API server, package/build endpoints, diagnostics, selftests.
-- `ROADMAP.md` - current strategy, capability status, known gaps, changelog.
-- `HANDOFF.md` - session handoff notes for contributors and coding agents.
+- `BACKLOG.md` - open specified and in-progress work only.
+- `ROADMAP.md` - append-only verified delivery history.
+- `SESSION-HANDOFF.md` - the current working-state transfer at commit points and session close.
+- `HANDOFF.md` - full onboarding for contributors and coding agents.
 - `config.example.json` - path configuration template.
 - `.env.example` - environment variable template.
 - `restart-studio.bat` - Windows launcher for the local X4 Forge setup.
@@ -537,7 +593,6 @@ Notes:
 ## Current Known Caveats
 
 - Final in-game behavior still needs X4 verification. X4 Forge can prove a lot about structure, schema, and packaging, but it cannot honestly certify runtime behavior without the game.
-- The AI Guide Builder Action Port currently updates the visible workspace before `Confirm & Apply`; this is tracked for correction.
 - Some domains round-trip as preserved package data before they become fully editable graph models.
 - Runtime Lua UI construction is powerful but still needs careful in-game verification for advanced ftable/widget patterns.
 - The app is a local development tool, not a hosted multi-user service.

@@ -135,6 +135,7 @@ import { runModDriftSelftest } from "./src/lib/modDrift";
 import { assessLuaStaleness, injectLuaVersionMarker, runLuaStalenessSelftest } from "./src/lib/luaStalenessCheck";
 import { registerGithubRoutes } from "./src/server/githubRoutes";
 import { runGithubCredentialStoreSelftest } from "./src/server/githubCredentialStore";
+import { runGithubDeviceFlowSelftest } from "./src/server/githubDeviceFlow";
 import { runLocalWorkspaceCacheSelftest } from "./src/lib/localWorkspaceCache";
 import { runXmlInputLimitsSelftest } from "./src/lib/xmlInputLimits";
 import { registerGameDetectRoutes } from "./src/server/gameDetectRoutes";
@@ -197,6 +198,9 @@ import { runFactionsLintSelftest, lintFactionRelations } from "./src/lib/faction
 import { runGodLintSelftest, lintGodMacros } from "./src/lib/godLint";
 import { atomicWriteFile, atomicWriteJson, runWorkspaceStateSelftest } from "./src/lib/workspaceState";
 import { WorkspaceRegistry, runWorkspaceRegistrySelftest, validWorkspaceId, type WorkspaceRecord } from "./src/lib/workspaceRegistry";
+import { runContinuousPollingSelftest } from "./src/lib/continuousPolling.selftest";
+import { applyForgeCapabilityFixedBody, buildForgeCapabilityContract } from "./src/lib/forgeCapabilities";
+import { runForgeCapabilitiesSelftest } from "./src/lib/forgeCapabilities.selftest";
 import {
   ValidationBaselineStore,
   compareValidationWarnings,
@@ -338,12 +342,13 @@ function reloadSchemaLibrary(): SchemaLibrary {
 // B110 / Kimi R3 — one additive failure contract for every JSON API surface. Mount before
 // auth so 401/403 responses are covered too. Success responses keep the exact same object
 // or array by reference; route-specific failure evidence is retained.
-app.use((req, res, next) => {
+function apiFailureEnvelopeMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
   if (!req.path.startsWith('/api')) return next();
   const originalJson = res.json.bind(res);
   res.json = ((body: unknown) => originalJson(normalizeApiFailureBody(res.statusCode, body))) as typeof res.json;
   return next();
-});
+}
+app.use(apiFailureEnvelopeMiddleware);
 
 // B110 / Kimi R9 — a route that never settles must become a truthful 504, not a socket
 // that spins forever. The test drill can use a shorter isolated deadline; real routes use
@@ -351,7 +356,7 @@ app.use((req, res, next) => {
 const API_RESPONSE_DEADLINE_MS = responseDeadlineFromEnv(process.env.FORGE_RESPONSE_TIMEOUT_MS);
 const TIMEOUT_DRILL_DELAY_MS = Number(process.env.FORGE_TIMEOUT_DRILL_MS || 0);
 const TIMEOUT_DRILL_RESPONSE_MS = responseDeadlineFromEnv(process.env.FORGE_TIMEOUT_DRILL_RESPONSE_MS);
-app.use((req, res, next) => {
+function apiResponseDeadlineMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
   if (!req.path.startsWith('/api')) return next();
   const timeoutMs = req.path === '/api/agent/timeout-drill' && TIMEOUT_DRILL_DELAY_MS > 0
     ? TIMEOUT_DRILL_RESPONSE_MS
@@ -369,7 +374,8 @@ app.use((req, res, next) => {
     });
   });
   return next();
-});
+}
+app.use(apiResponseDeadlineMiddleware);
 
 // A real schema-enriched complex MD graph is larger than the old 5 MiB ceiling before it
 // reaches any handler (AI Influence: 8.2 MiB / 2,018 nodes; DeadAir: 5.1 MiB / 1,196).
@@ -378,7 +384,7 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: "32mb" }));
 
 // Enable CORS only for this app's same-port localhost origins.
-app.use((req, res, next) => {
+function localCorsMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
   const origin = req.headers.origin;
   const allowedOrigins = new Set([
     `http://127.0.0.1:${PORT}`,
@@ -392,8 +398,9 @@ app.use((req, res, next) => {
   if (req.method === "OPTIONS") {
     return res.sendStatus(200);
   }
-  next();
-});
+  return next();
+}
+app.use(localCorsMiddleware);
 
 // Middleware to verify the app session token for all /api/* routes.
 // Read-only diagnostic GET endpoints that expose no secrets and no mutation.
@@ -404,6 +411,7 @@ const PUBLIC_READONLY_GETS = new Set<string>([
   "/agent/lang/complete",
   "/agent/lang/attrs",
   "/agent/lang/hover",
+  "/agent/lang/element-explain",
   "/agent/md-audit",
   "/agent/xsd-debug",
   "/agent/catdat-debug",
@@ -613,13 +621,20 @@ function authMiddleware(req: express.Request, res: express.Response, next: expre
 }
 
 app.use("/api", authMiddleware);
-app.use("/api", (req, res, next) => {
+const INPUT_FIRST_WORKSPACE_ROUTES = new Set([
+  'POST /agent/compile',
+  'POST /agent/generate',
+  'POST /agent/generate/preview',
+]);
+function workspaceAuthorityMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (INPUT_FIRST_WORKSPACE_ROUTES.has(`${req.method.toUpperCase()} ${req.path}`)) return next();
   const identity = requestedWorkspaceIdentity(req);
   if (statefulWorkspaceRoute(req) || identity.workspaceId || identity.conflict) {
     if (!resolveWorkspaceAuthority(req, res, statefulWorkspaceRoute(req))) return;
   }
-  next();
-});
+  return next();
+}
+app.use("/api", workspaceAuthorityMiddleware);
 
 // Test-only negative path. It does not exist unless the isolated route harness opts in.
 if (TIMEOUT_DRILL_DELAY_MS > 0) {
@@ -2618,6 +2633,20 @@ const aiSpendMeter = createSpendMeter(
   AI_DAILY_USD_CAP,
 );
 
+// Isolated route-integration provider oracle. It is unreachable in production and only
+// responds to one exact harness prompt when the harness explicitly enables test mode.
+// This lets the real /generate/preview adapter prove apply:false without network spend.
+const ROUTE_TEST_AI_PROMPT = '__FORGE_ROUTE_TEST_PREVIEW__';
+const routeTestAiResponses: string[] = (() => {
+  if (process.env.NODE_ENV === 'production' || process.env.FORGE_ROUTE_TEST_MODE !== '1') return [];
+  try {
+    const parsed = JSON.parse(process.env.FORGE_ROUTE_TEST_AI_RESPONSES || '[]');
+    return Array.isArray(parsed) && parsed.every(value => typeof value === 'string') ? parsed : [];
+  } catch {
+    return [];
+  }
+})();
+
 async function callMultiProviderAI(
   req: express.Request,
   systemInstruction: string,
@@ -2625,6 +2654,9 @@ async function callMultiProviderAI(
   responseFormat: "json" | "text" = "text",
   jsonSchema?: any
 ): Promise<string> {
+  if (req.body?.prompt === ROUTE_TEST_AI_PROMPT && routeTestAiResponses.length) {
+    return routeTestAiResponses.shift()!;
+  }
   const provider = (req.headers["x-ai-provider"] as string) || "gemini";
   const model = (req.headers["x-ai-model"] as string) || "";
   const reasoning = (req.headers["x-ai-reasoning"] as string) || "none";
@@ -3182,6 +3214,7 @@ app.get("/api/agent/schema", (req, res) => {
   return res.json({
     api_version: "2026-07-30.agent.v4",
     description: "X4 Forge external agent contract. Use this to inspect supported workspace domains, valid values, compile outputs, and protected API routes before modifying the studio.",
+    capability_contract: buildForgeCapabilityContract(value => crypto.createHash('sha256').update(value, 'utf8').digest('hex')),
     auth: {
       read_only_schema_is_public: true,
       protected_routes: "Mutation and workspace routes require Authorization: Bearer <token>; explicitly allowlisted read-only reference/diagnostic GETs are public on localhost.",
@@ -3495,6 +3528,13 @@ app.get("/api/agent/schema", (req, res) => {
       },
       {
         method: "POST",
+        path: "/api/agent/project/validate/check",
+        auth: true,
+        body: { project: "ExtensionProject (inline)", fromPath: "or exact mod-folder path under a configured root", root: "workspace | filesystem", recordBaseline: "forced false" },
+        purpose: "Canonical read/analyze capability adapter. Runs full-project validation while forcing recordBaseline:false so polling, MCP, IDE, and external-agent checks cannot advance durable baseline state."
+      },
+      {
+        method: "POST",
         path: "/api/agent/project/validate",
         auth: true,
         body: { project: "ExtensionProject (inline)", fromPath: "or exact mod-folder path under a configured root", root: "workspace | filesystem", recordBaseline: "optional true; green validations only" },
@@ -3554,10 +3594,17 @@ app.get("/api/agent/schema", (req, res) => {
       },
       {
         method: "POST",
+        path: "/api/agent/generate/preview",
+        auth: true,
+        body: { prompt: "string", currentWorkspace: "optional ModWorkspace", apply: "forced false" },
+        purpose: "Canonical spend/network preview adapter. Generates and validates a proposal but cannot commit workspace state."
+      },
+      {
+        method: "POST",
         path: "/api/agent/generate",
         auth: true,
-        body: { prompt: "string", currentWorkspace: "optional ModWorkspace", diagnostics: "optional XMLDiagnostic[]" },
-        purpose: "Ask the server-side AI provider to generate/edit a workspace. Current implementation mainly edits MD graph and UI domains while preserving other existing domains."
+        body: { prompt: "string", currentWorkspace: "optional ModWorkspace", apply: "optional boolean; defaults true", expectedHead: "optional CAS head" },
+        purpose: "Legacy broader generation route. It applies by default; use /api/agent/generate/preview for a capability-constrained non-applying proposal."
       },
       {
         method: "GET",
@@ -7184,7 +7231,7 @@ app.post("/api/agent/project/validate-crossfile", (req, res) => {
 //     configured roots (mod workspace / live extensions dir) — ROADMAP tool-improvement
 //     #6 (no ~20KB inline ceiling, no sandbox staleness) and the #5 "validate the LIVE
 //     deployed mod" workflow. Path-containment guarded; never reads outside the roots.
-app.post("/api/agent/project/validate", (req, res) => {
+function validateProjectRequest(req: express.Request, res: express.Response) {
   try {
     let project = req.body?.project as ExtensionProject | undefined;
     let source: { mode: "inline" } | { mode: "fromPath"; root: string; loaded: string[]; skipped: { path: string; reason: string }[] } = { mode: "inline" };
@@ -7257,7 +7304,19 @@ app.post("/api/agent/project/validate", (req, res) => {
   } catch (error) {
     return res.status(500).json({ error: errorMessage(error) || "project validate failed" });
   }
+}
+app.post("/api/agent/project/validate/check", (req, res) => {
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    return res.status(400).json({ code: 'CAPABILITY_INPUT_INVALID', error: 'project.validate requires a JSON object body.' });
+  }
+  const unknown = Object.keys(req.body).filter(key => !['project', 'fromPath', 'root', 'recordBaseline'].includes(key));
+  if (unknown.length) {
+    return res.status(400).json({ code: 'CAPABILITY_INPUT_INVALID', error: `project.validate does not accept: ${unknown.join(', ')}` });
+  }
+  req.body = applyForgeCapabilityFixedBody('project.validate', req.body);
+  return validateProjectRequest(req, res);
 });
+app.post("/api/agent/project/validate", validateProjectRequest);
 
 type ExactSuppressionScope = { code: string; file?: string; sourceRef?: string };
 type SuppressionTarget = {
@@ -7704,6 +7763,7 @@ const SELFTESTS: Record<string, () => unknown> = {
   "agent-history-selftest": runAgentHistorySelftest,
   "instance-discovery-selftest": runInstanceDiscoverySelftest,
   "github-credential-store-selftest": runGithubCredentialStoreSelftest,
+  "github-device-flow-selftest": runGithubDeviceFlowSelftest,
   "local-workspace-cache-selftest": runLocalWorkspaceCacheSelftest,
   "xml-input-limits-selftest": runXmlInputLimitsSelftest,
   "agent-keys-selftest": runAgentKeysSelftest,
@@ -7787,6 +7847,8 @@ const SELFTESTS: Record<string, () => unknown> = {
   "lua-runtime-log-selftest": runLuaRuntimeLogSelftest,
   "workspace-persistence-selftest": runWorkspaceStateSelftest,
   "workspace-registry-selftest": runWorkspaceRegistrySelftest,
+  "continuous-polling-selftest": runContinuousPollingSelftest,
+  "forge-capabilities-selftest": runForgeCapabilitiesSelftest,
   "ui-compiler-selftest": runUiCompilerSelftest,
   "node-toolbox-selftest": runNodeToolboxSelftest,
   "readiness-selftest": runReadinessSelftest,
@@ -8871,6 +8933,27 @@ app.get("/api/agent/lang/hover", (req, res) => {
     return res.json({ domain, ...(index ? hoverFor(index, tag) : { tag: (tag || "").toLowerCase(), known: false, requiredAttrs: [], attrCount: 0 }) });
   } catch (error) {
     return res.status(500).json({ error: errorMessage(error) || "lang hover failed" });
+  }
+});
+
+app.get("/api/agent/lang/element-explain", (req, res) => {
+  try {
+    const unknown = Object.keys(req.query).filter(key => !['file', 'tag'].includes(key));
+    if (unknown.length) {
+      return res.status(400).json({ code: 'CAPABILITY_INPUT_INVALID', error: `schema.element.explain does not accept: ${unknown.join(', ')}` });
+    }
+    const tag = String(req.query.tag || '').trim();
+    if (!tag) {
+      return res.status(400).json({ code: 'CAPABILITY_INPUT_INVALID', error: 'schema.element.explain requires a non-empty tag query parameter.' });
+    }
+    const file = String(req.query.file || 'md/x.xml');
+    const { index, domain } = langIndexFor(file);
+    const hover = index
+      ? hoverFor(index, tag)
+      : { tag: tag.toLowerCase(), known: false, requiredAttrs: [], attrCount: 0 };
+    return res.json({ domain, ...hover, attrs: index ? attributesFor(index, tag) : [] });
+  } catch (error) {
+    return res.status(500).json({ error: errorMessage(error) || 'lang element explain failed' });
   }
 });
 
@@ -10982,36 +11065,50 @@ app.post("/api/agent/deploy-verify", (req, res) => {
 });
 
 app.post("/api/agent/compile", (req, res) => {
-  const record = req.body?.workspace ? null : resolveWorkspaceAuthority(req, res, true);
-  if (!req.body?.workspace && !record) return;
-  const ws = sanitizeWorkspace(req.body?.workspace || record!.workspace);
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    return res.status(400).json({ code: 'CAPABILITY_INPUT_INVALID', success: false, error: 'workspace.compile requires a JSON object body.' });
+  }
+  const unknown = Object.keys(req.body).filter(key => !['workspace', 'fileOverrides'].includes(key));
+  if (unknown.length) {
+    return res.status(400).json({ code: 'CAPABILITY_INPUT_INVALID', success: false, error: `Unknown compile field(s): ${unknown.join(', ')}` });
+  }
+  const hasInlineWorkspace = Object.hasOwn(req.body, 'workspace');
+  if (hasInlineWorkspace && (!req.body.workspace || typeof req.body.workspace !== 'object' || Array.isArray(req.body.workspace))) {
+    return res.status(400).json({ code: 'CAPABILITY_INPUT_INVALID', success: false, error: 'workspace.compile workspace must be a JSON object when supplied.' });
+  }
+  let normalizedOverrides: Record<string, string> | undefined;
+  if (req.body.fileOverrides !== undefined) {
+    const overrides = req.body.fileOverrides;
+    if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) {
+      return res.status(400).json({ code: 'CAPABILITY_INPUT_INVALID', success: false, error: 'fileOverrides must be an object of project-relative paths to string contents.' });
+    }
+    normalizedOverrides = {};
+    let totalBytes = 0;
+    for (const [rawPath, rawContent] of Object.entries(overrides)) {
+      const normalized = String(rawPath || '').replace(/\\/g, '/').replace(/^\.\//, '');
+      if (!normalized || path.posix.isAbsolute(normalized) || /^[A-Za-z]:/.test(normalized) || normalized.includes('\0') || normalized.split('/').includes('..') || !/\.(xml|lua)$/i.test(normalized)) {
+        return res.status(400).json({ code: 'CAPABILITY_INPUT_INVALID', success: false, error: `Unsafe or unsupported validation override path: ${rawPath}` });
+      }
+      if (typeof rawContent !== 'string') {
+        return res.status(400).json({ code: 'CAPABILITY_INPUT_INVALID', success: false, error: `Validation override content must be a string: ${rawPath}` });
+      }
+      totalBytes += Buffer.byteLength(rawContent, 'utf8');
+      if (totalBytes > 4 * 1024 * 1024) {
+        return res.status(413).json({ code: 'CAPABILITY_INPUT_TOO_LARGE', success: false, error: 'Validation overrides exceed the 4 MiB request limit.' });
+      }
+      normalizedOverrides[normalized] = rawContent;
+    }
+  }
+  const record = hasInlineWorkspace ? null : resolveWorkspaceAuthority(req, res, true);
+  if (!hasInlineWorkspace && !record) return;
+  const ws = sanitizeWorkspace(hasInlineWorkspace ? req.body.workspace : record!.workspace);
   try {
     const built = buildWorkspaceFileManifest(ws);
     const modId = built.modId;
     const files = { ...built.files };
-    const overrides = req.body?.fileOverrides;
-    if (overrides !== undefined) {
-      if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) {
-        return res.status(400).json({ success: false, error: "fileOverrides must be an object of project-relative paths to string contents." });
-      }
-      let totalBytes = 0;
-      for (const [rawPath, rawContent] of Object.entries(overrides)) {
-        const normalized = String(rawPath || "").replace(/\\/g, "/").replace(/^\.\//, "");
-        if (!normalized || path.posix.isAbsolute(normalized) || /^[A-Za-z]:/.test(normalized) || normalized.includes("\0") || normalized.split("/").includes("..") || !/\.(xml|lua)$/i.test(normalized)) {
-          return res.status(400).json({ success: false, error: `Unsafe or unsupported validation override path: ${rawPath}` });
-        }
-        if (typeof rawContent !== "string") {
-          return res.status(400).json({ success: false, error: `Validation override content must be a string: ${rawPath}` });
-        }
-        totalBytes += Buffer.byteLength(rawContent, "utf8");
-        if (totalBytes > 4 * 1024 * 1024) {
-          return res.status(413).json({ success: false, error: "Validation overrides exceed the 4 MiB request limit." });
-        }
-        files[normalized] = rawContent;
-      }
-      if (Object.keys(files).length > 2000) {
-        return res.status(413).json({ success: false, error: "Compiled project exceeds the 2,000-file validation limit." });
-      }
+    if (normalizedOverrides) Object.assign(files, normalizedOverrides);
+    if (Object.keys(files).length > 2000) {
+      return res.status(413).json({ code: 'CAPABILITY_INPUT_TOO_LARGE', success: false, error: 'Compiled project exceeds the 2,000-file validation limit.' });
     }
     const mdPath = `md/${modId}.xml`;
     const uiIndexPath = `ui.xml`;
@@ -11822,10 +11919,20 @@ function populateNodeMetadata(nodes: any[]): any[] {
  * Prompts the built-in Gemini language model to map a natural language instruction directly
  * into a highly complex, logical ModWorkspace structured JSON value.
  */
-app.post("/api/agent/generate", async (req, res) => {
+async function generateWorkspaceRequest(req: express.Request, res: express.Response) {
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    return res.status(400).json({ code: 'CAPABILITY_INPUT_INVALID', error: 'Workspace generation requires a JSON object body.' });
+  }
   const { prompt, currentWorkspace } = req.body;
-  if (!prompt) {
-    return res.status(400).json({ error: "Missing 'prompt' body parameter." });
+  if (typeof prompt !== 'string' || !prompt.trim()) {
+    return res.status(400).json({ code: 'CAPABILITY_INPUT_INVALID', error: 'Workspace generation requires a non-empty string prompt.' });
+  }
+  if (currentWorkspace !== undefined &&
+    (!currentWorkspace || typeof currentWorkspace !== 'object' || Array.isArray(currentWorkspace))) {
+    return res.status(400).json({ code: 'CAPABILITY_INPUT_INVALID', error: 'Workspace generation currentWorkspace must be a JSON object when supplied.' });
+  }
+  if (req.body.apply !== undefined && typeof req.body.apply !== 'boolean') {
+    return res.status(400).json({ code: 'CAPABILITY_INPUT_INVALID', error: 'Workspace generation apply must be boolean when supplied.' });
   }
   const applyGenerated = req.body.apply !== false;
   const addressed = ((req as any).__workspaceRecord as WorkspaceRecord | undefined) ||
@@ -12283,7 +12390,29 @@ Use real X4 Mission Director xmlTags. Each requirement: {id, label (plain Englis
       error: error.message || "Failed to trigger automated workspace planner in phased execution mode."
     });
   }
+}
+app.post("/api/agent/generate/preview", (req, res) => {
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    return res.status(400).json({ code: 'CAPABILITY_INPUT_INVALID', error: 'workspace.generate.preview requires a JSON object body.' });
+  }
+  const unknown = Object.keys(req.body).filter(key => !['prompt', 'currentWorkspace', 'apply'].includes(key));
+  if (unknown.length) {
+    return res.status(400).json({ code: 'CAPABILITY_INPUT_INVALID', error: `workspace.generate.preview does not accept: ${unknown.join(', ')}` });
+  }
+  if (typeof req.body.prompt !== 'string' || !req.body.prompt.trim()) {
+    return res.status(400).json({ code: 'CAPABILITY_INPUT_INVALID', error: 'workspace.generate.preview requires a non-empty string prompt.' });
+  }
+  if (req.body.currentWorkspace !== undefined &&
+    (!req.body.currentWorkspace || typeof req.body.currentWorkspace !== 'object' || Array.isArray(req.body.currentWorkspace))) {
+    return res.status(400).json({ code: 'CAPABILITY_INPUT_INVALID', error: 'workspace.generate.preview currentWorkspace must be a JSON object when supplied.' });
+  }
+  if (req.body.apply !== undefined && typeof req.body.apply !== 'boolean') {
+    return res.status(400).json({ code: 'CAPABILITY_INPUT_INVALID', error: 'workspace.generate.preview apply must be boolean when supplied.' });
+  }
+  req.body = applyForgeCapabilityFixedBody('workspace.generate.preview', req.body);
+  return generateWorkspaceRequest(req, res);
 });
+app.post("/api/agent/generate", generateWorkspaceRequest);
 
 
 // GitHub proxy routes (load/push/create/device-flow/commits) moved to
@@ -12382,9 +12511,9 @@ async function setupDevOrProd() {
 
 // Host-toolchain gate for local agents (HANDOFF protocol: typecheck/lint/tests run
 // through here). DEV-ONLY BY DESIGN: arbitrary command execution must never ship in a
-// packaged/production build (G5 security item, 2026-07-08) — under NODE_ENV=production
-// the route is not registered at all unless FORGE_ALLOW_RUN_COMMAND=true is set
-// explicitly. Dev workflow (restart-studio.bat / tsx watch) is unchanged.
+// packaged/production build (G5 security item, 2026-07-08). Registration is default-closed
+// in every environment and requires the explicit FORGE_ALLOW_RUN_COMMAND=true opt-in. The
+// checked-in dev launchers set that flag; a bare `node dist/server.cjs` never enables exec.
 function terminateProcessTree(pid: number | undefined): void {
   if (!pid) return;
   void import('child_process').then(({ spawn }) => {
@@ -12402,7 +12531,11 @@ function terminateProcessTree(pid: number | undefined): void {
   }).catch(() => { /* best effort; the exit/state contract still reports the timeout */ });
 }
 
-if (process.env.NODE_ENV !== "production" || process.env.FORGE_ALLOW_RUN_COMMAND === "true") {
+export function isRunCommandEnabled(env: NodeJS.ProcessEnv): boolean {
+  return env.FORGE_ALLOW_RUN_COMMAND === "true";
+}
+
+function registerRunCommandRoutes(app: express.Express): void {
   app.get("/api/run_command", async (req, res) => {
     const cmd = String(req.query.cmd || "");
     try {
@@ -12517,6 +12650,8 @@ if (process.env.NODE_ENV !== "production" || process.env.FORGE_ALLOW_RUN_COMMAND
   });
 }
 
+if (isRunCommandEnabled(process.env)) registerRunCommandRoutes(app);
+
 /**
  * B93.2 — tell the caller the truth about the request they made.
  *
@@ -12547,7 +12682,7 @@ function allowedMethodsForApiPath(requestPath: string): string[] {
   return [...methods].sort();
 }
 
-app.use((req, res, next) => {
+function apiUnknownRouteMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
   if (!req.path.startsWith('/api/')) return next();
   const allowed = allowedMethodsForApiPath(req.path);
   if (allowed.length === 0) {
@@ -12567,7 +12702,8 @@ app.use((req, res, next) => {
     });
   }
   return next();
-});
+}
+app.use(apiUnknownRouteMiddleware);
 
 initializeReferenceCorpus();
 setupDevOrProd().then(() => {

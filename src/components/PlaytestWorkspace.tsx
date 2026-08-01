@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import type { ModWorkspace } from '../types';
 import ReleaseCenter from './ReleaseCenter';
 import { DEFAULT_RELEASE_PREFERENCES, type ReleasePreferences } from '../lib/releasePreferences';
+import { fetchPollingJson } from '../lib/continuousPolling';
+import { useContinuousPolling } from '../lib/useContinuousPolling';
 import { 
   Folder, 
   Terminal, 
@@ -159,6 +161,14 @@ export default function PlaytestWorkspace({
   const [forgeState, setForgeState] = useState<ForgeStateView | null>(null);
   const [pastedDiagnosis, setPastedDiagnosis] = useState<GameLogStatus['diagnosis'] | null>(null);
   const [diagnosingPasted, setDiagnosingPasted] = useState<boolean>(false);
+  const gameLogAuthorityRef = React.useRef(activeModId);
+  React.useLayoutEffect(() => {
+    gameLogAuthorityRef.current = activeModId;
+    setGameLogStatus(null);
+    setGameLogError('');
+    setGameLogLoading(true);
+    setDebugBrief(null);
+  }, [activeModId]);
   // NPC Identity Probe UI removed 2026-07-09 (Ken): it was a one-off research rig from
   // the cross-session NPC-id investigation, never meant to ship in the product surface.
   // The agent API endpoints (/api/agent/npc-identity-probe/*) remain for agent use.
@@ -218,56 +228,63 @@ export default function PlaytestWorkspace({
   };
 
   const refreshGameLogStatus = async () => {
+    const requestedModId = activeModId;
     setGameLogLoading(true);
     setGameLogError('');
     try {
-      const response = await fetch(`/api/agent/game-log/status?modId=${encodeURIComponent(activeModId)}`);
+      const response = await fetch(`/api/agent/game-log/status?modId=${encodeURIComponent(requestedModId)}`);
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.error || 'Failed to read X4 debug log status.');
       }
+      if (gameLogAuthorityRef.current !== requestedModId) return;
       setGameLogStatus(data);
     } catch (err) {
+      if (gameLogAuthorityRef.current !== requestedModId) return;
+      setGameLogStatus(null);
       setGameLogError(err.message || 'Failed to read X4 debug log status.');
     } finally {
+      if (gameLogAuthorityRef.current === requestedModId) setGameLogLoading(false);
+    }
+  };
+
+  const gameLogStatusUrl = `/api/agent/game-log/status?modId=${encodeURIComponent(activeModId)}`;
+  useContinuousPolling<GameLogStatus>({
+    resourceKey: `game-log-status:${activeModId}`,
+    contract: `GET ${gameLogStatusUrl}`,
+    intervalMs: 4000,
+    run: signal => fetchPollingJson(gameLogStatusUrl, undefined, signal),
+    onResult: data => { setGameLogStatus(data); setGameLogError(''); setGameLogLoading(false); },
+    onError: error => {
+      setGameLogStatus(null);
+      setGameLogError(error.message || 'Failed to read X4 debug log status.');
       setGameLogLoading(false);
-    }
-  };
+    },
+  });
 
-  const refreshDebugBrief = async () => {
-    try {
-      const expected = ['Save_identity', 'Chat_boot', 'Poll_tick', 'On_action'].join(',');
-      const response = await fetch(`/api/agent/debug-watcher/brief?modId=${encodeURIComponent(activeModId)}&expect=${encodeURIComponent(expected)}`);
-      const data = await response.json();
-      setDebugBrief(data);
-    } catch (err) {
-      setDebugBrief({ error: err?.message || 'Failed to read debug watcher brief.' });
-    }
-  };
+  const expectedCues = ['Save_identity', 'Chat_boot', 'Poll_tick', 'On_action'].join(',');
+  const debugBriefUrl = `/api/agent/debug-watcher/brief?modId=${encodeURIComponent(activeModId)}&expect=${encodeURIComponent(expectedCues)}`;
+  useContinuousPolling<DebugWatcherBrief>({
+    resourceKey: `debug-watcher-playtest:${activeModId}`,
+    contract: `GET ${debugBriefUrl}`,
+    intervalMs: 4000,
+    run: signal => fetchPollingJson(debugBriefUrl, undefined, signal),
+    onResult: data => setDebugBrief(data),
+    onError: error => setDebugBrief({ error: error.message || 'Failed to read debug watcher brief.' }),
+  });
 
-  const refreshForgeState = async () => {
-    try {
-      const response = await fetch('/api/agent/live/forge-state');
-      const data = await response.json();
-      setForgeState(data);
-    } catch (err) {
-      setForgeState({ available: false, error: err?.message || 'Failed to read FORGE-STATE topics.' });
-    }
-  };
+  useContinuousPolling<ForgeStateView>({
+    resourceKey: 'forge-state:latest',
+    contract: 'GET /api/agent/live/forge-state',
+    intervalMs: 4000,
+    run: signal => fetchPollingJson('/api/agent/live/forge-state', undefined, signal),
+    onResult: data => setForgeState(data),
+    onError: error => setForgeState({ available: false, error: error.message || 'Failed to read FORGE-STATE topics.' }),
+  });
 
-  useEffect(() => {
-    refreshGameLogStatus();
-    refreshDebugBrief();
-    refreshForgeState();
-    // Poll every 4s so the watcher feels live during an in-game test (was 15s, which read
-    // as "not automatic"). The tail is byte-bounded, so a fast poll is cheap.
-    const timer = window.setInterval(() => { refreshGameLogStatus(); refreshDebugBrief(); refreshForgeState(); }, 4000);
-    return () => window.clearInterval(timer);
-    // reason: refreshGameLogStatus is a non-memoized component-body function; the polling interval should reset only on activeModId change, not every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeModId]);
-
-  const gameLogTone = gameLogStatus?.status === 'errors'
+  const gameLogTone = gameLogError
+    ? 'border-red-500/30 bg-red-500/5 text-red-300'
+    : gameLogStatus?.status === 'errors'
     ? 'border-red-500/30 bg-red-500/5 text-red-300'
     : gameLogStatus?.status === 'warnings'
       ? 'border-amber-500/30 bg-amber-500/5 text-amber-300'
@@ -451,11 +468,11 @@ export default function PlaytestWorkspace({
           </p>
         </div>
 
-        <div className={`rounded-lg border p-3 space-y-2 ${gameLogTone}`}>
+        <div data-testid="playtest-game-log-status" className={`rounded-lg border p-3 space-y-2 ${gameLogTone}`}>
           <div className="flex items-center justify-between gap-3">
             <div className="space-y-0.5 min-w-0">
               <div className="font-mono text-[9px] uppercase font-black tracking-wider text-white" title="Reflects only this mod's entries in the X4 debug log — not whether the mod is deployed, loaded in-game, or schema-valid.">
-                Active-Mod Log Status: {gameLogStatus ? (GAME_LOG_STATUS_LABELS[gameLogStatus.status] || gameLogStatus.status) : 'CHECKING'}
+                Active-Mod Log Status: {gameLogError ? 'UNAVAILABLE' : gameLogStatus ? (GAME_LOG_STATUS_LABELS[gameLogStatus.status] || gameLogStatus.status) : 'CHECKING'}
               </div>
               <p className="text-[10px] leading-relaxed text-slate-300">
                 {gameLogError || gameLogStatus?.summary || 'Reading recent debuglog.txt output...'}

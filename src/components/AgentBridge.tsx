@@ -24,6 +24,14 @@ import {
   Clock
 } from 'lucide-react';
 import { ModWorkspace, NODE_TEMPLATES, MDNode } from '../types';
+import { fetchPollingJson } from '../lib/continuousPolling';
+import { useContinuousPolling } from '../lib/useContinuousPolling';
+import {
+  FORGE_CAPABILITIES,
+  FORGE_CAPABILITY_SCHEMA_VERSION,
+  isForgeCapabilityContractV1,
+  verifyForgeCapabilityContract,
+} from '../lib/forgeCapabilities';
 
 interface AgentBridgeProps {
   isOpen: boolean;
@@ -49,8 +57,16 @@ interface AgentRuntimeApi {
 }
 
 interface AgentWorkspaceResponse {
+  workspaceId?: unknown;
   version?: unknown;
   workspace?: unknown;
+}
+
+interface CapabilityContractState {
+  source: 'loading' | 'live' | 'legacy' | 'invalid' | 'unavailable';
+  schemaVersion: string;
+  contractHash?: string;
+  count: number;
 }
 
 declare global {
@@ -507,9 +523,18 @@ export default function AgentBridge({
   
   // Server state tracking
   const [serverVersion, setServerVersion] = useState<number>(localVersion);
-  const [pendingWorkspace, setPendingWorkspace] = useState<ModWorkspace | null>(null);
+  const [pendingWorkspace, setPendingWorkspace] = useState<{
+    workspaceId: string;
+    version: number;
+    workspace: ModWorkspace;
+  } | null>(null);
   const [lastSyncedTime, setLastSyncedTime] = useState<string>("Never");
-  const [isServerHealthy, setIsServerHealthy] = useState<boolean>(true);
+  const [serverHealth, setServerHealth] = useState<'checking' | 'connected' | 'offline'>('checking');
+  const [capabilityContract, setCapabilityContract] = useState<CapabilityContractState>({
+    source: 'loading',
+    schemaVersion: FORGE_CAPABILITY_SCHEMA_VERSION,
+    count: FORGE_CAPABILITIES.length,
+  });
   
   // Documentation collapsables
   const [collapsedEndpoints, setCollapsedEndpoints] = useState<Record<string, boolean>>({
@@ -525,6 +550,9 @@ export default function AgentBridge({
   const authCurlHeader = `-H "Authorization: Bearer $(Get-Content .studio-api-token)"`;
   const workspaceId = window.__X4_WORKSPACE_CONTEXT__?.getWorkspaceId() || '<workspace-id>';
   const workspaceCurlHeader = `-H "x-workspace-id: ${workspaceId}"`;
+  const clientId = window.__X4_WORKSPACE_CONTEXT__?.clientId || '<client-id>';
+  const clientCurlHeader = `-H "x-client-id: ${clientId}"`;
+  const providerCurlHeaders = `-H "x-ai-provider: openrouter" -H "x-custom-api-key: <your-provider-key>"`;
 
   const toggleEndpoint = (key: string) => {
     setCollapsedEndpoints(prev => ({ ...prev, [key]: !prev[key] }));
@@ -536,64 +564,112 @@ export default function AgentBridge({
     setTimeout(() => setCopiedTextId(null), 2000);
   };
 
-  // Poll the server workspace state periodically to track background changes from external AI agents
-  useEffect(() => {
-    if (!isPolling || !isOpen) return;
-
-    let isActive = true;
-    const fetchStatus = async () => {
-      try {
-        const res = await fetch("/api/agent/workspace");
-        if (!res.ok) throw new Error("Offline");
-        
-        const data = await res.json() as AgentWorkspaceResponse;
-        if (!isActive) return;
-
-        setIsServerHealthy(true);
-        setLastSyncedTime(new Date().toLocaleTimeString());
-
-        // Check if server version is newer
-        if (typeof data.version === 'number' && data.version > localVersion && isModWorkspace(data.workspace)) {
-          setServerVersion(data.version);
-          if (autoSync) {
-            setWorkspace(data.workspace);
-            setLocalVersion(data.version);
-            setPendingWorkspace(null);
-          } else {
-            setPendingWorkspace(data.workspace);
-          }
-        } else if (data.version === localVersion) {
+  // R13: this exact workspace read shares one request with App. Only the panel's
+  // presentation/adoption policy remains local to the panel subscriber.
+  const pollingWorkspaceId = window.__X4_WORKSPACE_CONTEXT__?.getWorkspaceId() || 'unbound';
+  const bridgeWorkspaceAuthorityRef = React.useRef(pollingWorkspaceId);
+  React.useLayoutEffect(() => {
+    if (bridgeWorkspaceAuthorityRef.current === pollingWorkspaceId) return;
+    bridgeWorkspaceAuthorityRef.current = pollingWorkspaceId;
+    setPendingWorkspace(null);
+    setServerVersion(localVersion);
+    setLastSyncedTime('Never');
+    setServerHealth('checking');
+  }, [pollingWorkspaceId, localVersion]);
+  useContinuousPolling<AgentWorkspaceResponse>({
+    enabled: isPolling && isOpen,
+    resourceKey: `workspace:${pollingWorkspaceId}`,
+    contract: 'GET /api/agent/workspace',
+    intervalMs: 4000,
+    run: signal => fetchPollingJson('/api/agent/workspace', undefined, signal),
+    onResult: data => {
+      if (typeof data.workspaceId === 'string' && data.workspaceId !== pollingWorkspaceId) return;
+      setServerHealth('connected');
+      setLastSyncedTime(new Date().toLocaleTimeString());
+      if (typeof data.version === 'number' && data.version > localVersion && isModWorkspace(data.workspace)) {
+        setServerVersion(data.version);
+        if (autoSync) {
+          setWorkspace(data.workspace);
+          setLocalVersion(data.version);
           setPendingWorkspace(null);
-          setServerVersion(data.version);
+        } else {
+          setPendingWorkspace({ workspaceId: pollingWorkspaceId, version: data.version, workspace: data.workspace });
         }
-      } catch {
-        if (!isActive) return;
-        setIsServerHealthy(false);
+      } else if (data.version === localVersion) {
+        setPendingWorkspace(null);
+        setServerVersion(data.version);
       }
-    };
+    },
+    onError: () => setServerHealth('offline'),
+  });
 
-    fetchStatus(); // immediate check
-    const interval = setInterval(fetchStatus, 4000);
-
-    return () => {
-      isActive = false;
-      clearInterval(interval);
-    };
-  }, [isPolling, localVersion, autoSync, isOpen, setLocalVersion, setWorkspace]);
+  useEffect(() => {
+    if (!isOpen) return;
+    const controller = new AbortController();
+    setCapabilityContract({
+      source: 'loading',
+      schemaVersion: FORGE_CAPABILITY_SCHEMA_VERSION,
+      count: FORGE_CAPABILITIES.length,
+    });
+    void fetch('/api/agent/schema', { signal: controller.signal })
+      .then(async response => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const body = await response.json() as { capability_contract?: unknown };
+        if (!Object.hasOwn(body, 'capability_contract')) {
+          setCapabilityContract({
+            source: 'legacy',
+            schemaVersion: FORGE_CAPABILITY_SCHEMA_VERSION,
+            count: FORGE_CAPABILITIES.length,
+          });
+          return;
+        }
+        const contract = body.capability_contract;
+        if (!isForgeCapabilityContractV1(contract) || !await verifyForgeCapabilityContract(contract)) {
+          setCapabilityContract({
+            source: 'invalid',
+            schemaVersion: FORGE_CAPABILITY_SCHEMA_VERSION,
+            count: FORGE_CAPABILITIES.length,
+          });
+          return;
+        }
+        setCapabilityContract({
+          source: 'live',
+          schemaVersion: contract.schemaVersion,
+          contractHash: contract.contractHash,
+          count: contract.capabilities.length,
+        });
+      })
+      .catch(error => {
+        if (controller.signal.aborted || error?.name === 'AbortError') return;
+        setCapabilityContract({
+          source: 'unavailable',
+          schemaVersion: FORGE_CAPABILITY_SCHEMA_VERSION,
+          count: FORGE_CAPABILITIES.length,
+        });
+      });
+    return () => controller.abort();
+  }, [isOpen]);
 
   // Manually apply pending external changes
   const applyPendingChanges = () => {
     if (pendingWorkspace) {
-      setWorkspace(pendingWorkspace);
-      setLocalVersion(serverVersion);
+      const currentWorkspaceId = window.__X4_WORKSPACE_CONTEXT__?.getWorkspaceId() || 'unbound';
+      if (pendingWorkspace.workspaceId !== currentWorkspaceId) {
+        setPendingWorkspace(null);
+        return;
+      }
+      setWorkspace(pendingWorkspace.workspace);
+      setLocalVersion(pendingWorkspace.version);
       setPendingWorkspace(null);
     }
   };
 
+  const displayedServerHealth = isPolling ? serverHealth : 'paused';
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-y-0 right-0 w-[480px] bg-[#0c0f16] border-l border-cyan-500/30 z-50 flex flex-col shadow-2xl font-mono text-xs text-slate-300">
+    <div data-testid="agent-bridge" className="fixed inset-y-0 right-0 w-[480px] bg-[#0c0f16] border-l border-cyan-500/30 z-50 flex flex-col shadow-2xl font-mono text-xs text-slate-300">
       
       {/* Header Panel */}
       <div className="bg-[#141b25] border-b border-white/10 p-4 flex items-center justify-between">
@@ -608,6 +684,7 @@ export default function AgentBridge({
         </div>
         <button 
           onClick={onClose}
+          aria-label="Close Agent API Bridge"
           className="p-1.5 rounded hover:bg-white/5 text-slate-400 hover:text-white transition-all cursor-pointer"
         >
           <X className="w-4 h-4" />
@@ -617,9 +694,9 @@ export default function AgentBridge({
       {/* Synchronisation Status Banner */}
       <div className="px-4 py-2 border-b border-white/5 bg-[#090b10] flex items-center justify-between text-[11px]">
         <div className="flex items-center gap-1.5">
-          <div className={`w-2 h-2 rounded-full ${isServerHealthy ? 'bg-emerald-500 animate-ping' : 'bg-red-500'}`} />
-          <span className="text-slate-400">
-            Sync: {isServerHealthy ? 'Connected' : 'Offline'}
+          <div className={`w-2 h-2 rounded-full ${displayedServerHealth === 'connected' ? 'bg-emerald-500 animate-ping' : displayedServerHealth === 'offline' ? 'bg-red-500' : displayedServerHealth === 'checking' ? 'bg-amber-400 animate-pulse' : 'bg-slate-500'}`} />
+          <span data-testid="agent-bridge-sync-status" className="text-slate-400">
+            Sync: {displayedServerHealth === 'connected' ? 'Connected' : displayedServerHealth === 'offline' ? 'Offline' : displayedServerHealth === 'checking' ? 'Checking' : 'Paused'}
           </span>
           <span className="text-[9px] text-slate-500">| ver: v{localVersion} (srv: v{serverVersion})</span>
         </div>
@@ -627,7 +704,10 @@ export default function AgentBridge({
           <span className="text-[9px] text-slate-500">Last: {lastSyncedTime}</span>
           <button 
             onClick={() => {
-              setIsPolling(prev => !prev);
+              setIsPolling(prev => {
+                if (!prev) setServerHealth('checking');
+                return !prev;
+              });
             }}
             className="p-1 text-slate-400 hover:text-white transition-all"
             title={isPolling ? "Pause server synchronization" : "Resume server synchronization"}
@@ -637,9 +717,38 @@ export default function AgentBridge({
         </div>
       </div>
 
+      <div
+        data-testid="agent-capability-contract"
+        data-contract-source={capabilityContract.source}
+        data-contract-version={capabilityContract.schemaVersion}
+        data-capability-count={capabilityContract.count}
+        data-catalog-scope={capabilityContract.source === 'live' ? 'server' : 'local'}
+        title={capabilityContract.contractHash || 'Local catalog only; server capability contract is unknown'}
+        className="px-4 py-2 border-b border-white/5 bg-cyan-950/10 text-[9px] text-slate-400 flex items-center justify-between gap-3"
+      >
+        <span>
+          {capabilityContract.source === 'live' ? 'Server capabilities' : 'Local catalog'}:{' '}
+          <strong className="text-cyan-300">{capabilityContract.count}</strong>
+          {capabilityContract.source === 'live' ? ` · ${capabilityContract.schemaVersion}` : ' · Server capabilities unknown'}
+          {capabilityContract.contractHash ? ` · ${capabilityContract.contractHash.slice(0, 12)}` : ''}
+        </span>
+        <span className={capabilityContract.source !== 'live' && capabilityContract.source !== 'loading' ? 'text-amber-400' : 'text-slate-500'}>
+          {capabilityContract.source === 'live'
+            ? 'LIVE CONTRACT'
+            : capabilityContract.source === 'loading'
+              ? 'DISCOVERING'
+              : capabilityContract.source === 'legacy'
+                ? 'LEGACY SERVER'
+                : capabilityContract.source === 'invalid'
+                  ? 'INVALID CONTRACT'
+                  : 'SERVER UNAVAILABLE'}
+        </span>
+        <span className="sr-only">Discovery metadata only; server policy enforces access.</span>
+      </div>
+
       {/* Sync Alerts */}
       {pendingWorkspace && (
-        <div className="bg-cyan-500/10 border-b border-cyan-500/20 p-3 flex flex-col gap-2 animate-fade-in">
+        <div data-testid="agent-bridge-pending-workspace" className="bg-cyan-500/10 border-b border-cyan-500/20 p-3 flex flex-col gap-2 animate-fade-in">
           <div className="flex items-start gap-2">
             <AlertCircle className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
             <div>
@@ -1021,12 +1130,10 @@ export default function AgentBridge({
                     </p>
                     <div className="relative">
                       <pre className="bg-[#10141f] p-2 rounded text-[10px] text-cyan-300 overflow-x-auto w-full select-all">
-                        {`curl -X GET "${appOrigin}/api/agent/workspace" \\
-     ${authCurlHeader} \\
-     ${workspaceCurlHeader}`}
+                        {`curl.exe -X GET "${appOrigin}/api/agent/workspace" ${authCurlHeader} ${workspaceCurlHeader} ${clientCurlHeader}`}
                       </pre>
                       <button 
-                        onClick={() => handleCopy(`curl -X GET "${appOrigin}/api/agent/workspace" ${authCurlHeader} ${workspaceCurlHeader}`, 'curl_getws')}
+                        onClick={() => handleCopy(`curl.exe -X GET "${appOrigin}/api/agent/workspace" ${authCurlHeader} ${workspaceCurlHeader} ${clientCurlHeader}`, 'curl_getws')}
                         className="absolute right-2 top-2 p-1 rounded bg-black/45 hover:bg-black text-slate-400 hover:text-white transition-all cursor-pointer"
                       >
                         {copiedTextId === 'curl_getws' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -1056,24 +1163,10 @@ export default function AgentBridge({
                     </p>
                     <div className="relative">
                       <pre className="bg-[#10141f] p-2 rounded text-[9px] text-cyan-300 overflow-y-auto max-h-32 select-all">
-                        {`curl -X POST "${appOrigin}/api/agent/workspace" \\
-     ${authCurlHeader} \\
-     ${workspaceCurlHeader} \\
-     -H "Content-Type: application/json" \\
-     -d '{
-       "workspace": {
-         "name": "Bounty_Hunter_Mod",
-         "nodes": [...],
-         "links": [...],
-         "uiWidgets": [...],
-         "uiTheme": {...}
-       }
-     },
-     "expectedHead": "<head from GET>"
-     }'`}
+                        {`curl.exe -X POST "${appOrigin}/api/agent/workspace" ${authCurlHeader} ${workspaceCurlHeader} ${clientCurlHeader} -H "Content-Type: application/json" -d '{"workspace":{"name":"Bounty_Hunter_Mod","nodes":[],"links":[],"uiWidgets":[]},"expectedHead":"<head from GET>"}'`}
                       </pre>
                       <button 
-                        onClick={() => handleCopy(`curl -X POST "${appOrigin}/api/agent/workspace" ${authCurlHeader} ${workspaceCurlHeader} -H "Content-Type: application/json" -d '{"workspace": {"name": "My_AI_Mod", "nodes": [], "links": [], "uiWidgets": []}, "expectedHead": "<head from GET>"}'`, 'curl_postws')}
+                        onClick={() => handleCopy(`curl.exe -X POST "${appOrigin}/api/agent/workspace" ${authCurlHeader} ${workspaceCurlHeader} ${clientCurlHeader} -H "Content-Type: application/json" -d '{"workspace":{"name":"My_AI_Mod","nodes":[],"links":[],"uiWidgets":[]},"expectedHead":"<head from GET>"}'`, 'curl_postws')}
                         className="absolute right-2 top-2 p-1 rounded bg-black/45 hover:bg-black text-slate-400 hover:text-white transition-all cursor-pointer"
                       >
                         {copiedTextId === 'curl_postws' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -1113,11 +1206,10 @@ export default function AgentBridge({
                     </div>
                     <div className="relative">
                       <pre className="bg-[#10141f] p-2 rounded text-[10px] text-cyan-300 overflow-x-auto w-full select-all">
-                        {`curl -X GET "${appOrigin}/api/agent/debug-watcher/brief?modId=ai_influence&expect=Save_identity,Chat_boot,Poll_tick,On_action" \\
-     ${authCurlHeader}`}
+                        {`curl.exe -X GET "${appOrigin}/api/agent/debug-watcher/brief?modId=ai_influence&expect=Save_identity,Chat_boot,Poll_tick,On_action" ${authCurlHeader}`}
                       </pre>
                       <button
-                        onClick={() => handleCopy(`curl -X GET "${appOrigin}/api/agent/debug-watcher/brief?modId=ai_influence&expect=Save_identity,Chat_boot,Poll_tick,On_action" ${authCurlHeader}`, 'curl_debug_watcher')}
+                        onClick={() => handleCopy(`curl.exe -X GET "${appOrigin}/api/agent/debug-watcher/brief?modId=ai_influence&expect=Save_identity,Chat_boot,Poll_tick,On_action" ${authCurlHeader}`, 'curl_debug_watcher')}
                         className="absolute right-2 top-2 p-1 rounded bg-black/45 hover:bg-black text-slate-400 hover:text-white transition-all cursor-pointer"
                       >
                         {copiedTextId === 'curl_debug_watcher' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -1135,7 +1227,7 @@ export default function AgentBridge({
                 >
                   <div className="flex items-center gap-2">
                     <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#df9825]/20 text-[#df9825] border border-[#df9825]/30">POST</span>
-                    <span className="text-white text-xs font-bold font-mono">/api/agent/generate</span>
+                    <span className="text-white text-xs font-bold font-mono">/api/agent/generate/preview</span>
                   </div>
                   {collapsedEndpoints.generate ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
                 </button>
@@ -1143,17 +1235,14 @@ export default function AgentBridge({
                 {!collapsedEndpoints.generate && (
                   <div className="p-3 border-t border-white/5 space-y-2 bg-[#0a0c11]">
                     <p className="text-[10px] text-slate-400 font-sans leading-relaxed">
-                      Uses the server-side structured AI provider to generate or edit MD graph/UI layout domains while preserving existing non-MD domains.
+                      Previews a server-side AI proposal without applying it. This can use the network and provider quota; workspace mutation still requires the separate approval path.
                     </p>
                     <div className="relative">
                       <pre className="bg-[#10141f] p-2 rounded text-[10px] text-cyan-300 overflow-x-auto w-full select-all">
-                        {`curl -X POST "${appOrigin}/api/agent/generate" \\
-     ${authCurlHeader} \\
-     -H "Content-Type: application/json" \\
-     -d '{"prompt": "Create custom mission with Elite Fighter wing escort"}'`}
+                        {`curl.exe -X POST "${appOrigin}/api/agent/generate/preview" ${authCurlHeader} ${workspaceCurlHeader} ${clientCurlHeader} ${providerCurlHeaders} -H "Content-Type: application/json" -d '{"prompt":"Create custom mission with Elite Fighter wing escort","apply":false}'`}
                       </pre>
                       <button 
-                        onClick={() => handleCopy(`curl -X POST "${appOrigin}/api/agent/generate" ${authCurlHeader} -H "Content-Type: application/json" -d '{"prompt": "Create custom mission with Elite Fighter wing escort"}'`, 'curl_gen')}
+                        onClick={() => handleCopy(`curl.exe -X POST "${appOrigin}/api/agent/generate/preview" ${authCurlHeader} ${workspaceCurlHeader} ${clientCurlHeader} ${providerCurlHeaders} -H "Content-Type: application/json" -d '{"prompt":"Create custom mission with Elite Fighter wing escort","apply":false}'`, 'curl_gen')}
                         className="absolute right-2 top-2 p-1 rounded bg-black/45 hover:bg-black text-slate-400 hover:text-white transition-all cursor-pointer"
                       >
                         {copiedTextId === 'curl_gen' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -1183,13 +1272,10 @@ export default function AgentBridge({
                     </p>
                     <div className="relative">
                       <pre className="bg-[#10141f] p-2 rounded text-[10px] text-cyan-300 overflow-x-auto w-full select-all">
-                        {`curl -X POST "${appOrigin}/api/agent/compile" \\
-     ${authCurlHeader} \\
-     -H "Content-Type: application/json" \\
-     -d '{"workspace": {...}}'`}
+                        {`curl.exe -X POST "${appOrigin}/api/agent/compile" ${authCurlHeader} ${workspaceCurlHeader} ${clientCurlHeader} -H "Content-Type: application/json" -d '{}'`}
                       </pre>
                       <button 
-                        onClick={() => handleCopy(`curl -X POST "${appOrigin}/api/agent/compile" ${authCurlHeader} -H "Content-Type: application/json" -d '{"workspace": null}'`, 'curl_compile')}
+                        onClick={() => handleCopy(`curl.exe -X POST "${appOrigin}/api/agent/compile" ${authCurlHeader} ${workspaceCurlHeader} ${clientCurlHeader} -H "Content-Type: application/json" -d '{}'`, 'curl_compile')}
                         className="absolute right-2 top-2 p-1 rounded bg-black/45 hover:bg-black text-slate-400 hover:text-white transition-all cursor-pointer"
                       >
                         {copiedTextId === 'curl_compile' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}

@@ -11,6 +11,7 @@
 
 import type { Express, Response } from "express";
 import { createGithubCredentialStore } from './githubCredentialStore';
+import { pollGithubDeviceToken } from './githubDeviceFlow';
 
 const credentialStore = createGithubCredentialStore();
 const MAX_PUSH_FILES = 100;
@@ -289,42 +290,31 @@ export function registerGithubRoutes(app: Express): void {
     if (!clientId || !deviceCode) {
       return res.status(400).json({ error: "Missing client_id or device_code." });
     }
+    let clientDisconnected = false;
+    const controller = new AbortController();
+    const stopForDisconnect = () => {
+      if (res.writableEnded) return;
+      clientDisconnected = true;
+      controller.abort();
+    };
+    req.once("aborted", stopForDisconnect);
+    res.once("close", stopForDisconnect);
     try {
-      const response = await fetch("https://github.com/login/oauth/access_token", {
-        method: "POST",
-        headers: { "Accept": "application/json", "Content-Type": "application/json", "User-Agent": "x4-md-studio" },
-        body: JSON.stringify({
-          client_id: clientId,
-          device_code: deviceCode,
-          grant_type: "urn:ietf:params:oauth:grant-type:device_code"
-        })
+      const result = await pollGithubDeviceToken({
+        clientId,
+        deviceCode,
+        signal: controller.signal,
+        isCurrent: () => !clientDisconnected,
+        persistToken: token => credentialStore.set(token),
       });
-      const data: any = await response.json();
-
-      if (data.access_token) {
-        credentialStore.set(String(data.access_token));
-        // Fetch the authenticated user's login so the client can auto-fill the repo owner.
-        let login: string | undefined;
-        try {
-          const userRes = await fetch("https://api.github.com/user", {
-            headers: {
-              "Accept": "application/vnd.github.v3+json",
-              "Authorization": `token ${data.access_token}`,
-              "User-Agent": "x4-md-studio"
-            }
-          });
-          const userData: any = await userRes.json();
-          login = userData?.login;
-        } catch {
-          // Non-fatal; owner can be entered manually.
-        }
-        return res.json({ connected: true, token_type: data.token_type, scope: data.scope, login });
-      }
-
-      // Still waiting / throttled / expired — surface the GitHub error code to the poller.
-      return res.json({ pending: true, error: data.error, interval: data.interval });
+      if ('cancelled' in result) return;
+      return res.json(result);
     } catch (error) {
+      if (clientDisconnected || controller.signal.aborted) return;
       return res.status(500).json({ error: (error as Error).message || "Device token poll failed." });
+    } finally {
+      req.off("aborted", stopForDisconnect);
+      res.off("close", stopForDisconnect);
     }
   });
 

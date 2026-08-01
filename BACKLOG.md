@@ -6,10 +6,34 @@
 
 ## P0 — Active
 
+### B115 · Forge Capability Convergence `in_progress` (P0, PRIORITY OVERRIDE)
+
+Ken explicitly promoted GitHub initiative #9 and child requests #10–#21 above the active R13 close on 2026-07-31.
+This is a bounded extension program, not a Forge rewrite: reuse the existing validator, workspace registry/CAS,
+artifact/release pipeline, runtime watcher, Agent API, MCP shim, built-in harness, and UI shells. The first batch is
+W0–W1 only: durable baseline plus a canonical `forge.capability.v1` contract and route-drift oracle. R13 is parked,
+not discarded; its exact tracked/untracked state is recoverable from the ignored checkpoint at
+`test-results/checkpoints/2026-07-31-r13-before-b115/`. Full contract, phases, gates and toolkit disposition:
+`docs/plans/2026-07-31-capability-convergence.md`.
+
+**Hard gates:** no Effective Tree authority before the W7 X4 engine merge-law oracle; no source-writing rebase or
+network-driven update automation before the Phase 2 review stop and recorded Ken decisions; no public release
+without explicit release authorization and all applicable packaged/installed gates.
+
+**W0–W1 checkpoint (2026-07-31): `PARTIAL`.** The canonical eleven-capability registry, exact route/MCP disposition
+oracle, constrained preview/validation adapters, CLI discovery, live MCP narrowing, Agent Bridge contract state, and
+input-before-authority/spend negatives are implemented. Final source gates, 328/328 route integration, 129/129
+runtime oracles, focused browser 13/13 plus eyes-on screenshots, full isolated E2E 64/64, production build, and
+precommit are green. The reviewed manifest is SHA-256
+`2272083e7804692f2529e03fee1a1e3ba49506611c7a7226ea80ea5f311a5264`.
+W1 is not `VERIFIED` because its shipped extension files overlap the still-unreleased R13 work, so a packaged VSIX
+and installed Antigravity result cannot be attributed to W1 alone. Do not start W2 until that combined release
+boundary is explicitly authorized and evidenced. Full close: `docs/plans/2026-07-31-capability-convergence.md`.
+
 ### B110 · Kimi R1-R21 execution program `in_progress` (P1, DURABLE LEDGER)
 
 The complete recommendation set is now reconciled instead of living in the deleted KNOWN-BUGS addendum.
-Current verdict: R1-R12 except R13, plus R14-R17/R19/R20 verified; R13/R21 open; R18 partial.
+Current verdict: R1-R12 except R13, plus R14-R17/R19/R20 verified; R13 in progress; R21 open; R18 partial.
 Execute only as bounded workflow tasks in the recorded order—never as a sweeping
 cleanup—and update each row after every implementation. Ledger:
 `docs/plans/2026-07-29-kimi-recommendations-ledger.md`.
@@ -33,10 +57,13 @@ explicit authority; duplicate names, migration/restart, history/recovery/readine
 green. Stable Open VSX 0.0.63 is installed/rendered in Antigravity and its 17,907,329 public bytes exactly match the
 inspected local VSIX. Evidence: `docs/plans/2026-07-31-workspace-authority.md`.
 
-**Active bounded unit:** R13 one scheduler for continuous polling. Reconcile every timer/subscription owner after
-R8/R17 authority: consolidate continuous readiness/workspace/diagnostic reads behind one scheduler while keeping
-bounded OAuth/device and operation-status workflows isolated by contract. Specify before implementation and prove
-unmount, pause/backoff, timeout, stale-response, and no-duplicate-request behavior.
+**R13 source/runtime checkpoint:** one scheduler for continuous polling is `PARTIAL`. Final read-only review found and
+repaired stale workspace/mod/cue/log presentation authority, false initial/paused health, and client/server OAuth
+cancellation gaps. Current source/runtime/browser evidence is green: scheduler 21/21, device flow 4/4, focused
+polling 10/10, full isolated E2E 64/64, typecheck and build. The remaining boundary is one combined byte-inspected
+VSIX and installed Antigravity visual gate because R13 shares unreleased extension bytes with B115 W1. Do not publish
+or mark R13 `VERIFIED` before that gate; running-game LIVE experience remains B114. Evidence:
+`docs/plans/2026-07-31-continuous-polling-scheduler.md`.
 
 **Post-Kimi authorized research program (queued; do not start before R1-R21 close):** reconcile
 `F:\Downskies\X4 Foundations Modding Tooling Research for IDE Extension Opportunities.md` and

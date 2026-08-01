@@ -9,6 +9,9 @@ rem ============================================================================
 cd /d "%~dp0"
 set API_ONLY=true
 set PORT=3001
+rem Explicit local-dev opt-in for the authenticated host-tool command routes.
+rem Bare npm/node launches remain default-closed.
+set "FORGE_ALLOW_RUN_COMMAND=true"
 
 :loop
 echo [supervisor] starting API watcher (%date% %time%)

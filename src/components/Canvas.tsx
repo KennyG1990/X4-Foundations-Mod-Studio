@@ -55,8 +55,19 @@ import { COMPOSITE_BLOCKS } from '../lib/compositeBlocks';
 import { computeAutoLayout } from '../lib/mdAutoLayout';
 import { markE2EPerfCounter } from '../lib/e2ePerfCounters';
 import { summarizePackageStatus, type DiagnosticSource } from '../lib/packageStatus';
+import { fetchPollingJson, pollingResourceKey } from '../lib/continuousPolling';
+import { useContinuousPolling } from '../lib/useContinuousPolling';
 
 type Pt = { x: number; y: number };
+
+interface LiveCueTelemetryResponse {
+  available?: boolean;
+  live?: boolean;
+  logUpdatedAt?: string;
+  bridge?: { bridgeUp: boolean; gameActive: boolean; summary: string };
+  watches?: Array<{ name: string; value: string }>;
+  cues?: Parameters<typeof mapTelemetryToNodes>[1];
+}
 
 /**
  * Build the SVG path for a wire that routes through optional waypoints.
@@ -149,42 +160,49 @@ export default function Canvas({
   // (red ✗) IN THE RUNNING GAME. Silence is not a fault — silent cues get no badge.
   const [liveMode, setLiveMode] = useState<boolean>(false);
   const [liveBadges, setLiveBadges] = useState<Record<string, LiveNodeBadge>>({});
-  const [liveStatus, setLiveStatus] = useState<{ available: boolean; live: boolean; updatedAt?: string; bridge?: { bridgeUp: boolean; gameActive: boolean; summary: string } } | null>(null);
+  const [liveStatus, setLiveStatus] = useState<{ available: boolean; live: boolean; updatedAt?: string; error?: string; bridge?: { bridgeUp: boolean; gameActive: boolean; summary: string } } | null>(null);
   const [liveWatches, setLiveWatches] = useState<{ name: string; value: string }[]>([]);
   // (Recipe-wizard state lives inside CanvasOnboarding since the A7 extraction.)
   // B19 guided rail: which starter (template id or 'recipe:<id>') was just loaded.
   // Null = no rail. Set by CanvasOnboarding's onLoad, cleared by the rail's ✕.
   const [railSourceId, setRailSourceId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!liveMode) { setLiveBadges({}); setLiveStatus(null); setLiveWatches([]); return; }
-    let stopped = false;
-    const poll = async () => {
-      try {
-        const cueNames = workspace.nodes
-          .filter(n => n.type === 'cue')
-          .map(n => String(n.properties?.name ?? '').trim())
-          .filter(Boolean);
-        if (!cueNames.length) { setLiveBadges({}); return; }
-        const res = await fetch('/api/agent/live/cue-telemetry', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cueNames }),
-        });
-        if (!res.ok || stopped) return;
-        const data = await res.json();
-        if (stopped) return;
-        setLiveStatus({ available: !!data.available, live: !!data.live, updatedAt: data.logUpdatedAt, bridge: data.bridge });
-        setLiveWatches(Array.isArray(data.watches) ? data.watches : []);
-        const next: Record<string, LiveNodeBadge> = {};
-        for (const badge of mapTelemetryToNodes(workspace.nodes, data.cues || [])) next[badge.nodeId] = badge;
-        setLiveBadges(next);
-      } catch { /* transient poll failure — keep last state */ }
-    };
-    poll();
-    const interval = setInterval(poll, 2500);
-    return () => { stopped = true; clearInterval(interval); };
-  }, [liveMode, workspace.nodes]);
+  const liveCueNames = useMemo(() => workspace.nodes
+    .filter(node => node.type === 'cue')
+    .map(node => String(node.properties?.name ?? '').trim())
+    .filter(Boolean), [workspace.nodes]);
+  const liveCueBody = useMemo(() => JSON.stringify({ cueNames: liveCueNames }), [liveCueNames]);
+  const liveCueAuthority = `${window.__X4_WORKSPACE_CONTEXT__?.getWorkspaceId() || 'unbound'}|${liveCueBody}`;
+  // Status/badges are evidence for one exact workspace + cue-list authority. Clear
+  // them before paint whenever that authority changes, including enable/disable.
+  React.useLayoutEffect(() => {
+    setLiveBadges({});
+    setLiveStatus(null);
+    setLiveWatches([]);
+  }, [liveMode, liveCueAuthority, liveCueNames.length]);
+  useContinuousPolling<LiveCueTelemetryResponse>({
+    enabled: liveMode && liveCueNames.length > 0,
+    resourceKey: pollingResourceKey('live-cue-telemetry', liveCueAuthority),
+    contract: `POST /api/agent/live/cue-telemetry ${liveCueBody}`,
+    intervalMs: 2500,
+    run: signal => fetchPollingJson('/api/agent/live/cue-telemetry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: liveCueBody,
+    }, signal),
+    onResult: data => {
+      setLiveStatus({ available: !!data.available, live: !!data.live, updatedAt: data.logUpdatedAt, bridge: data.bridge });
+      setLiveWatches(Array.isArray(data.watches) ? data.watches : []);
+      const next: Record<string, LiveNodeBadge> = {};
+      for (const badge of mapTelemetryToNodes(workspace.nodes, data.cues || [])) next[badge.nodeId] = badge;
+      setLiveBadges(next);
+    },
+    onError: error => {
+      setLiveStatus({ available: false, live: false, error: error.message || 'LIVE telemetry request failed.' });
+      setLiveBadges({});
+      setLiveWatches([]);
+    },
+  });
   // General multi-node selection (ANY node type) for alignment — parallel to the
   // cue-only `selectedCueIds`, so the cue-specific behaviour is untouched.
   const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
@@ -1763,7 +1781,7 @@ export default function Canvas({
           onClick={() => setLiveMode(prev => !prev)}
           data-testid="canvas-live-toggle"
           title={liveMode
-            ? `LIVE game telemetry ON — ${liveStatus ? (liveStatus.available ? (liveStatus.live ? 'debug log is ACTIVE (game writing now)' : `log found, last update ${liveStatus.updatedAt || 'unknown'}`) : 'no X4 debug log found') : 'connecting…'}. ${liveStatus?.bridge ? liveStatus.bridge.summary + ' ' : ''}Firing cues get green ▶ badges, erroring cues red ✗ — straight from the running game.`
+            ? `LIVE game telemetry ON — ${liveStatus ? (liveStatus.error ? `telemetry unavailable: ${liveStatus.error}` : liveStatus.available ? (liveStatus.live ? 'debug log is ACTIVE (game writing now)' : `log found, last update ${liveStatus.updatedAt || 'unknown'}`) : 'no X4 debug log found') : liveCueNames.length ? 'connecting…' : 'no named cue nodes to watch'}. ${liveStatus?.bridge ? liveStatus.bridge.summary + ' ' : ''}Firing cues get green ▶ badges, erroring cues red ✗ — straight from the running game.`
             : 'LIVE — light up cue nodes from the running game\'s debug log (Play-In-Editor mode)'}
           className={`p-1.5 rounded flex items-center gap-1 transition-all border cursor-pointer ${
             liveMode

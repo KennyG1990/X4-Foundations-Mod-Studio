@@ -1580,7 +1580,7 @@ async function validateNodeDocument(doc: vscode.TextDocument, key: string, gener
   try {
     if (!backend?.owned || !backend.token) return;
     const pathName = 'md/x4forge-node-selection.xml';
-    const response = await fetch(`${backend.baseUrl}/api/agent/project/validate`, {
+    const response = await fetch(`${backend.baseUrl}/api/agent/project/validate/check`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${backend.token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ project: { id: 'x4forge_node_selection', name: 'X4 Forge node selection', files: [
@@ -1664,7 +1664,7 @@ async function liveValidateRoot(root: string, generation: number): Promise<void>
       return;
     }
     const files = [...byPath.values()];
-    const res = await fetch(`${backend.baseUrl}/api/agent/project/validate`, {
+    const res = await fetch(`${backend.baseUrl}/api/agent/project/validate/check`, {
       method: "POST",
       headers: { Authorization: `Bearer ${backend.token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ project: { id: path.basename(root), name: path.basename(root), files } }),

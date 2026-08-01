@@ -155,12 +155,22 @@ function checkDurableWriters() {
   if (result.status !== 0) throw new Error(`durable writer inventory failed with exit ${result.status ?? "unknown"}`);
 }
 
+function checkCapabilityContracts() {
+  for (const command of ["npm run test:capabilities", "npm run test:mcp-capabilities"]) {
+    console.log(`[precommit] ${command}`);
+    const result = spawnSync(command, { cwd: root, shell: true, stdio: "inherit" });
+    if (result.error) throw result.error;
+    if (result.status !== 0) throw new Error(`${command} failed with exit ${result.status ?? "unknown"}`);
+  }
+}
+
 try {
   checkTripwires();
   checkMirrorDrift();
   checkE2eVerdict();
   checkProductCopy();
   checkDurableWriters();
+  checkCapabilityContracts();
   runTypecheck();
   checkLargeFiles();
   console.log("[precommit] OK");

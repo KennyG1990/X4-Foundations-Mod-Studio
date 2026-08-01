@@ -24,6 +24,7 @@ import { ModWorkspace, generateMDXML, generateUIXML } from '../types';
 import { toTFileName } from '../lib/modCompiler';
 import { getAIHeaders } from '../lib/apiHelper';
 import { capLocalHistory } from '../lib/localWorkspaceCache';
+import { nextGithubDevicePollIntervalMs } from '../lib/githubDeviceFlow';
 
 // Baseline layout of commits matching user screenshot exactly
 interface GitCommitItem {
@@ -166,6 +167,8 @@ export default function SourceControl({
   const [deviceFlow, setDeviceFlow] = useState<{ userCode: string; verificationUri: string } | null>(null);
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const deviceFlowGenerationRef = useRef(0);
+  const deviceRequestAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -451,11 +454,21 @@ Guidelines:
 
   // Clean up any in-flight device-flow polling when the panel unmounts
   useEffect(() => {
-    return () => { if (pollTimerRef.current) clearTimeout(pollTimerRef.current); };
+    return () => {
+      deviceFlowGenerationRef.current += 1;
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+      deviceRequestAbortRef.current?.abort();
+      deviceRequestAbortRef.current = null;
+    };
   }, []);
 
   const cancelDeviceFlow = () => {
+    deviceFlowGenerationRef.current += 1;
     if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    pollTimerRef.current = null;
+    deviceRequestAbortRef.current?.abort();
+    deviceRequestAbortRef.current = null;
     setIsConnecting(false);
     setDeviceFlow(null);
     setSyncStatusMsg('Cancelled GitHub sign-in.');
@@ -465,16 +478,26 @@ Guidelines:
   // then stores it exactly like a PAT so all existing load/push/create logic keeps working.
   const handleConnectWithGitHub = async () => {
     const clientId = gitClientId.trim(); // optional override; the server falls back to its configured GITHUB_CLIENT_ID
+    deviceFlowGenerationRef.current += 1;
+    const generation = deviceFlowGenerationRef.current;
+    if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    pollTimerRef.current = null;
+    deviceRequestAbortRef.current?.abort();
+    const startController = new AbortController();
+    deviceRequestAbortRef.current = startController;
     setIsConnecting(true);
     setSyncStatusMsg('Starting GitHub authorization…');
     try {
       const startRes = await fetch('/api/github/device/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(clientId ? { client_id: clientId, scope: 'repo' } : { scope: 'repo' })
+        body: JSON.stringify(clientId ? { client_id: clientId, scope: 'repo' } : { scope: 'repo' }),
+        signal: startController.signal,
       });
       let start: { error?: string; device_code?: string; user_code?: string; verification_uri?: string; interval?: number; expires_in?: number } | null = null;
       try { start = await startRes.json(); } catch { start = null; }
+      if (deviceRequestAbortRef.current === startController) deviceRequestAbortRef.current = null;
+      if (deviceFlowGenerationRef.current !== generation) return;
 
       if (!start) {
         throw new Error(startRes.status === 404
@@ -490,22 +513,29 @@ Guidelines:
       setSyncStatusMsg('Opening GitHub in your browser — enter the code to authorize.');
       try { window.open(start.verification_uri, '_blank', 'noopener'); } catch { /* popup blocked; link still shown */ }
 
-      const intervalMs = Math.max(start.interval || 5, 5) * 1000;
+      let currentIntervalMs = Math.max(start.interval || 5, 5) * 1000;
       const deadline = Date.now() + (start.expires_in || 900) * 1000;
 
       const poll = async () => {
+        pollTimerRef.current = null;
+        if (deviceFlowGenerationRef.current !== generation) return;
         if (Date.now() > deadline) {
           setIsConnecting(false);
           setDeviceFlow(null);
           setSyncStatusMsg('GitHub authorization timed out. Try connecting again.');
           return;
         }
+        const pollController = new AbortController();
+        deviceRequestAbortRef.current = pollController;
         try {
           const res = await fetch('/api/github/device/poll', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(clientId ? { client_id: clientId, device_code: start.device_code } : { device_code: start.device_code })
+            body: JSON.stringify(clientId ? { client_id: clientId, device_code: start.device_code } : { device_code: start.device_code }),
+            signal: pollController.signal,
           }).then(r => r.json());
+          if (deviceRequestAbortRef.current === pollController) deviceRequestAbortRef.current = null;
+          if (deviceFlowGenerationRef.current !== generation) return;
 
           if (res.connected) {
             if (res.login) {
@@ -534,15 +564,22 @@ Guidelines:
             return;
           }
           // authorization_pending / slow_down → keep waiting
-          const nextMs = res.error === 'slow_down' ? intervalMs + 5000 : intervalMs;
-          pollTimerRef.current = setTimeout(poll, nextMs);
+          currentIntervalMs = nextGithubDevicePollIntervalMs(currentIntervalMs, res.error);
+          if (deviceFlowGenerationRef.current === generation) {
+            pollTimerRef.current = setTimeout(poll, currentIntervalMs);
+          }
         } catch {
-          pollTimerRef.current = setTimeout(poll, intervalMs);
+          if (deviceRequestAbortRef.current === pollController) deviceRequestAbortRef.current = null;
+          if (deviceFlowGenerationRef.current === generation) {
+            pollTimerRef.current = setTimeout(poll, currentIntervalMs);
+          }
         }
       };
 
-      pollTimerRef.current = setTimeout(poll, intervalMs);
+      pollTimerRef.current = setTimeout(poll, currentIntervalMs);
     } catch (e) {
+      if (deviceRequestAbortRef.current === startController) deviceRequestAbortRef.current = null;
+      if (deviceFlowGenerationRef.current !== generation) return;
       setIsConnecting(false);
       setDeviceFlow(null);
       setSyncStatusMsg(`Connect failed: ${messageFromUnknown(e, String(e))}`);

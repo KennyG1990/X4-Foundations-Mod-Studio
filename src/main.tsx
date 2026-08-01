@@ -1,6 +1,6 @@
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
-import App from './App.tsx';
+import App, { type WorkspacePollingResponse } from './App.tsx';
 import './index.css';
 import { toast } from './lib/uiDialogs';
 import { clientRequestDeadlineMs, createAbortDeadline, timeoutError } from './lib/requestDeadline';
@@ -173,9 +173,15 @@ async function bootstrapAndRender(): Promise<void> {
     throw new Error(boot.body?.error || `Workspace bootstrap failed (${boot.response.status}).`);
   }
   window.__X4_WORKSPACE_CONTEXT__?.selectWorkspace(String(boot.body.workspaceId));
+  const bootstrapWorkspace: WorkspacePollingResponse = {
+    workspaceId: String(boot.body.workspaceId),
+    workspace: boot.body.workspace,
+    version: Number(boot.body.version),
+    workspaceHash: String(boot.body.workspaceHash || ''),
+  };
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      <App />
+      <App bootstrapWorkspace={bootstrapWorkspace} />
     </StrictMode>,
   );
 }

@@ -48,6 +48,8 @@ import GlobalSearch from './components/GlobalSearch';
 import ShortcutsOverlay from './components/ShortcutsOverlay';
 import { ModWorkspace, MDNode, UIWidget, PRESETS, NODE_TEMPLATES, sanitizeWorkspace, generateMDXML, validateModWorkspace, ChatMessage, PackageDiagnostic } from './types';
 import { workspaceContentHash } from './lib/workspaceIdentity';
+import { fetchPollingJson } from './lib/continuousPolling';
+import { useContinuousPolling } from './lib/useContinuousPolling';
 import { persistWorkspaceCache } from './lib/localWorkspaceCache';
 import { applyNodeSelectionDocument, buildNodeSelectionDocument, isNodeSelectionFailure } from './lib/nodeSelectionDocument';
 import type { SchemaLibrary } from './lib/schemaTypes';
@@ -140,7 +142,74 @@ function workspaceLocalKey(suffix: 'workspace' | 'version', workspaceId = select
   return `x4_mod_studio_${suffix}:${workspaceId || 'unbound'}`;
 }
 
-export default function App() {
+interface ReadinessBriefPollingResponse {
+  verdict?: ReadinessWatcherEvidence['verdict'];
+  sinceDeploy?: ReadinessWatcherEvidence['sinceDeploy'];
+  status?: { lastDeploy?: ReadinessWatcherEvidence['lastDeploy'] };
+}
+
+export interface WorkspacePollingResponse {
+  workspaceId?: string;
+  workspace?: ModWorkspace;
+  version?: number;
+  workspaceHash?: string;
+}
+
+interface InitialWorkspaceState {
+  workspace: ModWorkspace;
+  version: number;
+  serverHash: string;
+}
+
+function loadInitialWorkspaceState(bootstrapWorkspace?: WorkspacePollingResponse): InitialWorkspaceState {
+  const selectedId = selectedWorkspaceId();
+  const storedVersion = Number(localStorage.getItem(workspaceLocalKey('version', selectedId)) || 1);
+  const bootstrapMatches = Boolean(
+    selectedId
+    && bootstrapWorkspace?.workspaceId === selectedId
+    && bootstrapWorkspace.workspace
+    && typeof bootstrapWorkspace.version === 'number',
+  );
+
+  // Bootstrap already completed the addressed, authenticated server read before
+  // React mounts. Apply the same version rule as the convergence poll so an early
+  // release action cannot operate on BLANK_WORKSPACE while a second GET is pending.
+  if (bootstrapMatches && bootstrapWorkspace!.version! > storedVersion) {
+    return {
+      workspace: sanitizeWorkspace(bootstrapWorkspace!.workspace!),
+      version: bootstrapWorkspace!.version!,
+      serverHash: String(bootstrapWorkspace!.workspaceHash || ''),
+    };
+  }
+
+  const stored = localStorage.getItem(workspaceLocalKey('workspace', selectedId)) || localStorage.getItem('x4_mod_studio_workspace');
+  const parsed = stored ? JSON.parse(stored) : BLANK_WORKSPACE;
+  const legacyAIScripts = localStorage.getItem('x4_mod_studio_aiscripts');
+  const legacyWares = localStorage.getItem('x4_mod_studio_wares');
+  const legacyJobs = localStorage.getItem('x4_mod_studio_jobs');
+  const legacyPatches = localStorage.getItem('x4_mod_studio_xml_patches');
+
+  if (legacyAIScripts && (!parsed.aiScripts || parsed.aiScripts.length === 0)) {
+    try { parsed.aiScripts = JSON.parse(legacyAIScripts); } catch{}
+  }
+  if (legacyWares && (!parsed.wares || parsed.wares.length === 0)) {
+    try { parsed.wares = JSON.parse(legacyWares); } catch{}
+  }
+  if (legacyJobs && (!parsed.jobs || parsed.jobs.length === 0)) {
+    try { parsed.jobs = JSON.parse(legacyJobs); } catch{}
+  }
+  if (legacyPatches && (!parsed.xmlPatches || parsed.xmlPatches.length === 0)) {
+    try { parsed.xmlPatches = JSON.parse(legacyPatches); } catch{}
+  }
+
+  return {
+    workspace: sanitizeWorkspace(parsed),
+    version: storedVersion,
+    serverHash: bootstrapMatches ? String(bootstrapWorkspace!.workspaceHash || '') : '',
+  };
+}
+
+export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: WorkspacePollingResponse } = {}) {
   const [schemaTemplates, setSchemaTemplates] = useState<Omit<MDNode, 'id' | 'x' | 'y'>[]>([]);
   // A4.5/A4.2 — the live md.xsd-derived valid tag set, so the AI review's unknown-tag
   // check never false-flags legitimate schema tags outside the curated palette.
@@ -165,34 +234,13 @@ export default function App() {
     }
   }, []);
 
-  const [rawWorkspace, setRawWorkspace] = useState<ModWorkspace>(() => {
-    // Attempt local storage sync
-    const stored = localStorage.getItem(workspaceLocalKey('workspace')) || localStorage.getItem('x4_mod_studio_workspace');
-    const parsed = stored ? JSON.parse(stored) : BLANK_WORKSPACE;
-    
-    // Merge legacy localStorage items for backwards compatibility:
-    const legacyAIScripts = localStorage.getItem('x4_mod_studio_aiscripts');
-    const legacyWares = localStorage.getItem('x4_mod_studio_wares');
-    const legacyJobs = localStorage.getItem('x4_mod_studio_jobs');
-    const legacyPatches = localStorage.getItem('x4_mod_studio_xml_patches');
-
-    if (legacyAIScripts && (!parsed.aiScripts || parsed.aiScripts.length === 0)) {
-      try { parsed.aiScripts = JSON.parse(legacyAIScripts); } catch{}
-    }
-    if (legacyWares && (!parsed.wares || parsed.wares.length === 0)) {
-      try { parsed.wares = JSON.parse(legacyWares); } catch{}
-    }
-    if (legacyJobs && (!parsed.jobs || parsed.jobs.length === 0)) {
-      try { parsed.jobs = JSON.parse(legacyJobs); } catch{}
-    }
-    if (legacyPatches && (!parsed.xmlPatches || parsed.xmlPatches.length === 0)) {
-      try { parsed.xmlPatches = JSON.parse(legacyPatches); } catch{}
-    }
-
-    return sanitizeWorkspace(parsed);
-  });
+  const initialWorkspaceStateRef = useRef<InitialWorkspaceState | null>(null);
+  if (!initialWorkspaceStateRef.current) initialWorkspaceStateRef.current = loadInitialWorkspaceState(bootstrapWorkspace);
+  const initialWorkspaceState = initialWorkspaceStateRef.current;
+  const [rawWorkspace, setRawWorkspace] = useState<ModWorkspace>(() => initialWorkspaceState.workspace);
 
   const workspaceRevisionRef = useRef(0);
+  const workspacePollStartRevisionRef = useRef(0);
   const localWorkspaceDirtyRef = useRef(false);
   const localWorkspaceUpdatedAtRef = useRef(new Date().toISOString());
   const [workspaceSyncEpoch, setWorkspaceSyncEpoch] = useState(0);
@@ -437,30 +485,29 @@ export default function App() {
   );
   const activeReadinessModId = React.useMemo(() => toSafeModId(workspace.name), [workspace.name]);
 
-  // B36 adapter: poll the EXISTING server verdict/deploy evidence. Components do not
-  // infer game state; they all render the same model built from this response.
-  useEffect(() => {
-    let cancelled = false;
+  // A ready verdict belongs to exactly one mod identity. Clear it before paint when
+  // the selected workspace changes; retaining it until the next request would render
+  // the previous mod's deploy/game evidence under the new mod.
+  React.useLayoutEffect(() => {
     setReadinessWatcher({ phase: 'loading' });
-    const poll = async () => {
-      try {
-        const response = await fetch(`/api/agent/debug-watcher/brief?modId=${encodeURIComponent(activeReadinessModId)}`);
-        const data = await response.json();
-        if (!response.ok) throw new Error(data?.error || 'Readiness evidence request failed.');
-        if (!cancelled) setReadinessWatcher({
-          phase: 'ready',
-          verdict: data?.verdict,
-          sinceDeploy: data?.sinceDeploy,
-          lastDeploy: data?.status?.lastDeploy || null,
-        });
-      } catch (error) {
-        if (!cancelled) setReadinessWatcher({ phase: 'error', error: error instanceof Error ? error.message : 'Readiness evidence unavailable.' });
-      }
-    };
-    poll();
-    const timer = window.setInterval(poll, 4000);
-    return () => { cancelled = true; window.clearInterval(timer); };
   }, [activeReadinessModId]);
+
+  // B36/R13 adapter: the shared scheduler owns cadence and cancellation; this
+  // subscriber only maps the server's deterministic verdict into presentation state.
+  useContinuousPolling<ReadinessBriefPollingResponse>({
+    resourceKey: `debug-watcher-brief:${activeReadinessModId}`,
+    contract: `GET /api/agent/debug-watcher/brief?modId=${encodeURIComponent(activeReadinessModId)}`,
+    intervalMs: 4000,
+    run: signal => fetchPollingJson(`/api/agent/debug-watcher/brief?modId=${encodeURIComponent(activeReadinessModId)}`, undefined, signal),
+    onStart: () => setReadinessWatcher(current => current.phase === 'ready' ? current : { phase: 'loading' }),
+    onResult: data => setReadinessWatcher({
+      phase: 'ready',
+      verdict: data?.verdict,
+      sinceDeploy: data?.sinceDeploy,
+      lastDeploy: data?.status?.lastDeploy || null,
+    }),
+    onError: error => setReadinessWatcher({ phase: 'error', error: error.message || 'Readiness evidence unavailable.' }),
+  });
 
   const graphDiagnostics = React.useMemo(
     () => validateModWorkspace(workspace, mdCode),
@@ -578,7 +625,7 @@ export default function App() {
     }
   }, [workspace, selectedNode, selectedWidget]);
 
-  const [localVersion, setLocalVersion] = useState<number>(() => Number(localStorage.getItem(workspaceLocalKey('version')) || 1));
+  const [localVersion, setLocalVersion] = useState<number>(() => initialWorkspaceState.version);
   const [isAgentBridgeOpen, setIsAgentBridgeOpen] = useState<boolean>(false);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState<boolean>(false);
   const [isAIConfigOpen, setIsAIConfigOpen] = useState<boolean>(false);
@@ -616,7 +663,7 @@ export default function App() {
   // B2 slice 2 (ADR-F1): the last server head this client saw — attached as expectedHead
   // on every auto-sync so a concurrent writer produces an explicit 409, never a silent
   // last-writer-wins. Learned from poll GETs and from each own POST's response.
-  const lastServerHashRef = useRef<string>('');
+  const lastServerHashRef = useRef<string>(initialWorkspaceState.serverHash);
   // Autosaves are serialized. A slow boot save and a quick user edit used to race with the
   // same expectedHead: the newer write could succeed, then the older response raised a false
   // 409 conflict. CAS protects against other writers; this queue protects ordering within this
@@ -764,11 +811,9 @@ export default function App() {
       const lessons = bp.scratchpad.rejected.length
         ? `\nDo NOT repeat these rejected approaches: ${bp.scratchpad.rejected.join('; ')}.` : '';
       const prompt = `Mod goal: ${bp.intent}\nWork ONLY on this task: "${task.title}".${task.doneCheck ? ` Success check: ${task.doneCheck}.` : ''}${lessons}\nProduce the minimal node graph that satisfies this task, building on the current workspace.`;
-      const currentCode = generateMDXML(workspace);
-      const diagnostics = validateModWorkspace(workspace, currentCode);
-      const response = await fetch('/api/agent/generate', {
+      const response = await fetch('/api/agent/generate/preview', {
         method: 'POST', headers: getAIHeaders(), signal: controller.signal,
-        body: JSON.stringify({ prompt, currentWorkspace: workspace, diagnostics, apply: false }),
+        body: JSON.stringify({ prompt, currentWorkspace: workspace, apply: false }),
       });
       const data = await handleApiResponse(response, 'Architect generation failed.');
       const proposed: ModWorkspace = data.workspace;
@@ -877,17 +922,13 @@ export default function App() {
     aiAbortRef.current = controller;
 
     try {
-      const currentCode = generateMDXML(workspace);
-      const diagnostics = validateModWorkspace(workspace, currentCode);
-
-      const response = await fetch("/api/agent/generate", {
+      const response = await fetch("/api/agent/generate/preview", {
         method: "POST",
         headers: getAIHeaders(),
         signal: controller.signal,
         body: JSON.stringify({
           prompt: promptMsg,
           currentWorkspace: workspace,
-          diagnostics: diagnostics,
           // Approval-flow fix: stage only — the canvas must not change until
           // the user clicks Confirm & Apply on the proposal card.
           apply: false
@@ -1099,7 +1140,7 @@ export default function App() {
       const compiled = await compiledResponse.json() as { files?: Record<string, string>; error?: string };
       if (!compiledResponse.ok || !compiled.files) throw new Error(compiled.error || `Compile failed (HTTP ${compiledResponse.status}).`);
       const files = Object.entries(compiled.files).map(([path, content]) => ({ path, content }));
-      const validationResponse = await fetch('/api/agent/project/validate', {
+      const validationResponse = await fetch('/api/agent/project/validate/check', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ project: { id: candidate.id, name: candidate.name, files } }),
       });
@@ -1416,15 +1457,19 @@ export default function App() {
     setIsCompileModalOpen(true);
   };
 
-  // Initial load and periodic background polling of the server workspace
-  useEffect(() => {
-    const fetchLatestServerWorkspace = async () => {
-      const requestWorkspaceRevision = workspaceRevisionRef.current;
-      try {
-        const response = await fetch("/api/agent/workspace");
-        const data = await response.json();
-        if (data?.workspaceId && data.workspaceId !== selectedWorkspaceId()) return;
-        if (data && data.workspace && data.version) {
+  // R13: App and AgentBridge share this exact addressed read. App still owns the
+  // local dirty/revision/CAS adoption policy; run-start metadata preserves the
+  // revision boundary even when another subscriber supplies the shared fetcher.
+  useContinuousPolling<WorkspacePollingResponse>({
+    resourceKey: `workspace:${currentWorkspaceId || 'unbound'}`,
+    contract: 'GET /api/agent/workspace',
+    intervalMs: 3000,
+    onStart: () => { workspacePollStartRevisionRef.current = workspaceRevisionRef.current; },
+    run: signal => fetchPollingJson('/api/agent/workspace', undefined, signal),
+    onResult: data => {
+      const requestWorkspaceRevision = workspacePollStartRevisionRef.current;
+      if (data?.workspaceId && data.workspaceId !== selectedWorkspaceId()) return;
+      if (data && data.workspace && data.version) {
           // Local state becomes dirty at the moment setWorkspace is called, not 300ms later
           // when autosave starts. While dirty, a poll cannot adopt stale server content or
           // advance a known CAS head past the unsaved edit. The first boot read may still
@@ -1492,16 +1537,12 @@ export default function App() {
               setSyncDiverged(false);
             }
           }
-        }
-      } catch {
-        // Silently ignore background polling connection issues
       }
-    };
-
-    fetchLatestServerWorkspace();
-    const interval = setInterval(fetchLatestServerWorkspace, 3000);
-    return () => clearInterval(interval);
-  }, [localVersion, setWorkspace, currentWorkspaceId]);
+    },
+    // Background connection failures remain non-destructive and visually quiet;
+    // scheduler backoff prevents a failure storm.
+    onError: () => undefined,
+  });
 
   // B1: adopt the server workspace explicitly (badge click) — the user's choice, never silent.
   const adoptServerWorkspace = async () => {
