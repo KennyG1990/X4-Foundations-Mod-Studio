@@ -1,0 +1,27 @@
+name: Validate Discord GitHub Sync Contract
+
+on:
+  push:
+    paths:
+      - '.github/workflows/discord-to-github.yml'
+      - '.github/workflows/issue-sync.yml'
+      - '.github/DISCORD_GITHUB_SYNC.md'
+      - '.github/scripts/check-discord-sync-contract.py'
+  pull_request:
+    paths:
+      - '.github/workflows/discord-to-github.yml'
+      - '.github/workflows/issue-sync.yml'
+      - '.github/DISCORD_GITHUB_SYNC.md'
+      - '.github/scripts/check-discord-sync-contract.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check synchronization contract
+        run: python .github/scripts/check-discord-sync-contract.py
