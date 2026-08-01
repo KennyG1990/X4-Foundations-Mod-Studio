@@ -32,11 +32,9 @@ function sampleRoute(path: string): string {
   return path.replace(/:[A-Za-z0-9_]+/g, 'sample');
 }
 
-function observedAgentScopes(capability: ForgeCapabilityDescriptorV1): AgentKeyScope[] {
-  const primary = capability.apiBindings.find(binding => binding.role === 'primary');
-  if (!primary) return [];
-  const reqPath = sampleRoute(primary.path).replace(/^\/api/, '');
-  return (['read', 'write', 'deploy'] as const).filter(scope => scopeAllows(scope, primary.method, reqPath));
+function observedAgentScopes(binding: ForgeCapabilityDescriptorV1['apiBindings'][number]): AgentKeyScope[] {
+  const reqPath = sampleRoute(binding.path).replace(/^\/api/, '');
+  return (['read', 'write', 'deploy'] as const).filter(scope => scopeAllows(scope, binding.method, reqPath));
 }
 
 export async function runForgeCapabilitiesSelftest(): Promise<{ pass: boolean; checks: CapabilityCheck[]; contractHash: string }> {
@@ -212,12 +210,12 @@ export async function runForgeCapabilitiesSelftest(): Promise<{ pass: boolean; c
     preview?.effects.includes('spend') === true && preview.effects.includes('network') === true && preview.surfaces.mcp.length === 0,
   );
 
-  const scopeMismatches = FORGE_CAPABILITIES.flatMap(capability => {
-    const observed = observedAgentScopes(capability);
+  const scopeMismatches = FORGE_CAPABILITIES.flatMap(capability => capability.apiBindings.flatMap(binding => {
+    const observed = observedAgentScopes(binding);
     return JSON.stringify(observed) === JSON.stringify(capability.access.agentScopes)
       ? []
-      : [`${capability.id}: declared=${capability.access.agentScopes.join(',')} observed=${observed.join(',')}`];
-  });
+      : [`${capability.id} ${binding.method} ${binding.path}: declared=${capability.access.agentScopes.join(',')} observed=${observed.join(',')}`];
+  }));
   check('declared agent scopes match current middleware', scopeMismatches.length === 0, scopeMismatches.join(' | ') || undefined);
 
   const unclassifiedPosts = FORGE_CAPABILITIES.flatMap(capability => capability.apiBindings

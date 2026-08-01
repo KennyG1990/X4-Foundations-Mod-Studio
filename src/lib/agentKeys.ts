@@ -22,9 +22,17 @@ import crypto from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import routeAuthorityManifest from '../../config/forge-route-dispositions.json' with { type: 'json' };
+import {
+  createAgentRouteAuthority,
+  runAgentRouteAuthoritySelftest,
+  type AgentAuthorityResolution,
+  type AgentKeyScope,
+  type AgentRouteAuthorityDecision,
+} from './agentAuthority';
 import { atomicWriteJson, type AtomicWriteOptions } from './workspaceState';
 
-export type AgentKeyScope = 'read' | 'write' | 'deploy';
+export type { AgentKeyScope, AgentRouteAuthorityDecision } from './agentAuthority';
 
 export interface AgentKeyRecord {
   id: string;
@@ -213,78 +221,26 @@ export function createAgentKeyStore(opts: StoreOptions): AgentKeyStore {
 }
 
 // ---------------------------------------------------------------------------
-// Scope enforcement policy (used by server authMiddleware; deny-by-default).
+// B117 exact route authority. The bundled reviewed manifest is the only grant source.
 // ---------------------------------------------------------------------------
 
-/** Non-GET path prefixes (relative to /api) a 'write' key may call. */
-export const WRITE_SCOPE_POST_PREFIXES = [
-  '/agent/workspace',
-  '/agent/compile',
-  '/agent/package',
-  '/agent/release/nexus/',
-  '/agent/artifact/',
-  '/agent/project/',
-  '/agent/simulate',
-  '/agent/probe/preview',
-] as const;
+const ACTIVE_AGENT_ROUTE_AUTHORITY = createAgentRouteAuthority(routeAuthorityManifest);
 
-/** Exact POST routes that are read-only despite using a body for cursor/content context. */
-export const READ_SCOPE_POST_PATHS = new Set([
-  '/reference/complete',
-  '/reference/hover',
-  '/reference/xpath-complete',
-  '/reference/simulate-diff',
-  '/agent/bulk-transform/preview',
-  '/agent/project-rules/prepare-suppression',
-]);
+function apiPath(reqPath: string): string {
+  const value = String(reqPath || '');
+  return value.startsWith('/api/') ? value : `/api${value.startsWith('/') ? value : `/${value}`}`;
+}
 
-/** Exact mutation routes added outside the older broad workspace prefixes. */
-export const WRITE_SCOPE_POST_PATHS = new Set([
-  '/agent/bulk-transform/apply',
-  '/agent/project-rules/suppress',
-]);
+export const AGENT_AUTHORITY_POLICY_VERSION = ACTIVE_AGENT_ROUTE_AUTHORITY.policyVersion;
+export const AGENT_AUTHORITY_POLICY_HASH = ACTIVE_AGENT_ROUTE_AUTHORITY.policyHash;
 
-/** Key management is session-token-only for EVERY scope. */
-export const KEY_MANAGEMENT_PREFIX = '/agent/keys';
-/** GitHub routes can spend the user's external repository authority via a stored credential. */
-export const GITHUB_SESSION_ONLY_PREFIX = '/github/';
-/** Steam release preparation accepts an executable path and produces an external-tool command. */
-export const STEAM_RELEASE_SESSION_ONLY_PREFIX = '/agent/release/steam/';
-/** A user-output receipt claims a native/browser Save As completed; agents cannot assert that human-side fact. */
-export const RELEASE_EXPORT_RECEIPT_SESSION_ONLY_PATH = '/agent/release/export/receipt';
-/** Legacy cross-workspace compatibility routes enumerate or return records outside one key binding. */
-export const WORKSPACE_CROSS_AUTHORITY_SESSION_ONLY_PATHS = new Set([
-  '/agent/workspace/parked',
-  '/agent/workspace/restore-parked',
-]);
+export function resolveAgentRouteAuthority(method: string, reqPath: string): AgentAuthorityResolution {
+  return ACTIVE_AGENT_ROUTE_AUTHORITY.resolve(method, apiPath(reqPath));
+}
 
-/**
- * Arbitrary command execution (dev-only run_command route + its async jobs) is
- * session-token-only for EVERY scope. B64-SEC1 (2026-07-18): the blanket-GET grant
- * below would otherwise let a read-scoped key reach `GET /api/run_command?cmd=…`
- * (which runs exec()) — a scope-integrity break the POST-only matrix never covered.
- * Covers `/run_command`, `/run_command/job` (POST) and `/run_command/job/:id` (GET).
- */
-export const EXEC_PREFIX = '/run_command';
-
-/**
- * Is `method path` allowed for `scope`? (path is express req.path under /api.)
- * Deny-by-default: anything not explicitly granted for the scope is refused.
- */
+/** Is this exact reviewed method/template granted to the key preset? */
 export function scopeAllows(scope: AgentKeyScope, method: string, reqPath: string): boolean {
-  if (reqPath.startsWith(KEY_MANAGEMENT_PREFIX)) return false; // never via agent key
-  if (reqPath.startsWith(GITHUB_SESSION_ONLY_PREFIX)) return false; // stored user credential: Studio session only
-  if (reqPath.startsWith(STEAM_RELEASE_SESSION_ONLY_PREFIX)) return false; // local executable selection: Studio session only
-  if (reqPath === RELEASE_EXPORT_RECEIPT_SESSION_ONLY_PATH) return false; // user-side Save As receipt: Studio session only
-  if (WORKSPACE_CROSS_AUTHORITY_SESSION_ONLY_PATHS.has(reqPath)) return false; // cross-workspace disclosure: Studio session only
-  if (reqPath.startsWith(EXEC_PREFIX)) return false; // B64-SEC1: exec is session-token-only, even on GET
-  const m = method.toUpperCase();
-  if (m === 'GET' || m === 'HEAD' || m === 'OPTIONS') return true; // all scopes read
-  if (m === 'POST' && READ_SCOPE_POST_PATHS.has(reqPath)) return true;
-  if (scope === 'read') return false;
-  if (scope === 'deploy') return true; // full API power (minus key mgmt above)
-  // scope === 'write'
-  return WRITE_SCOPE_POST_PATHS.has(reqPath) || WRITE_SCOPE_POST_PREFIXES.some((p) => reqPath.startsWith(p));
+  return ACTIVE_AGENT_ROUTE_AUTHORITY.allows(scope, method, apiPath(reqPath));
 }
 
 // ---------------------------------------------------------------------------
@@ -368,7 +324,10 @@ export function runAgentKeysSelftest(): { pass: boolean; checks: Array<{ name: s
     scopeAllows('write', 'POST', '/agent/bulk-transform/apply') === true &&
     scopeAllows('write', 'POST', '/agent/project-rules/suppress') === true &&
     scopeAllows('write', 'POST', '/agent/bulk-transform/apply/extra') === false);
-  ok('deploy_scope_full_power', scopeAllows('deploy', 'POST', '/agent/deploy') === true);
+  ok('deploy_scope_has_exact_deploy_not_future_prefix_power',
+    scopeAllows('deploy', 'POST', '/agent/deploy') === true &&
+    scopeAllows('deploy', 'POST', '/agent/deploy/future') === false &&
+    scopeAllows('deploy', 'GET', '/agent/unreviewed-future-route') === false);
   ok('no_scope_can_manage_keys',
     (['read', 'write', 'deploy'] as AgentKeyScope[]).every(
       (s) => scopeAllows(s, 'POST', '/agent/keys') === false && scopeAllows(s, 'GET', '/agent/keys') === false));
@@ -384,13 +343,24 @@ export function runAgentKeysSelftest(): { pass: boolean; checks: Array<{ name: s
              scopeAllows(s, 'POST', '/agent/release/steam/adopt') === false));
   ok('no_agent_key_scope_can_claim_user_export_receipt',
     (['read', 'write', 'deploy'] as AgentKeyScope[]).every(
-      (s) => scopeAllows(s, 'POST', RELEASE_EXPORT_RECEIPT_SESSION_ONLY_PATH) === false));
+      (s) => scopeAllows(s, 'POST', '/agent/release/export/receipt') === false));
   ok('no_agent_key_scope_can_cross_workspace_authority',
     (['read', 'write', 'deploy'] as AgentKeyScope[]).every(
       (s) => scopeAllows(s, 'GET', '/agent/workspace/parked') === false &&
              scopeAllows(s, 'POST', '/agent/workspace/restore-parked') === false));
   ok('write_scope_can_prepare_local_nexus_artifact',
     scopeAllows('write', 'POST', '/agent/release/nexus/prepare') === true);
+  ok('no_scope_can_change_standing_credentials_or_configuration',
+    (['read', 'write', 'deploy'] as AgentKeyScope[]).every(
+      (s) => scopeAllows(s, 'GET', '/ai/keys/status') === false &&
+             scopeAllows(s, 'POST', '/ai/keys') === false &&
+             scopeAllows(s, 'GET', '/schema/config') === false &&
+             scopeAllows(s, 'POST', '/schema/config') === false &&
+             scopeAllows(s, 'GET', '/studio/layout') === false &&
+             scopeAllows(s, 'POST', '/studio/release-preferences') === false));
+  ok('workspace_plural_does_not_inherit_singular_write_grant',
+    scopeAllows('write', 'POST', '/agent/workspaces') === false &&
+    scopeAllows('read', 'POST', '/agent/workspaces/bootstrap') === true);
   // B64-SEC1: no agent-key scope may reach the dev-only exec route on ANY method (the
   // blanket-GET grant used to leak GET /run_command RCE to read keys). Session token only.
   ok('no_scope_can_exec_commands',
@@ -449,6 +419,10 @@ export function runAgentKeysSelftest(): { pass: boolean; checks: Array<{ name: s
     try { fs.rmSync(tmpFile, { force: true }); } catch { /* ignore */ }
   } catch (e) {
     ok('persistence_round_trip', false, String(e));
+  }
+
+  for (const check of runAgentRouteAuthoritySelftest().checks) {
+    ok(`route_authority_${check.name}`, check.pass, check.detail);
   }
 
   return { pass: checks.every((c) => c.pass), checks };

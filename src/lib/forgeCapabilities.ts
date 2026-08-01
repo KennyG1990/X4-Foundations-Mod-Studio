@@ -239,7 +239,7 @@ export const FORGE_CAPABILITIES = [
   },
   {
     id: 'patch.readiness.analyze',
-    version: 1,
+    version: 2,
     title: 'Analyze patch readiness',
     description: 'Check mod diff selectors against old and current X4 sources without writing either source.',
     inputSchema: {
@@ -260,7 +260,7 @@ export const FORGE_CAPABILITIES = [
       findings: { type: 'array', items: { type: 'object', additionalProperties: true } },
     }, ['oldRoot', 'newRoot', 'diffFiles', 'summary', 'findings']),
     context: { workspace: 'none', profile: 'none' },
-    access: { public: false, studioSession: true, agentScopes: ['read', 'write', 'deploy'] },
+    access: { public: false, studioSession: true, agentScopes: ['deploy'] },
     effects: ['read', 'analyze'],
     confirmation: 'none',
     apiBindings: [

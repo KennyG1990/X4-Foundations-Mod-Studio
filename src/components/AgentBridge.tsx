@@ -126,7 +126,13 @@ export default function AgentBridge({
     createdAt: number; expiresAt: number | null; lastUsedAt: number | null;
     useCount: number; revokedAt: number | null; hashPrefix: string; workspaceId?: string;
   }
+  interface AgentAuthoritySummary {
+    version: string;
+    hash: string;
+    existingKeysFollowCurrentPolicy: boolean;
+  }
   const [agentKeys, setAgentKeys] = useState<AgentKeyRow[]>([]);
+  const [agentAuthority, setAgentAuthority] = useState<AgentAuthoritySummary | null>(null);
   const [keysError, setKeysError] = useState<string>('');
   const [newKeyLabel, setNewKeyLabel] = useState<string>('');
   const [newKeyScope, setNewKeyScope] = useState<'read' | 'write' | 'deploy'>('write');
@@ -139,6 +145,9 @@ export default function AgentBridge({
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const d = await r.json();
       setAgentKeys(Array.isArray(d.keys) ? d.keys : []);
+      setAgentAuthority(d.authority && typeof d.authority.version === 'string' && typeof d.authority.hash === 'string'
+        ? d.authority as AgentAuthoritySummary
+        : null);
       setKeysError('');
     } catch (e) {
       setKeysError(`Could not load keys: ${e instanceof Error ? e.message : String(e)}`);
@@ -1323,7 +1332,7 @@ export default function AgentBridge({
                   value={newKeyScope}
                   onChange={(e) => setNewKeyScope(e.target.value as 'read' | 'write' | 'deploy')}
                   className="bg-black/40 border border-white/10 rounded px-2 py-1.5 text-slate-200 font-mono text-[11px] outline-none"
-                  title="read = GET only · write = + workspace/compile/validate/package · deploy = full API power"
+                  title="read = reviewed inspection/analysis · write = guarded authoring/compile/package · deploy = explicit deploy/recovery/caller-key AI; administrative routes stay Studio-only"
                 >
                   <option value="read">scope: read</option>
                   <option value="write">scope: write</option>
@@ -1353,8 +1362,15 @@ export default function AgentBridge({
               </div>
               <p className="text-slate-500 text-[10px]">
                 read = inspect only · write = edit/compile/validate/package (no deploys, no spend) ·
-                deploy = everything. Every new key is bound to <code>{workspaceId}</code>; key management itself always requires the Studio.
+                deploy = exact reviewed deploy/recovery, guarded filesystem, and caller-key AI routes. Credentials,
+                settings, GitHub, Steam handoff, human receipts, and command execution always require the Studio.
+                Every key is bound to <code>{workspaceId}</code> and follows the current policy.
               </p>
+              {agentAuthority && (
+                <p data-testid="agent-authority-policy" className="text-slate-600 text-[9px] font-mono">
+                  {agentAuthority.version} · {agentAuthority.hash.slice(0, 12)} · existing keys follow current policy
+                </p>
+              )}
             </div>
 
             {/* One-time reveal */}

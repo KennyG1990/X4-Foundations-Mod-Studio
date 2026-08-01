@@ -14,7 +14,8 @@
  *   - session token has full access; a bogus token is refused
  *   - a READ-scoped agent key: 200 on read GETs, 403 on the run_command exec route (B64-SEC1
  *     regression guard — this makes that one-off live drill PERMANENT), 403 on write POSTs
- *   - a WRITE-scoped key: 200 on a write-scoped prefix, 403 on deploy-only routes + key mgmt
+ *   - a WRITE-scoped key: 200 on exact compile/dry-run routes, 403 on deploy-only routes + key mgmt
+ *   - a DEPLOY-scoped key: reaches reviewed deploy/provider handlers but cannot inherit Studio-only authority
  *   - fs/write path containment: a traversal path is rejected; an in-root write is accepted
  * Deploy, validate-with-fixture-schema, and the extension smoke are B64-T1b (need a fixture).
  *
@@ -73,6 +74,8 @@ const ROUTE_TEST_AI_RESPONSES = [
 let WORKSPACE_ID = '';
 const tmp = path.join(os.tmpdir(), `x4-route-int-${process.pid}`);
 const aiMarkerDir = path.join(tmp, 'ai-markers');
+const callerKeyDispatchMarker = path.join(aiMarkerDir, 'caller-key-provider-dispatch.jsonl');
+const CALLER_PROVIDER_KEY = 'isolated-route-test-caller-key';
 const stateDir = path.join(tmp, 'state');
 const dataDir = path.join(tmp, 'data');
 const configDir = path.join(tmp, 'config');
@@ -80,7 +83,8 @@ fs.mkdirSync(stateDir, { recursive: true });
 fs.mkdirSync(dataDir, { recursive: true });
 fs.mkdirSync(configDir, { recursive: true });
 const LEGACY_UNBOUND_KEY = `x4fk_${'1'.repeat(64)}`;
-fs.writeFileSync(path.join(dataDir, 'agent-keys.json'), JSON.stringify({
+const agentKeysFile = path.join(dataDir, 'agent-keys.json');
+fs.writeFileSync(agentKeysFile, JSON.stringify({
   version: 1,
   keys: [{
     id: 'key_legacy_unbound', label: 'legacy-unbound', scope: 'read',
@@ -516,7 +520,9 @@ async function main() {
     invalidLegacySnapshotHash.status === 400 && invalidLegacySnapshotHash.json?.code === 'CAPABILITY_INPUT_INVALID' &&
     /expectedSnapshotHash must be a string/i.test(invalidLegacySnapshotHash.json?.error || ''),
     JSON.stringify(invalidLegacySnapshotHash.json || {}));
-  const refusedPaidCall = await req('POST', '/api/gemini', SESSION_TOKEN, { prompt: 'R7 meter failure fixture' });
+  const refusedPaidCall = await req('POST', '/api/gemini', SESSION_TOKEN, { prompt: 'R7 meter failure fixture' }, {
+    headers: { 'x-custom-api-key': 'route-test-key-never-dispatched' },
+  });
   ok('corrupt_spend_meter_refuses_before_provider_dispatch', refusedPaidCall.status === 500 && /spend meter unavailable.*refused before network dispatch/i.test(refusedPaidCall.json?.error || ''), JSON.stringify(refusedPaidCall.json || {}));
   fs.unlinkSync(aiUsageFile);
   const firstRunUsage = await req('GET', '/api/ai/usage', SESSION_TOKEN);
@@ -583,6 +589,189 @@ async function main() {
   const writeKey = await mkKey('write');
   const deployKey = await mkKey('deploy');
   ok('minted_read_write_and_deploy_keys', !!readKey && !!writeKey && !!deployKey, `read=${!!readKey} write=${!!writeKey} deploy=${!!deployKey}`);
+
+  // B117/W2A: the manifest is the exact, versioned grant source. Prove each preset has
+  // a real positive, exact denials carry stable policy evidence, and Studio-only routes
+  // remain unreachable even to deploy keys.
+  const authorityView = await req('GET', '/api/agent/keys', SESSION_TOKEN);
+  const authorityHash = String(authorityView.json?.authority?.hash || '');
+  ok('exact_authority_policy_is_discoverable',
+    authorityView.status === 200 && authorityView.json?.authority?.version === 'forge.route-dispositions.v4' &&
+    /^[a-f0-9]{64}$/.test(authorityHash) && authorityView.json?.authority?.existingKeysFollowCurrentPolicy === true,
+    JSON.stringify(authorityView.json?.authority || {}));
+
+  const readBootstrap = await req('POST', '/api/agent/workspaces/bootstrap', readKey, { workspaceId: WORKSPACE_ID });
+  ok('read_key_can_bootstrap_its_bound_workspace', readBootstrap.status === 200 && readBootstrap.json?.workspaceId === WORKSPACE_ID, JSON.stringify(readBootstrap.json || {}));
+  const readWorkspaceList = await req('GET', '/api/agent/workspaces', readKey);
+  ok('read_key_lists_only_its_bound_workspace',
+    readWorkspaceList.status === 200 && readWorkspaceList.json?.workspaces?.length === 1 && readWorkspaceList.json.workspaces[0]?.workspaceId === WORKSPACE_ID,
+    JSON.stringify(readWorkspaceList.json || {}));
+  const readReferenceCompletion = await req('POST', '/api/reference/complete', readKey, { path: 'md/w2a.xml', content: '', line: 0, column: 0 });
+  ok('read_key_can_run_reviewed_deterministic_analysis', readReferenceCompletion.status === 200 && Array.isArray(readReferenceCompletion.json), `status=${readReferenceCompletion.status}`);
+  const readHostFileDenied = await req('POST', '/api/agent/npc-identity-probe/correlate', readKey, {
+    beforeSavePath: path.join(tmp, 'must-not-read-before.xml'),
+    afterSavePath: path.join(tmp, 'must-not-read-after.xml'),
+  });
+  ok('read_key_cannot_cross_host_file_boundary',
+    readHostFileDenied.status === 403 && readHostFileDenied.json?.authorityCode === 'AGENT_SCOPE_DENIED' &&
+    JSON.stringify(readHostFileDenied.json?.requiredScopes) === JSON.stringify(['deploy']),
+    JSON.stringify(readHostFileDenied.json || {}));
+  const readPatchRootsDenied = await req('GET', `/api/agent/patch-readiness?${new URLSearchParams({
+    fromPath: 'must-not-read', oldRoot: path.join(tmp, 'must-not-read-old'), newRoot: path.join(tmp, 'must-not-read-new'),
+  })}`, readKey);
+  ok('read_key_cannot_select_patch_readiness_host_roots',
+    readPatchRootsDenied.status === 403 && readPatchRootsDenied.json?.authorityCode === 'AGENT_SCOPE_DENIED' &&
+    JSON.stringify(readPatchRootsDenied.json?.requiredScopes) === JSON.stringify(['deploy']),
+    JSON.stringify(readPatchRootsDenied.json || {}));
+
+  const writeCompile = await req('POST', '/api/agent/compile', writeKey, {});
+  ok('write_key_can_compile_bound_workspace', writeCompile.status === 200 && writeCompile.json?.success === true && writeCompile.json?.workspaceId === WORKSPACE_ID, JSON.stringify(writeCompile.json || {}));
+  const beforeWriteDryRun = await req('GET', '/api/agent/workspace', writeKey);
+  const writeMergeDryRun = await req('POST', '/api/agent/workspace/merge', writeKey, {
+    changes: { description: 'W2A write-scope dry run' },
+    expectedHead: beforeWriteDryRun.json?.workspaceHash,
+    expectedSnapshotHash: beforeWriteDryRun.json?.snapshotHash,
+    dryRun: true,
+  });
+  const afterWriteDryRun = await req('GET', '/api/agent/workspace', writeKey);
+  ok('write_key_can_reach_guarded_dry_run_without_mutation',
+    writeMergeDryRun.status === 200 && writeMergeDryRun.json?.dryRun === true && writeMergeDryRun.json?.applied === false &&
+    afterWriteDryRun.json?.workspaceHash === beforeWriteDryRun.json?.workspaceHash &&
+    afterWriteDryRun.json?.snapshotHash === beforeWriteDryRun.json?.snapshotHash &&
+    afterWriteDryRun.json?.version === beforeWriteDryRun.json?.version,
+    JSON.stringify(writeMergeDryRun.json || {}));
+
+  const writePreviewDenied = await req('POST', '/api/agent/generate/preview', writeKey, { prompt: 42 });
+  ok('write_key_cannot_cross_provider_boundary',
+    writePreviewDenied.status === 403 && writePreviewDenied.json?.authorityCode === 'AGENT_SCOPE_DENIED' &&
+    JSON.stringify(writePreviewDenied.json?.requiredScopes) === JSON.stringify(['deploy']) &&
+    writePreviewDenied.json?.policyVersion === 'forge.route-dispositions.v4' && writePreviewDenied.json?.policyHash === authorityHash,
+    JSON.stringify(writePreviewDenied.json || {}));
+  const deployPreviewInputRejected = await req('POST', '/api/agent/generate/preview', deployKey, { prompt: 42 });
+  ok('deploy_key_reaches_preview_adapter_before_provider_work',
+    deployPreviewInputRejected.status === 400 && deployPreviewInputRejected.json?.code === 'CAPABILITY_INPUT_INVALID' && !deployPreviewInputRejected.json?.authorityCode,
+    JSON.stringify(deployPreviewInputRejected.json || {}));
+
+  const readWriteDenied = await req('POST', '/api/agent/workspace', readKey, { workspace: {} });
+  ok('read_key_exact_write_denial_has_policy_evidence',
+    readWriteDenied.status === 403 && readWriteDenied.json?.authorityCode === 'AGENT_SCOPE_DENIED' &&
+    JSON.stringify(readWriteDenied.json?.requiredScopes) === JSON.stringify(['write', 'deploy']) &&
+    readWriteDenied.json?.policyVersion === 'forge.route-dispositions.v4' && readWriteDenied.json?.policyHash === authorityHash,
+    JSON.stringify(readWriteDenied.json || {}));
+  const writeDeployDenied = await req('POST', '/api/agent/deploy', writeKey, { workspace: routeTestWorkspace });
+  ok('write_key_exact_deploy_denial_has_policy_evidence',
+    writeDeployDenied.status === 403 && writeDeployDenied.json?.authorityCode === 'AGENT_SCOPE_DENIED' &&
+    JSON.stringify(writeDeployDenied.json?.requiredScopes) === JSON.stringify(['deploy']) && writeDeployDenied.json?.policyHash === authorityHash,
+    JSON.stringify(writeDeployDenied.json || {}));
+
+  const aiKeysPath = path.join(dataDir, 'ai-keys.json');
+  const configPath = path.join(configDir, 'config.json');
+  const harvestedSchemasPath = path.join(dataDir, 'harvested-schemas');
+  ok('studio_only_mutation_fixtures_start_clean', !fs.existsSync(aiKeysPath) && !fs.existsSync(configPath) && !fs.existsSync(harvestedSchemasPath));
+  const deployAiStatusDenied = await req('GET', '/api/ai/keys/status', deployKey);
+  const deployAiWriteDenied = await req('POST', '/api/ai/keys', deployKey, { provider: 'gemini', key: 'must-not-persist' });
+  const deployConfigDenied = await req('POST', '/api/schema/config', deployKey, { x4GamePath: gameRoot, x4ReferenceRoot: referenceRoot, modWorkspacePath: safeWorkspace });
+  const deployHarvestDenied = await req('POST', '/api/agent/setup/harvest-schemas', deployKey, { gameRoot });
+  for (const [name, response] of [
+    ['deploy_key_cannot_read_provider_key_status', deployAiStatusDenied],
+    ['deploy_key_cannot_write_provider_keys', deployAiWriteDenied],
+    ['deploy_key_cannot_write_standing_config', deployConfigDenied],
+    ['deploy_key_cannot_harvest_standing_schemas', deployHarvestDenied],
+  ]) {
+    ok(name, response.status === 403 && response.json?.authorityCode === 'STUDIO_SESSION_REQUIRED' &&
+      Array.isArray(response.json?.requiredScopes) && response.json.requiredScopes.length === 0 && response.json?.policyHash === authorityHash,
+    JSON.stringify(response.json || {}));
+  }
+  ok('studio_only_denials_leave_credentials_config_and_harvest_unchanged',
+    !fs.existsSync(aiKeysPath) && !fs.existsSync(configPath) && !fs.existsSync(harvestedSchemasPath));
+
+  const studioWorkspacesBeforeDeniedCreate = await req('GET', '/api/agent/workspaces', SESSION_TOKEN);
+  const deployCreateDenied = await req('POST', '/api/agent/workspaces', deployKey, {
+    clientId: `client_denied_${process.pid}`,
+    workspace: { ...routeTestWorkspace, name: 'Denied third workspace' },
+  });
+  const studioWorkspacesAfterDeniedCreate = await req('GET', '/api/agent/workspaces', SESSION_TOKEN);
+  ok('deploy_key_cannot_administer_workspace_registry',
+    deployCreateDenied.status === 403 && deployCreateDenied.json?.authorityCode === 'STUDIO_SESSION_REQUIRED' &&
+    studioWorkspacesAfterDeniedCreate.json?.workspaces?.length === studioWorkspacesBeforeDeniedCreate.json?.workspaces?.length,
+    JSON.stringify(deployCreateDenied.json || {}));
+
+  const usageBeforeLegacyDenied = fs.existsSync(aiUsageFile) ? fs.readFileSync(aiUsageFile) : null;
+  const deployLegacyGenerateDenied = await req('POST', '/api/agent/generate', deployKey, { prompt: 'must not dispatch', apply: false });
+  const usageAfterLegacyDenied = fs.existsSync(aiUsageFile) ? fs.readFileSync(aiUsageFile) : null;
+  ok('deploy_key_cannot_use_legacy_applying_generation',
+    deployLegacyGenerateDenied.status === 403 && deployLegacyGenerateDenied.json?.authorityCode === 'STUDIO_SESSION_REQUIRED' &&
+    String(usageAfterLegacyDenied) === String(usageBeforeLegacyDenied), JSON.stringify(deployLegacyGenerateDenied.json || {}));
+
+  const usageBeforeForgedOrigin = fs.existsSync(aiUsageFile) ? fs.readFileSync(aiUsageFile) : null;
+  const forgedOriginProvider = await req('POST', '/api/gemini', deployKey, { prompt: 'must reject before provider dispatch' }, {
+    headers: { Origin: `http://127.0.0.1:${PORT}`, Referer: `http://127.0.0.1:${PORT}/` },
+  });
+  const usageAfterForgedOrigin = fs.existsSync(aiUsageFile) ? fs.readFileSync(aiUsageFile) : null;
+  ok('agent_origin_spoof_cannot_use_studio_provider_credentials',
+    forgedOriginProvider.status === 500 && /external\/agent requests must supply their own key/i.test(forgedOriginProvider.json?.error || '') &&
+    String(usageAfterForgedOrigin) === String(usageBeforeForgedOrigin) && !fs.existsSync(callerKeyDispatchMarker), JSON.stringify(forgedOriginProvider.json || {}));
+
+  const callerKeyUsageBefore = await req('GET', '/api/ai/usage', SESSION_TOKEN);
+  const callerKeyProvider = await req('POST', '/api/gemini', deployKey, { prompt: '__FORGE_ROUTE_TEST_CALLER_KEY__' }, {
+    headers: { 'x-custom-api-key': CALLER_PROVIDER_KEY },
+  });
+  const callerKeyUsageAfter = await req('GET', '/api/ai/usage', SESSION_TOKEN);
+  const callerKeyMarkerText = fs.existsSync(callerKeyDispatchMarker)
+    ? fs.readFileSync(callerKeyDispatchMarker, 'utf8')
+    : '';
+  const callerKeyDispatches = callerKeyMarkerText
+    ? callerKeyMarkerText.trim().split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line))
+    : [];
+  ok('deploy_key_with_caller_provider_key_reaches_metered_dispatch_boundary',
+    callerKeyProvider.status === 200 && /caller-supplied provider key accepted/i.test(callerKeyProvider.json?.text || '') &&
+    callerKeyUsageAfter.json?.totalToday === callerKeyUsageBefore.json?.totalToday + 1 &&
+    callerKeyDispatches.length === 1 && callerKeyDispatches[0]?.credentialSource === 'caller',
+    JSON.stringify({ response: callerKeyProvider.json, before: callerKeyUsageBefore.json, after: callerKeyUsageAfter.json, dispatches: callerKeyDispatches }));
+  ok('caller_provider_key_is_not_logged_or_written_to_evidence',
+    !callerKeyMarkerText.includes(CALLER_PROVIDER_KEY) && !serverOut.includes(CALLER_PROVIDER_KEY),
+    JSON.stringify({ markerContainsKey: callerKeyMarkerText.includes(CALLER_PROVIDER_KEY), serverOutputContainsKey: serverOut.includes(CALLER_PROVIDER_KEY) }));
+
+  const unknownAgentRoute = await req('GET', '/api/agent/unreviewed-future-route', deployKey);
+  ok('unknown_route_never_inherits_deploy_authority',
+    unknownAgentRoute.status === 403 && unknownAgentRoute.json?.authorityCode === 'AUTHORITY_ROUTE_UNREVIEWED' && unknownAgentRoute.json?.policyHash === authorityHash,
+    JSON.stringify(unknownAgentRoute.json || {}));
+  const encodedSeparatorRoute = await req('GET', '/api/agent/history/a%2Fb/raw', deployKey);
+  ok('encoded_separator_route_is_rejected_as_malformed_authority',
+    encodedSeparatorRoute.status === 403 && encodedSeparatorRoute.json?.authorityCode === 'AUTHORITY_PATH_MALFORMED' && encodedSeparatorRoute.json?.policyHash === authorityHash,
+    JSON.stringify(encodedSeparatorRoute.json || {}));
+  const caseVariantRoute = await req('GET', '/api/agent/Workspace', deployKey);
+  ok('case_variant_route_is_not_authorized_or_dispatched',
+    caseVariantRoute.status === 403 && caseVariantRoute.json?.authorityCode === 'AUTHORITY_ROUTE_UNREVIEWED',
+    JSON.stringify(caseVariantRoute.json || {}));
+  const slashVariantRoute = await req('GET', '/api/agent/workspace/', deployKey);
+  ok('trailing_slash_variant_is_rejected_as_malformed_authority',
+    slashVariantRoute.status === 403 && slashVariantRoute.json?.authorityCode === 'AUTHORITY_PATH_MALFORMED',
+    JSON.stringify(slashVariantRoute.json || {}));
+
+  const beforeForceDenied = await req('GET', '/api/agent/workspace', writeKey);
+  // The successful read's response-finish audit write can land just after the client has
+  // consumed the body. Let that authorized use settle before taking the denial baseline.
+  await sleep(25);
+  const keyStoreBeforeForceDenied = fs.readFileSync(agentKeysFile);
+  const forceDenied = await req('POST', '/api/agent/workspace', writeKey, {
+    workspace: { ...beforeForceDenied.json?.workspace, description: 'must not force' },
+    force: true,
+  });
+  await sleep(25);
+  const keyStoreAfterForceDenied = fs.readFileSync(agentKeysFile);
+  ok('handler_level_denial_does_not_record_successful_key_use',
+    Buffer.compare(keyStoreAfterForceDenied, keyStoreBeforeForceDenied) === 0,
+    `before=${crypto.createHash('sha256').update(keyStoreBeforeForceDenied).digest('hex')} after=${crypto.createHash('sha256').update(keyStoreAfterForceDenied).digest('hex')}`);
+  const afterForceDenied = await req('GET', '/api/agent/workspace', writeKey);
+  ok('write_key_force_is_denied_without_workspace_mutation',
+    forceDenied.status === 403 && forceDenied.json?.authorityCode === 'AGENT_SCOPE_DENIED' &&
+    JSON.stringify(forceDenied.json?.requiredScopes) === JSON.stringify(['deploy']) &&
+    afterForceDenied.json?.workspaceHash === beforeForceDenied.json?.workspaceHash &&
+    afterForceDenied.json?.snapshotHash === beforeForceDenied.json?.snapshotHash &&
+    afterForceDenied.json?.version === beforeForceDenied.json?.version,
+    JSON.stringify(forceDenied.json || {}));
+
   ok('workspace_bound_key_cannot_forge_other_identity', (await req('GET', '/api/agent/workspace', readKey, undefined, { workspaceId: SECOND_WORKSPACE_ID })).json?.code === 'WORKSPACE_BINDING_MISMATCH');
   const parkedReadDenied = await req('GET', '/api/agent/workspace/parked', readKey);
   ok('workspace_bound_read_key_cannot_enumerate_parked_workspaces', parkedReadDenied.status === 403 && parkedReadDenied.json?.code === 'insufficient_scope', JSON.stringify(parkedReadDenied.json || {}));
@@ -617,7 +806,7 @@ async function main() {
   ok('read_key_200_read_get', (await req('GET', '/api/agent/workspace', readKey)).status === 200);
   ok('read_key_403_run_command', (await req('GET', '/api/run_command?cmd=echo+hi', readKey)).status === 403); // B64-SEC1 permanent guard
   ok('read_key_403_run_command_job', (await req('POST', '/api/run_command/job', readKey, { cmd: 'echo hi' })).status === 403);
-  ok('read_key_403_write_post', (await req('POST', '/api/agent/workspace', readKey, { workspace: {} })).status === 403);
+  ok('read_key_403_write_post', readWriteDenied.status === 403);
   ok('read_key_403_key_mgmt', (await req('POST', '/api/agent/keys', readKey, { label: 'x', scope: 'read', ttl: '1h' })).status === 403);
 
   // --- write-scope contract ---
@@ -657,7 +846,10 @@ async function main() {
   fs.writeFileSync(path.join(patchOldRoot, 'libraries', 'wares.xml'), patchBaseXml);
   fs.writeFileSync(path.join(patchNewRoot, 'libraries', 'wares.xml'), patchBaseXml);
   const patchQuery = new URLSearchParams({ fromPath: 'patch_capability', oldRoot: patchOldRoot, newRoot: patchNewRoot });
-  const patchReadinessCapabilityResponse = await req('GET', `/api/agent/patch-readiness?${patchQuery}`, SESSION_TOKEN);
+  const patchReadinessCapabilityResponse = await req('GET', `/api/agent/patch-readiness?${patchQuery}`, deployKey);
+  ok('deploy_key_can_run_reviewed_patch_readiness_host_reads',
+    patchReadinessCapabilityResponse.status === 200 && patchReadinessCapabilityResponse.json?.diffFiles === 1,
+    JSON.stringify(patchReadinessCapabilityResponse.json || {}));
   capabilityResponses.set('patch.readiness.analyze', patchReadinessCapabilityResponse);
 
   // R11/R14: workspace conflicts carry evidence and each destructive choice has an honest
@@ -782,6 +974,10 @@ async function main() {
   ok('old_unsafe_config_snapshot_blocked', runtimeSnapshot.status === 409, `status=${runtimeSnapshot.status}`);
   const runtimeDeploy = await req('POST', '/api/agent/deploy', SESSION_TOKEN, { workspace: { id: 'fixture', name: 'fixture', nodes: [], links: [], uiWidgets: [] } });
   ok('old_unsafe_config_staging_deploy_blocked', runtimeDeploy.status === 409, `status=${runtimeDeploy.status}`);
+  const deployKeyRuntimeDeploy = await req('POST', '/api/agent/deploy', deployKey, { workspace: { id: 'fixture', name: 'fixture', nodes: [], links: [], uiWidgets: [] } });
+  ok('deploy_key_reaches_deploy_handler_and_safety_guard',
+    deployKeyRuntimeDeploy.status === 409 && deployKeyRuntimeDeploy.json?.code === 'PROTECTED_ROOT_OVERLAP' && !deployKeyRuntimeDeploy.json?.authorityCode,
+    JSON.stringify(deployKeyRuntimeDeploy.json || {}));
 
   const repairedConfig = await req('POST', '/api/schema/config', SESSION_TOKEN, deployedRolesConfig);
   ok('unsafe_config_can_be_repaired', repairedConfig.status === 200, `status=${repairedConfig.status}`);

@@ -994,9 +994,9 @@ export function activate(context: vscode.ExtensionContext): void {
         if (!label) return;
         const scope = await vscode.window.showQuickPick(
           [
-            { label: "read", description: "inspect only (GET)" },
-            { label: "write", description: "edit / compile / validate / package — no deploys, no spend" },
-            { label: "deploy", description: "full API power" },
+            { label: "read", description: "reviewed inspection and deterministic analysis routes" },
+            { label: "write", description: "guarded authoring / compile / validate / package — no deploys or spend" },
+            { label: "deploy", description: "exact deploy / recovery / guarded filesystem / caller-key AI routes; no administration" },
           ],
           { placeHolder: "Key scope" },
         );

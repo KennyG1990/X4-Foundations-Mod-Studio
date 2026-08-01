@@ -34,6 +34,27 @@ and no five-second sampled or traced Forge stall. Attempt-1 evidence remains in
 `docs/plans/2026-08-01-b115-r13-installed-gate.md`; verified remediation is in
 `docs/plans/2026-08-01-b116-installed-renderer-profile.md`. No public publish occurred.
 
+### B117 · B115 W2A exact agent route authority `in_progress` (P0)
+
+Replace the broad GET/prefix/`deploy => true` agent-key matcher with one reviewed, exact, deny-by-default route policy
+over the existing W1 inventory. Preserve the already-verified ADR-F5 workspace resolver/CAS and B42 key store; make
+credentials, standing configuration, Studio preferences, cross-workspace operations, command execution, publication
+handoffs, schema harvesting, global registration and legacy applying generation Studio-only; retain only explicitly
+reviewed guarded configured-root/deploy/recovery grants. Exact
+contract, rollback and source/HTTP/MCP/E2E/package/installed gates:
+`docs/plans/2026-08-01-b117-exact-agent-route-authority.md`.
+
+**Checkpoint (2026-08-01): `PARTIAL`.** Exact v4 authority, deny-by-default runtime enforcement, hierarchical
+read/write/deploy presets, Studio-only sensitive routes, workspace-mode parity, caller-key provider isolation,
+candidate promotion and truthful Agent Bridge copy are implemented. Green evidence: authority 8/8, routes 378/378,
+oracles 129/129, capability/MCP audits, typecheck/lint/build/writer/precommit, and focused E2E 3/3. The required full
+suite remains red after three separate retry-only failures; the latest is the repository-recorded Windows
+Node/libuv/Playwright worker exit `0xC0000409` at 0 ms. Keep this item open. Next gate is a bounded supported-Node
+toolchain A/B or a clean unchanged full-suite receipt, followed by VSIX/installed-byte/rendered key-scope proof. No
+flake exemption, public release, game/mod write, or stored-key migration is authorized by this checkpoint. W2A proves
+that scoped agent keys cannot spoof Origin to inherit stored provider credentials; it does not close the separately
+recorded, Ken-gated B64-SEC5 gap for callers already holding the full Studio bearer token.
+
 ### B110 · Kimi R1-R21 execution program `in_progress` (P1, DURABLE LEDGER)
 
 The complete recommendation set is now reconciled instead of living in the deleted KNOWN-BUGS addendum.

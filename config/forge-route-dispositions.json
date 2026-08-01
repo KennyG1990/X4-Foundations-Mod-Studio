@@ -1,8 +1,9 @@
 {
-  "schemaVersion": "forge.route-dispositions.v3",
+  "schemaVersion": "forge.route-dispositions.v4",
   "sources": [
     "server.ts",
     "src/lib/actionCensus.ts",
+    "src/lib/agentAuthority.ts",
     "src/lib/agentBrief.ts",
     "src/lib/agentHistory.selftest.ts",
     "src/lib/agentHistory.ts",
@@ -163,1466 +164,3303 @@
     "DELETE /api/github/credential": {
       "disposition": "session-only",
       "owner": "github-integration",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "external-repository",
+      "workspaceMode": "optional"
     },
     "GET *": {
       "disposition": "ui-internal",
       "owner": "studio-host",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "global-session",
+      "workspaceMode": "none"
     },
     "GET /": {
       "disposition": "ui-internal",
       "owner": "studio-host",
-      "registrations": 2
+      "registrations": 2,
+      "agentScopes": [],
+      "resourceClass": "global-session",
+      "workspaceMode": "none"
     },
     "GET /api/agent/action-census": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/action-census-selftest": {
       "disposition": "public-selftest",
       "owner": "runActionCensusSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/agent-brief-selftest": {
       "disposition": "public-selftest",
       "owner": "runAgentBriefSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/agent-history-selftest": {
       "disposition": "public-selftest",
       "owner": "runAgentHistorySelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/agent-keys-selftest": {
       "disposition": "public-selftest",
       "owner": "runAgentKeysSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/agent-loop-selftest": {
       "disposition": "public-selftest",
       "owner": "runAgentLoopSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/ai-key-store-selftest": {
       "disposition": "public-selftest",
       "owner": "runAiKeyStoreSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/ai-spend-meter-selftest": {
       "disposition": "public-selftest",
       "owner": "runAiSpendMeterSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/aiscript-lint-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/aiscript-roundtrip-selftest": {
       "disposition": "public-selftest",
       "owner": "runAiScriptRoundtripSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/api-failure-envelope-selftest": {
       "disposition": "public-selftest",
       "owner": "runApiFailureEnvelopeSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/api-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/architect-loop-selftest": {
       "disposition": "public-selftest",
       "owner": "runArchitectLoopSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/artifact-pipeline-selftest": {
       "disposition": "public-selftest",
       "owner": "runCompileArtifactSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/auto-layout-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/blueprint-selftest": {
       "disposition": "public-selftest",
       "owner": "runBlueprintSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/bridge-live-state-selftest": {
       "disposition": "public-selftest",
       "owner": "runBridgeLiveStateSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/bug-report-selftest": {
       "disposition": "public-selftest",
       "owner": "runBugReportSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/bulk-corpus-transform-selftest": {
       "disposition": "public-selftest",
       "owner": "runBulkCorpusTransformSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/canvas-interaction-selftest": {
       "disposition": "public-selftest",
       "owner": "runCanvasInteractionSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/catdat-debug": {
       "disposition": "legacy-public",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/catdat-selftest": {
       "disposition": "public-selftest",
       "owner": "runCatDatSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/compile-fidelity-selftest": {
       "disposition": "public-selftest",
       "owner": "runCompileFidelitySelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/compile-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/composite-blocks-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/continuous-polling-selftest": {
       "disposition": "public-selftest",
       "owner": "runContinuousPollingSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/contract-glue-sample": {
       "disposition": "legacy-public",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/contract-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/critic-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/cue-lineage-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/data-dir-selftest": {
       "disposition": "public-selftest",
       "owner": "runDataDirSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/db-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/debug-watcher/brief": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/destructive-recovery-selftest": {
       "disposition": "public-selftest",
       "owner": "runDestructiveRecoverySelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/detect-game": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/diagnostic-explain-selftest": {
       "disposition": "public-selftest",
       "owner": "runDiagnosticExplainSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/diagnostics": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "workspace",
+      "workspaceMode": "required"
     },
     "GET /api/agent/experience-mode-selftest": {
       "disposition": "public-selftest",
       "owner": "runExperienceModeSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/explain-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/expression-suggest-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/extension-doctor": {
       "disposition": "canonical-capability",
       "owner": "extensions.conflicts.analyze",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/extension-doctor-selftest": {
       "disposition": "authenticated-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/extension-file": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/extension-project-selftest": {
       "disposition": "public-selftest",
       "owner": "runExtensionProjectSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/external-api-registry": {
       "disposition": "legacy-public",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/external-api-registry-selftest": {
       "disposition": "public-selftest",
       "owner": "runExternalApiRegistrySelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/external-api/derive": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/factions-lint-selftest": {
       "disposition": "public-selftest",
       "owner": "runFactionsLintSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/file-bridge-transport-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/forge-capabilities-selftest": {
       "disposition": "public-selftest",
       "owner": "runForgeCapabilitiesSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/forge-probe-selftest": {
       "disposition": "public-selftest",
       "owner": "runForgeProbeSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/forge-state-selftest": {
       "disposition": "public-selftest",
       "owner": "runForgeStateSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/forge-watch-selftest": {
       "disposition": "public-selftest",
       "owner": "runForgeWatchSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/friendly-names-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/galaxy-map": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/galaxy-map-selftest": {
       "disposition": "public-selftest",
       "owner": "runGalaxyMapSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/game-detect-selftest": {
       "disposition": "public-selftest",
       "owner": "runGameDetectSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/game-log/status": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/github-credential-store-selftest": {
       "disposition": "public-selftest",
       "owner": "runGithubCredentialStoreSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/github-device-flow-selftest": {
       "disposition": "public-selftest",
       "owner": "runGithubDeviceFlowSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/god-lint-selftest": {
       "disposition": "public-selftest",
       "owner": "runGodLintSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/health-card": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "workspace",
+      "workspaceMode": "required"
     },
     "GET /api/agent/health-card-selftest": {
       "disposition": "public-selftest",
       "owner": "runHealthCardSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/history": {
       "disposition": "canonical-capability",
       "owner": "history.list",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "workspace",
+      "workspaceMode": "required"
     },
     "GET /api/agent/history/:id/raw": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "workspace",
+      "workspaceMode": "required"
     },
     "GET /api/agent/imported-graph-layout-selftest": {
       "disposition": "public-selftest",
       "owner": "runImportedGraphLayoutSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/instance-discovery-selftest": {
       "disposition": "public-selftest",
       "owner": "runInstanceDiscoverySelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/intent-check-selftest": {
       "disposition": "public-selftest",
       "owner": "runIntentCheckSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/jobs-content-lint-selftest": {
       "disposition": "public-selftest",
       "owner": "runJobsContentLintSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/keys": {
       "disposition": "session-only",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "global-session",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/lang-service-selftest": {
       "disposition": "public-selftest",
       "owner": "runLangServiceSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/lang/attrs": {
       "disposition": "legacy-public",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/lang/complete": {
       "disposition": "legacy-public",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/lang/element-explain": {
       "disposition": "canonical-capability",
       "owner": "schema.element.explain",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/lang/hover": {
       "disposition": "legacy-public",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/latest-value-write-queue-selftest": {
       "disposition": "public-selftest",
       "owner": "runLatestValueWriteQueueSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/live-canvas-selftest": {
       "disposition": "public-selftest",
       "owner": "runLiveCanvasTelemetrySelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/live-fixes-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/live-log-nav-selftest": {
       "disposition": "public-selftest",
       "owner": "runLiveLogNavSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/live/bridge-state": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/live/forge-state": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/local-workspace-cache-selftest": {
       "disposition": "public-selftest",
       "owner": "runLocalWorkspaceCacheSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/log-file-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/log-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/log-telemetry-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/lua-logic-blocks-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/lua-md-binding-selftest": {
       "disposition": "public-selftest",
       "owner": "runLuaMdBindingSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/lua-runtime-log-selftest": {
       "disposition": "public-selftest",
       "owner": "runLuaRuntimeLogSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/lua-snippets": {
       "disposition": "legacy-public",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/lua-staleness-selftest": {
       "disposition": "public-selftest",
       "owner": "runLuaStalenessSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/lua-static-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/md-audit": {
       "disposition": "legacy-public",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/md-faithfulness-selftest": {
       "disposition": "authenticated-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/md-file-identity-selftest": {
       "disposition": "public-selftest",
       "owner": "runMdFileIdentitySelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/md-pitfall-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/migration-lint-selftest": {
       "disposition": "public-selftest",
       "owner": "runMigrationLintSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/mod-dependency-graph": {
       "disposition": "legacy-public",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/mod-dependency-selftest": {
       "disposition": "public-selftest",
       "owner": "runModDependencyGraphSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/mod-distribution-selftest": {
       "disposition": "public-selftest",
       "owner": "runModDistributionSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/mod-doctor-reference-selftest": {
       "disposition": "public-selftest",
       "owner": "runModDoctorReferenceSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/mod-drift": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/mod-drift-selftest": {
       "disposition": "public-selftest",
       "owner": "runModDriftSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/mod-patterns-selftest": {
       "disposition": "public-selftest",
       "owner": "runModPatternsSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/mod-recipes-selftest": {
       "disposition": "public-selftest",
       "owner": "runModRecipesSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/mod-templates-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/node-align-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/node-diagnostics-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/node-selection-document-selftest": {
       "disposition": "public-selftest",
       "owner": "runNodeSelectionDocumentSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/node-toolbox-selftest": {
       "disposition": "public-selftest",
       "owner": "runNodeToolboxSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/npc-identity-probe/selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/object-index": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/object-index-selftest": {
       "disposition": "public-selftest",
       "owner": "runObjectIndexSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/override-map": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/override-map-selftest": {
       "disposition": "public-selftest",
       "owner": "runOverrideMapSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/parent-liveness-selftest": {
       "disposition": "public-selftest",
       "owner": "runParentLivenessSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/patch-audit": {
       "disposition": "legacy-public",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/patch-readiness": {
       "disposition": "canonical-capability",
       "owner": "patch.readiness.analyze",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "deploy"
+      ],
+      "resourceClass": "host-file-read",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/patch-readiness-selftest": {
       "disposition": "public-selftest",
       "owner": "runPatchReadinessSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/patch-targets": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/path-roles-selftest": {
       "disposition": "public-selftest",
       "owner": "runPathRolesSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/platform-release-selftest": {
       "disposition": "public-selftest",
       "owner": "runPlatformReleaseSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/port-semantics-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/position-picker-selftest": {
       "disposition": "public-selftest",
       "owner": "runPositionPickerSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/project-crossfile-selftest": {
       "disposition": "public-selftest",
       "owner": "runProjectCrossFileSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/project-file-inventory-selftest": {
       "disposition": "public-selftest",
       "owner": "runProjectFileInventorySelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/project-orchestration-selftest": {
       "disposition": "public-selftest",
       "owner": "runProjectOrchestrationSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/project-rules-selftest": {
       "disposition": "public-selftest",
       "owner": "runProjectRulesSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/project/brief": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "inline-or-addressed",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/proof": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "workspace",
+      "workspaceMode": "required"
     },
     "GET /api/agent/proposal-review-selftest": {
       "disposition": "public-selftest",
       "owner": "runProposalReviewSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/quick-fixes-selftest": {
       "disposition": "public-selftest",
       "owner": "runWorkspaceQuickFixesSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/readiness": {
       "disposition": "canonical-capability",
       "owner": "readiness.read",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "workspace",
+      "workspaceMode": "required"
     },
     "GET /api/agent/readiness-selftest": {
       "disposition": "public-selftest",
       "owner": "runReadinessSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/reference-corpus-selftest": {
       "disposition": "public-selftest",
       "owner": "runReferenceCorpusSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/reference-language-selftest": {
       "disposition": "public-selftest",
       "owner": "runReferenceLanguageSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/reference-literal-lint-selftest": {
       "disposition": "public-selftest",
       "owner": "runReferenceLiteralLintSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/reference-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/request-deadline-selftest": {
       "disposition": "public-selftest",
       "owner": "runRequestDeadlineSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/round-trip-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/schema": {
       "disposition": "legacy-public",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/schema-discovery-selftest": {
       "disposition": "public-selftest",
       "owner": "runSchemaDiscoverySelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/schema-registry": {
       "disposition": "canonical-capability",
       "owner": "schema.domains.list",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/schema-registry-selftest": {
       "disposition": "public-selftest",
       "owner": "runSchemaRegistrySelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/schema-routing-selftest": {
       "disposition": "public-selftest",
       "owner": "runSchemaRoutingSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/scriptproperties-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/scriptproperties-status": {
       "disposition": "legacy-public",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/selftest-index": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/semantics": {
       "disposition": "legacy-public",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/semantics-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/simulate-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/status": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "workspace",
+      "workspaceMode": "required"
     },
     "GET /api/agent/tfile-lint-selftest": {
       "disposition": "public-selftest",
       "owner": "runTFileLintSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/timeout-drill": {
       "disposition": "legacy-public",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/ttfm-selftest": {
       "disposition": "public-selftest",
       "owner": "runTtfmSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/type-probe": {
       "disposition": "legacy-public",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/ui-compiler-selftest": {
       "disposition": "public-selftest",
       "owner": "runUiCompilerSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/ui-layout-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/ui-widget-validate-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/validation-delta-selftest": {
       "disposition": "public-selftest",
       "owner": "runValidationDeltaSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/vanilla-ui-harvest": {
       "disposition": "legacy-public",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/vanilla-ui-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/wares-content-lint-selftest": {
       "disposition": "public-selftest",
       "owner": "runWaresContentLintSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/wares-jobs-roundtrip-selftest": {
       "disposition": "public-selftest",
       "owner": "runWaresJobsRoundtripSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/watcher-verdict-selftest": {
       "disposition": "public-selftest",
       "owner": "runWatcherVerdictSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/workspace": {
       "disposition": "canonical-capability",
       "owner": "workspace.read",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "workspace",
+      "workspaceMode": "required"
     },
     "GET /api/agent/workspace-conflict-selftest": {
       "disposition": "public-selftest",
       "owner": "runWorkspaceConflictSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/workspace-identity-selftest": {
       "disposition": "public-selftest",
       "owner": "runWorkspaceIdentitySelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/workspace-persistence-selftest": {
       "disposition": "public-selftest",
       "owner": "runWorkspaceStateSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/workspace-registry-selftest": {
       "disposition": "public-selftest",
       "owner": "runWorkspaceRegistrySelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/workspace/parked": {
       "disposition": "session-only",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "cross-workspace-session",
+      "workspaceMode": "required"
     },
     "GET /api/agent/workspaces": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "workspace",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/xml-input-limits-selftest": {
       "disposition": "public-selftest",
       "owner": "runXmlInputLimitsSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/xml-source-spans-selftest": {
       "disposition": "public-selftest",
       "owner": "runXmlSourceSpanSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/xml-wellformed-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/xpath-synth-selftest": {
       "disposition": "public-selftest",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/xsd-debug": {
       "disposition": "legacy-public",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/agent/xsd-model-selftest": {
       "disposition": "public-selftest",
       "owner": "runXsdValidateSelftest",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/ai/keys/status": {
-      "disposition": "legacy-agent-api",
+      "disposition": "session-only",
       "owner": "forge-server",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "global-session",
+      "workspaceMode": "optional"
     },
     "GET /api/ai/usage": {
       "disposition": "legacy-agent-api",
       "owner": "forge-server",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "GET /api/fs/list": {
       "disposition": "legacy-agent-api",
       "owner": "filesystem-service",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "GET /api/fs/read": {
       "disposition": "legacy-agent-api",
       "owner": "filesystem-service",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "GET /api/fs/snapshots": {
       "disposition": "legacy-agent-api",
       "owner": "filesystem-service",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "GET /api/github/credential": {
       "disposition": "session-only",
       "owner": "github-integration",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "external-repository",
+      "workspaceMode": "optional"
     },
     "GET /api/patch/base-content": {
       "disposition": "legacy-agent-api",
       "owner": "forge-server",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "GET /api/reference/aiscripts": {
       "disposition": "legacy-public",
       "owner": "reference-corpus",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/reference/coverage": {
       "disposition": "legacy-public",
       "owner": "reference-corpus",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/reference/effective-file": {
       "disposition": "legacy-public",
       "owner": "reference-corpus",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/reference/factions": {
       "disposition": "legacy-public",
       "owner": "reference-corpus",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/reference/file": {
       "disposition": "legacy-public",
       "owner": "reference-corpus",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/reference/jobs": {
       "disposition": "legacy-public",
       "owner": "reference-corpus",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/reference/manifest": {
       "disposition": "legacy-public",
       "owner": "reference-corpus",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/reference/scriptproperties": {
       "disposition": "legacy-public",
       "owner": "reference-corpus",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/reference/search": {
       "disposition": "legacy-public",
       "owner": "reference-corpus",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/reference/sectors": {
       "disposition": "legacy-public",
       "owner": "reference-corpus",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/reference/selftest": {
       "disposition": "public-selftest",
       "owner": "reference-corpus",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/reference/status": {
       "disposition": "legacy-public",
       "owner": "reference-corpus",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/reference/suggest": {
       "disposition": "legacy-agent-api",
       "owner": "reference-corpus",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "GET /api/reference/wares": {
       "disposition": "legacy-public",
       "owner": "reference-corpus",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     },
     "GET /api/run_command": {
       "disposition": "conditional-dev-only",
       "owner": "forge-server",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "command-session",
+      "workspaceMode": "optional"
     },
     "GET /api/run_command/job/:id": {
       "disposition": "conditional-dev-only",
       "owner": "forge-server",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "command-session",
+      "workspaceMode": "optional"
     },
     "GET /api/schema/config": {
-      "disposition": "legacy-agent-api",
+      "disposition": "session-only",
       "owner": "schema-service",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "global-session",
+      "workspaceMode": "optional"
     },
     "GET /api/schema/element/:tag": {
       "disposition": "legacy-agent-api",
       "owner": "schema-service",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "GET /api/schema/library": {
       "disposition": "legacy-agent-api",
       "owner": "schema-service",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "GET /api/studio/layout": {
-      "disposition": "legacy-agent-api",
+      "disposition": "session-only",
       "owner": "forge-server",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "global-session",
+      "workspaceMode": "optional"
     },
     "GET /api/studio/release-preferences": {
-      "disposition": "legacy-agent-api",
+      "disposition": "session-only",
       "owner": "forge-server",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "global-session",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/artifact/build": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/bulk-transform/apply": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "workspace",
+      "workspaceMode": "required"
     },
     "POST /api/agent/bulk-transform/preview": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "workspace",
+      "workspaceMode": "required"
     },
     "POST /api/agent/check-expression": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/compile": {
       "disposition": "canonical-capability",
       "owner": "workspace.compile",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "inline-or-addressed",
+      "workspaceMode": "input-first"
     },
     "POST /api/agent/critic": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/deploy": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "deploy"
+      ],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/deploy-verify": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "deploy"
+      ],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/explain": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/external-api/register": {
-      "disposition": "legacy-agent-api",
+      "disposition": "session-only",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "global-session",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/generate": {
-      "disposition": "legacy-agent-api",
+      "disposition": "session-only",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "provider-network",
+      "workspaceMode": "input-first"
     },
     "POST /api/agent/generate/preview": {
       "disposition": "canonical-capability",
       "owner": "workspace.generate.preview",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "deploy"
+      ],
+      "resourceClass": "provider-network",
+      "workspaceMode": "input-first"
     },
     "POST /api/agent/history/:id/revert": {
       "disposition": "canonical-capability",
       "owner": "history.revert",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "deploy"
+      ],
+      "resourceClass": "workspace",
+      "workspaceMode": "required"
     },
     "POST /api/agent/keys": {
       "disposition": "session-only",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "global-session",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/keys/revoke": {
       "disposition": "session-only",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "global-session",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/live/cue-telemetry": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/log-diagnose": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/log-file-tail": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "deploy"
+      ],
+      "resourceClass": "host-file-read",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/lua-staleness/instrument": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "deploy"
+      ],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/mod-folder/import": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "deploy"
+      ],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/node-diagnostics": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/npc-identity-probe/correlate": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "deploy"
+      ],
+      "resourceClass": "host-file-read",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/npc-identity-probe/parse-log": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "deploy"
+      ],
+      "resourceClass": "host-file-read",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/npc-identity-probe/parse-save": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "deploy"
+      ],
+      "resourceClass": "host-file-read",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/package": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "inline-or-addressed",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/package/release": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/probe/preview": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/project-rules/prepare-suppression": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/project-rules/suppress": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/project/content-xml": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "inline-or-addressed",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/project/create": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "inline-or-addressed",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/project/file/create": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "inline-or-addressed",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/project/files": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "inline-or-addressed",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/project/generate": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "inline-or-addressed",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/project/package": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "inline-or-addressed",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/project/validate": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "inline-or-addressed",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/project/validate-crossfile": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "inline-or-addressed",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/project/validate/check": {
       "disposition": "canonical-capability",
       "owner": "project.validate",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "inline-or-addressed",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/quick-fixes": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/release/artifact/download": {
       "disposition": "legacy-agent-api",
       "owner": "release-center",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "deploy"
+      ],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/release/export/receipt": {
       "disposition": "session-only",
       "owner": "release-center",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/release/nexus/prepare": {
       "disposition": "legacy-agent-api",
       "owner": "release-center",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/release/steam/adopt": {
       "disposition": "session-only",
       "owner": "release-center",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/release/steam/prepare": {
       "disposition": "session-only",
       "owner": "release-center",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/release/steam/verify": {
       "disposition": "session-only",
       "owner": "release-center",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/round-trip-check": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/setup/harvest-schemas": {
-      "disposition": "legacy-agent-api",
+      "disposition": "session-only",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "global-session",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/simulate": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/suggest/expression": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/workspace": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "workspace",
+      "workspaceMode": "required"
     },
     "POST /api/agent/workspace/merge": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "workspace",
+      "workspaceMode": "required"
     },
     "POST /api/agent/workspace/restore-parked": {
       "disposition": "session-only",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "cross-workspace-session",
+      "workspaceMode": "required"
     },
     "POST /api/agent/workspaces": {
-      "disposition": "legacy-agent-api",
+      "disposition": "session-only",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "cross-workspace-session",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/workspaces/bootstrap": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "workspace",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/xpath-synth": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "POST /api/agent/xsd-lookup": {
       "disposition": "legacy-agent-api",
       "owner": "agent-api",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "POST /api/ai/keys": {
-      "disposition": "legacy-agent-api",
+      "disposition": "session-only",
       "owner": "forge-server",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "global-session",
+      "workspaceMode": "optional"
     },
     "POST /api/fs/create": {
       "disposition": "legacy-agent-api",
       "owner": "filesystem-service",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "deploy"
+      ],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "POST /api/fs/delete-dir": {
       "disposition": "legacy-agent-api",
       "owner": "filesystem-service",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "deploy"
+      ],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "POST /api/fs/delete-snapshot": {
       "disposition": "legacy-agent-api",
       "owner": "filesystem-service",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "deploy"
+      ],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "POST /api/fs/restore-snapshot": {
       "disposition": "legacy-agent-api",
       "owner": "filesystem-service",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "deploy"
+      ],
+      "resourceClass": "configured-root",
+      "workspaceMode": "required"
     },
     "POST /api/fs/snapshot": {
       "disposition": "legacy-agent-api",
       "owner": "filesystem-service",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "deploy"
+      ],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "POST /api/fs/write": {
       "disposition": "legacy-agent-api",
       "owner": "filesystem-service",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "deploy"
+      ],
+      "resourceClass": "configured-root",
+      "workspaceMode": "optional"
     },
     "POST /api/gemini": {
       "disposition": "legacy-agent-api",
       "owner": "forge-server",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "deploy"
+      ],
+      "resourceClass": "provider-network",
+      "workspaceMode": "optional"
     },
     "POST /api/gemini/analyze": {
       "disposition": "legacy-agent-api",
       "owner": "forge-server",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "deploy"
+      ],
+      "resourceClass": "provider-network",
+      "workspaceMode": "optional"
     },
     "POST /api/gemini/analyze-log": {
       "disposition": "legacy-agent-api",
       "owner": "forge-server",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "deploy"
+      ],
+      "resourceClass": "provider-network",
+      "workspaceMode": "optional"
     },
     "POST /api/github/commits": {
       "disposition": "session-only",
       "owner": "github-integration",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "external-repository",
+      "workspaceMode": "optional"
     },
     "POST /api/github/create": {
       "disposition": "session-only",
       "owner": "github-integration",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "external-repository",
+      "workspaceMode": "optional"
     },
     "POST /api/github/credential": {
       "disposition": "session-only",
       "owner": "github-integration",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "external-repository",
+      "workspaceMode": "optional"
     },
     "POST /api/github/device/poll": {
       "disposition": "session-only",
       "owner": "github-integration",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "external-repository",
+      "workspaceMode": "optional"
     },
     "POST /api/github/device/start": {
       "disposition": "session-only",
       "owner": "github-integration",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "external-repository",
+      "workspaceMode": "optional"
     },
     "POST /api/github/load": {
       "disposition": "session-only",
       "owner": "github-integration",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "external-repository",
+      "workspaceMode": "optional"
     },
     "POST /api/github/push": {
       "disposition": "session-only",
       "owner": "github-integration",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "external-repository",
+      "workspaceMode": "optional"
     },
     "POST /api/reference/complete": {
       "disposition": "legacy-agent-api",
       "owner": "reference-corpus",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "POST /api/reference/hover": {
       "disposition": "legacy-agent-api",
       "owner": "reference-corpus",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "POST /api/reference/simulate-diff": {
       "disposition": "legacy-agent-api",
       "owner": "reference-corpus",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "POST /api/reference/xpath-complete": {
       "disposition": "legacy-agent-api",
       "owner": "reference-corpus",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "stateless-analysis",
+      "workspaceMode": "optional"
     },
     "POST /api/run_command/job": {
       "disposition": "conditional-dev-only",
       "owner": "forge-server",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "command-session",
+      "workspaceMode": "optional"
     },
     "POST /api/schema/config": {
-      "disposition": "legacy-agent-api",
+      "disposition": "session-only",
       "owner": "schema-service",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "global-session",
+      "workspaceMode": "optional"
     },
     "POST /api/studio/layout": {
-      "disposition": "legacy-agent-api",
+      "disposition": "session-only",
       "owner": "forge-server",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "global-session",
+      "workspaceMode": "optional"
     },
     "POST /api/studio/release-preferences": {
-      "disposition": "legacy-agent-api",
+      "disposition": "session-only",
       "owner": "forge-server",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [],
+      "resourceClass": "global-session",
+      "workspaceMode": "optional"
     }
   },
   "dynamicRoutes": {
     "GET route @ src/server/selftestRegistry.ts": {
       "disposition": "public-selftest",
       "owner": "selftest-registry",
-      "registrations": 1
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
     }
   },
   "capabilitySignatures": {
     "extensions.conflicts.analyze@1": "5e8005a8422ebbe1039a848332caf8f40076ea7cce693b21df8039aec856697e",
     "history.list@1": "f55787b4089116ac1d375e1da9677fc978b0715aa6f841a70bfcd13870ee962e",
     "history.revert@1": "2399e2dd2ec3263e0f6f5364ab3be8edf1fe8d065cea40bc736d72ee8c4bcd98",
-    "patch.readiness.analyze@1": "4601f6372e3121602b1773fdabfaa2d02c6a4df185c0c630ef290553d5e84b36",
+    "patch.readiness.analyze@2": "7baa90f99f4f1a7cc4382caaf009c107388e9de6124d0d2b5bf155769ab91812",
     "project.validate@1": "34e6c5a213b07038e58d70dca27db474370300e38599f6299b5664a974dedf06",
     "readiness.read@1": "8a1e349ea4a481e12be506a20cc246957898faed7a9548a523d5a0359195add0",
     "schema.domains.list@1": "c2ecae2906cf231eb4384a63ea601c7449f4fc691b629b97bff9fa81e32f21b5",
@@ -1632,8 +3470,8 @@
     "workspace.read@2": "962774de4a25e8725a0d90d4982298cc72f100312075b1f6f4ff9de1482752d7"
   },
   "mcpModuleSignature": {
-    "version": 8,
-    "hash": "c37b5c02c0c9f1d92c7d956f991ca5b184e54c248bebdfb1bfbe3911985a9ab7"
+    "version": 9,
+    "hash": "33daa0d2445e2e3b1d1f39b26fe5d7271756dd4f9fbc74152d4ffe7c3457d338"
   },
   "mcpSignatures": {
     "validate_mod": "536c11b1ddbd5575f54ee832e887149947ae5b302a0fa873c04113d474b64448",
@@ -1644,7 +3482,7 @@
     "stage_and_validate": "536c11b1ddbd5575f54ee832e887149947ae5b302a0fa873c04113d474b64448",
     "readiness": "8791e498bef78bc853bfd48e07e3404adc25171cb7ffdd16ffa183ff097c3fa7",
     "check_conflicts": "0bd9187ac3d013b361c04d91395f72e2859dd923cc8f167efe08696527ab1703",
-    "check_patch_readiness": "22e4e59659fac4469b95d9ef4fe7343084ace0717005308cff54c10e26d5a2b0",
+    "check_patch_readiness": "a38c6f472937bb8f4df3f8aec0e8f43c3a8a9348120b7c577c2ac1c5d6543dec",
     "explain_element": "1ca4792d3d94435a3657f6dd2acad01d71f3ef6b138bab61ad456aaeb5f146d4"
   },
   "mcpCapabilityIdentities": {
@@ -1656,7 +3494,7 @@
     "stage_and_validate": "project.validate@1",
     "readiness": "readiness.read@1",
     "check_conflicts": "extensions.conflicts.analyze@1",
-    "check_patch_readiness": "patch.readiness.analyze@1",
+    "check_patch_readiness": "patch.readiness.analyze@2",
     "explain_element": "schema.element.explain@1"
   }
 }

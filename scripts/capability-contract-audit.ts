@@ -14,6 +14,14 @@ import os from 'os';
 import path from 'path';
 import ts from 'typescript';
 import { scopeAllows } from '../src/lib/agentKeys';
+import {
+  AGENT_KEY_SCOPES,
+  createAgentRouteAuthority,
+  type AgentRouteAuthority,
+  type AgentAuthorityResourceClass,
+  type AgentKeyScope,
+  type WorkspaceAuthorityMode,
+} from '../src/lib/agentAuthority';
 import { LEDGER_REVERT_PATTERN, LEDGER_ROUTES, type LedgerKind } from '../src/lib/agentHistory';
 import {
   FORGE_CAPABILITIES,
@@ -28,7 +36,7 @@ const ROOT = process.cwd();
 const MANIFEST_PATH = path.join(ROOT, 'config', 'forge-route-dispositions.json');
 const CANDIDATE_PATH = path.join(ROOT, 'test-results', 'forge-route-dispositions.candidate.json');
 const MCP_MODULE_PATH = path.join(ROOT, 'vscode-extension', 'mcp', 'x4forge-mcp.cjs');
-const MCP_MODULE_AUDIT_VERSION = 8;
+const MCP_MODULE_AUDIT_VERSION = 9;
 const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'all']);
 
 type RouteDisposition =
@@ -73,10 +81,13 @@ interface RouteDispositionEntry {
   disposition: RouteDisposition;
   owner: string;
   registrations: number;
+  agentScopes: AgentKeyScope[];
+  resourceClass: AgentAuthorityResourceClass;
+  workspaceMode: WorkspaceAuthorityMode;
 }
 
 interface RouteDispositionManifest {
-  schemaVersion: 'forge.route-dispositions.v3';
+  schemaVersion: 'forge.route-dispositions.v4';
   sources: string[];
   routes: Record<string, RouteDispositionEntry>;
   dynamicRoutes: Record<string, RouteDispositionEntry>;
@@ -85,6 +96,25 @@ interface RouteDispositionManifest {
   mcpSignatures: Record<string, string>;
   mcpCapabilityIdentities: Record<string, string>;
 }
+
+interface LegacyRouteDispositionEntry {
+  disposition: RouteDisposition;
+  owner: string;
+  registrations: number;
+}
+
+interface LegacyRouteDispositionManifest {
+  schemaVersion: 'forge.route-dispositions.v3';
+  sources: string[];
+  routes: Record<string, LegacyRouteDispositionEntry>;
+  dynamicRoutes: Record<string, LegacyRouteDispositionEntry>;
+  capabilitySignatures: Record<string, string>;
+  mcpModuleSignature: { version: number; hash: string };
+  mcpSignatures: Record<string, string>;
+  mcpCapabilityIdentities: Record<string, string>;
+}
+
+type ReleasedRouteDispositionManifest = RouteDispositionManifest | LegacyRouteDispositionManifest;
 
 interface RouteInventory {
   routes: RouteFact[];
@@ -144,7 +174,9 @@ function localSourceSpecifiers(file: ts.SourceFile): string[] {
     if (!expression || !ts.isStringLiteralLike(expression)) {
       throw new Error(`${file.fileName}: ${kind} specifier must be one static string literal`);
     }
-    if (expression.text.startsWith('.') || expression.text.startsWith('@/')) specifiers.add(expression.text);
+    if ((expression.text.startsWith('.') || expression.text.startsWith('@/')) && path.extname(expression.text).toLowerCase() !== '.json') {
+      specifiers.add(expression.text);
+    }
   };
   for (const statement of file.statements) {
     if (!ts.isImportDeclaration(statement) || !ts.isStringLiteralLike(statement.moduleSpecifier) ||
@@ -1316,6 +1348,13 @@ function expressBindingEscapeErrors(file: ts.SourceFile, source: string, owners:
       ts.isTypeAssertionExpression(callee.parent) || ts.isNonNullExpression(callee.parent) || ts.isSatisfiesExpression(callee.parent)) &&
       callee.parent.expression === callee) callee = callee.parent;
     const call = callee.parent && ts.isCallExpression(callee.parent) && callee.parent.expression === callee ? callee.parent : null;
+    if (call && access.name === 'set') {
+      const setting = call.arguments[0];
+      const enabled = call.arguments[1];
+      return !!setting && ts.isStringLiteral(setting) &&
+        (setting.text === 'case sensitive routing' || setting.text === 'strict routing') &&
+        enabled?.kind === ts.SyntaxKind.TrueKeyword;
+    }
     return !!call && (access.name === null || access.name === 'use' || access.name === 'listen' || HTTP_METHODS.has(access.name.toLowerCase()));
   };
   const visit = (node: ts.Node): void => {
@@ -2076,10 +2115,12 @@ function apiRouteMultiplicityErrors(
   return errors;
 }
 
-function reachableScopes(fact: RouteFact): Array<'read' | 'write' | 'deploy'> {
+function reachableScopes(fact: RouteFact, authority?: AgentRouteAuthority): Array<'read' | 'write' | 'deploy'> {
   if (!fact.path.startsWith('/api')) return [];
   const reqPath = sampleRoute(fact.path).replace(/^\/api/, '');
-  return (['read', 'write', 'deploy'] as const).filter(scope => scopeAllows(scope, fact.method, reqPath));
+  return (['read', 'write', 'deploy'] as const).filter(scope => authority
+    ? authority.allows(scope, fact.method, `/api${reqPath}`)
+    : scopeAllows(scope, fact.method, reqPath));
 }
 
 function exactLedgerKind(method: string, routePath: string, routes = LEDGER_ROUTES): LedgerKind | null {
@@ -2142,7 +2183,12 @@ function isRecognizedDynamicSelftest(fact: DynamicRouteFact): boolean {
   return fact.source === 'src/server/selftestRegistry.ts' && fact.method === 'GET' && fact.expression === 'route';
 }
 
-function classifyRoute(fact: RouteFact, publicGets: Set<string>, capabilityOwners: Map<string, string>): Omit<RouteDispositionEntry, 'registrations'> {
+function classifyRoute(
+  fact: RouteFact,
+  publicGets: Set<string>,
+  capabilityOwners: Map<string, string>,
+  authority?: AgentRouteAuthority,
+): Pick<RouteDispositionEntry, 'disposition' | 'owner'> {
   const key = routeKey(fact.method, fact.path);
   const capabilityOwner = capabilityOwners.get(key);
   if (capabilityOwner) return { disposition: 'canonical-capability', owner: capabilityOwner };
@@ -2154,7 +2200,7 @@ function classifyRoute(fact: RouteFact, publicGets: Set<string>, capabilityOwner
   if (isConditionalDevRoute(fact)) return { disposition: 'conditional-dev-only', owner: routeOwner(fact.path) };
   if (fact.method === 'GET' && publicGets.has(reqPath)) return { disposition: 'legacy-public', owner: routeOwner(fact.path) };
   if (fact.path.startsWith('/api')) {
-    return reachableScopes(fact).length
+    return reachableScopes(fact, authority).length
       ? { disposition: 'legacy-agent-api', owner: routeOwner(fact.path) }
       : { disposition: 'session-only', owner: routeOwner(fact.path) };
   }
@@ -2170,18 +2216,58 @@ function groupedCounts<T>(facts: T[], keyFor: (fact: T) => string): Map<string, 
   return grouped;
 }
 
-function buildBaseline(inventory: RouteInventory, publicGets: Set<string>): RouteDispositionManifest {
+function reviewedAuthorityFields(
+  reviewed: RouteDispositionEntry | undefined,
+  fallback: Pick<RouteDispositionEntry, 'disposition'>,
+  apiRoute: boolean,
+): Pick<RouteDispositionEntry, 'agentScopes' | 'resourceClass' | 'workspaceMode'> {
+  if (reviewed) {
+    return {
+      agentScopes: [...reviewed.agentScopes],
+      resourceClass: reviewed.resourceClass,
+      workspaceMode: reviewed.workspaceMode,
+    };
+  }
+  return {
+    agentScopes: fallback.disposition === 'legacy-public' || fallback.disposition === 'public-selftest'
+      ? [...AGENT_KEY_SCOPES]
+      : [],
+    resourceClass: fallback.disposition === 'legacy-public' || fallback.disposition === 'public-selftest'
+      ? 'public'
+      : 'global-session',
+    workspaceMode: apiRoute ? 'optional' : 'none',
+  };
+}
+
+function buildBaseline(
+  inventory: RouteInventory,
+  publicGets: Set<string>,
+  authoritySource?: RouteDispositionManifest,
+): RouteDispositionManifest {
   const owners = capabilityRouteOwners();
+  const authority = authoritySource ? createAgentRouteAuthority(authoritySource) : undefined;
   const calls = serverCallAnalysis(inventory).calls;
   const direct = groupedCounts(inventory.routes, fact => routeKey(fact.method, fact.path));
   const dynamic = groupedCounts(inventory.dynamic, dynamicRouteKey);
-  const routes = Object.fromEntries([...direct.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, facts]) => [
-    key,
-    { ...classifyRoute(facts[0], publicGets, owners), registrations: facts.reduce((sum, fact) => sum + effectiveRegistrationCount(fact, calls), 0) },
-  ]));
+  const routes = Object.fromEntries([...direct.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, facts]) => {
+    const classified = classifyRoute(facts[0], publicGets, owners, authority);
+    return [
+      key,
+      {
+        ...classified,
+        registrations: facts.reduce((sum, fact) => sum + effectiveRegistrationCount(fact, calls), 0),
+        ...reviewedAuthorityFields(authoritySource?.routes[key], classified, facts[0].path.startsWith('/api')),
+      },
+    ];
+  }));
   const dynamicRoutes: Record<string, RouteDispositionEntry> = Object.fromEntries([...dynamic.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, facts]) => {
     if (!isRecognizedDynamicSelftest(facts[0])) throw new Error(`Refusing unrecognized dynamic route: ${key}`);
-    return [key, { disposition: 'public-selftest' as const, owner: 'selftest-registry', registrations: facts.reduce((sum, fact) => sum + effectiveRegistrationCount(fact, calls), 0) }];
+    const classified = { disposition: 'public-selftest' as const, owner: 'selftest-registry' };
+    return [key, {
+      ...classified,
+      registrations: facts.reduce((sum, fact) => sum + effectiveRegistrationCount(fact, calls), 0),
+      ...reviewedAuthorityFields(authoritySource?.dynamicRoutes[key], classified, true),
+    }];
   }));
   const capabilitySignatures = Object.fromEntries(FORGE_CAPABILITIES.map(capability => [
     `${capability.id}@${capability.version}`,
@@ -2203,7 +2289,7 @@ function buildBaseline(inventory: RouteInventory, publicGets: Set<string>): Rout
     `${mapping.capabilityId}@${mapping.capabilityVersion}`,
   ]));
   return {
-    schemaVersion: 'forge.route-dispositions.v3',
+    schemaVersion: 'forge.route-dispositions.v4',
     sources: ROUTE_SOURCES,
     routes,
     dynamicRoutes,
@@ -2229,18 +2315,37 @@ const ROUTE_MANIFEST_KEYS = [
   'mcpCapabilityIdentities',
 ] as const;
 
+const AGENT_RESOURCE_CLASSES = new Set<AgentAuthorityResourceClass>([
+  'public',
+  'workspace',
+  'inline-or-addressed',
+  'configured-root',
+  'global-session',
+  'cross-workspace-session',
+  'provider-network',
+  'host-file-read',
+  'external-repository',
+  'command-session',
+  'stateless-analysis',
+]);
+const WORKSPACE_AUTHORITY_MODES = new Set<WorkspaceAuthorityMode>(['none', 'optional', 'required', 'input-first']);
+const ALLOWED_SCOPE_CHAINS = new Set(['', 'deploy', 'write,deploy', 'read,write,deploy']);
+
 function parseCapabilityIdentity(identity: string): { id: string; version: number } | null {
   const match = identity.match(/^([a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)+)@([1-9]\d*)$/);
   return match ? { id: match[1], version: Number(match[2]) } : null;
 }
 
-function routeDispositionManifestShapeErrors(value: unknown): string[] {
+function routeDispositionManifestShapeErrors(value: unknown, allowLegacyV3 = false): string[] {
   const errors: string[] = [];
   if (!isRecordValue(value)) return ['manifest must be a JSON object'];
   const keys = Object.keys(value);
   for (const key of ROUTE_MANIFEST_KEYS) if (!Object.hasOwn(value, key)) errors.push(`manifest is missing ${key}`);
   for (const key of keys) if (!(ROUTE_MANIFEST_KEYS as readonly string[]).includes(key)) errors.push(`manifest has unsupported field ${key}`);
-  if (value.schemaVersion !== 'forge.route-dispositions.v3') errors.push(`manifest has unsupported schema ${String(value.schemaVersion)}`);
+  const legacyV3 = value.schemaVersion === 'forge.route-dispositions.v3';
+  if (value.schemaVersion !== 'forge.route-dispositions.v4' && !(allowLegacyV3 && legacyV3)) {
+    errors.push(`manifest has unsupported schema ${String(value.schemaVersion)}`);
+  }
 
   if (!Array.isArray(value.sources) || value.sources.length === 0 ||
     value.sources.some(source => typeof source !== 'string' || !source || source !== source.trim() || source.includes('\\') ||
@@ -2271,9 +2376,12 @@ function routeDispositionManifestShapeErrors(value: unknown): string[] {
         continue;
       }
       const entryKeys = Object.keys(raw);
-      if (!['disposition', 'owner', 'registrations'].every(field => Object.hasOwn(raw, field)) ||
-        entryKeys.some(field => !['disposition', 'owner', 'registrations'].includes(field))) {
-        errors.push(`manifest ${label}.${key} must contain only disposition, owner, and registrations`);
+      const requiredFields = legacyV3
+        ? ['disposition', 'owner', 'registrations']
+        : ['disposition', 'owner', 'registrations', 'agentScopes', 'resourceClass', 'workspaceMode'];
+      if (!requiredFields.every(field => Object.hasOwn(raw, field)) ||
+        entryKeys.some(field => !requiredFields.includes(field))) {
+        errors.push(`manifest ${label}.${key} must contain only ${requiredFields.join(', ')}`);
       }
       if (typeof raw.disposition !== 'string' || !ROUTE_DISPOSITIONS.has(raw.disposition as RouteDisposition)) {
         errors.push(`manifest ${label}.${key} has invalid disposition ${String(raw.disposition)}`);
@@ -2281,6 +2389,17 @@ function routeDispositionManifestShapeErrors(value: unknown): string[] {
       if (typeof raw.owner !== 'string' || !raw.owner.trim()) errors.push(`manifest ${label}.${key} has an invalid owner`);
       if (!Number.isInteger(raw.registrations) || Number(raw.registrations) < 1) {
         errors.push(`manifest ${label}.${key} has invalid registrations ${String(raw.registrations)}`);
+      }
+      if (!legacyV3) {
+        if (!Array.isArray(raw.agentScopes) || !ALLOWED_SCOPE_CHAINS.has(raw.agentScopes.join(','))) {
+          errors.push(`manifest ${label}.${key}.agentScopes must be one of [], [deploy], [write, deploy], or [read, write, deploy]`);
+        }
+        if (typeof raw.resourceClass !== 'string' || !AGENT_RESOURCE_CLASSES.has(raw.resourceClass as AgentAuthorityResourceClass)) {
+          errors.push(`manifest ${label}.${key} has invalid resourceClass ${String(raw.resourceClass)}`);
+        }
+        if (typeof raw.workspaceMode !== 'string' || !WORKSPACE_AUTHORITY_MODES.has(raw.workspaceMode as WorkspaceAuthorityMode)) {
+          errors.push(`manifest ${label}.${key} has invalid workspaceMode ${String(raw.workspaceMode)}`);
+        }
       }
     }
   };
@@ -2348,20 +2467,24 @@ function routeDispositionManifestShapeErrors(value: unknown): string[] {
   return errors;
 }
 
-function parseRouteDispositionManifest(bytes: string, label: string): RouteDispositionManifest {
+function parseRouteDispositionManifest(bytes: string, label: string, allowLegacyV3 = false): ReleasedRouteDispositionManifest {
   let parsed: unknown;
   try {
     parsed = JSON.parse(bytes);
   } catch (error) {
     throw new Error(`${label} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`);
   }
-  const errors = routeDispositionManifestShapeErrors(parsed);
+  const errors = routeDispositionManifestShapeErrors(parsed, allowLegacyV3);
   if (errors.length) throw new Error(`${label} is malformed: ${errors.join('; ')}`);
-  return parsed as RouteDispositionManifest;
+  return parsed as ReleasedRouteDispositionManifest;
 }
 
 function loadManifest(): RouteDispositionManifest {
-  return parseRouteDispositionManifest(fs.readFileSync(MANIFEST_PATH, 'utf8'), path.relative(ROOT, MANIFEST_PATH));
+  const manifest = parseRouteDispositionManifest(fs.readFileSync(MANIFEST_PATH, 'utf8'), path.relative(ROOT, MANIFEST_PATH));
+  if (manifest.schemaVersion !== 'forge.route-dispositions.v4') {
+    throw new Error(`${path.relative(ROOT, MANIFEST_PATH)} must use forge.route-dispositions.v4`);
+  }
+  return manifest;
 }
 
 interface GitReadResult {
@@ -2375,7 +2498,7 @@ interface ReleasedManifestBaseline {
   kind: 'released' | 'first-unreleased';
   ref: string;
   commit: string;
-  manifest?: RouteDispositionManifest;
+  manifest?: ReleasedRouteDispositionManifest;
 }
 
 type GitReader = (args: string[]) => GitReadResult;
@@ -2417,7 +2540,7 @@ function loadReleasedManifestAtRef(ref = capabilityBaselineRef(), runGit: GitRea
   if (shown.error || shown.status !== 0) {
     throw new Error(`Unable to read the released route manifest blob ${commit}:${relative}: ${shown.error?.message || shown.stderr || `git exit ${shown.status}`}`);
   }
-  const manifest = parseRouteDispositionManifest(shown.stdout, `Released route manifest ${commit}:${relative}`);
+  const manifest = parseRouteDispositionManifest(shown.stdout, `Released route manifest ${commit}:${relative}`, true);
   return { kind: 'released', ref, commit, manifest };
 }
 
@@ -6737,14 +6860,16 @@ function audit(manifestOverride?: RouteDispositionManifest): { errors: string[];
   }
 
   const manifest = manifestOverride || (fs.existsSync(MANIFEST_PATH) ? loadManifest() : null);
+  let manifestAuthority: AgentRouteAuthority | undefined;
   if (!manifest) {
     errors.push(`missing ${path.relative(ROOT, MANIFEST_PATH)}; generate, review, then promote a hashed candidate`);
   } else {
     errors.push(...routeDispositionManifestShapeErrors(manifest).map(error => `manifest: ${error}`));
+    manifestAuthority = createAgentRouteAuthority(manifest);
     if (!sameStrings(manifest.sources, ROUTE_SOURCES)) errors.push('manifest source boundary differs from dynamically discovered route sources');
     errors.push(...manifestDriftErrors(routeRegistrations, manifest.routes || {}, 'route'));
     errors.push(...manifestDriftErrors(dynamicRegistrations, manifest.dynamicRoutes || {}, 'dynamic route'));
-    const expectedBaseline = buildBaseline(inventory, publicGets);
+    const expectedBaseline = buildBaseline(inventory, publicGets, manifest);
     errors.push(...dispositionAuthorityErrors(expectedBaseline.routes, manifest.routes || {}, 'route'));
     errors.push(...dispositionAuthorityErrors(expectedBaseline.dynamicRoutes, manifest.dynamicRoutes || {}, 'dynamic route'));
     const changedAuthorityProbe = JSON.parse(JSON.stringify(expectedBaseline)) as RouteDispositionManifest;
@@ -6799,6 +6924,68 @@ function audit(manifestOverride?: RouteDispositionManifest): { errors: string[];
       (dynamicKeyProbe && !routeDispositionManifestShapeErrors(malformedDynamicKeyProbe)
         .some(error => error.includes('dynamicRoutes has malformed key')))) {
       errors.push('manifest shape selftest failed canonical route or dynamic-route key grammar negatives');
+    }
+    if (authorityProbeKey) {
+      const missingAuthorityFieldProbe = JSON.parse(JSON.stringify(expectedBaseline)) as unknown as { routes: Record<string, Record<string, unknown>> };
+      delete missingAuthorityFieldProbe.routes[authorityProbeKey].agentScopes;
+      const extraAuthorityFieldProbe = JSON.parse(JSON.stringify(expectedBaseline)) as unknown as { routes: Record<string, Record<string, unknown>> };
+      extraAuthorityFieldProbe.routes[authorityProbeKey].unexpectedGrant = true;
+      const unorderedScopeProbe = JSON.parse(JSON.stringify(expectedBaseline)) as RouteDispositionManifest;
+      unorderedScopeProbe.routes[authorityProbeKey].agentScopes = ['deploy', 'read'];
+      const duplicateScopeProbe = JSON.parse(JSON.stringify(expectedBaseline)) as RouteDispositionManifest;
+      duplicateScopeProbe.routes[authorityProbeKey].agentScopes = ['read', 'read'];
+      const nonHierarchicalScopeProbe = JSON.parse(JSON.stringify(expectedBaseline)) as RouteDispositionManifest;
+      nonHierarchicalScopeProbe.routes[authorityProbeKey].agentScopes = ['read', 'deploy'];
+      const invalidResourceProbe = JSON.parse(JSON.stringify(expectedBaseline)) as unknown as { routes: Record<string, Record<string, unknown>> };
+      invalidResourceProbe.routes[authorityProbeKey].resourceClass = 'unknown-resource';
+      const invalidWorkspaceModeProbe = JSON.parse(JSON.stringify(expectedBaseline)) as unknown as { routes: Record<string, Record<string, unknown>> };
+      invalidWorkspaceModeProbe.routes[authorityProbeKey].workspaceMode = 'sometimes';
+      const shapeProbes = [
+        missingAuthorityFieldProbe,
+        extraAuthorityFieldProbe,
+        unorderedScopeProbe,
+        duplicateScopeProbe,
+        nonHierarchicalScopeProbe,
+        invalidResourceProbe,
+        invalidWorkspaceModeProbe,
+      ];
+      if (shapeProbes.some(probe => routeDispositionManifestShapeErrors(probe).length === 0)) {
+        errors.push('manifest v4 authority shape selftest failed missing/extra/scope/resource/workspace-mode probes');
+      }
+
+      const reviewedFieldProbe = JSON.parse(JSON.stringify(expectedBaseline)) as RouteDispositionManifest;
+      reviewedFieldProbe.routes[authorityProbeKey].resourceClass = reviewedFieldProbe.routes[authorityProbeKey].resourceClass === 'configured-root'
+        ? 'stateless-analysis'
+        : 'configured-root';
+      const regeneratedReviewedProbe = buildBaseline(inventory, publicGets, reviewedFieldProbe);
+      if (regeneratedReviewedProbe.routes[authorityProbeKey].resourceClass !== reviewedFieldProbe.routes[authorityProbeKey].resourceClass ||
+        serializedManifest(regeneratedReviewedProbe) !== serializedManifest(reviewedFieldProbe)) {
+        errors.push('candidate preservation selftest failed to retain an exact reviewed authority edit');
+      }
+      const protectedFallback = reviewedAuthorityFields(undefined, { disposition: 'session-only' }, true);
+      const publicFallback = reviewedAuthorityFields(undefined, { disposition: 'legacy-public' }, true);
+      if (protectedFallback.agentScopes.length || !sameStrings(publicFallback.agentScopes, [...AGENT_KEY_SCOPES]) ||
+        publicFallback.resourceClass !== 'public') {
+        errors.push('candidate default selftest failed closed protected-route or public-route presets');
+      }
+    }
+
+    const legacyV3Probe = {
+      ...expectedBaseline,
+      schemaVersion: 'forge.route-dispositions.v3' as const,
+      routes: Object.fromEntries(Object.entries(expectedBaseline.routes).map(([key, entry]) => [key, {
+        disposition: entry.disposition,
+        owner: entry.owner,
+        registrations: entry.registrations,
+      }])),
+      dynamicRoutes: Object.fromEntries(Object.entries(expectedBaseline.dynamicRoutes).map(([key, entry]) => [key, {
+        disposition: entry.disposition,
+        owner: entry.owner,
+        registrations: entry.registrations,
+      }])),
+    } satisfies LegacyRouteDispositionManifest;
+    if (routeDispositionManifestShapeErrors(legacyV3Probe, true).length || versionGuardRejects(legacyV3Probe, expectedBaseline)) {
+      errors.push('released v3 compatibility selftest failed a complete v3-to-v4 unchanged-signature transition');
     }
     const baselineProbeCommit = 'a'.repeat(40);
     const baselineProbeBytes = serializedManifest(expectedBaseline);
@@ -6891,7 +7078,25 @@ function audit(manifestOverride?: RouteDispositionManifest): { errors: string[];
       if (!fact) continue;
       const reqPath = sampleRoute(fact.path).replace(/^\/api/, '');
       const observedPublic = fact.method === 'GET' && publicGets.has(reqPath);
-      const scopes = reachableScopes(fact);
+      const scopes = reachableScopes(fact, manifestAuthority);
+      if (!sameStrings(scopes, disposition.agentScopes)) {
+        errors.push(`${key}: runtime scopes ${scopes.join(',') || 'none'} != reviewed manifest scopes ${disposition.agentScopes.join(',') || 'none'}`);
+      }
+      const allAgentScopes = sameStrings(disposition.agentScopes, [...AGENT_KEY_SCOPES]);
+      const noAgentScopes = disposition.agentScopes.length === 0;
+      if (['public', 'stateless-analysis'].includes(disposition.resourceClass) && !allAgentScopes) {
+        errors.push(`${key}: ${disposition.resourceClass} routes must use the read/write/deploy preset`);
+      }
+      if (['global-session', 'cross-workspace-session', 'external-repository', 'command-session'].includes(disposition.resourceClass) && !noAgentScopes) {
+        errors.push(`${key}: ${disposition.resourceClass} routes must remain Studio-session only`);
+      }
+      if (disposition.resourceClass === 'host-file-read' && !sameStrings(disposition.agentScopes, ['deploy'])) {
+        errors.push(`${key}: host-file-read routes must use the deploy-only preset`);
+      }
+      if (disposition.resourceClass === 'provider-network' &&
+        !(noAgentScopes || sameStrings(disposition.agentScopes, ['deploy']))) {
+        errors.push(`${key}: provider-network routes must be Studio-only or deploy-only`);
+      }
       if (disposition.disposition === 'legacy-public' && !observedPublic) errors.push(`${key}: legacy-public route is not in PUBLIC_READONLY_GETS`);
       if (observedPublic && !['canonical-capability', 'legacy-public', 'public-selftest'].includes(disposition.disposition)) {
         errors.push(`${key}: public route is classified ${disposition.disposition}`);
@@ -6933,12 +7138,13 @@ function audit(manifestOverride?: RouteDispositionManifest): { errors: string[];
   for (const capability of FORGE_CAPABILITIES) {
     const observedPublic = capability.apiBindings.every(binding => binding.method === 'GET' && publicGets.has(binding.path.replace(/^\/api/, '')));
     if (observedPublic !== capability.access.public) errors.push(`${capability.id}: declared public=${capability.access.public}, observed public=${observedPublic}`);
-    const primary = capability.apiBindings.find(binding => binding.role === 'primary');
-    if (primary) {
-      const reqPath = sampleRoute(primary.path).replace(/^\/api/, '');
-      const observedScopes = (['read', 'write', 'deploy'] as const).filter(scope => scopeAllows(scope, primary.method, reqPath));
+    for (const binding of capability.apiBindings) {
+      const reqPath = sampleRoute(binding.path).replace(/^\/api/, '');
+      const observedScopes = (['read', 'write', 'deploy'] as const).filter(scope => manifestAuthority
+        ? manifestAuthority.allows(scope, binding.method, `/api${reqPath}`)
+        : scopeAllows(scope, binding.method, reqPath));
       if (!sameStrings(observedScopes, capability.access.agentScopes)) {
-        errors.push(`${capability.id}: declared scopes ${capability.access.agentScopes.join(',')} != observed ${observedScopes.join(',')}`);
+        errors.push(`${capability.id}: ${binding.method} ${binding.path} declares scopes ${capability.access.agentScopes.join(',')} != observed ${observedScopes.join(',')}`);
       }
     }
     for (const binding of capability.apiBindings) {
@@ -7536,8 +7742,8 @@ function serializedManifest(manifest: RouteDispositionManifest): string {
   return `${JSON.stringify(manifest, null, 2)}\n`;
 }
 
-function assertVersionedSignatureChanges(previous: RouteDispositionManifest, candidate: RouteDispositionManifest): void {
-  const previousShapeErrors = routeDispositionManifestShapeErrors(previous);
+function assertVersionedSignatureChanges(previous: ReleasedRouteDispositionManifest, candidate: RouteDispositionManifest): void {
+  const previousShapeErrors = routeDispositionManifestShapeErrors(previous, true);
   if (previousShapeErrors.length) throw new Error(`malformed released route manifest: ${previousShapeErrors.join('; ')}`);
   const candidateShapeErrors = routeDispositionManifestShapeErrors(candidate);
   if (candidateShapeErrors.length) throw new Error(`malformed candidate route manifest: ${candidateShapeErrors.join('; ')}`);
@@ -7546,7 +7752,7 @@ function assertVersionedSignatureChanges(previous: RouteDispositionManifest, can
     for (const [identity, hash] of Object.entries(signatures || {})) {
       const parsed = parseCapabilityIdentity(identity);
       if (!parsed) throw new Error(`invalid capability identity in manifest: ${identity}`);
-      if (result.has(parsed.id)) throw new Error(`multiple descriptor versions for stable capability ${parsed.id} are not supported by the v3 manifest`);
+      if (result.has(parsed.id)) throw new Error(`multiple descriptor versions for stable capability ${parsed.id} are not supported by the route manifest`);
       result.set(parsed.id, { identity, version: parsed.version, hash });
     }
     return result;
@@ -7587,7 +7793,7 @@ function assertVersionedSignatureChanges(previous: RouteDispositionManifest, can
   }
 }
 
-function versionGuardRejects(previous: RouteDispositionManifest, candidate: RouteDispositionManifest): boolean {
+function versionGuardRejects(previous: ReleasedRouteDispositionManifest, candidate: RouteDispositionManifest): boolean {
   try {
     assertVersionedSignatureChanges(previous, candidate);
     return false;
@@ -7602,13 +7808,21 @@ if (process.argv.includes('--generate-candidate')) {
     console.error('Refusing to generate a candidate with unrecognized registrations or public-allowlist additions.');
     process.exit(1);
   }
-  const candidate = buildBaseline(initial, publicGets);
+  const authoritySource = fs.existsSync(MANIFEST_PATH) ? loadManifest() : undefined;
+  const candidate = buildBaseline(initial, publicGets, authoritySource);
+  const newlyDiscoveredRoutes = new Set(Object.keys(candidate.routes).filter(key => !authoritySource?.routes[key]));
   try {
     const baseline = loadReleasedManifestAtRef();
     if (baseline.kind === 'released') assertVersionedSignatureChanges(baseline.manifest!, candidate);
     const candidateAudit = audit(candidate);
-    if (candidateAudit.errors.length) {
-      throw new Error(`Refusing candidate generation because the current source fails the full audit: ${candidateAudit.errors.join(' | ')}`);
+    const pendingCanonicalScopeReviews = new Set(FORGE_CAPABILITIES.flatMap(capability => capability.apiBindings
+      .map(binding => routeKey(binding.method, binding.path))
+      .filter(key => newlyDiscoveredRoutes.has(key))
+      .map(key => `${capability.id}: ${key}`)));
+    const blockingErrors = candidateAudit.errors.filter(error => ![...pendingCanonicalScopeReviews]
+      .some(prefix => error.startsWith(prefix) && error.includes('declares scopes') && error.includes('!= observed')));
+    if (blockingErrors.length) {
+      throw new Error(`Refusing candidate generation because the current source fails the reviewable audit: ${blockingErrors.join(' | ')}`);
     }
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
@@ -7617,7 +7831,10 @@ if (process.argv.includes('--generate-candidate')) {
   const serialized = serializedManifest(candidate);
   fs.mkdirSync(path.dirname(CANDIDATE_PATH), { recursive: true });
   fs.writeFileSync(CANDIDATE_PATH, serialized, 'utf8');
-  console.log(`Generated candidate ${path.relative(ROOT, CANDIDATE_PATH)} SHA-256 ${sha256(serialized)}. Review it against ${path.relative(ROOT, MANIFEST_PATH)}, then promote that exact hash.`);
+  const reviewNotice = newlyDiscoveredRoutes.size
+    ? ` New routes defaulted closed unless public; review authority for: ${[...newlyDiscoveredRoutes].join(', ')}.`
+    : '';
+  console.log(`Generated candidate ${path.relative(ROOT, CANDIDATE_PATH)} SHA-256 ${sha256(serialized)}. Review it against ${path.relative(ROOT, MANIFEST_PATH)}, then promote that exact hash.${reviewNotice}`);
   process.exit(0);
 }
 
@@ -7641,7 +7858,7 @@ if (promoteIndex >= 0) {
   let baselineRef = '';
   try {
     candidate = JSON.parse(candidateBytes) as RouteDispositionManifest;
-    const currentBytes = serializedManifest(buildBaseline(initial, publicGets));
+    const currentBytes = serializedManifest(buildBaseline(initial, publicGets, candidate));
     if (candidateBytes !== currentBytes) throw new Error('Candidate is stale relative to current route/capability/MCP source; regenerate and review again.');
     const baseline = loadReleasedManifestAtRef();
     baselineCommit = baseline.commit;

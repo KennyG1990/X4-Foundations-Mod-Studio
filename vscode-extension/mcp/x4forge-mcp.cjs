@@ -180,7 +180,7 @@ const TOOLS = [
   {
     name: "check_patch_readiness",
     capabilityId: "patch.readiness.analyze",
-    capabilityVersion: 1,
+    capabilityVersion: 2,
     description:
       "Check a mod's <diff> selectors against old and current game data. Returns summary data plus at most 50 findings filtered to broken or removed targets; use the Agent API for all verdicts.",
     inputSchema: {

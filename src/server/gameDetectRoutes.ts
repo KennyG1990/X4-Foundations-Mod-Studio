@@ -20,7 +20,7 @@
  *                                            POST /api/schema/config, unchanged.
  */
 
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -34,6 +34,8 @@ import { atomicWriteFile } from "../lib/workspaceState";
 interface GameDetectDeps {
   /** cat/dat extractor: (gamePath, 'libraries/md.xsd') → ExtractMatch | null */
   extractBaseGameFile: (gamePath: string, targetFile: string) => { name: string; text: string } | null;
+  /** B117 defense-in-depth for the standing harvested-schema write. */
+  requireStudioActor?: (req: Request, res: Response) => boolean;
 }
 
 /** Read one registry value; '' when the key/value is missing or reg.exe fails. */
@@ -161,6 +163,7 @@ export function registerGameDetectRoutes(app: Express, deps: GameDetectDeps): vo
   });
 
   app.post("/api/agent/setup/harvest-schemas", (req, res) => {
+    if (deps.requireStudioActor && !deps.requireStudioActor(req, res)) return;
     try {
       const gamePath = String(req.body?.x4GamePath || "").trim();
       if (!gamePath || !fs.existsSync(gamePath)) {

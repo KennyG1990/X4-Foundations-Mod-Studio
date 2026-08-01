@@ -138,8 +138,8 @@ async function seedWorkspace(page: Page): Promise<void> {
     localStorage.removeItem('x4_mod_studio_version');
   });
   await page.goto('/');
-  await expect(page.getByTestId('grid-canvas')).toBeVisible();
   await page.waitForFunction(() => !!(window as E2EWindow).__X4_E2E__);
+  await expect(page.getByTestId('grid-canvas')).toBeVisible();
   // The boot poll adopts the seeded server copy (version beats the cleared local state).
   await expect(page.getByTestId('canvas-node-cue_e2e')).toBeVisible();
   await expect(page.getByTestId('canvas-node-action_e2e')).toBeVisible();

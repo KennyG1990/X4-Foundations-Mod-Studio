@@ -157,7 +157,17 @@ import { runReferenceLiteralLintSelftest } from "./src/lib/referenceLint";
 import { parse as luaParse } from "luaparse";
 import { registerNpcIdentityProbeRoutes } from "./src/server/npcIdentityProbe";
 import { registerSelftests } from "./src/server/selftestRegistry";
-import { createAgentKeyStore, scopeAllows, runAgentKeysSelftest, AGENT_KEY_TTLS, AGENT_KEY_PREFIX, type AgentKeyScope } from "./src/lib/agentKeys";
+import {
+  createAgentKeyStore,
+  resolveAgentRouteAuthority,
+  runAgentKeysSelftest,
+  AGENT_KEY_TTLS,
+  AGENT_KEY_PREFIX,
+  AGENT_AUTHORITY_POLICY_HASH,
+  AGENT_AUTHORITY_POLICY_VERSION,
+  type AgentKeyScope,
+  type AgentRouteAuthorityDecision,
+} from "./src/lib/agentKeys";
 // B86 — agent action ledger: a skimmable record of what agents actually did.
 import {
   ledgerRouteKind, describeAction, lineDelta, unifiedDiff, looksBinary, filterRows, revertibility,
@@ -253,6 +263,11 @@ dotenv.config();
 dotenv.config({ path: '.env.local', override: true });
 
 const app = express();
+// B117: keep Express route identity identical to the reviewed closed-world authority
+// matcher. A case- or slash-variant must never resolve to a handler under broader
+// Express defaults after the authority layer rejected that exact method/path.
+app.set('case sensitive routing', true);
+app.set('strict routing', true);
 const PORT = Number(process.env.PORT || 3000);
 const TOKEN_FILE = path.join(process.cwd(), ".studio-api-token");
 /** B93.5: reported by GET /api/agent/status so callers can tell a restart from a stale read. */
@@ -519,14 +534,20 @@ const agentKeyStore = createAgentKeyStore({ file: AGENT_KEYS_FILE });
 // eslint-disable-next-line prefer-const
 let workspaceRegistry: WorkspaceRegistry;
 
-type RequestActor = { kind: 'agent' | 'studio'; label: string; scope?: AgentKeyScope; workspaceId?: string };
+type RequestActor = {
+  kind: 'agent' | 'studio';
+  label: string;
+  scope?: AgentKeyScope;
+  workspaceId?: string;
+  authority?: AgentRouteAuthorityDecision;
+};
 
 function requireStudioActor(req: express.Request, res: express.Response): boolean {
   const actor = (req as any).__actor as RequestActor | undefined;
   if (actor?.kind === 'studio') return true;
   res.status(403).json({
     code: 'STUDIO_SESSION_REQUIRED',
-    error: 'This cross-workspace compatibility route is available only to the Studio session.',
+    error: 'This route requires the Studio session.',
   });
   return false;
 }
@@ -543,14 +564,6 @@ function requestedWorkspaceIdentity(req: express.Request): { workspaceId: string
     clientId,
     ...(distinct.length > 1 ? { conflict: 'Conflicting workspaceId values were supplied in the request.' } : {}),
   };
-}
-
-function statefulWorkspaceRoute(req: express.Request): boolean {
-  const path = req.path;
-  return path === '/agent/status' || path === '/agent/diagnostics' || path === '/agent/readiness' ||
-    path === '/agent/proof' || path === '/agent/health-card' || path === '/fs/restore-snapshot' ||
-    (path === '/agent/workspace' || path.startsWith('/agent/workspace/')) || path.startsWith('/agent/history') ||
-    path.startsWith('/agent/bulk-transform/');
 }
 
 function resolveWorkspaceAuthority(req: express.Request, res: express.Response, required = true): WorkspaceRecord | null {
@@ -600,6 +613,8 @@ function resolveWorkspaceAuthority(req: express.Request, res: express.Response, 
 }
 
 function authMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const authority = resolveAgentRouteAuthority(req.method, req.path);
+  if (authority.ok) (req as any).__routeAuthority = authority.decision;
   if (req.method === "GET" && PUBLIC_READONLY_GETS.has(req.path)) {
     return next();
   }
@@ -613,7 +628,11 @@ function authMiddleware(req: express.Request, res: express.Response, next: expre
   if (token === STUDIO_API_TOKEN) {
     // B86: record WHO acted, never WHAT they authenticated with. Only the actor kind and a
     // human label are ever attached; the token itself never leaves this function.
-    (req as any).__actor = { kind: 'studio', label: 'Studio UI' } satisfies RequestActor;
+    (req as any).__actor = {
+      kind: 'studio',
+      label: 'Studio UI',
+      ...(authority.ok ? { authority: authority.decision } : {}),
+    } satisfies RequestActor;
     return next(); // session token: full power, unchanged fast path
   }
 
@@ -623,15 +642,47 @@ function authMiddleware(req: express.Request, res: express.Response, next: expre
     if (!v.ok) {
       return res.status(401).json({ error: `Unauthorized: agent key ${v.reason || "invalid"}.` });
     }
-    if (!scopeAllows(v.scope as AgentKeyScope, req.method, req.path)) {
+    if ('reason' in authority) {
+      const authorityCode = authority.reason === 'malformed_path'
+        ? 'AUTHORITY_PATH_MALFORMED'
+        : 'AUTHORITY_ROUTE_UNREVIEWED';
       return res.status(403).json({
-        error: `Forbidden: key "${v.label}" has scope "${v.scope}" — this route needs a higher scope (or the studio session token for key management).`,
+        error: `Forbidden: key "${v.label}" has scope "${v.scope}" but this method/path is not in the reviewed agent authority policy.`,
         code: "insufficient_scope",
+        authorityCode,
         scope: v.scope,
+        policyVersion: AGENT_AUTHORITY_POLICY_VERSION,
+        policyHash: AGENT_AUTHORITY_POLICY_HASH,
       });
     }
-    agentKeyStore.touch(v.id!);
-    (req as any).__actor = { kind: 'agent', label: v.label || 'unnamed key', scope: v.scope, workspaceId: v.workspaceId } satisfies RequestActor;
+    if (!authority.decision.agentScopes.includes(v.scope as AgentKeyScope)) {
+      const studioOnly = authority.decision.agentScopes.length === 0;
+      return res.status(403).json({
+        error: studioOnly
+          ? `Forbidden: ${authority.decision.routeKey} requires the Studio session.`
+          : `Forbidden: key "${v.label}" has scope "${v.scope}"; ${authority.decision.routeKey} allows ${authority.decision.agentScopes.join(' or ')}.`,
+        code: "insufficient_scope",
+        authorityCode: studioOnly ? 'STUDIO_SESSION_REQUIRED' : 'AGENT_SCOPE_DENIED',
+        scope: v.scope,
+        requiredScopes: authority.decision.agentScopes,
+        route: authority.decision.routeKey,
+        policyVersion: authority.decision.policyVersion,
+        policyHash: authority.decision.policyHash,
+      });
+    }
+    (req as any).__actor = {
+      kind: 'agent',
+      label: v.label || 'unnamed key',
+      scope: v.scope,
+      workspaceId: v.workspaceId,
+      authority: authority.decision,
+    } satisfies RequestActor;
+    // A verified credential is not a successful use by itself. Workspace binding,
+    // handler authorization, validation and execution all run after this middleware.
+    // Only a completed non-error response is durable usage evidence.
+    res.once('finish', () => {
+      if (res.statusCode < 400) agentKeyStore.touch(v.id!);
+    });
     return next();
   }
 
@@ -639,16 +690,13 @@ function authMiddleware(req: express.Request, res: express.Response, next: expre
 }
 
 app.use("/api", authMiddleware);
-const INPUT_FIRST_WORKSPACE_ROUTES = new Set([
-  'POST /agent/compile',
-  'POST /agent/generate',
-  'POST /agent/generate/preview',
-]);
 function workspaceAuthorityMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
-  if (INPUT_FIRST_WORKSPACE_ROUTES.has(`${req.method.toUpperCase()} ${req.path}`)) return next();
+  const authority = (req as any).__routeAuthority as AgentRouteAuthorityDecision | undefined;
+  if (authority?.workspaceMode === 'input-first') return next();
   const identity = requestedWorkspaceIdentity(req);
-  if (statefulWorkspaceRoute(req) || identity.workspaceId || identity.conflict) {
-    if (!resolveWorkspaceAuthority(req, res, statefulWorkspaceRoute(req))) return;
+  const required = authority?.workspaceMode === 'required';
+  if (required || identity.workspaceId || identity.conflict) {
+    if (!resolveWorkspaceAuthority(req, res, required)) return;
   }
   return next();
 }
@@ -939,7 +987,21 @@ app.use("/api", ledgerMiddleware);
 // ---------------------------------------------------------------------------
 app.get("/api/agent/keys", (_req, res) => {
   agentKeyStore.prune();
-  return res.json({ keys: agentKeyStore.list(), ttls: Object.keys(AGENT_KEY_TTLS) });
+  return res.json({
+    keys: agentKeyStore.list(),
+    ttls: Object.keys(AGENT_KEY_TTLS),
+    authority: {
+      version: AGENT_AUTHORITY_POLICY_VERSION,
+      hash: AGENT_AUTHORITY_POLICY_HASH,
+      presets: {
+        read: 'Reviewed inspect and deterministic analysis routes only.',
+        write: 'Read plus guarded workspace authoring, compile, validation and local packaging; no deploy or provider spend.',
+        deploy: 'Write plus explicitly reviewed deploy, guarded configured-root/recovery and caller-key AI routes.',
+      },
+      studioOnly: ['credentials', 'standing configuration', 'Studio preferences', 'workspace administration', 'GitHub', 'Steam handoff', 'human export receipts', 'command execution'],
+      existingKeysFollowCurrentPolicy: true,
+    },
+  });
 });
 
 app.post("/api/agent/keys", (req, res) => {
@@ -2603,14 +2665,17 @@ async function generateContentWithRetry(ai: any, params: any, maxRetries = 2) {
 // Unified Multi-Provider AI Endpoint Controller (Gemini, Claude, OpenAI)
 // Plays direct native fetch proxy requests to protect backend secrets.
 // -----------------------------------------------------
-// Security (Track B): the server's own .env provider keys may only back requests that
-// came from the app UI in the browser (Origin/Referer = the app's localhost origins).
-// External clients (scripts, agents, other local processes) must supply their own key
-// via x-custom-api-key — they hold the studio token, but that authorizes workspace
-// access, not spending the user's provider credits.
+// Security (Track B): an agent-key actor can never inherit the server's stored/.env
+// provider keys, even with forged localhost Origin/Referer headers. The legacy Studio
+// session still combines its bearer token with isAppUiRequest() as a compatibility
+// signal. B64-SEC5 records that a client holding that full-power Studio token can spoof
+// those headers; replacing that deliberate boundary remains Ken-gated and is not
+// silently rearchitected by B117. External agents must use scoped agent keys plus
+// x-custom-api-key.
 // Audit #3: key management endpoints — write-only set, boolean-only status. Values
 // never travel back to the browser. Authed like every non-allowlisted route.
 app.post("/api/ai/keys", (req, res) => {
+  if (!requireStudioActor(req, res)) return;
   try {
     const { provider, key } = req.body || {};
     const status = setStoredAiKey(String(provider || ""), String(key ?? ""));
@@ -2620,7 +2685,8 @@ app.post("/api/ai/keys", (req, res) => {
   }
 });
 
-app.get("/api/ai/keys/status", (_req, res) => {
+app.get("/api/ai/keys/status", (req, res) => {
+  if (!requireStudioActor(req, res)) return;
   return res.json({ status: aiKeyStatus() });
 });
 
@@ -2666,12 +2732,14 @@ const aiSpendMeter = createSpendMeter(
 // responds to one exact harness prompt when the harness explicitly enables test mode.
 // This lets the real /generate/preview adapter prove apply:false without network spend.
 const ROUTE_TEST_AI_PROMPT = '__FORGE_ROUTE_TEST_PREVIEW__';
+const ROUTE_TEST_CALLER_KEY_PROMPT = '__FORGE_ROUTE_TEST_CALLER_KEY__';
 const ROUTE_TEST_AI_DELAY_PROMPTS = new Set(['__FORGE_ROUTE_TEST_HELD__', '__FORGE_ROUTE_TEST_DEADLINE__']);
 const routeTestAiDelayed = new Set<string>();
 const ROUTE_TEST_AI_DELAY_MS = Math.max(0, Number(process.env.FORGE_ROUTE_TEST_AI_DELAY_MS || 0));
 const ROUTE_TEST_AI_MARKER_DIR = process.env.FORGE_ROUTE_TEST_AI_MARKER_DIR || '';
+const ROUTE_TEST_MODE_ENABLED = process.env.NODE_ENV !== 'production' && process.env.FORGE_ROUTE_TEST_MODE === '1';
 const routeTestAiResponses: string[] = (() => {
-  if (process.env.NODE_ENV === 'production' || process.env.FORGE_ROUTE_TEST_MODE !== '1') return [];
+  if (!ROUTE_TEST_MODE_ENABLED) return [];
   try {
     const parsed = JSON.parse(process.env.FORGE_ROUTE_TEST_AI_RESPONSES || '[]');
     return Array.isArray(parsed) && parsed.every(value => typeof value === 'string') ? parsed : [];
@@ -2708,6 +2776,26 @@ async function callMultiProviderAI(
   const provider = (req.headers["x-ai-provider"] as string) || "gemini";
   const model = (req.headers["x-ai-model"] as string) || "";
   const reasoning = (req.headers["x-ai-reasoning"] as string) || "none";
+  const actor = (req as any).__actor as RequestActor | undefined;
+  const customKeyHeader = (req.headers["x-custom-api-key"] as string) || "";
+  const envFallbackAllowed = actor?.kind === 'studio' && isAppUiRequest(req);
+  const NO_KEY_MSG = "No API key for this request. App-UI requests use the configured provider settings; external/agent requests must supply their own key via the x-custom-api-key header (the server's stored/.env keys are reserved for the authenticated app UI).";
+  const storedKey = envFallbackAllowed ? getStoredAiKey(provider) : "";
+  const environmentKey = envFallbackAllowed
+    ? provider === 'claude'
+      ? process.env.ANTHROPIC_API_KEY
+      : provider === 'openai'
+        ? process.env.OPENAI_API_KEY
+        : provider === 'openrouter'
+          ? (process.env.OPENROUTER_API_KEY || process.env.OPEN_ROUTER_API_KEY)
+          : process.env.GEMINI_API_KEY
+    : undefined;
+  const providerKey = customKeyHeader || storedKey || environmentKey || "";
+  if (!providerKey || (provider !== 'claude' && provider !== 'openai' && provider !== 'openrouter' && providerKey === 'MY_GEMINI_API_KEY')) {
+    throw new Error(envFallbackAllowed
+      ? `${provider === 'claude' ? 'Anthropic' : provider === 'openai' ? 'OpenAI' : provider === 'openrouter' ? 'OpenRouter' : 'Gemini'} API key is not configured. Please supply your API Key in the AI Providers settings modal.`
+      : NO_KEY_MSG);
+  }
   const estInTokens = Math.ceil((systemInstruction.length + prompt.length) / 4);
   const estimatedUsd = estimateCallUsd(model, estInTokens, 4000);
   {
@@ -2724,25 +2812,30 @@ async function callMultiProviderAI(
     }
     aiSpendMeter.reserve(provider, estimatedUsd);
   }
-  const customKeyHeader = (req.headers["x-custom-api-key"] as string) || "";
-  const envFallbackAllowed = isAppUiRequest(req);
+  // External HTTP oracle seam: deliberately after credential eligibility and spend
+  // reservation, but before network dispatch. It proves an agent-supplied key reaches
+  // the paid-call boundary without making a real provider request or logging the key.
+  if (ROUTE_TEST_MODE_ENABLED && routeTestPrompt === ROUTE_TEST_CALLER_KEY_PROMPT) {
+    if (ROUTE_TEST_AI_MARKER_DIR) {
+      fs.mkdirSync(ROUTE_TEST_AI_MARKER_DIR, { recursive: true });
+      fs.appendFileSync(path.join(ROUTE_TEST_AI_MARKER_DIR, 'caller-key-provider-dispatch.jsonl'), `${JSON.stringify({
+        provider,
+        credentialSource: customKeyHeader ? 'caller' : 'studio',
+      })}\n`);
+    }
+    return JSON.stringify({ text: 'Caller-supplied provider key accepted by the isolated dispatch oracle.' });
+  }
   // Hard server-side timeout: a hung provider must not leave the client spinning forever.
   const AI_TIMEOUT_MS = 120_000;
-  const NO_KEY_MSG = "No API key for this request. App-UI requests use the configured provider settings; external/agent requests must supply their own key via the x-custom-api-key header (the server's .env keys are reserved for the app UI).";
-  // Audit #3 (2026-07-10): keys live SERVER-SIDE now (data/ai-keys.json via the AI
-  // Providers modal). Precedence: explicit header (agents + one legacy round) → stored
-  // key (app-UI only — agents don't spend the user's credits) → .env (app-UI only).
-  const storedKey = envFallbackAllowed ? getStoredAiKey(provider) : "";
-  const customKey = customKeyHeader || storedKey;
+  // Audit #3 (2026-07-10): precedence is explicit caller key, then stored/.env key only
+  // for an authenticated Studio actor from the real app origin. Credential eligibility is
+  // resolved before reserving spend, so missing credentials cannot mutate the meter.
   // B64-SEC4: the call count and coarse estimated USD cost were reserved together above,
   // before network dispatch. A configured cap therefore cannot be bypassed by a second-write
   // failure between the call and cost dimensions.
 
   if (provider === "claude") {
-    const claudeKey = customKey || (envFallbackAllowed ? process.env.ANTHROPIC_API_KEY : undefined);
-    if (!claudeKey) {
-      throw new Error(envFallbackAllowed ? "Anthropic API key is not configured. Please supply your API Key in the AI Providers settings modal." : NO_KEY_MSG);
-    }
+    const claudeKey = providerKey;
 
     const finalModel = model || "claude-3-5-sonnet-latest";
     let finalPrompt = prompt;
@@ -2799,10 +2892,7 @@ async function callMultiProviderAI(
     return textOut.trim();
 
   } else if (provider === "openai") {
-    const openaiKey = customKey || (envFallbackAllowed ? process.env.OPENAI_API_KEY : undefined);
-    if (!openaiKey) {
-      throw new Error(envFallbackAllowed ? "OpenAI API key is not configured. Please supply your API Key in the AI Providers settings modal." : NO_KEY_MSG);
-    }
+    const openaiKey = providerKey;
 
     const finalModel = model || "gpt-4o";
     let finalPrompt = prompt;
@@ -2852,10 +2942,7 @@ async function callMultiProviderAI(
     return textOut.trim();
 
   } else if (provider === "openrouter") {
-    const openrouterKey = customKey || (envFallbackAllowed ? (process.env.OPENROUTER_API_KEY || process.env.OPEN_ROUTER_API_KEY) : undefined);
-    if (!openrouterKey) {
-      throw new Error(envFallbackAllowed ? "OpenRouter API key is not configured. Please supply your API Key in the AI Providers settings modal." : NO_KEY_MSG);
-    }
+    const openrouterKey = providerKey;
 
     // B55P1: "google/gemini-2.1-flash" is not a valid OpenRouter id (live-reproduced 500,
     // 2026-07-16, catalog-checked) — a keyed request with no x-ai-model header always failed.
@@ -2899,10 +2986,7 @@ async function callMultiProviderAI(
 
   } else {
     // Default to Google Gemini API (standard model schema)
-    const geminiKey = customKey || (envFallbackAllowed ? process.env.GEMINI_API_KEY : undefined);
-    if (!geminiKey || geminiKey === "MY_GEMINI_API_KEY") {
-      throw new Error(envFallbackAllowed ? "Gemini API key is not configured. Please supply your API Key in the AI Providers settings modal to enable cognitive assistance." : NO_KEY_MSG);
-    }
+    const geminiKey = providerKey;
 
     const finalModel = model || "gemini-3.5-flash";
 
@@ -3825,6 +3909,7 @@ function rejectUnsafeDevelopmentWrite(res: express.Response, resolved: ResolvedX
 }
 
 app.get("/api/schema/config", (req, res) => {
+  if (!requireStudioActor(req, res)) return;
   try {
     const resolved = resolveXsdConfig();
     const issues = directoryRoleIssues(resolved);
@@ -3857,11 +3942,13 @@ app.get("/api/schema/config", (req, res) => {
 // localStorage is origin-scoped, so layout-only persistence there silently resets whenever
 // the port changes. Keep the normalized preference in the same durable, extension-owned
 // state root as the active workspace; X4_STATE_DIR also makes e2e writes disposable.
-app.get("/api/studio/layout", (_req, res) => {
+app.get("/api/studio/layout", (req, res) => {
+  if (!requireStudioActor(req, res)) return;
   return res.json({ layout: readStudioLayoutState() });
 });
 
 app.post("/api/studio/layout", (req, res) => {
+  if (!requireStudioActor(req, res)) return;
   try {
     return res.json({ success: true, layout: writeStudioLayoutState(req.body?.layout) });
   } catch (error) {
@@ -3871,11 +3958,13 @@ app.post("/api/studio/layout", (req, res) => {
   }
 });
 
-app.get("/api/studio/release-preferences", (_req, res) => {
+app.get("/api/studio/release-preferences", (req, res) => {
+  if (!requireStudioActor(req, res)) return;
   return res.json({ preferences: readReleasePreferencesState() });
 });
 
 app.post("/api/studio/release-preferences", (req, res) => {
+  if (!requireStudioActor(req, res)) return;
   try {
     return res.json({ success: true, preferences: writeReleasePreferencesState(req.body?.preferences) });
   } catch (error) {
@@ -3885,6 +3974,7 @@ app.post("/api/studio/release-preferences", (req, res) => {
 });
 
 app.post("/api/schema/config", (req, res) => {
+  if (!requireStudioActor(req, res)) return;
   try {
     // B84: `schemaDir` used to be written UNCONDITIONALLY, so any partial update that omitted
     // it silently blanked the configured schema path. Absence now preserves the existing value
@@ -5376,6 +5466,19 @@ app.post("/api/agent/workspace", (req, res) => {
   if (!workspace) {
     return res.status(400).json({ error: "Missing required 'workspace' body parameter." });
   }
+  const actor = (req as any).__actor as RequestActor | undefined;
+  if (force === true && actor?.kind === 'agent' && actor.scope !== 'deploy') {
+    return res.status(403).json({
+      code: 'insufficient_scope',
+      authorityCode: 'AGENT_SCOPE_DENIED',
+      error: 'Forced workspace replacement requires a deploy-scoped key or the Studio session.',
+      scope: actor.scope,
+      requiredScopes: ['deploy'],
+      route: actor.authority?.routeKey,
+      policyVersion: actor.authority?.policyVersion,
+      policyHash: actor.authority?.policyHash,
+    });
+  }
   const r = applyWorkspaceMutation(record, workspace, { expectedVersion, expectedHead, expectedSnapshotHash, dryRun, force: force === true });
   return res.status(r.status).json(r.body);
 });
@@ -5391,6 +5494,19 @@ app.post("/api/agent/workspace/merge", (req, res) => {
   const { changes, expectedVersion, expectedHead, expectedSnapshotHash, dryRun, force } = req.body || {};
   if (!changes || typeof changes !== 'object') {
     return res.status(400).json({ error: "Missing required 'changes' object (top-level workspace fields to merge)." });
+  }
+  const actor = (req as any).__actor as RequestActor | undefined;
+  if (force === true && actor?.kind === 'agent' && actor.scope !== 'deploy') {
+    return res.status(403).json({
+      code: 'insufficient_scope',
+      authorityCode: 'AGENT_SCOPE_DENIED',
+      error: 'Forced workspace merge requires a deploy-scoped key or the Studio session.',
+      scope: actor.scope,
+      requiredScopes: ['deploy'],
+      route: actor.authority?.routeKey,
+      policyVersion: actor.authority?.policyVersion,
+      policyHash: actor.authority?.policyHash,
+    });
   }
   const r = applyWorkspaceMutation(record, changes, { expectedVersion, expectedHead, expectedSnapshotHash, dryRun, merge: true, force: force === true });
   return res.status(r.status).json(r.body);
@@ -7108,6 +7224,7 @@ app.get("/api/agent/external-api-registry", (req, res) => {
 
 // Authenticated: register an API def at runtime (in-memory; not persisted to disk).
 app.post("/api/agent/external-api/register", (req, res) => {
+  if (!requireStudioActor(req, res)) return;
   try {
     const v = validateApiDefinition(req.body, "endpoint");
     if (!v.ok || !v.normalized) {
@@ -12556,7 +12673,10 @@ app.post("/api/agent/generate/preview", (req, res) => {
   req.body = applyForgeCapabilityFixedBody('workspace.generate.preview', req.body);
   return generateWorkspaceRequest(req, res);
 });
-app.post("/api/agent/generate", generateWorkspaceRequest);
+app.post("/api/agent/generate", (req, res) => {
+  if (!requireStudioActor(req, res)) return;
+  return generateWorkspaceRequest(req, res);
+});
 
 
 // GitHub proxy routes (load/push/create/device-flow/commits) moved to
@@ -12565,7 +12685,10 @@ app.post("/api/agent/generate", generateWorkspaceRequest);
 // waits for a file change after its child dies; the supervisor guards full-tree death.)
 registerGithubRoutes(app);
 // B18 first-run setup: game autodetect + schema harvest (config apply stays /api/schema/config).
-registerGameDetectRoutes(app, { extractBaseGameFile: catDatExtractBaseGameFile });
+registerGameDetectRoutes(app, {
+  extractBaseGameFile: catDatExtractBaseGameFile,
+  requireStudioActor,
+});
 
 // B25: AI usage readout — counts only, no key material, no prompts.
 app.get("/api/ai/usage", (_req, res) => {

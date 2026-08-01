@@ -1,15 +1,15 @@
 {
   "version": 1,
-  "sourceFingerprint": "6ee8528b7e25943bb3818c1231885e570fe05c0f700d50e56fe2cc9b5960e492",
+  "sourceFingerprint": "6fbd555ad00bb42376739fe68a31ed2235c47d1bc2a77b540c06a8ea98fb4c0a",
   "policy": "Every raw production filesystem mutation source is count-pinned here. Authoritative files use atomic sibling promotion; stronger tree, archive, append-log, SQLite, retention, ephemeral, and fixture contracts remain explicit exceptions.",
   "writers": [
     {
       "file": "server.ts",
-      "calls": { "writeFileSync": 31, "renameSync": 10, "copyFileSync": 4, "mkdirSync": 33, "rmSync": 38, "unlinkSync": 4, "chmodSync": 2, "mkdtempSync": 9 },
+      "calls": { "writeFileSync": 31, "appendFileSync": 1, "renameSync": 10, "copyFileSync": 4, "mkdirSync": 34, "rmSync": 38, "unlinkSync": 4, "chmodSync": 2, "mkdtempSync": 9 },
       "categories": ["mixed", "authoritative-atomic", "verified-tree-transaction", "isolated-artifact-stage", "retention-cleanup", "fixture-only"],
-      "owners": ["writeWorkspaceFileGuarded and fs/create", "snapshot create/prune/delete/restore", "copyRegularTree and synchronizeRegularTree", "replaceValidatedDeployment and recovery", "compileWorkspaceToFolder scratch cleanup", "replaceReleaseDirectory", "Nexus and Steam release handlers", "embedded route/artifact/workspace API selftests"],
-      "rationale": "The composition root contains guarded atomic source/snapshot writes, verified deployment/release directory transactions, isolated compilation/release materializers, bounded snapshot/artifact retention, and embedded scratch-only route fixtures.",
-      "failureContract": "Authoritative files preserve prior bytes; tree promotion rolls back; scratch trees never target configured live roots; retention deletes only named bounded artifacts."
+      "owners": ["writeWorkspaceFileGuarded and fs/create", "snapshot create/prune/delete/restore", "copyRegularTree and synchronizeRegularTree", "replaceValidatedDeployment and recovery", "compileWorkspaceToFolder scratch cleanup", "replaceReleaseDirectory", "Nexus and Steam release handlers", "embedded route/artifact/workspace API selftests", "route-integration caller-key provider-dispatch marker"],
+      "rationale": "The composition root contains guarded atomic source/snapshot writes, verified deployment/release directory transactions, isolated compilation/release materializers, bounded snapshot/artifact retention, and embedded scratch-only route fixtures including the isolated provider-dispatch evidence marker.",
+      "failureContract": "Authoritative files preserve prior bytes; tree promotion rolls back; scratch trees never target configured live roots; retention deletes only named bounded artifacts; the provider-dispatch marker requires non-production plus explicit route-test mode, writes fixed-name non-secret evidence only beneath the harness-provided isolated fixture directory, and propagates append failure so the oracle cannot report false success."
     },
     {
       "file": "src/lib/agentHistory.selftest.ts",

@@ -125,7 +125,14 @@ test('explicit local overwrite wins and records a durable recovery', async ({ pa
   // explicit resolution so force:true proves the real server path and cannot remain
   // queued behind a test route that is released only after this dialog disappears.
   await releaseConflictRoute();
+  const forcedWriteReceipt = page.waitForResponse(response => {
+    const request = response.request();
+    if (request.method() !== 'POST' || new URL(request.url()).pathname !== '/api/agent/workspace') return false;
+    try { return request.postDataJSON()?.force === true; }
+    catch { return false; }
+  }, { timeout: 30_000 });
   await page.getByTestId('conflict-keep-btn').click();
+  expect((await forcedWriteReceipt).ok()).toBeTruthy();
   await expect(page.getByTestId('sync-conflict-dialog')).toHaveCount(0);
   await expect.poll(async () => (await readServerWorkspace()).name).toBe(keptLocal.name);
 

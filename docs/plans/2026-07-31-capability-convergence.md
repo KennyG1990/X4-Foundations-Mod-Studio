@@ -1,6 +1,6 @@
 # B115 — Forge Capability Convergence
 
-Status: PARTIAL program — W0-W1 VERIFIED through B116; W2-W21 remain; no public release
+Status: PARTIAL program — W0-W1 VERIFIED through B116; W2A implementation checkpoint PARTIAL; W2B-W21 remain; no public release
 Lane: FULL
 Owner: active Codex session
 Approved: 2026-07-31 by Ken
@@ -24,8 +24,10 @@ Sources: Google Drive “X4 Forge — Capability Convergence Feature Request Pac
   4. Review stop: do not cross into source-writing rebase or network-driven update actions without the decisions
      and proof gates recorded below.
   5. W19–W21: reviewed staged rebase, opt-in upstream intelligence, and final UI/CLI/MCP/Agent API/harness parity.
-- **Current bounded implementation batch:** W0–W1 only — durable baseline plus a browser-safe, deterministic
-  `forge.capability.v1` metadata registry and drift oracle. Existing route handlers remain the executors.
+- **Current bounded implementation batch:** W2A exact agent route authority under B117. W0–W1 are verified history;
+  W2A extends their route inventory into executable deny-by-default authority while retaining existing handlers,
+  key storage, workspace resolution and CAS. Exact contract and checkpoint evidence live in
+  `docs/plans/2026-08-01-b117-exact-agent-route-authority.md`.
 - **Assumptions:** initial `main` was `a68d69855631cb5fd1c62cc4b0a69e08b6a0fc87`; during W1 separately owned
   documentation-only commits advanced `main`/`origin/main` first to `082f501c9778b13256e4c7d3d07b7f8bde2ae3ec` and then
   to `13db48cd84fb8eefe7c205a39d41f99029d093e2`. During close, `origin/main` advanced once more to
@@ -434,3 +436,22 @@ Sources: Google Drive “X4 Forge — Capability Convergence Feature Request Pac
 - Project lesson banked here: green self-audits are not fresh review; exact-byte adversarial review remains mandatory
   for proof-generating code. External StarForge capability/AAR ledgers were not mutated under this task's explicit
   repository-only authorization boundary.
+
+## W2A CHECKPOINT — 2026-08-01
+
+- Status: `PARTIAL`; B117 remains open. The 290-route/one-registrar v4 manifest is now executable exact authority,
+  broad GET/prefix/`deploy => true` inheritance is removed, sensitive administration stays Studio-only, and existing
+  key presets follow the reviewed current policy without a storage migration.
+- Green evidence: authority 8/8; external HTTP 378/378; oracles 129/129; capability and MCP audits; typecheck; lint
+  with zero errors; production build; writer inventory; precommit; focused repaired E2E 3/3; isolated-state teardown
+  and unchanged live-state/config hashes.
+- Required blocker: three full E2E attempts each produced a different retry-only failure and therefore a red structured
+  verdict. The first two yielded bounded evidence-harness corrections; the third is the already-recorded Windows
+  Node 24.15.0 / Playwright 1.61.0 / libuv 1.51.0 worker exit `0xC0000409` at 0 ms, with the unchanged viewport case
+  passing on retry. No flake exemption or unrelated product/test rewrite is accepted.
+- Remaining W2A gates: clean full isolated E2E, staged app, VSIX inspection/probe, installed-byte parity and rendered
+  Antigravity key-scope proof. W2B per-key narrowing/discovery and W3 receipts do not begin as substitutes for these
+  missing gates. Full details and AAR: `docs/plans/2026-08-01-b117-exact-agent-route-authority.md`.
+- Boundary correction from final staged review: scoped agent keys cannot spoof localhost Origin/Referer to inherit
+  server provider credentials, but the pre-existing full Studio-bearer Origin-spoof path remains B64-SEC5 and is
+  explicitly Ken-gated. W2A does not claim to close or silently redesign that adjacent Studio/UI trust boundary.
