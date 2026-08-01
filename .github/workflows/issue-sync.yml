@@ -1,77 +1,190 @@
-name: Sync GitHub Issues to Discord Forums
+name: Sync GitHub Issue State to Discord Forums
 
 on:
   issues:
     types: [opened, closed, reopened]
 
+permissions:
+  issues: write
+  contents: read
+
 jobs:
   sync-to-discord:
     runs-on: ubuntu-latest
     steps:
-      - name: Sync GitHub Issue to Discord Forum (Bugs & Feature Requests)
-        if: github.event.action == 'opened' || github.event.action == 'reopened'
+      - name: Synchronize canonical GitHub issue state with its Discord thread
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
-          BUG_FORUM_ID: "1531779148333453452"
-          FEATURE_FORUM_ID: "1531779159217405962"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          ACTION: ${{ github.event.action }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_NUM: ${{ github.event.issue.number }}
           ISSUE_URL: ${{ github.event.issue.html_url }}
           ISSUE_BODY: ${{ github.event.issue.body }}
           USER: ${{ github.event.issue.user.login }}
           LABELS: ${{ toJson(github.event.issue.labels.*.name) }}
+          CONFIG_GUILD_ID: ${{ vars.DISCORD_GUILD_ID }}
+          CONFIG_BUG_FORUM_ID: ${{ vars.DISCORD_BUG_FORUM_ID }}
+          CONFIG_FEATURE_FORUM_ID: ${{ vars.DISCORD_FEATURE_FORUM_ID }}
         run: |
           set -euo pipefail
+
+          # Repository variables may override the original Forge Discord configuration.
+          GUILD_ID="${CONFIG_GUILD_ID:-1528637983429759217}"
+          BUG_FORUM_ID="${CONFIG_BUG_FORUM_ID:-1531779148333453452}"
+          FEATURE_FORUM_ID="${CONFIG_FEATURE_FORUM_ID:-1531779159217405962}"
 
           if [ -z "${DISCORD_TOKEN:-}" ]; then
             echo "DISCORD_TOKEN secret is missing. Skipping sync."
             exit 0
           fi
 
-          # Discord-originated issues must never be echoed back into Discord.
-          # This is the authoritative break in the previous feedback loop.
-          if [[ "$ISSUE_TITLE" == "[Discord]"* ]] || \
-             [[ "$ISSUE_BODY" == *"discord-forum-origin:"* ]] || \
-             [[ "$ISSUE_BODY" == *"Reported via Discord Forum."* ]]; then
-            echo "Skipping Discord-originated GitHub issue #$ISSUE_NUM"
-            exit 0
+          extract_sync_line() {
+            printf '%s\n' "$1" | grep -oE 'discord-sync:v1[^>]*' | head -n 1 || true
+          }
+
+          sync_field() {
+            local key="$1"
+            printf '%s\n' "$SYNC_LINE" | tr ' ' '\n' | sed -n "s/^${key}=//p" | head -n 1
+          }
+
+          post_thread_message() {
+            local thread_id="$1"
+            local message="$2"
+            local payload
+            payload=$(jq -n --arg content "$message" '{content: $content}')
+            curl --fail --silent --show-error --retry 3 \
+              -H "Authorization: Bot $DISCORD_TOKEN" \
+              -H "Content-Type: application/json" \
+              -X POST -d "$payload" \
+              "https://discord.com/api/v10/channels/$thread_id/messages" >/dev/null
+          }
+
+          patch_thread_state() {
+            local thread_id="$1"
+            local archived="$2"
+            local locked="$3"
+            local payload
+            payload=$(jq -n --argjson archived "$archived" --argjson locked "$locked" \
+              '{archived: $archived, locked: $locked}')
+            curl --fail --silent --show-error --retry 3 \
+              -H "Authorization: Bot $DISCORD_TOKEN" \
+              -H "Content-Type: application/json" \
+              -X PATCH -d "$payload" \
+              "https://discord.com/api/v10/channels/$thread_id" >/dev/null
+          }
+
+          record_mapping() {
+            local origin="$1"
+            local guild_id="$2"
+            local forum_id="$3"
+            local thread_id="$4"
+            local mapping
+            mapping=$(cat <<EOF
+          <!-- discord-sync:v1 origin=$origin repo=$REPOSITORY guild=$guild_id forum=$forum_id thread=$thread_id issue=$ISSUE_NUM -->
+
+          Discord thread: https://discord.com/channels/$guild_id/$thread_id
+          EOF
+            )
+            gh api -X POST "repos/$REPOSITORY/issues/$ISSUE_NUM/comments" -f body="$mapping" >/dev/null
+          }
+
+          create_discord_thread() {
+            if [ -z "$GUILD_ID" ] || [ -z "$BUG_FORUM_ID" ] || [ -z "$FEATURE_FORUM_ID" ]; then
+              echo "Discord repository variables are incomplete; cannot create a mirror thread."
+              exit 1
+            fi
+
+            TARGET_FORUM_ID="$BUG_FORUM_ID"
+            ICON="🐛"
+            if echo "$LABELS" | grep -iqE 'enhancement|feature'; then
+              TARGET_FORUM_ID="$FEATURE_FORUM_ID"
+              ICON="💡"
+            fi
+
+            REPO_NAME="${REPOSITORY#*/}"
+            TITLE="${ICON} [${REPO_NAME} #${ISSUE_NUM}] ${ISSUE_TITLE}"
+            TITLE="${TITLE:0:90}"
+            BODY_TEXT="**GitHub Issue #${ISSUE_NUM} opened by @${USER}**\n\nLink: ${ISSUE_URL}\n\n>>> ${ISSUE_BODY:0:1400}\n\nsync-origin:github repo=${REPOSITORY} issue=${ISSUE_NUM}"
+
+            PAYLOAD=$(jq -n --arg name "$TITLE" --arg content "$BODY_TEXT" \
+              '{name: $name, message: {content: $content}}')
+
+            RESPONSE_FILE=$(mktemp)
+            HTTP_STATUS=$(curl --silent --show-error --retry 3 \
+              -o "$RESPONSE_FILE" -w '%{http_code}' \
+              -H "Authorization: Bot $DISCORD_TOKEN" \
+              -H 'Content-Type: application/json' \
+              -X POST -d "$PAYLOAD" \
+              "https://discord.com/api/v10/channels/$TARGET_FORUM_ID/threads")
+
+            if [[ "$HTTP_STATUS" != 2* ]]; then
+              echo "Discord thread creation failed with HTTP $HTTP_STATUS"
+              cat "$RESPONSE_FILE"
+              exit 1
+            fi
+
+            THREAD_ID=$(jq -r '.id // empty' "$RESPONSE_FILE")
+            if [ -z "$THREAD_ID" ]; then
+              echo "Discord created a thread but returned no thread ID."
+              cat "$RESPONSE_FILE"
+              exit 1
+            fi
+
+            record_mapping "github" "$GUILD_ID" "$TARGET_FORUM_ID" "$THREAD_ID"
+            echo "Mapped GitHub issue #$ISSUE_NUM <-> Discord thread $THREAD_ID"
+          }
+
+          # The source Discord thread is stored in a Discord-origin issue body. GitHub-origin
+          # issues store the mapping in an issue comment after the thread is created.
+          SYNC_LINE=$(extract_sync_line "${ISSUE_BODY:-}")
+          if [ -z "$SYNC_LINE" ]; then
+            COMMENTS=$(gh api --paginate "repos/$REPOSITORY/issues/$ISSUE_NUM/comments" --jq '.[].body' || true)
+            SYNC_LINE=$(extract_sync_line "$COMMENTS")
           fi
 
-          # Target #feature-requests if labeled feature/enhancement, otherwise #bug-reports.
-          TARGET_FORUM_ID="$BUG_FORUM_ID"
-          ICON="🐛"
-          if echo "$LABELS" | grep -iqE "enhancement|feature"; then
-            TARGET_FORUM_ID="$FEATURE_FORUM_ID"
-            ICON="💡"
+          THREAD_ID=""
+          ORIGIN=""
+          if [ -n "$SYNC_LINE" ]; then
+            THREAD_ID=$(sync_field thread)
+            ORIGIN=$(sync_field origin)
+            MAPPED_GUILD_ID=$(sync_field guild)
+            MAPPED_FORUM_ID=$(sync_field forum)
+            GUILD_ID="${MAPPED_GUILD_ID:-$GUILD_ID}"
           fi
 
-          # Keep a stable, machine-detectable issue reference in the thread title.
-          TITLE="${ICON} [Issue #${ISSUE_NUM}] ${ISSUE_TITLE}"
-          TITLE="${TITLE:0:90}"
-          BODY_TEXT="**GitHub Issue #${ISSUE_NUM} Opened by @${USER}**\n\nLink: ${ISSUE_URL}\n\n>>> ${ISSUE_BODY:0:1500}"
+          case "$ACTION" in
+            opened)
+              if [ -n "$THREAD_ID" ]; then
+                # Discord-origin issues already have their canonical source thread. Never echo-create.
+                echo "Issue #$ISSUE_NUM already maps to Discord thread $THREAD_ID (origin=$ORIGIN)"
+              else
+                create_discord_thread
+              fi
+              ;;
 
-          PAYLOAD=$(jq -n \
-            --arg name "$TITLE" \
-            --arg content "$BODY_TEXT" \
-            '{
-              name: $name,
-              message: { content: $content }
-            }')
+            reopened)
+              if [ -z "$THREAD_ID" ]; then
+                create_discord_thread
+              else
+                patch_thread_state "$THREAD_ID" false false
+                post_thread_message "$THREAD_ID" "♻️ GitHub issue #$ISSUE_NUM was reopened: $ISSUE_URL"
+                echo "Reopened Discord thread $THREAD_ID for issue #$ISSUE_NUM"
+              fi
+              ;;
 
-          RESPONSE_FILE=$(mktemp)
-          HTTP_STATUS=$(curl --silent --show-error --retry 3 \
-               -o "$RESPONSE_FILE" \
-               -w "%{http_code}" \
-               -H "Authorization: Bot $DISCORD_TOKEN" \
-               -H "Content-Type: application/json" \
-               -X POST \
-               -d "$PAYLOAD" \
-               "https://discord.com/api/v10/channels/$TARGET_FORUM_ID/threads")
+            closed)
+              if [ -z "$THREAD_ID" ]; then
+                echo "Issue #$ISSUE_NUM has no recorded Discord mapping; nothing to close."
+                exit 0
+              fi
+              post_thread_message "$THREAD_ID" "✅ GitHub issue #$ISSUE_NUM was closed: $ISSUE_URL"
+              patch_thread_state "$THREAD_ID" true true
+              echo "Archived Discord thread $THREAD_ID for closed issue #$ISSUE_NUM"
+              ;;
 
-          if [[ "$HTTP_STATUS" != 2* ]]; then
-            echo "Discord thread creation failed with HTTP $HTTP_STATUS"
-            cat "$RESPONSE_FILE"
-            exit 1
-          fi
-
-          echo "Created Discord mirror thread for GitHub issue #$ISSUE_NUM"
+            *)
+              echo "Unsupported issue action: $ACTION"
+              ;;
+          esac
