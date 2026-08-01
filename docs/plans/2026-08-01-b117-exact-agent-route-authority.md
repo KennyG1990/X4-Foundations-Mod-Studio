@@ -354,3 +354,303 @@ Lane: FULL
   installed parity complete.
 - Global/project lessons banked: this plan records the project-specific checkpoint. External StarForge ledgers were
   not mutated under the repository-only authorization boundary; no unverified procedural skill is banked.
+
+## POST-CHECKPOINT VALIDATION UNBLOCK — SPECIFIED 2026-08-01
+
+- Bounded unit: run the unchanged authoritative full E2E gate once under an already-installed Node 22 runtime, with a
+  process-local PATH override so Playwright, its worker and both ephemeral web servers use the same runtime. Do not
+  install, upgrade, pin, copy or replace Node; do not change Playwright, retries, timeouts, ordering, product code or
+  test assertions during the A/B.
+- Baseline: `HEAD == origin/main == e70046830cbc2548e27920d4828cf2978c55ade0`; system Node is 24.15.0 and the last
+  receipt is red at 93 pass / one flaky after worker exit `0xC0000409`. Already-installed alternatives are Cursor's
+  Node 22.22.0 and Python Playwright's Node 22.17.0; both report libuv 1.51.0. Local Playwright 1.61.0 declares
+  `engines.node >=18`; Forge's TypeScript types already target Node 22. No root `engines`, `.nvmrc` or CI Node pin was
+  found. Unrelated dirty paths remain exactly the post-checkpoint list in `SESSION-HANDOFF.md`.
+- Selected A/B: Cursor Node 22.22.0, because it is the newer installed Node 22 candidate. Invoke
+  `scripts/run-e2e.mjs` directly with that executable and prepend its exact directory to PATH only for that child
+  process. The wrapper uses `process.execPath` for Playwright, while the PATH override covers config-owned `node ...`
+  web-server commands.
+- Risks and authorization: the run uses the existing isolated 3100/3101 stack and per-run state/config roots. It
+  writes only normal ignored test receipts/artifacts. It must not touch the live workspace/config, game/mod folders,
+  installed IDE, dependencies, credentials, provider network/spend or public state. The Cursor-bundled runtime is an
+  A/B oracle, not a new Forge dependency or durable project toolchain decision.
+- Rollback: process-local environment ends with the command; no machine setting changes. If the run fails, retain the
+  red receipt and stop source edits. Any durable Node pin or workflow change requires a separately reconciled plan.
+- Acceptance: captured `process.execPath`/version is 22.22.0; structured verdict reports all 94 tests passed with zero
+  failed/flaky/bad/quarantined; ports 3100/3101 are clear afterward; live `.studio-state` regular-tree fingerprint
+  (sorted directories plus relative paths, sizes and per-file SHA-256) remains
+  `8B678D6922FF4D28CEC7526A7C4895300E532680C19514C9AA0165FB530A5479`; live `config.json` SHA-256 remains
+  `ABEC6AE6AD169392878E06E19346C5E85C1DFB5D9BDFACDD80BA77DAF227C697`.
+- Negative/failure path: any retry, missing structured receipt, wrong runtime, state/hash drift or leaked port is red.
+  A clean A/B proves W2A on Node 22 but does not by itself authorize a repository/machine Node pin; reconcile whether
+  reproducibility needs that follow-up before calling the overall installed gate complete.
+
+### POST-CHECKPOINT VALIDATION UNBLOCK — FAILED 2026-08-01
+
+- Runtime proof: `C:\Users\Moshi\AppData\Local\Programs\cursor\resources\app\resources\helpers\node.exe`
+  reported Node `v22.22.0` and libuv `1.51.0`; the same directory was prepended to PATH for the Playwright worker and
+  config-owned web-server commands. No runtime, dependency, retry, timeout, ordering, product-code or assertion change
+  was made during the run.
+- Authoritative gate: `node scripts/run-e2e.mjs` exited 1 after 501.4 seconds. The structured receipt at
+  `test-results/e2e-verdict.json` reports 94 total, 92 passed, one failed, one flaky, two bad results, zero active
+  quarantines and `green:false` (generated `2026-08-01T21:21:10.47Z`). This fails the acceptance contract, so the B117
+  close remains `PARTIAL`; packaging, installed-product and rendered-host gates remain unrun.
+- [REPRODUCED] Deterministic failure: both attempts of `project-browser.spec.ts` — “Load Mod Project visibly
+  decomposes a complex multi-script project without collapsing or overlapping cues” — received schema-config
+  manifest state `unavailable` where the test requires `ready`. Evidence:
+  `test-results/project-browser-Load-Mod-P-b6b56-lapsing-or-overlapping-cues-chromium/error-context.md` and the
+  corresponding `-retry1/error-context.md`.
+- [REPRODUCED] Retry-only failure: the first attempt of `continuous-polling.spec.ts` — “pre-marker divergent scoped
+  cache is conservatively retained against a newer bootstrap” — exhausted its 35-second timeout while
+  `sync-conflict-dialog` intercepted the helper's click on `health-card-dismiss`; retry passed in 1.6 seconds. Evidence:
+  `test-results/continuous-polling-pre-mar-4ea54-d-against-a-newer-bootstrap-chromium/error-context.md` and `trace.zip`.
+- [REPRODUCED] Runtime incompatibility: the server logged `ERR_DLOPEN_FAILED` because the checked-out
+  `better_sqlite3.node` targets ABI 137 while Node 22 requires ABI 127. The server continued without its SQLite cache,
+  so Cursor's bundled Node 22 is not a clean substitute for this checkout and the A/B cannot establish a supported
+  Forge runtime. No rebuild or dependency mutation was authorized or attempted.
+- Safety result: ports 3000/3001/3100/3101 were all clear after exit. The live `.studio-state` regular-tree fingerprint
+  remained `8B678D6922FF4D28CEC7526A7C4895300E532680C19514C9AA0165FB530A5479`; live `config.json` remained
+  `ABEC6AE6AD169392878E06E19346C5E85C1DFB5D9BDFACDD80BA77DAF227C697`. The isolated
+  `%TEMP%\x4forge-e2e-state-72948` artifact was retained with the failure evidence; no live workspace path was changed.
+- Review boundary: do not infer that the manifest failure is caused by the native SQLite mismatch or B117 until route,
+  manifest and test-order readers/writers are reconciled. Do not change B117 source or tests under this closed A/B.
+  Any toolchain pin, fixture-isolation repair or product change is a separately specified bounded unit.
+- AAR trigger: the alternate-runtime hypothesis did not produce a clean gate and exposed an ABI mismatch plus two
+  distinct failures. Sustain: process-local A/B and structured verdict prevented a false green; live-state hashes
+  proved isolation. Improve work/approach: inspect native-addon ABI compatibility before choosing an alternate Node.
+  Improve tools: the runner should report its Node ABI and native-addon compatibility before spending eight minutes on
+  a full suite. Highest-risk evidenced weakness: the full gate is not currently reproducible across the two locally
+  available Node majors, so a green retry cannot be treated as release evidence. No procedural skill was banked.
+
+## E2E FIXTURE ISOLATION REPAIR — SPECIFIED 2026-08-01
+
+Task: make the B116 polling fixture independent of the unrelated startup health overlay, then re-prove B117 on the
+checkout's ABI-compatible default Node 24 runtime.
+
+Lane: FULL
+
+### PLAN
+
+- Bounded unit: in `tests/e2e/continuous-polling.spec.ts` only, give `bootWithFetchCounts()` an explicit option to skip
+  its unrelated health-card dismissal, and select that option for the two tests whose startup state intentionally
+  opens `sync-conflict-dialog`. Keep the default dismissal for every ordinary polling test. No endpoint mock, forced
+  click, timeout change, z-index change or product implementation change.
+- Assumptions and unresolved facts: the Node-22 project-browser failure is attributed to the reproduced native-addon
+  ABI mismatch because the config route returned success and `startCanonicalReferenceManifest()` reports
+  `unavailable` when SQLite cannot open. The polling race is attributed to fixture setup because its trace shows the
+  expected conflict dialog intercepting a later unrelated health-card click. A fresh-eyes read-only review remains
+  pending before implementation.
+- In scope: this plan and the single polling E2E helper. Out of scope: B117 authorization code, application overlay
+  stacking, retry/flake policy, global timeouts, test ordering, Node installation/pinning, native-addon rebuild,
+  package metadata and the project-browser assertion.
+- Risks and authorization: skipping setup cleanup where later clicks occur could leave the health card in the way.
+  Apply the option only to startup-conflict tests that perform no later obscured UI interaction; retain their conflict
+  dialog and remote/local authority assertions as the negative behavior. Runs use only the isolated 3100/3101 stack.
+  No live workspace/config, dependency, game/mod, IDE, credential, spend, provider or public write is authorized.
+- Rollback/checkpoint: `HEAD == origin/main == e70046830cbc2548e27920d4828cf2978c55ade0`; revert the helper-only diff.
+  Existing unrelated dirty paths remain untouched. Pre-repair receipt is the red
+  `test-results/e2e-verdict.json` generated `2026-08-01T21:21:10.47Z`.
+- Acceptance: typecheck and lint remain green; both immediate-startup conflict tests pass five consecutive
+  default-runtime iterations with no retry; the exact project-browser complex-load test passes under default Node 24
+  with the native SQLite cache available; the authoritative full E2E receipt is 94/94 with zero
+  failed/flaky/bad/quarantined; ports
+  3100/3101 clear; live-state/config fingerprints remain the values recorded above. Any red result stops package and
+  installed-product validation.
+- Required evidence: focused Playwright output, full `test-results/e2e-verdict.json`, server logs showing no
+  `ERR_DLOPEN_FAILED`, port inventory, live fingerprints and final diff review. Negative proof: suppressing only the
+  health overlay must not suppress `sync-conflict-dialog`, overwrite the unmarked draft or change the newer remote
+  workspace.
+- Documentation: record reconcile, validation, review and AAR here. If the full gate becomes clean, continue the
+  already-specified B117 package/install/rendered-host gates; otherwise specify the next evidenced blocker separately.
+
+### RECONCILE
+
+- Fresh-eyes review reproduced the setup race from the trace: both bootstrap and health calls returned 200, the
+  expected workspace CAS returned 409, and the authoritative reread returned 200 before the z-index 9999 conflict
+  dialog intercepted a click aimed at the z-index 90 health card. Confidence attribution: fixture async ordering 95%,
+  product overlay coordination 3%, Node/SQLite timing amplification 1%, B117 authority 0.5%, cross-test leakage 0.5%.
+- Resource/coupling check: the helper's health dismissal was introduced by the earlier B116 polling suite; the B117
+  commit did not edit this helper or the failing project-browser test. The B117-protected config request completed and
+  entered the handler, excluding an authorization denial. `startCanonicalReferenceManifest()` explicitly returns
+  `unavailable` when its SQLite database cannot open, matching the Node-22 server log exactly.
+- Plan change: replace the initial endpoint-mock proposal with the smaller per-call helper option recommended by review.
+  This preserves real health and conflict behavior and changes only irrelevant fixture cleanup. No capability-map delta.
+
+### IMPLEMENT / VALIDATE — PARTIAL 2026-08-01
+
+- Implemented only the reconciled fixture boundary: optional `dismissHealthCard`, a guard after boot readiness, and
+  `false` at the equal-version and pre-marker startup-conflict calls. A first mechanical patch selected the adjacent
+  successful-autosave call instead of pre-marker; diff review caught and corrected it before validation. No product
+  file changed.
+- `npm run typecheck` -> PASS in 27.5 seconds. `npm run lint` -> PASS in 21.8 seconds with zero errors and the existing
+  583 warnings.
+- Default runtime proof: `C:\Program Files\nodejs\node.exe`, Node `v24.15.0`, ABI 137. Both startup-conflict tests
+  repeated five times each -> 10/10 PASS in 136.1 seconds. Their assertions retained the local draft, newer remote
+  state and visible conflict, so the negative authority path was not mocked away.
+- Exact project-browser complex-load test -> 1/1 PASS in 24.2 seconds. Server logged canonical reference manifest
+  `ready`, confirming that the Node-22 failure was an invalid ABI A/B rather than B117 route behavior.
+- Authoritative full E2E -> FAILED after 898.1 seconds. Receipt `test-results/e2e-verdict.json`, generated
+  `2026-08-01T21:48:43.33Z`, reports 14 passed, 80 failed, zero flaky and `green:false`. The backend on 3101 exited
+  during the first attempt of “newer server bootstrap cannot silently replace a failed scoped draft”; its attempt and
+  retry report `TypeError: fetch failed`, then every later test cascaded through Vite proxy `ECONNREFUSED 127.0.0.1:3101`.
+  Treat this as one backend-lifecycle failure plus downstream fallout, not 80 independent regressions.
+- Safety -> PASS: ports 3000/3001/3100/3101 clear; live `.studio-state` fingerprint remains
+  `8B678D6922FF4D28CEC7526A7C4895300E532680C19514C9AA0165FB530A5479`; live `config.json` remains
+  `ABEC6AE6AD169392878E06E19346C5E85C1DFB5D9BDFACDD80BA77DAF227C697`. Isolated state artifact
+  `%TEMP%\x4forge-e2e-state-72984` is retained. No matching Windows Application Error event was found in the crash
+  window; the buffered full-run output did not preserve the backend's first fatal line.
+- Review status: the helper repair is focused-green but cannot close while the required full gate is red. B117 remains
+  `PARTIAL`; package/install/rendered-host gates remain blocked. The full-suite failure changes the next plan again.
+
+### AAR
+
+- Triggers: reconciliation changed the mock proposal; the first patch targeted one adjacent repeated call and required
+  correction; the authoritative gate failed with a new backend-lifecycle class.
+- Sustain: exact diff review caught the call-site error; repeated focused negatives proved the repair; receipt parsing
+  collapsed 80 apparent failures to one server-loss event; post-run hashes proved live-state isolation.
+- Improve work/approach: use more contextual patch hunks around repeated calls and capture the first server-process exit
+  cause before a long cascade consumes the output budget.
+- Improve tools: the E2E runner needs durable backend stdout/stderr plus exit code in its receipt. The current final-only
+  buffer can obscure the one causal line behind thousands of downstream proxy errors.
+- Highest-risk evidenced weakness: loss of the backend is not fail-fast; Playwright spent roughly twelve further minutes
+  retrying tests that could not connect, producing noisy evidence and slow feedback. A bounded fail-fast/exit-evidence
+  improvement is warranted after the crash mechanism is reproduced. No procedural skill is banked yet.
+
+## BACKEND EXIT DIAGNOSIS — SPECIFIED 2026-08-01
+
+- Bounded unit: no source edits. Run the exact first-failing “newer server bootstrap” test repeatedly on the default
+  runtime with untruncated server output. If it remains green, run only the ordered prefix through that test to test
+  cumulative state/resource pressure. Capture the first operation and process-exit evidence; do not rerun the remaining
+  suite or alter timeouts/retries/code during diagnosis.
+- Baseline/rollback: checkpoint `e700468`; only the plan and fixture helper are task-owned working changes. Ports are
+  clear and live hashes match. Runs use disposable 3100/3101 state; rollback is process exit. Preserve evidence.
+- Acceptance: either reproduce the backend exit with an exact fatal/exit signature and smallest ordering boundary, or
+  complete ten isolated iterations plus three ordered-prefix iterations without loss and classify the full-run exit as
+  unreproduced. Every run must clear ports and preserve live hashes.
+- Negative/safety: a browser assertion failure with a healthy 3101 is not equivalent to a backend exit. Do not weaken
+  the workspace-conflict behavior or convert a crash to a retry. No dependency, machine, live config/workspace,
+  game/mod, IDE, credential, network/spend or public mutation is authorized.
+
+### BACKEND EXIT DIAGNOSIS — VERIFIED 2026-08-01
+
+- Exact first-failing test repeated ten times on Node 24/ABI 137 -> 10/10 PASS in 251.1 seconds; each iteration completed
+  the failed-write, forced-remote-seed, reload, conflict and final authoritative-read path with 3101 alive.
+- Exact seven-test ordered prefix through that test repeated three times on one ephemeral server -> 21/21 PASS in
+  273.7 seconds. No backend exit, fetch failure or proxy refusal reproduced.
+- Retained isolated history ledger narrows the original exit window: remote force seed completed at
+  `2026-08-01T21:35:58.516Z`; after reload, 3101 successfully served project/files and bootstrap at
+  `21:36:01.459Z` / `21:36:01.476Z`, plus another project/files request at `21:36:06.069Z`. With the old trace rotated,
+  the final `readServerWorkspaceEnvelope()` GET is the first failed await at approximately 90% confidence; the
+  immediately preceding conflict wait is the alternative.
+- Classification: backend exit is [REPRODUCED] in the full run but unreproduced under 31 targeted executions. Test
+  logic as sole cause 5%; cumulative native/runtime process failure 65%; external/OS process loss 20%; unknown
+  full-suite interaction 10%. The fixture helper repair did not contribute: it is not selected by the test that saw
+  the exit, and the exact ordered prefix remains green.
+- Status: diagnosis objective `VERIFIED`; no source mutation beyond the already specified helper repair. Because B117
+  still requires one clean authoritative receipt, run one final unchanged full gate on default Node 24 with
+  `DEBUG=pw:webserver` and stdout/stderr tee'd to a timestamped `%TEMP%\x4forge-b117-full-e2e-*.log`. A clean 94/94
+  receipt resumes packaging; another exit stops and preserves the lifecycle log for a new bounded runner/runtime unit.
+
+## FINAL GATE RESUME — VERIFIED 2026-08-01
+
+### BASELINE / RECONCILE
+
+- The final run retained the checkpointed B117 product bytes at
+  `e70046830cbc2548e27920d4828cf2978c55ade0`. The only executable working-tree delta was the already specified
+  polling-fixture repair in `tests/e2e/continuous-polling.spec.ts`; it changes no production or packaged byte.
+- The failed Node 22 A/B is not a supported-runtime result: its native SQLite binding ABI did not match. Default
+  Node 24.15.0 / ABI 137 is the checkout-compatible runtime and produced a ready canonical-reference manifest.
+- The one full-run backend loss remains a reproduced but unreproduced lifecycle event. Ten exact-test iterations and
+  three ordered-prefix iterations stayed green; the final full run therefore preserved server output instead of
+  changing product code, retry policy, suite order or timeouts.
+- No new capability or product surface was created. This close strengthens B42/B115 authority through the existing
+  key store, auth chokepoint, route inventory, workspace resolver/CAS, capability registry, MCP shim and Agent Bridge.
+
+### VALIDATE
+
+- Final instrumented `npm run test:e2e` on Node 24.15.0 -> **94/94 PASS**, zero failed, flaky, bad-result or
+  quarantined tests in 19.2 minutes. `test-results/e2e-verdict.json` was generated at
+  `2026-08-01T22:21:10.45Z` with `childExit:0` and `green:true`. The retained `DEBUG=pw:webserver` log is
+  `C:\Users\Moshi\AppData\Local\Temp\x4forge-b117-full-e2e-20260801-180159.log`, SHA-256
+  `C5239B8CE97122EC2C1E86965BAF6C642032809BC9177AF0B98674CDABC68EF6`; both ephemeral servers terminated
+  normally.
+- Safety after the full gate -> PASS: ports 3000/3001/3100/3101 were clear; live `.studio-state` regular-tree
+  fingerprint remained `8B678D6922FF4D28CEC7526A7C4895300E532680C19514C9AA0165FB530A5479`; live `config.json`
+  remained `ABEC6AE6AD169392878E06E19346C5E85C1DFB5D9BDFACDD80BA77DAF227C697`.
+- Final `graphify update .` -> PASS: 3,836 nodes, 9,087 edges and 179 communities. No tracked Graphify artifact changed.
+- Final post-review `npm run precommit:check` -> PASS in 151.5 seconds, including 26/26 verdict-policy tests,
+  product-copy guard, 14/14 writer policy plus inventories, capability audit 11/290/1/10, live ten-tool MCP recovery
+  and typecheck. The immediately preceding attempt failed when the MCP child exited `3221226505 == 0xC0000409`
+  with no stderr; the exact MCP gate then passed 5/5 before the complete clean rerun. The failed attempt remains AAR
+  evidence, not a waived gate.
+- Final product/package gates -> PASS: root production build; extension build; staged app with five bundle files,
+  169 runtime packages and the native binding; staged runtime probe 16/16; VSIX inspector 13/13; package inspection
+  2,091 entries and 60,712,736 unpacked bytes.
+- Candidate `vscode-extension/x4-forge-studio-0.0.63-b117-20260801-1824.vsix` is 17,964,903 bytes, SHA-256
+  `5456DF296C784C295A47318B373EDE19C97A2A33D13AA00A6D78E5F67DD87CFA`. No marketplace publish occurred or
+  was authorized.
+- Installed Antigravity 1.107.0 reports `x4forge.x4-forge-studio@0.0.63`. Independent package-to-install parity
+  checked 2,089 packaged extension files with zero missing, mismatched or unexpected files; normalized
+  `package.json` matched, and archive `extension.vsixmanifest` exactly matched installed `.vsixmanifest` at SHA-256
+  `BD1222499FD5752DAF5A64DA124250981CB896D993476E7896391D68EFAD279C`.
+- The first installation attempt failed closed with `EPERM` while the prior extension was locked by the running IDE.
+  After the one Antigravity window closed normally, retry printed installation success but the CLI wrapper then exited
+  134 in its known V8 teardown path. That wrapper exit is not called green; independent extension inventory, creation
+  time, 2,089-file parity and manifest parity prove the installed artifact.
+- Real rendered-host proof -> PASS: Antigravity visibly rendered Forge `v1.0.409` in Expert mode with its managed
+  sidecar on `:55694`, then the installed Agent Keys panel rendered the executable contract:
+  `read = inspect only`, `write = edit/compile/validate/package (no deploys, no spend)`, and deploy limited to exact
+  reviewed deploy/recovery, guarded filesystem and caller-key AI routes. Credentials, settings, GitHub, Steam
+  handoff, human receipts and command execution visibly remain Studio-only. Evidence and the machine receipt are in
+  `vscode-extension/evidence/2026-08-01-b117-authority/`.
+
+### REVIEW
+
+- Acceptance 1–10 remain done and evidenced by the v4 manifest, exact matcher, promotion audit, 378/378 external HTTP
+  matrix, 129/129 runtime oracles, capability/MCP parity, secret-absence and no-mutation negatives, and installed UI
+  copy. Acceptance 11 is now done: type/lint/build/writer/precommit source gates, full E2E, staged app, inspector,
+  packaged bytes, installed parity and real rendered Antigravity all passed.
+- The polling helper repair is a test-fixture isolation correction only. Both deliberately modal startup-conflict
+  tests passed five consecutive iterations each while preserving the visible conflict and local/remote authority
+  assertions; the ordinary helper path remains unchanged.
+- The separate Antigravity agent pane displayed an unattributed `MCP Error` badge. It is not used as evidence for or
+  against the installed Forge scope-copy gate, and this close does not claim installed external-agent connectivity.
+- B64-SEC5 remains open and Ken-gated: a caller already holding the full Studio bearer can forge the legacy
+  Origin/Referer compatibility signal. W2A proves scoped-key authority only and does not redesign that boundary.
+- Capability-map delta: B42/B115 now has one exact deny-by-default v4 route authority and finite hierarchical presets.
+  The delta is recorded in this repository close and ROADMAP. The external StarForge capability/AAR mirrors remain
+  outside the repository-only authorization boundary and are not falsely presented as updated.
+
+### CLOSE
+
+- Status: `VERIFIED`. B117 / B115 W2A is complete. The historical `PARTIAL` checkpoint above remains accurate for
+  its revision and is superseded by this final evidence, not rewritten.
+- Deliberately unchanged: stored keys and presets, workspace/CAS semantics, W2B actor-specific narrowing/discovery,
+  W3 receipts, B64-SEC5, game/mod/config directories, provider spend, public marketplace state and release version.
+- Rollback remains source/config reversion to the checkpoint plus reinstalling the prior exact 0.0.63 VSIX. No data
+  migration or external publish needs reversal.
+- Suggested commit title: `security(agent): enforce exact reviewed route authority`.
+
+### FINAL AAR
+
+- Triggered: the Node 22 A/B failed on native ABI mismatch; a first fixture patch targeted the adjacent call before
+  diff review corrected it; one full run lost its backend; the first install hit a live-file lock; the successful
+  installer then suffered a V8 teardown crash; and an initial parity helper used unsupported `Byte.AsSpan` before the
+  corrected independent oracle passed. A post-review precommit attempt also lost its MCP child to the same
+  `0xC0000409` lifecycle class; five exact repeats and the final full precommit rerun passed. None of those attempts is
+  relabelled green. The first commit invocation then used a 120-second wrapper around the repository's observed
+  150-second hook, timed out without creating a commit or leaving an index lock, and was retried with an adequate
+  bound rather than bypassing hooks.
+- Sustain: zero-flake structured receipts, isolated live-state hashes, exact-test/prefix reduction, durable server
+  logging, byte-level installed parity and eyes-on rendered inspection prevented inference from replacing proof.
+- Improve work/approach: check native-addon ABI before runtime A/B; review narrow call-site diffs before validation;
+  close the installed host before replacing an extension; treat installer narration and wrapper exit as separate
+  evidence.
+- Improve tools: the E2E runner should retain actual backend PID/exit/signal and native ABI compatibility; the
+  Antigravity CLI should not crash after successful installation. Those are bounded follow-ups, not reasons to widen
+  this security unit.
+- Highest-risk evidenced weakness: B64-SEC5 still lets a full Studio-bearer caller spoof the compatibility origin used
+  for stored provider credentials. It predates W2A, is not reachable through scoped agent keys, and remains an explicit
+  product decision rather than a hidden completion claim.
+- Project lesson banked here: installation success requires independent installed-byte and rendered-host proof when
+  the installer process itself exits abnormally.

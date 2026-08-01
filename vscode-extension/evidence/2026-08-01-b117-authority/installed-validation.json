@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-01T22:42:32.0129140Z",
+  "task": "B117 exact agent route authority",
+  "result": "PASS",
+  "source": {
+    "checkpointRevision": "e70046830cbc2548e27920d4828cf2978c55ade0",
+    "forgeVersion": "1.0.409",
+    "extensionVersion": "0.0.63"
+  },
+  "e2e": {
+    "receipt": "test-results/e2e-verdict.json",
+    "generatedAt": "2026-08-01T22:21:10.45Z",
+    "total": 94,
+    "passed": 94,
+    "failed": 0,
+    "flaky": 0,
+    "badResults": 0,
+    "quarantined": 0,
+    "green": true,
+    "instrumentedLog": "C:/Users/Moshi/AppData/Local/Temp/x4forge-b117-full-e2e-20260801-180159.log",
+    "instrumentedLogSha256": "C5239B8CE97122EC2C1E86965BAF6C642032809BC9177AF0B98674CDABC68EF6"
+  },
+  "package": {
+    "artifact": "vscode-extension/x4-forge-studio-0.0.63-b117-20260801-1824.vsix",
+    "bytes": 17964903,
+    "sha256": "5456DF296C784C295A47318B373EDE19C97A2A33D13AA00A6D78E5F67DD87CFA",
+    "entries": 2091,
+    "unpackedBytes": 60712736,
+    "stagedProbePassed": 16,
+    "stagedProbeTotal": 16,
+    "inspectorPassed": 13,
+    "inspectorTotal": 13
+  },
+  "installed": {
+    "host": "Antigravity IDE",
+    "hostVersion": "1.107.0",
+    "path": "C:/Users/Moshi/.antigravity-ide/extensions/x4forge.x4-forge-studio-0.0.63",
+    "createdAt": "2026-08-01T18:27:38.1374705-04:00",
+    "files": 2090,
+    "packagedFilesChecked": 2089,
+    "missing": 0,
+    "mismatched": 0,
+    "unexpected": 0,
+    "packageJsonNormalizedEqual": true,
+    "archiveManifestSha256": "BD1222499FD5752DAF5A64DA124250981CB896D993476E7896391D68EFAD279C",
+    "installedManifestSha256": "BD1222499FD5752DAF5A64DA124250981CB896D993476E7896391D68EFAD279C",
+    "manifestEqual": true,
+    "parity": "PASS"
+  },
+  "rendered": {
+    "managedSidecarPort": 55694,
+    "capabilityCount": 11,
+    "scopeCopyVisible": true,
+    "studioOnlyCopyVisible": true,
+    "overview": {
+      "path": "vscode-extension/evidence/2026-08-01-b117-authority/installed-studio-overview.jpg",
+      "bytes": 98511,
+      "sha256": "DF5F2A756D0810DC3DD95CFCF8EE5021B35B9BF02EC1BD1319B986F680E23F39"
+    },
+    "scopeAuthority": {
+      "path": "vscode-extension/evidence/2026-08-01-b117-authority/agent-key-scope-authority.jpg",
+      "bytes": 103357,
+      "sha256": "2A3C085D9AC6B66026D0538D8E36F392758ABB7E083796D6BC0EC238DBCF65D8"
+    }
+  },
+  "safety": {
+    "publicPublish": false,
+    "gameOrModWrite": false,
+    "providerDispatchOrSpend": false,
+    "storedKeyMigration": false
+  }
+}

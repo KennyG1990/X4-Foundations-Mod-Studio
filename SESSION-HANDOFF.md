@@ -4,90 +4,83 @@ Updated: 2026-08-01
 
 ## One-line state
 
-B115 W0–W1/B116 remain `VERIFIED`; B117/W2A exact agent route authority is implemented but checkpointed
-`PARTIAL` because the required full E2E receipt is red after three different retry-only failures. Do not call W2A
-complete, move it to ROADMAP, package/install it, or begin W2B as a substitute for the missing gate.
+B115 W0–W2A are `VERIFIED` through B117. Exact reviewed route authority crossed source, adversarial HTTP/MCP,
+94/94 full E2E, packaged-byte, installed Antigravity and rendered-copy gates. W2B effective-authority discovery,
+per-key narrowing and MCP projection is next; B64-SEC5 and B114 remain separate Ken-gated boundaries.
 
 ## Operator brief
 
-- Project: `F:\DEV_ENV\X4_Forge`; normal Antigravity may remain open, but this checkpoint used only isolated
-  repository/runtime fixtures and did not take computer control.
-- Machine state at validation start: Ken reported quiet. Every E2E run cleared ports 3100/3101; ports 3000/3001 were
-  also clear. Live `.studio-state` and `config.json` hashes remained unchanged.
+- Project: `F:\DEV_ENV\X4_Forge`. Antigravity 1.107.0 is open and responsive on the installed 0.0.63 extension;
+  computer control is released. Ken reported the machine quiet before validation.
 - Eyeball queue:
   - B114 running-game experience remains Ken-gated: launch X4 with debug logging; open Forge; click `LIVE`; fire one
     known cue and confirm a green badge; provoke/load one attributed cue error and confirm a red X; turn LIVE off and
     confirm updates stop.
-  - B117 installed key-scope rendering is not ready for Ken yet. After a clean full E2E + package/install parity,
-    open Antigravity → X4 Forge Studio → Agent Bridge → Agent API Keys; confirm read/write/deploy descriptions state
-    exact reviewed powers, sensitive categories say Studio-only, and no copy says deploy has “everything.”
-- Commit question: checkpoint only the enumerated B117 paths with title
-  `security(agent): checkpoint exact reviewed route authority`; verify `origin/main == HEAD` after push. B117 remains
-  open even after that checkpoint lands.
+  - B117 has no remaining eyeball gate. Installed evidence already shows Forge v1.0.409 and the exact Agent Keys scope
+    copy. The separate Antigravity agent pane displayed `MCP Error`; do not cite that pane as external-MCP proof.
+- Commit point: stage only the B117 close paths below, run the final precommit gate, commit
+  `security(agent): enforce exact reviewed route authority`, push, and assert `origin/main == HEAD == ls-remote`.
 
 ## Current evidence
 
-- Base synchronized by fast-forward only: `e857f30606f72bd5b70059201ac3451c1eb9ca88`; eight incoming commits touched
-  only README/Discord-sync paths and did not overlap W2A or the unrelated dirty worktree.
-- Exact policy: `forge.route-dispositions.v4`, 290 direct routes + one dynamic registrar; runtime policy SHA-256
+- Source checkpoint: `e70046830cbc2548e27920d4828cf2978c55ade0`; exact policy
+  `forge.route-dispositions.v4`, 290 direct routes plus one dynamic registrar, SHA-256
   `8b332e6fa9996bb5c3e2ed0fd5f269fd5ee2c8de62b1d400f8eb8ab76748026a`.
-- Green: authority 8/8; routes 378/378; oracles 129/129; capability audit 11/290/1/10 with contract SHA-256
+- Source/runtime: authority 8/8; routes 378/378; oracles 129/129; capability audit 11/290/1/10 with contract SHA-256
   `d8a820f537dbcbb50bcb8a91c8bd415c221a15940f184e38a817fa4566c1ac8f`; MCP; typecheck; lint exit 0 / zero errors;
-  build; writer policy 14/14 + inventory + durable write 8/8; precommit; focused repaired E2E 3/3.
-- Full E2E attempt 1: retry-only canvas bootstrap failure; test now waits for the existing E2E bootstrap authority and
-  passes focused.
-- Full E2E attempt 2: retry-only conflict-dialog timeout; trace proved the successful force receipt arrived just after
-  ten seconds; test now waits for that exact receipt and passes focused.
-- Full E2E attempt 3: `test-results/e2e-verdict.json` records 93 pass / 0 fail / 1 flaky / `green:false` after the
-  `studio-shell.spec.ts` 2560 worker exited at 0 ms with `3221226505 == 0xC0000409`; unchanged retry passed and no
-  failure trace exists. Fresh-eyes cause estimate: 88% known Node/libuv/Playwright Windows worker lifecycle, 10%
-  cumulative harness interaction, at most 2% Forge viewport behavior.
-- The zero-flake policy is working. Do not add an exemption, increase retries/timeouts, reorder the suite, weaken an
-  assertion, or edit viewport product code without new reproduced evidence.
-- Final staged security review corrected one overbroad claim: W2A proves a scoped agent key cannot spoof Origin/
-  Referer to inherit stored provider credentials, but a caller already holding the full Studio bearer can still spoof
-  the legacy `isAppUiRequest()` signal. That is the pre-existing, explicitly Ken-gated B64-SEC5 decision; W2A did not
-  silently add a second UI-authentication mechanism or claim SEC5 fixed.
-- No public release, installed IDE mutation, game/mod/config write, real provider dispatch/spend, stored-key migration,
-  GitHub issue mutation or user-data deletion occurred.
+  build; writer policy 14/14 plus inventory and durable writes; precommit.
+- Final full E2E: 94/94, zero failed/flaky/bad/quarantined, `childExit:0`, `green:true`; receipt generated
+  `2026-08-01T22:21:10.45Z`. Instrumented log SHA-256
+  `C5239B8CE97122EC2C1E86965BAF6C642032809BC9177AF0B98674CDABC68EF6`. Ports 3000/3001/3100/3101 cleared;
+  live workspace/config fingerprints stayed unchanged.
+- Package: staged probe 16/16, inspector 13/13, 2,091 entries. Candidate
+  `vscode-extension/x4-forge-studio-0.0.63-b117-20260801-1824.vsix` is 17,964,903 bytes, SHA-256
+  `5456DF296C784C295A47318B373EDE19C97A2A33D13AA00A6D78E5F67DD87CFA`.
+- Installed: Antigravity extension inventory reports 0.0.63; all 2,089 packaged extension files match with zero
+  missing/mismatched/unexpected, normalized `package.json` matches, and the archive/installed manifest hash is
+  `BD1222499FD5752DAF5A64DA124250981CB896D993476E7896391D68EFAD279C`. Forge v1.0.409 visibly rendered the managed
+  sidecar and exact read/write/deploy plus Studio-only copy. Evidence:
+  `vscode-extension/evidence/2026-08-01-b117-authority/`.
+- Failed attempts remain recorded: invalid Node 22/native-ABI A/B; one unreproduced full-run backend exit; live-file
+  installer lock; post-success installer V8 teardown; first parity-helper API error; and one post-review precommit MCP
+  child exit `0xC0000409`. The exact MCP gate then passed 5/5 and the complete precommit rerun passed in 151.5 seconds.
+  Independent final oracles are green; none of the failed attempts was relabelled.
+- No public release, game/mod/config write, provider spend, stored-key migration, GitHub issue mutation or user-data
+  deletion occurred.
 
 ## Ownership and staging boundary
 
-- B117-owned: `config/durable-writers.json`, `config/forge-route-dispositions.json`,
-  `scripts/capability-contract-audit.ts`, `scripts/route-integration.mjs`, `server.ts`,
-  `src/components/AgentBridge.tsx`, `src/lib/agentAuthority.ts`, `src/lib/agentKeys.ts`,
-  `src/lib/forgeCapabilities.selftest.ts`, `src/lib/forgeCapabilities.ts`, `src/server/gameDetectRoutes.ts`,
-  `tests/e2e/canvas-interactions.spec.ts`, `tests/e2e/workspace-conflict.spec.ts`, `tsconfig.json`,
-  `vscode-extension/mcp/x4forge-mcp.cjs`, `vscode-extension/src/extension.ts`, Graphify outputs, this handoff,
-  the B117 child plan, the W2A delta in the parent plan, and only the B117 hunk in `BACKLOG.md`.
-- Preserve and do not stage/reset/clean: unrelated `BACKLOG.md` hunks; `CODEX-ONBOARDING.md`; `KNOWN-BUGS.md`;
-  deleted data/Discord/game documents and scripts; `.github/ISSUE_TEMPLATE/*`; `Note for Kimi.md`; old 0.0.35 PNGs;
-  R8/R17 screenshots; generated `test-results/.last-run.json`.
+- Final B117 close owns: `tests/e2e/continuous-polling.spec.ts`,
+  `docs/plans/2026-08-01-b117-exact-agent-route-authority.md`,
+  `docs/plans/2026-07-31-capability-convergence.md`, only the B115/B117 hunk in `BACKLOG.md`, `ROADMAP.md`, this
+  handoff, Graphify outputs if changed, and `vscode-extension/evidence/2026-08-01-b117-authority/`.
+- Preserve and do not stage/reset/clean: unrelated `BACKLOG.md` R13/B111–B114 hunks; `CODEX-ONBOARDING.md`;
+  `KNOWN-BUGS.md`; deleted data/Discord/game documents and scripts; `.github/ISSUE_TEMPLATE/*`; `Note for Kimi.md`;
+  old 0.0.35 PNGs; R8/R17 screenshots; generated `test-results/.last-run.json`.
+- The capability-map delta is specified in the B117 repository close. The external StarForge capability/AAR mirrors
+  were not written under this repository-only authorization boundary.
 
 ## Next bounded work
 
-1. First read-only command after checkpoint: inspect `node --version`, `npm ls @playwright/test`, the exact red
-   `test-results/e2e-verdict.json`, and installed alternate Node runtimes. Specify a bounded supported-Node/toolchain
-   A/B before changing project dependencies or machine state.
-2. Obtain one clean full `npm run test:e2e` receipt under the unchanged zero-flake oracle; verify ephemeral teardown
-   and live state/config hashes again.
-3. Only then run staged app, VSIX inspection/probe, installed-byte parity and rendered Antigravity key-scope proof.
-   Close B117 as `VERIFIED`, update ROADMAP/capability map/AAR records, and use final title
-   `security(agent): enforce exact reviewed route authority`.
-4. Keep B64-SEC5 separate and Ken-gated: decide whether the full Studio bearer is intentionally trusted for provider
-   spend or approve a new UI-bound credential/confirmation design. Origin/Referer alone is not an authority proof.
-5. Resume B115 W2B only after W2A closes. W7 Effective Tree authority remains locked behind its engine merge-law
-   oracle. Kimi R18 remains `PARTIAL`; R21 remains `OPEN`; B114 remains the live-game experience gate.
+1. Confirm the B117 close commit is on `origin/main`, then classify W2B as a new Full-lane unit. Read this handoff,
+   `BACKLOG.md`, the convergence plan, B117's exact-policy seam, GitHub #19/#20 and the current capability map before
+   proposing changes.
+2. Reconcile actor-effective capability discovery, per-key narrowing and MCP projection against the existing B42 key
+   store, `forge.route-dispositions.v4`, canonical capability registry, Agent API discovery and ten-tool MCP shim.
+   Specify one bounded unit before implementation; do not build a second permission engine or generic dispatcher.
+3. Keep B64-SEC5 separate and Ken-gated: decide whether the full Studio bearer intentionally trusts the legacy
+   Origin/Referer signal for stored-provider spend or approve a UI-bound credential/confirmation design.
+4. Deliberately pull B114's live-game experience gate when Ken and X4 are available; easy source work must not starve
+   it. Kimi R18 remains `PARTIAL`; R21 remains `OPEN`; the post-Kimi research program stays queued behind R1–R21.
 
 ## AAR
 
-- Sustain: exact source/caller reconciliation, one mutation lane, external HTTP authority tests, byte-level denial
-  invariants, secret-absence proof, and independent review caught real privilege and evidence-integrity defects.
-- Improve work/approach: register evidence writers when introduced; size command wrappers from observed gate time;
-  stop product/test edits once the failure class moves to an independently reproduced toolchain crash.
-- Improve tools: candidate refusal should print exact mismatched authority deltas; the Windows Node/Playwright worker
-  lifecycle needs a separate supported-version A/B rather than policy exceptions.
-- Highest-risk evidenced weakness: shipped authorization bytes have not yet crossed clean full E2E/installed parity,
-  and the adjacent full-Studio-token provider-origin boundary remains spoofable by design pending Ken's SEC5 decision.
-  The checkpoint is useful and reviewable, but it is not a release-quality close.
-- Project lesson: a retry-pass is evidence about likely cause, not permission to relabel a red required verdict green.
+- Sustain: one exact policy seam, structured zero-flake receipts, isolated-state hashes, targeted reduction, package
+  inspection, byte-level installed parity and rendered-host proof.
+- Improve work/approach: check native ABI compatibility before alternate-runtime A/B; review narrow call-site diffs;
+  close the host before extension replacement; separate installer narration from process-exit evidence.
+- Improve tools: retain backend PID/exit/signal and native ABI in E2E evidence; Antigravity should not crash after a
+  successful extension install.
+- Highest-risk evidenced weakness: B64-SEC5 remains a spoofable full-Studio-bearer compatibility boundary. Scoped
+  keys cannot reach it, but W2A does not solve or hide it.
+- Project lesson: an abnormal installer exit requires independent installed-byte and real rendered-host proof.

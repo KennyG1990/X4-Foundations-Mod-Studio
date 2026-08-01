@@ -1,6 +1,6 @@
 # B115 — Forge Capability Convergence
 
-Status: PARTIAL program — W0-W1 VERIFIED through B116; W2A implementation checkpoint PARTIAL; W2B-W21 remain; no public release
+Status: PARTIAL program — W0-W2A VERIFIED through B117; W2B-W21 remain; no public release
 Lane: FULL
 Owner: active Codex session
 Approved: 2026-07-31 by Ken
@@ -24,10 +24,10 @@ Sources: Google Drive “X4 Forge — Capability Convergence Feature Request Pac
   4. Review stop: do not cross into source-writing rebase or network-driven update actions without the decisions
      and proof gates recorded below.
   5. W19–W21: reviewed staged rebase, opt-in upstream intelligence, and final UI/CLI/MCP/Agent API/harness parity.
-- **Current bounded implementation batch:** W2A exact agent route authority under B117. W0–W1 are verified history;
-  W2A extends their route inventory into executable deny-by-default authority while retaining existing handlers,
-  key storage, workspace resolution and CAS. Exact contract and checkpoint evidence live in
-  `docs/plans/2026-08-01-b117-exact-agent-route-authority.md`.
+- **Current bounded implementation batch:** W2B effective-authority discovery, per-key narrowing and MCP projection.
+  W0–W2A are verified history through B117. W2B must consume the exact v4 route authority, existing key store,
+  capability registry and MCP shim; it must not create a second permission engine or generic dispatcher. W2A's exact
+  contract and final evidence live in `docs/plans/2026-08-01-b117-exact-agent-route-authority.md`.
 - **Assumptions:** initial `main` was `a68d69855631cb5fd1c62cc4b0a69e08b6a0fc87`; during W1 separately owned
   documentation-only commits advanced `main`/`origin/main` first to `082f501c9778b13256e4c7d3d07b7f8bde2ae3ec` and then
   to `13db48cd84fb8eefe7c205a39d41f99029d093e2`. During close, `origin/main` advanced once more to
@@ -455,3 +455,24 @@ Sources: Google Drive “X4 Forge — Capability Convergence Feature Request Pac
 - Boundary correction from final staged review: scoped agent keys cannot spoof localhost Origin/Referer to inherit
   server provider credentials, but the pre-existing full Studio-bearer Origin-spoof path remains B64-SEC5 and is
   explicitly Ken-gated. W2A does not claim to close or silently redesign that adjacent Studio/UI trust boundary.
+
+## W2A VERIFIED CLOSE — 2026-08-01
+
+- Status: `VERIFIED`; B117 is closed. `forge.route-dispositions.v4` is now the single exact, deny-by-default runtime
+  authority for all 290 direct routes plus the dynamic registrar. Existing B42 key persistence, R8/R17 workspace
+  resolver/CAS, handlers, capability registry, MCP shim and Studio ownership remain their established owners.
+- Read/write/deploy are finite hierarchical compatibility presets. Credentials, standing configuration, Studio
+  preferences, GitHub/Steam handoffs, commands, schema harvesting, global registration and legacy generation are
+  Studio-only. Write cannot deploy or spend; deploy receives only explicitly reviewed deployment, recovery,
+  configured-root and caller-key AI routes. Existing key records follow the current policy without migration.
+- Final evidence: authority 8/8; routes 378/378; oracles 129/129; capability/MCP and writer audits; typecheck/lint/
+  production builds; full isolated E2E 94/94 with zero failed/flaky/bad/quarantined; staged probe 16/16; VSIX
+  inspector 13/13; 2,091-entry package inspection; 2,089-file installed parity; and real Antigravity 1.107.0 rendering
+  Forge v1.0.409 plus the exact scope/Studio-only copy. Artifact SHA-256:
+  `5456DF296C784C295A47318B373EDE19C97A2A33D13AA00A6D78E5F67DD87CFA`.
+- The earlier Node 22 ABI failure, one unreproduced full-run backend exit, installer lock and post-success CLI teardown
+  crash remain recorded in the B117 AAR. Independent default-runtime, package, installed-byte and rendered-host
+  oracles supplied the green close; no failed attempt was relabelled.
+- Boundaries: B64-SEC5 remains separately Ken-gated. W2B per-key narrowing/effective discovery/MCP projection and W3
+  receipts remain open. No public publish, game/mod write, provider spend, stored-key migration or release-version
+  change occurred.

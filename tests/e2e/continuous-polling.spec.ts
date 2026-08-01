@@ -39,7 +39,10 @@ type PollWindow = Window & {
   };
 };
 
-async function bootWithFetchCounts(page: import('@playwright/test').Page): Promise<void> {
+async function bootWithFetchCounts(
+  page: import('@playwright/test').Page,
+  options: { dismissHealthCard?: boolean } = {},
+): Promise<void> {
   await page.addInitScript(() => {
     const nativeFetch = window.fetch.bind(window);
     const pollWindow = window as unknown as PollWindow;
@@ -89,6 +92,9 @@ async function bootWithFetchCounts(page: import('@playwright/test').Page): Promi
     const pollWindow = window as unknown as PollWindow;
     return !!pollWindow.__X4_E2E__?.getWorkspace().name && !!pollWindow.__X4_CONTINUOUS_POLLING__;
   });
+  // Startup-conflict fixtures deliberately raise the modal before this helper returns.
+  // Do not ask Playwright to click an unrelated card through that authoritative overlay.
+  if (options.dismissHealthCard === false) return;
   const healthCard = page.getByTestId('health-card');
   await healthCard.waitFor({ state: 'visible', timeout: 1500 }).catch(() => undefined);
   if (await healthCard.isVisible()) await page.getByTestId('health-card-dismiss').click();
@@ -229,7 +235,7 @@ test('equal-version unmarked local divergence is retained and conflicts without 
   expect(workspaceContentHash(localWorkspace)).toBe(envelope.workspaceHash);
   expect(workspaceSnapshotHash(localWorkspace)).not.toBe(envelope.snapshotHash);
   await seedScopedWorkspaceOnce(page, { workspaceId: envelope.workspaceId, workspace: localWorkspace, version: envelope.version });
-  await bootWithFetchCounts(page);
+  await bootWithFetchCounts(page, { dismissHealthCard: false });
   expect(await page.evaluate(() =>
     (window as unknown as PollWindow).__X4_E2E__?.getWorkspace().uiTheme?.accentColor
   )).toBe('#abcdef');
@@ -418,7 +424,7 @@ test('pre-marker divergent scoped cache is conservatively retained against a new
     description: 'Newer remote state must not erase the unmarked scoped body.',
   });
   await seedServerWorkspace(remote);
-  await bootWithFetchCounts(page);
+  await bootWithFetchCounts(page, { dismissHealthCard: false });
 
   expect(await page.evaluate(() => (window as unknown as PollWindow).__X4_E2E__?.getWorkspace().description)).toBe(unmarkedDraft.description);
   await expect(page.getByTestId('sync-conflict-dialog')).toBeVisible({ timeout: 10_000 });

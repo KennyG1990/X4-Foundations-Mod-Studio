@@ -7313,3 +7313,28 @@ store publish, game/mod write, provider spend, or live workspace mutation occurr
 
 Suggested commit title:
 `perf(workspace): avoid unchanged full-snapshot polling`.
+
+## 2026-08-01 — B117 / B115 W2A exact agent route authority — VERIFIED
+
+Agent-key authorization now consumes one reviewed `forge.route-dispositions.v4` policy covering all 290 direct
+routes and the dynamic registrar. Exact literal/parameter matching, ambiguity rejection and deny-by-default behavior
+replace broad GET, prefix and `deploy => true` inheritance. Existing B42 key storage, R8/R17 workspace authority/CAS,
+handlers, MCP shim and Studio ownership remain intact.
+
+Read, write and deploy are finite hierarchical presets. Credentials, standing configuration, Studio preferences,
+GitHub/Steam handoffs, command execution, schema harvesting, global registration and legacy generation remain
+Studio-only. Write cannot deploy or spend; deploy gains only explicitly reviewed deployment, recovery,
+configured-root and caller-key AI routes. Existing keys follow the current policy without migration.
+
+Evidence: authority 8/8, routes 378/378, oracles 129/129, capability/MCP audits, typecheck/lint/build/writer gates,
+focused negatives, full isolated E2E 94/94 with zero failed/flaky/bad/quarantined, staged probe 16/16, VSIX inspector
+13/13, 2,091-entry package inspection, and installed-byte parity. Artifact: 17,964,903 bytes, SHA-256
+`5456DF296C784C295A47318B373EDE19C97A2A33D13AA00A6D78E5F67DD87CFA`. Antigravity 1.107.0 visibly rendered
+Forge v1.0.409 and the exact scope/Studio-only explanation. Screenshots and machine receipt:
+`vscode-extension/evidence/2026-08-01-b117-authority/`.
+
+B64-SEC5 remains separately Ken-gated; W2B per-key narrowing/discovery and W3 receipts remain open. No public
+release, marketplace publish, game/mod write, provider spend or stored-key migration occurred.
+
+Suggested commit title:
+`security(agent): enforce exact reviewed route authority`.
