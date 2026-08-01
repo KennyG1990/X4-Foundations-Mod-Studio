@@ -30,6 +30,13 @@ W1 is not `VERIFIED` because its shipped extension files overlap the still-unrel
 and installed Antigravity result cannot be attributed to W1 alone. Do not start W2 until that combined release
 boundary is explicitly authorized and evidenced. Full close: `docs/plans/2026-07-31-capability-convergence.md`.
 
+**Combined installed gate attempt 1 (2026-08-01): `FAILED`; remediation `in_progress`.** Exact committed B115-W1/R13
+bytes built, packaged, inspected, installed with critical-file parity, and rendered the eleven-capability LIVE
+contract. The required Bridge unsubscribe/close interaction then reproduced a multi-minute Antigravity renderer
+stall in both the original IDE window and a second no-folder window. B115 W1 remains `PARTIAL`; no version bump or
+public publish is authorized. Failure evidence and the next evidence-first boundary:
+`docs/plans/2026-08-01-b115-r13-installed-gate.md`.
+
 ### B110 · Kimi R1-R21 execution program `in_progress` (P1, DURABLE LEDGER)
 
 The complete recommendation set is now reconciled instead of living in the deleted KNOWN-BUGS addendum.
@@ -57,12 +64,14 @@ explicit authority; duplicate names, migration/restart, history/recovery/readine
 green. Stable Open VSX 0.0.63 is installed/rendered in Antigravity and its 17,907,329 public bytes exactly match the
 inspected local VSIX. Evidence: `docs/plans/2026-07-31-workspace-authority.md`.
 
-**R13 source/runtime checkpoint:** one scheduler for continuous polling is `PARTIAL`. Final read-only review found and
-repaired stale workspace/mod/cue/log presentation authority, false initial/paused health, and client/server OAuth
-cancellation gaps. Current source/runtime/browser evidence is green: scheduler 21/21, device flow 4/4, focused
-polling 10/10, full isolated E2E 64/64, typecheck and build. The remaining boundary is one combined byte-inspected
-VSIX and installed Antigravity visual gate because R13 shares unreleased extension bytes with B115 W1. Do not publish
-or mark R13 `VERIFIED` before that gate; running-game LIVE experience remains B114. Evidence:
+**R13 source/runtime checkpoint:** one scheduler for continuous polling remains `PARTIAL`. Final read-only review found
+and repaired stale workspace/mod/cue/log presentation authority, false initial/paused health, and client/server OAuth
+cancellation gaps. Source/runtime/browser evidence is green: scheduler 21/21, device flow 4/4, focused polling 10/10,
+full isolated E2E 64/64, typecheck and build. The combined VSIX was inspected, installed with exact critical-byte
+parity and visibly rendered the contract, but the required Bridge close reproduced a multi-minute Antigravity
+renderer stall in two windows. Do not publish or mark R13 `VERIFIED`; the next unit must capture an installed-host CPU
+profile and a deterministic 1,424-node close fixture before changing cancellation. Running-game LIVE experience
+remains B114. Evidence:
 `docs/plans/2026-07-31-continuous-polling-scheduler.md`.
 
 **Post-Kimi authorized research program (queued; do not start before R1-R21 close):** reconcile

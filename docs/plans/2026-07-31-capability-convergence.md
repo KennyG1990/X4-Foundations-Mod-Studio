@@ -1,6 +1,6 @@
 # B115 — Forge Capability Convergence
 
-Status: PARTIAL — W0–W1 implemented; packaged/installed attribution boundary remains
+Status: PARTIAL — W0–W1 implemented; package/install attribution proven; installed-host interaction gate failed
 Lane: FULL
 Owner: active Codex session
 Approved: 2026-07-31 by Ken
@@ -355,14 +355,18 @@ Sources: Google Drive “X4 Forge — Capability Convergence Feature Request Pac
   and documentation, so no shipped runtime byte changed afterward. Ports 3000, 3001, 3100, 3101 and 8972 were clear.
 - PASS Graphify refresh: 3,746 nodes / 8,843 edges / 176 communities. PASS final `git diff --check` apart from
   informational existing line-ending warnings.
-- PARTIAL package/install gate: the production build and packaged-server route negatives are green, but no new VSIX
-  was packaged or installed. W1 shares extension files with still-unreleased R13 bytes, so an installed Antigravity
-  result would not be independently attributable. No in-game proof applies to this metadata/governance unit.
+- FAILED combined package/install gate: exact B115-W1/R13 bytes were packaged into a 17,942,625-byte VSIX with
+  SHA-256 `20C938156CA36039E600251E730F5DCEC5E02D064B54789566E5E3EA335DB00D`, passed the 13-check inspector and 16-check
+  staged probe, installed with critical-file parity, and visibly rendered the eleven-capability LIVE contract in
+  Antigravity. The required Bridge Close interaction then reproduced multi-minute renderer unresponsiveness in two
+  windows. No in-game proof applies to this metadata/governance unit. Full gate evidence:
+  `docs/plans/2026-08-01-b115-r13-installed-gate.md`.
 
 ## REVIEW
 
-- Acceptance 1–10 and 12–19: done and evidenced. Acceptance 11 is done through source, HTTP, native browser, build and
-  precommit layers but partial at packaged/installed Antigravity attribution; no requirement is being relabelled green.
+- Acceptance 1–10 and 12–19: done and evidenced. Acceptance 11 is done through source, HTTP, native browser, build,
+  package, installed-byte parity and visible contract/readiness, but the installed-host interaction boundary fails on
+  Bridge Close; no requirement is being relabelled green.
 - Fresh-eyes reviews repeatedly found real false-green paths in descriptor validation, MCP narrowing, route-source
   closure, middleware/loader provenance, projection reachability, input ordering, mutable import aliases and star
   re-exports. Each finding changed the documented contract before repair and received a negative probe. Final
@@ -381,16 +385,17 @@ Sources: Google Drive “X4 Forge — Capability Convergence Feature Request Pac
 
 ## CLOSE
 
-- Status: `PARTIAL`. W0–W1 behavior and all attributable source/runtime/browser gates are green; the combined
-  packaged-VSIX/installed-Antigravity boundary remains unavailable because R13 and W1 share unreleased extension bytes.
+- Status: `PARTIAL`. W0–W1 behavior and all attributable source/runtime/browser/package/install-byte gates are green;
+  the combined installed-Antigravity interaction boundary is `FAILED` because Bridge Close stalls two real renderers.
 - What did not change: W2–W21, permission enforcement, provider execution, transaction engine, Effective Tree,
   installed profiles, source-writing rebase, network update automation, public release and game/mod directories.
 - Baseline/rollback: the checkpoint is based on synchronized `HEAD == origin/main ==
   f2bc7f1dadf8c2bf42e12c22c4cc59fc079c3734`; ignored checkpoint
   `test-results/checkpoints/2026-07-31-r13-before-b115/` preserves the pre-B115 mixed R13 state.
-- Remaining program: W2–W21 in the dependency order above; W7 engine merge-law proof remains the downstream authority
-  gate. A separately bounded release task is required to combine, package and install the overlapping R13/W1 bytes.
-- Suggested combined checkpoint title: `feat(forge): add capability contract and continuous polling`.
+- Remaining program: resolve the installed-host failure before W2; W2–W21 then resume in dependency order, with W7
+  engine merge-law proof remaining the downstream authority gate. The next bounded unit must profile the same close
+  and exercise a deterministic 1,424-node fixture before changing scheduler cancellation or declaring a fix.
+- Suggested installed-gate checkpoint title: `test(extension): record failed installed capability gate`.
 
 ## AAR
 
@@ -410,9 +415,9 @@ Sources: Google Drive “X4 Forge — Capability Convergence Feature Request Pac
 - Improve tools: the new route/capability audit closes the hand-maintained-route failure class, but its large inline
   selftest block is hard to review. A later bounded refactor should extract pure AST fixtures without weakening this
   final oracle. The direct sweep's default-server dependency is adequately handled by the existing isolated wrapper.
-- Highest-risk evidenced weakness: mixed unreleased R13/W1 extension bytes prevent attributable package/install proof.
-  The bounded risk reduction is one combined versioned VSIX release gate with byte-parity, installed Antigravity
-  rendering and exact source ownership before either unit is called VERIFIED.
+- Highest-risk evidenced weakness: exact package/install attribution now exists, but the installed workbench can stall
+  on a rendered Bridge Close despite green browser tests. The active 6.04 MB workspace also transfers every three
+  seconds while unchanged; treat that as proven pressure, not a proven stall cause, until the next profile/fixture unit.
 - Project lesson banked here: green self-audits are not fresh review; exact-byte adversarial review remains mandatory
   for proof-generating code. External StarForge capability/AAR ledgers were not mutated under this task's explicit
   repository-only authorization boundary.

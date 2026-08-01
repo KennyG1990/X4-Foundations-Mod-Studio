@@ -183,15 +183,20 @@ Status: PARTIAL
   negatives prove held A-workspace/log/cue evidence cannot cross to B, prior success is cleared before fresh truth,
   OAuth cancel cannot re-arm, and resumed health returns through Checking before Connected.
 - Visual/live result when applicable: mocked rendered LIVE badges and cleanup are green. Actual running-game LIVE
-  experience remains B114 and is not claimed. A combined packaged/installed Antigravity gate remains pending because
-  R13 and B115 W1 share the same unreleased extension bytes.
+  experience remains B114 and is not claimed. The combined artifact is now packaged, byte-inspected, installed and
+  visibly renders `forge.capability.v1`, honest Checking-to-Connected readiness, distinct client authority and Live
+  State. The installed Bridge Close interaction nevertheless reproduced multi-minute Antigravity `CodeWindow`
+  unresponsiveness in two windows. Exact evidence is in
+  `docs/plans/2026-08-01-b115-r13-installed-gate.md` and
+  `vscode-extension/evidence/2026-08-01-b115-r13-installed/`.
 
 ## REVIEW
 
 - Requirement -> done | partial | missed | deferred | out of scope:
   - Criteria 1-7 -> done and evidenced by 25/25 scheduler/device oracles, polling E2E 10/10 and full E2E 64/64.
-  - Criterion 8 current rendered states -> browser and full-suite evidence are green; installed-host evidence remains
-    partial. Running-game telemetry is separately tracked by B114 and is not claimed by the scheduler unit.
+  - Criterion 8 current rendered states -> browser and full-suite evidence are green; installed contract/readiness is
+    green, but installed-host unsubscribe/close fails with a reproduced renderer stall. Running-game telemetry is
+    separately tracked by B114 and is not claimed by the scheduler unit.
   - OAuth/device and corpus bounded workflows -> out of scheduler scope by reconciled contract; source inventory
     confirms they retain their terminal/deadline/cancel ownership.
 - Fresh-eyes findings: review found and forced repairs for render-time callback authority crossing, delayed CueViewer
@@ -203,13 +208,14 @@ Status: PARTIAL
 
 ## CLOSE
 
-- Status: `PARTIAL`. Source, deterministic runtime, isolated browser and full regression behavior are green; the
-  combined staged-product/VSIX/installed-Antigravity gate is still required before R13 becomes `VERIFIED`.
-- Remaining risks/deferred work: package and inspect one combined B115-W1/R13 extension build, install it in
-  Antigravity, and visibly verify scheduler-backed readiness, workspace-first-paint authority, Playtest refresh and
-  LIVE subscribe/unsubscribe. Do not publish without the separate release authorization. B111-B114 and R18/R21
-  remain separate units.
-- Suggested combined checkpoint title: `feat(forge): add capability contract and continuous polling`.
+- Status: `PARTIAL`. Source, deterministic runtime, isolated browser, full regression, package, installed-byte parity,
+  installed contract/readiness and client-authority evidence are green. Installed Bridge unsubscribe/close is
+  `FAILED`: the real Antigravity renderer stalls for minutes in two windows, so R13 cannot become `VERIFIED`.
+- Remaining risks/deferred work: capture an installed-host CPU profile while reproducing the same close and add a
+  deterministic 1,424-node close fixture before changing scheduler cancellation. Separately prove conditional/head-
+  only workspace polling so unchanged three-second polls do not transfer the current 6.04 MB snapshot. Do not publish
+  without separate release authorization. B111-B114 and R18/R21 remain separate units.
+- Suggested installed-gate checkpoint title: `test(extension): record failed installed capability gate`.
 
 ## AAR
 
@@ -233,9 +239,10 @@ Status: PARTIAL
 - Improve tools: the full wrapper buffers all output and produces its receipt only after child close, so an observer
   timeout loses both progress and structured truth while leaving webServer children. Add a wrapper-owned overall
   deadline/progress heartbeat and guaranteed child-tree teardown as a separate bounded tool item.
-- Highest-risk evidenced weakness: source/runtime green cannot prove the installed host when two independently
-  planned units share unreleased extension bytes. The bounded risk reduction is one combined byte-inspected VSIX and
-  installed-host visual gate before either unit is labelled `VERIFIED`.
+- Highest-risk evidenced weakness: installed-host interaction can stall despite green source/browser tests and exact
+  installed bytes. The active 6.04 MB workspace is also fetched and parsed every three seconds while unchanged; this
+  is proven allocation pressure but not yet a proven four-minute-stall cause. The next unit must profile first and
+  optimize only against an explicit conditional-fetch contract.
 - Project lesson banked here: authority-changing polling must clear old presentation before awaiting the new request;
   cancellation must cross the browser/server boundary and gate credential persistence at the final commit point.
   External AAR ledgers were not mutated under this repository-only task boundary.
