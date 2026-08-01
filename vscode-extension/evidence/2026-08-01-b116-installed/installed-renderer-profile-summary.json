@@ -1,0 +1,365 @@
+{
+  "schemaVersion": 3,
+  "capturedAt": "2026-08-01T12:29:23.062Z",
+  "installedArtifactSha256": "ED813B2D4527B396E997FD3BE25B39FAB16D6BA98445B418960BCE8BB6DA412E",
+  "controls": {
+    "unprofiled": {
+      "pointerCloseAndRenderMs": 286,
+      "pointerRemountAndRenderMs": 275
+    },
+    "hostRendererProfiled": {
+      "pointerCloseAndRenderMs": 434,
+      "pointerRemountAndRenderMs": 445
+    },
+    "forgeWebviewProfiled": {
+      "pointerCloseAndRenderMs": 478,
+      "pointerRemountAndRenderMs": 484
+    }
+  },
+  "installedDom": {
+    "allElements": 1401,
+    "reactFlowNodes": 0,
+    "reactFlowEdges": 0,
+    "bridgeVisible": true,
+    "versionText": "v1.0.399"
+  },
+  "hostRenderer": {
+    "windowMs": 110483,
+    "totalSampleMs": 110807.589,
+    "idleSharePct": 99.389,
+    "maxSampleDeltaMs": 410.035,
+    "performanceMetricDeltas": {
+      "Nodes": -31,
+      "LayoutCount": 0,
+      "RecalcStyleCount": 1,
+      "LayoutDuration": 0,
+      "RecalcStyleDuration": 0.000453,
+      "ScriptDuration": 0.054442,
+      "TaskDuration": 0.847398,
+      "JSHeapUsedSize": -3044988
+    },
+    "topSelfFrames": [
+      {
+        "functionName": "(idle)",
+        "url": "",
+        "lineNumber": -1,
+        "selfUs": 110130407,
+        "samples": 89226,
+        "selfMs": 110130.407,
+        "sharePct": 99.389
+      },
+      {
+        "functionName": "(program)",
+        "url": "",
+        "lineNumber": -1,
+        "selfUs": 585096,
+        "samples": 139,
+        "selfMs": 585.096,
+        "sharePct": 0.528
+      },
+      {
+        "functionName": "postMessage",
+        "url": "",
+        "lineNumber": -1,
+        "selfUs": 14516,
+        "samples": 12,
+        "selfMs": 14.516,
+        "sharePct": 0.013
+      },
+      {
+        "functionName": "encode",
+        "url": "",
+        "lineNumber": -1,
+        "selfUs": 6351,
+        "samples": 5,
+        "selfMs": 6.351,
+        "sharePct": 0.006
+      },
+      {
+        "functionName": "(garbage collector)",
+        "url": "",
+        "lineNumber": -1,
+        "selfUs": 4709,
+        "samples": 4,
+        "selfMs": 4.709,
+        "sharePct": 0.004
+      },
+      {
+        "functionName": "emit",
+        "url": "node://electron/js2c/sandbox_bundle",
+        "lineNumber": 1,
+        "selfUs": 4582,
+        "samples": 4,
+        "selfMs": 4.582,
+        "sharePct": 0.004
+      },
+      {
+        "functionName": "deserializeRequestMixedArgs",
+        "url": "vscode-file://vscode-app/c:/Users/<user>/AppData/Local/Programs/Antigravity%20IDE/resources/app/out/vs/workbench/workbench.desktop.main.js",
+        "lineNumber": 8474,
+        "selfUs": 4250,
+        "samples": 3,
+        "selfMs": 4.25,
+        "sharePct": 0.004
+      },
+      {
+        "functionName": "(anonymous)",
+        "url": "vscode-file://vscode-app/c:/Users/<user>/AppData/Local/Programs/Antigravity%20IDE/resources/app/out/vs/workbench/workbench.desktop.main.js",
+        "lineNumber": 8474,
+        "selfUs": 3555,
+        "samples": 3,
+        "selfMs": 3.555,
+        "sharePct": 0.003
+      },
+      {
+        "functionName": "fa",
+        "url": "vscode-file://vscode-app/c:/Users/<user>/AppData/Local/Programs/Antigravity%20IDE/resources/app/out/vs/workbench/workbench.desktop.main.js",
+        "lineNumber": 2809,
+        "selfUs": 2349,
+        "samples": 2,
+        "selfMs": 2.349,
+        "sharePct": 0.002
+      },
+      {
+        "functionName": "removeEventListener",
+        "url": "",
+        "lineNumber": -1,
+        "selfUs": 2307,
+        "samples": 2,
+        "selfMs": 2.307,
+        "sharePct": 0.002
+      },
+      {
+        "functionName": "setAttribute",
+        "url": "",
+        "lineNumber": -1,
+        "selfUs": 2299,
+        "samples": 2,
+        "selfMs": 2.299,
+        "sharePct": 0.002
+      },
+      {
+        "functionName": "send",
+        "url": "",
+        "lineNumber": -1,
+        "selfUs": 2257,
+        "samples": 2,
+        "selfMs": 2.257,
+        "sharePct": 0.002
+      },
+      {
+        "functionName": "tQi",
+        "url": "vscode-file://vscode-app/c:/Users/<user>/AppData/Local/Programs/Antigravity%20IDE/resources/app/out/vs/workbench/workbench.desktop.main.js",
+        "lineNumber": 3171,
+        "selfUs": 2181,
+        "samples": 2,
+        "selfMs": 2.181,
+        "sharePct": 0.002
+      },
+      {
+        "functionName": "sLu",
+        "url": "vscode-file://vscode-app/c:/Users/<user>/AppData/Local/Programs/Antigravity%20IDE/resources/app/out/vs/workbench/workbench.desktop.main.js",
+        "lineNumber": 4977,
+        "selfUs": 1578,
+        "samples": 1,
+        "selfMs": 1.578,
+        "sharePct": 0.001
+      },
+      {
+        "functionName": "deserializeRequestJSONArgs",
+        "url": "vscode-file://vscode-app/c:/Users/<user>/AppData/Local/Programs/Antigravity%20IDE/resources/app/out/vs/workbench/workbench.desktop.main.js",
+        "lineNumber": 8474,
+        "selfUs": 1578,
+        "samples": 1,
+        "selfMs": 1.578,
+        "sharePct": 0.001
+      }
+    ]
+  },
+  "forgeWebview": {
+    "windowMs": 76266,
+    "totalSampleMs": 76266.576,
+    "idleSampleMs": 65866.952,
+    "activeSampleMs": 10399.624,
+    "urlAttributedSampleMs": 120.429,
+    "maxSampleDeltaMs": 38.961,
+    "maxSampleDeltaFrame": {
+      "functionName": "(program)",
+      "url": "",
+      "lineNumber": -1
+    },
+    "performanceMetricDeltas": {
+      "Nodes": 0,
+      "LayoutCount": 80,
+      "RecalcStyleCount": 11748,
+      "LayoutDuration": 0.016583,
+      "RecalcStyleDuration": 1.36118,
+      "ScriptDuration": 0.43821,
+      "TaskDuration": 10.444639,
+      "JSHeapUsedSize": 63384
+    },
+    "topSelfFrames": [
+      {
+        "functionName": "(idle)",
+        "url": "",
+        "lineNumber": -1,
+        "selfUs": 65866952,
+        "samples": 53423,
+        "selfMs": 65866.952,
+        "sharePct": 86.364
+      },
+      {
+        "functionName": "(program)",
+        "url": "",
+        "lineNumber": -1,
+        "selfUs": 9825767,
+        "samples": 7779,
+        "selfMs": 9825.767,
+        "sharePct": 12.883
+      },
+      {
+        "functionName": "requestAnimationFrame",
+        "url": "",
+        "lineNumber": -1,
+        "selfUs": 271789,
+        "samples": 219,
+        "selfMs": 271.789,
+        "sharePct": 0.356
+      },
+      {
+        "functionName": "(garbage collector)",
+        "url": "",
+        "lineNumber": -1,
+        "selfUs": 169032,
+        "samples": 137,
+        "selfMs": 169.032,
+        "sharePct": 0.222
+      },
+      {
+        "functionName": "N",
+        "url": "http://127.0.0.1:<sidecar>/assets/index-DVP62Wxk.js",
+        "lineNumber": 1640,
+        "selfUs": 33986,
+        "samples": 28,
+        "selfMs": 33.986,
+        "sharePct": 0.045
+      },
+      {
+        "functionName": "tn.createElement",
+        "url": "http://127.0.0.1:<sidecar>/assets/index-DVP62Wxk.js",
+        "lineNumber": 16,
+        "selfUs": 16142,
+        "samples": 22,
+        "selfMs": 16.142,
+        "sharePct": 0.021
+      },
+      {
+        "functionName": "vp",
+        "url": "http://127.0.0.1:<sidecar>/assets/index-DVP62Wxk.js",
+        "lineNumber": 47,
+        "selfUs": 6990,
+        "samples": 6,
+        "selfMs": 6.99,
+        "sharePct": 0.009
+      },
+      {
+        "functionName": "Gv",
+        "url": "http://127.0.0.1:<sidecar>/assets/index-DVP62Wxk.js",
+        "lineNumber": 48,
+        "selfUs": 5346,
+        "samples": 5,
+        "selfMs": 5.346,
+        "sharePct": 0.007
+      },
+      {
+        "functionName": "fetch",
+        "url": "",
+        "lineNumber": -1,
+        "selfUs": 4821,
+        "samples": 4,
+        "selfMs": 4.821,
+        "sharePct": 0.006
+      },
+      {
+        "functionName": "Ry",
+        "url": "http://127.0.0.1:<sidecar>/assets/index-DVP62Wxk.js",
+        "lineNumber": 53,
+        "selfUs": 4479,
+        "samples": 4,
+        "selfMs": 4.479,
+        "sharePct": 0.006
+      },
+      {
+        "functionName": "Yp",
+        "url": "http://127.0.0.1:<sidecar>/assets/index-DVP62Wxk.js",
+        "lineNumber": 47,
+        "selfUs": 3832,
+        "samples": 4,
+        "selfMs": 3.832,
+        "sharePct": 0.005
+      },
+      {
+        "functionName": "(anonymous)",
+        "url": "http://127.0.0.1:<sidecar>/assets/index-DVP62Wxk.js",
+        "lineNumber": 63,
+        "selfUs": 3608,
+        "samples": 4,
+        "selfMs": 3.608,
+        "sharePct": 0.005
+      },
+      {
+        "functionName": "Un",
+        "url": "http://127.0.0.1:<sidecar>/assets/index-DVP62Wxk.js",
+        "lineNumber": 48,
+        "selfUs": 2905,
+        "samples": 3,
+        "selfMs": 2.905,
+        "sharePct": 0.004
+      },
+      {
+        "functionName": "Sv",
+        "url": "http://127.0.0.1:<sidecar>/assets/index-DVP62Wxk.js",
+        "lineNumber": 47,
+        "selfUs": 2666,
+        "samples": 2,
+        "selfMs": 2.666,
+        "sharePct": 0.003
+      },
+      {
+        "functionName": "wh",
+        "url": "http://127.0.0.1:<sidecar>/assets/index-DVP62Wxk.js",
+        "lineNumber": 48,
+        "selfUs": 2362,
+        "samples": 2,
+        "selfMs": 2.362,
+        "sharePct": 0.003
+      }
+    ]
+  },
+  "shortTrace": {
+    "capturedAt": "2026-08-01T12:35:59.026Z",
+    "windowMs": 56758,
+    "eventCount": 178236,
+    "completeEventCount": 66938,
+    "eventsAtLeast50ms": 11,
+    "eventsAtLeast5000ms": 0,
+    "maxCompleteEventMs": 327.399,
+    "maxForgeCompleteEventMs": 64.802,
+    "maxForgeEvent": {
+      "name": "FunctionCall",
+      "category": "devtools.timeline",
+      "url": "http://127.0.0.1:<sidecar>/assets/index-DVP62Wxk.js"
+    },
+    "controlDispatchMs": {
+      "close": 76,
+      "remount": 218
+    },
+    "rawIgnoredArtifact": {
+      "path": "test-results/b116/raw/installed-forge-short-trace.json",
+      "bytes": 39274977,
+      "sha256": "8660afb13259d1dd675c55f06403a4239fe700deaeaaef2a772333f59c3f1330"
+    }
+  },
+  "unresponsiveLogMatches": 0,
+  "interpretation": "All installed pointer close/remount controls completed below five seconds. The host renderer and isolated Forge webview profiles show no multi-second sampled gap or Forge-owned blocking stack. The browser-wide short trace captured the close/remount sequence with no complete event at or above five seconds; its longest Forge-attributed complete event was 64.802 ms. CPU sample deltas are correlation evidence, while trace complete-event durations are scheduler evidence."
+}

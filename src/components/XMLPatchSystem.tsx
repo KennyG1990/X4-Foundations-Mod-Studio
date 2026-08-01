@@ -30,7 +30,7 @@ interface XMLPatchSystemProps {
   workspace: ModWorkspace;
   setWorkspace: React.Dispatch<React.SetStateAction<ModWorkspace>>;
   saveCheckpoint?: (customTarget?: ModWorkspace) => void;
-  onServerWorkspaceApplied?: (workspace: ModWorkspace, metadata: { workspaceHash: string; version: number }) => void;
+  onServerWorkspaceApplied?: (workspace: ModWorkspace, metadata: { workspaceHash: string; snapshotHash: string; version: number }) => void;
 }
 
 export interface PatchBlock {

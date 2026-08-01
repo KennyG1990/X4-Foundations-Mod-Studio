@@ -24,8 +24,13 @@ import {
   Clock
 } from 'lucide-react';
 import { ModWorkspace, NODE_TEMPLATES, MDNode } from '../types';
-import { fetchPollingJson } from '../lib/continuousPolling';
 import { useContinuousPolling } from '../lib/useContinuousPolling';
+import {
+  pollWorkspaceSnapshot,
+  WORKSPACE_POLLING_CONTRACT,
+  type FullWorkspacePollingResponse,
+  type WorkspacePollingResponse,
+} from '../lib/workspacePolling';
 import {
   FORGE_CAPABILITIES,
   FORGE_CAPABILITY_SCHEMA_VERSION,
@@ -40,6 +45,13 @@ interface AgentBridgeProps {
   setWorkspace: React.Dispatch<React.SetStateAction<ModWorkspace>>;
   localVersion: number;
   setLocalVersion: (v: number) => void;
+  autoSync: boolean;
+  onAutoSyncChange: (enabled: boolean) => void;
+  pollingEnabled: boolean;
+  onPollingEnabledChange: (enabled: boolean) => void;
+  pendingWorkspace: FullWorkspacePollingResponse | null;
+  onDiscardPendingWorkspace: (candidate?: FullWorkspacePollingResponse) => void;
+  onApplyPendingWorkspace: (candidate: FullWorkspacePollingResponse) => Promise<boolean>;
   /** B86.1: jump the canvas to a node named by a history entry. */
   setFocusNodeRequest?: (req: { nodeId: string; timestamp: number } | null) => void;
 }
@@ -54,12 +66,6 @@ interface AgentRuntimeApi {
   updateWidget: (widgetIdOrLabel: string, key: string, value: AgentRuntimeValue) => boolean;
   addNode: (xmlTagOrType: string, x?: number, y?: number, properties?: AgentRuntimeProperties) => boolean;
   getCurrentWorkspace: () => ModWorkspace;
-}
-
-interface AgentWorkspaceResponse {
-  workspaceId?: unknown;
-  version?: unknown;
-  workspace?: unknown;
 }
 
 interface CapabilityContractState {
@@ -103,6 +109,13 @@ export default function AgentBridge({
   setWorkspace,
   localVersion,
   setLocalVersion,
+  autoSync,
+  onAutoSyncChange,
+  pollingEnabled,
+  onPollingEnabledChange,
+  pendingWorkspace,
+  onDiscardPendingWorkspace,
+  onApplyPendingWorkspace,
   setFocusNodeRequest
 }: AgentBridgeProps) {
   const [activeTab, setActiveTab] = useState<'docs' | 'status' | 'execute' | 'keys' | 'history'>('docs');
@@ -517,17 +530,8 @@ export default function AgentBridge({
     };
   }, [addNode, runtimeExecute, updateNodeProperty, updateWidget, workspace]);
   
-  // Settings
-  const [autoSync, setAutoSync] = useState<boolean>(false);
-  const [isPolling, setIsPolling] = useState<boolean>(true);
-  
   // Server state tracking
   const [serverVersion, setServerVersion] = useState<number>(localVersion);
-  const [pendingWorkspace, setPendingWorkspace] = useState<{
-    workspaceId: string;
-    version: number;
-    workspace: ModWorkspace;
-  } | null>(null);
   const [lastSyncedTime, setLastSyncedTime] = useState<string>("Never");
   const [serverHealth, setServerHealth] = useState<'checking' | 'connected' | 'offline'>('checking');
   const [capabilityContract, setCapabilityContract] = useState<CapabilityContractState>({
@@ -564,41 +568,35 @@ export default function AgentBridge({
     setTimeout(() => setCopiedTextId(null), 2000);
   };
 
-  // R13: this exact workspace read shares one request with App. Only the panel's
-  // presentation/adoption policy remains local to the panel subscriber.
+  // R13: this exact workspace read shares one request with App. The panel subscriber
+  // owns health presentation only; App retains the full body and adoption policy so a
+  // closed drawer cannot lose the one conditional transfer.
   const pollingWorkspaceId = window.__X4_WORKSPACE_CONTEXT__?.getWorkspaceId() || 'unbound';
   const bridgeWorkspaceAuthorityRef = React.useRef(pollingWorkspaceId);
   React.useLayoutEffect(() => {
     if (bridgeWorkspaceAuthorityRef.current === pollingWorkspaceId) return;
     bridgeWorkspaceAuthorityRef.current = pollingWorkspaceId;
-    setPendingWorkspace(null);
+    if (pendingWorkspace && pendingWorkspace.workspaceId !== pollingWorkspaceId) {
+      onDiscardPendingWorkspace(pendingWorkspace);
+    }
     setServerVersion(localVersion);
     setLastSyncedTime('Never');
     setServerHealth('checking');
-  }, [pollingWorkspaceId, localVersion]);
-  useContinuousPolling<AgentWorkspaceResponse>({
-    enabled: isPolling && isOpen,
+  }, [pollingWorkspaceId, localVersion, onDiscardPendingWorkspace, pendingWorkspace]);
+  React.useLayoutEffect(() => {
+    if (isOpen && pollingEnabled) setServerHealth('checking');
+  }, [isOpen, pollingEnabled]);
+  useContinuousPolling<WorkspacePollingResponse>({
+    enabled: pollingEnabled && isOpen,
     resourceKey: `workspace:${pollingWorkspaceId}`,
-    contract: 'GET /api/agent/workspace',
+    contract: WORKSPACE_POLLING_CONTRACT,
     intervalMs: 4000,
-    run: signal => fetchPollingJson('/api/agent/workspace', undefined, signal),
+    run: signal => pollWorkspaceSnapshot(pollingWorkspaceId, signal),
     onResult: data => {
       if (typeof data.workspaceId === 'string' && data.workspaceId !== pollingWorkspaceId) return;
       setServerHealth('connected');
       setLastSyncedTime(new Date().toLocaleTimeString());
-      if (typeof data.version === 'number' && data.version > localVersion && isModWorkspace(data.workspace)) {
-        setServerVersion(data.version);
-        if (autoSync) {
-          setWorkspace(data.workspace);
-          setLocalVersion(data.version);
-          setPendingWorkspace(null);
-        } else {
-          setPendingWorkspace({ workspaceId: pollingWorkspaceId, version: data.version, workspace: data.workspace });
-        }
-      } else if (data.version === localVersion) {
-        setPendingWorkspace(null);
-        setServerVersion(data.version);
-      }
+      if (typeof data.version === 'number') setServerVersion(data.version);
     },
     onError: () => setServerHealth('offline'),
   });
@@ -651,20 +649,18 @@ export default function AgentBridge({
   }, [isOpen]);
 
   // Manually apply pending external changes
-  const applyPendingChanges = () => {
+  const applyPendingChanges = async () => {
     if (pendingWorkspace) {
       const currentWorkspaceId = window.__X4_WORKSPACE_CONTEXT__?.getWorkspaceId() || 'unbound';
       if (pendingWorkspace.workspaceId !== currentWorkspaceId) {
-        setPendingWorkspace(null);
+        onDiscardPendingWorkspace(pendingWorkspace);
         return;
       }
-      setWorkspace(pendingWorkspace.workspace);
-      setLocalVersion(pendingWorkspace.version);
-      setPendingWorkspace(null);
+      await onApplyPendingWorkspace(pendingWorkspace);
     }
   };
 
-  const displayedServerHealth = isPolling ? serverHealth : 'paused';
+  const displayedServerHealth = pollingEnabled ? serverHealth : 'paused';
 
   if (!isOpen) return null;
 
@@ -696,7 +692,7 @@ export default function AgentBridge({
         <div className="flex items-center gap-1.5">
           <div className={`w-2 h-2 rounded-full ${displayedServerHealth === 'connected' ? 'bg-emerald-500 animate-ping' : displayedServerHealth === 'offline' ? 'bg-red-500' : displayedServerHealth === 'checking' ? 'bg-amber-400 animate-pulse' : 'bg-slate-500'}`} />
           <span data-testid="agent-bridge-sync-status" className="text-slate-400">
-            Sync: {displayedServerHealth === 'connected' ? 'Connected' : displayedServerHealth === 'offline' ? 'Offline' : displayedServerHealth === 'checking' ? 'Checking' : 'Paused'}
+            External updates: {displayedServerHealth === 'connected' ? 'Connected' : displayedServerHealth === 'offline' ? 'Offline' : displayedServerHealth === 'checking' ? 'Checking' : 'Paused'}
           </span>
           <span className="text-[9px] text-slate-500">| ver: v{localVersion} (srv: v{serverVersion})</span>
         </div>
@@ -704,15 +700,14 @@ export default function AgentBridge({
           <span className="text-[9px] text-slate-500">Last: {lastSyncedTime}</span>
           <button 
             onClick={() => {
-              setIsPolling(prev => {
-                if (!prev) setServerHealth('checking');
-                return !prev;
-              });
+              const next = !pollingEnabled;
+              if (next) setServerHealth('checking');
+              onPollingEnabledChange(next);
             }}
             className="p-1 text-slate-400 hover:text-white transition-all"
-            title={isPolling ? "Pause server synchronization" : "Resume server synchronization"}
+            title={pollingEnabled ? "Pause external workspace updates (local edits still save)" : "Resume external workspace updates"}
           >
-            <RefreshCw className={`w-3 h-3 ${isPolling ? 'animate-spin-slow text-cyan-400' : ''}`} />
+            <RefreshCw className={`w-3 h-3 ${pollingEnabled ? 'animate-spin-slow text-cyan-400' : ''}`} />
           </button>
         </div>
       </div>
@@ -754,19 +749,19 @@ export default function AgentBridge({
             <div>
               <span className="font-bold text-cyan-400 text-[11px] block">EXTERNAL AGENT CHANGE DETECTED</span>
               <p className="text-[10px] text-slate-300 leading-normal font-sans">
-                An external AI Agent (Antigravity/Claude) has pushed a modified blueprint of the mod (v{serverVersion}).
+                An external AI Agent (Antigravity/Claude) has pushed a modified blueprint of the mod (v{pendingWorkspace.version}).
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2 self-end">
             <button
-              onClick={() => setPendingWorkspace(null)}
+              onClick={() => onDiscardPendingWorkspace(pendingWorkspace)}
               className="px-2.5 py-1 text-[10px] hover:text-white text-slate-400 bg-white/5 rounded border border-white/5 hover:bg-white/10 transition-all font-mono"
             >
               Discard
             </button>
             <button
-              onClick={applyPendingChanges}
+              onClick={() => void applyPendingChanges()}
               className="px-3 py-1 text-[10px] bg-cyan-600/20 hover:bg-cyan-600/30 font-bold border border-cyan-500/30 text-cyan-400 rounded flex items-center gap-1.5 transition-all cursor-pointer font-mono"
             >
               <Play className="w-3 h-3" />
@@ -1050,7 +1045,8 @@ export default function AgentBridge({
               <div className="flex items-center justify-between text-[11px] py-1">
                 <span className="text-slate-400">Auto-Apply Agent Modifications</span>
                 <button 
-                  onClick={() => setAutoSync(!autoSync)}
+                  data-testid="agent-bridge-auto-sync"
+                  onClick={() => onAutoSyncChange(!autoSync)}
                   className="p-1 focus:outline-none"
                 >
                   {autoSync ? (
@@ -1163,10 +1159,10 @@ export default function AgentBridge({
                     </p>
                     <div className="relative">
                       <pre className="bg-[#10141f] p-2 rounded text-[9px] text-cyan-300 overflow-y-auto max-h-32 select-all">
-                        {`curl.exe -X POST "${appOrigin}/api/agent/workspace" ${authCurlHeader} ${workspaceCurlHeader} ${clientCurlHeader} -H "Content-Type: application/json" -d '{"workspace":{"name":"Bounty_Hunter_Mod","nodes":[],"links":[],"uiWidgets":[]},"expectedHead":"<head from GET>"}'`}
+                        {`curl.exe -X POST "${appOrigin}/api/agent/workspace" ${authCurlHeader} ${workspaceCurlHeader} ${clientCurlHeader} -H "Content-Type: application/json" -d '{"workspace":{"name":"Bounty_Hunter_Mod","nodes":[],"links":[],"uiWidgets":[]},"expectedHead":"<workspaceHash from GET>","expectedSnapshotHash":"<snapshotHash from GET>"}'`}
                       </pre>
                       <button 
-                        onClick={() => handleCopy(`curl.exe -X POST "${appOrigin}/api/agent/workspace" ${authCurlHeader} ${workspaceCurlHeader} ${clientCurlHeader} -H "Content-Type: application/json" -d '{"workspace":{"name":"My_AI_Mod","nodes":[],"links":[],"uiWidgets":[]},"expectedHead":"<head from GET>"}'`, 'curl_postws')}
+                        onClick={() => handleCopy(`curl.exe -X POST "${appOrigin}/api/agent/workspace" ${authCurlHeader} ${workspaceCurlHeader} ${clientCurlHeader} -H "Content-Type: application/json" -d '{"workspace":{"name":"My_AI_Mod","nodes":[],"links":[],"uiWidgets":[]},"expectedHead":"<workspaceHash from GET>","expectedSnapshotHash":"<snapshotHash from GET>"}'`, 'curl_postws')}
                         className="absolute right-2 top-2 p-1 rounded bg-black/45 hover:bg-black text-slate-400 hover:text-white transition-all cursor-pointer"
                       >
                         {copiedTextId === 'curl_postws' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}

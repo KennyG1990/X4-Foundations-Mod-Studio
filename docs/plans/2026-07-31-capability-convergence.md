@@ -1,6 +1,6 @@
 # B115 — Forge Capability Convergence
 
-Status: PARTIAL — W0–W1 implemented; package/install attribution proven; installed-host interaction gate failed
+Status: PARTIAL program — W0-W1 VERIFIED through B116; W2-W21 remain; no public release
 Lane: FULL
 Owner: active Codex session
 Approved: 2026-07-31 by Ken
@@ -30,7 +30,7 @@ Sources: Google Drive “X4 Forge — Capability Convergence Feature Request Pac
   documentation-only commits advanced `main`/`origin/main` first to `082f501c9778b13256e4c7d3d07b7f8bde2ae3ec` and then
   to `13db48cd84fb8eefe7c205a39d41f99029d093e2`. During close, `origin/main` advanced once more to
   `f2bc7f1dadf8c2bf42e12c22c4cc59fc079c3734` through two non-overlapping Discord/GitHub sync workflows; local
-  `main` was fast-forwarded without a merge commit. R13 source is present but PARTIAL and uncommitted; API
+  `main` was fast-forwarded without a merge commit. At that recorded baseline, R13 source was PARTIAL and uncommitted; API
   `2026-07-30.agent.v4` and current MCP tool names must remain compatible.
 - **Authoritative references:** `AGENTS.md`; `UNIVERSAL_AI_TASK_WORKFLOW.md`; ADR-F1 through ADR-F5;
   `F:\StarForge\wiki\x4-forge\capability-map.md`; X4 XSDs and unpacked corpus; real X4 debug-log evidence for
@@ -350,7 +350,7 @@ Sources: Google Drive “X4 Forge — Capability Convergence Feature Request Pac
   `test-results/capability-contract-live.png` shows eleven server capabilities, `forge.capability.v1`, the hash prefix
   and `LIVE CONTRACT`; `test-results/capability-contract-invalid.png` visibly shows the local eleven-capability
   catalog, unknown server support and `INVALID CONTRACT`.
-- PASS full isolated `npm run test:e2e`: authoritative receipt `test-results/e2e-verdict.json` reports 64 passed,
+- PASS intermediate full isolated `npm run test:e2e`: authoritative receipt `test-results/e2e-verdict.json` reports 64 passed,
   zero failed/flaky/bad/quarantined-blocking in 7.5 minutes. Final post-E2E changes were confined to the audit script
   and documentation, so no shipped runtime byte changed afterward. Ports 3000, 3001, 3100, 3101 and 8972 were clear.
 - PASS Graphify refresh: 3,746 nodes / 8,843 edges / 176 communities. PASS final `git diff --check` apart from
@@ -361,12 +361,20 @@ Sources: Google Drive “X4 Forge — Capability Convergence Feature Request Pac
   Antigravity. The required Bridge Close interaction then reproduced multi-minute renderer unresponsiveness in two
   windows. No in-game proof applies to this metadata/governance unit. Full gate evidence:
   `docs/plans/2026-08-01-b115-r13-installed-gate.md`.
+- PASS B116 remediation on final current source: full isolated E2E passed 94/94. Exact artifact
+  `vscode-extension/x4-forge-studio-0.0.63-b116-r2-20260801-125325.vsix`, SHA-256
+  `C5B46B44FC60AB804B5B8E561C2C41DD1B3DFB466801A5FAC6098361737A8565`, matched all seven critical installed files.
+  Installed profile summary `vscode-extension/evidence/2026-08-01-b116-installed-r2/installed-renderer-profile-summary.json`
+  reports `PASS`: Close took 173 ms, remount reached `Connected` plus all 11 capabilities in 3,031 ms, and no new
+  unresponsive-host log appeared. Raw profiles remain ignored and retained; normal Antigravity was restored. The
+  failed attempt above remains reproduced history rather than being erased. No public publish occurred.
 
 ## REVIEW
 
-- Acceptance 1–10 and 12–19: done and evidenced. Acceptance 11 is done through source, HTTP, native browser, build,
-  package, installed-byte parity and visible contract/readiness, but the installed-host interaction boundary fails on
-  Bridge Close; no requirement is being relabelled green.
+- Acceptance 1–19: done and evidenced for W0-W1. Acceptance 11 now includes source, HTTP, native browser, build,
+  exact-r2 package/install parity, visible contract/readiness, installed extension-host profile and a green rendered
+  Close/remount boundary. The original failed attempt remains recorded; it is superseded by the B116 remediation, not
+  relabelled green.
 - Fresh-eyes reviews repeatedly found real false-green paths in descriptor validation, MCP narrowing, route-source
   closure, middleware/loader provenance, projection reachability, input ordering, mutable import aliases and star
   re-exports. Each finding changed the documented contract before repair and received a negative probe. Final
@@ -381,21 +389,22 @@ Sources: Google Drive “X4 Forge — Capability Convergence Feature Request Pac
   introduced. W2–W21 remain deliberately unimplemented under this bounded unit.
 - Capability-map delta identified but not written outside the authorized repository: add the canonical eleven-
   capability contract, exact 290-route/one-registrar governance, two-step manifest and MCP monotonic narrowing. No
-  ROADMAP move is made because the bounded close is PARTIAL.
+  external capability-map write occurs in this repository-only unit. W0-W1 may now move to the repository ROADMAP;
+  the overall W2-W21 program remains `PARTIAL`.
 
 ## CLOSE
 
-- Status: `PARTIAL`. W0–W1 behavior and all attributable source/runtime/browser/package/install-byte gates are green;
-  the combined installed-Antigravity interaction boundary is `FAILED` because Bridge Close stalls two real renderers.
+- Status: `PARTIAL` overall / `VERIFIED` for W0-W1. B116 closed the combined installed-host boundary; W2-W21 remain
+  deliberately unimplemented.
 - What did not change: W2–W21, permission enforcement, provider execution, transaction engine, Effective Tree,
-  installed profiles, source-writing rebase, network update automation, public release and game/mod directories.
+  installed user profiles or settings, source-writing rebase, network update automation, public release and game/mod directories.
 - Baseline/rollback: the checkpoint is based on synchronized `HEAD == origin/main ==
   f2bc7f1dadf8c2bf42e12c22c4cc59fc079c3734`; ignored checkpoint
   `test-results/checkpoints/2026-07-31-r13-before-b115/` preserves the pre-B115 mixed R13 state.
-- Remaining program: resolve the installed-host failure before W2; W2–W21 then resume in dependency order, with W7
-  engine merge-law proof remaining the downstream authority gate. The next bounded unit must profile the same close
-  and exercise a deterministic 1,424-node fixture before changing scheduler cancellation or declaring a fix.
-- Suggested installed-gate checkpoint title: `test(extension): record failed installed capability gate`.
+- Remaining program: W2-W21 resume in dependency order, with W7 engine merge-law proof remaining the downstream
+  authority gate. B116's deterministic 1,424-node fixture and exact installed profile remain mandatory regression
+  evidence; public release remains separately authorized.
+- Suggested W0-W1 close title: `perf(workspace): avoid unchanged full-snapshot polling`.
 
 ## AAR
 
@@ -405,6 +414,10 @@ Sources: Google Drive “X4 Forge — Capability Convergence Feature Request Pac
   green audits. The last review found method-receiver recursion and an uppercase-call render false positive; the first
   repair attempt broke four legitimate JSX positives until fixtures were changed to real `createRoot(...).render(...)`
   flows. This is a non-clean Full-lane close.
+- Remediation-close triggers: B116's first profile-summary analysis used unbounded `Math.max(...)` and hit a call-stack
+  error before corrected analysis produced the retained `PASS` summary. The first remount timing was invalid, so it
+  was discarded and the unchanged interaction repeated immediately; the valid 3,031 ms `Connected` plus 11-capability
+  result is the evidence used here. Neither invalid attempt was relabelled green.
 - Sustain: preserve one mutation lane; freeze exact source hashes for read-only reviewers; require negative probes for
   every false-green class; keep runtime verdicts, screenshots and post-teardown port checks; preserve the dirty R13
   baseline before priority switching.
@@ -415,9 +428,9 @@ Sources: Google Drive “X4 Forge — Capability Convergence Feature Request Pac
 - Improve tools: the new route/capability audit closes the hand-maintained-route failure class, but its large inline
   selftest block is hard to review. A later bounded refactor should extract pure AST fixtures without weakening this
   final oracle. The direct sweep's default-server dependency is adequately handled by the existing isolated wrapper.
-- Highest-risk evidenced weakness: exact package/install attribution now exists, but the installed workbench can stall
-  on a rendered Bridge Close despite green browser tests. The active 6.04 MB workspace also transfers every three
-  seconds while unchanged; treat that as proven pressure, not a proven stall cause, until the next profile/fixture unit.
+- Highest-risk evidenced weakness: the original installed workbench stall is reproduced history, and B116's exact r2
+  no longer reproduced it after removing the unchanged 6.04 MB full-snapshot transfer. That correlation does not prove
+  a single root cause; retain the exact dense fixture and installed profile as regression gates.
 - Project lesson banked here: green self-audits are not fresh review; exact-byte adversarial review remains mandatory
   for proof-generating code. External StarForge capability/AAR ledgers were not mutated under this task's explicit
   repository-only authorization boundary.

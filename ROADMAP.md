@@ -7283,3 +7283,33 @@ records. Open VSX public/local bytes match at 17,907,329 bytes and SHA-256
 
 Suggested commit title:
 `feat(workspaces): isolate clients with immutable authority`.
+
+## 2026-08-01 — B116 / B110-R13 / B115 W0–W1 conditional workspace polling and installed capability contract — VERIFIED
+
+One shared scheduler now owns continuous browser reads. Unchanged ticks transfer only the addressed workspace
+summary; a changed content head fetches and adopts one full snapshot. App owns polling authority, Auto-Apply,
+checkpoint-before-adopt, and dirty/queued/conflicted workspace-switch protection. The Agent API drawer truthfully
+shows Checking, Connected, Offline, or Paused; close unsubscribes, remount starts from Checking, manual adoption
+validates finite revisions, scoped draft metadata is paired with its body, and Ctrl+Z restores the pre-adoption
+workspace without echoing a write to the server. The canonical `forge.capability.v1` registry remains the single
+eleven-capability contract across UI, CLI, MCP, Agent API, and the built-in harness.
+
+Current-source evidence: typecheck passed; lint exited 0 with baseline warnings only; route integration 347/347;
+runtime-discovered oracles 129/129; isolated reference integration 82/82; full E2E 94/94 with zero failed, flaky,
+bad-result, or quarantined tests; production and extension builds; staged package probe 16/16; VSIX inspector 13/13;
+Graphify refresh at 3,805 nodes / 9,017 edges / 180 communities; and ports 3100/3101 cleared after the isolated run.
+The exact installed artifact is `x4-forge-studio-0.0.63-b116-r2-20260801-125325.vsix`, 17,954,072 bytes, 2,091
+entries, SHA-256 `C5B46B44FC60AB804B5B8E561C2C41DD1B3DFB466801A5FAC6098361737A8565`; installed critical-file parity was 7/7.
+
+Real Antigravity 1.107.0 rendered Connected with 11 capabilities. Its actual extension-host inspector target matched
+the stable host PID and owned the packaged sidecar supervisor. Pointer close unmounted in 173 ms; remount reached
+Connected with 11 capabilities in 3,031 ms after visibly showing Checking. The 85,941-sample extension-host profile,
+85,800-sample workbench profile, 85,752-sample Forge-webview profile, and 514,981-event scheduler trace contained no
+five-second Forge-owned sampled span or complete event; no new `CodeWindow: detected unresponsive` log appeared.
+Sanitized summary and screenshots: `vscode-extension/evidence/2026-08-01-b116-installed-r2/`.
+
+B115 W2–W21, Kimi R18/R21, and the B114 running-game experience gate remain separate work. No public release,
+store publish, game/mod write, provider spend, or live workspace mutation occurred.
+
+Suggested commit title:
+`perf(workspace): avoid unchanged full-snapshot polling`.

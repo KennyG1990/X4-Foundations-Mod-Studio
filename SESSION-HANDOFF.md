@@ -1,107 +1,51 @@
 # X4 Forge — Session Handoff
 
-Updated: 2026-08-01 02:15 America/New_York — B115 W1 / Kimi R13 installed gate attempt 1
+Updated: 2026-08-01
 
 ## One-line state
 
-Exact B115-W1/R13 bytes are packaged, inspected, installed and visibly render the capability contract, but the
-required Agent Bridge Close interaction reproduced a 173–228 second Antigravity renderer stall in two windows. The
-gate closes `FAILED`; B115 W1 and R13 remain `PARTIAL`. Commit/push this evidence-only checkpoint, then run a bounded
-installed-host profile + 1,424-node fixture task before changing cancellation or resuming B115 W2.
+B116 / B110-R13 / B115 W0–W1 are `VERIFIED`: conditional addressed-workspace polling, truthful Agent API pause/remount, draft/undo/switch authority, the eleven-capability contract, and the exact installed Antigravity boundary are green. The next bounded convergence unit is B115 W2.
 
 ## Operator brief
 
-- Project: `F:\DEV_ENV\X4_Forge` — Forge application and Antigravity extension, not the live X4 mod.
-- Revision entering the gate: `HEAD == origin/main == 37f07192099f844647cb3cf8ba423656159feab8`.
-- Installed product: local same-version `x4forge.x4-forge-studio@0.0.63`, built from `37f0719`. Artifact:
-  `vscode-extension/x4-forge-studio-0.0.63-b115-r13.vsix`, SHA-256
-  `20C938156CA36039E600251E730F5DCEC5E02D064B54789566E5E3EA335DB00D`.
-- Antigravity state restored: only Ken's original window remains, Agent Bridge is closed, Beginner mode is selected,
-  renderer is responsive, and its managed sidecar remains on port 59743. The temporary no-folder window and port
-  55737 are gone. The disposable isolated profile under Local Temp was exactly resolved, found unused, and deleted;
-  it contained no user data and is not recoverable.
-- X4 was observed running during final cleanup but was never controlled or written. Expert mode was used temporarily
-  for the Agent API proof and restored to Beginner; no setting remains changed. No game/mod/workspace content,
-  credential, public release or external service was mutated. No computer-control session is retained.
-- Commit target: `test(extension): record failed installed capability gate`. Run precommit first, stage only the exact
-  task records/screenshots, push `main`, then assert `origin/main == HEAD == ls-remote`. Final
-  `npm run precommit:check` passed in 148.5 seconds.
-- Eyeball queue: none for Ken from this failed gate. The next proof is agent-owned profiling/fixture work; do not ask
-  Ken to repeat a multi-minute freeze until instrumentation is ready.
+- Project: `F:\DEV_ENV\X4_Forge`; normal Antigravity IDE is open on the restored untitled multi-root workspace.
+- Computer control: released. Instrumentation ports 9333/9334 are closed; no instrumented Antigravity process remains.
+- Eyeball queue: B114 remains the only active experience gate. Ken script: launch X4 with debug logging, open Forge, click `LIVE`, fire one known cue, confirm a green cue badge, provoke/load one attributed cue error, confirm a red X, then turn LIVE off and confirm it stops cleanly.
+- Commit question: this close must land as `perf(workspace): avoid unchanged full-snapshot polling`; if it is not the latest pushed `main` commit, finish the exact staging/precommit/commit/push parity check before starting W2.
 
-## What passed
+## Verified close
 
-- Root production build, extension build and fresh allowlisted staging.
-- VSIX inspector selftest 13/13; final artifact inspection: 2,091 entries, 17,942,625 archive bytes, 60,557,268
-  unpacked bytes.
-- Staged sidecar probe 16/16 on the successful retry; ports 8982/8983 were clear afterward.
-- Antigravity install after a full-host exit released the first attempt's locked-directory `EPERM`.
-- Exact archive-to-installed hashes for controller, supervisor, MCP, server and UI asset. Installed `package.json`
-  differs only by Antigravity's `__metadata`; normalized JSON hash is
-  `7E47118C853E1756BC95738FBB10A30B29A4AB5ACAB64673B913F256FD62455D`.
-- Real rendered `Sync: Checking` to `Connected`, eleven capabilities, `forge.capability.v1`, contract hash prefix
-  `37357c1e6b11`, LIVE CONTRACT, honest optional-runtime state and current Live State.
-- Explicit authority/client isolation: both real windows addressed workspace `ws_f61166c42849c757cf219c37`, while
-  client IDs differed (`client_022a...` versus `client_3564...`) and sidecar ports differed (59743 versus 55737).
+- Exact artifact: `vscode-extension/x4-forge-studio-0.0.63-b116-r2-20260801-125325.vsix`.
+- Artifact identity: 17,954,072 bytes; 2,091 entries; 60,607,012 unpacked bytes; SHA-256 `C5B46B44FC60AB804B5B8E561C2C41DD1B3DFB466801A5FAC6098361737A8565`.
+- Package gates: root production build PASS; extension build PASS; fresh stage PASS; staged probe 16/16; inspector selftest 13/13; final inspector PASS; installed parity 7/7.
+- Current-source gates: typecheck PASS; lint exit 0 with baseline warnings only; routes 347/347; runtime oracles 129/129; reference integration 82/82; Graphify 3,805 nodes / 9,017 edges / 180 communities.
+- Full E2E: 94 passed, 0 failed, 0 flaky, 0 bad-result, 0 quarantined; receipt `test-results/e2e-verdict.json`; ports 3100/3101 cleared after the run.
+- Installed Antigravity 1.107.0: real extension-host identity and stable PID proved; packaged sidecar-supervisor child present; Connected + 11 capabilities rendered.
+- Installed interaction: close 173 ms; remount visibly showed Checking and reached Connected + 11 capabilities in 3,031 ms; zero new `CodeWindow: detected unresponsive` matches.
+- Performance evidence: 85,941 extension-host samples, 85,800 workbench samples, 85,752 Forge-webview samples, 514,981 scheduler-trace events; no complete event or Forge-owned sampled span reached five seconds.
+- Sanitized tracked evidence: `vscode-extension/evidence/2026-08-01-b116-installed-r2/installed-renderer-profile-summary.json` plus four PNGs. Raw profiles/traces are retained under that directory's ignored `raw/` child with hashes in the summary.
+- No public release, store publish, game/mod write, provider spend, live 3000/3001 workspace mutation, or user-data deletion occurred.
 
-## What failed
+## Ownership and staging boundary
 
-- Original window: two observed `CodeWindow` stalls lasted 221.467 and 227.522 seconds.
-- Second no-folder window: rendered Bridge Close at 02:08:56 reproduced the same dialog and recovered at 02:11:49,
-  about 173 seconds later. Evidence:
-  `vscode-extension/evidence/2026-08-01-b115-r13-installed/installed-bridge-close-unresponsive-small-window.png`.
-- Host log: `C:\Users\Moshi\AppData\Roaming\Antigravity IDE\logs\20260801T014026\main.log`.
-- Source/log audit: closing Bridge disables its scheduler subscription but leaves the component mounted; cleanup is
-  one subscriber deletion, while App remains subscribed. A 10,000-cycle exact-path benchmark measured 0.0003 ms
-  median / 0.0017 ms p99 / 0.0502 ms max. In the first two stalls, 88/91 host samples stopped in Antigravity's
-  local-extension-host `MessagePort.onmessage`, not a Forge frame. No Forge Bridge-close host message exists.
-- Adjacent measured pressure: active workspace response is 6.04 MB / 1,424 nodes / 1,420 links and is fetched/parses
-  every three seconds even when unchanged. Parse median is about 16.5 ms. It is a real performance defect/amplifier,
-  not yet the proven multi-minute cause.
+- Stage the B116/R13/W0–W1 source, tests, package evidence, close plans, `.gitignore`, `ROADMAP.md`, this handoff, and only the relevant BACKLOG/CODEX-ONBOARDING hunks.
+- Preserve unrelated user work: `KNOWN-BUGS.md`; deleted Discord/game files and data JSON; `.github/ISSUE_TEMPLATE/*`; `Note for Kimi.md`; modified 0.0.35 screenshots; R8/R17 screenshots; B111–B114 backlog text; unrelated CODEX-ONBOARDING hunks.
+- Do not reset, clean, or rewrite the dirty worktree. Do not publish 0.0.63 again.
 
-## Exact checkpoint file ownership
+## Next bounded work
 
-Stage only:
+1. B115 W2: reconcile and specify the next capability-convergence work unit from `docs/plans/2026-07-31-capability-convergence.md`; do not begin W7 Effective Tree authority before its engine merge-law oracle.
+2. Kimi R18 remains `PARTIAL`; R21 remains `OPEN`. Both are unlocked but separate from W2.
+3. B111–B113 remain specified UX units. B114 remains the running-game experience gate.
+4. After the Kimi program closes, reconcile the two Downskies community-tool research documents as the queued post-Kimi program.
 
-- the B115 hunk and R13 hunk in `BACKLOG.md` (exclude B111-B114);
-- `SESSION-HANDOFF.md`;
-- `docs/plans/2026-07-29-kimi-recommendations-ledger.md`;
-- `docs/plans/2026-07-31-capability-convergence.md`;
-- `docs/plans/2026-07-31-continuous-polling-scheduler.md`;
-- `docs/plans/2026-08-01-b115-r13-installed-gate.md`;
-- all six PNGs in `vscode-extension/evidence/2026-08-01-b115-r13-installed/`.
+## AAR
 
-Preserve and do not stage unrelated user state:
-
-- B111-B114 hunks in `BACKLOG.md`, `CODEX-ONBOARDING.md`, `KNOWN-BUGS.md`.
-- Deleted `data/known_fixes.json`, `data/trivia_questions.json`, `docs/DISCORD_BOTS_AND_GAMES.md` and deleted root
-  Discord/game scripts.
-- Modified `vscode-extension/evidence/0.0.35-runtime-copy-*.png`.
-- Untracked `Note for Kimi.md`, `.github/ISSUE_TEMPLATE/*.md`, and the six prior R8/R17 evidence PNGs.
-
-## Next bounded unit
-
-1. Commit/push this failed gate without product-source changes or public publishing.
-2. Create B116 as a Full-lane evidence-first remediation: capture an installed-host CPU profile on the same Close;
-   add a deterministic 1,424-node close/rerender fixture; instrument close, subscriber count, workspace payload and
-   rerender timings without weakening current tests.
-3. Decide the mutation from that evidence. Do not rewrite scheduler cancellation on current evidence. Independently
-   specify conditional/head-only workspace polling so unchanged polls transfer no 6.04 MB snapshot and one changed
-   head causes exactly one full fetch.
-4. Rebuild/package/install exact bytes and repeat the real rendered Close/remount gate. Only then may R13 and B115 W1
-   become `VERIFIED`; W2 remains held until that result.
-
-## AAR outcome
-
-- Non-clean Full-lane close: staged probe, install, package metadata interpretation, isolated-profile onboarding,
-  UI interaction and cleanup each required correction or retry.
-- Sustain: exact-byte attribution, two-renderer A/B, Keep Waiting instead of destructive recovery, and separate PID/
-  process ownership before causal claims.
-- Improve work/approach: capture CPU profile at first reproduction and exercise the exact rendered click; an
-  accessibility-only state change is not sufficient when the defect is interaction-specific.
-- Improve tools: add Forge timing/payload instrumentation and a deterministic large-workspace fixture. Antigravity's
-  minified unresponsive sample does not identify the owning extension/RPC payload.
-- Highest-risk evidenced weakness: unchanged 6.04 MB full-workspace polling creates continuous renderer allocation
-  pressure. Prove conditional transfer separately; do not claim it explains the four-minute stall without profile
-  evidence.
-- External StarForge capability/AAR ledgers were not mutated in this repository-only checkpoint.
+- Sustain: exact package-to-install parity, a real extension-host identity proof, rendered Checking/Connected capture, and separate CPU-correlation versus scheduler-trace evidence made the installed claim auditable.
+- Improve work/approach: the first remount duration included agent/tool delay and was invalid; an immediate repeat measured the actual 3,031 ms boundary. A trace-analysis `Math.max(...largeArray)` overflowed and was replaced with a linear scan. Two broad workspace-file searches timed out and were abandoned as irrelevant.
+- Improve tools: retain raw profiles outside Playwright-cleaned `test-results`; the new ignored evidence `raw/` path prevents another receipt loss. Graphify's installed CLI remains 0.8.45 while the skill text reports 0.8.47; do not reinstall during a close.
+- Final-close triggers: fresh-eyes review corrected two evidence-retention claims; PowerShell CRLF bytes contaminated
+  the first partial-index patch and were replaced by explicit UTF-8/LF streaming; the first 120-second precommit
+  wrapper expired without a verdict, left no orphan process, and the unchanged rerun passed in 143.9 seconds.
+- Highest-risk observed weakness: dense 1,424-node workspace work can still create long browser-main-thread cost even though unchanged polling and installed close/remount are now bounded. Keep B116 dense/AX fixture receipts as the regression oracle instead of treating this close as general canvas-performance proof.
+- Project lesson: UI timing that includes orchestration latency is not product timing; measure from the input dispatch to a deterministic DOM state in one uninterrupted evidence action.

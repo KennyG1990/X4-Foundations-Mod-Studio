@@ -118,7 +118,7 @@ export async function runForgeCapabilitiesSelftest(): Promise<{ pass: boolean; c
     transportMismatchErrors.join(' | ') || undefined,
   );
   const openTransportMismatch = {
-    ...findForgeCapability('workspace.read')!,
+    ...findForgeCapability('workspace.read', 2)!,
     inputSchema: { type: 'object', properties: {}, additionalProperties: true },
   } as ForgeCapabilityDescriptorV1;
   const openTransportErrors = validateForgeCapabilityRegistry([openTransportMismatch]);

@@ -1,9 +1,11 @@
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
-import App, { type WorkspacePollingResponse } from './App.tsx';
+import App from './App.tsx';
 import './index.css';
 import { toast } from './lib/uiDialogs';
 import { clientRequestDeadlineMs, createAbortDeadline, timeoutError } from './lib/requestDeadline';
+import { primeWorkspacePollingSnapshot, type WorkspacePollingResponse } from './lib/workspacePolling';
+import { sanitizeWorkspace } from './types';
 
 // Calibration L4: route any native alert() — legacy or stray — to a non-blocking in-app
 // toast. Native alert/confirm/prompt freeze the renderer; confirm/prompt are converted to
@@ -173,12 +175,14 @@ async function bootstrapAndRender(): Promise<void> {
     throw new Error(boot.body?.error || `Workspace bootstrap failed (${boot.response.status}).`);
   }
   window.__X4_WORKSPACE_CONTEXT__?.selectWorkspace(String(boot.body.workspaceId));
-  const bootstrapWorkspace: WorkspacePollingResponse = {
+  const bootstrapWorkspace: WorkspacePollingResponse & { workspace: ReturnType<typeof sanitizeWorkspace> } = {
     workspaceId: String(boot.body.workspaceId),
-    workspace: boot.body.workspace,
+    workspace: sanitizeWorkspace(boot.body.workspace),
     version: Number(boot.body.version),
     workspaceHash: String(boot.body.workspaceHash || ''),
+    snapshotHash: String(boot.body.snapshotHash || ''),
   };
+  primeWorkspacePollingSnapshot(bootstrapWorkspace);
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <App bootstrapWorkspace={bootstrapWorkspace} />

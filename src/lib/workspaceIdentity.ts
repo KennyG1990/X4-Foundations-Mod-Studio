@@ -56,6 +56,22 @@ export function workspaceContentHash(ws: ModWorkspace | null | undefined): strin
   return fnvHash(stableStringify(substance));
 }
 
+/**
+ * Complete digest of one already-sanitized authoritative workspace snapshot.
+ *
+ * This is deliberately separate from `workspaceContentHash`: that legacy hash is persisted
+ * as the registry/CAS head and intentionally covers deployable substance. Polling needs to
+ * observe every persisted/UI field without migrating or invalidating those durable heads.
+ * `workspace.id` remains part of this digest because authoring surfaces use it for generated
+ * paths and script identities. The registry canonicalizes accepted legacy records that omit
+ * it before hashing/exposure, so the same stored record remains deterministic across processes.
+ * Callers must sanitize first so server and browser compare the same canonical shape.
+ */
+export function workspaceSnapshotHash(ws: ModWorkspace | null | undefined): string {
+  if (!ws || typeof ws !== 'object') return 'empty';
+  return fnvHash(stableStringify(ws as unknown as Record<string, unknown>));
+}
+
 /* ------------------------------------------------------------------ *
  * Oracle
  * ------------------------------------------------------------------ */
@@ -92,12 +108,21 @@ export function runWorkspaceIdentitySelftest(): {
   ok('link_add_detected', workspaceContentHash(base) !== workspaceContentHash(linkEdit));
   const renamed = JSON.parse(JSON.stringify(base)); renamed.name = 'M2';
   ok('workspace_rename_detected', workspaceContentHash(base) !== workspaceContentHash(renamed));
+  ok('snapshot_hash_detects_non_cas_field', workspaceSnapshotHash(base) !== workspaceSnapshotHash({
+    ...base,
+    uiTheme: { backgroundColor: '#000', borderColor: '#111', accentColor: '#222', opacity: 1, showIcons: true },
+  } as ModWorkspace));
+  ok('snapshot_hash_detects_authoritative_internal_id', workspaceSnapshotHash(base) !== workspaceSnapshotHash({
+    ...base,
+    id: 'different-legacy-local-id',
+  } as ModWorkspace));
 
   // JSON round-trip stability (client → POST → server → GET → client)
   ok('json_roundtrip_stable', workspaceContentHash(JSON.parse(JSON.stringify(base))) === workspaceContentHash(base));
 
   // degradation
   ok('null_and_undefined_hash_empty', workspaceContentHash(null) === 'empty' && workspaceContentHash(undefined) === 'empty');
+  ok('snapshot_null_and_undefined_hash_empty', workspaceSnapshotHash(null) === 'empty' && workspaceSnapshotHash(undefined) === 'empty');
 
   // stableStringify basics
   ok('stable_stringify_sorts_keys', stableStringify({ b: 1, a: 2 }) === '{"a":2,"b":1}');

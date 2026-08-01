@@ -78,6 +78,7 @@ export interface LedgerRow {
   recoveryId?: string;
   recoveryKind?: 'workspace' | 'deploy';
   recoveryExpectedHash?: string;
+  recoveryExpectedSnapshotHash?: string;
   recoveryExpiresAt?: string;
   revertible: boolean;
   revertReason?: string;
@@ -609,6 +610,23 @@ export function decodeRows(jsonl: string): LedgerRow[] {
     } catch { /* skip a torn line, keep the rest */ }
   }
   return rows;
+}
+
+const LEGACY_WORKSPACE_RECOVERY_REASON =
+  'This workspace recovery predates complete snapshot guards and cannot be replayed safely.';
+
+/**
+ * Older durable rows can outlive the recovery contract that created them. Do not advertise an
+ * undo button when the server will correctly refuse that legacy, content-hash-only receipt.
+ * The stored row remains append-only; only its API/UI projection is normalized.
+ */
+export function normalizeHistoryRecoveryTruth(row: LedgerRow): LedgerRow {
+  if (row.kind !== 'workspace' || !row.recoveryId || row.recoveryExpectedSnapshotHash) return row;
+  return {
+    ...row,
+    revertible: false,
+    revertReason: LEGACY_WORKSPACE_RECOVERY_REASON,
+  };
 }
 
 export function filterRows(rows: LedgerRow[], filter: { kind?: string; outcome?: string; file?: string; limit?: number }): LedgerRow[] {

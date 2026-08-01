@@ -55,7 +55,7 @@ const routeTestWorkspace = {
   nodes: [routeTestNode], links: [], uiWidgets: [],
   uiTheme: { backgroundColor: '#000000', borderColor: '#ffffff', accentColor: '#00ffff', opacity: 1, showIcons: true },
 };
-const ROUTE_TEST_AI_RESPONSES = [
+const ROUTE_TEST_AI_RESPONSE_CYCLE = [
   JSON.stringify({ name: routeTestWorkspace.name, version: routeTestWorkspace.version, author: routeTestWorkspace.author, description: routeTestWorkspace.description, nodes: routeTestWorkspace.nodes }),
   JSON.stringify({ links: [] }),
   JSON.stringify({ uiWidgets: [], uiTheme: routeTestWorkspace.uiTheme }),
@@ -64,8 +64,15 @@ const ROUTE_TEST_AI_RESPONSES = [
   JSON.stringify(routeTestWorkspace),
   JSON.stringify({ requirements: [] }),
 ];
+const ROUTE_TEST_AI_RESPONSES = [
+  ...ROUTE_TEST_AI_RESPONSE_CYCLE,
+  ...ROUTE_TEST_AI_RESPONSE_CYCLE,
+  ...ROUTE_TEST_AI_RESPONSE_CYCLE,
+  ROUTE_TEST_AI_RESPONSE_CYCLE[0],
+];
 let WORKSPACE_ID = '';
 const tmp = path.join(os.tmpdir(), `x4-route-int-${process.pid}`);
+const aiMarkerDir = path.join(tmp, 'ai-markers');
 const stateDir = path.join(tmp, 'state');
 const dataDir = path.join(tmp, 'data');
 const configDir = path.join(tmp, 'config');
@@ -149,7 +156,7 @@ function killTree(pid) {
 }
 
 async function req(method, urlPath, token, body, options = {}) {
-  const headers = {};
+  const headers = { ...(options.headers || {}) };
   if (token) headers['Authorization'] = `Bearer ${token}`;
   const workspaceId = Object.prototype.hasOwnProperty.call(options, 'workspaceId') ? options.workspaceId : WORKSPACE_ID;
   if (token && workspaceId) headers['x-workspace-id'] = workspaceId;
@@ -208,6 +215,9 @@ async function main() {
       FORGE_TIMEOUT_DRILL_RESPONSE_MS: '100',
       FORGE_ROUTE_TEST_MODE: '1',
       FORGE_ROUTE_TEST_AI_RESPONSES: JSON.stringify(ROUTE_TEST_AI_RESPONSES),
+      FORGE_ROUTE_TEST_AI_DELAY_MS: '400',
+      FORGE_ROUTE_TEST_AI_MARKER_DIR: aiMarkerDir,
+      FORGE_ROUTE_TEST_RESPONSE_TIMEOUT_MS: '100',
     },
   });
   let serverOut = '';
@@ -234,6 +244,10 @@ async function main() {
   ok('workspace_bootstrap_returns_immutable_id', bootstrap.status === 200 && /^ws_[a-f0-9]{24}$/i.test(WORKSPACE_ID), JSON.stringify(bootstrap.json || {}));
   const workspaceSuccess = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
   ok('session_token_200_workspace', workspaceSuccess.status === 200);
+  ok('workspace_bootstrap_returns_matching_snapshot_digest',
+    typeof bootstrap.json?.snapshotHash === 'string' && bootstrap.json.snapshotHash.length > 0
+      && bootstrap.json.snapshotHash === workspaceSuccess.json?.snapshotHash,
+    JSON.stringify({ bootstrap: bootstrap.json?.snapshotHash, read: workspaceSuccess.json?.snapshotHash }));
   ok('success_object_shape_is_not_enveloped', !Object.prototype.hasOwnProperty.call(workspaceSuccess.json || {}, 'failedStages') && !Object.prototype.hasOwnProperty.call(workspaceSuccess.json || {}, 'code'), JSON.stringify(workspaceSuccess.json || {}));
 
   // ADR-F5: two same-name workspaces and two tabs are independent authorities.
@@ -246,8 +260,8 @@ async function main() {
   const firstBeforeIsolation = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
   const secondBeforeIsolation = await req('GET', '/api/agent/workspace', SESSION_TOKEN, undefined, { workspaceId: SECOND_WORKSPACE_ID, clientId: SECOND_CLIENT_ID });
   const [firstWrite, secondWrite] = await Promise.all([
-    req('POST', '/api/agent/workspace', SESSION_TOKEN, { workspace: { ...firstBeforeIsolation.json.workspace, description: 'first tab isolated' }, expectedHead: firstBeforeIsolation.json.workspaceHash }),
-    req('POST', '/api/agent/workspace', SESSION_TOKEN, { workspace: { ...secondBeforeIsolation.json.workspace, description: 'second tab isolated' }, expectedHead: secondBeforeIsolation.json.workspaceHash }, { workspaceId: SECOND_WORKSPACE_ID, clientId: SECOND_CLIENT_ID }),
+    req('POST', '/api/agent/workspace', SESSION_TOKEN, { workspace: { ...firstBeforeIsolation.json.workspace, description: 'first tab isolated' }, expectedHead: firstBeforeIsolation.json.workspaceHash, expectedSnapshotHash: firstBeforeIsolation.json.snapshotHash }),
+    req('POST', '/api/agent/workspace', SESSION_TOKEN, { workspace: { ...secondBeforeIsolation.json.workspace, description: 'second tab isolated' }, expectedHead: secondBeforeIsolation.json.workspaceHash, expectedSnapshotHash: secondBeforeIsolation.json.snapshotHash }, { workspaceId: SECOND_WORKSPACE_ID, clientId: SECOND_CLIENT_ID }),
   ]);
   ok('concurrent_different_workspace_cas_both_succeed', firstWrite.status === 200 && secondWrite.status === 200 && firstWrite.json?.workspaceId === WORKSPACE_ID && secondWrite.json?.workspaceId === SECOND_WORKSPACE_ID);
   const firstAfterIsolation = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
@@ -337,8 +351,110 @@ async function main() {
     JSON.stringify({ status: hostilePreview.status, applied: hostilePreview.json?.applied, error: hostilePreview.json?.error }));
   ok('capability_preview_route_leaves_workspace_head_unchanged',
     previewBefore.status === 200 && previewAfter.status === 200 &&
-    previewBefore.json?.workspaceHash === previewAfter.json?.workspaceHash && previewBefore.json?.version === previewAfter.json?.version,
-    JSON.stringify({ before: previewBefore.json?.workspaceHash, after: previewAfter.json?.workspaceHash }));
+    previewBefore.json?.workspaceHash === previewAfter.json?.workspaceHash &&
+    previewBefore.json?.snapshotHash === previewAfter.json?.snapshotHash &&
+    previewBefore.json?.version === previewAfter.json?.version,
+    JSON.stringify({ before: previewBefore.json?.snapshotHash, after: previewAfter.json?.snapshotHash }));
+  const blindGeneratedApply = await req('POST', '/api/agent/generate', SESSION_TOKEN, {
+    prompt: '__FORGE_ROUTE_TEST_PREVIEW__', currentWorkspace: previewAfter.json?.workspace, apply: true,
+  });
+  ok('legacy_generation_rejects_blind_apply_before_provider_work',
+    blindGeneratedApply.status === 409 && blindGeneratedApply.json?.error === 'generation_precondition_required' &&
+    blindGeneratedApply.json?.generatedWorkspace === undefined,
+    JSON.stringify(blindGeneratedApply.json || {}));
+  const headOnlyGeneratedApply = await req('POST', '/api/agent/generate', SESSION_TOKEN, {
+    prompt: '__FORGE_ROUTE_TEST_PREVIEW__', currentWorkspace: previewAfter.json?.workspace, apply: true,
+    expectedHead: previewAfter.json?.workspaceHash,
+  });
+  ok('legacy_generation_rejects_head_only_apply_before_provider_work',
+    headOnlyGeneratedApply.status === 409 && headOnlyGeneratedApply.json?.error === 'generation_precondition_required' &&
+    headOnlyGeneratedApply.json?.generatedWorkspace === undefined,
+    JSON.stringify(headOnlyGeneratedApply.json || {}));
+  const generatedApply = await req('POST', '/api/agent/generate', SESSION_TOKEN, {
+    prompt: '__FORGE_ROUTE_TEST_PREVIEW__',
+    currentWorkspace: previewAfter.json?.workspace,
+    apply: true,
+    expectedHead: previewAfter.json?.workspaceHash,
+    expectedSnapshotHash: previewAfter.json?.snapshotHash,
+  });
+  const afterGeneratedApply = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  ok('legacy_generation_returns_authoritative_paired_post_write_identities',
+    generatedApply.status === 200 && generatedApply.json?.applied === true &&
+    typeof generatedApply.json?.workspaceHash === 'string' &&
+    typeof generatedApply.json?.snapshotHash === 'string' &&
+    generatedApply.json.workspaceHash === afterGeneratedApply.json?.workspaceHash &&
+    generatedApply.json.snapshotHash === afterGeneratedApply.json?.snapshotHash &&
+    JSON.stringify(generatedApply.json?.workspace) === JSON.stringify(afterGeneratedApply.json?.workspace),
+    JSON.stringify({ status: generatedApply.status, workspaceHash: generatedApply.json?.workspaceHash, snapshotHash: generatedApply.json?.snapshotHash }));
+  const generationThemeWrite = await req('POST', '/api/agent/workspace', SESSION_TOKEN, {
+    workspace: {
+      ...afterGeneratedApply.json?.workspace,
+      uiTheme: { ...afterGeneratedApply.json?.workspace?.uiTheme, accentColor: '#123abc' },
+    },
+    expectedHead: afterGeneratedApply.json?.workspaceHash,
+    expectedSnapshotHash: afterGeneratedApply.json?.snapshotHash,
+  });
+  const staleGeneration = await req('POST', '/api/agent/generate', SESSION_TOKEN, {
+    prompt: '__FORGE_ROUTE_TEST_PREVIEW__',
+    currentWorkspace: afterGeneratedApply.json?.workspace,
+    apply: true,
+    expectedHead: afterGeneratedApply.json?.workspaceHash,
+    expectedSnapshotHash: afterGeneratedApply.json?.snapshotHash,
+  });
+  const afterStaleGeneration = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  ok('legacy_generation_rejects_snapshot_only_staleness_before_provider_work',
+    generationThemeWrite.status === 200 &&
+    generationThemeWrite.json?.workspaceHash === afterGeneratedApply.json?.workspaceHash &&
+    generationThemeWrite.json?.snapshotHash !== afterGeneratedApply.json?.snapshotHash &&
+    staleGeneration.status === 409 && staleGeneration.json?.error === 'snapshot_conflict' &&
+    staleGeneration.json?.generatedWorkspace === undefined &&
+    staleGeneration.json?.currentSnapshotHash === generationThemeWrite.json?.snapshotHash &&
+    afterStaleGeneration.json?.snapshotHash === generationThemeWrite.json?.snapshotHash,
+    JSON.stringify({ write: generationThemeWrite.status, stale: staleGeneration.json, after: afterStaleGeneration.json?.snapshotHash }));
+  const heldBefore = afterStaleGeneration;
+  const heldMarker = path.join(aiMarkerDir, '__FORGE_ROUTE_TEST_HELD__.held');
+  const heldGenerationPromise = req('POST', '/api/agent/generate', SESSION_TOKEN, {
+    prompt: '__FORGE_ROUTE_TEST_HELD__',
+    currentWorkspace: heldBefore.json?.workspace,
+    apply: true,
+    expectedHead: heldBefore.json?.workspaceHash,
+    expectedSnapshotHash: heldBefore.json?.snapshotHash,
+  });
+  for (let attempt = 0; attempt < 80 && !fs.existsSync(heldMarker); attempt++) await sleep(25);
+  const heldConcurrentWrite = await req('POST', '/api/agent/workspace', SESSION_TOKEN, {
+    workspace: {
+      ...heldBefore.json?.workspace,
+      uiTheme: { ...heldBefore.json?.workspace?.uiTheme, accentColor: '#456def' },
+    },
+    expectedHead: heldBefore.json?.workspaceHash,
+    expectedSnapshotHash: heldBefore.json?.snapshotHash,
+  });
+  const heldGeneration = await heldGenerationPromise;
+  const afterHeldGeneration = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  ok('legacy_generation_rechecks_snapshot_after_held_provider_before_single_commit',
+    fs.existsSync(heldMarker) && heldConcurrentWrite.status === 200 &&
+    heldGeneration.status === 409 && heldGeneration.json?.error === 'snapshot_conflict' &&
+    heldGeneration.json?.generatedWorkspace &&
+    afterHeldGeneration.json?.snapshotHash === heldConcurrentWrite.json?.snapshotHash &&
+    afterHeldGeneration.json?.workspace?.uiTheme?.accentColor === '#456def',
+    JSON.stringify({ marker: fs.existsSync(heldMarker), concurrent: heldConcurrentWrite.status, generation: heldGeneration.status, after: afterHeldGeneration.json?.snapshotHash }));
+  const deadlineBefore = afterHeldGeneration;
+  const deadlineMarker = path.join(aiMarkerDir, '__FORGE_ROUTE_TEST_DEADLINE__.held');
+  const deadlineGeneration = await req('POST', '/api/agent/generate', SESSION_TOKEN, {
+    prompt: '__FORGE_ROUTE_TEST_DEADLINE__',
+    currentWorkspace: deadlineBefore.json?.workspace,
+    apply: true,
+    expectedHead: deadlineBefore.json?.workspaceHash,
+    expectedSnapshotHash: deadlineBefore.json?.snapshotHash,
+  }, { headers: { 'x-forge-route-test-deadline': '1' } });
+  await sleep(500);
+  const afterDeadlineGeneration = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  ok('legacy_generation_deadline_cannot_mutate_after_client_failure',
+    fs.existsSync(deadlineMarker) && deadlineGeneration.status === 504 &&
+    deadlineGeneration.json?.code === 'REQUEST_DEADLINE_EXCEEDED' &&
+    afterDeadlineGeneration.json?.workspaceHash === deadlineBefore.json?.workspaceHash &&
+    afterDeadlineGeneration.json?.snapshotHash === deadlineBefore.json?.snapshotHash,
+    JSON.stringify({ marker: fs.existsSync(deadlineMarker), status: deadlineGeneration.status, before: deadlineBefore.json?.snapshotHash, after: afterDeadlineGeneration.json?.snapshotHash }));
   const elementExplain = await req('GET', '/api/agent/lang/element-explain?file=md%2Fx.xml&tag=set_value', null);
   capabilityResponses.set('schema.element.explain', elementExplain);
   ok('capability_element_explain_primary_returns_declared_envelope',
@@ -394,6 +510,12 @@ async function main() {
     invalidLegacyApply.status === 400 && invalidLegacyApply.json?.code === 'CAPABILITY_INPUT_INVALID' &&
     /apply must be boolean/i.test(invalidLegacyApply.json?.error || ''),
     JSON.stringify(invalidLegacyApply.json || {}));
+  const invalidLegacySnapshotHash = await req('POST', '/api/agent/generate', SESSION_TOKEN,
+    { prompt: 'must not dispatch', apply: true, expectedSnapshotHash: 42 }, { workspaceId: unknownInputWorkspaceId });
+  ok('legacy_generation_rejects_non_string_snapshot_hash_before_authority_or_spend',
+    invalidLegacySnapshotHash.status === 400 && invalidLegacySnapshotHash.json?.code === 'CAPABILITY_INPUT_INVALID' &&
+    /expectedSnapshotHash must be a string/i.test(invalidLegacySnapshotHash.json?.error || ''),
+    JSON.stringify(invalidLegacySnapshotHash.json || {}));
   const refusedPaidCall = await req('POST', '/api/gemini', SESSION_TOKEN, { prompt: 'R7 meter failure fixture' });
   ok('corrupt_spend_meter_refuses_before_provider_dispatch', refusedPaidCall.status === 500 && /spend meter unavailable.*refused before network dispatch/i.test(refusedPaidCall.json?.error || ''), JSON.stringify(refusedPaidCall.json || {}));
   fs.unlinkSync(aiUsageFile);
@@ -462,6 +584,14 @@ async function main() {
   const deployKey = await mkKey('deploy');
   ok('minted_read_write_and_deploy_keys', !!readKey && !!writeKey && !!deployKey, `read=${!!readKey} write=${!!writeKey} deploy=${!!deployKey}`);
   ok('workspace_bound_key_cannot_forge_other_identity', (await req('GET', '/api/agent/workspace', readKey, undefined, { workspaceId: SECOND_WORKSPACE_ID })).json?.code === 'WORKSPACE_BINDING_MISMATCH');
+  const parkedReadDenied = await req('GET', '/api/agent/workspace/parked', readKey);
+  ok('workspace_bound_read_key_cannot_enumerate_parked_workspaces', parkedReadDenied.status === 403 && parkedReadDenied.json?.code === 'insufficient_scope', JSON.stringify(parkedReadDenied.json || {}));
+  const parkedRestoreDenied = await req('POST', '/api/agent/workspace/restore-parked', deployKey, { targetWorkspaceId: SECOND_WORKSPACE_ID });
+  ok('workspace_bound_deploy_key_cannot_restore_other_workspace', parkedRestoreDenied.status === 403 && parkedRestoreDenied.json?.code === 'insufficient_scope', JSON.stringify(parkedRestoreDenied.json || {}));
+  const studioParked = await req('GET', '/api/agent/workspace/parked', SESSION_TOKEN);
+  ok('studio_session_can_list_parked_workspaces', studioParked.status === 200 && studioParked.json?.parked?.some(row => row.workspaceId === SECOND_WORKSPACE_ID), JSON.stringify(studioParked.json || {}));
+  const studioRestoreParked = await req('POST', '/api/agent/workspace/restore-parked', SESSION_TOKEN, { targetWorkspaceId: SECOND_WORKSPACE_ID });
+  ok('studio_session_can_read_explicit_parked_workspace', studioRestoreParked.status === 200 && studioRestoreParked.json?.workspaceId === SECOND_WORKSPACE_ID && studioRestoreParked.json?.workspace?.description === 'second tab isolated', JSON.stringify(studioRestoreParked.json || {}));
   const secondHistoryIsolation = await req('GET', '/api/agent/history', SESSION_TOKEN, undefined, { workspaceId: SECOND_WORKSPACE_ID, clientId: SECOND_CLIENT_ID });
   ok('history_is_scoped_to_workspace_identity', secondHistoryIsolation.status === 200 && (secondHistoryIsolation.json?.rows || []).every(row => row.workspaceId === SECOND_WORKSPACE_ID));
 
@@ -537,11 +667,92 @@ async function main() {
   ok('workspace_saved_time_is_real_not_read_time', initialWorkspace.json?.lastUpdated === repeatWorkspace.json?.lastUpdated && typeof initialWorkspace.json?.origin === 'string');
   const serverCopy = { id: 'conflict-server', name: 'Conflict Server', version: '1.0', author: 'Route', description: 'server copy', nodes: [], links: [], uiWidgets: [], uiTheme: {}, xmlPatches: [{ id: 'server-patch', action: 'add', targetFile: 'libraries/wares.xml', sel: '/wares', content: '<ware id="server"/>', note: '' }] };
   const localCopy = { ...serverCopy, id: 'conflict-local', name: 'Conflict Local', description: 'local copy', xmlPatches: [{ id: 'local-patch', action: 'add', targetFile: 'libraries/wares.xml', sel: '/wares', content: '<ware id="local"/>', note: '' }] };
-  const serverWrite = await req('POST', '/api/agent/workspace', SESSION_TOKEN, { workspace: serverCopy, expectedHead: initialWorkspace.json?.workspaceHash });
+  const serverWrite = await req('POST', '/api/agent/workspace', SESSION_TOKEN, { workspace: serverCopy, expectedHead: initialWorkspace.json?.workspaceHash, expectedSnapshotHash: initialWorkspace.json?.snapshotHash });
   ok('workspace_cas_write_establishes_server_copy', serverWrite.status === 200 && serverWrite.json?.success === true, `status=${serverWrite.status}`);
-  const conflictWrite = await req('POST', '/api/agent/workspace', SESSION_TOKEN, { workspace: localCopy, expectedHead: initialWorkspace.json?.workspaceHash });
+  const conflictWrite = await req('POST', '/api/agent/workspace', SESSION_TOKEN, { workspace: localCopy, expectedHead: initialWorkspace.json?.workspaceHash, expectedSnapshotHash: initialWorkspace.json?.snapshotHash });
   ok('workspace_conflict_returns_both_real_heads', conflictWrite.status === 409 && conflictWrite.json?.conflict?.server?.head === serverWrite.json?.workspaceHash && typeof conflictWrite.json?.conflict?.local?.head === 'string', JSON.stringify(conflictWrite.json?.conflict || {}));
   ok('workspace_conflict_returns_file_level_delta', conflictWrite.json?.conflict?.preview?.counts?.changed > 0 && Array.isArray(conflictWrite.json?.conflict?.preview?.files), JSON.stringify(conflictWrite.json?.conflict?.preview?.counts || {}));
+  const beforeSnapshotConflict = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const externalThemeCopy = {
+    ...beforeSnapshotConflict.json.workspace,
+    uiTheme: { ...beforeSnapshotConflict.json.workspace.uiTheme, accentColor: '#abcdef' },
+  };
+  const externalThemeWrite = await req('POST', '/api/agent/workspace', SESSION_TOKEN, {
+    workspace: externalThemeCopy,
+    expectedHead: beforeSnapshotConflict.json.workspaceHash,
+    expectedSnapshotHash: beforeSnapshotConflict.json.snapshotHash,
+  });
+  ok('snapshot_only_write_keeps_legacy_cas_but_changes_snapshot_digest',
+    externalThemeWrite.status === 200
+      && externalThemeWrite.json?.workspaceHash === beforeSnapshotConflict.json.workspaceHash
+      && externalThemeWrite.json?.snapshotHash !== beforeSnapshotConflict.json.snapshotHash,
+    JSON.stringify(externalThemeWrite.json || {}));
+  const staleThemeWrite = await req('POST', '/api/agent/workspace', SESSION_TOKEN, {
+    workspace: { ...beforeSnapshotConflict.json.workspace, uiTheme: { ...beforeSnapshotConflict.json.workspace.uiTheme, accentColor: '#fedcba' } },
+    expectedHead: beforeSnapshotConflict.json.workspaceHash,
+    expectedSnapshotHash: beforeSnapshotConflict.json.snapshotHash,
+  });
+  ok('snapshot_precondition_rejects_non_cas_stale_write',
+    staleThemeWrite.status === 409
+      && staleThemeWrite.json?.error === 'snapshot_conflict'
+      && staleThemeWrite.json?.currentHead === beforeSnapshotConflict.json.workspaceHash
+      && staleThemeWrite.json?.currentSnapshotHash === externalThemeWrite.json?.snapshotHash,
+    JSON.stringify(staleThemeWrite.json || {}));
+  const beforeIdConflict = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const externalIdWrite = await req('POST', '/api/agent/workspace', SESSION_TOKEN, {
+    workspace: { ...beforeIdConflict.json.workspace, id: 'route_external_id' },
+    expectedHead: beforeIdConflict.json.workspaceHash,
+    expectedSnapshotHash: beforeIdConflict.json.snapshotHash,
+  });
+  ok('workspace_id_write_keeps_legacy_cas_but_changes_snapshot_digest',
+    externalIdWrite.status === 200
+      && externalIdWrite.json?.workspaceHash === beforeIdConflict.json.workspaceHash
+      && externalIdWrite.json?.snapshotHash !== beforeIdConflict.json.snapshotHash,
+    JSON.stringify(externalIdWrite.json || {}));
+  const staleIdWrite = await req('POST', '/api/agent/workspace', SESSION_TOKEN, {
+    workspace: { ...beforeIdConflict.json.workspace, id: 'route_stale_id' },
+    expectedHead: beforeIdConflict.json.workspaceHash,
+    expectedSnapshotHash: beforeIdConflict.json.snapshotHash,
+  });
+  ok('snapshot_precondition_rejects_stale_workspace_id_write',
+    staleIdWrite.status === 409
+      && staleIdWrite.json?.error === 'snapshot_conflict'
+      && staleIdWrite.json?.currentSnapshotHash === externalIdWrite.json?.snapshotHash,
+    JSON.stringify(staleIdWrite.json || {}));
+  const beforeForcedId = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const forcedIdOnly = await req('POST', '/api/agent/workspace', SESSION_TOKEN, {
+    workspace: { ...beforeForcedId.json.workspace, id: 'route_forced_id_only' },
+    force: true,
+  });
+  ok('forced_snapshot_only_write_returns_snapshot_guarded_recovery',
+    forcedIdOnly.status === 200
+      && forcedIdOnly.json?.workspaceHash === beforeForcedId.json.workspaceHash
+      && forcedIdOnly.json?.snapshotHash !== beforeForcedId.json.snapshotHash
+      && forcedIdOnly.json?.recovery?.expectedCurrentSnapshotHash === forcedIdOnly.json.snapshotHash,
+    JSON.stringify(forcedIdOnly.json || {}));
+  const forcedIdHistory = await req('GET', '/api/agent/history?kind=workspace', SESSION_TOKEN);
+  const forcedIdRow = (forcedIdHistory.json?.rows || []).find(row => row.recoveryId === forcedIdOnly.json?.recovery?.id);
+  ok('snapshot_only_workspace_write_is_visible_with_recovery_link',
+    forcedIdHistory.status === 200
+      && forcedIdRow?.recoveryId === forcedIdOnly.json?.recovery?.id
+      && forcedIdRow?.recoveryExpectedSnapshotHash === forcedIdOnly.json?.snapshotHash,
+    JSON.stringify(forcedIdRow || {}));
+  const laterSnapshotOnly = await req('POST', '/api/agent/workspace', SESSION_TOKEN, {
+    workspace: {
+      ...forcedIdOnly.json.workspace,
+      uiTheme: { ...forcedIdOnly.json.workspace.uiTheme, accentColor: '#aabbcc' },
+    },
+    expectedHead: forcedIdOnly.json.workspaceHash,
+    expectedSnapshotHash: forcedIdOnly.json.snapshotHash,
+  });
+  const staleSnapshotRecovery = await req('POST', `/api/agent/history/${forcedIdRow?.id}/revert`, SESSION_TOKEN, {});
+  ok('snapshot_only_change_makes_older_workspace_recovery_stale',
+    laterSnapshotOnly.status === 200
+      && laterSnapshotOnly.json?.workspaceHash === forcedIdOnly.json.workspaceHash
+      && staleSnapshotRecovery.status === 409
+      && staleSnapshotRecovery.json?.code === 'RECOVERY_STALE'
+      && staleSnapshotRecovery.json?.currentSnapshotHash === laterSnapshotOnly.json.snapshotHash,
+    JSON.stringify(staleSnapshotRecovery.json || {}));
   const forcedLocal = await req('POST', '/api/agent/workspace', SESSION_TOKEN, { workspace: localCopy, force: true });
   ok('forced_workspace_overwrite_returns_recovery', forcedLocal.status === 200 && forcedLocal.json?.recovery?.kind === 'workspace' && forcedLocal.json?.recovery?.expectedCurrentHash === forcedLocal.json?.workspaceHash, JSON.stringify(forcedLocal.json?.recovery || {}));
   const workspaceHistory = await req('GET', '/api/agent/history?kind=workspace', SESSION_TOKEN);

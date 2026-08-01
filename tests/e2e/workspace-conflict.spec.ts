@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { buildTemplateWorkspace } from '../../src/lib/modTemplates';
+import { workspaceContentHash, workspaceSnapshotHash } from '../../src/lib/workspaceIdentity';
+import { sanitizeWorkspace } from '../../src/types';
 import { ephemeralWorkspaceHeaders, readServerWorkspace, seedServerWorkspace } from './ephemeral';
 
 type ConflictE2EWindow = Window & {
@@ -34,13 +36,16 @@ async function triggerConflict(page: Page, localCopy: unknown, serverCopy: unkno
     const isWorkspaceRoute = new URL(request.url()).pathname === '/api/agent/workspace';
     if (!isWorkspaceRoute) return route.continue();
     if (request.method() === 'GET' && mockServerReads) {
+      const sanitizedServerCopy = sanitizeWorkspace(serverCopy);
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
+          workspaceId: 'ws_cccccccccccccccccccccccc',
           workspace: serverCopy,
           version: 42,
-          workspaceHash: 'e2e-server-head',
+          workspaceHash: workspaceContentHash(sanitizedServerCopy),
+          snapshotHash: workspaceSnapshotHash(sanitizedServerCopy),
           lastUpdated: '2026-07-30T12:00:00.000Z',
           origin: 'e2e:external-writer',
         }),
@@ -116,9 +121,12 @@ test('explicit local overwrite wins and records a durable recovery', async ({ pa
   const keptLocal = { ...initial, name: 'Conflict Kept Local', description: 'explicit winner' };
   const releaseConflictRoute = await triggerConflict(page, keptLocal, newerServer);
 
+  // The mocked 409 has completed its only job. Remove its interceptor before the
+  // explicit resolution so force:true proves the real server path and cannot remain
+  // queued behind a test route that is released only after this dialog disappears.
+  await releaseConflictRoute();
   await page.getByTestId('conflict-keep-btn').click();
   await expect(page.getByTestId('sync-conflict-dialog')).toHaveCount(0);
-  await releaseConflictRoute();
   await expect.poll(async () => (await readServerWorkspace()).name).toBe(keptLocal.name);
 
   const history = await request.get('http://127.0.0.1:3101/api/agent/history?kind=workspace', {

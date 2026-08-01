@@ -107,7 +107,7 @@ test('corpus authoring blocks collisions, completes XPath, previews, applies, an
           sourceSignature: 'e2e-source-2', sources: [{ source: 'base', mode: 'base' }], findings: [],
         },
       ],
-      conflicts: [], findings: [], workspaceHash: envelope.workspaceHash,
+      conflicts: [], findings: [], workspaceHash: envelope.workspaceHash, snapshotHash: envelope.snapshotHash,
     };
   };
 
@@ -117,10 +117,11 @@ test('corpus authoring blocks collisions, completes XPath, previews, applies, an
   });
 
   await page.route('**/api/agent/bulk-transform/apply', async route => {
-    const body = route.request().postDataJSON() as { rule: Record<string, unknown>; expectedPlanHash: string; expectedHead: string };
+    const body = route.request().postDataJSON() as { rule: Record<string, unknown>; expectedPlanHash: string; expectedHead: string; expectedSnapshotHash: string };
     const before = await readServerWorkspaceEnvelope();
     expect(body.expectedPlanHash).toBe('plan-e2e');
     expect(body.expectedHead).toBe(before.workspaceHash);
+    expect(body.expectedSnapshotHash).toBe(before.snapshotHash);
     const plan = await planFor(body.rule);
     const patched = { ...before.workspace, xmlPatches: plan.rows.map(row => row.patch) };
     await seedServerWorkspace(patched);

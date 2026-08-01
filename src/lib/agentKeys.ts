@@ -252,6 +252,11 @@ export const GITHUB_SESSION_ONLY_PREFIX = '/github/';
 export const STEAM_RELEASE_SESSION_ONLY_PREFIX = '/agent/release/steam/';
 /** A user-output receipt claims a native/browser Save As completed; agents cannot assert that human-side fact. */
 export const RELEASE_EXPORT_RECEIPT_SESSION_ONLY_PATH = '/agent/release/export/receipt';
+/** Legacy cross-workspace compatibility routes enumerate or return records outside one key binding. */
+export const WORKSPACE_CROSS_AUTHORITY_SESSION_ONLY_PATHS = new Set([
+  '/agent/workspace/parked',
+  '/agent/workspace/restore-parked',
+]);
 
 /**
  * Arbitrary command execution (dev-only run_command route + its async jobs) is
@@ -271,6 +276,7 @@ export function scopeAllows(scope: AgentKeyScope, method: string, reqPath: strin
   if (reqPath.startsWith(GITHUB_SESSION_ONLY_PREFIX)) return false; // stored user credential: Studio session only
   if (reqPath.startsWith(STEAM_RELEASE_SESSION_ONLY_PREFIX)) return false; // local executable selection: Studio session only
   if (reqPath === RELEASE_EXPORT_RECEIPT_SESSION_ONLY_PATH) return false; // user-side Save As receipt: Studio session only
+  if (WORKSPACE_CROSS_AUTHORITY_SESSION_ONLY_PATHS.has(reqPath)) return false; // cross-workspace disclosure: Studio session only
   if (reqPath.startsWith(EXEC_PREFIX)) return false; // B64-SEC1: exec is session-token-only, even on GET
   const m = method.toUpperCase();
   if (m === 'GET' || m === 'HEAD' || m === 'OPTIONS') return true; // all scopes read
@@ -379,6 +385,10 @@ export function runAgentKeysSelftest(): { pass: boolean; checks: Array<{ name: s
   ok('no_agent_key_scope_can_claim_user_export_receipt',
     (['read', 'write', 'deploy'] as AgentKeyScope[]).every(
       (s) => scopeAllows(s, 'POST', RELEASE_EXPORT_RECEIPT_SESSION_ONLY_PATH) === false));
+  ok('no_agent_key_scope_can_cross_workspace_authority',
+    (['read', 'write', 'deploy'] as AgentKeyScope[]).every(
+      (s) => scopeAllows(s, 'GET', '/agent/workspace/parked') === false &&
+             scopeAllows(s, 'POST', '/agent/workspace/restore-parked') === false));
   ok('write_scope_can_prepare_local_nexus_artifact',
     scopeAllows('write', 'POST', '/agent/release/nexus/prepare') === true);
   // B64-SEC1: no agent-key scope may reach the dev-only exec route on ANY method (the

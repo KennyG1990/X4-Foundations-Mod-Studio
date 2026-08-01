@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "sourceFingerprint": "da2aa7a574219347452d2088bdad63d0fbb370db92c0b0861ba2d3b5ce90a5b3",
+  "sourceFingerprint": "6ee8528b7e25943bb3818c1231885e570fe05c0f700d50e56fe2cc9b5960e492",
   "policy": "Every raw production filesystem mutation source is count-pinned here. Authoritative files use atomic sibling promotion; stronger tree, archive, append-log, SQLite, retention, ephemeral, and fixture contracts remain explicit exceptions.",
   "writers": [
     {
       "file": "server.ts",
-      "calls": { "writeFileSync": 30, "renameSync": 10, "copyFileSync": 4, "mkdirSync": 32, "rmSync": 38, "unlinkSync": 4, "chmodSync": 2, "mkdtempSync": 9 },
+      "calls": { "writeFileSync": 31, "renameSync": 10, "copyFileSync": 4, "mkdirSync": 33, "rmSync": 38, "unlinkSync": 4, "chmodSync": 2, "mkdtempSync": 9 },
       "categories": ["mixed", "authoritative-atomic", "verified-tree-transaction", "isolated-artifact-stage", "retention-cleanup", "fixture-only"],
       "owners": ["writeWorkspaceFileGuarded and fs/create", "snapshot create/prune/delete/restore", "copyRegularTree and synchronizeRegularTree", "replaceValidatedDeployment and recovery", "compileWorkspaceToFolder scratch cleanup", "replaceReleaseDirectory", "Nexus and Steam release handlers", "embedded route/artifact/workspace API selftests"],
       "rationale": "The composition root contains guarded atomic source/snapshot writes, verified deployment/release directory transactions, isolated compilation/release materializers, bounded snapshot/artifact retention, and embedded scratch-only route fixtures.",
@@ -272,7 +272,7 @@
   "hostStores": [
     {
       "file": "src/App.tsx",
-      "calls": { "localStorageSet": 20 },
+      "calls": { "localStorageSet": 7 },
       "categories": ["browser-cache", "browser-preference"],
       "owners": ["Studio layout/release preferences", "workspace-ID-scoped revision and content cache", "experience confirmations"],
       "rationale": "Browser storage mirrors server-owned workspace/release state by immutable ID or retains non-authoritative UI preferences and acknowledgements.",

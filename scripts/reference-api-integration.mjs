@@ -4,13 +4,32 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const root = process.env.X4_REFERENCE_ROOT || './data/x4-unpacked';
+function resolveReferenceRoot() {
+  const candidates = [];
+  if (process.env.X4_REFERENCE_ROOT?.trim()) candidates.push(process.env.X4_REFERENCE_ROOT.trim());
+  try {
+    const configured = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'config.json'), 'utf8'));
+    if (configured.x4ReferenceRoot?.trim()) candidates.push(configured.x4ReferenceRoot.trim());
+    if (configured.xsdSchemaPath?.trim() && path.basename(configured.xsdSchemaPath).toLowerCase() === 'libraries') {
+      candidates.push(path.dirname(configured.xsdSchemaPath));
+    }
+  } catch { /* an unconfigured machine fails the corpus assertions honestly */ }
+  candidates.push(path.join(process.cwd(), 'data', 'x4-unpacked'));
+  return candidates.map(candidate => path.resolve(candidate)).find(candidate => {
+    try { return fs.statSync(candidate).isDirectory(); } catch { return false; }
+  }) || path.resolve(candidates.at(-1));
+}
+
+const root = resolveReferenceRoot();
 const port = Number(process.env.REFERENCE_API_TEST_PORT || 8973);
 const base = `http://127.0.0.1:${port}`;
 const token = `reference-api-integration-${process.pid}`;
+const clientId = `client_reference_${process.pid}_${Date.now().toString(36)}`;
+let workspaceId = '';
 const tmp = path.join(os.tmpdir(), `x4-reference-api-${process.pid}`);
 const stateDir = path.join(tmp, 'state');
 const dataDir = path.join(tmp, 'data');
+const discoveryDir = path.join(tmp, 'discovery');
 fs.mkdirSync(stateDir, { recursive: true });
 fs.mkdirSync(dataDir, { recursive: true });
 
@@ -42,6 +61,8 @@ function killTree(pid) {
 async function request(urlPath, options = {}) {
   const headers = { ...(options.headers || {}) };
   if (options.token) headers.Authorization = `Bearer ${options.token}`;
+  if (options.token === token) headers['x-client-id'] = clientId;
+  if (options.token && workspaceId) headers['x-workspace-id'] = workspaceId;
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
   return fetch(base + urlPath, {
     method: options.method || 'GET',
@@ -62,9 +83,12 @@ try {
       ...process.env,
       PORT: String(port),
       NODE_ENV: 'development',
+      API_ONLY: 'true',
+      DISABLE_HMR: 'true',
       STUDIO_API_TOKEN: token,
       X4_STATE_DIR: stateDir,
       X4_DATA_DIR: dataDir,
+      X4FORGE_DISCOVERY_DIR: discoveryDir,
       X4_REFERENCE_ROOT: root,
       X4_XSD_PATH: path.join(root, 'libraries'),
     },
@@ -82,6 +106,16 @@ try {
   }
   check('isolated server ready', ready, ready ? '' : output.slice(-500));
   if (!ready) throw new Error('server did not become ready');
+
+  const bootstrapResponse = await request('/api/agent/workspaces/bootstrap', {
+    method: 'POST', token, body: { clientId },
+  });
+  const bootstrap = await bootstrapResponse.json();
+  workspaceId = String(bootstrap.workspaceId || '');
+  check('isolated workspace authority bootstrapped',
+    bootstrapResponse.status === 200 && /^ws_[a-f0-9]{24}$/i.test(workspaceId),
+    JSON.stringify({ status: bootstrapResponse.status, workspaceId }));
+  if (!workspaceId) throw new Error(`could not bootstrap fixture workspace: ${JSON.stringify(bootstrap)}`);
 
   const makeKey = async (label, scope) => {
     const response = await request('/api/agent/keys', { method: 'POST', token, body: { label, scope, ttl: '1h' } });
@@ -256,9 +290,9 @@ try {
   check('bulk preview requires authentication', (await request('/api/agent/bulk-transform/preview', { method: 'POST', body: { rule: bulkRule } })).status === 401);
   const readScopedPreview = await request('/api/agent/bulk-transform/preview', { method: 'POST', token: readToken, body: { rule: bulkRule } });
   check('read-scoped agent key can run no-write bulk preview', readScopedPreview.status === 200, `status=${readScopedPreview.status}`);
-  const readScopedApply = await request('/api/agent/bulk-transform/apply', { method: 'POST', token: readToken, body: { rule: bulkRule, expectedPlanHash: bulkPreview.planHash, expectedHead: bulkPreview.workspaceHash } });
+  const readScopedApply = await request('/api/agent/bulk-transform/apply', { method: 'POST', token: readToken, body: { rule: bulkRule, expectedPlanHash: bulkPreview.planHash, expectedHead: bulkPreview.workspaceHash, expectedSnapshotHash: bulkPreview.snapshotHash } });
   check('read-scoped agent key cannot apply a bulk mutation', readScopedApply.status === 403, `status=${readScopedApply.status}`);
-  const stalePlanResponse = await request('/api/agent/bulk-transform/apply', { method: 'POST', token, body: { rule: bulkRule, expectedPlanHash: 'definitely-stale', expectedHead: beforeBulk.workspaceHash } });
+  const stalePlanResponse = await request('/api/agent/bulk-transform/apply', { method: 'POST', token, body: { rule: bulkRule, expectedPlanHash: 'definitely-stale', expectedHead: beforeBulk.workspaceHash, expectedSnapshotHash: beforeBulk.snapshotHash } });
   const afterStale = await request('/api/agent/workspace', { token }).then((response) => response.json());
   check('stale bulk plan is rejected with zero mutation', stalePlanResponse.status === 409 && afterStale.workspaceHash === beforeBulk.workspaceHash, `status=${stalePlanResponse.status}`);
   const traversalBulk = await request('/api/agent/bulk-transform/preview', { method: 'POST', token, body: { rule: { ...bulkRule, pathPrefix: '../outside' } } });
@@ -284,7 +318,7 @@ try {
   const afterCap = await request('/api/agent/workspace', { token }).then((response) => response.json());
   check('bulk cap breach blocks all output and mutation', cappedBulk.status === 422 && cappedBody.droppedCount > 0 && cappedBody.rows?.length === 0 && afterCap.workspaceHash === beforeBulk.workspaceHash, JSON.stringify({ status: cappedBulk.status, dropped: cappedBody.droppedCount, rows: cappedBody.rows?.length }));
   if (bulkPreview.ok) {
-    const applyResponse = await request('/api/agent/bulk-transform/apply', { method: 'POST', token: writeToken, body: { rule: bulkRule, expectedPlanHash: bulkPreview.planHash, expectedHead: bulkPreview.workspaceHash } });
+    const applyResponse = await request('/api/agent/bulk-transform/apply', { method: 'POST', token: writeToken, body: { rule: bulkRule, expectedPlanHash: bulkPreview.planHash, expectedHead: bulkPreview.workspaceHash, expectedSnapshotHash: bulkPreview.snapshotHash } });
     const applied = await applyResponse.json();
     check('bulk apply atomically updates workspace patch state', applyResponse.status === 200 && applied.applied === true && applied.workspace?.xmlPatches?.length === bulkPreview.matchedFiles, JSON.stringify({ status: applyResponse.status, patches: applied.workspace?.xmlPatches?.length, expected: bulkPreview.matchedFiles }));
     const compileResponse = await request('/api/agent/compile', { method: 'POST', token, body: { workspace: applied.workspace } });
@@ -312,7 +346,7 @@ try {
 
     const rerunPreviewResponse = await request('/api/agent/bulk-transform/preview', { method: 'POST', token, body: { rule: bulkRule } });
     const rerunPreview = await rerunPreviewResponse.json();
-    const rerunApplyResponse = await request('/api/agent/bulk-transform/apply', { method: 'POST', token: writeToken, body: { rule: bulkRule, expectedPlanHash: rerunPreview.planHash, expectedHead: rerunPreview.workspaceHash } });
+    const rerunApplyResponse = await request('/api/agent/bulk-transform/apply', { method: 'POST', token: writeToken, body: { rule: bulkRule, expectedPlanHash: rerunPreview.planHash, expectedHead: rerunPreview.workspaceHash, expectedSnapshotHash: rerunPreview.snapshotHash } });
     const rerunApplied = await rerunApplyResponse.json();
     check('bulk rerun is idempotent and does not duplicate blocks', rerunPreviewResponse.status === 200 && rerunApplyResponse.status === 200 && rerunApplied.applied === false && rerunApplied.workspace?.xmlPatches?.length === bulkPreview.matchedFiles, JSON.stringify({ preview: rerunPreviewResponse.status, apply: rerunApplyResponse.status, applied: rerunApplied.applied, patches: rerunApplied.workspace?.xmlPatches?.length }));
 
@@ -327,7 +361,7 @@ try {
       content: bulkPreview.rows[0].newValue, note: 'manual conflict fixture',
       targetFile: bulkPreview.rows[0].targetFile, includeInBuild: true,
     });
-    const seedConflictResponse = await request('/api/agent/workspace', { method: 'POST', token, body: { workspace: conflictWorkspace, expectedHead: rerunApplied.workspaceHash } });
+    const seedConflictResponse = await request('/api/agent/workspace', { method: 'POST', token, body: { workspace: conflictWorkspace, expectedHead: rerunApplied.workspaceHash, expectedSnapshotHash: rerunApplied.snapshotHash } });
     const seededConflict = await seedConflictResponse.json();
     const conflictPreviewResponse = await request('/api/agent/bulk-transform/preview', { method: 'POST', token, body: { rule: bulkRule } });
     const conflictPreview = await conflictPreviewResponse.json();

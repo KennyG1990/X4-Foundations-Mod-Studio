@@ -19,7 +19,7 @@ import {
   summarizeWorkspaceContent,
   type PersistedWorkspaceState,
 } from './workspaceState';
-import { workspaceContentHash } from './workspaceIdentity';
+import { workspaceContentHash, workspaceSnapshotHash } from './workspaceIdentity';
 
 const REGISTRY_SCHEMA = 1;
 const INDEX_FILE = 'workspace-registry.json';
@@ -39,6 +39,7 @@ export interface WorkspaceSummary {
   name: string;
   version: number;
   workspaceHash: string;
+  snapshotHash: string;
   createdAt: string;
   savedAt: string;
   origin: string;
@@ -73,8 +74,26 @@ function cloneWorkspace<T>(workspace: T): T {
   return JSON.parse(JSON.stringify(workspace));
 }
 
+/**
+ * Registry records predating ADR-F5 may omit the old workspace-local id even though current
+ * authoring surfaces still use it for generated paths. Give those records one stable value
+ * derived from their immutable registry authority before hashing or exposing them. Explicit
+ * ids remain editable workspace content and are never replaced.
+ */
+function canonicalWorkspaceForRecord(workspace: ModWorkspace, workspaceId: string): ModWorkspace {
+  const cloned = cloneWorkspace(workspace);
+  if (typeof cloned.id !== 'string' || cloned.id.length === 0) {
+    cloned.id = `workspace_${workspaceId.slice(3)}`;
+  }
+  return cloned;
+}
+
 function contentHead(workspace: unknown): string {
   return workspaceContentHash(sanitizeWorkspace(workspace));
+}
+
+function snapshotHead(workspace: unknown): string {
+  return workspaceSnapshotHash(sanitizeWorkspace(workspace));
 }
 
 function validRecord(value: unknown, expectedId?: string): value is WorkspaceRecord {
@@ -105,6 +124,8 @@ export class WorkspaceRegistry {
   private readonly now: () => number;
   private readonly randomHex: (bytes: number) => string;
   private readonly records = new Map<string, WorkspaceRecord>();
+  /** Complete polling digests are runtime indexes, not persisted CAS heads. */
+  private readonly snapshotHeads = new Map<string, string>();
   private readonly persistedAtBoot = new Set<string>();
   private readonly committedSinceBoot = new Set<string>();
   private index!: WorkspaceRegistryIndex;
@@ -158,8 +179,13 @@ export class WorkspaceRegistry {
         try { record = JSON.parse(fs.readFileSync(this.recordPath(id), 'utf8')); }
         catch (error) { throw new Error(`Workspace record ${id} is unreadable; refusing fallback: ${error instanceof Error ? error.message : String(error)}`); }
         if (!validRecord(record, id)) throw new Error(`Workspace record ${id} is corrupt or unsupported; refusing fallback.`);
-        this.assertWorkspaceSize(record.workspace);
-        this.records.set(id, record);
+        const normalizedRecord: WorkspaceRecord = {
+          ...record,
+          workspace: canonicalWorkspaceForRecord(record.workspace, id),
+        };
+        this.assertWorkspaceSize(normalizedRecord.workspace);
+        this.records.set(id, normalizedRecord);
+        this.snapshotHeads.set(id, snapshotHead(normalizedRecord.workspace));
         this.persistedAtBoot.add(id);
       }
       this.index = parsed;
@@ -185,11 +211,12 @@ export class WorkspaceRegistry {
     const ids: string[] = [];
     for (const candidate of candidates) {
       const workspaceId = this.newId();
+      const workspace = canonicalWorkspaceForRecord(candidate.state.workspace, workspaceId);
       const record: WorkspaceRecord = {
         schema: REGISTRY_SCHEMA,
         workspaceId,
-        workspace: cloneWorkspace(candidate.state.workspace),
-        head: contentHead(candidate.state.workspace),
+        workspace,
+        head: contentHead(workspace),
         version: Number(candidate.state.version) || this.now(),
         createdAt: migratedAt,
         savedAt: candidate.state.savedAt || migratedAt,
@@ -197,6 +224,7 @@ export class WorkspaceRegistry {
       };
       this.persistRecord(record);
       this.records.set(workspaceId, record);
+      this.snapshotHeads.set(workspaceId, snapshotHead(record.workspace));
       ids.push(workspaceId);
       // A real legacy record existed before this process. The generated boot default did not.
       if (active || candidates.length > 1 || candidate.origin.startsWith('migrated:')) this.persistedAtBoot.add(workspaceId);
@@ -225,6 +253,7 @@ export class WorkspaceRegistry {
       name: String((record.workspace as any)?.name || 'Untitled'),
       version: record.version,
       workspaceHash: record.head,
+      snapshotHash: this.snapshotHash(record),
       createdAt: record.createdAt,
       savedAt: record.savedAt,
       origin: record.origin,
@@ -234,13 +263,15 @@ export class WorkspaceRegistry {
 
   create(workspace: ModWorkspace, origin: string): WorkspaceRecord {
     if (this.records.size >= this.maxRecords) throw new Error(`Workspace registry is full (${this.maxRecords} records).`);
-    this.assertWorkspaceSize(workspace);
+    const workspaceId = this.newId();
+    const canonicalWorkspace = canonicalWorkspaceForRecord(workspace, workspaceId);
+    this.assertWorkspaceSize(canonicalWorkspace);
     const now = this.timestamp();
     const record: WorkspaceRecord = {
       schema: REGISTRY_SCHEMA,
-      workspaceId: this.newId(),
-      workspace: cloneWorkspace(workspace),
-      head: contentHead(workspace),
+      workspaceId,
+      workspace: canonicalWorkspace,
+      head: contentHead(canonicalWorkspace),
       version: this.now(),
       createdAt: now,
       savedAt: now,
@@ -254,6 +285,7 @@ export class WorkspaceRegistry {
       throw error;
     }
     this.records.set(record.workspaceId, record);
+    this.snapshotHeads.set(record.workspaceId, snapshotHead(record.workspace));
     this.index = nextIndex;
     return record;
   }
@@ -261,11 +293,12 @@ export class WorkspaceRegistry {
   commit(workspaceId: string, workspace: ModWorkspace, origin: string): WorkspaceRecord {
     const found = this.lookup(workspaceId);
     if (found.ok === false) throw new Error(found.error);
-    this.assertWorkspaceSize(workspace);
+    const canonicalWorkspace = canonicalWorkspaceForRecord(workspace, workspaceId);
+    this.assertWorkspaceSize(canonicalWorkspace);
     const next: WorkspaceRecord = {
       ...found.record,
-      workspace: cloneWorkspace(workspace),
-      head: contentHead(workspace),
+      workspace: canonicalWorkspace,
+      head: contentHead(canonicalWorkspace),
       version: Math.max(found.record.version + 1, this.now()),
       savedAt: this.timestamp(),
       origin,
@@ -273,8 +306,17 @@ export class WorkspaceRegistry {
     // Durable promotion precedes memory publication; a failed write cannot report success.
     this.persistRecord(next);
     this.records.set(workspaceId, next);
+    this.snapshotHeads.set(workspaceId, snapshotHead(next.workspace));
     this.committedSinceBoot.add(workspaceId);
     return next;
+  }
+
+  snapshotHash(record: WorkspaceRecord): string {
+    const cached = this.snapshotHeads.get(record.workspaceId);
+    if (cached) return cached;
+    const computed = snapshotHead(record.workspace);
+    this.snapshotHeads.set(record.workspaceId, computed);
+    return computed;
   }
 
   isLegacyFirstContact(workspaceId: string): boolean {
@@ -291,7 +333,7 @@ export function runWorkspaceRegistrySelftest(): {
   const checks: Array<{ name: string; pass: boolean; detail?: string }> = [];
   const ok = (name: string, pass: boolean, detail?: unknown) => checks.push({ name, pass, ...(detail === undefined ? {} : { detail: String(detail) }) });
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'x4forge-workspace-registry-'));
-  const legacy = { id: 'workspace_default', name: 'Same_Name', nodes: [{ id: 'legacy' }], links: [] } as unknown as ModWorkspace;
+  const legacy = { name: 'Same_Name', nodes: [{ id: 'legacy' }], links: [] } as unknown as ModWorkspace;
   let now = Date.parse('2026-07-31T12:00:00Z');
   let seed = 1;
   const randomHex = (bytes: number) => (seed++).toString(16).padStart(bytes * 2, '0');
@@ -299,18 +341,47 @@ export function runWorkspaceRegistrySelftest(): {
     atomicWriteJson(path.join(root, 'active.json'), { workspace: legacy, version: 7, savedAt: '2026-07-30T00:00:00Z', origin: 'legacy-active' });
     const registry = new WorkspaceRegistry({ root, defaultWorkspace: legacy, now: () => now, randomHex, maxRecords: 3, maxWorkspaceBytes: 2048 });
     const migrated = registry.list()[0];
+    const migratedRecord = registry.lookup(migrated.workspaceId);
     ok('legacy_active_migrated', registry.list().length === 1 && migrated.name === 'Same_Name');
     ok('migration_preserves_content_hash', migrated.workspaceHash === contentHead(legacy));
-    ok('workspace_id_is_server_owned', validWorkspaceId(migrated.workspaceId) && migrated.workspaceId !== String((legacy as any).id));
+    ok('migration_indexes_complete_snapshot_hash', migratedRecord.ok && migrated.snapshotHash === snapshotHead(migratedRecord.record.workspace));
+    const canonicalLegacyId = migratedRecord.ok ? migratedRecord.record.workspace.id : '';
+    ok('workspace_id_is_server_owned', validWorkspaceId(migrated.workspaceId));
+    ok('legacy_missing_local_id_is_canonicalized', canonicalLegacyId === `workspace_${migrated.workspaceId.slice(3)}`);
     const duplicate = registry.create({ ...legacy, nodes: [{ id: 'other' }] } as ModWorkspace, 'selftest:create');
     ok('duplicate_names_get_distinct_ids', duplicate.workspace.name === legacy.name && duplicate.workspaceId !== migrated.workspaceId);
-    const beforeOther = duplicate.head;
+    ok('idless_creates_get_distinct_canonical_local_ids', duplicate.workspace.id === `workspace_${duplicate.workspaceId.slice(3)}` && duplicate.workspace.id !== canonicalLegacyId);
+    const explicitDuplicate = registry.commit(duplicate.workspaceId, { ...duplicate.workspace, id: 'explicit-local-id' }, 'selftest:explicit-id');
+    ok('explicit_local_id_survives_commit', explicitDuplicate.workspace.id === 'explicit-local-id');
+    const beforeOther = explicitDuplicate.head;
     now += 10;
     const committed = registry.commit(migrated.workspaceId, { ...legacy, nodes: [{ id: 'changed' }] } as ModWorkspace, 'selftest:commit');
     ok('commit_advances_only_addressed_record', committed.version > migrated.version && (registry.lookup(duplicate.workspaceId) as any).record.head === beforeOther);
+    ok('idless_commit_preserves_canonical_local_id', committed.workspace.id === canonicalLegacyId);
+    const beforeThemeSummary = registry.summary(committed);
+    now += 10;
+    const themeCommitted = registry.commit(migrated.workspaceId, {
+      ...committed.workspace,
+      uiTheme: { backgroundColor: '#000', borderColor: '#111', accentColor: '#abc', opacity: 1, showIcons: true },
+    }, 'selftest:theme-commit');
+    const afterThemeSummary = registry.summary(themeCommitted);
+    ok('non_cas_commit_invalidates_snapshot_hash_only',
+      afterThemeSummary.workspaceHash === beforeThemeSummary.workspaceHash
+      && afterThemeSummary.snapshotHash !== beforeThemeSummary.snapshotHash);
+    ok('repeated_summary_reuses_stable_snapshot_hash', registry.summary(themeCommitted).snapshotHash === afterThemeSummary.snapshotHash);
     ok('legacy_migrated_record_not_first_contact', registry.isLegacyFirstContact(migrated.workspaceId) === false);
+    const idlessRecordPath = path.join(root, RECORD_DIR, `${migrated.workspaceId}.json`);
+    const idlessRecord = JSON.parse(fs.readFileSync(idlessRecordPath, 'utf8'));
+    delete idlessRecord.workspace.id;
+    atomicWriteJson(idlessRecordPath, idlessRecord);
+    const idlessBytesBeforeLoad = fs.readFileSync(idlessRecordPath, 'utf8');
     const restarted = new WorkspaceRegistry({ root, defaultWorkspace: legacy, now: () => now + 100, randomHex });
-    ok('restart_preserves_ids_and_heads', JSON.stringify(restarted.list().map(row => [row.workspaceId, row.workspaceHash])) === JSON.stringify(registry.list().map(row => [row.workspaceId, row.workspaceHash])));
+    ok('restart_preserves_ids_and_heads', JSON.stringify(restarted.list().map(row => [row.workspaceId, row.workspaceHash, row.snapshotHash])) === JSON.stringify(registry.list().map(row => [row.workspaceId, row.workspaceHash, row.snapshotHash])));
+    const restartedMigrated = restarted.lookup(migrated.workspaceId);
+    ok('accepted_idless_record_rehydrates_stable_local_id', restartedMigrated.ok && restartedMigrated.record.workspace.id === canonicalLegacyId);
+    ok('idless_record_load_is_read_only', fs.readFileSync(idlessRecordPath, 'utf8') === idlessBytesBeforeLoad);
+    const restartedDuplicate = restarted.lookup(duplicate.workspaceId);
+    ok('explicit_local_id_survives_restart', restartedDuplicate.ok && restartedDuplicate.record.workspace.id === 'explicit-local-id');
     ok('unknown_id_fails_closed', restarted.lookup('ws_ffffffffffffffffffffffff').ok === false);
     let capRejected = false;
     try { registry.create({ ...legacy, name: 'Third' } as ModWorkspace, 'selftest'); registry.create({ ...legacy, name: 'Fourth' } as ModWorkspace, 'selftest'); } catch { capRejected = true; }

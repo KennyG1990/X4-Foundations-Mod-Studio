@@ -47,7 +47,16 @@ import WikiBrowser from './components/WikiBrowser';
 import GlobalSearch from './components/GlobalSearch';
 import ShortcutsOverlay from './components/ShortcutsOverlay';
 import { ModWorkspace, MDNode, UIWidget, PRESETS, NODE_TEMPLATES, sanitizeWorkspace, generateMDXML, validateModWorkspace, ChatMessage, PackageDiagnostic } from './types';
-import { workspaceContentHash } from './lib/workspaceIdentity';
+import { workspaceContentHash, workspaceSnapshotHash } from './lib/workspaceIdentity';
+import {
+  invalidateWorkspacePollingHead,
+  pollWorkspaceSnapshot,
+  sameWorkspacePollingPair,
+  WORKSPACE_POLLING_CONTRACT,
+  type FullWorkspacePollingResponse,
+  type WorkspaceAutoAdoptResult,
+  type WorkspacePollingResponse,
+} from './lib/workspacePolling';
 import { fetchPollingJson } from './lib/continuousPolling';
 import { useContinuousPolling } from './lib/useContinuousPolling';
 import { persistWorkspaceCache } from './lib/localWorkspaceCache';
@@ -109,6 +118,7 @@ type ForgeE2EWindow = Window & {
     getWorkspaceHash: () => string;
     resetPerfCounters: () => E2EPerfCounters;
     getPerfCounters: () => E2EPerfCounters;
+    setWorkspaceDirtyForTest: (dirty: boolean) => void;
   };
 };
 
@@ -142,23 +152,70 @@ function workspaceLocalKey(suffix: 'workspace' | 'version', workspaceId = select
   return `x4_mod_studio_${suffix}:${workspaceId || 'unbound'}`;
 }
 
+const WORKSPACE_DRAFT_METADATA_KEY = '__x4ForgeDraft';
+
+interface CachedWorkspaceDraftMetadata {
+  schemaVersion: 1;
+  baseVersion: number;
+  expectedHead: string;
+  expectedSnapshotHash: string;
+  workspaceHash: string;
+  snapshotHash: string;
+}
+
+function serializeCachedWorkspaceDraft(
+  nextWorkspace: ModWorkspace,
+  baseVersion: number,
+  expectedHead: string,
+  expectedSnapshotHash: string,
+): string {
+  const normalized = sanitizeWorkspace(nextWorkspace);
+  const metadata: CachedWorkspaceDraftMetadata = {
+    schemaVersion: 1,
+    baseVersion,
+    expectedHead,
+    expectedSnapshotHash,
+    workspaceHash: workspaceContentHash(normalized),
+    snapshotHash: workspaceSnapshotHash(normalized),
+  };
+  return JSON.stringify({ ...normalized, [WORKSPACE_DRAFT_METADATA_KEY]: metadata });
+}
+
+function readCachedWorkspaceDraftMetadata(
+  parsed: unknown,
+  retainedWorkspace: ModWorkspace,
+): CachedWorkspaceDraftMetadata | null {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const value = (parsed as Record<string, unknown>)[WORKSPACE_DRAFT_METADATA_KEY];
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const metadata = value as Partial<CachedWorkspaceDraftMetadata>;
+  if (
+    metadata.schemaVersion !== 1
+    || typeof metadata.baseVersion !== 'number'
+    || !Number.isFinite(metadata.baseVersion)
+    || metadata.baseVersion < 1
+    || typeof metadata.expectedHead !== 'string'
+    || typeof metadata.expectedSnapshotHash !== 'string'
+    || typeof metadata.workspaceHash !== 'string'
+    || typeof metadata.snapshotHash !== 'string'
+    || metadata.workspaceHash !== workspaceContentHash(retainedWorkspace)
+    || metadata.snapshotHash !== workspaceSnapshotHash(retainedWorkspace)
+  ) return null;
+  return metadata as CachedWorkspaceDraftMetadata;
+}
+
 interface ReadinessBriefPollingResponse {
   verdict?: ReadinessWatcherEvidence['verdict'];
   sinceDeploy?: ReadinessWatcherEvidence['sinceDeploy'];
   status?: { lastDeploy?: ReadinessWatcherEvidence['lastDeploy'] };
 }
 
-export interface WorkspacePollingResponse {
-  workspaceId?: string;
-  workspace?: ModWorkspace;
-  version?: number;
-  workspaceHash?: string;
-}
-
 interface InitialWorkspaceState {
   workspace: ModWorkspace;
   version: number;
   serverHash: string;
+  serverSnapshotHash: string;
+  hasDraft: boolean;
 }
 
 function loadInitialWorkspaceState(bootstrapWorkspace?: WorkspacePollingResponse): InitialWorkspaceState {
@@ -171,41 +228,93 @@ function loadInitialWorkspaceState(bootstrapWorkspace?: WorkspacePollingResponse
     && typeof bootstrapWorkspace.version === 'number',
   );
 
-  // Bootstrap already completed the addressed, authenticated server read before
-  // React mounts. Apply the same version rule as the convergence poll so an early
-  // release action cannot operate on BLANK_WORKSPACE while a second GET is pending.
-  if (bootstrapMatches && bootstrapWorkspace!.version! > storedVersion) {
-    return {
-      workspace: sanitizeWorkspace(bootstrapWorkspace!.workspace!),
-      version: bootstrapWorkspace!.version!,
-      serverHash: String(bootstrapWorkspace!.workspaceHash || ''),
-    };
-  }
-
-  const stored = localStorage.getItem(workspaceLocalKey('workspace', selectedId)) || localStorage.getItem('x4_mod_studio_workspace');
+  const scopedStored = localStorage.getItem(workspaceLocalKey('workspace', selectedId));
+  const stored = scopedStored || localStorage.getItem('x4_mod_studio_workspace');
   const parsed = stored ? JSON.parse(stored) : BLANK_WORKSPACE;
   const legacyAIScripts = localStorage.getItem('x4_mod_studio_aiscripts');
   const legacyWares = localStorage.getItem('x4_mod_studio_wares');
   const legacyJobs = localStorage.getItem('x4_mod_studio_jobs');
   const legacyPatches = localStorage.getItem('x4_mod_studio_xml_patches');
 
-  if (legacyAIScripts && (!parsed.aiScripts || parsed.aiScripts.length === 0)) {
-    try { parsed.aiScripts = JSON.parse(legacyAIScripts); } catch{}
-  }
-  if (legacyWares && (!parsed.wares || parsed.wares.length === 0)) {
-    try { parsed.wares = JSON.parse(legacyWares); } catch{}
-  }
-  if (legacyJobs && (!parsed.jobs || parsed.jobs.length === 0)) {
-    try { parsed.jobs = JSON.parse(legacyJobs); } catch{}
-  }
-  if (legacyPatches && (!parsed.xmlPatches || parsed.xmlPatches.length === 0)) {
-    try { parsed.xmlPatches = JSON.parse(legacyPatches); } catch{}
+  // Legacy global fragments belong only to the legacy global workspace fallback.
+  // Mutating an immutable-ID scoped body before its embedded draft digest is checked
+  // can invalidate a valid marker and silently expose it to version-first replacement.
+  if (!scopedStored) {
+    if (legacyAIScripts && (!parsed.aiScripts || parsed.aiScripts.length === 0)) {
+      try { parsed.aiScripts = JSON.parse(legacyAIScripts); } catch{}
+    }
+    if (legacyWares && (!parsed.wares || parsed.wares.length === 0)) {
+      try { parsed.wares = JSON.parse(legacyWares); } catch{}
+    }
+    if (legacyJobs && (!parsed.jobs || parsed.jobs.length === 0)) {
+      try { parsed.jobs = JSON.parse(legacyJobs); } catch{}
+    }
+    if (legacyPatches && (!parsed.xmlPatches || parsed.xmlPatches.length === 0)) {
+      try { parsed.xmlPatches = JSON.parse(legacyPatches); } catch{}
+    }
   }
 
+  const retainedWorkspace = sanitizeWorkspace(parsed);
+  const retainedHash = workspaceContentHash(retainedWorkspace);
+  const retainedSnapshotHash = workspaceSnapshotHash(retainedWorkspace);
+  const cachedDraft = scopedStored ? readCachedWorkspaceDraftMetadata(parsed, retainedWorkspace) : null;
+  if (cachedDraft) {
+    return {
+      workspace: retainedWorkspace,
+      version: cachedDraft.baseVersion,
+      serverHash: cachedDraft.expectedHead || retainedHash,
+      serverSnapshotHash: cachedDraft.expectedSnapshotHash || retainedSnapshotHash,
+      hasDraft: true,
+    };
+  }
+  const scopedDiffersFromBootstrap = Boolean(
+    scopedStored
+    && bootstrapMatches
+    && (retainedHash !== bootstrapWorkspace!.workspaceHash || retainedSnapshotHash !== bootstrapWorkspace!.snapshotHash),
+  );
+  if (scopedDiffersFromBootstrap) {
+    // Migration shield for pre-marker scoped drafts. We cannot distinguish an unsaved
+    // draft from a stale clean cache, so fail conservatively into explicit CAS review.
+    return {
+      workspace: retainedWorkspace,
+      version: Number.isFinite(storedVersion) && storedVersion >= 1 ? storedVersion : 1,
+      serverHash: retainedHash,
+      serverSnapshotHash: retainedSnapshotHash,
+      hasDraft: true,
+    };
+  }
+
+  // Bootstrap already completed the addressed, authenticated server read before
+  // React mounts. A validated unresolved draft above takes precedence; otherwise the
+  // newer server version repairs an ordinary clean/stale cache before rendering.
+  if (bootstrapMatches && bootstrapWorkspace!.version! > storedVersion) {
+    return {
+      workspace: sanitizeWorkspace(bootstrapWorkspace!.workspace!),
+      version: bootstrapWorkspace!.version!,
+      serverHash: String(bootstrapWorkspace!.workspaceHash || ''),
+      serverSnapshotHash: String(bootstrapWorkspace!.snapshotHash || ''),
+      hasDraft: false,
+    };
+  }
+  const retainedMatchesBootstrap = Boolean(
+    bootstrapMatches
+    && retainedHash === bootstrapWorkspace!.workspaceHash
+    && retainedSnapshotHash === bootstrapWorkspace!.snapshotHash,
+  );
+
   return {
-    workspace: sanitizeWorkspace(parsed),
+    workspace: retainedWorkspace,
     version: storedVersion,
-    serverHash: bootstrapMatches ? String(bootstrapWorkspace!.workspaceHash || '') : '',
+    // A divergent retained cache must carry its own stale expected pair. Giving it the
+    // server's current pair would authorize a later local edit to overwrite remote-only
+    // state; the retained pair instead produces the required explicit 409 conflict.
+    serverHash: bootstrapMatches
+      ? (retainedMatchesBootstrap ? String(bootstrapWorkspace!.workspaceHash || '') : retainedHash)
+      : '',
+    serverSnapshotHash: bootstrapMatches
+      ? (retainedMatchesBootstrap ? String(bootstrapWorkspace!.snapshotHash || '') : retainedSnapshotHash)
+      : '',
+    hasDraft: false,
   };
 }
 
@@ -240,11 +349,18 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
   const [rawWorkspace, setRawWorkspace] = useState<ModWorkspace>(() => initialWorkspaceState.workspace);
 
   const workspaceRevisionRef = useRef(0);
-  const workspacePollStartRevisionRef = useRef(0);
-  const localWorkspaceDirtyRef = useRef(false);
+  const workspacePollStartRevisionRef = useRef<{ runId: number; revision: number } | null>(null);
+  const localWorkspaceDirtyRef = useRef(initialWorkspaceState.hasDraft);
+  const workspaceSyncRetryTimerRef = useRef<number | null>(null);
+  const workspaceSyncRetryCountRef = useRef(0);
   const localWorkspaceUpdatedAtRef = useRef(new Date().toISOString());
   const [workspaceSyncEpoch, setWorkspaceSyncEpoch] = useState(0);
   const setWorkspace = React.useCallback((value: React.SetStateAction<ModWorkspace>) => {
+    if (workspaceSyncRetryTimerRef.current !== null) {
+      window.clearTimeout(workspaceSyncRetryTimerRef.current);
+      workspaceSyncRetryTimerRef.current = null;
+    }
+    workspaceSyncRetryCountRef.current = 0;
     // Mark dirty synchronously, before React schedules the state updater. This closes the
     // debounce window in which a slow poll could otherwise adopt stale server content.
     localWorkspaceDirtyRef.current = true;
@@ -254,6 +370,10 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
       workspaceRevisionRef.current += 1;
       return sanitizeWorkspace(next);
     });
+  }, []);
+
+  useEffect(() => () => {
+    if (workspaceSyncRetryTimerRef.current !== null) window.clearTimeout(workspaceSyncRetryTimerRef.current);
   }, []);
 
   const workspace = rawWorkspace;
@@ -435,6 +555,7 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
       getWorkspaceHash: () => workspaceContentHash(sanitizeWorkspace(workspace)),
       resetPerfCounters: resetE2EPerfCounters,
       getPerfCounters: getE2EPerfCounters,
+      setWorkspaceDirtyForTest: (dirty: boolean) => { localWorkspaceDirtyRef.current = dirty; },
     };
   }, [workspace, mdCode, setWorkspace]);
 
@@ -627,6 +748,30 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
 
   const [localVersion, setLocalVersion] = useState<number>(() => initialWorkspaceState.version);
   const [isAgentBridgeOpen, setIsAgentBridgeOpen] = useState<boolean>(false);
+  // Auto-Apply is a workspace synchronization policy, not drawer-local presentation state.
+  // App's always-on subscriber owns the one transferred full body even while the drawer is
+  // closed; AgentBridge remains the visible controller for this state.
+  const [agentAutoSync, setAgentAutoSyncState] = useState<boolean>(false);
+  const agentAutoSyncRef = useRef(false);
+  const setAgentAutoSync = React.useCallback((enabled: boolean) => {
+    agentAutoSyncRef.current = enabled;
+    setAgentAutoSyncState(enabled);
+  }, []);
+  // The Bridge pause control governs the shared workspace resource, not merely its
+  // drawer-local health subscriber. Keeping this policy in App makes "External updates: Paused"
+  // truthful even though App owns the always-mounted adoption subscriber.
+  const [agentWorkspacePollingEnabled, setAgentWorkspacePollingEnabled] = useState<boolean>(true);
+  const [pendingAgentWorkspace, setPendingAgentWorkspaceState] = useState<FullWorkspacePollingResponse | null>(null);
+  const pendingAgentWorkspaceRef = useRef<FullWorkspacePollingResponse | null>(null);
+  const setPendingAgentWorkspace = React.useCallback((candidate: FullWorkspacePollingResponse | null) => {
+    pendingAgentWorkspaceRef.current = candidate;
+    setPendingAgentWorkspaceState(candidate);
+  }, []);
+  const clearPendingAgentWorkspace = React.useCallback((expected?: FullWorkspacePollingResponse) => {
+    const current = pendingAgentWorkspaceRef.current;
+    if (expected && current && !sameWorkspacePollingPair(expected, current)) return;
+    setPendingAgentWorkspace(null);
+  }, [setPendingAgentWorkspace]);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState<boolean>(false);
   const [isAIConfigOpen, setIsAIConfigOpen] = useState<boolean>(false);
   // B13: keyboard-shortcuts overlay ("?" or the header keyboard button)
@@ -659,11 +804,16 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
   const [syncDiverged, setSyncDiverged] = useState<boolean>(false);
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string>(() => selectedWorkspaceId());
   useEffect(() => { notifyNativeWorkspaceAuthority(currentWorkspaceId); }, [currentWorkspaceId]);
+  useEffect(() => {
+    const pending = pendingAgentWorkspaceRef.current;
+    if (pending && pending.workspaceId !== currentWorkspaceId) clearPendingAgentWorkspace(pending);
+  }, [clearPendingAgentWorkspace, currentWorkspaceId]);
   const syncMissesRef = useRef(0);
   // B2 slice 2 (ADR-F1): the last server head this client saw — attached as expectedHead
   // on every auto-sync so a concurrent writer produces an explicit 409, never a silent
   // last-writer-wins. Learned from poll GETs and from each own POST's response.
   const lastServerHashRef = useRef<string>(initialWorkspaceState.serverHash);
+  const lastServerSnapshotHashRef = useRef<string>(initialWorkspaceState.serverSnapshotHash);
   // Autosaves are serialized. A slow boot save and a quick user edit used to race with the
   // same expectedHead: the newer write could succeed, then the older response raised a false
   // 409 conflict. CAS protects against other writers; this queue protects ordering within this
@@ -683,6 +833,12 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
   // human is deciding a conflict, the poll must NOT adopt — adoption would silently pick
   // the server side and discard the local edit, which is exactly what CAS exists to stop).
   const syncConflictRef = useRef(false);
+  const lastAutoAdoptedPollRef = useRef<string>('');
+  // A summary-only mismatch needs one explanatory full body for this App/workspace/head.
+  // Once that exact body has been observed, a manual Agent Bridge pending decision must
+  // not force another 6 MB transfer on every other tick while Auto-Apply remains OFF.
+  const lastFullWorkspacePollRef = useRef<{ workspaceId: string; snapshotHash: string } | null>(null);
+  const failedWorkspaceCacheSnapshotRef = useRef<string>('');
   const setSyncConflict = (v: boolean) => {
     syncConflictRef.current = v;
     _setSyncConflict(v);
@@ -1104,11 +1260,18 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
   const [futureStates, setFutureStates] = useState<ModWorkspace[]>([]);
 
   // Function to capture a manual undoable snapshot checkpoint
-  const saveCheckpoint = (customTarget?: ModWorkspace) => {
-    const target = customTarget || workspace;
+  const saveCheckpoint = React.useCallback((customTarget?: ModWorkspace) => {
+    const target = customTarget || workspaceRef.current;
     setPastStates(prev => [...prev.slice(-39), JSON.parse(JSON.stringify(target))]);
     setFutureStates([]);
-  };
+  }, []);
+
+  const handleActiveMdScriptChange = React.useCallback((script: string | null) => {
+    setActiveMdScript(script);
+    setSelectedNode(null);
+    setSelectedCueIds([]);
+    setSelectedNodeIds([]);
+  }, []);
 
   // The graph remains the structured-authoring authority. Selection opens a native
   // virtual XML document; saving that document returns here for a lossless model merge.
@@ -1266,15 +1429,68 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
   // Audit #6: the 3s poll re-hashed an unchanged canvas at 12–26ms/main-thread on
   // import-sized workspaces; the workspace object is replaced by reference on every
   // edit, so the hash is valid until the reference changes.
-  const pollHashMemoRef = useRef<{ ws: unknown; hash: string } | null>(null);
+  const pollHashMemoRef = useRef<{ ws: unknown; hash: string; snapshotHash: string } | null>(null);
+  const persistScopedWorkspaceSnapshot = React.useCallback((
+    nextWorkspace: ModWorkspace,
+    version: number,
+    snapshotHash: string,
+    workspaceId = selectedWorkspaceId(),
+    draftAuthority?: { expectedHead: string; expectedSnapshotHash: string },
+  ): boolean => {
+    const cached = persistWorkspaceCache(
+      localStorage,
+      draftAuthority
+        ? serializeCachedWorkspaceDraft(
+            nextWorkspace,
+            version,
+            draftAuthority.expectedHead,
+            draftAuthority.expectedSnapshotHash,
+          )
+        : JSON.stringify(nextWorkspace),
+      workspaceLocalKey('workspace', workspaceId),
+    );
+    if (cached.ok === false) {
+      failedWorkspaceCacheSnapshotRef.current = snapshotHash;
+      if (!quotaWarnedRef.current) {
+        quotaWarnedRef.current = true;
+        console.warn('Workspace exceeds the scoped localStorage cache limit — the prior cache/version pair was preserved; in-memory and server authority remain current.', cached.error);
+      }
+      return false;
+    }
+    try {
+      // Persist the version only after the matching full workspace succeeded. Reversing
+      // this order can strand a stale workspace behind an apparently current version.
+      localStorage.setItem(workspaceLocalKey('version', workspaceId), String(version));
+      failedWorkspaceCacheSnapshotRef.current = '';
+      return true;
+    } catch (error) {
+      failedWorkspaceCacheSnapshotRef.current = snapshotHash;
+      if (!quotaWarnedRef.current) {
+        quotaWarnedRef.current = true;
+        console.warn('Could not persist the scoped workspace version; the older version remains so bootstrap can repair from server authority.', error);
+      }
+      return false;
+    }
+  }, []);
   // Sync to local storage and do debounced sync with the server database
   useEffect(() => {
     const persistLocalCache = () => {
-      const result = persistWorkspaceCache(localStorage, JSON.stringify(workspace));
-      if ('error' in result) {
+      const serialized = localWorkspaceDirtyRef.current
+        ? serializeCachedWorkspaceDraft(
+            workspace,
+            localVersion,
+            lastServerHashRef.current,
+            lastServerSnapshotHashRef.current,
+          )
+        : JSON.stringify(workspace);
+      // The addressed body is the reload authority for unsaved edits. Do not advance its
+      // base version here; a server result does that only after the body is durable. The
+      // legacy global key is read-only migration input, not a duplicate ongoing cache.
+      const scoped = persistWorkspaceCache(localStorage, serialized, workspaceLocalKey('workspace'));
+      if (scoped.ok === false) {
         if (!quotaWarnedRef.current) {
           quotaWarnedRef.current = true;
-          console.warn('Workspace exceeds the localStorage cache limit — the last-known-good local cache was preserved; the server copy remains the authority.', result.error);
+          console.warn('Workspace exceeds the localStorage cache limit — the last-known-good local cache was preserved; the server copy remains the authority.', scoped.error);
         }
       }
     };
@@ -1303,18 +1519,30 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
             console.warn('Could not synchronize local edits because the initial server head was not learned.');
             return;
           }
+          for (let wait = 0; wait < 50 && !lastServerSnapshotHashRef.current; wait += 1) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+          if (!lastServerSnapshotHashRef.current) {
+            console.warn('Could not synchronize local edits because the initial server snapshot digest was not learned.');
+            return;
+          }
           // A later workspace revision has its own queued save. Dropping this superseded
           // target prevents a delayed boot/default save from running after server adoption.
           if (workspaceRevisionRef.current !== targetRevision) return;
           if (syncAuthorityEpochRef.current !== targetAuthorityEpoch) return;
           const targetHash = workspaceContentHash(sanitizeWorkspace(targetWorkspace));
+          const targetSnapshotHash = workspaceSnapshotHash(sanitizeWorkspace(targetWorkspace));
           let lastError: unknown;
           for (let attempt = 0; attempt < 4; attempt += 1) {
             try {
               const response = await fetch("/api/agent/workspace", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ workspace: targetWorkspace, expectedHead: lastServerHashRef.current })
+                body: JSON.stringify({
+                  workspace: targetWorkspace,
+                  expectedHead: lastServerHashRef.current,
+                  expectedSnapshotHash: lastServerSnapshotHashRef.current,
+                })
               });
               const responseData = await response.json().catch(() => null);
               if (syncAuthorityEpochRef.current !== targetAuthorityEpoch) return;
@@ -1325,14 +1553,32 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
                 const latestResponse = await fetch("/api/agent/workspace");
                 const latest = latestResponse.ok ? await latestResponse.json() : null;
                 if (syncAuthorityEpochRef.current !== targetAuthorityEpoch) return;
-                if (latest?.workspaceHash === targetHash) {
+                if (latest?.workspaceHash === targetHash && latest?.snapshotHash === targetSnapshotHash) {
                   lastServerHashRef.current = latest.workspaceHash;
+                  lastServerSnapshotHashRef.current = latest.snapshotHash;
                   if (latest.version) {
                     setLocalVersion(latest.version);
-                    localStorage.setItem(workspaceLocalKey('version'), String(latest.version));
+                    const currentForCache = sanitizeWorkspace(workspaceRef.current);
+                    const currentHash = workspaceContentHash(currentForCache);
+                    const currentSnapshotHash = workspaceSnapshotHash(currentForCache);
+                    const currentMatchesTarget = currentHash === targetHash && currentSnapshotHash === targetSnapshotHash;
+                    persistScopedWorkspaceSnapshot(
+                      currentForCache,
+                      Number(latest.version),
+                      currentSnapshotHash,
+                      selectedWorkspaceId(),
+                      currentMatchesTarget ? undefined : {
+                        expectedHead: String(latest.workspaceHash),
+                        expectedSnapshotHash: String(latest.snapshotHash),
+                      },
+                    );
                   }
-                  if (workspaceContentHash(sanitizeWorkspace(workspaceRef.current)) === targetHash) localWorkspaceDirtyRef.current = false;
+                  const current = sanitizeWorkspace(workspaceRef.current);
+                  if (workspaceContentHash(current) === targetHash && workspaceSnapshotHash(current) === targetSnapshotHash) {
+                    localWorkspaceDirtyRef.current = false;
+                  }
                   setSyncConflict(false);
+                  workspaceSyncRetryCountRef.current = 0;
                   return;
                 }
                 const conflict = responseData?.conflict as WorkspaceConflictDetail | undefined;
@@ -1341,6 +1587,7 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
                   server: {
                     ...conflict.server,
                     ...(latest?.workspaceHash ? { head: latest.workspaceHash } : {}),
+                    ...(latest?.snapshotHash ? { snapshotHash: latest.snapshotHash } : {}),
                     ...(latest?.version ? { version: latest.version } : {}),
                     ...(latest?.lastUpdated ? { savedAt: latest.lastUpdated } : {}),
                     ...(latest?.origin ? { origin: latest.origin } : {}),
@@ -1350,28 +1597,54 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
                   detectedAt: new Date().toISOString(),
                   server: {
                     head: latest?.workspaceHash || responseData?.currentHead || 'unknown',
+                    snapshotHash: latest?.snapshotHash || responseData?.currentSnapshotHash,
                     version: latest?.version || responseData?.currentVersion,
                     savedAt: latest?.lastUpdated,
                     origin: latest?.origin,
                     name: latest?.workspace?.name,
                   },
-                  local: { head: targetHash, name: targetWorkspace.name, updatedAt: localWorkspaceUpdatedAtRef.current },
+                  local: { head: targetHash, snapshotHash: targetSnapshotHash, name: targetWorkspace.name, updatedAt: localWorkspaceUpdatedAtRef.current },
                   previewUnavailable: 'The server proved divergent content heads but could not provide a file-level preview.',
                 });
                 setSyncConflict(true);
+                workspaceSyncRetryCountRef.current = 0;
                 return;
               }
               if (!response.ok) throw new Error(`Workspace sync failed (${response.status}).`);
               const data = responseData;
-              if (data && data.success && data.version) {
-                setLocalVersion(data.version);
-                localStorage.setItem(workspaceLocalKey('version'), String(data.version));
-                if (typeof data.workspaceHash === 'string' && data.workspaceHash) {
-                  lastServerHashRef.current = data.workspaceHash;
-                }
-                if (workspaceContentHash(sanitizeWorkspace(workspaceRef.current)) === targetHash) localWorkspaceDirtyRef.current = false;
-                setSyncConflict(false);
+              const returnedVersion = Number(data?.version);
+              if (
+                data?.success !== true
+                || !Number.isFinite(returnedVersion)
+                || returnedVersion < 1
+                || data?.workspaceHash !== targetHash
+                || data?.snapshotHash !== targetSnapshotHash
+              ) {
+                throw new Error('Workspace sync returned an incomplete or mismatched authority receipt.');
               }
+              setLocalVersion(returnedVersion);
+              const currentForCache = sanitizeWorkspace(workspaceRef.current);
+              const currentHash = workspaceContentHash(currentForCache);
+              const currentSnapshotHash = workspaceSnapshotHash(currentForCache);
+              const currentMatchesTarget = currentHash === targetHash && currentSnapshotHash === targetSnapshotHash;
+              persistScopedWorkspaceSnapshot(
+                currentForCache,
+                returnedVersion,
+                currentSnapshotHash,
+                selectedWorkspaceId(),
+                currentMatchesTarget ? undefined : {
+                  expectedHead: String(data.workspaceHash),
+                  expectedSnapshotHash: String(data.snapshotHash),
+                },
+              );
+              lastServerHashRef.current = data.workspaceHash;
+              lastServerSnapshotHashRef.current = data.snapshotHash;
+              const current = sanitizeWorkspace(workspaceRef.current);
+              if (workspaceContentHash(current) === targetHash && workspaceSnapshotHash(current) === targetSnapshotHash) {
+                localWorkspaceDirtyRef.current = false;
+              }
+              setSyncConflict(false);
+              workspaceSyncRetryCountRef.current = 0;
               return;
             } catch (error) {
               lastError = error;
@@ -1379,6 +1652,30 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
             }
           }
           console.warn("Could not synchronize local edits to server workspace space after retries.", lastError);
+          const current = sanitizeWorkspace(workspaceRef.current);
+          const stillOwnsTarget = workspaceContentHash(current) === targetHash
+            && workspaceSnapshotHash(current) === targetSnapshotHash;
+          if (
+            stillOwnsTarget
+            && localWorkspaceDirtyRef.current
+            && syncAuthorityEpochRef.current === targetAuthorityEpoch
+            && workspaceSyncRetryTimerRef.current === null
+          ) {
+            const retryNumber = workspaceSyncRetryCountRef.current;
+            const delayMs = Math.min(24_000, 3_000 * (2 ** Math.min(retryNumber, 3)));
+            workspaceSyncRetryCountRef.current += 1;
+            workspaceSyncRetryTimerRef.current = window.setTimeout(() => {
+              workspaceSyncRetryTimerRef.current = null;
+              if (
+                localWorkspaceDirtyRef.current
+                && syncAuthorityEpochRef.current === targetAuthorityEpoch
+                && workspaceContentHash(sanitizeWorkspace(workspaceRef.current)) === targetHash
+                && workspaceSnapshotHash(sanitizeWorkspace(workspaceRef.current)) === targetSnapshotHash
+              ) {
+                setWorkspaceSyncEpoch(epoch => epoch + 1);
+              }
+            }, delayMs);
+          }
         })
         .finally(() => { queuedWorkspaceSyncsRef.current = Math.max(0, queuedWorkspaceSyncsRef.current - 1); });
     };
@@ -1394,7 +1691,7 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
       clearTimeout(debounceTimer);
       document.removeEventListener('visibilitychange', flushOnHide);
     };
-  }, [workspace, workspaceSyncEpoch]);
+  }, [localVersion, persistScopedWorkspaceSnapshot, workspace, workspaceSyncEpoch]);
 
   const executeCompileModProject = async () => {
     setCompileStatus('compiling');
@@ -1414,7 +1711,11 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
           const convergenceRes = await fetch('/api/agent/workspace', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ workspace: deployData.workspace, expectedHead: lastServerHashRef.current }),
+            body: JSON.stringify({
+              workspace: deployData.workspace,
+              expectedHead: lastServerHashRef.current,
+              expectedSnapshotHash: lastServerSnapshotHashRef.current,
+            }),
           });
           const convergence = await convergenceRes.json().catch(() => ({}));
           if (!convergenceRes.ok || !convergence?.success) {
@@ -1426,10 +1727,14 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
           localWorkspaceDirtyRef.current = false;
           if (convergence.version) {
             setLocalVersion(convergence.version);
-            localStorage.setItem(workspaceLocalKey('version'), String(convergence.version));
+            persistScopedWorkspaceSnapshot(
+              sanitizeWorkspace(deployData.workspace),
+              Number(convergence.version),
+              String(convergence.snapshotHash),
+            );
           }
           if (convergence.workspaceHash) lastServerHashRef.current = String(convergence.workspaceHash);
-          localStorage.setItem(workspaceLocalKey('workspace'), JSON.stringify(deployData.workspace));
+          if (convergence.snapshotHash) lastServerSnapshotHashRef.current = String(convergence.snapshotHash);
         }
         setCompileStatus('success');
         setCompileMessage(`Deployed + verified "${deployData.modId}" to ${deployData.deployedPath || deployData.stagingPath}` +
@@ -1457,28 +1762,142 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
     setIsCompileModalOpen(true);
   };
 
+  const autoApplyPolledWorkspace = React.useCallback((
+    candidate: FullWorkspacePollingResponse,
+    runId: number,
+  ): WorkspaceAutoAdoptResult => {
+    if (candidate.workspaceId !== selectedWorkspaceId()) {
+      return { status: 'blocked', reason: 'authority' };
+    }
+    const normalized = sanitizeWorkspace(candidate.workspace);
+    if (workspaceContentHash(normalized) !== candidate.workspaceHash || workspaceSnapshotHash(normalized) !== candidate.snapshotHash) {
+      return { status: 'blocked', reason: 'invalid-pair' };
+    }
+    const adoptionKey = [runId, candidate.workspaceId, candidate.version, candidate.workspaceHash, candidate.snapshotHash].join(':');
+    if (lastAutoAdoptedPollRef.current === adoptionKey) return { status: 'already-applied' };
+    // A visible unresolved conflict is the strongest automatic-adoption stop. Keeping it
+    // first also makes that guard independently observable even though conflict state often
+    // coexists with a dirty local canvas.
+    if (syncConflictRef.current) return { status: 'blocked', reason: 'conflict' };
+    if (localWorkspaceDirtyRef.current) return { status: 'blocked', reason: 'dirty' };
+    if (queuedWorkspaceSyncsRef.current > 0) return { status: 'blocked', reason: 'queued' };
+    const start = workspacePollStartRevisionRef.current;
+    if (!start || start.runId !== runId || start.revision !== workspaceRevisionRef.current) {
+      return { status: 'blocked', reason: 'stale-run' };
+    }
+    const storedVersion = Number(localStorage.getItem(workspaceLocalKey('version')) || String(localVersion));
+    if (candidate.version <= storedVersion) {
+      const current = sanitizeWorkspace(workspaceRef.current);
+      if (workspaceContentHash(current) === candidate.workspaceHash && workspaceSnapshotHash(current) === candidate.snapshotHash) {
+        lastAutoAdoptedPollRef.current = adoptionKey;
+        return { status: 'already-applied' };
+      }
+      return { status: 'blocked', reason: 'stale-version' };
+    }
+
+    // Claim the exact shared run before scheduling React state so any duplicate callback
+    // for the same server result cannot enqueue a second adoption.
+    lastAutoAdoptedPollRef.current = adoptionKey;
+    saveCheckpoint(workspaceRef.current);
+    workspaceRef.current = normalized;
+    workspaceRevisionRef.current += 1;
+    setRawWorkspace(normalized);
+    localWorkspaceDirtyRef.current = false;
+    lastServerHashRef.current = candidate.workspaceHash;
+    lastServerSnapshotHashRef.current = candidate.snapshotHash;
+    syncMissesRef.current = 0;
+    setSyncDiverged(false);
+    setLocalVersion(candidate.version);
+    persistScopedWorkspaceSnapshot(normalized, candidate.version, candidate.snapshotHash);
+    return { status: 'applied' };
+  }, [localVersion, persistScopedWorkspaceSnapshot, saveCheckpoint]);
+
   // R13: App and AgentBridge share this exact addressed read. App still owns the
   // local dirty/revision/CAS adoption policy; run-start metadata preserves the
   // revision boundary even when another subscriber supplies the shared fetcher.
   useContinuousPolling<WorkspacePollingResponse>({
+    enabled: agentWorkspacePollingEnabled,
     resourceKey: `workspace:${currentWorkspaceId || 'unbound'}`,
-    contract: 'GET /api/agent/workspace',
+    contract: WORKSPACE_POLLING_CONTRACT,
     intervalMs: 3000,
-    onStart: () => { workspacePollStartRevisionRef.current = workspaceRevisionRef.current; },
-    run: signal => fetchPollingJson('/api/agent/workspace', undefined, signal),
-    onResult: data => {
-      const requestWorkspaceRevision = workspacePollStartRevisionRef.current;
-      if (data?.workspaceId && data.workspaceId !== selectedWorkspaceId()) return;
-      if (data && data.workspace && data.version) {
+    onStart: meta => { workspacePollStartRevisionRef.current = { runId: meta.runId, revision: workspaceRevisionRef.current }; },
+    run: signal => pollWorkspaceSnapshot(currentWorkspaceId, signal),
+    onResult: (data, meta) => {
+      const started = workspacePollStartRevisionRef.current;
+      const requestWorkspaceRevision = started?.runId === meta.runId ? started.revision : -1;
+      if (data.workspaceId !== selectedWorkspaceId()) return;
+      if (data.version && data.workspaceHash && data.snapshotHash) {
+          if (data.workspace) {
+            lastFullWorkspacePollRef.current = { workspaceId: data.workspaceId, snapshotHash: data.snapshotHash };
+            const current = sanitizeWorkspace(workspaceRef.current);
+            const differsFromCanvas = workspaceContentHash(current) !== data.workspaceHash
+              || workspaceSnapshotHash(current) !== data.snapshotHash;
+            if (differsFromCanvas) {
+              const candidate = data as FullWorkspacePollingResponse;
+              if (agentAutoSyncRef.current) {
+                const adoption = autoApplyPolledWorkspace(candidate, meta.runId);
+                if (adoption.status === 'applied' || adoption.status === 'already-applied') {
+                  const retained = pendingAgentWorkspaceRef.current;
+                  if (retained?.workspaceId === candidate.workspaceId) setPendingAgentWorkspace(null);
+                } else {
+                  setPendingAgentWorkspace(candidate);
+                }
+              } else {
+                setPendingAgentWorkspace(candidate);
+              }
+            } else {
+              const retained = pendingAgentWorkspaceRef.current;
+              // A validated server body equal to the canvas supersedes every older pending
+              // candidate for this same immutable workspace, regardless of the old pair.
+              if (retained?.workspaceId === data.workspaceId) clearPendingAgentWorkspace(retained);
+            }
+          } else {
+            // Version is sequencing metadata rather than snapshot identity. When the server
+            // commits the same paired hashes again, keep the one retained full body and move
+            // its pending version forward without another multi-megabyte transfer.
+            const retained = pendingAgentWorkspaceRef.current;
+            if (retained && sameWorkspacePollingPair(retained, data)) {
+              const candidate = data.version > retained.version ? { ...retained, version: data.version } : retained;
+              if (agentAutoSyncRef.current) {
+                const adoption = autoApplyPolledWorkspace(candidate, meta.runId);
+                if (adoption.status === 'applied' || adoption.status === 'already-applied') {
+                  clearPendingAgentWorkspace(candidate);
+                } else if (candidate !== retained) {
+                  setPendingAgentWorkspace(candidate);
+                }
+              } else if (candidate !== retained) {
+                setPendingAgentWorkspace(candidate);
+              }
+            }
+          }
           // Local state becomes dirty at the moment setWorkspace is called, not 300ms later
           // when autosave starts. While dirty, a poll cannot adopt stale server content or
           // advance a known CAS head past the unsaved edit. The first boot read may still
           // teach a head to a client that has not learned one yet.
           if (localWorkspaceDirtyRef.current) {
+            const retained = sanitizeWorkspace(workspaceRef.current);
+            const pollNamesRetainedCanvas = workspaceContentHash(retained) === data.workspaceHash
+              && workspaceSnapshotHash(retained) === data.snapshotHash;
+            if (!pollNamesRetainedCanvas) {
+              // Never turn a mismatching remote pair into write authority for dirty local
+              // content. A bootstrap-derived retained pair can now produce an explicit 409;
+              // an unbound client safely waits rather than authorizing a clobber.
+              syncMissesRef.current += 1;
+              if (syncMissesRef.current >= 3) setSyncDiverged(true);
+              return;
+            }
+            let learnedAuthority = false;
             if (!lastServerHashRef.current && typeof data.workspaceHash === 'string' && data.workspaceHash) {
               lastServerHashRef.current = data.workspaceHash;
+              learnedAuthority = true;
+            }
+            if (!lastServerSnapshotHashRef.current && typeof data.snapshotHash === 'string' && data.snapshotHash) {
+              lastServerSnapshotHashRef.current = data.snapshotHash;
+              learnedAuthority = true;
+            }
+            if (learnedAuthority) {
               // The original debounced save may already have exhausted its bounded wait.
-              // Wake the unchanged-but-dirty workspace so learning the first CAS head can
+              // Wake the unchanged-but-dirty workspace so learning the first paired heads can
               // never strand a local edit until the user types again.
               setWorkspaceSyncEpoch(epoch => epoch + 1);
             }
@@ -1491,31 +1910,20 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
           // may still teach the client the current CAS head, so the queued local edit can be
           // written safely, but it must never replace the newer canvas with its old payload.
           if (workspaceRevisionRef.current !== requestWorkspaceRevision) {
+            let learnedAuthority = false;
             if (!lastServerHashRef.current && typeof data.workspaceHash === 'string' && data.workspaceHash) {
               lastServerHashRef.current = data.workspaceHash;
-              if (localWorkspaceDirtyRef.current) setWorkspaceSyncEpoch(epoch => epoch + 1);
+              learnedAuthority = true;
             }
+            if (!lastServerSnapshotHashRef.current && typeof data.snapshotHash === 'string' && data.snapshotHash) {
+              lastServerSnapshotHashRef.current = data.snapshotHash;
+              learnedAuthority = true;
+            }
+            if (learnedAuthority && localWorkspaceDirtyRef.current) setWorkspaceSyncEpoch(epoch => epoch + 1);
             return;
           }
           const storedVer = Number(localStorage.getItem(workspaceLocalKey('version')) || String(localVersion));
-          if (data.version > storedVer && !syncConflictRef.current) {
-            setWorkspace(data.workspace);
-            localWorkspaceDirtyRef.current = false;
-            setLocalVersion(data.version);
-            localStorage.setItem(workspaceLocalKey('version'), String(data.version));
-            localStorage.setItem(workspaceLocalKey('workspace'), JSON.stringify(data.workspace));
-            // B2 slice 2: adoption is also learning the head (this branch returns early —
-            // missing this line left the CAS ref empty after every adoption).
-            if (typeof data.workspaceHash === 'string' && data.workspaceHash) lastServerHashRef.current = data.workspaceHash;
-            syncMissesRef.current = 0;
-            setSyncDiverged(false);
-            return;
-          }
           if (syncConflictRef.current) return; // human is deciding — hold ALL automatic adoption
-          // B2 slice 2: the poll is also how the client learns the current server head.
-          if (typeof data.workspaceHash === 'string' && data.workspaceHash.length > 0) {
-            lastServerHashRef.current = data.workspaceHash;
-          }
           // B1 sync-trust: the version gate said "don't adopt" — verify CONTENT actually
           // agrees. A transient mismatch (<~6s) is just the edit→sync debounce; a
           // persistent one is real divergence (the stale-canvas incident class) and gets
@@ -1523,16 +1931,42 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
           if (typeof data.workspaceHash === 'string' && data.workspaceHash.length > 0) {
             const memo = pollHashMemoRef.current;
             let localHash: string;
+            let localSnapshotHash: string;
             if (memo && memo.ws === workspaceRef.current) {
               localHash = memo.hash;
+              localSnapshotHash = memo.snapshotHash;
             } else {
-              localHash = workspaceContentHash(sanitizeWorkspace(workspaceRef.current));
-              pollHashMemoRef.current = { ws: workspaceRef.current, hash: localHash };
+              const current = sanitizeWorkspace(workspaceRef.current);
+              localHash = workspaceContentHash(current);
+              localSnapshotHash = workspaceSnapshotHash(current);
+              pollHashMemoRef.current = { ws: workspaceRef.current, hash: localHash, snapshotHash: localSnapshotHash };
             }
-            if (localHash !== data.workspaceHash) {
+            if (localHash !== data.workspaceHash || localSnapshotHash !== data.snapshotHash) {
+              // A head-only response cannot explain a mismatch until this App has observed
+              // the exact full body once. After that, Agent Bridge may deliberately hold it
+              // pending with Auto-Apply OFF; repeated invalidation would re-transfer the same
+              // multi-megabyte snapshot forever.
+              const observedFull = lastFullWorkspacePollRef.current;
+              if (!data.workspace && (
+                observedFull?.workspaceId !== data.workspaceId
+                || observedFull.snapshotHash !== data.snapshotHash
+              )) {
+                invalidateWorkspacePollingHead(data.workspaceId, data.snapshotHash);
+              }
               syncMissesRef.current += 1;
               if (syncMissesRef.current >= 3) setSyncDiverged(true);
             } else {
+              if (!data.workspace && data.version > storedVer) {
+                setLocalVersion(data.version);
+                if (failedWorkspaceCacheSnapshotRef.current !== data.snapshotHash) {
+                  persistScopedWorkspaceSnapshot(sanitizeWorkspace(workspaceRef.current), data.version, data.snapshotHash);
+                }
+              }
+              // Learn mutation authority only when it names the exact canvas we retain.
+              // A different full snapshot held for explicit Agent Bridge review must keep
+              // the prior pair so a stale local edit produces 409 instead of overwriting it.
+              lastServerHashRef.current = data.workspaceHash;
+              lastServerSnapshotHashRef.current = data.snapshotHash;
               syncMissesRef.current = 0;
               setSyncDiverged(false);
             }
@@ -1545,7 +1979,7 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
   });
 
   // B1: adopt the server workspace explicitly (badge click) — the user's choice, never silent.
-  const adoptServerWorkspace = async () => {
+  const adoptServerWorkspace = async (expected?: FullWorkspacePollingResponse): Promise<boolean> => {
     syncAuthorityEpochRef.current += 1;
     setSyncConflictBusy('server');
     setSyncConflictError('');
@@ -1554,24 +1988,50 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
       const data = await response.json();
       if (!response.ok || !data?.workspace) throw new Error(data?.error || `Server workspace read failed (${response.status}).`);
       if (data?.workspace) {
-        saveCheckpoint(workspaceRef.current);
-        setWorkspace(data.workspace);
-        localWorkspaceDirtyRef.current = false;
-        if (data.version) {
-          setLocalVersion(data.version);
-          localStorage.setItem(workspaceLocalKey('version'), String(data.version));
+        if (typeof data.version !== 'number' || !Number.isFinite(data.version) || data.version < 1) {
+          throw new Error('Server workspace response did not include a valid numeric version.');
         }
-        localStorage.setItem(workspaceLocalKey('workspace'), JSON.stringify(data.workspace));
+        const returnedVersion = data.version;
+        const normalized = sanitizeWorkspace(data.workspace);
+        const actualHash = workspaceContentHash(normalized);
+        const actualSnapshotHash = workspaceSnapshotHash(normalized);
+        if (data.workspaceId !== selectedWorkspaceId() || actualHash !== data.workspaceHash || actualSnapshotHash !== data.snapshotHash) {
+          throw new Error('Server workspace response failed immutable authority or paired-hash validation.');
+        }
+        if (expected && !sameWorkspacePollingPair(expected, data)) {
+          throw new Error('The pending server workspace changed again. Review the refreshed pending change before applying it.');
+        }
+        saveCheckpoint(workspaceRef.current);
+        workspaceRef.current = normalized;
+        workspaceRevisionRef.current += 1;
+        setRawWorkspace(normalized);
+        localWorkspaceDirtyRef.current = false;
+        setLocalVersion(returnedVersion);
+        persistScopedWorkspaceSnapshot(normalized, returnedVersion, String(data.snapshotHash));
         if (typeof data.workspaceHash === 'string' && data.workspaceHash) lastServerHashRef.current = data.workspaceHash;
+        if (typeof data.snapshotHash === 'string' && data.snapshotHash) lastServerSnapshotHashRef.current = data.snapshotHash;
         syncMissesRef.current = 0;
         setSyncDiverged(false);
         setSyncConflict(false);
+        const retainedPending = pendingAgentWorkspaceRef.current;
+        if (retainedPending && sameWorkspacePollingPair(retainedPending, data)) {
+          clearPendingAgentWorkspace(retainedPending);
+        }
         toast(`Used server copy "${data.workspace.name || 'Untitled'}". Undo restores your previous canvas.`, 'success');
+        return true;
       }
     } catch (error) {
-      setSyncConflictError(`Server copy was not applied: ${error instanceof Error ? error.message : String(error)}`);
+      const message = `Server copy was not applied: ${error instanceof Error ? error.message : String(error)}`;
+      setSyncConflictError(message);
+      toast(message, 'error');
       setSyncConflictBusy('');
+      // Entry invalidates any queued save so a successful server adoption wins cleanly.
+      // If validation/read fails, the user's dirty canvas still owns a required write;
+      // re-arm it under the new epoch instead of stranding it indefinitely.
+      if (localWorkspaceDirtyRef.current) setWorkspaceSyncEpoch(epoch => epoch + 1);
+      return false;
     }
+    return false;
   };
 
   // ADR-F5 workspace switcher. Each tab owns its selected immutable ID; duplicate names are safe.
@@ -1585,7 +2045,13 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
   // Ready before interaction: on boot, and whenever a switch/load may have parked
   // something (workspace name change). onFocus refresh stays as a liveness bonus.
   useEffect(() => { refreshParkedList(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [workspace.name]);
+  const canLeaveCurrentWorkspace = () => {
+    if (!localWorkspaceDirtyRef.current && queuedWorkspaceSyncsRef.current === 0 && !syncConflictRef.current) return true;
+    toast('This workspace has unsaved or unresolved changes. Save or resolve them before switching workspaces; nothing was changed.', 'warning');
+    return false;
+  };
   const restoreParkedWorkspace = async (targetWorkspaceId: string) => {
+    if (!canLeaveCurrentWorkspace()) return;
     try {
       const response = await fetch('/api/agent/workspace/restore-parked', {
         method: 'POST',
@@ -1594,24 +2060,96 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
       });
       const data = await response.json();
       if (data?.success && data.workspace) {
-        saveCheckpoint();
+        const targetId = String(data.workspaceId || '');
+        const returnedVersion = data.version;
+        const serverWorkspace = sanitizeWorkspace(data.workspace);
+        const serverHash = workspaceContentHash(serverWorkspace);
+        const serverSnapshotHash = workspaceSnapshotHash(serverWorkspace);
+        if (
+          targetId !== targetWorkspaceId
+          || typeof returnedVersion !== 'number'
+          || !Number.isFinite(returnedVersion)
+          || returnedVersion < 1
+          || data.workspaceHash !== serverHash
+          || data.snapshotHash !== serverSnapshotHash
+        ) throw new Error('Restored workspace response failed immutable authority, version or paired-hash validation.');
+
+        let retainedTarget: ModWorkspace | null = null;
+        let retainedDraft: CachedWorkspaceDraftMetadata | null = null;
+        const scopedTarget = localStorage.getItem(workspaceLocalKey('workspace', targetId));
+        if (scopedTarget) {
+          try {
+            const parsedTarget = JSON.parse(scopedTarget);
+            const candidate = sanitizeWorkspace(parsedTarget);
+            const candidateHash = workspaceContentHash(candidate);
+            const candidateSnapshotHash = workspaceSnapshotHash(candidate);
+            retainedDraft = readCachedWorkspaceDraftMetadata(parsedTarget, candidate);
+            if (retainedDraft || candidateHash !== serverHash || candidateSnapshotHash !== serverSnapshotHash) {
+              retainedTarget = candidate;
+            }
+          } catch { /* malformed target cache falls back to the validated server response */ }
+        }
+
         syncAuthorityEpochRef.current += 1;
-        window.__X4_WORKSPACE_CONTEXT__?.selectWorkspace(String(data.workspaceId));
-        setCurrentWorkspaceId(String(data.workspaceId));
-        setWorkspace(data.workspace);
-        localWorkspaceDirtyRef.current = false;
-        if (data.version) { setLocalVersion(data.version); localStorage.setItem(workspaceLocalKey('version', data.workspaceId), String(data.version)); }
-        localStorage.setItem(workspaceLocalKey('workspace', data.workspaceId), JSON.stringify(data.workspace));
-        if (typeof data.workspaceHash === 'string' && data.workspaceHash) lastServerHashRef.current = data.workspaceHash;
-        syncMissesRef.current = 0;
-        setSyncDiverged(false);
-        setSyncConflict(false);
+        if (workspaceSyncRetryTimerRef.current !== null) {
+          window.clearTimeout(workspaceSyncRetryTimerRef.current);
+          workspaceSyncRetryTimerRef.current = null;
+        }
+        workspaceSyncRetryCountRef.current = 0;
+        setPastStates([]);
+        setFutureStates([]);
+        window.__X4_WORKSPACE_CONTEXT__?.selectWorkspace(targetId);
+        setCurrentWorkspaceId(targetId);
+        if (retainedTarget) {
+          const retainedHash = workspaceContentHash(retainedTarget);
+          const retainedSnapshotHash = workspaceSnapshotHash(retainedTarget);
+          workspaceRef.current = retainedTarget;
+          workspaceRevisionRef.current += 1;
+          setRawWorkspace(retainedTarget);
+          localWorkspaceDirtyRef.current = true;
+          setLocalVersion(retainedDraft?.baseVersion
+            ?? Number(localStorage.getItem(workspaceLocalKey('version', targetId)) || 1));
+          lastServerHashRef.current = retainedDraft?.expectedHead || retainedHash;
+          lastServerSnapshotHashRef.current = retainedDraft?.expectedSnapshotHash || retainedSnapshotHash;
+          setPendingAgentWorkspace({
+            workspaceId: targetId,
+            workspace: serverWorkspace,
+            version: returnedVersion,
+            workspaceHash: serverHash,
+            snapshotHash: serverSnapshotHash,
+          });
+          syncMissesRef.current = 3;
+          setSyncDiverged(true);
+          setSyncConflict(false);
+          toast(`Restored "${serverWorkspace.name}" with its local draft retained for explicit server reconciliation.`, 'warning');
+        } else {
+          workspaceRef.current = serverWorkspace;
+          workspaceRevisionRef.current += 1;
+          setRawWorkspace(serverWorkspace);
+          localWorkspaceDirtyRef.current = false;
+          setLocalVersion(returnedVersion);
+          persistScopedWorkspaceSnapshot(
+            serverWorkspace,
+            returnedVersion,
+            serverSnapshotHash,
+            targetId,
+          );
+          lastServerHashRef.current = serverHash;
+          lastServerSnapshotHashRef.current = serverSnapshotHash;
+          clearPendingAgentWorkspace();
+          syncMissesRef.current = 0;
+          setSyncDiverged(false);
+          setSyncConflict(false);
+        }
         refreshParkedList();
       }
-    } catch { /* server unreachable — the canvas stays as-is */ }
+    } catch (error) {
+      toast(`Workspace was not switched: ${error instanceof Error ? error.message : String(error)}`, 'error');
+    }
   };
 
   const createWorkspace = async () => {
+    if (!canLeaveCurrentWorkspace()) return;
     const name = await promptDialog('Name the new independent workspace.', 'Untitled_Workspace', { okLabel: 'Create workspace' });
     if (!name?.trim()) return;
     try {
@@ -1624,15 +2162,21 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
       const data = await response.json();
       if (!response.ok || !data?.workspaceId || !data?.workspace) throw new Error(data?.error || `Workspace creation failed (${response.status}).`);
       syncAuthorityEpochRef.current += 1;
+      setPastStates([]);
+      setFutureStates([]);
       window.__X4_WORKSPACE_CONTEXT__?.selectWorkspace(String(data.workspaceId));
       setCurrentWorkspaceId(String(data.workspaceId));
-      saveCheckpoint();
       setWorkspace(data.workspace);
       localWorkspaceDirtyRef.current = false;
       setLocalVersion(Number(data.version || Date.now()));
       lastServerHashRef.current = String(data.workspaceHash || '');
-      localStorage.setItem(workspaceLocalKey('workspace', data.workspaceId), JSON.stringify(data.workspace));
-      localStorage.setItem(workspaceLocalKey('version', data.workspaceId), String(data.version || Date.now()));
+      lastServerSnapshotHashRef.current = String(data.snapshotHash || '');
+      persistScopedWorkspaceSnapshot(
+        sanitizeWorkspace(data.workspace),
+        Number(data.version || Date.now()),
+        String(data.snapshotHash),
+        String(data.workspaceId),
+      );
       setSyncConflict(false);
       setSyncDiverged(false);
       await refreshParkedList();
@@ -1659,8 +2203,16 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
       const data = await response.json();
       if (!response.ok || !data?.success) throw new Error(data?.error || `Forced overwrite failed (${response.status}).`);
       if (data?.success) {
-        if (data.version) { setLocalVersion(data.version); localStorage.setItem(workspaceLocalKey('version'), String(data.version)); }
+        if (data.version) {
+          setLocalVersion(data.version);
+          persistScopedWorkspaceSnapshot(
+            sanitizeWorkspace(workspaceRef.current),
+            Number(data.version),
+            String(data.snapshotHash),
+          );
+        }
         if (typeof data.workspaceHash === 'string' && data.workspaceHash) lastServerHashRef.current = data.workspaceHash;
+        if (typeof data.snapshotHash === 'string' && data.snapshotHash) lastServerSnapshotHashRef.current = data.snapshotHash;
         setSyncConflict(false);
         setSyncDiverged(false);
         syncMissesRef.current = 0;
@@ -1899,6 +2451,7 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
                 if (pick.startsWith('workspace:')) {
                   const targetWorkspaceId = pick.slice('workspace:'.length);
                   const target = parkedList.find(row => row.workspaceId === targetWorkspaceId);
+                  if (!canLeaveCurrentWorkspace()) return;
                   const ok = await confirmDialog(
                     `Switch this tab to "${target?.name || targetWorkspaceId}"? The current workspace remains saved under ${currentWorkspaceId}.`,
                     { okLabel: 'Switch workspace', cancelLabel: 'Stay here' },
@@ -2258,12 +2811,7 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
               selectedNodeIds={selectedNodeIds}
               setSelectedNodeIds={setSelectedNodeIds}
               activeMdScript={activeMdScript}
-              onActiveMdScriptChange={(script) => {
-                setActiveMdScript(script);
-                setSelectedNode(null);
-                setSelectedCueIds([]);
-                setSelectedNodeIds([]);
-              }}
+              onActiveMdScriptChange={handleActiveMdScriptChange}
               packageDiagnostics={effectiveDiagnostics}
               diagnosticSource={diagnosticSource}
             />
@@ -2312,8 +2860,13 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
               saveCheckpoint={saveCheckpoint}
               onServerWorkspaceApplied={(nextWorkspace, metadata) => {
                 lastServerHashRef.current = metadata.workspaceHash;
+                lastServerSnapshotHashRef.current = metadata.snapshotHash;
                 setLocalVersion(metadata.version);
-                localStorage.setItem(workspaceLocalKey('version'), String(metadata.version));
+                persistScopedWorkspaceSnapshot(
+                  sanitizeWorkspace(nextWorkspace),
+                  metadata.version,
+                  metadata.snapshotHash,
+                );
                 setSyncConflict(false);
                 // The bulk route already committed this exact state through the server CAS
                 // path. Adopt it without marking it as another local edit; otherwise the
@@ -2391,6 +2944,17 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
         setWorkspace={setWorkspace}
         localVersion={localVersion}
         setLocalVersion={setLocalVersion}
+        autoSync={agentAutoSync}
+        onAutoSyncChange={setAgentAutoSync}
+        pollingEnabled={agentWorkspacePollingEnabled}
+        onPollingEnabledChange={setAgentWorkspacePollingEnabled}
+        pendingWorkspace={pendingAgentWorkspace?.workspaceId === selectedWorkspaceId() ? pendingAgentWorkspace : null}
+        onDiscardPendingWorkspace={clearPendingAgentWorkspace}
+        onApplyPendingWorkspace={async candidate => {
+          const applied = await adoptServerWorkspace(candidate);
+          if (applied) clearPendingAgentWorkspace(candidate);
+          return applied;
+        }}
         setFocusNodeRequest={setFocusNodeRequest}
       />
 

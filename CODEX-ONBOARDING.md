@@ -126,11 +126,11 @@ ports. `sanitizeWorkspace()` normalizes any partial workspace into a full one (h
 `generateMDXML()` compiles the graph to MD XML; `generateContentXML()` emits the extension manifest.
 [VERIFIED — types.ts, modCompiler.ts.]
 
-**Server-side workspace state.** The server holds ONE **active workspace** in memory AND persisted to disk
-(`.studio-state/active.json`, atomic write) so it survives restarts. Switching to a differently-named
-workspace **parks** the previous one (`.studio-state/parked-*.json`) instead of destroying it. Writes go
-through a **content-addressed compare-and-swap (CAS)**: `GET /api/agent/workspace` returns a `workspaceHash`;
-a write must send `expectedHead` (that hash) or `force:true`, else it's rejected `409 legacy_write_rejected`.
+**Server-side workspace state.** The server registry persists explicitly addressed workspaces under
+`.studio-state/`; a client binds one immutable workspace ID at a time. Writes use paired compare-and-swap
+identities: `GET /api/agent/workspace` returns the deployable-content `workspaceHash` plus the complete-state
+`snapshotHash`. Safe writers return them as `expectedHead` and `expectedSnapshotHash`; a mismatch is rejected
+without overwrite. A blind write requires explicit `force:true` or is rejected `409 legacy_write_rejected`.
 This is the fix for a whole class of data-loss incidents (§7). [VERIFIED — B2 all slices, `src/lib/workspaceState.ts`,
 server.ts workspace routes.]
 
@@ -139,8 +139,8 @@ Every `/api/*` route requires `Authorization: Bearer <token>` **except** a small
 read-only GETs (`PUBLIC_READONLY_GETS` in server.ts) — a new public GET must be added there or it 401s. The
 token is written to `.studio-api-token` at boot; the Vite dev server injects it into the page so the UI is
 authed automatically. Key endpoints:
-- `GET /api/agent/workspace` → active workspace + version + `workspaceHash`.
-- `POST /api/agent/workspace` `{workspace, expectedHead?, force?}` → replace (CAS).
+- `GET /api/agent/workspace` → addressed workspace + version + `workspaceHash` + `snapshotHash`.
+- `POST /api/agent/workspace` `{workspace, expectedHead?, expectedSnapshotHash?, force?}` → replace (paired CAS).
 - `POST /api/agent/project/validate` → **authoritative validation** (XSD + cross-file cue resolution +
   md↔lua binding); loop to `ok:true`.
 - `POST /api/agent/deploy-verify` → the 9-stage compile+deploy preflight.
@@ -188,11 +188,11 @@ co-located content via a `.forgekeep` list (so it never nukes the Python bridge,
 |---|---|
 | `npm run typecheck` | `tsc --noEmit` — the fast first gate; run after every change. |
 | `npm run lint` | `eslint src server.ts`. |
-| `node scripts/oracle-sweep.mjs` | Runs **all** registered oracles; exits non-zero on any red. **76/76 green** at last sweep (2026-07-13). Discovery reads the *runtime* selftest index (B27), not a source regex. `--list` shows coverage. |
-| `npm run test:e2e` | **THE e2e gate.** Playwright, **12 tests across 6 spec files**, on the ephemeral stack (below). Wrapped by `scripts/run-e2e.mjs`. |
-| `npm run test:canvas` | A 2-spec subset of the above (canvas only). |
+| `node scripts/oracle-sweep.mjs` | Runs **all runtime-discovered** registered oracles and exits non-zero on any red. `--list` shows current coverage; do not hard-code a historical count. |
+| `npm run test:e2e` | **THE e2e gate.** Full Playwright suite on the ephemeral stack (below), verdict-parsed by `scripts/run-e2e.mjs`; the current test count is discovered at runtime. |
+| `npm run test:canvas` | The focused canvas subset of the full suite. |
 | `npm run validate:mod` | `tsx scripts/x4validate.ts` — CLI mod validation. |
-| `npm run precommit:check` | typecheck + recurring-mistake **tripwires** (B32) + **mirror-drift** gate (B30) + large-file guards. |
+| `npm run precommit:check` | typecheck + recurring-mistake tripwires + mirror/large-file guards + capability-route and MCP drift gates. |
 | `npm run build` | `vite build` + esbuild the server to `dist/server.cjs` (production bundle). |
 
 **Critical e2e gotcha — the exit code lies.** On this Node build, Playwright prints its summary ("N passed")
@@ -332,10 +332,12 @@ opens the schema, the B10 structural rider is the one specified code task. [INFE
   short-lived (<~2s, no multi-second awaits).** Recover with a navigate-reload. [VERIFIED — B28.]
 - **The sync-clobber incident class (now fixed, don't reintroduce).** The server's workspace was once an
   in-memory mutable singleton with an integer version; a restart reset the counter and a blank client
-  silently overwrote real work — this destroyed a session's output more than once. The fix (B2s3) is disk
-  persistence + content-addressed CAS + a legacy-write gate + park-on-switch. **Never** add a workspace write
-  path that bypasses `commitActiveWorkspace()` / the CAS, and never make a blind (no-`expectedHead`, no-
-  `force`) write. [VERIFIED — B2 ROADMAP closes.]
+  silently overwrote real work — this destroyed a session's output more than once. The current fix is disk
+  persistence + an immutable workspace registry + paired content/snapshot CAS + a legacy-write gate; the
+  legacy "parked" routes are Studio-session-only list/lookup compatibility surfaces, not a global switch.
+  **Never** add a workspace write
+  path that bypasses the workspace registry / paired CAS, and never make a blind (no-`expectedHead`, no-
+  `expectedSnapshotHash`, no-`force`) write. [VERIFIED — B2 ROADMAP closes; B116 paired snapshot guard.]
 - **Don't validate against the real mod.** Using `x4_ai_influence` as a UI/deploy test article once
   regenerated and corrupted 8 files. **Deploy tests use a scratch mod, full stop.** "Timestamps advanced +
   copies agree" is NOT correctness — only comparison against the pre-action source is. [VERIFIED — the SPEC-

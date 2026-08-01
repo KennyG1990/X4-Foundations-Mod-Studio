@@ -2,7 +2,7 @@
 
 Task: B110-R13 one scheduler for continuous browser reads
 Lane: FULL
-Status: PARTIAL
+Status: VERIFIED — B116 closed the final Auto-Apply, Pause/Resume, and installed-host interaction gates
 
 ## PLAN
 
@@ -171,32 +171,43 @@ Status: PARTIAL
   - Second full E2E -> observer expired after 12 minutes with no structured report/receipt. The exact task-owned
     3100/3101 processes were identified and stopped; both ports verified closed. This is unavailable evidence, not
     a pass or an assertion failure.
-  - Final full isolated `npm run test:e2e` -> authoritative `test-results/e2e-verdict.json` reports 64/64 PASS,
+  - Intermediate full isolated `npm run test:e2e` -> authoritative `test-results/e2e-verdict.json` reports 64/64 PASS,
     zero failed/flaky/bad/quarantined-blocking in 7.5 minutes. The ephemeral 3100/3101 stack stopped and both ports
     were clear afterward; live 3000/3001 and the user workspace were not used.
   - `npm run build` -> PASS; Vite 1,818 modules and bundled server completed.
   - `graphify update .` -> PASS; 3,746 nodes / 8,843 edges / 176 communities. Final precommit, diff/staged inspection
     and exact commit/push evidence are recorded in the session handoff at this checkpoint.
+  - B116 final current-source full E2E -> 94/94 PASS with zero failed/flaky/bad/quarantined-blocking results after
+    every Auto-Apply, Pause/Resume, draft migration and restore correction through fresh-eyes pass 28.
 - Negative/rollback result: contract collision, timeout/abort/backoff reset, hidden/offline pause/resume,
   unsubscribe abort, subscriber callback isolation, capped backoff/recovery, stale identity refusal, late-token
   non-persistence, secret omission and accumulated slowdown pass the registered deterministic oracles. Browser
   negatives prove held A-workspace/log/cue evidence cannot cross to B, prior success is cleared before fresh truth,
   OAuth cancel cannot re-arm, and resumed health returns through Checking before Connected.
 - Visual/live result when applicable: mocked rendered LIVE badges and cleanup are green. Actual running-game LIVE
-  experience remains B114 and is not claimed. The combined artifact is now packaged, byte-inspected, installed and
-  visibly renders `forge.capability.v1`, honest Checking-to-Connected readiness, distinct client authority and Live
-  State. The installed Bridge Close interaction nevertheless reproduced multi-minute Antigravity `CodeWindow`
-  unresponsiveness in two windows. Exact evidence is in
-  `docs/plans/2026-08-01-b115-r13-installed-gate.md` and
-  `vscode-extension/evidence/2026-08-01-b115-r13-installed/`.
+  experience remains B114 and is not claimed. Attempt 1 reproduced multi-minute Antigravity `CodeWindow` stalls and
+  remains preserved in `docs/plans/2026-08-01-b115-r13-installed-gate.md`. B116 then removed unchanged 6.04 MB full-
+  snapshot polling without changing scheduler cancellation, stabilized the dense Canvas rerender boundary, and
+  installed exact inspected bytes. The superseded first B116 artifact completed pointer Bridge close/remount in
+  286/275 ms
+  unprofiled, 434/445 ms under the host profile and 478/484 ms under the isolated Forge-webview profile. The explicit
+  56.758-second trace recorded zero complete events at or above five seconds, a 64.802 ms maximum Forge-attributed
+  complete event, and no new `CodeWindow: detected unresponsive` log. Final attribution is to
+  `x4-forge-studio-0.0.63-b116-r2-20260801-125325.vsix`, SHA-256
+  `C5B46B44FC60AB804B5B8E561C2C41DD1B3DFB466801A5FAC6098361737A8565`, with installed parity 7/7. Its installed
+  profile summary `vscode-extension/evidence/2026-08-01-b116-installed-r2/installed-renderer-profile-summary.json`
+  reports `PASS`: Close took 173 ms, remount reached `Connected` plus all 11 capabilities in 3,031 ms, and no new
+  unresponsive-host log appeared. Raw profiles remain ignored and retained; normal Antigravity was restored. No
+  public publish occurred.
 
 ## REVIEW
 
 - Requirement -> done | partial | missed | deferred | out of scope:
-  - Criteria 1-7 -> done and evidenced by 25/25 scheduler/device oracles, polling E2E 10/10 and full E2E 64/64.
-  - Criterion 8 current rendered states -> browser and full-suite evidence are green; installed contract/readiness is
-    green, but installed-host unsubscribe/close fails with a reproduced renderer stall. Running-game telemetry is
-    separately tracked by B114 and is not claimed by the scheduler unit.
+  - Criteria 1-7 -> done and evidenced by 25/25 scheduler/device oracles, polling E2E 10/10, the intermediate full E2E
+    64/64 and B116's final current-source full E2E 94/94.
+  - Criterion 8 current rendered states -> done. Browser/full-suite evidence, installed contract/readiness and the
+    exact rendered pointer unsubscribe/close/remount gate are green after B116. Running-game telemetry is separately
+    tracked by B114 and is not claimed by the scheduler unit.
   - OAuth/device and corpus bounded workflows -> out of scheduler scope by reconciled contract; source inventory
     confirms they retain their terminal/deadline/cancel ownership.
 - Fresh-eyes findings: review found and forced repairs for render-time callback authority crossing, delayed CueViewer
@@ -208,14 +219,12 @@ Status: PARTIAL
 
 ## CLOSE
 
-- Status: `PARTIAL`. Source, deterministic runtime, isolated browser, full regression, package, installed-byte parity,
-  installed contract/readiness and client-authority evidence are green. Installed Bridge unsubscribe/close is
-  `FAILED`: the real Antigravity renderer stalls for minutes in two windows, so R13 cannot become `VERIFIED`.
-- Remaining risks/deferred work: capture an installed-host CPU profile while reproducing the same close and add a
-  deterministic 1,424-node close fixture before changing scheduler cancellation. Separately prove conditional/head-
-  only workspace polling so unchanged three-second polls do not transfer the current 6.04 MB snapshot. Do not publish
-  without separate release authorization. B111-B114 and R18/R21 remain separate units.
-- Suggested installed-gate checkpoint title: `test(extension): record failed installed capability gate`.
+- Status: `VERIFIED`. One shared scheduler owns all continuous browser reads, and B116 proved truthful polling
+  authority plus the exact packaged/installed Antigravity close/remount boundary.
+- Remaining risks/deferred work: one isolated dense heartbeat outlier reached 5,448.3 ms before its mandatory unchanged
+  retry passed at 4,147.4 ms; retain that exact regression control. Do not publish without separate release
+  authorization. B111-B114 and R18/R21 remain separate units; running-game LIVE experience remains B114.
+- Suggested close title: `perf(workspace): avoid unchanged full-snapshot polling`.
 
 ## AAR
 
@@ -228,6 +237,10 @@ Status: PARTIAL
   exited red; final review rejected a permissive AgentBridge resume assertion before execution; two external
   Discord/Railway commits advanced the base mid-task and required a no-overlap reconciliation. The eventual full
   isolated run passed; the failed/expired attempts remain retained evidence rather than being rewritten as green.
+- Final-close triggers inherited from B116: profile-summary analysis first used unbounded `Math.max(...)` and hit a
+  call-stack error before the corrected analysis passed. The first remount timing was invalid, so it was discarded and
+  the unchanged interaction repeated immediately; the valid result reached `Connected` plus all 11 capabilities in
+  3,031 ms. Neither failed measurement was rewritten as green.
 - Sustain: resource/caller inventory separated continuous subscriptions from bounded workflows; one host-owned
   mutation lane plus parallel read-only reviews found authority defects early; focused failure reproduction made the
   bootstrap cause measurable before repair.
@@ -239,10 +252,10 @@ Status: PARTIAL
 - Improve tools: the full wrapper buffers all output and produces its receipt only after child close, so an observer
   timeout loses both progress and structured truth while leaving webServer children. Add a wrapper-owned overall
   deadline/progress heartbeat and guaranteed child-tree teardown as a separate bounded tool item.
-- Highest-risk evidenced weakness: installed-host interaction can stall despite green source/browser tests and exact
-  installed bytes. The active 6.04 MB workspace is also fetched and parsed every three seconds while unchanged; this
-  is proven allocation pressure but not yet a proven four-minute-stall cause. The next unit must profile first and
-  optimize only against an explicit conditional-fetch contract.
+- Highest-risk evidenced weakness at final close: the dense browser fixture can still approach the five-second
+  heartbeat boundary, so its exact regression gate must remain. B116 removed the proven unchanged 6.04 MB allocation
+  pressure and the installed renderer no longer reproduced the stall, but that correlation is not a claim that one
+  Forge stack alone caused every prior four-minute Antigravity stall.
 - Project lesson banked here: authority-changing polling must clear old presentation before awaiting the new request;
   cancellation must cross the browser/server boundary and gate credential persistence at the final commit point.
   External AAR ledgers were not mutated under this repository-only task boundary.

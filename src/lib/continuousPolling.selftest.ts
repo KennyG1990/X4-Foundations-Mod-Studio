@@ -4,6 +4,9 @@
  */
 
 import { ContinuousPollingScheduler, PollingIdentityGate, type PollingEnvironment } from './continuousPolling';
+import { WorkspacePollingClient } from './workspacePolling';
+import { workspaceContentHash, workspaceSnapshotHash } from './workspaceIdentity';
+import { sanitizeWorkspace, type ModWorkspace } from '../types';
 
 interface FakeTimer { at: number; callback: () => void }
 
@@ -246,6 +249,236 @@ export async function runContinuousPollingSelftest(): Promise<{
     await flushPromises();
     check('late completion after unsubscribe invokes no callback', results === 0);
     scheduler.dispose();
+  }
+
+  // B116: summary-first workspace reads transfer a full snapshot only for an
+  // unknown/changed content head, and never advance their cache on failure.
+  {
+    const workspaceId = 'ws_aaaaaaaaaaaaaaaaaaaaaaaa';
+    const otherWorkspaceId = 'ws_bbbbbbbbbbbbbbbbbbbbbbbb';
+    const base = sanitizeWorkspace({ id: 'polling', name: 'Polling Base', nodes: [], links: [], uiWidgets: [] });
+    const changed = sanitizeWorkspace({ ...base, name: 'Polling Changed' });
+    const changedAgain = sanitizeWorkspace({ ...base, name: 'Polling Changed Again' });
+    const baseHash = workspaceContentHash(base);
+    const changedHash = workspaceContentHash(changed);
+    const changedAgainHash = workspaceContentHash(changedAgain);
+    const baseSnapshotHash = workspaceSnapshotHash(base);
+    const changedSnapshotHash = workspaceSnapshotHash(changed);
+    const changedAgainSnapshotHash = workspaceSnapshotHash(changedAgain);
+    let authority = workspaceId;
+    let summary: Record<string, unknown> = { workspaceId, version: 1, workspaceHash: baseHash, snapshotHash: baseSnapshotHash };
+    let full: Record<string, unknown> = { workspaceId, version: 1, workspaceHash: baseHash, snapshotHash: baseSnapshotHash, workspace: base };
+    let summaryCalls = 0;
+    let fullCalls = 0;
+    let failFull = false;
+    const fetcher = async (input: RequestInfo | URL): Promise<Response> => {
+      const pathname = new URL(String(input), 'http://fixture').pathname;
+      if (pathname === '/api/agent/workspaces') {
+        summaryCalls += 1;
+        return new Response(JSON.stringify({ workspaces: [summary] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (pathname === '/api/agent/workspace') {
+        fullCalls += 1;
+        if (failFull) return new Response(JSON.stringify({ error: 'fixture full read failed' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify(full), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({ error: 'unexpected route' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+    };
+    const client = new WorkspacePollingClient(fetcher, () => authority);
+    let primeMismatch = '';
+    try { client.prime({ workspaceId, version: 1, workspaceHash: baseHash, snapshotHash: baseSnapshotHash, workspace: changed }); }
+    catch (error) { primeMismatch = error instanceof Error ? error.message : String(error); }
+    check('bootstrap prime rejects a hash-mismatched snapshot', /hash-mismatched snapshot/.test(primeMismatch));
+    client.prime({ workspaceId, version: 1, workspaceHash: baseHash, snapshotHash: baseSnapshotHash, workspace: base });
+    const signal = new AbortController().signal;
+
+    const unchanged = await client.poll(workspaceId, signal);
+    check('workspace summary hit returns no unchanged full snapshot', summaryCalls === 1 && fullCalls === 0 && !unchanged.workspace);
+
+    summary = { workspaceId, version: 2, workspaceHash: baseHash, snapshotHash: baseSnapshotHash };
+    const versionOnly = await client.poll(workspaceId, signal);
+    check('version-only same-hash change remains head-only', fullCalls === 0 && versionOnly.version === 2 && !versionOnly.workspace);
+
+    summary = { workspaceId, version: 3, workspaceHash: changedHash, snapshotHash: changedSnapshotHash };
+    full = { workspaceId, version: 3, workspaceHash: changedHash, snapshotHash: changedSnapshotHash, workspace: changed };
+    const fetched = await client.poll(workspaceId, signal);
+    await client.poll(workspaceId, signal);
+    check('one changed head causes exactly one validated full fetch', fullCalls === 1 && fetched.workspace?.name === changed.name);
+
+    summary = { workspaceId, version: 4, workspaceHash: changedAgainHash, snapshotHash: changedAgainSnapshotHash };
+    full = { workspaceId, version: 2, workspaceHash: baseHash, snapshotHash: baseSnapshotHash, workspace: base };
+    let older = '';
+    try { await client.poll(workspaceId, signal); } catch (error) { older = error instanceof Error ? error.message : String(error); }
+    check('full response older than its preceding summary is rejected', /older than the selected summary/.test(older) && client.cachedHead(workspaceId)?.workspaceHash === changedHash);
+
+    full = { workspaceId, version: 4, workspaceHash: changedHash, snapshotHash: changedSnapshotHash, workspace: changed };
+    let equalVersionMismatch = '';
+    try { await client.poll(workspaceId, signal); } catch (error) { equalVersionMismatch = error instanceof Error ? error.message : String(error); }
+    check('equal-version full response must match the preceding summary head', /older than the selected summary/.test(equalVersionMismatch) && client.cachedHead(workspaceId)?.workspaceHash === changedHash);
+
+    full = { workspaceId, version: 4, workspaceHash: changedAgainHash, snapshotHash: changedAgainSnapshotHash, workspace: changed };
+    let contentMismatch = '';
+    try { await client.poll(workspaceId, signal); } catch (error) { contentMismatch = error instanceof Error ? error.message : String(error); }
+    check('full content/hash mismatch is rejected without cache advance', /hash mismatch/.test(contentMismatch) && client.cachedHead(workspaceId)?.workspaceHash === changedHash);
+
+    full = { workspaceId, version: 4, workspaceHash: changedAgainHash, snapshotHash: changedAgainSnapshotHash, workspace: changedAgain };
+    failFull = true;
+    let failure = '';
+    try { await client.poll(workspaceId, signal); } catch (error) { failure = error instanceof Error ? error.message : String(error); }
+    check('failed full fetch does not poison the last green head', failure === 'fixture full read failed' && client.cachedHead(workspaceId)?.workspaceHash === changedHash);
+    failFull = false;
+    const callsBeforeRetry = fullCalls;
+    const retried = await client.poll(workspaceId, signal);
+    check('failed full fetch retries and commits only a validated result', fullCalls === callsBeforeRetry + 1 && retried.workspace?.name === changedAgain.name && client.cachedHead(workspaceId)?.workspaceHash === changedAgainHash);
+
+    summary = { workspaceId, version: 5, workspaceHash: baseHash, snapshotHash: baseSnapshotHash };
+    full = { workspaceId: otherWorkspaceId, version: 5, workspaceHash: baseHash, snapshotHash: baseSnapshotHash, workspace: base };
+    let mismatch = '';
+    try { await client.poll(workspaceId, signal); } catch (error) { mismatch = error instanceof Error ? error.message : String(error); }
+    check('mismatched full workspace authority is rejected without cache advance', /did not match selected workspace/.test(mismatch) && client.cachedHead(workspaceId)?.workspaceHash === changedAgainHash);
+
+    summary = { workspaceId: otherWorkspaceId, version: 1, workspaceHash: baseHash, snapshotHash: baseSnapshotHash };
+    let missing = '';
+    try { await client.poll(workspaceId, signal); } catch (error) { missing = error instanceof Error ? error.message : String(error); }
+    check('summary omission fails closed', /omitted selected workspace/.test(missing));
+
+    summary = { workspaceId, version: 'broken', workspaceHash: '', snapshotHash: '' };
+    let malformed = '';
+    try { await client.poll(workspaceId, signal); } catch (error) { malformed = error instanceof Error ? error.message : String(error); }
+    check('malformed selected summary fails closed', /omitted selected workspace/.test(malformed));
+
+    const aborted = new AbortController();
+    aborted.abort();
+    const callsBeforeAbort = summaryCalls + fullCalls;
+    let abortName = '';
+    try { await client.poll(workspaceId, aborted.signal); } catch (error) { abortName = error instanceof Error ? error.name : ''; }
+    check('pre-aborted workspace poll performs no request', abortName === 'AbortError' && summaryCalls + fullCalls === callsBeforeAbort);
+
+    summary = { workspaceId, version: 6, workspaceHash: baseHash, snapshotHash: baseSnapshotHash };
+    authority = otherWorkspaceId;
+    const fullBeforeAuthorityChange = fullCalls;
+    let staleName = '';
+    try { await client.poll(workspaceId, signal); } catch (error) { staleName = error instanceof Error ? error.name : ''; }
+    check('changed authority blocks the full read before transfer', staleName === 'AbortError' && fullCalls === fullBeforeAuthorityChange);
+  }
+
+  // A polling digest must cover persisted fields that the legacy registry/CAS head
+  // intentionally omits. Each mutation below keeps the CAS hash stable but must cause
+  // exactly one full fetch, followed by summary-only polling.
+  {
+    const workspaceId = 'ws_121212121212121212121212';
+    const base = sanitizeWorkspace({
+      id: 'snapshot-base',
+      name: 'Snapshot Matrix',
+      nodes: [],
+      links: [],
+      uiWidgets: [],
+      uiTheme: { backgroundColor: '#111111', borderColor: '#222222', accentColor: '#333333', opacity: 0.9, showIcons: true },
+      templates: [{ id: 'template-base', type: 'action', xmlTag: 'debug_text', properties: { text: 'base' } }],
+      mdScriptName: 'SnapshotBase',
+      sourceFolder: 'C:/mods/snapshot-base',
+      contentId: 'snapshot_base',
+      mdOriginal: { path: 'md/snapshot_base.xml', content: '<mdscript name="SnapshotBase" />' },
+      contentOriginal: '<content id="snapshot_base" />',
+    });
+    const mutations: Array<[string, ModWorkspace]> = [
+      ['workspace id', sanitizeWorkspace({ ...base, id: 'snapshot-authoritative-id' })],
+      ['UI theme', sanitizeWorkspace({ ...base, uiTheme: { ...base.uiTheme, accentColor: '#abcdef' } })],
+      ['templates', sanitizeWorkspace({ ...base, templates: [{ ...base.templates![0], id: 'template-changed' }] })],
+      ['MD script name', sanitizeWorkspace({ ...base, mdScriptName: 'SnapshotChanged' })],
+      ['source folder', sanitizeWorkspace({ ...base, sourceFolder: 'D:/mods/snapshot-changed' })],
+      ['content ID', sanitizeWorkspace({ ...base, contentId: 'snapshot_changed' })],
+      ['MD original', sanitizeWorkspace({ ...base, mdOriginal: { ...base.mdOriginal!, content: '<mdscript name="SnapshotChanged" />' } })],
+      ['content original', sanitizeWorkspace({ ...base, contentOriginal: '<content id="snapshot_changed" />' })],
+    ];
+    for (const [label, changed] of mutations) {
+      const baseWorkspaceHash = workspaceContentHash(base);
+      const changedWorkspaceHash = workspaceContentHash(changed);
+      const baseSnapshotHash = workspaceSnapshotHash(base);
+      const changedSnapshotHash = workspaceSnapshotHash(changed);
+      let fullCalls = 0;
+      const fetcher = async (input: RequestInfo | URL): Promise<Response> => {
+        const pathname = new URL(String(input), 'http://fixture').pathname;
+        if (pathname === '/api/agent/workspaces') {
+          return new Response(JSON.stringify({ workspaces: [{
+            workspaceId,
+            version: 2,
+            workspaceHash: changedWorkspaceHash,
+            snapshotHash: changedSnapshotHash,
+          }] }), { status: 200 });
+        }
+        if (pathname === '/api/agent/workspace') {
+          fullCalls += 1;
+          return new Response(JSON.stringify({
+            workspaceId,
+            version: 2,
+            workspaceHash: changedWorkspaceHash,
+            snapshotHash: changedSnapshotHash,
+            workspace: changed,
+          }), { status: 200 });
+        }
+        return new Response('{}', { status: 404 });
+      };
+      const client = new WorkspacePollingClient(fetcher, () => workspaceId);
+      client.prime({
+        workspaceId,
+        version: 1,
+        workspaceHash: baseWorkspaceHash,
+        snapshotHash: baseSnapshotHash,
+        workspace: base,
+      });
+      const first = await client.poll(workspaceId, new AbortController().signal);
+      await client.poll(workspaceId, new AbortController().signal);
+      check(
+        `${label} snapshot mutation causes exactly one full fetch`,
+        baseWorkspaceHash === changedWorkspaceHash
+          && baseSnapshotHash !== changedSnapshotHash
+          && fullCalls === 1
+          && first.workspace !== undefined,
+      );
+    }
+  }
+
+  // Authority can change while the full body is in flight. The late response must
+  // neither advance the polling cache nor become eligible for subscriber delivery.
+  {
+    const workspaceId = 'ws_cccccccccccccccccccccccc';
+    const otherWorkspaceId = 'ws_dddddddddddddddddddddddd';
+    const base = sanitizeWorkspace({ id: 'race-base', name: 'Race Base', nodes: [], links: [], uiWidgets: [] });
+    const changed = sanitizeWorkspace({ ...base, name: 'Race Changed' });
+    const baseHash = workspaceContentHash(base);
+    const changedHash = workspaceContentHash(changed);
+    const baseSnapshotHash = workspaceSnapshotHash(base);
+    const changedSnapshotHash = workspaceSnapshotHash(changed);
+    let authority = workspaceId;
+    const fullStarted = deferred<void>();
+    const heldFull = deferred<Response>();
+    const fetcher = async (input: RequestInfo | URL): Promise<Response> => {
+      const pathname = new URL(String(input), 'http://fixture').pathname;
+      if (pathname === '/api/agent/workspaces') {
+        return new Response(JSON.stringify({ workspaces: [{ workspaceId, version: 2, workspaceHash: changedHash, snapshotHash: changedSnapshotHash }] }), { status: 200 });
+      }
+      if (pathname === '/api/agent/workspace') {
+        fullStarted.resolve(undefined);
+        return heldFull.promise;
+      }
+      return new Response('{}', { status: 404 });
+    };
+    const client = new WorkspacePollingClient(fetcher, () => authority);
+    client.prime({ workspaceId, version: 1, workspaceHash: baseHash, snapshotHash: baseSnapshotHash, workspace: base });
+    const running = client.poll(workspaceId, new AbortController().signal);
+    await fullStarted.promise;
+    authority = otherWorkspaceId;
+    heldFull.resolve(new Response(JSON.stringify({
+      workspaceId,
+      version: 2,
+      workspaceHash: changedHash,
+      snapshotHash: changedSnapshotHash,
+      workspace: changed,
+    }), { status: 200 }));
+    let staleName = '';
+    try { await running; } catch (error) { staleName = error instanceof Error ? error.name : ''; }
+    check('authority change during full transfer rejects late result and cache advance', staleName === 'AbortError' && client.cachedHead(workspaceId)?.workspaceHash === baseHash);
   }
 
   const passed = checks.filter(item => item.pass).length;

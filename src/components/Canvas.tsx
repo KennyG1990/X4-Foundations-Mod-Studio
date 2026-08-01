@@ -125,7 +125,7 @@ interface CanvasProps {
   diagnosticSource?: DiagnosticSource;
 }
 
-export default function Canvas({
+function Canvas({
   workspace,
   setWorkspace,
   saveCheckpoint,
@@ -2907,3 +2907,10 @@ export default function Canvas({
     </div>
   );
 }
+
+// B116: shell-only state such as opening/closing Agent Bridge must not traverse a
+// dense canvas whose data and interaction props are unchanged. App stabilizes its
+// callback props; React.memo makes that ownership boundary explicit.
+const MemoizedCanvas = React.memo(Canvas);
+MemoizedCanvas.displayName = 'Canvas';
+export default MemoizedCanvas;

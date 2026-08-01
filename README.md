@@ -224,7 +224,7 @@ Important routes include:
 - `POST /api/agent/deploy`
 - `POST /api/agent/project/validate/check` (never advances the validation baseline)
 - `POST /api/agent/generate/preview` (never applies the generated workspace)
-- `POST /api/agent/generate` (legacy apply-capable route)
+- `POST /api/agent/generate` (legacy apply-capable route; apply requires both read hashes and returns both post-write hashes)
 - Diagnostic and selftest routes under `/api/agent/*`
 
 The in-app **AGENT API** panel documents the routes, shows live state, and exposes surgical workspace operations. It is focused on real agent operations, not demo-only test runs.
@@ -479,6 +479,16 @@ $headers = @{
 }
 Invoke-RestMethod -Uri "http://localhost:3000/api/agent/workspace" -Headers $headers
 ```
+
+`workspace.read@2` returns two change identities. `workspaceHash` is the durable legacy CAS head used by
+`expectedHead`; `snapshotHash` also covers authoritative editor-only and source-fidelity fields. Safe writers should
+send both values back as `expectedHead` and `expectedSnapshotHash`. A mismatch returns `409` without overwriting;
+`force:true` remains the explicit destructive override with recovery evidence.
+
+The legacy applying `POST /api/agent/generate` follows the same paired rule. Applying calls require both hashes,
+reject an already-stale request before provider work, complete provider/validation work before the single mutation
+boundary, recheck there, and return the authoritative post-write `workspaceHash` and `snapshotHash`. A timed-out or
+disconnected request cannot commit. The canonical `/api/agent/generate/preview` route remains non-applying.
 
 For AI generation from an external script, include your own provider key:
 

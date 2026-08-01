@@ -14,7 +14,9 @@
 >   bypass workspace-guard" or references those files is STALE. The live dev workspace is untouched by
 >   construction; no machine-state ask is needed to run e2e. `test:e2e` (12 specs) is THE gate.
 > - **The B2 mutable-singleton sync bug (§19 "known bug") is FIXED** (B2s3: disk persistence + legacy-write
->   gate + park-on-switch). Workspace state survives restarts; a parked-state switcher exists (B12).
+>   gate, since superseded by immutable workspace identities and tab-local selection). Workspace state survives
+>   restarts; legacy "parked" routes are Studio-session-only list/lookup compatibility surfaces, not a
+>   process-global switcher.
 > - **The BACKLOG is Ken-gated-only** as of 2026-07-13: every remaining item is a commit, a decision
 >   (B8/B23/XPath/P-C-D), a write-gated deploy (B24s2), an in-game check, or an optional eyeball. There is
 >   no agent-buildable feature work queued.
@@ -201,8 +203,8 @@ tracked release evidence. **Do not casually modify:** `server.ts` sync/CAS regio
   addresses). Client keeps the canvas in React state + localStorage
   (`x4_mod_studio_workspace`); server holds the authoritative copy with `workspaceVersion`
   (Date.now()-seeded, restart-proof) + `workspaceContentHash` (FNV-1a, `src/lib/workspaceIdentity.ts`).
-- **Sync (the hardest-won subsystem — ADR-F1):** client edits → 300ms debounce → POST with
-  `expectedHead` (the last server hash it saw) → server compares → mismatch = **409 head_conflict** →
+- **Sync (the hardest-won subsystem — ADR-F1):** client edits → 300ms debounce → POST with paired
+  `expectedHead` + `expectedSnapshotHash` (the last server identities it saw) → server compares → mismatch = **409 conflict** →
   UI renders WRITE CONFLICT card (Adopt server / Keep mine; adoption poll is HELD during conflicts via
   `syncConflictRef`). Separately a 3s poll adopts newer server versions when the client has no local
   edits, and a persistent hash divergence shows the amber "CANVAS ≠ SERVER" badge. [VERIFIED live
@@ -330,8 +332,8 @@ header (token from `.studio-api-token` / injected `window.__STUDIO_API_TOKEN__`;
 (public) states the auth contract. Errors: JSON `{error: string}`.
 
 **Agent API (headless automation — the stable surface):**
-- `GET /api/agent/workspace` → current workspace + `version` + `workspaceHash`.
-- `POST /api/agent/workspace` `{workspace, expectedHead?}` → replace; **409 `head_conflict`** on CAS miss.
+- `GET /api/agent/workspace` → addressed workspace + `version` + `workspaceHash` + `snapshotHash`.
+- `POST /api/agent/workspace` `{workspace, expectedHead?, expectedSnapshotHash?}` → replace; **409** on either stale identity.
 - `POST /api/agent/project/validate` `{files?|fromPath?}` → `{ok, errors, findings, report}` — THE
   legality check (XSD + cross-file + md↔lua + lints).
 - `POST /api/agent/compile`, `/api/agent/deploy`, `/api/agent/package/release` `{bump}` → zip path.
@@ -346,7 +348,7 @@ header (token from `.studio-api-token` / injected `window.__STUDIO_API_TOKEN__`;
   luaparse-gated) — **write-gated: Ken's explicit go required.**
 - **Dev-only:** `POST /api/run_command/job {cmd}` + `GET /api/run_command/job/:id` (§7); sync GET
   variant exists but freezes page fetches — avoid.
-- **AI:** `POST /api/agent/generate` etc. take `x-ai-provider`/`x-ai-model`/`x-ai-reasoning` headers;
+- **AI:** `POST /api/agent/generate` apply requires both workspace hashes, commits only after all provider/validation work, and returns both post-write hashes; AI routes take `x-ai-provider`/`x-ai-model`/`x-ai-reasoning` headers;
   external agents MUST send their own `x-custom-api-key` (server env/stored keys are app-UI-origin-only).
 - `POST /api/ai/keys {provider, key}` (write-only) · `GET /api/ai/keys/status` → booleans.
 

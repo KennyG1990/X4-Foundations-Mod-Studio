@@ -107,7 +107,7 @@ import { registerBulkTransformRoutes } from "./src/server/bulkTransformRoutes";
 import { computeModDrift, fingerprintModFolder, flattenProjectValidation, getSchemaIndex, loadProjectFromDisk, runProjectValidation } from "./src/server/projectValidation";
 import { buildRemediationCapsules, runAgentLoopSelftest, runRepairLoop, type LoopDiagnostic } from "./src/lib/agentLoop";
 import { assessSourceSync, hashFolderFingerprint, runCompileFidelitySelftest } from "./src/lib/compileFidelity";
-import { workspaceContentHash, runWorkspaceIdentitySelftest } from "./src/lib/workspaceIdentity";
+import { workspaceContentHash, workspaceSnapshotHash, runWorkspaceIdentitySelftest } from "./src/lib/workspaceIdentity";
 import { buildWorkspaceConflictPreview, runWorkspaceConflictSelftest } from "./src/lib/workspaceConflict";
 import { DestructiveRecoveryStore, runDestructiveRecoverySelftest, type DeploymentRecoveryRecord } from "./src/lib/destructiveRecovery";
 import { mdStemFingerprint, runMdFileIdentitySelftest } from "./src/lib/mdFileIdentity";
@@ -161,7 +161,7 @@ import { createAgentKeyStore, scopeAllows, runAgentKeysSelftest, AGENT_KEY_TTLS,
 // B86 — agent action ledger: a skimmable record of what agents actually did.
 import {
   ledgerRouteKind, describeAction, lineDelta, unifiedDiff, looksBinary, filterRows, revertibility,
-  compactDiagnostics, MAX_DIFFABLE_BYTES, type LedgerRow, type LedgerKind,
+  compactDiagnostics, normalizeHistoryRecoveryTruth, MAX_DIFFABLE_BYTES, type LedgerRow, type LedgerKind,
 } from "./src/lib/agentHistory";
 import { AgentHistoryStore } from "./src/lib/agentHistoryStore";
 import { runAgentHistorySelftest } from "./src/lib/agentHistory.selftest";
@@ -356,13 +356,21 @@ app.use(apiFailureEnvelopeMiddleware);
 const API_RESPONSE_DEADLINE_MS = responseDeadlineFromEnv(process.env.FORGE_RESPONSE_TIMEOUT_MS);
 const TIMEOUT_DRILL_DELAY_MS = Number(process.env.FORGE_TIMEOUT_DRILL_MS || 0);
 const TIMEOUT_DRILL_RESPONSE_MS = responseDeadlineFromEnv(process.env.FORGE_TIMEOUT_DRILL_RESPONSE_MS);
+const ROUTE_TEST_RESPONSE_DEADLINE_MS = responseDeadlineFromEnv(process.env.FORGE_ROUTE_TEST_RESPONSE_TIMEOUT_MS);
+type DeadlineAwareRequest = express.Request & { __forgeResponseDeadlineExceeded?: boolean };
 function apiResponseDeadlineMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
   if (!req.path.startsWith('/api')) return next();
+  const markUnavailable = () => { (req as DeadlineAwareRequest).__forgeResponseDeadlineExceeded = true; };
+  req.once('aborted', markUnavailable);
+  res.once('close', () => { if (!res.writableEnded) markUnavailable(); });
   const timeoutMs = req.path === '/api/agent/timeout-drill' && TIMEOUT_DRILL_DELAY_MS > 0
     ? TIMEOUT_DRILL_RESPONSE_MS
-    : API_RESPONSE_DEADLINE_MS;
+    : process.env.NODE_ENV !== 'production' && process.env.FORGE_ROUTE_TEST_MODE === '1' && req.headers['x-forge-route-test-deadline'] === '1'
+      ? ROUTE_TEST_RESPONSE_DEADLINE_MS
+      : API_RESPONSE_DEADLINE_MS;
   res.setTimeout(timeoutMs, () => {
     if (res.writableEnded || res.destroyed) return;
+    markUnavailable();
     if (res.headersSent) return res.destroy();
     return res.status(504).json({
       success: false,
@@ -512,6 +520,16 @@ const agentKeyStore = createAgentKeyStore({ file: AGENT_KEYS_FILE });
 let workspaceRegistry: WorkspaceRegistry;
 
 type RequestActor = { kind: 'agent' | 'studio'; label: string; scope?: AgentKeyScope; workspaceId?: string };
+
+function requireStudioActor(req: express.Request, res: express.Response): boolean {
+  const actor = (req as any).__actor as RequestActor | undefined;
+  if (actor?.kind === 'studio') return true;
+  res.status(403).json({
+    code: 'STUDIO_SESSION_REQUIRED',
+    error: 'This cross-workspace compatibility route is available only to the Studio session.',
+  });
+  return false;
+}
 
 function requestedWorkspaceIdentity(req: express.Request): { workspaceId: string; clientId: string; conflict?: string } {
   const candidates = [req.headers['x-workspace-id'], req.query?.workspaceId, req.body?.workspaceId]
@@ -686,11 +704,13 @@ function ledgerMiddleware(req: express.Request, res: express.Response, next: exp
   // precisely the uselessness this panel exists to avoid. Hash the workspace before and after
   // and drop the row when nothing actually changed.
   let workspaceHashBefore = '';
+  let workspaceSnapshotHashBefore = '';
   const ledgerWorkspace = (req as any).__workspaceRecord as WorkspaceRecord | undefined;
   if (kind === 'workspace' || kind === 'generate') {
     try {
       nodesBefore = new Map(((ledgerWorkspace?.workspace as any)?.nodes || []).map((n: any) => [String(n.id), JSON.stringify(n)]));
       workspaceHashBefore = ledgerWorkspace ? workspaceHash(ledgerWorkspace) : '';
+      workspaceSnapshotHashBefore = ledgerWorkspace ? workspaceRegistry.snapshotHash(ledgerWorkspace) : '';
     } catch { nodesBefore = null; }
   }
 
@@ -844,11 +864,13 @@ function ledgerMiddleware(req: express.Request, res: express.Response, next: exp
       // A workspace sync that changed nothing is not an action worth a row.
       if (kind === 'workspace' && workspaceHashBefore) {
         let after = '';
+        let afterSnapshot = '';
         try {
           const latest = ledgerWorkspace ? workspaceRegistry.lookup(ledgerWorkspace.workspaceId) : null;
           after = latest?.ok ? workspaceHash(latest.record) : '';
-        } catch { after = ''; }
-        if (after && after === workspaceHashBefore) return;
+          afterSnapshot = latest?.ok ? workspaceRegistry.snapshotHash(latest.record) : '';
+        } catch { after = ''; afterSnapshot = ''; }
+        if (after && afterSnapshot && after === workspaceHashBefore && afterSnapshot === workspaceSnapshotHashBefore) return;
       }
 
       const described = describeAction({
@@ -858,7 +880,13 @@ function ledgerMiddleware(req: express.Request, res: express.Response, next: exp
         nodes: touchedNodes,
       });
       const recovery = captured?.recovery && typeof captured.recovery.id === 'string'
-        ? captured.recovery as { id: string; kind?: 'workspace' | 'deploy'; expectedCurrentHash?: string; expiresAt?: string }
+        ? captured.recovery as {
+          id: string;
+          kind?: 'workspace' | 'deploy';
+          expectedCurrentHash?: string;
+          expectedCurrentSnapshotHash?: string;
+          expiresAt?: string;
+        }
         : undefined;
       const rule = revertibility(kind, described.outcome, !!beforeBlob, !!recovery);
       const row: LedgerRow = {
@@ -884,6 +912,7 @@ function ledgerMiddleware(req: express.Request, res: express.Response, next: exp
           recoveryId: recovery.id,
           recoveryKind: recovery.kind,
           recoveryExpectedHash: recovery.expectedCurrentHash,
+          recoveryExpectedSnapshotHash: recovery.expectedCurrentSnapshotHash,
           recoveryExpiresAt: recovery.expiresAt,
         } : {}),
         ...(touchedNodes && touchedNodes.length ? { nodes: touchedNodes } : {}),
@@ -2637,6 +2666,10 @@ const aiSpendMeter = createSpendMeter(
 // responds to one exact harness prompt when the harness explicitly enables test mode.
 // This lets the real /generate/preview adapter prove apply:false without network spend.
 const ROUTE_TEST_AI_PROMPT = '__FORGE_ROUTE_TEST_PREVIEW__';
+const ROUTE_TEST_AI_DELAY_PROMPTS = new Set(['__FORGE_ROUTE_TEST_HELD__', '__FORGE_ROUTE_TEST_DEADLINE__']);
+const routeTestAiDelayed = new Set<string>();
+const ROUTE_TEST_AI_DELAY_MS = Math.max(0, Number(process.env.FORGE_ROUTE_TEST_AI_DELAY_MS || 0));
+const ROUTE_TEST_AI_MARKER_DIR = process.env.FORGE_ROUTE_TEST_AI_MARKER_DIR || '';
 const routeTestAiResponses: string[] = (() => {
   if (process.env.NODE_ENV === 'production' || process.env.FORGE_ROUTE_TEST_MODE !== '1') return [];
   try {
@@ -2654,7 +2687,22 @@ async function callMultiProviderAI(
   responseFormat: "json" | "text" = "text",
   jsonSchema?: any
 ): Promise<string> {
-  if (req.body?.prompt === ROUTE_TEST_AI_PROMPT && routeTestAiResponses.length) {
+  if ((req as DeadlineAwareRequest).__forgeResponseDeadlineExceeded) {
+    throw new Error('Request response deadline or caller connection ended; additional provider work refused.');
+  }
+  const routeTestPrompt = String(req.body?.prompt || '');
+  if ((routeTestPrompt === ROUTE_TEST_AI_PROMPT || ROUTE_TEST_AI_DELAY_PROMPTS.has(routeTestPrompt)) && routeTestAiResponses.length) {
+    if (ROUTE_TEST_AI_DELAY_PROMPTS.has(routeTestPrompt) && !routeTestAiDelayed.has(routeTestPrompt)) {
+      routeTestAiDelayed.add(routeTestPrompt);
+      if (ROUTE_TEST_AI_MARKER_DIR) {
+        fs.mkdirSync(ROUTE_TEST_AI_MARKER_DIR, { recursive: true });
+        fs.writeFileSync(path.join(ROUTE_TEST_AI_MARKER_DIR, `${routeTestPrompt}.held`), new Date().toISOString());
+      }
+      if (ROUTE_TEST_AI_DELAY_MS > 0) await new Promise(resolve => setTimeout(resolve, ROUTE_TEST_AI_DELAY_MS));
+      if ((req as DeadlineAwareRequest).__forgeResponseDeadlineExceeded) {
+        throw new Error('Request response deadline or caller connection ended during provider work; result discarded.');
+      }
+    }
     return routeTestAiResponses.shift()!;
   }
   const provider = (req.headers["x-ai-provider"] as string) || "gemini";
@@ -3339,7 +3387,7 @@ app.get("/api/agent/schema", (req, res) => {
         method: "GET",
         path: "/api/agent/workspace",
         auth: true,
-        purpose: "Read the active studio workspace plus version counter."
+        purpose: "Read the explicitly addressed studio workspace plus version, legacy content CAS workspaceHash, and complete authoritative snapshotHash."
       },
       {
         method: "GET",
@@ -3389,13 +3437,13 @@ app.get("/api/agent/schema", (req, res) => {
         path: "/api/agent/bulk-transform/preview",
         auth: true,
         body: { rule: { pathPrefix: "assets/units/size_xl/macros", selector: "/macros/macro/properties/hull/@max", operation: "multiply", operand: 1.5, rounding: "ceil", roundingIncrement: 100, maxFiles: 250 } },
-        purpose: "Read-only mandatory dry-run. Resolves effective base+DLC XML, transforms canonical numeric matches, simulates every proposed diff, reports conflicts/caps, and returns a guarded planHash plus workspaceHash."
+        purpose: "Read-only mandatory dry-run. Resolves effective base+DLC XML, transforms canonical numeric matches, simulates every proposed diff, reports conflicts/caps, and returns a guarded planHash plus workspaceHash and snapshotHash."
       },
       {
         method: "POST",
         path: "/api/agent/bulk-transform/apply",
         auth: true,
-        body: { rule: "the exact preview rule", expectedPlanHash: "planHash from preview", expectedHead: "workspaceHash from preview" },
+        body: { rule: "the exact preview rule", expectedPlanHash: "planHash from preview", expectedHead: "workspaceHash from preview", expectedSnapshotHash: "snapshotHash from preview" },
         purpose: "Recompute the preview, reject corpus/workspace drift or any failed row, then atomically merge generated patch blocks into workspace.xmlPatches. Never writes the corpus or game directory."
       },
       {
@@ -3426,30 +3474,30 @@ app.get("/api/agent/schema", (req, res) => {
         method: "POST",
         path: "/api/agent/workspace",
         auth: true,
-        body: { workspace: "ModWorkspace", expectedHead: "workspaceHash from GET (content CAS; 409 head_conflict on mismatch)", expectedVersion: "optional number (optimistic concurrency; 409 on mismatch)", force: "optional boolean — deliberate last-writer-wins overwrite", dryRun: "optional boolean (validate + return diagnostics without applying)" },
-        purpose: "Replace the active studio workspace and bump the version if changed. Writes with NEITHER expectedHead NOR expectedVersion NOR force are rejected 409 legacy_write_rejected (GET first, send its workspaceHash as expectedHead). Loading a workspace with a different name PARKS the previous state (see /workspace/parked).",
-        example: "POST {\"workspace\":{...},\"expectedHead\":\"ab12...\"} -> 409 {error:'head_conflict'} if stale, else 200 {applied,version,workspaceHash,diagnosticsSummary}"
+        body: { workspace: "ModWorkspace", expectedHead: "workspaceHash from GET (content CAS; 409 head_conflict on mismatch)", expectedSnapshotHash: "snapshotHash from GET (complete state CAS; 409 snapshot_conflict on mismatch)", expectedVersion: "optional number (optimistic concurrency; 409 on mismatch)", force: "optional boolean — deliberate last-writer-wins overwrite", dryRun: "optional boolean (validate + return diagnostics without applying)" },
+        purpose: "Replace the addressed studio workspace and bump the version if changed. Safe writers send the paired expectedHead and expectedSnapshotHash from one GET. Writes with no hash/version precondition and no force are rejected 409 legacy_write_rejected. The immutable workspace binding does not change when its display name changes.",
+        example: "POST {\"workspace\":{...},\"expectedHead\":\"ab12...\",\"expectedSnapshotHash\":\"cd34...\"} -> 409 on either stale identity, else 200 {applied,version,workspaceHash,snapshotHash,diagnosticsSummary}"
       },
       {
         method: "POST",
         path: "/api/agent/workspace/merge",
         auth: true,
-        body: { changes: "partial top-level ModWorkspace fields to merge (JSON-merge-patch)", expectedHead: "workspaceHash from GET (content CAS)", expectedVersion: "optional number", force: "optional boolean", dryRun: "optional boolean" },
-        purpose: "Granular edit: merge only the provided top-level fields into the active workspace. Same CAS/force rules as POST /api/agent/workspace.",
-        example: "POST {\"changes\":{\"version\":\"2.0.0\"},\"expectedHead\":\"ab12...\"}"
+        body: { changes: "partial top-level ModWorkspace fields to merge (JSON-merge-patch)", expectedHead: "workspaceHash from GET (content CAS)", expectedSnapshotHash: "snapshotHash from GET (complete state CAS)", expectedVersion: "optional number", force: "optional boolean", dryRun: "optional boolean" },
+        purpose: "Granular edit: merge only the provided top-level fields into the addressed workspace. Same CAS/force rules as POST /api/agent/workspace.",
+        example: "POST {\"changes\":{\"version\":\"2.0.0\"},\"expectedHead\":\"ab12...\",\"expectedSnapshotHash\":\"cd34...\"}"
       },
       {
         method: "GET",
         path: "/api/agent/workspace/parked",
         auth: true,
-        purpose: "B2s3: list states parked when a different mod was loaded (park-on-switch keeps prior work instead of destroying it)."
+        purpose: "Studio-session-only legacy compatibility route: list every other persisted workspace record relative to the explicitly addressed workspace. Agent keys are denied because their immutable binding cannot authorize cross-workspace enumeration. It does not change process-global state."
       },
       {
         method: "POST",
         path: "/api/agent/workspace/restore-parked",
         auth: true,
-        body: { name: "workspace name as listed by /workspace/parked" },
-        purpose: "Switch back to a parked state; the current state is parked first, so restores are never destructive."
+        body: { targetWorkspaceId: "immutable workspaceId listed by /workspace/parked" },
+        purpose: "Studio-session-only legacy compatibility route: resolve and return another persisted workspace by immutable ID. Agent keys are denied because their immutable binding cannot authorize cross-workspace reads. The caller must explicitly adopt/rebind the returned workspace; this route does not activate global state."
       },
       {
         method: "GET",
@@ -3603,8 +3651,8 @@ app.get("/api/agent/schema", (req, res) => {
         method: "POST",
         path: "/api/agent/generate",
         auth: true,
-        body: { prompt: "string", currentWorkspace: "optional ModWorkspace", apply: "optional boolean; defaults true", expectedHead: "optional CAS head" },
-        purpose: "Legacy broader generation route. It applies by default; use /api/agent/generate/preview for a capability-constrained non-applying proposal."
+        body: { prompt: "string", currentWorkspace: "optional ModWorkspace", apply: "optional boolean; defaults true", expectedHead: "required workspaceHash when apply is true", expectedSnapshotHash: "required snapshotHash when apply is true" },
+        purpose: "Legacy broader generation route. It applies by default; applying calls require paired identities, complete every provider/validation step before the single commit boundary, recheck both hashes there, and return both post-write hashes. Use /api/agent/generate/preview for a non-applying proposal."
       },
       {
         method: "GET",
@@ -4534,7 +4582,7 @@ app.get("/api/agent/history", (req, res) => {
       outcome: req.query.outcome ? String(req.query.outcome) : undefined,
       file: req.query.file ? String(req.query.file) : undefined,
       limit: req.query.limit ? Number(req.query.limit) : 200,
-    });
+    }).map(normalizeHistoryRecoveryTruth);
     return res.json({
       ok: true,
       workspaceId: record.workspaceId,
@@ -4586,17 +4634,28 @@ app.post("/api/agent/history/:id/revert", (req, res) => {
       if (found.record.kind === 'workspace') {
         if (found.record.workspaceId !== record.workspaceId) return res.status(403).json({ ok: false, code: 'RECOVERY_WORKSPACE_MISMATCH', error: 'Workspace recovery belongs to a different workspace.' });
         const currentHead = workspaceHash(record);
-        if (currentHead !== found.record.expectedCurrentHash) {
+        const currentSnapshotHash = workspaceRegistry.snapshotHash(record);
+        if (!found.record.beforeSnapshotHash || !found.record.expectedCurrentSnapshotHash) {
+          return res.status(409).json({
+            ok: false,
+            code: 'RECOVERY_UNSUPPORTED',
+            error: 'Workspace recovery predates complete snapshot guards and cannot be replayed safely.',
+          });
+        }
+        if (currentHead !== found.record.expectedCurrentHash || currentSnapshotHash !== found.record.expectedCurrentSnapshotHash) {
           return res.status(409).json({
             ok: false,
             code: 'RECOVERY_STALE',
             error: 'Workspace recovery refused because the server changed after the destructive action.',
             expectedCurrentHash: found.record.expectedCurrentHash,
             currentHash: currentHead,
+            expectedCurrentSnapshotHash: found.record.expectedCurrentSnapshotHash,
+            currentSnapshotHash,
           });
         }
         const previousWorkspace = sanitizeWorkspace(found.record.beforeWorkspace);
-        if (workspaceContentHash(previousWorkspace) !== found.record.beforeHash) {
+        if (workspaceContentHash(previousWorkspace) !== found.record.beforeHash
+          || workspaceSnapshotHash(previousWorkspace) !== found.record.beforeSnapshotHash) {
           return res.status(409).json({ ok: false, code: 'RECOVERY_CORRUPT', error: 'Workspace recovery payload does not match its recorded pre-state hash.' });
         }
         (req as any).__revertOf = row.id;
@@ -4625,6 +4684,7 @@ app.post("/api/agent/history/:id/revert", (req, res) => {
           workspace: record.workspace,
           version: record.version,
           workspaceHash: workspaceHash(record),
+          snapshotHash: workspaceRegistry.snapshotHash(record),
         });
       }
       const resolved = resolveXsdConfig();
@@ -4852,7 +4912,14 @@ app.post("/api/fs/restore-snapshot", (req, res) => {
     
     const committed = workspaceRegistry.commit(record.workspaceId, sanitizeWorkspace(parsed.workspace), 'restore-snapshot');
 
-    return res.json({ success: true, workspaceId: committed.workspaceId, workspace: committed.workspace, version: committed.version, workspaceHash: workspaceHash(committed) });
+    return res.json({
+      success: true,
+      workspaceId: committed.workspaceId,
+      workspace: committed.workspace,
+      version: committed.version,
+      workspaceHash: workspaceHash(committed),
+      snapshotHash: workspaceRegistry.snapshotHash(committed),
+    });
   } catch (error) {
     return res.status(500).json({ error: error.message || "Failed to restore snapshot." });
   }
@@ -4981,6 +5048,7 @@ app.get("/api/agent/workspace", (req, res) => {
     // B1: lets the client DETECT canvas↔server divergence instead of trusting the bare
     // version counter (the stale-canvas incident class). Hash both sides post-sanitize.
     workspaceHash: workspaceHash(record),
+    snapshotHash: workspaceRegistry.snapshotHash(record),
     lastUpdated: record.savedAt,
     origin: record.origin,
   });
@@ -5124,7 +5192,7 @@ function summarizeDiagnostics(diags: any[]) {
 function applyWorkspaceMutation(
   record: WorkspaceRecord,
   incoming: any,
-  opts: { expectedVersion?: number; expectedHead?: string; dryRun?: boolean; merge?: boolean; force?: boolean },
+  opts: { expectedVersion?: number; expectedHead?: string; expectedSnapshotHash?: string; dryRun?: boolean; merge?: boolean; force?: boolean },
   registry: WorkspaceRegistry = workspaceRegistry,
   recoveryStore: DestructiveRecoveryStore = destructiveRecoveryStore,
 ): { status: number; body: any } {
@@ -5134,12 +5202,14 @@ function applyWorkspaceMutation(
   const currentWorkspace = sanitizeWorkspace(record.workspace);
   const currentVersion = record.version;
   const currentHead = workspaceHash(record);
+  const currentSnapshotHash = registry.snapshotHash(record);
   // B2 slice 3: ADR-F1's legacy-write deprecation round ENDS here. A write that names
   // neither expectedHead nor expectedVersion is blind last-writer-wins — the exact
   // mechanism of the 2026-07-11 boot-blank clobber. It now requires an explicit
   // `force:true` (a deliberate human/agent choice), except on true first contact
   // (fresh install: nothing persisted, nothing written this run). Dry runs stay open.
   const isLegacyWrite = !(typeof opts.expectedHead === 'string' && opts.expectedHead.length > 0)
+    && !(typeof opts.expectedSnapshotHash === 'string' && opts.expectedSnapshotHash.length > 0)
     && typeof opts.expectedVersion !== 'number';
   const firstContact = registry.isLegacyFirstContact(record.workspaceId);
   if (isLegacyWrite && !opts.force && !opts.dryRun && !firstContact) {
@@ -5147,9 +5217,10 @@ function applyWorkspaceMutation(
       status: 409,
       body: {
         error: 'legacy_write_rejected',
-        message: "Blind write rejected: no expectedHead/expectedVersion supplied. GET /api/agent/workspace first and send its workspaceHash as expectedHead (CAS), or pass force:true to deliberately overwrite (last-writer-wins).",
+        message: "Blind write rejected: no expectedHead/expectedSnapshotHash/expectedVersion supplied. GET /api/agent/workspace first and send its workspaceHash plus snapshotHash as expectedHead and expectedSnapshotHash (paired CAS), or pass force:true to deliberately overwrite (last-writer-wins).",
         workspaceId: record.workspaceId,
         currentHead,
+        currentSnapshotHash,
         currentVersion,
       }
     };
@@ -5171,12 +5242,16 @@ function applyWorkspaceMutation(
   // /api/agent/workspace → workspaceHash). Mismatch = someone else changed the workspace
   // since the writer last read it → explicit 409 with BOTH heads, never a silent
   // last-writer-wins overwrite (the clobber class behind the SPEC-#66 incident).
-  // Version numbers can lie across restarts; content hashes cannot.
-  if (typeof opts.expectedHead === 'string' && opts.expectedHead.length > 0) {
-    if (opts.expectedHead !== currentHead) {
+  // Version numbers can lie across restarts; the paired CAS + snapshot identities
+  // cover deployable content and the remaining authoritative workspace state.
+  const headMismatch = typeof opts.expectedHead === 'string' && opts.expectedHead.length > 0 && opts.expectedHead !== currentHead;
+  const snapshotMismatch = typeof opts.expectedSnapshotHash === 'string' && opts.expectedSnapshotHash.length > 0
+    && opts.expectedSnapshotHash !== currentSnapshotHash;
+  if (headMismatch || snapshotMismatch) {
       let conflictPreview: ReturnType<typeof buildWorkspaceConflictPreview> | undefined;
+      const proposed = sanitizeWorkspace(opts.merge ? { ...currentWorkspace, ...incoming } : incoming);
+      const proposedSnapshotHash = workspaceSnapshotHash(proposed);
       try {
-        const proposed = sanitizeWorkspace(opts.merge ? { ...currentWorkspace, ...incoming } : incoming);
         conflictPreview = buildWorkspaceConflictPreview(
           buildWorkspaceFileManifest(proposed).files,
           buildWorkspaceFileManifest(currentWorkspace).files,
@@ -5185,16 +5260,21 @@ function applyWorkspaceMutation(
       return {
         status: 409,
         body: {
-          error: 'head_conflict',
-          message: `Content conflict: expectedHead ${opts.expectedHead} != current ${currentHead}. The workspace changed since you read it — re-fetch, reconcile, and retry (or omit expectedHead to force last-writer-wins).`,
+          error: headMismatch ? 'head_conflict' : 'snapshot_conflict',
+          message: headMismatch
+            ? `Content conflict: expectedHead ${opts.expectedHead} != current ${currentHead}. The workspace changed since you read it — re-fetch, reconcile, and retry (or pass force:true for a deliberate overwrite).`
+            : `Snapshot conflict: expectedSnapshotHash ${opts.expectedSnapshotHash} != current ${currentSnapshotHash}. A workspace field outside the legacy CAS hash changed since you read it — re-fetch, reconcile, and retry (or pass force:true for a deliberate overwrite).`,
           currentHead,
           expectedHead: opts.expectedHead,
+          currentSnapshotHash,
+          expectedSnapshotHash: opts.expectedSnapshotHash,
           workspaceId: record.workspaceId,
           currentVersion,
           conflict: {
             detectedAt: new Date().toISOString(),
             server: {
               head: currentHead,
+              snapshotHash: currentSnapshotHash,
               version: currentVersion,
               savedAt: record.savedAt,
               origin: record.origin,
@@ -5202,13 +5282,13 @@ function applyWorkspaceMutation(
             },
             local: {
               head: workspaceContentHash(sanitizeWorkspace(opts.merge ? { ...currentWorkspace, ...incoming } : incoming)),
+              snapshotHash: proposedSnapshotHash,
               name: String((opts.merge ? { ...currentWorkspace, ...incoming } : incoming)?.name || 'Untitled'),
             },
             ...(conflictPreview ? { preview: conflictPreview } : { previewUnavailable: 'The file-level comparison could not be compiled.' }),
           },
         }
       };
-    }
   }
   const merged = opts.merge ? { ...currentWorkspace, ...incoming } : incoming;
   const nextWorkspace = sanitizeWorkspace(merged);
@@ -5237,7 +5317,9 @@ function applyWorkspaceMutation(
           workspaceId: record.workspaceId,
           beforeWorkspace: currentWorkspace,
           beforeHash: currentHead,
+          beforeSnapshotHash: currentSnapshotHash,
           expectedCurrentHash: workspaceContentHash(nextWorkspace),
+          expectedCurrentSnapshotHash: workspaceSnapshotHash(nextWorkspace),
           summary: `Restore server workspace before forced overwrite by ${String(nextWorkspace?.name || 'Untitled')}`,
         });
       } catch (error) {
@@ -5254,7 +5336,8 @@ function applyWorkspaceMutation(
         };
       }
     }
-    // B2s3: all real writes go through the chokepoint (persist + park-on-switch).
+    // B2s3/ADR-F5: all real writes go through the immutable registry commit chokepoint;
+    // workspace selection remains tab-local and is never changed by a mutation.
     record = registry.commit(record.workspaceId, nextWorkspace, opts.force ? 'api:forced' : (isLegacyWrite ? 'api:legacy-first-contact' : 'api:cas'));
   }
   return {
@@ -5266,6 +5349,7 @@ function applyWorkspaceMutation(
       version: record.version,
       // B2 slice 2: writers track the post-write head so their NEXT CAS write carries it.
       workspaceHash: workspaceHash(record),
+      snapshotHash: registry.snapshotHash(record),
       diagnosticsSummary: summarizeDiagnostics(diagnostics),
       workspace: record.workspace,
       ...(recovery ? { recovery: {
@@ -5275,6 +5359,7 @@ function applyWorkspaceMutation(
         expiresAt: recovery.expiresAt,
         summary: recovery.summary,
         expectedCurrentHash: recovery.expectedCurrentHash,
+        expectedCurrentSnapshotHash: recovery.expectedCurrentSnapshotHash,
       } } : {}),
     }
   };
@@ -5282,16 +5367,16 @@ function applyWorkspaceMutation(
 
 /**
  * POST /api/agent/workspace
- * Replace the active workspace. Supports optimistic concurrency via
- * `expectedVersion` (409 on mismatch) and `dryRun` (validate without applying).
+ * Replace the addressed workspace. Supports paired optimistic concurrency via
+ * `expectedHead` + `expectedSnapshotHash`, legacy `expectedVersion`, and `dryRun`.
  */
 app.post("/api/agent/workspace", (req, res) => {
   const record = requestWorkspace(req);
-  const { workspace, expectedVersion, expectedHead, dryRun, force } = req.body || {};
+  const { workspace, expectedVersion, expectedHead, expectedSnapshotHash, dryRun, force } = req.body || {};
   if (!workspace) {
     return res.status(400).json({ error: "Missing required 'workspace' body parameter." });
   }
-  const r = applyWorkspaceMutation(record, workspace, { expectedVersion, expectedHead, dryRun, force: force === true });
+  const r = applyWorkspaceMutation(record, workspace, { expectedVersion, expectedHead, expectedSnapshotHash, dryRun, force: force === true });
   return res.status(r.status).json(r.body);
 });
 
@@ -5299,23 +5384,24 @@ app.post("/api/agent/workspace", (req, res) => {
  * POST /api/agent/workspace/merge
  * JSON-merge-patch style granular edit: provide only the top-level fields to
  * change (e.g. { "version": "2.0.0" } or { "wares": [...] }). Supports the same
- * `expectedVersion` and `dryRun` controls.
+ * paired hash preconditions, `expectedVersion`, and `dryRun` controls.
  */
 app.post("/api/agent/workspace/merge", (req, res) => {
   const record = requestWorkspace(req);
-  const { changes, expectedVersion, expectedHead, dryRun, force } = req.body || {};
+  const { changes, expectedVersion, expectedHead, expectedSnapshotHash, dryRun, force } = req.body || {};
   if (!changes || typeof changes !== 'object') {
     return res.status(400).json({ error: "Missing required 'changes' object (top-level workspace fields to merge)." });
   }
-  const r = applyWorkspaceMutation(record, changes, { expectedVersion, expectedHead, dryRun, merge: true, force: force === true });
+  const r = applyWorkspaceMutation(record, changes, { expectedVersion, expectedHead, expectedSnapshotHash, dryRun, merge: true, force: force === true });
   return res.status(r.status).json(r.body);
 });
 
 /**
  * GET /api/agent/workspace/parked
- * B2s3: states parked when a different mod was loaded (park-on-switch). Read-only list.
+ * Legacy-named read-only compatibility list of every other persisted workspace.
  */
 app.get("/api/agent/workspace/parked", (req, res) => {
+  if (!requireStudioActor(req, res)) return;
   const current = requestWorkspace(req);
   return res.json({
     workspaceId: current.workspaceId,
@@ -5327,11 +5413,12 @@ app.get("/api/agent/workspace/parked", (req, res) => {
 });
 
 /**
- * POST /api/agent/workspace/restore-parked { name }
- * B2s3: deliberate switch back to a parked state — parks the current one first (so a
- * restore is never destructive either), then activates the parked workspace.
+ * POST /api/agent/workspace/restore-parked { targetWorkspaceId }
+ * Legacy-named compatibility lookup. Returns the target record; the caller owns explicit
+ * adoption/rebinding and no process-global active state is changed here.
  */
 app.post("/api/agent/workspace/restore-parked", (req, res) => {
+  if (!requireStudioActor(req, res)) return;
   requestWorkspace(req); // proves authority over the currently selected tab workspace
   const targetWorkspaceId = String(req.body?.targetWorkspaceId || '').trim();
   if (!targetWorkspaceId) return res.status(400).json({ code: 'TARGET_WORKSPACE_ID_REQUIRED', error: "Missing required 'targetWorkspaceId' body parameter." });
@@ -7874,6 +7961,7 @@ registerBulkTransformRoutes(app, {
   workspace: req => requestWorkspace(req).workspace as ModWorkspace,
   workspaceId: req => requestWorkspace(req).workspaceId,
   workspaceHash: req => workspaceHash(requestWorkspace(req)),
+  workspaceSnapshotHash: req => workspaceRegistry.snapshotHash(requestWorkspace(req)),
   applyWorkspaceMutation: (req, incoming, options) => applyWorkspaceMutation(requestWorkspace(req), incoming, options),
 });
 
@@ -8838,6 +8926,27 @@ app.get("/api/agent/api-selftest", (_req, res) => {
     record = registry.lookup(record.record.workspaceId);
     results.push({ test: 'mergeApply', pass: merge.status === 200 && merge.body.applied === true && record.ok && (record.record.workspace as any).version === '7.7.7' });
     if (record.ok === false) throw new Error(record.error);
+    const beforeSnapshotOnly = registry.summary(record.record);
+    registry.commit(record.record.workspaceId, {
+      ...record.record.workspace,
+      uiTheme: { ...record.record.workspace.uiTheme, accentColor: '#abcdef' },
+    }, 'selftest:external-theme');
+    record = registry.lookup(record.record.workspaceId);
+    if (record.ok === false) throw new Error(record.error);
+    const snapshotConflict = applyWorkspaceMutation(record.record, {
+      ...record.record.workspace,
+      uiTheme: { ...record.record.workspace.uiTheme, accentColor: '#fedcba' },
+    }, {
+      expectedHead: beforeSnapshotOnly.workspaceHash,
+      expectedSnapshotHash: beforeSnapshotOnly.snapshotHash,
+    }, registry, recovery);
+    results.push({
+      test: 'snapshotConflict',
+      pass: snapshotConflict.status === 409
+        && snapshotConflict.body.error === 'snapshot_conflict'
+        && snapshotConflict.body.currentHead === beforeSnapshotOnly.workspaceHash
+        && snapshotConflict.body.currentSnapshotHash !== beforeSnapshotOnly.snapshotHash,
+    });
     const legacy = applyWorkspaceMutation(record.record, { ...savedWs, version: '8.8.8' }, {}, registry, recovery);
     results.push({ test: 'legacyRejected', pass: legacy.status === 409 && legacy.body.error === 'legacy_write_rejected' });
     const forced = applyWorkspaceMutation(record.record, { ...savedWs, version: '8.8.9' }, { force: true }, registry, recovery);
@@ -11934,10 +12043,38 @@ async function generateWorkspaceRequest(req: express.Request, res: express.Respo
   if (req.body.apply !== undefined && typeof req.body.apply !== 'boolean') {
     return res.status(400).json({ code: 'CAPABILITY_INPUT_INVALID', error: 'Workspace generation apply must be boolean when supplied.' });
   }
+  for (const field of ['expectedHead', 'expectedSnapshotHash'] as const) {
+    if (req.body[field] !== undefined && typeof req.body[field] !== 'string') {
+      return res.status(400).json({ code: 'CAPABILITY_INPUT_INVALID', error: `Workspace generation ${field} must be a string when supplied.` });
+    }
+  }
   const applyGenerated = req.body.apply !== false;
   const addressed = ((req as any).__workspaceRecord as WorkspaceRecord | undefined) ||
     ((applyGenerated || !currentWorkspace) ? resolveWorkspaceAuthority(req, res, true) : null);
   if ((applyGenerated || !currentWorkspace) && !addressed) return;
+  const expectedHead = String(req.body.expectedHead || '').trim();
+  const expectedSnapshotHash = String(req.body.expectedSnapshotHash || '').trim();
+  if (applyGenerated && addressed && (!expectedHead || !expectedSnapshotHash)) {
+    return res.status(409).json({
+      error: 'generation_precondition_required',
+      message: 'Applying AI generation requires the paired expectedHead and expectedSnapshotHash from one GET /api/agent/workspace. Re-read the addressed workspace and retry; preview generation remains available without mutation.',
+      workspaceId: addressed.workspaceId,
+      currentHead: workspaceHash(addressed),
+      currentSnapshotHash: workspaceRegistry.snapshotHash(addressed),
+      currentVersion: addressed.version,
+    });
+  }
+  // Reject an already-stale applying request before entering the provider/spend boundary.
+  // applyWorkspaceMutation repeats this paired check after generation, closing the race where
+  // another writer changes either identity while the provider workflow is running.
+  if (applyGenerated && addressed && (expectedHead || expectedSnapshotHash)) {
+    const preflight = applyWorkspaceMutation(addressed, addressed.workspace, {
+      expectedHead,
+      expectedSnapshotHash,
+      dryRun: true,
+    });
+    if (preflight.status !== 200) return res.status(preflight.status).json(preflight.body);
+  }
   const baseWorkspace = sanitizeWorkspace(currentWorkspace || addressed!.workspace);
 
   try {
@@ -12270,19 +12407,6 @@ Apply corrections to the nodes, properties, and links to resolve every finding. 
       console.log(`[AI-STUDIO] Repair loop finished: ${repairResult.attempts} attempt(s), halt=${repairResult.haltReason}, remaining=${repairResult.remaining.length} finding(s).`);
     }
 
-    // Approval-flow fix (Codex finding): the in-app AI guide sends apply:false
-    // so the generated blueprint is STAGED — returned to the client for its
-    // Confirm & Apply card — without touching the shared workspace. Previously
-    // generate committed here unconditionally, so the canvas sync adopted the
-    // change before the user approved (the approval step was not the first
-    // mutation point). External agents keep the documented apply-by-default.
-    if (applyGenerated) {
-      const latest = workspaceRegistry.lookup(addressed!.workspaceId);
-      if (latest.ok === false) return res.status(404).json({ code: latest.code, error: latest.error, generatedWorkspace: combinedWorkspace });
-      const mutation = applyWorkspaceMutation(latest.record, combinedWorkspace, { expectedHead: String(req.body?.expectedHead || '').trim() });
-      if (mutation.status !== 200) return res.status(mutation.status).json({ ...mutation.body, generatedWorkspace: combinedWorkspace });
-    }
-
     console.log(`[AI-STUDIO] Phased interpretation complete. Delivered blueprint named: ${combinedWorkspace.name}`);
 
     const finalCode = generateMDXML(combinedWorkspace);
@@ -12363,13 +12487,32 @@ Use real X4 Mission Director xmlTags. Each requirement: {id, label (plain Englis
       console.warn("[AI-STUDIO] requirement extraction failed (non-fatal):", e);
     }
 
+    // This is the single applying boundary. Every provider await and deterministic validation is
+    // complete before mutation, and a timed-out/disconnected request is forbidden from committing
+    // after its caller has already received failure. The synchronous mutation repeats both CAS
+    // checks, covering any writer that changed state during generation.
+    let appliedMutation: ReturnType<typeof applyWorkspaceMutation> | null = null;
+    if (applyGenerated) {
+      if (res.writableEnded || res.destroyed || (req as DeadlineAwareRequest).__forgeResponseDeadlineExceeded) return;
+      const latest = workspaceRegistry.lookup(addressed!.workspaceId);
+      if (latest.ok === false) return res.status(404).json({ code: latest.code, error: latest.error, generatedWorkspace: combinedWorkspace });
+      appliedMutation = applyWorkspaceMutation(latest.record, combinedWorkspace, { expectedHead, expectedSnapshotHash });
+      if (appliedMutation.status !== 200) {
+        return res.status(appliedMutation.status).json({ ...appliedMutation.body, generatedWorkspace: combinedWorkspace });
+      }
+    }
+
     return res.json({
       success: true,
       ...(addressed ? { workspaceId: addressed.workspaceId } : {}),
       message: resultMessage,
       applied: applyGenerated,
-      version: addressed ? (workspaceRegistry.lookup(addressed.workspaceId).ok ? (workspaceRegistry.lookup(addressed.workspaceId) as any).record.version : addressed.version) : undefined,
-      workspace: combinedWorkspace,
+      version: appliedMutation?.body.version ?? addressed?.version,
+      ...(appliedMutation ? {
+        workspaceHash: appliedMutation.body.workspaceHash,
+        snapshotHash: appliedMutation.body.snapshotHash,
+      } : {}),
+      workspace: appliedMutation?.body.workspace ?? combinedWorkspace,
       diagnostics: finalDiagnostics,
       requirements: intentRequirements,
       selfHealFailed: (repairResult.attempts > 0 && finalDiagnostics.length > 0) || !!selfHealError,
@@ -12386,6 +12529,7 @@ Use real X4 Mission Director xmlTags. Each requirement: {id, label (plain Englis
 
   } catch (error) {
     console.error("AI Agent layout generation error: ", error);
+    if (res.writableEnded || res.destroyed || (req as DeadlineAwareRequest).__forgeResponseDeadlineExceeded) return;
     return res.status(500).json({
       error: error.message || "Failed to trigger automated workspace planner in phased execution mode."
     });

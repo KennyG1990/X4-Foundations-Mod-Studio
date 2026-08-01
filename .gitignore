@@ -52,6 +52,10 @@ tests/e2e/handoff-gap-analysis.spec.ts
 # (.graphifyignore stays tracked; the AGENTS/CLAUDE/GEMINI.md instruction files do too.)
 graphify-out/
 
+# Raw installed-host profiler and Chromium trace payloads are retained locally;
+# only their sanitized summaries and screenshots belong in version control.
+vscode-extension/evidence/**/raw/
+
 # Vite uses public-assets/ explicitly. Legacy public/ was validation scratch and
 # once carried real mod payloads; keep it from returning as a release leak.
 public/

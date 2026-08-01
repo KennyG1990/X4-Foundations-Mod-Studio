@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Copy, Loader2, Play, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 import { sanitizeWorkspace, type ModWorkspace } from '../types';
-import { workspaceContentHash } from '../lib/workspaceIdentity';
+import { workspaceContentHash, workspaceSnapshotHash } from '../lib/workspaceIdentity';
 import XPathInput from './XPathInput';
 
 type Operation = 'multiply' | 'add' | 'set' | 'round' | 'min' | 'max' | 'clamp';
@@ -39,13 +39,14 @@ interface PreviewPlan {
   conflicts: Array<{ targetFile: string; selector: string }>;
   findings: Array<{ severity: string; code: string; message: string; path?: string }>;
   workspaceHash: string;
+  snapshotHash: string;
 }
 
 interface Props {
   workspace: ModWorkspace;
   setWorkspace: React.Dispatch<React.SetStateAction<ModWorkspace>>;
   saveCheckpoint?: (customTarget?: ModWorkspace) => void;
-  onServerWorkspaceApplied?: (workspace: ModWorkspace, metadata: { workspaceHash: string; version: number }) => void;
+  onServerWorkspaceApplied?: (workspace: ModWorkspace, metadata: { workspaceHash: string; snapshotHash: string; version: number }) => void;
 }
 
 const ROW_HEIGHT = 44;
@@ -159,7 +160,8 @@ export default function BulkTransformPanel({ workspace, setWorkspace, saveCheckp
       const plan = (body.plan || body) as PreviewPlan;
       if (plan?.rows) setPreview(plan);
       const localHash = workspaceContentHash(sanitizeWorkspace(workspace));
-      if (response.ok && plan.workspaceHash !== localHash) {
+      const localSnapshotHash = workspaceSnapshotHash(sanitizeWorkspace(workspace));
+      if (response.ok && (plan.workspaceHash !== localHash || plan.snapshotHash !== localSnapshotHash)) {
         setError('The canvas has not finished synchronizing to the server. Wait a moment, then preview again; no patches were applied.');
         setPreview({ ...plan, ok: false });
       } else if (!response.ok) setError(body.message || body.error || plan.findings?.[0]?.message || `Preview failed (${response.status})`);
@@ -173,13 +175,22 @@ export default function BulkTransformPanel({ workspace, setWorkspace, saveCheckp
     try {
       const response = await fetch('/api/agent/bulk-transform/apply', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rule, expectedPlanHash: preview.planHash, expectedHead: preview.workspaceHash }),
+        body: JSON.stringify({
+          rule,
+          expectedPlanHash: preview.planHash,
+          expectedHead: preview.workspaceHash,
+          expectedSnapshotHash: preview.snapshotHash,
+        }),
       });
       const body = await jsonResponse(response);
       saveCheckpoint?.(workspace);
-      if (onServerWorkspaceApplied) onServerWorkspaceApplied(body.workspace, { workspaceHash: body.workspaceHash, version: body.version });
+      if (onServerWorkspaceApplied) onServerWorkspaceApplied(body.workspace, {
+        workspaceHash: body.workspaceHash,
+        snapshotHash: body.snapshotHash,
+        version: body.version,
+      });
       else setWorkspace(body.workspace);
-      setPreview({ ...body.plan, workspaceHash: body.workspaceHash });
+      setPreview({ ...body.plan, workspaceHash: body.workspaceHash, snapshotHash: body.snapshotHash });
     } catch (applyError) {
       const body = (applyError as Error & { body?: any }).body;
       if (body?.plan?.rows) setPreview({ ...body.plan, workspaceHash: body.currentHead || preview.workspaceHash });

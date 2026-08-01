@@ -65,16 +65,22 @@ const TOOLS = [
   {
     name: "get_workspace",
     capabilityId: "workspace.read",
-    capabilityVersion: 1,
-    description: "Read a bounded summary of the explicitly bound Forge workspace (name/version, counts, and up to 50 node summaries). Authority comes from X4FORGE_WORKSPACE_ID plus the key binding.",
+    capabilityVersion: 2,
+    description: "Read a bounded summary of the explicitly bound Forge workspace, including its content CAS hash, complete snapshot hash, name/version, counts, and up to 50 node summaries. Authority comes from X4FORGE_WORKSPACE_ID plus the key binding.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
-    handler: async () => {
+    handler: async (_input, context) => {
+      const legacyProjection = context?.contractState === "legacy-static-fallback";
       const d = requireResponse(await forge("GET", "/api/agent/workspace"), "workspace", {
         workspaceId: "string", workspace: "object", version: "number", workspaceHash: "string",
-        lastUpdated: "string", origin: "string",
+        ...(legacyProjection ? {} : { snapshotHash: "string" }), lastUpdated: "string", origin: "string",
       });
       const ws = d.workspace || d;
-      return { name: ws.name, version: d.version, nodes: (ws.nodes || []).length, links: (ws.links || []).length, nodeSummary: (ws.nodes || []).slice(0, 50).map((n) => ({ id: n.id, tag: n.xmlTag, label: n.label })) };
+      return {
+        name: ws.name, version: d.version, workspaceHash: d.workspaceHash,
+        ...(legacyProjection ? { snapshotHashAvailable: false, compatibility: "workspace.read@1" } : { snapshotHash: d.snapshotHash }),
+        nodes: (ws.nodes || []).length, links: (ws.links || []).length,
+        nodeSummary: (ws.nodes || []).slice(0, 50).map((n) => ({ id: n.id, tag: n.xmlTag, label: n.label })),
+      };
     },
   },
   {
@@ -639,7 +645,10 @@ async function listTools() {
     if (!toolNames.includes(TOOLS[toolIndex].name)) continue;
     const capability = capabilities.get(`${TOOLS[toolIndex].capabilityId}@${TOOLS[toolIndex].capabilityVersion}`);
     const projection = capability?.surfaces?.mcp?.find((candidate) => candidate.id === TOOLS[toolIndex].name);
-    const projectionDescription = projection?.status === "partial" && projection.note
+    const legacyWorkspaceRead = contractState === "legacy-static-fallback" && TOOLS[toolIndex].name === "get_workspace";
+    const projectionDescription = legacyWorkspaceRead
+      ? "Read a bounded workspace.read@1 compatibility summary from a reviewed legacy Forge server. The legacy response has workspaceHash but no complete snapshotHash; snapshotHashAvailable is false."
+      : projection?.status === "partial" && projection.note
       ? `${TOOLS[toolIndex].description} Projection limit: ${projection.note}`
       : TOOLS[toolIndex].description;
     listed.push({
@@ -648,7 +657,7 @@ async function listTools() {
       inputSchema: structuredClone(TOOLS[toolIndex].inputSchema),
       _meta: {
         "x4forge/capabilityId": TOOLS[toolIndex].capabilityId,
-        "x4forge/capabilityVersion": TOOLS[toolIndex].capabilityVersion,
+        "x4forge/capabilityVersion": legacyWorkspaceRead ? 1 : TOOLS[toolIndex].capabilityVersion,
         "x4forge/contractVersion": contractState,
         ...(contract?.contractHash ? { "x4forge/contractHash": contract.contractHash } : {}),
       },

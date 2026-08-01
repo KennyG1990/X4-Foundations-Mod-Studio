@@ -9,8 +9,8 @@ import type { WorkspaceConflictPreview } from '../lib/workspaceConflict';
 
 export interface WorkspaceConflictDetail {
   detectedAt: string;
-  server: { head: string; version?: number; savedAt?: string; origin?: string; name?: string };
-  local: { head: string; name?: string; updatedAt?: string };
+  server: { head: string; snapshotHash?: string; version?: number; savedAt?: string; origin?: string; name?: string };
+  local: { head: string; snapshotHash?: string; name?: string; updatedAt?: string };
   preview?: WorkspaceConflictPreview;
   previewUnavailable?: string;
 }
@@ -70,11 +70,13 @@ export default function WorkspaceConflictDialog({ detail, expanded, busy, error,
           <div className="rounded border border-cyan-500/25 bg-cyan-950/20 p-3" data-testid="conflict-server-meta">
             <div className="flex items-center gap-1.5 font-bold text-cyan-200"><Server className="h-3.5 w-3.5" /> Server copy</div>
             <div className="mt-2 break-all text-[10px] text-slate-300">{detail?.server.name || 'Untitled'} · head {detail?.server.head?.slice(0, 12) || 'unknown'}</div>
+            {detail?.server.snapshotHash ? <div className="mt-1 break-all text-[9px] text-slate-500">snapshot {detail.server.snapshotHash.slice(0, 12)}</div> : null}
             <div className="mt-1 text-[9.5px] text-slate-500">Saved {when(detail?.server.savedAt)} · {detail?.server.origin || 'origin unavailable'}</div>
           </div>
           <div className="rounded border border-amber-500/25 bg-amber-950/20 p-3" data-testid="conflict-local-meta">
             <div className="font-bold text-amber-200">My canvas</div>
             <div className="mt-2 break-all text-[10px] text-slate-300">{detail?.local.name || 'Untitled'} · head {detail?.local.head?.slice(0, 12) || 'unknown'}</div>
+            {detail?.local.snapshotHash ? <div className="mt-1 break-all text-[9px] text-slate-500">snapshot {detail.local.snapshotHash.slice(0, 12)}</div> : null}
             <div className="mt-1 text-[9.5px] text-slate-500">Edited {when(detail?.local.updatedAt)} · conflict detected {when(detail?.detectedAt)}</div>
           </div>
         </div>

@@ -187,7 +187,7 @@ type Mode = 'live' | 'legacy' | 'malformed' | 'current-missing' | 'unknown-envel
   'fixed-body-type' | 'mcp-alias-collision' | 'extra-field' | 'api-path' | 'api-dot-path' | 'open-input' | 'hung' | 'outage' |
   'narrowed' | 'alias-narrowed' | 'v2';
 let mode: Mode = 'live';
-let endpointMode: 'normal' | 'invalid-json' | 'empty-json' | 'missing-fields' = 'normal';
+let endpointMode: 'normal' | 'invalid-json' | 'empty-json' | 'missing-fields' | 'missing-workspace-snapshot' = 'normal';
 const contract = buildForgeCapabilityContract(sha256);
 const wrongHashContract = {
   ...contract,
@@ -246,9 +246,9 @@ const traversalPathCapability = {
   apiBindings: validationV1.apiBindings.map(binding => ({ ...binding, path: `${binding.path}/../hidden` })),
 } as ForgeCapabilityDescriptorV1;
 const traversalPathContract = buildForgeCapabilityContract(sha256, [traversalPathCapability]);
-const workspaceReadV1 = FORGE_CAPABILITIES.find(capability => capability.id === 'workspace.read')!;
+const workspaceRead = FORGE_CAPABILITIES.find(capability => capability.id === 'workspace.read')!;
 const openInputCapability = {
-  ...workspaceReadV1,
+  ...workspaceRead,
   inputSchema: { type: 'object', properties: {}, additionalProperties: true },
 } as ForgeCapabilityDescriptorV1;
 const openInputContract = buildForgeCapabilityContract(sha256, [openInputCapability]);
@@ -363,6 +363,20 @@ const server = http.createServer((request, response) => {
     }));
     return;
   }
+  if (request.method === 'GET' && request.url === '/api/agent/workspace') {
+    routeCalls.push({ method: request.method, path: request.url, body: null });
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({
+      workspaceId: 'ws_fixture',
+      workspace: { name: 'Fixture workspace', nodes: [{ id: 'cue_fixture', xmlTag: 'cue', label: 'Fixture cue' }], links: [] },
+      version: 7,
+      workspaceHash: 'a'.repeat(64),
+      ...(endpointMode === 'missing-workspace-snapshot' ? {} : { snapshotHash: 'b'.repeat(64) }),
+      lastUpdated: '2030-01-01T00:00:00.000Z',
+      origin: 'mcp-selftest',
+    }));
+    return;
+  }
   response.writeHead(404, { 'Content-Type': 'application/json' });
   response.end(JSON.stringify({ error: 'not found' }));
 });
@@ -378,13 +392,30 @@ try {
       assert.equal(tool._meta?.['x4forge/contractVersion'], 'forge.capability.v1');
       assert.equal(tool._meta?.['x4forge/contractHash'], contract.contractHash);
       assert.equal(typeof tool._meta?.['x4forge/capabilityId'], 'string');
-      assert.equal(tool._meta?.['x4forge/capabilityVersion'], 1);
+      const capabilityId = String(tool._meta?.['x4forge/capabilityId'] || '');
+      assert.equal(
+        tool._meta?.['x4forge/capabilityVersion'],
+        FORGE_CAPABILITIES.find(capability => capability.id === capabilityId)?.version,
+      );
       assert.equal(tool.annotations, undefined, '2024-11-05 MCP must not emit annotations introduced in later revisions');
     }
     routeCalls.length = 0;
     const liveValidation = await client.request('tools/call', { name: 'validate_mod', arguments: { fromPath: 'fixture' } });
     assert.equal(liveValidation.error, undefined, liveValidation.error?.message);
     assert.equal((liveValidation.result as any)?.isError, undefined);
+    const liveWorkspace = await client.request('tools/call', { name: 'get_workspace', arguments: {} });
+    assert.equal(liveWorkspace.error, undefined, liveWorkspace.error?.message);
+    assert.equal((liveWorkspace.result as any)?.isError, undefined);
+    const liveWorkspaceSummary = JSON.parse(String(liveWorkspace.result?.content?.[0]?.text || '{}'));
+    assert.deepEqual(liveWorkspaceSummary, {
+      name: 'Fixture workspace',
+      version: 7,
+      workspaceHash: 'a'.repeat(64),
+      snapshotHash: 'b'.repeat(64),
+      nodes: 1,
+      links: 0,
+      nodeSummary: [{ id: 'cue_fixture', tag: 'cue', label: 'Fixture cue' }],
+    }, 'get_workspace must return both identities and the bounded workspace summary');
     const liveExplanation = await client.request('tools/call', { name: 'explain_element', arguments: { tag: 'cue' } });
     assert.equal(liveExplanation.error, undefined, liveExplanation.error?.message);
     assert.equal((liveExplanation.result as any)?.isError, undefined);
@@ -393,6 +424,7 @@ try {
     assert.equal((liveReadiness.result as any)?.isError, undefined);
     assert.deepEqual(routeCalls.map(call => `${call.method} ${call.path}`), [
       'POST /api/agent/project/validate/check',
+      'GET /api/agent/workspace',
       'GET /api/agent/lang/element-explain?file=md%2Fx.xml&tag=cue',
       'GET /api/agent/readiness',
     ], 'current-contract execution must use current capability routes');
@@ -431,6 +463,12 @@ try {
     const incompleteEnvelope = await client.request('tools/call', { name: 'explain_element', arguments: { tag: 'cue' } });
     assert.equal((incompleteEnvelope.result as any)?.isError, true,
       'successful API response missing canonical output fields must fail the MCP call');
+    endpointMode = 'missing-workspace-snapshot';
+    const missingSnapshot = await client.request('tools/call', { name: 'get_workspace', arguments: {} });
+    assert.equal((missingSnapshot.result as any)?.isError, true,
+      'workspace.read@2 must fail closed when the API omits snapshotHash');
+    assert.match(String(missingSnapshot.result?.content?.[0]?.text || ''), /snapshotHash/,
+      'workspace.read@2 failure must name the missing snapshotHash field');
     endpointMode = 'normal';
   });
 
@@ -439,27 +477,52 @@ try {
     const legacyTools = await toolsFor(client);
     assert.deepEqual(legacyTools.map(tool => tool.name), EXPECTED_TOOLS, 'legacy fallback changed the curated MCP inventory');
     assert.ok(legacyTools.every(tool => tool._meta?.['x4forge/contractVersion'] === 'legacy-static-fallback'));
+    const legacyWorkspaceTool = legacyTools.find(tool => tool.name === 'get_workspace');
+    assert.equal(legacyWorkspaceTool?._meta?.['x4forge/capabilityVersion'], 1,
+      'legacy get_workspace must identify its workspace.read@1 compatibility projection');
+    assert.match(String(legacyWorkspaceTool?.description || ''), /no complete snapshotHash/i);
     routeCalls.length = 0;
     const legacyCall = await client.request('tools/call', { name: 'validate_mod', arguments: { fromPath: 'fixture' } });
     assert.equal(legacyCall.error, undefined, legacyCall.error?.message);
     assert.equal(legacyCall.result?.content?.[0]?.type, 'text');
-    assert.deepEqual(routeCalls, [{ method: 'POST', path: '/api/agent/project/validate', body: { fromPath: 'fixture' } }],
-      'legacy validation call must use the bounded raw compatibility route without mutation flags');
+    endpointMode = 'missing-workspace-snapshot';
+    const legacyWorkspace = await client.request('tools/call', { name: 'get_workspace', arguments: {} });
+    assert.equal((legacyWorkspace.result as any)?.isError, undefined,
+      'reviewed legacy workspace.read@1 response must remain callable without snapshotHash');
+    const legacyWorkspaceSummary = JSON.parse(String(legacyWorkspace.result?.content?.[0]?.text || '{}'));
+    assert.equal(legacyWorkspaceSummary.snapshotHash, undefined);
+    assert.equal(legacyWorkspaceSummary.snapshotHashAvailable, false);
+    assert.equal(legacyWorkspaceSummary.compatibility, 'workspace.read@1');
+    endpointMode = 'normal';
+    assert.deepEqual(routeCalls, [
+      { method: 'POST', path: '/api/agent/project/validate', body: { fromPath: 'fixture' } },
+      { method: 'GET', path: '/api/agent/workspace', body: null },
+    ], 'legacy calls must use bounded compatibility routes and preserve workspace.read@1 truth');
   });
 
   mode = 'legacy';
   await withMcp(baseUrl, async client => {
     await toolsFor(client);
     mode = 'outage';
+    const unavailableTools = await toolsFor(client);
+    const unavailableWorkspaceTool = unavailableTools.find(tool => tool.name === 'get_workspace');
+    assert.equal(unavailableWorkspaceTool?._meta?.['x4forge/capabilityVersion'], 2,
+      'fresh unavailable static fallback must not masquerade as a confirmed legacy v1 server');
     routeCalls.length = 0;
     const validationCall = await client.request('tools/call', { name: 'validate_mod', arguments: { fromPath: 'fixture' } });
     assert.equal(validationCall.result?.content?.[0]?.type, 'text');
     const explanationCall = await client.request('tools/call', { name: 'explain_element', arguments: { tag: 'cue' } });
     assert.equal(explanationCall.result?.content?.[0]?.type, 'text');
+    endpointMode = 'missing-workspace-snapshot';
+    const unavailableWorkspace = await client.request('tools/call', { name: 'get_workspace', arguments: {} });
+    assert.equal((unavailableWorkspace.result as any)?.isError, true,
+      'unavailable static fallback must keep workspace.read@2 fail-closed until legacy is positively identified');
+    endpointMode = 'normal';
     assert.deepEqual(routeCalls.map(call => `${call.method} ${call.path}`), [
       'POST /api/agent/project/validate',
       'GET /api/agent/lang/hover?file=md%2Fx.xml&tag=cue',
       'GET /api/agent/lang/attrs?file=md%2Fx.xml&tag=cue',
+      'GET /api/agent/workspace',
     ], 'transient schema outage before current-contract discovery must retain old-server-compatible calls');
   });
 

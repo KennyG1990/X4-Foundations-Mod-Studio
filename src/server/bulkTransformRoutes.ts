@@ -19,7 +19,8 @@ interface BulkTransformRouteOptions {
   workspace: (req: Request) => ModWorkspace;
   workspaceId: (req: Request) => string;
   workspaceHash: (req: Request) => string;
-  applyWorkspaceMutation: (req: Request, incoming: any, options: { expectedHead?: string; merge?: boolean }) => MutationResult;
+  workspaceSnapshotHash: (req: Request) => string;
+  applyWorkspaceMutation: (req: Request, incoming: any, options: { expectedHead?: string; expectedSnapshotHash?: string; merge?: boolean }) => MutationResult;
 }
 
 const MAX_MANIFEST_ROWS = 50_000;
@@ -101,7 +102,13 @@ export function registerBulkTransformRoutes(app: Express, options: BulkTransform
     try {
       const workspace = options.workspace(req);
       const plan = buildPlan(parseRule(req.body), workspace);
-      return res.status(plan.ok ? 200 : 422).json({ ...plan, applied: false, workspaceId: options.workspaceId(req), workspaceHash: options.workspaceHash(req) });
+      return res.status(plan.ok ? 200 : 422).json({
+        ...plan,
+        applied: false,
+        workspaceId: options.workspaceId(req),
+        workspaceHash: options.workspaceHash(req),
+        snapshotHash: options.workspaceSnapshotHash(req),
+      });
     } catch (error) { return sendError(res, error); }
   });
 
@@ -109,6 +116,7 @@ export function registerBulkTransformRoutes(app: Express, options: BulkTransform
     try {
       const expectedPlanHash = String(req.body?.expectedPlanHash || '').trim();
       const expectedHead = String(req.body?.expectedHead || '').trim();
+      const expectedSnapshotHash = String(req.body?.expectedSnapshotHash || '').trim();
       if (!expectedPlanHash) return res.status(400).json({ error: 'Missing required expectedPlanHash from preview.' });
       if (!expectedHead) return res.status(400).json({ error: 'Missing required expectedHead from preview.' });
       const workspace = options.workspace(req);
@@ -124,7 +132,7 @@ export function registerBulkTransformRoutes(app: Express, options: BulkTransform
       }
       if (!plan.ok) return res.status(422).json({ error: 'bulk_plan_invalid', message: 'Bulk transform is not clean; zero workspace changes were applied.', plan });
       const xmlPatches = mergeBulkTransformPatches(workspace.xmlPatches || [], plan);
-      const mutation = options.applyWorkspaceMutation(req, { xmlPatches }, { expectedHead, merge: true });
+      const mutation = options.applyWorkspaceMutation(req, { xmlPatches }, { expectedHead, expectedSnapshotHash, merge: true });
       return res.status(mutation.status).json({ ...mutation.body, workspaceId: options.workspaceId(req), plan, added: plan.rows.length, matchedFiles: plan.matchedFiles });
     } catch (error) { return sendError(res, error); }
   });

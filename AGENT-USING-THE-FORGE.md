@@ -188,7 +188,7 @@ Static gates prove *legality*. They cannot prove *behaviour*. So:
 | Endpoint | Use |
 |---|---|
 | `GET /api/agent/schema` | self-documenting endpoint list (public) |
-| `GET /api/agent/workspace` | active workspace + `workspaceHash` |
+| `GET /api/agent/workspace` | addressed workspace + `workspaceHash` and complete `snapshotHash` |
 | `POST /api/agent/project/validate` | **authoritative** validation — loop to `ok:true` |
 | `POST /api/agent/deploy-verify` | 10-stage compile + deploy preflight; requires explicit `path` or `workspace` |
 | `GET /api/agent/selftest-index` | the oracle list |

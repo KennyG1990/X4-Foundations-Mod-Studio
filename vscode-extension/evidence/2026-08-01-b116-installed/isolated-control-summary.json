@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-08-01T13:03:36Z",
+  "fixture": {
+    "nodes": 1424,
+    "links": 1420,
+    "targetSnapshotBytes": 6040734
+  },
+  "controls": {
+    "smallClose": {
+      "renderedNodes": 3,
+      "closeMs": 54,
+      "maxHeartbeatGapMs": 58.3,
+      "worstLongTaskMs": 0,
+      "heartbeatTicks": 2,
+      "rawIgnoredSha256": "61288196C90F171D1F821644884C838CE3E3E0A9F65B16B9E035865360BC6AD3"
+    },
+    "largeSparseClose": {
+      "renderedNodes": 28,
+      "bootstrapTransferSize": 6041392,
+      "bootstrapEncodedBodySize": 6041092,
+      "bootstrapDecodedBodySize": 6041092,
+      "declaredContentLength": 6041092,
+      "closeMs": 65,
+      "maxHeartbeatGapMs": 51.9,
+      "worstLongTaskMs": 0,
+      "heartbeatTicks": 2,
+      "rawIgnoredSha256": "162A2D7261762C0D06A9B63EB1ABA06CDD2A57CC571313D8E5D7F6BE471BC63B"
+    },
+    "largeDenseClose": {
+      "renderedNodes": 1424,
+      "closeMs": 733,
+      "maxHeartbeatGapMs": 3983.8,
+      "worstLongTaskMs": 3813,
+      "heartbeatTicks": 13,
+      "rawIgnoredSha256": "929F90664C6AEBF2B946D2CC1A44598A9D28E54F593994A73A2BC41DD1AE301C"
+    },
+    "largeDenseAccessibility": {
+      "renderedNodes": 1424,
+      "axNodes": 59583,
+      "uniqueActionNames": 1420,
+      "elapsedMs": 1770,
+      "maxHeartbeatGapMs": 1442,
+      "worstLongTaskMs": 1394,
+      "heartbeatTicks": 11,
+      "rawIgnoredSha256": "7E38850DF39992E449BAC61FABD597B82CCCDB7957686D2D4A10B68EB0B36E66"
+    }
+  },
+  "source": "Four isolated single-test Playwright runs on ports 3100/3101 with unique output directories; each raw JSON remains ignored under test-results/b116/.",
+  "interpretation": "All exact controls passed the unchanged five-second close, heartbeat and long-task gates. The dense close remains the highest-cost renderer control and is retained as a mandatory regression sentinel."
+}

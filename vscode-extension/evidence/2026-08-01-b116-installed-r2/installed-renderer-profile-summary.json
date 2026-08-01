@@ -1,0 +1,717 @@
+{
+  "schemaVersion": 4,
+  "capturedAt": "2026-08-01T17:13:56.536Z",
+  "status": "VERIFIED",
+  "artifact": {
+    "extensionId": "x4forge.x4-forge-studio",
+    "version": "0.0.63",
+    "vsixFile": "x4-forge-studio-0.0.63-b116-r2-20260801-125325.vsix",
+    "vsixBytes": 17954072,
+    "vsixSha256": "C5B46B44FC60AB804B5B8E561C2C41DD1B3DFB466801A5FAC6098361737A8565",
+    "entryCount": 2091,
+    "unpackedBytes": 60607012,
+    "installedMainSha256": "07AE06A5D776489AF8657B29455CC74894A690A146006F4E93B32CFAD419DBCC",
+    "installedParity": {
+      "passed": 7,
+      "total": 7,
+      "normalizedPackageJsonMetadataIgnored": true
+    }
+  },
+  "host": {
+    "product": "Antigravity IDE",
+    "version": "1.107.0",
+    "electron": "39.2.3",
+    "node": "22.21.1",
+    "chrome": "142.0.7444.175",
+    "platform": "win32",
+    "arch": "x64"
+  },
+  "targetIdentity": {
+    "loopbackOnly": true,
+    "targetCountBefore": 1,
+    "targetCountAfter": 1,
+    "targetType": "node",
+    "entrypoint": "vs/workbench/api/node/extensionHostProcess",
+    "pidMatched": true,
+    "pidStable": true,
+    "inspectorArgumentMatched": true,
+    "forgeSupervisorChildPresent": true,
+    "websocketUrlPersisted": false
+  },
+  "installedDom": {
+    "allElements": 1428,
+    "reactFlowNodes": 0,
+    "reactFlowEdges": 0,
+    "bridgeVisible": true,
+    "externalUpdates": "Connected",
+    "capabilityCount": 11,
+    "versionText": "v1.0.399"
+  },
+  "interaction": {
+    "initialState": {
+      "externalUpdates": "Connected",
+      "capabilityCount": 11
+    },
+    "firstRemount": {
+      "checkingVisible": true,
+      "checkingFirstRenderMs": 336
+    },
+    "measuredRepeat": {
+      "pointerCloseAndUnmountMs": 173,
+      "pointerRemountToConnectedMs": 3031,
+      "capabilityCountAfter": 11
+    },
+    "pidStable": true,
+    "newUnresponsiveLogMatches": 0,
+    "closeUnderFiveSeconds": true,
+    "remountUnderFiveSeconds": true
+  },
+  "extensionHost": {
+    "samplingIntervalUs": 1000,
+    "capture": {
+      "durationMs": 133718.702,
+      "totalSampleMs": 133718.396,
+      "nodeCount": 704,
+      "sampleCount": 85941,
+      "timeDeltaCount": 85941,
+      "summedTimeDeltaUs": 133718396,
+      "maxSampleDeltaMs": 719.108,
+      "idleMs": 132248.256,
+      "programMs": 876.852,
+      "garbageCollectorMs": 47.938,
+      "forgeInclusiveMs": 0,
+      "longestConsecutiveForgeSampledSpanMs": 0,
+      "topSelfFrames": [
+        {
+          "functionName": "(idle)",
+          "url": "",
+          "lineNumber": -1,
+          "selfUs": 132248256,
+          "selfMs": 132248.256,
+          "sharePct": 98.901
+        },
+        {
+          "functionName": "(program)",
+          "url": "",
+          "lineNumber": -1,
+          "selfUs": 876852,
+          "selfMs": 876.852,
+          "sharePct": 0.656
+        },
+        {
+          "functionName": "(garbage collector)",
+          "url": "",
+          "lineNumber": -1,
+          "selfUs": 47938,
+          "selfMs": 47.938,
+          "sharePct": 0.036
+        },
+        {
+          "functionName": "existsSync",
+          "url": "",
+          "lineNumber": -1,
+          "selfUs": 35394,
+          "selfMs": 35.394,
+          "sharePct": 0.026
+        },
+        {
+          "functionName": "pushAsyncContext",
+          "url": "node:internal/async_hooks",
+          "lineNumber": 546,
+          "selfUs": 24808,
+          "selfMs": 24.808,
+          "sharePct": 0.019
+        },
+        {
+          "functionName": "addCACert",
+          "url": "",
+          "lineNumber": -1,
+          "selfUs": 20231,
+          "selfMs": 20.231,
+          "sharePct": 0.015
+        },
+        {
+          "functionName": "spawn",
+          "url": "",
+          "lineNumber": -1,
+          "selfUs": 20144,
+          "selfMs": 20.144,
+          "sharePct": 0.015
+        },
+        {
+          "functionName": "spawn",
+          "url": "",
+          "lineNumber": -1,
+          "selfUs": 15631,
+          "selfMs": 15.631,
+          "sharePct": 0.012
+        },
+        {
+          "functionName": "spawn",
+          "url": "",
+          "lineNumber": -1,
+          "selfUs": 15240,
+          "selfMs": 15.24,
+          "sharePct": 0.011
+        },
+        {
+          "functionName": "spawn",
+          "url": "",
+          "lineNumber": -1,
+          "selfUs": 14181,
+          "selfMs": 14.181,
+          "sharePct": 0.011
+        },
+        {
+          "functionName": "set",
+          "url": "file:///<antigravity-install>/resources/app/extensions/antigravity/dist/extension.js",
+          "lineNumber": 1,
+          "selfUs": 11216,
+          "selfMs": 11.216,
+          "sharePct": 0.008
+        },
+        {
+          "functionName": "connect",
+          "url": "",
+          "lineNumber": -1,
+          "selfUs": 8075,
+          "selfMs": 8.075,
+          "sharePct": 0.006
+        },
+        {
+          "functionName": "postMessage",
+          "url": "",
+          "lineNumber": -1,
+          "selfUs": 7967,
+          "selfMs": 7.967,
+          "sharePct": 0.006
+        },
+        {
+          "functionName": "_deliver",
+          "url": "file:///<antigravity-install>/resources/app/out/vs/workbench/api/node/extensionHostProcess.js",
+          "lineNumber": 26,
+          "selfUs": 7861,
+          "selfMs": 7.861,
+          "sharePct": 0.006
+        },
+        {
+          "functionName": "DOMException",
+          "url": "node:internal/per_context/domexception",
+          "lineNumber": 71,
+          "selfUs": 7803,
+          "selfMs": 7.803,
+          "sharePct": 0.006
+        }
+      ],
+      "topForgeFrames": []
+    },
+    "rawArtifact": {
+      "path": "raw/installed-extension-host-b116-r2.cpuprofile",
+      "bytes": 851183,
+      "sha256": "02e02dbc2a00cbf52f5bcd96e6a563a1e0a1d302fec5fffbeb0a03534f36886f"
+    },
+    "cdpErrors": 0,
+    "detached": false,
+    "emptyProfile": false,
+    "samplesMatchTimeDeltas": true,
+    "extensionOwnedSampledSpanAtLeastFiveSeconds": false
+  },
+  "hostRenderer": {
+    "samplingIntervalUs": 1000,
+    "capture": {
+      "durationMs": 133078.766,
+      "totalSampleMs": 133078.539,
+      "nodeCount": 309,
+      "sampleCount": 85800,
+      "timeDeltaCount": 85800,
+      "summedTimeDeltaUs": 133078539,
+      "maxSampleDeltaMs": 332.16,
+      "idleMs": 130116.779,
+      "programMs": 2745.826,
+      "garbageCollectorMs": 50.055,
+      "forgeInclusiveMs": 0,
+      "longestConsecutiveForgeSampledSpanMs": 0,
+      "topSelfFrames": [
+        {
+          "functionName": "(idle)",
+          "url": "",
+          "lineNumber": -1,
+          "selfUs": 130116779,
+          "selfMs": 130116.779,
+          "sharePct": 97.774
+        },
+        {
+          "functionName": "(program)",
+          "url": "",
+          "lineNumber": -1,
+          "selfUs": 2745826,
+          "selfMs": 2745.826,
+          "sharePct": 2.063
+        },
+        {
+          "functionName": "(garbage collector)",
+          "url": "",
+          "lineNumber": -1,
+          "selfUs": 50055,
+          "selfMs": 50.055,
+          "sharePct": 0.038
+        },
+        {
+          "functionName": "postMessage",
+          "url": "",
+          "lineNumber": -1,
+          "selfUs": 14100,
+          "selfMs": 14.1,
+          "sharePct": 0.011
+        },
+        {
+          "functionName": "postMessage",
+          "url": "",
+          "lineNumber": -1,
+          "selfUs": 10910,
+          "selfMs": 10.91,
+          "sharePct": 0.008
+        },
+        {
+          "functionName": "fa",
+          "url": "vscode-file://<antigravity-install>/resources/app/out/vs/workbench/workbench.desktop.main.js",
+          "lineNumber": 2809,
+          "selfUs": 7468,
+          "selfMs": 7.468,
+          "sharePct": 0.006
+        },
+        {
+          "functionName": "doLayoutTabsNonWrapping",
+          "url": "vscode-file://<antigravity-install>/resources/app/out/vs/workbench/workbench.desktop.main.js",
+          "lineNumber": 5216,
+          "selfUs": 6288,
+          "selfMs": 6.288,
+          "sharePct": 0.005
+        },
+        {
+          "functionName": "deserializeRequestMixedArgs",
+          "url": "vscode-file://<antigravity-install>/resources/app/out/vs/workbench/workbench.desktop.main.js",
+          "lineNumber": 8474,
+          "selfUs": 6274,
+          "selfMs": 6.274,
+          "sharePct": 0.005
+        },
+        {
+          "functionName": "removeEventListener",
+          "url": "",
+          "lineNumber": -1,
+          "selfUs": 4654,
+          "selfMs": 4.654,
+          "sharePct": 0.003
+        },
+        {
+          "functionName": "emit",
+          "url": "node:electron/js2c/sandbox_bundle",
+          "lineNumber": 1,
+          "selfUs": 4604,
+          "selfMs": 4.604,
+          "sharePct": 0.003
+        },
+        {
+          "functionName": "update",
+          "url": "vscode-file://<antigravity-install>/resources/app/out/vs/workbench/workbench.desktop.main.js",
+          "lineNumber": 5781,
+          "selfUs": 3158,
+          "selfMs": 3.158,
+          "sharePct": 0.002
+        },
+        {
+          "functionName": "_receiveRequest",
+          "url": "vscode-file://<antigravity-install>/resources/app/out/vs/workbench/workbench.desktop.main.js",
+          "lineNumber": 8474,
+          "selfUs": 3148,
+          "selfMs": 3.148,
+          "sharePct": 0.002
+        },
+        {
+          "functionName": "send",
+          "url": "",
+          "lineNumber": -1,
+          "selfUs": 3147,
+          "selfMs": 3.147,
+          "sharePct": 0.002
+        },
+        {
+          "functionName": "$setEntry",
+          "url": "vscode-file://<antigravity-install>/resources/app/out/vs/workbench/workbench.desktop.main.js",
+          "lineNumber": 5054,
+          "selfUs": 3139,
+          "selfMs": 3.139,
+          "sharePct": 0.002
+        },
+        {
+          "functionName": "fetch",
+          "url": "",
+          "lineNumber": -1,
+          "selfUs": 3136,
+          "selfMs": 3.136,
+          "sharePct": 0.002
+        }
+      ],
+      "topForgeFrames": []
+    },
+    "performanceMetricDeltas": {
+      "Nodes": 15,
+      "LayoutCount": 9,
+      "RecalcStyleCount": 1699,
+      "LayoutDuration": 0.00386,
+      "RecalcStyleDuration": 0.270571,
+      "ScriptDuration": 0.094856,
+      "TaskDuration": 2.92248,
+      "JSHeapUsedSize": 1018340
+    },
+    "rawArtifact": {
+      "path": "raw/installed-host-renderer-b116-r2.cpuprofile",
+      "bytes": 685711,
+      "sha256": "e28f0356743f4b82c7c0e42750cb02f189acbe8dbd2de9af007af060301fe2fc"
+    }
+  },
+  "forgeWebview": {
+    "samplingIntervalUs": 1000,
+    "capture": {
+      "durationMs": 132811.679,
+      "totalSampleMs": 132811.391,
+      "nodeCount": 215,
+      "sampleCount": 85752,
+      "timeDeltaCount": 85752,
+      "summedTimeDeltaUs": 132811391,
+      "maxSampleDeltaMs": 166.862,
+      "idleMs": 124002.373,
+      "programMs": 8149.354,
+      "garbageCollectorMs": 50.439,
+      "forgeInclusiveMs": 607.667,
+      "longestConsecutiveForgeSampledSpanMs": 4.817,
+      "topSelfFrames": [
+        {
+          "functionName": "(idle)",
+          "url": "",
+          "lineNumber": -1,
+          "selfUs": 124002373,
+          "selfMs": 124002.373,
+          "sharePct": 93.367
+        },
+        {
+          "functionName": "(program)",
+          "url": "",
+          "lineNumber": -1,
+          "selfUs": 8149354,
+          "selfMs": 8149.354,
+          "sharePct": 6.136
+        },
+        {
+          "functionName": "requestAnimationFrame",
+          "url": "",
+          "lineNumber": -1,
+          "selfUs": 399681,
+          "selfMs": 399.681,
+          "sharePct": 0.301
+        },
+        {
+          "functionName": "v",
+          "url": "<forge-sidecar>/assets/index-BJpj7P3h.js",
+          "lineNumber": 1640,
+          "selfUs": 51517,
+          "selfMs": 51.517,
+          "sharePct": 0.039
+        },
+        {
+          "functionName": "(garbage collector)",
+          "url": "",
+          "lineNumber": -1,
+          "selfUs": 50439,
+          "selfMs": 50.439,
+          "sharePct": 0.038
+        },
+        {
+          "functionName": "A2.rn.createElement",
+          "url": "<forge-sidecar>/assets/index-BJpj7P3h.js",
+          "lineNumber": 16,
+          "selfUs": 23351,
+          "selfMs": 23.351,
+          "sharePct": 0.018
+        },
+        {
+          "functionName": "",
+          "url": "<forge-sidecar>/assets/index-BJpj7P3h.js",
+          "lineNumber": 68,
+          "selfUs": 12521,
+          "selfMs": 12.521,
+          "sharePct": 0.009
+        },
+        {
+          "functionName": "",
+          "url": "<forge-sidecar>/assets/index-BJpj7P3h.js",
+          "lineNumber": 63,
+          "selfUs": 6198,
+          "selfMs": 6.198,
+          "sharePct": 0.005
+        },
+        {
+          "functionName": "Pn",
+          "url": "<forge-sidecar>/assets/index-BJpj7P3h.js",
+          "lineNumber": 47,
+          "selfUs": 6156,
+          "selfMs": 6.156,
+          "sharePct": 0.005
+        },
+        {
+          "functionName": "Dp",
+          "url": "<forge-sidecar>/assets/index-BJpj7P3h.js",
+          "lineNumber": 47,
+          "selfUs": 5687,
+          "selfMs": 5.687,
+          "sharePct": 0.004
+        },
+        {
+          "functionName": "AbortController",
+          "url": "",
+          "lineNumber": -1,
+          "selfUs": 4792,
+          "selfMs": 4.792,
+          "sharePct": 0.004
+        },
+        {
+          "functionName": "oh",
+          "url": "<forge-sidecar>/assets/index-BJpj7P3h.js",
+          "lineNumber": 47,
+          "selfUs": 4640,
+          "selfMs": 4.64,
+          "sharePct": 0.003
+        },
+        {
+          "functionName": "lx",
+          "url": "<forge-sidecar>/assets/index-BJpj7P3h.js",
+          "lineNumber": 47,
+          "selfUs": 4625,
+          "selfMs": 4.625,
+          "sharePct": 0.003
+        },
+        {
+          "functionName": "v4",
+          "url": "<forge-sidecar>/assets/index-BJpj7P3h.js",
+          "lineNumber": 2041,
+          "selfUs": 4103,
+          "selfMs": 4.103,
+          "sharePct": 0.003
+        },
+        {
+          "functionName": "A2.rn.createElement",
+          "url": "<forge-sidecar>/assets/index-BJpj7P3h.js",
+          "lineNumber": 16,
+          "selfUs": 3366,
+          "selfMs": 3.366,
+          "sharePct": 0.003
+        }
+      ],
+      "topForgeFrames": [
+        {
+          "functionName": "requestAnimationFrame",
+          "url": "",
+          "lineNumber": -1,
+          "selfUs": 399681,
+          "selfMs": 399.681,
+          "sharePct": 0.301
+        },
+        {
+          "functionName": "v",
+          "url": "<forge-sidecar>/assets/index-BJpj7P3h.js",
+          "lineNumber": 1640,
+          "selfUs": 51517,
+          "selfMs": 51.517,
+          "sharePct": 0.039
+        },
+        {
+          "functionName": "A2.rn.createElement",
+          "url": "<forge-sidecar>/assets/index-BJpj7P3h.js",
+          "lineNumber": 16,
+          "selfUs": 23351,
+          "selfMs": 23.351,
+          "sharePct": 0.018
+        },
+        {
+          "functionName": "",
+          "url": "<forge-sidecar>/assets/index-BJpj7P3h.js",
+          "lineNumber": 68,
+          "selfUs": 12521,
+          "selfMs": 12.521,
+          "sharePct": 0.009
+        },
+        {
+          "functionName": "",
+          "url": "<forge-sidecar>/assets/index-BJpj7P3h.js",
+          "lineNumber": 63,
+          "selfUs": 6198,
+          "selfMs": 6.198,
+          "sharePct": 0.005
+        },
+        {
+          "functionName": "Pn",
+          "url": "<forge-sidecar>/assets/index-BJpj7P3h.js",
+          "lineNumber": 47,
+          "selfUs": 6156,
+          "selfMs": 6.156,
+          "sharePct": 0.005
+        },
+        {
+          "functionName": "Dp",
+          "url": "<forge-sidecar>/assets/index-BJpj7P3h.js",
+          "lineNumber": 47,
+          "selfUs": 5687,
+          "selfMs": 5.687,
+          "sharePct": 0.004
+        },
+        {
+          "functionName": "AbortController",
+          "url": "",
+          "lineNumber": -1,
+          "selfUs": 4792,
+          "selfMs": 4.792,
+          "sharePct": 0.004
+        },
+        {
+          "functionName": "oh",
+          "url": "<forge-sidecar>/assets/index-BJpj7P3h.js",
+          "lineNumber": 47,
+          "selfUs": 4640,
+          "selfMs": 4.64,
+          "sharePct": 0.003
+        },
+        {
+          "functionName": "lx",
+          "url": "<forge-sidecar>/assets/index-BJpj7P3h.js",
+          "lineNumber": 47,
+          "selfUs": 4625,
+          "selfMs": 4.625,
+          "sharePct": 0.003
+        },
+        {
+          "functionName": "v4",
+          "url": "<forge-sidecar>/assets/index-BJpj7P3h.js",
+          "lineNumber": 2041,
+          "selfUs": 4103,
+          "selfMs": 4.103,
+          "sharePct": 0.003
+        },
+        {
+          "functionName": "A2.rn.createElement",
+          "url": "<forge-sidecar>/assets/index-BJpj7P3h.js",
+          "lineNumber": 16,
+          "selfUs": 3366,
+          "selfMs": 3.366,
+          "sharePct": 0.003
+        },
+        {
+          "functionName": "_v",
+          "url": "<forge-sidecar>/assets/index-BJpj7P3h.js",
+          "lineNumber": 47,
+          "selfUs": 3344,
+          "selfMs": 3.344,
+          "sharePct": 0.003
+        },
+        {
+          "functionName": "",
+          "url": "<forge-sidecar>/assets/index-BJpj7P3h.js",
+          "lineNumber": 63,
+          "selfUs": 3142,
+          "selfMs": 3.142,
+          "sharePct": 0.002
+        },
+        {
+          "functionName": "",
+          "url": "<forge-sidecar>/assets/index-BJpj7P3h.js",
+          "lineNumber": 47,
+          "selfUs": 3104,
+          "selfMs": 3.104,
+          "sharePct": 0.002
+        }
+      ]
+    },
+    "performanceMetricDeltas": {
+      "Nodes": 0,
+      "LayoutCount": 148,
+      "RecalcStyleCount": 16839,
+      "LayoutDuration": 0.023993,
+      "RecalcStyleDuration": 1.571022,
+      "ScriptDuration": 0.675204,
+      "TaskDuration": 9.029199,
+      "JSHeapUsedSize": 196640
+    },
+    "rawArtifact": {
+      "path": "raw/installed-forge-webview-b116-r2.cpuprofile",
+      "bytes": 641662,
+      "sha256": "4b00bcf6ffa424c18e3bbaea68418e870056a30531ae94eb4be23e73203f6f90"
+    }
+  },
+  "schedulerTrace": {
+    "windowMs": 134010.963,
+    "eventCount": 514981,
+    "completeEventCount": 489811,
+    "eventsAtLeast50ms": 2,
+    "eventsAtLeast5000ms": 0,
+    "maxCompleteEventMs": 332.548,
+    "maxCompleteEvent": {
+      "name": "RunTask",
+      "category": "disabled-by-default-devtools.timeline"
+    },
+    "forgeCompleteEventCount": 0,
+    "maxForgeCompleteEventMs": 0,
+    "maxForgeEvent": null,
+    "controlDispatchMs": {
+      "close": 173,
+      "remount": 3031
+    },
+    "rawArtifact": {
+      "path": "raw/installed-forge-short-trace-b116-r2.json",
+      "bytes": 83068875,
+      "sha256": "bd5c542730a53288be64663a1e0111e6cc342eb2ad05b194f40b9201a8f68334"
+    }
+  },
+  "screenshots": {
+    "installed-agent-api-connected.png": {
+      "path": "installed-agent-api-connected.png",
+      "bytes": 128446,
+      "sha256": "b90cae6fec4809ba1a36c019385c5b66858fbe63b681de96afa0462d88561930"
+    },
+    "installed-agent-api-closed.png": {
+      "path": "installed-agent-api-closed.png",
+      "bytes": 122325,
+      "sha256": "660381af8a7ee1a486777865077f36ed577cb9b3c85139a9c74ae07aca211bdd"
+    },
+    "installed-agent-api-remount-checking.png": {
+      "path": "installed-agent-api-remount-checking.png",
+      "bytes": 127948,
+      "sha256": "a77caa99cf054c5afbaf392545597ef53e7f13ad546d65fa4da6c1ee196fac69"
+    },
+    "installed-agent-api-remount-connected.png": {
+      "path": "installed-agent-api-remount-connected.png",
+      "bytes": 128004,
+      "sha256": "b17e5da726a3ed5f85abf6ed380e9df4b21c1fd7951ae700bd8c2513e68fce2f"
+    }
+  },
+  "sanitization": {
+    "rulesVersion": 1,
+    "rawProfilesTracked": false,
+    "websocketUrlPersisted": false,
+    "pidPersisted": false,
+    "summaryJsonLivePortPersisted": false,
+    "userPathPersisted": false,
+    "forbiddenMatches": 0
+  },
+  "verdict": {
+    "identityGatePassed": true,
+    "installedParityPassed": true,
+    "renderedCapabilitiesPassed": true,
+    "interactionsUnderFiveSeconds": true,
+    "noNewUnresponsiveHostLog": true,
+    "noCompleteTraceEventAtOrAboveFiveSeconds": true,
+    "noForgeSampledSpanAtOrAboveFiveSeconds": true,
+    "correlationGatePassed": true,
+    "overall": "PASS"
+  },
+  "interpretation": "The exact r2 VSIX bytes were installed and rendered in Antigravity. The real extension-host identity stayed stable, the Bridge closed and remounted to Connected with 11 capabilities below five seconds, and the extension-host, workbench-renderer, Forge-webview, and scheduler evidence contain no five-second Forge-owned stall. CPU samples are correlation evidence; complete trace durations are scheduler evidence."
+}

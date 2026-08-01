@@ -43,6 +43,9 @@ export interface WorkspaceRecoveryRecord extends RecoveryBase {
   workspaceId?: string;
   beforeWorkspace: unknown;
   beforeHash: string;
+  /** B116 complete-snapshot guards. Missing on older receipts, which cannot be replayed safely. */
+  beforeSnapshotHash?: string;
+  expectedCurrentSnapshotHash?: string;
 }
 
 export interface DeploymentRecoveryRecord extends RecoveryBase {
@@ -77,6 +80,8 @@ function isRecord(value: unknown): value is DestructiveRecoveryRecord {
   if (!['workspace', 'deploy'].includes(String(row.kind)) || !['preparing', 'ready', 'used'].includes(String(row.status))) return false;
   if (!row.createdAt || !row.expiresAt || !row.expectedCurrentHash || !row.summary) return false;
   if (row.kind === 'workspace') return row.beforeWorkspace !== undefined && typeof row.beforeHash === 'string' &&
+    (row.beforeSnapshotHash === undefined || typeof row.beforeSnapshotHash === 'string') &&
+    (row.expectedCurrentSnapshotHash === undefined || typeof row.expectedCurrentSnapshotHash === 'string') &&
     (row.workspaceId === undefined || /^ws_[a-f0-9]{24}$/i.test(row.workspaceId));
   return typeof row.targetRoot === 'string' && typeof row.targetPath === 'string' && typeof row.modId === 'string'
     && typeof row.beforeFingerprint === 'string' && typeof row.beforeBytes === 'number' && typeof row.priorExisted === 'boolean';
@@ -150,7 +155,9 @@ export class DestructiveRecoveryStore {
     workspaceId: string;
     beforeWorkspace: unknown;
     beforeHash: string;
+    beforeSnapshotHash: string;
     expectedCurrentHash: string;
+    expectedCurrentSnapshotHash: string;
     summary: string;
   }): WorkspaceRecoveryRecord {
     if (!/^ws_[a-f0-9]{24}$/i.test(input.workspaceId)) throw new Error('Workspace recovery workspaceId is malformed.');
@@ -169,8 +176,10 @@ export class DestructiveRecoveryStore {
       expiresAt: new Date(now + this.maxAgeMs).toISOString(),
       summary: input.summary,
       expectedCurrentHash: input.expectedCurrentHash,
+      expectedCurrentSnapshotHash: input.expectedCurrentSnapshotHash,
       beforeWorkspace: input.beforeWorkspace,
       beforeHash: input.beforeHash,
+      beforeSnapshotHash: input.beforeSnapshotHash,
     };
     this.write(record);
     return record;
@@ -264,9 +273,20 @@ export function runDestructiveRecoverySelftest(): {
   let now = Date.parse('2026-07-30T00:00:00Z');
   try {
     const store = new DestructiveRecoveryStore({ root, maxEntries: 3, maxAgeMs: 1_000, maxWorkspaceBytes: 256, maxDeployBytes: 64, now: () => now });
-    const workspace = store.createWorkspace({ workspaceId: 'ws_111111111111111111111111', beforeWorkspace: { name: 'before', nodes: [], links: [] }, beforeHash: 'before', expectedCurrentHash: 'after', summary: 'forced overwrite' });
+    const workspace = store.createWorkspace({
+      workspaceId: 'ws_111111111111111111111111',
+      beforeWorkspace: { name: 'before', nodes: [], links: [] },
+      beforeHash: 'before',
+      beforeSnapshotHash: 'before-snapshot',
+      expectedCurrentHash: 'after',
+      expectedCurrentSnapshotHash: 'after-snapshot',
+      summary: 'forced overwrite',
+    });
     const readWorkspace = store.read(workspace.id);
-    ok('workspace_roundtrip', readWorkspace.ok && readWorkspace.record.kind === 'workspace' && readWorkspace.record.expectedCurrentHash === 'after');
+    ok('workspace_roundtrip', readWorkspace.ok && readWorkspace.record.kind === 'workspace'
+      && readWorkspace.record.expectedCurrentHash === 'after'
+      && readWorkspace.record.beforeSnapshotHash === 'before-snapshot'
+      && readWorkspace.record.expectedCurrentSnapshotHash === 'after-snapshot');
     store.markUsed(workspace.id);
     const usedWorkspace = store.read(workspace.id);
     ok('used_record_is_retained_but_not_ready', usedWorkspace.ok && usedWorkspace.record.status === 'used');
@@ -274,7 +294,17 @@ export function runDestructiveRecoverySelftest(): {
     try { store.markUsed(workspace.id); } catch { replayRejected = true; }
     ok('replay_rejected', replayRejected);
     let oversizedRejected = false;
-    try { store.createWorkspace({ workspaceId: 'ws_111111111111111111111111', beforeWorkspace: { huge: 'x'.repeat(300) }, beforeHash: 'a', expectedCurrentHash: 'b', summary: 'large' }); } catch { oversizedRejected = true; }
+    try {
+      store.createWorkspace({
+        workspaceId: 'ws_111111111111111111111111',
+        beforeWorkspace: { huge: 'x'.repeat(300) },
+        beforeHash: 'a',
+        beforeSnapshotHash: 'as',
+        expectedCurrentHash: 'b',
+        expectedCurrentSnapshotHash: 'bs',
+        summary: 'large',
+      });
+    } catch { oversizedRejected = true; }
     ok('oversized_workspace_rejected', oversizedRejected);
 
     const deploy = store.prepareDeployment({ priorExisted: true, targetRoot: root, targetPath: path.join(root, 'mod'), modId: 'mod', beforeFingerprint: 'old', beforeBytes: 12, summary: 'deploy mod' });

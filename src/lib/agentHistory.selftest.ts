@@ -18,7 +18,7 @@ import os from 'os';
 import path from 'path';
 import {
   describeAction, lineDelta, unifiedDiff, looksBinary, redactSecrets, encodeRow, decodeRows,
-  filterRows, revertibility, ledgerRouteKind, compactDiagnostics, LedgerRow,
+  filterRows, revertibility, ledgerRouteKind, compactDiagnostics, normalizeHistoryRecoveryTruth, LedgerRow,
 } from './agentHistory';
 import { AgentHistoryStore } from './agentHistoryStore';
 
@@ -143,6 +143,21 @@ export function runAgentHistorySelftest(): { pass: boolean; checks: Array<{ name
     });
     ok('workspace summary names the canvas and node counts', /Replaced the working canvas "AI Influence" \(225 nodes\)/.test(wsRow.title), wsRow.title);
     ok('workspace summary reports changed nodes', wsRow.title.includes('1 node changed'), wsRow.title);
+    const legacyWorkspaceRecovery = normalizeHistoryRecoveryTruth({
+      id: 'legacy-recovery-row', ts: new Date(0).toISOString(), agent: { kind: 'studio', label: 'studio' },
+      kind: 'workspace', title: 'Forced workspace replacement', files: [], outcome: { status: 'ok' },
+      durationMs: 1, recoveryId: 'workspace-legacy-receipt', recoveryKind: 'workspace', revertible: true,
+    });
+    ok('legacy workspace recovery is not advertised as replayable',
+      legacyWorkspaceRecovery.revertible === false && /predates complete snapshot guards/.test(String(legacyWorkspaceRecovery.revertReason)),
+      legacyWorkspaceRecovery.revertReason);
+    const guardedWorkspaceRecovery = normalizeHistoryRecoveryTruth({
+      ...legacyWorkspaceRecovery,
+      recoveryExpectedSnapshotHash: 'snapshot-after',
+      revertible: true,
+      revertReason: undefined,
+    });
+    ok('snapshot-guarded workspace recovery remains replayable', guardedWorkspaceRecovery.revertible === true);
 
     const genRow = describeAction({
       kind: 'generate', status: 200, files: [], routePath: '/api/agent/generate',

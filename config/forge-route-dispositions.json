@@ -130,6 +130,7 @@
     "src/lib/watcherVerdict.ts",
     "src/lib/workspaceConflict.ts",
     "src/lib/workspaceIdentity.ts",
+    "src/lib/workspacePolling.ts",
     "src/lib/workspaceQuickFixes.ts",
     "src/lib/workspaceRegistry.ts",
     "src/lib/workspaceState.ts",
@@ -1025,7 +1026,7 @@
       "registrations": 1
     },
     "GET /api/agent/workspace/parked": {
-      "disposition": "legacy-agent-api",
+      "disposition": "session-only",
       "owner": "agent-api",
       "registrations": 1
     },
@@ -1460,7 +1461,7 @@
       "registrations": 1
     },
     "POST /api/agent/workspace/restore-parked": {
-      "disposition": "legacy-agent-api",
+      "disposition": "session-only",
       "owner": "agent-api",
       "registrations": 1
     },
@@ -1628,16 +1629,16 @@
     "schema.element.explain@1": "066fc8d2153c753a7f498044a0fb2e4a6921f81a2fe1deb6445a02894194286d",
     "workspace.compile@1": "f499ed768aa66f810f0da7ea3c230c98fdd0493d54ec0c08055b0ba2abed51de",
     "workspace.generate.preview@1": "76630ed9e34f95a4cc895088e0d3def92d5f3b2bb223d071e1e5a4fc1b4f6add",
-    "workspace.read@1": "247eae15f67e9bc64608ec1b0dc9dff0e36cc1f195b85d1c1a49d8b6b44a25f9"
+    "workspace.read@2": "962774de4a25e8725a0d90d4982298cc72f100312075b1f6f4ff9de1482752d7"
   },
   "mcpModuleSignature": {
-    "version": 5,
-    "hash": "79cc65f74387ae4fdda93fba0f0e4d0c0fdb2cde697d8b9c80a050352d2ca53c"
+    "version": 8,
+    "hash": "c37b5c02c0c9f1d92c7d956f991ca5b184e54c248bebdfb1bfbe3911985a9ab7"
   },
   "mcpSignatures": {
     "validate_mod": "536c11b1ddbd5575f54ee832e887149947ae5b302a0fa873c04113d474b64448",
     "list_schema_domains": "578cd399452547080765b87adccba3c66d839d7a80eeab320f73aebec7d29893",
-    "get_workspace": "8be29b46890e1965f944cd57f8c3010cedd055f4be41380e9464cbb7c7a8b400",
+    "get_workspace": "f24000a8bb446b4d3f881e018336a64f8206757dd0e7df7db555be2bd2a1e7e7",
     "compile_workspace": "37660dbf2abb6bc6b17c79bcebb30e430352ed04bdd09d3beb495d2485b35794",
     "author_check": "536c11b1ddbd5575f54ee832e887149947ae5b302a0fa873c04113d474b64448",
     "stage_and_validate": "536c11b1ddbd5575f54ee832e887149947ae5b302a0fa873c04113d474b64448",
@@ -1649,7 +1650,7 @@
   "mcpCapabilityIdentities": {
     "validate_mod": "project.validate@1",
     "list_schema_domains": "schema.domains.list@1",
-    "get_workspace": "workspace.read@1",
+    "get_workspace": "workspace.read@2",
     "compile_workspace": "workspace.compile@1",
     "author_check": "project.validate@1",
     "stage_and_validate": "project.validate@1",

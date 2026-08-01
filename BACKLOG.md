@@ -10,37 +10,34 @@
 
 Ken explicitly promoted GitHub initiative #9 and child requests #10–#21 above the active R13 close on 2026-07-31.
 This is a bounded extension program, not a Forge rewrite: reuse the existing validator, workspace registry/CAS,
-artifact/release pipeline, runtime watcher, Agent API, MCP shim, built-in harness, and UI shells. The first batch is
-W0–W1 only: durable baseline plus a canonical `forge.capability.v1` contract and route-drift oracle. R13 is parked,
-not discarded; its exact tracked/untracked state is recoverable from the ignored checkpoint at
-`test-results/checkpoints/2026-07-31-r13-before-b115/`. Full contract, phases, gates and toolkit disposition:
+artifact/release pipeline, runtime watcher, Agent API, MCP shim, built-in harness, and UI shells. W0–W1 are now
+`VERIFIED`; the next bounded unit is W2. Full contract, phases, gates and toolkit disposition:
 `docs/plans/2026-07-31-capability-convergence.md`.
 
 **Hard gates:** no Effective Tree authority before the W7 X4 engine merge-law oracle; no source-writing rebase or
 network-driven update automation before the Phase 2 review stop and recorded Ken decisions; no public release
 without explicit release authorization and all applicable packaged/installed gates.
 
-**W0–W1 checkpoint (2026-07-31): `PARTIAL`.** The canonical eleven-capability registry, exact route/MCP disposition
-oracle, constrained preview/validation adapters, CLI discovery, live MCP narrowing, Agent Bridge contract state, and
-input-before-authority/spend negatives are implemented. Final source gates, 328/328 route integration, 129/129
-runtime oracles, focused browser 13/13 plus eyes-on screenshots, full isolated E2E 64/64, production build, and
-precommit are green. The reviewed manifest is SHA-256
-`2272083e7804692f2529e03fee1a1e3ba49506611c7a7226ea80ea5f311a5264`.
-W1 is not `VERIFIED` because its shipped extension files overlap the still-unreleased R13 work, so a packaged VSIX
-and installed Antigravity result cannot be attributed to W1 alone. Do not start W2 until that combined release
-boundary is explicitly authorized and evidenced. Full close: `docs/plans/2026-07-31-capability-convergence.md`.
+**W0–W1 checkpoint (2026-08-01): `VERIFIED` through B116.** The canonical eleven-capability registry, exact route/MCP
+disposition oracle, constrained preview/validation adapters, CLI discovery, live MCP narrowing, Agent Bridge contract
+state, and input-before-authority/spend negatives are implemented. The final current-source gates include 347/347
+route integration, 129/129 runtime oracles, 82/82 reference integration, 94/94 isolated E2E, exact r2 VSIX inspection,
+7/7 installed-file parity, and a real Antigravity extension-host/rendered close-remount profile. W2 is unlocked as the
+next bounded specification. Full close: `docs/plans/2026-07-31-capability-convergence.md`.
 
-**Combined installed gate attempt 1 (2026-08-01): `FAILED`; remediation `in_progress`.** Exact committed B115-W1/R13
-bytes built, packaged, inspected, installed with critical-file parity, and rendered the eleven-capability LIVE
-contract. The required Bridge unsubscribe/close interaction then reproduced a multi-minute Antigravity renderer
-stall in both the original IDE window and a second no-folder window. B115 W1 remains `PARTIAL`; no version bump or
-public publish is authorized. Failure evidence and the next evidence-first boundary:
-`docs/plans/2026-08-01-b115-r13-installed-gate.md`.
+**Combined installed gate (2026-08-01): attempt 1 `FAILED`; B116 remediation `VERIFIED`.** The first package exposed a
+multi-minute renderer stall. B116 replaced unchanged full-snapshot polling with conditional summary polling, preserved
+truthful pause/resume and workspace authority, and closed the exact installed boundary: VSIX SHA-256
+`C5B46B44FC60AB804B5B8E561C2C41DD1B3DFB466801A5FAC6098361737A8565`, installed parity 7/7, Bridge close 173 ms,
+remount to Connected with 11 capabilities in 3,031 ms, stable real extension-host PID, zero new unresponsive events,
+and no five-second sampled or traced Forge stall. Attempt-1 evidence remains in
+`docs/plans/2026-08-01-b115-r13-installed-gate.md`; verified remediation is in
+`docs/plans/2026-08-01-b116-installed-renderer-profile.md`. No public publish occurred.
 
 ### B110 · Kimi R1-R21 execution program `in_progress` (P1, DURABLE LEDGER)
 
 The complete recommendation set is now reconciled instead of living in the deleted KNOWN-BUGS addendum.
-Current verdict: R1-R12 except R13, plus R14-R17/R19/R20 verified; R13 in progress; R21 open; R18 partial.
+Current verdict: R1–R17 plus R19–R20 VERIFIED; R18 PARTIAL; R21 OPEN.
 Execute only as bounded workflow tasks in the recorded order—never as a sweeping
 cleanup—and update each row after every implementation. Ledger:
 `docs/plans/2026-07-29-kimi-recommendations-ledger.md`.

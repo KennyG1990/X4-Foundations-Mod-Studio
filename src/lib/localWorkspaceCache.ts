@@ -17,8 +17,9 @@ export function capLocalHistory<T>(history: T[]): T[] {
 export function persistWorkspaceCache(
   storage: WorkspaceCacheStorage,
   serializedWorkspace: string,
+  primaryKey = WORKSPACE_CACHE_KEY,
 ): { ok: true } | { ok: false; error: unknown } {
-  const tryPrimary = () => storage.setItem(WORKSPACE_CACHE_KEY, serializedWorkspace);
+  const tryPrimary = () => storage.setItem(primaryKey, serializedWorkspace);
   try {
     tryPrimary();
     return { ok: true };

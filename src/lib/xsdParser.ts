@@ -402,14 +402,28 @@ export function runSchemaDiscoverySelftest(): { pass: boolean; checks: Array<{ n
     const deep = path.join(tmp, 'weird'); fs.mkdirSync(path.join(deep, 'a', 'b', 'schemas'), { recursive: true }); fs.writeFileSync(path.join(deep, 'a', 'b', 'schemas', 'md.xsd'), '<xs:schema/>');
     ok('recursive fallback finds deep md', (discoverXsd(deep, 'md.xsd') || '').endsWith(path.join('schemas', 'md.xsd')));
 
-    const r = resolveXsdConfig({ xsdSchemaPath: tmp });
-    ok('resolveXsdConfig reports all present', r.mdExists === true && r.commonExists === true && r.aiscriptsExists === true);
+    // This oracle validates explicit config precedence inside its fixture. Production
+    // X4_REFERENCE_ROOT/X4_XSD_PATH values intentionally outrank config at runtime, so
+    // isolate them here or a correctly configured installed Forge makes the fixture red.
+    const prevReferenceRoot = process.env.X4_REFERENCE_ROOT;
+    const prevXsdPath = process.env.X4_XSD_PATH;
+    delete process.env.X4_REFERENCE_ROOT;
+    delete process.env.X4_XSD_PATH;
+    try {
+      const r = resolveXsdConfig({ xsdSchemaPath: tmp });
+      ok('resolveXsdConfig reports all present', r.mdExists === true && r.commonExists === true && r.aiscriptsExists === true);
 
-    const corpus = path.join(tmp, 'corpus');
-    mk('corpus/libraries/md.xsd'); mk('corpus/libraries/common.xsd'); mk('corpus/libraries/aiscripts.xsd');
-    const fromCorpus = resolveXsdConfig({ x4ReferenceRoot: corpus });
-    ok('unpacked root derives schema directory', fromCorpus.schemaDir === path.join(corpus, 'libraries'), fromCorpus.schemaDir);
-    ok('derived corpus schemas report present', fromCorpus.mdExists && fromCorpus.commonExists && fromCorpus.aiscriptsExists);
+      const corpus = path.join(tmp, 'corpus');
+      mk('corpus/libraries/md.xsd'); mk('corpus/libraries/common.xsd'); mk('corpus/libraries/aiscripts.xsd');
+      const fromCorpus = resolveXsdConfig({ x4ReferenceRoot: corpus });
+      ok('unpacked root derives schema directory', fromCorpus.schemaDir === path.join(corpus, 'libraries'), fromCorpus.schemaDir);
+      ok('derived corpus schemas report present', fromCorpus.mdExists && fromCorpus.commonExists && fromCorpus.aiscriptsExists);
+    } finally {
+      if (prevReferenceRoot === undefined) delete process.env.X4_REFERENCE_ROOT;
+      else process.env.X4_REFERENCE_ROOT = prevReferenceRoot;
+      if (prevXsdPath === undefined) delete process.env.X4_XSD_PATH;
+      else process.env.X4_XSD_PATH = prevXsdPath;
+    }
 
     // B64-SEC3: a corrupt config.json degrades to {} (unconfigured) and never throws.
     const cfgDir = path.join(tmp, 'cfg'); fs.mkdirSync(cfgDir, { recursive: true });
