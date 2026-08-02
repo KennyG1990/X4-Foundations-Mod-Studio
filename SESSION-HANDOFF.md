@@ -9,8 +9,8 @@ machine-reviewed receipt-coverage inventory and pure request policy. No producti
 
 ## Operator brief
 
-- Project: `F:\DEV_ENV\X4_Forge`. Baseline/current pre-commit HEAD, `origin/main`, and remote main are all
-  `ce5266a34ed7c560bd6d98e409251c90b1b9430e`.
+- Project: `F:\DEV_ENV\X4_Forge`. W3A code/evidence is committed/pushed at
+  `bec8247a84a2267d9429f5bef67fc7c8ab5c6411`; local HEAD, `origin/main`, and remote main matched after push.
 - Machine state: Antigravity is open on Ken's existing DeadAir workspace; X4 is stopped; the machine was declared
   quiet. W3A used isolated temporary server/data/state roots and never changed the visible canvas.
 - Eyeball queue:
@@ -19,9 +19,8 @@ machine-reviewed receipt-coverage inventory and pure request policy. No producti
     confirm updates stop.
   - W3C will require a disposable real-Antigravity receipt/history rendering and installed-byte parity. W3A has no
     visible control, so a screenshot would not prove its substrate.
-- Commit question: the prior GitHub-ledger close is committed/pushed. W3A precommit passed in 123.2 seconds; stage
-  only the owned paths below, commit `feat(authority): add durable action receipt foundation`, push, and assert
-  `origin/main == HEAD == ls-remote` before W3B0 edits.
+- Commit question: W3A is committed/pushed and GitHub `#20`/`#19` readback passed. Commit this final handoff/readback
+  delta before W3B0 so the next session never mistakes the verified substrate for uncommitted work.
 
 ## W3A verified evidence
 
@@ -49,12 +48,12 @@ machine-reviewed receipt-coverage inventory and pure request policy. No producti
 - Preserve and do not stage/reset/clean: unrelated existing `BACKLOG.md` hunks; `CODEX-ONBOARDING.md`;
   `KNOWN-BUGS.md`; deleted data/Discord files and scripts; `.github/ISSUE_TEMPLATE/*`; `Note for Kimi.md`; old 0.0.35
   PNG changes; R8/R17 screenshots; ignored `test-results/*`; generated/ignored Graphify and bundle files.
-- External durable delta after commit: update the StarForge capability map and project/global AAR ledgers, then update
-  GitHub `#20` and `#19` in the same task. Keep both issues open because W3B/W3C remain.
+- External durable delta is complete: StarForge capability/AAR ledgers were appended, and GitHub `#20`/`#19` remain
+  open/`PARTIAL` with one exact W3A implementation block each and commit-linked evidence.
 
 ## Next bounded work
 
-1. Complete W3A final precommit, selective staging, commit/push/parity assertion, external ledgers, and GitHub readback.
+1. Commit/push this final handoff/readback delta and reassert remote parity.
 2. Start `docs/plans/2026-08-02-w3b0-action-receipt-coverage.md` with a fresh native Luna work order. It must join all
    292 routes, semantic effects, 34 filesystem writers, 11 host stores, two browser outputs, SQLite, Agent History,
    and external effects; normal audit fails on every unknown/mismatch.

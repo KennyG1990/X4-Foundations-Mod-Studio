@@ -284,6 +284,9 @@ Dependency: W0-W2B VERIFIED through B118
   run-command absence without explicit opt-in. The harness stopped its ephemeral process trees.
 - Graphify: deterministic refresh -> 4,025 nodes / 9,658 edges / 171 communities; the W3A selftest and adapter are in
   the server-reachable graph.
+- GitHub projection after push: issues `#20` and `#19` remain open/`PARTIAL`; connector readback found exactly one
+  implementation-ledger start/end marker on each, exact W3A commit `bec8247a84a2267d9429f5bef67fc7c8ab5c6411`, and
+  the exact W3A plan link.
 - Visual/installed/X4 applicability: none for W3A. It introduces no user-visible control and no production mutation
   path consumes receipts yet. Real Antigravity receipt/history rendering is mandatory in W3C; running X4 is not a W3
   gate. Full E2E remains mandatory after W3B/W3C behavior integration, not for this pure substrate checkpoint.
@@ -322,6 +325,8 @@ Dependency: W0-W2B VERIFIED through B118
   TOCTOU under hostile local filesystem replacement, and bounded retention remain explicit follow-up concerns. The
   route harness currently probes whatever `dist` exists; W3B0 now requires a freshness/order gate.
 - Suggested checkpoint title: `feat(authority): add durable action receipt foundation`.
+- Checkpoint committed/pushed: `bec8247a84a2267d9429f5bef67fc7c8ab5c6411`; local HEAD, `origin/main`, and remote
+  main were equal immediately after push.
 
 ## AAR
 
