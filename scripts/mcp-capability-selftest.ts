@@ -24,9 +24,30 @@ const EXPECTED_TOOLS = [
   'check_patch_readiness',
   'explain_element',
 ];
+const READ_TOOLS = ['list_schema_domains', 'get_workspace', 'readiness', 'check_conflicts', 'explain_element'];
+const WRITE_TOOLS = [
+  'validate_mod', 'list_schema_domains', 'get_workspace', 'compile_workspace', 'author_check',
+  'stage_and_validate', 'readiness', 'check_conflicts', 'explain_element',
+];
+const CUSTOM_TOOLS = ['validate_mod', 'list_schema_domains', 'author_check', 'stage_and_validate', 'explain_element'];
+const MCP_KEY = `x4fk_${'a'.repeat(64)}`;
+const MCP_WORKSPACE_ID = 'ws_111111111111111111111111';
+const EFFECTIVE_API_VERSION = '2026-08-01.agent-effective.v1';
+const EFFECTIVE_SCHEMA_VERSION = 'forge.agent-capability-authority.v1';
+const ROUTE_POLICY_VERSION = 'forge.route-dispositions.v4';
 
 function sha256(value: string): string {
   return crypto.createHash('sha256').update(value, 'utf8').digest('hex');
+}
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const entries = Object.keys(value as Record<string, unknown>).sort().map(key =>
+      `${JSON.stringify(key)}:${stableStringify((value as Record<string, unknown>)[key])}`);
+    return `{${entries.join(',')}}`;
+  }
+  return JSON.stringify(value);
 }
 
 async function listen(server: http.Server): Promise<number> {
@@ -58,14 +79,14 @@ interface McpClient {
   close(): Promise<void>;
 }
 
-async function startMcp(baseUrl: string): Promise<McpClient> {
+async function startMcp(baseUrl: string, auth: { key?: string; workspaceId?: string } = {}): Promise<McpClient> {
   const child = spawn(process.execPath, [path.join(process.cwd(), 'vscode-extension', 'mcp', 'x4forge-mcp.cjs')], {
     cwd: process.cwd(),
     env: {
       ...process.env,
       X4FORGE_URL: baseUrl,
-      X4FORGE_KEY: '',
-      X4FORGE_WORKSPACE_ID: '',
+      X4FORGE_KEY: auth.key ?? MCP_KEY,
+      X4FORGE_WORKSPACE_ID: auth.workspaceId ?? MCP_WORKSPACE_ID,
       X4FORGE_CAPABILITY_RETRY_MS: '100',
     },
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -177,15 +198,20 @@ async function toolsFor(client: McpClient): Promise<any[]> {
   return tools;
 }
 
-async function withMcp<T>(baseUrl: string, run: (client: McpClient) => Promise<T>): Promise<T> {
-  const client = await startMcp(baseUrl);
+async function withMcp<T>(
+  baseUrl: string,
+  run: (client: McpClient) => Promise<T>,
+  auth?: { key?: string; workspaceId?: string },
+): Promise<T> {
+  const client = await startMcp(baseUrl, auth);
   try { return await run(client); } finally { await client.close(); }
 }
 
-type Mode = 'live' | 'legacy' | 'malformed' | 'current-missing' | 'unknown-envelope' | 'primitive' |
+type Mode = 'live' | 'read' | 'write' | 'legacy' | 'malformed' | 'current-missing' | 'unknown-envelope' | 'primitive' |
   'wrong-hash' | 'unauthorized' | 'forbidden' | 'incomplete' | 'duplicate-id' | 'binding-collision' |
   'fixed-body-type' | 'mcp-alias-collision' | 'extra-field' | 'api-path' | 'api-dot-path' | 'open-input' | 'hung' | 'outage' |
-  'narrowed' | 'alias-narrowed' | 'v2';
+  'narrowed' | 'alias-narrowed' | 'v2' | 'wrong-workspace' | 'authority-wrong-hash' | 'effective-malformed' |
+  'effective-missing' | 'effective-expanded';
 let mode: Mode = 'live';
 let endpointMode: 'normal' | 'invalid-json' | 'empty-json' | 'missing-fields' | 'missing-workspace-snapshot' = 'normal';
 const contract = buildForgeCapabilityContract(sha256);
@@ -194,7 +220,6 @@ const wrongHashContract = {
   contractHash: `${contract.contractHash[0] === '0' ? '1' : '0'}${contract.contractHash.slice(1)}`,
 };
 const validationV1 = FORGE_CAPABILITIES.find(capability => capability.id === 'project.validate')!;
-const narrowedContract = buildForgeCapabilityContract(sha256, [validationV1]);
 const aliasNarrowedValidationV1 = {
   ...validationV1,
   surfaces: {
@@ -202,9 +227,7 @@ const aliasNarrowedValidationV1 = {
     mcp: validationV1.surfaces.mcp.filter(projection => projection.id === 'validate_mod'),
   },
 } as ForgeCapabilityDescriptorV1;
-const aliasNarrowedContract = buildForgeCapabilityContract(sha256, [aliasNarrowedValidationV1]);
 const validationV2 = { ...validationV1, version: 2 } as unknown as ForgeCapabilityDescriptorV1;
-const v2Contract = buildForgeCapabilityContract(sha256, [validationV2]);
 const duplicateIdV2 = {
   ...validationV1,
   version: 2,
@@ -235,6 +258,12 @@ const mcpAliasCollisionCapability = {
   apiBindings: validationV1.apiBindings.map(binding => ({ ...binding, path: `${binding.path}/alias-collision` })),
 } as ForgeCapabilityDescriptorV1;
 const mcpAliasCollisionContract = buildForgeCapabilityContract(sha256, [validationV1, mcpAliasCollisionCapability]);
+const effectiveOrphanCapability = {
+  ...validationV1,
+  id: 'project.validationorphan',
+  apiBindings: validationV1.apiBindings.map(binding => ({ ...binding, path: `${binding.path}/effective-orphan` })),
+  surfaces: { ...validationV1.surfaces, mcp: [] },
+} as ForgeCapabilityDescriptorV1;
 const extraFieldContract = { ...contract, generatedAt: '2030-01-01T00:00:00.000Z' };
 const invalidPathCapability = {
   ...validationV1,
@@ -259,35 +288,70 @@ const incompleteContract = buildForgeCapabilityContract(sha256, [{
   apiBindings: [],
   surfaces: {},
 } as unknown as ForgeCapabilityDescriptorV1]);
+type Constraint = { capabilityIdentities: string[]; allowedEffects: string[] };
+const customConstraint: Constraint = {
+  capabilityIdentities: ['project.validate@1'],
+  allowedEffects: ['read', 'analyze', 'audit-write', 'audit-retention-delete'],
+};
+
+function effectiveAuthority(
+  scope: 'read' | 'write' | 'deploy',
+  constraint: Constraint | null = null,
+  effectiveCapabilities?: ForgeCapabilityDescriptorV1[],
+): Record<string, unknown> {
+  const allowedEffects = new Set(constraint?.allowedEffects || []);
+  const selected = new Set(constraint?.capabilityIdentities || []);
+  const capabilities = effectiveCapabilities || FORGE_CAPABILITIES.filter(capability => {
+    if (!capability.access.agentScopes.some(candidate => candidate === scope)) return false;
+    if (capability.access.public || constraint === null) return true;
+    return selected.has(`${capability.id}@${capability.version}`) && capability.effects.every(effect => allowedEffects.has(effect));
+  });
+  const effectiveIdentities = new Set(capabilities.map(capability => `${capability.id}@${capability.version}`));
+  const exclusions = FORGE_CAPABILITIES.flatMap(capability => {
+    const identity = `${capability.id}@${capability.version}`;
+    if (effectiveIdentities.has(identity)) return [];
+    if (!capability.access.agentScopes.some(candidate => candidate === scope)) return [{ capabilityIdentity: identity, code: 'CAPABILITY_SCOPE_DENIED' }];
+    if (constraint !== null && !selected.has(identity)) return [{ capabilityIdentity: identity, code: 'CAPABILITY_NOT_GRANTED' }];
+    const disallowedEffects = capability.effects.filter(effect => !allowedEffects.has(effect));
+    return [{ capabilityIdentity: identity, code: 'CAPABILITY_EFFECT_DENIED', disallowedEffects }];
+  });
+  const unsigned = {
+    api_version: EFFECTIVE_API_VERSION,
+    authority_schema_version: EFFECTIVE_SCHEMA_VERSION,
+    actor: {
+      kind: 'agent', label: `${scope} fixture`, keyId: `key_${scope}_fixture`, scope,
+      workspaceId: mode === 'wrong-workspace' ? 'ws_222222222222222222222222' : MCP_WORKSPACE_ID,
+    },
+    route_policy: { version: ROUTE_POLICY_VERSION, hash: 'b'.repeat(64) },
+    constraint,
+    capability_contract: buildForgeCapabilityContract(sha256, capabilities),
+    exclusions,
+  };
+  return { ...unsigned, authority_hash: sha256(stableStringify(unsigned)) };
+}
 const routeCalls: Array<{ method: string; path: string; body: unknown }> = [];
+const discoveryCalls: Array<{ path: string; authorization?: string; workspaceId?: string }> = [];
 const server = http.createServer((request, response) => {
   if (request.url === '/api/agent/schema') {
+    discoveryCalls.push({
+      path: request.url,
+      authorization: request.headers.authorization,
+      workspaceId: request.headers['x-workspace-id'] as string | undefined,
+    });
     if (mode === 'hung') return;
-    if (mode === 'unauthorized') {
-      response.writeHead(401, { 'Content-Type': 'application/json' });
-      response.end(JSON.stringify({ error: 'invalid agent key' }));
-      return;
-    }
-    if (mode === 'forbidden') {
-      response.writeHead(403, { 'Content-Type': 'application/json' });
-      response.end(JSON.stringify({ error: 'key scope denied' }));
-      return;
-    }
     if (mode === 'outage') {
       response.writeHead(503, { 'Content-Type': 'application/json' });
       response.end(JSON.stringify({ error: 'schema temporarily unavailable' }));
       return;
     }
     response.writeHead(200, { 'Content-Type': 'application/json' });
-    const body = mode === 'live'
+    const effectiveModes: Mode[] = [
+      'live', 'read', 'write', 'narrowed', 'alias-narrowed', 'v2', 'unauthorized', 'forbidden',
+      'wrong-workspace', 'authority-wrong-hash', 'effective-malformed', 'effective-missing', 'effective-expanded',
+    ];
+    const body = effectiveModes.includes(mode)
       ? { api_version: '2026-07-30.agent.v4', capability_contract: contract }
-      : mode === 'narrowed'
-        ? { api_version: '2026-07-30.agent.v4', capability_contract: narrowedContract }
-        : mode === 'alias-narrowed'
-          ? { api_version: '2026-07-30.agent.v4', capability_contract: aliasNarrowedContract }
-          : mode === 'v2'
-          ? { api_version: '2026-07-30.agent.v4', capability_contract: v2Contract }
-          : mode === 'duplicate-id'
+      : mode === 'duplicate-id'
             ? { api_version: '2026-07-30.agent.v4', capability_contract: duplicateIdContract }
             : mode === 'binding-collision'
               ? { api_version: '2026-07-30.agent.v4', capability_contract: bindingCollisionContract }
@@ -317,6 +381,56 @@ const server = http.createServer((request, response) => {
                   ? 'not-a-schema-envelope'
                   : { api_version: '2026-06-10.agent.v2' };
     response.end(JSON.stringify(body));
+    return;
+  }
+  if (request.url === '/api/agent/capabilities/effective') {
+    discoveryCalls.push({
+      path: request.url,
+      authorization: request.headers.authorization,
+      workspaceId: request.headers['x-workspace-id'] as string | undefined,
+    });
+    if (mode === 'legacy') {
+      response.writeHead(404, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ error: 'not found' }));
+      return;
+    }
+    if (mode === 'effective-missing') {
+      response.writeHead(404, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ error: 'not found' }));
+      return;
+    }
+    if (mode === 'unauthorized') {
+      response.writeHead(401, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ error: 'invalid agent key' }));
+      return;
+    }
+    if (mode === 'forbidden') {
+      response.writeHead(403, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ error: 'key scope denied' }));
+      return;
+    }
+    let authority = mode === 'read'
+      ? effectiveAuthority('read')
+      : mode === 'write'
+        ? effectiveAuthority('write')
+        : mode === 'narrowed'
+          ? effectiveAuthority('write', customConstraint)
+          : mode === 'alias-narrowed'
+            ? effectiveAuthority('write', customConstraint, [
+              FORGE_CAPABILITIES.find(capability => capability.id === 'schema.domains.list')!,
+              FORGE_CAPABILITIES.find(capability => capability.id === 'schema.element.explain')!,
+              aliasNarrowedValidationV1,
+            ])
+            : mode === 'v2'
+              ? effectiveAuthority('write', customConstraint, [validationV2])
+              : mode === 'effective-expanded'
+                ? effectiveAuthority('deploy', null, [...FORGE_CAPABILITIES, effectiveOrphanCapability])
+              : mode === 'effective-malformed'
+                ? { api_version: EFFECTIVE_API_VERSION, actor: {} }
+                : effectiveAuthority('deploy');
+    if (mode === 'authority-wrong-hash') authority = { ...authority, authority_hash: '0'.repeat(64) };
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify(authority));
     return;
   }
   if (request.method === 'GET' && request.url?.startsWith('/api/agent/lang/hover?')) {
@@ -384,13 +498,48 @@ const server = http.createServer((request, response) => {
 const port = await listen(server);
 const baseUrl = `http://127.0.0.1:${port}`;
 try {
+  mode = 'read';
+  await withMcp(baseUrl, async client => {
+    assert.deepEqual((await toolsFor(client)).map(tool => tool.name), READ_TOOLS,
+      'read key effective discovery must expose exactly five curated tools');
+  });
+
+  mode = 'write';
+  await withMcp(baseUrl, async client => {
+    assert.deepEqual((await toolsFor(client)).map(tool => tool.name), WRITE_TOOLS,
+      'write key effective discovery must expose exactly nine curated tools');
+  });
+
   mode = 'live';
+  for (const [label, auth] of [
+    ['missing-key', { key: '' }],
+    ['missing-workspace', { workspaceId: '' }],
+  ] as const) {
+    await withMcp(baseUrl, async client => {
+      assert.deepEqual(await toolsFor(client), [], `${label} must advertise no tools before effective discovery`);
+      const denied = await client.request('tools/call', { name: 'get_workspace', arguments: {} });
+      assert.equal(denied.error?.code, -32602, `${label} must also block direct tools/call`);
+    }, auth);
+  }
+
+  mode = 'live';
+  discoveryCalls.length = 0;
   await withMcp(baseUrl, async client => {
     const liveTools = await toolsFor(client);
     assert.deepEqual(liveTools.map(tool => tool.name), EXPECTED_TOOLS, 'live discovery changed the curated MCP inventory');
+    assert.deepEqual(discoveryCalls.slice(0, 2).map(call => call.path), [
+      '/api/agent/schema', '/api/agent/capabilities/effective',
+    ], 'current MCP discovery must verify the canonical catalog before the actor-effective subset');
+    assert.ok(discoveryCalls.slice(0, 2).every(call =>
+      call.authorization === `Bearer ${MCP_KEY}` && call.workspaceId === MCP_WORKSPACE_ID),
+    'canonical and effective discovery must carry the configured bearer key and workspace authority');
+    assert.ok(!JSON.stringify(liveTools).includes(MCP_KEY) && !JSON.stringify(liveTools).includes('x4fk_'),
+      'MCP inventory must never leak the plaintext key');
     for (const tool of liveTools) {
       assert.equal(tool._meta?.['x4forge/contractVersion'], 'forge.capability.v1');
       assert.equal(tool._meta?.['x4forge/contractHash'], contract.contractHash);
+      assert.equal(tool._meta?.['x4forge/authorityVersion'], EFFECTIVE_API_VERSION);
+      assert.match(String(tool._meta?.['x4forge/authorityHash'] || ''), /^[a-f0-9]{64}$/);
       assert.equal(typeof tool._meta?.['x4forge/capabilityId'], 'string');
       const capabilityId = String(tool._meta?.['x4forge/capabilityId'] || '');
       assert.equal(
@@ -506,8 +655,8 @@ try {
     mode = 'outage';
     const unavailableTools = await toolsFor(client);
     const unavailableWorkspaceTool = unavailableTools.find(tool => tool.name === 'get_workspace');
-    assert.equal(unavailableWorkspaceTool?._meta?.['x4forge/capabilityVersion'], 2,
-      'fresh unavailable static fallback must not masquerade as a confirmed legacy v1 server');
+    assert.equal(unavailableWorkspaceTool?._meta?.['x4forge/capabilityVersion'], 1,
+      'a positively identified reviewed legacy server may retain its bounded v1 adapter through an outage');
     routeCalls.length = 0;
     const validationCall = await client.request('tools/call', { name: 'validate_mod', arguments: { fromPath: 'fixture' } });
     assert.equal(validationCall.result?.content?.[0]?.type, 'text');
@@ -515,15 +664,15 @@ try {
     assert.equal(explanationCall.result?.content?.[0]?.type, 'text');
     endpointMode = 'missing-workspace-snapshot';
     const unavailableWorkspace = await client.request('tools/call', { name: 'get_workspace', arguments: {} });
-    assert.equal((unavailableWorkspace.result as any)?.isError, true,
-      'unavailable static fallback must keep workspace.read@2 fail-closed until legacy is positively identified');
+    assert.equal((unavailableWorkspace.result as any)?.isError, undefined,
+      'positively identified legacy workspace.read@1 may remain available through a transient discovery outage');
     endpointMode = 'normal';
     assert.deepEqual(routeCalls.map(call => `${call.method} ${call.path}`), [
       'POST /api/agent/project/validate',
       'GET /api/agent/lang/hover?file=md%2Fx.xml&tag=cue',
       'GET /api/agent/lang/attrs?file=md%2Fx.xml&tag=cue',
       'GET /api/agent/workspace',
-    ], 'transient schema outage before current-contract discovery must retain old-server-compatible calls');
+    ], 'transient outage after reviewed legacy discovery must retain only the old-server-compatible calls');
   });
 
   mode = 'malformed';
@@ -533,10 +682,13 @@ try {
     assert.equal(deniedCall.error?.code, -32602, 'malformed current contract must also block direct tools/call');
   });
 
-  for (const invalidMode of ['current-missing', 'unknown-envelope', 'primitive', 'wrong-hash', 'unauthorized', 'forbidden'] as const) {
+  for (const invalidMode of [
+    'current-missing', 'unknown-envelope', 'primitive', 'wrong-hash', 'unauthorized', 'forbidden',
+    'wrong-workspace', 'authority-wrong-hash', 'effective-malformed', 'effective-missing', 'effective-expanded',
+  ] as const) {
     mode = invalidMode;
     await withMcp(baseUrl, async client => {
-      assert.deepEqual(await toolsFor(client), [], `${invalidMode} schema discovery must fail closed`);
+      assert.deepEqual(await toolsFor(client), [], `${invalidMode} capability discovery must fail closed`);
       const deniedCall = await client.request('tools/call', { name: 'validate_mod', arguments: { fromPath: 'fixture' } });
       assert.equal(deniedCall.error?.code, -32602, `${invalidMode} must also block direct tools/call`);
     });
@@ -566,14 +718,39 @@ try {
 
   mode = 'narrowed';
   await withMcp(baseUrl, async client => {
-    assert.deepEqual((await toolsFor(client)).map(tool => tool.name), ['validate_mod', 'author_check', 'stage_and_validate']);
+    const narrowedTools = await toolsFor(client);
+    assert.deepEqual(narrowedTools.map(tool => tool.name), CUSTOM_TOOLS,
+      'custom exact identity must retain public capabilities while narrowing protected tools');
+    const narrowedAuthorityHash = narrowedTools[0]?._meta?.['x4forge/authorityHash'];
+    assert.match(String(narrowedAuthorityHash || ''), /^[a-f0-9]{64}$/,
+      'narrowed live tools must carry the effective authority hash');
+    mode = 'legacy';
+    const stickyAfterLegacyDowngrade = await toolsFor(client);
+    assert.deepEqual(stickyAfterLegacyDowngrade.map(tool => tool.name), CUSTOM_TOOLS,
+      'reviewed legacy downgrade after live narrowing must not widen the MCP inventory');
+    assert.ok(stickyAfterLegacyDowngrade.every(tool =>
+      tool._meta?.['x4forge/contractVersion'] === 'legacy-sticky-live' &&
+      tool._meta?.['x4forge/authorityHash'] === narrowedAuthorityHash),
+    'legacy downgrade must retain the accepted live contract and authority receipts');
+    assert.equal(stickyAfterLegacyDowngrade.find(tool => tool.name === 'get_workspace'), undefined,
+      'legacy downgrade must not acquire a workspace.read@1 compatibility projection');
+    const excludedAfterLegacy = await client.request('tools/call', { name: 'compile_workspace', arguments: {} });
+    assert.equal(excludedAfterLegacy.error?.code, -32602,
+      'legacy downgrade must not make an excluded tool directly callable');
+    routeCalls.length = 0;
+    const allowedAfterLegacy = await client.request('tools/call', {
+      name: 'validate_mod', arguments: { fromPath: 'fixture' },
+    });
+    assert.equal(allowedAfterLegacy.error, undefined, allowedAfterLegacy.error?.message);
+    assert.deepEqual(routeCalls.map(call => `${call.method} ${call.path}`), ['POST /api/agent/project/validate/check'],
+      'legacy downgrade after live authority must retain current routes, not compatibility adapters');
     mode = 'hung';
     const stickyAfterTimeout = await toolsFor(client);
-    assert.deepEqual(stickyAfterTimeout.map(tool => tool.name), ['validate_mod', 'author_check', 'stage_and_validate'],
+    assert.deepEqual(stickyAfterTimeout.map(tool => tool.name), CUSTOM_TOOLS,
       'timeout after live narrowing must not widen the MCP inventory');
     assert.ok(stickyAfterTimeout.every(tool => tool._meta?.['x4forge/contractVersion'] === 'unavailable-sticky-live'));
     mode = 'live';
-    assert.deepEqual((await toolsFor(client)).map(tool => tool.name), ['validate_mod', 'author_check', 'stage_and_validate'],
+    assert.deepEqual((await toolsFor(client)).map(tool => tool.name), CUSTOM_TOOLS,
       'a broader later live contract must not re-expand a process after narrowing');
   });
 
@@ -582,12 +759,15 @@ try {
     assert.deepEqual((await toolsFor(client)).map(tool => tool.name), EXPECTED_TOOLS);
     mode = 'alias-narrowed';
     await client.waitForNotification('notifications/tools/list_changed');
-    assert.deepEqual((await toolsFor(client)).map(tool => tool.name), ['validate_mod'],
-      'live contracts must narrow individual MCP aliases and announce the live-to-live inventory change');
+    assert.deepEqual(await toolsFor(client), [],
+      'a substituted descriptor that is locally well-formed but not byte-equivalent to canonical must fail closed');
+    const deniedSubstitutedCall = await client.request('tools/call', { name: 'validate_mod', arguments: { fromPath: 'fixture' } });
+    assert.equal(deniedSubstitutedCall.error?.code, -32602,
+      'descriptor substitution must also block direct tools/call');
     mode = 'live';
-    await new Promise(resolve => setTimeout(resolve, 250));
-    assert.deepEqual((await toolsFor(client)).map(tool => tool.name), ['validate_mod'],
-      'a broader later live contract must not re-expand aliases removed earlier in the process');
+    await client.waitForNotification('notifications/tools/list_changed');
+    assert.deepEqual((await toolsFor(client)).map(tool => tool.name), EXPECTED_TOOLS,
+      'a later valid actor-effective contract must recover after a substituted descriptor is removed');
   });
 
   mode = 'v2';
@@ -600,14 +780,13 @@ try {
     const hungStarted = Date.now();
     const hungTools = await toolsFor(client);
     const hungElapsed = Date.now() - hungStarted;
-    assert.deepEqual(hungTools.map(tool => tool.name), EXPECTED_TOOLS, 'temporarily unavailable discovery changed the curated static inventory');
+    assert.deepEqual(hungTools, [], 'pre-first-discovery outage must not expose a broad static inventory');
     assert.ok(hungElapsed >= 1_500 && hungElapsed < 4_500, `hung discovery fallback took ${hungElapsed} ms`);
-    assert.ok(hungTools.every(tool => tool._meta?.['x4forge/contractVersion'] === 'unavailable-static-fallback'));
     mode = 'live';
     const recovered = await toolsFor(client);
     assert.deepEqual(recovered.map(tool => tool.name), EXPECTED_TOOLS, 'same-process discovery did not recover after the server became live');
     assert.ok(recovered.every(tool => tool._meta?.['x4forge/contractVersion'] === 'forge.capability.v1'));
-    console.log(`MCP capability selftest PASS: ${recovered.length} live tools, legacy/outage compatibility, malformed/v2 fail-closed, capability/alias narrowing with live notifications, and same-process recovery after ${hungElapsed} ms.`);
+    console.log(`MCP capability selftest PASS: read=${READ_TOOLS.length}, write=${WRITE_TOOLS.length}, deploy=${recovered.length}; exact custom narrowing, legacy-only fallback, authenticated effective discovery, canonical-subset checks, fail-closed negatives, sticky monotonicity, and same-process recovery after ${hungElapsed} ms.`);
   });
 } finally {
   await stop(server);

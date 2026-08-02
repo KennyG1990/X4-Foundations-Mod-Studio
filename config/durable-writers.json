@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "sourceFingerprint": "6fbd555ad00bb42376739fe68a31ed2235c47d1bc2a77b540c06a8ea98fb4c0a",
+  "sourceFingerprint": "89c03a3d87f98de6120c777b381f9e3e59a6686c097ae6d4f20c4cb0684fc76d",
   "policy": "Every raw production filesystem mutation source is count-pinned here. Authoritative files use atomic sibling promotion; stronger tree, archive, append-log, SQLite, retention, ephemeral, and fixture contracts remain explicit exceptions.",
   "writers": [
     {
@@ -29,7 +29,7 @@
     },
     {
       "file": "src/lib/agentKeys.ts",
-      "calls": { "writeFileSync": 1, "rmSync": 2 },
+      "calls": { "writeFileSync": 3, "rmSync": 2 },
       "categories": ["authoritative-atomic", "fixture-only"],
       "owners": ["createAgentKeyStore", "runAgentKeysSelftest"],
       "rationale": "Production key state delegates to restricted atomic JSON; remaining raw writes corrupt and clean only a temporary negative fixture.",

@@ -37,6 +37,10 @@ import {
   isForgeCapabilityContractV1,
   verifyForgeCapabilityContract,
 } from '../lib/forgeCapabilities';
+import {
+  createdAgentKeyMatchesRequestedAuthority,
+  type RequestedAgentKeyAuthority,
+} from '../../shared/agentKeyCreationContract';
 
 interface AgentBridgeProps {
   isOpen: boolean;
@@ -125,19 +129,32 @@ export default function AgentBridge({
     id: string; label: string; scope: 'read' | 'write' | 'deploy';
     createdAt: number; expiresAt: number | null; lastUsedAt: number | null;
     useCount: number; revokedAt: number | null; hashPrefix: string; workspaceId?: string;
+    capabilityConstraint?: { capabilityIdentities: string[]; allowedEffects: string[] };
   }
   interface AgentAuthoritySummary {
     version: string;
     hash: string;
     existingKeysFollowCurrentPolicy: boolean;
+    customAuthority?: string;
+  }
+  interface AgentCapabilityOption {
+    identity: string;
+    title: string;
+    effects: string[];
+    agentScopes: Array<'read' | 'write' | 'deploy'>;
   }
   const [agentKeys, setAgentKeys] = useState<AgentKeyRow[]>([]);
   const [agentAuthority, setAgentAuthority] = useState<AgentAuthoritySummary | null>(null);
+  const [agentCapabilityOptions, setAgentCapabilityOptions] = useState<AgentCapabilityOption[]>([]);
+  const [agentEffectOptions, setAgentEffectOptions] = useState<string[]>([]);
   const [keysError, setKeysError] = useState<string>('');
   const [newKeyLabel, setNewKeyLabel] = useState<string>('');
   const [newKeyScope, setNewKeyScope] = useState<'read' | 'write' | 'deploy'>('write');
   const [newKeyTtl, setNewKeyTtl] = useState<string>('7d');
-  const [createdKey, setCreatedKey] = useState<{ token: string; label: string } | null>(null);
+  const [customKeyAuthority, setCustomKeyAuthority] = useState(false);
+  const [selectedCapabilityIdentities, setSelectedCapabilityIdentities] = useState<string[]>([]);
+  const [selectedAllowedEffects, setSelectedAllowedEffects] = useState<string[]>([]);
+  const [createdKey, setCreatedKey] = useState<{ token: string; label: string; contractOnly: boolean } | null>(null);
 
   const loadAgentKeys = useCallback(async () => {
     try {
@@ -148,6 +165,8 @@ export default function AgentBridge({
       setAgentAuthority(d.authority && typeof d.authority.version === 'string' && typeof d.authority.hash === 'string'
         ? d.authority as AgentAuthoritySummary
         : null);
+      setAgentCapabilityOptions(Array.isArray(d.capabilityOptions) ? d.capabilityOptions : []);
+      setAgentEffectOptions(Array.isArray(d.effectOptions) ? d.effectOptions : []);
       setKeysError('');
     } catch (e) {
       setKeysError(`Could not load keys: ${e instanceof Error ? e.message : String(e)}`);
@@ -157,6 +176,40 @@ export default function AgentBridge({
   useEffect(() => {
     if (activeTab === 'keys') void loadAgentKeys();
   }, [activeTab, loadAgentKeys]);
+
+  const eligibleCapabilityOptions = agentCapabilityOptions.filter(option => option.agentScopes.includes(newKeyScope));
+  const selectedCapabilityOptions = eligibleCapabilityOptions.filter(option => selectedCapabilityIdentities.includes(option.identity));
+  const selectableEffects = agentEffectOptions.filter(effect => selectedCapabilityOptions.some(option => option.effects.includes(effect)));
+
+  const resetCustomAuthorityForScope = useCallback((scope: 'read' | 'write' | 'deploy') => {
+    const eligible = agentCapabilityOptions.filter(option => option.agentScopes.includes(scope));
+    setSelectedCapabilityIdentities(eligible.map(option => option.identity));
+    const union = new Set(eligible.flatMap(option => option.effects));
+    setSelectedAllowedEffects(agentEffectOptions.filter(effect => union.has(effect)));
+  }, [agentCapabilityOptions, agentEffectOptions]);
+
+  const setCustomAuthorityEnabled = useCallback((enabled: boolean) => {
+    setCustomKeyAuthority(enabled);
+    if (enabled) resetCustomAuthorityForScope(newKeyScope);
+  }, [newKeyScope, resetCustomAuthorityForScope]);
+
+  const setKeyScope = useCallback((scope: 'read' | 'write' | 'deploy') => {
+    setNewKeyScope(scope);
+    if (customKeyAuthority) resetCustomAuthorityForScope(scope);
+  }, [customKeyAuthority, resetCustomAuthorityForScope]);
+
+  const toggleCapabilityIdentity = useCallback((identity: string) => {
+    const option = agentCapabilityOptions.find(candidate => candidate.identity === identity);
+    if (!option) return;
+    const adding = !selectedCapabilityIdentities.includes(identity);
+    const next = adding
+      ? [...selectedCapabilityIdentities, identity]
+      : selectedCapabilityIdentities.filter(candidate => candidate !== identity);
+    const union = new Set(agentCapabilityOptions.filter(candidate => next.includes(candidate.identity)).flatMap(candidate => candidate.effects));
+    setSelectedCapabilityIdentities(next);
+    setSelectedAllowedEffects(agentEffectOptions.filter(effect =>
+      union.has(effect) && ((adding && option.effects.includes(effect)) || selectedAllowedEffects.includes(effect))));
+  }, [agentCapabilityOptions, agentEffectOptions, selectedAllowedEffects, selectedCapabilityIdentities]);
 
   // B86 — agent action ledger. Rows carry summaries and references only; payloads are fetched
   // on demand so opening this tab never pulls hundreds of KB of Lua across the wire.
@@ -229,20 +282,57 @@ export default function AgentBridge({
   const createAgentKey = useCallback(async () => {
     setKeysError('');
     try {
+      const requestedAuthority: RequestedAgentKeyAuthority = customKeyAuthority
+        ? {
+          authorityMode: 'exact',
+          capabilityIdentities: [...selectedCapabilityIdentities].sort(),
+          allowedEffects: selectedAllowedEffects,
+        }
+        : { authorityMode: 'preset' };
       const r = await fetch('/api/agent/keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label: newKeyLabel.trim(), scope: newKeyScope, ttl: newKeyTtl }),
+        body: JSON.stringify({
+          label: newKeyLabel.trim(), scope: newKeyScope, ttl: newKeyTtl,
+          ...requestedAuthority,
+        }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
-      setCreatedKey({ token: d.token, label: d.record?.label || newKeyLabel });
+      const tokenPresent = typeof d.token === 'string' && d.token.length > 0;
+      const authorityMatches = createdAgentKeyMatchesRequestedAuthority(requestedAuthority, d.record);
+      if (!tokenPresent || !authorityMatches) {
+        const keyId = typeof d.record?.id === 'string' ? d.record.id : '';
+        let revoked = false;
+        if (keyId) {
+          try {
+            const revoke = await fetch('/api/agent/keys/revoke', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: keyId }),
+            });
+            revoked = revoke.ok;
+          } catch { /* reported below as an active-key hazard */ }
+        }
+        await loadAgentKeys();
+        throw new Error(
+          `Forge did not confirm the requested ${requestedAuthority.authorityMode} key authority; no token was exposed. ` +
+          (revoked
+            ? 'The mismatched key was revoked automatically.'
+            : `Automatic revocation failed${keyId ? ` for ${keyId}` : ' because no key id was returned'}; the key may still be active and must be revoked from Issued Keys.`),
+        );
+      }
+      setCreatedKey({
+        token: d.token,
+        label: d.record?.label || newKeyLabel,
+        contractOnly: d.record?.authorityMode === 'exact',
+      });
       setNewKeyLabel('');
       await loadAgentKeys();
     } catch (e) {
       setKeysError(e instanceof Error ? e.message : String(e));
     }
-  }, [newKeyLabel, newKeyScope, newKeyTtl, loadAgentKeys]);
+  }, [newKeyLabel, newKeyScope, newKeyTtl, customKeyAuthority, selectedCapabilityIdentities, selectedAllowedEffects, loadAgentKeys]);
 
   const revokeAgentKey = useCallback(async (id: string) => {
     setKeysError('');
@@ -817,6 +907,7 @@ export default function AgentBridge({
         </button>
         <button
           onClick={() => setActiveTab('keys')}
+          data-testid="agent-keys-tab"
           className={`flex-1 py-1.5 rounded font-mono text-[11px] font-bold transition-all cursor-pointer ${
             activeTab === 'keys'
               ? 'bg-amber-600/20 text-amber-400 border border-amber-500/30'
@@ -1330,7 +1421,7 @@ export default function AgentBridge({
                 <select
                   data-testid="agent-key-scope"
                   value={newKeyScope}
-                  onChange={(e) => setNewKeyScope(e.target.value as 'read' | 'write' | 'deploy')}
+                  onChange={(e) => setKeyScope(e.target.value as 'read' | 'write' | 'deploy')}
                   className="bg-black/40 border border-white/10 rounded px-2 py-1.5 text-slate-200 font-mono text-[11px] outline-none"
                   title="read = reviewed inspection/analysis · write = guarded authoring/compile/package · deploy = explicit deploy/recovery/caller-key AI; administrative routes stay Studio-only"
                 >
@@ -1360,6 +1451,81 @@ export default function AgentBridge({
                   Generate
                 </button>
               </div>
+              <label className="flex items-start gap-2 rounded border border-cyan-500/20 bg-cyan-500/[0.04] px-2.5 py-2 cursor-pointer">
+                <input
+                  data-testid="agent-key-custom-toggle"
+                  type="checkbox"
+                  checked={customKeyAuthority}
+                  onChange={(event) => setCustomAuthorityEnabled(event.target.checked)}
+                  disabled={agentCapabilityOptions.length === 0}
+                  className="mt-0.5 accent-cyan-400"
+                />
+                <span>
+                  <span className="block font-mono text-[10px] font-bold text-cyan-300">LIMIT TO AN EXACT CAPABILITY CONTRACT (ADVANCED)</span>
+                  <span className="block text-[10px] text-slate-400 mt-0.5">
+                    Off keeps the normal scope preset. On freezes exact <code>capability.id@version</code> choices and allowed effects;
+                    protected Agent API routes without a canonical contract stop working. Public localhost reads remain public.
+                    Change it later by revoking and recreating the key.
+                  </span>
+                </span>
+              </label>
+              {customKeyAuthority && (
+                <div data-testid="agent-key-custom-authority" className="rounded border border-cyan-500/20 bg-black/25 p-2.5 space-y-2">
+                  <div>
+                    <div className="font-mono text-[9px] font-bold text-slate-300 mb-1">EXACT PROTECTED CAPABILITIES</div>
+                    <div className="grid grid-cols-1 gap-1">
+                      {eligibleCapabilityOptions.map(option => {
+                        const checked = selectedCapabilityIdentities.includes(option.identity);
+                        const blockedEffects = option.effects.filter(effect => !selectedAllowedEffects.includes(effect));
+                        return (
+                          <label key={option.identity} className="flex items-start gap-2 rounded border border-white/5 px-2 py-1.5 cursor-pointer hover:border-white/10">
+                            <input
+                              data-testid={`agent-key-capability-${option.identity}`}
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleCapabilityIdentity(option.identity)}
+                              className="mt-0.5 accent-cyan-400"
+                            />
+                            <span className="min-w-0">
+                              <span className="block text-slate-200">{option.title}</span>
+                              <code className="block text-[9px] text-slate-500">{option.identity} · {option.effects.join(', ')}</code>
+                              {checked && blockedEffects.length > 0 && (
+                                <span className="block text-[9px] text-amber-300">blocked until allowed: {blockedEffects.join(', ')}</span>
+                              )}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-mono text-[9px] font-bold text-slate-300 mb-1">ALLOWED EFFECTS</div>
+                    {selectableEffects.length === 0 ? (
+                      <p className="text-[9px] text-slate-500">No protected capability selected; this key will reach public capabilities only.</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {selectableEffects.map(effect => (
+                          <label key={effect} className="flex items-center gap-1 rounded border border-white/10 px-1.5 py-1 font-mono text-[9px] text-slate-300 cursor-pointer">
+                            <input
+                              data-testid={`agent-key-effect-${effect}`}
+                              type="checkbox"
+                              checked={selectedAllowedEffects.includes(effect)}
+                              onChange={() => setSelectedAllowedEffects(previous => previous.includes(effect)
+                                ? previous.filter(candidate => candidate !== effect)
+                                : agentEffectOptions.filter(candidate => candidate === effect || previous.includes(candidate)))}
+                              className="accent-cyan-400"
+                            />
+                            {effect}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                    <p className="text-[9px] text-slate-500 mt-1">
+                      A capability is callable only when it is checked and every effect printed beside it is allowed.
+                    </p>
+                  </div>
+                </div>
+              )}
               <p className="text-slate-500 text-[10px]">
                 read = inspect only · write = edit/compile/validate/package (no deploys, no spend) ·
                 deploy = exact reviewed deploy/recovery, guarded filesystem, and caller-key AI routes. Credentials,
@@ -1401,11 +1567,16 @@ export default function AgentBridge({
                 <p className="text-[10px] text-amber-200/70 font-mono">
                   Use both <code>Authorization: Bearer {'<key>'}</code> and <code>x-workspace-id: {workspaceId}</code>.
                 </p>
+                {createdKey.contractOnly && (
+                  <p data-testid="agent-key-created-contract-only" className="text-[10px] text-cyan-200/80 font-mono">
+                    Contract-only key: only its exact selected protected capabilities can be called; noncanonical protected routes are denied.
+                  </p>
+                )}
               </div>
             )}
 
             {keysError && (
-              <div className="rounded border border-red-500/40 bg-red-500/10 text-red-300 px-3 py-2 font-mono text-[11px]">
+              <div data-testid="agent-key-error" className="rounded border border-red-500/40 bg-red-500/10 text-red-300 px-3 py-2 font-mono text-[11px]">
                 {keysError}
               </div>
             )}
@@ -1428,6 +1599,15 @@ export default function AgentBridge({
                         <span className={`px-1.5 rounded border ${k.scope === 'deploy' ? 'border-red-500/40 text-red-300' : k.scope === 'write' ? 'border-cyan-500/40 text-cyan-300' : 'border-emerald-500/40 text-emerald-300'}`}>{k.scope}</span>
                         <span>#{k.hashPrefix}</span>
                         <span>{k.workspaceId ? `workspace ${k.workspaceId.slice(-6)}` : 'legacy unbound'}</span>
+                        {k.capabilityConstraint && (
+                          <span
+                            data-testid={`agent-key-contract-${k.label}`}
+                            className="px-1.5 rounded border border-cyan-500/30 text-cyan-300"
+                            title={`${k.capabilityConstraint.capabilityIdentities.join(', ')} · effects: ${k.capabilityConstraint.allowedEffects.join(', ') || 'none'}`}
+                          >
+                            contract-only · {k.capabilityConstraint.capabilityIdentities.length} cap{k.capabilityConstraint.capabilityIdentities.length === 1 ? '' : 's'} · {k.capabilityConstraint.allowedEffects.length} effects
+                          </span>
+                        )}
                         <span>
                           {k.revokedAt !== null ? 'REVOKED'
                             : k.expiresAt === null ? 'never expires'

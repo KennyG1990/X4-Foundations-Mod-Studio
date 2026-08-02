@@ -2,9 +2,11 @@
   "schemaVersion": "forge.route-dispositions.v4",
   "sources": [
     "server.ts",
+    "shared/agentKeyCreationContract.ts",
     "src/lib/actionCensus.ts",
     "src/lib/agentAuthority.ts",
     "src/lib/agentBrief.ts",
+    "src/lib/agentCapabilityAuthority.ts",
     "src/lib/agentHistory.selftest.ts",
     "src/lib/agentHistory.ts",
     "src/lib/agentHistoryStore.ts",
@@ -424,6 +426,18 @@
       ],
       "resourceClass": "public",
       "workspaceMode": "optional"
+    },
+    "GET /api/agent/capabilities/effective": {
+      "disposition": "agent-authority-discovery",
+      "owner": "agent-capability-authority",
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "workspace",
+      "workspaceMode": "required"
     },
     "GET /api/agent/catdat-debug": {
       "disposition": "legacy-public",
@@ -3470,8 +3484,8 @@
     "workspace.read@2": "962774de4a25e8725a0d90d4982298cc72f100312075b1f6f4ff9de1482752d7"
   },
   "mcpModuleSignature": {
-    "version": 9,
-    "hash": "33daa0d2445e2e3b1d1f39b26fe5d7271756dd4f9fbc74152d4ffe7c3457d338"
+    "version": 11,
+    "hash": "43e84c05b24b350b49957f9d896d17c12f97833c36c86ea9173939c19a37051c"
   },
   "mcpSignatures": {
     "validate_mod": "536c11b1ddbd5575f54ee832e887149947ae5b302a0fa873c04113d474b64448",

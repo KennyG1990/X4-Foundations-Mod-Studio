@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "task": "B118",
+  "status": "VERIFIED",
+  "recordedAt": "2026-08-01T22:30:07.1838741-04:00",
+  "baseline": "bb0f7e5b339350da2bcc2e64cf6d7a099817cdf8",
+  "validation": {
+    "agentKeyAndClientContract": "73/73 PASS",
+    "routeIntegration": "400/400 PASS",
+    "mcpTools": {
+      "read": 5,
+      "write": 9,
+      "deploy": 10,
+      "result": "PASS"
+    },
+    "capabilityAudit": {
+      "capabilities": 11,
+      "literalRoutes": 291,
+      "dynamicRegistrars": 1,
+      "mcpAliases": 10,
+      "contractSha256": "d8a820f537dbcbb50bcb8a91c8bd415c221a15940f184e38a817fa4566c1ac8f",
+      "routeManifestSha256": "509227ae34bd2b28e466f91185fccb671dff937cfecbe78b0c3605c6f7fff65d",
+      "mcpModuleAuditVersion": 11,
+      "result": "PASS"
+    },
+    "runtimeOracles": "129/129 PASS",
+    "focusedE2e": "5/5 PASS",
+    "fullE2e": {
+      "generatedAt": "2026-08-02T01:03:43.371Z",
+      "passed": 96,
+      "failed": 0,
+      "flaky": 0,
+      "badResults": 0,
+      "quarantined": 0,
+      "childExit": 0,
+      "green": true
+    },
+    "typecheck": "PASS",
+    "lint": "PASS: 0 errors, 587 existing warnings",
+    "productionBuild": "PASS",
+    "extensionBuild": "PASS",
+    "stagedProbe": "16/16 PASS",
+    "precommit": "PASS in 130.6 seconds after the final explicit-exact-response correction",
+    "graphify": {
+      "nodes": 3874,
+      "edges": 9186,
+      "communities": 174
+    }
+  },
+  "isolation": {
+    "liveStateSha256BeforeAndAfter": "F9A2FB4165E70997D074EAE99F120998DFDB3BA10A21A87FBB7E703F8F3A0C0D",
+    "configSha256BeforeAndAfter": "ABEC6AE6AD169392878E06E19346C5E85C1DFB5D9BDFACDD80BA77DAF227C697",
+    "portsClearAfter": [3000, 3001, 3100, 3101]
+  },
+  "package": {
+    "path": "vscode-extension/x4-forge-studio-0.0.63-b118-r2-20260801-215504.vsix",
+    "bytes": 17976544,
+    "sha256": "7979E2C5F7D31F2E8C5363E95281120D4DA936014D57717B7206AAF531079663",
+    "entries": 2091,
+    "unpackedBytes": 60765876,
+    "inspection": "PASS"
+  },
+  "installed": {
+    "host": "Antigravity 1.107.0 isolated CLI profile",
+    "extension": "x4forge.x4-forge-studio@0.0.63",
+    "cliRecognition": "PASS",
+    "filesChecked": 2089,
+    "missing": 0,
+    "mismatched": 0,
+    "unexpected": 0,
+    "normalizedPackageJsonEqual": true,
+    "comparisonManifestSha256": "6A7DAFF02FB1B81DAD5096CC61064EC9B50F86647ADFC61BE98F196F5A864495"
+  },
+  "renderedEvidence": [
+    {
+      "path": "installed-agent-keys-exact-controls.png",
+      "bytes": 147608,
+      "sha256": "AB283B1EEB2D1E35905BA2A5D8D624BACCEC7AB3389050AE6661943400978F64",
+      "proves": "installed Studio exact contract toggle and versioned capability choices"
+    },
+    {
+      "path": "installed-agent-keys-effects.png",
+      "bytes": 147343,
+      "sha256": "838D364B0063C1D44B431FEE8D561F9B2FC236F999D4E3DEC1AAC8A4C0B2B7C0",
+      "proves": "installed Studio allowed-effect intersection and durable issued-key display"
+    },
+    {
+      "path": "installed-native-authority-mode.png",
+      "bytes": 150791,
+      "sha256": "65F155C7A4C5A5D9ED4DED24DB565976A730267BAB45BC68CD4D9E57E5D9D666",
+      "proves": "installed native preset versus exact-contract guidance"
+    }
+  ],
+  "safety": {
+    "nativeProofFlowCancelledBeforeMint": true,
+    "realUserKeyCreated": false,
+    "publicReleaseAttempted": false,
+    "gameOrModWrite": false,
+    "providerSpend": false,
+    "computerControlReleased": true,
+    "defaultAntigravityTaskInterrupted": false,
+    "isolatedInstallRoot": "test-results/b118-r2-isolated-install"
+  }
+}

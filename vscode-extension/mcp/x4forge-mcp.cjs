@@ -29,6 +29,9 @@ const SERVER_INFO = { name: "x4forge", version: "0.1.0" };
 const PROTOCOL_VERSION = "2024-11-05";
 const CAPABILITY_DISCOVERY_TIMEOUT_MS = 2000;
 const CAPABILITY_RETRY_MS = Math.max(100, Number(process.env.X4FORGE_CAPABILITY_RETRY_MS) || 5000);
+const EFFECTIVE_AUTHORITY_API_VERSION = "2026-08-01.agent-effective.v1";
+const EFFECTIVE_AUTHORITY_SCHEMA_VERSION = "forge.agent-capability-authority.v1";
+const ROUTE_AUTHORITY_VERSION = "forge.route-dispositions.v4";
 
 /** Curated tool surface — additions require the B56s4 security review, not just code. */
 const TOOLS = [
@@ -69,7 +72,7 @@ const TOOLS = [
     description: "Read a bounded summary of the explicitly bound Forge workspace, including its content CAS hash, complete snapshot hash, name/version, counts, and up to 50 node summaries. Authority comes from X4FORGE_WORKSPACE_ID plus the key binding.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     handler: async (_input, context) => {
-      const legacyProjection = context?.contractState === "legacy-static-fallback";
+      const legacyProjection = usesStaticCompatibilityRoutes(context);
       const d = requireResponse(await forge("GET", "/api/agent/workspace"), "workspace", {
         workspaceId: "string", workspace: "object", version: "number", workspaceHash: "string",
         ...(legacyProjection ? {} : { snapshotHash: "string" }), lastUpdated: "string", origin: "string",
@@ -514,10 +517,82 @@ function validateLiveContract(contract) {
   return expected === String(contract.contractHash).toLowerCase();
 }
 
+function validateEffectiveAuthority(authority, canonicalContract) {
+  if (!isRecord(authority) || !hasExactKeys(authority, [
+    "actor", "api_version", "authority_hash", "authority_schema_version", "capability_contract",
+    "constraint", "exclusions", "route_policy",
+  ]) || authority.api_version !== EFFECTIVE_AUTHORITY_API_VERSION ||
+    authority.authority_schema_version !== EFFECTIVE_AUTHORITY_SCHEMA_VERSION ||
+    !/^[a-f0-9]{64}$/i.test(String(authority.authority_hash || "")) ||
+    !isRecord(authority.actor) || !hasExactKeys(authority.actor, ["keyId", "kind", "label", "scope", "workspaceId"]) ||
+    authority.actor.kind !== "agent" || !isNonEmptyString(authority.actor.keyId) ||
+    !isNonEmptyString(authority.actor.label) || !AGENT_SCOPES.has(authority.actor.scope) ||
+    !isNonEmptyString(authority.actor.workspaceId) || authority.actor.workspaceId !== WORKSPACE_ID ||
+    !isRecord(authority.route_policy) || !hasExactKeys(authority.route_policy, ["hash", "version"]) ||
+    authority.route_policy.version !== ROUTE_AUTHORITY_VERSION ||
+    !/^[a-f0-9]{64}$/i.test(String(authority.route_policy.hash || "")) ||
+    !validateLiveContract(authority.capability_contract) || !Array.isArray(authority.exclusions)) return false;
+
+  const constraint = authority.constraint;
+  if (constraint !== null && (!isRecord(constraint) ||
+    !hasExactKeys(constraint, ["allowedEffects", "capabilityIdentities"]) ||
+    !isStringArray(constraint.capabilityIdentities) || !hasUniqueStrings(constraint.capabilityIdentities) ||
+    !isStringArray(constraint.allowedEffects, CAPABILITY_EFFECTS) || !hasUniqueStrings(constraint.allowedEffects) ||
+    stableStringify(constraint.capabilityIdentities) !== stableStringify([...constraint.capabilityIdentities].sort()))) return false;
+
+  const canonicalByIdentity = new Map(canonicalContract.capabilities.map((capability) => [
+    `${capability.id}@${capability.version}`, capability,
+  ]));
+  const effectiveByIdentity = new Map();
+  for (const capability of authority.capability_contract.capabilities) {
+    const identity = `${capability.id}@${capability.version}`;
+    const canonical = canonicalByIdentity.get(identity);
+    if (!canonical || stableStringify(canonical) !== stableStringify(capability)) return false;
+    effectiveByIdentity.set(identity, capability);
+  }
+
+  const allowedEffects = new Set(constraint?.allowedEffects || []);
+  const selectedIdentities = new Set(constraint?.capabilityIdentities || []);
+  for (const identity of selectedIdentities) {
+    const selected = canonicalByIdentity.get(identity);
+    if (!selected || selected.access.public || !selected.access.agentScopes.includes(authority.actor.scope)) return false;
+  }
+  const expectedEffective = canonicalContract.capabilities.filter((capability) => {
+    if (!capability.access.agentScopes.includes(authority.actor.scope)) return false;
+    if (capability.access.public || constraint === null) return true;
+    const identity = `${capability.id}@${capability.version}`;
+    return selectedIdentities.has(identity) && capability.effects.every((effect) => allowedEffects.has(effect));
+  }).map((capability) => `${capability.id}@${capability.version}`);
+  if (stableStringify([...effectiveByIdentity.keys()]) !== stableStringify(expectedEffective)) return false;
+
+  const exclusions = new Map();
+  for (const exclusion of authority.exclusions) {
+    if (!isRecord(exclusion) || !isNonEmptyString(exclusion.capabilityIdentity) ||
+      !["CAPABILITY_ROUTE_UNREVIEWED", "CAPABILITY_OWNER_MISMATCH", "CAPABILITY_SCOPE_DENIED",
+        "CAPABILITY_WORKSPACE_REQUIRED", "CAPABILITY_NOT_GRANTED", "CAPABILITY_EFFECT_DENIED"].includes(exclusion.code) ||
+      (exclusion.disallowedEffects !== undefined &&
+        (!isStringArray(exclusion.disallowedEffects, CAPABILITY_EFFECTS) || !hasUniqueStrings(exclusion.disallowedEffects))) ||
+      !hasExactKeys(exclusion, exclusion.disallowedEffects === undefined
+        ? ["capabilityIdentity", "code"]
+        : ["capabilityIdentity", "code", "disallowedEffects"]) ||
+      exclusions.has(exclusion.capabilityIdentity) || !canonicalByIdentity.has(exclusion.capabilityIdentity)) return false;
+    exclusions.set(exclusion.capabilityIdentity, exclusion);
+  }
+  const expectedExcluded = [...canonicalByIdentity.keys()].filter((identity) => !effectiveByIdentity.has(identity));
+  if (stableStringify([...exclusions.keys()]) !== stableStringify(expectedExcluded)) return false;
+
+  const unsigned = { ...authority };
+  delete unsigned.authority_hash;
+  const expectedHash = crypto.createHash("sha256").update(stableStringify(unsigned), "utf8").digest("hex");
+  return expectedHash === String(authority.authority_hash).toLowerCase();
+}
+
 let discoveryInFlight;
 let stickyLiveToolNames = null;
 let lastValidContract = null;
+let lastValidAuthority = null;
 let blockedUntilValidContract = false;
+let reviewedLegacyConfirmed = false;
 let clientInitialized = false;
 let recoveryTimer = null;
 let lastAdvertisedToolSignature = null;
@@ -532,15 +607,24 @@ async function loadCapabilityContract() {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), CAPABILITY_DISCOVERY_TIMEOUT_MS);
     try {
+      if (!KEY || !WORKSPACE_ID) return { state: "invalid" };
       const schema = await forge("GET", "/api/agent/schema", undefined, controller.signal);
       if (!schema || typeof schema !== "object" || Array.isArray(schema)) return { state: "invalid" };
       if (!("capability_contract" in schema)) {
-        return REVIEWED_LEGACY_SCHEMA_API_VERSIONS.has(schema.api_version)
-          ? { state: "legacy" }
-          : { state: "invalid" };
+        if (!REVIEWED_LEGACY_SCHEMA_API_VERSIONS.has(schema.api_version)) return { state: "invalid" };
+        try {
+          await forge("GET", "/api/agent/capabilities/effective", undefined, controller.signal);
+          return { state: "invalid" };
+        } catch (error) {
+          return Number(error?.status || 0) === 404 ? { state: "legacy" } : { state: "invalid" };
+        }
       }
-      const contract = schema.capability_contract;
-      return validateLiveContract(contract) ? { state: "live", contract } : { state: "invalid" };
+      const canonicalContract = schema.capability_contract;
+      if (!validateLiveContract(canonicalContract)) return { state: "invalid" };
+      const authority = await forge("GET", "/api/agent/capabilities/effective", undefined, controller.signal);
+      return validateEffectiveAuthority(authority, canonicalContract)
+        ? { state: "live", contract: authority.capability_contract, authority }
+        : { state: "invalid" };
     } catch (error) {
       const status = Number(error?.status || 0);
       return error?.invalidResponse || (status >= 400 && status < 500) ? { state: "invalid" } : { state: "unavailable" };
@@ -560,11 +644,14 @@ async function availableTools() {
   const discovery = await loadCapabilityContract();
   if (discovery.state === "invalid") {
     blockedUntilValidContract = true;
+    reviewedLegacyConfirmed = false;
     return { discovery, toolNames: [], effectiveContract: null, contractState: "invalid" };
   }
   if (discovery.state === "live") {
     blockedUntilValidContract = false;
+    reviewedLegacyConfirmed = false;
     lastValidContract = discovery.contract;
+    lastValidAuthority = discovery.authority;
     const advertised = new Map(discovery.contract.capabilities.map((capability) => [`${capability.id}@${capability.version}`, capability]));
     const supportedNow = new Set();
     for (let toolIndex = 0; toolIndex < TOOLS.length; toolIndex += 1) {
@@ -579,6 +666,7 @@ async function availableTools() {
       discovery,
       toolNames: [...stickyLiveToolNames],
       effectiveContract: discovery.contract,
+      effectiveAuthority: discovery.authority,
       contractState: discovery.contract.schemaVersion,
     };
   }
@@ -590,15 +678,28 @@ async function availableTools() {
       discovery,
       toolNames: [...stickyLiveToolNames],
       effectiveContract: lastValidContract,
+      effectiveAuthority: lastValidAuthority,
       contractState: `${discovery.state}-sticky-live`,
     };
   }
-  return {
+  if (discovery.state === "legacy") {
+    reviewedLegacyConfirmed = true;
+    return {
+      discovery,
+      toolNames: [...STATIC_TOOL_NAMES],
+      effectiveContract: null,
+      effectiveAuthority: null,
+      contractState: "legacy-static-fallback",
+    };
+  }
+  if (reviewedLegacyConfirmed) return {
     discovery,
     toolNames: [...STATIC_TOOL_NAMES],
     effectiveContract: null,
-    contractState: `${discovery.state}-static-fallback`,
+    effectiveAuthority: null,
+    contractState: `${discovery.state}-legacy-static-fallback`,
   };
+  return { discovery, toolNames: [], effectiveContract: null, effectiveAuthority: null, contractState: discovery.state };
 }
 
 function toolAvailabilitySignature(availability) {
@@ -608,6 +709,7 @@ function toolAvailabilitySignature(availability) {
     ...(names.length ? {
       contractState: availability.contractState,
       contractHash: availability.effectiveContract?.contractHash || null,
+      authorityHash: availability.effectiveAuthority?.authority_hash || null,
     } : {}),
   });
 }
@@ -638,14 +740,14 @@ async function resolveAvailableTools(notifyOnChange) {
 }
 
 async function listTools() {
-  const { toolNames, effectiveContract: contract, contractState } = await resolveAvailableTools(true);
+  const { toolNames, effectiveContract: contract, effectiveAuthority: authority, contractState } = await resolveAvailableTools(true);
   const capabilities = new Map((contract?.capabilities || []).map((capability) => [`${capability.id}@${capability.version}`, capability]));
   const listed = [];
   for (let toolIndex = 0; toolIndex < TOOLS.length; toolIndex += 1) {
     if (!toolNames.includes(TOOLS[toolIndex].name)) continue;
     const capability = capabilities.get(`${TOOLS[toolIndex].capabilityId}@${TOOLS[toolIndex].capabilityVersion}`);
     const projection = capability?.surfaces?.mcp?.find((candidate) => candidate.id === TOOLS[toolIndex].name);
-    const legacyWorkspaceRead = contractState === "legacy-static-fallback" && TOOLS[toolIndex].name === "get_workspace";
+    const legacyWorkspaceRead = contractState.endsWith("legacy-static-fallback") && TOOLS[toolIndex].name === "get_workspace";
     const projectionDescription = legacyWorkspaceRead
       ? "Read a bounded workspace.read@1 compatibility summary from a reviewed legacy Forge server. The legacy response has workspaceHash but no complete snapshotHash; snapshotHashAvailable is false."
       : projection?.status === "partial" && projection.note
@@ -660,6 +762,10 @@ async function listTools() {
         "x4forge/capabilityVersion": legacyWorkspaceRead ? 1 : TOOLS[toolIndex].capabilityVersion,
         "x4forge/contractVersion": contractState,
         ...(contract?.contractHash ? { "x4forge/contractHash": contract.contractHash } : {}),
+        ...(authority?.authority_hash ? {
+          "x4forge/authorityVersion": authority.api_version,
+          "x4forge/authorityHash": authority.authority_hash,
+        } : {}),
       },
     });
   }

@@ -160,6 +160,7 @@ import { registerSelftests } from "./src/server/selftestRegistry";
 import {
   createAgentKeyStore,
   resolveAgentRouteAuthority,
+  resolveAgentRouteTemplateAuthority,
   runAgentKeysSelftest,
   AGENT_KEY_TTLS,
   AGENT_KEY_PREFIX,
@@ -168,6 +169,15 @@ import {
   type AgentKeyScope,
   type AgentRouteAuthorityDecision,
 } from "./src/lib/agentKeys";
+import {
+  AGENT_CAPABILITY_AUTHORITY_API_VERSION,
+  AGENT_CAPABILITY_AUTHORITY_SCHEMA_VERSION,
+  buildEffectiveCapabilitySelection,
+  decideConstrainedAgentRoute,
+  isAgentCapabilityDiscoveryRoute,
+  normalizeAgentCapabilityConstraint,
+  type AgentCapabilityConstraint,
+} from "./src/lib/agentCapabilityAuthority";
 // B86 — agent action ledger: a skimmable record of what agents actually did.
 import {
   ledgerRouteKind, describeAction, lineDelta, unifiedDiff, looksBinary, filterRows, revertibility,
@@ -209,7 +219,12 @@ import { runGodLintSelftest, lintGodMacros } from "./src/lib/godLint";
 import { atomicWriteFile, atomicWriteJson, runWorkspaceStateSelftest } from "./src/lib/workspaceState";
 import { WorkspaceRegistry, runWorkspaceRegistrySelftest, validWorkspaceId, type WorkspaceRecord } from "./src/lib/workspaceRegistry";
 import { runContinuousPollingSelftest } from "./src/lib/continuousPolling.selftest";
-import { applyForgeCapabilityFixedBody, buildForgeCapabilityContract } from "./src/lib/forgeCapabilities";
+import {
+  applyForgeCapabilityFixedBody,
+  buildForgeCapabilityContract,
+  FORGE_CAPABILITIES,
+  FORGE_CAPABILITY_EFFECTS,
+} from "./src/lib/forgeCapabilities";
 import { runForgeCapabilitiesSelftest } from "./src/lib/forgeCapabilities.selftest";
 import {
   ValidationBaselineStore,
@@ -537,8 +552,10 @@ let workspaceRegistry: WorkspaceRegistry;
 type RequestActor = {
   kind: 'agent' | 'studio';
   label: string;
+  keyId?: string;
   scope?: AgentKeyScope;
   workspaceId?: string;
+  capabilityConstraint?: AgentCapabilityConstraint;
   authority?: AgentRouteAuthorityDecision;
 };
 
@@ -670,19 +687,41 @@ function authMiddleware(req: express.Request, res: express.Response, next: expre
         policyHash: authority.decision.policyHash,
       });
     }
+    const capabilityDecision = decideConstrainedAgentRoute(authority.decision, v.capabilityConstraint);
+    if (!capabilityDecision.allowed) {
+      return res.status(403).json({
+        error: capabilityDecision.code === 'UNCONTRACTED_ROUTE_DENIED'
+          ? `Forbidden: custom key "${v.label}" is contract-only; ${authority.decision.routeKey} has no canonical capability authority.`
+          : capabilityDecision.code === 'CAPABILITY_EFFECT_DENIED'
+            ? `Forbidden: custom key "${v.label}" does not allow every effect of ${capabilityDecision.capabilityIdentity}.`
+            : `Forbidden: custom key "${v.label}" does not grant ${capabilityDecision.capabilityIdentity || authority.decision.owner}.`,
+        code: 'insufficient_scope',
+        authorityCode: capabilityDecision.code,
+        scope: v.scope,
+        route: authority.decision.routeKey,
+        capabilityIdentity: capabilityDecision.capabilityIdentity,
+        disallowedEffects: capabilityDecision.disallowedEffects,
+        policyVersion: authority.decision.policyVersion,
+        policyHash: authority.decision.policyHash,
+      });
+    }
     (req as any).__actor = {
       kind: 'agent',
       label: v.label || 'unnamed key',
+      keyId: v.id,
       scope: v.scope,
       workspaceId: v.workspaceId,
+      ...(v.capabilityConstraint ? { capabilityConstraint: v.capabilityConstraint } : {}),
       authority: authority.decision,
     } satisfies RequestActor;
     // A verified credential is not a successful use by itself. Workspace binding,
     // handler authorization, validation and execution all run after this middleware.
     // Only a completed non-error response is durable usage evidence.
-    res.once('finish', () => {
-      if (res.statusCode < 400) agentKeyStore.touch(v.id!);
-    });
+    if (!isAgentCapabilityDiscoveryRoute(authority.decision)) {
+      res.once('finish', () => {
+        if (res.statusCode < 400) agentKeyStore.touch(v.id!);
+      });
+    }
     return next();
   }
 
@@ -1000,14 +1039,39 @@ app.get("/api/agent/keys", (_req, res) => {
       },
       studioOnly: ['credentials', 'standing configuration', 'Studio preferences', 'workspace administration', 'GitHub', 'Steam handoff', 'human export receipts', 'command execution'],
       existingKeysFollowCurrentPolicy: true,
+      customAuthority: 'Optional custom keys are immutable and contract-only: exact capability.id@version identities plus allowed effects; revoke and recreate to change them.',
     },
+    capabilityOptions: FORGE_CAPABILITIES.filter(capability => !capability.access.public).map(capability => ({
+      identity: `${capability.id}@${capability.version}`,
+      title: capability.title,
+      effects: capability.effects,
+      agentScopes: capability.access.agentScopes,
+    })),
+    effectOptions: FORGE_CAPABILITY_EFFECTS,
   });
 });
 
 app.post("/api/agent/keys", (req, res) => {
-  const label = String(req.body?.label || "").trim();
-  const scope = String(req.body?.scope || "") as AgentKeyScope;
-  const ttlName = String(req.body?.ttl || "");
+  const body = req.body;
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return res.status(400).json({
+      code: 'AGENT_KEY_REQUEST_INVALID',
+      error: 'Agent key creation requires one JSON object.',
+      errors: ['Agent key creation requires one JSON object.'],
+    });
+  }
+  const allowedFields = new Set([
+    'label', 'scope', 'ttl', 'authorityMode', 'capabilityIdentities', 'allowedEffects',
+    'workspaceId', 'clientId',
+  ]);
+  const unknownFields = Object.keys(body).filter(field => !allowedFields.has(field)).sort();
+  if (unknownFields.length) {
+    const error = `Unknown agent key creation field(s): ${unknownFields.join(', ')}.`;
+    return res.status(400).json({ code: 'AGENT_KEY_REQUEST_INVALID', error, errors: [error] });
+  }
+  const label = String(body.label || "").trim();
+  const scope = String(body.scope || "") as AgentKeyScope;
+  const ttlName = String(body.ttl || "");
   if (!label) return res.status(400).json({ error: "Missing 'label'." });
   if (!["read", "write", "deploy"].includes(scope)) {
     return res.status(400).json({ error: "Invalid 'scope' — use read | write | deploy." });
@@ -1015,12 +1079,64 @@ app.post("/api/agent/keys", (req, res) => {
   if (!(ttlName in AGENT_KEY_TTLS)) {
     return res.status(400).json({ error: `Invalid 'ttl' — use ${Object.keys(AGENT_KEY_TTLS).join(" | ")}.` });
   }
+  const hasCapabilityIdentities = Object.hasOwn(body, 'capabilityIdentities');
+  const hasAllowedEffects = Object.hasOwn(body, 'allowedEffects');
+  const rawAuthorityMode = body.authorityMode;
+  let authorityMode: 'preset' | 'exact';
+  const modeErrors: string[] = [];
+  if (rawAuthorityMode === undefined) {
+    authorityMode = 'preset';
+    if (hasCapabilityIdentities || hasAllowedEffects) {
+      modeErrors.push("authorityMode: 'exact' is required when capabilityIdentities or allowedEffects are supplied.");
+    }
+  } else if (rawAuthorityMode === 'preset' || rawAuthorityMode === 'exact') {
+    authorityMode = rawAuthorityMode;
+  } else {
+    authorityMode = 'preset';
+    modeErrors.push("authorityMode must be 'preset' or 'exact'.");
+  }
+  if (rawAuthorityMode === 'preset' && (hasCapabilityIdentities || hasAllowedEffects)) {
+    modeErrors.push("Preset authority must not include capabilityIdentities or allowedEffects.");
+  }
+  if (authorityMode === 'exact' && (!hasCapabilityIdentities || !hasAllowedEffects)) {
+    modeErrors.push("Exact authority requires both capabilityIdentities and allowedEffects arrays.");
+  }
+  if (modeErrors.length) {
+    return res.status(400).json({
+      code: 'AGENT_KEY_AUTHORITY_MODE_INVALID',
+      error: modeErrors.join(' '),
+      errors: modeErrors,
+    });
+  }
+  const normalizedConstraint = authorityMode === 'exact'
+    ? normalizeAgentCapabilityConstraint(body.capabilityIdentities, body.allowedEffects, scope)
+    : { ok: true as const, constraint: undefined };
+  if ('errors' in normalizedConstraint) {
+    return res.status(400).json({
+      code: 'AGENT_CAPABILITY_CONSTRAINT_INVALID',
+      error: normalizedConstraint.errors.join(' '),
+      errors: normalizedConstraint.errors,
+    });
+  }
   const workspace = resolveWorkspaceAuthority(req, res, true);
   if (!workspace) return;
-  const { token, record } = agentKeyStore.create(label, scope, AGENT_KEY_TTLS[ttlName], workspace.workspaceId);
+  const { token, record } = agentKeyStore.create(
+    label,
+    scope,
+    AGENT_KEY_TTLS[ttlName],
+    workspace.workspaceId,
+    normalizedConstraint.constraint,
+  );
   const { tokenHash: _hidden, ...safe } = record;
   // The plaintext token appears in THIS response only — it is never persisted or listed.
-  return res.json({ token, record: { ...safe, hashPrefix: record.tokenHash.slice(0, 8) } });
+  return res.json({
+    token,
+    record: {
+      ...safe,
+      authorityMode: record.capabilityConstraint ? 'exact' : 'preset',
+      hashPrefix: record.tokenHash.slice(0, 8),
+    },
+  });
 });
 
 app.post("/api/agent/keys/revoke", (req, res) => {
@@ -1030,6 +1146,41 @@ app.post("/api/agent/keys/revoke", (req, res) => {
   return done
     ? res.json({ ok: true, id })
     : res.status(404).json({ error: "No such active key (already revoked or unknown id)." });
+});
+
+app.get('/api/agent/capabilities/effective', (req, res) => {
+  const actor = (req as any).__actor as RequestActor | undefined;
+  if (!actor) return res.status(401).json({ code: 'AUTHENTICATED_ACTOR_REQUIRED', error: 'Effective capability discovery requires authentication.' });
+  const selection = buildEffectiveCapabilitySelection(
+    {
+      kind: actor.kind,
+      scope: actor.scope,
+      workspaceId: actor.workspaceId || (req as any).__workspaceId,
+      constraint: actor.capabilityConstraint,
+    },
+    resolveAgentRouteTemplateAuthority,
+  );
+  const sha256 = (value: string) => crypto.createHash('sha256').update(value, 'utf8').digest('hex');
+  const capabilityContract = buildForgeCapabilityContract(sha256, selection.capabilities);
+  const authority = {
+    api_version: AGENT_CAPABILITY_AUTHORITY_API_VERSION,
+    authority_schema_version: AGENT_CAPABILITY_AUTHORITY_SCHEMA_VERSION,
+    actor: {
+      kind: actor.kind,
+      label: actor.label,
+      ...(actor.keyId ? { keyId: actor.keyId } : {}),
+      ...(actor.scope ? { scope: actor.scope } : {}),
+      ...(actor.workspaceId || (req as any).__workspaceId ? { workspaceId: actor.workspaceId || (req as any).__workspaceId } : {}),
+    },
+    route_policy: { version: AGENT_AUTHORITY_POLICY_VERSION, hash: AGENT_AUTHORITY_POLICY_HASH },
+    constraint: actor.capabilityConstraint || null,
+    capability_contract: capabilityContract,
+    exclusions: selection.exclusions,
+  };
+  return res.json({
+    ...authority,
+    authority_hash: sha256(stableStringify(authority)),
+  });
 });
 
 type CompiledFileManifest = Record<string, string>;

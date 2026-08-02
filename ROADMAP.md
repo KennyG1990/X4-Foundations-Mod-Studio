@@ -7338,3 +7338,34 @@ release, marketplace publish, game/mod write, provider spend or stored-key migra
 
 Suggested commit title:
 `security(agent): enforce exact reviewed route authority`.
+
+## 2026-08-01 — B118 / B115 W2B actor-effective capability authority — VERIFIED
+
+Forge now exposes one truthful capability contract per authenticated actor without replacing its canonical registry
+or exact route authority. Optional custom keys persist immutable sorted `capability.id@version` identities and allowed
+effects; protected calls require the preset, addressed workspace, exact route owner, selected identity and every
+declared effect. Protected noncanonical legacy routes fail closed. Existing v1/v2/v3 preset records keep their current
+behavior, and public API-v4 discovery remains unchanged.
+
+The Agent Keys UI and native `X4 Forge: Create Agent Key` command make preset versus exact authority explicit. Both
+verify the server-returned authority before exposing a token or claiming success; a mismatched mint is immediately
+revoked. MCP authenticates caller-effective discovery, verifies a byte-equivalent canonical subset, preserves tool
+list/direct-call parity and cannot re-expand after live narrowing through outage or reviewed-legacy downgrade.
+
+Evidence: key contracts 73/73; route integration 400/400; MCP read=5/write=9/deploy=10; capability audit
+11 capabilities / 291 routes / one registrar / 10 aliases; oracles 129/129; focused browser 5/5; full isolated E2E
+96/96 with zero failed/flaky/bad/quarantined; typecheck, zero-error lint, production/extension builds, Graphify and
+final precommit. The staged product passed 16/16; replacement 2,091-entry VSIX
+`x4-forge-studio-0.0.63-b118-r2-20260801-215504.vsix` is 17,976,544 bytes, SHA-256
+`7979E2C5F7D31F2E8C5363E95281120D4DA936014D57717B7206AAF531079663`. An isolated Antigravity CLI profile
+recognized 0.0.63; all 2,089 installed extension files match with canonical comparison-manifest SHA-256
+`6A7DAFF02FB1B81DAD5096CC61064EC9B50F86647ADFC61BE98F196F5A864495`. Antigravity 1.107.0 visibly rendered the
+unchanged exact capability/effect controls and native preset-versus-exact guidance; the proof flow was cancelled
+before mint. Evidence:
+`vscode-extension/evidence/2026-08-01-b118-effective-authority/`.
+
+W3 transaction receipts, generic harness parity, B64-SEC5, provider execution and public release remain separate.
+No game/mod/config write, provider spend, marketplace publish, stored-key migration or real user-key creation occurred.
+
+Suggested commit title:
+`security(agent): expose and enforce effective capability authority`.

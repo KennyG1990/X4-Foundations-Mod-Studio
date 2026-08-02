@@ -42,6 +42,10 @@ import {
   type NativeReleaseRequest,
   type NativeReleaseResult,
 } from "./nativeEditorBridge";
+import {
+  createdAgentKeyMatchesRequestedAuthority,
+  type RequestedAgentKeyAuthority,
+} from "../../shared/agentKeyCreationContract";
 
 interface BackendHandle {
   baseUrl: string;
@@ -1001,6 +1005,68 @@ export function activate(context: vscode.ExtensionContext): void {
           { placeHolder: "Key scope" },
         );
         if (!scope) return;
+        const authorityMode = await vscode.window.showQuickPick(
+          [
+            { label: "Preset (recommended)", description: "Follow the current reviewed routes for this scope.", mode: 'preset' as const },
+            { label: "Exact capability contract", description: "Freeze exact capability.id@version and effect limits; noncanonical protected routes stop working.", mode: 'exact' as const },
+          ],
+          { placeHolder: "Authority mode" },
+        );
+        if (!authorityMode) return;
+        let capabilityIdentities: string[] | undefined;
+        let allowedEffects: string[] | undefined;
+        if (authorityMode.mode === 'exact') {
+          const optionsResponse = await fetch(`${handle.baseUrl}/api/agent/keys`, {
+            headers: backendApiHeaders(handle),
+          });
+          const optionsData = (await optionsResponse.json()) as {
+            error?: string;
+            capabilityOptions?: Array<{
+              identity: string;
+              title: string;
+              effects: string[];
+              agentScopes: string[];
+            }>;
+            effectOptions?: string[];
+          };
+          if (!optionsResponse.ok) throw new Error(optionsData.error || `HTTP ${optionsResponse.status}`);
+          const eligible = (optionsData.capabilityOptions || []).filter(option => option.agentScopes.includes(scope.label));
+          const pickedCapabilities = await vscode.window.showQuickPick(
+            eligible.map(option => ({
+              label: option.title,
+              description: option.identity,
+              detail: `effects: ${option.effects.join(', ')}`,
+              identity: option.identity,
+              effects: option.effects,
+              picked: true,
+            })),
+            {
+              canPickMany: true,
+              placeHolder: "Exact protected capabilities (none = public capabilities only)",
+              title: "Contract-only key: protected legacy Agent API routes will be denied",
+            },
+          );
+          if (!pickedCapabilities) return;
+          capabilityIdentities = pickedCapabilities.map(option => option.identity).sort();
+          const selectedEffectSet = new Set(pickedCapabilities.flatMap(option => option.effects));
+          const pickedEffects = await vscode.window.showQuickPick(
+            (optionsData.effectOptions || []).filter(effect => selectedEffectSet.has(effect)).map(effect => ({ label: effect, picked: true })),
+            {
+              canPickMany: true,
+              placeHolder: "Allowed effects (removing one blocks every selected capability that requires it)",
+              title: "Every effect required by a capability must remain allowed",
+            },
+          );
+          if (!pickedEffects) return;
+          allowedEffects = (optionsData.effectOptions || []).filter(effect => pickedEffects.some(item => item.label === effect));
+          const confirmed = await vscode.window.showWarningMessage(
+            `Create a contract-only ${scope.label} key with ${capabilityIdentities.length} protected capabilit${capabilityIdentities.length === 1 ? 'y' : 'ies'}? ` +
+            "Noncanonical protected Agent API routes will be denied. Public localhost reads remain public. Change this later by revoking and recreating the key.",
+            { modal: true },
+            "Create contract-only key",
+          );
+          if (confirmed !== "Create contract-only key") return;
+        }
         const ttl = await vscode.window.showQuickPick(
           [
             { label: "1h", description: "expires in 1 hour" },
@@ -1012,19 +1078,56 @@ export function activate(context: vscode.ExtensionContext): void {
           { placeHolder: "Key lifetime" },
         );
         if (!ttl) return;
+        const requestedAuthority: RequestedAgentKeyAuthority = authorityMode.mode === 'exact'
+          ? { authorityMode: 'exact', capabilityIdentities: capabilityIdentities || [], allowedEffects: allowedEffects || [] }
+          : { authorityMode: 'preset' };
         const res = await fetch(`${handle.baseUrl}/api/agent/keys`, {
           method: "POST",
           headers: backendApiHeaders(handle, true),
-          body: JSON.stringify({ label: label.trim(), scope: scope.label, ttl: ttl.label }),
+          body: JSON.stringify({
+            label: label.trim(), scope: scope.label, ttl: ttl.label,
+            ...requestedAuthority,
+          }),
         });
-        const data = (await res.json()) as { token?: string; error?: string };
-        if (!res.ok || !data.token) throw new Error(data.error || `HTTP ${res.status}`);
-        await vscode.env.clipboard.writeText(data.token);
-        log(`agent key created: label="${label.trim()}" scope=${scope.label} ttl=${ttl.label}`);
+        const data = (await res.json()) as {
+          token?: string;
+          error?: string;
+          record?: {
+            id?: string;
+            authorityMode?: string;
+            capabilityConstraint?: { capabilityIdentities?: unknown; allowedEffects?: unknown };
+          };
+        };
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        const token = typeof data.token === 'string' ? data.token : '';
+        const tokenPresent = token.length > 0;
+        const authorityMatches = createdAgentKeyMatchesRequestedAuthority(requestedAuthority, data.record);
+        if (!tokenPresent || !authorityMatches) {
+          const keyId = typeof data.record?.id === 'string' ? data.record.id : '';
+          let revoked = false;
+          if (keyId) {
+            try {
+              const revoke = await fetch(`${handle.baseUrl}/api/agent/keys/revoke`, {
+                method: 'POST',
+                headers: backendApiHeaders(handle, true),
+                body: JSON.stringify({ id: keyId }),
+              });
+              revoked = revoke.ok;
+            } catch { /* reported below as an active-key hazard */ }
+          }
+          throw new Error(
+            `Forge did not confirm the requested ${requestedAuthority.authorityMode} key authority; no token was copied. ` +
+            (revoked
+              ? 'The mismatched key was revoked automatically.'
+              : `Automatic revocation failed${keyId ? ` for ${keyId}` : ' because no key id was returned'}; the key may still be active and must be revoked in Studio.`),
+          );
+        }
+        await vscode.env.clipboard.writeText(token);
+        log(`agent key created: label="${label.trim()}" scope=${scope.label} ttl=${ttl.label} authority=${requestedAuthority.authorityMode === 'exact' ? `contract-only:${capabilityIdentities?.length || 0}` : 'preset'}`);
         log(`  endpoint: ${handle.baseUrl}/api  ·  header: Authorization: Bearer <key on your clipboard>`);
         void vscode.window
           .showInformationMessage(
-            `X4 Forge: key "${label.trim()}" (${scope.label}, ${ttl.label}) copied to clipboard — it will not be shown again. Endpoint: ${handle.baseUrl}`,
+            `X4 Forge: key "${label.trim()}" (${scope.label}, ${ttl.label}${requestedAuthority.authorityMode === 'exact' ? ', contract-only' : ', preset'}) copied to clipboard — it will not be shown again. Endpoint: ${handle.baseUrl}`,
             "Show Logs",
           )
           .then((pick) => pick === "Show Logs" && output.show(true));

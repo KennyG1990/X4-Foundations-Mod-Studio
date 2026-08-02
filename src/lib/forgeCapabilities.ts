@@ -30,6 +30,21 @@ export type ForgeCapabilityEffect =
   | 'spend'
   | 'credential'
   | 'publish';
+export const FORGE_CAPABILITY_EFFECTS = [
+  'read',
+  'analyze',
+  'audit-write',
+  'audit-retention-delete',
+  'workspace-write',
+  'filesystem-write',
+  'package',
+  'deploy',
+  'delete',
+  'network',
+  'spend',
+  'credential',
+  'publish',
+] as const satisfies readonly ForgeCapabilityEffect[];
 export type ForgeConfirmationPolicy = 'none' | 'preview-required' | 'human-only';
 export type ForgeSurfaceProjectionStatus = 'connected' | 'partial' | 'disconnected';
 export type ForgeApiInputLocation = 'none' | 'query' | 'body' | 'path' | 'path-and-query';
@@ -603,21 +618,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 const JSON_SCHEMA_TYPES = new Set(['array', 'boolean', 'integer', 'null', 'number', 'object', 'string']);
 const CONTEXT_REQUIREMENTS = new Set<ForgeContextRequirement>(['none', 'optional', 'required']);
 const AGENT_SCOPES = new Set<ForgeAgentScope>(['read', 'write', 'deploy']);
-const CAPABILITY_EFFECTS = new Set<ForgeCapabilityEffect>([
-  'read',
-  'analyze',
-  'audit-write',
-  'audit-retention-delete',
-  'workspace-write',
-  'filesystem-write',
-  'package',
-  'deploy',
-  'delete',
-  'network',
-  'spend',
-  'credential',
-  'publish',
-]);
+const CAPABILITY_EFFECTS = new Set<ForgeCapabilityEffect>(FORGE_CAPABILITY_EFFECTS);
 const CONFIRMATION_POLICIES = new Set<ForgeConfirmationPolicy>(['none', 'preview-required', 'human-only']);
 const API_INPUT_LOCATIONS = new Set<ForgeApiInputLocation>(['none', 'query', 'body', 'path', 'path-and-query']);
 const API_BINDING_ROLES = new Set<ForgeApiBindingRole>(['primary', 'supporting']);

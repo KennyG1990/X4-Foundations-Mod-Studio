@@ -78,6 +78,8 @@ export interface AgentRouteAuthority {
   policyVersion: AgentRouteAuthorityManifest['schemaVersion'];
   policyHash: string;
   resolve(method: string, requestPath: string): AgentAuthorityResolution;
+  /** Resolve one exact reviewed Express template without fabricating a concrete parameter. */
+  resolveTemplate(method: string, template: string): AgentAuthorityResolution;
   allows(scope: AgentKeyScope, method: string, requestPath: string): boolean;
 }
 
@@ -201,6 +203,21 @@ export function createAgentRouteAuthority(value: unknown): AgentRouteAuthority {
     }
   }
   const policyHash = crypto.createHash('sha256').update(canonicalJson(manifest), 'utf8').digest('hex');
+  const decisionFor = (route: CompiledRoute): AgentAuthorityResolution => ({
+    ok: true,
+    decision: {
+      policyVersion: manifest.schemaVersion,
+      policyHash,
+      routeKey: `${route.method} ${route.template}`,
+      method: route.method,
+      template: route.template,
+      disposition: route.entry.disposition,
+      owner: route.entry.owner,
+      agentScopes: [...route.entry.agentScopes],
+      resourceClass: route.entry.resourceClass,
+      workspaceMode: route.entry.workspaceMode,
+    },
+  });
   return {
     policyVersion: manifest.schemaVersion,
     policyHash,
@@ -213,21 +230,15 @@ export function createAgentRouteAuthority(value: unknown): AgentRouteAuthority {
         candidate.segments.length === segments.length &&
         candidate.segments.every((segment, index) => candidate.params[index] ? true : segment === segments[index]));
       if (!route) return { ok: false, reason: 'unreviewed_route' };
-      return {
-        ok: true,
-        decision: {
-          policyVersion: manifest.schemaVersion,
-          policyHash,
-          routeKey: `${route.method} ${route.template}`,
-          method: route.method,
-          template: route.template,
-          disposition: route.entry.disposition,
-          owner: route.entry.owner,
-          agentScopes: [...route.entry.agentScopes],
-          resourceClass: route.entry.resourceClass,
-          workspaceMode: route.entry.workspaceMode,
-        },
-      };
+      return decisionFor(route);
+    },
+    resolveTemplate(method, template) {
+      const normalizedMethod = String(method || '').toUpperCase();
+      if (!METHOD_RE.test(normalizedMethod) || !templateParts(String(template || ''))) {
+        return { ok: false, reason: 'malformed_path' };
+      }
+      const route = compiled.find(candidate => candidate.method === normalizedMethod && candidate.template === template);
+      return route ? decisionFor(route) : { ok: false, reason: 'unreviewed_route' };
     },
     allows(scope, method, requestPath) {
       const resolved = this.resolve(method, requestPath);
@@ -281,6 +292,11 @@ export function runAgentRouteAuthoritySelftest(): {
     authority.allows('deploy', 'GET', '/api/agent/history/row_1/raw') &&
     !authority.allows('deploy', 'GET', '/api/agent/history/row_1/extra/raw') &&
     !authority.allows('deploy', 'GET', '/api/agent/history/../raw'));
+  const exactTemplate = authority.resolveTemplate('GET', '/api/agent/history/:id/raw');
+  ok('exact_template_resolution_does_not_fabricate_parameters',
+    exactTemplate.ok && exactTemplate.decision.routeKey === 'GET /api/agent/history/:id/raw' &&
+    !authority.resolveTemplate('GET', '/api/agent/history/:other/raw').ok &&
+    !authority.resolveTemplate('GET', '/api/agent/history/value/raw').ok);
   ok('unknown_method_and_prefix_child_fail_closed',
     !authority.allows('deploy', 'DELETE', '/api/agent/workspace') &&
     !authority.allows('deploy', 'GET', '/api/agent/Workspace') &&

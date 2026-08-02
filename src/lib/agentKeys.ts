@@ -30,7 +30,16 @@ import {
   type AgentKeyScope,
   type AgentRouteAuthorityDecision,
 } from './agentAuthority';
+import {
+  AGENT_CAPABILITY_DISCOVERY_ROUTE_KEY,
+  buildEffectiveCapabilitySelection,
+  decideConstrainedAgentRoute,
+  normalizeAgentCapabilityConstraint,
+  type AgentCapabilityConstraint,
+} from './agentCapabilityAuthority';
+import type { ForgeCapabilityEffect } from './forgeCapabilities';
 import { atomicWriteJson, type AtomicWriteOptions } from './workspaceState';
+import { runAgentKeyCreationContractSelftest } from '../../shared/agentKeyCreationContract';
 
 export type { AgentKeyScope, AgentRouteAuthorityDecision } from './agentAuthority';
 
@@ -40,6 +49,8 @@ export interface AgentKeyRecord {
   scope: AgentKeyScope;
   /** ADR-F5: immutable workspace authority. Missing only on pre-migration legacy keys. */
   workspaceId?: string;
+  /** B118: absent preserves preset compatibility; present is immutable create-time narrowing. */
+  capabilityConstraint?: AgentCapabilityConstraint;
   /** sha256 hex of the plaintext key. Never the key itself. */
   tokenHash: string;
   createdAt: number;
@@ -56,11 +67,18 @@ export interface AgentKeyVerify {
   label?: string;
   scope?: AgentKeyScope;
   workspaceId?: string;
+  capabilityConstraint?: AgentCapabilityConstraint;
   reason?: 'unknown' | 'expired' | 'revoked';
 }
 
 export interface AgentKeyStore {
-  create(label: string, scope: AgentKeyScope, ttlMs: number | null, workspaceId?: string): { token: string; record: AgentKeyRecord };
+  create(
+    label: string,
+    scope: AgentKeyScope,
+    ttlMs: number | null,
+    workspaceId?: string,
+    capabilityConstraint?: AgentCapabilityConstraint,
+  ): { token: string; record: AgentKeyRecord };
   verify(token: string, atMs?: number): AgentKeyVerify;
   revoke(id: string): boolean;
   /** Safe listing — records only (hashes included are non-reversible, but we still trim them for display). */
@@ -90,9 +108,24 @@ function isAgentKeyRecord(value: unknown): value is AgentKeyRecord {
   if (!value || typeof value !== 'object') return false;
   const row = value as Partial<AgentKeyRecord>;
   const nullableNumber = (candidate: unknown) => candidate === null || (typeof candidate === 'number' && Number.isFinite(candidate));
+  const constraint = row.capabilityConstraint;
+  const constraintKeysValid = constraint === undefined || (!!constraint && typeof constraint === 'object' && !Array.isArray(constraint) &&
+    JSON.stringify(Object.keys(constraint).sort()) === JSON.stringify(['allowedEffects', 'capabilityIdentities']));
+  // Persistence deliberately validates durable shape, not today's live capability catalog.
+  // A retired identity/effect must narrow only that key; it must never brick unrelated keys
+  // or remove Studio's ability to list/revoke the stale record.
+  const constraintValid = constraint === undefined || (constraintKeysValid &&
+    Array.isArray(constraint.capabilityIdentities) &&
+    constraint.capabilityIdentities.every(identity => typeof identity === 'string' && /^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)+@[1-9][0-9]*$/.test(identity)) &&
+    new Set(constraint.capabilityIdentities).size === constraint.capabilityIdentities.length &&
+    JSON.stringify([...constraint.capabilityIdentities].sort()) === JSON.stringify(constraint.capabilityIdentities) &&
+    Array.isArray(constraint.allowedEffects) &&
+    constraint.allowedEffects.every(effect => typeof effect === 'string' && /^[a-z][a-z0-9-]*$/.test(effect)) &&
+    new Set(constraint.allowedEffects).size === constraint.allowedEffects.length);
   return typeof row.id === 'string' && typeof row.label === 'string' &&
     (row.scope === 'read' || row.scope === 'write' || row.scope === 'deploy') &&
     (row.workspaceId === undefined || /^ws_[a-f0-9]{24}$/i.test(row.workspaceId)) &&
+    constraintValid &&
     typeof row.tokenHash === 'string' && /^[a-f0-9]{64}$/.test(row.tokenHash) &&
     typeof row.createdAt === 'number' && Number.isFinite(row.createdAt) &&
     nullableNumber(row.expiresAt) && nullableNumber(row.lastUsedAt) && nullableNumber(row.revokedAt) &&
@@ -122,7 +155,7 @@ export function createAgentKeyStore(opts: StoreOptions): AgentKeyStore {
     try {
       const raw = fs.readFileSync(opts.file, 'utf8');
       const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== 'object' || ![1, 2].includes(parsed.version) || !Array.isArray(parsed.keys) || !parsed.keys.every(isAgentKeyRecord)) {
+      if (!parsed || typeof parsed !== 'object' || ![1, 2, 3].includes(parsed.version) || !Array.isArray(parsed.keys) || !parsed.keys.every(isAgentKeyRecord)) {
         throw new Error('agent key store has an invalid shape');
       }
       records = parsed.keys;
@@ -137,14 +170,24 @@ export function createAgentKeyStore(opts: StoreOptions): AgentKeyStore {
   function save(next: AgentKeyRecord[]): void {
     if (!opts.file) return;
     if (loadError) throw new Error(`Agent key store is unreadable; refusing to overwrite it: ${loadError}`);
-    writeJson(opts.file, { version: 2, keys: next }, { mode: 0o600 });
+    writeJson(opts.file, { version: 3, keys: next }, { mode: 0o600 });
   }
   load();
 
   return {
-    create(label: string, scope: AgentKeyScope, ttlMs: number | null, workspaceId?: string) {
+    create(label: string, scope: AgentKeyScope, ttlMs: number | null, workspaceId?: string, capabilityConstraint?: AgentCapabilityConstraint) {
       if (workspaceId !== undefined && !/^ws_[a-f0-9]{24}$/i.test(workspaceId)) {
         throw new Error('Agent key workspaceId is malformed.');
+      }
+      const normalizedConstraint = capabilityConstraint === undefined
+        ? { ok: true as const, constraint: undefined }
+        : normalizeAgentCapabilityConstraint(
+          capabilityConstraint.capabilityIdentities,
+          capabilityConstraint.allowedEffects,
+          scope,
+        );
+      if ('errors' in normalizedConstraint) {
+        throw new Error(`Agent key capability constraint is invalid: ${normalizedConstraint.errors.join(' ')}`);
       }
       const at = now();
       const token = AGENT_KEY_PREFIX + randomHex(32);
@@ -153,6 +196,7 @@ export function createAgentKeyStore(opts: StoreOptions): AgentKeyStore {
         label: String(label || 'unnamed').slice(0, 60),
         scope,
         ...(workspaceId ? { workspaceId } : {}),
+        ...(normalizedConstraint.constraint ? { capabilityConstraint: normalizedConstraint.constraint } : {}),
         tokenHash: hashAgentKey(token),
         createdAt: at,
         expiresAt: ttlMs === null ? null : at + Math.max(60_000, ttlMs),
@@ -163,7 +207,18 @@ export function createAgentKeyStore(opts: StoreOptions): AgentKeyStore {
       const next = [...records, record];
       save(next);
       records = next;
-      return { token, record };
+      return {
+        token,
+        record: {
+          ...record,
+          ...(record.capabilityConstraint ? {
+            capabilityConstraint: {
+              capabilityIdentities: [...record.capabilityConstraint.capabilityIdentities],
+              allowedEffects: [...record.capabilityConstraint.allowedEffects],
+            },
+          } : {}),
+        },
+      };
     },
 
     verify(token: string, atMs?: number): AgentKeyVerify {
@@ -174,7 +229,19 @@ export function createAgentKeyStore(opts: StoreOptions): AgentKeyStore {
       if (!rec) return { ok: false, reason: 'unknown' };
       if (rec.revokedAt !== null) return { ok: false, reason: 'revoked' };
       if (rec.expiresAt !== null && at >= rec.expiresAt) return { ok: false, reason: 'expired' };
-      return { ok: true, id: rec.id, label: rec.label, scope: rec.scope, workspaceId: rec.workspaceId };
+      return {
+        ok: true,
+        id: rec.id,
+        label: rec.label,
+        scope: rec.scope,
+        workspaceId: rec.workspaceId,
+        ...(rec.capabilityConstraint ? {
+          capabilityConstraint: {
+            capabilityIdentities: [...rec.capabilityConstraint.capabilityIdentities],
+            allowedEffects: [...rec.capabilityConstraint.allowedEffects],
+          },
+        } : {}),
+      };
     },
 
     revoke(id: string): boolean {
@@ -187,7 +254,16 @@ export function createAgentKeyStore(opts: StoreOptions): AgentKeyStore {
     },
 
     list() {
-      return records.map(({ tokenHash, ...rest }) => ({ ...rest, hashPrefix: tokenHash.slice(0, 8) }));
+      return records.map(({ tokenHash, ...rest }) => ({
+        ...rest,
+        ...(rest.capabilityConstraint ? {
+          capabilityConstraint: {
+            capabilityIdentities: [...rest.capabilityConstraint.capabilityIdentities],
+            allowedEffects: [...rest.capabilityConstraint.allowedEffects],
+          },
+        } : {}),
+        hashPrefix: tokenHash.slice(0, 8),
+      }));
     },
 
     touch(id: string, atMs?: number) {
@@ -238,6 +314,10 @@ export function resolveAgentRouteAuthority(method: string, reqPath: string): Age
   return ACTIVE_AGENT_ROUTE_AUTHORITY.resolve(method, apiPath(reqPath));
 }
 
+export function resolveAgentRouteTemplateAuthority(method: string, template: string): AgentAuthorityResolution {
+  return ACTIVE_AGENT_ROUTE_AUTHORITY.resolveTemplate(method, apiPath(template));
+}
+
 /** Is this exact reviewed method/template granted to the key preset? */
 export function scopeAllows(scope: AgentKeyScope, method: string, reqPath: string): boolean {
   return ACTIVE_AGENT_ROUTE_AUTHORITY.allows(scope, method, apiPath(reqPath));
@@ -270,6 +350,60 @@ export function runAgentKeysSelftest(): { pass: boolean; checks: Array<{ name: s
   let malformedBindingRejected = false;
   try { store.create('bad binding', 'read', null, 'not-a-workspace'); } catch { malformedBindingRejected = true; }
   ok('malformed_workspace_binding_rejected', malformedBindingRejected);
+
+  const constrained = store.create('contract-only', 'write', null, 'ws_111111111111111111111111', {
+    capabilityIdentities: ['workspace.compile@1'],
+    allowedEffects: ['audit-retention-delete', 'analyze', 'read', 'audit-write'],
+  });
+  const constrainedVerify = store.verify(constrained.token, T0 + 1000);
+  ok('capability_constraint_is_canonical_and_roundtrips',
+    constrainedVerify.ok === true &&
+    JSON.stringify(constrainedVerify.capabilityConstraint) === JSON.stringify({
+      capabilityIdentities: ['workspace.compile@1'],
+      allowedEffects: ['read', 'analyze', 'audit-write', 'audit-retention-delete'],
+    }) &&
+    JSON.stringify(store.list().find(row => row.id === constrained.record.id)?.capabilityConstraint) ===
+      JSON.stringify(constrainedVerify.capabilityConstraint));
+  constrained.record.scope = 'deploy';
+  constrained.record.capabilityConstraint!.capabilityIdentities.push('workspace.generate.preview@1');
+  const afterReturnedRecordMutation = store.verify(constrained.token, T0 + 1000);
+  ok('returned_create_record_cannot_mutate_internal_authority', afterReturnedRecordMutation.ok === true &&
+    afterReturnedRecordMutation.scope === 'write' &&
+    JSON.stringify(afterReturnedRecordMutation.capabilityConstraint?.capabilityIdentities) === JSON.stringify(['workspace.compile@1']));
+  const mutableListCopy = store.list().find(row => row.id === constrained.record.id);
+  mutableListCopy?.capabilityConstraint?.capabilityIdentities.push('workspace.generate.preview@1');
+  ok('listed_constraint_cannot_mutate_internal_authority',
+    JSON.stringify(store.verify(constrained.token, T0 + 1000).capabilityConstraint?.capabilityIdentities) === JSON.stringify(['workspace.compile@1']));
+  const beforeInvalidConstraint = JSON.stringify(store.list());
+  const rejectedConstraints: AgentCapabilityConstraint[] = [
+    { capabilityIdentities: ['project.validate@1'], allowedEffects: ['read'] },
+    { capabilityIdentities: ['workspace.compile@2'], allowedEffects: ['read'] },
+    { capabilityIdentities: ['workspace.compile@1', 'workspace.compile@1'], allowedEffects: ['read'] },
+    { capabilityIdentities: ['schema.domains.list@1'], allowedEffects: ['read'] },
+    { capabilityIdentities: ['workspace.compile@1'], allowedEffects: ['read', 'read'] },
+    { capabilityIdentities: ['workspace.compile@1'], allowedEffects: ['read', 'deploy'] },
+  ];
+  ok('invalid_capability_constraints_fail_before_create', rejectedConstraints.every((constraint) => {
+    try { store.create('bad constraint', 'read', null, undefined, constraint); } catch { return true; }
+    return false;
+  }) && JSON.stringify(store.list()) === beforeInvalidConstraint);
+  let surplusEffectRejected = false;
+  try {
+    store.create('surplus effect', 'write', null, undefined, {
+      capabilityIdentities: ['workspace.compile@1'],
+      allowedEffects: ['read', 'deploy'],
+    });
+  } catch (error) {
+    surplusEffectRejected = /unused by the selected capabilities: deploy/.test(String(error));
+  }
+  ok('surplus_effect_is_rejected_inside_an_otherwise_valid_preset',
+    surplusEffectRejected && JSON.stringify(store.list()) === beforeInvalidConstraint);
+  const malformedConstraintInputs = [
+    normalizeAgentCapabilityConstraint('workspace.compile@1', [], 'write'),
+    normalizeAgentCapabilityConstraint(['workspace.compile@1'], ['unknown-effect'], 'write'),
+  ];
+  ok('non_array_and_unknown_effect_constraints_fail_closed',
+    malformedConstraintInputs.every(result => result.ok === false) && JSON.stringify(store.list()) === beforeInvalidConstraint);
 
   // no plaintext at rest
   ok('record_stores_hash_not_plaintext',
@@ -373,6 +507,48 @@ export function runAgentKeysSelftest(): { pass: boolean; checks: Array<{ name: s
     scopeAllows('read', 'GET', '/agent/schema') === true &&
     scopeAllows('read', 'GET', '/agent/workspace') === true);
 
+  const customConstraint = constrainedVerify.capabilityConstraint!;
+  const customEffective = buildEffectiveCapabilitySelection(
+    { kind: 'agent', scope: 'write', workspaceId: boundVerify.workspaceId, constraint: customConstraint },
+    (method, template) => resolveAgentRouteTemplateAuthority(method, template),
+  );
+  ok('effective_contract_intersects_exact_identity_effects_and_public_routes',
+    JSON.stringify(customEffective.capabilities.map(capability => `${capability.id}@${capability.version}`)) === JSON.stringify([
+      'schema.domains.list@1',
+      'schema.element.explain@1',
+      'workspace.compile@1',
+    ]));
+  const effectDenied = buildEffectiveCapabilitySelection(
+    {
+      kind: 'agent',
+      scope: 'write',
+      workspaceId: boundVerify.workspaceId,
+      constraint: { capabilityIdentities: ['workspace.compile@1'], allowedEffects: ['read', 'analyze', 'audit-write'] },
+    },
+    (method, template) => resolveAgentRouteTemplateAuthority(method, template),
+  );
+  ok('one_disallowed_effect_denies_the_whole_capability',
+    effectDenied.exclusions.some(exclusion => exclusion.capabilityIdentity === 'workspace.compile@1' &&
+      exclusion.code === 'CAPABILITY_EFFECT_DENIED' && exclusion.disallowedEffects?.includes('audit-retention-delete')));
+  const compileDecision = resolveAgentRouteAuthority('POST', '/agent/compile');
+  const workspaceReadDecision = resolveAgentRouteAuthority('GET', '/agent/workspace');
+  const legacyDecision = resolveAgentRouteAuthority('POST', '/reference/complete');
+  ok('route_constraint_reuses_exact_owner_and_denies_uncontracted_routes',
+    compileDecision.ok && decideConstrainedAgentRoute(compileDecision.decision, customConstraint).allowed === true &&
+    workspaceReadDecision.ok && decideConstrainedAgentRoute(workspaceReadDecision.decision, customConstraint).code === 'CAPABILITY_NOT_GRANTED' &&
+    legacyDecision.ok && decideConstrainedAgentRoute(legacyDecision.decision, customConstraint).code === 'UNCONTRACTED_ROUTE_DENIED');
+  ok('discovery_exemption_is_bound_to_one_exact_route_and_disposition', workspaceReadDecision.ok &&
+    decideConstrainedAgentRoute({
+      ...workspaceReadDecision.decision,
+      routeKey: AGENT_CAPABILITY_DISCOVERY_ROUTE_KEY,
+      disposition: 'agent-authority-discovery',
+    }, customConstraint).allowed === true &&
+    decideConstrainedAgentRoute({
+      ...workspaceReadDecision.decision,
+      routeKey: 'GET /api/agent/capabilities/unreviewed',
+      disposition: 'agent-authority-discovery',
+    }, customConstraint).code === 'UNCONTRACTED_ROUTE_DENIED');
+
   // persistence round-trip (real temp file)
   try {
     const tmpFile = path.join(os.tmpdir(), `x4-agent-keys-selftest-${process.pid}.json`);
@@ -382,7 +558,48 @@ export function runAgentKeysSelftest(): { pass: boolean; checks: Array<{ name: s
     const s2 = createAgentKeyStore({ file: tmpFile, now: () => T0 });
     ok('persistence_round_trip', s2.verify(k.token, T0).ok === true);
     const fileRaw = fs.readFileSync(tmpFile, 'utf8');
-    ok('file_never_contains_plaintext', !fileRaw.includes(k.token));
+    ok('store_writes_v3_and_never_contains_plaintext', JSON.parse(fileRaw).version === 3 && !fileRaw.includes(k.token));
+    for (const version of [1, 2]) {
+      fs.writeFileSync(tmpFile, JSON.stringify({ version, keys: [k.record] }), 'utf8');
+      ok(`legacy_v${version}_preset_record_loads_unchanged`, createAgentKeyStore({ file: tmpFile, now: () => T0 }).verify(k.token, T0).ok === true);
+    }
+
+    const staleSource = s1.create('stale constraint', 'write', null, 'ws_111111111111111111111111', {
+      capabilityIdentities: ['workspace.compile@1'],
+      allowedEffects: ['read', 'analyze', 'audit-write', 'audit-retention-delete'],
+    });
+    const staleRecord: AgentKeyRecord = {
+      ...staleSource.record,
+      capabilityConstraint: {
+        capabilityIdentities: ['workspace.compile@99'],
+        allowedEffects: ['retired-effect' as ForgeCapabilityEffect],
+      },
+    };
+    fs.writeFileSync(tmpFile, JSON.stringify({ version: 3, keys: [k.record, staleRecord] }), 'utf8');
+    const staleStore = createAgentKeyStore({ file: tmpFile, now: () => T0 + 1 });
+    const staleVerify = staleStore.verify(staleSource.token, T0 + 1);
+    ok('stale_constraint_does_not_brick_unrelated_keys', staleStore.verify(k.token, T0 + 1).ok === true && staleVerify.ok === true);
+    const staleEffective = buildEffectiveCapabilitySelection(
+      { kind: 'agent', scope: staleVerify.scope, workspaceId: staleVerify.workspaceId, constraint: staleVerify.capabilityConstraint },
+      (method, template) => resolveAgentRouteTemplateAuthority(method, template),
+    );
+    ok('stale_constraint_fails_closed_to_public_capabilities',
+      JSON.stringify(staleEffective.capabilities.map(capability => `${capability.id}@${capability.version}`)) ===
+        JSON.stringify(['schema.domains.list@1', 'schema.element.explain@1']));
+    const staleRevoked = staleStore.revoke(staleRecord.id);
+    const replacement = staleStore.create('replacement', 'write', null, 'ws_111111111111111111111111', {
+      capabilityIdentities: ['workspace.compile@1'],
+      allowedEffects: ['read', 'analyze', 'audit-write', 'audit-retention-delete'],
+    });
+    ok('stale_constraint_remains_listable_revokeable_and_replaceable', staleRevoked &&
+      staleStore.list().some(row => row.id === staleRecord.id && row.revokedAt !== null) &&
+      staleStore.verify(replacement.token, T0 + 1).ok === true);
+    const reopenedV3 = createAgentKeyStore({ file: tmpFile, now: () => T0 + 1 });
+    ok('constrained_v3_disk_roundtrip_preserves_immutable_authority',
+      JSON.stringify(reopenedV3.verify(replacement.token, T0 + 1).capabilityConstraint) === JSON.stringify({
+        capabilityIdentities: ['workspace.compile@1'],
+        allowedEffects: ['read', 'analyze', 'audit-write', 'audit-retention-delete'],
+      }));
 
     const injected = createAgentKeyStore({
       file: tmpFile,
@@ -423,6 +640,9 @@ export function runAgentKeysSelftest(): { pass: boolean; checks: Array<{ name: s
 
   for (const check of runAgentRouteAuthoritySelftest().checks) {
     ok(`route_authority_${check.name}`, check.pass, check.detail);
+  }
+  for (const check of runAgentKeyCreationContractSelftest().checks) {
+    ok(`creation_receipt_${check.name}`, check.pass);
   }
 
   return { pass: checks.every((c) => c.pass), checks };

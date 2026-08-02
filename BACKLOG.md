@@ -10,9 +10,9 @@
 
 Ken explicitly promoted GitHub initiative #9 and child requests #10–#21 above the active R13 close on 2026-07-31.
 This is a bounded extension program, not a Forge rewrite: reuse the existing validator, workspace registry/CAS,
-artifact/release pipeline, runtime watcher, Agent API, MCP shim, built-in harness, and UI shells. W0–W2A are now
-`VERIFIED`; the next bounded unit is W2B effective-authority discovery/per-key narrowing/MCP projection. Full
-contract, phases, gates and toolkit disposition:
+artifact/release pipeline, runtime watcher, Agent API, MCP shim, built-in harness, and UI shells. W0–W2B are now
+`VERIFIED`; the next bounded unit is W3 transaction/receipt authority, which must be reconciled and specified before
+implementation. Full contract, phases, gates and toolkit disposition:
 `docs/plans/2026-07-31-capability-convergence.md`.
 
 **Hard gates:** no Effective Tree authority before the W7 X4 engine merge-law oracle; no source-writing rebase or
@@ -41,6 +41,13 @@ candidate promotion and truthful Agent Bridge copy crossed 378/378 routes, 129/1
 probe 16/16, VSIX inspection 13/13, 2,089-file installed parity and real Antigravity rendering. B64-SEC5 remains a
 separate Ken-gated full-Studio-bearer boundary. Evidence:
 `docs/plans/2026-08-01-b117-exact-agent-route-authority.md`.
+
+**W2B close (2026-08-01): `VERIFIED` through B118.** Exact contract-only key restrictions, protected caller-effective
+discovery, monotonic MCP projection, strict creation envelopes and shared Studio/native receipt verification crossed
+73/73 key, 400/400 route, 129/129 oracle, 5/5 focused browser, 96/96 full E2E, staged/package, 2,089-file installed
+parity and real Antigravity guidance gates. Existing preset records remain compatible; no parallel permission engine
+or dispatcher was added. W3 receipts, B64-SEC5 and generic built-in-harness dispatch remain separate. Evidence:
+`docs/plans/2026-08-01-b118-effective-agent-authority.md`.
 
 ### B110 · Kimi R1-R21 execution program `in_progress` (P1, DURABLE LEDGER)
 

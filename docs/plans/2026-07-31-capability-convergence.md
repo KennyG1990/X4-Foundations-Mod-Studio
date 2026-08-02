@@ -1,6 +1,6 @@
 # B115 — Forge Capability Convergence
 
-Status: PARTIAL program — W0-W2A VERIFIED through B117; W2B-W21 remain; no public release
+Status: PARTIAL program — W0-W2B VERIFIED through B118; W3-W21 remain; no public release
 Lane: FULL
 Owner: active Codex session
 Approved: 2026-07-31 by Ken
@@ -24,10 +24,13 @@ Sources: Google Drive “X4 Forge — Capability Convergence Feature Request Pac
   4. Review stop: do not cross into source-writing rebase or network-driven update actions without the decisions
      and proof gates recorded below.
   5. W19–W21: reviewed staged rebase, opt-in upstream intelligence, and final UI/CLI/MCP/Agent API/harness parity.
-- **Current bounded implementation batch:** W2B effective-authority discovery, per-key narrowing and MCP projection.
-  W0–W2A are verified history through B117. W2B must consume the exact v4 route authority, existing key store,
-  capability registry and MCP shim; it must not create a second permission engine or generic dispatcher. W2A's exact
-  contract and final evidence live in `docs/plans/2026-08-01-b117-exact-agent-route-authority.md`.
+- **Current bounded implementation batch:** W2B is `VERIFIED` through B118. Existing keys remain preset-compatible;
+  optional custom keys are contract-only with exact versioned identities and allowed effects; the public canonical
+  catalog remains intact while protected discovery and MCP consume a deterministic caller-effective subset. The
+  implementation reused the exact v4 route authority, B42 key store, canonical registry and current MCP shim; it did
+  not add a second permission engine or generic dispatcher. Contract and evidence:
+  `docs/plans/2026-08-01-b118-effective-agent-authority.md`. W3 transaction/receipt authority is next in dependency
+  order but is not yet specified or implemented.
 - **Assumptions:** initial `main` was `a68d69855631cb5fd1c62cc4b0a69e08b6a0fc87`; during W1 separately owned
   documentation-only commits advanced `main`/`origin/main` first to `082f501c9778b13256e4c7d3d07b7f8bde2ae3ec` and then
   to `13db48cd84fb8eefe7c205a39d41f99029d093e2`. During close, `origin/main` advanced once more to
@@ -476,3 +479,25 @@ Sources: Google Drive “X4 Forge — Capability Convergence Feature Request Pac
 - Boundaries: B64-SEC5 remains separately Ken-gated. W2B per-key narrowing/effective discovery/MCP projection and W3
   receipts remain open. No public publish, game/mod write, provider spend, stored-key migration or release-version
   change occurred.
+
+## W2B VERIFIED CLOSE — 2026-08-01
+
+- Status: `VERIFIED`; B118 is closed. Optional exact keys persist immutable sorted `capability.id@version` identities
+  plus allowed effects and intersect them with the existing preset, exact v4 route decision and addressed workspace.
+  Protected noncanonical routes fail closed; public localhost reads and existing preset keys keep their established
+  behavior. One protected endpoint returns the deterministic caller-effective subset without changing API-v4's
+  public canonical catalog.
+- Studio and native key flows use explicit preset/exact intent and verify the returned canonical authority before
+  revealing, copying, logging or claiming a token. A mismatched minted record is revoked automatically. MCP validates
+  the actor-effective subset, keeps list/call parity and cannot expand after accepted live authority through outage or
+  reviewed-legacy downgrade.
+- Evidence: key contract 73/73; HTTP routes 400/400; MCP read=5/write=9/deploy=10; capability audit 11/291/1/10;
+  oracles 129/129; focused browser 5/5; full isolated E2E 96/96 with zero failed/flaky/bad/quarantined; typecheck,
+  lint/build, Graphify, staged probe 16/16 and final precommit. Replacement VSIX
+  `x4-forge-studio-0.0.63-b118-r2-20260801-215504.vsix` is 17,976,544 bytes, SHA-256
+  `7979E2C5F7D31F2E8C5363E95281120D4DA936014D57717B7206AAF531079663`; an isolated Antigravity CLI profile
+  recognized 0.0.63 and all 2,089 installed files match. Real Antigravity 1.107.0 rendered the unchanged exact
+  capability/effect controls and native preset-versus-exact guidance; the proof flow was cancelled before mint.
+  Evidence: `vscode-extension/evidence/2026-08-01-b118-effective-authority/`.
+- Boundaries: W3 receipts, generic harness parity, B64-SEC5, provider execution and public release remain separate.
+  No game/mod/config write, provider spend, marketplace publish or real user-key creation occurred.

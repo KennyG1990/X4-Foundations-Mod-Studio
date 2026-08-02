@@ -83,6 +83,8 @@ fs.mkdirSync(stateDir, { recursive: true });
 fs.mkdirSync(dataDir, { recursive: true });
 fs.mkdirSync(configDir, { recursive: true });
 const LEGACY_UNBOUND_KEY = `x4fk_${'1'.repeat(64)}`;
+const EXPIRED_AGENT_KEY = `x4fk_${'2'.repeat(64)}`;
+const REVOKED_AGENT_KEY = `x4fk_${'3'.repeat(64)}`;
 const agentKeysFile = path.join(dataDir, 'agent-keys.json');
 fs.writeFileSync(agentKeysFile, JSON.stringify({
   version: 1,
@@ -90,6 +92,14 @@ fs.writeFileSync(agentKeysFile, JSON.stringify({
     id: 'key_legacy_unbound', label: 'legacy-unbound', scope: 'read',
     tokenHash: crypto.createHash('sha256').update(LEGACY_UNBOUND_KEY).digest('hex'),
     createdAt: Date.now(), expiresAt: null, lastUsedAt: null, useCount: 0, revokedAt: null,
+  }, {
+    id: 'key_expired_fixture', label: 'expired-fixture', scope: 'read',
+    tokenHash: crypto.createHash('sha256').update(EXPIRED_AGENT_KEY).digest('hex'),
+    createdAt: Date.now() - 10_000, expiresAt: Date.now() - 1_000, lastUsedAt: null, useCount: 0, revokedAt: null,
+  }, {
+    id: 'key_revoked_fixture', label: 'revoked-fixture', scope: 'read',
+    tokenHash: crypto.createHash('sha256').update(REVOKED_AGENT_KEY).digest('hex'),
+    createdAt: Date.now() - 10_000, expiresAt: null, lastUsedAt: null, useCount: 0, revokedAt: Date.now() - 1_000,
   }],
 }));
 const referenceRoot = path.join(tmp, 'reference');
@@ -152,6 +162,14 @@ function schemaErrors(schema, value, at = '$') {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function stableStringify(value) {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
 
 function killTree(pid) {
   if (!pid) return;
@@ -581,14 +599,21 @@ async function main() {
   ok('artifact_selftest_proves_locked_root_transaction', requiredArtifactChecks.every(name => artifactChecks.get(name) === true), JSON.stringify(Object.fromEntries(requiredArtifactChecks.map(name => [name, artifactChecks.get(name)]))));
 
   // --- mint a read + a write agent key with the session token ---
-  const mkKey = async (scope) => {
-    const r = await req('POST', '/api/agent/keys', SESSION_TOKEN, { label: `route-int-${scope}`, scope, ttl: '1h' });
-    return r.json && (r.json.token || r.json.key);
+  const mkKey = async (scope, extra = {}) => {
+    const response = await req('POST', '/api/agent/keys', SESSION_TOKEN, {
+      label: `route-int-${scope}`, scope, ttl: '1h', ...extra,
+    });
+    return { response, token: response.json && (response.json.token || response.json.key) };
   };
-  const readKey = await mkKey('read');
-  const writeKey = await mkKey('write');
-  const deployKey = await mkKey('deploy');
-  ok('minted_read_write_and_deploy_keys', !!readKey && !!writeKey && !!deployKey, `read=${!!readKey} write=${!!writeKey} deploy=${!!deployKey}`);
+  const readMint = await mkKey('read');
+  const writeMint = await mkKey('write');
+  const deployMint = await mkKey('deploy');
+  const readKey = readMint.token;
+  const writeKey = writeMint.token;
+  const deployKey = deployMint.token;
+  ok('minted_read_write_and_deploy_keys', !!readKey && !!writeKey && !!deployKey &&
+    [readMint, writeMint, deployMint].every(result => result.response.json?.record?.authorityMode === 'preset'),
+  `read=${!!readKey} write=${!!writeKey} deploy=${!!deployKey}`);
 
   // B117/W2A: the manifest is the exact, versioned grant source. Prove each preset has
   // a real positive, exact denials carry stable policy evidence, and Studio-only routes
@@ -599,6 +624,182 @@ async function main() {
     authorityView.status === 200 && authorityView.json?.authority?.version === 'forge.route-dispositions.v4' &&
     /^[a-f0-9]{64}$/.test(authorityHash) && authorityView.json?.authority?.existingKeysFollowCurrentPolicy === true,
     JSON.stringify(authorityView.json?.authority || {}));
+  ok('key_management_exposes_custom_contract_options_without_public_capabilities',
+    authorityView.json?.authority?.customAuthority?.includes('contract-only') &&
+    Array.isArray(authorityView.json?.capabilityOptions) && authorityView.json.capabilityOptions.length === 9 &&
+    authorityView.json.capabilityOptions.every(option => !['schema.domains.list@1', 'schema.element.explain@1'].includes(option.identity)) &&
+    Array.isArray(authorityView.json?.effectOptions) && authorityView.json.effectOptions.includes('spend'),
+    JSON.stringify({ options: authorityView.json?.capabilityOptions?.length, effects: authorityView.json?.effectOptions }));
+
+  const effectiveIds = response => response.json?.capability_contract?.capabilities?.map(capability => capability.id);
+  const effectiveHashIsValid = response => {
+    if (!response.json || typeof response.json !== 'object') return false;
+    const unsigned = { ...response.json };
+    delete unsigned.authority_hash;
+    return response.json.authority_hash === crypto.createHash('sha256').update(stableStringify(unsigned)).digest('hex');
+  };
+  const keyStoreBeforeDiscovery = fs.readFileSync(agentKeysFile);
+  const publicEffective = await req('GET', '/api/agent/capabilities/effective', null);
+  const bogusEffective = await req('GET', '/api/agent/capabilities/effective', `x4fk_${'f'.repeat(64)}`);
+  const studioEffective = await req('GET', '/api/agent/capabilities/effective', SESSION_TOKEN);
+  const readEffective = await req('GET', '/api/agent/capabilities/effective', readKey);
+  const writeEffective = await req('GET', '/api/agent/capabilities/effective', writeKey);
+  const deployEffective = await req('GET', '/api/agent/capabilities/effective', deployKey);
+  await sleep(25);
+  const keyStoreAfterDiscovery = fs.readFileSync(agentKeysFile);
+  ok('effective_discovery_is_protected_and_studio_sees_full_contract', publicEffective.status === 401 && bogusEffective.status === 401 &&
+    studioEffective.status === 200 && studioEffective.json?.actor?.kind === 'studio' &&
+    effectiveIds(studioEffective)?.length === 11 && effectiveHashIsValid(studioEffective),
+  JSON.stringify({ public: publicEffective.json, bogus: bogusEffective.json, studio: { actor: studioEffective.json?.actor, ids: effectiveIds(studioEffective) } }));
+  for (const [name, response, scope, expectedCount] of [
+    ['read', readEffective, 'read', 6],
+    ['write', writeEffective, 'write', 8],
+    ['deploy', deployEffective, 'deploy', 11],
+  ]) {
+    ok(`${name}_key_effective_capabilities_are_exact_and_hashed`, response.status === 200 &&
+      response.json?.api_version === '2026-08-01.agent-effective.v1' &&
+      response.json?.authority_schema_version === 'forge.agent-capability-authority.v1' &&
+      response.json?.actor?.scope === scope && response.json?.actor?.workspaceId === WORKSPACE_ID &&
+      response.json?.route_policy?.version === 'forge.route-dispositions.v4' &&
+      response.json?.route_policy?.hash === authorityHash && response.json?.constraint === null &&
+      effectiveIds(response)?.length === expectedCount && effectiveHashIsValid(response),
+    JSON.stringify({ status: response.status, actor: response.json?.actor, ids: effectiveIds(response), hash: response.json?.authority_hash }));
+    ok(`${name}_effective_discovery_leaks_no_credential_material`,
+      !String(response.raw || '').includes('x4fk_') && !String(response.raw || '').includes('tokenHash') && !String(response.raw || '').includes('hashPrefix'));
+  }
+  ok('effective_discovery_does_not_increment_key_use_or_rewrite_store',
+    Buffer.compare(keyStoreBeforeDiscovery, keyStoreAfterDiscovery) === 0,
+    `before=${crypto.createHash('sha256').update(keyStoreBeforeDiscovery).digest('hex')} after=${crypto.createHash('sha256').update(keyStoreAfterDiscovery).digest('hex')}`);
+  ok('read_write_deploy_effective_sets_are_monotonic',
+    effectiveIds(readEffective).every(id => effectiveIds(writeEffective).includes(id)) &&
+    effectiveIds(writeEffective).every(id => effectiveIds(deployEffective).includes(id)));
+
+  const keyStoreBeforeInvalidConstraint = fs.readFileSync(agentKeysFile);
+  const invalidConstraints = await Promise.all([
+    mkKey('write', { authorityMode: 'exact', capabilityIdentities: ['workspace.compile@99'], allowedEffects: ['read'] }),
+    mkKey('write', { authorityMode: 'exact', capabilityIdentities: ['workspace.compile@1', 'workspace.compile@1'], allowedEffects: ['read'] }),
+    mkKey('read', { authorityMode: 'exact', capabilityIdentities: ['project.validate@1'], allowedEffects: ['read'] }),
+    mkKey('write', { authorityMode: 'exact', capabilityIdentities: 'workspace.compile@1', allowedEffects: [] }),
+    mkKey('write', { authorityMode: 'exact', capabilityIdentities: ['workspace.compile@1'], allowedEffects: ['unknown-effect'] }),
+  ]);
+  const keyStoreAfterInvalidConstraint = fs.readFileSync(agentKeysFile);
+  ok('invalid_custom_constraints_fail_before_key_store_mutation', invalidConstraints.every(result =>
+    result.response.status === 400 && result.response.json?.code === 'AGENT_CAPABILITY_CONSTRAINT_INVALID' && !result.token) &&
+    Buffer.compare(keyStoreBeforeInvalidConstraint, keyStoreAfterInvalidConstraint) === 0,
+  JSON.stringify(invalidConstraints.map(result => ({ status: result.response.status, body: result.response.json }))));
+
+  const invalidAuthorityRequests = await Promise.all([
+    mkKey('write', { capabilityIdentities: ['workspace.compile@1'], allowedEffects: ['read'] }),
+    mkKey('write', { authorityMode: 'preset', capabilityIdentities: [], allowedEffects: [] }),
+    mkKey('write', { authorityMode: 'exact', capabilityIdentities: ['workspace.compile@1'] }),
+    mkKey('write', { authorityMode: 'future', capabilityIdentities: [], allowedEffects: [] }),
+    mkKey('write', { capabilityConstraint: { capabilityIdentities: [], allowedEffects: [] } }),
+    mkKey('write', { authorityMode: 'exact', capabiltyIdentities: [], allowedEffects: [] }),
+    mkKey('write', { authorityMode: 'preset', unexpectedGrant: true }),
+  ]);
+  const expectedInvalidAuthorityCodes = [
+    'AGENT_KEY_AUTHORITY_MODE_INVALID',
+    'AGENT_KEY_AUTHORITY_MODE_INVALID',
+    'AGENT_KEY_AUTHORITY_MODE_INVALID',
+    'AGENT_KEY_AUTHORITY_MODE_INVALID',
+    'AGENT_KEY_REQUEST_INVALID',
+    'AGENT_KEY_REQUEST_INVALID',
+    'AGENT_KEY_REQUEST_INVALID',
+  ];
+  const keyStoreAfterInvalidAuthority = fs.readFileSync(agentKeysFile);
+  ok('implicit_mixed_nested_and_typo_authority_requests_fail_before_key_store_mutation',
+    invalidAuthorityRequests.every((result, index) => result.response.status === 400 &&
+      result.response.json?.code === expectedInvalidAuthorityCodes[index] && !result.token) &&
+      Buffer.compare(keyStoreBeforeInvalidConstraint, keyStoreAfterInvalidAuthority) === 0,
+  JSON.stringify(invalidAuthorityRequests.map(result => ({ status: result.response.status, body: result.response.json }))));
+
+  const customConstraint = {
+    capabilityIdentities: ['project.validate@1'],
+    allowedEffects: ['read', 'analyze', 'audit-write', 'audit-retention-delete'],
+  };
+  const customMint = await mkKey('write', { label: 'route-int-custom-write', authorityMode: 'exact', ...customConstraint });
+  const customKey = customMint.token;
+  ok('custom_key_is_minted_with_canonical_immutable_constraint', customMint.response.status === 200 && !!customKey &&
+    customMint.response.json?.record?.authorityMode === 'exact' &&
+    JSON.stringify(customMint.response.json?.record?.capabilityConstraint) === JSON.stringify(customConstraint),
+  JSON.stringify(customMint.response.json?.record || {}));
+  const customEffective = await req('GET', '/api/agent/capabilities/effective', customKey);
+  ok('custom_effective_contract_keeps_public_and_exact_selected_capability', customEffective.status === 200 &&
+    JSON.stringify(effectiveIds(customEffective)) === JSON.stringify(['project.validate', 'schema.domains.list', 'schema.element.explain']) &&
+    JSON.stringify(customEffective.json?.constraint) === JSON.stringify(customConstraint) && effectiveHashIsValid(customEffective),
+  JSON.stringify({ ids: effectiveIds(customEffective), exclusions: customEffective.json?.exclusions }));
+  const customProject = {
+    id: 'b118_custom_probe', name: 'b118_custom_probe', files: [
+      { path: 'content.xml', kind: 'content', content: '<content id="b118_custom_probe" name="B118 Custom Probe" version="100"/>' },
+    ],
+  };
+  const customValidation = await req('POST', '/api/agent/project/validate/check', customKey, { project: customProject });
+  ok('custom_key_can_call_its_exact_canonical_capability', customValidation.status === 200 && typeof customValidation.json?.ok === 'boolean',
+    JSON.stringify(customValidation.json?.summary || customValidation.json || {}));
+  await sleep(25);
+  const storeBeforeCustomDenials = fs.readFileSync(agentKeysFile);
+  const workspaceBeforeCustomDenials = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const customCompileDenied = await req('POST', '/api/agent/compile', customKey, {});
+  const customLegacyDenied = await req('POST', '/api/reference/complete', customKey, { path: 'md/b118.xml', content: '', line: 0, column: 0 });
+  await sleep(25);
+  const workspaceAfterCustomDenials = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const storeAfterCustomDenials = fs.readFileSync(agentKeysFile);
+  ok('custom_key_denies_unselected_canonical_capability_before_mutation',
+    customCompileDenied.status === 403 && customCompileDenied.json?.authorityCode === 'CAPABILITY_NOT_GRANTED' &&
+    customCompileDenied.json?.capabilityIdentity === 'workspace.compile@1' &&
+    customCompileDenied.json?.policyVersion === 'forge.route-dispositions.v4' && customCompileDenied.json?.policyHash === authorityHash &&
+    workspaceAfterCustomDenials.json?.workspaceHash === workspaceBeforeCustomDenials.json?.workspaceHash &&
+    workspaceAfterCustomDenials.json?.snapshotHash === workspaceBeforeCustomDenials.json?.snapshotHash,
+  JSON.stringify(customCompileDenied.json || {}));
+  ok('custom_key_denies_noncanonical_protected_routes', customLegacyDenied.status === 403 &&
+    customLegacyDenied.json?.authorityCode === 'UNCONTRACTED_ROUTE_DENIED' &&
+    customLegacyDenied.json?.policyVersion === 'forge.route-dispositions.v4' && customLegacyDenied.json?.policyHash === authorityHash,
+  JSON.stringify(customLegacyDenied.json || {}));
+  ok('custom_authority_denials_do_not_record_successful_key_use',
+    Buffer.compare(storeBeforeCustomDenials, storeAfterCustomDenials) === 0);
+
+  const effectMint = await mkKey('deploy', {
+    label: 'route-int-effect-denied',
+    authorityMode: 'exact',
+    capabilityIdentities: ['workspace.generate.preview@1'],
+    allowedEffects: ['read', 'analyze', 'audit-write', 'audit-retention-delete'],
+  });
+  const effectKey = effectMint.token;
+  const effectEffective = await req('GET', '/api/agent/capabilities/effective', effectKey);
+  const previewExclusion = effectEffective.json?.exclusions?.find(exclusion => exclusion.capabilityIdentity === 'workspace.generate.preview@1');
+  ok('missing_effect_excludes_the_whole_selected_capability', effectEffective.status === 200 &&
+    !effectiveIds(effectEffective).includes('workspace.generate.preview') &&
+    previewExclusion?.code === 'CAPABILITY_EFFECT_DENIED' &&
+    JSON.stringify(previewExclusion?.disallowedEffects) === JSON.stringify(['network', 'spend']),
+  JSON.stringify(previewExclusion || {}));
+  const usageBeforeEffectDenial = fs.existsSync(aiUsageFile) ? fs.readFileSync(aiUsageFile) : null;
+  const dispatchBeforeEffectDenial = fs.existsSync(callerKeyDispatchMarker) ? fs.readFileSync(callerKeyDispatchMarker) : null;
+  const effectPreviewDenied = await req('POST', '/api/agent/generate/preview', effectKey, { prompt: 'must not dispatch', apply: false });
+  const usageAfterEffectDenial = fs.existsSync(aiUsageFile) ? fs.readFileSync(aiUsageFile) : null;
+  const dispatchAfterEffectDenial = fs.existsSync(callerKeyDispatchMarker) ? fs.readFileSync(callerKeyDispatchMarker) : null;
+  ok('missing_effect_denies_before_provider_spend_or_dispatch', effectPreviewDenied.status === 403 &&
+    effectPreviewDenied.json?.authorityCode === 'CAPABILITY_EFFECT_DENIED' &&
+    JSON.stringify(effectPreviewDenied.json?.disallowedEffects) === JSON.stringify(['network', 'spend']) &&
+    effectPreviewDenied.json?.policyVersion === 'forge.route-dispositions.v4' && effectPreviewDenied.json?.policyHash === authorityHash &&
+    String(usageAfterEffectDenial) === String(usageBeforeEffectDenial) &&
+    String(dispatchAfterEffectDenial) === String(dispatchBeforeEffectDenial), JSON.stringify(effectPreviewDenied.json || {}));
+
+  const revocableMint = await mkKey('read', { label: 'route-int-revocable' });
+  const revokeResponse = await req('POST', '/api/agent/keys/revoke', SESSION_TOKEN, { id: revocableMint.response.json?.record?.id });
+  const revokedDiscovery = await req('GET', '/api/agent/capabilities/effective', revocableMint.token);
+  const expiredDiscovery = await req('GET', '/api/agent/capabilities/effective', EXPIRED_AGENT_KEY);
+  const preRevokedDiscovery = await req('GET', '/api/agent/capabilities/effective', REVOKED_AGENT_KEY);
+  const unboundDiscovery = await req('GET', '/api/agent/capabilities/effective', LEGACY_UNBOUND_KEY);
+  const missingWorkspaceDiscovery = await req('GET', '/api/agent/capabilities/effective', readKey, undefined, { workspaceId: '' });
+  const wrongWorkspaceDiscovery = await req('GET', '/api/agent/capabilities/effective', readKey, undefined, { workspaceId: SECOND_WORKSPACE_ID });
+  ok('effective_discovery_rejects_revoked_and_expired_credentials', revokeResponse.status === 200 &&
+    revokedDiscovery.status === 401 && expiredDiscovery.status === 401 && preRevokedDiscovery.status === 401,
+  JSON.stringify({ revoked: revokedDiscovery.json, expired: expiredDiscovery.json, preRevoked: preRevokedDiscovery.json }));
+  ok('effective_discovery_requires_exact_bound_workspace',
+    unboundDiscovery.status === 403 && unboundDiscovery.json?.code === 'WORKSPACE_BINDING_REQUIRED' &&
+    missingWorkspaceDiscovery.status === 400 && missingWorkspaceDiscovery.json?.code === 'WORKSPACE_ID_REQUIRED' &&
+    wrongWorkspaceDiscovery.status === 403 && wrongWorkspaceDiscovery.json?.code === 'WORKSPACE_BINDING_MISMATCH',
+  JSON.stringify({ unbound: unboundDiscovery.json, missing: missingWorkspaceDiscovery.json, wrong: wrongWorkspaceDiscovery.json }));
 
   const readBootstrap = await req('POST', '/api/agent/workspaces/bootstrap', readKey, { workspaceId: WORKSPACE_ID });
   ok('read_key_can_bootstrap_its_bound_workspace', readBootstrap.status === 200 && readBootstrap.json?.workspaceId === WORKSPACE_ID, JSON.stringify(readBootstrap.json || {}));

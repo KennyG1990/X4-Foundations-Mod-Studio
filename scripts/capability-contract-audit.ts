@@ -15,6 +15,10 @@ import path from 'path';
 import ts from 'typescript';
 import { scopeAllows } from '../src/lib/agentKeys';
 import {
+  AGENT_CAPABILITY_DISCOVERY_DISPOSITION,
+  AGENT_CAPABILITY_DISCOVERY_ROUTE_KEY,
+} from '../src/lib/agentCapabilityAuthority';
+import {
   AGENT_KEY_SCOPES,
   createAgentRouteAuthority,
   type AgentRouteAuthority,
@@ -36,7 +40,7 @@ const ROOT = process.cwd();
 const MANIFEST_PATH = path.join(ROOT, 'config', 'forge-route-dispositions.json');
 const CANDIDATE_PATH = path.join(ROOT, 'test-results', 'forge-route-dispositions.candidate.json');
 const MCP_MODULE_PATH = path.join(ROOT, 'vscode-extension', 'mcp', 'x4forge-mcp.cjs');
-const MCP_MODULE_AUDIT_VERSION = 9;
+const MCP_MODULE_AUDIT_VERSION = 11;
 const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'all']);
 
 type RouteDisposition =
@@ -47,6 +51,7 @@ type RouteDisposition =
   | 'public-selftest'
   | 'authenticated-selftest'
   | 'conditional-dev-only'
+  | 'agent-authority-discovery'
   | 'session-only';
 const ROUTE_DISPOSITIONS = new Set<RouteDisposition>([
   'canonical-capability',
@@ -56,6 +61,7 @@ const ROUTE_DISPOSITIONS = new Set<RouteDisposition>([
   'public-selftest',
   'authenticated-selftest',
   'conditional-dev-only',
+  'agent-authority-discovery',
   'session-only',
 ]);
 
@@ -2190,6 +2196,9 @@ function classifyRoute(
   authority?: AgentRouteAuthority,
 ): Pick<RouteDispositionEntry, 'disposition' | 'owner'> {
   const key = routeKey(fact.method, fact.path);
+  if (key === AGENT_CAPABILITY_DISCOVERY_ROUTE_KEY) {
+    return { disposition: AGENT_CAPABILITY_DISCOVERY_DISPOSITION, owner: 'agent-capability-authority' };
+  }
   const capabilityOwner = capabilityOwners.get(key);
   if (capabilityOwner) return { disposition: 'canonical-capability', owner: capabilityOwner };
   const reqPath = sampleRoute(fact.path).replace(/^\/api/, '');
@@ -2226,6 +2235,13 @@ function reviewedAuthorityFields(
       agentScopes: [...reviewed.agentScopes],
       resourceClass: reviewed.resourceClass,
       workspaceMode: reviewed.workspaceMode,
+    };
+  }
+  if (fallback.disposition === AGENT_CAPABILITY_DISCOVERY_DISPOSITION) {
+    return {
+      agentScopes: [...AGENT_KEY_SCOPES],
+      resourceClass: 'workspace',
+      workspaceMode: 'required',
     };
   }
   return {
@@ -7119,6 +7135,15 @@ function audit(manifestOverride?: RouteDispositionManifest): { errors: string[];
       }
       if (disposition.disposition === 'conditional-dev-only' && !isConditionalDevRoute(fact)) {
         errors.push(`${key}: conditional-dev-only is not a recognized conditional route`);
+      }
+      if (disposition.disposition === AGENT_CAPABILITY_DISCOVERY_DISPOSITION && key !== AGENT_CAPABILITY_DISCOVERY_ROUTE_KEY) {
+        errors.push(`${key}: agent-authority-discovery is reserved for ${AGENT_CAPABILITY_DISCOVERY_ROUTE_KEY}`);
+      }
+      if (key === AGENT_CAPABILITY_DISCOVERY_ROUTE_KEY &&
+        (disposition.disposition !== AGENT_CAPABILITY_DISCOVERY_DISPOSITION ||
+          disposition.owner !== 'agent-capability-authority' ||
+          !allAgentScopes || disposition.resourceClass !== 'workspace' || disposition.workspaceMode !== 'required')) {
+        errors.push(`${key}: effective authority discovery must be the exact reviewed workspace-addressed agent-authority-discovery route`);
       }
       if (disposition.disposition === 'canonical-capability') {
         if (!capabilitiesById.has(disposition.owner)) errors.push(`${key}: unknown canonical owner ${disposition.owner}`);
