@@ -4,6 +4,10 @@
     "server.ts",
     "shared/agentKeyCreationContract.ts",
     "src/lib/actionCensus.ts",
+    "src/lib/actionReceipt.selftest.ts",
+    "src/lib/actionReceipt.ts",
+    "src/lib/actionReceiptHistory.ts",
+    "src/lib/actionReceiptStore.ts",
     "src/lib/agentAuthority.ts",
     "src/lib/agentBrief.ts",
     "src/lib/agentCapabilityAuthority.ts",
@@ -202,6 +206,18 @@
     "GET /api/agent/action-census-selftest": {
       "disposition": "public-selftest",
       "owner": "runActionCensusSelftest",
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
+    },
+    "GET /api/agent/action-receipt-selftest": {
+      "disposition": "public-selftest",
+      "owner": "runActionReceiptSelftest",
       "registrations": 1,
       "agentScopes": [
         "read",

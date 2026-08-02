@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "sourceFingerprint": "89c03a3d87f98de6120c777b381f9e3e59a6686c097ae6d4f20c4cb0684fc76d",
+  "sourceFingerprint": "674328cb46f9c3181f5db66bea96a571bb808b02325aff0d6d55b132cec4bb9e",
   "policy": "Every raw production filesystem mutation source is count-pinned here. Authoritative files use atomic sibling promotion; stronger tree, archive, append-log, SQLite, retention, ephemeral, and fixture contracts remain explicit exceptions.",
   "writers": [
     {
@@ -10,6 +10,22 @@
       "owners": ["writeWorkspaceFileGuarded and fs/create", "snapshot create/prune/delete/restore", "copyRegularTree and synchronizeRegularTree", "replaceValidatedDeployment and recovery", "compileWorkspaceToFolder scratch cleanup", "replaceReleaseDirectory", "Nexus and Steam release handlers", "embedded route/artifact/workspace API selftests", "route-integration caller-key provider-dispatch marker"],
       "rationale": "The composition root contains guarded atomic source/snapshot writes, verified deployment/release directory transactions, isolated compilation/release materializers, bounded snapshot/artifact retention, and embedded scratch-only route fixtures including the isolated provider-dispatch evidence marker.",
       "failureContract": "Authoritative files preserve prior bytes; tree promotion rolls back; scratch trees never target configured live roots; retention deletes only named bounded artifacts; the provider-dispatch marker requires non-production plus explicit route-test mode, writes fixed-name non-secret evidence only beneath the harness-provided isolated fixture directory, and propagates append failure so the oracle cannot report false success."
+    },
+    {
+      "file": "src/lib/actionReceipt.selftest.ts",
+      "calls": { "writeFileSync": 5, "rmSync": 2, "mkdtempSync": 2, "symlinkSync": 1 },
+      "categories": ["fixture-only"],
+      "owners": ["runActionReceiptSelftest"],
+      "rationale": "Creates canonical, corrupt, tampered, unavailable-root, and junction-escape fixtures only beneath unique temporary roots.",
+      "failureContract": "Fixture cleanup is best effort; production data roots, receipts, history, and configured workspace paths are never opened or mutated."
+    },
+    {
+      "file": "src/lib/actionReceiptStore.ts",
+      "calls": { "writeFileSync": 1, "renameSync": 1, "mkdirSync": 1, "rmSync": 1 },
+      "categories": ["authoritative-atomic"],
+      "owners": ["ActionReceiptStore.ensureRoot", "ActionReceiptStore.atomicWrite"],
+      "rationale": "Stores canonical receipt bytes through a sibling temporary file, fsync, and atomic rename under the relocatable receipt root.",
+      "failureContract": "Root, ID, symlink/junction, corrupt-byte, and write failures fail closed; a pre-promotion failure leaves the prior receipt bytes untouched and cleans the temporary file."
     },
     {
       "file": "src/lib/agentHistory.selftest.ts",

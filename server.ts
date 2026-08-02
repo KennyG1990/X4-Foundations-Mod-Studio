@@ -185,6 +185,7 @@ import {
 } from "./src/lib/agentHistory";
 import { AgentHistoryStore } from "./src/lib/agentHistoryStore";
 import { runAgentHistorySelftest } from "./src/lib/agentHistory.selftest";
+import { runActionReceiptSelftest } from "./src/lib/actionReceipt.selftest";
 import { runBugReportSelftest } from "./src/lib/bugReport";
 import { normalizeApiFailureBody, runApiFailureEnvelopeSelftest } from "./src/lib/apiFailureEnvelope";
 import {
@@ -8116,6 +8117,7 @@ app.get("/api/agent/galaxy-map", (_req, res) => {
 // SELFTEST REGISTRY (audit R1): one line per oracle — route + public allowlist wired together.
 const SELFTESTS: Record<string, () => unknown> = {
   "agent-history-selftest": runAgentHistorySelftest,
+  "action-receipt-selftest": runActionReceiptSelftest,
   "instance-discovery-selftest": runInstanceDiscoverySelftest,
   "github-credential-store-selftest": runGithubCredentialStoreSelftest,
   "github-device-flow-selftest": runGithubDeviceFlowSelftest,

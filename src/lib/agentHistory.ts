@@ -20,6 +20,8 @@
  * in the store (`agentHistoryStore.ts`) so every rule here is testable without touching disk.
  */
 
+import type { ActionReceiptStatus } from './actionReceipt';
+
 export type LedgerKind =
   | 'edit' | 'import' | 'validate' | 'compile' | 'deploy' | 'package' | 'revert'
   | 'workspace' | 'generate' | 'snapshot' | 'config' | 'keys' | 'command' | 'action';
@@ -80,6 +82,10 @@ export interface LedgerRow {
   recoveryExpectedHash?: string;
   recoveryExpectedSnapshotHash?: string;
   recoveryExpiresAt?: string;
+  /** W3A: optional non-authoritative link to a separately persisted terminal action receipt. */
+  receiptId?: string;
+  receiptHash?: string;
+  receiptStatus?: ActionReceiptStatus;
   revertible: boolean;
   revertReason?: string;
   /** Set on a `revert` row: the id of the entry it undid. */

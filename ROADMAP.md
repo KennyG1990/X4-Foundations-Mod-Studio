@@ -7397,3 +7397,28 @@ capability-map delta.
 
 Suggested commit title:
 `docs: synchronize GitHub feature ledgers`.
+
+## 2026-08-02 — B115 W3A durable action-receipt foundation — VERIFIED
+
+Forge now has one strict, versioned `forge.action-receipt.v1` substrate without replacing Agent History, workspace
+CAS, destructive recovery, or domain artifact receipts. Discriminated global/profile/workspace authority, canonical
+operation identity and full-authority/content hashes, exact declared-resource before/after facts, validation and
+recovery truth, terminal-state immutability, incomplete/compensated outcomes, secret rejection/redaction, and natural
+duplicate conflict are machine-enforced. The relocatable store refuses traversal and symlink/junction escapes before
+outside creation, writes atomically, verifies persisted bytes, and reports stable invalid/storage failures.
+
+Agent History gains only an optional, non-authoritative terminal projection containing receipt ID, exact content hash,
+and status. Prepared/tampered receipts and caller-supplied fake links refuse or are replaced; history append failure,
+rotation, corruption, deletion, and reopen cannot alter the separately persisted receipt. No production mutation,
+API response, MCP, CLI, harness, UI, extension package, or game path claims receipt coverage yet; W3B and W3C remain
+open.
+
+Evidence: receipt oracle 116/116; legacy Agent History 73/73; runtime-discovered oracles 130/130; isolated routes
+400/400 against the freshly rebuilt production bundle; writer audit 14/14 plus 34 filesystem / 11 host-store / 2
+browser-output owners and extension writer 8/8; 11-capability / 292-route / 10-MCP audit; MCP read=5/write=9/deploy=10;
+typecheck; lint with 0 errors / 587 existing warnings; production build and isolated startup; Graphify 4,025 nodes /
+9,658 edges / 171 communities. Full evidence and triggered AAR:
+`docs/plans/2026-08-02-w3-action-receipt-authority.md`.
+
+Suggested commit title:
+`feat(authority): add durable action receipt foundation`.

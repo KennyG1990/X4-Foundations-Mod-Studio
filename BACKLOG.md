@@ -49,6 +49,13 @@ parity and real Antigravity guidance gates. Existing preset records remain compa
 or dispatcher was added. W3 receipts, B64-SEC5 and generic built-in-harness dispatch remain separate. Evidence:
 `docs/plans/2026-08-01-b118-effective-agent-authority.md`.
 
+**W3A checkpoint (2026-08-02): `VERIFIED`.** One strict `forge.action-receipt.v1` schema, deterministic operation and
+content identity, contained atomic store, complete lifecycle/recovery truth, and exact fail-soft Agent History
+projection substrate crossed 116/116 focused checks, 73/73 history checks, 130/130 runtime oracles, 400/400 routes
+against a fresh production bundle, and all static/governance/build gates. No production mutation path consumes the
+receipt yet; W3B0 coverage inventory is the next bounded unit, followed by W3B integration and W3C surface parity.
+Evidence: `docs/plans/2026-08-02-w3-action-receipt-authority.md`.
+
 ### B110 · Kimi R1-R21 execution program `in_progress` (P1, DURABLE LEDGER)
 
 The complete recommendation set is now reconciled instead of living in the deleted KNOWN-BUGS addendum.
