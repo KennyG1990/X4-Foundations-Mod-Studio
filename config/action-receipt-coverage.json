@@ -1,0 +1,2935 @@
+{
+  "schema": "forge.action-receipt-coverage.v1",
+  "routes": [
+    {
+      "routeKey": "DELETE /api/github/credential",
+      "method": "DELETE",
+      "template": "/api/github/credential",
+      "owner": "github-integration",
+      "resourceClass": "external-repository",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/DELETE ~1api~1github~1credential",
+      "integrationBatch": "W3B1",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "DELETE /api/github/credential",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "session-credential-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "credential",
+        "delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/artifact/build",
+      "method": "POST",
+      "template": "/api/agent/artifact/build",
+      "owner": "agent-api",
+      "resourceClass": "configured-root",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1artifact~1build",
+      "integrationBatch": "W3B2",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/artifact/build",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write",
+        "package"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/bulk-transform/apply",
+      "method": "POST",
+      "template": "/api/agent/bulk-transform/apply",
+      "owner": "agent-api",
+      "resourceClass": "workspace",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1bulk-transform~1apply",
+      "integrationBatch": "W3B1",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/bulk-transform/apply",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "workspace-write"
+      ],
+      "authorityScopes": [
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/bulk-transform/preview",
+      "method": "POST",
+      "template": "/api/agent/bulk-transform/preview",
+      "owner": "agent-api",
+      "resourceClass": "workspace",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1bulk-transform~1preview",
+      "integrationBatch": "W3B0-internal",
+      "history": "quiet",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/bulk-transform/preview",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "read-analysis-only",
+      "policy": "receipt-exempt",
+      "effects": [
+        "read",
+        "analyze"
+      ],
+      "authorityScopes": [
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/check-expression",
+      "method": "POST",
+      "template": "/api/agent/check-expression",
+      "owner": "agent-api",
+      "resourceClass": "stateless-analysis",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1check-expression",
+      "integrationBatch": "W3B0-internal",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/check-expression",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "audit-retention",
+      "policy": "separately-governed",
+      "effects": [
+        "read",
+        "analyze",
+        "audit-write",
+        "audit-retention-delete"
+      ],
+      "authorityScopes": [
+        "global"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/compile",
+      "method": "POST",
+      "template": "/api/agent/compile",
+      "owner": "workspace.compile",
+      "resourceClass": "inline-or-addressed",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1compile",
+      "integrationBatch": "W3B0-internal",
+      "history": "visible",
+      "capability": {
+        "kind": "canonical",
+        "id": "workspace.compile",
+        "version": 1
+      },
+      "semanticClass": "audit-retention",
+      "policy": "separately-governed",
+      "effects": [
+        "read",
+        "analyze",
+        "audit-write",
+        "audit-retention-delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/critic",
+      "method": "POST",
+      "template": "/api/agent/critic",
+      "owner": "agent-api",
+      "resourceClass": "stateless-analysis",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1critic",
+      "integrationBatch": "W3B0-internal",
+      "history": "quiet",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/critic",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "read-analysis-only",
+      "policy": "receipt-exempt",
+      "effects": [
+        "read",
+        "analyze"
+      ],
+      "authorityScopes": [
+        "global"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/deploy",
+      "method": "POST",
+      "template": "/api/agent/deploy",
+      "owner": "agent-api",
+      "resourceClass": "configured-root",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1deploy",
+      "integrationBatch": "W3B2",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/deploy",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write",
+        "deploy",
+        "delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/deploy-verify",
+      "method": "POST",
+      "template": "/api/agent/deploy-verify",
+      "owner": "agent-api",
+      "resourceClass": "configured-root",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1deploy-verify",
+      "integrationBatch": "W3B2",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/deploy-verify",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write",
+        "deploy",
+        "delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/explain",
+      "method": "POST",
+      "template": "/api/agent/explain",
+      "owner": "agent-api",
+      "resourceClass": "stateless-analysis",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1explain",
+      "integrationBatch": "W3B0-internal",
+      "history": "quiet",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/explain",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "read-analysis-only",
+      "policy": "receipt-exempt",
+      "effects": [
+        "read",
+        "analyze"
+      ],
+      "authorityScopes": [
+        "global"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/external-api/register",
+      "method": "POST",
+      "template": "/api/agent/external-api/register",
+      "owner": "agent-api",
+      "resourceClass": "global-session",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1external-api~1register",
+      "integrationBatch": "W3B1",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/external-api/register",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "session-credential-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "session-write"
+      ],
+      "authorityScopes": [
+        "global"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/generate",
+      "method": "POST",
+      "template": "/api/agent/generate",
+      "owner": "agent-api",
+      "resourceClass": "provider-network",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1generate",
+      "integrationBatch": "W3B3",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/generate",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "external-spend",
+      "policy": "receipt-required",
+      "effects": [
+        "network",
+        "spend",
+        "workspace-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/generate/preview",
+      "method": "POST",
+      "template": "/api/agent/generate/preview",
+      "owner": "workspace.generate.preview",
+      "resourceClass": "provider-network",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1generate~1preview",
+      "integrationBatch": "W3B3",
+      "history": "visible",
+      "capability": {
+        "kind": "canonical",
+        "id": "workspace.generate.preview",
+        "version": 1
+      },
+      "semanticClass": "external-spend",
+      "policy": "receipt-required",
+      "effects": [
+        "read",
+        "analyze",
+        "network",
+        "spend",
+        "audit-write",
+        "audit-retention-delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/history/:id/revert",
+      "method": "POST",
+      "template": "/api/agent/history/:id/revert",
+      "owner": "history.revert",
+      "resourceClass": "workspace",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1history~1:id~1revert",
+      "integrationBatch": "W3B1",
+      "history": "visible",
+      "capability": {
+        "kind": "canonical",
+        "id": "history.revert",
+        "version": 1
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "workspace-write",
+        "filesystem-write",
+        "deploy",
+        "delete",
+        "audit-write",
+        "audit-retention-delete"
+      ],
+      "authorityScopes": [
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/keys",
+      "method": "POST",
+      "template": "/api/agent/keys",
+      "owner": "agent-api",
+      "resourceClass": "global-session",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1keys",
+      "integrationBatch": "W3B1",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/keys",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "session-credential-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "credential"
+      ],
+      "authorityScopes": [
+        "global"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/keys/revoke",
+      "method": "POST",
+      "template": "/api/agent/keys/revoke",
+      "owner": "agent-api",
+      "resourceClass": "global-session",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1keys~1revoke",
+      "integrationBatch": "W3B1",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/keys/revoke",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "session-credential-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "credential",
+        "delete"
+      ],
+      "authorityScopes": [
+        "global"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/live/cue-telemetry",
+      "method": "POST",
+      "template": "/api/agent/live/cue-telemetry",
+      "owner": "agent-api",
+      "resourceClass": "configured-root",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1live~1cue-telemetry",
+      "integrationBatch": "W3B0-internal",
+      "history": "quiet",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/live/cue-telemetry",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "read-analysis-only",
+      "policy": "receipt-exempt",
+      "effects": [
+        "read",
+        "analyze"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/log-diagnose",
+      "method": "POST",
+      "template": "/api/agent/log-diagnose",
+      "owner": "agent-api",
+      "resourceClass": "stateless-analysis",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1log-diagnose",
+      "integrationBatch": "W3B0-internal",
+      "history": "quiet",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/log-diagnose",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "read-analysis-only",
+      "policy": "receipt-exempt",
+      "effects": [
+        "read",
+        "analyze"
+      ],
+      "authorityScopes": [
+        "global"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/log-file-tail",
+      "method": "POST",
+      "template": "/api/agent/log-file-tail",
+      "owner": "agent-api",
+      "resourceClass": "host-file-read",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1log-file-tail",
+      "integrationBatch": "W3B0-internal",
+      "history": "quiet",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/log-file-tail",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "read-analysis-only",
+      "policy": "receipt-exempt",
+      "effects": [
+        "read",
+        "analyze"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/lua-staleness/instrument",
+      "method": "POST",
+      "template": "/api/agent/lua-staleness/instrument",
+      "owner": "agent-api",
+      "resourceClass": "configured-root",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1lua-staleness~1instrument",
+      "integrationBatch": "W3B1",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/lua-staleness/instrument",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/mod-folder/import",
+      "method": "POST",
+      "template": "/api/agent/mod-folder/import",
+      "owner": "agent-api",
+      "resourceClass": "configured-root",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1mod-folder~1import",
+      "integrationBatch": "W3B0-internal",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/mod-folder/import",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "audit-retention",
+      "policy": "separately-governed",
+      "effects": [
+        "read",
+        "analyze",
+        "audit-write",
+        "audit-retention-delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/node-diagnostics",
+      "method": "POST",
+      "template": "/api/agent/node-diagnostics",
+      "owner": "agent-api",
+      "resourceClass": "stateless-analysis",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1node-diagnostics",
+      "integrationBatch": "W3B0-internal",
+      "history": "quiet",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/node-diagnostics",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "read-analysis-only",
+      "policy": "receipt-exempt",
+      "effects": [
+        "read",
+        "analyze"
+      ],
+      "authorityScopes": [
+        "global"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/npc-identity-probe/correlate",
+      "method": "POST",
+      "template": "/api/agent/npc-identity-probe/correlate",
+      "owner": "agent-api",
+      "resourceClass": "host-file-read",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1npc-identity-probe~1correlate",
+      "integrationBatch": "W3B0-internal",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/npc-identity-probe/correlate",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "audit-retention",
+      "policy": "separately-governed",
+      "effects": [
+        "read",
+        "analyze",
+        "audit-write",
+        "audit-retention-delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/npc-identity-probe/parse-log",
+      "method": "POST",
+      "template": "/api/agent/npc-identity-probe/parse-log",
+      "owner": "agent-api",
+      "resourceClass": "host-file-read",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1npc-identity-probe~1parse-log",
+      "integrationBatch": "W3B0-internal",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/npc-identity-probe/parse-log",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "audit-retention",
+      "policy": "separately-governed",
+      "effects": [
+        "read",
+        "analyze",
+        "audit-write",
+        "audit-retention-delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/npc-identity-probe/parse-save",
+      "method": "POST",
+      "template": "/api/agent/npc-identity-probe/parse-save",
+      "owner": "agent-api",
+      "resourceClass": "host-file-read",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1npc-identity-probe~1parse-save",
+      "integrationBatch": "W3B0-internal",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/npc-identity-probe/parse-save",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "audit-retention",
+      "policy": "separately-governed",
+      "effects": [
+        "read",
+        "analyze",
+        "audit-write",
+        "audit-retention-delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/package",
+      "method": "POST",
+      "template": "/api/agent/package",
+      "owner": "agent-api",
+      "resourceClass": "inline-or-addressed",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1package",
+      "integrationBatch": "W3B2",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/package",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write",
+        "package"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/package/release",
+      "method": "POST",
+      "template": "/api/agent/package/release",
+      "owner": "agent-api",
+      "resourceClass": "configured-root",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1package~1release",
+      "integrationBatch": "W3B2",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/package/release",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write",
+        "package"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/probe/preview",
+      "method": "POST",
+      "template": "/api/agent/probe/preview",
+      "owner": "agent-api",
+      "resourceClass": "stateless-analysis",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1probe~1preview",
+      "integrationBatch": "W3B0-internal",
+      "history": "quiet",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/probe/preview",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "read-analysis-only",
+      "policy": "receipt-exempt",
+      "effects": [
+        "read",
+        "analyze"
+      ],
+      "authorityScopes": [
+        "global"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/project-rules/prepare-suppression",
+      "method": "POST",
+      "template": "/api/agent/project-rules/prepare-suppression",
+      "owner": "agent-api",
+      "resourceClass": "configured-root",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1project-rules~1prepare-suppression",
+      "integrationBatch": "W3B0-internal",
+      "history": "quiet",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/project-rules/prepare-suppression",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "read-analysis-only",
+      "policy": "receipt-exempt",
+      "effects": [
+        "read",
+        "analyze"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/project-rules/suppress",
+      "method": "POST",
+      "template": "/api/agent/project-rules/suppress",
+      "owner": "agent-api",
+      "resourceClass": "configured-root",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1project-rules~1suppress",
+      "integrationBatch": "W3B1",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/project-rules/suppress",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/project/content-xml",
+      "method": "POST",
+      "template": "/api/agent/project/content-xml",
+      "owner": "agent-api",
+      "resourceClass": "inline-or-addressed",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1project~1content-xml",
+      "integrationBatch": "W3B0-internal",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/project/content-xml",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "audit-retention",
+      "policy": "separately-governed",
+      "effects": [
+        "read",
+        "analyze",
+        "audit-write",
+        "audit-retention-delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/project/create",
+      "method": "POST",
+      "template": "/api/agent/project/create",
+      "owner": "agent-api",
+      "resourceClass": "inline-or-addressed",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1project~1create",
+      "integrationBatch": "W3B0-internal",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/project/create",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "audit-retention",
+      "policy": "separately-governed",
+      "effects": [
+        "read",
+        "analyze",
+        "audit-write",
+        "audit-retention-delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/project/file/create",
+      "method": "POST",
+      "template": "/api/agent/project/file/create",
+      "owner": "agent-api",
+      "resourceClass": "inline-or-addressed",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1project~1file~1create",
+      "integrationBatch": "W3B0-internal",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/project/file/create",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "audit-retention",
+      "policy": "separately-governed",
+      "effects": [
+        "read",
+        "analyze",
+        "audit-write",
+        "audit-retention-delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/project/files",
+      "method": "POST",
+      "template": "/api/agent/project/files",
+      "owner": "agent-api",
+      "resourceClass": "inline-or-addressed",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1project~1files",
+      "integrationBatch": "W3B0-internal",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/project/files",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "audit-retention",
+      "policy": "separately-governed",
+      "effects": [
+        "read",
+        "analyze",
+        "audit-write",
+        "audit-retention-delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/project/generate",
+      "method": "POST",
+      "template": "/api/agent/project/generate",
+      "owner": "agent-api",
+      "resourceClass": "inline-or-addressed",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1project~1generate",
+      "integrationBatch": "W3B0-internal",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/project/generate",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "audit-retention",
+      "policy": "separately-governed",
+      "effects": [
+        "read",
+        "analyze",
+        "audit-write",
+        "audit-retention-delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/project/package",
+      "method": "POST",
+      "template": "/api/agent/project/package",
+      "owner": "agent-api",
+      "resourceClass": "inline-or-addressed",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1project~1package",
+      "integrationBatch": "W3B2",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/project/package",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write",
+        "package"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/project/validate",
+      "method": "POST",
+      "template": "/api/agent/project/validate",
+      "owner": "agent-api",
+      "resourceClass": "inline-or-addressed",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1project~1validate",
+      "integrationBatch": "W3B0-internal",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/project/validate",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "audit-retention",
+      "policy": "separately-governed",
+      "effects": [
+        "read",
+        "analyze",
+        "audit-write",
+        "audit-retention-delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/project/validate-crossfile",
+      "method": "POST",
+      "template": "/api/agent/project/validate-crossfile",
+      "owner": "agent-api",
+      "resourceClass": "inline-or-addressed",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1project~1validate-crossfile",
+      "integrationBatch": "W3B0-internal",
+      "history": "quiet",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/project/validate-crossfile",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "read-analysis-only",
+      "policy": "receipt-exempt",
+      "effects": [
+        "read",
+        "analyze"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/project/validate/check",
+      "method": "POST",
+      "template": "/api/agent/project/validate/check",
+      "owner": "project.validate",
+      "resourceClass": "inline-or-addressed",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1project~1validate~1check",
+      "integrationBatch": "W3B0-internal",
+      "history": "visible",
+      "capability": {
+        "kind": "canonical",
+        "id": "project.validate",
+        "version": 1
+      },
+      "semanticClass": "audit-retention",
+      "policy": "separately-governed",
+      "effects": [
+        "read",
+        "analyze",
+        "audit-write",
+        "audit-retention-delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/quick-fixes",
+      "method": "POST",
+      "template": "/api/agent/quick-fixes",
+      "owner": "agent-api",
+      "resourceClass": "stateless-analysis",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1quick-fixes",
+      "integrationBatch": "W3B0-internal",
+      "history": "quiet",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/quick-fixes",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "read-analysis-only",
+      "policy": "receipt-exempt",
+      "effects": [
+        "read",
+        "analyze"
+      ],
+      "authorityScopes": [
+        "global"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/release/artifact/download",
+      "method": "POST",
+      "template": "/api/agent/release/artifact/download",
+      "owner": "release-center",
+      "resourceClass": "configured-root",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1release~1artifact~1download",
+      "integrationBatch": "W3B2",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/release/artifact/download",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "external-publish",
+      "policy": "receipt-required",
+      "effects": [
+        "publish"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/release/export/receipt",
+      "method": "POST",
+      "template": "/api/agent/release/export/receipt",
+      "owner": "release-center",
+      "resourceClass": "configured-root",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1release~1export~1receipt",
+      "integrationBatch": "W3B2",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/release/export/receipt",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "external-publish",
+      "policy": "receipt-required",
+      "effects": [
+        "publish"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/release/nexus/prepare",
+      "method": "POST",
+      "template": "/api/agent/release/nexus/prepare",
+      "owner": "release-center",
+      "resourceClass": "configured-root",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1release~1nexus~1prepare",
+      "integrationBatch": "W3B2",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/release/nexus/prepare",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write",
+        "package"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/release/steam/adopt",
+      "method": "POST",
+      "template": "/api/agent/release/steam/adopt",
+      "owner": "release-center",
+      "resourceClass": "configured-root",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1release~1steam~1adopt",
+      "integrationBatch": "W3B2",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/release/steam/adopt",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write",
+        "package"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/release/steam/prepare",
+      "method": "POST",
+      "template": "/api/agent/release/steam/prepare",
+      "owner": "release-center",
+      "resourceClass": "configured-root",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1release~1steam~1prepare",
+      "integrationBatch": "W3B2",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/release/steam/prepare",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write",
+        "package"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/release/steam/verify",
+      "method": "POST",
+      "template": "/api/agent/release/steam/verify",
+      "owner": "release-center",
+      "resourceClass": "configured-root",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1release~1steam~1verify",
+      "integrationBatch": "W3B2",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/release/steam/verify",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write",
+        "package"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/round-trip-check",
+      "method": "POST",
+      "template": "/api/agent/round-trip-check",
+      "owner": "agent-api",
+      "resourceClass": "configured-root",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1round-trip-check",
+      "integrationBatch": "W3B0-internal",
+      "history": "quiet",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/round-trip-check",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "read-analysis-only",
+      "policy": "receipt-exempt",
+      "effects": [
+        "read",
+        "analyze"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/setup/harvest-schemas",
+      "method": "POST",
+      "template": "/api/agent/setup/harvest-schemas",
+      "owner": "agent-api",
+      "resourceClass": "global-session",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1setup~1harvest-schemas",
+      "integrationBatch": "W3B2",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/setup/harvest-schemas",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write"
+      ],
+      "authorityScopes": [
+        "global"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/simulate",
+      "method": "POST",
+      "template": "/api/agent/simulate",
+      "owner": "agent-api",
+      "resourceClass": "stateless-analysis",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1simulate",
+      "integrationBatch": "W3B0-internal",
+      "history": "quiet",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/simulate",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "read-analysis-only",
+      "policy": "receipt-exempt",
+      "effects": [
+        "read",
+        "analyze"
+      ],
+      "authorityScopes": [
+        "global"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/suggest/expression",
+      "method": "POST",
+      "template": "/api/agent/suggest/expression",
+      "owner": "agent-api",
+      "resourceClass": "stateless-analysis",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1suggest~1expression",
+      "integrationBatch": "W3B0-internal",
+      "history": "quiet",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/suggest/expression",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "read-analysis-only",
+      "policy": "receipt-exempt",
+      "effects": [
+        "read",
+        "analyze"
+      ],
+      "authorityScopes": [
+        "global"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/workspace",
+      "method": "POST",
+      "template": "/api/agent/workspace",
+      "owner": "agent-api",
+      "resourceClass": "workspace",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1workspace",
+      "integrationBatch": "W3B1",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/workspace",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "workspace-write"
+      ],
+      "authorityScopes": [
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/workspace/merge",
+      "method": "POST",
+      "template": "/api/agent/workspace/merge",
+      "owner": "agent-api",
+      "resourceClass": "workspace",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1workspace~1merge",
+      "integrationBatch": "W3B1",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/workspace/merge",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "workspace-write"
+      ],
+      "authorityScopes": [
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/workspace/restore-parked",
+      "method": "POST",
+      "template": "/api/agent/workspace/restore-parked",
+      "owner": "agent-api",
+      "resourceClass": "cross-workspace-session",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1workspace~1restore-parked",
+      "integrationBatch": "W3B0-internal",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/workspace/restore-parked",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "audit-retention",
+      "policy": "separately-governed",
+      "effects": [
+        "read",
+        "analyze",
+        "audit-write",
+        "audit-retention-delete"
+      ],
+      "authorityScopes": [
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/workspaces",
+      "method": "POST",
+      "template": "/api/agent/workspaces",
+      "owner": "agent-api",
+      "resourceClass": "cross-workspace-session",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1workspaces",
+      "integrationBatch": "W3B1",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/workspaces",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "workspace-write"
+      ],
+      "authorityScopes": [
+        "global"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/workspaces/bootstrap",
+      "method": "POST",
+      "template": "/api/agent/workspaces/bootstrap",
+      "owner": "agent-api",
+      "resourceClass": "workspace",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1workspaces~1bootstrap",
+      "integrationBatch": "W3B0-internal",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/workspaces/bootstrap",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "audit-retention",
+      "policy": "separately-governed",
+      "effects": [
+        "read",
+        "analyze",
+        "audit-write",
+        "audit-retention-delete"
+      ],
+      "authorityScopes": [
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/xpath-synth",
+      "method": "POST",
+      "template": "/api/agent/xpath-synth",
+      "owner": "agent-api",
+      "resourceClass": "configured-root",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1xpath-synth",
+      "integrationBatch": "W3B0-internal",
+      "history": "quiet",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/xpath-synth",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "read-analysis-only",
+      "policy": "receipt-exempt",
+      "effects": [
+        "read",
+        "analyze"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/agent/xsd-lookup",
+      "method": "POST",
+      "template": "/api/agent/xsd-lookup",
+      "owner": "agent-api",
+      "resourceClass": "stateless-analysis",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1agent~1xsd-lookup",
+      "integrationBatch": "W3B0-internal",
+      "history": "quiet",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/agent/xsd-lookup",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "read-analysis-only",
+      "policy": "receipt-exempt",
+      "effects": [
+        "read",
+        "analyze"
+      ],
+      "authorityScopes": [
+        "global"
+      ]
+    },
+    {
+      "routeKey": "POST /api/ai/keys",
+      "method": "POST",
+      "template": "/api/ai/keys",
+      "owner": "forge-server",
+      "resourceClass": "global-session",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1ai~1keys",
+      "integrationBatch": "W3B1",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/ai/keys",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "session-credential-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "credential",
+        "delete"
+      ],
+      "authorityScopes": [
+        "global"
+      ]
+    },
+    {
+      "routeKey": "POST /api/fs/create",
+      "method": "POST",
+      "template": "/api/fs/create",
+      "owner": "filesystem-service",
+      "resourceClass": "configured-root",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1fs~1create",
+      "integrationBatch": "W3B1",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/fs/create",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/fs/delete-dir",
+      "method": "POST",
+      "template": "/api/fs/delete-dir",
+      "owner": "filesystem-service",
+      "resourceClass": "configured-root",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1fs~1delete-dir",
+      "integrationBatch": "W3B1",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/fs/delete-dir",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write",
+        "delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/fs/delete-snapshot",
+      "method": "POST",
+      "template": "/api/fs/delete-snapshot",
+      "owner": "filesystem-service",
+      "resourceClass": "configured-root",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1fs~1delete-snapshot",
+      "integrationBatch": "W3B1",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/fs/delete-snapshot",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write",
+        "delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/fs/restore-snapshot",
+      "method": "POST",
+      "template": "/api/fs/restore-snapshot",
+      "owner": "filesystem-service",
+      "resourceClass": "configured-root",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1fs~1restore-snapshot",
+      "integrationBatch": "W3B1",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/fs/restore-snapshot",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "workspace-write"
+      ],
+      "authorityScopes": [
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/fs/snapshot",
+      "method": "POST",
+      "template": "/api/fs/snapshot",
+      "owner": "filesystem-service",
+      "resourceClass": "configured-root",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1fs~1snapshot",
+      "integrationBatch": "W3B1",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/fs/snapshot",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write",
+        "delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/fs/write",
+      "method": "POST",
+      "template": "/api/fs/write",
+      "owner": "filesystem-service",
+      "resourceClass": "configured-root",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1fs~1write",
+      "integrationBatch": "W3B1",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/fs/write",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/gemini",
+      "method": "POST",
+      "template": "/api/gemini",
+      "owner": "forge-server",
+      "resourceClass": "provider-network",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1gemini",
+      "integrationBatch": "W3B3",
+      "history": "quiet",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/gemini",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "external-spend",
+      "policy": "receipt-required",
+      "effects": [
+        "network",
+        "spend"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile"
+      ]
+    },
+    {
+      "routeKey": "POST /api/gemini/analyze",
+      "method": "POST",
+      "template": "/api/gemini/analyze",
+      "owner": "forge-server",
+      "resourceClass": "provider-network",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1gemini~1analyze",
+      "integrationBatch": "W3B3",
+      "history": "quiet",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/gemini/analyze",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "external-spend",
+      "policy": "receipt-required",
+      "effects": [
+        "network",
+        "spend"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile"
+      ]
+    },
+    {
+      "routeKey": "POST /api/gemini/analyze-log",
+      "method": "POST",
+      "template": "/api/gemini/analyze-log",
+      "owner": "forge-server",
+      "resourceClass": "provider-network",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1gemini~1analyze-log",
+      "integrationBatch": "W3B3",
+      "history": "quiet",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/gemini/analyze-log",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "external-spend",
+      "policy": "receipt-required",
+      "effects": [
+        "network",
+        "spend"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile"
+      ]
+    },
+    {
+      "routeKey": "POST /api/github/commits",
+      "method": "POST",
+      "template": "/api/github/commits",
+      "owner": "github-integration",
+      "resourceClass": "external-repository",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1github~1commits",
+      "integrationBatch": "W3B3",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/github/commits",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "external-network",
+      "policy": "receipt-required",
+      "effects": [
+        "network"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/github/create",
+      "method": "POST",
+      "template": "/api/github/create",
+      "owner": "github-integration",
+      "resourceClass": "external-repository",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1github~1create",
+      "integrationBatch": "W3B3",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/github/create",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "external-publish",
+      "policy": "receipt-required",
+      "effects": [
+        "network",
+        "publish"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/github/credential",
+      "method": "POST",
+      "template": "/api/github/credential",
+      "owner": "github-integration",
+      "resourceClass": "external-repository",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1github~1credential",
+      "integrationBatch": "W3B1",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/github/credential",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "session-credential-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "credential"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile"
+      ]
+    },
+    {
+      "routeKey": "POST /api/github/device/poll",
+      "method": "POST",
+      "template": "/api/github/device/poll",
+      "owner": "github-integration",
+      "resourceClass": "external-repository",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1github~1device~1poll",
+      "integrationBatch": "W3B3",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/github/device/poll",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "external-network",
+      "policy": "receipt-required",
+      "effects": [
+        "network",
+        "credential"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile"
+      ]
+    },
+    {
+      "routeKey": "POST /api/github/device/start",
+      "method": "POST",
+      "template": "/api/github/device/start",
+      "owner": "github-integration",
+      "resourceClass": "external-repository",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1github~1device~1start",
+      "integrationBatch": "W3B3",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/github/device/start",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "external-network",
+      "policy": "receipt-required",
+      "effects": [
+        "network"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile"
+      ]
+    },
+    {
+      "routeKey": "POST /api/github/load",
+      "method": "POST",
+      "template": "/api/github/load",
+      "owner": "github-integration",
+      "resourceClass": "external-repository",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1github~1load",
+      "integrationBatch": "W3B3",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/github/load",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "external-network",
+      "policy": "receipt-required",
+      "effects": [
+        "network"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/github/push",
+      "method": "POST",
+      "template": "/api/github/push",
+      "owner": "github-integration",
+      "resourceClass": "external-repository",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1github~1push",
+      "integrationBatch": "W3B3",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/github/push",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "external-publish",
+      "policy": "receipt-required",
+      "effects": [
+        "network",
+        "publish"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "routeKey": "POST /api/reference/complete",
+      "method": "POST",
+      "template": "/api/reference/complete",
+      "owner": "reference-corpus",
+      "resourceClass": "stateless-analysis",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1reference~1complete",
+      "integrationBatch": "W3B0-internal",
+      "history": "none",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/reference/complete",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "read-analysis-only",
+      "policy": "receipt-exempt",
+      "effects": [
+        "read",
+        "analyze"
+      ],
+      "authorityScopes": [
+        "global"
+      ]
+    },
+    {
+      "routeKey": "POST /api/reference/hover",
+      "method": "POST",
+      "template": "/api/reference/hover",
+      "owner": "reference-corpus",
+      "resourceClass": "stateless-analysis",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1reference~1hover",
+      "integrationBatch": "W3B0-internal",
+      "history": "none",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/reference/hover",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "read-analysis-only",
+      "policy": "receipt-exempt",
+      "effects": [
+        "read",
+        "analyze"
+      ],
+      "authorityScopes": [
+        "global"
+      ]
+    },
+    {
+      "routeKey": "POST /api/reference/simulate-diff",
+      "method": "POST",
+      "template": "/api/reference/simulate-diff",
+      "owner": "reference-corpus",
+      "resourceClass": "stateless-analysis",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1reference~1simulate-diff",
+      "integrationBatch": "W3B0-internal",
+      "history": "none",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/reference/simulate-diff",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "read-analysis-only",
+      "policy": "receipt-exempt",
+      "effects": [
+        "read",
+        "analyze"
+      ],
+      "authorityScopes": [
+        "global"
+      ]
+    },
+    {
+      "routeKey": "POST /api/reference/xpath-complete",
+      "method": "POST",
+      "template": "/api/reference/xpath-complete",
+      "owner": "reference-corpus",
+      "resourceClass": "stateless-analysis",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1reference~1xpath-complete",
+      "integrationBatch": "W3B0-internal",
+      "history": "none",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/reference/xpath-complete",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "read-analysis-only",
+      "policy": "receipt-exempt",
+      "effects": [
+        "read",
+        "analyze"
+      ],
+      "authorityScopes": [
+        "global"
+      ]
+    },
+    {
+      "routeKey": "POST /api/run_command/job",
+      "method": "POST",
+      "template": "/api/run_command/job",
+      "owner": "forge-server",
+      "resourceClass": "command-session",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1run_command~1job",
+      "integrationBatch": "W3B3",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/run_command/job",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "external-process",
+      "policy": "refused",
+      "effects": [
+        "process"
+      ],
+      "authorityScopes": [
+        "global"
+      ]
+    },
+    {
+      "routeKey": "POST /api/schema/config",
+      "method": "POST",
+      "template": "/api/schema/config",
+      "owner": "schema-service",
+      "resourceClass": "global-session",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1schema~1config",
+      "integrationBatch": "W3B1",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/schema/config",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write",
+        "session-write"
+      ],
+      "authorityScopes": [
+        "global"
+      ]
+    },
+    {
+      "routeKey": "POST /api/studio/layout",
+      "method": "POST",
+      "template": "/api/studio/layout",
+      "owner": "forge-server",
+      "resourceClass": "global-session",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1studio~1layout",
+      "integrationBatch": "W3B1",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/studio/layout",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write",
+        "session-write"
+      ],
+      "authorityScopes": [
+        "global"
+      ]
+    },
+    {
+      "routeKey": "POST /api/studio/release-preferences",
+      "method": "POST",
+      "template": "/api/studio/release-preferences",
+      "owner": "forge-server",
+      "resourceClass": "global-session",
+      "sourceRef": "config/forge-route-dispositions.json#/routes/POST ~1api~1studio~1release-preferences",
+      "integrationBatch": "W3B1",
+      "history": "visible",
+      "capability": {
+        "kind": "reviewed-legacy",
+        "id": "POST /api/studio/release-preferences",
+        "reviewRef": "docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review"
+      },
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write",
+        "session-write"
+      ],
+      "authorityScopes": [
+        "global"
+      ]
+    }
+  ],
+  "surfaces": [
+    {
+      "id": "browser-output:src/components/AgentBridge.tsx",
+      "kind": "browser-output",
+      "owner": "workspace manifest JSON download",
+      "sourceRef": "config/durable-writers.json#/browserOutputs/0",
+      "integrationBatch": "W3B2",
+      "semanticClass": "external-publish",
+      "policy": "receipt-required",
+      "effects": [
+        "publish"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "browser-output:src/components/ReleaseCenter.tsx",
+      "kind": "browser-output",
+      "owner": "verified Nexus and Steam artifact export",
+      "sourceRef": "config/durable-writers.json#/browserOutputs/1",
+      "integrationBatch": "W3B2",
+      "semanticClass": "external-publish",
+      "policy": "receipt-required",
+      "effects": [
+        "publish"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:server.ts",
+      "kind": "filesystem-writer",
+      "owner": "writeWorkspaceFileGuarded and fs/create | snapshot create/prune/delete/restore | copyRegularTree and synchronizeRegularTree | replaceValidatedDeployment and recovery | compileWorkspaceToFolder scratch cleanup | replaceReleaseDirectory | Nexus and Steam release handlers | embedded route/artifact/workspace API selftests | route-integration caller-key provider-dispatch marker",
+      "sourceRef": "config/durable-writers.json#/writers/0",
+      "integrationBatch": "W3B1",
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "workspace-write",
+        "filesystem-write",
+        "package",
+        "deploy",
+        "delete",
+        "session-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/lib/actionReceipt.selftest.ts",
+      "kind": "filesystem-writer",
+      "owner": "runActionReceiptSelftest",
+      "sourceRef": "config/durable-writers.json#/writers/1",
+      "integrationBatch": "W3B0-internal",
+      "semanticClass": "fixture-cache",
+      "policy": "receipt-exempt",
+      "effects": [
+        "filesystem-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/lib/actionReceiptStore.ts",
+      "kind": "filesystem-writer",
+      "owner": "ActionReceiptStore.ensureRoot | ActionReceiptStore.atomicWrite",
+      "sourceRef": "config/durable-writers.json#/writers/2",
+      "integrationBatch": "W3B0-internal",
+      "semanticClass": "audit-retention",
+      "policy": "separately-governed",
+      "effects": [
+        "audit-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/lib/agentHistory.selftest.ts",
+      "kind": "filesystem-writer",
+      "owner": "runAgentHistorySelftest",
+      "sourceRef": "config/durable-writers.json#/writers/3",
+      "integrationBatch": "W3B0-internal",
+      "semanticClass": "fixture-cache",
+      "policy": "receipt-exempt",
+      "effects": [
+        "filesystem-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/lib/agentHistoryStore.ts",
+      "kind": "filesystem-writer",
+      "owner": "AgentHistoryStore.writeBlob | AgentHistoryStore.append | AgentHistoryStore.rotateIfNeeded",
+      "sourceRef": "config/durable-writers.json#/writers/4",
+      "integrationBatch": "W3B0-internal",
+      "semanticClass": "audit-retention",
+      "policy": "separately-governed",
+      "effects": [
+        "audit-write",
+        "audit-retention-delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/lib/agentKeys.ts",
+      "kind": "filesystem-writer",
+      "owner": "createAgentKeyStore | runAgentKeysSelftest",
+      "sourceRef": "config/durable-writers.json#/writers/5",
+      "integrationBatch": "W3B1",
+      "semanticClass": "session-credential-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "credential",
+        "delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/lib/artifactPackager.ts",
+      "kind": "filesystem-writer",
+      "owner": "materializeCatalogArtifact | copyVerified",
+      "sourceRef": "config/durable-writers.json#/writers/6",
+      "integrationBatch": "W3B2",
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write",
+        "package"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/lib/artifactPipeline.ts",
+      "kind": "filesystem-writer",
+      "owner": "materializeArtifact",
+      "sourceRef": "config/durable-writers.json#/writers/7",
+      "integrationBatch": "W3B2",
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write",
+        "package"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/lib/db.ts",
+      "kind": "filesystem-writer",
+      "owner": "openStudioDb | dbSelfTest",
+      "sourceRef": "config/durable-writers.json#/writers/8",
+      "integrationBatch": "W3B0-internal",
+      "semanticClass": "fixture-cache",
+      "policy": "receipt-exempt",
+      "effects": [
+        "filesystem-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/lib/destructiveRecovery.ts",
+      "kind": "filesystem-writer",
+      "owner": "DestructiveRecoveryStore | runDestructiveRecoverySelftest",
+      "sourceRef": "config/durable-writers.json#/writers/9",
+      "integrationBatch": "W3B0-internal",
+      "semanticClass": "fixture-cache",
+      "policy": "separately-governed",
+      "effects": [
+        "filesystem-write",
+        "delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/lib/instanceDiscovery.ts",
+      "kind": "filesystem-writer",
+      "owner": "publishInstance | pruneDeadInstances | unpublishInstance",
+      "sourceRef": "config/durable-writers.json#/writers/10",
+      "integrationBatch": "W3B0-internal",
+      "semanticClass": "fixture-cache",
+      "policy": "separately-governed",
+      "effects": [
+        "filesystem-write",
+        "delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/lib/pathRoles.ts",
+      "kind": "filesystem-writer",
+      "owner": "runPathRolesSelftest",
+      "sourceRef": "config/durable-writers.json#/writers/11",
+      "integrationBatch": "W3B0-internal",
+      "semanticClass": "fixture-cache",
+      "policy": "receipt-exempt",
+      "effects": [
+        "filesystem-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/lib/platformRelease.ts",
+      "kind": "filesystem-writer",
+      "owner": "runPlatformReleaseSelftest",
+      "sourceRef": "config/durable-writers.json#/writers/12",
+      "integrationBatch": "W3B0-internal",
+      "semanticClass": "fixture-cache",
+      "policy": "receipt-exempt",
+      "effects": [
+        "filesystem-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/lib/projectFileInventory.ts",
+      "kind": "filesystem-writer",
+      "owner": "runProjectFileInventorySelftest",
+      "sourceRef": "config/durable-writers.json#/writers/13",
+      "integrationBatch": "W3B0-internal",
+      "semanticClass": "fixture-cache",
+      "policy": "receipt-exempt",
+      "effects": [
+        "filesystem-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/lib/referenceCorpus.ts",
+      "kind": "filesystem-writer",
+      "owner": "runReferenceCorpusSelftest",
+      "sourceRef": "config/durable-writers.json#/writers/14",
+      "integrationBatch": "W3B0-internal",
+      "semanticClass": "fixture-cache",
+      "policy": "receipt-exempt",
+      "effects": [
+        "filesystem-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/lib/referenceManifest.ts",
+      "kind": "filesystem-writer",
+      "owner": "runReferenceManifestSelftest",
+      "sourceRef": "config/durable-writers.json#/writers/15",
+      "integrationBatch": "W3B0-internal",
+      "semanticClass": "fixture-cache",
+      "policy": "receipt-exempt",
+      "effects": [
+        "filesystem-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/lib/referenceOverlay.ts",
+      "kind": "filesystem-writer",
+      "owner": "runReferenceOverlaySelftest",
+      "sourceRef": "config/durable-writers.json#/writers/16",
+      "integrationBatch": "W3B0-internal",
+      "semanticClass": "fixture-cache",
+      "policy": "receipt-exempt",
+      "effects": [
+        "filesystem-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/lib/schemaRegistry.ts",
+      "kind": "filesystem-writer",
+      "owner": "runSchemaRegistrySelftest",
+      "sourceRef": "config/durable-writers.json#/writers/17",
+      "integrationBatch": "W3B0-internal",
+      "semanticClass": "fixture-cache",
+      "policy": "receipt-exempt",
+      "effects": [
+        "filesystem-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/lib/schemaRouting.ts",
+      "kind": "filesystem-writer",
+      "owner": "runSchemaRoutingSelftest",
+      "sourceRef": "config/durable-writers.json#/writers/18",
+      "integrationBatch": "W3B0-internal",
+      "semanticClass": "fixture-cache",
+      "policy": "receipt-exempt",
+      "effects": [
+        "filesystem-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/lib/validationDelta.ts",
+      "kind": "filesystem-writer",
+      "owner": "ValidationBaselineStore | runValidationDeltaSelftest",
+      "sourceRef": "config/durable-writers.json#/writers/19",
+      "integrationBatch": "W3B0-internal",
+      "semanticClass": "audit-retention",
+      "policy": "separately-governed",
+      "effects": [
+        "audit-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/lib/workspaceRegistry.ts",
+      "kind": "filesystem-writer",
+      "owner": "WorkspaceRegistry.create rollback | runWorkspaceRegistrySelftest",
+      "sourceRef": "config/durable-writers.json#/writers/21",
+      "integrationBatch": "W3B1",
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "workspace-write",
+        "filesystem-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/lib/workspaceState.ts",
+      "kind": "filesystem-writer",
+      "owner": "atomicWriteFile | parkState | runWorkspaceStateSelftest",
+      "sourceRef": "config/durable-writers.json#/writers/20",
+      "integrationBatch": "W3B1",
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write",
+        "delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/lib/x4CatDat.ts",
+      "kind": "filesystem-writer",
+      "owner": "writeCatDatCatalogs | runCatDatSelftest",
+      "sourceRef": "config/durable-writers.json#/writers/22",
+      "integrationBatch": "W3B2",
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write",
+        "package"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/lib/xsdParser.ts",
+      "kind": "filesystem-writer",
+      "owner": "writeXsdConfig | runSchemaDiscoverySelftest",
+      "sourceRef": "config/durable-writers.json#/writers/23",
+      "integrationBatch": "W3B1",
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write",
+        "session-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/lib/xsdValidate.ts",
+      "kind": "filesystem-writer",
+      "owner": "runXsdSelftest",
+      "sourceRef": "config/durable-writers.json#/writers/24",
+      "integrationBatch": "W3B0-internal",
+      "semanticClass": "fixture-cache",
+      "policy": "receipt-exempt",
+      "effects": [
+        "filesystem-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/server/aiKeyStore.ts",
+      "kind": "filesystem-writer",
+      "owner": "createAiKeyStore | runAiKeyStoreSelftest",
+      "sourceRef": "config/durable-writers.json#/writers/25",
+      "integrationBatch": "W3B1",
+      "semanticClass": "session-credential-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "credential",
+        "delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/server/gameDetectRoutes.ts",
+      "kind": "filesystem-writer",
+      "owner": "harvest-schemas route",
+      "sourceRef": "config/durable-writers.json#/writers/26",
+      "integrationBatch": "W3B2",
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/server/githubCredentialStore.ts",
+      "kind": "filesystem-writer",
+      "owner": "createGithubCredentialStore",
+      "sourceRef": "config/durable-writers.json#/writers/27",
+      "integrationBatch": "W3B1",
+      "semanticClass": "session-credential-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "credential",
+        "delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:src/server/npcIdentityProbe.ts",
+      "kind": "filesystem-writer",
+      "owner": "runNpcIdentityProbeSelftest",
+      "sourceRef": "config/durable-writers.json#/writers/28",
+      "integrationBatch": "W3B0-internal",
+      "semanticClass": "fixture-cache",
+      "policy": "receipt-exempt",
+      "effects": [
+        "filesystem-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:vscode-extension/src/durableWrite.ts",
+      "kind": "filesystem-writer",
+      "owner": "replaceFileSetAtomically | atomicWriteFile | runDurableWriteSelftest",
+      "sourceRef": "config/durable-writers.json#/writers/29",
+      "integrationBatch": "W3B1",
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "workspace-write",
+        "filesystem-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:vscode-extension/src/extension.ts",
+      "kind": "filesystem-writer",
+      "owner": "spawnSidecar",
+      "sourceRef": "config/durable-writers.json#/writers/30",
+      "integrationBatch": "W3B3",
+      "semanticClass": "external-process",
+      "policy": "receipt-required",
+      "effects": [
+        "process",
+        "filesystem-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:vscode-extension/src/modFolder.ts",
+      "kind": "filesystem-writer",
+      "owner": "writeRecommendations | writeXmlAssociations | runModFolderSelftest",
+      "sourceRef": "config/durable-writers.json#/writers/31",
+      "integrationBatch": "W3B1",
+      "semanticClass": "durable-local-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "workspace-write",
+        "filesystem-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:vscode-extension/src/nativeEditorBridge.selftest.ts",
+      "kind": "filesystem-writer",
+      "owner": "runNativeEditorBridgeSelftest",
+      "sourceRef": "config/durable-writers.json#/writers/32",
+      "integrationBatch": "W3B0-internal",
+      "semanticClass": "fixture-cache",
+      "policy": "receipt-exempt",
+      "effects": [
+        "filesystem-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "filesystem-writer:vscode-extension/src/nativeEditorBridge.ts",
+      "kind": "filesystem-writer",
+      "owner": "exportVerifiedReleaseArtifact",
+      "sourceRef": "config/durable-writers.json#/writers/33",
+      "integrationBatch": "W3B2",
+      "semanticClass": "external-publish",
+      "policy": "receipt-required",
+      "effects": [
+        "filesystem-write",
+        "delete",
+        "publish"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "host-store:src/App.tsx",
+      "kind": "host-store",
+      "owner": "Studio layout/release preferences | workspace-ID-scoped revision and content cache | experience confirmations",
+      "sourceRef": "config/durable-writers.json#/hostStores/0",
+      "integrationBatch": "W3B1",
+      "semanticClass": "session-credential-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "session-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "host-store:src/components/AIConnectionModal.tsx",
+      "kind": "host-store",
+      "owner": "legacy Google OAuth cleanup",
+      "sourceRef": "config/durable-writers.json#/hostStores/1",
+      "integrationBatch": "W3B1",
+      "semanticClass": "session-credential-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "credential",
+        "session-write",
+        "delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "host-store:src/components/DiagnosticGuidance.tsx",
+      "kind": "host-store",
+      "owner": "suppression reviewer convenience",
+      "sourceRef": "config/durable-writers.json#/hostStores/2",
+      "integrationBatch": "W3B1",
+      "semanticClass": "session-credential-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "session-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "host-store:src/components/Sidebar.tsx",
+      "kind": "host-store",
+      "owner": "workspace directory display mode",
+      "sourceRef": "config/durable-writers.json#/hostStores/3",
+      "integrationBatch": "W3B1",
+      "semanticClass": "session-credential-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "session-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "host-store:src/components/SourceControl.tsx",
+      "kind": "host-store",
+      "owner": "Git UI baseline/history cache | GitHub repository preference and legacy-token cleanup",
+      "sourceRef": "config/durable-writers.json#/hostStores/4",
+      "integrationBatch": "W3B1",
+      "semanticClass": "session-credential-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "credential",
+        "session-write",
+        "delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "host-store:src/components/VirtualizedNodeToolbox.tsx",
+      "kind": "host-store",
+      "owner": "toolbox view preference",
+      "sourceRef": "config/durable-writers.json#/hostStores/5",
+      "integrationBatch": "W3B1",
+      "semanticClass": "session-credential-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "session-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "host-store:src/components/XMLPatchSystem.tsx",
+      "kind": "host-store",
+      "owner": "custom XML snippet library",
+      "sourceRef": "config/durable-writers.json#/hostStores/6",
+      "integrationBatch": "W3B1",
+      "semanticClass": "session-credential-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "session-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "host-store:src/lib/apiHelper.ts",
+      "kind": "host-store",
+      "owner": "AI provider/model preferences | legacy provider-key cleanup",
+      "sourceRef": "config/durable-writers.json#/hostStores/7",
+      "integrationBatch": "W3B1",
+      "semanticClass": "session-credential-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "credential",
+        "session-write",
+        "delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "host-store:src/lib/modBlueprint.ts",
+      "kind": "host-store",
+      "owner": "blueprint draft cache",
+      "sourceRef": "config/durable-writers.json#/hostStores/8",
+      "integrationBatch": "W3B0-internal",
+      "semanticClass": "fixture-cache",
+      "policy": "receipt-exempt",
+      "effects": [
+        "session-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "host-store:src/main.tsx",
+      "kind": "host-store",
+      "owner": "injected Studio session token handoff | tab-scoped client and workspace identity",
+      "sourceRef": "config/durable-writers.json#/hostStores/9",
+      "integrationBatch": "W3B1",
+      "semanticClass": "session-credential-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "credential",
+        "session-write",
+        "delete"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "host-store:vscode-extension/src/extension.ts",
+      "kind": "host-store",
+      "owner": "managed-sidecar workspace selection | two-way-editing telemetry counters",
+      "sourceRef": "config/durable-writers.json#/hostStores/10",
+      "integrationBatch": "W3B1",
+      "semanticClass": "session-credential-mutation",
+      "policy": "receipt-required",
+      "effects": [
+        "session-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
+      "id": "sqlite:src/lib/db.ts",
+      "kind": "sqlite",
+      "owner": "openStudioDb | bindGamePath | recordSourceStamps | cacheObjectIndex | cacheExtensions | appendReferenceFiles | completeReferenceGeneration",
+      "sourceRef": "config/durable-writers.json#/database",
+      "integrationBatch": "W3B0-internal",
+      "semanticClass": "fixture-cache",
+      "policy": "separately-governed",
+      "effects": [
+        "filesystem-write"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # X4 Forge pending-feature implementation program
 
-Status: IN_PROGRESS; W3A VERIFIED, implementation continues with W3B0
+Status: IN_PROGRESS; W3A and W3B0 VERIFIED, implementation continues with W3B1
 Lane: FULL
 Inventory cutoff: 2026-08-02
 Owner: active Sol coordinator; implementation code is delegated only to native `luna_executor` workers
@@ -166,6 +166,13 @@ pass 116/116 focused checks, 73/73 legacy-history checks, 130/130 runtime oracle
 built production bundle, writer/capability/MCP audits, typecheck/lint/build, and Graphify. No production mutation or
 surface claims receipt authority yet. Exact close: `docs/plans/2026-08-02-w3-action-receipt-authority.md`; W3B0 is
 specified at `docs/plans/2026-08-02-w3b0-action-receipt-coverage.md`.
+
+**W3B0 checkpoint (2026-08-02): VERIFIED.** One reviewed fail-closed coverage authority now joins all 82 current
+non-GET routes and 48 durable/host/browser/database surfaces to exact effects, scopes, owners, source anchors, policy,
+and W3B batch. Pure resolution, deterministic candidate/hash-pinned promotion, precommit drift enforcement, fresh
+production-route proof (400/400), isolated runtime proof (130/130), and all declared static/governance gates are
+green. It deliberately mounts no production receipt consumer or visible extension surface. W3B1 addressed-state
+integration is next; exact close: `docs/plans/2026-08-02-w3b0-action-receipt-coverage.md`.
 
 ### Wave 2 — reproducibility, provider boundary, and unlocked Kimi/UX units
 

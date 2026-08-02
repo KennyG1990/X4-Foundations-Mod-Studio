@@ -12934,21 +12934,161 @@ async function setupDevOrProd() {
 // packaged/production build (G5 security item, 2026-07-08). Registration is default-closed
 // in every environment and requires the explicit FORGE_ALLOW_RUN_COMMAND=true opt-in. The
 // checked-in dev launchers set that flag; a bare `node dist/server.cjs` never enables exec.
-function terminateProcessTree(pid: number | undefined): void {
-  if (!pid) return;
-  void import('child_process').then(({ spawn }) => {
+const WINDOWS_TASKKILL_TIMEOUT_MS = 500;
+const WINDOWS_PWSH_TREE_KILL_TIMEOUT_MS = 2_000;
+const WINDOWS_PWSH_TREE_KILL_SCRIPT = String.raw`
+$ErrorActionPreference = 'Stop'
+if ($args.Count -ne 1) { exit 10 }
+[int]$ownedRootPid = 0
+if (-not [int]::TryParse([string]$args[0], [ref]$ownedRootPid) -or $ownedRootPid -le 0) { exit 11 }
+
+function Test-ExactProcessExists([int]$processId) {
+  try {
+    $process = [System.Diagnostics.Process]::GetProcessById($processId)
+    $process.Dispose()
+    return $true
+  } catch [System.ArgumentException] {
+    return $false
+  } catch {
+    throw
+  }
+}
+
+function Get-OwnedProcessDepth([int]$rootPid) {
+  if (-not (Test-ExactProcessExists $rootPid)) { throw 'owned root is absent' }
+  $rows = [System.Collections.Generic.List[object]]::new()
+  $rootSeen = $false
+  foreach ($process in @(Get-Process -ErrorAction Stop)) {
+    [int]$processId = $process.Id
+    try {
+      $parent = $process.Parent
+    } catch {
+      if (Test-ExactProcessExists $processId) { throw }
+      continue
+    }
+    [int]$parentId = if ($null -eq $parent) { 0 } else { $parent.Id }
+    $rows.Add([PSCustomObject]@{ Id = $processId; ParentId = $parentId })
+    if ($processId -eq $rootPid) { $rootSeen = $true }
+  }
+  if (-not $rootSeen) { throw 'owned root was not fully enumerated' }
+
+  $depth = @{}
+  $depth[$rootPid] = 0
+  do {
+    $added = $false
+    foreach ($row in $rows) {
+      if (-not $depth.ContainsKey($row.Id) -and $depth.ContainsKey($row.ParentId)) {
+        $depth[$row.Id] = 1 + $depth[$row.ParentId]
+        $added = $true
+      }
+    }
+  } while ($added)
+  return ,$depth
+}
+
+$previousSignature = $null
+$stableDepth = $null
+for ($attempt = 0; $attempt -lt 4; $attempt++) {
+  $currentDepth = Get-OwnedProcessDepth $ownedRootPid
+  $signature = @( $currentDepth.GetEnumerator() |
+    Sort-Object -Property Key |
+    ForEach-Object { '{0}:{1}' -f $_.Key, $_.Value } ) -join ','
+  if ($null -ne $previousSignature -and $signature -eq $previousSignature) {
+    $stableDepth = $currentDepth
+    break
+  }
+  $previousSignature = $signature
+}
+if ($null -eq $stableDepth) { exit 12 }
+
+$ordered = @( $stableDepth.GetEnumerator() |
+  Sort-Object -Property @{ Expression = { $_.Value }; Descending = $true },
+    @{ Expression = { $_.Key }; Descending = $true } )
+$capturedPids = @( $ordered | ForEach-Object { [int]$_.Key } )
+foreach ($targetPid in $capturedPids) {
+  if (-not (Test-ExactProcessExists $targetPid)) { continue }
+  try {
+    Stop-Process -Id $targetPid -Force -ErrorAction Stop
+  } catch {
+    exit 13
+  }
+}
+
+for ($verifyAttempt = 0; $verifyAttempt -lt 20; $verifyAttempt++) {
+  $remaining = @( $capturedPids | Where-Object { Test-ExactProcessExists $_ } )
+  if ($remaining.Count -eq 0) { exit 0 }
+  Start-Sleep -Milliseconds 25
+}
+exit 14
+`;
+
+async function terminateProcessTree(pid: number | undefined): Promise<boolean> {
+  if (!pid) return false;
+  try {
+    const { spawn } = await import('child_process');
     if (process.platform === 'win32') {
-      const killer = spawn('taskkill', ['/PID', String(pid), '/T', '/F'], {
-        stdio: 'ignore',
-        windowsHide: true,
+      const runHelper = (
+        command: string,
+        args: readonly string[],
+        timeout: number,
+      ): Promise<boolean> => new Promise<boolean>((resolveTermination) => {
+        let killer;
+        try {
+          killer = spawn(command, args, {
+            shell: false,
+            stdio: 'ignore',
+            windowsHide: true,
+            timeout,
+            killSignal: 'SIGKILL',
+          });
+        } catch {
+          resolveTermination(false);
+          return;
+        }
+        let settled = false;
+        const settle = (confirmed: boolean) => {
+          if (settled) return;
+          settled = true;
+          killer.removeListener('error', onError);
+          killer.removeListener('exit', onExit);
+          killer.removeListener('close', onClose);
+          resolveTermination(confirmed);
+        };
+        const onError = () => settle(false);
+        const onExit = (code: number | null) => settle(code === 0);
+        const onClose = (code: number | null) => settle(code === 0);
+        killer.once('error', onError);
+        killer.once('exit', onExit);
+        killer.once('close', onClose);
       });
-      killer.unref();
-      return;
+      const taskkillConfirmed = await runHelper(
+        'taskkill',
+        ['/PID', String(pid), '/T', '/F'],
+        WINDOWS_TASKKILL_TIMEOUT_MS,
+      );
+      if (taskkillConfirmed) return true;
+      return await runHelper(
+        'pwsh',
+        [
+          '-NoLogo',
+          '-NoProfile',
+          '-NonInteractive',
+          '-CommandWithArgs',
+          WINDOWS_PWSH_TREE_KILL_SCRIPT,
+          String(pid),
+        ],
+        WINDOWS_PWSH_TREE_KILL_TIMEOUT_MS,
+      );
     }
     // exec() does not create an isolated process group on Unix. Killing -pid could target
     // the Forge server's own group, so only kill the owned shell there.
     try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ }
-  }).catch(() => { /* best effort; the exit/state contract still reports the timeout */ });
+    // A successful signal request is not termination confirmation. The child exit/close
+    // listeners own processExited truth on Unix.
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 export function isRunCommandEnabled(env: NodeJS.ProcessEnv): boolean {
@@ -12980,7 +13120,7 @@ function registerRunCommandRoutes(app: express.Express): void {
       });
       const timer = setTimeout(() => {
         timedOut = true;
-        terminateProcessTree(child.pid);
+        void terminateProcessTree(child.pid).catch(() => { /* fail closed */ });
       }, SYNC_COMMAND_DEADLINE_MS);
     } catch (e) {
       res.status(500).json({ error: e.message || String(e) });
@@ -13035,16 +13175,28 @@ function registerRunCommandRoutes(app: express.Express): void {
         job.status = 'timed_out';
         job.error = `Command exceeded the ${job.timeoutMs} ms execution deadline.`;
         job.endedAt = new Date().toISOString();
-        terminateProcessTree(child.pid);
+        void terminateProcessTree(child.pid)
+          .then((terminationConfirmed) => {
+            if (terminationConfirmed) job.processExited = true;
+          })
+          .catch(() => { /* fail closed */ });
       }, job.timeoutMs);
-      child.on('error', (e) => {
+      child.once('error', (e) => {
         if (job.status !== 'running') return;
         job.error = e.message;
         job.status = 'done';
         job.endedAt = new Date().toISOString();
         clearTimeout(timer);
       });
-      child.on('exit', (code) => {
+      child.once('exit', (code) => {
+        clearTimeout(timer);
+        job.processExited = true;
+        if (job.status !== 'running') return;
+        job.status = 'done';
+        job.exitCode = code;
+        job.endedAt = new Date().toISOString();
+      });
+      child.once('close', (code) => {
         clearTimeout(timer);
         job.processExited = true;
         if (job.status !== 'running') return;

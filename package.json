@@ -18,6 +18,8 @@
     "validate:mod": "tsx scripts/x4validate.ts",
     "start:prod": "set NODE_ENV=production&& node dist/server.cjs",
     "precommit:check": "node scripts/precommit-check.mjs",
+    "test:action-receipt-coverage": "tsx scripts/action-receipt-coverage-audit.ts --audit",
+    "test:action-receipt-coverage:selftest": "tsx scripts/action-receipt-coverage-audit.ts --candidate-selftest && tsx scripts/action-receipt-coverage-audit.ts --promotion-selftest",
     "test:canvas": "node scripts/run-e2e.mjs tests/e2e/canvas-interactions.spec.ts tests/e2e/canvas-coverage.spec.ts",
     "test:e2e": "node scripts/run-e2e.mjs",
     "test:e2e-policy": "node scripts/e2e-flake-policy-selftest.mjs",

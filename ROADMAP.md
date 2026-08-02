@@ -7422,3 +7422,25 @@ typecheck; lint with 0 errors / 587 existing warnings; production build and isol
 
 Suggested commit title:
 `feat(authority): add durable action receipt foundation`.
+
+## 2026-08-02 — B115 W3B0 action-receipt coverage authority — VERIFIED
+
+Forge now has one reviewed fail-closed receipt-policy inventory spanning all 82 current non-GET routes and 48
+durable/host/browser/database mutation surfaces. Canonical effects, authority scope, Agent History disposition,
+resource owner, source anchor, semantic policy, and W3B integration batch must agree. Unknown, stale, duplicate,
+effect-narrowed, scope-invalid, or generated-but-unreviewed entries fail before they can authorize a receipt.
+
+The pure resolver returns exact W3A prepare input or stable refusal without invoking a handler. Candidate generation
+is deterministic and contained; reviewed promotion requires exact candidate and prior-state hashes; precommit audits
+only the reviewed manifest. Current policy totals are 46 required / 20 exempt / 15 separately governed / 1 refused
+route and 27 required / 15 exempt / 6 separately governed surfaces. No production mutation consumes receipts yet;
+W3B1-W3B3 and W3C remain open.
+
+Evidence: pure engine 98/98; candidate/promotion 57/57 + 23/23; reviewed hash
+`e7a1426590e64bca7c184f7adb0c77fbee5c00be02773624dfe92294dca279a7`; fresh-bundle routes 400/400; isolated runtime
+130/130; writers/capabilities/MCP/type/lint/build/precommit green; Graphify 4,249 nodes / 10,210 edges / 178
+communities. Failed 396/400 and 399/400 attempts, exact repairs, negative paths, and triggered AAR remain in
+`docs/plans/2026-08-02-w3b0-action-receipt-coverage.md`.
+
+Suggested commit title:
+`feat(authority): enforce action receipt coverage inventory`.

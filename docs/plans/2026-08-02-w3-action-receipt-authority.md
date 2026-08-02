@@ -1,6 +1,6 @@
 # B115 W3 — authoritative action receipts and transaction truth
 
-Status: W3A VERIFIED; W3 remains IN_PROGRESS at W3B0
+Status: W3A and W3B0 VERIFIED; W3 remains IN_PROGRESS at W3B1
 Lane: FULL
 GitHub owners: `#20` primary, `#19` convergence projection
 Dependency: W0-W2B VERIFIED through B118
@@ -259,6 +259,14 @@ Dependency: W0-W2B VERIFIED through B118
     link fields are overwritten. Production mutation handlers are intentionally untouched.
   - The 116-check selftest is runtime-registered; route and durable-writer governance manifests include the exact new
     route/source/writer boundaries.
+- W3B0 actual bounded changes:
+  - One strict reviewed manifest joins all 82 current non-GET routes and 48 durable/host/browser/database surfaces to
+    canonical effects, authority scopes, Agent History disposition, policy class, owner, source anchor, and W3B batch.
+  - A pure fail-closed resolver produces exact W3A prepare input or a stable refusal without invoking a handler.
+  - Deterministic candidate generation is separate from explicit hash-pinned promotion; normal precommit audits only
+    the reviewed manifest and rejects route, effect, writer, owner, scope, or semantic drift.
+  - Validation-required route/process repairs guarantee a fresh production bundle, independent Windows ZIP proof,
+    and honest bounded descendant termination on the reproduced taskkill-denied path. They add no route or authority.
 
 ## VALIDATE
 
@@ -293,6 +301,14 @@ Dependency: W0-W2B VERIFIED through B118
 - Final `npm run precommit:check` after durable close synchronization -> exit 0 in 123.2 seconds: tripwires 0,
   mirror parity, verdict 26/26, product-copy, writer 14/14 plus extension 8/8, capability/MCP, typecheck, and size
   gates all passed.
+- W3B0 policy and inventory: pure engine 98/98; candidate/promotion 57/57 + 23/23; reviewed manifest 82 routes /
+  48 surfaces, hash `e7a1426590e64bca7c184f7adb0c77fbee5c00be02773624dfe92294dca279a7`; writers,
+  capability, MCP, typecheck, lint, and diff gates PASS.
+- W3B0 runtime: the unchanged complete route gate returned 400/400 after its mandatory fresh build; the isolated
+  runtime index returned 130/130, stopped the exact server, closed the port, and removed its isolated state. Graphify
+  refreshed to 4,249 nodes / 10,210 edges / 178 communities. The implementation precommit gate passed in 217.6s.
+- W3B0 visual/installed/X4 applicability: none. It mounts no production receipt consumer and adds no visible control;
+  W3C still requires real installed/rendered Antigravity proof.
 
 ## REVIEW
 
@@ -308,6 +324,9 @@ Dependency: W0-W2B VERIFIED through B118
   corruption, deletion, and reopen leave canonical receipt bytes/hash/status unchanged.
 - W3B/W3C items 9-18 — deliberately not claimed. No production mutation handler, response envelope, UI, MCP, CLI,
   harness, package, installed extension, or live game path changed in W3A.
+- W3B0 acceptance 1-10 — done/evidenced. Every current route/surface has one reviewed disposition; all fail-closed
+  semantic, drift, candidate, promotion, scope, and W3A-construction negatives pass. The explicit item-10 plan change
+  permits only the reproduced evidence-path repairs and adds no receipt integration.
 - Fresh-eyes findings corrected before acceptance: five first-candidate gaps, six lifecycle/semantic gaps, legacy
   method and mixed-recovery gaps, locale-sensitive ordering, broken operation-idempotency semantics, invalid-error
   remapping, CommonJS bundle startup, and the initially missing history adapter. The final full source/diff review
@@ -315,18 +334,19 @@ Dependency: W0-W2B VERIFIED through B118
 
 ## CLOSE
 
-- Status: W3A `VERIFIED`; W3 overall `IN_PROGRESS`.
+- Status: W3A and W3B0 `VERIFIED`; W3 overall `IN_PROGRESS` at W3B1.
 - Changed: strict durable receipt schema/store, exact terminal history projection substrate, 116-check runtime oracle,
   and mechanically reviewed route/writer source deltas.
 - Deliberately unchanged: every real mutation path and every UI/MCP/CLI/harness response consumer. W3A does not make
   the current Forge receipt-authoritative; W3B integration and W3C parity remain required.
 - Capability-map delta: verified receipt substrate only, explicitly not mutation coverage or visible parity.
-- Remaining risks: the store assumes one server writer; W3B0 must prove no second process imports it. Directory fsync,
-  TOCTOU under hostile local filesystem replacement, and bounded retention remain explicit follow-up concerns. The
-  route harness currently probes whatever `dist` exists; W3B0 now requires a freshness/order gate.
-- Suggested checkpoint title: `feat(authority): add durable action receipt foundation`.
+- Remaining risks: no CLI, MCP, extension host, subprocess, or production handler imports a second receipt-store
+  writer, but W3B1-W3B3 still must bind 46 required routes and 27 required surfaces to prepare/finalize/fail truth.
+  Directory fsync, hostile local replacement, bounded retention, and W3C installed projection remain follow-ups.
+- Suggested W3B0 checkpoint title: `feat(authority): enforce action receipt coverage inventory`.
 - Checkpoint committed/pushed: `bec8247a84a2267d9429f5bef67fc7c8ab5c6411`; local HEAD, `origin/main`, and remote
   main were equal immediately after push.
+- W3B0 checkpoint commit/push and GitHub readback: pending durable synchronization after the verified local close.
 
 ## AAR
 

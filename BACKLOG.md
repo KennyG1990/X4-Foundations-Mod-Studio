@@ -53,8 +53,14 @@ or dispatcher was added. W3 receipts, B64-SEC5 and generic built-in-harness disp
 content identity, contained atomic store, complete lifecycle/recovery truth, and exact fail-soft Agent History
 projection substrate crossed 116/116 focused checks, 73/73 history checks, 130/130 runtime oracles, 400/400 routes
 against a fresh production bundle, and all static/governance/build gates. No production mutation path consumes the
-receipt yet; W3B0 coverage inventory is the next bounded unit, followed by W3B integration and W3C surface parity.
+receipt yet; W3B integration and W3C surface parity remain.
 Evidence: `docs/plans/2026-08-02-w3-action-receipt-authority.md`.
+
+**W3B0 checkpoint (2026-08-02): `VERIFIED`.** The reviewed coverage oracle classifies all 82 current non-GET routes
+and 48 durable/host/browser/database surfaces, rejects semantic and inventory drift, and resolves exact W3A prepare
+input or stable refusal without invoking a handler. Candidate/promotion, 400/400 fresh-bundle routes, 130/130 isolated
+runtime oracles, precommit, and Graphify are green. No production mutation emits a receipt yet; W3B1 addressed-state
+integration is next. Evidence: `docs/plans/2026-08-02-w3b0-action-receipt-coverage.md`.
 
 ### B110 · Kimi R1-R21 execution program `in_progress` (P1, DURABLE LEDGER)
 

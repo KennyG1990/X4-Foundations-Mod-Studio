@@ -29,6 +29,30 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 
+function runRequiredBuild() {
+  const windowsNpmCli = process.env.npm_execpath || path.join(
+    path.dirname(process.execPath),
+    'node_modules',
+    'npm',
+    'bin',
+    'npm-cli.js',
+  );
+  const npmCommand = process.platform === 'win32' ? process.execPath : 'npm';
+  const npmArgs = process.platform === 'win32' ? [windowsNpmCli, 'run', 'build'] : ['run', 'build'];
+  const result = spawnSync(npmCommand, npmArgs, {
+    cwd: process.cwd(),
+    shell: false,
+    stdio: 'inherit',
+  });
+  if (result.error) {
+    throw new Error(`[route-integration] required npm run build could not start: ${result.error.message}`);
+  }
+  if (result.status !== 0) {
+    const outcome = result.signal ? `signal ${result.signal}` : `exit code ${result.status}`;
+    throw new Error(`[route-integration] required npm run build failed with ${outcome}`);
+  }
+}
+
 async function findFreePort() {
   return await new Promise((resolve, reject) => {
     const probe = net.createServer();
@@ -217,6 +241,10 @@ function regularTreeHash(root) {
 
 let child;
 async function main() {
+  // Production assertions must always use bytes emitted by this invocation.
+  // Keep the build synchronous so no route server can start before it passes.
+  runRequiredBuild();
+
   const tsxCli = path.join(process.cwd(), 'node_modules', 'tsx', 'dist', 'cli.mjs');
   child = spawn(process.execPath, [tsxCli, 'server.ts'], {
     cwd: process.cwd(),
@@ -1879,7 +1907,7 @@ async function main() {
   const nexusExtract = path.join(tmp, 'nexus-extracted');
   fs.mkdirSync(nexusExtract, { recursive: true });
   const extract = process.platform === 'win32'
-    ? spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', 'Expand-Archive -LiteralPath $env:X4FORGE_ZIP -DestinationPath $env:X4FORGE_EXTRACT -Force'], { env: { ...process.env, X4FORGE_ZIP: nexusRelease.json?.zipPath || '', X4FORGE_EXTRACT: nexusExtract }, encoding: 'utf8' })
+    ? spawnSync(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe'), ['-xf', nexusRelease.json?.zipPath || '', '-C', nexusExtract], { encoding: 'utf8', shell: false, windowsHide: true })
     : spawnSync('unzip', ['-q', nexusRelease.json?.zipPath || '', '-d', nexusExtract], { encoding: 'utf8' });
   ok('nexus_zip_extracts_with_independent_system_tool', extract.status === 0, String(extract.stderr || '').slice(-200));
   const extractedBinary = path.join(nexusExtract, releaseName, 'assets', 'opaque.bin');
@@ -2107,7 +2135,7 @@ async function main() {
   // coverage is how a false "done" reaches a user, so the prod bundle is now probed for real.
   const distServer = path.join(process.cwd(), 'dist', 'server.cjs');
   if (!fs.existsSync(distServer)) {
-    ok('production_surface_probed', false, 'dist/server.cjs missing — run npm run build. NOT silently skipped.');
+    ok('production_surface_probed', false, 'required build completed without dist/server.cjs. NOT silently skipped.');
   } else {
     const defaultClosedPort = await findFreePort();
     const defaultClosedToken = `${SESSION_TOKEN}-default-closed`;

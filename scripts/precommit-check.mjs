@@ -164,6 +164,19 @@ function checkCapabilityContracts() {
   }
 }
 
+function checkActionReceiptCoverage() {
+  console.log("[precommit] action-receipt coverage audit");
+  const result = spawnSync("npm run test:action-receipt-coverage", {
+    cwd: root,
+    shell: true,
+    stdio: "inherit",
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(`action-receipt coverage audit failed with exit ${result.status ?? "unknown"}`);
+  }
+}
+
 try {
   checkTripwires();
   checkMirrorDrift();
@@ -171,6 +184,7 @@ try {
   checkProductCopy();
   checkDurableWriters();
   checkCapabilityContracts();
+  checkActionReceiptCoverage();
   runTypecheck();
   checkLargeFiles();
   console.log("[precommit] OK");
