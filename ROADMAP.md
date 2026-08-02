@@ -7369,3 +7369,31 @@ No game/mod/config write, provider spend, marketplace publish, stored-key migrat
 
 Suggested commit title:
 `security(agent): expose and enforce effective capability authority`.
+
+## 2026-08-02 — GitHub feature-ledger projection — VERIFIED
+
+X4 Forge now has one synchronized public GitHub execution projection without replacing repository technical truth.
+Existing convergence initiative/issues `#9`–`#21` were updated non-destructively: each original body remains the
+non-empty requirement prefix and each issue has exactly one replaceable Forge implementation-ledger block. All remain
+open because their complete feature boundaries are not yet verified.
+
+The Kimi execution ledger is issue `#29`, with 19/21 recommendations checked and only R18/R21 left open through
+children `#30` and `#31`. B111–B114 are independently owned by `#32`–`#35`; post-Kimi research is queued in `#36`;
+and the already-verified B109 guided Nexus/Steam Release Center is recorded in `#37`, the only issue in this set
+closed with reason `completed`. All incomplete items remain open. Exact-topic duplicate searches found no second
+feature owner; the R18 search returned only its parent reference plus child owner `#30`.
+
+Repository Markdown remains authoritative for implementation status, acceptance contracts, evidence, validation and
+AARs. GitHub is the synchronized public execution ledger. `AGENTS.md`, `CLAUDE.md` and `GEMINI.md` carry the same
+policy and are byte-identical at SHA-256
+`5AB37EBDC5AD8C6D44DF17AFCDFA5AEF33461650BAAFBC6311FBBA5974B3D02D`.
+
+Validation: connector-backed issue readback passed for `#9`–`#21` and `#29`–`#37`; every required open/closed state,
+marker count, parent checklist and link passed; initial task-path `git diff --check` exited 0; and
+`npm run precommit:check` passed in 130.3 seconds, including mirror parity, 26/26 verdict selftests, product-copy,
+writer, capability/MCP, typecheck, size and tripwire gates. No executable product behavior, code, API, schema,
+dependency, release, provider, credential, installed product, game, mod or standing configuration changed. No product
+capability-map delta.
+
+Suggested commit title:
+`docs: synchronize GitHub feature ledgers`.

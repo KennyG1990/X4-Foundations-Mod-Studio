@@ -443,7 +443,15 @@ Ken's explicit sign-off, never a silent re-derivation.
 **Capability map:** `F:\StarForge\wiki\x4-forge\capability-map.md` — read before ANY reconcile; update
 by DELTA per workflow rule 3.4.
 
-**Records (MD-only, no third-party trackers — Ken's policy):**
+**Records and GitHub feature ledger (Ken's policy, updated 2026-08-01):**
+- Repository Markdown remains authoritative for implementation state, acceptance contracts, evidence, close status,
+  and AARs. GitHub Issues are the public execution projection, not a replacement source of technical truth.
+- Every scoped feature or program must have exactly one non-duplicate GitHub owner issue. Parent programs use
+  checklists; independently executable remaining units get child issues. Update/check/close the issue in the same
+  task that changes its repository status, and link the exact plan/evidence.
+- Reconcile existing issue titles, bodies, and resources before creating an issue. Never duplicate a working feature
+  or close an issue from partial infrastructure. GitHub issue state does not authorize code, release, game/mod,
+  credential, spending, or network mutations.
 - `BACKLOG.md` (per repo, SMALL): open work only — SPECIFIED / in-progress items. Sessions start here.
 - `ROADMAP.md`: append-only verified history. Forge-codebase work → this repo's ROADMAP; mod + bridge
   work → `x4_ai_influence/x4_neural_link/ROADMAP.md`. Closing a backlog item MOVES it here dated.

@@ -7,6 +7,8 @@ Approved: 2026-07-31 by Ken
 Sources: Google Drive “X4 Forge — Capability Convergence Feature Request Package”; GitHub initiative
 `KennyG1990/X4_Forge#9`; child issues `#10` through `#21`; current Forge source and project records;
 `WingedGuardian/x4-claude-toolkit` at commit `112df5835ddd10aa62a8b791758a3db1ae2798da`.
+GitHub issues `#9`–`#21` carry replaceable Forge implementation-ledger blocks; repository plans and evidence remain
+authoritative. Update both surfaces in the same bounded close without marking partial infrastructure complete.
 
 ## PLAN
 

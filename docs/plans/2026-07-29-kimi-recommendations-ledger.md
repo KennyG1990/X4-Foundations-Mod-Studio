@@ -5,6 +5,10 @@ make each future implementation a bounded workflow task rather than an untracked
 
 **Baseline:** clean `main == origin/main == 72ec4aa77d2d99a79b308101c7d34b58b5966de2` on 2026-07-29.
 
+**GitHub execution ledger (2026-08-01):** parent issue `#29`; remaining R18 child `#30`; remaining R21 child
+`#31`; related verified Nexus/Steam Release Center `#37`. Update the parent checklist and applicable child in the
+same verified close that changes a row below.
+
 ## Status vocabulary
 
 - `VERIFIED`: the recommendation's substance exists and has current cited proof.
