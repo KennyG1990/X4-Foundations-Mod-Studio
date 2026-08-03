@@ -4,6 +4,7 @@ Status: IN_PROGRESS; W3A and W3B0 VERIFIED, implementation continues with W3B1
 Lane: FULL
 Inventory cutoff: 2026-08-02
 Owner: active Sol coordinator; implementation code is delegated only to native `luna_executor` workers
+Current documented status report: `docs/plans/2026-08-02-original-pending-issues-status-report.md`
 
 ## PLAN
 

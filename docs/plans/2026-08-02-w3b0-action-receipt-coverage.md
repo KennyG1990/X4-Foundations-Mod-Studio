@@ -1,6 +1,6 @@
 # B115 W3B0 — action-receipt coverage oracle and pure request policy
 
-Status: VERIFIED; implementation and declared validation complete, durable GitHub/commit synchronization in progress
+Status: VERIFIED; committed/pushed and GitHub ledger readback complete
 Lane: FULL
 GitHub owners: `#20` primary, `#19` convergence projection
 Dependency: corrected W3A schema/store must be VERIFIED before this slice is accepted
@@ -262,6 +262,14 @@ Dependency: corrected W3A schema/store must be VERIFIED before this slice is acc
   `e7a1426590e64bca7c184f7adb0c77fbee5c00be02773624dfe92294dca279a7`, typecheck, and size gates all passed.
 - Final synchronized `npm run precommit:check` after repository and StarForge durable close updates returned exit 0
   in 192.8 seconds with the same exact receipt-coverage hash/counts and every repository gate green.
+- Git checkpoint: `d247400bf399ef52efed081a058757eaec42c025` committed and pushed; local HEAD, `origin/main`, and
+  remote `refs/heads/main` matched exactly after push.
+- GitHub projection readback: `#20` and `#19` remain open/`PARTIAL`; each has exactly one implementation-ledger
+  start/end marker, the exact W3B0 plan link, short commit `d247400`, and full commit link. Connector readback matched
+  the submitted body byte-for-byte at 2026-08-03T02:16Z.
+- Original-scope report reconciliation found parent `#9` still described W3 as unspecified. Its one replaceable
+  ledger block was refreshed to W3A/W3B0 truth; 2026-08-03T02:28:21Z readback was byte-exact, open/`PARTIAL`, with
+  one marker pair and exact `d247400` evidence links.
 - Visual/installed/X4 applicability: none for W3B0. It creates no visible extension control and mounts no production
   receipt consumer. Installed/rendered Antigravity proof remains mandatory for W3C; X4 remains stopped and is not a
   gate for this pure policy checkpoint.
@@ -296,6 +304,8 @@ Dependency: corrected W3A schema/store must be VERIFIED before this slice is acc
 - Remaining risks: W3B1-W3B3 still must bind the 46 required routes and 27 required non-route surfaces to real
   prepare/finalize/fail receipts; W3C still owns installed Antigravity projection and rendered proof.
 - Suggested close title: `feat(authority): enforce action receipt coverage inventory`.
+- Checkpoint committed/pushed: `d247400bf399ef52efed081a058757eaec42c025`; remote parity and GitHub readback
+  passed.
 
 ## AAR
 
@@ -352,6 +362,12 @@ Dependency: corrected W3A schema/store must be VERIFIED before this slice is acc
 - Improve work/approach: a fail-fast combined wrapper discarded independently completed sibling results three times,
   including a final static batch where one trailing-whitespace check was red. Run red-prone diagnostics serially or
   catch and report each child result before aggregation.
+- Improve tools: the first `git commit` wrapper allowed only 124 seconds, shorter than the mandatory precommit hook;
+  it terminated the hook with HEAD unchanged and no leaked lock. The exact index was re-audited and the retry used an
+  eight-minute bound, completed in 194.3 seconds, and produced `d247400` without bypassing checks.
+- Improve tools: managed approval queues delayed Graphify, staging, push, and GitHub synchronization by tens of
+  minutes to hours. Every delayed action was read back before retry or continuation; approval latency is not evidence
+  of execution, failure, or success.
 - Highest-risk evidenced weakness: W3B0 now proves that every known effect has a reviewed receipt policy, but it does
   not prove those required effects actually emit receipts. W3B1-W3B3 are the bounded integration fix.
 - Lessons banked: project and general AAR ledgers updated at the verified close.

@@ -346,7 +346,9 @@ Dependency: W0-W2B VERIFIED through B118
 - Suggested W3B0 checkpoint title: `feat(authority): enforce action receipt coverage inventory`.
 - Checkpoint committed/pushed: `bec8247a84a2267d9429f5bef67fc7c8ab5c6411`; local HEAD, `origin/main`, and remote
   main were equal immediately after push.
-- W3B0 checkpoint commit/push and GitHub readback: pending durable synchronization after the verified local close.
+- W3B0 checkpoint `d247400bf399ef52efed081a058757eaec42c025` committed/pushed with exact local/origin/remote
+  parity. GitHub `#20` and `#19` remain open/`PARTIAL`; readback found one exact ledger marker pair, plan link, and
+  short/full commit link on each.
 
 ## AAR
 

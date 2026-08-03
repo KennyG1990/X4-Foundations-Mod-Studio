@@ -7442,5 +7442,10 @@ Evidence: pure engine 98/98; candidate/promotion 57/57 + 23/23; reviewed hash
 communities. Failed 396/400 and 399/400 attempts, exact repairs, negative paths, and triggered AAR remain in
 `docs/plans/2026-08-02-w3b0-action-receipt-coverage.md`.
 
+Checkpoint `d247400bf399ef52efed081a058757eaec42c025` is pushed with local/origin/remote parity. GitHub `#20` and `#19`
+remain open/`PARTIAL`; connector readback proved exactly one W3B0 ledger block, plan link, and commit link on each.
+The original-scope status audit also refreshed stale parent `#9` to the same W3A/W3B0 truth and read it back exact;
+the parent remains open/`PARTIAL`.
+
 Suggested commit title:
 `feat(authority): enforce action receipt coverage inventory`.
