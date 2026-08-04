@@ -36,6 +36,16 @@ export interface ActionReceiptStoreSuccess {
   receipt: ActionReceipt;
 }
 
+/**
+ * Result of the synchronous prepare existence/create decision.  The disposition is intentionally
+ * separate from the legacy prepare return so a caller can fail closed on an existing prepared
+ * receipt instead of replaying its mutation after a same-operation race.
+ */
+export interface ActionReceiptPrepareDisposition {
+  receipt: ActionReceipt;
+  created: boolean;
+}
+
 export interface ActionReceiptStoreFailure {
   ok: false;
   code: string;
@@ -87,6 +97,13 @@ function isMissingFilesystemEntry(error: unknown): boolean {
   return code === 'ENOENT' || code === 'ENOTDIR';
 }
 
+function isUnavailableRealpathAncestor(error: unknown): boolean {
+  const code = error && typeof error === 'object' && 'code' in error
+    ? (error as NodeJS.ErrnoException).code
+    : undefined;
+  return code === 'EPERM';
+}
+
 function transitionAt(input: Omit<ActionReceiptTransitionInput, 'to' | 'at'> & { at?: string }, now: () => number): string {
   return input.at ?? new Date(now()).toISOString();
 }
@@ -117,14 +134,21 @@ export class ActionReceiptStore {
     return this.pathFor(id);
   }
 
-  private assertPhysicalDirectory(candidate: string, stat: fs.Stats): void {
+  private assertPhysicalDirectory(candidate: string, stat: fs.Stats, allowUnavailableRealpath = false): boolean {
     if (!stat.isDirectory() || stat.isSymbolicLink()) {
       throw new ActionReceiptStoreError('RECEIPT_ROOT_ESCAPE', 'Receipt store root contains a non-directory or symbolic-link segment.');
     }
-    const realCandidate = fs.realpathSync.native(candidate);
+    let realCandidate: string;
+    try {
+      realCandidate = fs.realpathSync.native(candidate);
+    } catch (error) {
+      if (allowUnavailableRealpath && isUnavailableRealpathAncestor(error)) return false;
+      throw error;
+    }
     if (!samePath(realCandidate, candidate)) {
       throw new ActionReceiptStoreError('RECEIPT_ROOT_ESCAPE', 'Receipt store root contains a junction or symlink ancestor.');
     }
+    return true;
   }
 
   private ensureRoot(create: boolean): boolean {
@@ -132,22 +156,42 @@ export class ActionReceiptStore {
       const parsed = path.parse(this.root);
       const relative = path.relative(parsed.root, this.root);
       let current = parsed.root;
+      // A strict ancestor may be lstat-accessible while Windows denies realpath (for example, a
+      // sandboxed user-profile directory).  Defer that ancestor's proof until a deeper existing
+      // directory resolves exactly.  lstat still rejects Node-visible symlinks and junctions first,
+      // and no missing segment may be created unless its immediate parent is the latest exactly
+      // resolved directory.  EPERM therefore never becomes authority to write through an unknown
+      // ancestor; it only permits the walk to reach a stronger, deeper physical-path proof.
+      let verifiedDirectory = parsed.root;
       for (const segment of relative.split(path.sep).filter(Boolean)) {
         current = path.join(current, segment);
         let stat: fs.Stats;
+        let existed = true;
         try {
           stat = fs.lstatSync(current);
         } catch (error) {
           if (!isMissingFilesystemEntry(error)) throw error;
           if (!create) return false;
+          if (!samePath(verifiedDirectory, path.dirname(current))) {
+            throw new ActionReceiptStoreError(
+              'RECEIPT_ROOT_UNAVAILABLE',
+              'Receipt store root cannot be created beneath an ancestor whose physical path is unavailable.',
+            );
+          }
           // Create one segment only after every existing ancestor has been checked.  Recursive
           // mkdir would follow a junction ancestor and write outside the declared root first.
           try { fs.mkdirSync(current); } catch (mkdirError) {
             if (!isMissingFilesystemEntry(mkdirError) && (mkdirError as NodeJS.ErrnoException).code !== 'EEXIST') throw mkdirError;
           }
           stat = fs.lstatSync(current);
+          existed = false;
         }
-        this.assertPhysicalDirectory(current, stat);
+        const realpathVerified = this.assertPhysicalDirectory(
+          current,
+          stat,
+          existed && !samePath(current, this.root),
+        );
+        if (realpathVerified) verifiedDirectory = current;
       }
       return true;
     } catch (error) {
@@ -241,7 +285,7 @@ export class ActionReceiptStore {
     catch (error) { const detail = errorDetails(error); return { ok: false, ...detail }; }
   }
 
-  prepare(input: ActionReceiptPrepareInput): ActionReceipt {
+  prepareWithDisposition(input: ActionReceiptPrepareInput): ActionReceiptPrepareDisposition {
     const candidate = createPreparedActionReceipt({
       ...input,
       preparedAt: input.preparedAt ?? new Date(this.now()).toISOString(),
@@ -253,13 +297,18 @@ export class ActionReceiptStore {
       const existingAuthority = canonicalizeActionReceiptAuthority(existing);
       const candidateAuthority = canonicalizeActionReceiptAuthority(candidate);
       if (existing.authorityHash === candidate.authorityHash && existingAuthority === candidateAuthority) {
-        return existing;
+        return { receipt: existing, created: false };
       }
       throw new ActionReceiptStoreError('RECEIPT_DUPLICATE_CONFLICT', 'A materially different receipt already occupies this deterministic receipt id.');
     }
     const bytes = Buffer.from(serializeActionReceipt(candidate), 'utf8');
     this.atomicWrite(file, bytes);
-    return this.readChecked(candidate.id);
+    return { receipt: this.readChecked(candidate.id), created: true };
+  }
+
+  /** Backward-compatible W3A writer surface; callers that need race disposition use the method above. */
+  prepare(input: ActionReceiptPrepareInput): ActionReceipt {
+    return this.prepareWithDisposition(input).receipt;
   }
 
   tryPrepare(input: ActionReceiptPrepareInput): ActionReceiptStoreResult {

@@ -36,14 +36,17 @@ function fnvHash(text: string): string {
 }
 
 /**
- * Content hash of the CANONICAL workspace substance. Includes everything that deploys
- * (nodes/links/domains/passthrough/stamp/meta); both sides must hash the same sanitized
- * shape — hash AFTER sanitizeWorkspace on both ends.
+ * The exact deployable substance used by the legacy content hash.
+ *
+ * Keep this as the single field-list authority. Callers should sanitize the workspace before
+ * asking for a canonical payload/string so browser and server receive the same shape.
+ * Missing values remain present in the payload object and are omitted by stableStringify,
+ * preserving the existing JSON-compatible semantics.
  */
-export function workspaceContentHash(ws: ModWorkspace | null | undefined): string {
-  if (!ws || typeof ws !== 'object') return 'empty';
+export function canonicalWorkspaceContentPayload(ws: ModWorkspace | null | undefined): Record<string, unknown> | null {
+  if (!ws || typeof ws !== 'object') return null;
   const w = ws as unknown as Record<string, unknown>;
-  const substance = {
+  return {
     name: w.name, version: w.version, author: w.author, description: w.description,
     nodes: w.nodes, links: w.links,
     uiWidgets: w.uiWidgets, aiScripts: w.aiScripts, wares: w.wares, jobs: w.jobs,
@@ -53,7 +56,26 @@ export function workspaceContentHash(ws: ModWorkspace | null | undefined): strin
     sourceStamp: w.sourceStamp, integrationContract: w.integrationContract,
     mdFileStem: w.mdFileStem,
   };
-  return fnvHash(stableStringify(substance));
+}
+
+/** Stable string authority shared by the legacy short hash and server receipt hashing. */
+export function canonicalWorkspaceContentString(ws: ModWorkspace | null | undefined): string {
+  return stableStringify(canonicalWorkspaceContentPayload(ws));
+}
+
+/** Stable string authority for every field in an already-sanitized workspace snapshot. */
+export function canonicalWorkspaceSnapshotString(ws: ModWorkspace | null | undefined): string {
+  return stableStringify(ws);
+}
+
+/**
+ * Content hash of the CANONICAL workspace substance. Includes everything that deploys
+ * (nodes/links/domains/passthrough/stamp/meta); both sides must hash the same sanitized
+ * shape — hash AFTER sanitizeWorkspace on both ends.
+ */
+export function workspaceContentHash(ws: ModWorkspace | null | undefined): string {
+  if (!ws || typeof ws !== 'object') return 'empty';
+  return fnvHash(canonicalWorkspaceContentString(ws));
 }
 
 /**
@@ -69,7 +91,7 @@ export function workspaceContentHash(ws: ModWorkspace | null | undefined): strin
  */
 export function workspaceSnapshotHash(ws: ModWorkspace | null | undefined): string {
   if (!ws || typeof ws !== 'object') return 'empty';
-  return fnvHash(stableStringify(ws as unknown as Record<string, unknown>));
+  return fnvHash(canonicalWorkspaceSnapshotString(ws));
 }
 
 /* ------------------------------------------------------------------ *
@@ -88,6 +110,10 @@ export function runWorkspaceIdentitySelftest(): {
     name: 'M', nodes: [{ id: 'n1', type: 'cue', properties: { name: 'Start', b: 1, a: 2 } }],
     links: [{ sourceNodeId: 'n1', targetNodeId: 'n2' }],
   } as unknown as ModWorkspace;
+
+  // Compatibility fixtures captured before canonical payload extraction.
+  ok('legacy_content_fixture_unchanged', workspaceContentHash(base) === 'c616589ddd4fd2a7');
+  ok('legacy_snapshot_fixture_unchanged', workspaceSnapshotHash(base) === 'c616589ddd4fd2a7');
 
   // key order must not matter
   const reordered = {

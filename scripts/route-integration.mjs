@@ -195,14 +195,91 @@ function stableStringify(value) {
   return JSON.stringify(value);
 }
 
+const workspaceReceiptContentFields = [
+  'name', 'version', 'author', 'description', 'nodes', 'links', 'uiWidgets', 'aiScripts',
+  'wares', 'jobs', 'tFiles', 'xmlPatches', 'customLua', 'compileSettings', 'dependencies',
+  'passthroughFiles', 'originalFiles', 'sourceStamp', 'integrationContract', 'mdFileStem',
+];
+
+function sha256Stable(value) {
+  return crypto.createHash('sha256').update(stableStringify(value), 'utf8').digest('hex');
+}
+
+function workspaceReceiptHashes(workspace) {
+  const content = {};
+  for (const field of workspaceReceiptContentFields) {
+    if (Object.prototype.hasOwnProperty.call(workspace || {}, field)) content[field] = workspace[field];
+  }
+  return {
+    workspace: sha256Stable(content),
+    snapshot: sha256Stable(workspace),
+  };
+}
+
+function actionReceiptFiles() {
+  const root = path.join(dataDir, 'action-receipts');
+  if (!fs.existsSync(root)) return [];
+  return fs.readdirSync(root).filter(name => /^ar_[a-f0-9]{64}\.json$/.test(name)).sort();
+}
+
+function reopenPersistedActionReceipt(projection) {
+  try {
+    const id = String(projection?.id || '');
+    if (!/^ar_[a-f0-9]{64}$/.test(id)) return { ok: false, code: 'projection_id_invalid' };
+    const file = path.join(dataDir, 'action-receipts', `${id}.json`);
+    if (!fs.existsSync(file)) return { ok: false, code: 'receipt_missing' };
+    const raw = fs.readFileSync(file, 'utf8');
+    const record = JSON.parse(raw);
+    const withoutHash = { ...record };
+    delete withoutHash.hash;
+    return {
+      ok: true,
+      raw,
+      record,
+      canonical: raw === stableStringify(record),
+      computedHash: sha256Stable(withoutHash),
+      projectionMatches: record.id === projection.id
+        && record.hash === projection.hash
+        && record.status === projection.status,
+    };
+  } catch (error) {
+    return { ok: false, code: error && typeof error === 'object' && 'code' in error ? String(error.code) : 'receipt_read_failed' };
+  }
+}
+
+function workspaceStateFingerprint(response) {
+  return stableStringify({
+    version: response?.json?.version,
+    workspaceHash: response?.json?.workspaceHash,
+    snapshotHash: response?.json?.snapshotHash,
+    workspace: response?.json?.workspace,
+  });
+}
+
 function killTree(pid) {
   if (!pid) return;
   if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' });
   else { try { process.kill(-pid, 'SIGKILL'); } catch { try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ } } }
 }
 
+/* global Buffer, URLSearchParams, console, fetch, process, setTimeout */
+/**
+ * Request options: `operationId` is the caller-owned control seam for mutation
+ * requests. Omit it for a fresh strong-random ID, pass a string to preserve an
+ * exact valid or malformed value (including replay IDs), or pass `null` to
+ * deliberately omit the operation header. An explicit
+ * `options.headers['x-forge-operation-id']` is always preserved exactly and
+ * takes precedence over this convenience option. On reads, `operationId` is
+ * ignored and an already supplied operation header is left untouched.
+ */
 async function req(method, urlPath, token, body, options = {}) {
   const headers = { ...(options.headers || {}) };
+  const hasExplicitOperationHeader = Object.keys(headers)
+    .some(key => key.toLowerCase() === 'x-forge-operation-id');
+  const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(String(method).toUpperCase());
+  if (!hasExplicitOperationHeader && isMutation && options.operationId !== null) {
+    headers['x-forge-operation-id'] = options.operationId ?? `forge_op_${crypto.randomBytes(16).toString('hex')}`;
+  }
   if (token) headers['Authorization'] = `Bearer ${token}`;
   const workspaceId = Object.prototype.hasOwnProperty.call(options, 'workspaceId') ? options.workspaceId : WORKSPACE_ID;
   if (token && workspaceId) headers['x-workspace-id'] = workspaceId;
@@ -1080,6 +1157,557 @@ async function main() {
     patchReadinessCapabilityResponse.status === 200 && patchReadinessCapabilityResponse.json?.diffFiles === 1,
     JSON.stringify(patchReadinessCapabilityResponse.json || {}));
   capabilityResponses.set('patch.readiness.analyze', patchReadinessCapabilityResponse);
+
+  // W3B1 replace slice: prove the external response projection against canonical persisted bytes.
+  const replaceProofOperationId = 'forge_op_w3b1_replace_proof';
+  const replaceRawWorkspaceMarker = 'W3B1_REPLACE_RAW_WORKSPACE_PAYLOAD';
+  const replaceProofBefore = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const replaceProofWorkspace = {
+    ...replaceProofBefore.json?.workspace,
+    description: replaceRawWorkspaceMarker,
+  };
+  const replaceProofBody = {
+    workspace: replaceProofWorkspace,
+    expectedHead: replaceProofBefore.json?.workspaceHash,
+    expectedSnapshotHash: replaceProofBefore.json?.snapshotHash,
+  };
+
+  const receiptFilesBeforeMissingId = actionReceiptFiles();
+  const missingReplaceOperation = await req(
+    'POST',
+    '/api/agent/workspace',
+    SESSION_TOKEN,
+    replaceProofBody,
+    { operationId: null },
+  );
+  const afterMissingReplaceOperation = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  ok('workspace_replace_missing_operation_id_refused_before_receipt',
+    missingReplaceOperation.status === 400
+      && missingReplaceOperation.json?.code === 'ACTION_RECEIPT_OPERATION_ID_INVALID'
+      && workspaceStateFingerprint(afterMissingReplaceOperation) === workspaceStateFingerprint(replaceProofBefore)
+      && stableStringify(actionReceiptFiles()) === stableStringify(receiptFilesBeforeMissingId),
+    `status=${missingReplaceOperation.status} code=${missingReplaceOperation.json?.code}`);
+
+  const receiptFilesBeforeMalformedId = actionReceiptFiles();
+  const malformedReplaceOperation = await req(
+    'POST',
+    '/api/agent/workspace',
+    SESSION_TOKEN,
+    replaceProofBody,
+    { operationId: 'forge/op/malformed' },
+  );
+  const afterMalformedReplaceOperation = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  ok('workspace_replace_malformed_operation_id_refused_before_receipt',
+    malformedReplaceOperation.status === 400
+      && malformedReplaceOperation.json?.code === 'ACTION_RECEIPT_OPERATION_ID_INVALID'
+      && workspaceStateFingerprint(afterMalformedReplaceOperation) === workspaceStateFingerprint(replaceProofBefore)
+      && stableStringify(actionReceiptFiles()) === stableStringify(receiptFilesBeforeMalformedId),
+    `status=${malformedReplaceOperation.status} code=${malformedReplaceOperation.json?.code}`);
+
+  const receiptFilesBeforeReplace = actionReceiptFiles();
+  const replaceProof = await req(
+    'POST',
+    '/api/agent/workspace',
+    SESSION_TOKEN,
+    replaceProofBody,
+    { operationId: replaceProofOperationId },
+  );
+  const replaceProofAfter = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const replaceProjection = replaceProof.json?.receipt;
+  const replaceReceiptEvidence = reopenPersistedActionReceipt(replaceProjection);
+  const replaceReceipt = replaceReceiptEvidence.ok ? replaceReceiptEvidence.record : undefined;
+  ok('workspace_replace_returns_committed_receipt_projection',
+    replaceProof.status === 200
+      && replaceProof.json?.success === true
+      && replaceProof.json?.applied === true
+      && replaceProjection?.status === 'committed'
+      && Object.keys(replaceProjection || {}).sort().join(',') === 'hash,id,status'
+      && actionReceiptFiles().length === receiptFilesBeforeReplace.length + 1
+      && replaceProof.json?.version === replaceProofAfter.json?.version
+      && replaceProof.json?.workspaceHash === replaceProofAfter.json?.workspaceHash
+      && replaceProof.json?.snapshotHash === replaceProofAfter.json?.snapshotHash,
+    `status=${replaceProof.status} receipt=${replaceProjection?.status}`);
+  ok('workspace_replace_persisted_receipt_is_canonical_and_hash_verified',
+    replaceReceiptEvidence.ok
+      && replaceReceiptEvidence.canonical === true
+      && replaceReceiptEvidence.computedHash === replaceReceipt?.hash
+      && replaceReceiptEvidence.projectionMatches === true,
+    `reopened=${replaceReceiptEvidence.ok} canonical=${replaceReceiptEvidence.canonical === true}`);
+  ok('workspace_replace_persisted_receipt_has_exact_identity',
+    replaceReceipt?.schema === 'forge.action-receipt.v1'
+      && replaceReceipt?.status === 'committed'
+      && replaceReceipt?.capability?.legacyRoute === '/api/agent/workspace'
+      && replaceReceipt?.capability?.method === 'POST'
+      && replaceReceipt?.metadata?.route === 'POST /api/agent/workspace'
+      && replaceReceipt?.authority?.scope === 'workspace'
+      && replaceReceipt?.authority?.operationId === replaceProofOperationId
+      && replaceReceipt?.authority?.workspaceId === WORKSPACE_ID
+      && replaceReceipt?.actor?.kind === 'human'
+      && replaceReceipt?.actor?.id === 'studio'
+      && replaceReceipt?.client?.channel === 'studio'
+      && replaceReceipt?.client?.id === CLIENT_ID
+      && replaceReceipt?.client?.version === '2026-07-30.agent.v4',
+    `route=${replaceReceipt?.metadata?.route} status=${replaceReceipt?.status}`);
+
+  const replaceBeforeHashes = workspaceReceiptHashes(replaceProofBefore.json?.workspace);
+  const replaceAfterHashes = workspaceReceiptHashes(replaceProofAfter.json?.workspace);
+  const replaceBeforeResources = new Map((replaceReceipt?.authority?.resources || []).map(resource => [resource.role, resource]));
+  const replaceAfterResources = new Map((replaceReceipt?.after?.resources || []).map(resource => [resource.role, resource]));
+  ok('workspace_replace_persisted_receipt_has_truthful_paired_resources',
+    replaceReceipt?.after?.outcome === 'applied'
+      && replaceBeforeResources.size === 2
+      && replaceAfterResources.size === 2
+      && replaceBeforeResources.get('workspace')?.root === 'workspace'
+      && replaceBeforeResources.get('workspace')?.relativePath === `${WORKSPACE_ID}/content`
+      && replaceBeforeResources.get('workspace')?.beforeHash === replaceBeforeHashes.workspace
+      && replaceBeforeResources.get('snapshot')?.root === 'workspace'
+      && replaceBeforeResources.get('snapshot')?.relativePath === `${WORKSPACE_ID}/snapshot`
+      && replaceBeforeResources.get('snapshot')?.beforeHash === replaceBeforeHashes.snapshot
+      && replaceAfterResources.get('workspace')?.hash === replaceAfterHashes.workspace
+      && replaceAfterResources.get('snapshot')?.hash === replaceAfterHashes.snapshot,
+    `before=${replaceBeforeResources.size} after=${replaceAfterResources.size} outcome=${replaceReceipt?.after?.outcome}`);
+
+  const persistedReplaceBytes = replaceReceiptEvidence.ok ? replaceReceiptEvidence.raw : '';
+  const encodedTmp = JSON.stringify(tmp).slice(1, -1);
+  const returnedProjectionBytes = stableStringify(replaceProjection || null);
+  ok('workspace_replace_receipt_evidence_leaks_no_raw_payload_token_or_path',
+    !persistedReplaceBytes.includes(replaceRawWorkspaceMarker)
+      && !persistedReplaceBytes.includes(SESSION_TOKEN)
+      && !persistedReplaceBytes.includes(tmp)
+      && !persistedReplaceBytes.includes(tmp.replaceAll('\\', '/'))
+      && !persistedReplaceBytes.includes(encodedTmp)
+      && !returnedProjectionBytes.includes(replaceRawWorkspaceMarker)
+      && !returnedProjectionBytes.includes(SESSION_TOKEN)
+      && !returnedProjectionBytes.includes(encodedTmp));
+
+  const beforeReplaceReplay = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const receiptFilesBeforeReplay = actionReceiptFiles();
+  const replaceReplay = await req(
+    'POST',
+    '/api/agent/workspace',
+    SESSION_TOKEN,
+    replaceProofBody,
+    { operationId: replaceProofOperationId },
+  );
+  const afterReplaceReplay = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  ok('workspace_replace_exact_replay_is_stable_and_non_mutating',
+    replaceReplay.status === 200
+      && replaceReplay.json?.replayed === true
+      && replaceReplay.json?.applied === false
+      && stableStringify(replaceReplay.json?.receipt) === stableStringify(replaceProjection)
+      && replaceReplay.json?.version === beforeReplaceReplay.json?.version
+      && replaceReplay.json?.workspaceHash === beforeReplaceReplay.json?.workspaceHash
+      && replaceReplay.json?.snapshotHash === beforeReplaceReplay.json?.snapshotHash
+      && stableStringify(replaceReplay.json?.workspace) === stableStringify(beforeReplaceReplay.json?.workspace)
+      && workspaceStateFingerprint(afterReplaceReplay) === workspaceStateFingerprint(beforeReplaceReplay)
+      && stableStringify(actionReceiptFiles()) === stableStringify(receiptFilesBeforeReplay),
+    `status=${replaceReplay.status} replayed=${replaceReplay.json?.replayed}`);
+
+  const beforeReplaceDuplicate = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const receiptFilesBeforeDuplicate = actionReceiptFiles();
+  const replaceDuplicate = await req('POST', '/api/agent/workspace', SESSION_TOKEN, {
+    workspace: { ...beforeReplaceDuplicate.json?.workspace, description: 'W3B1_CHANGED_MATERIAL_FACTS' },
+    expectedHead: beforeReplaceDuplicate.json?.workspaceHash,
+    expectedSnapshotHash: beforeReplaceDuplicate.json?.snapshotHash,
+  }, { operationId: replaceProofOperationId });
+  const afterReplaceDuplicate = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  ok('workspace_replace_changed_facts_duplicate_conflicts_without_mutation',
+    replaceDuplicate.status === 409
+      && replaceDuplicate.json?.success === false
+      && replaceDuplicate.json?.code === 'ACTION_RECEIPT_DUPLICATE_CONFLICT'
+      && workspaceStateFingerprint(afterReplaceDuplicate) === workspaceStateFingerprint(beforeReplaceDuplicate)
+      && stableStringify(actionReceiptFiles()) === stableStringify(receiptFilesBeforeDuplicate),
+    `status=${replaceDuplicate.status} code=${replaceDuplicate.json?.code}`);
+
+  // W3B1 merge slice: prove the external response projection against canonical persisted bytes.
+  const mergeProofOperationId = 'forge_op_w3b1_merge_proof';
+  const mergeRawWorkspaceMarker = 'W3B1_MERGE_RAW_WORKSPACE_PAYLOAD';
+  const mergeProofBefore = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const mergeProofBody = {
+    changes: { description: mergeRawWorkspaceMarker },
+    expectedHead: mergeProofBefore.json?.workspaceHash,
+    expectedSnapshotHash: mergeProofBefore.json?.snapshotHash,
+  };
+  const receiptFilesBeforeMerge = actionReceiptFiles();
+  const mergeProof = await req(
+    'POST',
+    '/api/agent/workspace/merge',
+    SESSION_TOKEN,
+    mergeProofBody,
+    { operationId: mergeProofOperationId },
+  );
+  const mergeProofAfter = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const mergeProjection = mergeProof.json?.receipt;
+  const mergeReceiptEvidence = reopenPersistedActionReceipt(mergeProjection);
+  const mergeReceipt = mergeReceiptEvidence.ok ? mergeReceiptEvidence.record : undefined;
+  ok('workspace_merge_commits_real_change_and_receipt_projection',
+    mergeProof.status === 200
+      && mergeProof.json?.success === true
+      && mergeProof.json?.applied === true
+      && mergeProofAfter.json?.workspace?.description === mergeRawWorkspaceMarker
+      && stableStringify(mergeProofAfter.json?.workspace) === stableStringify({
+        ...mergeProofBefore.json?.workspace,
+        description: mergeRawWorkspaceMarker,
+      })
+      && workspaceStateFingerprint(mergeProofAfter) !== workspaceStateFingerprint(mergeProofBefore)
+      && mergeProof.json?.version === mergeProofAfter.json?.version
+      && mergeProof.json?.workspaceHash === mergeProofAfter.json?.workspaceHash
+      && mergeProof.json?.snapshotHash === mergeProofAfter.json?.snapshotHash
+      && mergeProjection?.status === 'committed'
+      && Object.keys(mergeProjection || {}).sort().join(',') === 'hash,id,status'
+      && /^ar_[a-f0-9]{64}$/.test(String(mergeProjection?.id || ''))
+      && /^[a-f0-9]{64}$/.test(String(mergeProjection?.hash || ''))
+      && actionReceiptFiles().length === receiptFilesBeforeMerge.length + 1,
+    `status=${mergeProof.status} receipt=${mergeProjection?.status}`);
+  ok('workspace_merge_persisted_receipt_is_canonical_and_hash_verified',
+    mergeReceiptEvidence.ok
+      && mergeReceiptEvidence.canonical === true
+      && mergeReceiptEvidence.computedHash === mergeReceipt?.hash
+      && mergeReceiptEvidence.projectionMatches === true,
+    `reopened=${mergeReceiptEvidence.ok} canonical=${mergeReceiptEvidence.canonical === true}`);
+  ok('workspace_merge_persisted_receipt_has_exact_identity',
+    mergeReceipt?.schema === 'forge.action-receipt.v1'
+      && mergeReceipt?.status === 'committed'
+      && mergeReceipt?.capability?.legacyRoute === '/api/agent/workspace/merge'
+      && mergeReceipt?.capability?.method === 'POST'
+      && mergeReceipt?.metadata?.route === 'POST /api/agent/workspace/merge'
+      && mergeReceipt?.authority?.scope === 'workspace'
+      && mergeReceipt?.authority?.operationId === mergeProofOperationId
+      && mergeReceipt?.authority?.workspaceId === WORKSPACE_ID
+      && mergeReceipt?.actor?.kind === 'human'
+      && mergeReceipt?.actor?.id === 'studio'
+      && mergeReceipt?.client?.channel === 'studio'
+      && mergeReceipt?.client?.id === CLIENT_ID
+      && mergeReceipt?.client?.version === '2026-07-30.agent.v4',
+    `route=${mergeReceipt?.metadata?.route} status=${mergeReceipt?.status}`);
+
+  const mergeBeforeHashes = workspaceReceiptHashes(mergeProofBefore.json?.workspace);
+  const mergeAfterHashes = workspaceReceiptHashes(mergeProofAfter.json?.workspace);
+  const mergeBeforeResources = new Map((mergeReceipt?.authority?.resources || []).map(resource => [resource.role, resource]));
+  const mergeAfterResources = new Map((mergeReceipt?.after?.resources || []).map(resource => [resource.role, resource]));
+  ok('workspace_merge_persisted_receipt_has_truthful_paired_resources',
+    mergeReceipt?.after?.outcome === 'applied'
+      && Array.isArray(mergeReceipt?.authority?.resources)
+      && mergeReceipt.authority.resources.length === 2
+      && Array.isArray(mergeReceipt?.after?.resources)
+      && mergeReceipt.after.resources.length === 2
+      && mergeBeforeResources.size === 2
+      && mergeAfterResources.size === 2
+      && mergeBeforeResources.get('workspace')?.root === 'workspace'
+      && mergeBeforeResources.get('workspace')?.relativePath === `${WORKSPACE_ID}/content`
+      && mergeBeforeResources.get('workspace')?.beforeHash === mergeBeforeHashes.workspace
+      && mergeBeforeResources.get('snapshot')?.root === 'workspace'
+      && mergeBeforeResources.get('snapshot')?.relativePath === `${WORKSPACE_ID}/snapshot`
+      && mergeBeforeResources.get('snapshot')?.beforeHash === mergeBeforeHashes.snapshot
+      && mergeAfterResources.get('workspace')?.hash === mergeAfterHashes.workspace
+      && mergeAfterResources.get('snapshot')?.hash === mergeAfterHashes.snapshot,
+    `before=${mergeBeforeResources.size} after=${mergeAfterResources.size} outcome=${mergeReceipt?.after?.outcome}`);
+
+  const persistedMergeBytes = mergeReceiptEvidence.ok ? mergeReceiptEvidence.raw : '';
+  const returnedMergeProjectionBytes = stableStringify(mergeProjection || null);
+  const mergeEvidenceBytes = `${persistedMergeBytes}\n${returnedMergeProjectionBytes}`;
+  const mergeEvidenceNeedles = [
+    mergeRawWorkspaceMarker,
+    JSON.stringify(mergeRawWorkspaceMarker).slice(1, -1),
+    SESSION_TOKEN,
+    JSON.stringify(SESSION_TOKEN).slice(1, -1),
+    tmp,
+    tmp.replaceAll('\\', '/'),
+    JSON.stringify(tmp).slice(1, -1),
+    JSON.stringify(tmp.replaceAll('\\', '/')).slice(1, -1),
+  ];
+  ok('workspace_merge_receipt_evidence_leaks_no_raw_payload_token_or_path',
+    mergeEvidenceNeedles.every(needle => !mergeEvidenceBytes.includes(needle)));
+
+  const beforeMergeReplay = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const receiptFilesBeforeMergeReplay = actionReceiptFiles();
+  const mergeReplay = await req(
+    'POST',
+    '/api/agent/workspace/merge',
+    SESSION_TOKEN,
+    mergeProofBody,
+    { operationId: mergeProofOperationId },
+  );
+  const afterMergeReplay = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  ok('workspace_merge_exact_replay_is_stable_and_non_mutating',
+    mergeReplay.status === 200
+      && mergeReplay.json?.replayed === true
+      && mergeReplay.json?.applied === false
+      && stableStringify(mergeReplay.json?.receipt) === stableStringify(mergeProjection)
+      && workspaceStateFingerprint(afterMergeReplay) === workspaceStateFingerprint(beforeMergeReplay)
+      && stableStringify(actionReceiptFiles()) === stableStringify(receiptFilesBeforeMergeReplay),
+    `status=${mergeReplay.status} replayed=${mergeReplay.json?.replayed}`);
+
+  const beforeMergeDuplicate = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const receiptFilesBeforeDuplicateMerge = actionReceiptFiles();
+  const mergeDuplicate = await req('POST', '/api/agent/workspace/merge', SESSION_TOKEN, {
+    changes: { description: 'W3B1_MERGE_CHANGED_MATERIAL_FACTS' },
+    expectedHead: beforeMergeDuplicate.json?.workspaceHash,
+    expectedSnapshotHash: beforeMergeDuplicate.json?.snapshotHash,
+  }, { operationId: mergeProofOperationId });
+  const afterMergeDuplicate = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  ok('workspace_merge_changed_facts_duplicate_conflicts_without_mutation',
+    mergeDuplicate.status === 409
+      && mergeDuplicate.json?.success === false
+      && mergeDuplicate.json?.code === 'ACTION_RECEIPT_DUPLICATE_CONFLICT'
+      && workspaceStateFingerprint(afterMergeDuplicate) === workspaceStateFingerprint(beforeMergeDuplicate)
+      && stableStringify(actionReceiptFiles()) === stableStringify(receiptFilesBeforeDuplicateMerge),
+    `status=${mergeDuplicate.status} code=${mergeDuplicate.json?.code}`);
+
+  const staleReceiptOperationId = 'forge_op_w3b1_stale_receipt';
+  const staleReceiptExternalOperationId = 'forge_op_w3b1_stale_external';
+  const staleReceiptBaseline = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const receiptFilesBeforeStaleReceiptExternal = actionReceiptFiles();
+  const staleReceiptExternal = await req('POST', '/api/agent/workspace', SESSION_TOKEN, {
+    workspace: { ...staleReceiptBaseline.json?.workspace, description: 'W3B1_STALE_RECEIPT_EXTERNAL_CHANGE' },
+    expectedHead: staleReceiptBaseline.json?.workspaceHash,
+    expectedSnapshotHash: staleReceiptBaseline.json?.snapshotHash,
+  }, { operationId: staleReceiptExternalOperationId });
+  const afterStaleReceiptExternal = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const staleReceiptExternalProjection = staleReceiptExternal.json?.receipt;
+  const staleReceiptExternalEvidence = reopenPersistedActionReceipt(staleReceiptExternalProjection);
+  ok('workspace_stale_receipt_external_change_established',
+    staleReceiptExternal.status === 200
+      && staleReceiptExternal.json?.applied === true
+      && Object.keys(staleReceiptExternalProjection || {}).sort().join(',') === 'hash,id,status'
+      && staleReceiptExternalProjection?.status === 'committed'
+      && staleReceiptExternalEvidence.ok
+      && staleReceiptExternalEvidence.projectionMatches === true
+      && afterStaleReceiptExternal.json?.workspace?.description === 'W3B1_STALE_RECEIPT_EXTERNAL_CHANGE'
+      && workspaceStateFingerprint(afterStaleReceiptExternal) !== workspaceStateFingerprint(staleReceiptBaseline)
+      && actionReceiptFiles().length === receiptFilesBeforeStaleReceiptExternal.length + 1,
+    `status=${staleReceiptExternal.status} receipt=${staleReceiptExternalProjection?.status}`);
+
+  const staleReceiptBody = {
+    workspace: { ...staleReceiptBaseline.json?.workspace, description: 'W3B1_STALE_RECEIPT_FAILED_ATTEMPT' },
+    expectedHead: staleReceiptBaseline.json?.workspaceHash,
+    expectedSnapshotHash: staleReceiptBaseline.json?.snapshotHash,
+  };
+  const beforeStaleReceiptAttempt = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const receiptFilesBeforeStaleReceipt = actionReceiptFiles();
+  const staleReceiptAttempt = await req(
+    'POST',
+    '/api/agent/workspace',
+    SESSION_TOKEN,
+    staleReceiptBody,
+    { operationId: staleReceiptOperationId },
+  );
+  const afterStaleReceiptAttempt = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const staleReceiptProjection = staleReceiptAttempt.json?.receipt;
+  const staleReceiptEvidence = reopenPersistedActionReceipt(staleReceiptProjection);
+  const staleReceipt = staleReceiptEvidence.ok ? staleReceiptEvidence.record : undefined;
+  ok('workspace_stale_receipt_failed_projection_persisted',
+    staleReceiptAttempt.status === 409
+      && staleReceiptAttempt.json?.error === 'head_conflict'
+      && Object.keys(staleReceiptProjection || {}).sort().join(',') === 'hash,id,status'
+      && staleReceiptProjection?.status === 'failed'
+      && workspaceStateFingerprint(afterStaleReceiptAttempt) === workspaceStateFingerprint(beforeStaleReceiptAttempt)
+      && actionReceiptFiles().length === receiptFilesBeforeStaleReceipt.length + 1,
+    `status=${staleReceiptAttempt.status} error=${staleReceiptAttempt.json?.error} receipt=${staleReceiptProjection?.status}`);
+  ok('workspace_stale_receipt_failed_persisted_canonical_hash_valid',
+    staleReceiptEvidence.ok
+      && staleReceiptEvidence.canonical === true
+      && staleReceiptEvidence.computedHash === staleReceipt?.hash
+      && staleReceiptEvidence.projectionMatches === true
+      && staleReceipt?.status === 'failed'
+      && staleReceipt?.authority?.operationId === staleReceiptOperationId
+      && staleReceipt?.validation?.status === 'failed',
+    `reopened=${staleReceiptEvidence.ok} canonical=${staleReceiptEvidence.canonical === true}`);
+
+  const beforeStaleReceiptReplay = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const receiptFilesBeforeStaleReceiptReplay = actionReceiptFiles();
+  const staleReceiptReplay = await req(
+    'POST',
+    '/api/agent/workspace',
+    SESSION_TOKEN,
+    staleReceiptBody,
+    { operationId: staleReceiptOperationId },
+  );
+  const afterStaleReceiptReplay = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const staleReceiptReplayProjection = staleReceiptReplay.json?.receipt;
+  const staleReceiptReplayEvidence = reopenPersistedActionReceipt(staleReceiptReplayProjection);
+  ok('workspace_stale_receipt_failed_replay_is_stable_nonmutating',
+    staleReceiptReplay.status === 409
+      && staleReceiptReplay.json?.replayed === true
+      && Object.keys(staleReceiptReplayProjection || {}).sort().join(',') === 'hash,id,status'
+      && staleReceiptReplayProjection?.status === 'failed'
+      && stableStringify(staleReceiptReplayProjection) === stableStringify(staleReceiptProjection)
+      && staleReceiptReplayEvidence.ok
+      && staleReceiptReplayEvidence.projectionMatches === true
+      && workspaceStateFingerprint(afterStaleReceiptReplay) === workspaceStateFingerprint(beforeStaleReceiptReplay)
+      && stableStringify(actionReceiptFiles()) === stableStringify(receiptFilesBeforeStaleReceiptReplay),
+    `status=${staleReceiptReplay.status} replayed=${staleReceiptReplay.json?.replayed}`);
+
+  const invalidBodyReceiptOperationId = 'forge_op_w3b1_invalid_body_receipt';
+  const beforeInvalidBodyReceipt = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const receiptFilesBeforeInvalidBodyReceipt = actionReceiptFiles();
+  const invalidBodyReceiptAttempt = await req(
+    'POST',
+    '/api/agent/workspace',
+    SESSION_TOKEN,
+    {},
+    { operationId: invalidBodyReceiptOperationId },
+  );
+  const afterInvalidBodyReceipt = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const invalidBodyReceiptProjection = invalidBodyReceiptAttempt.json?.receipt;
+  const invalidBodyReceiptEvidence = reopenPersistedActionReceipt(invalidBodyReceiptProjection);
+  const invalidBodyReceipt = invalidBodyReceiptEvidence.ok ? invalidBodyReceiptEvidence.record : undefined;
+  ok('workspace_invalid_body_receipt_failed_projection_persisted',
+    invalidBodyReceiptAttempt.status === 400
+      && invalidBodyReceiptAttempt.json?.error === "Missing required 'workspace' body parameter."
+      && Object.keys(invalidBodyReceiptProjection || {}).sort().join(',') === 'hash,id,status'
+      && invalidBodyReceiptProjection?.status === 'failed'
+      && workspaceStateFingerprint(afterInvalidBodyReceipt) === workspaceStateFingerprint(beforeInvalidBodyReceipt)
+      && actionReceiptFiles().length === receiptFilesBeforeInvalidBodyReceipt.length + 1,
+    `status=${invalidBodyReceiptAttempt.status} receipt=${invalidBodyReceiptProjection?.status}`);
+  const invalidBodyReceiptEvidenceBytes = `${invalidBodyReceiptEvidence.ok ? invalidBodyReceiptEvidence.raw : ''}\n${stableStringify(invalidBodyReceiptProjection || null)}`;
+  const invalidBodyReceiptEvidenceNeedles = [
+    SESSION_TOKEN,
+    JSON.stringify(SESSION_TOKEN).slice(1, -1),
+    tmp,
+    tmp.replaceAll('\\', '/'),
+    JSON.stringify(tmp).slice(1, -1),
+    JSON.stringify(tmp.replaceAll('\\', '/')).slice(1, -1),
+  ];
+  ok('workspace_invalid_body_receipt_is_canonical_hash_valid_and_identity_bound',
+    invalidBodyReceiptEvidence.ok
+      && invalidBodyReceiptEvidence.canonical === true
+      && invalidBodyReceiptEvidence.computedHash === invalidBodyReceipt?.hash
+      && invalidBodyReceiptEvidence.projectionMatches === true
+      && invalidBodyReceipt?.status === 'failed'
+      && invalidBodyReceipt?.validation?.status === 'failed'
+      && invalidBodyReceipt?.authority?.operationId === invalidBodyReceiptOperationId
+      && invalidBodyReceipt?.capability?.legacyRoute === '/api/agent/workspace'
+      && invalidBodyReceipt?.capability?.method === 'POST'
+      && invalidBodyReceipt?.metadata?.route === 'POST /api/agent/workspace'
+      && invalidBodyReceiptEvidenceNeedles.every(needle => !invalidBodyReceiptEvidenceBytes.includes(needle)),
+    `reopened=${invalidBodyReceiptEvidence.ok} canonical=${invalidBodyReceiptEvidence.canonical === true}`);
+
+  const mergeDryRunReceiptOperationId = 'forge_op_w3b1_merge_dry_run_receipt';
+  const mergeDryRunReceiptMarker = 'W3B1_MERGE_DRY_RUN_PROPOSED_DESCRIPTION';
+  const mergeDryRunReceiptBefore = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const receiptFilesBeforeMergeDryRunReceipt = actionReceiptFiles();
+  const mergeDryRunReceiptAttempt = await req(
+    'POST',
+    '/api/agent/workspace/merge',
+    SESSION_TOKEN,
+    {
+      changes: { description: mergeDryRunReceiptMarker },
+      expectedHead: mergeDryRunReceiptBefore.json?.workspaceHash,
+      expectedSnapshotHash: mergeDryRunReceiptBefore.json?.snapshotHash,
+      dryRun: true,
+    },
+    { operationId: mergeDryRunReceiptOperationId },
+  );
+  const mergeDryRunReceiptAfter = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const mergeDryRunReceiptProjection = mergeDryRunReceiptAttempt.json?.receipt;
+  const mergeDryRunReceiptEvidence = reopenPersistedActionReceipt(mergeDryRunReceiptProjection);
+  const mergeDryRunReceipt = mergeDryRunReceiptEvidence.ok ? mergeDryRunReceiptEvidence.record : undefined;
+  ok('workspace_merge_dry_run_receipt_committed_projection_no_mutation',
+    mergeDryRunReceiptAttempt.status === 200
+      && mergeDryRunReceiptAttempt.json?.dryRun === true
+      && mergeDryRunReceiptAttempt.json?.applied === false
+      && mergeDryRunReceiptAttempt.json?.version === mergeDryRunReceiptBefore.json?.version
+      && mergeDryRunReceiptAttempt.json?.workspaceId === mergeDryRunReceiptBefore.json?.workspaceId
+      && stableStringify(mergeDryRunReceiptAttempt.json?.previewWorkspace) === stableStringify({ ...mergeDryRunReceiptBefore.json?.workspace, description: mergeDryRunReceiptMarker })
+      && !Object.prototype.hasOwnProperty.call(mergeDryRunReceiptAttempt.json || {}, 'workspace')
+      && mergeDryRunReceiptAfter.json?.version === mergeDryRunReceiptBefore.json?.version
+      && workspaceStateFingerprint(mergeDryRunReceiptAfter) === workspaceStateFingerprint(mergeDryRunReceiptBefore)
+      && !Object.prototype.hasOwnProperty.call(mergeDryRunReceiptAttempt.json || {}, 'recovery')
+      && Object.keys(mergeDryRunReceiptProjection || {}).sort().join(',') === 'hash,id,status'
+      && mergeDryRunReceiptProjection?.status === 'committed'
+      && actionReceiptFiles().length === receiptFilesBeforeMergeDryRunReceipt.length + 1,
+    `status=${mergeDryRunReceiptAttempt.status} dryRun=${mergeDryRunReceiptAttempt.json?.dryRun} receipt=${mergeDryRunReceiptProjection?.status}`);
+  const mergeDryRunReceiptAuthorityResources = new Map((mergeDryRunReceipt?.authority?.resources || []).map(resource => [resource.role, resource]));
+  const mergeDryRunReceiptAfterResources = new Map((mergeDryRunReceipt?.after?.resources || []).map(resource => [resource.role, resource]));
+  const mergeDryRunReceiptRoles = ['workspace', 'snapshot'];
+  ok('workspace_merge_dry_run_receipt_is_canonical_no_change_and_identity_bound',
+    mergeDryRunReceiptEvidence.ok
+      && mergeDryRunReceiptEvidence.canonical === true
+      && mergeDryRunReceiptEvidence.computedHash === mergeDryRunReceipt?.hash
+      && mergeDryRunReceiptEvidence.projectionMatches === true
+      && mergeDryRunReceipt?.status === 'committed'
+      && mergeDryRunReceipt?.authority?.operationId === mergeDryRunReceiptOperationId
+      && mergeDryRunReceipt?.capability?.legacyRoute === '/api/agent/workspace/merge'
+      && mergeDryRunReceipt?.capability?.method === 'POST'
+      && mergeDryRunReceipt?.metadata?.route === 'POST /api/agent/workspace/merge'
+      && mergeDryRunReceipt?.after?.outcome === 'no_change'
+      && mergeDryRunReceipt?.rollback?.required === false
+      && mergeDryRunReceiptAuthorityResources.size === 2
+      && mergeDryRunReceiptAfterResources.size === 2
+      && mergeDryRunReceiptRoles.every(role => mergeDryRunReceiptAuthorityResources.has(role) && mergeDryRunReceiptAfterResources.has(role))
+      && mergeDryRunReceiptRoles.every(role => mergeDryRunReceiptAfterResources.get(role)?.hash === mergeDryRunReceiptAuthorityResources.get(role)?.beforeHash),
+    `reopened=${mergeDryRunReceiptEvidence.ok} outcome=${mergeDryRunReceipt?.after?.outcome}`);
+
+  const mergeNoChangeReceiptOperationId = 'forge_op_w3b1_merge_no_change_receipt';
+  const mergeNoChangeReceiptBefore = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const mergeNoChangeReceiptDescription = mergeNoChangeReceiptBefore.json?.workspace?.description;
+  const receiptFilesBeforeMergeNoChangeReceipt = actionReceiptFiles();
+  const mergeNoChangeReceiptAttempt = await req(
+    'POST',
+    '/api/agent/workspace/merge',
+    SESSION_TOKEN,
+    {
+      changes: { description: mergeNoChangeReceiptDescription },
+      expectedHead: mergeNoChangeReceiptBefore.json?.workspaceHash,
+      expectedSnapshotHash: mergeNoChangeReceiptBefore.json?.snapshotHash,
+    },
+    { operationId: mergeNoChangeReceiptOperationId },
+  );
+  const mergeNoChangeReceiptAfter = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const mergeNoChangeReceiptProjection = mergeNoChangeReceiptAttempt.json?.receipt;
+  const mergeNoChangeReceiptEvidence = reopenPersistedActionReceipt(mergeNoChangeReceiptProjection);
+  const mergeNoChangeReceipt = mergeNoChangeReceiptEvidence.ok ? mergeNoChangeReceiptEvidence.record : undefined;
+  ok('workspace_merge_no_change_receipt_committed_projection_no_mutation',
+    mergeNoChangeReceiptAttempt.status === 200
+      && mergeNoChangeReceiptAttempt.json?.applied === false
+      && mergeNoChangeReceiptAttempt.json?.dryRun !== true
+      && mergeNoChangeReceiptAttempt.json?.version === mergeNoChangeReceiptBefore.json?.version
+      && mergeNoChangeReceiptAttempt.json?.workspaceHash === mergeNoChangeReceiptBefore.json?.workspaceHash
+      && mergeNoChangeReceiptAttempt.json?.snapshotHash === mergeNoChangeReceiptBefore.json?.snapshotHash
+      && stableStringify(mergeNoChangeReceiptAttempt.json?.workspace) === stableStringify(mergeNoChangeReceiptBefore.json?.workspace)
+      && mergeNoChangeReceiptAfter.json?.version === mergeNoChangeReceiptBefore.json?.version
+      && mergeNoChangeReceiptAfter.json?.workspaceHash === mergeNoChangeReceiptBefore.json?.workspaceHash
+      && mergeNoChangeReceiptAfter.json?.snapshotHash === mergeNoChangeReceiptBefore.json?.snapshotHash
+      && stableStringify(mergeNoChangeReceiptAfter.json?.workspace) === stableStringify(mergeNoChangeReceiptBefore.json?.workspace)
+      && workspaceStateFingerprint(mergeNoChangeReceiptAfter) === workspaceStateFingerprint(mergeNoChangeReceiptBefore)
+      && !Object.prototype.hasOwnProperty.call(mergeNoChangeReceiptAttempt.json || {}, 'recovery')
+      && Object.keys(mergeNoChangeReceiptProjection || {}).sort().join(',') === 'hash,id,status'
+      && mergeNoChangeReceiptProjection?.status === 'committed'
+      && actionReceiptFiles().length === receiptFilesBeforeMergeNoChangeReceipt.length + 1,
+    `status=${mergeNoChangeReceiptAttempt.status} applied=${mergeNoChangeReceiptAttempt.json?.applied} receipt=${mergeNoChangeReceiptProjection?.status}`);
+  const mergeNoChangeReceiptAuthorityResources = new Map((mergeNoChangeReceipt?.authority?.resources || []).map(resource => [resource.role, resource]));
+  const mergeNoChangeReceiptAfterResources = new Map((mergeNoChangeReceipt?.after?.resources || []).map(resource => [resource.role, resource]));
+  const mergeNoChangeReceiptRoles = ['workspace', 'snapshot'];
+  ok('workspace_merge_no_change_receipt_is_canonical_no_change_and_identity_bound',
+    mergeNoChangeReceiptEvidence.ok
+      && mergeNoChangeReceiptEvidence.canonical === true
+      && mergeNoChangeReceiptEvidence.computedHash === mergeNoChangeReceipt?.hash
+      && mergeNoChangeReceiptEvidence.projectionMatches === true
+      && mergeNoChangeReceipt?.status === 'committed'
+      && mergeNoChangeReceipt?.authority?.operationId === mergeNoChangeReceiptOperationId
+      && mergeNoChangeReceipt?.capability?.legacyRoute === '/api/agent/workspace/merge'
+      && mergeNoChangeReceipt?.capability?.method === 'POST'
+      && mergeNoChangeReceipt?.metadata?.route === 'POST /api/agent/workspace/merge'
+      && mergeNoChangeReceipt?.after?.outcome === 'no_change'
+      && mergeNoChangeReceipt?.rollback?.required === false
+      && Array.isArray(mergeNoChangeReceipt?.authority?.resources)
+      && mergeNoChangeReceipt.authority.resources.length === 2
+      && Array.isArray(mergeNoChangeReceipt?.after?.resources)
+      && mergeNoChangeReceipt.after.resources.length === 2
+      && mergeNoChangeReceiptAuthorityResources.size === 2
+      && mergeNoChangeReceiptAfterResources.size === 2
+      && mergeNoChangeReceiptRoles.every(role => {
+        const expectedPath = role === 'workspace' ? `${WORKSPACE_ID}/content` : `${WORKSPACE_ID}/snapshot`;
+        const authority = mergeNoChangeReceiptAuthorityResources.get(role);
+        const after = mergeNoChangeReceiptAfterResources.get(role);
+        return authority?.root === 'workspace'
+          && authority?.relativePath === expectedPath
+          && after?.root === 'workspace'
+          && after?.relativePath === expectedPath
+          && after?.hash === authority?.beforeHash;
+      }),
+    `reopened=${mergeNoChangeReceiptEvidence.ok} outcome=${mergeNoChangeReceipt?.after?.outcome}`);
 
   // R11/R14: workspace conflicts carry evidence and each destructive choice has an honest
   // recovery path. All state lives under this harness's ephemeral state/data directories.

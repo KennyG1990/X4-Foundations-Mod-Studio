@@ -20,6 +20,7 @@ export const RECOVERY_MAX_ENTRIES = 12;
 export const RECOVERY_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 export const RECOVERY_MAX_WORKSPACE_BYTES = 32 * 1024 * 1024;
 export const RECOVERY_MAX_DEPLOY_BYTES = 512 * 1024 * 1024;
+export const RECOVERY_DUPLICATE_CONFLICT = 'RECOVERY_DUPLICATE_CONFLICT';
 
 export type RecoveryKind = 'workspace' | 'deploy';
 export type RecoveryStatus = 'preparing' | 'ready' | 'used';
@@ -67,6 +68,81 @@ export interface RecoveryStoreOptions {
   maxWorkspaceBytes?: number;
   maxDeployBytes?: number;
   now?: () => number;
+}
+
+export class DestructiveRecoveryStoreError extends Error {
+  readonly code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = 'DestructiveRecoveryStoreError';
+    this.code = code;
+  }
+}
+
+interface WorkspaceRecoveryInput {
+  /** Optional caller-owned identity. Omitted values retain the historical random-ID behavior. */
+  recoveryId?: string;
+  workspaceId: string;
+  beforeWorkspace: unknown;
+  beforeHash: string;
+  beforeSnapshotHash: string;
+  expectedCurrentHash: string;
+  expectedCurrentSnapshotHash: string;
+  summary: string;
+}
+
+const EXACT_WORKSPACE_RECOVERY_KEYS = new Set([
+  'schema',
+  'id',
+  'kind',
+  'status',
+  'createdAt',
+  'expiresAt',
+  'summary',
+  'expectedCurrentHash',
+  'expectedCurrentSnapshotHash',
+  'workspaceId',
+  'beforeWorkspace',
+  'beforeHash',
+  'beforeSnapshotHash',
+]);
+
+function isMissingFilesystemError(error: unknown): boolean {
+  if (!error || typeof error !== 'object' || !('code' in error)) return false;
+  const code = String((error as NodeJS.ErrnoException).code || '');
+  return code === 'ENOENT' || code === 'ENOTDIR';
+}
+
+/** JSON canonicalization for replay comparison; persisted bytes remain the existing JSON contract. */
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(item => canonicalJson(item)).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const object = value as Record<string, unknown>;
+    return `{${Object.keys(object)
+      .sort()
+      .filter(key => object[key] !== undefined)
+      .map(key => `${JSON.stringify(key)}:${canonicalJson(object[key])}`)
+      .join(',')}}`;
+  }
+  const serialized = JSON.stringify(value);
+  return serialized === undefined ? 'null' : serialized;
+}
+
+function canonicalWorkspaceRecoveryFacts(input: WorkspaceRecoveryInput, expiresAfterMs: number): string {
+  return canonicalJson({
+    schema: RECOVERY_SCHEMA,
+    kind: 'workspace',
+    status: 'ready',
+    workspaceId: input.workspaceId,
+    beforeWorkspace: input.beforeWorkspace,
+    beforeHash: input.beforeHash,
+    beforeSnapshotHash: input.beforeSnapshotHash,
+    expectedCurrentHash: input.expectedCurrentHash,
+    expectedCurrentSnapshotHash: input.expectedCurrentSnapshotHash,
+    summary: input.summary,
+    expiresAfterMs,
+  });
 }
 
 function validId(id: string): boolean {
@@ -120,9 +196,13 @@ export class DestructiveRecoveryStore {
   }
 
   private entryDir(id: string): string {
-    if (!validId(id)) throw new Error('Invalid recovery id.');
+    if (typeof id !== 'string' || !validId(id)) {
+      throw new DestructiveRecoveryStoreError('RECOVERY_ID_INVALID', 'Invalid recovery id.');
+    }
     const candidate = path.resolve(this.root, id);
-    if (candidate === this.root || !candidate.startsWith(`${this.root}${path.sep}`)) throw new Error('Recovery path escaped its root.');
+    if (candidate === this.root || !candidate.startsWith(`${this.root}${path.sep}`)) {
+      throw new DestructiveRecoveryStoreError('RECOVERY_PATH_ESCAPE', 'Recovery path escaped its root.');
+    }
     return candidate;
   }
 
@@ -138,6 +218,96 @@ export class DestructiveRecoveryStore {
     atomicWriteJson(this.recordPath(record.id), record);
   }
 
+  private duplicateConflict(): never {
+    throw new DestructiveRecoveryStoreError(
+      RECOVERY_DUPLICATE_CONFLICT,
+      'A recovery record already occupies this deterministic recovery id and is not an exact ready replay.',
+    );
+  }
+
+  private assertPhysicalContained(candidate: string): void {
+    let realRoot: string;
+    let realCandidate: string;
+    try {
+      realRoot = fs.realpathSync.native(this.root);
+      realCandidate = fs.realpathSync.native(candidate);
+    } catch (error) {
+      if (isMissingFilesystemError(error)) {
+        throw new DestructiveRecoveryStoreError('RECOVERY_PATH_ESCAPE', 'Recovery path could not be resolved safely.');
+      }
+      throw error;
+    }
+    const comparableRoot = process.platform === 'win32' ? realRoot.toLowerCase() : realRoot;
+    const comparableCandidate = process.platform === 'win32' ? realCandidate.toLowerCase() : realCandidate;
+    if (comparableCandidate === comparableRoot || !comparableCandidate.startsWith(`${comparableRoot}${path.sep}`)) {
+      throw new DestructiveRecoveryStoreError('RECOVERY_PATH_ESCAPE', 'Recovery path resolves outside its root.');
+    }
+  }
+
+  private isExactWorkspaceReplay(record: DestructiveRecoveryRecord, input: WorkspaceRecoveryInput): record is WorkspaceRecoveryRecord {
+    if (record.kind !== 'workspace' || record.status !== 'ready' || record.id !== input.recoveryId) return false;
+    if (record.usedAt !== undefined || Object.keys(record).some(key => !EXACT_WORKSPACE_RECOVERY_KEYS.has(key))) return false;
+    if (typeof record.createdAt !== 'string' || typeof record.expiresAt !== 'string'
+      || typeof record.workspaceId !== 'string' || typeof record.beforeHash !== 'string'
+      || typeof record.beforeSnapshotHash !== 'string' || typeof record.expectedCurrentHash !== 'string'
+      || typeof record.expectedCurrentSnapshotHash !== 'string' || typeof record.summary !== 'string'
+      || record.beforeWorkspace === undefined) return false;
+    const createdAt = Date.parse(record.createdAt);
+    const expiresAt = Date.parse(record.expiresAt);
+    if (!Number.isFinite(createdAt) || !Number.isFinite(expiresAt) || expiresAt - createdAt !== this.maxAgeMs) return false;
+    return canonicalWorkspaceRecoveryFacts(input, this.maxAgeMs) === canonicalWorkspaceRecoveryFacts({
+      recoveryId: record.id,
+      workspaceId: record.workspaceId,
+      beforeWorkspace: record.beforeWorkspace,
+      beforeHash: record.beforeHash,
+      beforeSnapshotHash: record.beforeSnapshotHash,
+      expectedCurrentHash: record.expectedCurrentHash,
+      expectedCurrentSnapshotHash: record.expectedCurrentSnapshotHash,
+      summary: record.summary,
+    }, expiresAt - createdAt);
+  }
+
+  private findExplicitWorkspaceReplay(input: WorkspaceRecoveryInput): WorkspaceRecoveryRecord | undefined {
+    if (input.recoveryId === undefined) return undefined;
+    const id = input.recoveryId;
+    const directory = this.entryDir(id);
+    let directoryStat: fs.Stats | undefined;
+    try { directoryStat = fs.lstatSync(directory); } catch (error) {
+      if (isMissingFilesystemError(error)) return undefined;
+      throw error;
+    }
+    if (directoryStat.isSymbolicLink()) {
+      throw new DestructiveRecoveryStoreError('RECOVERY_PATH_ESCAPE', 'Recovery entry resolves through a link.');
+    }
+    if (!directoryStat.isDirectory()) this.duplicateConflict();
+    this.assertPhysicalContained(directory);
+
+    const entries = fs.readdirSync(directory, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name === 'record.json') continue;
+      if (entry.isSymbolicLink()) {
+        throw new DestructiveRecoveryStoreError('RECOVERY_PATH_ESCAPE', 'Recovery entry contains a linked path.');
+      }
+      this.duplicateConflict();
+    }
+
+    const recordFile = path.join(directory, 'record.json');
+    let recordStat: fs.Stats | undefined;
+    try { recordStat = fs.lstatSync(recordFile); } catch (error) {
+      if (isMissingFilesystemError(error)) this.duplicateConflict();
+      throw error;
+    }
+    if (recordStat.isSymbolicLink()) {
+      throw new DestructiveRecoveryStoreError('RECOVERY_PATH_ESCAPE', 'Recovery record resolves through a link.');
+    }
+    if (!recordStat.isFile()) this.duplicateConflict();
+    this.assertPhysicalContained(recordFile);
+
+    const found = this.read(id);
+    if (found.ok === false || !this.isExactWorkspaceReplay(found.record, input)) this.duplicateConflict();
+    return found.record;
+  }
+
   read(id: string): { ok: true; record: DestructiveRecoveryRecord } | { ok: false; code: string; error: string } {
     try {
       const file = this.recordPath(id);
@@ -151,24 +321,20 @@ export class DestructiveRecoveryStore {
     }
   }
 
-  createWorkspace(input: {
-    workspaceId: string;
-    beforeWorkspace: unknown;
-    beforeHash: string;
-    beforeSnapshotHash: string;
-    expectedCurrentHash: string;
-    expectedCurrentSnapshotHash: string;
-    summary: string;
-  }): WorkspaceRecoveryRecord {
+  createWorkspace(input: WorkspaceRecoveryInput): WorkspaceRecoveryRecord {
+    if (input.recoveryId !== undefined) this.entryDir(input.recoveryId);
     if (!/^ws_[a-f0-9]{24}$/i.test(input.workspaceId)) throw new Error('Workspace recovery workspaceId is malformed.');
     const serialized = JSON.stringify(input.beforeWorkspace);
     const bytes = Buffer.byteLength(serialized, 'utf8');
     if (bytes > this.maxWorkspaceBytes) throw new Error(`Workspace recovery exceeds ${this.maxWorkspaceBytes} bytes.`);
+
+    const replay = this.findExplicitWorkspaceReplay(input);
+    if (replay) return replay;
     this.prune();
     const now = this.now();
     const record: WorkspaceRecoveryRecord = {
       schema: RECOVERY_SCHEMA,
-      id: this.newId('workspace'),
+      id: input.recoveryId ?? this.newId('workspace'),
       kind: 'workspace',
       status: 'ready',
       workspaceId: input.workspaceId,
@@ -270,9 +436,137 @@ export function runDestructiveRecoverySelftest(): {
   const checks: Array<{ name: string; pass: boolean; detail?: string }> = [];
   const ok = (name: string, pass: boolean, detail?: unknown) => checks.push({ name, pass, ...(detail === undefined ? {} : { detail: String(detail) }) });
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'x4forge-recovery-selftest-'));
+  const deterministicRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'x4forge-recovery-deterministic-selftest-'));
+  const collisionRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'x4forge-recovery-collision-selftest-'));
   let now = Date.parse('2026-07-30T00:00:00Z');
   try {
     const store = new DestructiveRecoveryStore({ root, maxEntries: 3, maxAgeMs: 1_000, maxWorkspaceBytes: 256, maxDeployBytes: 64, now: () => now });
+    const deterministicStore = new DestructiveRecoveryStore({ root: deterministicRoot, maxEntries: 3, maxAgeMs: 1_000, maxWorkspaceBytes: 256, maxDeployBytes: 64, now: () => now });
+    const collisionStore = new DestructiveRecoveryStore({ root: collisionRoot, maxEntries: 12, maxAgeMs: 1_000, maxWorkspaceBytes: 256, maxDeployBytes: 64, now: () => now });
+    const deterministicInput: WorkspaceRecoveryInput = {
+      recoveryId: `ar_${'a'.repeat(64)}`,
+      workspaceId: 'ws_222222222222222222222222',
+      beforeWorkspace: { name: 'before', nodes: [], links: [] },
+      beforeHash: 'deterministic-before',
+      beforeSnapshotHash: 'deterministic-before-snapshot',
+      expectedCurrentHash: 'deterministic-after',
+      expectedCurrentSnapshotHash: 'deterministic-after-snapshot',
+      summary: 'deterministic overwrite',
+    };
+    const deterministic = deterministicStore.createWorkspace(deterministicInput);
+    const deterministicRecordPath = path.join(deterministicRoot, deterministic.id, 'record.json');
+    const deterministicBytesBefore = fs.readFileSync(deterministicRecordPath);
+    const deterministicStatBefore = fs.statSync(deterministicRecordPath).mtimeMs;
+    const unrelatedOne = deterministicStore.prepareDeployment({ priorExisted: true, targetRoot: root, targetPath: path.join(root, 'one'), modId: 'one', beforeFingerprint: 'one-before', beforeBytes: 1, summary: 'one' });
+    const unrelatedTwo = deterministicStore.prepareDeployment({ priorExisted: true, targetRoot: root, targetPath: path.join(root, 'two'), modId: 'two', beforeFingerprint: 'two-before', beforeBytes: 1, summary: 'two' });
+    const directoriesBeforeReplay = fs.readdirSync(deterministicRoot).sort();
+    const deterministicReplay = deterministicStore.createWorkspace({
+      ...deterministicInput,
+      beforeWorkspace: { links: [], nodes: [], name: 'before' },
+    });
+    const deterministicBytesAfter = fs.readFileSync(deterministicRecordPath);
+    const deterministicStatAfter = fs.statSync(deterministicRecordPath).mtimeMs;
+    const directoriesAfterReplay = fs.readdirSync(deterministicRoot).sort();
+    ok('explicit_id_creation_uses_requested_identity', deterministic.id === deterministicInput.recoveryId && deterministic.status === 'ready');
+    ok('exact_replay_is_byte_and_timestamp_identical', deterministicReplay.id === deterministic.id
+      && Buffer.compare(deterministicBytesBefore, deterministicBytesAfter) === 0
+      && deterministicStatBefore === deterministicStatAfter);
+    ok('exact_replay_does_not_prune_or_allocate', JSON.stringify(directoriesBeforeReplay) === JSON.stringify(directoriesAfterReplay)
+      && deterministicStore.read(unrelatedOne.id).ok && deterministicStore.read(unrelatedTwo.id).ok);
+    const restartedStore = new DestructiveRecoveryStore({ root: deterministicRoot, maxEntries: 3, maxAgeMs: 1_000, maxWorkspaceBytes: 256, maxDeployBytes: 64, now: () => now });
+    const restartedReplay = restartedStore.createWorkspace(deterministicInput);
+    ok('exact_replay_survives_restart', restartedReplay.id === deterministic.id
+      && Buffer.compare(deterministicBytesBefore, fs.readFileSync(deterministicRecordPath)) === 0);
+
+    const changedFacts = [
+      { beforeHash: 'changed-before' },
+      { beforeWorkspace: { name: 'changed' } },
+      { workspaceId: 'ws_333333333333333333333333' },
+      { expectedCurrentHash: 'changed-after' },
+      { expectedCurrentSnapshotHash: 'changed-after-snapshot' },
+      { summary: 'changed summary' },
+    ];
+    let changedFactsRejected = true;
+    for (const change of changedFacts) {
+      try { deterministicStore.createWorkspace({ ...deterministicInput, ...change }); changedFactsRejected = false; } catch (error) {
+        changedFactsRejected = changedFactsRejected && error instanceof DestructiveRecoveryStoreError && error.code === RECOVERY_DUPLICATE_CONFLICT;
+      }
+    }
+    ok('changed_fact_duplicate_conflicts_without_overwrite', changedFactsRejected
+      && Buffer.compare(deterministicBytesBefore, fs.readFileSync(deterministicRecordPath)) === 0);
+
+    const usedInput: WorkspaceRecoveryInput = { ...deterministicInput, recoveryId: `ar_${'b'.repeat(64)}` };
+    const usedRecord = collisionStore.createWorkspace(usedInput);
+    const usedRecordPath = path.join(collisionRoot, usedRecord.id, 'record.json');
+    collisionStore.markUsed(usedRecord.id);
+    const usedBytes = fs.readFileSync(usedRecordPath);
+    let usedConflict = false;
+    try { collisionStore.createWorkspace(usedInput); } catch (error) {
+      usedConflict = error instanceof DestructiveRecoveryStoreError && error.code === RECOVERY_DUPLICATE_CONFLICT;
+    }
+    ok('used_replay_conflicts_without_overwrite', usedConflict && Buffer.compare(usedBytes, fs.readFileSync(usedRecordPath)) === 0);
+
+    const expiryInput: WorkspaceRecoveryInput = { ...deterministicInput, recoveryId: `ar_${'c'.repeat(64)}` };
+    const expiryRecord = collisionStore.createWorkspace(expiryInput);
+    const expiryRecordPath = path.join(collisionRoot, expiryRecord.id, 'record.json');
+    const expiryBytes = fs.readFileSync(expiryRecordPath);
+    const changedExpiryStore = new DestructiveRecoveryStore({ root: collisionRoot, maxEntries: 12, maxAgeMs: 2_000, maxWorkspaceBytes: 256, maxDeployBytes: 64, now: () => now });
+    let expirySemanticsConflict = false;
+    try { changedExpiryStore.createWorkspace(expiryInput); } catch (error) {
+      expirySemanticsConflict = error instanceof DestructiveRecoveryStoreError && error.code === RECOVERY_DUPLICATE_CONFLICT;
+    }
+    ok('changed_expiry_semantics_conflict', expirySemanticsConflict && Buffer.compare(expiryBytes, fs.readFileSync(expiryRecordPath)) === 0);
+
+    const focusedCorruptId = `ar_${'d'.repeat(64)}`;
+    const focusedCorruptDir = path.join(collisionRoot, focusedCorruptId);
+    fs.mkdirSync(focusedCorruptDir, { recursive: true });
+    const focusedCorruptPath = path.join(focusedCorruptDir, 'record.json');
+    fs.writeFileSync(focusedCorruptPath, '{nope', 'utf8');
+    let focusedCorruptConflict = false;
+    try { collisionStore.createWorkspace({ ...deterministicInput, recoveryId: focusedCorruptId }); } catch (error) {
+      focusedCorruptConflict = error instanceof DestructiveRecoveryStoreError && error.code === RECOVERY_DUPLICATE_CONFLICT;
+    }
+    ok('corrupt_replay_conflicts_without_overwrite', focusedCorruptConflict && fs.readFileSync(focusedCorruptPath, 'utf8') === '{nope');
+
+    const partialId = `ar_${'e'.repeat(64)}`;
+    const partialDir = path.join(collisionRoot, partialId);
+    fs.mkdirSync(partialDir, { recursive: true });
+    let partialConflict = false;
+    try { collisionStore.createWorkspace({ ...deterministicInput, recoveryId: partialId }); } catch (error) {
+      partialConflict = error instanceof DestructiveRecoveryStoreError && error.code === RECOVERY_DUPLICATE_CONFLICT;
+    }
+    ok('partial_replay_conflicts_without_record_creation', partialConflict && fs.readdirSync(partialDir).length === 0);
+
+    const wrongKindId = `ar_${'f'.repeat(64)}`;
+    const wrongKind = collisionStore.prepareDeployment({ priorExisted: true, targetRoot: root, targetPath: path.join(root, 'wrong'), modId: 'wrong', beforeFingerprint: 'wrong-before', beforeBytes: 1, summary: 'wrong kind' });
+    const wrongKindDir = path.join(collisionRoot, wrongKindId);
+    fs.renameSync(path.join(collisionRoot, wrongKind.id), wrongKindDir);
+    const wrongKindPath = path.join(wrongKindDir, 'record.json');
+    const wrongKindRecord = JSON.parse(fs.readFileSync(wrongKindPath, 'utf8'));
+    wrongKindRecord.id = wrongKindId;
+    fs.writeFileSync(wrongKindPath, JSON.stringify(wrongKindRecord), 'utf8');
+    const wrongKindBytes = fs.readFileSync(wrongKindPath);
+    let wrongKindConflict = false;
+    try { collisionStore.createWorkspace({ ...deterministicInput, recoveryId: wrongKindId }); } catch (error) {
+      wrongKindConflict = error instanceof DestructiveRecoveryStoreError && error.code === RECOVERY_DUPLICATE_CONFLICT;
+    }
+    ok('wrong_kind_collision_conflicts_without_overwrite', wrongKindConflict && Buffer.compare(wrongKindBytes, fs.readFileSync(wrongKindPath)) === 0);
+
+    const malformedEntries = fs.readdirSync(collisionRoot).sort();
+    let malformedIdentityRejected = false;
+    try { collisionStore.createWorkspace({ ...deterministicInput, recoveryId: '../escape' }); } catch (error) {
+      malformedIdentityRejected = error instanceof DestructiveRecoveryStoreError && error.code === 'RECOVERY_ID_INVALID';
+    }
+    ok('malformed_identity_rejected_before_mutation', malformedIdentityRejected
+      && JSON.stringify(malformedEntries) === JSON.stringify(fs.readdirSync(collisionRoot).sort()));
+
+    now += 2_000;
+    let expiredConflict = false;
+    try { collisionStore.createWorkspace(expiryInput); } catch (error) {
+      expiredConflict = error instanceof DestructiveRecoveryStoreError && error.code === RECOVERY_DUPLICATE_CONFLICT;
+    }
+    ok('expired_replay_conflicts_without_overwrite', expiredConflict && Buffer.compare(expiryBytes, fs.readFileSync(expiryRecordPath)) === 0);
+
     const workspace = store.createWorkspace({
       workspaceId: 'ws_111111111111111111111111',
       beforeWorkspace: { name: 'before', nodes: [], links: [] },
@@ -332,6 +626,8 @@ export function runDestructiveRecoverySelftest(): {
     ok('invalid_id_rejected', invalidRejected);
   } finally {
     try { fs.rmSync(root, { recursive: true, force: true }); } catch { /* test cleanup */ }
+    try { fs.rmSync(deterministicRoot, { recursive: true, force: true }); } catch { /* test cleanup */ }
+    try { fs.rmSync(collisionRoot, { recursive: true, force: true }); } catch { /* test cleanup */ }
   }
   const passed = checks.filter(check => check.pass).length;
   return { allPassed: passed === checks.length, passed, total: checks.length, checks };

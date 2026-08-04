@@ -46,6 +46,10 @@ import {
   createdAgentKeyMatchesRequestedAuthority,
   type RequestedAgentKeyAuthority,
 } from "../../shared/agentKeyCreationContract";
+import {
+  ACTION_OPERATION_ID_HEADER,
+  createActionOperationId,
+} from "../../shared/actionOperationId";
 
 interface BackendHandle {
   baseUrl: string;
@@ -80,14 +84,36 @@ function backendApiHeaders(handle: BackendHandle, json = false): Record<string, 
   return headers;
 }
 
+function extensionStrongRandomBytes(byteLength: number): Uint8Array {
+  if (typeof crypto.randomBytes !== "function") {
+    throw new Error('Strong cryptographic randomness is unavailable for Forge operation identity.');
+  }
+  return crypto.randomBytes(byteLength);
+}
+
+/**
+ * Copy one mutation's headers and add caller-owned operation identity when the
+ * caller did not explicitly supply it. This helper deliberately does not call
+ * fetch so route and method anchors remain visible at every request site.
+ */
+function freshActionOperationHeaders(existing: HeadersInit): Headers {
+  const headers = new Headers(existing);
+  if (!headers.has(ACTION_OPERATION_ID_HEADER)) {
+    headers.set(ACTION_OPERATION_ID_HEADER, createActionOperationId(extensionStrongRandomBytes));
+  }
+  return headers;
+}
+
 async function bindBackendWorkspace(context: vscode.ExtensionContext, handle: BackendHandle): Promise<void> {
   if (!handle.owned || !handle.token) return;
   handle.clientId ||= `client_extension_${process.pid}_${Date.now().toString(36)}`;
   const saved = context.globalState.get<string>('x4forge.workspaceId') || '';
   const attempt = async (workspaceId: string) => {
+    // Each attempt is a new fetch invocation. The fallback with a changed
+    // workspaceId must not share identity with the rejected request.
     const response = await fetch(`${handle.baseUrl}/api/agent/workspaces/bootstrap`, {
       method: 'POST',
-      headers: backendApiHeaders(handle, true),
+      headers: freshActionOperationHeaders(backendApiHeaders(handle, true)),
       body: JSON.stringify({ clientId: handle.clientId, ...(workspaceId ? { workspaceId } : {}) }),
     });
     return { response, body: await response.json() as { workspaceId?: string; code?: string; error?: string } };
@@ -708,7 +734,7 @@ async function handleStudioMessage(context: vscode.ExtensionContext, value: unkn
       if (!handle.owned || !handle.token || !handle.clientId) return;
       const response = await fetch(`${handle.baseUrl}/api/agent/workspaces/bootstrap`, {
         method: 'POST',
-        headers: backendApiHeaders(handle, true),
+        headers: freshActionOperationHeaders(backendApiHeaders(handle, true)),
         body: JSON.stringify({ clientId: handle.clientId, workspaceId }),
       });
       const body = await response.json() as { workspaceId?: string; error?: string };
@@ -1083,7 +1109,7 @@ export function activate(context: vscode.ExtensionContext): void {
           : { authorityMode: 'preset' };
         const res = await fetch(`${handle.baseUrl}/api/agent/keys`, {
           method: "POST",
-          headers: backendApiHeaders(handle, true),
+          headers: freshActionOperationHeaders(backendApiHeaders(handle, true)),
           body: JSON.stringify({
             label: label.trim(), scope: scope.label, ttl: ttl.label,
             ...requestedAuthority,
@@ -1109,7 +1135,7 @@ export function activate(context: vscode.ExtensionContext): void {
             try {
               const revoke = await fetch(`${handle.baseUrl}/api/agent/keys/revoke`, {
                 method: 'POST',
-                headers: backendApiHeaders(handle, true),
+                headers: freshActionOperationHeaders(backendApiHeaders(handle, true)),
                 body: JSON.stringify({ id: keyId }),
               });
               revoked = revoke.ok;
@@ -1325,7 +1351,7 @@ async function referenceLanguagePost<T>(route: "complete" | "hover", body: Recor
   try {
     const response = await fetchWithTimeout(`${backend.baseUrl}/api/reference/${route}`, 3000, {
       method: "POST",
-      headers: { Authorization: `Bearer ${backend.token}`, "Content-Type": "application/json" },
+      headers: freshActionOperationHeaders({ Authorization: `Bearer ${backend.token}`, "Content-Type": "application/json" }),
       body: JSON.stringify(body),
     });
     if (!response?.ok) return null;
@@ -1685,7 +1711,7 @@ async function validateNodeDocument(doc: vscode.TextDocument, key: string, gener
     const pathName = 'md/x4forge-node-selection.xml';
     const response = await fetch(`${backend.baseUrl}/api/agent/project/validate/check`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${backend.token}`, 'Content-Type': 'application/json' },
+      headers: freshActionOperationHeaders({ Authorization: `Bearer ${backend.token}`, 'Content-Type': 'application/json' }),
       body: JSON.stringify({ project: { id: 'x4forge_node_selection', name: 'X4 Forge node selection', files: [
         { path: 'content.xml', content: '<content id="x4forge_node_selection" name="X4 Forge node selection" version="1" />' },
         { path: pathName, content: doc.getText() },
@@ -1769,7 +1795,7 @@ async function liveValidateRoot(root: string, generation: number): Promise<void>
     const files = [...byPath.values()];
     const res = await fetch(`${backend.baseUrl}/api/agent/project/validate/check`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${backend.token}`, "Content-Type": "application/json" },
+      headers: freshActionOperationHeaders({ Authorization: `Bearer ${backend.token}`, "Content-Type": "application/json" }),
       body: JSON.stringify({ project: { id: path.basename(root), name: path.basename(root), files } }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1892,7 +1918,7 @@ async function adoptFolderIntoCanvas(context: vscode.ExtensionContext, folderNam
     const wsRes = await fetch(`${backend.baseUrl}/api/agent/workspace`, { headers: auth });
     const wsData = (await wsRes.json()) as { version?: number };
     const importRes = await fetch(`${backend.baseUrl}/api/agent/mod-folder/import`, {
-      method: "POST", headers: auth, body: JSON.stringify({ path: folderName }),
+      method: "POST", headers: freshActionOperationHeaders(auth), body: JSON.stringify({ path: folderName }),
     });
     const imported = (await importRes.json()) as { success?: boolean; workspace?: unknown; report?: { skipped?: unknown[]; reason?: string }; error?: string };
     if (!importRes.ok || !imported.success || !imported.workspace) {
@@ -1900,7 +1926,7 @@ async function adoptFolderIntoCanvas(context: vscode.ExtensionContext, folderNam
       throw new Error(imported.error || imported.report?.reason || `guarded import refused (HTTP ${importRes.status})`);
     }
     const commitRes = await fetch(`${backend.baseUrl}/api/agent/workspace`, {
-      method: "POST", headers: auth,
+      method: "POST", headers: freshActionOperationHeaders(auth),
       body: JSON.stringify({ workspace: imported.workspace, expectedVersion: wsData.version }),
     });
     const committed = (await commitRes.json()) as { applied?: boolean; error?: string };

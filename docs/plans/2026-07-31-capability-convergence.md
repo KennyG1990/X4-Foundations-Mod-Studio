@@ -1,6 +1,6 @@
 # B115 — Forge Capability Convergence
 
-Status: PARTIAL program — W0-W2B VERIFIED through B118; W3-W21 remain; no public release
+Status: PARTIAL program — W0-W2B, W3A, and W3B0 VERIFIED; W3B1 in progress; W3B2-W21 remain; no public release
 Lane: FULL
 Owner: active Codex session
 Approved: 2026-07-31 by Ken
@@ -10,6 +10,13 @@ Sources: Google Drive “X4 Forge — Capability Convergence Feature Request Pac
 GitHub issues `#9`–`#21` carry replaceable Forge implementation-ledger blocks; repository plans and evidence remain
 authoritative. Update both surfaces in the same bounded close without marking partial infrastructure complete.
 
+Owner correction, 2026-08-03: the external-provider/toolkit-bridge/comparison strategy formerly assigned to W5-W6
+is rejected. Forge must implement every useful community-tool capability natively, or supersede it with a measured
+stronger native Forge implementation. The toolkit is requirements/provenance and optional MIT source-reference
+material only: no toolkit executable, subprocess, runtime dependency, imported result, comparison UI, disagreement
+report, or optional referee ships in Forge. The exact native capability-to-owner matrix is authoritative in
+`docs/plans/2026-08-02-pending-feature-implementation-program.md`.
+
 ## PLAN
 
 - **Bounded program:** close the capability gaps in issues #10–#21 by extending Forge's existing engines and
@@ -17,22 +24,21 @@ authoritative. Update both surfaces in the same bounded close without marking pa
   `runProjectValidation`, the workspace registry, CAS, artifact pipeline, Release Center, runtime watcher, or
   existing UI shells.
 - **Execution order:**
-  1. W0–W6: durable program, capability contract, authority, transaction receipts, reproducible release artifacts,
-     and optional bounded provider infrastructure.
+  1. W0–W5: durable program, capability contract, authority, transaction receipts, reproducible release artifacts,
+     and the native community-capability contract.
   2. W7–W13: engine-proven merge laws, immutable version/install profiles, Effective Tree and provenance,
      governed rule packs, rule-linked fixes, runtime oracle, and living evidence graph.
   3. W14–W18: structural/behavioral forensics, Compatibility Lab, analogue-driven completeness, and read-only
      semantic mod diff.
   4. Review stop: do not cross into source-writing rebase or network-driven update actions without the decisions
      and proof gates recorded below.
-  5. W19–W21: reviewed staged rebase, opt-in upstream intelligence, and final UI/CLI/MCP/Agent API/harness parity.
-- **Current bounded implementation batch:** W2B is `VERIFIED` through B118. Existing keys remain preset-compatible;
-  optional custom keys are contract-only with exact versioned identities and allowed effects; the public canonical
-  catalog remains intact while protected discovery and MCP consume a deterministic caller-effective subset. The
-  implementation reused the exact v4 route authority, B42 key store, canonical registry and current MCP shim; it did
-  not add a second permission engine or generic dispatcher. Contract and evidence:
-  `docs/plans/2026-08-01-b118-effective-agent-authority.md`. W3 transaction/receipt authority is next in dependency
-  order but is not yet specified or implemented.
+  5. W19–W20: reviewed staged rebase and opt-in upstream intelligence; W6/W21 then close the native no-gap and final
+     installed-extension acceptance gates across embedded Studio, native IDE controls, optional extension-managed
+     MCP, and internal sidecar/harness proof.
+- **Current bounded implementation batch:** W3A receipt substrate and W3B0 reviewed receipt-policy coverage are
+  `VERIFIED`; W3B1 addressed-state integration is in progress. Existing W0-W2B route/key/capability/MCP authority
+  remains the reused foundation. No production close may claim native toolkit-feature parity until the mapped W7-W20
+  engine/product owner is implemented and the installed extension proves its applicable surface.
 - **Assumptions:** initial `main` was `a68d69855631cb5fd1c62cc4b0a69e08b6a0fc87`; during W1 separately owned
   documentation-only commits advanced `main`/`origin/main` first to `082f501c9778b13256e4c7d3d07b7f8bde2ae3ec` and then
   to `13db48cd84fb8eefe7c205a39d41f99029d093e2`. During close, `origin/main` advanced once more to
@@ -41,12 +47,13 @@ authoritative. Update both surfaces in the same bounded close without marking pa
   `2026-07-30.agent.v4` and current MCP tool names must remain compatible.
 - **Authoritative references:** `AGENTS.md`; `UNIVERSAL_AI_TASK_WORKFLOW.md`; ADR-F1 through ADR-F5;
   `F:\StarForge\wiki\x4-forge\capability-map.md`; X4 XSDs and unpacked corpus; real X4 debug-log evidence for
-  engine behavior. Toolkit output is labelled comparison evidence, never Forge authority.
+  engine behavior. The pinned toolkit source supplies requirements/provenance and optional licence-reviewed source
+  reference only; its executable output is not a Forge product input or acceptance oracle.
 - **In scope for W0–W1:** eleven already-cross-surface capabilities — project validation, schema-domain listing,
   workspace read/compile, readiness, extension conflicts, patch readiness, element explanation, generation preview,
   history listing, and history revert; complete disposition of direct Express route literals; additive schema
   discovery; CLI discovery; MCP capability IDs with old-server fallback.
-- **Out of scope for W0–W1:** handler rewrites, permission enforcement, provider execution, transaction engine,
+- **Out of scope for W0–W1:** handler rewrites, permission enforcement, external-analysis execution, transaction engine,
   rule packs, Effective Tree semantics, installed profiles, native MCP registration, automatic rebase, network
   metadata, public release, and game-directory writes.
 - **Risks:** metadata could be mistaken for enforcement; a dynamic registry could expand MCP authority; raw
@@ -212,12 +219,16 @@ authoritative. Update both surfaces in the same bounded close without marking pa
   Agent Bridge, workspace registry/CAS, Agent History, artifact/release pipeline, runtime watcher and reference
   corpus. No duplicate validator, workspace store, packager or user-facing toolkit shell will be created.
 - Couplings checked: API routes ↔ schema; key scopes ↔ declared access; mutating routes ↔ history/receipts; MCP/CLI/UI
-  aliases ↔ canonical capability IDs; profile/rule/provider/input hashes ↔ later evidence claims.
-- Toolkit disposition: optional isolated provider and comparison oracle first; independent native Forge authority;
-  selective MIT reuse only after provenance/licence review; Bash hooks/prose knowledge/arbitrary plugins rejected.
+  aliases ↔ canonical capability IDs; profile/rule/source/input hashes ↔ later evidence claims.
+- Toolkit disposition: requirements/provenance and optional selective MIT source reference only. Every useful
+  capability is implemented through native Forge owners; toolkit execution, imported findings, comparison results,
+  Bash hooks, prose-only authority, and arbitrary plugins are rejected.
 - Capability-map delta: none yet. The map changes only when a capability is implemented and evidenced.
-- Plan changes caused by reconciliation: capability/permission/receipt foundations precede provider execution; W7
-  engine proof blocks Effective Tree; W1 is metadata and drift governance only, not a generic execution framework.
+- Plan changes caused by reconciliation: capability/permission/receipt foundations precede native capability
+  integration; W7 engine proof blocks Effective Tree; W1 is metadata and drift governance only, not a generic
+  execution framework. The 2026-08-03 owner correction additionally removes the planned external analysis-provider
+  and side-by-side toolkit result path; W5 now owns the native requirements contract and W6 is a native no-gap
+  acceptance suite that closes only after the W7-W20 implementations.
   Fresh review additionally required enforced `/validate/check` and `/generate/preview` adapters, explicit partial/
   disconnected projections, minimum output envelopes, complete route-source discovery, and malformed-current-contract
   fail-closed behavior. Post-repair security review then reproduced two narrower failures: incomplete but correctly
@@ -403,7 +414,8 @@ authoritative. Update both surfaces in the same bounded close without marking pa
 
 - Status: `PARTIAL` overall / `VERIFIED` for W0-W1. B116 closed the combined installed-host boundary; W2-W21 remain
   deliberately unimplemented.
-- What did not change: W2–W21, permission enforcement, provider execution, transaction engine, Effective Tree,
+- What did not change in that historical W0-W1 unit: W2–W21, permission enforcement, existing metered AI-provider
+  execution, transaction engine, Effective Tree,
   installed user profiles or settings, source-writing rebase, network update automation, public release and game/mod directories.
 - Baseline/rollback: the checkpoint is based on synchronized `HEAD == origin/main ==
   f2bc7f1dadf8c2bf42e12c22c4cc59fc079c3734`; ignored checkpoint
@@ -501,5 +513,7 @@ authoritative. Update both surfaces in the same bounded close without marking pa
   recognized 0.0.63 and all 2,089 installed files match. Real Antigravity 1.107.0 rendered the unchanged exact
   capability/effect controls and native preset-versus-exact guidance; the proof flow was cancelled before mint.
   Evidence: `vscode-extension/evidence/2026-08-01-b118-effective-authority/`.
-- Boundaries: W3 receipts, generic harness parity, B64-SEC5, provider execution and public release remain separate.
-  No game/mod/config write, provider spend, marketplace publish or real user-key creation occurred.
+- Boundaries for that historical close: W3 receipts, generic harness parity, B64-SEC5, existing metered AI-provider
+  execution and public release remained separate. No game/mod/config write, AI-provider spend, marketplace publish or
+  real user-key creation occurred. This does not preserve or authorize the now-rejected external analysis-provider
+  plan.

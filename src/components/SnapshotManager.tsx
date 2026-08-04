@@ -173,12 +173,38 @@ export default function SnapshotManager({
     // Capture current state in undo stack before rolling back
     saveCheckpoint();
     try {
+      const currentWorkspaceResponse = await fetch('/api/agent/workspace');
+      if (!currentWorkspaceResponse.ok) {
+        console.error(`Failed to read current workspace before restoring snapshot (${currentWorkspaceResponse.status}).`);
+        return;
+      }
+      const currentWorkspaceData: unknown = await currentWorkspaceResponse.json();
+      if (!currentWorkspaceData || typeof currentWorkspaceData !== 'object') {
+        console.error('Failed to restore snapshot: current workspace response was malformed.');
+        return;
+      }
+      const currentWorkspaceRecord = currentWorkspaceData as {
+        workspaceHash?: unknown;
+        snapshotHash?: unknown;
+      };
+      if (
+        typeof currentWorkspaceRecord.workspaceHash !== 'string'
+        || currentWorkspaceRecord.workspaceHash.trim().length === 0
+        || typeof currentWorkspaceRecord.snapshotHash !== 'string'
+        || currentWorkspaceRecord.snapshotHash.trim().length === 0
+      ) {
+        console.error('Failed to restore snapshot: current workspace response did not include valid CAS hashes.');
+        return;
+      }
+
       const response = await fetch('/api/fs/restore-snapshot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           modId,
-          snapshotName: snap.id
+          snapshotName: snap.id,
+          expectedHead: currentWorkspaceRecord.workspaceHash,
+          expectedSnapshotHash: currentWorkspaceRecord.snapshotHash
         })
       });
       if (response.ok) {

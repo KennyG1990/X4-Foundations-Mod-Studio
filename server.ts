@@ -110,6 +110,21 @@ import { assessSourceSync, hashFolderFingerprint, runCompileFidelitySelftest } f
 import { workspaceContentHash, workspaceSnapshotHash, runWorkspaceIdentitySelftest } from "./src/lib/workspaceIdentity";
 import { buildWorkspaceConflictPreview, runWorkspaceConflictSelftest } from "./src/lib/workspaceConflict";
 import { DestructiveRecoveryStore, runDestructiveRecoverySelftest, type DeploymentRecoveryRecord } from "./src/lib/destructiveRecovery";
+import { ActionReceiptStore } from "./src/lib/actionReceiptStore";
+import { attachActionReceiptToLedgerRow } from "./src/lib/actionReceiptHistory";
+import { combineReceiptResourceBeforeHashes, hashBoundedReceiptFacts } from "./src/lib/actionReceiptRuntime";
+import {
+  hashWorkspaceActionRequestFacts,
+  workspaceReceiptAfter,
+  workspaceReceiptResources,
+} from "./src/lib/workspaceActionReceipt";
+import type { ActionReceiptAfter } from "./src/lib/actionReceipt";
+import {
+  WorkspaceReceiptService,
+  type WorkspaceReceiptServiceResult,
+  type WorkspaceReceiptTransactionDescription,
+} from "./src/server/workspaceReceiptService";
+import { runWorkspaceReceiptServiceSelftest } from "./src/server/workspaceReceiptService.selftest";
 import { mdStemFingerprint, runMdFileIdentitySelftest } from "./src/lib/mdFileIdentity";
 import { layoutImportedGraphBatch, runImportedGraphLayoutSelftest } from "./src/lib/importedGraphLayout";
 import { runXmlSourceSpanSelftest } from "./src/lib/xmlSourceSpans";
@@ -288,6 +303,9 @@ const PORT = Number(process.env.PORT || 3000);
 const TOKEN_FILE = path.join(process.cwd(), ".studio-api-token");
 /** B93.5: reported by GET /api/agent/status so callers can tell a restart from a stale read. */
 const SERVER_STARTED_AT = new Date().toISOString();
+/** W3B1a: stable sidecar identity for authoritative action-receipt client mapping. */
+const ACTION_RECEIPT_RUNTIME_VERSION = "2026-07-30.agent.v4";
+const ACTION_RECEIPT_OPERATION_ID_RE = /^[a-zA-Z][a-zA-Z0-9._:-]{0,127}$/;
 
 function loadStudioApiToken(): string {
   if (process.env.STUDIO_API_TOKEN?.trim()) {
@@ -432,7 +450,7 @@ function localCorsMiddleware(req: express.Request, res: express.Response, next: 
   if (origin && allowedOrigins.has(origin)) {
     res.header("Access-Control-Allow-Origin", origin);
   }
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, x-ai-provider, x-custom-api-key, x-workspace-id, x-client-id");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, x-ai-provider, x-custom-api-key, x-workspace-id, x-client-id, x-forge-operation-id");
   res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE");
   if (req.method === "OPTIONS") {
     return res.sendStatus(200);
@@ -763,6 +781,25 @@ if (TIMEOUT_DRILL_DELAY_MS > 0) {
 // ---------------------------------------------------------------------------
 const agentHistoryStore = new AgentHistoryStore();
 const destructiveRecoveryStore = new DestructiveRecoveryStore({ root: dataPath('recoveries') });
+// W3B1a: one server-owned receipt writer and one serialization-aware service for the bundled
+// extension sidecar.  Construction is intentionally filesystem-light; policy/store failures
+// remain mutation-time failures so read-only diagnostics can still start.
+const actionReceiptStore = new ActionReceiptStore({ root: dataPath('action-receipts') });
+const workspaceReceiptService = new WorkspaceReceiptService();
+
+type ActionReceiptProjection = { id: string; hash: string; status: string };
+type WorkspaceReceiptRecovery = ReturnType<DestructiveRecoveryStore['createWorkspace']>;
+
+function captureActionReceiptProjection(req: express.Request, projection: ActionReceiptProjection | undefined): void {
+  if (projection !== undefined) (req as any).__forgeActionReceipt = projection;
+}
+
+function requestActionReceiptProjection(req: express.Request): ActionReceiptProjection | undefined {
+  const value = (req as any).__forgeActionReceipt;
+  if (!value || typeof value !== 'object') return undefined;
+  if (typeof value.id !== 'string' || typeof value.hash !== 'string' || typeof value.status !== 'string') return undefined;
+  return value as ActionReceiptProjection;
+}
 
 function ledgerActor(req: express.Request): { kind: 'agent' | 'studio'; label: string } {
   const actor = (req as any).__actor;
@@ -949,7 +986,10 @@ function ledgerMiddleware(req: express.Request, res: express.Response, next: exp
         }
       } catch { touchedNodes = undefined; }
 
-      // A workspace sync that changed nothing is not an action worth a row.
+      const receiptProjection = requestActionReceiptProjection(req);
+      // A committed workspace sync that changed nothing is not an action worth a row. Failed,
+      // rolled-back, compensated, and incomplete receipt rows remain visible even when the
+      // domain state is back at its pre-action hash.
       if (kind === 'workspace' && workspaceHashBefore) {
         let after = '';
         let afterSnapshot = '';
@@ -958,7 +998,8 @@ function ledgerMiddleware(req: express.Request, res: express.Response, next: exp
           after = latest?.ok ? workspaceHash(latest.record) : '';
           afterSnapshot = latest?.ok ? workspaceRegistry.snapshotHash(latest.record) : '';
         } catch { after = ''; afterSnapshot = ''; }
-        if (after && afterSnapshot && after === workspaceHashBefore && afterSnapshot === workspaceSnapshotHashBefore) return;
+        if (after && afterSnapshot && after === workspaceHashBefore && afterSnapshot === workspaceSnapshotHashBefore
+          && (receiptProjection === undefined || receiptProjection.status === 'committed')) return;
       }
 
       const described = describeAction({
@@ -1008,7 +1049,19 @@ function ledgerMiddleware(req: express.Request, res: express.Response, next: exp
         ...(rule.reason ? { revertReason: rule.reason } : {}),
         ...((req as any).__revertOf ? { revertOf: (req as any).__revertOf } : {}),
       };
-      agentHistoryStore.append(row);
+      let historyRow = row;
+      if (receiptProjection !== undefined) {
+        try {
+          // History is a fail-soft projection. Reopen the complete authoritative receipt and
+          // verify the request-local projection before attaching only id/hash/status.
+          const receipt = actionReceiptStore.read(receiptProjection.id);
+          if (receipt.hash !== receiptProjection.hash || receipt.status !== receiptProjection.status) throw new Error('receipt projection mismatch');
+          historyRow = attachActionReceiptToLedgerRow(row, receipt);
+        } catch {
+          // Receipt truth and route success never depend on the optional history projection.
+        }
+      }
+      agentHistoryStore.append(historyRow);
     } catch {
       // Swallowed BY DESIGN. The response has already been sent; a ledger fault must not
       // surface as a request failure. The store counts its own faults for the panel.
@@ -3710,6 +3763,7 @@ app.get("/api/agent/schema", (req, res) => {
         method: "POST",
         path: "/api/agent/workspace",
         auth: true,
+        headers: { "x-forge-operation-id": "required caller-owned bounded operation identity; the server never fabricates it" },
         body: { workspace: "ModWorkspace", expectedHead: "workspaceHash from GET (content CAS; 409 head_conflict on mismatch)", expectedSnapshotHash: "snapshotHash from GET (complete state CAS; 409 snapshot_conflict on mismatch)", expectedVersion: "optional number (optimistic concurrency; 409 on mismatch)", force: "optional boolean — deliberate last-writer-wins overwrite", dryRun: "optional boolean (validate + return diagnostics without applying)" },
         purpose: "Replace the addressed studio workspace and bump the version if changed. Safe writers send the paired expectedHead and expectedSnapshotHash from one GET. Writes with no hash/version precondition and no force are rejected 409 legacy_write_rejected. The immutable workspace binding does not change when its display name changes.",
         example: "POST {\"workspace\":{...},\"expectedHead\":\"ab12...\",\"expectedSnapshotHash\":\"cd34...\"} -> 409 on either stale identity, else 200 {applied,version,workspaceHash,snapshotHash,diagnosticsSummary}"
@@ -3718,6 +3772,7 @@ app.get("/api/agent/schema", (req, res) => {
         method: "POST",
         path: "/api/agent/workspace/merge",
         auth: true,
+        headers: { "x-forge-operation-id": "required caller-owned bounded operation identity; the server never fabricates it" },
         body: { changes: "partial top-level ModWorkspace fields to merge (JSON-merge-patch)", expectedHead: "workspaceHash from GET (content CAS)", expectedSnapshotHash: "snapshotHash from GET (complete state CAS)", expectedVersion: "optional number", force: "optional boolean", dryRun: "optional boolean" },
         purpose: "Granular edit: merge only the provided top-level fields into the addressed workspace. Same CAS/force rules as POST /api/agent/workspace.",
         example: "POST {\"changes\":{\"version\":\"2.0.0\"},\"expectedHead\":\"ab12...\",\"expectedSnapshotHash\":\"cd34...\"}"
@@ -5431,13 +5486,31 @@ function summarizeDiagnostics(diags: any[]) {
  * @param incoming   either a full workspace or (when merge) a partial set of top-level fields
  * @param opts.merge JSON-merge-patch semantics over the active workspace
  */
+type WorkspaceMutationResult = {
+  status: number;
+  body: any;
+  changed?: boolean;
+  recovery?: WorkspaceReceiptRecovery;
+};
+
 function applyWorkspaceMutation(
   record: WorkspaceRecord,
   incoming: any,
-  opts: { expectedVersion?: number; expectedHead?: string; expectedSnapshotHash?: string; dryRun?: boolean; merge?: boolean; force?: boolean },
+  opts: {
+    expectedVersion?: number;
+    expectedHead?: string;
+    expectedSnapshotHash?: string;
+    dryRun?: boolean;
+    merge?: boolean;
+    force?: boolean;
+    /** W3B1a supplies the deterministic receipt-owned recovery prepared before mutation. */
+    receiptRecovery?: WorkspaceReceiptRecovery;
+    /** W3B1a supplies the one sanitized target used to derive receipt and recovery hashes. */
+    receiptPreparedWorkspace?: ModWorkspace;
+  },
   registry: WorkspaceRegistry = workspaceRegistry,
   recoveryStore: DestructiveRecoveryStore = destructiveRecoveryStore,
-): { status: number; body: any } {
+): WorkspaceMutationResult {
   if (!incoming || typeof incoming !== 'object') {
     return { status: 400, body: { error: "Missing or invalid workspace payload." } };
   }
@@ -5491,7 +5564,8 @@ function applyWorkspaceMutation(
     && opts.expectedSnapshotHash !== currentSnapshotHash;
   if (headMismatch || snapshotMismatch) {
       let conflictPreview: ReturnType<typeof buildWorkspaceConflictPreview> | undefined;
-      const proposed = sanitizeWorkspace(opts.merge ? { ...currentWorkspace, ...incoming } : incoming);
+      const proposed = opts.receiptPreparedWorkspace
+        ?? sanitizeWorkspace(opts.merge ? { ...currentWorkspace, ...incoming } : incoming);
       const proposedSnapshotHash = workspaceSnapshotHash(proposed);
       try {
         conflictPreview = buildWorkspaceConflictPreview(
@@ -5523,9 +5597,9 @@ function applyWorkspaceMutation(
               name: currentWorkspace?.name || 'Untitled',
             },
             local: {
-              head: workspaceContentHash(sanitizeWorkspace(opts.merge ? { ...currentWorkspace, ...incoming } : incoming)),
+              head: workspaceContentHash(proposed),
               snapshotHash: proposedSnapshotHash,
-              name: String((opts.merge ? { ...currentWorkspace, ...incoming } : incoming)?.name || 'Untitled'),
+              name: String(proposed?.name || 'Untitled'),
             },
             ...(conflictPreview ? { preview: conflictPreview } : { previewUnavailable: 'The file-level comparison could not be compiled.' }),
           },
@@ -5533,12 +5607,13 @@ function applyWorkspaceMutation(
       };
   }
   const merged = opts.merge ? { ...currentWorkspace, ...incoming } : incoming;
-  const nextWorkspace = sanitizeWorkspace(merged);
+  const nextWorkspace = opts.receiptPreparedWorkspace ?? sanitizeWorkspace(merged);
   const diagnostics = computeWorkspaceDiagnostics(nextWorkspace);
 
   if (opts.dryRun) {
     return {
       status: 200,
+      changed: false,
       body: {
         success: true, dryRun: true, applied: false,
         workspaceId: record.workspaceId,
@@ -5553,7 +5628,31 @@ function applyWorkspaceMutation(
   const isDifferent = JSON.stringify(nextWorkspace) !== JSON.stringify(currentWorkspace);
   let recovery: ReturnType<DestructiveRecoveryStore['createWorkspace']> | undefined;
   if (isDifferent) {
-    if (opts.force) {
+    if (opts.receiptRecovery !== undefined) {
+      const expectedCurrentHash = workspaceContentHash(nextWorkspace);
+      const expectedCurrentSnapshotHash = workspaceSnapshotHash(nextWorkspace);
+      if (opts.receiptRecovery.kind !== 'workspace'
+        || opts.receiptRecovery.status !== 'ready'
+        || opts.receiptRecovery.workspaceId !== record.workspaceId
+        || opts.receiptRecovery.beforeHash !== currentHead
+        || opts.receiptRecovery.beforeSnapshotHash !== currentSnapshotHash
+        || opts.receiptRecovery.expectedCurrentHash !== expectedCurrentHash
+        || opts.receiptRecovery.expectedCurrentSnapshotHash !== expectedCurrentSnapshotHash) {
+        return {
+          status: 507,
+          changed: false,
+          body: {
+            success: false,
+            code: 'RECEIPT_RECOVERY_MISMATCH',
+            error: 'Workspace mutation refused because its deterministic recovery did not match the prepared state.',
+            workspaceId: record.workspaceId,
+            currentHead,
+            currentVersion,
+          },
+        };
+      }
+      recovery = opts.receiptRecovery;
+    } else if (opts.force) {
       try {
         recovery = recoveryStore.createWorkspace({
           workspaceId: record.workspaceId,
@@ -5584,6 +5683,8 @@ function applyWorkspaceMutation(
   }
   return {
     status: 200,
+    changed: isDifferent,
+    ...(recovery ? { recovery } : {}),
     body: {
       success: true, applied: isDifferent,
       message: isDifferent ? 'Workspace updated; version bumped.' : 'Workspace already in sync.',
@@ -5607,32 +5708,641 @@ function applyWorkspaceMutation(
   };
 }
 
+function receiptFailureStatus(code: string): number {
+  if (code === 'ACTION_RECEIPT_OPERATION_ID_INVALID'
+    || code.includes('INPUT_INVALID')
+    || code.includes('REQUEST_FACTS_INVALID')
+    || code.includes('IDENTITY_INVALID')
+    || code.includes('IDENTITY_MISSING')) return 400;
+  if (code === 'ACTION_RECEIPT_DUPLICATE_CONFLICT'
+    || code === 'ACTION_RECEIPT_REPLAY'
+    || code === 'ACTION_RECEIPT_PREPARED_REPLAY') return 409;
+  if (code.includes('RECOVERY')) return 507;
+  if (code.includes('POLICY') || code.includes('STORE') || code.includes('PREPARE')) return 503;
+  return 500;
+}
+
+function safeReceiptErrorCode(error: unknown, fallback: string): string {
+  const candidate = error && typeof error === 'object' && 'code' in error
+    ? String((error as { code?: unknown }).code || '')
+    : '';
+  return /^(?:ACTION_RECEIPT|WORKSPACE_ACTION_RECEIPT)_[A-Z0-9_]+$/.test(candidate) ? candidate : fallback;
+}
+
+function receiptStringSemantic(value: unknown, canonicalPattern: RegExp): Record<string, unknown> {
+  if (typeof value !== 'string' || value.length === 0) return { supplied: false };
+  if (canonicalPattern.test(value)) return { supplied: true, canonical: true, value: value.toLowerCase() };
+  return {
+    supplied: true,
+    canonical: false,
+    length: value.length,
+    digest: crypto.createHash('sha256').update(value, 'utf8').digest('hex'),
+  };
+}
+
+function receiptVersionSemantic(value: unknown): Record<string, unknown> {
+  if (typeof value !== 'number') return { supplied: false };
+  if (Number.isSafeInteger(value) && value >= 0) return { supplied: true, canonical: true, value };
+  if (Number.isFinite(value)) return { supplied: true, canonical: false, value };
+  return { supplied: true, canonical: false, value: String(value) };
+}
+
+function receiptPreflightSemantic(failure: WorkspaceMutationResult | undefined): Record<string, unknown> {
+  if (failure === undefined) return { supplied: false };
+  const rawCode = failure.body && typeof failure.body === 'object' ? failure.body.code : undefined;
+  const code = typeof rawCode === 'string' && /^[a-zA-Z][a-zA-Z0-9._:-]{0,127}$/.test(rawCode)
+    ? rawCode
+    : `status_${failure.status}`;
+  return { supplied: true, status: failure.status, code };
+}
+
+function sameWorkspaceReceiptResources(left: unknown, right: unknown): boolean {
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+  return left.every((entry, index) => {
+    const other = right[index];
+    if (!entry || typeof entry !== 'object' || !other || typeof other !== 'object') return false;
+    const a = entry as Record<string, unknown>;
+    const b = other as Record<string, unknown>;
+    return a.role === b.role && a.root === b.root && a.relativePath === b.relativePath && a.beforeHash === b.beforeHash;
+  });
+}
+
+function sameWorkspaceReceiptAfterResources(left: ActionReceiptAfter | undefined, right: ActionReceiptAfter | undefined): boolean {
+  if (left === undefined || right === undefined || !Array.isArray(left.resources) || !Array.isArray(right.resources)
+    || left.resources.length !== right.resources.length) return false;
+  return left.resources.every((resource, index) => {
+    const other = right.resources[index];
+    return resource.role === other?.role && resource.root === other?.root
+      && resource.relativePath === other?.relativePath && resource.hash === other?.hash;
+  });
+}
+
+function workspacePartialAfter(resources: unknown, workspace: unknown, code: string): ActionReceiptAfter {
+  return workspaceReceiptAfter(resources, workspace, { outcome: 'partial', code });
+}
+
+function recoveryResponse(recovery: WorkspaceReceiptRecovery | undefined): Record<string, unknown> | undefined {
+  if (recovery === undefined) return undefined;
+  return {
+    id: recovery.id,
+    kind: recovery.kind,
+    createdAt: recovery.createdAt,
+    expiresAt: recovery.expiresAt,
+    summary: recovery.summary,
+    expectedCurrentHash: recovery.expectedCurrentHash,
+    expectedCurrentSnapshotHash: recovery.expectedCurrentSnapshotHash,
+  };
+}
+
+function currentWorkspaceReplayBody(
+  record: WorkspaceRecord,
+  mode: 'replace' | 'merge',
+  receipt: ActionReceiptProjection,
+): Record<string, unknown> {
+  const diagnostics = (() => {
+    try {
+      const values = computeWorkspaceDiagnostics(record.workspace as ModWorkspace);
+      return { diagnosticsSummary: summarizeDiagnostics(values), diagnostics: values };
+    } catch {
+      return {};
+    }
+  })();
+  const storedRecovery = destructiveRecoveryStore.read(receipt.id);
+  return {
+    success: true,
+    applied: false,
+    replayed: true,
+    message: `Workspace ${mode} was already committed; returning the current addressed workspace.`,
+    workspaceId: record.workspaceId,
+    version: record.version,
+    workspaceHash: workspaceHash(record),
+    snapshotHash: workspaceRegistry.snapshotHash(record),
+    ...diagnostics,
+    workspace: record.workspace,
+    receipt,
+    ...(storedRecovery.ok && storedRecovery.record.kind === 'workspace'
+      ? { recovery: recoveryResponse(storedRecovery.record) }
+      : {}),
+  };
+}
+
+function workspaceReceiptFailureBody(
+  result: WorkspaceReceiptServiceResult,
+  domainResult?: WorkspaceMutationResult,
+): { status: number; body: Record<string, unknown> } {
+  const hasOriginalFailure = result.receipt !== undefined
+    && domainResult !== undefined && domainResult.status >= 400;
+  const body: Record<string, unknown> = hasOriginalFailure
+    ? { ...(domainResult!.body || {}) }
+    : {
+      success: false,
+      status: 'FAILED',
+      code: result.code,
+      error: 'Workspace receipt transaction failed.',
+      failedStages: ['workspace_receipt'],
+    };
+  if (result.replayed) body.replayed = true;
+  if (result.receipt !== undefined) body.receipt = result.receipt;
+  return {
+    status: hasOriginalFailure ? domainResult!.status : receiptFailureStatus(result.code),
+    body,
+  };
+}
+
+type ExecuteWorkspaceReceiptMutationOptions = {
+  operationId: string;
+  routeKey: 'POST /api/agent/workspace' | 'POST /api/agent/workspace/merge';
+  mode: 'replace' | 'merge';
+  merge?: boolean;
+  expectedVersion?: number;
+  expectedHead?: string;
+  expectedSnapshotHash?: string;
+  dryRun?: boolean;
+  force?: boolean;
+  /** Valid-operation route/body/scope refusal preserved through receipt preparation. */
+  preflightFailure?: WorkspaceMutationResult;
+  /** Scope/policy refusals still hash a valid proposal; malformed body refusals do not. */
+  preflightKind?: 'body' | 'scope';
+};
+
+/** W3B1a adapter for the two addressed workspace mutation routes only. */
+async function executeWorkspaceReceiptMutation(
+  req: express.Request,
+  res: express.Response,
+  record: WorkspaceRecord,
+  incoming: unknown,
+  options: ExecuteWorkspaceReceiptMutationOptions,
+): Promise<void> {
+  const latestAtPrepare = workspaceRegistry.lookup(record.workspaceId);
+  if (latestAtPrepare.ok === false) {
+    return void res.status(404).json({ code: latestAtPrepare.code, error: latestAtPrepare.error });
+  }
+
+  const preparedRecord = latestAtPrepare.record;
+  const beforeWorkspace = sanitizeWorkspace(preparedRecord.workspace);
+  let nextWorkspace = beforeWorkspace;
+  let beforeResources: ReturnType<typeof workspaceReceiptResources>;
+  let nextResources: ReturnType<typeof workspaceReceiptResources>;
+  let preparationFailure = options.preflightFailure;
+  try {
+    beforeResources = workspaceReceiptResources(preparedRecord.workspaceId, beforeWorkspace);
+  } catch {
+    return void res.status(500).json({
+      code: 'ACTION_RECEIPT_PREPARE_INVALID',
+      error: 'Workspace receipt facts could not be prepared from the addressed workspace state.',
+    });
+  }
+  if (preparationFailure === undefined || options.preflightKind === 'scope') {
+    try {
+      nextWorkspace = sanitizeWorkspace(options.merge ? { ...beforeWorkspace, ...(incoming as object) } : incoming);
+    } catch {
+      preparationFailure = preparationFailure || {
+        status: 400,
+        changed: false,
+        body: {
+          code: 'ACTION_RECEIPT_PREPARE_INVALID',
+          error: 'Workspace receipt facts could not be prepared from the supplied workspace state.',
+        },
+      };
+      nextWorkspace = beforeWorkspace;
+    }
+  }
+  try {
+    nextResources = workspaceReceiptResources(preparedRecord.workspaceId, nextWorkspace);
+  } catch {
+    preparationFailure = preparationFailure || {
+      status: 400,
+      changed: false,
+      body: {
+        code: 'ACTION_RECEIPT_PREPARE_INVALID',
+        error: 'Workspace receipt facts did not contain the complete paired resources.',
+      },
+    };
+    nextWorkspace = beforeWorkspace;
+    nextResources = beforeResources;
+  }
+
+  const isDifferent = JSON.stringify(nextWorkspace) !== JSON.stringify(beforeWorkspace);
+  const nextContentHash = nextResources.find(resource => resource.role === 'workspace')?.beforeHash;
+  const nextSnapshotHash = nextResources.find(resource => resource.role === 'snapshot')?.beforeHash;
+  if (!nextContentHash || !nextSnapshotHash) {
+    return void res.status(400).json({
+      code: 'ACTION_RECEIPT_PREPARE_INVALID',
+      error: 'Workspace receipt facts did not contain the complete paired resources.',
+    });
+  }
+
+  const requestFacts: Record<string, unknown> = {
+    routeKey: options.routeKey,
+    mode: options.mode,
+    force: options.force === true,
+    dryRun: Boolean(options.dryRun),
+    proposedContentHash: nextContentHash,
+    proposedSnapshotHash: nextSnapshotHash,
+  };
+  if (typeof options.expectedHead === 'string' && /^[a-f0-9]{16}$/.test(options.expectedHead)) {
+    requestFacts.expectedHead = options.expectedHead;
+  }
+  // The public CAS response remains the legacy 16-hex snapshot hash. Complete receipt
+  // hashes use the schema-approved request-facts field; the legacy value is bound below in
+  // a separately named bounded envelope so it is never mislabeled as a complete hash.
+  const expectedSnapshotIsComplete = typeof options.expectedSnapshotHash === 'string'
+    && /^[a-f0-9]{64}$/.test(options.expectedSnapshotHash);
+  if (expectedSnapshotIsComplete) {
+    requestFacts.expectedSnapshotHash = options.expectedSnapshotHash;
+  }
+  if (typeof options.expectedVersion === 'number'
+    && Number.isSafeInteger(options.expectedVersion) && options.expectedVersion >= 0) {
+    requestFacts.expectedVersion = options.expectedVersion;
+  }
+
+  let requestHash: string;
+  let beforeHash: string;
+  try {
+    const boundedRequestFactsHash = hashWorkspaceActionRequestFacts(requestFacts);
+    requestHash = hashBoundedReceiptFacts({
+      boundedRequestFactsHash,
+      expectedHead: receiptStringSemantic(options.expectedHead, /^[a-f0-9]{16}$/),
+      expectedSnapshotHash: receiptStringSemantic(options.expectedSnapshotHash, /^(?:[a-f0-9]{16}|[a-f0-9]{64})$/),
+      expectedVersion: receiptVersionSemantic(options.expectedVersion),
+      preflight: receiptPreflightSemantic(preparationFailure),
+    });
+    beforeHash = combineReceiptResourceBeforeHashes(beforeResources);
+  } catch (error) {
+    preparationFailure = preparationFailure || {
+      status: 400,
+      changed: false,
+      body: {
+        code: safeReceiptErrorCode(error, 'ACTION_RECEIPT_PREPARE_INVALID'),
+        error: 'Workspace receipt request facts were refused.',
+      },
+    };
+    requestHash = hashBoundedReceiptFacts({
+      boundedRequestFactsHash: hashWorkspaceActionRequestFacts({
+        routeKey: options.routeKey,
+        mode: options.mode,
+        force: options.force === true,
+        dryRun: Boolean(options.dryRun),
+        proposedContentHash: beforeResources.find(resource => resource.role === 'workspace')?.beforeHash,
+        proposedSnapshotHash: beforeResources.find(resource => resource.role === 'snapshot')?.beforeHash,
+      }),
+      expectedHead: receiptStringSemantic(options.expectedHead, /^[a-f0-9]{16}$/),
+      expectedSnapshotHash: receiptStringSemantic(options.expectedSnapshotHash, /^(?:[a-f0-9]{16}|[a-f0-9]{64})$/),
+      expectedVersion: receiptVersionSemantic(options.expectedVersion),
+      preflight: receiptPreflightSemantic(preparationFailure),
+    });
+    beforeHash = combineReceiptResourceBeforeHashes(beforeResources);
+  }
+
+  const actor = (req as any).__actor as RequestActor | undefined;
+  const clientId = String((req as any).__clientId || '');
+  const identity = actor?.kind === 'agent'
+    ? { kind: 'agent', keyId: actor.keyId, version: ACTION_RECEIPT_RUNTIME_VERSION }
+    : { kind: 'studio', clientId, version: ACTION_RECEIPT_RUNTIME_VERSION };
+  const effectResource = beforeResources.find(resource => resource.role === 'workspace');
+  if (effectResource === undefined) {
+    return void res.status(400).json({
+      code: 'ACTION_RECEIPT_PREPARE_INVALID',
+      error: 'Workspace receipt effect authority was not available.',
+    });
+  }
+
+  const receiptRecoveryRequired = isDifferent && !options.dryRun && preparationFailure === undefined;
+  let recoveryPrepared: WorkspaceReceiptRecovery | undefined;
+  let mutationRecord: WorkspaceRecord | undefined;
+  let mutationResult: WorkspaceMutationResult | undefined = preparationFailure;
+  let expectedAfter: ActionReceiptAfter | undefined;
+  const abandonedRecovery = (receiptId?: string): void => {
+    if (receiptId) destructiveRecoveryStore.abandon(receiptId);
+  };
+
+  const description: WorkspaceReceiptTransactionDescription = {
+    routeKey: options.routeKey,
+    operationId: options.operationId,
+    identity,
+    authority: {
+      scope: 'workspace',
+      workspaceId: preparedRecord.workspaceId,
+      requestScope: `workspace-${preparedRecord.workspaceId}`,
+      resources: beforeResources,
+    },
+    declaredEffects: [{
+      id: 'workspace-write',
+      operation: options.mode,
+      resource: effectResource,
+      reversible: receiptRecoveryRequired,
+    }],
+    requestHash,
+    beforeHash,
+    validation: {
+      validator: 'workspace-cas',
+      code: options.merge ? 'workspace-merge' : 'workspace-replace',
+      summary: 'Workspace CAS and domain validation',
+    },
+    rollback: receiptRecoveryRequired
+      ? { required: true, mode: 'recovery', status: 'prepared' }
+      : { required: false, mode: 'none', status: 'not_required' },
+    metadata: {
+      operation: options.mode,
+      route: options.routeKey,
+      mode: options.mode,
+      dryRun: Boolean(options.dryRun),
+    },
+    store: actionReceiptStore,
+    serializationKey: `workspace:${preparedRecord.workspaceId}`,
+    mayMutate: async ({ receipt }) => {
+      const deadlineRequest = req as DeadlineAwareRequest;
+      if (res.writableEnded || res.destroyed || deadlineRequest.__forgeResponseDeadlineExceeded) {
+        mutationResult = {
+          status: 503,
+          changed: false,
+          body: {
+            success: false,
+            code: 'WORKSPACE_RECEIPT_RESPONSE_DEADLINE',
+            error: 'Workspace receipt mutation refused because the response deadline was exceeded.',
+            workspaceId: preparedRecord.workspaceId,
+          },
+        };
+        abandonedRecovery(receiptRecoveryRequired ? receipt.id : undefined);
+        return false;
+      }
+      if (preparationFailure !== undefined) return true;
+      const latest = workspaceRegistry.lookup(preparedRecord.workspaceId);
+      if (latest.ok === false) {
+        mutationResult = {
+          status: latest.code === 'WORKSPACE_NOT_FOUND' ? 404 : 409,
+          changed: false,
+          body: {
+            success: false,
+            code: latest.code,
+            error: latest.error,
+            workspaceId: preparedRecord.workspaceId,
+          },
+        };
+        abandonedRecovery(receiptRecoveryRequired ? receipt.id : undefined);
+        return false;
+      }
+      let currentResources: ReturnType<typeof workspaceReceiptResources>;
+      try {
+        currentResources = workspaceReceiptResources(latest.record.workspaceId, sanitizeWorkspace(latest.record.workspace));
+      } catch {
+        mutationResult = {
+          status: 409,
+          changed: false,
+          body: {
+            success: false,
+            code: 'WORKSPACE_STATE_UNAVAILABLE',
+            error: 'Workspace receipt mutation refused because the addressed workspace state could not be re-read.',
+            workspaceId: preparedRecord.workspaceId,
+            currentHead: workspaceHash(latest.record),
+            currentSnapshotHash: workspaceRegistry.snapshotHash(latest.record),
+            currentVersion: latest.record.version,
+          },
+        };
+        abandonedRecovery(receiptRecoveryRequired ? receipt.id : undefined);
+        return false;
+      }
+      if (!sameWorkspaceReceiptResources(currentResources, receipt.authority.resources)) {
+        mutationResult = {
+          status: 409,
+          changed: false,
+          body: {
+            success: false,
+            code: 'WORKSPACE_STATE_CONFLICT',
+            error: 'Workspace changed before the serialized receipt mutation could begin; re-fetch and retry.',
+            workspaceId: latest.record.workspaceId,
+            currentHead: workspaceHash(latest.record),
+            currentSnapshotHash: workspaceRegistry.snapshotHash(latest.record),
+            currentVersion: latest.record.version,
+          },
+        };
+        abandonedRecovery(receiptRecoveryRequired ? receipt.id : undefined);
+        return false;
+      }
+      mutationRecord = latest.record;
+      return true;
+    },
+    callbacks: {
+      prepareRecovery: async ({ receipt }) => {
+        try {
+          recoveryPrepared = destructiveRecoveryStore.createWorkspace({
+            recoveryId: receipt.id,
+            workspaceId: preparedRecord.workspaceId,
+            beforeWorkspace,
+            beforeHash: workspaceHash(preparedRecord),
+            beforeSnapshotHash: workspaceRegistry.snapshotHash(preparedRecord),
+            expectedCurrentHash: workspaceContentHash(nextWorkspace),
+            expectedCurrentSnapshotHash: workspaceSnapshotHash(nextWorkspace),
+            summary: 'Workspace receipt recovery',
+          });
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      mutate: async ({ receipt }) => {
+        if (preparationFailure !== undefined) {
+          abandonedRecovery(receiptRecoveryRequired ? receipt.id : undefined);
+          return { ok: false, changed: false };
+        }
+        const target = mutationRecord !== undefined
+          ? { ok: true as const, record: mutationRecord }
+          : workspaceRegistry.lookup(preparedRecord.workspaceId);
+        if (target.ok === false) {
+          abandonedRecovery(receiptRecoveryRequired ? receipt.id : undefined);
+          return { ok: false, changed: false };
+        }
+        // The adapter already computed the complete sanitized target above. Reuse it as a
+        // full replacement so sanitizeWorkspace cannot generate a second set of defaults
+        // (ids/timestamps) during the domain write, especially for merge payloads.
+        const domain = applyWorkspaceMutation(target.record, nextWorkspace, {
+          expectedVersion: options.expectedVersion,
+          expectedHead: options.expectedHead,
+          expectedSnapshotHash: options.expectedSnapshotHash,
+          dryRun: options.dryRun,
+          merge: false,
+          force: options.force,
+          receiptRecovery: recoveryPrepared,
+          receiptPreparedWorkspace: nextWorkspace,
+        });
+        mutationResult = domain;
+        if (domain.status >= 400 || domain.body?.success === false) {
+          if (domain.changed !== true) abandonedRecovery(receiptRecoveryRequired ? receipt.id : undefined);
+          return { ok: false, changed: false };
+        }
+        return { changed: domain.changed === true };
+      },
+      postcondition: async ({ receipt }) => {
+        const latest = workspaceRegistry.lookup(preparedRecord.workspaceId);
+        if (latest.ok === false) throw new Error('Workspace disappeared during receipt finalization.');
+        const after = workspaceReceiptAfter(receipt.authority.resources, sanitizeWorkspace(latest.record.workspace));
+        expectedAfter = after;
+        return after;
+      },
+      rollback: async ({ receipt }) => {
+        const latest = workspaceRegistry.lookup(preparedRecord.workspaceId);
+        if (latest.ok === false) return { ok: false };
+        const currentWorkspace = sanitizeWorkspace(latest.record.workspace);
+        const currentAfter = workspaceReceiptAfter(receipt.authority.resources, currentWorkspace);
+        const expected = receipt.after || expectedAfter || workspaceReceiptAfter(receipt.authority.resources, nextWorkspace);
+        if (currentAfter.outcome === 'no_change') {
+          abandonedRecovery(receipt.id);
+          return currentAfter;
+        }
+        if (!sameWorkspaceReceiptAfterResources(expected, currentAfter)) {
+          return { ok: false, partialAfter: workspacePartialAfter(receipt.authority.resources, currentWorkspace, 'workspace_rollback_guard') };
+        }
+        const recovery = recoveryPrepared || (() => {
+          const found = destructiveRecoveryStore.read(receipt.id);
+          return found.ok && found.record.kind === 'workspace' ? found.record : undefined;
+        })();
+        if (recovery === undefined || recovery.status !== 'ready'
+          || recovery.workspaceId !== preparedRecord.workspaceId
+          || recovery.beforeHash !== workspaceHash(preparedRecord)
+          || recovery.beforeSnapshotHash !== workspaceRegistry.snapshotHash(preparedRecord)
+          || recovery.expectedCurrentHash !== workspaceContentHash(nextWorkspace)
+          || recovery.expectedCurrentSnapshotHash !== workspaceSnapshotHash(nextWorkspace)) {
+          return { ok: false, partialAfter: workspacePartialAfter(receipt.authority.resources, currentWorkspace, 'workspace_recovery_unavailable') };
+        }
+        // Re-read immediately before the compensating commit. A later writer that changed
+        // either complete receipt resource is never overwritten.
+        const guarded = workspaceRegistry.lookup(preparedRecord.workspaceId);
+        if (guarded.ok === false) return { ok: false };
+        const guardedAfter = workspaceReceiptAfter(receipt.authority.resources, sanitizeWorkspace(guarded.record.workspace));
+        if (!sameWorkspaceReceiptAfterResources(expected, guardedAfter)) {
+          return { ok: false, partialAfter: workspacePartialAfter(receipt.authority.resources, sanitizeWorkspace(guarded.record.workspace), 'workspace_rollback_guard') };
+        }
+        try {
+          workspaceRegistry.commit(preparedRecord.workspaceId, recovery.beforeWorkspace as ModWorkspace, 'api:receipt-rollback');
+        } catch {
+          const observed = workspaceRegistry.lookup(preparedRecord.workspaceId);
+          return observed.ok
+            ? { ok: false, partialAfter: workspacePartialAfter(receipt.authority.resources, sanitizeWorkspace(observed.record.workspace), 'workspace_rollback_failed') }
+            : { ok: false };
+        }
+        const restored = workspaceRegistry.lookup(preparedRecord.workspaceId);
+        if (restored.ok === false) return { ok: false };
+        const restoredAfter = workspaceReceiptAfter(receipt.authority.resources, sanitizeWorkspace(restored.record.workspace));
+        if (restoredAfter.outcome !== 'no_change') {
+          return { ok: false, partialAfter: workspacePartialAfter(receipt.authority.resources, sanitizeWorkspace(restored.record.workspace), 'workspace_rollback_failed') };
+        }
+        abandonedRecovery(receipt.id);
+        return restoredAfter;
+      },
+    },
+  };
+
+  let result: WorkspaceReceiptServiceResult;
+  try {
+    result = await workspaceReceiptService.execute(description);
+  } catch {
+    abandonedRecovery(recoveryPrepared?.id);
+    throw new Error('Workspace receipt transaction failed.');
+  }
+  captureActionReceiptProjection(req, result.receipt);
+  if (!result.ok) {
+    if (!result.receipt) abandonedRecovery(recoveryPrepared?.id);
+    else if (result.receipt.status === 'failed') abandonedRecovery(recoveryPrepared?.id);
+    const failure = workspaceReceiptFailureBody(result, mutationResult);
+    return void res.status(failure.status).json(failure.body);
+  }
+
+  if (result.replayed) {
+    const replayed = workspaceRegistry.lookup(preparedRecord.workspaceId);
+    if (replayed.ok === false) {
+      return void res.status(500).json({
+        success: false,
+        status: 'FAILED',
+        code: 'ACTION_RECEIPT_REPLAY_STATE_UNAVAILABLE',
+        error: 'The committed workspace receipt replay could not read the addressed workspace.',
+        failedStages: ['workspace_replay'],
+        receipt: result.receipt,
+      });
+    }
+    return void res.status(200).json(currentWorkspaceReplayBody(replayed.record, options.mode, result.receipt));
+  }
+
+  if (mutationResult === undefined || mutationResult.status >= 400 || mutationResult.body?.success === false) {
+    return void res.status(500).json({
+      success: false,
+      status: 'FAILED',
+      code: 'ACTION_RECEIPT_MUTATION_RESULT_MISSING',
+      error: 'The committed workspace receipt had no truthful mutation response.',
+      failedStages: ['workspace_response'],
+      receipt: result.receipt,
+    });
+  }
+  const body = { ...(mutationResult.body || {}), receipt: result.receipt };
+  return void res.status(mutationResult.status).json(body);
+}
+
 /**
  * POST /api/agent/workspace
  * Replace the addressed workspace. Supports paired optimistic concurrency via
  * `expectedHead` + `expectedSnapshotHash`, legacy `expectedVersion`, and `dryRun`.
  */
-app.post("/api/agent/workspace", (req, res) => {
-  const record = requestWorkspace(req);
-  const { workspace, expectedVersion, expectedHead, expectedSnapshotHash, dryRun, force } = req.body || {};
-  if (!workspace) {
-    return res.status(400).json({ error: "Missing required 'workspace' body parameter." });
-  }
-  const actor = (req as any).__actor as RequestActor | undefined;
-  if (force === true && actor?.kind === 'agent' && actor.scope !== 'deploy') {
-    return res.status(403).json({
-      code: 'insufficient_scope',
-      authorityCode: 'AGENT_SCOPE_DENIED',
-      error: 'Forced workspace replacement requires a deploy-scoped key or the Studio session.',
-      scope: actor.scope,
-      requiredScopes: ['deploy'],
-      route: actor.authority?.routeKey,
-      policyVersion: actor.authority?.policyVersion,
-      policyHash: actor.authority?.policyHash,
+app.post("/api/agent/workspace", async (req, res) => {
+  const operationId = req.headers['x-forge-operation-id'];
+  if (typeof operationId !== 'string' || !ACTION_RECEIPT_OPERATION_ID_RE.test(operationId)) {
+    return res.status(400).json({
+      code: 'ACTION_RECEIPT_OPERATION_ID_INVALID',
+      error: 'A caller-owned x-forge-operation-id header is required.',
     });
   }
-  const r = applyWorkspaceMutation(record, workspace, { expectedVersion, expectedHead, expectedSnapshotHash, dryRun, force: force === true });
-  return res.status(r.status).json(r.body);
+  try {
+    const record = requestWorkspace(req);
+    const { workspace, expectedVersion, expectedHead, expectedSnapshotHash, dryRun, force } = req.body || {};
+    const actor = (req as any).__actor as RequestActor | undefined;
+    let preflightFailure: WorkspaceMutationResult | undefined;
+    let preflightKind: 'body' | 'scope' | undefined;
+    if (!workspace || typeof workspace !== 'object') {
+      preflightFailure = {
+        status: 400,
+        changed: false,
+        body: { error: "Missing required 'workspace' body parameter." },
+      };
+      preflightKind = 'body';
+    }
+    if (preflightFailure === undefined && force === true && actor?.kind === 'agent' && actor.scope !== 'deploy') {
+      preflightFailure = {
+        status: 403,
+        changed: false,
+        body: {
+          code: 'insufficient_scope',
+          authorityCode: 'AGENT_SCOPE_DENIED',
+          error: 'Forced workspace replacement requires a deploy-scoped key or the Studio session.',
+          scope: actor.scope,
+          requiredScopes: ['deploy'],
+          route: actor.authority?.routeKey,
+          policyVersion: actor.authority?.policyVersion,
+          policyHash: actor.authority?.policyHash,
+        },
+      };
+      preflightKind = 'scope';
+    }
+    return await executeWorkspaceReceiptMutation(req, res, record, workspace, {
+      operationId,
+      routeKey: 'POST /api/agent/workspace',
+      mode: 'replace',
+      expectedVersion,
+      expectedHead,
+      expectedSnapshotHash,
+      dryRun,
+      force: force === true,
+      preflightFailure,
+      preflightKind,
+    });
+  } catch {
+    const request = req as DeadlineAwareRequest;
+    if (res.writableEnded || res.destroyed || request.__forgeResponseDeadlineExceeded) return;
+    return res.status(500).json({
+      success: false,
+      status: 'FAILED',
+      code: 'WORKSPACE_RECEIPT_HANDLER_FAILED',
+      error: 'Workspace receipt transaction failed.',
+      failedStages: ['workspace_receipt'],
+    });
+  }
 });
 
 /**
@@ -5641,27 +6351,69 @@ app.post("/api/agent/workspace", (req, res) => {
  * change (e.g. { "version": "2.0.0" } or { "wares": [...] }). Supports the same
  * paired hash preconditions, `expectedVersion`, and `dryRun` controls.
  */
-app.post("/api/agent/workspace/merge", (req, res) => {
-  const record = requestWorkspace(req);
-  const { changes, expectedVersion, expectedHead, expectedSnapshotHash, dryRun, force } = req.body || {};
-  if (!changes || typeof changes !== 'object') {
-    return res.status(400).json({ error: "Missing required 'changes' object (top-level workspace fields to merge)." });
-  }
-  const actor = (req as any).__actor as RequestActor | undefined;
-  if (force === true && actor?.kind === 'agent' && actor.scope !== 'deploy') {
-    return res.status(403).json({
-      code: 'insufficient_scope',
-      authorityCode: 'AGENT_SCOPE_DENIED',
-      error: 'Forced workspace merge requires a deploy-scoped key or the Studio session.',
-      scope: actor.scope,
-      requiredScopes: ['deploy'],
-      route: actor.authority?.routeKey,
-      policyVersion: actor.authority?.policyVersion,
-      policyHash: actor.authority?.policyHash,
+app.post("/api/agent/workspace/merge", async (req, res) => {
+  const operationId = req.headers['x-forge-operation-id'];
+  if (typeof operationId !== 'string' || !ACTION_RECEIPT_OPERATION_ID_RE.test(operationId)) {
+    return res.status(400).json({
+      code: 'ACTION_RECEIPT_OPERATION_ID_INVALID',
+      error: 'A caller-owned x-forge-operation-id header is required.',
     });
   }
-  const r = applyWorkspaceMutation(record, changes, { expectedVersion, expectedHead, expectedSnapshotHash, dryRun, merge: true, force: force === true });
-  return res.status(r.status).json(r.body);
+  try {
+    const record = requestWorkspace(req);
+    const { changes, expectedVersion, expectedHead, expectedSnapshotHash, dryRun, force } = req.body || {};
+    const actor = (req as any).__actor as RequestActor | undefined;
+    let preflightFailure: WorkspaceMutationResult | undefined;
+    let preflightKind: 'body' | 'scope' | undefined;
+    if (!changes || typeof changes !== 'object') {
+      preflightFailure = {
+        status: 400,
+        changed: false,
+        body: { error: "Missing required 'changes' object (top-level workspace fields to merge)." },
+      };
+      preflightKind = 'body';
+    }
+    if (preflightFailure === undefined && force === true && actor?.kind === 'agent' && actor.scope !== 'deploy') {
+      preflightFailure = {
+        status: 403,
+        changed: false,
+        body: {
+          code: 'insufficient_scope',
+          authorityCode: 'AGENT_SCOPE_DENIED',
+          error: 'Forced workspace merge requires a deploy-scoped key or the Studio session.',
+          scope: actor.scope,
+          requiredScopes: ['deploy'],
+          route: actor.authority?.routeKey,
+          policyVersion: actor.authority?.policyVersion,
+          policyHash: actor.authority?.policyHash,
+        },
+      };
+      preflightKind = 'scope';
+    }
+    return await executeWorkspaceReceiptMutation(req, res, record, changes, {
+      operationId,
+      routeKey: 'POST /api/agent/workspace/merge',
+      mode: 'merge',
+      expectedVersion,
+      expectedHead,
+      expectedSnapshotHash,
+      dryRun,
+      merge: true,
+      force: force === true,
+      preflightFailure,
+      preflightKind,
+    });
+  } catch {
+    const request = req as DeadlineAwareRequest;
+    if (res.writableEnded || res.destroyed || request.__forgeResponseDeadlineExceeded) return;
+    return res.status(500).json({
+      success: false,
+      status: 'FAILED',
+      code: 'WORKSPACE_RECEIPT_HANDLER_FAILED',
+      error: 'Workspace receipt transaction failed.',
+      failedStages: ['workspace_receipt'],
+    });
+  }
 });
 
 /**
@@ -8204,6 +8956,7 @@ const SELFTESTS: Record<string, () => unknown> = {
   "lua-runtime-log-selftest": runLuaRuntimeLogSelftest,
   "workspace-persistence-selftest": runWorkspaceStateSelftest,
   "workspace-registry-selftest": runWorkspaceRegistrySelftest,
+  "workspace-receipt-service-selftest": runWorkspaceReceiptServiceSelftest,
   "continuous-polling-selftest": runContinuousPollingSelftest,
   "forge-capabilities-selftest": runForgeCapabilitiesSelftest,
   "ui-compiler-selftest": runUiCompilerSelftest,

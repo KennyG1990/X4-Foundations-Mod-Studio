@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "sourceFingerprint": "674328cb46f9c3181f5db66bea96a571bb808b02325aff0d6d55b132cec4bb9e",
+  "sourceFingerprint": "705106d30bbc03111284f0f6a0be354b2ed55caa4873ca251b863335501460d6",
   "policy": "Every raw production filesystem mutation source is count-pinned here. Authoritative files use atomic sibling promotion; stronger tree, archive, append-log, SQLite, retention, ephemeral, and fixture contracts remain explicit exceptions.",
   "writers": [
     {
@@ -13,11 +13,11 @@
     },
     {
       "file": "src/lib/actionReceipt.selftest.ts",
-      "calls": { "writeFileSync": 5, "rmSync": 2, "mkdtempSync": 2, "symlinkSync": 1 },
+      "calls": { "writeFileSync": 5, "mkdirSync": 1, "rmSync": 2, "mkdtempSync": 2, "symlinkSync": 2 },
       "categories": ["fixture-only"],
       "owners": ["runActionReceiptSelftest"],
-      "rationale": "Creates canonical, corrupt, tampered, unavailable-root, and junction-escape fixtures only beneath unique temporary roots.",
-      "failureContract": "Fixture cleanup is best effort; production data roots, receipts, history, and configured workspace paths are never opened or mutated."
+      "rationale": "Creates canonical, corrupt, tampered, unavailable-root, and junction-escape fixtures only beneath unique temporary roots; extra mkdir/symlink calls construct isolated physical-ancestor realpath-EPERM and link-refusal fixtures beneath unique temporary roots.",
+      "failureContract": "Fixture cleanup is best effort; the physical-ancestor realpath-EPERM and link-refusal fixtures never target production data, receipts, history, or configured workspace paths."
     },
     {
       "file": "src/lib/actionReceiptStore.ts",
@@ -77,7 +77,7 @@
     },
     {
       "file": "src/lib/destructiveRecovery.ts",
-      "calls": { "writeFileSync": 2, "mkdirSync": 3, "rmSync": 4, "mkdtempSync": 1 },
+      "calls": { "writeFileSync": 4, "renameSync": 1, "mkdirSync": 5, "rmSync": 6, "mkdtempSync": 3 },
       "categories": ["verified-tree-transaction", "retention-cleanup", "fixture-only"],
       "owners": ["DestructiveRecoveryStore", "runDestructiveRecoverySelftest"],
       "rationale": "Recovery metadata is atomic JSON; payload trees are exact pre-state copies; raw writes construct corrupt/restore fixtures only.",
@@ -182,11 +182,11 @@
     },
     {
       "file": "src/lib/workspaceRegistry.ts",
-      "calls": { "writeFileSync": 1, "mkdirSync": 1, "rmSync": 2, "mkdtempSync": 1 },
+      "calls": { "writeFileSync": 1, "mkdirSync": 1, "rmSync": 2, "unlinkSync": 1, "mkdtempSync": 1 },
       "categories": ["authoritative-atomic", "fixture-only"],
-      "owners": ["WorkspaceRegistry.create rollback", "runWorkspaceRegistrySelftest"],
-      "rationale": "Registry index and records use the shared atomic writer; raw removal rolls back an unindexed new record, while the remaining calls build corruption and migration fixtures in a unique temporary root.",
-      "failureContract": "A record is never visible without an indexed ID; failed index promotion removes only the newly created unindexed record, and fixture mutations never reach configured state."
+      "owners": ["WorkspaceRegistry.create rollback", "WorkspaceRegistry.compensateCreate guarded cleanup", "runWorkspaceRegistrySelftest"],
+      "rationale": "Registry index and records use the shared atomic writer; create removes an unindexed new record when index promotion fails, while compensateCreate validates paired identity and hashes, promotes removal from the index, and unlinks only a strictly guarded just-created record; remaining raw calls build corruption and migration fixtures in a unique temporary root.",
+      "failureContract": "Create rollback removes only the newly written unindexed record when index promotion fails; compensateCreate verifies paired identity, hashes, and regular-file state, promotes the index first, and attempts exact prior-index restoration if record cleanup fails, reporting partial state when restoration cannot be established; fixture mutations never reach configured state."
     },
     {
       "file": "src/lib/x4CatDat.ts",

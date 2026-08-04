@@ -176,6 +176,10 @@ export function runActionReceiptSelftest(): ActionReceiptSelftestResult {
     ok('ordinary_policy_words_in_actor_client_allowed', ordinaryIdentityReceipt.actor.id === 'environment-agent' && ordinaryIdentityReceipt.client.id === 'credential-client');
     ok('credential_value_in_actor_rejected', expectRejected(() => createPreparedActionReceipt({ ...input, actor: { kind: 'agent', id: 'x4fk_fixture_secret_12345' } })));
     ok('credential_value_in_client_rejected', expectRejected(() => createPreparedActionReceipt({ ...input, client: { channel: 'harness', id: 'Bearer-x4fk_fixture_secret_12345', version: '1.0.0' } })));
+    ok('cli_client_channel_rejected', expectRejected(() => createPreparedActionReceipt({
+      ...input,
+      client: { channel: 'cli', id: 'w3a-selftest', version: '1.0.0' } as unknown as ActionReceiptPrepareInput['client'],
+    })));
     const legacyGetInput: ActionReceiptPrepareInput = {
       ...input,
       capability: { legacyRoute: '/api/agent/action-receipt-selftest', method: 'GET', reviewed: true, reviewRef: 'w3a-route-review' },
@@ -704,6 +708,72 @@ export function runActionReceiptSelftest(): ActionReceiptSelftestResult {
 
     const traversalRead = store.tryRead('../escape');
     ok('id_traversal_rejected', traversalRead.ok === false && traversalRead.code === 'RECEIPT_ID_INVALID');
+
+    const unavailableRealpathAncestor = path.join(root, 'realpath-unavailable-ancestor');
+    const physicalReceiptParent = path.join(unavailableRealpathAncestor, 'verified-parent');
+    const physicalReceiptRoot = path.join(physicalReceiptParent, 'physical-receipt-root');
+    const unavailableAncestorLink = path.join(unavailableRealpathAncestor, 'junction');
+    const escapedUnavailableDescendant = path.join(outside, 'realpath-unavailable-escape');
+    fs.mkdirSync(physicalReceiptParent, { recursive: true });
+    const physicalReceiptRootInitiallyMissing = !fs.existsSync(physicalReceiptRoot);
+    fs.symlinkSync(outside, unavailableAncestorLink, process.platform === 'win32' ? 'junction' : 'dir');
+    const mutableRealpathSync = fs.realpathSync as unknown as { native: (...args: unknown[]) => unknown };
+    const originalNativeRealpath = mutableRealpathSync.native;
+    let unavailableAncestorRoundTrip = false;
+    let unavailableAncestorLinkRefused = false;
+    let unavailableAncestorDetail: unknown;
+    try {
+      mutableRealpathSync.native = (...args: unknown[]) => {
+        if (path.resolve(String(args[0])) === path.resolve(unavailableRealpathAncestor)) {
+          throw Object.assign(new Error('fixture realpath unavailable'), { code: 'EPERM' });
+        }
+        return originalNativeRealpath(...args);
+      };
+      const physicalStore = new ActionReceiptStore({
+        root: physicalReceiptRoot,
+        now: () => Date.parse('2026-08-02T00:15:00.000Z'),
+      });
+      const physicalPrepared = physicalStore.prepare({
+        ...input,
+        authority: { ...input.authority, operationId: 'op-realpath-unavailable-ancestor' },
+      });
+      const physicalCommitted = physicalStore.commit(physicalPrepared.id, {
+        at: '2026-08-02T00:16:00.000Z',
+        validation: { status: 'passed', validator: 'forge.w3a.selftest' },
+        rollbackStatus: 'available',
+        after: afterFor(physicalPrepared, 'applied', [HASH_C]),
+      });
+      const physicalReopened = physicalStore.read(physicalPrepared.id);
+      unavailableAncestorRoundTrip = physicalReceiptRootInitiallyMissing
+        && physicalCommitted.status === 'committed'
+        && physicalReopened.hash === physicalCommitted.hash
+        && path.dirname(physicalStore.receiptPath(physicalPrepared.id)) === physicalReceiptRoot;
+
+      const unavailableLinkResult = new ActionReceiptStore({
+        root: path.join(unavailableAncestorLink, 'realpath-unavailable-escape'),
+      }).tryPrepare({
+        ...input,
+        authority: { ...input.authority, operationId: 'op-realpath-unavailable-link' },
+      });
+      unavailableAncestorLinkRefused = unavailableLinkResult.ok === false
+        && unavailableLinkResult.code === 'RECEIPT_ROOT_ESCAPE'
+        && !fs.existsSync(escapedUnavailableDescendant);
+    } catch (error) {
+      unavailableAncestorDetail = error;
+    } finally {
+      mutableRealpathSync.native = originalNativeRealpath;
+    }
+    ok(
+      'realpath_unavailable_physical_ancestor_allows_store_round_trip',
+      unavailableAncestorRoundTrip,
+      unavailableAncestorDetail,
+    );
+    ok(
+      'realpath_unavailable_link_ancestor_still_refused_before_write',
+      unavailableAncestorLinkRefused,
+      unavailableAncestorDetail,
+    );
+
     const linkRoot = path.join(root, 'junction-root');
     fs.symlinkSync(outside, linkRoot, process.platform === 'win32' ? 'junction' : 'dir');
     const linkStore = new ActionReceiptStore({ root: linkRoot });

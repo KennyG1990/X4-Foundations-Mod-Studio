@@ -73,6 +73,7 @@ const ephemeralEnv = {
 
 export default defineConfig({
   testDir: './tests/e2e',
+  outputDir: path.resolve(process.cwd(), 'test-results', 'e2e'),
   // ONE worker still: specs share the ONE ephemeral server's active workspace.
   // (Per-worker servers would allow parallelism later — ports would need to shard.)
   fullyParallel: false,

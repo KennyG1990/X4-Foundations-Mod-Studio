@@ -2473,7 +2473,7 @@
     {
       "id": "filesystem-writer:src/lib/workspaceRegistry.ts",
       "kind": "filesystem-writer",
-      "owner": "WorkspaceRegistry.create rollback | runWorkspaceRegistrySelftest",
+      "owner": "WorkspaceRegistry.create rollback | WorkspaceRegistry.compensateCreate guarded cleanup | runWorkspaceRegistrySelftest",
       "sourceRef": "config/durable-writers.json#/writers/21",
       "integrationBatch": "W3B1",
       "semanticClass": "durable-local-mutation",

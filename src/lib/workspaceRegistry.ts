@@ -13,6 +13,7 @@ import path from 'path';
 import { sanitizeWorkspace, type ModWorkspace } from '../types';
 import {
   atomicWriteJson,
+  atomicWriteFile,
   listParked,
   readActiveState,
   readParked,
@@ -66,6 +67,48 @@ export type WorkspaceLookup =
   | { ok: true; record: WorkspaceRecord }
   | { ok: false; code: 'WORKSPACE_ID_INVALID' | 'WORKSPACE_NOT_FOUND'; error: string };
 
+export type WorkspaceRegistryCompensationState = 'present' | 'removed' | 'unknown';
+
+export type WorkspaceRegistryCompensationFailureCode =
+  | 'WORKSPACE_ID_INVALID'
+  | 'WORKSPACE_EXPECTED_HEAD_INVALID'
+  | 'WORKSPACE_EXPECTED_SNAPSHOT_HASH_INVALID'
+  | 'WORKSPACE_NOT_FOUND'
+  | 'WORKSPACE_DEFAULT_REFUSED'
+  | 'WORKSPACE_NOT_JUST_CREATED'
+  | 'WORKSPACE_STATE_INCONSISTENT'
+  | 'WORKSPACE_RECORD_UNAVAILABLE'
+  | 'WORKSPACE_HEAD_STALE'
+  | 'WORKSPACE_SNAPSHOT_STALE'
+  | 'WORKSPACE_COMPENSATION_INDEX_FAILED'
+  | 'WORKSPACE_COMPENSATION_CLEANUP_FAILED';
+
+export type WorkspaceRegistryCompensationResult =
+  | {
+    ok: true;
+    status: 'compensated';
+    code: 'WORKSPACE_COMPENSATED';
+    workspaceId: string;
+    index: 'removed';
+    record: 'removed';
+    memory: 'removed';
+    restartVisible: false;
+    memoryIndexAgree: true;
+  }
+  | {
+    ok: false;
+    status: 'refused' | 'failed' | 'partial';
+    code: WorkspaceRegistryCompensationFailureCode;
+    error: string;
+    workspaceId: string;
+    index: WorkspaceRegistryCompensationState;
+    record: WorkspaceRegistryCompensationState;
+    memory: WorkspaceRegistryCompensationState;
+    restartVisible: boolean | 'unknown';
+    memoryIndexAgree: boolean;
+    indexRestored?: boolean;
+  };
+
 export function validWorkspaceId(value: string): boolean {
   return /^ws_[a-f0-9]{24}$/i.test(String(value || ''));
 }
@@ -94,6 +137,15 @@ function contentHead(workspace: unknown): string {
 
 function snapshotHead(workspace: unknown): string {
   return workspaceSnapshotHash(sanitizeWorkspace(workspace));
+}
+
+function validWorkspaceHash(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-f0-9]{16}$/.test(value);
+}
+
+function sameRegistryIndex(left: WorkspaceRegistryIndex, right: WorkspaceRegistryIndex): boolean {
+  return left.schema === right.schema && left.defaultWorkspaceId === right.defaultWorkspaceId &&
+    left.migratedAt === right.migratedAt && JSON.stringify(left.workspaceIds) === JSON.stringify(right.workspaceIds);
 }
 
 function validRecord(value: unknown, expectedId?: string): value is WorkspaceRecord {
@@ -311,6 +363,282 @@ export class WorkspaceRegistry {
     return next;
   }
 
+  /**
+   * Compensate a receipt-finalization failure for one record created by this process.
+   *
+   * This is deliberately narrower than workspace deletion: both paired identities must match,
+   * the record must still be a first-contact create, and the default can never be addressed.
+   * The index is promoted first so restart authority is changed only after all guards pass; a
+   * cleanup failure restores the exact prior index before memory is published.
+   */
+  compensateCreate(workspaceId: string, expectedHead: string, expectedSnapshotHash: string): WorkspaceRegistryCompensationResult {
+    const id = typeof workspaceId === 'string' ? workspaceId : String(workspaceId || '');
+    const failure = (
+      code: WorkspaceRegistryCompensationFailureCode,
+      error: string,
+      status: 'refused' | 'failed' | 'partial',
+      state: {
+        index: WorkspaceRegistryCompensationState;
+        record: WorkspaceRegistryCompensationState;
+        memory: WorkspaceRegistryCompensationState;
+        restartVisible: boolean | 'unknown';
+        memoryIndexAgree: boolean;
+        indexRestored?: boolean;
+      },
+    ): WorkspaceRegistryCompensationResult => ({
+      ok: false,
+      status,
+      code,
+      error,
+      workspaceId: id,
+      ...state,
+    });
+    const absent = {
+      index: 'unknown' as const,
+      record: 'unknown' as const,
+      memory: 'unknown' as const,
+      restartVisible: false as const,
+      memoryIndexAgree: true,
+    };
+    const present = {
+      index: 'present' as const,
+      record: 'present' as const,
+      memory: 'present' as const,
+      restartVisible: true as const,
+      memoryIndexAgree: true,
+    };
+
+    if (!validWorkspaceId(id)) {
+      return failure('WORKSPACE_ID_INVALID', 'workspaceId is malformed.', 'refused', absent);
+    }
+    if (!validWorkspaceHash(expectedHead)) {
+      return failure('WORKSPACE_EXPECTED_HEAD_INVALID', 'expected workspace head is malformed.', 'refused', absent);
+    }
+    if (!validWorkspaceHash(expectedSnapshotHash)) {
+      return failure('WORKSPACE_EXPECTED_SNAPSHOT_HASH_INVALID', 'expected snapshot hash is malformed.', 'refused', absent);
+    }
+    if (id === this.index.defaultWorkspaceId) {
+      return failure('WORKSPACE_DEFAULT_REFUSED', 'The default workspace cannot be compensated.', 'refused', present);
+    }
+
+    const record = this.records.get(id);
+    const listed = this.index.workspaceIds.filter(candidate => candidate === id);
+    if (!record && listed.length === 0) {
+      return failure('WORKSPACE_NOT_FOUND', 'The workspace was not found.', 'refused', absent);
+    }
+    if (!record || listed.length !== 1) {
+      return failure('WORKSPACE_STATE_INCONSISTENT', 'The workspace registry state is inconsistent; compensation was refused.', 'refused', {
+        index: listed.length === 1 ? 'present' : 'unknown',
+        record: record ? 'present' : 'unknown',
+        memory: record ? 'present' : 'unknown',
+        restartVisible: listed.length === 1 ? 'unknown' : false,
+        memoryIndexAgree: false,
+      });
+    }
+    if (!this.isLegacyFirstContact(id)) {
+      return failure('WORKSPACE_NOT_JUST_CREATED', 'Only an uncommitted workspace created by this process can be compensated.', 'refused', present);
+    }
+    if (record.head !== expectedHead) {
+      return failure('WORKSPACE_HEAD_STALE', 'The workspace head is stale.', 'refused', present);
+    }
+    if (this.snapshotHash(record) !== expectedSnapshotHash) {
+      return failure('WORKSPACE_SNAPSHOT_STALE', 'The workspace snapshot hash is stale.', 'refused', present);
+    }
+
+    let originalIndexBytes: Buffer;
+    let durableIndex: unknown;
+    let durableRecord: unknown;
+    try {
+      const indexStat = fs.lstatSync(this.indexPath);
+      if (!indexStat.isFile() || indexStat.isSymbolicLink()) throw new Error('index file is not a regular file');
+      originalIndexBytes = fs.readFileSync(this.indexPath);
+      durableIndex = JSON.parse(originalIndexBytes.toString('utf8'));
+      const recordStat = fs.lstatSync(this.recordPath(id));
+      if (!recordStat.isFile() || recordStat.isSymbolicLink()) throw new Error('record file is not a regular file');
+      durableRecord = JSON.parse(fs.readFileSync(this.recordPath(id), 'utf8'));
+    } catch {
+      return failure('WORKSPACE_RECORD_UNAVAILABLE', 'The durable workspace record could not be verified.', 'refused', {
+        ...present,
+        record: 'unknown',
+        restartVisible: 'unknown',
+        memoryIndexAgree: false,
+      });
+    }
+    if (!validIndex(durableIndex) || !sameRegistryIndex(durableIndex, this.index)) {
+      return failure('WORKSPACE_STATE_INCONSISTENT', 'The durable workspace index changed or is invalid; compensation was refused.', 'refused', {
+        ...present,
+        restartVisible: 'unknown',
+        memoryIndexAgree: false,
+      });
+    }
+    if (!validRecord(durableRecord, id)) {
+      return failure('WORKSPACE_RECORD_UNAVAILABLE', 'The durable workspace record is corrupt or unsupported.', 'refused', {
+        ...present,
+        record: 'unknown',
+        restartVisible: 'unknown',
+        memoryIndexAgree: false,
+      });
+    }
+    const durableWorkspace = canonicalWorkspaceForRecord(durableRecord.workspace, id);
+    if (contentHead(durableWorkspace) !== expectedHead) {
+      return failure('WORKSPACE_HEAD_STALE', 'The durable workspace head is stale.', 'refused', present);
+    }
+    if (snapshotHead(durableWorkspace) !== expectedSnapshotHash) {
+      return failure('WORKSPACE_SNAPSHOT_STALE', 'The durable workspace snapshot hash is stale.', 'refused', present);
+    }
+
+    const previousIndex = this.index;
+    const nextIndex: WorkspaceRegistryIndex = {
+      ...previousIndex,
+      workspaceIds: previousIndex.workspaceIds.filter(candidate => candidate !== id),
+    };
+    const readDurableIndex = (): WorkspaceRegistryIndex | null => {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(this.indexPath, 'utf8'));
+        return validIndex(parsed) ? parsed : null;
+      } catch {
+        return null;
+      }
+    };
+    const restoreIndex = (): boolean => {
+      try {
+        atomicWriteFile(this.indexPath, originalIndexBytes);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const publishRemoved = (): void => {
+      this.records.delete(id);
+      this.snapshotHeads.delete(id);
+      this.persistedAtBoot.delete(id);
+      this.committedSinceBoot.delete(id);
+      this.index = nextIndex;
+    };
+    const successfulCompensation = (): WorkspaceRegistryCompensationResult => {
+      publishRemoved();
+      return {
+        ok: true,
+        status: 'compensated',
+        code: 'WORKSPACE_COMPENSATED',
+        workspaceId: id,
+        index: 'removed',
+        record: 'removed',
+        memory: 'removed',
+        restartVisible: false,
+        memoryIndexAgree: true,
+      };
+    };
+    const reportPromotionFailure = (): WorkspaceRegistryCompensationResult => {
+      const restored = restoreIndex();
+      if (restored) {
+        return failure('WORKSPACE_COMPENSATION_INDEX_FAILED', 'The durable workspace index promotion failed; no compensation was applied.', 'failed', {
+          ...present,
+          indexRestored: true,
+        });
+      }
+      const observed = readDurableIndex();
+      if (observed && sameRegistryIndex(observed, previousIndex)) {
+        return failure('WORKSPACE_COMPENSATION_INDEX_FAILED', 'The durable workspace index promotion failed; the original index remains authoritative.', 'failed', {
+          ...present,
+          indexRestored: false,
+        });
+      }
+      if (observed && sameRegistryIndex(observed, nextIndex)) {
+        publishRemoved();
+        return failure('WORKSPACE_COMPENSATION_INDEX_FAILED', 'The durable workspace index changed but compensation could not complete.', 'partial', {
+          index: 'removed',
+          record: 'present',
+          memory: 'removed',
+          restartVisible: false,
+          memoryIndexAgree: true,
+          indexRestored: false,
+        });
+      }
+      return failure('WORKSPACE_COMPENSATION_INDEX_FAILED', 'The durable workspace index could not be reconciled after promotion failure.', 'partial', {
+        index: 'unknown',
+        record: 'present',
+        memory: 'present',
+        restartVisible: 'unknown',
+        memoryIndexAgree: false,
+        indexRestored: false,
+      });
+    };
+
+    try {
+      this.persistIndex(nextIndex);
+      const promoted = readDurableIndex();
+      if (!promoted || !sameRegistryIndex(promoted, nextIndex)) return reportPromotionFailure();
+    } catch {
+      return reportPromotionFailure();
+    }
+
+    try {
+      fs.unlinkSync(this.recordPath(id));
+    } catch {
+      const observed = readDurableIndex();
+      const recordPresence = (() => {
+        try {
+          fs.lstatSync(this.recordPath(id));
+          return 'present' as const;
+        } catch (error) {
+          const code = error && typeof error === 'object' && 'code' in error
+            ? (error as NodeJS.ErrnoException).code
+            : undefined;
+          return code === 'ENOENT' || code === 'ENOTDIR' ? 'absent' as const : 'unknown' as const;
+        }
+      })();
+      if (observed && sameRegistryIndex(observed, nextIndex) && recordPresence === 'absent') {
+        return successfulCompensation();
+      }
+      if (recordPresence === 'present') {
+        const restored = restoreIndex();
+        if (restored) {
+          return failure('WORKSPACE_COMPENSATION_CLEANUP_FAILED', 'The workspace record cleanup failed; the durable index was restored.', 'failed', {
+            ...present,
+            indexRestored: true,
+          });
+        }
+        const afterRestore = readDurableIndex();
+        if (afterRestore && sameRegistryIndex(afterRestore, previousIndex)) {
+          return failure('WORKSPACE_COMPENSATION_CLEANUP_FAILED', 'The workspace record cleanup failed; the original index remains authoritative.', 'failed', {
+            ...present,
+            indexRestored: false,
+          });
+        }
+        if (afterRestore && sameRegistryIndex(afterRestore, nextIndex)) {
+          publishRemoved();
+          return failure('WORKSPACE_COMPENSATION_CLEANUP_FAILED', 'The workspace record cleanup failed after index promotion; the record remains durable but is no longer listed.', 'partial', {
+            index: 'removed',
+            record: 'present',
+            memory: 'removed',
+            restartVisible: false,
+            memoryIndexAgree: true,
+            indexRestored: false,
+          });
+        }
+        return failure('WORKSPACE_COMPENSATION_CLEANUP_FAILED', 'The workspace record cleanup and index restoration could not be reconciled.', 'partial', {
+          index: 'unknown',
+          record: 'present',
+          memory: 'present',
+          restartVisible: 'unknown',
+          memoryIndexAgree: false,
+          indexRestored: false,
+        });
+      }
+      return failure('WORKSPACE_COMPENSATION_CLEANUP_FAILED', 'The workspace record cleanup and index restoration could not be reconciled.', 'partial', {
+        index: observed && sameRegistryIndex(observed, nextIndex) ? 'removed' : observed && sameRegistryIndex(observed, previousIndex) ? 'present' : 'unknown',
+        record: recordPresence === 'absent' ? 'removed' : 'unknown',
+        memory: 'present',
+        restartVisible: 'unknown',
+        memoryIndexAgree: false,
+        indexRestored: false,
+      });
+    }
+
+    return successfulCompensation();
+  }
+
   snapshotHash(record: WorkspaceRecord): string {
     const cached = this.snapshotHeads.get(record.workspaceId);
     if (cached) return cached;
@@ -383,6 +711,150 @@ export function runWorkspaceRegistrySelftest(): {
     const restartedDuplicate = restarted.lookup(duplicate.workspaceId);
     ok('explicit_local_id_survives_restart', restartedDuplicate.ok && restartedDuplicate.record.workspace.id === 'explicit-local-id');
     ok('unknown_id_fails_closed', restarted.lookup('ws_ffffffffffffffffffffffff').ok === false);
+
+    const compensationRoot = path.join(root, 'compensation');
+    const compensationRegistry = new WorkspaceRegistry({
+      root: compensationRoot,
+      defaultWorkspace: { ...legacy, name: 'Compensation_Default' } as ModWorkspace,
+      now: () => now,
+      randomHex,
+      maxRecords: 4,
+      maxWorkspaceBytes: 2048,
+    });
+    const createdForCompensation = compensationRegistry.create({ ...legacy, name: 'Compensation_Target' } as ModWorkspace, 'selftest:compensation');
+    const unrelatedForCompensation = compensationRegistry.create({ ...legacy, name: 'Compensation_Unrelated' } as ModWorkspace, 'selftest:unrelated');
+    const committedForCompensation = compensationRegistry.create({ ...legacy, name: 'Compensation_Committed' } as ModWorkspace, 'selftest:committed-create');
+    const committedAfterCommit = compensationRegistry.commit(committedForCompensation.workspaceId, {
+      ...committedForCompensation.workspace,
+      description: 'committed once',
+    } as ModWorkspace, 'selftest:committed-once');
+    const expectedCompensationHead = createdForCompensation.head;
+    const expectedCompensationSnapshotHash = compensationRegistry.snapshotHash(createdForCompensation);
+    const defaultForCompensation = compensationRegistry.lookup(compensationRegistry.defaultWorkspaceId);
+    const unrelatedRecordPath = path.join(compensationRoot, RECORD_DIR, `${unrelatedForCompensation.workspaceId}.json`);
+    const committedRecordPath = path.join(compensationRoot, RECORD_DIR, `${committedForCompensation.workspaceId}.json`);
+    const targetRecordPath = path.join(compensationRoot, RECORD_DIR, `${createdForCompensation.workspaceId}.json`);
+    const compensationIndexPath = path.join(compensationRoot, INDEX_FILE);
+    const committedGuardIndexBytes = fs.readFileSync(compensationIndexPath);
+    const committedGuardRecordBytes = fs.readFileSync(committedRecordPath);
+    const committedGuardList = JSON.stringify(compensationRegistry.list());
+    const committedGuardMemory = JSON.stringify(compensationRegistry.lookup(committedForCompensation.workspaceId));
+    const committedGuardDefaultId = compensationRegistry.defaultWorkspaceId;
+    const committedGuardUnrelatedBytes = fs.readFileSync(unrelatedRecordPath);
+    const committedGuard = compensationRegistry.compensateCreate(
+      committedForCompensation.workspaceId,
+      committedAfterCommit.head,
+      compensationRegistry.snapshotHash(committedAfterCommit),
+    );
+    ok('compensation_committed_record_refused_and_preserved',
+      committedGuard.ok === false && committedGuard.code === 'WORKSPACE_NOT_JUST_CREATED' &&
+      fs.readFileSync(compensationIndexPath).equals(committedGuardIndexBytes) &&
+      fs.readFileSync(committedRecordPath).equals(committedGuardRecordBytes) &&
+      JSON.stringify(compensationRegistry.list()) === committedGuardList &&
+      JSON.stringify(compensationRegistry.lookup(committedForCompensation.workspaceId)) === committedGuardMemory &&
+      compensationRegistry.defaultWorkspaceId === committedGuardDefaultId &&
+      fs.readFileSync(unrelatedRecordPath).equals(committedGuardUnrelatedBytes));
+    const targetIndexBytesBeforeFailure = fs.readFileSync(compensationIndexPath);
+    const targetRecordBytesBeforeFailure = fs.readFileSync(targetRecordPath);
+    const targetListBeforeFailure = JSON.stringify(compensationRegistry.list());
+    const targetMemoryBeforeFailure = JSON.stringify(compensationRegistry.lookup(createdForCompensation.workspaceId));
+    const unrelatedBytesBeforeSuccess = fs.readFileSync(unrelatedRecordPath).toString('utf8');
+    const defaultIdBeforeCompensation = compensationRegistry.defaultWorkspaceId;
+    const scanTmpFiles = (dir: string): string[] => {
+      const found: string[] = [];
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) found.push(...scanTmpFiles(full));
+        else if (entry.name.endsWith('.tmp')) found.push(entry.name);
+      }
+      return found;
+    };
+
+    const malformedCompensation = compensationRegistry.compensateCreate('not-a-workspace', expectedCompensationHead, expectedCompensationSnapshotHash);
+    ok('compensation_malformed_identity_refused', malformedCompensation.ok === false && malformedCompensation.code === 'WORKSPACE_ID_INVALID');
+    const staleHeadCompensation = compensationRegistry.compensateCreate(createdForCompensation.workspaceId, '0000000000000000', expectedCompensationSnapshotHash);
+    ok('compensation_stale_head_refused', staleHeadCompensation.ok === false && staleHeadCompensation.code === 'WORKSPACE_HEAD_STALE');
+    const staleSnapshotCompensation = compensationRegistry.compensateCreate(createdForCompensation.workspaceId, expectedCompensationHead, '0000000000000000');
+    ok('compensation_stale_snapshot_refused', staleSnapshotCompensation.ok === false && staleSnapshotCompensation.code === 'WORKSPACE_SNAPSHOT_STALE');
+    const defaultCompensation = defaultForCompensation.ok
+      ? compensationRegistry.compensateCreate(defaultForCompensation.record.workspaceId, defaultForCompensation.record.head, compensationRegistry.snapshotHash(defaultForCompensation.record))
+      : null;
+    ok('compensation_default_refused', defaultCompensation?.ok === false && defaultCompensation.code === 'WORKSPACE_DEFAULT_REFUSED');
+    const unknownCompensation = compensationRegistry.compensateCreate('ws_ffffffffffffffffffffffff', expectedCompensationHead, expectedCompensationSnapshotHash);
+    ok('compensation_unknown_identity_refused', unknownCompensation.ok === false && unknownCompensation.code === 'WORKSPACE_NOT_FOUND');
+
+    const registryWithPersistIndexSeam = compensationRegistry as unknown as { persistIndex: (index: WorkspaceRegistryIndex) => void };
+    const originalPersistIndex = registryWithPersistIndexSeam.persistIndex;
+    registryWithPersistIndexSeam.persistIndex = () => { throw new Error('injected index promotion failure'); };
+    let injectedIndexFailure: WorkspaceRegistryCompensationResult;
+    try {
+      injectedIndexFailure = compensationRegistry.compensateCreate(createdForCompensation.workspaceId, expectedCompensationHead, expectedCompensationSnapshotHash);
+    } finally {
+      registryWithPersistIndexSeam.persistIndex = originalPersistIndex;
+    }
+    ok('compensation_index_failure_preserves_exact_state_and_no_temp_debris',
+      injectedIndexFailure!.ok === false && injectedIndexFailure!.code === 'WORKSPACE_COMPENSATION_INDEX_FAILED' &&
+      injectedIndexFailure!.indexRestored === true &&
+      fs.readFileSync(compensationIndexPath).equals(targetIndexBytesBeforeFailure) &&
+      fs.readFileSync(targetRecordPath).equals(targetRecordBytesBeforeFailure) &&
+      JSON.stringify(compensationRegistry.list()) === targetListBeforeFailure &&
+      JSON.stringify(compensationRegistry.lookup(createdForCompensation.workspaceId)) === targetMemoryBeforeFailure &&
+      compensationRegistry.defaultWorkspaceId === defaultIdBeforeCompensation && scanTmpFiles(compensationRoot).length === 0);
+
+    const fsWithUnlinkSeam = fs as unknown as { unlinkSync: (candidate: string) => void };
+    const originalUnlink = fsWithUnlinkSeam.unlinkSync;
+    fsWithUnlinkSeam.unlinkSync = (candidate: string) => {
+      const result = originalUnlink(candidate);
+      if (path.resolve(candidate) === path.resolve(targetRecordPath)) throw new Error('injected post-unlink cleanup failure');
+      return result;
+    };
+    let injectedCleanupFailure: WorkspaceRegistryCompensationResult;
+    try {
+      injectedCleanupFailure = compensationRegistry.compensateCreate(createdForCompensation.workspaceId, expectedCompensationHead, expectedCompensationSnapshotHash);
+    } finally {
+      fsWithUnlinkSeam.unlinkSync = originalUnlink;
+    }
+    ok('compensation_successfully_removes_just_created_workspace',
+      injectedCleanupFailure!.ok && injectedCleanupFailure!.code === 'WORKSPACE_COMPENSATED' &&
+      injectedCleanupFailure!.index === 'removed' && injectedCleanupFailure!.record === 'removed' &&
+      injectedCleanupFailure!.memory === 'removed' && injectedCleanupFailure!.restartVisible === false &&
+      !fs.existsSync(targetRecordPath));
+    ok('compensation_post_unlink_throw_reports_success',
+      injectedCleanupFailure!.ok && injectedCleanupFailure!.code === 'WORKSPACE_COMPENSATED' &&
+      injectedCleanupFailure!.index === 'removed' && injectedCleanupFailure!.record === 'removed' &&
+      injectedCleanupFailure!.memory === 'removed' && injectedCleanupFailure!.restartVisible === false &&
+      !fs.existsSync(targetRecordPath) && scanTmpFiles(compensationRoot).length === 0);
+    ok('compensation_preserves_unrelated_record_and_default',
+      compensationRegistry.defaultWorkspaceId === defaultIdBeforeCompensation &&
+      !compensationRegistry.list().some(row => row.workspaceId === createdForCompensation.workspaceId) &&
+      (() => {
+        const preserved = compensationRegistry.lookup(unrelatedForCompensation.workspaceId);
+        return preserved.ok && JSON.stringify(preserved.record) === JSON.stringify(unrelatedForCompensation);
+      })() &&
+      fs.readFileSync(unrelatedRecordPath).toString('utf8') === unrelatedBytesBeforeSuccess);
+    const restartedCompensationRegistry = new WorkspaceRegistry({
+      root: compensationRoot,
+      defaultWorkspace: { ...legacy, name: 'Compensation_Default' } as ModWorkspace,
+      now: () => now + 100,
+      randomHex,
+      maxRecords: 4,
+      maxWorkspaceBytes: 2048,
+    });
+    const restartedDefault = restartedCompensationRegistry.lookup(defaultIdBeforeCompensation);
+    const restartedUnrelated = restartedCompensationRegistry.lookup(unrelatedForCompensation.workspaceId);
+    ok('compensation_restart_proof_hides_removed_workspace',
+      restartedCompensationRegistry.defaultWorkspaceId === defaultIdBeforeCompensation &&
+      !restartedCompensationRegistry.list().some(row => row.workspaceId === createdForCompensation.workspaceId) &&
+      restartedCompensationRegistry.lookup(createdForCompensation.workspaceId).ok === false &&
+      restartedCompensationRegistry.lookup(unrelatedForCompensation.workspaceId).ok === true &&
+      restartedCompensationRegistry.lookup(committedForCompensation.workspaceId).ok === true &&
+      restartedDefault.ok && defaultForCompensation.ok && JSON.stringify(restartedDefault.record) === JSON.stringify(defaultForCompensation.record) &&
+      restartedUnrelated.ok && JSON.stringify(restartedUnrelated) === JSON.stringify(compensationRegistry.lookup(unrelatedForCompensation.workspaceId)) &&
+      fs.readFileSync(unrelatedRecordPath).toString('utf8') === unrelatedBytesBeforeSuccess &&
+      !fs.existsSync(targetRecordPath));
+    const replayCompensation = compensationRegistry.compensateCreate(createdForCompensation.workspaceId, expectedCompensationHead, expectedCompensationSnapshotHash);
+    ok('compensation_replay_refused', replayCompensation.ok === false && replayCompensation.code === 'WORKSPACE_NOT_FOUND');
+
     let capRejected = false;
     try { registry.create({ ...legacy, name: 'Third' } as ModWorkspace, 'selftest'); registry.create({ ...legacy, name: 'Fourth' } as ModWorkspace, 'selftest'); } catch { capRejected = true; }
     ok('record_cap_rejected', capRejected && registry.list().length === 3);

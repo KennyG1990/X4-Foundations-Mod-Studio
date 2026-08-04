@@ -12,7 +12,6 @@ import type {
   ActionReceiptCoverageRouteEntry,
   ActionReceiptCoverageSurfaceEntry,
   DiscoveredActionReceiptCoverageInventory,
-  DiscoveredReceiptCoverageCapability,
   DiscoveredReceiptCoverageSurface,
   ReceiptCoverageEffect,
   ReceiptCoverageScope,
@@ -23,6 +22,17 @@ import {
 } from '../src/lib/actionReceiptCoverage.js';
 import { FORGE_CAPABILITIES } from '../src/lib/forgeCapabilities.js';
 import { atomicWriteFile } from '../src/lib/workspaceState.js';
+import {
+  buildDiscoveredActionReceiptCoverageInventory as buildInventoryFromAuthorities,
+  getActionReceiptCoverageBuildAuthority,
+  type ActionReceiptCoverageInventoryBuildResult,
+  type RouteAuthorityMetadata,
+  type SurfaceAuthorityMetadata,
+} from '../src/lib/actionReceiptCoverageInventory.js';
+import { ACTION_RECEIPT_COVERAGE_REVIEWED_MANIFEST_SHA256 } from '../src/lib/actionReceiptPolicyBundle.js';
+import { runActionReceiptPolicyBundleSelftest } from '../src/lib/actionReceiptPolicyBundle.selftest.js';
+
+export type { ActionReceiptCoverageInventoryBuildResult } from '../src/lib/actionReceiptCoverageInventory.js';
 
 const SCRIPT_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 const REPOSITORY_ROOT = resolve(SCRIPT_DIRECTORY, '..');
@@ -34,45 +44,17 @@ const DURABLE_AUTHORITY_PATH = resolve(REPOSITORY_ROOT, 'config', 'durable-write
 const CAPABILITY_AUDIT_PATH = resolve(SCRIPT_DIRECTORY, 'capability-contract-audit.ts');
 const DURABLE_AUDIT_PATH = resolve(SCRIPT_DIRECTORY, 'durable-writer-audit.mjs');
 const PREREQUISITE_MAX_BUFFER = 4 * 1024 * 1024;
-const PREREQUISITE_TIMEOUT_MS = 120_000;
-
-type InventorySurfaceKind = Extract<
-  DiscoveredReceiptCoverageSurface['kind'],
-  'filesystem-writer' | 'host-store' | 'browser-output' | 'sqlite'
->;
-
-export interface ActionReceiptCoverageInventoryBuildResult {
-  inventory: DiscoveredActionReceiptCoverageInventory;
-  totalRouteCount: number;
-  nonGetRouteCount: number;
-  surfaceCounts: Record<InventorySurfaceKind, number>;
-}
+// Measured here at 177.7s standalone; allow five minutes under nested precommit load.
+const PREREQUISITE_TIMEOUT_MS = 300_000;
 
 type IntegrationBatch = 'W3B0-internal' | 'W3B1' | 'W3B2' | 'W3B3';
 
-interface RouteAuthorityMetadata {
-  agentScopes: string[];
-  disposition: string;
-  workspaceMode: string;
-}
-
-interface SurfaceAuthorityMetadata {
-  categories: string[];
-  owners: string[];
-}
-
-interface BuildAuthorityMetadata {
-  routes: Map<string, RouteAuthorityMetadata>;
-  surfaces: Map<string, SurfaceAuthorityMetadata>;
-}
-
-const BUILD_AUTHORITY_METADATA = Symbol('action-receipt-coverage-build-authority');
-type InternalInventoryBuildResult = ActionReceiptCoverageInventoryBuildResult & {
-  [BUILD_AUTHORITY_METADATA]: BuildAuthorityMetadata;
-};
-
 const LEGACY_REVIEW_REF = 'docs/plans/2026-08-02-w3b0-action-receipt-coverage.md#review';
 export const ACTION_RECEIPT_COVERAGE_CANDIDATE_SCHEMA = 'forge.action-receipt-coverage-candidate.v1' as const;
+
+function compareOrdinal(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
 
 function stableError(code: string, detail: string): Error {
   return new Error(`${code}: ${detail}`);
@@ -218,7 +200,7 @@ export interface ActionReceiptCoverageCandidatePathSelftestResult {
 }
 
 export function runActionReceiptCoverageCandidatePathSelftest(): ActionReceiptCoverageCandidatePathSelftestResult {
-  const safeRelative = 'test-results/2026-08-02-w3-action-receipts/w3b0/action-receipt-coverage.candidate.json';
+  const safeRelative = 'test-results/action-receipt-coverage-path-selftest.candidate.json';
   const safeAbsolute = resolve(REPOSITORY_ROOT, safeRelative);
   const outsideAbsolute = resolve(REPOSITORY_ROOT, '..', 'action-receipt-coverage.candidate.json');
   const inputs = [
@@ -337,7 +319,18 @@ function runPrerequisiteAudit(label: string, args: readonly string[]): Promise<v
         accept();
         return;
       }
-      const code = (error as NodeJS.ErrnoException & { code?: string | number }).code;
+      const execError = error as NodeJS.ErrnoException & {
+        code?: string | number;
+        killed?: boolean;
+      };
+      const code = execError.code;
+      if (execError.killed === true || code === 'ETIMEDOUT') {
+        reject(stableError(
+          'ACTION_RECEIPT_COVERAGE_PREREQUISITE_TIMEOUT',
+          `${label}:timeout`,
+        ));
+        return;
+      }
       if (code === 'ENOENT' || code === 'EACCES' || code === 'EPERM') {
         reject(stableError('ACTION_RECEIPT_COVERAGE_PREREQUISITE_START_FAILED', `${label}:${code}`));
         return;
@@ -364,24 +357,6 @@ export async function runActionReceiptCoveragePrerequisiteAudits(): Promise<void
   await runPrerequisiteAudit('durable-writer-audit', [DURABLE_AUDIT_PATH]);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function requireRecord(value: unknown, label: string): Record<string, unknown> {
-  if (!isRecord(value)) {
-    throw stableError('ACTION_RECEIPT_COVERAGE_AUTHORITY_INVALID', `${label}:object-required`);
-  }
-  return value;
-}
-
-function requireString(value: unknown, label: string): string {
-  if (typeof value !== 'string' || value.length === 0 || value !== value.trim()) {
-    throw stableError('ACTION_RECEIPT_COVERAGE_AUTHORITY_INVALID', `${label}:nonempty-string-required`);
-  }
-  return value;
-}
-
 function readJsonAuthority(path: string, label: string): unknown {
   let bytes: string;
   try {
@@ -396,271 +371,13 @@ function readJsonAuthority(path: string, label: string): unknown {
   }
 }
 
-function compareOrdinal(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
-
-function jsonPointerToken(value: string): string {
-  return value.replace(/~/g, '~0').replace(/\//g, '~1');
-}
-
-function sameCanonicalCapability(
-  left: DiscoveredReceiptCoverageCapability,
-  right: DiscoveredReceiptCoverageCapability,
-): boolean {
-  return left.id === right.id
-    && left.version === right.version
-    && left.effects.length === right.effects.length
-    && left.effects.every((effect, index) => effect === right.effects[index]);
-}
-
-function buildCanonicalBindingMap(): Map<string, DiscoveredReceiptCoverageCapability> {
-  const bindings = new Map<string, DiscoveredReceiptCoverageCapability>();
-  for (const capability of FORGE_CAPABILITIES) {
-    const runtimeCapability = capability as unknown as Record<string, unknown>;
-    const capabilityVersion = runtimeCapability.version;
-    const capabilityEffects = runtimeCapability.effects;
-    if (typeof capability.id !== 'string' || capability.id.length === 0
-      || typeof capabilityVersion !== 'number' || !Number.isInteger(capabilityVersion) || capabilityVersion <= 0
-      || !Array.isArray(capabilityEffects) || capabilityEffects.length === 0) {
-      throw stableError('ACTION_RECEIPT_COVERAGE_CAPABILITY_INVALID', 'registry-entry');
-    }
-    if (new Set(capability.effects).size !== capability.effects.length) {
-      throw stableError('ACTION_RECEIPT_COVERAGE_CAPABILITY_INVALID', `${capability.id}:duplicate-effect`);
-    }
-    for (const binding of capability.apiBindings) {
-      const method = requireString(binding.method, `${capability.id}.apiBinding.method`);
-      const template = requireString(binding.path, `${capability.id}.apiBinding.path`);
-      const routeKey = `${method} ${template}`;
-      const candidate: DiscoveredReceiptCoverageCapability = {
-        id: capability.id,
-        version: capabilityVersion,
-        effects: [...capability.effects],
-      };
-      const previous = bindings.get(routeKey);
-      if (previous !== undefined && !sameCanonicalCapability(previous, candidate)) {
-        throw stableError('ACTION_RECEIPT_COVERAGE_CAPABILITY_BINDING_CONFLICT', routeKey);
-      }
-      bindings.set(routeKey, candidate);
-    }
-  }
-  return bindings;
-}
-
-function reviewedStrings(value: unknown, label: string, duplicateCode: string): string[] {
-  if (!Array.isArray(value) || value.length === 0) {
-    throw stableError('ACTION_RECEIPT_COVERAGE_AUTHORITY_INVALID', `${label}:nonempty-array-required`);
-  }
-  const values: string[] = [];
-  const seen = new Set<string>();
-  for (let index = 0; index < value.length; index += 1) {
-    const entry = requireString(value[index], `${label}[${index}]`);
-    if (seen.has(entry)) {
-      throw stableError(duplicateCode, `${label}:${entry}`);
-    }
-    seen.add(entry);
-    values.push(entry);
-  }
-  return values;
-}
-
-function routeAuthorityMetadata(value: Record<string, unknown>, label: string): RouteAuthorityMetadata {
-  const disposition = requireString(value.disposition, `${label}.disposition`);
-  const workspaceMode = requireString(value.workspaceMode, `${label}.workspaceMode`);
-  if (!['none', 'optional', 'required', 'input-first'].includes(workspaceMode)) {
-    throw stableError('ACTION_RECEIPT_COVERAGE_AUTHORITY_INVALID', `${label}.workspaceMode:value`);
-  }
-  if (!Array.isArray(value.agentScopes)) {
-    throw stableError('ACTION_RECEIPT_COVERAGE_AUTHORITY_INVALID', `${label}.agentScopes:array-required`);
-  }
-  const agentScopes: string[] = [];
-  const seen = new Set<string>();
-  for (let index = 0; index < value.agentScopes.length; index += 1) {
-    const scope = requireString(value.agentScopes[index], `${label}.agentScopes[${index}]`);
-    if (!['read', 'write', 'deploy'].includes(scope) || seen.has(scope)) {
-      throw stableError('ACTION_RECEIPT_COVERAGE_AUTHORITY_INVALID', `${label}.agentScopes:value`);
-    }
-    seen.add(scope);
-    agentScopes.push(scope);
-  }
-  return { agentScopes, disposition, workspaceMode };
-}
-
-function addSurface(
-  surfaces: DiscoveredReceiptCoverageSurface[],
-  ids: Set<string>,
-  kind: InventorySurfaceKind,
-  file: string,
-  owner: string,
-  sourceRef: string,
-): string {
-  const id = `${kind}:${file}`;
-  if (ids.has(id)) {
-    throw stableError('ACTION_RECEIPT_COVERAGE_SURFACE_ID_DUPLICATE', id);
-  }
-  ids.add(id);
-  surfaces.push({ id, kind, owner, sourceRef });
-  return id;
-}
-
-function buildSurfaces(authority: unknown): {
-  surfaces: DiscoveredReceiptCoverageSurface[];
-  counts: Record<InventorySurfaceKind, number>;
-  authorities: Map<string, SurfaceAuthorityMetadata>;
-} {
-  const root = requireRecord(authority, 'durable-writers');
-  if (root.version !== 1) {
-    throw stableError('ACTION_RECEIPT_COVERAGE_AUTHORITY_INVALID', 'durable-writers.version');
-  }
-  const surfaces: DiscoveredReceiptCoverageSurface[] = [];
-  const ids = new Set<string>();
-  const authorities = new Map<string, SurfaceAuthorityMetadata>();
-  const counts: Record<InventorySurfaceKind, number> = {
-    'filesystem-writer': 0,
-    'host-store': 0,
-    'browser-output': 0,
-    sqlite: 0,
-  };
-  const arrays: Array<{ field: string; kind: InventorySurfaceKind }> = [
-    { field: 'writers', kind: 'filesystem-writer' },
-    { field: 'hostStores', kind: 'host-store' },
-    { field: 'browserOutputs', kind: 'browser-output' },
-  ];
-  for (const { field, kind } of arrays) {
-    const entries = root[field];
-    if (!Array.isArray(entries) || entries.length === 0) {
-      throw stableError('ACTION_RECEIPT_COVERAGE_AUTHORITY_INVALID', `durable-writers.${field}:nonempty-array-required`);
-    }
-    counts[kind] = entries.length;
-    for (let index = 0; index < entries.length; index += 1) {
-      const entry = requireRecord(entries[index], `durable-writers.${field}[${index}]`);
-      const file = requireString(entry.file, `durable-writers.${field}[${index}].file`);
-      const owners = reviewedStrings(
-        entry.owners,
-        `durable-writers.${field}[${index}].owners`,
-        'ACTION_RECEIPT_COVERAGE_SURFACE_OWNER_DUPLICATE',
-      );
-      const categories = reviewedStrings(
-        entry.categories,
-        `durable-writers.${field}[${index}].categories`,
-        'ACTION_RECEIPT_COVERAGE_SURFACE_CATEGORY_DUPLICATE',
-      );
-      const id = addSurface(
-        surfaces,
-        ids,
-        kind,
-        file,
-        owners.join(' | '),
-        `config/durable-writers.json#/${field}/${index}`,
-      );
-      authorities.set(id, { categories, owners });
-    }
-  }
-  const database = requireRecord(root.database, 'durable-writers.database');
-  const databaseFile = requireString(database.file, 'durable-writers.database.file');
-  const databaseOwners = reviewedStrings(
-    database.owners,
-    'durable-writers.database.owners',
-    'ACTION_RECEIPT_COVERAGE_SURFACE_OWNER_DUPLICATE',
-  );
-  const databaseCategory = requireString(database.category, 'durable-writers.database.category');
-  const databaseId = addSurface(
-    surfaces,
-    ids,
-    'sqlite',
-    databaseFile,
-    databaseOwners.join(' | '),
-    'config/durable-writers.json#/database',
-  );
-  authorities.set(databaseId, { categories: [databaseCategory], owners: databaseOwners });
-  counts.sqlite = 1;
-  surfaces.sort((left, right) => compareOrdinal(left.id, right.id));
-  return { surfaces, counts, authorities };
-}
-
 export function buildDiscoveredActionReceiptCoverageInventory(): ActionReceiptCoverageInventoryBuildResult {
-  const routeAuthority = requireRecord(
-    readJsonAuthority(ROUTE_AUTHORITY_PATH, 'forge-route-dispositions'),
-    'forge-route-dispositions',
-  );
-  if (routeAuthority.schemaVersion !== 'forge.route-dispositions.v4') {
-    throw stableError('ACTION_RECEIPT_COVERAGE_AUTHORITY_INVALID', 'forge-route-dispositions.schemaVersion');
-  }
-  const routeRecords = requireRecord(routeAuthority.routes, 'forge-route-dispositions.routes');
-  const routeEntries = Object.entries(routeRecords).sort(([left], [right]) => compareOrdinal(left, right));
-  if (routeEntries.length === 0) {
-    throw stableError('ACTION_RECEIPT_COVERAGE_AUTHORITY_INVALID', 'forge-route-dispositions.routes:nonempty-required');
-  }
-  const canonicalBindings = buildCanonicalBindingMap();
-  const quietRoutes = new Set(LEDGER_QUIET_ROUTES);
-  if (quietRoutes.size !== LEDGER_QUIET_ROUTES.length
-    || LEDGER_QUIET_ROUTES.some(route => typeof route !== 'string' || route.length === 0 || route !== route.trim())) {
-    throw stableError('ACTION_RECEIPT_COVERAGE_HISTORY_AUTHORITY_INVALID', 'LEDGER_QUIET_ROUTES');
-  }
-  const discoveredRouteKeys = new Set(routeEntries.map(([routeKey]) => routeKey));
-  const routeAuthorities = new Map<string, RouteAuthorityMetadata>();
-  const routes: DiscoveredActionReceiptCoverageInventory['routes'] = [];
-  for (const [routeKey, rawDisposition] of routeEntries) {
-    const separator = routeKey.indexOf(' ');
-    if (separator <= 0 || separator === routeKey.length - 1) {
-      throw stableError('ACTION_RECEIPT_COVERAGE_ROUTE_KEY_INVALID', routeKey);
-    }
-    const method = routeKey.slice(0, separator);
-    const template = routeKey.slice(separator + 1);
-    if (!/^[A-Z]+$/.test(method) || template.length === 0 || template !== template.trim()) {
-      throw stableError('ACTION_RECEIPT_COVERAGE_ROUTE_KEY_INVALID', routeKey);
-    }
-    const disposition = requireRecord(rawDisposition, `forge-route-dispositions.routes.${routeKey}`);
-    const authorityMetadata = routeAuthorityMetadata(
-      disposition,
-      `forge-route-dispositions.routes.${routeKey}`,
-    );
-    routeAuthorities.set(routeKey, authorityMetadata);
-    const owner = requireString(disposition.owner, `forge-route-dispositions.routes.${routeKey}.owner`);
-    const resourceClass = requireString(
-      disposition.resourceClass,
-      `forge-route-dispositions.routes.${routeKey}.resourceClass`,
-    );
-    if (method === 'GET') continue;
-    const canonicalCapability = canonicalBindings.get(routeKey);
-    routes.push({
-      routeKey,
-      method,
-      template,
-      owner,
-      resourceClass,
-      sourceRef: `config/forge-route-dispositions.json#/routes/${jsonPointerToken(routeKey)}`,
-      history: template.startsWith('/api/reference/')
-        ? 'none'
-        : quietRoutes.has(template) ? 'quiet' : 'visible',
-      ...(canonicalCapability === undefined ? {} : {
-        canonicalCapability: {
-          id: canonicalCapability.id,
-          version: canonicalCapability.version,
-          effects: [...canonicalCapability.effects],
-        },
-      }),
-    });
-  }
-  for (const routeKey of canonicalBindings.keys()) {
-    if (!routeKey.startsWith('GET ') && !discoveredRouteKeys.has(routeKey)) {
-      throw stableError('ACTION_RECEIPT_COVERAGE_CANONICAL_ROUTE_MISSING', routeKey);
-    }
-  }
-
-  const durableAuthority = readJsonAuthority(DURABLE_AUTHORITY_PATH, 'durable-writers');
-  const { surfaces, counts, authorities: surfaceAuthorities } = buildSurfaces(durableAuthority);
-  const result: InternalInventoryBuildResult = {
-    inventory: { routes, surfaces },
-    totalRouteCount: routeEntries.length,
-    nonGetRouteCount: routes.length,
-    surfaceCounts: counts,
-    [BUILD_AUTHORITY_METADATA]: {
-      routes: routeAuthorities,
-      surfaces: surfaceAuthorities,
-    },
-  };
-  return result;
+  return buildInventoryFromAuthorities({
+    routeAuthority: readJsonAuthority(ROUTE_AUTHORITY_PATH, 'forge-route-dispositions'),
+    durableWriterAuthority: readJsonAuthority(DURABLE_AUTHORITY_PATH, 'durable-writers'),
+    capabilities: FORGE_CAPABILITIES,
+    quietRoutes: LEDGER_QUIET_ROUTES,
+  });
 }
 
 type CandidateRoutePolicy = Pick<
@@ -1121,7 +838,7 @@ function defaultSurfacePolicy(
 export function buildActionReceiptCoverageCandidate(
   buildResult: ActionReceiptCoverageInventoryBuildResult,
 ): ActionReceiptCoverageManifest {
-  const metadata = (buildResult as InternalInventoryBuildResult)[BUILD_AUTHORITY_METADATA];
+  const metadata = getActionReceiptCoverageBuildAuthority(buildResult);
   const routes = buildResult.inventory.routes.map(discovered => {
     const defaults = discovered.canonicalCapability === undefined
       ? legacyRoutePolicy(discovered)
@@ -1442,7 +1159,7 @@ export function runActionReceiptCoverageCandidateEnvelopeSelftest(
   suppliedBuildResult?: ActionReceiptCoverageInventoryBuildResult,
 ): ActionReceiptCoverageCandidateEnvelopeSelftestResult {
   const buildResult = suppliedBuildResult ?? buildDiscoveredActionReceiptCoverageInventory();
-  const metadata = (buildResult as InternalInventoryBuildResult)[BUILD_AUTHORITY_METADATA];
+  const metadata = getActionReceiptCoverageBuildAuthority(buildResult);
   const inputBefore = JSON.stringify({
     public: buildResult,
     routeAuthority: metadata === undefined ? [] : [...metadata.routes],
@@ -1946,6 +1663,13 @@ export function auditActionReceiptCoverageManifest(
 ): ActionReceiptCoverageAuditSummary {
   const buildResult = suppliedBuildResult ?? buildDiscoveredActionReceiptCoverageInventory();
   const reviewed = readStableReviewedBytes();
+  if (reviewed.snapshot.state !== 'regular-file'
+    || reviewed.snapshot.fingerprint.sha256 !== ACTION_RECEIPT_COVERAGE_REVIEWED_MANIFEST_SHA256) {
+    throw stableError(
+      'ACTION_RECEIPT_COVERAGE_REVIEWED_SHA256_MISMATCH',
+      'reviewed manifest bytes do not match the pinned authority SHA-256',
+    );
+  }
   const manifest = requireFreshActionReceiptCoverageReviewedManifest(reviewed.bytes, buildResult);
   const expectedBytes = prettyLfJsonBytes(manifest);
   return {
@@ -2071,7 +1795,7 @@ export function runActionReceiptCoverageCandidateInvariantSelftest(
   const check = (name: string, pass: boolean, detail?: string): void => {
     checks.push({ name, pass, ...(detail === undefined ? {} : { detail }) });
   };
-  const metadata = (buildResult as InternalInventoryBuildResult)[BUILD_AUTHORITY_METADATA];
+  const metadata = getActionReceiptCoverageBuildAuthority(buildResult);
   const inputBefore = JSON.stringify({
     public: buildResult,
     routeAuthority: metadata === undefined ? [] : [...metadata.routes],
@@ -2570,7 +2294,7 @@ export function runActionReceiptCoveragePromotionSelftest(
   suppliedBuildResult?: ActionReceiptCoverageInventoryBuildResult,
 ): ActionReceiptCoveragePromotionSelftestResult {
   const buildResult = suppliedBuildResult ?? buildDiscoveredActionReceiptCoverageInventory();
-  const metadata = (buildResult as InternalInventoryBuildResult)[BUILD_AUTHORITY_METADATA];
+  const metadata = getActionReceiptCoverageBuildAuthority(buildResult);
   const inputBefore = JSON.stringify({
     public: buildResult,
     routeAuthority: metadata === undefined ? [] : [...metadata.routes],
@@ -2932,8 +2656,17 @@ async function main(args: readonly string[]): Promise<void> {
   }
   if (args.length === 1 && args[0] === '--candidate-selftest') {
     const result = runActionReceiptCoverageCandidateSelftests();
-    process.stdout.write(`${JSON.stringify(compactCandidateSelftest(result))}\n`);
-    if (!result.pass) process.exitCode = 1;
+    const policyBundle = runActionReceiptPolicyBundleSelftest();
+    process.stdout.write(`${JSON.stringify({
+      ...compactCandidateSelftest(result),
+      policyBundle: {
+        pass: policyBundle.pass,
+        passed: policyBundle.passed,
+        total: policyBundle.total,
+        failures: policyBundle.failures,
+      },
+    })}\n`);
+    if (!result.pass || !policyBundle.pass) process.exitCode = 1;
     return;
   }
   if (args.length === 1 && args[0] === '--promotion-selftest') {

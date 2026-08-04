@@ -13,7 +13,7 @@ export const ACTION_RECEIPT_HASH_ALGORITHM = 'sha256' as const;
 
 export type ActionReceiptStatus = 'prepared' | 'committed' | 'failed' | 'rolled_back' | 'incomplete' | 'compensated';
 export type ReceiptActorKind = 'human' | 'agent' | 'service' | 'system';
-export type ReceiptClientChannel = 'studio' | 'api' | 'mcp' | 'cli' | 'harness' | 'internal';
+export type ReceiptClientChannel = 'studio' | 'api' | 'mcp' | 'harness' | 'internal';
 export type ReceiptValidationStatus = 'pending' | 'passed' | 'failed';
 export type ReceiptRollbackMode = 'none' | 'recovery';
 export type ReceiptRollbackStatus = 'not_required' | 'prepared' | 'available' | 'performed' | 'failed';
@@ -431,7 +431,7 @@ function normalizeClient(value: unknown): ActionReceiptClient {
   const object = requireObject(value, 'client');
   exactKeys(object, ['channel', 'id', 'version'], 'client');
   const channel = requireString(object.channel, 'client.channel', 16) as ReceiptClientChannel;
-  if (!(['studio', 'api', 'mcp', 'cli', 'harness', 'internal'] as string[]).includes(channel)) fail('client.channel is invalid.');
+  if (!(['studio', 'api', 'mcp', 'harness', 'internal'] as string[]).includes(channel)) fail('client.channel is invalid.');
   const id = requirePattern(object.id, 'client.id', LOGICAL_ID_RE, 128);
   const version = requirePattern(object.version, 'client.version', VERSION_RE, 64);
   return { channel, id, version };

@@ -5,6 +5,8 @@
  * app adopt it naturally on page load — no page.route interception, no localStorage
  * version pinning, no restore/teardown. The live dev stack is never touched.
  */
+import { randomBytes } from 'node:crypto';
+import { ACTION_OPERATION_ID_HEADER, createActionOperationId } from '../../shared/actionOperationId';
 import { E2E_API_PORT, E2E_TOKEN } from '../../playwright.config';
 
 // B41: 127.0.0.1, never "localhost" — the API binds IPv4-only (server.ts listen)
@@ -56,9 +58,13 @@ export async function ephemeralWorkspaceHeaders(json = false): Promise<Record<st
 
 /** Force-set the ephemeral server's active workspace (deliberate overwrite by design). */
 export async function seedServerWorkspace(workspace: unknown): Promise<void> {
+  const headers = {
+    ...(await workspaceHeaders(true)),
+    [ACTION_OPERATION_ID_HEADER]: createActionOperationId(randomBytes),
+  };
   const res = await fetchEphemeral(`${API}/api/agent/workspace`, {
     method: 'POST',
-    headers: await workspaceHeaders(true),
+    headers,
     body: JSON.stringify({ workspace, force: true }),
   });
   if (!res.ok) throw new Error(`ephemeral seed failed: ${res.status} ${await res.text()}`);

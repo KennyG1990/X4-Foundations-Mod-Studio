@@ -6,8 +6,13 @@
     "src/lib/actionCensus.ts",
     "src/lib/actionReceipt.selftest.ts",
     "src/lib/actionReceipt.ts",
+    "src/lib/actionReceiptCoverage.ts",
+    "src/lib/actionReceiptCoverageInventory.ts",
     "src/lib/actionReceiptHistory.ts",
+    "src/lib/actionReceiptPolicyBundle.ts",
+    "src/lib/actionReceiptRuntime.ts",
     "src/lib/actionReceiptStore.ts",
+    "src/lib/actionReceiptTransaction.ts",
     "src/lib/agentAuthority.ts",
     "src/lib/agentBrief.ts",
     "src/lib/agentCapabilityAuthority.ts",
@@ -135,10 +140,12 @@
     "src/lib/waresContentLint.ts",
     "src/lib/waresJobsParser.ts",
     "src/lib/watcherVerdict.ts",
+    "src/lib/workspaceActionReceipt.ts",
     "src/lib/workspaceConflict.ts",
     "src/lib/workspaceIdentity.ts",
     "src/lib/workspacePolling.ts",
     "src/lib/workspaceQuickFixes.ts",
+    "src/lib/workspaceReceiptHash.ts",
     "src/lib/workspaceRegistry.ts",
     "src/lib/workspaceState.ts",
     "src/lib/x4CatDat.ts",
@@ -164,6 +171,8 @@
     "src/server/referenceRoutes.ts",
     "src/server/selftestRegistry.ts",
     "src/server/validationRoutes.ts",
+    "src/server/workspaceReceiptService.selftest.ts",
+    "src/server/workspaceReceiptService.ts",
     "src/types.ts"
   ],
   "routes": {
@@ -2228,6 +2237,18 @@
     "GET /api/agent/workspace-persistence-selftest": {
       "disposition": "public-selftest",
       "owner": "runWorkspaceStateSelftest",
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
+    },
+    "GET /api/agent/workspace-receipt-service-selftest": {
+      "disposition": "public-selftest",
+      "owner": "runWorkspaceReceiptServiceSelftest",
       "registrations": 1,
       "agentScopes": [
         "read",

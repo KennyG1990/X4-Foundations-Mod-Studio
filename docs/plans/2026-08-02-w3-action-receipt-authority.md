@@ -1,9 +1,16 @@
 # B115 W3 — authoritative action receipts and transaction truth
 
-Status: W3A and W3B0 VERIFIED; W3 remains IN_PROGRESS at W3B1
+Status: W3A and W3B0 VERIFIED; W3B1 IN_PROGRESS / PARTIAL with workspace replace/merge route-green
 Lane: FULL
 GitHub owners: `#20` primary, `#19` convergence projection
 Dependency: W0-W2B VERIFIED through B118
+
+Current W3B1 plan: `docs/plans/2026-08-02-w3b1-addressed-state-receipts.md`
+
+Product boundary correction (owner, 2026-08-02): W3 ships only as part of the installed Antigravity/VS Code IDE
+extension. The bundled Studio panel and extension-managed sidecar are components of that extension, not a standalone
+web app. There is no end-user CLI product; older CLI/all-surface language below is superseded by the corrected W3C
+contract in this plan.
 
 ## PLAN
 
@@ -30,13 +37,15 @@ Dependency: W0-W2B VERIFIED through B118
   compensated; no rewrite of terminal facts and no duplicate/conflicting receipt ID.
 - Adapters that project receipts into Agent History without making the rotating history store authoritative.
 - W3B integration of all current supported mutation paths, reusing current guarded writers and recovery.
-- API response receipt projection and later MCP/CLI/harness consumption without alternate semantics.
+- Receipt projection through the installed extension's embedded Studio/history and native IDE controls, with
+  extension-managed MCP when applicable. The sidecar API and harness are internal support/proof seams.
 
 ### Out of scope
 
 - W4 deterministic release normalization/secret scan, except the receipt schema fields needed to consume later hashes.
 - Provider execution, Effective Tree, rule packs, semantic rebase, upstream network intelligence, and public release.
 - A generic model-driven dispatcher or replacement workflow engine.
+- A standalone browser application, packaged/headless end-user CLI, or CLI parity work.
 - Storing prompts, keys, tokens, provider secrets, raw environment variables, or arbitrary response bodies in
   receipts.
 
@@ -47,9 +56,9 @@ Dependency: W0-W2B VERIFIED through B118
   `src/lib/forgeCapabilities.ts`, `src/lib/agentAuthority.ts`, `server.ts`.
 - Tests/audits: `scripts/route-integration.mjs`, `scripts/capability-contract-audit.ts`, runtime selftest registry in
   `server.ts`, and focused receipt failure fixtures.
-- W3C surfaces as needed: `src/components/AgentBridge.tsx`, `vscode-extension/mcp/x4forge-mcp.cjs`, built-in harness
-  action/result types, and packaged CLI contract consumers. Exact UI/MCP write ownership is deferred until W3A/B
-  establishes the stable envelope.
+- W3C surfaces as needed: the bundled Studio/history UI, native extension controls, and
+  `vscode-extension/mcp/x4forge-mcp.cjs`; built-in harness types remain test support. Exact extension UI/MCP write
+  ownership is deferred until W3A/B establishes the stable envelope.
 
 ### Risks and authorization boundaries
 
@@ -134,16 +143,19 @@ Dependency: W0-W2B VERIFIED through B118
 14. Existing optimistic concurrency, dry-run-first deploy, recovery replay refusal, and rollback semantics remain
     intact.
 
-### W3C — one receipt across surfaces
+### W3C — one receipt throughout the IDE extension
 
-15. Agent API, MCP, packaged CLI contract, Studio UI/history, and built-in harness reference the same receipt schema
-    and identity. A surface may summarize but cannot alter status, effects, refusal, or rollback truth.
-16. Unknown/malformed receipt data fails closed for a mutating client. Legacy servers without W3 are reported as
-    lacking authoritative receipts; clients do not invent them.
-17. Representative equivalent mutations through supported surfaces yield equivalent receipt fields and refusal
-    codes for wrong workspace, stale CAS, under-scoped key, invalid root, failed validation, receipt-store failure,
-    and rollback failure.
-18. No hidden mutation remains available only to the built-in harness or Studio bearer.
+15. The installed extension's embedded Studio/history, native IDE controls/editors, and optional extension-managed
+    MCP reference the same receipt schema and identity. The extension-owned sidecar API and harness may transport or
+    verify that truth but are not separate user products. No surface may alter status, effects, refusal, or rollback
+    truth.
+16. Unknown/malformed receipt data fails closed for a mutating extension action. An older or attached sidecar without
+    W3 is reported as lacking authoritative receipts; the extension never invents them.
+17. Representative equivalent extension actions yield equivalent receipt fields and refusal codes for wrong
+    workspace, stale state, under-scoped key, invalid root, failed validation, receipt-store failure, and rollback
+    failure.
+18. No hidden mutation remains available only to an internal harness or bearer path, and no standalone web/CLI
+    product is created to satisfy parity.
 
 ### Required validation
 
@@ -247,8 +259,9 @@ Dependency: W0-W2B VERIFIED through B118
   4. **W3B3 external and process effects:** provider spend/network calls, run-command jobs, and GitHub operations get
      explicit action/refusal receipts without raw secret/request capture. No new authority or network surface is
      introduced.
-- W3C projections require separate reviewed work orders because `server.ts`, MCP, UI, CLI, extension packaging, and
-  built-in harness are shared hot paths. Each projection summarizes the W3 receipt; none owns a second status model.
+- W3C projections require separate reviewed work orders because `server.ts`, extension-managed MCP, embedded UI,
+  native IDE controls, extension packaging, and the built-in harness are shared hot paths. Each projection
+  summarizes the W3 receipt; none owns a second status model.
 - W3A actual bounded changes:
   - `actionReceipt.ts` defines the strict v1 record, discriminated authority, canonical hashes/IDs, lifecycle and
     semantic validation, secret rejection/redaction, and deterministic serialization.
@@ -267,6 +280,13 @@ Dependency: W0-W2B VERIFIED through B118
     the reviewed manifest and rejects route, effect, writer, owner, scope, or semantic drift.
   - Validation-required route/process repairs guarantee a fresh production bundle, independent Windows ZIP proof,
     and honest bounded descendant termination on the reproduced taskkill-denied path. They add no route or authority.
+- W3B1 partial implementation:
+  - one bundled, shared `WorkspaceReceiptService` now owns production replace/merge receipt execution in the
+    installed extension-managed sidecar;
+  - paired complete workspace/snapshot authority, pre-state recovery, terminal-before-success, exact replay,
+    changed-fact duplicate refusal, failed CAS/body receipts, and committed dry-run/no-change truth are integrated;
+  - workspace create, snapshot restore, bulk-transform apply, all W3B1b-d owners, and W3C visible projection remain
+    open. This is not a W3B1 close.
 
 ## VALIDATE
 
@@ -309,6 +329,10 @@ Dependency: W0-W2B VERIFIED through B118
   refreshed to 4,249 nodes / 10,210 edges / 178 communities. The implementation precommit gate passed in 217.6s.
 - W3B0 visual/installed/X4 applicability: none. It mounts no production receipt consumer and adds no visible control;
   W3C still requires real installed/rendered Antigravity proof.
+- W3B1 replace/merge partial evidence, 2026-08-03: service 25/25, transaction 23/23, receipt/store 119/119 under
+  normal Windows `TEMP`, typecheck, focused lint 0 errors, and final route integration 426/426 with exit 0. Every
+  committed/failed receipt assertion independently reopens canonical persisted bytes. Ports 3000/3001/3100/3101
+  were closed afterward and exact task-owned route fixtures were removed.
 
 ## REVIEW
 
@@ -322,11 +346,14 @@ Dependency: W0-W2B VERIFIED through B118
 - Item 8 — done/evidenced after reopening: a validated terminal receipt projects only ID/hash/status; legacy rows
   round-trip; caller fake fields are replaced; prepared/tampered receipts refuse; history append failure, rotation,
   corruption, deletion, and reopen leave canonical receipt bytes/hash/status unchanged.
-- W3B/W3C items 9-18 — deliberately not claimed. No production mutation handler, response envelope, UI, MCP, CLI,
-  harness, package, installed extension, or live game path changed in W3A.
+- W3B/W3C items 9-18 — deliberately not claimed. No production mutation handler, response envelope, embedded UI,
+  native IDE control, extension-managed MCP, harness, package, installed extension, or live game path changed in
+  W3A.
 - W3B0 acceptance 1-10 — done/evidenced. Every current route/surface has one reviewed disposition; all fail-closed
   semantic, drift, candidate, promotion, scope, and W3A-construction negatives pass. The explicit item-10 plan change
   permits only the reproduced evidence-path repairs and adds no receipt integration.
+- W3B1 addressed-state acceptance — partial: replace/merge are implemented and route-green; create compensation,
+  restore paired CAS, bulk apply, remaining failure injections, W3B1a E2E, and every W3B1b-d owner are not claimed.
 - Fresh-eyes findings corrected before acceptance: five first-candidate gaps, six lifecycle/semantic gaps, legacy
   method and mixed-recovery gaps, locale-sensitive ordering, broken operation-idempotency semantics, invalid-error
   remapping, CommonJS bundle startup, and the initially missing history adapter. The final full source/diff review
@@ -335,13 +362,14 @@ Dependency: W0-W2B VERIFIED through B118
 ## CLOSE
 
 - Status: W3A and W3B0 `VERIFIED`; W3 overall `IN_PROGRESS` at W3B1.
-- Changed: strict durable receipt schema/store, exact terminal history projection substrate, 116-check runtime oracle,
-  and mechanically reviewed route/writer source deltas.
-- Deliberately unchanged: every real mutation path and every UI/MCP/CLI/harness response consumer. W3A does not make
-  the current Forge receipt-authoritative; W3B integration and W3C parity remain required.
+- Changed: strict durable receipt schema/store, exact terminal history projection substrate, reviewed coverage, and
+  authoritative production receipt transactions for workspace replace/merge.
+- Deliberately unchanged: every other W3B1-B3 mutation path and every visible embedded-UI/native-control/MCP
+  consumer. Two route integrations do not make W3 or W3B1 complete; W3C extension parity remains required.
 - Capability-map delta: verified receipt substrate only, explicitly not mutation coverage or visible parity.
-- Remaining risks: no CLI, MCP, extension host, subprocess, or production handler imports a second receipt-store
-  writer, but W3B1-W3B3 still must bind 46 required routes and 27 required surfaces to prepare/finalize/fail truth.
+- Remaining risks: no extension-managed MCP, extension host, subprocess, or production handler imports a second
+  receipt-store writer, but W3B1-W3B3 still must bind 46 required routes and 27 required surfaces to
+  prepare/finalize/fail truth.
   Directory fsync, hostile local replacement, bounded retention, and W3C installed projection remain follow-ups.
 - Suggested W3B0 checkpoint title: `feat(authority): enforce action receipt coverage inventory`.
 - Checkpoint committed/pushed: `bec8247a84a2267d9429f5bef67fc7c8ab5c6411`; local HEAD, `origin/main`, and remote
@@ -349,6 +377,10 @@ Dependency: W0-W2B VERIFIED through B118
 - W3B0 checkpoint `d247400bf399ef52efed081a058757eaec42c025` committed/pushed with exact local/origin/remote
   parity. GitHub `#20` and `#19` remain open/`PARTIAL`; readback found one exact ledger marker pair, plan link, and
   short/full commit link on each.
+- W3B1 replace/merge checkpoint passed the complete precommit gate in 395.8 seconds and remains pending exact
+  staging, commit/push, remote parity, and GitHub readback at this record update. Its official full E2E verdict
+  remains unavailable because the repaired 2/2 focused slice completed but the Playwright child never emitted its
+  close event or verdict receipt; the checkpoint therefore remains `PARTIAL`.
 
 ## AAR
 
@@ -367,6 +399,11 @@ Dependency: W0-W2B VERIFIED through B118
   capability audits failed until only the exact fingerprint/source boundary deltas were promoted.
 - Triggered by coordinator error: I initially instructed the route source entry at the wrong locale-sensitive
   position, causing one unnecessary 82-second audit failure; the corrected `localeCompare` order passed.
+- Triggered during W3B1: normal Windows ancestor `realpath` returned `EPERM`; exact replay initially conflated
+  lifecycle facts with immutable intent; an over-strong dry-run oracle expected fields the honest preview contract
+  does not return; one all-green route run ended with post-verdict `0xC0000409`; large temp fixtures and several
+  stalled Luna workers required exact cleanup/interruption. Each case was reproduced, corrected or isolated, and
+  rerun before this partial checkpoint was documented.
 - Triggered by tools: combined parallel wrappers discarded sibling results on one red command; a Windows ripgrep
   glob failed; a cleanup-bearing isolated wrapper was policy-blocked before execution; repeated subagent validation
   wrappers needed explicit interruption. Independent commands and retained exact process IDs restored reliable

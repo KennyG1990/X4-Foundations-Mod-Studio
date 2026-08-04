@@ -6,6 +6,19 @@ Inventory cutoff: 2026-08-02
 Owner: active Sol coordinator; implementation code is delegated only to native `luna_executor` workers
 Current documented status report: `docs/plans/2026-08-02-original-pending-issues-status-report.md`
 
+Product boundary correction (owner, 2026-08-02): **X4 Forge is the Antigravity/VS Code IDE extension.** Its bundled
+Studio panel (`dist/index.html`) and extension-managed sidecar (`dist/server.cjs`) are implementation parts of that
+one product, not a standalone web application. Forge has no end-user CLI product. Repository scripts and the
+sidecar API remain internal build, validation, and extension plumbing; they are not separate user experiences or
+delivery targets. Forward work must ship through and be proven in the installed IDE extension.
+
+Native capability correction (owner, 2026-08-03): **Forge will not bridge to, execute, configure, or display results
+from an external analysis provider or the Claude toolkit.** Every useful community-tool capability must be implemented
+natively in Forge or be superseded by a measured stronger native Forge capability. The pinned toolkit source is a
+requirements, provenance, and optional MIT implementation-reference input only. It is not a runtime dependency,
+subprocess, result source, referee, or alternate product. The earlier W5 external-provider and W6 adapter/comparison
+design is rejected and superseded by the native capability contract below.
+
 ## PLAN
 
 - Bounded program: implement, validate, document, and synchronize every non-duplicate GitHub issue that was open in
@@ -16,11 +29,14 @@ Current documented status report: `docs/plans/2026-08-02-original-pending-issues
   duplicate disposition and links to their canonical owners, never separate implementations.
 - Closed `#37` is outside the pending set. New issues produced by research `#36` are not silently added to this
   cutoff program: each requires its own bounded approval and plan.
-- Critical path: W3 receipt authority -> W4-W6 reproducibility/provider foundation -> W7 engine merge-law oracle ->
-  W8-W13 shared truth -> W14-W18 product capabilities -> recorded review stop -> W19-W21 controlled mutation,
-  network intelligence, and final surface parity.
+- Critical path: W3 receipt authority -> W4 reproducible artifact truth -> W5 native capability contract -> W7
+  engine merge-law oracle -> W8-W13 shared truth -> W14-W18 native product capabilities -> recorded review stop ->
+  W19-W20 controlled mutation/network intelligence -> W6 native no-gap acceptance and W21 final extension parity.
 - Independent UX and Kimi units are interleaved only where they do not delay the critical path or overlap write
   scopes. Easy visible work may not displace W3 or the running-X4 gates.
+- The owner rejected Kimi R18 / GitHub `#30` as a product direction: no packaged/headless CLI will be implemented.
+  K30 is now a ledger-disposition unit only. This correction supersedes every older all-surface or CLI-parity phrase
+  in this program.
 
 ### Assumptions and unresolved facts
 
@@ -46,8 +62,9 @@ Current documented status report: `docs/plans/2026-08-02-original-pending-issues
 - `docs/plans/2026-07-29-kimi-recommendations-ledger.md`.
 - GitHub issues `#8`, `#9`-`#22`, and `#29`-`#36`; Discord thread `1531784030889054350` for `#8`.
 - X4 XSDs, unpacked vanilla/DLC corpus, and controlled engine evidence for domain truth.
-- `WingedGuardian/x4-claude-toolkit` at the pinned program revision as optional provider/oracle evidence, never hidden
-  authority.
+- `WingedGuardian/x4-claude-toolkit` at pinned commit
+  `112df5835ddd10aa62a8b791758a3db1ae2798da` as requirements/provenance and optional MIT source-reference material
+  only. It supplies no runtime process, imported result, product verdict, or hidden authority.
 
 ### In scope
 
@@ -55,6 +72,11 @@ Current documented status report: `docs/plans/2026-08-02-original-pending-issues
 - Source, tests, isolated fixtures, build/package/install evidence, and rendered Antigravity interaction.
 - GitHub owner issue updates in the same task as repository status changes.
 - Commit and push only after the applicable precommit, evidence, review, and documentation close gates pass.
+- The installed extension, its embedded Studio panel, native IDE controls/editors, optional extension-managed MCP
+  lifecycle, and the extension-owned sidecar behavior required to support those surfaces.
+- Native Forge implementations for every accepted community-tool capability in the matrix below, using the existing
+  validator, corpus, workspace, history, artifact, diagnostics, registry, and extension surfaces rather than a
+  toolkit bridge or parallel engine.
 
 ### Out of scope and authorization boundaries
 
@@ -62,12 +84,43 @@ Current documented status report: `docs/plans/2026-08-02-original-pending-issues
   release policy authorizes that exact release.
 - No real mod/game-directory write when an isolated fixture proves the contract. Running-X4 proof uses a scratch or
   reversible probe only.
-- No provider spend or upstream-network execution until its planned unit has a verified meter, limit, credential
-  boundary, timeout, and failure behavior.
+- No new spend or upstream-network execution until its planned unit has a verified meter, limit, credential boundary,
+  timeout, and failure behavior. Existing AI-provider paths remain governed by their current chokepoint; this does not
+  authorize an external analysis-provider framework.
 - No source-writing semantic rebase or network-driven update action before the Phase 2 review stop and recorded user
   decisions.
 - No wholesale toolkit copy, replacement Forge shell, second workspace/history/permission engine, or generic
   dispatcher that bypasses the canonical capability contract.
+- No external analysis-provider contract, toolkit executable/subprocess, toolkit installation/configuration UI,
+  imported toolkit findings, side-by-side verdicts, disagreement reports, or optional-referee mode.
+- No standalone browser product, packaged/headless end-user CLI, or parity work whose only purpose is to expose a
+  second product surface outside the IDE extension.
+
+### Native community-tool capability contract
+
+The pinned toolkit README is reconciled as a feature inventory, not as a component to integrate. `#18` owns the
+no-unexplained-gap acceptance ledger; the implementation remains in the existing canonical child owners so this
+contract does not create duplicate engines or surfaces.
+
+| Community capability | Required native Forge implementation | Canonical owner/unit |
+|---|---|---|
+| `x4validate` exact selector, guard, extension-path, reference, and completeness checks | Strengthen `runProjectValidation` over an engine-proven Effective Tree; fail explicitly when relevant sources are incomplete | `#11` W7-W9, `#10` W10-W11, `#15` W16 |
+| `x4effective` final values and per-attribute provenance | Native content-addressed Effective Tree, exact install/profile inventory, provenance queries, and installed-extension views | `#11` W8-W9, W18 |
+| `x4compat` collision/candidate analysis | Native structural and advisory behavioral Forensics Center over loose and packed active-profile content | `#12` W14, W18 |
+| `x4xref` who-calls/who-listens/cue tracing | Native cross-file MD/AI script reference index and provenance-backed queries | `#12` W14, W18 |
+| `x4stats` effective-game balance statistics | Native advisory statistics grounded in the selected profile's effective values; never an uncited balance verdict | `#12` W14, W18 |
+| `x4similar` near-duplicate content detection | Native evidence-labelled similarity analysis with explainable factors and no automatic removal claim | `#12` W14, W18 |
+| `x4diff` semantic mod-version comparison and local-edit recovery | Native semantic source/upstream/local/effective diff, followed only after review by staged receipted rebase | `#16` W17/W19 |
+| `x4modlist` installed-mod triage | Native immutable local mod registry first; separately authorized opt-in Nexus/Steam/GitHub freshness intelligence later | `#17` W8/W20 |
+| 7.x-to-9.x migration checks | Native Compatibility Lab with cited version rules and reviewed migration manifests | `#13` W15 |
+| Debug-log triage and known-good baseline | Native Runtime Oracle with exact log-session fingerprints, attribution, and static-to-engine evidence | `#14` W12 and `#35` |
+| Vanilla-analogue completeness and scaffolding | Native completeness service and cross-file scaffold previews using the legal local corpus | `#15` W16 |
+| Write guards, backups, and baseline safety | Native receipts, rollback/recovery, deterministic artifacts, and existing Forge permission boundaries | `#20` W3-W4 |
+
+Acceptance for `#18` requires every row to be `VERIFIED` in native Forge code and reachable through the installed IDE
+extension where it has a user surface. A capability is not delivered by metadata, a wrapper, an imported report, a
+toolkit process, or a side-by-side comparison. The toolkit may be read during design/licence review, but it is absent
+from the shipped dependency graph and runtime process tree.
 
 ### Program risks and recovery
 
@@ -101,8 +154,8 @@ Current documented status report: `docs/plans/2026-08-02-original-pending-issues
 | Owner | Current truth | Planned unit and dependency | Primary source/write surfaces | Required close proof |
 |---|---|---|---|---|
 | `#8` | OPEN; source Discord requirement recovered | U8 after W3, independent | `src/components/Canvas.tsx`, `src/types.ts`, layout preference helpers, canvas E2E | 50+ cue fixture, full/compact toggle preservation, selection/wires/actions, wide+narrow Antigravity |
-| `#9` | PARTIAL parent | W3-W21 parent, closes last | convergence plan and child ledgers | every child disposition and final parity benchmark |
-| `#10` | PARTIAL/disconnected rules | W10-W11 after W7/W9 evidence truth | `projectRules.ts`, `diagnosticExplain.ts`, quick-fix/guarded-write engines, new data-only rule-pack modules | schema/fixtures, deterministic explanations, three transactional fixes, ambiguity refusals, all surfaces |
+| `#9` | PARTIAL parent | W3-W21 parent, closes last | convergence plan and child ledgers | every child disposition, every native capability-matrix row, and final installed-extension task proof |
+| `#10` | PARTIAL/disconnected rules | W10-W11 after W7/W9 evidence truth | `projectRules.ts`, `diagnosticExplain.ts`, quick-fix/guarded-write engines, new data-only rule-pack modules | schema/fixtures, deterministic explanations, three transactional fixes, ambiguity refusals, all applicable extension surfaces |
 | `#11` | PARTIAL/non-authoritative | W8-W9 after W7 | CAT/DAT readers, diff simulator, new profile/effective-tree/provenance modules | loose+packed profile fixtures, skipped-source incompleteness, who-set chain, engine op parity |
 | `#12` | PARTIAL subsets | W14 after W9/W13 | Extension Doctor, dependency/override/reference indexes, new forensics service and panel | canonical-node conflicts, benign unions, packed mods, advisory behavioral overlap |
 | `#13` | PARTIAL | W8 + W15 after W9-W13 | schema/corpus/patch-readiness engines, profile store, Compatibility Lab | cited version-only breaks, reviewed migration manifest, no uncited warnings |
@@ -110,19 +163,19 @@ Current documented status report: `docs/plans/2026-08-02-original-pending-issues
 | `#15` | PARTIAL | W16 after W9-W13 | reference corpus, cross-file validators, templates/compiler, completeness service/panel | ware/ship/order scaffolds, removed-required negatives, per-element provenance |
 | `#16` | PARTIAL | W17 read-only; W19 staged write after review | XML/diff/XPath engines, artifact source separation, semantic diff/rebase modules | source/upstream/local/effective views, conflicts preserved, reviewed target equality |
 | `#17` | PARTIAL | W8 local registry; W20 opt-in upstream after review | extension locations/manifests/CAT readers, profile registry, credentialed metadata adapters | mixed loose/packed/Workshop profile, no heuristic auto-match/removal, freshness and local-fork states |
-| `#18` | OPEN provider framework | W5-W6 after W3/W4 | new external provider contract/process/cache, provider UI/API, toolkit adapters | absence-safe, sandbox/timeout/cancel, labelled results, four toolkit commands, disagreement report |
-| `#19` | PARTIAL | W3 foundation + W21 parity/benchmark | capability registry, API/MCP/CLI/harness/UI projections | identical operations/refusals/evidence and representative harness benchmark |
+| `#18` | SPECIFIED native no-gap contract; no toolkit-specific native close yet | W5 contract now; implementation through W7-W20; W6/W21 close gate | existing Forge engines and the canonical `#10`-`#17`/`#20` owners; no provider or adapter modules | every inventory row native, no shipped toolkit dependency/process/result, installed-extension reachability, representative native task suite |
+| `#19` | PARTIAL | W3 foundation + W21 extension convergence | capability registry, embedded Studio/native IDE/MCP projections, extension-owned sidecar and harness proof | identical native operations/refusals/evidence inside the installed extension and representative native workflow proof |
 | `#20` | PARTIAL | W3 then W4; first implementation | history/CAS/recovery/artifact/deploy/package stores, routes and surfaces | authoritative receipts, injected-failure rollback/no-false-success, permission matrix, secret/reference exclusions |
-| `#21` | PARTIAL/disconnected | W10 + W13 after W8/W9 | schema/corpus/evidence sources, new evidence graph/store/query/UI | versioned facts, grades, contradiction/supersession, rule links, promotion refusals, all surfaces |
+| `#21` | PARTIAL/disconnected | W10 + W13 after W8/W9 | schema/corpus/evidence sources, new evidence graph/store/query/UI | versioned facts, grades, contradiction/supersession, rule links, promotion refusals, all applicable extension surfaces |
 | `#22` | Implemented but issue open | U22 proof-and-close after W3 starts | `server.ts`, `scripts/route-integration.mjs`, capability/route audits | same explicit root for read/write, default/alias/traversal negatives, current-source gates |
-| `#29` | PARTIAL parent, 19/21 | K30 + K31; closes when both pass | Kimi ledger and GitHub parent | exact R18/R21 evidence and parent checklist |
-| `#30` | PARTIAL/unlocked | K30 after W3 receipts | packaged dependency-free CLI, discovery/auth, deploy-verify route/root handling, extension packaging | dry-run default, explicit apply, refusal matrix, staged+installed VSIX and Antigravity terminal proof |
-| `#31` | OPEN/unlocked | K31 after W3 receipts; independent of K30 writes | `vscode-extension/src/extension.ts`, new native MCP registration helper, `context.secrets`, shim/package | restart/workspace change/revoke, secret scan, unsupported-host fallback, installed VS Code+Antigravity |
+| `#29` | PARTIAL parent, 19 verified + R18 rejected | K31; closes after R21 is verified | Kimi ledger and GitHub parent | recorded R18 rejection, exact R21 evidence, and parent checklist |
+| `#30` | Owner-rejected product direction; CLOSED `not planned` 2026-08-02 | K30D complete, no implementation | Kimi ledger, repository plan, and GitHub issue only | exact owner decision recorded; no CLI code |
+| `#31` | OPEN/unlocked | K31 after W3 receipts | `vscode-extension/src/extension.ts`, new native MCP registration helper, `context.secrets`, shim/package | restart/workspace change/revoke, secret scan, unsupported-host fallback, installed VS Code+Antigravity |
 | `#32` | SPECIFIED/reproduced | U32 after W3 | `src/App.tsx`, normalized action/navigation helpers, UI/E2E | one accessible owner per action at every breakpoint; rendered Antigravity wide+narrow |
 | `#33` | SPECIFIED/reproduced | U33 after W3; feeds W10 UX | `diagnosticExplain.ts`, diagnostic provenance, `DiagnosticGuidance.tsx`, package/canvas/extension navigation | `<diff>` guidance, node/file/import navigation, stale/ambiguous refusal, installed rendering |
 | `#34` | SPECIFIED/copy reproduced | U34 after W3 receipts | `PlaytestWorkspace.tsx`, workspace save, deploy-verify routes, destructive recovery | exact target copy, one deploy authority, stale/root/locked/validation negatives, isolated+rendered proof |
 | `#35` | SPECIFIED; source partial | U35/W12 after X4 available | Canvas LIVE toggle, polling, log telemetry, bridge/runtime routes | live cue green, attributable error red, stale/authored negatives, clean stop, real rendered host |
-| `#36` | QUEUED behind `#29` | R36 after K30/K31 close | two named research docs, current capability map/repo/community sources | opportunity matrix, explicit rejects, nonduplicate approved issue proposals; no implementation in this unit |
+| `#36` | QUEUED behind `#29` | R36 after K31 and parent close | two named research docs, current capability map/repo/community sources | opportunity matrix, explicit rejects, nonduplicate approved issue proposals; no implementation in this unit |
 
 ### Duplicate mirrors
 
@@ -141,7 +194,8 @@ Current documented status report: `docs/plans/2026-08-02-original-pending-issues
 - W7 engine behavior controls W9 merge semantics; W9 provenance controls W10 merge-dependent rules and W14-W17
   product verdicts.
 - W10's rule/evidence schema and W13's graph share IDs and promotion governance; they are not two knowledge stores.
-- K30, K31, and W21 project canonical capabilities and receipts; they cannot carry private alternate behavior.
+- K31 and W21 project canonical capabilities and receipts inside the extension; they cannot carry private alternate
+  behavior. K30 is a no-code rejection/disposition, not an alternate client.
 - U33 becomes the first user-facing consumer of rule-specific explanation/navigation but may not pretend W10's full
   data-pack platform already exists.
 - U34 consumes W3 receipts and existing deploy/recovery authority; it does not add another deployment path.
@@ -157,8 +211,9 @@ Current documented status report: `docs/plans/2026-08-02-original-pending-issues
 2. **W3B authoritative mutation integration:** bind current guarded workspace/file/deploy/revert/key/config/artifact
    mutations to prepare/finalize/fail receipts and existing recovery. No success response without the required final
    receipt; post-mutation finalization failure must roll back or return explicit incomplete/recovery truth.
-3. **W3C surfaces:** Agent API envelopes, history links, MCP, CLI-ready projection, and built-in harness consume the
-   same receipt schema and refusal semantics.
+3. **W3C extension surface:** the installed Studio panel/history, native IDE controls, and extension-managed MCP
+   consume the same receipt schema and refusal semantics. The sidecar API and harness are internal proof seams, not
+   separate products. No CLI projection is built.
 4. **U22:** rerun root-alignment and traversal/alias tests on current bytes, correct durable records and close `#22`;
    no source rewrite unless proof finds regression.
 
@@ -175,14 +230,25 @@ production-route proof (400/400), isolated runtime proof (130/130), and all decl
 green. It deliberately mounts no production receipt consumer or visible extension surface. W3B1 addressed-state
 integration is next; exact close: `docs/plans/2026-08-02-w3b0-action-receipt-coverage.md`.
 
-### Wave 2 — reproducibility, provider boundary, and unlocked Kimi/UX units
+**W3B1 partial checkpoint (2026-08-03): IN_PROGRESS / PARTIAL.** The shared runtime plus addressed workspace
+replace/merge now prepare and terminalize authoritative receipts before response, preserve paired CAS/recovery,
+replay exact intent without repeating mutation, reject changed facts, and record failed/no-change truth. Focused
+service/transaction/store checks are 25/25, 23/23, and 119/119; the fresh production route gate is 426/426. This is
+2/5 W3B1a routes only: workspace create, snapshot restore, bulk-transform apply, W3B1a E2E, W3B1b-d, and W3C remain
+open. Exact record: `docs/plans/2026-08-02-w3b1-addressed-state-receipts.md`.
+
+### Wave 2 — reproducibility, native capability contract, and unlocked Kimi/UX units
 
 5. **W4:** normalize artifact/build/package/deploy/release results into receipt inputs; deterministic archives and
    manifests; secret scan and default deployment ignores; baseline fingerprints.
-6. **W5:** generic external-analysis provider contract, process sandbox, filesystem scope, timeout/cancel/progress,
-   deterministic cache, provenance and absence-safe behavior.
-7. **W6:** toolkit adapter and side-by-side benchmark for machine-readable capabilities; no hidden verdict winner.
-8. **K30 / `#30`:** packaged headless CLI with discovered instance/workspace/key authority and dry-run-first deploy.
+6. **W5:** freeze the native community-capability contract above, reconcile every requirement to one existing Forge
+   owner, and add/harden canonical Forge capability descriptors only when their real backing engines exist. No hollow
+   metadata, provider contract, toolkit process, or adapter is accepted.
+7. **W6:** machine-verifiable native no-gap acceptance suite. Each row must exercise Forge's own implementation and
+   deterministic expected behavior over legal local fixtures/engine evidence. It closes after W7-W20, not through
+   toolkit execution or result comparison.
+8. **K30D / `#30` — COMPLETE:** the owner's rejection of a packaged/headless CLI is recorded in the Kimi parent and
+   child; `#30` is closed as not planned. This unit wrote no product code.
 9. **K31 / `#31`:** native opt-in MCP registration lifecycle using secret storage and exact key revocation.
 10. **U8, U32, U33, U34:** compact graph view, header ownership, diagnostic explanation/navigation, and deploy UX.
     Disjoint UI paths may use parallel Luna workers; overlapping `App.tsx` or extension ownership is serialized.
@@ -198,7 +264,8 @@ integration is next; exact close: `docs/plans/2026-08-02-w3b0-action-receipt-cov
     contradiction/supersession, signature/hash pinning and governance.
 15. **W11:** shared rule interpreter and rule-authorized preview/apply/revalidate fix path using W3 receipts.
 16. **W12:** deploy-to-runtime oracle, log session/rotation fingerprint, attribution and static-vs-engine scorecard.
-17. **W13:** governed evidence graph and representative queries across UI/CLI/MCP/API/harness.
+17. **W13:** governed evidence graph and representative queries through the embedded Studio/native IDE experience;
+    extension-managed MCP, sidecar API, and harness are supporting integration/proof seams.
 18. **U35 / `#35`:** run the six-step real-X4 experience script when X4 is available. Until then the source/runtime
     unit may progress but final status remains PARTIAL.
 
@@ -212,8 +279,8 @@ integration is next; exact close: `docs/plans/2026-08-02-w3b0-action-receipt-cov
 
 ### Mandatory product-decision review stop
 
-- Re-read all Phase 2 evidence and benchmark whether native Forge, the optional provider, or a rejected capability is
-  justified for each remaining toolkit function.
+- Re-read all Phase 2 evidence and the native capability matrix. Any useful matrix row still lacking native Forge
+  behavior returns to its canonical implementation owner; there is no provider or comparison fallback.
 - Obtain and record explicit authorization for source-writing rebase behavior and each opt-in upstream network
   adapter. If not authorized, close the read-only portions honestly and leave W19/W20 BLOCKED/PARTIAL.
 
@@ -222,13 +289,16 @@ integration is next; exact close: `docs/plans/2026-08-02-w3b0-action-receipt-cov
 24. **W19 / `#16`:** staged, review-required semantic rebase with preserved conflicts/authorship and W3 rollback.
 25. **W20 / `#17`:** opt-in Nexus/Steam/GitHub metadata, user credentials, freshness, confidence-labelled identity
     candidates and no heuristic removal recommendation.
-26. **W21 / `#19`:** complete capability projection and representative benchmark across Studio UI, packaged CLI,
-    MCP, Agent API, built-in harness, and approved external providers.
+26. **W21 / `#19`:** complete native capability projection and representative task proof across the installed
+    extension's embedded Studio panel, native IDE controls/editors, and optional extension-managed MCP. The
+    extension-owned sidecar API and harness prove consistency internally; no external analysis provider, toolkit
+    runtime, comparison result, standalone web app, or CLI product is included.
 27. Close child issues and `#9` only after point-by-point evidence review.
 
 ### Wave 6 — queued research close
 
-28. Close `#29` after K30/K31 and update the Kimi ledger/ROADMAP.
+28. Close `#29` after the K30 rejection disposition and K31 implementation are recorded; update the Kimi
+    ledger/ROADMAP.
 29. Run `#36` research reconciliation against current sources and the live community landscape. Publish accepts and
     rejects, create only approved nonduplicate issues, and do not implement them under this cutoff program.
 
@@ -243,7 +313,8 @@ timestamp, revision/fixture, and evidence path.
    `POST /api/agent/project/validate` where the changed surface participates.
 4. Negative/rollback: at least one refusal and one injected failure; no false-success receipt; prior bytes/state
    preserved or exactly restorable.
-5. Runtime: `node scripts/oracle-sweep.mjs`, debug-watcher state, provider/CLI/MCP process lifecycle, or real engine
+5. Runtime: `node scripts/oracle-sweep.mjs`, debug-watcher state, extension-managed MCP/sidecar lifecycle, applicable
+   existing AI-provider behavior, or real engine
    events as applicable.
 6. Native UI: exact behavior rendered and interacted with in real Antigravity. DOM/source inspection is supporting,
    not final visual proof.

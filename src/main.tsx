@@ -6,6 +6,7 @@ import { toast } from './lib/uiDialogs';
 import { clientRequestDeadlineMs, createAbortDeadline, timeoutError } from './lib/requestDeadline';
 import { primeWorkspacePollingSnapshot, type WorkspacePollingResponse } from './lib/workspacePolling';
 import { sanitizeWorkspace } from './types';
+import { ACTION_OPERATION_ID_HEADER, resolveActionOperationId } from '../shared/actionOperationId';
 
 // Calibration L4: route any native alert() — legacy or stray — to a non-blocking in-app
 // toast. Native alert/confirm/prompt freeze the renderer; confirm/prompt are converted to
@@ -78,8 +79,17 @@ function methodOf(input: RequestInfo | URL, init?: RequestInit): string {
   return m.toUpperCase();
 }
 
+function studioStrongRandomBytes(byteLength: number): Uint8Array {
+  const strongCrypto = globalThis.crypto;
+  if (!strongCrypto || typeof strongCrypto.getRandomValues !== 'function') {
+    throw new Error('Strong cryptographic randomness is unavailable for Forge operation identity.');
+  }
+  return strongCrypto.getRandomValues(new Uint8Array(byteLength));
+}
+
 const customFetch = async function(this: any, input: RequestInfo | URL, init?: RequestInit) {
   const url = typeof input === 'string' ? input : (input instanceof URL ? input.href : input.url);
+  const method = methodOf(input, init);
   // Security: only attach the session token to SAME-ORIGIN /api/ requests. A bare
   // url.includes('/api/') would leak the bearer token to any future cross-origin URL
   // that happens to contain '/api/' (a plugin/analytics script). Resolve against the
@@ -105,11 +115,22 @@ const customFetch = async function(this: any, input: RequestInfo | URL, init?: R
       headers.set('x-client-id', clientId);
       const workspaceId = window.__X4_WORKSPACE_CONTEXT__?.getWorkspaceId() || '';
       if (workspaceId) headers.set('x-workspace-id', workspaceId);
+      // Generate once for this fetch invocation. The bootstrap transport-retry loop
+      // below reuses these headers; a changed bootstrap request is a new invocation.
+      const explicitOperationId = headers.get(ACTION_OPERATION_ID_HEADER);
+      const operationId = resolveActionOperationId(
+        method,
+        explicitOperationId === null ? undefined : explicitOperationId,
+        studioStrongRandomBytes,
+      );
+      if (!headers.has(ACTION_OPERATION_ID_HEADER) && operationId !== undefined) {
+        headers.set(ACTION_OPERATION_ID_HEADER, operationId);
+      }
       init = { ...init, headers };
     }
 
     // Fast path: anything that isn't an idempotent /api GET goes straight through.
-    if (!isApi || (methodOf(input, init) !== 'GET' && !isWorkspaceBootstrap)) {
+    if (!isApi || (method !== 'GET' && !isWorkspaceBootstrap)) {
       return originalFetch.call(this, input, init);
     }
 
