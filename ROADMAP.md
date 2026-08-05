@@ -7449,3 +7449,25 @@ the parent remains open/`PARTIAL`.
 
 Suggested commit title:
 `feat(authority): enforce action receipt coverage inventory`.
+
+## 2026-08-04 — Installed Studio retained-tab schema rebind — VERIFIED
+
+The Forge extension now restores every retained `X4 Forge Studio` tab onto one current managed sidecar session. Panel
+binding is keyed per webview, active/disposal state stays deterministic, backend port or token replacement reloads
+each affected panel once, and unchanged identity reloads none. Owned-sidecar liveness no longer downloads the 3.4 MiB
+schema response under a two-second deadline: it uses a small authenticated HEAD check with one bounded retry, while
+unknown external attach retains the full positive X4 Forge schema-identity check.
+
+Focused evidence is 6/6 liveness and 14/14 panel binding; extension build, root typecheck, zero-error lint, production
+build, staged probe 16/16, candidate inspection, installed-byte parity, and the exact-scope isolated precommit pass.
+Precommit exited 0 in 591 seconds with all writer, capability/MCP, receipt-coverage, type, size, mirror, and tripwire
+gates green. The inspected 2,091-entry candidate
+has SHA-256 `9295CFD8CF3CEE798C3DD261F9E312EC20F4AFC7FC12C709A05E50A8D2789D01`. Antigravity 1.107.0
+recorded one spawn, one ready event, four panel binds, zero dead-backend discards, and only port `51199`. Every retained
+tab visibly rendered 1,507 MD elements, 1,408 AI elements, 2,333 properties, and the same port; fresh Directory
+Settings and a 3,408,534-byte HTTP 200 schema read had no `Failed to fetch`. No schema path, game/mod data, marketplace
+state, or public version changed. Full evidence and AAR:
+`docs/plans/2026-08-04-installed-studio-multipanel-rebind.md`.
+
+Suggested commit title:
+`fix(extension): keep restored Forge tabs on one sidecar`.

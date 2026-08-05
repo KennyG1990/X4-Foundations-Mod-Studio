@@ -37,6 +37,7 @@
     "test:reference-manifest-api": "node scripts/reference-manifest-api-integration.mjs",
     "test:extension-capabilities": "tsx vscode-extension/src/capabilities.ts",
     "test:action-operation-id": "tsx shared/actionOperationId.selftest.ts",
+    "test:extension-backend-liveness": "tsx vscode-extension/src/backendLiveness.selftest.ts",
     "test:extension-panel-binding": "tsx vscode-extension/src/panelBinding.selftest.ts",
     "test:extension-native-bridge": "tsx vscode-extension/src/nativeEditorBridge.selftest.ts",
     "test:schema-particle-corpus": "tsx scripts/schema-particle-corpus-check.ts",

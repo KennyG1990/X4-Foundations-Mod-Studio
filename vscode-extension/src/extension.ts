@@ -29,6 +29,7 @@ import { xmlCursorContext } from "./langContext";
 import { findCueDefinition, findCueReferences, mdscriptNameOf, parseCueWord } from "./langNav";
 import { detectIdeCapabilities, formatIdeCapabilityReport } from "./capabilities";
 import { PanelBackendBinding, SharedBackendEnsure } from "./panelBinding";
+import { checkOwnedBackendLiveness, hasForgeSchemaIdentity } from "./backendLiveness";
 import {
   copyVerifiedReleaseArtifact,
   inspectNativeWorkshopTool,
@@ -70,6 +71,8 @@ let backend: BackendHandle | null = null;
 let panel: vscode.WebviewPanel | null = null;
 const panelBinding = new PanelBackendBinding();
 const backendEnsurer = new SharedBackendEnsure<BackendHandle>();
+const studioPanels = new Map<string, vscode.WebviewPanel>();
+let nextStudioPanelKey = 1;
 let output: vscode.OutputChannel;
 let statusItem: vscode.StatusBarItem;
 /** Set while deliberately stopping the sidecar so the exit handler stays quiet. */
@@ -334,15 +337,25 @@ async function probeForge(baseUrl: string, timeoutMs = 3000): Promise<boolean> {
   const res = await fetchWithTimeout(`${baseUrl}/api/agent/schema`, timeoutMs);
   if (!res || !res.ok) return false;
   try {
-    const data = (await res.json()) as { api_version?: unknown; description?: unknown };
-    return (
-      typeof data.api_version === "string" &&
-      typeof data.description === "string" &&
-      data.description.includes("X4 Forge")
-    );
+    return hasForgeSchemaIdentity(await res.json());
   } catch {
     return false;
   }
+}
+
+async function probeOwnedForge(handle: BackendHandle) {
+  const childRunning = !!handle.child && handle.child.exitCode === null && handle.child.signalCode === null;
+  return checkOwnedBackendLiveness({
+    childRunning,
+    probe: async (timeoutMs) => {
+      if (!handle.token) return false;
+      const res = await fetchWithTimeout(`${handle.baseUrl}/api/ai/keys/status`, timeoutMs, {
+        method: "HEAD",
+        headers: backendApiHeaders(handle),
+      });
+      return !!res?.ok;
+    },
+  });
 }
 
 /** Ask the OS for a free loopback port. */
@@ -592,24 +605,38 @@ async function autoRestartSidecar(context: vscode.ExtensionContext, exitCode: nu
 async function ensureBackend(context: vscode.ExtensionContext): Promise<BackendHandle> {
   return backendEnsurer.run(
     () => ensureBackendOnce(context),
-    (handle) => { bindStudioPanel(handle); },
+    (handle) => { bindStudioPanels(handle); },
   );
 }
 
 async function ensureBackendOnce(context: vscode.ExtensionContext): Promise<BackendHandle> {
   // Reuse a live handle.
-  if (backend) {
-    if (await probeForge(backend.baseUrl, 2000)) return backend;
-    log(`existing backend at ${backend.baseUrl} no longer answers; discarding handle`);
-    if (backend.owned && backend.child && backend.child.exitCode === null) {
+  const existing = backend;
+  if (existing) {
+    const ownedLiveness = existing.owned ? await probeOwnedForge(existing) : null;
+    const live = ownedLiveness?.live ?? await probeForge(existing.baseUrl, 2000);
+    if (live && backend === existing) {
+      if (ownedLiveness?.recoveredAfterRetry) {
+        log(`owned backend at ${existing.baseUrl} answered lightweight liveness retry ${ownedLiveness.attempts}`);
+      }
+      return existing;
+    }
+    if (backend && backend !== existing) return backend;
+    if (backend === existing) {
+      const detail = ownedLiveness
+        ? ` after ${ownedLiveness.attempts} lightweight check${ownedLiveness.attempts === 1 ? "" : "s"}`
+        : "";
+      log(`existing backend at ${existing.baseUrl} no longer answers${detail}; discarding handle`);
+    }
+    if (existing.owned && existing.child && existing.child.exitCode === null && existing.child.signalCode === null) {
       stoppingDeliberately = true;
       try {
-        requestManagedSidecarStop(backend.child);
+        requestManagedSidecarStop(existing.child);
       } finally {
         stoppingDeliberately = false;
       }
     }
-    backend = null;
+    if (backend === existing) backend = null;
   }
 
   // Attach-first: an already-running Forge (e.g. the standalone dev stack) wins.
@@ -710,15 +737,48 @@ function updateStatus(): void {
 }
 
 function trackStudioPanel(context: vscode.ExtensionContext, nextPanel: vscode.WebviewPanel): void {
-  panel = nextPanel;
-  panelBinding.reset();
-  context.subscriptions.push(nextPanel.webview.onDidReceiveMessage((message) => void handleStudioMessage(context, message)));
-  nextPanel.onDidDispose(() => {
-    if (panel === nextPanel) {
-      panel = null;
-      panelBinding.reset();
-    }
+  const panelKey = `studio-${nextStudioPanelKey++}`;
+  studioPanels.set(panelKey, nextPanel);
+  panelBinding.track(panelKey, (current) => {
+    nextPanel.webview.html = webviewHtml(
+      nextPanel.webview,
+      current.baseUrl,
+      current.owned ? `managed sidecar on port ${current.port}` : `attached to ${current.baseUrl}`,
+    );
+    log(`studio panel bound to ${current.baseUrl}`);
   });
+  if (nextPanel.active) panelBinding.setActive(panelKey);
+  syncCanonicalStudioPanel();
+  context.subscriptions.push(nextPanel.webview.onDidReceiveMessage((message) => void handleStudioMessage(context, message)));
+  nextPanel.onDidChangeViewState(() => {
+    if (nextPanel.active) {
+      panelBinding.setActive(panelKey);
+    } else if (panelBinding.getActiveKey() === panelKey) {
+      for (const [candidateKey, candidate] of studioPanels) {
+        if (candidate.active) {
+          panelBinding.setActive(candidateKey);
+          break;
+        }
+      }
+    }
+    syncCanonicalStudioPanel();
+  });
+  nextPanel.onDidDispose(() => {
+    studioPanels.delete(panelKey);
+    panelBinding.untrack(panelKey);
+    for (const [candidateKey, candidate] of studioPanels) {
+      if (candidate.active) {
+        panelBinding.setActive(candidateKey);
+        break;
+      }
+    }
+    syncCanonicalStudioPanel();
+  });
+}
+
+function syncCanonicalStudioPanel(): void {
+  const activeKey = panelBinding.getActiveKey();
+  panel = activeKey ? studioPanels.get(activeKey) ?? null : null;
 }
 
 async function handleStudioMessage(context: vscode.ExtensionContext, value: unknown): Promise<void> {
@@ -897,21 +957,14 @@ async function handleNativeReleaseAction(context: vscode.ExtensionContext, envel
   return postNativeReleaseResult({ requestId: envelope.requestId, ok: true, code: "STEAM_COMMAND_INSERTED", message: "The official WorkshopTool command is visible in a terminal but has not run. Review it, then press Enter yourself to authenticate/upload." });
 }
 
-function bindStudioPanel(handle: BackendHandle): boolean {
-  const activePanel = panel;
-  if (!activePanel) return false;
-  return panelBinding.bind(handle, (current) => {
-    activePanel.webview.html = webviewHtml(
-      activePanel.webview,
-      current.baseUrl,
-      current.owned ? `managed sidecar on port ${current.port}` : `attached to ${current.baseUrl}`,
-    );
-    log(`studio panel bound to ${current.baseUrl}`);
-  });
+function bindStudioPanels(handle: BackendHandle): boolean {
+  return panelBinding.bind(handle);
 }
 
 async function openStudio(context: vscode.ExtensionContext): Promise<void> {
-  if (panel) {
+  syncCanonicalStudioPanel();
+  const canonicalPanel = panel;
+  if (canonicalPanel) {
     try {
       await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: "X4 Forge: checking backend…" },
@@ -921,7 +974,7 @@ async function openStudio(context: vscode.ExtensionContext): Promise<void> {
       showBackendError(err instanceof Error ? err.message : String(err));
       return;
     }
-    panel.reveal();
+    canonicalPanel.reveal();
     return;
   }
   let handle: BackendHandle;
@@ -940,7 +993,7 @@ async function openStudio(context: vscode.ExtensionContext): Promise<void> {
     retainContextWhenHidden: true,
   });
   trackStudioPanel(context, createdPanel);
-  bindStudioPanel(handle);
+  bindStudioPanels(handle);
 }
 
 // ---------------------------------------------------------------------------

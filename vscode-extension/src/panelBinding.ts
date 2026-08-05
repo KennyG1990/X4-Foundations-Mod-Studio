@@ -9,24 +9,67 @@ function backendIdentity(backend: PanelBackendDescriptor): string {
   return JSON.stringify([backend.baseUrl, backend.owned, backend.port ?? null, backend.token ?? null]);
 }
 
+type PanelRenderer = (backend: PanelBackendDescriptor) => void;
+
+interface TrackedPanel {
+  render: PanelRenderer;
+  boundIdentity: string | null;
+}
+
+const LEGACY_PANEL_KEY = "\u0000legacy-panel";
+
 /**
- * Tracks which backend session the Studio iframe currently represents. A token change is
- * significant even when the OS reuses the same port: the new server injects a new session
- * credential into its HTML, so the iframe must be loaded again.
+ * Tracks the backend session represented by each Studio iframe. A token change is significant
+ * even when the OS reuses the same port: the new server injects a new session credential into
+ * its HTML, so every affected iframe must be loaded again.
  */
 export class PanelBackendBinding {
-  private boundIdentity: string | null = null;
+  private readonly panels = new Map<string, TrackedPanel>();
+  private activePanelKey: string | null = null;
 
-  bind(backend: PanelBackendDescriptor, render: (backend: PanelBackendDescriptor) => void): boolean {
-    const nextIdentity = backendIdentity(backend);
-    if (this.boundIdentity === nextIdentity) return false;
-    render(backend);
-    this.boundIdentity = nextIdentity;
+  track(panelKey: string, render: PanelRenderer): void {
+    if (!panelKey) throw new Error("A Studio panel key is required.");
+    if (this.panels.has(panelKey)) return;
+    this.panels.set(panelKey, { render, boundIdentity: null });
+    if (this.activePanelKey === null) this.activePanelKey = panelKey;
+  }
+
+  untrack(panelKey: string): void {
+    if (!this.panels.delete(panelKey)) return;
+    if (this.activePanelKey !== panelKey) return;
+    this.activePanelKey = this.panels.keys().next().value ?? null;
+  }
+
+  setActive(panelKey: string): boolean {
+    if (!this.panels.has(panelKey)) return false;
+    this.activePanelKey = panelKey;
     return true;
   }
 
-  reset(): void {
-    this.boundIdentity = null;
+  getActiveKey(): string | null {
+    return this.activePanelKey;
+  }
+
+  bind(backend: PanelBackendDescriptor, legacyRender?: PanelRenderer): boolean {
+    if (legacyRender) this.track(LEGACY_PANEL_KEY, legacyRender);
+    const nextIdentity = backendIdentity(backend);
+    let rebound = false;
+    for (const panel of this.panels.values()) {
+      if (panel.boundIdentity === nextIdentity) continue;
+      panel.render(backend);
+      panel.boundIdentity = nextIdentity;
+      rebound = true;
+    }
+    return rebound;
+  }
+
+  reset(panelKey?: string): void {
+    if (panelKey !== undefined) {
+      const panel = this.panels.get(panelKey);
+      if (panel) panel.boundIdentity = null;
+      return;
+    }
+    for (const panel of this.panels.values()) panel.boundIdentity = null;
   }
 }
 

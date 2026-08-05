@@ -21,12 +21,25 @@ const b: PanelBackendDescriptor = {
 const samePortNewSession: PanelBackendDescriptor = { ...b, token: "token-c" };
 
 async function main(): Promise<void> {
-  ok("first_bind_renders", binding.bind(a, render) && renders.length === 1);
-  ok("same_identity_does_not_reload", !binding.bind(a, render) && renders.length === 1);
-  ok("replacement_port_reloads_once", binding.bind(b, render) && renders.length === 2);
-  ok("same_port_new_token_reloads", binding.bind(samePortNewSession, render) && renders.length === 3);
+  binding.track("single", render);
+  ok("first_bind_renders", binding.bind(a) && renders.length === 1);
+  ok("same_identity_does_not_reload", !binding.bind(a) && renders.length === 1);
+  ok("replacement_port_reloads_once", binding.bind(b) && renders.length === 2);
+  ok("same_port_new_token_reloads", binding.bind(samePortNewSession) && renders.length === 3);
   binding.reset();
-  ok("restored_panel_reset_rebinds", binding.bind(samePortNewSession, render) && renders.length === 4);
+  ok("restored_panel_reset_rebinds", binding.bind(samePortNewSession) && renders.length === 4);
+
+  const multiBinding = new PanelBackendBinding();
+  const multiRenders: Record<string, string[]> = { first: [], second: [] };
+  multiBinding.track("first", (backend) => multiRenders.first.push(backend.baseUrl + "|" + (backend.token ?? "")));
+  multiBinding.track("second", (backend) => multiRenders.second.push(backend.baseUrl + "|" + (backend.token ?? "")));
+  ok("multi_panel_first_bind_renders_each_once", multiBinding.bind(a) && multiRenders.first.length === 1 && multiRenders.second.length === 1);
+  ok("multi_panel_unchanged_identity_does_not_reload", !multiBinding.bind(a) && multiRenders.first.length === 1 && multiRenders.second.length === 1);
+  ok("multi_panel_port_change_reloads_each_once", multiBinding.bind(b) && multiRenders.first.length === 2 && multiRenders.second.length === 2);
+  ok("multi_panel_token_change_reloads_each_once", multiBinding.bind(samePortNewSession) && multiRenders.first.length === 3 && multiRenders.second.length === 3);
+  multiBinding.setActive("second");
+  multiBinding.untrack("second");
+  ok("untracked_panel_does_not_render_remaining_does", multiBinding.bind(a) && multiRenders.first.length === 4 && multiRenders.second.length === 3 && multiBinding.getActiveKey() === "first");
 
   const shared = new SharedBackendEnsure<PanelBackendDescriptor>();
   let resolveStartup!: (value: PanelBackendDescriptor) => void;
