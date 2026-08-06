@@ -174,12 +174,13 @@ Owner: GitHub #11, W7
 - Status: VERIFIED.
 - Closed from run `w7_20260805_a97e2186_03` after the native X4, focused, negative-path,
   repository, E2E, packaged, and installed gates above passed.
-- Capability-map, AAR, ROADMAP, and SESSION-HANDOFF ledgers are now updated. GitHub markers, staging, commit, push, and remote parity remain coordinator-pending.
-  outside this worker's sole owned path and were not performed. Unrelated dirty files and all
-  Git state remain untouched.
+- W7's immediate checkpoint is fully closed. Capability-map, AAR, ROADMAP,
+  SESSION-HANDOFF, and GitHub ledgers are synchronized with the implementation. Commit
+  `1c912cf28bfe62509ba4ece06553949e514555b6` is pushed, with local `HEAD`,
+  `origin/main`, and remote `main` all at that commit. GitHub #11 and #18 remain
+  OPEN/PARTIAL; W3 and the overall native-capability program remain PARTIAL.
 - Rollback is limited to restoring this plan's prior close text; the fixture roots were already
   removed and the isolated profile remains in its recoverable quarantine receipt.
-- Suggested commit title for the coordinator: `test(x4): prove native XML merge behavior against engine`
 
 ## AAR
 

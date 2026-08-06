@@ -6,8 +6,11 @@ Updated: 2026-08-05 America/New_York
 
 W7’s native X4 merge-law/schema-routing unit is `VERIFIED`, including runtime, full isolated E2E, precommit,
 package, and installed-extension proof. W3 remains `IN_PROGRESS / PARTIAL` at `3/5`: replace, merge, and create
-are runtime-green; snapshot restore and bulk apply remain open. The combined checkpoint is not yet committed or
-pushed, and GitHub/remote parity is still pending.
+are runtime-green; snapshot restore and bulk apply remain open. Implementation commit
+[`1c912cf28bfe62509ba4ece06553949e514555b6`](https://github.com/KennyG1990/X4_Forge/commit/1c912cf28bfe62509ba4ece06553949e514555b6)
+is pushed with `HEAD == origin/main == remote/main`; GitHub `#11` and `#18` are each `OPEN / PARTIAL` with one
+updated ledger block and a commit link. Overall extension program status remains `IN_PROGRESS / PARTIAL`.
+The next step is a fresh task for the already-`SPECIFIED` deterministic rule/evidence-pack implementation.
 
 ## Operator brief
 
@@ -18,8 +21,12 @@ pushed, and GitHub/remote parity is still pending.
   reinstate a machine-state wait.
 - **Eyeball queue:** W7 installed schema/corpus rendering is recorded and green. W3 still needs route-specific
   receipt/finalization/compensation/fault-injection and real-child receipt/restore/bulk acceptance.
-- **Commit question:** no. Before this checkpoint, `HEAD` and `origin/main` both equal
-  `a97e21865143b754b60358865954d558dfb8d72d`. No commit, push, or GitHub mutation has been performed here.
+- **Commit question:** yes. Implementation commit
+  [`1c912cf28bfe62509ba4ece06553949e514555b6`](https://github.com/KennyG1990/X4_Forge/commit/1c912cf28bfe62509ba4ece06553949e514555b6)
+  is pushed, and `HEAD == origin/main == remote/main == 1c912cf28bfe62509ba4ece06553949e514555b6`. GitHub
+  [#11](https://github.com/KennyG1990/X4_Forge/issues/11) and
+  [#18](https://github.com/KennyG1990/X4_Forge/issues/18) are each `OPEN / PARTIAL`, with one updated ledger
+  block and the implementation commit linked.
 
 ## W7 — VERIFIED
 
@@ -44,7 +51,7 @@ Installed proof is recorded at:
 
 W7 closes this native merge-law/schema-routing unit. It does not close W3 or the overall extension program.
 
-## W3 — IN_PROGRESS / PARTIAL (3/5)
+## W3 — PARTIAL (3/5)
 
 Authoritative plan: `docs/plans/2026-08-02-w3b1-addressed-state-receipts.md`.
 
@@ -77,11 +84,6 @@ Authoritative plan: `docs/plans/2026-08-02-w3b1-addressed-state-receipts.md`.
 
 - This handoff task owns only `SESSION-HANDOFF.md`; this worker changed only that file.
 - Do not stage, commit, push, or mutate GitHub from this handoff update. Preserve all concurrent worktree changes.
-- The imminent W3/W7 close requires exact-path staging and one coherent combined commit because shared governed
-  manifests cover both units. Review the W3/W7 source, tests, plans, evidence, and governed manifest changes first;
-  stage only the reviewed paths with `git add -- <paths>`, never the whole checkout.
-- After push, update the markers for GitHub `#11` and `#18`; both remain `OPEN / PARTIAL` until that update. Prove
-  local `HEAD`, `origin/main`, and the remote commit are identical. Remote parity is pending.
 
 ## Preservation boundary — do not stage/reset/clean
 
@@ -98,20 +100,21 @@ Preserve these exact unrelated dirty paths and hunks:
 - Untracked `vscode-extension/evidence/2026-07-31-r8-r17/` screenshots.
 - Unrelated `BACKLOG.md` R13/B111-B114 hunks.
 
-## Exact next steps
+## Exact next step
 
-1. Re-read the combined W3/W7 diff against both authoritative plans and this receipt, preserving the boundary above.
-2. Run the final checkpoint review, stage only exact reviewed paths, create the combined coherent commit, push, and
-   prove local/origin/remote parity.
-3. Update GitHub `#11` and `#18` markers after the push; do not close either issue from partial W3 evidence.
-4. After this commit close, start a fresh task for the governed deterministic rule/evidence-pack implementation;
-   return to W3 snapshot restore and bulk apply as their separate open acceptance work.
+- Start a fresh task for the already-`SPECIFIED` deterministic rule/evidence-pack implementation; W7 no longer
+  blocks that unit. W3 snapshot restore and bulk apply remain separate open acceptance work.
 
 ## Current close and AAR
 
-- **Close:** W7 `VERIFIED`; W3 `IN_PROGRESS / PARTIAL` at `3/5`; overall extension program `IN_PROGRESS / PARTIAL`.
-  Commit, push, GitHub marker updates, and remote parity are pending. The W7 capability-map delta and AAR ledgers are applied; this
-  handoff creates no second delta.
+- **Close:** W7 `VERIFIED`; W3 `PARTIAL` at `3/5`; overall extension program `IN_PROGRESS / PARTIAL`.
+  Implementation commit
+  [`1c912cf28bfe62509ba4ece06553949e514555b6`](https://github.com/KennyG1990/X4_Forge/commit/1c912cf28bfe62509ba4ece06553949e514555b6)
+  is pushed with `HEAD == origin/main == remote/main`; GitHub
+  [#11](https://github.com/KennyG1990/X4_Forge/issues/11) and
+  [#18](https://github.com/KennyG1990/X4_Forge/issues/18) are each `OPEN / PARTIAL`, each with one updated ledger
+  block and a commit link. The W7 capability-map delta and AAR ledgers are applied; this handoff creates no second
+  delta.
 - **Degradation evidence:** clustered stalled/late workers and partial hidden spawns occurred. All known task workers
   are now closed. Treat worker narration as non-authoritative; inspect settled files and diffs. Use a fresh task for
   the next implementation unit after this commit close.

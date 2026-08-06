@@ -127,8 +127,11 @@ Date: 2026-08-04
   events/conditions/actions 402/35/807, corpus factions/wares/sectors 32/1902/170, rendered MD/AI counts 1507/1408,
   2333 script properties, validator rendered with 2 blocking errors and 5 warnings from genuine mod debt, and no
   `Failed to fetch`.
-- W7 closes only this native engine merge-law/schema-routing unit. W3 remains 3/5, and all other program units,
-  gates, ledgers, and Git parity remain open.
+- W7 closes only this native engine merge-law/schema-routing unit. Its immediate checkpoint Git/GitHub parity is
+  closed at pushed commit `1c912cf28bfe62509ba4ece06553949e514555b6`, with `#11`/`#18` readback complete. W3
+  remains 3/5; lifecycle 96/96 is verified, while snapshot restore, bulk apply, and route-specific receipt,
+  finalization, compensation, fault-injection, and real-child acceptance remain open. All later program units and
+  gates remain open.
 
 - Native Sol/Luna routing is restored and independently proven; diagnostic CLI execution was not used as product-
   code implementation evidence.
@@ -196,11 +199,13 @@ Date: 2026-08-04
 ## CLOSE
 
 - Current status: IN_PROGRESS / PARTIAL. W7's native engine merge-law/schema-routing unit is `VERIFIED` with the
-  exact engine, oracle, route, package, E2E, and installed Antigravity evidence recorded above. Native routing is
-  proven; W3B1a remains 3/5: workspace replace/merge and workspace-create are runtime-green, while snapshot
-  restore, bulk apply, and the W3B1a E2E receipt/real-child proof remain open. Later W3 units, W3C installed proof,
-  and ledger/Git parity also remain open.
-- Suggested first combined checkpoint title: `feat(receipts): authorize workspace creation through native Forge`.
+  exact engine, oracle, route, package, E2E, and installed Antigravity evidence recorded above. Its immediate
+  checkpoint Git/GitHub parity is closed at pushed commit `1c912cf28bfe62509ba4ece06553949e514555b6`, with `#11`/
+  `#18` readback complete. Native routing is proven; W3B1a remains 3/5 and lifecycle 96/96 is verified, while
+  snapshot restore, bulk apply, and route-specific receipt, finalization, compensation, fault-injection, and
+  real-child acceptance remain open. Later W3 units, W3C installed proof, and other program gates remain open.
+- Checkpoint: pushed commit `1c912cf28bfe62509ba4ece06553949e514555b6` with subject
+  `feat(x4): prove merge laws and harden mutation receipts`.
 
 ## AAR
 
