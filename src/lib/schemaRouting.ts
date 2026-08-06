@@ -9,8 +9,9 @@
  *   ui/core/addon.xsd / coreaddon.xsd  ·  t/*.xml → structural page/entry lint (the game
  *   ships NO t-file XSD — grounded against the unpacked 9.00 tree, 2026-07-16)  ·  any
  *   routed file with root <diff> → MERGED index (diff.xsd chain + domain chain), so both the
- *   patch wrapper and the payload vocabulary are legal. Everything else — including md/ and
- *   aiscripts/ (owned by their existing handlers) and the ~29 niche domains — is UNROUTED.
+ *   patch wrapper and the payload vocabulary are legal. Plain md/ and aiscripts/ documents remain
+ *   owned by their existing handlers; their diff-rooted patches use this merged path. The ~29
+ *   niche domains remain UNROUTED.
  *
  * Cry-wolf gate (the #1 historical failure mode of this surface): findings for a domain that
  * has not been corpus-proven zero-false-positive against the unpacked vanilla game are
@@ -79,18 +80,30 @@ export function sniffRootElement(xml: string): string | null {
 }
 
 /**
- * Route one file. Returns null for everything outside the subset — md/, aiscripts/, lua,
+ * Route one file. Returns null for everything outside the subset — plain md/, plain aiscripts/,
  * content.xml, unknown library basenames, ui files with unrecognized roots, niche domains.
  */
 export function routeProjectFile(filePath: string, xml: string): SchemaRoute | null {
   const p = String(filePath || '').replace(/\\/g, '/').toLowerCase();
   if (!p.endsWith('.xml')) return null;
-  // md/ and aiscripts/ are owned by the existing, corpus-hardened handlers.
-  if (/(^|\/)(md|aiscripts)\//.test(p)) return null;
   if (p === 'content.xml' || p.endsWith('/content.xml')) return null;
 
   const root = sniffRootElement(xml);
   const wrapper: SchemaRoute['wrapper'] = root === 'diff' ? 'diff' : 'plain';
+
+  // Plain md/ and aiscripts/ documents are owned by the dedicated validators. A diff patch
+  // still needs the shared wrapper+payload index so its <add>/<replace>/<remove> selectors
+  // and script payload vocabulary are checked together exactly once.
+  const scriptMatch = /(^|\/)(md|aiscripts)\//.exec(p);
+  if (scriptMatch) {
+    if (wrapper !== 'diff') return null;
+    return {
+      kind: 'schema',
+      domain: scriptMatch[2] === 'md' ? 'md' : 'aiscripts',
+      wrapper,
+      rootElement: root,
+    };
+  }
 
   if (/(^|\/)t\/[^/]+\.xml$/.test(p)) {
     return { kind: 'tfile', wrapper, rootElement: root };
@@ -269,6 +282,10 @@ export function runSchemaRoutingSelftest() {
   ok('tfile_routed', routeProjectFile('t/0001.xml', '<language id="44"/>')?.kind === 'tfile');
   ok('md_unrouted', routeProjectFile('md/story.xml', '<mdscript/>') === null);
   ok('aiscripts_unrouted', routeProjectFile('aiscripts/x.xml', '<aiscript/>') === null);
+  const mdDiff = routeProjectFile('md/story.xml', '<diff><add sel="/mdscript"/></diff>');
+  ok('md_diff_routes_to_md', mdDiff?.kind === 'schema' && mdDiff.domain === 'md' && mdDiff.wrapper === 'diff' && mdDiff.rootElement === 'diff');
+  const aiscriptsDiff = routeProjectFile('aiscripts/x.xml', '<diff><add sel="/aiscript"/></diff>');
+  ok('aiscripts_diff_routes_to_aiscripts', aiscriptsDiff?.kind === 'schema' && aiscriptsDiff.domain === 'aiscripts' && aiscriptsDiff.wrapper === 'diff' && aiscriptsDiff.rootElement === 'diff');
   ok('content_unrouted', routeProjectFile('content.xml', '<content/>') === null);
   ok('niche_library_unrouted', routeProjectFile('libraries/voicesequences.xml', '<voicesequences/>') === null);
   ok('comment_root_sniff', sniffRootElement('<!-- a <fake> tag --><?pi x?>\n<real/>') === 'real');

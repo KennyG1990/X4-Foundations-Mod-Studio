@@ -7471,3 +7471,19 @@ state, or public version changed. Full evidence and AAR:
 
 Suggested commit title:
 `fix(extension): keep restored Forge tabs on one sidecar`.
+
+## 2026-08-05 — W7 native merge-law/schema routing — VERIFIED
+
+Native X4 merge-law evidence is now grounded in X4 9.00 build 611726 / Steam 23660954. Run
+`w7_20260805_a97e2186_03` produced 11/11 markers and 9/9 semantic cases: selector cardinality, add, replace,
+remove, attribute, if, silent, pos, and dependency-ordered nested patch. Reconciliation confirmed that diff-rooted
+MD/AI files route through merged diff-plus-domain schemas, while those roots are skipped by dedicated validators;
+plain documents retain their existing handlers. This closes the bounded W7 engine/schema evidence unit only.
+
+Evidence: focused 898 assertions; schema 143/143; ordered-particle 544/544; official diff overlay 60/60 across
+176 official diff files; routes 443/443; runtime oracle 131/131; precommit OK; isolated E2E 96/96; and package
+probe 16/16. Installed Antigravity proved live schema, corpus, and validator readiness with no `Failed to fetch`.
+The same real load retained genuine mod findings, including
+`extensions/x4_ai_influence/md/ai_influence_conversation.xml(98)`, where neither `actor` nor `template` is present;
+these are findings in the loaded mod, not merge-law failures. Evidence receipt:
+`test-results/x4-merge-law-oracle/w7_20260805_a97e2186_03/`.

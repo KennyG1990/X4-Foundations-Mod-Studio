@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "sourceFingerprint": "7c50610339e515bcc1de9120e938f7aac36dca9f0045d820fd78267a72afe116",
+  "sourceFingerprint": "cb9e18ed171d87406d31368e4e5faf59c9b33b215754c44bc5f8793084fff92a",
   "policy": "Every raw production filesystem mutation source is count-pinned here. Authoritative files use atomic sibling promotion; stronger tree, archive, append-log, SQLite, retention, ephemeral, and fixture contracts remain explicit exceptions.",
   "writers": [
     {
@@ -243,6 +243,22 @@
       "owners": ["runNpcIdentityProbeSelftest"],
       "rationale": "Writes only disposable plain/gzip/corrupt save fixtures for identity correlation.",
       "failureContract": "Production identity probes read user-selected saves only and never mutate them."
+    },
+    {
+      "file": "src/server/workspaceCreateReceiptAdapter.selftest.ts",
+      "calls": { "rmSync": 1, "mkdtempSync": 1 },
+      "categories": ["fixture-only"],
+      "owners": ["runWorkspaceCreateReceiptAdapterSelftest"],
+      "rationale": "Creates one unique temporary workspace-registry and action-receipt fixture root for the adapter selftest.",
+      "failureContract": "Fixture cleanup is best effort; selftest mutations never target configured workspace, registry, receipt, or production roots."
+    },
+    {
+      "file": "src/server/x4MergeLawOracleFs.ts",
+      "calls": { "writeFileSync": 2, "renameSync": 1, "mkdirSync": 4, "unlinkSync": 3 },
+      "categories": ["verified-tree-transaction", "fixture-only"],
+      "owners": ["validateX4MergeLawOracleExtensionsRoot", "buildX4MergeLawOracleStagingPlan", "inspectX4MergeLawOracleStagingTargets", "stageX4MergeLawOracleFixture", "cleanupX4MergeLawOracleFixture"],
+      "rationale": "Validates an explicit physical extensions root and stages an exact signed merge-law fixture through a guarded sibling transaction before promotion and cleanup.",
+      "failureContract": "Unsafe, conflicting, foreign, or malformed targets refuse before mutation; write or promotion failures roll back owned state or report guarded residue, and cleanup reports incomplete state after a post-mutation failure without touching unowned files."
     },
     {
       "file": "vscode-extension/src/durableWrite.ts",

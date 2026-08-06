@@ -43,7 +43,8 @@
     "test:schema-particle-corpus": "tsx scripts/schema-particle-corpus-check.ts",
     "test:diff-overlay-corpus": "tsx scripts/diff-overlay-corpus-check.ts",
     "test:artifact-pipeline": "tsx scripts/artifact-pipeline-check.ts",
-    "test:writers": "node scripts/durable-writer-audit.mjs --selftest && node scripts/durable-writer-audit.mjs && tsx vscode-extension/src/durableWrite.ts"
+    "test:writers": "node scripts/durable-writer-audit.mjs --selftest && node scripts/durable-writer-audit.mjs && tsx vscode-extension/src/durableWrite.ts",
+    "test:x4-merge-law-oracle": "tsx scripts/x4-merge-law-oracle.selftest.ts && tsx scripts/x4-merge-law-oracle-fixture.selftest.ts && tsx scripts/x4-merge-law-oracle-fs.selftest.ts && tsx scripts/x4-merge-law-oracle-evidence.selftest.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

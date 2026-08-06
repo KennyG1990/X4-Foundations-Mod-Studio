@@ -1,6 +1,6 @@
 # B115 W3B1 — addressed-state action-receipt integration
 
-Status: IN_PROGRESS / PARTIAL; shared runtime plus workspace replace/merge are route-green, while create/restore/bulk remain open
+Status: IN_PROGRESS / PARTIAL; shared runtime plus workspace replace/merge/create are route-green (3/5 W3B1a routes), while snapshot restore and bulk-transform apply remain open
 Lane: FULL
 GitHub owners: `#20` primary, `#19` convergence projection
 Dependencies: W3A and W3B0 VERIFIED at `91463ee13300acabd252d29b12ce7ec0916312c3`
@@ -248,8 +248,8 @@ CLI are not. W3B1's sidecar transaction work remains required because the extens
 
 ## IMPLEMENT
 
-- `IN_PROGRESS` — W3B1a shared foundations and the addressed workspace replace/merge routes are implemented;
-  workspace create, snapshot restore, and bulk-transform apply remain open.
+- `IN_PROGRESS / PARTIAL` — W3B1a shared foundations and the addressed workspace replace/merge/create routes are
+  implemented and route-green (3/5); snapshot restore and bulk-transform apply remain open.
 - Accepted shared foundations:
   - bundled immutable runtime policy loading with the reviewed W3B0 manifest and no checkout-time config read;
   - caller-owned operation IDs in the embedded Studio and native extension controller;
@@ -262,8 +262,8 @@ CLI are not. W3B1's sidecar transaction work remains required because the extens
   serialization.
 - First-party extension callers now supply `x-forge-operation-id`; the discontinued standalone web/CLI surfaces are
   explicitly outside this work. The sidecar and route harness remain internal parts of the installed IDE extension.
-- Active implementation is split further inside W3B1a: workspace replace/merge, workspace create/snapshot restore,
-  then bulk transform and route/E2E assertions. This serial split follows the shared `server.ts` write boundary.
+- Active implementation is split further inside W3B1a: workspace replace/merge/create, snapshot restore, then bulk
+  transform and route/E2E assertions. This serial split follows the shared `server.ts` write boundary.
 - `POST /api/agent/workspace` and `POST /api/agent/workspace/merge` now execute through the one shared
   `WorkspaceReceiptService`. Each request binds the immutable workspace ID, paired complete content/snapshot
   resources, caller operation ID, Studio/agent identity, exact route/effect/request facts, and existing CAS result.
@@ -290,6 +290,322 @@ CLI are not. W3B1's sidecar transaction work remains required because the extens
 - Validation-tool repair is now the only implementation gate before the full E2E rerun: make `run-e2e.mjs` return
   an authoritative receipt when all test outcomes are terminal even if the Windows Playwright child hangs during
   teardown, while retaining an explicit red result for incomplete/missing outcome evidence.
+- Runner candidate result, 2026-08-04: `FAILED`. Independent execution of `node scripts/run-e2e.mjs --selftest`
+  remained attached for 3,074.8 seconds despite a requested 60-second command timeout. Coordinator review also
+  found three false-success/process-containment defects: recovered green did not require `termination.treeGone`,
+  Windows descendant discovery occurred only after killing the root, and strict report-completeness checks applied
+  only to recovery rather than ordinary close. A replacement native Luna restored `scripts/run-e2e.mjs` exactly to
+  pushed `HEAD` and deleted only the two untracked supervisor/fixture files. The candidate is `REVERTED`; no official
+  E2E rerun may proceed until a new independently bounded repair is specified and proven.
+- Workspace-create implementation result, 2026-08-04: `BLOCKED` before product code. Four native Luna workers
+  remained `running` without an implementation write; a fifth patch-author returned no output; the one previously
+  responsive mechanical worker wrote only a 97-byte ownership comment and remained there for roughly ten minutes
+  after a write-or-fail interrupt. A separate native Luna deleted that exact placeholder and scoped status is clean.
+  No `server.ts` or adapter implementation survives, so no partial behavior is being misreported as progress.
+- Native-routing diagnosis: the current validator reports `valid:false` because
+  `F:\DEV_ENV\X4_Forge\.codex\config.toml` is missing. Global facts remain correct (`multi_agent=true`,
+  `multi_agent_v2=false`, selected `sol-luna-v1.json`, Sol selector null, Luna V1, sole `luna_executor` role pinned
+  to `gpt-5.6-luna` at max). A direct ephemeral read-only Luna diagnostic returned `READY` in 14.2 seconds, proving
+  the model/service is healthy; it is diagnostic only and does not satisfy native implementation routing. Repairing
+  the missing standing project config and restarting Codex require the operator protocol's explicit write approval.
+- Continuation, 2026-08-04: the portable project config is restored, the structural validator is green, and fresh
+  native-child metadata proves V1 `luna_executor` / `gpt-5.6-luna` / effort `max` with no parent-turn fork. The
+  workspace-create adapter now exists and its focused oracle passes 16/16. It extends the real registry/service/store
+  owners, commits one canonical global applied receipt, redacts raw material, replays exactly without a second create
+  even after mutable origin changes, conflicts on changed same-identity facts, treats another Studio client as the
+  distinct W3A identity defined by the receipt model, serializes global create attempts, compensates exact
+  finalization failure, records compensation-fault incomplete truth, and fails closed on authoritative reopen loss.
+  Coordinator review first reproduced
+  `WORKSPACE_CREATE_RECEIPT_MISMATCH` on valid replay because original pre-state was compared to current registry
+  state; the corrected adapter keeps first-execution pre-state strict while replay verifies stable resource identity
+  and the stored aggregate hash against its own stored resources. `server.ts` route wiring and coherent HTTP harness
+  assertions for refusal, commit/readback, replay, conflict, distinct-client identity, registry deltas, compensation,
+  and redaction are now present; typecheck and the 16/16 adapter oracle pass. After the operator authorized quiet-
+  machine Antigravity validation, the fresh production build and external HTTP harness passed 443/443. The task temp
+  root was removed, ports 3000/3001/3100/3101 remained free, the exact dirty-worktree fingerprint was unchanged, and
+  local `HEAD` stayed equal to `origin/main`. Workspace-create is runtime-green as route 3/5, while the W3B1a close
+  still requires snapshot restore, bulk apply, and its official E2E gate.
+
+### E2E terminal-verdict repair contract (SPECIFIED 2026-08-03)
+
+- **Bounded unit:** repair only the existing `scripts/run-e2e.mjs` supervision boundary and its deterministic
+  fixtures/selftests. Do not change Playwright specs, product code, the ephemeral server contract, retry/flaky
+  policy, live ports, or the installed extension.
+- **Existing authority reused:** the Playwright JSON report remains verdict authority; list output remains diagnostic;
+  `writeJsonAtomic`, quarantine policy, and the existing verdict receipt remain the single close contract.
+- **Observed failure:** the focused official slice printed 2/2 successful tests, but `runE2e()` waits exclusively for
+  child `close`; inherited Windows handles can keep that event and the promise open after terminal report bytes are
+  available. This is `[REPRODUCED]`, not an inferred test failure.
+- **Safety/rollback:** supervision may terminate only the exact spawned Playwright process tree after a bounded
+  grace/idle threshold. Reverting the runner/selftest files restores the prior behavior. No PID, port, temp root,
+  user process, or live Forge state may be guessed or broadly killed.
+- **Acceptance:** normal child close preserves the existing verdict; a deterministic complete-report teardown hang
+  produces the same authoritative verdict, atomically writes a receipt describing the recovery/termination path,
+  and leaves no owned child; deterministic missing, malformed, structurally incomplete, or nonterminal-report hangs
+  terminate the exact tree, write a red receipt, and return 1. Duplicate events/timeouts settle exactly once; report
+  and receipt temp files are contained/cleaned; no stdout-only path may become green.
+- **Required tests:** preserve all 26 pure checks and add real supervision negatives for complete-report hang and
+  incomplete-report hang, including exact child-tree cleanup and receipt readback. Then run the selftest, focused
+  official E2E slice, full official E2E gate, port/temp containment checks, typecheck, and precommit.
+
+### E2E terminal-verdict repair v2 (RE-SPECIFIED 2026-08-04 after rejected candidate)
+
+- **Independent oracle:** the real-supervision selftest runs each production-supervisor probe in a separate parent-
+  owned process. The parent has its own finite wall-clock deadline and direct exact-root tree cleanup, so a broken
+  supervisor cannot make its own test wait indefinitely. A parent timeout is always red and its task-owned PIDs are
+  checked independently before the selftest can return.
+- **Production bound:** `run-e2e.mjs` owns a finite overall deadline plus a short terminal-report grace period; neither
+  depends on Playwright emitting `close`. It samples the exact spawned root/descendant tree while the child is alive
+  and performs one final bounded tree capture before any termination. Platform process discovery itself is bounded;
+  unavailable or incomplete ownership evidence cannot produce green.
+- **Strict truth on every path:** normal close and recovered teardown use the same structural report validator. A
+  report must be parseable, contain a non-empty discovered test set, contain terminal result evidence for every test,
+  and agree with the classified terminal totals. Missing, malformed, truncated, structurally incomplete, or
+  nonterminal data stays red even if list output says every test passed.
+- **Termination and receipt:** after a terminal report hangs past grace, or any run reaches the outer deadline, stop
+  only the exact spawned process tree. Green requires every pre-captured owned PID to be absent. The atomically written
+  verdict receipt records report completeness, termination reason, captured/remaining PIDs, and `treeGone`; it is
+  reopened and schema-checked before exit 0. Receipt-write/readback failure is red.
+- **Deterministic real-child fixtures:** preserve the existing pure policy checks and exercise at least normal close,
+  complete terminal report plus teardown hang, and incomplete/nonterminal report plus hang. Each hanging fixture owns
+  a descendant, records its PIDs, and proves both production cleanup and the independent parent bound. Test-only
+  runner flags remain repository engineering machinery, not a Forge product CLI or installed-extension surface.
+- **Containment/rollback:** fixture reports, PID records, and receipts use one selftest temp root and are removed after
+  readback; Playwright continues to own only `test-results/e2e`. Reverting the exact runner/test files restores the
+  pushed baseline; no product route, Playwright spec, retry/flaky policy, port, or installed extension changes.
+- **Continuation, 2026-08-04:** the replacement now has a green first layer. A pure terminal-report inspector requires
+  nonempty terminal test evidence, independently derives pass/fail/flaky/skip totals, requires exact stats agreement,
+  rejects inconsistent retry sequences, and forces Playwright global reporter errors red. Fresh-eyes review first
+  reproduced a false-green for nonempty top-level `report.errors`; the corrected contract passes 17/17 adversarial
+  probes. `run-e2e.mjs` applies that same inspector on its ordinary close path and records only bounded inspection
+  facts; the preserved 26 checks plus nine strict checks pass 35/35. This is still `IN_PROGRESS / PARTIAL`: the runner
+  still waits on `close` and has no independent deadline, process-tree capture/termination, receipt readback, or
+  real-child parent oracle.
+- **Continuation, 2026-08-04 (process identity foundation):** `scripts/e2e-process-table.mjs` now parses the exact
+  Windows WMIC CSV and deterministic C-locale POSIX `ps` formats into bounded, stable PID/parent/creation-token rows.
+  It rejects malformed/oversized/duplicate/incomplete snapshots and passes 37/37 direct checks. Coordinator
+  production-format readback first reproduced `header-mismatch` because this PowerShell host emits `CRCRLF`; a
+  targeted native Luna correction now parses the real WMIC snapshot successfully without logging raw rows.
+  `scripts/e2e-process-tree-contract.mjs` now owns both initial and repeated pure ownership. It preserves monotonic
+  captured identities, seeds later traversal from exact active reparented descendants after root loss, captures new
+  generations, reports reused PIDs without following their occupants, and inspects exact remaining/disappearance
+  state. Its 30/30 checks plus coordinator adversarial probes cover malformed/cyclic data, reuse, reparenting, and
+  fail-closed output. `scripts/e2e-process-table-adapter.mjs` adds one shared finite WMIC/`ps` command owner with a
+  separate outer timer, helper-only cleanup, bounded output, sanitized errors, deterministic POSIX locale, and fail-
+  closed platform dispatch. It passes 30/30 ten consecutive times, injected Windows/POSIX adversarial probes, and a
+  sanitized current-host WMIC readback; the complete static bundle also passes parser 37/37, runner 35/35, syntax,
+  typecheck, diff checks, and refreshed Graphify discovery (4,755 nodes / 11,567 edges). This remains a partial
+  foundation: runner sampling/deadline, immediate pre-kill identity recheck, exact target termination, receipt
+  readback, and independent real-child probes are not implemented. POSIX `ps lstart` is second-granularity, so POSIX
+  termination requires a stronger identity token or an explicit fail-closed disposition before it can be called exact.
+
+### E2E identity-rechecked termination subunit (SPECIFIED 2026-08-04)
+
+- **Bounded unit:** add one new process-termination contract beside the accepted parser/tree/adapter modules. First
+  implement only a pure preparation step that combines repeated closure with deterministic descendant-first active
+  targets. Then add injected Windows execution in a separate Luna slice. Do not touch `run-e2e.mjs` until both layers
+  are independently green.
+- **Existing authority reused:** every pre-kill snapshot comes from `captureProcessTableSnapshot`; every ownership
+  update comes from `captureOwnedProcessClosure`; disappearance truth comes from exact PID+creation-token identity.
+  No second parser, process graph, PID registry, or broad `taskkill /T` ownership guess may be introduced.
+- **Preparation contract:** given exact root identity, prior monotonic captured identities, and one validated snapshot,
+  return the updated captured set, newly captured descendants, exact reused PIDs, exact root presence, `treeGone`, and
+  active exact targets ordered deepest-descendant first with deterministic PID/token ties. Invalid/cyclic/reused data
+  is fail-closed and no target is emitted on an incomplete result.
+- **Windows execution contract:** immediately before each target command, capture/update again. If a new descendant is
+  found, re-plan before killing its ancestor. If the target is absent or its PID token changed, do not signal that PID.
+  The executor may invoke only exact argument-array `taskkill` for an identity that passed the immediate recheck, with
+  finite command timeout/output bounds and sanitized errors. Poll fresh snapshots until every captured identity is
+  absent or a finite pass/deadline limit returns red.
+- **POSIX boundary:** no target signal is authorized from second-granularity `ps lstart`. The executor returns a stable
+  unsupported/identity-insufficient failure on POSIX until a stronger token is implemented.
+- **Required negatives:** wrong-token occupant, root already gone with active descendant, reparented captured child,
+  new child appearing on immediate recheck, reused occupant with descendants, command timeout/failure, disappearance
+  timeout, malformed snapshots/options, duplicate callbacks, and never-throw hostile inputs. Pure/injected selftests
+  launch and kill no real process; independent parent-owned real-child proof is a later required layer.
+- **Rollback:** delete only the new termination module and its task-owned fixture if the contract fails. Existing
+  parser/tree/adapter bytes remain the rollback baseline.
+- **Continuation result:** the pure preparation layer is now green. `prepareCapturedProcessTermination` reuses the
+  repeated ownership owner, emits exact monotonic facts and deepest-descendant-first active targets, and remains
+  iterative for a 50,000-row chain. Its 21/21 selftest passes ten consecutive times plus coordinator branch/reuse/
+  large-chain probes. Two later workers, including a reduced recheck-only assignment, stayed running without creating
+  `scripts/e2e-process-termination-step.mjs` and were closed with no residue. A fresh continuation decomposed that
+  stalled unit further: `reconcileCapturedTerminationPlans` now validates and deep-clones two exact prepared plans,
+  requires monotonic captured PID+creation-token identity, unions bounded evidence deterministically, reports final
+  tree-gone truth, and authorizes a copied target only when the second plan discovers no new identity and retains the
+  same first target. Its separate pure selftest passes 18/18, including hostile accessors/proxies/prototypes,
+  malformed plans, target reorder/reuse refusal, bidirectional mutation isolation, and 50,000 identities. The async
+  wrapper now calls the bounded adapter and accepted planner once or twice as required, seeds the second plan from
+  first-plan captured identity, and delegates final policy to that pure reconciler. Its 10/10 injected no-process
+  selftest covers first-gone, stable target, new-child and target-loss replanning, second-gone, invalid input, and
+  both capture/plan failure layers with exact call counts. The exact Windows command adapter now passes 6/6 and owns
+  only argument-array `taskkill.exe /PID <pid> /F` execution, never `/T`, with finite command/outer timeout, bounded
+  output, sanitized errors, and explicit identity-insufficient POSIX refusal. The finite executor passes 8/8: every
+  target receives the stable two-snapshot recheck immediately before command, a new child forces replanning, exact
+  identities are commanded at most once, and command success remains red until a later fresh snapshot proves every
+  captured identity gone. Coordinator adversarial probes also pass for multi-pass capture, nonzero polling, malformed
+  command receipts, wrong-token occupants, persistent targets, and pass-limit truth. Fresh-eyes review found that
+  consistent proxies were not explicitly rejected despite the strict contract; a targeted Luna correction now uses
+  `node:util` proxy detection with durable top-level/target/nested-option regressions. Runner sampling/deadline,
+  receipt readback, and independent parent-owned real-child proof remain unimplemented.
+
+### E2E spawned-ownership sampling subunit (SPECIFIED 2026-08-04)
+
+- **Bounded unit:** add one thin asynchronous composition owner plus one injected no-process selftest. It establishes
+  the exact creation-token identity for the PID returned by `spawn`, captures its initial owned closure, and advances
+  that closure monotonically on later samples. This slice does not edit `run-e2e.mjs`, start/kill a real process,
+  write a verdict receipt, or implement timers.
+- **Existing authority reused:** process I/O comes only from `captureProcessTableSnapshot`; initial ownership comes
+  only from `captureInitialOwnedProcessClosure`; repeated ownership comes only from `captureOwnedProcessClosure`.
+  No parser, PID registry, process graph, termination path, or alternate ownership rule may be added.
+- **Contract:** strict plain-data input is cloned before any await. Initial capture accepts only a positive safe
+  spawned PID and bounded snapshot options, requires a complete exact snapshot containing that PID, derives the root
+  creation token from that row, and returns the accepted closure. Repeated sampling requires that exact root in the
+  previous monotonic captured set and returns only validated/cloned root-present, captured, newly-captured, and reused-
+  PID facts. Stable sanitized errors distinguish invalid input, snapshot failure, root unavailable, and closure-plan
+  failure; raw process rows, command output, paths, and injected error text never escape.
+- **Required negatives:** malformed/accessor/proxy/symbol/unknown input, malformed snapshot envelope, missing/reused
+  root, malformed previous capture, duplicate rows, adapter timeout/failure, reparented captured child after root
+  exit, PID-reused occupant refusal, mutation isolation, and exact one-snapshot call counts. All tests inject the
+  adapter command callback and launch no process.
+- **Rollback:** delete only the new sampling module and its selftest. Accepted parser, adapter, ownership, termination,
+  and runner files remain unchanged.
+- **Continuation result:** `initializeSpawnedProcessOwnership` now derives the spawned PID's exact token from one
+  accepted bounded snapshot and delegates the initial closure to its sole pure owner.
+  `sampleSpawnedProcessOwnership` clones the exact root/prior capture before await, takes one accepted snapshot, and
+  delegates monotonic ownership to the repeated-closure owner. Both return one exact sanitized envelope; malformed
+  options/hostile proxies reject before process I/O, transient command/parser failures stay red, reused occupants are
+  never adopted, and no raw row/output escapes. The injected no-process selftest passes 8/8 five consecutive times:
+  initial/late descendants, root-gone reparenting, reuse with a descendant, hostile zero-call input, stable snapshot
+  errors, no-callback timeout/helper cleanup under a cleared one-second watchdog, and bidirectional mutation
+  isolation. The complete static bundle, typecheck, exact project lint (0 errors / 592 warnings), and diff checks pass.
+  Graphify is refreshed to 4,892 nodes / 11,943 edges / 202 communities. This remains a foundation only;
+  `run-e2e.mjs` does not yet schedule it or own an outer deadline.
+
+### E2E runner lifecycle coordination subunit (SPECIFIED 2026-08-04)
+
+- **Bounded unit:** add one injected lifecycle coordinator and its no-real-process selftest, then wire that accepted
+  owner into `run-e2e.mjs` in a separate slice. The lifecycle owner may schedule ownership samples, observe child
+  close/error, probe only whether the strict report is terminal, choose one teardown trigger, and call the accepted
+  exact disappearance executor. Report classification, receipt construction/readback, Playwright policy, and process
+  launch remain with their existing owners.
+- **Production bounds:** overall deadline 30 minutes, terminal-report grace 5 seconds, and one-second sampling delay
+  after each completed bounded sample. The outer deadline is a separately armed timer and never depends on child
+  `close`, report polling, or snapshot callback. Timer setup failure is red. Teardown uses the executor at most 20
+  passes, 25 ms inter-pass poll, and the existing 5-second snapshot/command bounds.
+- **Single-settlement policy:** exact triggers are `child-close`, `child-error`, `terminal-report-grace-expired`, or
+  `outer-deadline`. Duplicate/late child events, report probes, grace, and deadline callbacks are ignored after the
+  first trigger. Sampling stops and any in-flight bounded sample settles before termination begins; child listeners and
+  lifecycle timers are always removed/cleared.
+- **Ownership and disappearance:** initialize exact ownership from the spawned child PID before accepting any green
+  path, advance monotonically while the child is alive, and retain a permanent evidence-incomplete flag after any
+  failed initialization/sample. Teardown still attempts the exact captured tree when evidence is incomplete, but
+  lifecycle completion requires complete ownership evidence plus an exact executor result with `treeGone:true`.
+  Normal child close uses the same executor/disappearance proof as recovered teardown; process exit alone is not proof.
+- **Report boundary:** the lifecycle receives only an injected bounded `probeTerminalReport` boolean. A strict complete
+  report starts the grace timer; missing/malformed/incomplete data does not. The runner re-reads and classifies the
+  report after lifecycle teardown, so no lifecycle narration or stdout can become verdict authority.
+- **Required injected negatives:** invalid/hostile inputs, spawn error, initial/sample failure, terminal report plus
+  no close, incomplete report until outer deadline, timer setup failure, termination failure/tree remaining, duplicate
+  events, late callbacks, and mutation isolation. A cleared independent one-second watchdog bounds every short fixture;
+  no injected unit test launches or kills a real process.
+- **Rollback:** delete only the new lifecycle module/selftest before integration, or revert the later exact runner
+  import/call. Accepted terminal, sampler, termination, policy, and receipt owners remain the rollback baseline.
+- **Continuation result:** `scripts/e2e-runner-lifecycle.mjs` now composes the accepted ownership sampler and exact
+  disappearance executor under one independently armed outer timer, one terminal-report grace timer, cancellable
+  sampling, single settlement, listener cleanup, and permanent ownership-evidence failure truth. Its injected
+  no-process oracle passes 12/12 five consecutive times, including outer deadline, child error, initialization/sample
+  failure, timer failure, duplicate/late callbacks, hostile input, and mutation isolation. `run-e2e.mjs` now invokes
+  that owner immediately after spawn, re-inspects the strict report after teardown, preserves bounded lifecycle facts
+  in its receipt, and remains red for outer deadline, child error, interaction failure, incomplete report, malformed
+  lifecycle, or unproven disappearance. The runner's pure checks pass 46/46. A separate injected fake-child integration
+  oracle passes 7/7 five consecutive times for normal close, report-grace recovery, outer-deadline cleanup, incomplete
+  report, malformed lifecycle, observed child error, and diagnostic interaction failure; it launches no process,
+  clears every watchdog/listener, removes the temporary report, and deletes only its validated task-owned temp root.
+  The complete static bundle, typecheck, lint baseline (0 errors / 592 warnings), and scoped diff checks pass. Receipt
+  schema-v2 reopen/content verification and the independently bounded real-child parent oracle remain open, so at
+  that point this subunit was still `IN_PROGRESS / PARTIAL` and no E2E checkpoint was yet verified.
+- **Continuation, 2026-08-05:** the independent E2E harness/tooling lifecycle subunit is now `VERIFIED` by the full
+  isolated `96/96` lifecycle receipt: zero failed, flaky, bad, or quarantined-blocking outcomes; `child-close`; and
+  `treeGone=true`. Ports `3100/3101` were closed and the ephemeral state directory was removed. This verifies the
+  harness/tooling lifecycle evidence only; it does not prove the missing W3B1a route semantics. Snapshot restore,
+  bulk apply, route-specific finalization/compensation/fault-injection proof, and real-child receipt/restore/bulk
+  acceptance remain open.
+
+### Workspace-create receipt subunit (SPECIFIED 2026-08-03)
+
+- **Bounded unit:** bind only `POST /api/agent/workspaces` to the existing receipt service, global registry receipt
+  resource, and `WorkspaceRegistry.compensateCreate`; extend its existing route proof. Do not add another registry,
+  receipt writer, workspace selector, user surface, or transaction kernel.
+- **Pre-state/serialization:** prepare one global registry authority from a complete sorted structural registry
+  snapshot and serialize on that global registry resource. The caller operation ID and sanitized requested workspace
+  facts are immutable intent; the randomly allocated resulting workspace ID is an after-state fact, not caller input.
+- **Success/replay:** create exactly one record, re-read the complete registry and created record, commit the receipt
+  before returning 201, and include only the terminal projection additively. Bind the random result ID only in the
+  existing bounded committed `after.code` as `workspace_created_<workspaceId>`; it is after-state, not caller intent.
+  An exact operation replay reopens and verifies the authoritative receipt, extracts that validated ID, and returns
+  the same record without creating another even if the record's mutable `origin` later changes. Within the same
+  W3A actor/client operation identity, changed workspace/material facts conflict. A different client is a distinct
+  canonical operation identity by design; forcing a cross-client conflict would require the forbidden operation map
+  or would falsify receipt client identity. Do not add an operation map, registry field, receipt schema, or parallel
+  store.
+- **Compensation:** receipt-finalization failure calls only `compensateCreate` with the exact just-created paired
+  hashes. Successful compensation removes that record from index/disk/memory while preserving the default and every
+  unrelated record. A refused/partial compensation is non-success with durable incomplete/partial-after truth.
+- **Failure paths:** missing/malformed operation identity, non-Studio actor, missing/malformed client identity,
+  invalid/oversized/full-registry payload, create-write failure, duplicate conflict, finalization failure,
+  compensation failure, response deadline, and history failure may never create false success or leak raw workspace
+  payloads/paths into receipts.
+- **Required proof:** exact receipt reopen/hash/identity/global-resource/after-state checks; one-record delta; exact
+  replay and changed-fact conflict; unrelated/default preservation; finalization compensation and compensation-fault
+  negatives; history projection/failure independence; route suite, focused selftests, typecheck, lint, build,
+  receipt/capability/writer audits, and precommit. Full E2E waits for all five W3B1a routes.
+- **Plan delta, 2026-08-04:** two broad and one server-only native Luna assignments produced no write. Split the
+  implementation into a small `src/server/workspaceCreateReceiptAdapter.ts` module followed by minimal `server.ts`
+  wiring. This is code organization only: the adapter must receive the existing registry, receipt service/store,
+  runtime identity, default workspace, deadline predicate, and projection callback by injection; it may instantiate
+  no store, queue, registry, policy loader, or transaction kernel. The acceptance contract is unchanged.
+
+### Snapshot-restore receipt subunit (SPECIFIED 2026-08-03)
+
+- **Bounded unit:** bind only `POST /api/fs/restore-snapshot` through the existing addressed-workspace receipt
+  transaction and recovery owners. Preserve the configured-root snapshot reader and `SnapshotManager`; do not fold
+  snapshot creation/deletion into this subunit.
+- **Source and intent:** require the already-added paired `expectedHead`/`expectedSnapshotHash`, a contained regular
+  snapshot file, valid snapshot envelope, and sanitized target workspace. Bind the exact snapshot-byte/source hash
+  and target content/snapshot hashes as bounded request facts; never persist an absolute path or raw snapshot/body.
+- **Mutation/rollback:** prepare paired current workspace resources and durable pre-state recovery before the single
+  `WorkspaceRegistry.commit`. Re-read paired CAS immediately before mutation. Receipt finalization precedes 2xx;
+  finalization/postcondition failure restores the exact prior content/snapshot identity or records non-success
+  incomplete truth when rollback fails.
+- **Replay/failures:** exact replay performs no second commit/version change. Reuse after snapshot bytes, requested
+  identity, client, or addressed workspace facts change conflicts. Traversal/junction/symlink, missing snapshot,
+  malformed JSON/envelope, stale either-CAS half, invalid operation ID, recovery/finalization/rollback fault, response
+  deadline, and history failure are explicit no-false-success paths.
+- **Required proof:** canonical receipt reopen/hash/identity/source/paired before-after/recovery checks; exact replay;
+  changed-file and both stale-CAS conflicts; traversal/host-path redaction; injected finalization rollback and rollback
+  failure; history independence; focused route tests, full route suite, typecheck, lint, build, receipt/capability/
+  writer audits, and precommit. Full E2E waits for bulk apply to complete the five-route W3B1a checkpoint.
+
+### Bulk-transform-apply receipt subunit (SPECIFIED 2026-08-03)
+
+- **Bounded unit:** keep `POST /api/agent/bulk-transform/preview` read-only and unchanged; bind only the apply route
+  through the addressed-workspace receipt transaction. Reuse `buildPlan`, `mergeBulkTransformPatches`, paired CAS,
+  and the existing workspace commit/recovery owner.
+- **Intent/source:** require expected plan/content/snapshot hashes. Recompute the canonical plan before prepare and
+  bind its complete plan hash, corpus generation/selection facts through bounded hashes, and resulting target paired
+  hashes. Raw rules, XML bodies, corpus paths, and host paths do not enter receipts.
+- **Mutation/rollback:** serialize with other mutations of the same workspace; recheck plan and both CAS halves at
+  the mutation boundary; prepare recovery before the one workspace commit; terminalize before success; restore exact
+  prior paired state on finalization/postcondition failure.
+- **Replay/failures:** exact replay never reapplies rows or increments the workspace version. Changed plan/corpus,
+  rule/client/workspace facts conflict. Missing/malformed operation ID, stale plan, unclean/empty/overbroad plan,
+  invalid rule, stale either-CAS half, concurrent workspace change, recovery/finalization/rollback fault, response
+  deadline, and history failure are explicit non-success/no-false-success paths.
+- **Required proof:** receipt reopen and bounded plan/source/paired before-after verification; exact replay; changed
+  plan and concurrent same-workspace serialization; both stale-CAS halves; finalization rollback and rollback-fault
+  truth; existing preview/apply E2E contract; focused route/selftests, complete routes, typecheck, lint, build, receipt/
+  capability/writer audits, precommit, then the official full W3B1a E2E gate and containment checks.
 
 ## VALIDATE
 
@@ -336,9 +652,28 @@ CLI are not. W3B1's sidecar transaction work remains required because the extens
   coverage (82 routes / 48 surfaces), typecheck, and large-file integrity.
 - All task-owned `x4-route-int-*` fixtures from these runs were removed by exact verified path. Older unowned temp
   fixtures were not touched. No listener/process leak remains.
-- This is a `PARTIAL` two-route W3B1a checkpoint, not W3B1 completion. Workspace create, snapshot restore,
-  bulk-transform apply, their compensation/failure route oracles, official full W3B1a E2E, package, and later W3C
-  installed Antigravity proof remain required.
+- E2E supervisor candidate selftest -> `FAILED`: the exact command above exceeded its independent 60-second bound
+  and returned control only after 3,074.8 seconds. The tool cell was terminated; no `x4-e2e-supervision-selftest-*`
+  temp directory or PID record remained, ports 3000/3001/3100/3101 were closed, and a command-line-filtered process
+  check returned no runner/supervision/fixture match. Two Node processes created at the candidate start timestamp
+  were inspected and matched none of those commands, so no unowned process was killed. A subsequent read-only CIM
+  inventory itself exceeded one minute and was stopped; CIM is not an acceptable bounded cleanup oracle here.
+- Candidate rollback -> `REVERTED`: coordinator readback proved `git diff --exit-code HEAD -- scripts/run-e2e.mjs`
+  clean, `git diff --check -- scripts/run-e2e.mjs` clean, and both `scripts/run-e2e-supervision.mjs` and
+  `tests/fixtures/e2e-runner/supervision-child.mjs` absent. No runner process or test was started by the rollback.
+- Native routing validator -> `FAILED`: `F:\DEV_ENV\X4_Forge\.codex\config.toml: missing TOML file`; all inspected
+  global catalog/feature/role facts were otherwise correct. The bundled launcher diagnostic also failed before Luna
+  because `CODEX_CLI_PATH` contained concatenated executable paths, then because current `codex debug models` no
+  longer accepts the launcher's obsolete `--json` flag. The manually updated ephemeral diagnostic reached exact
+  Luna and returned `READY`; it made no file change and is not implementation evidence.
+- Current status: this is a `PARTIAL` 3/5 W3B1a checkpoint, not W3B1 or W3 completion. Replace, merge, and create
+  are runtime-green; snapshot restore and bulk-transform apply remain open. Route-specific finalization/
+  compensation/fault-injection proof and real-child receipt/restore/bulk acceptance remain required. The independent
+  E2E harness/tooling lifecycle subunit is verified by the full isolated `96/96` receipt, but that result does not
+  prove the missing route semantics. Package and later W3C installed-extension proof remain required; W7 is a
+  separate workstream and is not conflated with this status.
+- Current checkpoint, 2026-08-05: `npm run precommit:check` -> PASS. This gate and the `96/96` lifecycle receipt
+  validate the documented harness/tooling repair; neither supplies the missing W3B1a route semantics.
 
 ## REVIEW
 
@@ -347,9 +682,13 @@ CLI are not. W3B1's sidecar transaction work remains required because the extens
 - Coordinator correction: the initial exported convenience helper could instantiate an isolated queue per call.
   It was corrected and retested before acceptance.
 - W3B1a requirements 9-12: replace/merge satisfy paired CAS, pre-state recovery, terminal-before-success, exact
-  replay/conflict, redaction, stale/body failure, dry-run, and no-change truth. Create compensation, restore CAS,
-  bulk apply, route-level same-scope concurrency/history-fault injections, and W3B1a E2E remain open. W3B1 and W3
-  remain `IN_PROGRESS` until acceptance item 16 is met.
+  replay/conflict, redaction, stale/body failure, dry-run, and no-change truth. Create now adds global serialization,
+  exact result identity, compensation, incomplete compensation-fault truth, authoritative reopen, replay/conflict,
+  and distinct-client proof through the 443/443 external route gate. Snapshot restore and bulk apply remain open,
+  including route-specific finalization/compensation/fault-injection proof. The independent E2E harness/tooling
+  lifecycle subunit is verified by the full isolated `96/96` receipt, but that receipt does not prove the missing
+  route semantics; real-child receipt/restore/bulk acceptance remains open. W3B1 and W3 remain `IN_PROGRESS` until
+  acceptance item 16 is met.
 - Fresh-eyes correction: the first exact-replay implementation compared state-derived reversibility/rollback facts
   and returned 409 after a successful mutation. The service oracle and route harness now prove immutable-intent
   replay while retaining changed request/effect/metadata conflict.
@@ -358,13 +697,19 @@ CLI are not. W3B1's sidecar transaction work remains required because the extens
 
 ## CLOSE
 
-- Status: `IN_PROGRESS / PARTIAL` (shared runtime and 2/5 W3B1a routes green; no W3B1 close).
-- Completed in this checkpoint: addressed workspace replace/merge receipt transactions and their focused/full route
-  evidence.
-- Deliberately not changed: workspace create, snapshot restore, bulk transform, W3B1b-d, artifact/provider/external
-  W3B2-B3 work, visible extension controls, game/mod state, and any standalone web/CLI surface.
-- Remaining immediate unit: serialize workspace create plus snapshot restore through the existing registry and
-  recovery owners, then integrate bulk-transform apply and run W3B1a E2E.
+- Status: `IN_PROGRESS / PARTIAL` (shared runtime and 3/5 W3B1a routes green—replace, merge, and create; independent
+  E2E harness/tooling lifecycle subunit `VERIFIED`; no W3B1 or W3 close).
+- Completed in current worktree evidence: addressed workspace replace/merge/create receipt transactions and their
+  focused/full route proof; the independent harness/tooling lifecycle receipt is `96/96` with child-close and
+  `treeGone=true`, zero failed/flaky/bad/quarantined-blocking outcomes, closed ports `3100/3101`, and removed
+  ephemeral state. `npm run precommit:check` also passed.
+- Deliberately not changed: snapshot restore, bulk transform, route-specific finalization/compensation/fault-injection
+  acceptance, real-child receipt/restore/bulk acceptance, W3B1b-d, artifact/provider/external W3B2-B3 work, visible
+  extension controls, game/mod state, and any standalone web/CLI surface. W7 remains separate from this status.
+- Remaining immediate unit: implement and validate snapshot restore and bulk-transform apply through the existing
+  registry/recovery owner, complete their route-specific finalization/compensation/fault-injection proof, and run
+  the real-child receipt/restore/bulk acceptance. The verified `96/96` harness receipt is lifecycle evidence only
+  and does not close those W3B1a route gates.
 - Suggested eventual W3B1 close title: `feat(authority): bind addressed state to action receipts`.
 
 ## AAR
@@ -400,6 +745,79 @@ CLI are not. W3B1's sidecar transaction work remains required because the extens
 - Triggered: three progressively smaller native Luna runner-repair workers and one resumed successful worker stayed
   `running` without writing despite valid V1 routing configuration. The static Sol-Luna validator passed with zero
   errors; no non-native implementation fallback was used. The runner close-path repair remains open.
+- Triggered: the first concrete supervisor candidate failed its own real-child selftest by remaining attached for
+  3,074.8 seconds against a requested 60-second shell bound. Fresh-eyes review independently found that it could
+  report green without proving the exact process tree gone, discovered descendants too late for reliable cleanup,
+  and enforced strict report completeness only on its recovery path. The candidate was exactly reverted and cannot
+  gate E2E.
+- Improve tools: do not test a process supervisor with a timeout implemented solely by that same supervisor. The
+  next candidate needs an independent bounded parent oracle, pre-termination exact descendant capture, and green
+  acceptance conditioned on both a complete terminal report and verified disappearance of every owned PID.
+- Triggered: the replacement strict-report layer initially accepted nonempty top-level Playwright reporter errors as
+  green because the existing classifier only counted per-test outcomes. Coordinator adversarial proof forced a native
+  Luna correction; global errors are now complete-but-red and missing error truth is incomplete.
+- Triggered: after the strict-report layer went green, multiple progressively smaller process-table/closure Luna
+  assignments remained running without writing. They were closed with no candidate residue; the session entered
+  degradation territory and handed the next micro-slice to a fresh session rather than using a fallback writer.
+- Triggered: in the fresh continuation, one parser worker and one broader tree-contract worker again remained running
+  without writes and were closed before late changes. Smaller serial assignments produced the accepted files. The
+  first synthetic-green parser still failed current real WMIC input on `CRCRLF`; targeted correction and a permanent
+  regression check made the real format green. The initial-closure worker also required a long bounded reasoning
+  window before writing, so the repeated-snapshot unit moved to another fresh continuation.
+- Triggered: the first two bounded OS-adapter Luna workers stayed running without creating their sole target and were
+  closed with no residue. A third, production-only mechanical order wrote the accepted Windows wrapper; serialized
+  follow-ups added 18 Windows checks, one shared POSIX path, 24 cross-platform checks, and the final dispatcher at
+  30/30. No fallback writer was used.
+- Triggered: fresh-eyes review found the Windows timeout selftest used a 160 ms wall-clock ceiling, which could fail
+  under event-loop starvation despite correct bounded behavior. A targeted Luna correction replaced it with a
+  cleared one-second watchdog, and ten consecutive 30/30 runs pass. The first coordinator adversarial command also
+  failed before Node execution because of invalid JavaScript wrapping around a PowerShell here-string; the corrected
+  read-only probe passed.
+- Highest-risk evidenced weakness: POSIX `ps lstart` has only second-level start-time precision. Read-only snapshots
+  are bounded and useful, but same-second PID reuse cannot authorize POSIX target termination; strengthen that token
+  or fail closed on POSIX before adding the kill layer.
+- Triggered: one broad termination-planner worker produced no file, while a mechanical production-only planner worker
+  plus a separate test worker completed 21/21. The next two progressively smaller two-snapshot recheck workers again
+  produced no file and were closed without residue. This continuation is in degradation territory; preserve the
+  handoff and retry the recheck in a fresh continuation rather than widening scope or substituting a writer.
+- Triggered: in the fresh continuation, one still-reduced plan-reconciliation worker again produced no file. A
+  fail-closed skeleton and serial identity, array, plan, conservative-reconcile, stable-target, and test-only Luna
+  slices produced the accepted 18/18 pure contract. Coordinator review caught and corrected one quadratic plan
+  consistency scan and one missing plain-object prototype guard before acceptance. Several larger test batches made
+  no write and were closed without residue; one- to four-check append slices were reliable.
+- Triggered: the first combined async-capture workers again made no write, while serial failure-helper, first-capture,
+  first-plan, tree-gone, second-capture, and second-plan slices produced the accepted 10/10 wrapper. One closed
+  two-case test worker landed a late fourth helper before shutdown while the successor was editing the same tail;
+  independent execution exposed the settled 3/3 state, and a final tail-only Luna correction made the intended 4/4
+  seed deterministic before failure-path checks extended it to 10/10. Never assume `close_agent` makes already-
+  running edits instantaneous; verify file timestamp/content after shutdown before assigning overlapping scope.
+- Improve tools: one read-only routing inspection printed an unredacted global config and exposed an existing local
+  credential in private tool output. It was not used, sent, or committed. Future routing checks must select exact
+  non-secret keys only; the credential owner must rotate the exposed value.
+- Triggered: the first combined disappearance-executor test fixture reused the captured child PID/token in the row
+  labeled unrelated, so a second recheck correctly consumed more injected snapshots and exposed the bad fixture.
+  A targeted correction used a truly unrelated PID. One closed broad test worker also landed a valid late file; the
+  coordinator froze the overlapping path and reviewed timestamps/content before continuation.
+- Triggered: fresh-eyes production review found that proxy traps failed closed but well-behaved proxies could pass
+  command/executor input normalization. A narrow correction now uses the supported `node:util` proxy detector and
+  durable command/executor proxy cases. The accepted post-correction bundle is command 6/6, executor 8/8, async
+  recheck 10/10, runner 35/35, and typecheck green.
+- Triggered: the first spawned-ownership worker, a production-only retry, and one initialize worker made no write and
+  were closed without residue. Serial scaffold, strict reader, initialize, sample, and one- to three-case selftest
+  slices produced the accepted 8/8 owner without a non-native fallback. The broad eight-case test worker and combined
+  final two-case worker also made no write; smaller append slices completed the durable suite.
+- Triggered: fresh-eyes review found `normalizeSnapshotOptions` constrained keys but not value types, which mapped
+  malformed caller input to snapshot failure instead of zero-I/O invalid input. The targeted correction now validates
+  platform/function/10..15000 ms values before await and the durable hostile group covers them.
+- Triggered: one JavaScript work-order string failed before worker spawn because an embedded delimiter was not escaped.
+  A corrected array-joined message spawned successfully. Coordinator lint also initially targeted the whole checkout
+  and encountered unrelated staged-install bundles; the authoritative package lint scope passed 0 errors / 592 warnings.
+- Triggered: repeated native Luna create workers could perform small mechanical rollback/deletion tasks but did not
+  produce nontrivial implementation code. The project validator then reproduced a missing `.codex/config.toml`, and
+  the post-update diagnostic launcher reproduced two stale CLI assumptions. Stop assigning product code until the
+  standing project config is explicitly authorized, restored, validated, and Codex restarted if required.
+- Improve work/approach: a placeholder comment is not implementation progress. The coordinator removed it through a
+  separate exact Luna rollback and preserved a clean behavior baseline rather than accumulating speculative files.
 - Sustain: exact reviewed inventory, current handler/store inspection, ADR reconciliation, fresh baseline, and
   package-boundary review before implementation.
 - Improve work/approach: partition by rollback owner and response timing before assigning code; do not use route
@@ -407,7 +825,11 @@ CLI are not. W3B1's sidecar transaction work remains required because the extens
   progress after the oversized server order stalled.
 - Improve tools: Graphify's profile shim requires the narrow host approval; use exact symbols because natural-language
   queries over common words such as “workspace” return low-value graph matches.
-- Highest-risk evidenced weakness: three W3B1a routes and every W3B1b-d owner can still mutate without this
-  authoritative receipt transaction. Replace/merge are repaired, but post-response history cannot cover the
+- Highest-risk evidenced weakness: two W3B1a routes and every W3B1b-d owner can still mutate without this
+  authoritative receipt transaction. Replace/merge/create are repaired, but post-response history cannot cover the
   remaining gap.
 - Lessons banked: pending verified implementation; do not bank a speculative procedural skill from this plan alone.
+- Continuation, 2026-08-05: the independent E2E harness/tooling lifecycle subunit reached `VERIFIED` through the
+  isolated `96/96` lifecycle receipt and cleanup proof. Preserve the boundary: this does not promote the missing
+  snapshot-restore/bulk route semantics, their fault-injection evidence, or real-child receipt/restore/bulk acceptance
+  to green; W7 remains separate.

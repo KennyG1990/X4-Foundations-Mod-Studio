@@ -1,128 +1,121 @@
-# X4 Forge — Session Handoff
+# X4 Forge — Combined W3/W7 Checkpoint Handoff
 
-Updated: 2026-08-03 22:15 America/New_York
+Updated: 2026-08-05 America/New_York
 
 ## One-line state
 
-B115 W0-W2B, W3A, and W3B0 are `VERIFIED`; W3B1 is `IN_PROGRESS / PARTIAL`. Workspace replace/merge consume
-authoritative receipts, pass 426/426 routes and precommit, and have focused E2E behavior proof; the official full
-E2E receipt, runner close-path repair, checkpoint commit/push/parity, create/restore/bulk, W3B1b-d, and W3C remain.
+W7’s native X4 merge-law/schema-routing unit is `VERIFIED`, including runtime, full isolated E2E, precommit,
+package, and installed-extension proof. W3 remains `IN_PROGRESS / PARTIAL` at `3/5`: replace, merge, and create
+are runtime-green; snapshot restore and bulk apply remain open. The combined checkpoint is not yet committed or
+pushed, and GitHub/remote parity is still pending.
 
 ## Operator brief
 
-- Project: `F:\DEV_ENV\X4_Forge`. The active unit is the W3B1 addressed-state receipt program. Replace/merge are at
-  the precommit checkpoint; do not mistake that for the full W3B1a or W3 close.
-- Machine state: Ken declared Antigravity open, X4 stopped, and the machine quiet, and authorized unattended computer
-  use. No canvas-changing Computer Use action occurred. Reconfirm state before new E2E or installed-host validation.
-- Eyeball queue:
-  - B114 / GitHub `#35` remains Ken-gated: start X4 with debug logging, open Forge, click `LIVE`, fire one known cue
-    and confirm its green badge, provoke/load one attributed cue error and confirm its red X, then disable `LIVE` and
-    confirm updates stop.
-  - W3C requires a disposable real-Antigravity receipt/history rendering and installed-byte parity after production
-    integration. W3B0 has no visible surface; a screenshot cannot prove its policy engine.
-- Commit question: the W3B1 shared-runtime plus replace/merge checkpoint is precommit-green but not yet committed.
-  Stage only the explicit task-owned paths, inspect the cached diff, commit/push, assert `origin/main == HEAD`, then
-  update/read back `#20`/`#19`. Keep the close `PARTIAL`; the full E2E verdict receipt is not green.
+- **Project:** `F:\DEV_ENV\X4_Forge`. This is the Forge **extension** program. Embedded Studio, the managed sidecar,
+  native IDE surfaces, and optional managed MCP are internal surfaces of that product; there is no standalone public
+  web product or end-user CLI.
+- **Machine state:** Antigravity validation is explicitly authorized and the machine is quiet for this task. Do not
+  reinstate a machine-state wait.
+- **Eyeball queue:** W7 installed schema/corpus rendering is recorded and green. W3 still needs route-specific
+  receipt/finalization/compensation/fault-injection and real-child receipt/restore/bulk acceptance.
+- **Commit question:** no. Before this checkpoint, `HEAD` and `origin/main` both equal
+  `a97e21865143b754b60358865954d558dfb8d72d`. No commit, push, or GitHub mutation has been performed here.
 
-## W3B1 partial checkpoint evidence
+## W7 — VERIFIED
 
-- Implemented consumers: `POST /api/agent/workspace` and `POST /api/agent/workspace/merge` in the extension-managed
-  sidecar. They prepare paired content/snapshot authority and recovery before mutation, persist terminal receipt
-  truth before ordinary success, replay exact intent without repeating mutation, and refuse changed-fact duplicates.
-- Focused gates: workspace receipt service 25/25; transaction 23/23; receipt/store 119/119 under normal Windows
-  `TEMP`; typecheck; focused lint 0 errors; diff integrity clean.
-- Full route gate: 426/426, exit 0, against a required fresh build. Coverage includes persisted canonical/hash/identity
-  proof for replace, merge, stale CAS failure/replay, valid-operation invalid body, dry run, no change, operation-ID
-  refusal, redaction, and changed-fact conflict.
-- Reproduced/fixed: physical-ancestor `realpath` `EPERM` on normal Windows temp; exact replay comparing lifecycle
-  facts as immutable intent; an over-strong dry-run oracle expecting current-state fields instead of the honest
-  `previewWorkspace` contract. One all-green route run ended with intermittent post-verdict `0xC0000409`; the rerun
-  exited 0.
-- Additional green gates: build; full lint 0 errors / 591 warnings; runtime-discovered oracles 131/131; reviewed
-  capability candidate SHA-256 `2ee734fa58fb1366ae91f08e71e66b72cdc20b64dd39417a4ca36cda6a23bda7` promoted;
-  capability/MCP audits; receipt coverage 82 routes / 48 surfaces; final precommit PASS in 395.8 seconds; Graphify
-  refreshed to 4,620 nodes / 11,263 edges / 192 communities.
-- Full E2E remains red/unavailable as an official gate. Baseline was 19 passed / 77 failed, with all 154 retry
-  artifacts showing only the missing caller operation ID. The repaired focused workspace-isolation slice then ran
-  2/2 assertions green, but Playwright never closed or wrote the verdict receipt. Its cleanup is now contained to
-  `test-results/e2e`; both task-owned temp state directories were removed and all four watched ports are closed.
-- Precommit reconciliation fixed three validation-integrity defects: the capability disposition omitted the new
-  selftest; the coverage path selftest relied on erased untracked evidence; and its 180-second nested timeout had
-  only about two seconds of standalone headroom. The final finite timeout is five minutes with explicit timeout
-  truth. Native Luna runner-repair workers later became unresponsive despite a fully green static V1 validator; no
-  fallback model wrote code.
-- Shutdown/safety: ports 3000/3001/3100/3101 are closed. Every task-owned route fixture named during this unit was
-  removed by exact path; older unowned temp fixtures were left untouched. The live workspace and Ken's canvas were
-  not replaced.
-- Exact record: `docs/plans/2026-08-02-w3b1-addressed-state-receipts.md`.
+Authoritative plan: `docs/plans/2026-08-04-x4-merge-law-oracle.md` (`Status: VERIFIED`). Runtime evidence:
 
-## W3B0 verified evidence
+- X4 `9.00`, build `611726`, Steam `23660954`; run `w7_20260805_a97e2186_03`.
+- `11/11` markers; `9/9` semantic cases; focused `898`; schema `143/143`; particles `544/544`.
+- Official diff overlay `60/60` across `176` files; routes `443/443`; oracle `131/131`.
+- `npm run precommit:check`: OK; full isolated E2E: `96/96`; package probe: `16/16`.
 
-- Reviewed coverage authority: 82 routes and 48 surfaces; route policy 46 required / 20 exempt / 15 separately
-  governed / 1 refused; surface policy 27 required / 15 exempt / 6 separately governed.
-- Pure engine 98/98; candidate/promotion 57/57 + 23/23; reviewed manifest SHA-256
-  `e7a1426590e64bca7c184f7adb0c77fbee5c00be02773624dfe92294dca279a7`.
-- Final gates: routes 400/400 against a required fresh build; runtime 130/130 in an isolated writable state root;
-  writers 14/14 plus extension 8/8; capabilities 11 / routes 292 / registrar 1 / MCP aliases 10; MCP read 5 / write 9
-  / deploy 10; typecheck; lint 0 errors / 587 existing warnings; build; synchronized precommit 192.8s and commit-hook
-  precommit 194.3s; Graphify 4,249 / 10,210 / 178.
-- Failed evidence is retained: 396/400 exposed false process/extraction truth; 399/400 exposed taskkill access denial;
-  the unchanged final assertions passed after bounded native-Luna repairs. No listener/process leak remains.
-- Exact record: `docs/plans/2026-08-02-w3b0-action-receipt-coverage.md`. Master:
-  `docs/plans/2026-08-02-w3-action-receipt-authority.md`. Program:
-  `docs/plans/2026-08-02-pending-feature-implementation-program.md`.
-- Original-scope completion report: `docs/plans/2026-08-02-original-pending-issues-status-report.md`; program remains
-  `IN_PROGRESS / PARTIAL`, with all 23 canonical pending owner issues open at live readback.
-- GitHub `#20` and `#19`: open/`PARTIAL`, exact submitted body, one start/end marker pair, short/full `d247400` link,
-  and exact W3B0 plan link on each; read back at 2026-08-03T02:16Z.
-- Parent GitHub `#9`: report reconciliation corrected its stale “W3 unspecified” block; final readback at
-  2026-08-03T02:28:21Z was byte-exact, open/`PARTIAL`, one marker pair, and exact W3B0 commit/plan links.
+Installed proof is recorded at:
+`vscode-extension/evidence/2026-08-06-w7-schema-routing-installed/installed-validation-receipt.json`.
 
-## Ownership and preservation boundary
+- Installed VSIX SHA-256: `db72aeaa3dedc6192992c11ff52d04f3edc8ad9a6e0e53b441930f8d2f6491f3`.
+- Schema routing loaded again: `1507` MD elements, `1408` AI elements, and `2333` properties rendered; schema
+  totals are `402` events, `35` conditions, and `807` actions.
+- Loaded corpus: `32` factions, `1902` wares, `170` sectors, and `383` files.
+- `schemaLoaded=true`, `corpusLoaded=true`, `validatorRendered=true`, and no `Failed to fetch` was observed or
+  reproduced.
+- The genuine loaded-mod validation findings are separate: `2` blocking errors and `5` warnings. They are mod
+  findings, not schema-loading failure and not a `Failed to fetch` regression.
 
-- Current W3B1 checkpoint owns the reviewed receipt config/audit/runtime files, `server.ts`, first-party operation-ID
-  callers, focused selftests, `scripts/route-integration.mjs`, `SESSION-HANDOFF.md`, and the W3/W3B1/program/status
-  records. Use explicit `git add -- <paths>` only; inspect the staged diff before committing.
-- Preserve and do not stage/reset/clean: existing R13/B111-B114 `BACKLOG.md` hunks; `CODEX-ONBOARDING.md`;
-  `KNOWN-BUGS.md`; deleted data/Discord files and scripts; `.claude/`; `.github/ISSUE_TEMPLATE/*`; `Note for Kimi.md`;
-  old 0.0.35 PNG changes; R8/R17 screenshots; generated/ignored Graphify and bundle files. Do not stage the
-  newline-only `test-results/.last-run.json` churn created while restoring the E2E-generated deletion.
-- StarForge capability and project/global AAR deltas are written. GitHub synchronization is complete; W3 remains
-  open because W3B1-W3C are not implemented.
+W7 closes this native merge-law/schema-routing unit. It does not close W3 or the overall extension program.
 
-## Next bounded work
+## W3 — IN_PROGRESS / PARTIAL (3/5)
 
-1. Stage only explicit W3B1 checkpoint paths, excluding every preservation item and `test-results/.last-run.json`;
-   review `git diff --cached`, commit with
-   `feat(authority): receipt workspace replace and merge`, push, and assert local/origin/remote parity.
-2. Update and read back GitHub `#20` and `#19` with exact PARTIAL scope, commit, plan link, 426/426, precommit, and
-   the explicit remaining E2E runner blocker.
-3. Repair the E2E child close/verdict path with native max-effort Luna when the native worker lane responds. Require
-   deterministic complete-hang and incomplete-hang negatives before rerunning the full 96-test suite.
-4. Delegate workspace create plus snapshot restore to native max-effort Luna. Create must use global registry authority
-   and exact compensation; restore must gain paired CAS and receipt-owned recovery instead of blind commit.
-5. Integrate bulk-transform apply, then run focused negatives, full W3B1a route/E2E/build/precommit gates and prove
-   ephemeral shutdown/live-workspace preservation.
-6. Continue W3B1b-d, W3B2, W3B3, and W3C. W3C must prove the real installed Antigravity extension; no standalone
-   web app, end-user CLI, external toolkit provider, or compared-results surface is authorized.
+Authoritative plan: `docs/plans/2026-08-02-w3b1-addressed-state-receipts.md`.
 
-## AAR
+- Runtime-green routes: workspace replace, merge, and create.
+- Open routes: snapshot restore and bulk-transform apply.
+- The E2E harness/lifecycle subunit is independently `VERIFIED` by the isolated `96/96` receipt with
+  `child-close`, `treeGone=true`, containment, closed ephemeral ports, and removed ephemeral state.
+- That `96/96` full E2E result does not prove the missing W3 route semantics. Route-specific receipt finalization,
+  compensation, fault-injection, and real-child receipt/restore/bulk acceptance remain open.
 
-- Sustain: exact source review, generated-versus-reviewed separation, hash-pinned promotion, unchanged route
-  assertions, isolated runtime proof, exact index staging, remote parity, and independent GitHub readback prevented a
-  false close.
-- Improve work/approach: run red-prone diagnostics serially and use the owning server harness with a writable state
-  root. Combined fail-fast wrappers discarded sibling evidence three times.
-- Improve tools: commit wrappers must outlive the mandatory ~194-second hook; the first 124-second attempt aborted
-  safely with HEAD unchanged and no lock. Approval queues delayed otherwise bounded actions for tens of minutes to
-  hours; silence never counted as a verdict.
-- Improve work/approach: route-test workers need one scenario/insertion at a time. Broad multi-scenario orders and
-  several post-test Luna sessions stalled; they were interrupted or retired without allowing Sol to write code.
-- Improve tools: the route harness should avoid copying a full dependency tree per run and should clean its fixture
-  after SQLite handles close. Exact manual cleanup is safe but unnecessarily expensive.
-- Improve tools: Playwright must own only `test-results/e2e`, and the E2E wrapper needs structured terminal-test
-  evidence plus exact-tree teardown when Windows never emits child `close`; incomplete evidence must remain red.
-- Improve tools: native Luna V1 configuration validated cleanly, but several runner-repair workers stayed alive with
-  no writes. A fresh session/restart may be required before that code-changing unit; never substitute another model.
-- Highest-risk evidenced weakness: replace/merge are repaired, but three W3B1a routes and every W3B1b-d owner still
-  emit no authoritative receipt. Post-response history cannot close that execution-truth gap.
+## Plans and next native unit
+
+- Program plan: `docs/plans/2026-08-04-extension-native-capability-program.md` — `IN_PROGRESS / PARTIAL`.
+- Rule-pack plan: `docs/plans/2026-08-04-x4-deterministic-rule-packs.md` — `SPECIFIED`, not implemented.
+- The next native feature unit is governed deterministic rule/evidence packs reusing existing validators. W7 no
+  longer blocks that unit.
+- The W7 and rule-pack plans already record the official Egosoft General XML guide and XML Patch Guide as grounding
+  references. They are specification references only; runtime claims come from the recorded X4 evidence.
+
+## Evidence paths
+
+- W7 runtime: `test-results/x4-merge-law-oracle/w7_20260805_a97e2186_03/`
+- W7 installed receipt: `vscode-extension/evidence/2026-08-06-w7-schema-routing-installed/installed-validation-receipt.json`
+- W7 plan: `docs/plans/2026-08-04-x4-merge-law-oracle.md`
+- W3 plan: `docs/plans/2026-08-02-w3b1-addressed-state-receipts.md`
+- Program plan: `docs/plans/2026-08-04-extension-native-capability-program.md`
+- Next-unit plan: `docs/plans/2026-08-04-x4-deterministic-rule-packs.md`
+
+## Task-owned and staging boundary
+
+- This handoff task owns only `SESSION-HANDOFF.md`; this worker changed only that file.
+- Do not stage, commit, push, or mutate GitHub from this handoff update. Preserve all concurrent worktree changes.
+- The imminent W3/W7 close requires exact-path staging and one coherent combined commit because shared governed
+  manifests cover both units. Review the W3/W7 source, tests, plans, evidence, and governed manifest changes first;
+  stage only the reviewed paths with `git add -- <paths>`, never the whole checkout.
+- After push, update the markers for GitHub `#11` and `#18`; both remain `OPEN / PARTIAL` until that update. Prove
+  local `HEAD`, `origin/main`, and the remote commit are identical. Remote parity is pending.
+
+## Preservation boundary — do not stage/reset/clean
+
+Preserve these exact unrelated dirty paths and hunks:
+
+- `CODEX-ONBOARDING.md`; `KNOWN-BUGS.md`.
+- Deleted `data/known_fixes.json`, `data/trivia_questions.json`, `docs/DISCORD_BOTS_AND_GAMES.md`,
+  `scripts/ailive_discord_bot.mjs`, `scripts/discord_economy.mjs`, `scripts/forge_discord_bot.mjs`,
+  `scripts/ingest_repo_bugs.mjs`, and `scripts/x4_muds_game.mjs`.
+- `.github/ISSUE_TEMPLATE/bug_report.md`; `.github/ISSUE_TEMPLATE/feature_request.md`; `Note for Kimi.md`.
+- `test-results/.last-run.json`.
+- `vscode-extension/evidence/0.0.35-runtime-copy-live.png` and
+  `vscode-extension/evidence/0.0.35-runtime-copy-startup.png`.
+- Untracked `vscode-extension/evidence/2026-07-31-r8-r17/` screenshots.
+- Unrelated `BACKLOG.md` R13/B111-B114 hunks.
+
+## Exact next steps
+
+1. Re-read the combined W3/W7 diff against both authoritative plans and this receipt, preserving the boundary above.
+2. Run the final checkpoint review, stage only exact reviewed paths, create the combined coherent commit, push, and
+   prove local/origin/remote parity.
+3. Update GitHub `#11` and `#18` markers after the push; do not close either issue from partial W3 evidence.
+4. After this commit close, start a fresh task for the governed deterministic rule/evidence-pack implementation;
+   return to W3 snapshot restore and bulk apply as their separate open acceptance work.
+
+## Current close and AAR
+
+- **Close:** W7 `VERIFIED`; W3 `IN_PROGRESS / PARTIAL` at `3/5`; overall extension program `IN_PROGRESS / PARTIAL`.
+  Commit, push, GitHub marker updates, and remote parity are pending. The W7 capability-map delta and AAR ledgers are applied; this
+  handoff creates no second delta.
+- **Degradation evidence:** clustered stalled/late workers and partial hidden spawns occurred. All known task workers
+  are now closed. Treat worker narration as non-authoritative; inspect settled files and diffs. Use a fresh task for
+  the next implementation unit after this commit close.
+- **Highest-risk W3 hazard:** the green `96/96` lifecycle proof can be mistaken for route acceptance; it does not
+  cover restore/bulk receipt semantics, route-specific finalization/compensation/fault injection, or real-child proof.
+- **Loaded-mod hazard:** keep the genuine `2` blocking errors and `5` warnings separate from schema/corpus loading;
+  neither establishes a `Failed to fetch` regression.

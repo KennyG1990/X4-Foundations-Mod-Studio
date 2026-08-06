@@ -378,12 +378,255 @@ async function main() {
   ok('success_object_shape_is_not_enveloped', !Object.prototype.hasOwnProperty.call(workspaceSuccess.json || {}, 'failedStages') && !Object.prototype.hasOwnProperty.call(workspaceSuccess.json || {}, 'code'), JSON.stringify(workspaceSuccess.json || {}));
 
   // ADR-F5: two same-name workspaces and two tabs are independent authorities.
-  const secondCreate = await req('POST', '/api/agent/workspaces', SESSION_TOKEN, {
+  const secondCreateOperationId = 'forge_op_w3b1_workspace_create_proof';
+  const secondCreateDescriptionMarker = 'W3B1_CREATE_RAW_DESCRIPTION_MARKER';
+  const secondCreateOrigin = `studio:create:${SECOND_CLIENT_ID}`;
+  const secondCreateBody = {
     clientId: SECOND_CLIENT_ID,
-    workspace: { ...workspaceSuccess.json.workspace, name: workspaceSuccess.json.workspace.name, description: 'second tab', nodes: [] },
-  }, { clientId: SECOND_CLIENT_ID });
+    workspace: {
+      ...workspaceSuccess.json.workspace,
+      name: workspaceSuccess.json.workspace.name,
+      description: secondCreateDescriptionMarker,
+      nodes: [],
+    },
+  };
+  const secondCreateListBeforeInvalid = await req('GET', '/api/agent/workspaces', SESSION_TOKEN);
+  const secondCreateCountBeforeInvalid = secondCreateListBeforeInvalid.json?.workspaces?.length;
+  const secondCreateReceiptFilesBeforeInvalid = actionReceiptFiles();
+
+  const secondCreateMissingOperation = await req(
+    'POST',
+    '/api/agent/workspaces',
+    SESSION_TOKEN,
+    secondCreateBody,
+    { clientId: SECOND_CLIENT_ID, operationId: null },
+  );
+  const secondCreateListAfterMissingOperation = await req('GET', '/api/agent/workspaces', SESSION_TOKEN);
+  ok('workspace_create_missing_operation_id_refused_before_receipt',
+    secondCreateMissingOperation.status === 400
+      && secondCreateMissingOperation.json?.code === 'ACTION_RECEIPT_OPERATION_ID_INVALID'
+      && secondCreateListAfterMissingOperation.json?.workspaces?.length === secondCreateCountBeforeInvalid
+      && stableStringify(actionReceiptFiles()) === stableStringify(secondCreateReceiptFilesBeforeInvalid),
+    `status=${secondCreateMissingOperation.status} code=${secondCreateMissingOperation.json?.code}`);
+
+  const secondCreateMalformedOperation = await req(
+    'POST',
+    '/api/agent/workspaces',
+    SESSION_TOKEN,
+    secondCreateBody,
+    { clientId: SECOND_CLIENT_ID, operationId: 'forge/op/malformed' },
+  );
+  const secondCreateListAfterMalformedOperation = await req('GET', '/api/agent/workspaces', SESSION_TOKEN);
+  ok('workspace_create_malformed_operation_id_refused_before_receipt',
+    secondCreateMalformedOperation.status === 400
+      && secondCreateMalformedOperation.json?.code === 'ACTION_RECEIPT_OPERATION_ID_INVALID'
+      && secondCreateListAfterMalformedOperation.json?.workspaces?.length === secondCreateCountBeforeInvalid
+      && stableStringify(actionReceiptFiles()) === stableStringify(secondCreateReceiptFilesBeforeInvalid),
+    `status=${secondCreateMalformedOperation.status} code=${secondCreateMalformedOperation.json?.code}`);
+
+  const secondCreateReceiptFilesBeforeValid = actionReceiptFiles();
+  const secondCreate = await req(
+    'POST',
+    '/api/agent/workspaces',
+    SESSION_TOKEN,
+    secondCreateBody,
+    { clientId: SECOND_CLIENT_ID, operationId: secondCreateOperationId },
+  );
   const SECOND_WORKSPACE_ID = String(secondCreate.json?.workspaceId || '');
+  const secondCreateProjection = secondCreate.json?.receipt;
+  const secondCreateListAfterValid = await req('GET', '/api/agent/workspaces', SESSION_TOKEN);
+  ok('workspace_create_returns_committed_receipt_projection',
+    secondCreate.status === 201
+      && secondCreate.json?.replayed === false
+      && /^ws_[a-f0-9]{24}$/i.test(SECOND_WORKSPACE_ID)
+      && SECOND_WORKSPACE_ID !== WORKSPACE_ID
+      && secondCreateProjection?.status === 'committed'
+      && /^[a-f0-9]{64}$/.test(String(secondCreateProjection?.hash || ''))
+      && Object.keys(secondCreateProjection || {}).sort().join(',') === 'hash,id,status'
+      && secondCreateListAfterValid.json?.workspaces?.length === secondCreateCountBeforeInvalid + 1
+      && actionReceiptFiles().length === secondCreateReceiptFilesBeforeValid.length + 1,
+    `status=${secondCreate.status} replayed=${secondCreate.json?.replayed} receipt=${secondCreateProjection?.status}`);
   ok('same_name_workspace_gets_distinct_immutable_id', secondCreate.status === 201 && /^ws_[a-f0-9]{24}$/i.test(SECOND_WORKSPACE_ID) && SECOND_WORKSPACE_ID !== WORKSPACE_ID && secondCreate.json?.workspace?.name === workspaceSuccess.json?.workspace?.name, JSON.stringify({ first: WORKSPACE_ID, second: SECOND_WORKSPACE_ID }));
+
+  const secondCreateReceiptEvidence = reopenPersistedActionReceipt(secondCreateProjection);
+  const secondCreateReceipt = secondCreateReceiptEvidence.ok ? secondCreateReceiptEvidence.record : undefined;
+  ok('workspace_create_persisted_receipt_is_canonical_and_hash_verified',
+    secondCreateReceiptEvidence.ok
+      && secondCreateReceiptEvidence.canonical === true
+      && secondCreateReceiptEvidence.computedHash === secondCreateReceipt?.hash
+      && secondCreateReceiptEvidence.projectionMatches === true,
+    `reopened=${secondCreateReceiptEvidence.ok} canonical=${secondCreateReceiptEvidence.canonical === true}`);
+  ok('workspace_create_persisted_receipt_has_exact_studio_identity',
+    secondCreateReceipt?.schema === 'forge.action-receipt.v1'
+      && secondCreateReceipt?.status === 'committed'
+      && secondCreateReceipt?.actor?.kind === 'human'
+      && secondCreateReceipt?.actor?.id === 'studio'
+      && secondCreateReceipt?.client?.channel === 'studio'
+      && secondCreateReceipt?.client?.id === SECOND_CLIENT_ID
+      && secondCreateReceipt?.client?.version === '2026-07-30.agent.v4'
+      && secondCreateReceipt?.authority?.scope === 'global'
+      && secondCreateReceipt?.authority?.operationId === secondCreateOperationId
+      && secondCreateReceipt?.authority?.requestScope === 'workspace-registry',
+    `scope=${secondCreateReceipt?.authority?.scope} status=${secondCreateReceipt?.status}`);
+  const secondCreateBeforeResource = secondCreateReceipt?.authority?.resources?.[0];
+  const secondCreateAfterResource = secondCreateReceipt?.after?.resources?.[0];
+  ok('workspace_create_persisted_receipt_has_truthful_registry_resource_and_after',
+    secondCreateReceipt?.authority?.resources?.length === 1
+      && secondCreateBeforeResource?.role === 'data'
+      && secondCreateBeforeResource?.root === 'workspace-registry'
+      && secondCreateBeforeResource?.relativePath === 'registry'
+      && /^[a-f0-9]{64}$/.test(String(secondCreateBeforeResource?.beforeHash || ''))
+      && secondCreateReceipt?.after?.outcome === 'applied'
+      && secondCreateReceipt?.after?.code === `workspace_created_${SECOND_WORKSPACE_ID}`
+      && secondCreateReceipt?.after?.resources?.length === 1
+      && secondCreateAfterResource?.role === 'data'
+      && secondCreateAfterResource?.root === 'workspace-registry'
+      && secondCreateAfterResource?.relativePath === 'registry'
+      && /^[a-f0-9]{64}$/.test(String(secondCreateAfterResource?.hash || '')),
+    `before=${secondCreateReceipt?.authority?.resources?.length} after=${secondCreateReceipt?.after?.resources?.length} outcome=${secondCreateReceipt?.after?.outcome}`);
+
+  const secondCreatePersistedBytes = secondCreateReceiptEvidence.ok ? secondCreateReceiptEvidence.raw : '';
+  const secondCreateProjectionBytes = stableStringify(secondCreateProjection || null);
+  ok('workspace_create_response_preserves_requested_description_and_origin',
+    secondCreate.json?.workspace?.description === secondCreateDescriptionMarker
+      && secondCreate.json?.origin === secondCreateOrigin);
+  const secondCreateEvidenceBytes = `${secondCreatePersistedBytes}\n${secondCreateProjectionBytes}`;
+  const encodedRouteTmp = JSON.stringify(tmp).slice(1, -1);
+  ok('workspace_create_receipt_evidence_leaks_no_raw_material_or_credentials',
+    !secondCreateEvidenceBytes.includes(secondCreateDescriptionMarker)
+      && !secondCreateEvidenceBytes.includes(secondCreateOrigin)
+      && !secondCreateEvidenceBytes.includes(tmp)
+      && !secondCreateEvidenceBytes.includes(tmp.replaceAll('\\', '/'))
+      && !secondCreateEvidenceBytes.includes(encodedRouteTmp)
+      && !/tokenHash/i.test(secondCreateEvidenceBytes)
+      && !/Authorization/i.test(secondCreateEvidenceBytes)
+      && !/x4fk_/i.test(secondCreateEvidenceBytes));
+  const secondCreateExactReplayListBefore = await req('GET', '/api/agent/workspaces', SESSION_TOKEN);
+  const secondCreateExactReplayCountBefore = secondCreateExactReplayListBefore.json?.workspaces?.length;
+  const secondCreateExactReplayReceiptFilesBefore = stableStringify(actionReceiptFiles());
+  const secondCreateExactReplay = await req(
+    'POST',
+    '/api/agent/workspaces',
+    SESSION_TOKEN,
+    secondCreateBody,
+    { clientId: SECOND_CLIENT_ID, operationId: secondCreateOperationId },
+  );
+  ok('workspace_create_exact_replay_returns_same_record_and_projection',
+    secondCreateExactReplay.status === 200
+      && secondCreateExactReplay.json?.replayed === true
+      && secondCreateExactReplay.json?.workspaceId === SECOND_WORKSPACE_ID
+      && secondCreateExactReplay.json?.workspace?.description === secondCreateDescriptionMarker
+      && secondCreateExactReplay.json?.origin === secondCreateOrigin
+      && stableStringify(secondCreateExactReplay.json?.receipt) === stableStringify(secondCreateProjection),
+    `status=${secondCreateExactReplay.status} replayed=${secondCreateExactReplay.json?.replayed}`);
+  const secondCreateExactReplayListAfter = await req('GET', '/api/agent/workspaces', SESSION_TOKEN);
+  ok('workspace_create_exact_replay_does_not_mutate',
+    secondCreateExactReplayListAfter.json?.workspaces?.length === secondCreateExactReplayCountBefore
+      && stableStringify(actionReceiptFiles()) === secondCreateExactReplayReceiptFilesBefore,
+    `count=${secondCreateExactReplayListAfter.json?.workspaces?.length}`);
+  const secondCreateChangedDescription = 'W3B1_CREATE_CHANGED_FACTS_DUPLICATE_DESCRIPTION';
+  const secondCreateChangedBody = {
+    ...secondCreateBody,
+    workspace: {
+      ...secondCreateBody.workspace,
+      description: secondCreateChangedDescription,
+    },
+  };
+  const secondCreateChangedFactsListBefore = await req('GET', '/api/agent/workspaces', SESSION_TOKEN);
+  const secondCreateChangedFactsCountBefore = secondCreateChangedFactsListBefore.json?.workspaces?.length;
+  const secondCreateChangedFactsReceiptFilesBefore = stableStringify(actionReceiptFiles());
+  const secondCreateChangedFactsConflict = await req(
+    'POST',
+    '/api/agent/workspaces',
+    SESSION_TOKEN,
+    secondCreateChangedBody,
+    { clientId: SECOND_CLIENT_ID, operationId: secondCreateOperationId },
+  );
+  ok('workspace_create_changed_facts_same_identity_conflict',
+    secondCreateChangedFactsConflict.status === 409
+      && secondCreateChangedFactsConflict.json?.success === false
+      && secondCreateChangedFactsConflict.json?.status === 'FAILED'
+      && secondCreateChangedFactsConflict.json?.code === 'ACTION_RECEIPT_DUPLICATE_CONFLICT'
+      && !Object.prototype.hasOwnProperty.call(secondCreateChangedFactsConflict.json || {}, 'receipt'),
+    `status=${secondCreateChangedFactsConflict.status} code=${secondCreateChangedFactsConflict.json?.code}`);
+  const secondCreateChangedFactsListAfter = await req('GET', '/api/agent/workspaces', SESSION_TOKEN);
+  ok('workspace_create_changed_facts_conflict_does_not_mutate',
+    secondCreateChangedFactsListAfter.json?.workspaces?.length === secondCreateChangedFactsCountBefore
+      && stableStringify(actionReceiptFiles()) === secondCreateChangedFactsReceiptFilesBefore,
+    `count=${secondCreateChangedFactsListAfter.json?.workspaces?.length}`);
+  const secondCreateChangedFactsFailureText = String(secondCreateChangedFactsConflict.raw || '');
+  const secondCreateChangedFactsFailureRedacted =
+    !secondCreateChangedFactsFailureText.includes(secondCreateChangedDescription)
+      && !secondCreateChangedFactsFailureText.includes(secondCreateOrigin)
+      && !secondCreateChangedFactsFailureText.includes(tmp)
+      && !secondCreateChangedFactsFailureText.includes(tmp.replaceAll('\\', '/'))
+      && !secondCreateChangedFactsFailureText.includes(JSON.stringify(tmp).slice(1, -1))
+      && !/tokenHash/i.test(secondCreateChangedFactsFailureText)
+      && !/Authorization/i.test(secondCreateChangedFactsFailureText)
+      && !/x4fk_/i.test(secondCreateChangedFactsFailureText);
+  ok('workspace_create_changed_facts_failure_is_redacted',
+    secondCreateChangedFactsFailureRedacted,
+    `redacted=${secondCreateChangedFactsFailureRedacted}`);
+  const distinctStudioCreateOrigin = `studio:create:${CLIENT_ID}`;
+  const distinctStudioListBefore = await req('GET', '/api/agent/workspaces', SESSION_TOKEN);
+  const distinctStudioCountBefore = distinctStudioListBefore.json?.workspaces?.length;
+  const distinctStudioReceiptFilesBefore = actionReceiptFiles();
+  const distinctStudioCreate = await req(
+    'POST',
+    '/api/agent/workspaces',
+    SESSION_TOKEN,
+    { clientId: CLIENT_ID, workspace: secondCreateBody.workspace },
+    { clientId: CLIENT_ID, operationId: secondCreateOperationId },
+  );
+  const distinctStudioWorkspaceId = String(distinctStudioCreate.json?.workspaceId || '');
+  const distinctStudioProjection = distinctStudioCreate.json?.receipt;
+  ok('workspace_create_distinct_studio_client_creates_new_identity',
+    distinctStudioCreate.status === 201
+      && distinctStudioCreate.json?.replayed === false
+      && /^ws_[a-f0-9]{24}$/i.test(distinctStudioWorkspaceId)
+      && distinctStudioWorkspaceId !== WORKSPACE_ID
+      && distinctStudioWorkspaceId !== SECOND_WORKSPACE_ID
+      && distinctStudioProjection?.status === 'committed'
+      && /^[a-f0-9]{64}$/.test(String(distinctStudioProjection?.hash || ''))
+      && distinctStudioProjection?.id !== secondCreateProjection?.id
+      && distinctStudioCreate.json?.workspace?.description === secondCreateDescriptionMarker
+      && distinctStudioCreate.json?.origin === distinctStudioCreateOrigin,
+    `status=${distinctStudioCreate.status} replayed=${distinctStudioCreate.json?.replayed}`);
+  const distinctStudioReceiptEvidence = reopenPersistedActionReceipt(distinctStudioProjection);
+  const distinctStudioReceipt = distinctStudioReceiptEvidence.ok ? distinctStudioReceiptEvidence.record : undefined;
+  ok('workspace_create_distinct_studio_client_persists_canonical_receipt',
+    distinctStudioReceiptEvidence.ok
+      && distinctStudioReceiptEvidence.canonical === true
+      && distinctStudioReceiptEvidence.projectionMatches === true
+      && distinctStudioReceipt?.status === 'committed'
+      && distinctStudioReceipt?.actor?.kind === 'human'
+      && distinctStudioReceipt?.actor?.id === 'studio'
+      && distinctStudioReceipt?.client?.channel === 'studio'
+      && distinctStudioReceipt?.client?.id === CLIENT_ID
+      && distinctStudioReceipt?.client?.version === secondCreateReceipt?.client?.version
+      && distinctStudioReceipt?.authority?.scope === 'global'
+      && distinctStudioReceipt?.authority?.operationId === secondCreateOperationId
+      && distinctStudioReceipt?.authority?.operationId === secondCreateReceipt?.authority?.operationId
+      && distinctStudioReceipt?.authority?.requestScope === secondCreateReceipt?.authority?.requestScope,
+    `reopened=${distinctStudioReceiptEvidence.ok} status=${distinctStudioReceipt?.status}`);
+  const distinctStudioListAfter = await req('GET', '/api/agent/workspaces', SESSION_TOKEN);
+  ok('workspace_create_distinct_studio_client_increases_registry_and_receipts',
+    distinctStudioListAfter.json?.workspaces?.length === distinctStudioCountBefore + 1
+      && actionReceiptFiles().length === distinctStudioReceiptFilesBefore.length + 1,
+    `count=${distinctStudioListAfter.json?.workspaces?.length}`);
+  const distinctStudioReceiptEvidenceBytes = `${distinctStudioReceiptEvidence.ok ? distinctStudioReceiptEvidence.raw : ''}\n${stableStringify(distinctStudioProjection || null)}`;
+  const distinctStudioReceiptEvidenceRedacted =
+    !distinctStudioReceiptEvidenceBytes.includes(secondCreateDescriptionMarker)
+      && !distinctStudioReceiptEvidenceBytes.includes(distinctStudioCreateOrigin)
+      && !distinctStudioReceiptEvidenceBytes.includes(tmp)
+      && !distinctStudioReceiptEvidenceBytes.includes(tmp.replaceAll('\\', '/'))
+      && !distinctStudioReceiptEvidenceBytes.includes(JSON.stringify(tmp).slice(1, -1))
+      && !/tokenHash/i.test(distinctStudioReceiptEvidenceBytes)
+      && !/Authorization/i.test(distinctStudioReceiptEvidenceBytes)
+      && !/x4fk_/i.test(distinctStudioReceiptEvidenceBytes);
+  ok('workspace_create_distinct_studio_client_receipt_evidence_is_redacted',
+    distinctStudioReceiptEvidenceRedacted,
+    `redacted=${distinctStudioReceiptEvidenceRedacted}`);
   const firstBeforeIsolation = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
   const secondBeforeIsolation = await req('GET', '/api/agent/workspace', SESSION_TOKEN, undefined, { workspaceId: SECOND_WORKSPACE_ID, clientId: SECOND_CLIENT_ID });
   const [firstWrite, secondWrite] = await Promise.all([

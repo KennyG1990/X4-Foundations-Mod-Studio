@@ -11,9 +11,9 @@ superseded: `#30`/Kimi R18 is an owner-rejected direction to disposition without
 target the extension experience plus internal sidecar/harness proof only.
 
 Native capability correction (owner, 2026-08-03, after this snapshot): the planned external analysis-provider,
-toolkit bridge, imported/side-by-side result, and optional-referee direction is rejected. Useful capabilities from
-the pinned Claude toolkit inventory must be implemented natively in Forge or superseded by stronger native Forge
-behavior. The authoritative capability-to-owner matrix is in
+external bridge, imported/side-by-side result, and optional-referee direction is rejected. Accepted X4 capabilities
+must be implemented natively in Forge or superseded by stronger native Forge behavior. The authoritative
+capability-to-owner matrix is in
 `docs/plans/2026-08-02-pending-feature-implementation-program.md`; `#18` remains open until every row is natively
 implemented and proven through the installed extension where applicable.
 
@@ -126,7 +126,7 @@ Live connector readback confirmed every issue in this table is still open except
 | `#15` | PARTIAL corpus/validators/templates | W16 completeness service and cross-file scaffolding |
 | `#16` | PARTIAL XML/diff/recovery infrastructure | W17 read-only semantic comparison; W19 write path after review |
 | `#17` | PARTIAL local discovery/registry | W8 profile authority; W20 opt-in upstream intelligence after review |
-| `#18` | SPECIFIED native no-gap contract; no toolkit-specific native close yet | Native implementations through mapped `#10`-`#17`/`#20` owners, then W6/W21 installed-extension no-gap proof; no external provider, toolkit runtime, or compared results |
+| `#18` | SPECIFIED native no-gap contract; no native no-gap close yet | Native implementations through mapped `#10`-`#17`/`#20` owners, then W6/W21 installed-extension no-gap proof; no external provider, external runtime, or compared results |
 | `#19` | PARTIAL; W3A/W3B0 verified and W3B1 replace/merge route-green | Remaining W3B1-W3C plus W21 installed-extension native convergence/task proof |
 | `#20` | PARTIAL; W3A/W3B0 verified and W3B1 replace/merge route-green | Remaining W3B1-W3B3 mutation receipts, W3C surfaces, W4 reproducibility |
 | `#21` | PARTIAL/disconnected graph/corpus pieces | W10 evidence schema and W13 governed evidence graph/query surfaces |
@@ -146,7 +146,7 @@ Live connector readback confirmed every issue in this table is still open except
    W3C installed-extension Studio/history/native-control/MCP projection with internal sidecar/harness proof; U22
    proof-and-close. No standalone web or CLI projection.
 2. **Wave 2:** W4 reproducible artifact/release truth; W5 native community-capability contract; K31; U8; U32-U34.
-   The old external-provider/toolkit-adapter W5-W6 direction is owner-rejected. W6 is now the native no-gap
+   The old external-provider/adapter W5-W6 direction is owner-rejected. W6 is now the native no-gap
    acceptance gate and closes only after its mapped Forge engines exist.
 3. **Wave 3:** W7 controlled X4 merge-law oracle; W8 immutable profiles; W9 Effective Tree; W10 rule/evidence packs;
    W11 fix interpreter; W12 runtime oracle; W13 evidence graph; U35 real-X4 experience gate.
@@ -156,7 +156,7 @@ Live connector readback confirmed every issue in this table is still open except
    authorization after Phase 2 evidence review.
 6. **Wave 5:** W19 reviewed staged rebase; W20 upstream intelligence; W6 native no-gap acceptance; W21 final
    installed-extension parity across embedded Studio, native IDE controls, optional MCP, and internal sidecar/harness
-   proof; then child and `#9` closes. No external analysis provider, toolkit process/result, or comparison panel.
+   proof; then child and `#9` closes. No external analysis provider, external process/result, or comparison panel.
 7. **Wave 6:** close `#29` after K31, run `#36` research, and create only separately approved nonduplicate
    follow-ups.
 8. **Duplicate bookkeeping:** `#23`/`#26` mirror `#8`, `#24`/`#27` mirror `#9`, and `#25` mirrors `#22`; all five

@@ -13,9 +13,8 @@ sidecar API remain internal build, validation, and extension plumbing; they are 
 delivery targets. Forward work must ship through and be proven in the installed IDE extension.
 
 Native capability correction (owner, 2026-08-03): **Forge will not bridge to, execute, configure, or display results
-from an external analysis provider or the Claude toolkit.** Every useful community-tool capability must be implemented
-natively in Forge or be superseded by a measured stronger native Forge capability. The pinned toolkit source is a
-requirements, provenance, and optional MIT implementation-reference input only. It is not a runtime dependency,
+from an external analysis product.** Every accepted X4 mod-analysis capability must be implemented natively in Forge
+or be superseded by a measured stronger native Forge capability. No external executable is a runtime dependency,
 subprocess, result source, referee, or alternate product. The earlier W5 external-provider and W6 adapter/comparison
 design is rejected and superseded by the native capability contract below.
 
@@ -62,9 +61,6 @@ design is rejected and superseded by the native capability contract below.
 - `docs/plans/2026-07-29-kimi-recommendations-ledger.md`.
 - GitHub issues `#8`, `#9`-`#22`, and `#29`-`#36`; Discord thread `1531784030889054350` for `#8`.
 - X4 XSDs, unpacked vanilla/DLC corpus, and controlled engine evidence for domain truth.
-- `WingedGuardian/x4-claude-toolkit` at pinned commit
-  `112df5835ddd10aa62a8b791758a3db1ae2798da` as requirements/provenance and optional MIT source-reference material
-  only. It supplies no runtime process, imported result, product verdict, or hidden authority.
 
 ### In scope
 
@@ -74,9 +70,9 @@ design is rejected and superseded by the native capability contract below.
 - Commit and push only after the applicable precommit, evidence, review, and documentation close gates pass.
 - The installed extension, its embedded Studio panel, native IDE controls/editors, optional extension-managed MCP
   lifecycle, and the extension-owned sidecar behavior required to support those surfaces.
-- Native Forge implementations for every accepted community-tool capability in the matrix below, using the existing
+- Native Forge implementations for every accepted X4 capability in the matrix below, using the existing
   validator, corpus, workspace, history, artifact, diagnostics, registry, and extension surfaces rather than a
-  toolkit bridge or parallel engine.
+  external bridge or parallel engine.
 
 ### Out of scope and authorization boundaries
 
@@ -89,38 +85,38 @@ design is rejected and superseded by the native capability contract below.
   authorize an external analysis-provider framework.
 - No source-writing semantic rebase or network-driven update action before the Phase 2 review stop and recorded user
   decisions.
-- No wholesale toolkit copy, replacement Forge shell, second workspace/history/permission engine, or generic
+- No wholesale parallel-engine copy, replacement Forge shell, second workspace/history/permission engine, or generic
   dispatcher that bypasses the canonical capability contract.
-- No external analysis-provider contract, toolkit executable/subprocess, toolkit installation/configuration UI,
-  imported toolkit findings, side-by-side verdicts, disagreement reports, or optional-referee mode.
+- No external analysis-provider contract, external executable/subprocess, external installation/configuration UI,
+  imported findings, side-by-side verdicts, disagreement reports, or optional-referee mode.
 - No standalone browser product, packaged/headless end-user CLI, or parity work whose only purpose is to expose a
   second product surface outside the IDE extension.
 
-### Native community-tool capability contract
+### Native X4 mod-analysis capability contract
 
-The pinned toolkit README is reconciled as a feature inventory, not as a component to integrate. `#18` owns the
-no-unexplained-gap acceptance ledger; the implementation remains in the existing canonical child owners so this
-contract does not create duplicate engines or surfaces.
+The capability inventory below is reconciled against existing Forge owners before implementation. `#18` owns the
+no-unexplained-gap acceptance ledger; implementation remains in the existing canonical child owners so this contract
+does not create duplicate engines or surfaces.
 
-| Community capability | Required native Forge implementation | Canonical owner/unit |
+| Native capability | Required native Forge implementation | Canonical owner/unit |
 |---|---|---|
-| `x4validate` exact selector, guard, extension-path, reference, and completeness checks | Strengthen `runProjectValidation` over an engine-proven Effective Tree; fail explicitly when relevant sources are incomplete | `#11` W7-W9, `#10` W10-W11, `#15` W16 |
-| `x4effective` final values and per-attribute provenance | Native content-addressed Effective Tree, exact install/profile inventory, provenance queries, and installed-extension views | `#11` W8-W9, W18 |
-| `x4compat` collision/candidate analysis | Native structural and advisory behavioral Forensics Center over loose and packed active-profile content | `#12` W14, W18 |
-| `x4xref` who-calls/who-listens/cue tracing | Native cross-file MD/AI script reference index and provenance-backed queries | `#12` W14, W18 |
-| `x4stats` effective-game balance statistics | Native advisory statistics grounded in the selected profile's effective values; never an uncited balance verdict | `#12` W14, W18 |
-| `x4similar` near-duplicate content detection | Native evidence-labelled similarity analysis with explainable factors and no automatic removal claim | `#12` W14, W18 |
-| `x4diff` semantic mod-version comparison and local-edit recovery | Native semantic source/upstream/local/effective diff, followed only after review by staged receipted rebase | `#16` W17/W19 |
-| `x4modlist` installed-mod triage | Native immutable local mod registry first; separately authorized opt-in Nexus/Steam/GitHub freshness intelligence later | `#17` W8/W20 |
+| Exact selector, guard, extension-path, reference, and completeness validation | Strengthen `runProjectValidation` over an engine-proven Effective Tree; fail explicitly when relevant sources are incomplete | `#11` W7-W9, `#10` W10-W11, `#15` W16 |
+| Effective values and per-attribute provenance | Native content-addressed Effective Tree, exact install/profile inventory, provenance queries, and installed-extension views | `#11` W8-W9, W18 |
+| Collision and candidate analysis | Native structural and advisory behavioral Forensics Center over loose and packed active-profile content | `#12` W14, W18 |
+| Cross-file caller, listener, and cue tracing | Native cross-file MD/AI script reference index and provenance-backed queries | `#12` W14, W18 |
+| Effective-game balance statistics | Native advisory statistics grounded in the selected profile's effective values; never an uncited balance verdict | `#12` W14, W18 |
+| Near-duplicate content detection | Native evidence-labelled similarity analysis with explainable factors and no automatic removal claim | `#12` W14, W18 |
+| Semantic mod-version comparison and local-edit recovery | Native semantic source/upstream/local/effective diff, followed only after review by staged receipted rebase | `#16` W17/W19 |
+| Installed-mod triage | Native immutable local mod registry first; separately authorized opt-in Nexus/Steam/GitHub freshness intelligence later | `#17` W8/W20 |
 | 7.x-to-9.x migration checks | Native Compatibility Lab with cited version rules and reviewed migration manifests | `#13` W15 |
 | Debug-log triage and known-good baseline | Native Runtime Oracle with exact log-session fingerprints, attribution, and static-to-engine evidence | `#14` W12 and `#35` |
 | Vanilla-analogue completeness and scaffolding | Native completeness service and cross-file scaffold previews using the legal local corpus | `#15` W16 |
 | Write guards, backups, and baseline safety | Native receipts, rollback/recovery, deterministic artifacts, and existing Forge permission boundaries | `#20` W3-W4 |
 
 Acceptance for `#18` requires every row to be `VERIFIED` in native Forge code and reachable through the installed IDE
-extension where it has a user surface. A capability is not delivered by metadata, a wrapper, an imported report, a
-toolkit process, or a side-by-side comparison. The toolkit may be read during design/licence review, but it is absent
-from the shipped dependency graph and runtime process tree.
+extension where it has a user surface. A capability is not delivered by metadata, a wrapper, an imported report, an
+external process, or a side-by-side comparison. External analysis code is absent from the shipped dependency graph
+and runtime process tree.
 
 ### Program risks and recovery
 
@@ -163,7 +159,7 @@ from the shipped dependency graph and runtime process tree.
 | `#15` | PARTIAL | W16 after W9-W13 | reference corpus, cross-file validators, templates/compiler, completeness service/panel | ware/ship/order scaffolds, removed-required negatives, per-element provenance |
 | `#16` | PARTIAL | W17 read-only; W19 staged write after review | XML/diff/XPath engines, artifact source separation, semantic diff/rebase modules | source/upstream/local/effective views, conflicts preserved, reviewed target equality |
 | `#17` | PARTIAL | W8 local registry; W20 opt-in upstream after review | extension locations/manifests/CAT readers, profile registry, credentialed metadata adapters | mixed loose/packed/Workshop profile, no heuristic auto-match/removal, freshness and local-fork states |
-| `#18` | SPECIFIED native no-gap contract; no toolkit-specific native close yet | W5 contract now; implementation through W7-W20; W6/W21 close gate | existing Forge engines and the canonical `#10`-`#17`/`#20` owners; no provider or adapter modules | every inventory row native, no shipped toolkit dependency/process/result, installed-extension reachability, representative native task suite |
+| `#18` | SPECIFIED native no-gap contract; no native no-gap close yet | W5 contract now; implementation through W7-W20; W6/W21 close gate | existing Forge engines and the canonical `#10`-`#17`/`#20` owners; no provider or adapter modules | every inventory row native, no shipped external dependency/process/result, installed-extension reachability, representative native task suite |
 | `#19` | PARTIAL | W3 foundation + W21 extension convergence | capability registry, embedded Studio/native IDE/MCP projections, extension-owned sidecar and harness proof | identical native operations/refusals/evidence inside the installed extension and representative native workflow proof |
 | `#20` | PARTIAL | W3 then W4; first implementation | history/CAS/recovery/artifact/deploy/package stores, routes and surfaces | authoritative receipts, injected-failure rollback/no-false-success, permission matrix, secret/reference exclusions |
 | `#21` | PARTIAL/disconnected | W10 + W13 after W8/W9 | schema/corpus/evidence sources, new evidence graph/store/query/UI | versioned facts, grades, contradiction/supersession, rule links, promotion refusals, all applicable extension surfaces |
@@ -241,12 +237,12 @@ open. Exact record: `docs/plans/2026-08-02-w3b1-addressed-state-receipts.md`.
 
 5. **W4:** normalize artifact/build/package/deploy/release results into receipt inputs; deterministic archives and
    manifests; secret scan and default deployment ignores; baseline fingerprints.
-6. **W5:** freeze the native community-capability contract above, reconcile every requirement to one existing Forge
+6. **W5:** freeze the native X4 capability contract above, reconcile every requirement to one existing Forge
    owner, and add/harden canonical Forge capability descriptors only when their real backing engines exist. No hollow
-   metadata, provider contract, toolkit process, or adapter is accepted.
+   metadata, provider contract, external process, or adapter is accepted.
 7. **W6:** machine-verifiable native no-gap acceptance suite. Each row must exercise Forge's own implementation and
    deterministic expected behavior over legal local fixtures/engine evidence. It closes after W7-W20, not through
-   toolkit execution or result comparison.
+   external execution or result comparison.
 8. **K30D / `#30` — COMPLETE:** the owner's rejection of a packaged/headless CLI is recorded in the Kimi parent and
    child; `#30` is closed as not planned. This unit wrote no product code.
 9. **K31 / `#31`:** native opt-in MCP registration lifecycle using secret storage and exact key revocation.
@@ -291,7 +287,7 @@ open. Exact record: `docs/plans/2026-08-02-w3b1-addressed-state-receipts.md`.
     candidates and no heuristic removal recommendation.
 26. **W21 / `#19`:** complete native capability projection and representative task proof across the installed
     extension's embedded Studio panel, native IDE controls/editors, and optional extension-managed MCP. The
-    extension-owned sidecar API and harness prove consistency internally; no external analysis provider, toolkit
+    extension-owned sidecar API and harness prove consistency internally; no external analysis provider or
     runtime, comparison result, standalone web app, or CLI product is included.
 27. Close child issues and `#9` only after point-by-point evidence review.
 

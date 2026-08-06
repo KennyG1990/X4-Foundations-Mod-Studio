@@ -12,12 +12,13 @@ Ken explicitly promoted GitHub initiative #9 and child requests #10–#21 above 
 This is a bounded extension program, not a Forge rewrite: reuse the existing validator, workspace registry/CAS,
 artifact/release pipeline, runtime watcher, Agent API, MCP shim, built-in harness, and UI shells. W0–W2B are now
 `VERIFIED`; the next bounded unit is W3 transaction/receipt authority, which must be reconciled and specified before
-implementation. Full contract, phases, gates and toolkit disposition:
+implementation. Full contract, phases, gates and native-capability disposition:
 `docs/plans/2026-07-31-capability-convergence.md`.
 
-**Hard gates:** no Effective Tree authority before the W7 X4 engine merge-law oracle; no source-writing rebase or
-network-driven update automation before the Phase 2 review stop and recorded Ken decisions; no public release
-without explicit release authorization and all applicable packaged/installed gates.
+**Hard gates:** W7 X4 engine merge-law is now `VERIFIED`; W8-W9 Effective Tree authority and the broader B115
+program remain open. No source-writing rebase or network-driven update automation before the Phase 2 review stop and
+recorded Ken decisions; no public release without explicit release authorization and all applicable packaged/installed
+gates.
 
 **W0–W1 checkpoint (2026-08-01): `VERIFIED` through B116.** The canonical eleven-capability registry, exact route/MCP
 disposition oracle, constrained preview/validation adapters, CLI discovery, live MCP narrowing, Agent Bridge contract
@@ -61,6 +62,47 @@ and 48 durable/host/browser/database surfaces, rejects semantic and inventory dr
 input or stable refusal without invoking a handler. Candidate/promotion, 400/400 fresh-bundle routes, 130/130 isolated
 runtime oracles, precommit, and Graphify are green. No production mutation emits a receipt yet; W3B1 addressed-state
 integration is next. Evidence: `docs/plans/2026-08-02-w3b0-action-receipt-coverage.md`.
+
+**W3B1 continuation (2026-08-04): `IN_PROGRESS / PARTIAL`.** Workspace replace/merge remain the committed 2/5
+checkpoint. Workspace-create is now the runtime-green third route: its 16/16 focused adapter plus fresh production
+build and external HTTP harness passed 443/443, including receipt reopen/hash readback, replay/conflict, distinct
+client identity, registry deltas, compensation truth, and redaction. Teardown removed the task temp root, left ports
+3000/3001/3100/3101 free, and preserved the exact dirty-worktree fingerprint. The replacement E2E repair retains its
+strict terminal-report inspector and 35/35 runner selftest. Its process safety foundation now adds bounded Windows/
+POSIX command capture with fail-closed dispatch (30/30), monotonic repeated-snapshot ownership, reparented-child
+seeding, exact PID-reuse reporting, and disappearance proof (30/30), on top of the 37/37 parser and sanitized real-
+WMIC readback. Its pure descendant-first termination planner passes 21/21, including a 50,000-row iterative chain.
+The pure two-plan recheck now passes 18/18: it validates and clones exact planner results, requires monotonic captured
+identity, fails closed on hostile/malformed shapes, and authorizes one stable target only when an immediate second
+ plan has no new child and retains the same first PID+creation token. The bounded async wrapper now passes 10/10 with
+ injected no-process snapshots: first-gone, stable target, new-child/target-loss replanning, second-gone, invalid input,
+ and both capture/plan failure layers. The exact Windows command adapter passes 6/6 with argument-array-only
+ `taskkill.exe /PID <pid> /F`, no `/T`, bounded output/time, sanitized failures, and explicit POSIX identity-
+ insufficient refusal. The finite disappearance executor passes 8/8: every command follows an immediate stable
+ two-snapshot identity recheck, new descendants force replanning, exact identities are commanded at most once, and
+  success requires a later fresh `treeGone` observation. Fresh-eyes review corrected a well-behaved-proxy acceptance
+  gap before this foundation was accepted. A new thin spawned-ownership sampler passes 8/8 five consecutive times:
+  it derives the exact root creation token from the accepted bounded snapshot, captures the initial closure, advances
+  monotonic ownership through the accepted repeated owner, preserves reparented children, and refuses reused occupants.
+  The runner lifecycle now wires that sampler and the disappearance executor under an independent outer timer,
+  terminal-report grace, single settlement, and listener/timer cleanup. Its no-process oracle passes 12/12 five times;
+  runner policy/completion checks pass 46/46; and the fake-child integration oracle passes 7/7 five times without
+  launching a process. The full static bundle and typecheck pass; lint remains 0 errors / 592 warnings. The full
+  isolated E2E supervision lifecycle is now `VERIFIED`: exact 96/96 with child-close, `treeGone=true`, schema-v2
+  receipt reopen/content verification, and containment proof; ports 3100/3101 closed, ephemeral state removed, and
+  `npm run precommit:check` OK. This lifecycle close does not prove snapshot-restore or bulk-apply route semantics.
+  W3 remains `PARTIAL` at 3/5: route-specific finalization/compensation/fault-injection and real-child
+  receipt/restore/bulk acceptance remain open.
+Evidence:
+`docs/plans/2026-08-02-w3b1-addressed-state-receipts.md`.
+
+**W7 X4 engine merge-law checkpoint (2026-08-05): `VERIFIED`.** X4 9.00 build `611726` / Steam `23660954`, run
+`w7_20260805_a97e2186_03`: 11/11 markers, 9/9 semantic cases, 898 focused assertions, schema 143/143, particle
+544/544, diff overlay 60/60 over 176 official diff files, routes 443/443, oracle 131/131, precommit OK, E2E 96/96,
+package probe 16/16, installed Antigravity schema/corpus/validator proof, and no Failed to fetch. Reconciled code
+routes diff-rooted MD/AI through merged diff+domain schemas and skips them in dedicated validators. Evidence:
+`docs/plans/2026-08-04-x4-merge-law-oracle.md`. W8-W9 Effective Tree and the broader B115 program remain
+open.
 
 ### B110 · Kimi R1-R21 execution program `in_progress` (P1, DURABLE LEDGER)
 

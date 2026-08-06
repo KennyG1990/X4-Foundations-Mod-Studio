@@ -159,6 +159,16 @@ export interface ProjectValidationResult {
   };
 }
 
+/** Dedicated MD/AI schema validators own plain script documents, not <diff> patches. */
+export function isDedicatedScriptFile(
+  file: ProjectFile,
+  kind: "md" | "aiscript",
+): file is ProjectFile & { content: string } {
+  return (file.kind === kind || classifyPath(file.path) === kind)
+    && typeof file.content === "string"
+    && sniffRootElement(file.content) !== "diff";
+}
+
 /** Copy canonical sets and admit definitions owned by this project. Never mutate shared cache sets. */
 function referencesForProject(project: ExtensionProject, base?: ProjectValidationReferences): ProjectValidationReferences | undefined {
   const available = !!(base?.macros?.size || base?.wares?.size || base?.factions?.size || base?.sectors?.size);
@@ -234,7 +244,7 @@ export function runProjectValidation(
     mdSchemaAvailable = !!mdIndex.loaded && mdIndex.elements.size > 0;
     if (mdSchemaAvailable) {
       for (const f of project.files) {
-        if ((f.kind === "md" || classifyPath(f.path) === "md") && typeof f.content === "string") {
+        if (isDedicatedScriptFile(f, "md")) {
           schemaFindings.push(...validateXmlAgainstSchema(f.content, mdIndex, {
             filePath: f.path, domain: "mission_director", reportUnknownElements: true, references, strictStructure: true,
           }));
@@ -245,7 +255,7 @@ export function runProjectValidation(
     aiSchemaAvailable = !!aiIndexRef?.loaded;
     if (aiIndexRef && aiSchemaAvailable) {
       for (const f of project.files) {
-        if ((f.kind === "aiscript" || classifyPath(f.path) === "aiscript") && typeof f.content === "string") {
+        if (isDedicatedScriptFile(f, "aiscript")) {
           schemaFindings.push(...validateXmlAgainstSchema(f.content, aiIndexRef, {
             filePath: f.path, domain: "ai_scripts", reportUnknownElements: true, references, strictStructure: true,
           }));

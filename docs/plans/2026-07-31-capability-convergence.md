@@ -5,16 +5,14 @@ Lane: FULL
 Owner: active Codex session
 Approved: 2026-07-31 by Ken
 Sources: Google Drive “X4 Forge — Capability Convergence Feature Request Package”; GitHub initiative
-`KennyG1990/X4_Forge#9`; child issues `#10` through `#21`; current Forge source and project records;
-`WingedGuardian/x4-claude-toolkit` at commit `112df5835ddd10aa62a8b791758a3db1ae2798da`.
+`KennyG1990/X4_Forge#9`; child issues `#10` through `#21`; current Forge source and project records.
 GitHub issues `#9`–`#21` carry replaceable Forge implementation-ledger blocks; repository plans and evidence remain
 authoritative. Update both surfaces in the same bounded close without marking partial infrastructure complete.
 
-Owner correction, 2026-08-03: the external-provider/toolkit-bridge/comparison strategy formerly assigned to W5-W6
-is rejected. Forge must implement every useful community-tool capability natively, or supersede it with a measured
-stronger native Forge implementation. The toolkit is requirements/provenance and optional MIT source-reference
-material only: no toolkit executable, subprocess, runtime dependency, imported result, comparison UI, disagreement
-report, or optional referee ships in Forge. The exact native capability-to-owner matrix is authoritative in
+Owner correction, 2026-08-03: the external-provider/bridge/comparison strategy formerly assigned to W5-W6 is
+rejected. Forge must implement every accepted X4 capability natively, or supersede it with a measured stronger native
+Forge implementation. No external analysis executable, subprocess, runtime dependency, imported result, comparison
+UI, disagreement report, or optional referee ships in Forge. The exact native capability-to-owner matrix is authoritative in
 `docs/plans/2026-08-02-pending-feature-implementation-program.md`.
 
 ## PLAN
@@ -37,7 +35,7 @@ report, or optional referee ships in Forge. The exact native capability-to-owner
      MCP, and internal sidecar/harness proof.
 - **Current bounded implementation batch:** W3A receipt substrate and W3B0 reviewed receipt-policy coverage are
   `VERIFIED`; W3B1 addressed-state integration is in progress. Existing W0-W2B route/key/capability/MCP authority
-  remains the reused foundation. No production close may claim native toolkit-feature parity until the mapped W7-W20
+  remains the reused foundation. No production close may claim native capability completion until the mapped W7-W20
   engine/product owner is implemented and the installed extension proves its applicable surface.
 - **Assumptions:** initial `main` was `a68d69855631cb5fd1c62cc4b0a69e08b6a0fc87`; during W1 separately owned
   documentation-only commits advanced `main`/`origin/main` first to `082f501c9778b13256e4c7d3d07b7f8bde2ae3ec` and then
@@ -47,8 +45,7 @@ report, or optional referee ships in Forge. The exact native capability-to-owner
   `2026-07-30.agent.v4` and current MCP tool names must remain compatible.
 - **Authoritative references:** `AGENTS.md`; `UNIVERSAL_AI_TASK_WORKFLOW.md`; ADR-F1 through ADR-F5;
   `F:\StarForge\wiki\x4-forge\capability-map.md`; X4 XSDs and unpacked corpus; real X4 debug-log evidence for
-  engine behavior. The pinned toolkit source supplies requirements/provenance and optional licence-reviewed source
-  reference only; its executable output is not a Forge product input or acceptance oracle.
+  engine behavior. External executable output is not a Forge product input or acceptance oracle.
 - **In scope for W0–W1:** eleven already-cross-surface capabilities — project validation, schema-domain listing,
   workspace read/compile, readiness, extension conflicts, patch readiness, element explanation, generation preview,
   history listing, and history revert; complete disposition of direct Express route literals; additive schema
@@ -209,25 +206,25 @@ report, or optional referee ships in Forge. The exact native capability-to-owner
 - Current safety gaps scheduled after W1: deploy scope is not deny-by-default; some paths bypass addressed-workspace
   authority; receipts are fragmented/fail-soft; Nexus ZIP timestamps are nondeterministic; release secret scanning
   is absent.
-- Current engine blocker scheduled for W7: `diffSimulator.ts` applies multi-match selectors to every match while the
-  requested/toolkit contract says the engine skips ambiguous operations. Engine truth must be reproduced before
+- Current engine blocker scheduled for W7: `diffSimulator.ts` applies multi-match selectors to every match while one
+  unverified requirement says the engine skips ambiguous operations. Engine truth must be reproduced before
   Effective Tree becomes authoritative.
 
 ## RECONCILE
 
 - Existing capability reused: `runProjectValidation`, `/api/agent/schema`, MCP shim, repository validator CLI,
   Agent Bridge, workspace registry/CAS, Agent History, artifact/release pipeline, runtime watcher and reference
-  corpus. No duplicate validator, workspace store, packager or user-facing toolkit shell will be created.
+  corpus. No duplicate validator, workspace store, packager, or parallel user-facing shell will be created.
 - Couplings checked: API routes ↔ schema; key scopes ↔ declared access; mutating routes ↔ history/receipts; MCP/CLI/UI
   aliases ↔ canonical capability IDs; profile/rule/source/input hashes ↔ later evidence claims.
-- Toolkit disposition: requirements/provenance and optional selective MIT source reference only. Every useful
-  capability is implemented through native Forge owners; toolkit execution, imported findings, comparison results,
-  Bash hooks, prose-only authority, and arbitrary plugins are rejected.
+- Native-only disposition: every accepted capability is implemented through native Forge owners; external analysis
+  execution, imported findings, comparison results, Bash hooks, prose-only authority, and arbitrary plugins are
+  rejected.
 - Capability-map delta: none yet. The map changes only when a capability is implemented and evidenced.
 - Plan changes caused by reconciliation: capability/permission/receipt foundations precede native capability
   integration; W7 engine proof blocks Effective Tree; W1 is metadata and drift governance only, not a generic
   execution framework. The 2026-08-03 owner correction additionally removes the planned external analysis-provider
-  and side-by-side toolkit result path; W5 now owns the native requirements contract and W6 is a native no-gap
+  and side-by-side external result path; W5 now owns the native requirements contract and W6 is a native no-gap
   acceptance suite that closes only after the W7-W20 implementations.
   Fresh review additionally required enforced `/validate/check` and `/generate/preview` adapters, explicit partial/
   disconnected projections, minimum output envelopes, complete route-source discovery, and malformed-current-contract

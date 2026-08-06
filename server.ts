@@ -124,6 +124,7 @@ import {
   type WorkspaceReceiptServiceResult,
   type WorkspaceReceiptTransactionDescription,
 } from "./src/server/workspaceReceiptService";
+import { executeWorkspaceCreateReceipt } from "./src/server/workspaceCreateReceiptAdapter";
 import { runWorkspaceReceiptServiceSelftest } from "./src/server/workspaceReceiptService.selftest";
 import { mdStemFingerprint, runMdFileIdentitySelftest } from "./src/lib/mdFileIdentity";
 import { layoutImportedGraphBatch, runImportedGraphLayoutSelftest } from "./src/lib/importedGraphLayout";
@@ -5322,17 +5323,145 @@ app.post('/api/agent/workspaces/bootstrap', (req, res) => {
   return res.json({ ...workspaceRegistry.summary(found.record), workspace: found.record.workspace, clientId: clientId || null });
 });
 
-app.post('/api/agent/workspaces', (req, res) => {
+function workspaceCreateReceiptFailureStatus(code: string): number {
+  if (code === 'WORKSPACE_CREATE_LIMIT'
+    || code === 'ACTION_RECEIPT_INCOMPLETE_UNRECORDED'
+    || code.includes('COMPENSATION')
+    || code.includes('ROLLBACK')
+    || code.includes('RECOVERY')) return 507;
+  if (code === 'ACTION_RECEIPT_OPERATION_ID_INVALID'
+    || code === 'WORKSPACE_CREATE_RECEIPT_FACTS_INVALID'
+    || code.startsWith('ACTION_RECEIPT_RUNTIME_')) return 400;
+  if (code === 'ACTION_RECEIPT_DUPLICATE_CONFLICT'
+    || code === 'ACTION_RECEIPT_PREPARED_REPLAY'
+    || code === 'ACTION_RECEIPT_REPLAY'
+    || code === 'WORKSPACE_CREATE_REGISTRY_CONFLICT') return 409;
+  if (code === 'WORKSPACE_CREATE_RESPONSE_DEADLINE'
+    || code === 'WORKSPACE_CREATE_RECEIPT_REOPEN_FAILED'
+    || code === 'WORKSPACE_CREATE_REPLAY_STATE_UNAVAILABLE'
+    || code.includes('STORE')
+    || code.includes('POLICY')
+    || code.includes('PREPARE')
+    || code.includes('COVERAGE')) return 503;
+  return 500;
+}
+
+app.post('/api/agent/workspaces', async (req, res) => {
+  const deadlineRequest = req as DeadlineAwareRequest;
+  const responseUnavailable = () => res.writableEnded
+    || res.destroyed
+    || deadlineRequest.__forgeResponseDeadlineExceeded === true;
+  const respondFailure = (
+    status: number,
+    code: string,
+    error: string,
+    replayed = false,
+    receipt?: ActionReceiptProjection,
+  ) => {
+    if (responseUnavailable()) return;
+    return res.status(status).json({
+      success: false,
+      status: 'FAILED',
+      code,
+      error,
+      failedStages: ['workspace_create_receipt'],
+      ...(replayed ? { replayed: true } : {}),
+      ...(receipt === undefined ? {} : { receipt }),
+    });
+  };
+
+  if (responseUnavailable()) return;
+  const operationId = req.headers['x-forge-operation-id'];
+  if (typeof operationId !== 'string' || !ACTION_RECEIPT_OPERATION_ID_RE.test(operationId)) {
+    return respondFailure(
+      400,
+      'ACTION_RECEIPT_OPERATION_ID_INVALID',
+      'A caller-owned x-forge-operation-id header is required.',
+    );
+  }
+
   const actor = (req as any).__actor as RequestActor | undefined;
-  if (actor?.kind !== 'studio') return res.status(403).json({ code: 'STUDIO_SESSION_REQUIRED', error: 'Only the Studio session can create workspaces.' });
+  if (actor?.kind !== 'studio') {
+    return respondFailure(
+      403,
+      'STUDIO_SESSION_REQUIRED',
+      'Only the Studio session can create workspaces.',
+    );
+  }
   const clientId = String(req.body?.clientId || req.headers['x-client-id'] || '').trim();
-  if (!/^client_[a-z0-9_-]{8,80}$/i.test(clientId)) return res.status(400).json({ code: 'CLIENT_ID_REQUIRED', error: 'Workspace creation requires a tab-scoped clientId.' });
+  if (!/^client_[a-z0-9_-]{8,80}$/i.test(clientId)) {
+    return respondFailure(
+      400,
+      'CLIENT_ID_REQUIRED',
+      'Workspace creation requires a tab-scoped clientId.',
+    );
+  }
+
+  let requestedWorkspace: ModWorkspace;
   try {
-    const workspace = sanitizeWorkspace(req.body?.workspace || { ...DEFAULT_WORKSPACE, name: String(req.body?.name || 'Untitled_Workspace') });
-    const record = workspaceRegistry.create(workspace, `studio:create:${clientId}`);
-    return res.status(201).json({ ...workspaceRegistry.summary(record), workspace: record.workspace, clientId });
-  } catch (error) {
-    return res.status(/full|limit|exceeds/i.test(errorMessage(error)) ? 507 : 500).json({ code: 'WORKSPACE_CREATE_FAILED', error: errorMessage(error) || 'Workspace creation failed.' });
+    requestedWorkspace = sanitizeWorkspace(
+      req.body?.workspace
+      || { ...DEFAULT_WORKSPACE, name: String(req.body?.name || 'Untitled_Workspace') },
+    );
+  } catch {
+    return respondFailure(
+      400,
+      'WORKSPACE_CREATE_RECEIPT_FACTS_INVALID',
+      'Workspace creation request is invalid.',
+    );
+  }
+
+  try {
+    const result = await executeWorkspaceCreateReceipt({
+      registry: workspaceRegistry,
+      receiptService: workspaceReceiptService,
+      store: actionReceiptStore,
+      captureProjection: projection => captureActionReceiptProjection(req, projection),
+    }, {
+      requestedWorkspace,
+      origin: `studio:create:${clientId}`,
+      operationId,
+      identity: {
+        kind: 'studio',
+        clientId,
+        version: ACTION_RECEIPT_RUNTIME_VERSION,
+      },
+      mayProceed: () => !responseUnavailable(),
+    });
+
+    if (responseUnavailable()) return;
+    if ('record' in result) {
+      if (result.receipt.status !== 'committed') {
+        return respondFailure(
+          500,
+          'WORKSPACE_CREATE_RESULT_INVALID',
+          'Workspace creation receipt transaction failed.',
+          result.replayed,
+          result.receipt,
+        );
+      }
+      return res.status(result.replayed ? 200 : 201).json({
+        ...workspaceRegistry.summary(result.record),
+        workspace: result.record.workspace,
+        clientId,
+        receipt: result.receipt,
+        replayed: result.replayed,
+      });
+    }
+
+    return respondFailure(
+      workspaceCreateReceiptFailureStatus(result.code),
+      result.code,
+      'Workspace creation receipt transaction failed.',
+      result.replayed,
+      result.receipt,
+    );
+  } catch {
+    return respondFailure(
+      500,
+      'WORKSPACE_CREATE_RECEIPT_EXECUTION_FAILED',
+      'Workspace creation receipt transaction failed.',
+    );
   }
 });
 

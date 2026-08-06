@@ -171,6 +171,7 @@
     "src/server/referenceRoutes.ts",
     "src/server/selftestRegistry.ts",
     "src/server/validationRoutes.ts",
+    "src/server/workspaceCreateReceiptAdapter.ts",
     "src/server/workspaceReceiptService.selftest.ts",
     "src/server/workspaceReceiptService.ts",
     "src/types.ts"

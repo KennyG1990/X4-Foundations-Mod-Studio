@@ -61,7 +61,7 @@ Lane: FULL
   - Google Drive “X4 Forge — Capability Convergence Feature Request Package”;
   - GitHub initiative #9 and child requests #19 and #20;
   - `docs/plans/2026-07-31-capability-convergence.md` and the verified R8/R17 workspace-authority plan;
-  - live source and HTTP behavior. Toolkit guard ideas are comparison evidence only, never runtime authority.
+  - live source and HTTP behavior. Comparison-only guard ideas are evidence only, never runtime authority.
 - In scope:
   - exact method/template matching and ambiguity rejection;
   - reviewed scope/resource/workspace classifications and safe candidate/promotion workflow;
@@ -73,7 +73,7 @@ Lane: FULL
   - per-key custom grants or AI-presence-tier security mapping;
   - an actor-specific authority endpoint and MCP tool filtering (W2B);
   - W3 transaction/approval receipts or changing Agent History's fail-soft contract;
-  - new provider processes, toolkit installation/execution, rule packs, Effective Tree, profiles, forensics, migration,
+  - new external analysis processes, rule packs, Effective Tree, profiles, forensics, migration,
     runtime oracle, scaffolding, semantic rebase, upstream intelligence, or knowledge graph;
   - changing explicit inline/path-addressed operations into registry operations contrary to ADR-F5;
   - game/mod-directory writes, real credentials/config mutation, GitHub issue mutation, marketplace publish, or release.

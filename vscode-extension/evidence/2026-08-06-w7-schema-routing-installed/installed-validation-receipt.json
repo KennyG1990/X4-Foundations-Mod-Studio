@@ -1,0 +1,124 @@
+{
+  "schema": "forge.w7-installed-validation.v1",
+  "status": "VERIFIED",
+  "deterministic": true,
+  "installed": {
+    "root": "c:\\Users\\Moshi\\.antigravity-ide\\extensions\\x4forge.x4-forge-studio-0.0.63",
+    "vsix": {
+      "path": "F:\\DEV_ENV\\X4_Forge\\vscode-extension\\x4-forge-studio-0.0.63-w7-merge-law-schema-routing-20260806.vsix",
+      "sha256": "DB72AEAA3DEDC6192992C11FF52D04F3EDC8AD9A6E0E53B441930F8D2F6491F3"
+    },
+    "inspector": {
+      "entries": 2091,
+      "unpackedBytes": 61226400,
+      "archiveBytes": 18053057
+    },
+    "comparison": {
+      "packagedFiles": 2089,
+      "immutableExactFiles": 2088,
+      "packageJsonException": "semantic metadata",
+      "extraInstalledFiles": [
+        ".vsixmanifest"
+      ]
+    },
+    "logPath": "C:\\Users\\Moshi\\AppData\\Roaming\\Antigravity IDE\\logs\\20260805T210448\\window2\\exthost\\output_logging_20260805T210459\\2-X4 Forge.log",
+    "rendered": {
+      "port": 58675,
+      "pid": 69620,
+      "mdElements": 1507,
+      "aiElements": 1408,
+      "properties": 2333,
+      "corpusBytes": 1028384,
+      "noFailedToFetch": true
+    },
+    "schema": {
+      "events": 402,
+      "conditions": 35,
+      "actions": 807
+    },
+    "corpus": {
+      "factions": 32,
+      "wares": 1902,
+      "sectors": 170,
+      "files": 383
+    },
+    "validation": {
+      "blockingErrors": 2,
+      "warnings": 5
+    },
+    "screenshots": [
+      {
+        "filename": "antigravity-installed-corpus-loaded.jpg",
+        "sha256": "F045FC3CC0295642A76CD323E46A831D193350D863B58289306E1F0D5DF41929"
+      },
+      {
+        "filename": "antigravity-installed-validator-results.jpg",
+        "sha256": "FC61CC3506073165265A42B4EC84ACA36D401BE63EB4B1367900F95F7DFC29C2"
+      }
+    ]
+  },
+  "w7": {
+    "runId": "w7_20260805_a97e2186_03",
+    "game": {
+      "version": "X4 9.00",
+      "build": 611726,
+      "steamBuild": 23660954
+    },
+    "markers": {
+      "passed": 11,
+      "total": 11
+    },
+    "semanticCases": {
+      "passed": 9,
+      "total": 9
+    },
+    "focusedAssertions": {
+      "passed": 898,
+      "total": 898
+    },
+    "schemaChecks": {
+      "passed": 143,
+      "total": 143
+    },
+    "particleChecks": {
+      "passed": 544,
+      "total": 544
+    },
+    "diffOverlayChecks": {
+      "passed": 60,
+      "total": 60,
+      "officialDiffFiles": 176
+    },
+    "routeChecks": {
+      "passed": 443,
+      "total": 443
+    },
+    "oracleChecks": {
+      "passed": 131,
+      "total": 131
+    },
+    "precommit": "OK",
+    "e2e": {
+      "passed": 96,
+      "total": 96
+    },
+    "packageProbe": {
+      "passed": 16,
+      "total": 16
+    },
+    "installedProof": {
+      "schemaLoaded": true,
+      "corpusLoaded": true,
+      "validatorRendered": true,
+      "noFailedToFetch": true
+    }
+  },
+  "routing": {
+    "diffRootedMdAiUsesMergedDiffAndDomainSchemas": true,
+    "diffRootedMdAiSkippedInDedicatedValidators": true
+  },
+  "limitations": [
+    "two restored windows/sidecars",
+    "genuine mod debt"
+  ]
+}
