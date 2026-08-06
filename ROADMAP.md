@@ -7509,7 +7509,35 @@ and isolated `131/131` at `127.0.0.1:8972` (including diagnostic-explain `8/8`);
 four unrelated scriptproperty warnings. The pre-repair result was `77` false `md_lua.missing_register` errors from
 pseudo-latin1 rejection on U+2014 in unrelated prose plus swallowed parse unavailability.
 
-W10 overall remains `OPEN / PARTIAL`; broader rule families, update lifecycle, Why? guidance/server/UI integration,
-and W11 remain open. The next visible batch is rule provenance in existing Why? guidance/server/selftest/E2E and
-requires focused E2E plus packaged/installed/rendered Antigravity proof. No UI/server/guidance integration or installed
-proof is claimed for this checkpoint. W3 remains `PARTIAL` at `3/5`; W7 remains `VERIFIED`.
+W10 overall remains `OPEN / PARTIAL`; broader rule families, update lifecycle, and W11 remain open. At this earlier
+data-only checkpoint, Why? guidance/server/UI integration and installed proof were intentionally outside the bounded
+slice; the dependent delta below records the later capability state. W3 remains `PARTIAL` at `3/5`; W7 remains
+`VERIFIED`.
+
+## 2026-08-06 — W10 rule-provenance guidance and lifecycle-race repair — VERIFIED bounded checkpoint
+
+The existing Forge diagnostic explanation and Why panel now resolve the governed X4 rule pack with discriminated
+matched, unmatched, unavailable, and ambiguous provenance. Matched output carries pack/rule IDs and versions, pack
+SHA, evidence grade/basis/digest, applicability, and game scope. Ambiguity refuses selection and shows candidates;
+missing or invalid target versions remain unavailable; uppercase `XSD_` matching and generic fallback remain intact;
+and the rendered panel states `deterministic, no AI`. The existing server registry exposes
+`x4-rule-packs-selftest`.
+
+The reproduced lifecycle race is repaired with a fresh exact-identity recheck: a failed termination command becomes
+successful only when the recheck proves `treeGone=true`; otherwise the original failure remains red. Focused tests
+pass executor `9/9`, command `6/6`, async `10/10`, runner lifecycle `12/12`, and runner integration `13/13`.
+Direct diagnostic explanation is `16/16`; rule pack is `32/32`; typecheck/build pass; lint is `0` errors / `593`
+warnings; runtime oracle is `132/132`; Graphify is `5,548` nodes / `13,586` edges / `222` communities. Final
+precommit is `[precommit] OK` with the recorded governance, capability, writer, receipt, type, and size checks.
+
+The isolated E2E green receipt `test-results/e2e-verdict-96-pass-treegone-green-20260806.json` records `96/96`,
+zero failed/flaky cases, `complete=true`, `treeGone=true`, `trigger=child-close`, clean ports `3100/3101`, absent
+root PID, and unchanged live workspace. The red receipt remains preserved as the reproduced lifecycle failure and
+is not relabeled green. The staged `0.0.63` package passed probe `16/16` and inspection; installed extension files
+match staged hashes. Rendered evidence separately proves governed XSD provenance on DeadAir Dynamic Wars and the
+`x4_ai_influence` validation/restored-state views. The retained `47`-error image is not used for a same-mod
+before/after claim.
+
+This closes only the bounded W10 rule-provenance/lifecycle checkpoint. W10 remains `OPEN / PARTIAL`; the overall
+extension-native program remains `IN_PROGRESS / PARTIAL`; commit, push, remote parity, GitHub readback, broader rule
+families, and update lifecycle remain pending. No version bump or marketplace publication is claimed.

@@ -57,7 +57,48 @@ test('reviewed exact suppression creates rules, rejects stale/error paths, and r
       data: { diagnostic: { severity: 'warning', code: warning!.code, filePath: warning!.filePath, message: 'fixture' } },
     });
     expect(explainResponse.ok(), await explainResponse.text()).toBeTruthy();
-    expect(await explainResponse.json()).toMatchObject({ success: true, mode: 'diagnostic', explanation: { deterministic: true, code: warning!.code } });
+    expect(await explainResponse.json()).toMatchObject({
+      success: true,
+      mode: 'diagnostic',
+      explanation: {
+        deterministic: true,
+        code: warning!.code,
+        title: 'Version-sensitive pattern detected',
+        ruleProvenance: { kind: 'unmatched', input: { code: warning!.code } },
+      },
+    });
+
+    const xsdExplainResponse = await request.post(`${API}/api/agent/explain`, {
+      headers: auth,
+      data: { diagnostic: { severity: 'error', code: 'XSD_invalid_element', message: 'fixture' } },
+    });
+    expect(xsdExplainResponse.ok(), await xsdExplainResponse.text()).toBeTruthy();
+    const xsdExplanation = await xsdExplainResponse.json();
+    expect(xsdExplanation).toMatchObject({
+      success: true,
+      mode: 'diagnostic',
+      explanation: {
+        code: 'XSD_invalid_element',
+        title: 'Game schema rejected this structure',
+        basis: 'Configured X4 XSD selected by deterministic schema routing.',
+        deterministic: true,
+        ruleProvenance: {
+          kind: 'matched',
+          packId: 'x4.core.diagnostics',
+          packVersion: '1.0.0',
+          packSha256: '351cb0199c815df91861205bf0bce85b22ed98f1bb695dcaa9345f5001e2f9c0',
+          ruleId: 'x4.schema.routed_validation',
+          ruleVersion: '1.0.0',
+          applicability: 'unavailable',
+          evidence: {
+            grade: 'schema',
+            basis: 'Configured X4 XSD selected by deterministic schema routing.',
+            digestSha256: 'f5786993e68ba1df76e89fba409a300ccd6e948dc84b9e1542e86e789bc0d847',
+          },
+        },
+      },
+    });
+    expect(xsdExplanation.explanation.ruleProvenance.scope).toEqual({});
 
     const prepareResponse = await request.post(`${API}/api/agent/project-rules/prepare-suppression`, {
       headers: auth, data: { workspace, scope: warning!.suppressionScope },
@@ -129,6 +170,10 @@ test('Diagnostics Center renders deterministic Why guidance and the reviewed sup
         filePath: 'md/example.xml', message: 'Unknown property segment cargo.',
         sourceRef: { kind: 'project', label: '$ship.cargo.unknown' },
         suppressionScope: { code: 'scriptproperty.unknown', file: 'md/example.xml', sourceRef: '$ship.cargo.unknown' },
+      }, {
+        severity: 'error', category: 'syntax', domain: 'schema', code: 'XSD_invalid_element',
+        filePath: 'md/schema-fixture.xml', message: 'Fixture XSD structure finding.',
+        sourceRef: { kind: 'project', label: 'XSD_invalid_element' },
       }],
       validation: { scope: 'full-project', ok: true },
       validationDelta: {
@@ -176,6 +221,21 @@ test('Diagnostics Center renders deterministic Why guidance and the reviewed sup
   await why.click();
   await expect(page.getByTestId('diagnostic-why-panel')).toContainText('Unknown X4 script properties commonly evaluate to null');
   await expect(page.getByTestId('diagnostic-why-panel')).toContainText('deterministic, no AI');
+
+  const xsdWhy = page.getByTestId('diagnostic-why-XSD_invalid_element');
+  await expect(xsdWhy).toBeVisible();
+  await xsdWhy.scrollIntoViewIfNeeded();
+  await xsdWhy.click();
+  const xsdPanel = page.getByTestId('diagnostic-why-panel').filter({ hasText: 'x4.schema.routed_validation' });
+  await expect(xsdPanel).toContainText('Rule ID/version: x4.schema.routed_validation / 1.0.0');
+  await expect(xsdPanel).toContainText('Evidence grade: schema');
+  await expect(xsdPanel).toContainText('Applicability: unavailable');
+  await expect(xsdPanel).toContainText('Pack ID/version: x4.core.diagnostics / 1.0.0');
+  await expect(xsdPanel).toContainText('Pack SHA-256: 351cb0199c815df91861205bf0bce85b22ed98f1bb695dcaa9345f5001e2f9c0');
+  await expect(xsdPanel).toContainText('Evidence basis: Configured X4 XSD selected by deterministic schema routing.');
+  await expect(xsdPanel).toContainText('Evidence digest: f5786993e68ba1df76e89fba409a300ccd6e948dc84b9e1542e86e789bc0d847');
+  await expect(xsdPanel).toContainText('Game scope: all versions (no explicit bounds)');
+  await expect(xsdPanel).toContainText('deterministic, no AI');
 
   await page.getByTestId('diagnostic-suppress-scriptproperty.unknown').click();
   await expect(page.getByTestId('suppression-review-dialog')).toBeVisible();

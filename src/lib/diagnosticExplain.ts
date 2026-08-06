@@ -7,13 +7,47 @@
  * and the safest next action without inventing game/runtime facts.
  */
 
+import { X4_CORE_RULE_PACK_EXPECTED_SHA256, resolveCoreX4DiagnosticRule } from './x4RulePacks';
+import type {
+  X4DiagnosticRuleInput,
+  X4RuleApplicabilityStatus,
+  X4RuleEvidenceV1,
+  X4RuleGameVersionScopeV1,
+  X4RuleIdentityV1,
+  X4RuleResolutionV1,
+} from './x4RulePackTypes';
+
 export interface ExplainableDiagnostic {
   severity: 'error' | 'warning' | 'info';
   code?: string;
   domain?: string;
   filePath?: string;
+  targetGameVersion?: string;
   message: string;
 }
+
+export type DiagnosticRuleProvenance =
+  | {
+      readonly kind: 'matched';
+      readonly packId: string;
+      readonly packVersion: string;
+      readonly packSha256: string;
+      readonly ruleId: string;
+      readonly ruleVersion: string;
+      readonly evidence: X4RuleEvidenceV1;
+      readonly applicability: X4RuleApplicabilityStatus;
+      readonly scope: X4RuleGameVersionScopeV1;
+    }
+  | {
+      readonly kind: 'unmatched';
+      readonly input: X4DiagnosticRuleInput;
+    }
+  | {
+      readonly kind: 'ambiguous';
+      readonly input: X4DiagnosticRuleInput;
+      readonly candidates: readonly X4RuleIdentityV1[];
+      readonly refusal: string;
+    };
 
 export interface DiagnosticExplanation {
   code: string;
@@ -23,9 +57,12 @@ export interface DiagnosticExplanation {
   next: string;
   basis: string;
   deterministic: true;
+  readonly ruleProvenance: DiagnosticRuleProvenance;
 }
 
-type Guidance = Omit<DiagnosticExplanation, 'code' | 'deterministic'>;
+type Guidance = Omit<DiagnosticExplanation, 'code' | 'deterministic' | 'ruleProvenance'>;
+
+const AMBIGUOUS_RULE_REFUSAL = 'Multiple governed X4 rules matched this diagnostic; no governed guidance was selected.';
 
 const GUIDANCE: Array<{ matches: (code: string) => boolean; value: Guidance }> = [
   {
@@ -153,16 +190,72 @@ function genericGuidance(diagnostic: ExplainableDiagnostic): Guidance {
   };
 }
 
-export function explainDiagnostic(diagnostic: ExplainableDiagnostic): DiagnosticExplanation {
+type DiagnosticRuleResolver = (input: X4DiagnosticRuleInput) => X4RuleResolutionV1;
+
+function ruleProvenanceFor(resolution: X4RuleResolutionV1): DiagnosticRuleProvenance {
+  if (resolution.kind === 'matched') {
+    return {
+      kind: 'matched',
+      packId: resolution.packId,
+      packVersion: resolution.packVersion,
+      packSha256: resolution.packSha256,
+      ruleId: resolution.ruleId,
+      ruleVersion: resolution.ruleVersion,
+      evidence: resolution.evidence,
+      applicability: resolution.applicability,
+      scope: resolution.scope,
+    };
+  }
+
+  if (resolution.kind === 'ambiguous') {
+    return {
+      kind: 'ambiguous',
+      input: resolution.input,
+      candidates: resolution.candidates,
+      refusal: AMBIGUOUS_RULE_REFUSAL,
+    };
+  }
+
+  return { kind: 'unmatched', input: resolution.input };
+}
+
+function explainDiagnosticWithResolver(
+  diagnostic: ExplainableDiagnostic,
+  resolveRule: DiagnosticRuleResolver,
+): DiagnosticExplanation {
   const code = String(diagnostic.code || 'project.finding').trim() || 'project.finding';
-  const selected = GUIDANCE.find(entry => entry.matches(code))?.value || genericGuidance(diagnostic);
-  return { code, ...selected, deterministic: true };
+  const ruleInput: X4DiagnosticRuleInput = {
+    code,
+    ...(diagnostic.targetGameVersion === undefined ? {} : { targetGameVersion: diagnostic.targetGameVersion }),
+  };
+  const resolution = resolveRule(ruleInput);
+  const ruleProvenance = ruleProvenanceFor(resolution);
+
+  if (resolution.kind === 'matched') {
+    return {
+      code,
+      ...resolution.guidance,
+      basis: resolution.evidence.basis,
+      deterministic: true,
+      ruleProvenance,
+    };
+  }
+
+  const selected = resolution.kind === 'ambiguous'
+    ? genericGuidance(diagnostic)
+    : GUIDANCE.find(entry => entry.matches(code))?.value || genericGuidance(diagnostic);
+  return { code, ...selected, deterministic: true, ruleProvenance };
+}
+
+export function explainDiagnostic(diagnostic: ExplainableDiagnostic): DiagnosticExplanation {
+  return explainDiagnosticWithResolver(diagnostic, resolveCoreX4DiagnosticRule);
 }
 
 export function runDiagnosticExplainSelftest() {
   const checks: Array<{ name: string; pass: boolean; detail?: unknown }> = [];
   const check = (name: string, pass: unknown, detail?: unknown) => checks.push({ name, pass: !!pass, ...(detail === undefined ? {} : { detail }) });
   const make = (code: string, severity: ExplainableDiagnostic['severity'] = 'warning') => explainDiagnostic({ code, severity, message: 'fixture' });
+  const makeForVersion = (code: string, targetGameVersion: string) => explainDiagnostic({ code, severity: 'warning', message: 'fixture', targetGameVersion });
   check('scriptproperty names silent-null impact', /null/i.test(make('scriptproperty.unknown').impact));
   check('rules name fail-closed behavior', /disabled/i.test(make('rules.review_overdue').impact));
   check('xsd guidance names schema', /schema/i.test(make('xsd.invalid').why));
@@ -172,6 +265,78 @@ export function runDiagnosticExplainSelftest() {
   const fallback = make('future.unregistered', 'error');
   check('unknown code degrades honestly', /no more specific explanation/i.test(fallback.why), fallback);
   check('all explanations carry deterministic provenance', make('xsd.invalid').deterministic && make('rules.invalid_value').deterministic && fallback.deterministic);
+  const xsd = make('XSD_invalid_element', 'error');
+  const xsdProvenance = xsd.ruleProvenance;
+  check(
+    'uppercase XSD resolves the governed rule identity and hash',
+    xsdProvenance.kind === 'matched'
+      && xsdProvenance.packId === 'x4.core.diagnostics'
+      && xsdProvenance.packVersion === '1.0.0'
+      && xsdProvenance.packSha256 === X4_CORE_RULE_PACK_EXPECTED_SHA256
+      && xsdProvenance.packSha256 === '351cb0199c815df91861205bf0bce85b22ed98f1bb695dcaa9345f5001e2f9c0'
+      && xsdProvenance.ruleId === 'x4.schema.routed_validation'
+      && xsdProvenance.ruleVersion === '1.0.0',
+    xsdProvenance,
+  );
+  check(
+    'uppercase XSD uses governed guidance and evidence',
+    xsd.title === 'Game schema rejected this structure'
+      && xsd.basis === 'Configured X4 XSD selected by deterministic schema routing.'
+      && xsd.ruleProvenance.kind === 'matched'
+      && xsd.ruleProvenance.evidence.grade === 'schema'
+      && xsd.ruleProvenance.evidence.basis === xsd.basis
+      && xsd.ruleProvenance.evidence.digestSha256 === 'f5786993e68ba1df76e89fba409a300ccd6e948dc84b9e1542e86e789bc0d847',
+    xsd,
+  );
+  check(
+    'missing target game version is unavailable',
+    xsdProvenance.kind === 'matched' && xsdProvenance.applicability === 'unavailable',
+    xsdProvenance,
+  );
+  const invalidTarget = makeForVersion('XSD_invalid_element', '9.00 ');
+  check(
+    'invalid target game version is unavailable',
+    invalidTarget.ruleProvenance.kind === 'matched' && invalidTarget.ruleProvenance.applicability === 'unavailable',
+    invalidTarget.ruleProvenance,
+  );
+  const applicableTarget = makeForVersion('XSD_invalid_element', '9.00');
+  check(
+    'explicit target game version is applicable',
+    applicableTarget.ruleProvenance.kind === 'matched' && applicableTarget.ruleProvenance.applicability === 'applicable',
+    applicableTarget.ruleProvenance,
+  );
+  const scriptProperty = make('scriptproperty.unknown');
+  check(
+    'scriptproperty stays unmatched with legacy null guidance',
+    scriptProperty.ruleProvenance.kind === 'unmatched'
+      && scriptProperty.ruleProvenance.input.code === 'scriptproperty.unknown'
+      && /null/i.test(scriptProperty.impact),
+    scriptProperty,
+  );
+  const ambiguousCandidates: readonly X4RuleIdentityV1[] = [
+    { packId: 'fixture.pack', packVersion: '1.0.0', packSha256: 'a'.repeat(64), ruleId: 'fixture.rule.a', ruleVersion: '1.0.0' },
+    { packId: 'fixture.pack', packVersion: '1.0.0', packSha256: 'a'.repeat(64), ruleId: 'fixture.rule.b', ruleVersion: '1.0.0' },
+  ];
+  const ambiguous = explainDiagnosticWithResolver(
+    { code: 'XSD_ambiguous_fixture', severity: 'warning', message: 'fixture' },
+    input => ({ kind: 'ambiguous', input, candidates: ambiguousCandidates }),
+  );
+  check(
+    'ambiguous resolution refuses governed guidance and exposes candidates',
+    ambiguous.ruleProvenance.kind === 'ambiguous'
+      && ambiguous.ruleProvenance.refusal === AMBIGUOUS_RULE_REFUSAL
+      && ambiguous.ruleProvenance.candidates.map(candidate => candidate.ruleId).join(',') === 'fixture.rule.a,fixture.rule.b'
+      && ambiguous.title === 'Project validator finding'
+      && /no more specific explanation/i.test(ambiguous.why),
+    ambiguous,
+  );
+  const deterministicA = make('XSD_invalid_element');
+  const deterministicB = make('XSD_invalid_element');
+  check(
+    'rule provenance is deterministic',
+    JSON.stringify(deterministicA.ruleProvenance) === JSON.stringify(deterministicB.ruleProvenance),
+    deterministicA.ruleProvenance,
+  );
   const passed = checks.filter(item => item.pass).length;
   return { allPassed: passed === checks.length, pass: passed === checks.length, passed, total: checks.length, checks };
 }

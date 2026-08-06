@@ -354,6 +354,25 @@ function readRecheckEnvelope(value) {
   }
 }
 
+function readMonotonicRecheck(value, previousCaptured) {
+  const recheck = readRecheckEnvelope(value);
+  if (recheck === null) return null;
+
+  try {
+    const captured = cloneIdentityArray(recheck.captured);
+    const reusedPids = clonePidArray(recheck.reusedPids);
+    const capturedTokensByPid = new Map(captured.map((identity) => [identity.pid, identity.creationToken]));
+    for (const identity of previousCaptured) {
+      if (capturedTokensByPid.get(identity.pid) !== identity.creationToken) {
+        return null;
+      }
+    }
+    return { recheck, captured, reusedPids };
+  } catch {
+    return null;
+  }
+}
+
 function normalizeOptionRecord(value) {
   try {
     if (!isPlainObject(value) || isProxyObject(value)) return null;
@@ -449,25 +468,11 @@ export async function terminateCapturedProcessTree(input = {}) {
       return recheckFailureResult(pass, currentCaptured, commanded, reusedPids);
     }
 
-    const recheck = readRecheckEnvelope(recheckResult);
-    if (recheck === null) {
+    const validatedRecheck = readMonotonicRecheck(recheckResult, currentCaptured);
+    if (validatedRecheck === null) {
       return recheckFailureResult(pass, currentCaptured, commanded, reusedPids);
     }
-
-    let nextCaptured;
-    let nextReusedPids;
-    try {
-      nextCaptured = cloneIdentityArray(recheck.captured);
-      nextReusedPids = clonePidArray(recheck.reusedPids);
-      const capturedTokensByPid = new Map(nextCaptured.map((identity) => [identity.pid, identity.creationToken]));
-      for (const identity of currentCaptured) {
-        if (capturedTokensByPid.get(identity.pid) !== identity.creationToken) {
-          throw new Error('termination-executor-non-monotonic-captured');
-        }
-      }
-    } catch {
-      return recheckFailureResult(pass, currentCaptured, commanded, reusedPids);
-    }
+    const { recheck, captured: nextCaptured, reusedPids: nextReusedPids } = validatedRecheck;
 
     currentCaptured = nextCaptured;
     for (const pid of nextReusedPids) {
@@ -513,6 +518,33 @@ export async function terminateCapturedProcessTree(input = {}) {
       return commandFailureResult(['termination-executor-command-failed'], pass, currentCaptured, commanded, reusedPids);
     }
     if (command.complete === false) {
+      if (command.attempted !== true) {
+        return commandFailureResult(command.errors, pass, currentCaptured, commanded, reusedPids);
+      }
+
+      let recoveryRecheckResult;
+      try {
+        recoveryRecheckResult = await prepareStableCapturedProcessTerminationStep({
+          rootIdentity: normalized.rootIdentity,
+          previousCaptured: currentCaptured,
+          snapshotOptions: normalized.snapshotOptions,
+        });
+      } catch {
+        return commandFailureResult(command.errors, pass, currentCaptured, commanded, reusedPids);
+      }
+
+      const recovery = readMonotonicRecheck(recoveryRecheckResult, currentCaptured);
+      if (recovery === null) {
+        return commandFailureResult(command.errors, pass, currentCaptured, commanded, reusedPids);
+      }
+
+      currentCaptured = recovery.captured;
+      for (const pid of recovery.reusedPids) {
+        reusedPids.add(pid);
+      }
+      if (recovery.recheck.treeGone === true && recovery.recheck.replanRequired === false) {
+        return buildResult(true, [], true, pass, currentCaptured, commanded, reusedPids);
+      }
       return commandFailureResult(command.errors, pass, currentCaptured, commanded, reusedPids);
     }
 

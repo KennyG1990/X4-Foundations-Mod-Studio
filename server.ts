@@ -76,6 +76,7 @@ import { createSpendMeter, estimateCallUsd, parseSpendCap, runAiSpendMeterSelfte
 import { runModPatternsSelftest } from "./src/lib/modPatterns";
 import { runExplainSelftest, explainWorkspace } from "./src/lib/mdExplain";
 import { explainDiagnostic, runDiagnosticExplainSelftest } from "./src/lib/diagnosticExplain";
+import { runX4RulePacksSelftest } from "./src/lib/x4RulePacks.selftest";
 import { runCriticSelftest, critiqueWorkspace } from "./src/lib/mdCritic";
 import { runXmlWellformedSelftest, checkXmlWellformed } from "./src/lib/xmlWellformed";
 import { runVanillaUiReferenceSelftest, profileMenuLua, deriveSchemaEvidence } from "./src/lib/vanillaUiReference";
@@ -9066,6 +9067,7 @@ const SELFTESTS: Record<string, () => unknown> = {
   "project-crossfile-selftest": runProjectCrossFileSelftest,
   "project-rules-selftest": runProjectRulesSelftest,
   "diagnostic-explain-selftest": runDiagnosticExplainSelftest,
+  "x4-rule-packs-selftest": runX4RulePacksSelftest,
   "validation-delta-selftest": runValidationDeltaSelftest,
   "workspace-conflict-selftest": runWorkspaceConflictSelftest,
   "destructive-recovery-selftest": runDestructiveRecoverySelftest,

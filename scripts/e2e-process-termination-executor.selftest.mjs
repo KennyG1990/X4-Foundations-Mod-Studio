@@ -325,10 +325,59 @@ async function checkPersistentTargetHitsPassLimitWithoutDuplicateCommand() {
   assert.equal(scenario.commandCalls.length, 1);
 }
 
+async function checkNaturalExitAfterFailedCommand() {
+  const rootSnapshot = wmicCsv(wmicRow(root, 4));
+  const unrelatedOnlySnapshot = wmicCsv(wmicRow(child, 999));
+  const scenario = await runScenario([
+    rootSnapshot,
+    rootSnapshot,
+    unrelatedOnlySnapshot,
+  ], {
+    root,
+    previousCaptured: [root],
+    maxPasses: 1,
+    pollIntervalMs: 0,
+    snapshotPlatform: 'win32',
+    commandPlatform: 'win32',
+    commandCallback(_command, _args, _options, callback) {
+      callback(new Error('injected natural-exit taskkill failure'));
+      return { kill() {} };
+    },
+  });
+
+  assert.deepEqual(Object.keys(scenario.result), executorOutputKeys);
+  assert.deepEqual(scenario.result, {
+    complete: true,
+    errors: [],
+    treeGone: true,
+    passes: 1,
+    captured: [root],
+    commanded: [],
+    reusedPids: [],
+  });
+  assert.equal(scenario.snapshotCalls.length, 3);
+  assert.equal(scenario.snapshotIndex, 3);
+  assert.equal(scenario.commandCalls.length, 1);
+  assert.deepEqual(scenario.commandedPids, [10]);
+  assert.deepEqual(scenario.commandCalls, [{
+    command: 'taskkill.exe',
+    args: ['/PID', '10', '/F'],
+    options: {
+      shell: false,
+      windowsHide: true,
+      encoding: 'utf8',
+      timeout: 100,
+      maxBuffer: 65536,
+      killSignal: 'SIGKILL',
+    },
+  }]);
+  assert.doesNotMatch(JSON.stringify(scenario.result), /injected natural-exit taskkill failure/);
+}
+
 async function checkCommandFailureTimeoutAndPosixPropagation() {
   const rootSnapshot = wmicCsv(wmicRow(root, 4));
 
-  const genericFailureScenario = await runScenario([rootSnapshot, rootSnapshot], {
+  const genericFailureScenario = await runScenario([rootSnapshot, rootSnapshot, rootSnapshot, rootSnapshot], {
     root,
     previousCaptured: [root],
     maxPasses: 1,
@@ -350,13 +399,13 @@ async function checkCommandFailureTimeoutAndPosixPropagation() {
     commanded: [],
     reusedPids: [],
   });
-  assert.equal(genericFailureScenario.snapshotCalls.length, 2);
-  assert.equal(genericFailureScenario.snapshotIndex, 2);
+  assert.equal(genericFailureScenario.snapshotCalls.length, 4);
+  assert.equal(genericFailureScenario.snapshotIndex, 4);
   assert.equal(genericFailureScenario.commandCalls.length, 1);
   assert.deepEqual(genericFailureScenario.commandedPids, [10]);
   assert.doesNotMatch(JSON.stringify(genericFailureScenario.result), /injected callback command failure/);
 
-  const timeoutScenario = await runScenario([rootSnapshot, rootSnapshot], {
+  const timeoutScenario = await runScenario([rootSnapshot, rootSnapshot, rootSnapshot, rootSnapshot], {
     root,
     previousCaptured: [root],
     maxPasses: 1,
@@ -378,11 +427,39 @@ async function checkCommandFailureTimeoutAndPosixPropagation() {
     commanded: [],
     reusedPids: [],
   });
-  assert.equal(timeoutScenario.snapshotCalls.length, 2);
-  assert.equal(timeoutScenario.snapshotIndex, 2);
+  assert.equal(timeoutScenario.snapshotCalls.length, 4);
+  assert.equal(timeoutScenario.snapshotIndex, 4);
   assert.equal(timeoutScenario.commandCalls.length, 1);
   assert.deepEqual(timeoutScenario.commandedPids, [10]);
   assert.doesNotMatch(JSON.stringify(timeoutScenario.result), /injected timeout detail/);
+
+  const malformedRecoveryScenario = await runScenario([rootSnapshot, rootSnapshot, ''], {
+    root,
+    previousCaptured: [root],
+    maxPasses: 1,
+    pollIntervalMs: 0,
+    snapshotPlatform: 'win32',
+    commandPlatform: 'win32',
+    commandCallback(_command, _args, _options, callback) {
+      callback(new Error('injected malformed-recovery command failure'));
+      return { kill() {} };
+    },
+  });
+  assert.deepEqual(Object.keys(malformedRecoveryScenario.result), executorOutputKeys);
+  assert.deepEqual(malformedRecoveryScenario.result, {
+    complete: false,
+    errors: ['termination-command-failed'],
+    treeGone: false,
+    passes: 1,
+    captured: [root],
+    commanded: [],
+    reusedPids: [],
+  });
+  assert.equal(malformedRecoveryScenario.snapshotCalls.length, 3);
+  assert.equal(malformedRecoveryScenario.snapshotIndex, 3);
+  assert.equal(malformedRecoveryScenario.commandCalls.length, 1);
+  assert.deepEqual(malformedRecoveryScenario.commandedPids, [10]);
+  assert.doesNotMatch(JSON.stringify(malformedRecoveryScenario.result), /injected malformed-recovery command failure/);
 
   const posixScenario = await runScenario([rootSnapshot, rootSnapshot], {
     root,
@@ -610,8 +687,9 @@ await checkNewChildReplansBeforeAncestor();
 await checkReusedOccupantDoesNotFollowDescendant();
 await checkRootGoneReparentedChildRemainsOwned();
 await checkPersistentTargetHitsPassLimitWithoutDuplicateCommand();
+await checkNaturalExitAfterFailedCommand();
 await checkCommandFailureTimeoutAndPosixPropagation();
 await checkMalformedInputPreCaptureAndCaptureFailures();
 await checkStableTargetThenGoneWithPolling();
 
-console.log('e2e process termination executor selftest: 8/8 PASS');
+console.log('e2e process termination executor selftest: 9/9 PASS');

@@ -151,8 +151,9 @@ Parent/program cross-reference: GitHub #18, no-unexplained-gap program ledger on
 - After the focused/build gates, a raw `node scripts/oracle-sweep.mjs` invocation without a server on
   `localhost:3001` exited `1` with `0/130` fetch-failed rows. This is recorded as a harness-invocation failure,
   not product evidence; the owning isolated oracle above is the corrected result.
-- No UI/server/guidance integration or installed-product proof exists for this checkpoint. The dependent
-  user-visible batch must run focused E2E plus packaged/installed/rendered Antigravity proof.
+- At this earlier data-only checkpoint, UI/server/guidance integration and installed-product proof were intentionally
+  outside the bounded slice. The dated dependent-batch delta below supersedes that statement as the current W10
+  capability state; it does not retroactively expand the data-only checkpoint.
 
 ## REVIEW
 
@@ -169,12 +170,12 @@ Parent/program cross-reference: GitHub #18, no-unexplained-gap program ledger on
 
 - Status: `VERIFIED` for the bounded data-only rule/evidence-pack authority and blocking Lua Unicode
   registration-analysis repair.
-- W10 overall remains `OPEN / PARTIAL`. Broader rule families, update lifecycle, Why? guidance/server/UI integration,
-  focused E2E, packaged/installed/rendered Antigravity proof, and W11 remain open.
-- The next exact unit is rule provenance in the existing Why? guidance/server/selftest/E2E path. It must carry focused
-  E2E plus packaged, installed, and rendered-host proof; no installed claim is made for this checkpoint.
-- No GitHub, commit, push, remote-parity, UI, package, install, or release completion is claimed here. Unrelated dirty
-  files remain outside this documentation scope.
+- W10 overall remains `OPEN / PARTIAL`. Broader rule families, update lifecycle, and W11 remain open. The dependent
+  rule-provenance/lifecycle checkpoint is recorded in the dated delta below; this data-only close remains limited to
+  the authority and availability slice described above.
+- No GitHub, commit, push, remote-parity, UI, package, install, or release completion is claimed for this earlier
+  data-only close; the dependent delta below records the later UI/package/install evidence. Unrelated dirty files
+  remain outside this documentation scope.
 
 ## AAR
 
@@ -191,3 +192,25 @@ Parent/program cross-reference: GitHub #18, no-unexplained-gap program ledger on
   registration set that manufactures `md_lua.missing_register`.
 - Project lesson: native rule packs may parameterize code-owned detectors, but data must not become an executable
   validator language and unavailable analysis must remain explicit.
+
+## 2026-08-06 dependent guidance/lifecycle delta
+
+- The bounded dependent unit is now `VERIFIED`: the existing diagnostic explanation and Why panel resolve governed
+  matched, unmatched, unavailable, and ambiguous provenance; matched output includes pack/rule IDs and versions,
+  pack SHA, evidence grade/basis/digest, applicability, and game scope; ambiguity refuses selection; unavailable
+  target versions remain unavailable; uppercase `XSD_` matching and generic fallback remain intact; and the panel
+  states `deterministic, no AI`.
+- The existing server registry now exposes `x4-rule-packs-selftest`. Direct diagnostic explanation validation is
+  `16/16`; rule-pack validation is `32/32`; focused lifecycle tests are executor `9/9`, command `6/6`, async
+  `10/10`, runner lifecycle `12/12`, and runner integration `13/13`.
+- The lifecycle repair accepts command failure only after a fresh exact-identity recheck proves `treeGone=true`.
+  The preserved red receipt remains evidence of the reproduced false lifecycle red; the isolated green receipt proves
+  `96/96`, `complete=true`, `treeGone=true`, clean ports `3100/3101`, absent root PID, and unchanged live workspace.
+- Package/stage/probe/inspection passed for the `0.0.63` extension package. Installed extension files match staged
+  hashes, and the rendered evidence directory proves governed XSD provenance plus the separately labeled
+  `x4_ai_influence` validation/restored-state views. The old `47`-error image is not used to claim a same-mod
+  before/after reduction.
+- Supporting validation is typecheck/build pass, lint `0` errors / `593` warnings, runtime oracle `132/132`, Graphify
+  `5,548` nodes / `13,586` edges / `222` communities, and final precommit `[precommit] OK` with the recorded
+  governance/capability/receipt checks. Commit, push, remote parity, and GitHub readback remain pending; W10 stays
+  `OPEN / PARTIAL`, and the overall extension-native program stays `IN_PROGRESS / PARTIAL`.

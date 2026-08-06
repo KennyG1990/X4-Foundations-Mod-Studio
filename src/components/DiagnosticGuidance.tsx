@@ -29,8 +29,18 @@ function responseError(body: PrepareResponse, fallback: string): string {
   return body.error ? `${body.code ? `${body.code}: ` : ''}${body.error}` : fallback;
 }
 
+function formatGameVersionScope(scope: { minGameVersion?: string; maxGameVersion?: string }): string {
+  if (scope.minGameVersion === undefined && scope.maxGameVersion === undefined) return 'all versions (no explicit bounds)';
+  return [
+    scope.minGameVersion === undefined ? 'min: unbounded' : `min: ${scope.minGameVersion}`,
+    scope.maxGameVersion === undefined ? 'max: unbounded' : `max: ${scope.maxGameVersion}`,
+  ].join(' · ');
+}
+
 export default function DiagnosticGuidance({ diagnostic, workspace, onSuppressionCommitted }: DiagnosticGuidanceProps) {
   const explanation = useMemo(() => explainDiagnostic(diagnostic), [diagnostic]);
+  const matchedProvenance = explanation.ruleProvenance.kind === 'matched' ? explanation.ruleProvenance : null;
+  const ambiguousProvenance = explanation.ruleProvenance.kind === 'ambiguous' ? explanation.ruleProvenance : null;
   const [expanded, setExpanded] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [prepared, setPrepared] = useState<PrepareResponse | null>(null);
@@ -120,6 +130,25 @@ export default function DiagnosticGuidance({ diagnostic, workspace, onSuppressio
           <p><b className="text-slate-200">Why:</b> {explanation.why}</p>
           <p><b className="text-slate-200">Impact:</b> {explanation.impact}</p>
           <p><b className="text-slate-200">Next:</b> {explanation.next}</p>
+          {matchedProvenance && (
+            <div data-testid="diagnostic-rule-provenance" className="space-y-0.5 rounded border border-emerald-500/20 bg-emerald-500/5 p-1.5 font-mono text-[8px] text-emerald-100">
+              <div><span className="text-emerald-300/70">Rule ID/version:</span> {matchedProvenance.ruleId} / {matchedProvenance.ruleVersion}</div>
+              <div><span className="text-emerald-300/70">Evidence grade:</span> {matchedProvenance.evidence.grade}</div>
+              <div><span className="text-emerald-300/70">Applicability:</span> {matchedProvenance.applicability}</div>
+              <div><span className="text-emerald-300/70">Pack ID/version:</span> {matchedProvenance.packId} / {matchedProvenance.packVersion}</div>
+              <div className="break-all"><span className="text-emerald-300/70">Pack SHA-256:</span> {matchedProvenance.packSha256}</div>
+              <div><span className="text-emerald-300/70">Evidence basis:</span> {matchedProvenance.evidence.basis}</div>
+              <div className="break-all"><span className="text-emerald-300/70">Evidence digest:</span> {matchedProvenance.evidence.digestSha256}</div>
+              <div><span className="text-emerald-300/70">Game scope:</span> {formatGameVersionScope(matchedProvenance.scope)}</div>
+            </div>
+          )}
+          {ambiguousProvenance && (
+            <div data-testid="diagnostic-rule-provenance" className="space-y-0.5 rounded border border-amber-500/20 bg-amber-500/5 p-1.5 font-mono text-[8px] text-amber-100">
+              <div><span className="text-amber-300/70">Governed rule selection:</span> refused</div>
+              <div><span className="text-amber-300/70">Refusal:</span> {ambiguousProvenance.refusal}</div>
+              <div><span className="text-amber-300/70">Candidate IDs:</span> {ambiguousProvenance.candidates.map(candidate => `${candidate.packId}/${candidate.ruleId}@${candidate.ruleVersion}`).join(', ') || 'none reported'}</div>
+            </div>
+          )}
           <p className="font-mono text-[8px] text-slate-500">Basis: {explanation.basis} · deterministic, no AI</p>
         </div>
       )}

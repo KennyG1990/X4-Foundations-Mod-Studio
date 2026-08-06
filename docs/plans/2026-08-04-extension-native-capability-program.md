@@ -147,10 +147,29 @@ Date: 2026-08-04
   `0` errors / `593` warnings overall with the owned parser subset at `0` errors / `7` warnings; and Graphify is
   `5,541` nodes / `13,555` edges / `215` communities. A raw oracle sweep invoked without its required server
   returned `0/130` fetch failures and is recorded only as a harness-invocation AAR, not product evidence.
-- W10 closes only this native data-only authority/availability slice. No guidance/server/UI integration or
-  installed-product proof exists in this checkpoint. The next exact unit is rule provenance in existing Why?
-  guidance/server/selftest/E2E, requiring focused E2E plus packaged/installed/rendered Antigravity proof. Broader
-  rule families, update lifecycle, and W11 remain open.
+- W10 closes the native data-only authority/availability slice recorded above; that earlier slice intentionally did
+  not include guidance/server/UI integration or installed-product proof. The dated dependent-batch delta below now
+  records those capabilities and the lifecycle repair. Broader rule families, update lifecycle, and W11 remain open.
+
+- 2026-08-06 W10 dependent guidance/lifecycle delta: the existing diagnostic explanation and Why panel now expose
+  governed matched, unmatched, unavailable, and ambiguous provenance with pack/rule IDs and versions, pack SHA,
+  evidence grade/basis/digest, applicability, game scope, deterministic fallback, candidate refusal, and
+  `deterministic, no AI` parity. Uppercase `XSD_` matching and the existing `scriptproperty` fallback remain intact.
+  The existing server registry exposes `x4-rule-packs-selftest`; direct diagnostic explanation is `16/16`, rule pack
+  is `32/32`, and focused lifecycle tests are executor `9/9`, command `6/6`, async `10/10`, runner lifecycle `12/12`,
+  and runner integration `13/13`.
+- The bounded lifecycle repair accepts a failed command only after a fresh exact-identity recheck proves
+  `treeGone=true`. The preserved red receipt remains the reproduced lifecycle failure; the isolated green receipt
+  proves product `96/96`, `complete=true`, `treeGone=true`, `trigger=child-close`, clean ports `3100/3101`, absent
+  root PID, and unchanged live workspace.
+- Package/stage/probe/inspection passed for the `0.0.63` extension package. Installed bits match staged hashes, and
+  the rendered evidence separately proves governed XSD provenance and the `x4_ai_influence` validation/restored
+  state. The retained `47`-error image is not used for a same-mod before/after claim. Supporting typecheck/build,
+  lint `0` errors / `593` warnings, runtime oracle `132/132`, Graphify `5,548` nodes / `13,586` edges /
+  `222` communities, and final precommit `[precommit] OK` are recorded in the bounded plan.
+- This dependent unit is `VERIFIED` only as a bounded W10 checkpoint. W10 remains `OPEN / PARTIAL`; the overall
+  extension-native program remains `IN_PROGRESS / PARTIAL`; commit, push, remote-parity, and GitHub readback remain
+  pending.
 
 - Native Sol/Luna routing is restored and independently proven; diagnostic CLI execution was not used as product-
   code implementation evidence.
@@ -219,7 +238,8 @@ Date: 2026-08-04
 
 - Current status: IN_PROGRESS / PARTIAL. W7's native engine merge-law/schema-routing unit is `VERIFIED`, and W10's
   bounded data-only rule/evidence-pack plus Lua Unicode availability checkpoint is also `VERIFIED`, with the exact
-  evidence recorded above. W10 overall remains `OPEN / PARTIAL`. W7's exact engine, oracle, route, package, E2E, and
+  evidence recorded above. The later bounded W10 rule-provenance guidance and lifecycle-race repair checkpoint is
+  likewise `VERIFIED` as recorded in the dated delta above. W10 overall remains `OPEN / PARTIAL`. W7's exact engine, oracle, route, package, E2E, and
   installed Antigravity evidence is recorded above. Its immediate
   checkpoint Git/GitHub parity is closed at pushed commit `1c912cf28bfe62509ba4ece06553949e514555b6`, with `#11`/
   `#18` readback complete. Native routing is proven; W3B1a remains 3/5 and lifecycle 96/96 is verified, while

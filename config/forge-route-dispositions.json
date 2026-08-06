@@ -150,6 +150,12 @@
     "src/lib/workspaceState.ts",
     "src/lib/x4CatDat.ts",
     "src/lib/x4ObjectIndex.ts",
+    "src/lib/x4RulePackCanonical.ts",
+    "src/lib/x4RulePackParser.ts",
+    "src/lib/x4RulePackResolver.ts",
+    "src/lib/x4RulePacks.selftest.ts",
+    "src/lib/x4RulePacks.ts",
+    "src/lib/x4RulePackTypes.ts",
     "src/lib/xmlInputLimits.ts",
     "src/lib/xmlLite.ts",
     "src/lib/xmlParser.ts",
@@ -2289,6 +2295,18 @@
         "deploy"
       ],
       "resourceClass": "workspace",
+      "workspaceMode": "optional"
+    },
+    "GET /api/agent/x4-rule-packs-selftest": {
+      "disposition": "public-selftest",
+      "owner": "runX4RulePacksSelftest",
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
       "workspaceMode": "optional"
     },
     "GET /api/agent/xml-input-limits-selftest": {

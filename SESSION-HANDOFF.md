@@ -1,94 +1,141 @@
-# X4 Forge — Combined W3/W7 Checkpoint Handoff
+# X4 Forge — W10 Rule-Provenance Checkpoint Handoff
 
-Updated: 2026-08-05 America/New_York
+Updated: 2026-08-06 America/New_York
 
 ## One-line state
 
-W7’s native X4 merge-law/schema-routing unit is `VERIFIED`, including runtime, full isolated E2E, precommit,
-package, and installed-extension proof. W3 remains `IN_PROGRESS / PARTIAL` at `3/5`: replace, merge, and create
-are runtime-green; snapshot restore and bulk apply remain open. Implementation commit
-[`1c912cf28bfe62509ba4ece06553949e514555b6`](https://github.com/KennyG1990/X4_Forge/commit/1c912cf28bfe62509ba4ece06553949e514555b6)
-is pushed. The follow-on close mirror is also pushed, and the current branch tip satisfies
-`HEAD == origin/main == remote/main`. GitHub `#11` and `#18` are each `OPEN / PARTIAL` with one updated ledger
-block and a commit link. Overall extension program status remains `IN_PROGRESS / PARTIAL`.
-The next step is a fresh task for the already-`SPECIFIED` deterministic rule/evidence-pack implementation.
+This is the X4 Forge extension program. The bounded W10 rule-provenance guidance and E2E lifecycle-race repair
+checkpoint is `VERIFIED`; W10 overall remains `OPEN / PARTIAL`; the overall extension-native program remains
+`IN_PROGRESS / PARTIAL`. Current `HEAD` remains `5541f7933b7fe54a6a519d95af01eb1b2b645054`: the first commit
+wrapper timed out after `120` seconds while the pre-commit capability audit was still running, so no commit was
+created. The exact `17`-path index remains intact with no unrelated path staged; the orphaned hook later exited.
+This targeted correction leaves newer working-tree bytes for the two in-repo documentation files, so those two
+existing index entries still require an explicit refresh before the commit retry. Commit, push, remote parity, and
+GitHub readback remain pending.
 
 ## Operator brief
 
-- **Project:** `F:\DEV_ENV\X4_Forge`. This is the Forge **extension** program. Embedded Studio, the managed sidecar,
-  native IDE surfaces, and optional managed MCP are internal surfaces of that product; there is no standalone public
-  web product or end-user CLI.
-- **Machine state:** Antigravity validation is explicitly authorized and the machine is quiet for this task. Do not
-  reinstate a machine-state wait.
-- **Eyeball queue:** W7 installed schema/corpus rendering is recorded and green. W3 still needs route-specific
-  receipt/finalization/compensation/fault-injection and real-child receipt/restore/bulk acceptance.
-- **Commit question:** yes. Implementation commit
-  [`1c912cf28bfe62509ba4ece06553949e514555b6`](https://github.com/KennyG1990/X4_Forge/commit/1c912cf28bfe62509ba4ece06553949e514555b6)
-  is pushed. The follow-on close mirror is also pushed, and the current branch tip satisfies
-  `HEAD == origin/main == remote/main`. GitHub [#11](https://github.com/KennyG1990/X4_Forge/issues/11) and
-  [#18](https://github.com/KennyG1990/X4_Forge/issues/18) are each `OPEN / PARTIAL`, with one updated ledger
-  block and the implementation commit linked.
+- **Project:** `F:\DEV_ENV\X4_Forge`, the Forge extension and its internal Studio, sidecar, API, IDE, and bridge
+  surfaces. There is no standalone public product or end-user CLI in this scope.
+- **Machine state:** the required isolated E2E, package, install, and rendered checks already have receipts. This
+  documentation close performs no further live-host, game, mod, package-install, Git, or GitHub mutation.
+- **Eyeball queue:** if a 30-second installed-proof check is needed, open
+  `vscode-extension/evidence/2026-08-06-w10-rule-provenance-installed/03-installed-xsd-rule-provenance.png` and
+  confirm the governed XSD provenance in the Why panel; then open `04-installed-x4-ai-influence-validation.png`
+  and `05-installed-x4-ai-influence-beginner-restored.png` and confirm the selected `x4_ai_influence` workspace,
+  restored Beginner mode, closed overlay, and `Valid · 15 warnings` with zero blocking errors. Do not compare the
+  DeadAir image with the `x4_ai_influence` images, and do not infer a single cause for the old `47`-error image.
+  W3 restore/bulk and receipt-finalization items remain separate open work.
+- **Commit question:** no. The first commit wrapper timed out during the still-running pre-commit capability audit;
+  no commit was created and `HEAD` did not move. The exact `17`-path index remains intact with no unrelated path
+  staged, the orphaned hook later exited, and the separately run final `npm run precommit:check` was already green.
+  Refresh only the two corrected documentation entries in that index, then rerun `git commit` with a sufficiently
+  long timeout and do not bypass the hook. Do not report push, remote parity, or GitHub readback until those gates
+  actually run.
 
-## W7 — VERIFIED
+## W10 — VERIFIED bounded checkpoint; overall OPEN / PARTIAL
 
-Authoritative plan: `docs/plans/2026-08-04-x4-merge-law-oracle.md` (`Status: VERIFIED`). Runtime evidence:
+Authoritative plans:
 
-- X4 `9.00`, build `611726`, Steam `23660954`; run `w7_20260805_a97e2186_03`.
-- `11/11` markers; `9/9` semantic cases; focused `898`; schema `143/143`; particles `544/544`.
-- Official diff overlay `60/60` across `176` files; routes `443/443`; oracle `131/131`.
-- `npm run precommit:check`: OK; full isolated E2E: `96/96`; package probe: `16/16`.
+- `docs/plans/2026-08-04-x4-deterministic-rule-packs.md`
+- `docs/plans/2026-08-06-x4-rule-provenance-guidance.md`
 
-Installed proof is recorded at:
-`vscode-extension/evidence/2026-08-06-w7-schema-routing-installed/installed-validation-receipt.json`.
+The existing diagnostic explanation and Why panel now resolve the governed X4 rule pack with matched, unmatched,
+unavailable, and ambiguous provenance. Matched output includes pack/rule IDs and versions, pack SHA, evidence
+grade/basis/digest, applicability, and game scope. Ambiguity refuses selection and shows candidates; missing or
+invalid target versions remain unavailable; uppercase `XSD_` matching and generic fallback remain intact; and the
+panel states `deterministic, no AI`. The existing server registry exposes `x4-rule-packs-selftest`.
 
-- Installed VSIX SHA-256: `db72aeaa3dedc6192992c11ff52d04f3edc8ad9a6e0e53b441930f8d2f6491f3`.
-- Schema routing loaded again: `1507` MD elements, `1408` AI elements, and `2333` properties rendered; schema
-  totals are `402` events, `35` conditions, and `807` actions.
-- Loaded corpus: `32` factions, `1902` wares, `170` sectors, and `383` files.
-- `schemaLoaded=true`, `corpusLoaded=true`, `validatorRendered=true`, and no `Failed to fetch` was observed or
-  reproduced.
-- The genuine loaded-mod validation findings are separate: `2` blocking errors and `5` warnings. They are mod
-  findings, not schema-loading failure and not a `Failed to fetch` regression.
+Focused evidence:
 
-W7 closes this native merge-law/schema-routing unit. It does not close W3 or the overall extension program.
+- Direct diagnostic explanation: `16/16`.
+- Rule-pack validation: `32/32`.
+- Lifecycle executor: `9/9`; command: `6/6`; async step: `10/10`; runner lifecycle: `12/12`; runner integration:
+  `13/13`.
+- Typecheck and build pass; lint `0` errors / `593` warnings; runtime oracle `132/132`; Graphify `5,548` nodes /
+  `13,586` edges / `222` communities.
+- Final precommit is `[precommit] OK`: verdict selftest `54/54`, product-copy `7` roots / `0` banned, writer
+  selftest `14/14`, durableWrite `8/8`, capability/receipt/type/size gates pass, and the reviewed governance
+  candidate was atomically promoted.
 
-## W3 — PARTIAL (3/5)
+Lifecycle receipts:
 
-Authoritative plan: `docs/plans/2026-08-02-w3b1-addressed-state-receipts.md`.
+- Green: `test-results/e2e-verdict-96-pass-treegone-green-20260806.json` — `96/96`, failed `0`, flaky `0`,
+  complete report, `complete=true`, `treeGone=true`, `trigger=child-close`, clean ports `3100/3101`, absent root
+  PID, and unchanged live workspace.
+- Red: `test-results/e2e-verdict-96-pass-treegone-red-20260806.json` — product `96/96`, but
+  `complete=false`, `treeGone=false`, and `termination-command-failed`. It remains reproduced failure evidence,
+  not a green result. The repair accepts a failed command only after a fresh exact-identity recheck proves
+  `treeGone=true`; otherwise it fails closed.
 
-- Runtime-green routes: workspace replace, merge, and create.
-- Open routes: snapshot restore and bulk-transform apply.
-- The E2E harness/lifecycle subunit is independently `VERIFIED` by the isolated `96/96` receipt with
-  `child-close`, `treeGone=true`, containment, closed ephemeral ports, and removed ephemeral state.
-- That `96/96` full E2E result does not prove the missing W3 route semantics. Route-specific receipt finalization,
-  compensation, fault-injection, and real-child receipt/restore/bulk acceptance remain open.
+Governance and package/install evidence:
 
-## Plans and next native unit
+- Reviewed/promoted candidate SHA:
+  `d17909cb056dacf32a212660d662f50ba88bb4bc40128ace6100a938c4263fc4`.
+- Final capability audit: pass, `11` capabilities, `294` literal routes, `1` dynamic registrar, `10` aliases;
+  contract SHA `d8a820f537dbcbb50bcb8a91c8bd415c221a15940f184e38a817fa4566c1ac8f`.
+- Package: `vscode-extension/x4-forge-studio-0.0.63-w10-rule-provenance-20260806.vsix`; probe `16/16`; SHA-256
+  `0c30ee8681b7a7365d1841fc0f1fcf659650dbb4e972bc785d51a57886eca3a9`; `18,073,169` bytes; inspector pass with
+  `2,091` entries and `61,307,258` unpacked bytes.
+- Installed extension: `x4forge.x4-forge-studio@0.0.63`, Forge build `v1.0.422`; installed `extension.js`,
+  `server.cjs`, and `index.html` match staged hashes (`4A7265...91FD`, `156667...29FAD`, `37EB6D...B50`). Two
+  locked-directory attempts failed with EPERM; after a normal full host close, installation succeeded.
+- Rendered evidence is under
+  `vscode-extension/evidence/2026-08-06-w10-rule-provenance-installed/`. `03` is DeadAir Dynamic Wars;
+  `04`/`05` are the actual `x4_ai_influence` workspace. The old `01-before-old-installed-47-errors.png` is a
+  same-workspace baseline only; no `47`-to-`2` same-mod claim exists. No version bump or marketplace publication
+  occurred.
+
+## Program state
 
 - Program plan: `docs/plans/2026-08-04-extension-native-capability-program.md` — `IN_PROGRESS / PARTIAL`.
-- Rule-pack plan: `docs/plans/2026-08-04-x4-deterministic-rule-packs.md` — `SPECIFIED`, not implemented.
-- The next native feature unit is governed deterministic rule/evidence packs reusing existing validators. W7 no
-  longer blocks that unit.
-- The W7 and rule-pack plans already record the official Egosoft General XML guide and XML Patch Guide as grounding
-  references. They are specification references only; runtime claims come from the recorded X4 evidence.
+- W7 remains `VERIFIED`; W3 remains `PARTIAL` at `3/5`.
+- The parent data-only W10 plan remains `VERIFIED` for its bounded authority/availability slice. Its earlier
+  no-guidance/no-installed-proof language is qualified as historical pre-dependent-batch scope; the current
+  dependent capability state is recorded in its 2026-08-06 delta.
+- Broader W10 rule families, update lifecycle, W3 restore/bulk, route-specific receipt finalization/compensation,
+  and overall program gates remain open.
 
-## Evidence paths
+## Checkpoint staging, local evidence, and external records
 
-- W7 runtime: `test-results/x4-merge-law-oracle/w7_20260805_a97e2186_03/`
-- W7 installed receipt: `vscode-extension/evidence/2026-08-06-w7-schema-routing-installed/installed-validation-receipt.json`
-- W7 plan: `docs/plans/2026-08-04-x4-merge-law-oracle.md`
-- W3 plan: `docs/plans/2026-08-02-w3b1-addressed-state-receipts.md`
-- Program plan: `docs/plans/2026-08-04-extension-native-capability-program.md`
-- Next-unit plan: `docs/plans/2026-08-04-x4-deterministic-rule-packs.md`
+### Currently staged checkpoint paths — exact 17-path index
 
-## Task-owned and staging boundary
+- `config/forge-route-dispositions.json`
+- `scripts/e2e-process-termination-executor.mjs`
+- `scripts/e2e-process-termination-executor.selftest.mjs`
+- `server.ts`
+- `src/components/DiagnosticGuidance.tsx`
+- `src/lib/diagnosticExplain.ts`
+- `tests/e2e/diagnostic-suppression.spec.ts`
+- `docs/plans/2026-08-06-x4-rule-provenance-guidance.md`
+- `docs/plans/2026-08-04-x4-deterministic-rule-packs.md`
+- `docs/plans/2026-08-04-extension-native-capability-program.md`
+- `ROADMAP.md`
+- `SESSION-HANDOFF.md`
+- `vscode-extension/evidence/2026-08-06-w10-rule-provenance-installed/01-before-old-installed-47-errors.png`
+- `vscode-extension/evidence/2026-08-06-w10-rule-provenance-installed/02-installed-new-real-mod-2-errors.png`
+- `vscode-extension/evidence/2026-08-06-w10-rule-provenance-installed/03-installed-xsd-rule-provenance.png`
+- `vscode-extension/evidence/2026-08-06-w10-rule-provenance-installed/04-installed-x4-ai-influence-validation.png`
+- `vscode-extension/evidence/2026-08-06-w10-rule-provenance-installed/05-installed-x4-ai-influence-beginner-restored.png`
 
-- This handoff task owns only `SESSION-HANDOFF.md`; this worker changed only that file.
-- Do not stage, commit, push, or mutate GitHub from this handoff update. Preserve all concurrent worktree changes.
+These are checkpoint paths. They are not part of the unrelated preservation/do-not-stage boundary.
 
-## Preservation boundary — do not stage/reset/clean
+### Local ignored evidence/package paths — do not infer as staged
 
-Preserve these exact unrelated dirty paths and hunks:
+- `test-results/e2e-verdict-96-pass-treegone-red-20260806.json`
+- `test-results/e2e-verdict-96-pass-treegone-green-20260806.json`
+- `vscode-extension/x4-forge-studio-0.0.63-w10-rule-provenance-20260806.vsix`
+
+These local ignored artifacts support the checkpoint but are not evidence of Git staging.
+
+### External wiki paths — report separately
+
+- `F:\StarForge\wiki\x4-forge\capability-map.md`
+- `F:\StarForge\wiki\x4-forge\aar-log.md`
+
+These paths are outside the Forge Git worktree and cannot be included in its staging set.
+
+## True unrelated preservation boundary — do not stage/reset/clean
 
 - `CODEX-ONBOARDING.md`; `KNOWN-BUGS.md`.
 - Deleted `data/known_fixes.json`, `data/trivia_questions.json`, `docs/DISCORD_BOTS_AND_GAMES.md`,
@@ -101,25 +148,34 @@ Preserve these exact unrelated dirty paths and hunks:
 - Untracked `vscode-extension/evidence/2026-07-31-r8-r17/` screenshots.
 - Unrelated `BACKLOG.md` R13/B111-B114 hunks.
 
-## Exact next step
+The exact `17`-path checkpoint index path set remains intact and contains no unrelated path. This correction changes
+the working-tree bytes of `docs/plans/2026-08-06-x4-rule-provenance-guidance.md` and `SESSION-HANDOFF.md`; refresh
+only those two existing index entries before retrying the commit. Preserve the unrelated paths above and do not reset,
+clean, restore, or stage any additional path.
 
-- Start a fresh task for the already-`SPECIFIED` deterministic rule/evidence-pack implementation; W7 no longer
-  blocks that unit. W3 snapshot restore and bulk apply remain separate open acceptance work.
+## Exact next unit
+
+1. Coordinator refreshes only `docs/plans/2026-08-06-x4-rule-provenance-guidance.md` and `SESSION-HANDOFF.md` in
+   the intact exact `17`-path index, verifies that no unrelated path is staged, then reruns `git commit` with a
+   sufficiently long shell timeout; do not bypass the pre-commit hook. The separate final
+   `npm run precommit:check` is already green, but the hook must still complete normally. After the commit exists,
+   handle push, remote-parity assertion, and GitHub #9/#10/#18 readback. The ignored local artifacts and external
+   wiki files must not be inferred as staged. Suggested commit title:
+   `feat(validation): surface governed rule provenance in Forge`.
+2. After that checkpoint, pull the next bounded W10 unit for broader governed rule coverage or update lifecycle;
+   keep W10 `OPEN / PARTIAL` and the overall program `IN_PROGRESS / PARTIAL`.
 
 ## Current close and AAR
 
-- **Close:** W7 `VERIFIED`; W3 `PARTIAL` at `3/5`; overall extension program `IN_PROGRESS / PARTIAL`.
-  Implementation commit
-  [`1c912cf28bfe62509ba4ece06553949e514555b6`](https://github.com/KennyG1990/X4_Forge/commit/1c912cf28bfe62509ba4ece06553949e514555b6)
-  is pushed. The follow-on close mirror is also pushed, and the current branch tip satisfies
-  `HEAD == origin/main == remote/main`. GitHub [#11](https://github.com/KennyG1990/X4_Forge/issues/11) and
-  [#18](https://github.com/KennyG1990/X4_Forge/issues/18) are each `OPEN / PARTIAL`, each with one updated ledger
-  block and a commit link. The W7 capability-map delta and AAR ledgers are applied; this handoff creates no second
-  delta.
-- **Degradation evidence:** clustered stalled/late workers and partial hidden spawns occurred. All known task workers
-  are now closed. Treat worker narration as non-authoritative; inspect settled files and diffs. Use a fresh task for
-  the next implementation unit after this commit close.
-- **Highest-risk W3 hazard:** the green `96/96` lifecycle proof can be mistaken for route acceptance; it does not
-  cover restore/bulk receipt semantics, route-specific finalization/compensation/fault injection, or real-child proof.
-- **Loaded-mod hazard:** keep the genuine `2` blocking errors and `5` warnings separate from schema/corpus loading;
-  neither establishes a `Failed to fetch` regression.
+- **Close:** the bounded rule-provenance guidance and lifecycle-race repair is `VERIFIED`. W10 overall is `OPEN /
+  PARTIAL`; the overall extension-native program is `IN_PROGRESS / PARTIAL`. No overall completion, commit, push,
+  remote parity, GitHub readback, version bump, or marketplace publication is claimed.
+- **AAR triggers:** initial full E2E timeout/orphan cleanup; transient sidecar-loss red `13/83`; product `96/96`
+  with lifecycle false red; bounded repair; correction of the mistaken per-run OS temp-cleanup gate assumption;
+  two EPERM install failures; corrected PowerShell parser/hash-output issue; first precommit manifest omission; and
+  unavailable reviewctl; one coordinator message-serialization failure was corrected without changing checkpoint
+  scope or evidence. The first commit wrapper also timed out after `120` seconds while the pre-commit capability
+  audit was still running; no commit was created, the exact index remained intact, and the retry must use sufficient
+  time without bypassing the hook.
+- **Highest-risk weakness:** lifecycle cleanup and installed-host locking can create false conclusions unless product
+  verdict, process ownership, and installed bits are verified independently.
