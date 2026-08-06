@@ -29,13 +29,33 @@ async function main(): Promise<void> {
   });
   ok("transient_owned_failure_retries_without_churn", transient.live && transient.attempts === 2 && transient.recoveredAfterRetry && retryWaits.join(",") === String(DEFAULT_OWNED_BACKEND_LIVENESS_POLICY.retryDelayMs));
 
-  let failedCalls = 0;
-  const failed = await checkOwnedBackendLiveness({
+  let busyCalls = 0;
+  const busy = await checkOwnedBackendLiveness({
     childRunning: true,
-    probe: async () => { failedCalls += 1; return false; },
+    probe: async () => { busyCalls += 1; return false; },
     wait: noWait,
   });
-  ok("genuinely_unresponsive_owned_backend_is_rejected", !failed.live && failed.reason === "unresponsive" && failed.attempts === 2 && failedCalls === 2);
+  ok(
+    "running_owned_child_is_retained_when_every_bounded_probe_times_out",
+    busy.live && busy.reason === "running-but-busy" && busy.attempts === DEFAULT_OWNED_BACKEND_LIVENESS_POLICY.maxAttempts && busyCalls === DEFAULT_OWNED_BACKEND_LIVENESS_POLICY.maxAttempts,
+  );
+
+  let childRunningDuringProbe = true;
+  let exitedDuringProbeCalls = 0;
+  const exitedDuringProbes = await checkOwnedBackendLiveness({
+    childRunning: childRunningDuringProbe,
+    isChildRunning: () => childRunningDuringProbe,
+    probe: async () => {
+      exitedDuringProbeCalls += 1;
+      childRunningDuringProbe = false;
+      return false;
+    },
+    wait: noWait,
+  });
+  ok(
+    "owned_child_exiting_during_failed_probes_is_rejected",
+    !exitedDuringProbes.live && exitedDuringProbes.reason === "child-not-running" && exitedDuringProbes.attempts === DEFAULT_OWNED_BACKEND_LIVENESS_POLICY.maxAttempts && exitedDuringProbeCalls === DEFAULT_OWNED_BACKEND_LIVENESS_POLICY.maxAttempts,
+  );
 
   let exitedCalls = 0;
   const exited = await checkOwnedBackendLiveness({

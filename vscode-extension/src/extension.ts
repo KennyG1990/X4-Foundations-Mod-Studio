@@ -344,9 +344,10 @@ async function probeForge(baseUrl: string, timeoutMs = 3000): Promise<boolean> {
 }
 
 async function probeOwnedForge(handle: BackendHandle) {
-  const childRunning = !!handle.child && handle.child.exitCode === null && handle.child.signalCode === null;
+  const isChildRunning = () => !!handle.child && handle.child.exitCode === null && handle.child.signalCode === null;
   return checkOwnedBackendLiveness({
-    childRunning,
+    childRunning: isChildRunning(),
+    isChildRunning,
     probe: async (timeoutMs) => {
       if (!handle.token) return false;
       const res = await fetchWithTimeout(`${handle.baseUrl}/api/ai/keys/status`, timeoutMs, {
@@ -616,8 +617,10 @@ async function ensureBackendOnce(context: vscode.ExtensionContext): Promise<Back
     const ownedLiveness = existing.owned ? await probeOwnedForge(existing) : null;
     const live = ownedLiveness?.live ?? await probeForge(existing.baseUrl, 2000);
     if (live && backend === existing) {
-      if (ownedLiveness?.recoveredAfterRetry) {
-        log(`owned backend at ${existing.baseUrl} answered lightweight liveness retry ${ownedLiveness.attempts}`);
+      if (ownedLiveness?.reason === "responsive" && ownedLiveness.recoveredAfterRetry) {
+        log(`owned backend at ${existing.baseUrl} responsive after lightweight liveness retry ${ownedLiveness.attempts}; retaining handle`);
+      } else if (ownedLiveness?.reason === "running-but-busy") {
+        log(`owned backend at ${existing.baseUrl} remains running but busy after ${ownedLiveness.attempts} bounded lightweight probes; retaining handle`);
       }
       return existing;
     }

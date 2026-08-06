@@ -44,8 +44,8 @@ const DURABLE_AUTHORITY_PATH = resolve(REPOSITORY_ROOT, 'config', 'durable-write
 const CAPABILITY_AUDIT_PATH = resolve(SCRIPT_DIRECTORY, 'capability-contract-audit.ts');
 const DURABLE_AUDIT_PATH = resolve(SCRIPT_DIRECTORY, 'durable-writer-audit.mjs');
 const PREREQUISITE_MAX_BUFFER = 4 * 1024 * 1024;
-// Measured here at 177.7s standalone; allow five minutes under nested precommit load.
-const PREREQUISITE_TIMEOUT_MS = 300_000;
+// Measured here at 295.8s standalone; allow ten minutes under nested precommit load.
+const PREREQUISITE_TIMEOUT_MS = 600_000;
 
 type IntegrationBatch = 'W3B0-internal' | 'W3B1' | 'W3B2' | 'W3B3';
 

@@ -7590,3 +7590,33 @@ and read-only parity proves `HEAD == origin/main == remote refs/heads/main` at t
 full-hash references and forbidden-name counts of `0`. No issue closure or overall program closure is claimed. The
 prior provenance documentation mirror is already closed at `e47dab5c600ed9954c938124d5a116a81daa3983`; it is not
 pending.
+
+## 2026-08-06 — Installed managed-sidecar busy-liveness repair — VERIFIED bounded checkpoint
+
+The installed extension now retains its owned Forge sidecar when deterministic validation temporarily starves the
+HTTP loop. Repeated bounded probe timeouts classify a still-running managed child as busy; only child-process exit
+authorizes the existing recovery path. Unknown/external services still require the unchanged full Forge schema
+identity. Focused liveness coverage is `7/7`; extension/root builds and typecheck pass; focused lint and diff checks
+pass; and Graphify is `5,634` nodes / `13,781` edges / `208` communities.
+
+Package `vscode-extension/x4-forge-studio-0.0.63-busy-liveness-20260806.vsix` is `18,076,535` bytes with SHA256
+`841A63185547E2FBB946815EF87AF663A7367B6DC3FB091F66307B6409F9F1A3`; package probe is `16/16` and inspection
+passes at `2,091` entries / `61,322,674` unpacked bytes. Installed Antigravity parity matches for the extension,
+supervisor, and server bundles. The installed log proves port `63755` was retained through a busy two-probe interval,
+the validation completed, and the same handle answered retry two afterward; destructive-discard, fetch-error,
+auto-restart, and unexpected-exit markers are absent. Rendered evidence shows the Studio recovered and the unpacked
+9.00 corpus remained loaded with `1,020,384` discovered items.
+
+Final precommit is `[precommit] OK`; its action-receipt prerequisite covers `82` routes / `50` surfaces after the
+measured 295.8-second audit received a bounded ten-minute wrapper. Full E2E is `96/96` in `23.2m`, failed/flaky/bad
+results `0/0/0`, complete report/lifecycle, `trigger=child-close`, `treeGone=true`, empty `remainingPids`, and closed
+ports `3100/3101`; the fresh receipt was generated `2026-08-06T18:34:23Z`. The first 20-minute outer observer killed
+an advancing run and its exact ephemeral stack was cleaned before the unchanged green rerun; it is not relabeled as
+product success.
+
+This checkpoint fixes the reproduced installed `Failed to fetch` lifecycle cause; it does not change schema paths,
+validator verdicts, agent-route authorization, or game/mod data. W3 remains `PARTIAL` at `3/5`, W10 remains
+`OPEN / PARTIAL`, and the overall extension-native program remains `IN_PROGRESS / PARTIAL`. The implementation
+checkpoint is the commit containing this entry, subject `fix(extension): retain busy managed sidecar`; its exact hash
+is recorded in the canonical GitHub owner readback after push. No version bump, marketplace publication, deploy, or
+overall-program completion is claimed.

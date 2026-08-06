@@ -14,11 +14,12 @@ export interface OwnedBackendLivenessResult {
   live: boolean;
   attempts: number;
   recoveredAfterRetry: boolean;
-  reason: "responsive" | "child-not-running" | "unresponsive";
+  reason: "responsive" | "child-not-running" | "running-but-busy";
 }
 
 interface OwnedBackendLivenessInput {
   childRunning: boolean;
+  isChildRunning?: () => boolean;
   probe: (timeoutMs: number, attempt: number) => Promise<boolean>;
   wait?: (delayMs: number) => Promise<void>;
   policy?: Readonly<OwnedBackendLivenessPolicy>;
@@ -27,9 +28,9 @@ interface OwnedBackendLivenessInput {
 const defaultWait = (delayMs: number) => new Promise<void>((resolve) => setTimeout(resolve, delayMs));
 
 /**
- * A running owned child gets more than one lightweight HTTP opportunity before the extension
- * may discard it. Process existence alone is not sufficient: repeated unresponsiveness is a
- * bounded negative result so the existing restart path can recover a genuinely hung backend.
+ * A running owned child gets bounded lightweight HTTP opportunities for observability, but its
+ * process state remains authoritative. Probe timeouts classify a still-running child as busy and
+ * reusable; only an already-exited child is rejected here.
  */
 export async function checkOwnedBackendLiveness(
   input: OwnedBackendLivenessInput,
@@ -58,11 +59,20 @@ export async function checkOwnedBackendLiveness(
     if (attempt < policy.maxAttempts) await wait(policy.retryDelayMs);
   }
 
+  if (input.isChildRunning && !input.isChildRunning()) {
+    return {
+      live: false,
+      attempts: policy.maxAttempts,
+      recoveredAfterRetry: false,
+      reason: "child-not-running",
+    };
+  }
+
   return {
-    live: false,
+    live: true,
     attempts: policy.maxAttempts,
     recoveredAfterRetry: false,
-    reason: "unresponsive",
+    reason: "running-but-busy",
   };
 }
 

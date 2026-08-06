@@ -4,134 +4,114 @@ Updated: 2026-08-06 America/New_York
 
 ## One-line state
 
-The bounded nested script-property path-resolution prerequisite and integrated health-card safe-area prerequisite are
-`VERIFIED`. Script-property selftest is `61/61`; focused health-card E2E is `1/1`; full E2E is `96/96` with complete
-terminal containment. W10 remains `OPEN / PARTIAL`, W3 remains `PARTIAL` at `3/5`, and the overall extension-native
-program remains `IN_PROGRESS / PARTIAL`. The implementation checkpoint is
-`2a404fc406881fa03c14bd9f4234ea51da6f56c2`, subject `fix(validation): resolve nested script-property paths`;
-required precommit exited `0` in `388.8s` with final `[precommit] OK`, and the commit hook reran the gate and also
-ended `[precommit] OK`. Push `main -> origin/main` succeeded, and read-only parity proves
-`HEAD == origin/main == remote refs/heads/main` at the full hash. GitHub issues `#9`, `#10`, and `#18` remain
-`OPEN / PARTIAL`; each has exactly one marker block, with respectively `4`, `3`, and `3` full-hash references and
-forbidden-name counts of `0`. The prior provenance documentation mirror is already closed at
-`e47dab5c600ed9954c938124d5a116a81daa3983`; it is not pending.
+The bounded installed managed-sidecar busy-liveness repair is `VERIFIED` in source, package, installed Antigravity,
+rendered UI, precommit, and full E2E. A still-running owned sidecar is retained when synchronous deterministic
+validation temporarily starves its HTTP loop; an exited child is still rejected, and external services still require
+the full Forge identity. W3 remains `PARTIAL` at `3/5`, W10 remains `OPEN / PARTIAL`, and the overall
+extension-native program remains `IN_PROGRESS / PARTIAL`.
 
 ## Operator brief
 
-- **Project:** `F:\DEV_ENV\X4_Forge`, the native Forge extension and its integrated Studio, sidecar, API, IDE, and
-  bridge surfaces.
-- **Eyeball queue:** the bounded health-card visual gate is closed by the rendered installed observation in the current
-  task transcript: the card is visible, clear of the right tool rail and bottom navigation, and accepts a normal
-  unforced click. No screenshot file path is asserted. W10 rule-pack provenance/lifecycle remains the next open
-  record-level unit.
-- **Commit question:** yes, the feature checkpoint was committed and pushed at
-  `2a404fc406881fa03c14bd9f4234ea51da6f56c2`. This record is its documentation-only mirror; no feature gate remains
-  pending and no self-referential documentation-mirror hash is required.
+- **Project:** `F:\DEV_ENV\X4_Forge`, the Forge extension and its integrated Studio/sidecar/API surfaces.
+- **Eyeball queue:** none for this bounded hotfix. Installed rendered proof is closed by the two saved Antigravity
+  screenshots. The separate W3 snapshot-source candidate has no user-visible surface yet.
+- **Machine state:** Ken granted standing permission to validate inside Antigravity for this work; do not pause to ask
+  again. Do not stop or interact with his running game.
+- **Commit point:** `fix(extension): retain busy managed sidecar`. The implementation checkpoint is the commit
+  containing this handoff; use Git and canonical GitHub owner `#19` for the exact post-push hash/parity readback.
 
-## Verified checkpoint
+## Reproduced diagnosis
 
-### Nested script-property path resolution
+- The earlier `403` report used obsolete/guessed `POST /api/agent/validate`. Current project validation routes are
+  `/api/agent/project/validate` and `/api/agent/project/validate/check`; deploy verification correctly refuses writes
+  when validation is red.
+- The current installed `Failed to fetch` was a different real bug. The sidecar loaded `402` MD events, `35`
+  conditions, `807` actions, `32` factions, `1,902` wares, and `170` sectors, but synchronous validation blocked HTTP
+  longer than two `1,500 ms` probes plus the retry delay. The extension treated the still-running child as dead,
+  discarded it, and rebound panels to a new port.
+- Therefore the schema files were present and loaded. The fetch failure came from destructive sidecar lifecycle churn,
+  not a missing-schema path.
 
-- Ordered authored paths, datatype transitions, inheritance, conservative candidate retention, hint prioritization,
-  opaque unavailable selector remainders, and deterministic negative/refusal semantics are green.
-- Zero findings: `$pship2.cargo.free`, `.free.all?`, `.free.all`, `$nsh.cargo.free.all`, `.free.solid`,
-  `.free.{event.param.transporttag}`, `.free.notreal`, `$station.controlentity.name`, `.default`,
-  `.{controlpost.commander}`, `$fc.isclass.ship_xl`, `$fc.isclass.ship_s`, `$fc.isclass.sector`, `$sb.isclass.ship_s`,
-  `$destination.{1}.isclass.sector`, `$Foes.count`, and `event.object.owner.knownname`.
-- Exact findings: `$pship2.cargo.notreal` unknown at `notreal`; `$pship2.cargo.hullpercentage` unknown at
-  `hullpercentage`; `$obj.param2` unknown; bare `$station.controlentity` requires a subselector; and focused
-  `$holder.containercargo.free` requires a subselector with `all`, `solid`, `container`, `liquid`, `universal`, and
-  `condensate` suggestions.
-- Untyped roots retain all datatype candidates; hints only prioritize. Empty/unavailable returns and unavailable
-  dynamic/list selector remainders are opaque. No finding is not selector-validity certification.
+## Verified implementation
 
-### Integrated health-card safe area
-
-- Focused E2E is `1/1`: a delayed `2.5s` health response exceeded the `1.5s` helper, then the card became visible,
-  stayed clear of the right tool rail and bottom navigation, accepted a normal unforced click, and closed with
-  `treeGone` and ports clean. Full E2E carries the same regression.
+- `vscode-extension/src/backendLiveness.ts` classifies `responsive`, `child-not-running`, and
+  `running-but-busy`. Process state is authoritative for an owned child after bounded probes.
+- `vscode-extension/src/extension.ts` supplies a fresh child-state callback at the final decision boundary and retains
+  the same handle for retry recovery or running-but-busy classification.
+- `vscode-extension/src/backendLiveness.selftest.ts` covers seven deterministic positive/negative cases.
+- `scripts/action-receipt-coverage-audit.ts` raises only the nested capability-audit wrapper from `300_000` to
+  `600_000 ms` after the prerequisite measured `295.8s`; its 4 MiB buffer and failure taxonomy are unchanged.
+- No schema path, validator verdict, route authorization, game/mod data, external attach, standalone/CLI, or
+  marketplace behavior changed. No capability-map delta.
 
 ## Gate and package evidence
 
-- Schema intelligence `168/168`; typecheck `0`; focused lint `0`; route integration `449/449`; runtime oracles
-  `132/132`; full lint exit `0` with `0` errors / `593` warnings.
-- Read-only target validation: `26` files, `VALID`; structural/unresolved/cross-file `0`; schema `0/0` with both
-  schemas loaded; AI-script `0`; script-property warnings/findings `0/0`; rules errors `0`.
-- Full E2E: `96/96`, failed `0`, flaky `0`, complete structured report, `complete=true`, `trigger=child-close`,
-  `treeGone=true`, empty `remainingPids`, ports `3100/3101` closed; receipt `test-results/e2e-verdict.json` generated
-  `2026-08-06 13:31:43Z`.
-- Root/extension build, stage-app, and secrets-clean are green. Staged package probe is `16/16`, including schema,
-  configuration, and corpus checks.
-- Package: `F:\DEV_ENV\X4_Forge\vscode-extension\x4-forge-studio-0.0.63-scriptproperty-path-resolution-20260806.vsix`;
-  `18,076,422` bytes; SHA256
-  `15CAA66FEDA0D1C1D087FA3E7635300A106E8EADD8020A9A3A9029E22412705E`; inspector PASS `2091` entries /
-  `61,322,134` unpacked bytes.
-- Graphify refresh completed from the repository root: `5572` nodes / `13642` edges / `217` communities.
+- Backend liveness `7/7`; extension/root builds exit `0`; root typecheck exit `0`; focused lint and diff checks exit
+  `0`; Graphify `5,634` nodes / `13,781` edges / `208` communities.
+- Final `npm run precommit:check` exits `0` with `[precommit] OK`; action-receipt coverage is `82` routes / `50`
+  surfaces.
+- Package `F:\DEV_ENV\X4_Forge\vscode-extension\x4-forge-studio-0.0.63-busy-liveness-20260806.vsix` is
+  `18,076,535` bytes, SHA256 `841A63185547E2FBB946815EF87AF663A7367B6DC3FB091F66307B6409F9F1A3`;
+  stage/probe is `16/16`, inspector PASS is `2,091` entries / `61,322,674` unpacked bytes.
+- Full E2E rerun is `96/96` in `1,396.3s`, failed/flaky/bad `0/0/0`. Fresh receipt generated
+  `2026-08-06T18:34:23Z` records complete report/lifecycle, `trigger=child-close`, `treeGone=true`, empty
+  `remainingPids`, and no runner interaction failure; independent readback found no listeners on `3100/3101`.
+- The first 20-minute observer killed an advancing E2E run and leaked only its isolated 3100/3101 stack. Exact PIDs
+  were resolved, stopped, and verified gone before the unchanged green rerun. The stale earlier receipt was rejected.
+- E2E writes were bound to `C:\Users\Moshi\AppData\Local\Temp\x4forge-e2e-state-44580` through both
+  `X4_STATE_DIR` and `X4_CONFIG_DIR`, outside live Forge state.
 
-## Installed proof
+## Installed Antigravity proof
 
-- Installed extension `x4forge.x4-forge-studio@0.0.63` is at
-  `C:\Users\Moshi\.antigravity-ide\extensions\x4forge.x4-forge-studio-0.0.63`.
-- Critical file parity is `7/7`; installed package manifest equals the package manifest after excluding injected
-  `__metadata`. Rendered installed observation reports Forge `v1.0.424`, Mission Director `1507` elements loaded
-  (`md.xsd` + `common.xsd`), AI-script `1408` elements, script properties `2333`, and safe-area placement clear of
-  current chrome. Installed script-property selftest is `61/61`.
-- Target import preview: actual `x4_ai_influence`, `116` selected files, Mission Director + AI Scripts +
-  Libraries/Patches + Lua/UI + Translations, `2925` graph nodes; imported manifest workspace renders as `x4 AiLive`
-  with readiness `VALID` and `0` errors / `11` warnings.
-- Installed-sidecar `fromPath` validation of `x4_ai_influence` reports `ok=true`, `26` loaded files, structural `0`,
-  unresolved `0`, cross-file `0`, missing registrations/listeners `0/0`, schema errors/warnings `0/0`, AI-script
-  errors `0`, script-property warnings/findings `0/0`, and rules errors `0`; script-property data and both schemas
-  are available.
-- The two active `.ware.name` warnings, representing five duplicate raw reference findings, are the already-recorded
-  ROADMAP `KB-3` `reference.unknown_ware` false positive. They are not a new regression and are not fixed in this
-  checkpoint; overall validation is not called warning-free.
+- Candidate installed at
+  `C:\Users\Moshi\.antigravity-ide\extensions\x4forge.x4-forge-studio-0.0.63`; installed extension,
+  supervisor, and server bundle hashes/lengths match staged bytes.
+- Antigravity `1.107.0` rendered Forge `v1.0.426`. Managed sidecar port `63755` was retained after two timed-out
+  probes at `17:04:39.102Z`; validation completed at `17:04:49.828Z`; the same handle answered retry two at
+  `17:04:55.145Z`. Fresh-log counts for discard, no-answer, fetch-failure, auto-restart, and unexpected-exit markers
+  are zero.
+- Evidence:
+  `vscode-extension/evidence/2026-08-06-busy-liveness/installed-antigravity-busy-retained-recovered.png` and
+  `vscode-extension/evidence/2026-08-06-busy-liveness/installed-antigravity-schema-corpus-loaded.png`.
+  The latter visibly shows the configured unpacked 9.00 corpus found, `1,020,384` discovered items, read-only
+  discovery/canonical-ID availability, and no `Failed to fetch`.
+- No version bump or marketplace publication occurred; this is a local same-version installed candidate.
 
-## Close boundary and next unit
+## Immediate close boundary
 
-- No broad lifecycle or provenance claim is closed. W10 stays `OPEN / PARTIAL`; the overall program stays
-  `IN_PROGRESS / PARTIAL`; W3 stays `PARTIAL` at `3/5`.
-- No version bump, marketplace publication, mod/game write, deploy, or Git/GitHub mutation occurred in the
-  documentation-only record update. The implementation checkpoint's precommit, staging, commit, push, parity, and
-  GitHub ledger update are closed and read back above; this record is the docs-only mirror and no feature gate remains
-  pending.
-
-## Closed checkpoint readback
-
-- Implementation commit: `2a404fc406881fa03c14bd9f4234ea51da6f56c2`, subject
-  `fix(validation): resolve nested script-property paths`; precommit and the commit-hook rerun both ended
-  `[precommit] OK`, with the required precommit taking `388.8s`.
-- Push `main -> origin/main` succeeded; read-only parity is
-  `HEAD == origin/main == remote refs/heads/main` at the full implementation hash.
-- GitHub issues `#9`, `#10`, and `#18` remain `OPEN / PARTIAL`; each has exactly one marker block, with respectively
-  `4`, `3`, and `3` full-hash references and forbidden-name counts of `0`. No issue closure is claimed.
-- No feature precommit, staging, commit, push, or GitHub ledger step remains pending. The prior provenance
-  documentation mirror is closed at `e47dab5c600ed9954c938124d5a116a81daa3983`.
+- Task-owned checkpoint paths are the three liveness source/test files, the bounded audit-timeout file, this handoff,
+  `ROADMAP.md`, the owning plan, and the two new evidence PNGs.
+- Canonical GitHub issue `#19` remains open. Update its single marker block after push with the exact commit hash,
+  busy-liveness `7/7`, same-port installed proof, full E2E `96/96`, and W3 `3/5`; do not close the issue or program.
+- The W3 snapshot reader candidate remains separate and uncommitted:
+  `src/server/workspaceSnapshotSource.ts` and `src/server/workspaceSnapshotSource.selftest.ts`. It is not part of the
+  hotfix index. Fresh-eyes review identified a missing explicit byte-count comparison after `read(fd)`; address that
+  in the next W3 adversarial/integration slice.
 
 ## Next bounded program unit
 
-The next unit is the remaining W10 rule-pack provenance/lifecycle work. It is not started; W10 remains `OPEN / PARTIAL`,
-W3 remains `PARTIAL` at `3/5`, and the overall extension-native program remains `IN_PROGRESS / PARTIAL`.
+Resume W3 snapshot restore authority: harden the source reader against truncated/injected reads, add adversarial and
+integration coverage, then proceed to the remaining restore/bulk receipt paths. Keep all implementation and test
+writes on exact native `gpt-5.6-luna` `luna_executor` workers at `reasoning_effort=max` with no fallback writer.
 
 ## Preserved unrelated dirty boundary
 
-The supplied unrelated baseline remains preserved exactly. Do not stage, reset, clean, or restore:
+Do not stage, reset, clean, restore, or claim ownership of:
 
-- `BACKLOG.md`, `CODEX-ONBOARDING.md`, and `KNOWN-BUGS.md`.
+- Modified `BACKLOG.md`, `CODEX-ONBOARDING.md`, and `KNOWN-BUGS.md`.
 - Deleted `data/known_fixes.json`, `data/trivia_questions.json`, `docs/DISCORD_BOTS_AND_GAMES.md`,
   `scripts/ailive_discord_bot.mjs`, `scripts/discord_economy.mjs`, `scripts/forge_discord_bot.mjs`,
   `scripts/ingest_repo_bugs.mjs`, and `scripts/x4_muds_game.mjs`.
-- `test-results/.last-run.json`.
-- Modified `vscode-extension/evidence/0.0.35-runtime-copy-live.png` and
+- Modified `test-results/.last-run.json`, `vscode-extension/evidence/0.0.35-runtime-copy-live.png`, and
   `vscode-extension/evidence/0.0.35-runtime-copy-startup.png`.
-- Untracked `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/feature_request.md`, and
-  `Note for Kimi.md`.
-- Untracked old screenshots under `vscode-extension/evidence/2026-07-31-r8-r17/`.
+- Untracked `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/feature_request.md`, `Note for Kimi.md`,
+  and the six older screenshots under `vscode-extension/evidence/2026-07-31-r8-r17/`.
+- The two untracked W3 snapshot-source files named above are active program work, not unrelated baseline, but they
+  must remain outside this hotfix checkpoint.
 
 ## AAR summary
 
-Triggered search/shell quoting, spawn-message syntax, semantic acceptance, oracle-harness, E2E containment, package
-normalization, installed-host locking/restart, and rendered reobserve events are recorded in the active plan and the
-project/global AAR ledgers. They were corrected or bounded without leaving a red product gate. The highest remaining
-risk is misreading an opaque no-finding selector continuation as selector validity; W10 lifecycle/provenance remains
-open until its separate acceptance contract is met.
+The task triggered installed-runtime contradiction, validation concurrency, accidental artifact, installer-lock,
+prerequisite-timeout, E2E-observer/cleanup, and one read-only PowerShell parser events. All are documented in the
+owning plan and project/global AAR ledgers. Highest-risk lesson: synchronous deterministic work can make a healthy
+owned sidecar fail HTTP probes; destructive lifecycle decisions must use owned-process truth, not HTTP timeout alone.
