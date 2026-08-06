@@ -7547,8 +7547,8 @@ The exact `17`-path implementation checkpoint is commit `590308e46867817467262bc
 issues `#9`, `#10`, and `#18` open, each with exactly one start marker and one end marker, the full checkpoint hash,
 and `Status: IN_PROGRESS / PARTIAL`; `#10` remains the canonical W10 owner, `#9` the parent program, and `#18` the
 no-gap projection. The index is empty and only the pre-existing unrelated preservation set remains dirty. No version
-bump or marketplace publication occurred. Only the documentation mirror commit remains pending; suggested title:
-`docs: record W10 provenance checkpoint parity`.
+bump or marketplace publication occurred. The prior provenance documentation mirror is already closed at
+`e47dab5c600ed9954c938124d5a116a81daa3983`; no pending mirror claim remains.
 
 ## 2026-08-06 — W10 nested script-property paths and integrated health-card safe area — VERIFIED bounded checkpoint
 
@@ -7580,4 +7580,13 @@ The two active `.ware.name` warnings, representing five duplicate raw reference 
 `KB-3` `reference.unknown_ware` false positive. They are not a new regression and are not fixed in this checkpoint;
 overall validation is not called warning-free. W10 remains `OPEN / PARTIAL`, W3 remains `PARTIAL` at `3/5`, and the
 overall extension-native program remains `IN_PROGRESS / PARTIAL`. No broad lifecycle/provenance claim, version bump,
-marketplace publication, mod/game write, or deploy occurred; Git/GitHub close remains pending coordinator reconciliation.
+marketplace publication, mod/game write, or deploy occurred.
+
+The implementation checkpoint is commit `2a404fc406881fa03c14bd9f4234ea51da6f56c2`, subject
+`fix(validation): resolve nested script-property paths`. Required precommit exited `0` in `388.8s` with final
+`[precommit] OK`; the commit hook reran the gate and also ended `[precommit] OK`. Push `main -> origin/main` succeeded,
+and read-only parity proves `HEAD == origin/main == remote refs/heads/main` at the full hash. GitHub issues `#9`,
+`#10`, and `#18` remain `OPEN / PARTIAL`; each has exactly one marker block, with respectively `4`, `3`, and `3`
+full-hash references and forbidden-name counts of `0`. No issue closure or overall program closure is claimed. The
+prior provenance documentation mirror is already closed at `e47dab5c600ed9954c938124d5a116a81daa3983`; it is not
+pending.

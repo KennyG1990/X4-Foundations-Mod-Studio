@@ -174,7 +174,8 @@ Date: 2026-08-04
   `main -> origin/main` succeeded, and read-only parity proves `HEAD == origin/main == remote/main` at that hash.
   Independent readback found `#9`, `#10`, and `#18` open with one implementation-ledger block, the full hash, and
   `Status: IN_PROGRESS / PARTIAL` each. `#10` remains the canonical W10 owner; `#9` is the parent and `#18` the
-  no-gap projection. Only the documentation mirror commit remains pending.
+  no-gap projection. The prior provenance documentation mirror is already closed at
+  `e47dab5c600ed9954c938124d5a116a81daa3983`; it is not pending.
 
 - Native Sol/Luna routing is restored and independently proven; diagnostic CLI execution was not used as product-
   code implementation evidence.
@@ -268,8 +269,8 @@ Date: 2026-08-04
   findings) are the already-recorded ROADMAP `KB-3` `reference.unknown_ware` false positive, not a new regression and
   not fixed here; the overall validation is not called warning-free. W10 remains `OPEN / PARTIAL`, W3 remains
   `PARTIAL` at `3/5`, and the overall extension-native program remains `IN_PROGRESS / PARTIAL`. No broad lifecycle or
-  provenance claim, version bump, marketplace publication, mod/game write, or deploy is made. Git/GitHub close remains
-  pending coordinator reconciliation.
+  provenance claim, version bump, marketplace publication, mod/game write, or deploy is made. The implementation
+  checkpoint and GitHub projection close are recorded below.
 
 ## CLOSE
 
@@ -287,8 +288,16 @@ Date: 2026-08-04
 - W10 provenance checkpoint: pushed commit `590308e46867817467262bc83b6ba34295fec271` with subject
   `feat(validation): surface governed rule provenance in Forge`; enforced hook, `main -> origin/main`, exact
   `HEAD == origin/main == remote/main` parity, and open issue `#9`/`#10`/`#18` readback passed. The index is empty,
-  unrelated dirty paths remain preserved, and the documentation mirror commit is still pending under suggested title
-  `docs: record W10 provenance checkpoint parity`.
+  unrelated dirty paths remain preserved. The prior provenance documentation mirror is closed at
+  `e47dab5c600ed9954c938124d5a116a81daa3983`; no pending mirror claim remains.
+- Current nested-path and integrated health-card checkpoint: pushed commit
+  `2a404fc406881fa03c14bd9f4234ea51da6f56c2` with subject
+  `fix(validation): resolve nested script-property paths`. Required precommit exited `0` in `388.8s` with final
+  `[precommit] OK`; the commit hook reran the gate and also ended `[precommit] OK`. Push `main -> origin/main`
+  succeeded, and read-only parity proves `HEAD == origin/main == remote refs/heads/main` at the full hash. GitHub
+  issues `#9`, `#10`, and `#18` remain `OPEN / PARTIAL`; each has exactly one marker block, with respectively `4`,
+  `3`, and `3` full-hash references and forbidden-name counts of `0`. No issue closure or overall program closure is
+  claimed.
 
 ## AAR
 

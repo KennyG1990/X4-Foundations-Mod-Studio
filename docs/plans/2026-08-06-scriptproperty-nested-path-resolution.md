@@ -150,7 +150,8 @@ remain OPEN / PARTIAL and deferred as a separate unit after this prerequisite.
 
 ## BASELINE
 
-- **Revision:** supplied and confirmed read-only: `HEAD/origin = e47dab5c600ed9954c938124d5a116a81daa3983`.
+- **Revision:** supplied and confirmed read-only: `HEAD/origin =
+  e47dab5c600ed9954c938124d5a116a81daa3983`.
 - **Worktree:** the supplied implementation checkpoint was settled before this record close. All unrelated modified,
   deleted, and untracked paths are preserved and outside this task's write scope.
 - **Authoritative read-only inputs:** the corpus is
@@ -310,8 +311,9 @@ State: VERIFIED
 - Negative/refusal readback and rendered installed observation are recorded in the task transcript; no screenshot
   file path is invented. No version bump, marketplace publication, mod/game write, or deploy occurred.
 - Graphify update from the repository root completed at `5572` nodes / `13642` edges / `217` communities.
-- The implementation baseline supplied for this checkpoint was `HEAD/origin =
-  e47dab5c600ed9954c938124d5a116a81daa3983`; this worker performed no Git mutation.
+- The original task baseline was `HEAD/origin = e47dab5c600ed9954c938124d5a116a81daa3983`. The final pushed
+  implementation checkpoint is `2a404fc406881fa03c14bd9f4234ea51da6f56c2`, subject
+  `fix(validation): resolve nested script-property paths`; this documentation close performs no Git mutation.
 
 ### Required validation matrix — completed
 
@@ -324,7 +326,7 @@ State: VERIFIED
 | E2E/containment | Focused health-card `1/1`; full E2E `96/96`; terminal report, tree, ports, and live-workspace containment | Leaked process/ports/state or workspace change would be red. |
 | Build/package | Root and extension builds, stage-app, secrets-clean, package probe `16/16`, package hash/size, inspector PASS | Stale/incomplete package or probe failure would block close. |
 | Installed product | Rendered installed observation plus sidecar `fromPath` readback, schemas available, script-property selftest `61/61` | Source-only, old, different-workspace, or DOM-only proof would be insufficient. |
-| Governance/records | Graphify `5572/13642/217`; record readback and diff checks below; Git/GitHub close remains coordinator-owned | No broader W10 or program closure is claimed. |
+| Governance/records | Graphify `5572/13642/217`; implementation commit/push parity and GitHub ledger readback below | No broader W10 or program closure is claimed. |
 
 The completed close records the exact commands/results, warning/error counts, corpus identity, package hash, receipt
 path, installed rendered observation, machine-readable sidecar readback, and unavailable-validation boundary above.
@@ -344,7 +346,7 @@ The real-mod result remains read-only.
 - Criterion 9: done; no script-property provenance, rule-pack binding, lifecycle/update claim, severity change, or
   verdict-policy change was added, and W10 remains `OPEN / PARTIAL`.
 - Criterion 10: done and evidenced by the complete static, focused, route, oracle, E2E, build, package, installed,
-  Graphify, and record checks. The Git/GitHub close is intentionally pending coordinator reconciliation.
+  Graphify, implementation commit/push parity, and GitHub ledger readback checks below.
 - Fresh-eyes review challenged global-head shortcuts, both placeholder forms, unavailable selector domains, project
   hints, candidate retention, inheritance, datatype transitions, primitive/unavailable returns, malformed-index
   honesty, the exact deterministic findings, focused suggestions, health-card safe-area placement, installed parity,
@@ -360,16 +362,22 @@ The real-mod result remains read-only.
   selector remainders as opaque. The integrated health-card safe-area behavior is green in focused and full E2E and
   visibly clear of the current chrome in the installed rendered observation.
 - **What does not change:** unrelated dirty paths, rule-pack provenance, W10 lifecycle/update behavior, severity or
-  verdict policy, product boundary, mod/game state, GitHub state, and the dedicated health-card plan.
+  verdict policy, product boundary, mod/game state, open GitHub issue state, and the dedicated health-card plan.
 - **Capability/ledger:** record only the bounded path-aware traversal, datatype/inheritance, conservative candidate,
   opaque-unavailable, deterministic-negative, and installed-proof delta. No broad lifecycle claim is made.
-- **Baseline/rollback:** the supplied baseline was `HEAD/origin =
-  e47dab5c600ed9954c938124d5a116a81daa3983`; implementation changes were already settled before this record close.
-  Recovery is limited to the bounded implementation checkpoint and owned record edits; this worker made no Git,
-  GitHub, package, install, mod, game, or deploy mutation.
-- **Coordinator close boundary:** Git/GitHub reconciliation, staging, commit, push, and final parity remain pending
-  with the coordinator. No version bump or marketplace publication occurred.
-- **Suggested combined implementation commit title:** `fix(validation): resolve nested script-property paths`.
+- **Baseline/rollback:** the original task baseline was `HEAD/origin =
+  e47dab5c600ed9954c938124d5a116a81daa3983`; the final pushed implementation checkpoint is
+  `2a404fc406881fa03c14bd9f4234ea51da6f56c2`. Recovery is limited to the bounded implementation checkpoint and
+  owned record edits. This documentation worker made no Git, GitHub, package, install, mod, game, or deploy mutation.
+- **Implementation checkpoint and projection readback:** commit
+  `2a404fc406881fa03c14bd9f4234ea51da6f56c2` has subject
+  `fix(validation): resolve nested script-property paths`. Required precommit exited `0` in `388.8s` with final
+  `[precommit] OK`; the commit hook reran the gate and also ended `[precommit] OK`. Push `main -> origin/main`
+  succeeded, and read-only parity proves `HEAD == origin/main == remote refs/heads/main` at the full hash. GitHub
+  issues `#9`, `#10`, and `#18` remain `OPEN / PARTIAL`; each has exactly one marker block, with respectively `4`,
+  `3`, and `3` full-hash references and forbidden-name counts of `0`. No issue closure or overall program closure is
+  claimed. The prior provenance documentation mirror is already closed at
+  `e47dab5c600ed9954c938124d5a116a81daa3983`; it is not pending.
 
 ## AAR
 

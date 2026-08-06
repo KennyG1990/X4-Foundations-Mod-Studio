@@ -7,8 +7,14 @@ Updated: 2026-08-06 America/New_York
 The bounded nested script-property path-resolution prerequisite and integrated health-card safe-area prerequisite are
 `VERIFIED`. Script-property selftest is `61/61`; focused health-card E2E is `1/1`; full E2E is `96/96` with complete
 terminal containment. W10 remains `OPEN / PARTIAL`, W3 remains `PARTIAL` at `3/5`, and the overall extension-native
-program remains `IN_PROGRESS / PARTIAL`. Git/GitHub close, staging, commit, push, and final parity are pending the
-coordinator; no follow-up hash is claimed.
+program remains `IN_PROGRESS / PARTIAL`. The implementation checkpoint is
+`2a404fc406881fa03c14bd9f4234ea51da6f56c2`, subject `fix(validation): resolve nested script-property paths`;
+required precommit exited `0` in `388.8s` with final `[precommit] OK`, and the commit hook reran the gate and also
+ended `[precommit] OK`. Push `main -> origin/main` succeeded, and read-only parity proves
+`HEAD == origin/main == remote refs/heads/main` at the full hash. GitHub issues `#9`, `#10`, and `#18` remain
+`OPEN / PARTIAL`; each has exactly one marker block, with respectively `4`, `3`, and `3` full-hash references and
+forbidden-name counts of `0`. The prior provenance documentation mirror is already closed at
+`e47dab5c600ed9954c938124d5a116a81daa3983`; it is not pending.
 
 ## Operator brief
 
@@ -18,8 +24,9 @@ coordinator; no follow-up hash is claimed.
   task transcript: the card is visible, clear of the right tool rail and bottom navigation, and accepts a normal
   unforced click. No screenshot file path is asserted. W10 rule-pack provenance/lifecycle remains the next open
   record-level unit.
-- **Commit question:** the current checkpoint scope has not been staged or committed. Suggested combined implementation
-  title: `fix(validation): resolve nested script-property paths`.
+- **Commit question:** yes, the feature checkpoint was committed and pushed at
+  `2a404fc406881fa03c14bd9f4234ea51da6f56c2`. This record is its documentation-only mirror; no feature gate remains
+  pending and no self-referential documentation-mirror hash is required.
 
 ## Verified checkpoint
 
@@ -84,34 +91,27 @@ coordinator; no follow-up hash is claimed.
 
 - No broad lifecycle or provenance claim is closed. W10 stays `OPEN / PARTIAL`; the overall program stays
   `IN_PROGRESS / PARTIAL`; W3 stays `PARTIAL` at `3/5`.
-- No version bump, marketplace publication, mod/game write, deploy, or Git/GitHub mutation occurred in this worker.
-  Coordinator still owns the current checkpoint precommit, exact staging, commit, push, parity, neutral ledger update,
-  and final documentation mirror.
+- No version bump, marketplace publication, mod/game write, deploy, or Git/GitHub mutation occurred in the
+  documentation-only record update. The implementation checkpoint's precommit, staging, commit, push, parity, and
+  GitHub ledger update are closed and read back above; this record is the docs-only mirror and no feature gate remains
+  pending.
 
-## Pending checkpoint scope
+## Closed checkpoint readback
 
-Stage exactly these in-repo paths for the current checkpoint, then commit/push and prove parity:
+- Implementation commit: `2a404fc406881fa03c14bd9f4234ea51da6f56c2`, subject
+  `fix(validation): resolve nested script-property paths`; precommit and the commit-hook rerun both ended
+  `[precommit] OK`, with the required precommit taking `388.8s`.
+- Push `main -> origin/main` succeeded; read-only parity is
+  `HEAD == origin/main == remote refs/heads/main` at the full implementation hash.
+- GitHub issues `#9`, `#10`, and `#18` remain `OPEN / PARTIAL`; each has exactly one marker block, with respectively
+  `4`, `3`, and `3` full-hash references and forbidden-name counts of `0`. No issue closure is claimed.
+- No feature precommit, staging, commit, push, or GitHub ledger step remains pending. The prior provenance
+  documentation mirror is closed at `e47dab5c600ed9954c938124d5a116a81daa3983`.
 
-- `scripts/route-integration.mjs`
-- `src/App.tsx`
-- `src/components/HealthCardOverlay.tsx`
-- `src/lib/scriptProperties.ts`
-- `tests/e2e/studio-shell.spec.ts`
-- `docs/plans/2026-08-06-scriptproperty-nested-path-resolution.md`
-- `docs/plans/2026-08-06-health-card-layout-safe-area.md`
-- `docs/plans/2026-08-06-x4-rule-lifecycle-scriptproperty.md`
-- `docs/plans/2026-08-04-extension-native-capability-program.md`
-- `ROADMAP.md`
-- `SESSION-HANDOFF.md`
+## Next bounded program unit
 
-## Exact next order
-
-1. Run the current checkpoint precommit.
-2. Stage exactly the pending checkpoint scope above.
-3. Commit, push, and prove local/origin/remote parity.
-4. Apply the neutral GitHub `#9`/`#10`/`#18` ledger update and read it back exactly.
-5. Complete the final documentation mirror if required.
-6. Only then resume the remaining W10 rule-pack provenance/lifecycle work.
+The next unit is the remaining W10 rule-pack provenance/lifecycle work. It is not started; W10 remains `OPEN / PARTIAL`,
+W3 remains `PARTIAL` at `3/5`, and the overall extension-native program remains `IN_PROGRESS / PARTIAL`.
 
 ## Preserved unrelated dirty boundary
 
