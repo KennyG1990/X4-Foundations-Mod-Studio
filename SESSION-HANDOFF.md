@@ -1,134 +1,137 @@
-# X4 Forge — W10 Provenance Post-Push Handoff
+# X4 Forge — Native Extension Close Handoff
 
 Updated: 2026-08-06 America/New_York
 
 ## One-line state
 
-This is the X4 Forge extension program. The bounded W10 rule-provenance guidance and E2E lifecycle-race repair
-checkpoint is `VERIFIED` at implementation commit `590308e46867817467262bc83b6ba34295fec271`; its enforced hook,
-push, parity, and issue-ledger readback are complete. W10 overall remains `OPEN / PARTIAL`, and the overall
-extension-native program remains `IN_PROGRESS / PARTIAL`. Only this documentation close mirror remains uncommitted;
-no follow-up hash exists.
+The bounded nested script-property path-resolution prerequisite and integrated health-card safe-area prerequisite are
+`VERIFIED`. Script-property selftest is `61/61`; focused health-card E2E is `1/1`; full E2E is `96/96` with complete
+terminal containment. W10 remains `OPEN / PARTIAL`, W3 remains `PARTIAL` at `3/5`, and the overall extension-native
+program remains `IN_PROGRESS / PARTIAL`. Git/GitHub close, staging, commit, push, and final parity are pending the
+coordinator; no follow-up hash is claimed.
 
 ## Operator brief
 
-- **Project:** `F:\DEV_ENV\X4_Forge`, the Forge extension and its internal Studio, sidecar, API, IDE, and bridge
-  surfaces. There is no standalone public product or end-user CLI in this scope.
-- **Eyeball queue:** installed proof remains under
-  `vscode-extension/evidence/2026-08-06-w10-rule-provenance-installed/`. `03` is the DeadAir XSD-provenance view;
-  `04` and `05` are the `x4_ai_influence` validation/restored-state views. Do not compare their error counts or infer
-  one cause for the old `47`-error image. W3 restore/bulk and receipt-finalization items remain separate open work.
-- **Commit question:** yes for the implementation checkpoint; no for this documentation mirror. Do not invent a
-  follow-up hash. Suggested documentation title: `docs: record W10 provenance checkpoint parity`.
+- **Project:** `F:\DEV_ENV\X4_Forge`, the native Forge extension and its integrated Studio, sidecar, API, IDE, and
+  bridge surfaces.
+- **Eyeball queue:** the bounded health-card visual gate is closed by the rendered installed observation in the current
+  task transcript: the card is visible, clear of the right tool rail and bottom navigation, and accepts a normal
+  unforced click. No screenshot file path is asserted. W10 rule-pack provenance/lifecycle remains the next open
+  record-level unit.
+- **Commit question:** the current checkpoint scope has not been staged or committed. Suggested combined implementation
+  title: `fix(validation): resolve nested script-property paths`.
 
-## W10 bounded checkpoint — VERIFIED; overall OPEN / PARTIAL
+## Verified checkpoint
 
-Authoritative plans:
+### Nested script-property path resolution
 
-- `docs/plans/2026-08-04-x4-deterministic-rule-packs.md`
-- `docs/plans/2026-08-06-x4-rule-provenance-guidance.md`
+- Ordered authored paths, datatype transitions, inheritance, conservative candidate retention, hint prioritization,
+  opaque unavailable selector remainders, and deterministic negative/refusal semantics are green.
+- Zero findings: `$pship2.cargo.free`, `.free.all?`, `.free.all`, `$nsh.cargo.free.all`, `.free.solid`,
+  `.free.{event.param.transporttag}`, `.free.notreal`, `$station.controlentity.name`, `.default`,
+  `.{controlpost.commander}`, `$fc.isclass.ship_xl`, `$fc.isclass.ship_s`, `$fc.isclass.sector`, `$sb.isclass.ship_s`,
+  `$destination.{1}.isclass.sector`, `$Foes.count`, and `event.object.owner.knownname`.
+- Exact findings: `$pship2.cargo.notreal` unknown at `notreal`; `$pship2.cargo.hullpercentage` unknown at
+  `hullpercentage`; `$obj.param2` unknown; bare `$station.controlentity` requires a subselector; and focused
+  `$holder.containercargo.free` requires a subselector with `all`, `solid`, `container`, `liquid`, `universal`, and
+  `condensate` suggestions.
+- Untyped roots retain all datatype candidates; hints only prioritize. Empty/unavailable returns and unavailable
+  dynamic/list selector remainders are opaque. No finding is not selector-validity certification.
 
-The existing diagnostic explanation and Why panel resolve the governed X4 rule pack with matched, unmatched,
-unavailable, and ambiguous provenance. Matched output includes pack/rule IDs and versions, pack SHA, evidence
-grade/basis/digest, applicability, and game scope. Ambiguity refuses selection and shows candidates; missing or
-invalid target versions remain unavailable; uppercase `XSD_` matching and generic fallback remain intact; and the
-panel states `deterministic, no AI`. The existing server registry exposes `x4-rule-packs-selftest`.
+### Integrated health-card safe area
 
-Feature evidence remains unchanged:
+- Focused E2E is `1/1`: a delayed `2.5s` health response exceeded the `1.5s` helper, then the card became visible,
+  stayed clear of the right tool rail and bottom navigation, accepted a normal unforced click, and closed with
+  `treeGone` and ports clean. Full E2E carries the same regression.
 
-- Direct diagnostic explanation `16/16`; rule pack `32/32`.
-- Lifecycle executor `9/9`; command `6/6`; async step `10/10`; runner lifecycle `12/12`; runner integration `13/13`.
-- Typecheck/build pass; lint `0` errors / `593` warnings; runtime oracle `132/132`; Graphify `5,548` nodes /
-  `13,586` edges / `222` communities.
-- Final precommit `[precommit] OK`: verdict `54/54`, product-copy `7` roots / `0` banned, writer `14/14`,
-  durableWrite `8/8`, capability/receipt/type/size gates pass, and the reviewed governance candidate was promoted.
-- Green E2E receipt `test-results/e2e-verdict-96-pass-treegone-green-20260806.json`: `96/96`, failed `0`, flaky
-  `0`, complete report, `complete=true`, `treeGone=true`, `trigger=child-close`, clean ports `3100/3101`, absent
-  root PID, and unchanged live workspace.
-- Red E2E receipt `test-results/e2e-verdict-96-pass-treegone-red-20260806.json`: product `96/96`, but
-  `complete=false`, `treeGone=false`, and `termination-command-failed`. It remains reproduced failure evidence.
-- Package `vscode-extension/x4-forge-studio-0.0.63-w10-rule-provenance-20260806.vsix`: probe `16/16`, SHA-256
-  `0c30ee8681b7a7365d1841fc0f1fcf659650dbb4e972bc785d51a57886eca3a9`, `18,073,169` bytes, inspection pass with
-  `2,091` entries and `61,307,258` unpacked bytes. Installed extension files matched staged hashes. No version bump
-  or marketplace publication occurred.
+## Gate and package evidence
 
-## Implementation Git and issue-ledger close — complete
+- Schema intelligence `168/168`; typecheck `0`; focused lint `0`; route integration `449/449`; runtime oracles
+  `132/132`; full lint exit `0` with `0` errors / `593` warnings.
+- Read-only target validation: `26` files, `VALID`; structural/unresolved/cross-file `0`; schema `0/0` with both
+  schemas loaded; AI-script `0`; script-property warnings/findings `0/0`; rules errors `0`.
+- Full E2E: `96/96`, failed `0`, flaky `0`, complete structured report, `complete=true`, `trigger=child-close`,
+  `treeGone=true`, empty `remainingPids`, ports `3100/3101` closed; receipt `test-results/e2e-verdict.json` generated
+  `2026-08-06 13:31:43Z`.
+- Root/extension build, stage-app, and secrets-clean are green. Staged package probe is `16/16`, including schema,
+  configuration, and corpus checks.
+- Package: `F:\DEV_ENV\X4_Forge\vscode-extension\x4-forge-studio-0.0.63-scriptproperty-path-resolution-20260806.vsix`;
+  `18,076,422` bytes; SHA256
+  `15CAA66FEDA0D1C1D087FA3E7635300A106E8EADD8020A9A3A9029E22412705E`; inspector PASS `2091` entries /
+  `61,322,134` unpacked bytes.
+- Graphify refresh completed from the repository root: `5572` nodes / `13642` edges / `217` communities.
 
-- Commit: `590308e46867817467262bc83b6ba34295fec271`.
-- Subject: `feat(validation): surface governed rule provenance in Forge`.
-- Scope: exactly `17` checkpoint paths; the enforced pre-commit hook passed.
-- Push: `main -> origin/main` succeeded.
-- Read-only parity:
-  `HEAD == origin/main == remote/main == 590308e46867817467262bc83b6ba34295fec271`.
-- Post-commit index: empty. At that readback, every remaining dirty/untracked path belonged to the pre-existing
-  unrelated preservation set.
-- Issues `#9`, `#10`, and `#18` were updated by replacing only their existing implementation-ledger block.
-  Independent readback found all three `open`, each with exactly one start marker and one end marker, the full
-  checkpoint hash, and `Status: IN_PROGRESS / PARTIAL`.
-- Ownership remains unchanged: `#10` is the canonical W10 feature owner; `#9` is the parent program; `#18` is the
-  no-gap projection. None was closed.
+## Installed proof
 
-The first issue-readback verification script had a JavaScript regex serialization error before producing any result.
-The corrected readback passed. This is the second small coordinator serialization/tool-friction event, not a product
-failure.
+- Installed extension `x4forge.x4-forge-studio@0.0.63` is at
+  `C:\Users\Moshi\.antigravity-ide\extensions\x4forge.x4-forge-studio-0.0.63`.
+- Critical file parity is `7/7`; installed package manifest equals the package manifest after excluding injected
+  `__metadata`. Rendered installed observation reports Forge `v1.0.424`, Mission Director `1507` elements loaded
+  (`md.xsd` + `common.xsd`), AI-script `1408` elements, script properties `2333`, and safe-area placement clear of
+  current chrome. Installed script-property selftest is `61/61`.
+- Target import preview: actual `x4_ai_influence`, `116` selected files, Mission Director + AI Scripts +
+  Libraries/Patches + Lua/UI + Translations, `2925` graph nodes; imported manifest workspace renders as `x4 AiLive`
+  with readiness `VALID` and `0` errors / `11` warnings.
+- Installed-sidecar `fromPath` validation of `x4_ai_influence` reports `ok=true`, `26` loaded files, structural `0`,
+  unresolved `0`, cross-file `0`, missing registrations/listeners `0/0`, schema errors/warnings `0/0`, AI-script
+  errors `0`, script-property warnings/findings `0/0`, and rules errors `0`; script-property data and both schemas
+  are available.
+- The two active `.ware.name` warnings, representing five duplicate raw reference findings, are the already-recorded
+  ROADMAP `KB-3` `reference.unknown_ware` false positive. They are not a new regression and are not fixed in this
+  checkpoint; overall validation is not called warning-free.
 
-## Program state
+## Close boundary and next unit
 
-- Program plan: `docs/plans/2026-08-04-extension-native-capability-program.md` — `IN_PROGRESS / PARTIAL`.
-- W10 overall remains `OPEN / PARTIAL`; broader rule families and update lifecycle remain open.
-- W7 remains `VERIFIED`; W3 remains `PARTIAL` at `3/5`.
-- The implementation checkpoint and issue-ledger update are complete. No feature owner or parent issue was closed.
-- No version bump or marketplace publication occurred.
+- No broad lifecycle or provenance claim is closed. W10 stays `OPEN / PARTIAL`; the overall program stays
+  `IN_PROGRESS / PARTIAL`; W3 stays `PARTIAL` at `3/5`.
+- No version bump, marketplace publication, mod/game write, deploy, or Git/GitHub mutation occurred in this worker.
+  Coordinator still owns the current checkpoint precommit, exact staging, commit, push, parity, neutral ledger update,
+  and final documentation mirror.
 
-## Documentation mirror scope — follow-up commit pending
+## Pending checkpoint scope
 
-Current in-repo documentation mirror paths:
+Stage exactly these in-repo paths for the current checkpoint, then commit/push and prove parity:
 
-- `docs/plans/2026-08-06-x4-rule-provenance-guidance.md`
-- `docs/plans/2026-08-04-x4-deterministic-rule-packs.md`
+- `scripts/route-integration.mjs`
+- `src/App.tsx`
+- `src/components/HealthCardOverlay.tsx`
+- `src/lib/scriptProperties.ts`
+- `tests/e2e/studio-shell.spec.ts`
+- `docs/plans/2026-08-06-scriptproperty-nested-path-resolution.md`
+- `docs/plans/2026-08-06-health-card-layout-safe-area.md`
+- `docs/plans/2026-08-06-x4-rule-lifecycle-scriptproperty.md`
 - `docs/plans/2026-08-04-extension-native-capability-program.md`
 - `ROADMAP.md`
 - `SESSION-HANDOFF.md`
 
-External local wiki records, reported separately and never inferred as Forge Git paths:
+## Exact next order
 
-- `F:\StarForge\wiki\x4-forge\capability-map.md`
-- `F:\StarForge\wiki\x4-forge\aar-log.md`
+1. Run the current checkpoint precommit.
+2. Stage exactly the pending checkpoint scope above.
+3. Commit, push, and prove local/origin/remote parity.
+4. Apply the neutral GitHub `#9`/`#10`/`#18` ledger update and read it back exactly.
+5. Complete the final documentation mirror if required.
+6. Only then resume the remaining W10 rule-pack provenance/lifecycle work.
 
-The Forge index remains empty because this worker does not stage. The five in-repo mirror files above are the only
-new follow-up commit scope; suggested title: `docs: record W10 provenance checkpoint parity`. No hash is claimed.
+## Preserved unrelated dirty boundary
 
-## True unrelated preservation boundary — do not stage/reset/clean
+The supplied unrelated baseline remains preserved exactly. Do not stage, reset, clean, or restore:
 
-- `CODEX-ONBOARDING.md`; `KNOWN-BUGS.md`.
+- `BACKLOG.md`, `CODEX-ONBOARDING.md`, and `KNOWN-BUGS.md`.
 - Deleted `data/known_fixes.json`, `data/trivia_questions.json`, `docs/DISCORD_BOTS_AND_GAMES.md`,
   `scripts/ailive_discord_bot.mjs`, `scripts/discord_economy.mjs`, `scripts/forge_discord_bot.mjs`,
   `scripts/ingest_repo_bugs.mjs`, and `scripts/x4_muds_game.mjs`.
-- `.github/ISSUE_TEMPLATE/bug_report.md`; `.github/ISSUE_TEMPLATE/feature_request.md`; `Note for Kimi.md`.
 - `test-results/.last-run.json`.
-- `vscode-extension/evidence/0.0.35-runtime-copy-live.png` and
+- Modified `vscode-extension/evidence/0.0.35-runtime-copy-live.png` and
   `vscode-extension/evidence/0.0.35-runtime-copy-startup.png`.
-- Untracked `vscode-extension/evidence/2026-07-31-r8-r17/` screenshots.
-- Unrelated `BACKLOG.md` R13/B111-B114 hunks.
+- Untracked `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/feature_request.md`, and
+  `Note for Kimi.md`.
+- Untracked old screenshots under `vscode-extension/evidence/2026-07-31-r8-r17/`.
 
-Preserve those paths and do not reset, clean, or restore the dirty worktree.
+## AAR summary
 
-## Exact next unit
-
-Validate these five in-repo documentation paths, then create and push only the documentation mirror commit with
-suggested title `docs: record W10 provenance checkpoint parity`. Prove follow-up parity without changing product,
-issue, marketplace, or game/mod state. The implementation checkpoint and its issue-ledger readback are already
-complete.
-
-## Current close and AAR
-
-- **Close:** bounded W10 provenance/lifecycle checkpoint `VERIFIED` at
-  `590308e46867817467262bc83b6ba34295fec271`; hook, push, parity, and open issue `#9`/`#10`/`#18` readback passed.
-  W10 remains `OPEN / PARTIAL`; the overall extension-native program remains `IN_PROGRESS / PARTIAL`.
-- **AAR/tool friction:** initial full E2E timeout/orphan cleanup; transient sidecar-loss red `13/83`; product
-  `96/96` with lifecycle false red; bounded repair; corrected per-run OS temp-gate assumption; two EPERM install
-  failures; corrected PowerShell parser/hash output; first precommit manifest omission; unavailable review gate;
-  first commit-wrapper timeout while the hook was still running; one corrected coordinator message serialization;
-  and one corrected issue-readback regex serialization. The two serialization events are small coordinator friction,
-  not product failures.
-- **Remaining close:** only this documentation mirror commit is pending. No follow-up hash exists yet.
+Triggered search/shell quoting, spawn-message syntax, semantic acceptance, oracle-harness, E2E containment, package
+normalization, installed-host locking/restart, and rendered reobserve events are recorded in the active plan and the
+project/global AAR ledgers. They were corrected or bounded without leaving a red product gate. The highest remaining
+risk is misreading an opaque no-finding selector continuation as selector validity; W10 lifecycle/provenance remains
+open until its separate acceptance contract is met.

@@ -7549,3 +7549,35 @@ and `Status: IN_PROGRESS / PARTIAL`; `#10` remains the canonical W10 owner, `#9`
 no-gap projection. The index is empty and only the pre-existing unrelated preservation set remains dirty. No version
 bump or marketplace publication occurred. Only the documentation mirror commit remains pending; suggested title:
 `docs: record W10 provenance checkpoint parity`.
+
+## 2026-08-06 — W10 nested script-property paths and integrated health-card safe area — VERIFIED bounded checkpoint
+
+The existing native script-property validator now resolves authored ordered nested paths with datatype transitions
+and inheritance, retains all datatype candidates beyond conservative hints, and keeps unavailable selector remainders
+opaque. Script-property selftest is `61/61`; schema intelligence `168/168`; typecheck `0`; focused lint `0`; route
+integration `449/449`; runtime oracles `132/132`; and the read-only 26-file target validation is `VALID` with
+structural/unresolved/cross-file `0`, schema `0/0` with both schemas loaded, AI-script `0`, and bounded script-property
+warnings/findings `0/0`. Deterministic negatives and unavailable-selector refusal semantics remain recorded in the
+owning plan.
+
+The integrated health-card safe-area regression is focused E2E `1/1`: after a delayed `2.5s` health response exceeded
+the `1.5s` helper, the card became visible, accepted a normal unforced click, stayed clear of the right tool rail and
+bottom navigation, and closed with `treeGone` and ports clean. Full E2E is `96/96`, failed `0`, flaky `0`, complete,
+`complete=true`, `trigger=child-close`, `treeGone=true`, empty `remainingPids`, and closed ports `3100/3101`; receipt
+`test-results/e2e-verdict.json` was generated `2026-08-06 13:31:43Z`.
+
+Root/extension build, stage-app, secrets-clean, and staged package probe `16/16` are green. Package
+`vscode-extension/x4-forge-studio-0.0.63-scriptproperty-path-resolution-20260806.vsix` is `18,076,422` bytes with
+SHA256 `15CAA66FEDA0D1C1D087FA3E7635300A106E8EADD8020A9A3A9029E22412705E`; inspector PASS is `2091` entries /
+`61,322,134` unpacked bytes. Graphify is `5572` nodes / `13642` edges / `217` communities. Installed rendered
+observation reports Forge `v1.0.424`, Mission Director `1507`, AI-script `1408`, script properties `2333`, and
+safe-area placement clear of current chrome; critical file parity is `7/7`, normalized manifest parity passes after
+excluding injected `__metadata`, and installed-sidecar readback is `ok=true` with 26 loaded files and all bounded
+error/warning counters at zero. The target import preview is `116` selected files / `2925` graph nodes and renders
+readiness `VALID` with `0` errors / `11` warnings.
+
+The two active `.ware.name` warnings, representing five duplicate raw reference findings, are the already-recorded
+`KB-3` `reference.unknown_ware` false positive. They are not a new regression and are not fixed in this checkpoint;
+overall validation is not called warning-free. W10 remains `OPEN / PARTIAL`, W3 remains `PARTIAL` at `3/5`, and the
+overall extension-native program remains `IN_PROGRESS / PARTIAL`. No broad lifecycle/provenance claim, version bump,
+marketplace publication, mod/game write, or deploy occurred; Git/GitHub close remains pending coordinator reconciliation.

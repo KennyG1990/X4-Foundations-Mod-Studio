@@ -9,11 +9,14 @@
 
 import React, { useEffect, useState } from 'react';
 import { X, ClipboardCheck } from 'lucide-react';
+import type { StudioLayoutPreferences } from '../lib/studioLayout';
 
 interface HealthRow { id: string; label: string; status: 'pass' | 'warn' | 'fail' | 'unknown'; detail: string }
 interface HealthCardData { rows: HealthRow[]; verdict: 'ready' | 'attention' | 'blocked'; summary: string; activeMod?: string | null }
 
-const HealthCardOverlay: React.FC = () => {
+type HealthCardOverlayProps = Pick<StudioLayoutPreferences, 'toolDock' | 'workspaceDock'>;
+
+const HealthCardOverlay: React.FC<HealthCardOverlayProps> = ({ toolDock, workspaceDock }) => {
   const [card, setCard] = useState<HealthCardData | null>(null);
   const [dismissed, setDismissed] = useState(false);
 
@@ -33,10 +36,15 @@ const HealthCardOverlay: React.FC = () => {
   // All green → no card at all (don't nag). Otherwise show until dismissed.
   if (!card || dismissed || card.verdict === 'ready') return null;
 
+  const horizontalSafeArea = toolDock === 'right'
+    ? 'right-16 w-[min(380px,calc(100vw-5rem))]'
+    : 'right-4 w-[min(380px,calc(100vw-2rem))]';
+  const verticalSafeArea = workspaceDock === 'bottom' ? 'bottom-16' : 'bottom-4';
+
   return (
     <div
       data-testid="health-card"
-      className={`fixed bottom-4 right-4 z-[90] w-[380px] rounded-xl border shadow-2xl bg-[#0a0d14]/97 backdrop-blur p-3 font-mono text-[10px] ${
+      className={`fixed ${verticalSafeArea} ${horizontalSafeArea} z-[90] rounded-xl border shadow-2xl bg-[#0a0d14]/97 backdrop-blur p-3 font-mono text-[10px] ${
         card.verdict === 'blocked' ? 'border-red-500/40' : 'border-amber-500/30'
       }`}
     >

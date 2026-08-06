@@ -73,6 +73,12 @@ test('lossless registries keep every destination and utility recoverable', async
 });
 
 test('layout customization docks, hides, reorders, collapses, restores, and persists', async ({ page, browser }) => {
+  await page.route('**/api/agent/health-card', async route => {
+    // Keep the first response beyond bootExpert's 1.5s dismissal window so the
+    // late-appearance safe-area regression remains deterministic.
+    await new Promise(resolve => setTimeout(resolve, 2_500));
+    await route.continue();
+  });
   await bootExpert(page);
   const initialHash = await page.evaluate(() => (window as E2EWindow).__X4_E2E__!.getWorkspaceHash());
 
@@ -114,6 +120,22 @@ test('layout customization docks, hides, reorders, collapses, restores, and pers
   await page.getByTestId('side-panel-restore').click();
   await expect(page.locator('#side_panel')).toHaveAttribute('data-tool-dock', 'right');
   await expect(page.locator('[data-sidebar-tab="filesystem"]')).toHaveCount(0);
+
+  const healthCard = page.getByTestId('health-card');
+  await expect(healthCard).toBeVisible();
+  const healthCardBox = await healthCard.boundingBox();
+  const toolRailCollapseBox = await page.getByTestId('tool-rail-collapse').boundingBox();
+  const workspaceNavigationBox = await page.getByTestId('workspace-navigation').boundingBox();
+  expect(healthCardBox).not.toBeNull();
+  expect(toolRailCollapseBox).not.toBeNull();
+  expect(workspaceNavigationBox).not.toBeNull();
+  const boxesOverlap = (first: NonNullable<typeof healthCardBox>, second: NonNullable<typeof toolRailCollapseBox>) =>
+    first.x < second.x + second.width
+    && first.x + first.width > second.x
+    && first.y < second.y + second.height
+    && first.y + first.height > second.y;
+  expect(boxesOverlap(healthCardBox!, toolRailCollapseBox!)).toBe(false);
+  expect(healthCardBox!.y + healthCardBox!.height).toBeLessThanOrEqual(workspaceNavigationBox!.y);
   await page.getByTestId('tool-rail-collapse').click();
   await expect(page.getByTestId('tool-rail-restore')).toBeVisible();
   await page.getByTestId('tool-rail-restore').click();

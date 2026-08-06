@@ -239,6 +239,38 @@ Date: 2026-08-04
   receipt reopen/content verification and the independent real-child parent oracle remain open. Graphify refresh
   follows the completed receipt slice.
 
+- 2026-08-06 W10 nested script-property path-resolution and integrated health-card safe-area delta: the existing
+  native validator now traverses authored ordered nested paths with datatype transitions and inheritance, retains all
+  datatype candidates beyond conservative project-symbol hints, and keeps empty/unavailable selector remainders
+  opaque. Script-property selftest is `61/61`; schema intelligence `168/168`; typecheck `0`; focused lint `0`; route
+  integration `449/449`; runtime oracles `132/132`; and the read-only `26`-file target validation is `VALID` with
+  structural/unresolved/cross-file `0`, schema `0/0` with both schemas loaded, AI-script `0`, and script-property
+  warnings/findings `0/0` in the bounded result.
+- The focused health-card safe-area E2E is `1/1` after a delayed `2.5s` health response exceeded the `1.5s` helper;
+  the card became visible, accepted a normal unforced click, stayed clear of the right tool rail and bottom
+  navigation, and closed with `treeGone` and ports clean. Full E2E is `96/96`, failed `0`, flaky `0`, complete,
+  `complete=true`, `trigger=child-close`, `treeGone=true`, empty `remainingPids`, and closed ports `3100/3101`; receipt
+  `test-results/e2e-verdict.json` was generated `2026-08-06 13:31:43Z`.
+- Root and extension builds, stage-app, secrets-clean, and staged package probe `16/16` are green. The package is
+  `F:\DEV_ENV\X4_Forge\vscode-extension\x4-forge-studio-0.0.63-scriptproperty-path-resolution-20260806.vsix`,
+  `18,076,422` bytes, SHA256
+  `15CAA66FEDA0D1C1D087FA3E7635300A106E8EADD8020A9A3A9029E22412705E`, with inspector PASS at `2091` entries /
+  `61,322,134` unpacked bytes. Graphify is refreshed at `5572` nodes / `13642` edges / `217` communities.
+- Installed rendered observation reports Forge `v1.0.424`, Mission Director `1507` elements loaded, AI-script `1408`,
+  script properties `2333`, and safe-area placement clear of current chrome. Installed script-property selftest is
+  `61/61`; critical file parity is `7/7`; normalized manifest parity passes after excluding injected `__metadata`;
+  and installed-sidecar `fromPath` validation reports `ok=true`, `26` loaded files, structural/unresolved/cross-file
+  `0`, missing registrations/listeners `0/0`, schema `0/0`, AI-script `0`, script-property warnings/findings `0/0`,
+  rules errors `0`, with both schemas and script-property data available. The target import preview contains `116`
+  selected files and `2925` graph nodes; the manifest workspace renders as `x4 AiLive` with readiness `VALID` and
+  `0` errors / `11` warnings.
+- This is a bounded verified prerequisite only. The two active `.ware.name` warnings (five duplicate raw reference
+  findings) are the already-recorded ROADMAP `KB-3` `reference.unknown_ware` false positive, not a new regression and
+  not fixed here; the overall validation is not called warning-free. W10 remains `OPEN / PARTIAL`, W3 remains
+  `PARTIAL` at `3/5`, and the overall extension-native program remains `IN_PROGRESS / PARTIAL`. No broad lifecycle or
+  provenance claim, version bump, marketplace publication, mod/game write, or deploy is made. Git/GitHub close remains
+  pending coordinator reconciliation.
+
 ## CLOSE
 
 - Current status: IN_PROGRESS / PARTIAL. W7's native engine merge-law/schema-routing unit is `VERIFIED`, and W10's

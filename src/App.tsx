@@ -2344,7 +2344,10 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
   return (
     <div className="w-full h-screen max-w-full overflow-hidden flex flex-col bg-[#0F1115] text-slate-300 font-sans">
       <FpsMeter />
-      <HealthCardOverlay />
+      <HealthCardOverlay
+        toolDock={layoutPreferences.toolDock}
+        workspaceDock={layoutPreferences.workspaceDock}
+      />
       <DialogHost />
       {/* Upper Technical Header */}
       <header data-testid="studio-header" className="h-11 min-w-0 max-w-full border-b border-white/10 bg-[#161920] px-2 flex items-center gap-2 shrink-0 font-mono">

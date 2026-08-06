@@ -130,7 +130,20 @@ const referenceRoot = path.join(tmp, 'reference');
 fs.mkdirSync(path.join(referenceRoot, 'libraries'), { recursive: true });
 fs.writeFileSync(path.join(referenceRoot, 'libraries', 'factions.xml'), '<factions><faction id="routefixture" name="Route Fixture" tags="economic"/></factions>');
 fs.writeFileSync(path.join(referenceRoot, 'libraries', 'wares.xml'), '<wares><ware id="routeware" name="Route Ware" group="test" tags="economy"/></wares>');
-fs.writeFileSync(path.join(referenceRoot, 'libraries', 'scriptproperties.xml'), '<scriptproperties><datatype name="faction"><property name="id" result="ID" type="string"/></datatype></scriptproperties>');
+fs.writeFileSync(
+  path.join(referenceRoot, 'libraries', 'scriptproperties.xml'),
+  '<scriptproperties>'
+  + '<datatype name="faction"><property name="id" result="ID" type="string"/></datatype>'
+  + '<datatype name="container"><property name="cargo" result="Cargo" type="containercargolist"/></datatype>'
+  + '<datatype name="storagemodule"><property name="cargo" result="Cargo" type="modulecargolist"/></datatype>'
+  + '<datatype name="containercargolist">'
+  + '<property name="free.all" result="Total free cargo" type="largeint"/>'
+  + '<property name="free.solid" result="Free solid cargo" type="largeint"/>'
+  + '<property name="free.{$tag}" result="Free tagged cargo" type="largeint"/>'
+  + '</datatype>'
+  + '<datatype name="modulecargolist"><property name="free" result="Total free cargo" type="integer"/></datatype>'
+  + '</scriptproperties>',
+);
 const gameRoot = path.join(tmp, 'X4 Foundations');
 const liveExtensions = path.join(gameRoot, 'extensions');
 const safeWorkspace = path.join(tmp, 'X4ForgeMods');
@@ -2954,6 +2967,49 @@ async function main() {
   ok('compile_runs_full_project_validator', liveCompile.status === 200 && liveCompile.json?.validation?.scope === 'full-project', `status=${liveCompile.status} scope=${liveCompile.json?.validation?.scope}`);
   ok('compile_live_buffer_reports_unknown_scriptproperty', liveCompile.json?.diagnostics?.some((d) => d.code === 'scriptproperty.unknown' && d.filePath === 'md/fixture.xml'), JSON.stringify(liveCompile.json?.diagnostics || []));
   ok('compile_never_reports_false_clean_when_schema_unavailable', liveCompile.json?.diagnostics?.some((d) => d.code === 'validation.md_schema_unavailable' && d.severity === 'warning'));
+  const nestedCompileWorkspace = { id: 'fixture', name: 'fixture', nodes: [], links: [], uiWidgets: [] };
+  const nestedCompilePath = 'md/fixture.xml';
+  const nestedCompileWorkspaceBefore = regularTreeHash(safeWorkspace);
+  const nestedCompileGood = await req('POST', '/api/agent/compile', SESSION_TOKEN, {
+    workspace: nestedCompileWorkspace,
+    fileOverrides: {
+      [nestedCompilePath]: '<?xml version="1.0"?><mdscript name="fixture"><cues><cue name="Root"><actions><set_value name="$x" exact="$pship2.cargo.free.all?"/></actions></cue></cues></mdscript>',
+    },
+  });
+  const nestedCompileGoodDiagnostics = (nestedCompileGood.json?.diagnostics || [])
+    .filter((d) => d.filePath === nestedCompilePath);
+  ok('compile_nested_scriptproperty_valid_chain_is_clean',
+    nestedCompileGood.status === 200
+      && nestedCompileGood.json?.validation?.scope === 'full-project'
+      && nestedCompileGoodDiagnostics.filter((d) => ['scriptproperty.unknown', 'scriptproperty.requires_subselector'].includes(d.code)).length === 0,
+    JSON.stringify(nestedCompileGoodDiagnostics));
+  ok('compile_nested_valid_overlay_preserves_schema_unavailable_warning',
+    nestedCompileGoodDiagnostics.some((d) => d.code === 'validation.md_schema_unavailable' && d.severity === 'warning'),
+    JSON.stringify(nestedCompileGoodDiagnostics));
+  ok('compile_nested_valid_overlay_is_read_only', regularTreeHash(safeWorkspace) === nestedCompileWorkspaceBefore);
+  const nestedCompileUnknown = await req('POST', '/api/agent/compile', SESSION_TOKEN, {
+    workspace: nestedCompileWorkspace,
+    fileOverrides: {
+      [nestedCompilePath]: '<?xml version="1.0"?><mdscript name="fixture"><cues><cue name="Root"><actions><set_value name="$x" exact="$pship2.cargo.notreal"/></actions></cue></cues></mdscript>',
+    },
+  });
+  const nestedCompileUnknownDiagnostics = (nestedCompileUnknown.json?.diagnostics || [])
+    .filter((d) => d.filePath === nestedCompilePath);
+  const nestedCompileUnknownScriptPropertyDiagnostics = nestedCompileUnknownDiagnostics
+    .filter((d) => d.code?.startsWith('scriptproperty.'));
+  const nestedCompileUnknownFinding = nestedCompileUnknownScriptPropertyDiagnostics[0];
+  ok('compile_nested_scriptproperty_unknown_chain_is_unknown',
+    nestedCompileUnknown.status === 200
+      && nestedCompileUnknown.json?.validation?.scope === 'full-project'
+      && nestedCompileUnknownScriptPropertyDiagnostics.length === 1
+      && nestedCompileUnknownFinding?.code === 'scriptproperty.unknown'
+      && /segment "notreal"/.test(String(nestedCompileUnknownFinding?.message || ''))
+      && nestedCompileUnknownFinding?.sourceRef?.label === '$pship2.cargo.notreal',
+    JSON.stringify(nestedCompileUnknownDiagnostics));
+  ok('compile_nested_unknown_overlay_preserves_schema_unavailable_warning',
+    nestedCompileUnknownDiagnostics.some((d) => d.code === 'validation.md_schema_unavailable' && d.severity === 'warning'),
+    JSON.stringify(nestedCompileUnknownDiagnostics));
+  ok('compile_nested_unknown_overlay_is_read_only', regularTreeHash(safeWorkspace) === nestedCompileWorkspaceBefore);
   const unsafeOverride = await req('POST', '/api/agent/compile', SESSION_TOKEN, {
     workspace: { id: 'fixture', name: 'fixture', nodes: [], links: [], uiWidgets: [] },
     fileOverrides: { '../escape.xml': '<mdscript/>' },
