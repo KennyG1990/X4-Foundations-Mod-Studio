@@ -7493,3 +7493,23 @@ Immediate W7 checkpoint is fully closed: parity was proven for implementation ch
 and again at the current final branch tip (`HEAD == origin/main == remote main`).
 GitHub `#11` and `#18` each remain `OPEN` / `PARTIAL`, with exactly one updated ledger block and this commit link.
 W3 and the overall program remain `PARTIAL` where applicable; no broader closure is claimed.
+
+## 2026-08-06 — W10 rule/evidence-pack data authority and Lua Unicode availability — VERIFIED checkpoint
+
+The bounded W10 data-only rule/evidence-pack authority and its blocking Lua registration-analysis repair are
+`VERIFIED`. The pack hash is
+`351cb0199c815df91861205bf0bce85b22ed98f1bb695dcaa9345f5001e2f9c0`; it binds existing `XSD_`,
+`md_lua.missing_register`, and `lua_md.missing_listener` diagnostics without creating a duplicate detector.
+
+Evidence: project-crossfile `25/25`; rule-pack `32/32`; `npm run test:oracles` exit `0` with runtime-index discovery
+and isolated `131/131` at `127.0.0.1:8972` (including diagnostic-explain `8/8`); typecheck and build exit `0`; lint
+`0` errors / `593` warnings overall with the owned parser subset at `0` errors / `7` warnings; and Graphify
+`5,541` nodes / `13,555` edges / `215` communities. Real read-only validation of the 26-file mod returned Verdict
+`VALID`, cross-file errors `0`, missing Lua registers `0`, missing MD listeners `0`, project-rules errors `0`, and
+four unrelated scriptproperty warnings. The pre-repair result was `77` false `md_lua.missing_register` errors from
+pseudo-latin1 rejection on U+2014 in unrelated prose plus swallowed parse unavailability.
+
+W10 overall remains `OPEN / PARTIAL`; broader rule families, update lifecycle, Why? guidance/server/UI integration,
+and W11 remain open. The next visible batch is rule provenance in existing Why? guidance/server/selftest/E2E and
+requires focused E2E plus packaged/installed/rendered Antigravity proof. No UI/server/guidance integration or installed
+proof is claimed for this checkpoint. W3 remains `PARTIAL` at `3/5`; W7 remains `VERIFIED`.

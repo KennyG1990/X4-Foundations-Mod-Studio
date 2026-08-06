@@ -37,7 +37,8 @@ export type ProjectCrossFileFindingCode =
   | 'dep.duplicate'
   | 'dep.self'
   | 'md.signal_library'
-  | 'md.run_actions_nonlibrary';
+  | 'md.run_actions_nonlibrary'
+  | 'validation.lua_ast_unavailable';
 
 export interface ProjectCrossFileFinding {
   code: ProjectCrossFileFindingCode;
@@ -78,6 +79,7 @@ export interface ProjectCrossFileValidationResult {
     unresolvedCueRefs: number;
     mdLuaMissingRegisters: number;
     luaMdMissingListeners: number;
+    luaRegistrationUnavailable: number;
     payloadContractErrors: number;
     dependencies: number;
   };
@@ -90,6 +92,7 @@ export interface ProjectCrossFileValidationResult {
     listened: ProjectUiEventRef[];
     missingRegisters: ProjectEventRef[];
     missingListeners: ProjectUiEventRef[];
+    parseUnavailable: Array<{ file: string; detail: string }>;
     payload: {
       reads: Array<{ key: string; scope: 'global' | 'verb'; file: string; destination: string; branch?: string }>;
       writes: Array<{ key: string; file: string }>;
@@ -165,33 +168,88 @@ function luaIdentifier(node: any): string | null {
   return node?.type === 'Identifier' && typeof node.name === 'string' ? node.name : null;
 }
 
-function luaStringPrefix(node: any, strings: Map<string, string>): { value: string; prefix: boolean } | null {
+interface LuaStringValue {
+  value: string;
+  prefix: boolean;
+  tainted: boolean;
+}
+
+interface LuaAnalysisSource {
+  content: string;
+  substituted: Uint8Array;
+}
+
+interface LuaRegistrationParseResult {
+  events: ProjectEventRef[];
+  available: boolean;
+  detail?: string;
+}
+
+function buildLuaAnalysisSource(content: string): LuaAnalysisSource {
+  const codeUnits = content.split('');
+  const substituted = new Uint8Array(content.length);
+  for (let index = 0; index < content.length; index += 1) {
+    if (content.charCodeAt(index) > 0xff) {
+      codeUnits[index] = '?';
+      substituted[index] = 1;
+    }
+  }
+  return { content: codeUnits.join(''), substituted };
+}
+
+function luaStringLiteralTainted(node: any, substituted: Uint8Array): boolean {
+  const range = node?.range;
+  if (!Array.isArray(range) || range.length < 2 || !Number.isInteger(range[0]) || !Number.isInteger(range[1])) return true;
+  const start = range[0] as number;
+  const end = range[1] as number;
+  if (start < 0 || end < start || end > substituted.length) return true;
+  for (let index = start; index < end; index += 1) {
+    if (substituted[index]) return true;
+  }
+  return false;
+}
+
+function luaStringPrefix(node: any, strings: Map<string, LuaStringValue>, substituted: Uint8Array): LuaStringValue | null {
   if (!node) return null;
-  if (node.type === 'StringLiteral' && typeof node.value === 'string') return { value: node.value, prefix: false };
+  if (node.type === 'StringLiteral' && typeof node.value === 'string') {
+    return { value: node.value, prefix: false, tainted: luaStringLiteralTainted(node, substituted) };
+  }
   if (node.type === 'Identifier') {
     const value = strings.get(node.name);
-    return value === undefined ? null : { value, prefix: false };
+    return value === undefined ? null : value;
   }
   if (node.type === 'BinaryExpression' && node.operator === '..') {
-    const left = luaStringPrefix(node.left, strings);
+    const left = luaStringPrefix(node.left, strings, substituted);
     if (!left) return null;
-    const right = luaStringPrefix(node.right, strings);
+    const right = luaStringPrefix(node.right, strings, substituted);
     return right
-      ? { value: left.value + right.value, prefix: left.prefix || right.prefix }
-      : { value: left.value, prefix: true };
+      ? {
+        value: left.value + right.value,
+        prefix: left.prefix || right.prefix,
+        tainted: left.tainted || right.tainted,
+      }
+      : { value: left.value, prefix: true, tainted: left.tainted };
   }
   return null;
 }
 
-function parseLuaRegisteredEvents(content: string, file: string): ProjectEventRef[] {
+function boundedLuaParseDetail(error: unknown): string {
+  const raw = error instanceof Error ? error.message : '';
+  const message = raw.replace(/\s+/g, ' ').trim() || 'unknown parse error';
+  const prefix = 'Lua AST parse unavailable: ';
+  return `${prefix}${message.slice(0, 160 - prefix.length)}`;
+}
+
+function parseLuaRegisteredEvents(content: string, file: string): LuaRegistrationParseResult {
+  const source = buildLuaAnalysisSource(content || '');
   let ast: any;
   try {
-    ast = parse(content || '', { comments: false, locations: true, ranges: true, scope: true, luaVersion: '5.2', encodingMode: 'pseudo-latin1' });
-  } catch {
-    return [];
+    ast = parse(source.content, { comments: false, locations: true, ranges: true, scope: true, luaVersion: '5.2', encodingMode: 'pseudo-latin1' });
+  } catch (error) {
+    return { events: [], available: false, detail: boundedLuaParseDetail(error) };
   }
 
-  const strings = new Map<string, string>();
+  const strings = new Map<string, LuaStringValue>();
   const registrars = new Set<string>(['RegisterEvent']);
   walkLuaAst(ast, node => {
     if (node.type !== 'LocalStatement' && node.type !== 'AssignmentStatement') return;
@@ -199,7 +257,8 @@ function parseLuaRegisteredEvents(content: string, file: string): ProjectEventRe
       const name = luaIdentifier(variable);
       const init = (node.init || [])[index];
       if (!name || !init) return;
-      if (init.type === 'StringLiteral' && typeof init.value === 'string') strings.set(name, init.value);
+      const stringValue = luaStringPrefix(init, strings, source.substituted);
+      if (stringValue) strings.set(name, stringValue);
       const sourceName = luaIdentifier(init);
       if (sourceName && registrars.has(sourceName)) registrars.add(name);
     });
@@ -223,20 +282,31 @@ function parseLuaRegisteredEvents(content: string, file: string): ProjectEventRe
 
   const out: ProjectEventRef[] = [];
   const seen = new Set<string>();
+  let taintedEventArgument = false;
   walkLuaAst(ast, node => {
     if (node.type !== 'CallExpression') return;
     const callee = luaIdentifier(node.base);
     if (!callee) return;
     const argIndex = registrars.has(callee) ? 0 : wrappers.get(callee);
     if (argIndex === undefined) return;
-    const value = luaStringPrefix((node.arguments || [])[argIndex], strings);
+    const value = luaStringPrefix((node.arguments || [])[argIndex], strings, source.substituted);
+    if (value?.tainted) {
+      taintedEventArgument = true;
+      return;
+    }
     if (!value?.value) return;
     const key = `${value.value}\0${value.prefix}`;
     if (seen.has(key)) return;
     seen.add(key);
     out.push({ event: value.value, file, ...(value.prefix ? { prefix: true } : {}) });
   });
-  return out;
+  return taintedEventArgument
+    ? {
+      events: out,
+      available: false,
+      detail: 'Lua registration event argument contains non-Latin-1 source text; registration analysis unavailable.',
+    }
+    : { events: out, available: true };
 }
 
 interface PayloadReadSite { file: string; destination: string; branch?: string }
@@ -376,10 +446,25 @@ export function validateProjectCrossFile(project: ExtensionProject): ProjectCros
   const luaFiles = files.filter(f => f.kind === 'lua' || f.kind === 'ui' || classifyPath(f.path) === 'lua');
   const raised = mdFiles.flatMap(f => parseMdRaisedLuaEvents(f.content || '', f.path));
   const listened = mdFiles.flatMap(f => parseMdUiListeners(f.content || '', f.path));
-  const registered = luaFiles.flatMap(f => parseLuaRegisteredEvents(f.content || '', f.path));
+  const registrationAnalyses = luaFiles.map(file => ({ file, result: parseLuaRegisteredEvents(file.content || '', file.path) }));
+  const parseUnavailable = registrationAnalyses
+    .filter(analysis => !analysis.result.available)
+    .map(analysis => ({
+      file: analysis.file.path,
+      detail: analysis.result.detail || 'Lua registration analysis unavailable.',
+    }));
+  const registered = registrationAnalyses.flatMap(analysis => analysis.result.events);
   const emitted = luaFiles.flatMap(f => parseLuaUiEmits(f.content || '', f.path));
   const payload = validateIndexedPayloadContract(mdFiles, luaFiles);
   findings.push(...payload.findings);
+  for (const unavailable of parseUnavailable) {
+    findings.push({
+      code: 'validation.lua_ast_unavailable',
+      severity: 'error',
+      file: unavailable.file,
+      detail: unavailable.detail,
+    });
+  }
 
   const registeredEvents = new Set(registered.map(r => r.event));
   const listenedEvents = new Set(listened.map(r => r.event));
@@ -389,8 +474,10 @@ export function validateProjectCrossFile(project: ExtensionProject): ProjectCros
   // (ROADMAP AAR #2: aic_uix.lua `log_<category>` false-positived the exact match).
   const registeredPrefixes = registered.filter(r => r.prefix).map(r => r.event);
   const listenedList = [...listenedEvents];
-  const missingRegisters = raised.filter(r => !registeredEvents.has(r.event)
-    && !registeredPrefixes.some(p => r.event.startsWith(p)));
+  const missingRegisters = parseUnavailable.length > 0
+    ? []
+    : raised.filter(r => !registeredEvents.has(r.event)
+      && !registeredPrefixes.some(p => r.event.startsWith(p)));
   const missingListeners = emitted.filter(r => r.prefix
     ? !listenedList.some(e => e.startsWith(r.event))
     : !listenedEvents.has(r.event));
@@ -504,12 +591,13 @@ export function validateProjectCrossFile(project: ExtensionProject): ProjectCros
       unresolvedCueRefs: cueIndex.unresolved.length,
       mdLuaMissingRegisters: missingRegisters.length,
       luaMdMissingListeners: missingListeners.length,
+      luaRegistrationUnavailable: parseUnavailable.length,
       payloadContractErrors: payload.findings.filter(f => f.severity === 'error').length,
       dependencies: manifest?.deps.length || 0,
     },
     findings,
     cueIndex,
-    mdLua: { raised, registered, emitted, listened, missingRegisters, missingListeners, payload: { reads: payload.reads, writes: payload.writes } },
+    mdLua: { raised, registered, emitted, listened, missingRegisters, missingListeners, parseUnavailable, payload: { reads: payload.reads, writes: payload.writes } },
     deps: { manifest, dependencies: manifest?.deps || [] },
   };
 }
@@ -642,6 +730,82 @@ export function runProjectCrossFileSelftest() {
   const wrapperResult = validateProjectCrossFile(wrappedRegister);
   ok('simple_register_event_wrapper_is_resolved_from_the_ast',
     !wrapperResult.findings.some(f => f.code === 'md_lua.missing_register'), wrapperResult.mdLua.registered);
+
+  const unicodeDirect: ExtensionProject = {
+    ...fixtureProject(),
+    files: fixtureProject().files.map(f => f.path === 'ui/chat.lua' ? {
+      ...f,
+      content: `local prose = "unrelated — prose"
+RegisterEvent("ai_influence.chat", handler)
+AddUITriggeredEvent("ai_influence", "chat.response", {})`,
+    } : f),
+  };
+  const unicodeDirectResult = validateProjectCrossFile(unicodeDirect);
+  ok('unicode_prose_preserves_direct_register',
+    unicodeDirectResult.mdLua.parseUnavailable.length === 0
+      && unicodeDirectResult.mdLua.registered.some(e => e.event === 'ai_influence.chat')
+      && !unicodeDirectResult.findings.some(f => f.code === 'md_lua.missing_register'),
+    unicodeDirectResult);
+
+  const unicodeAliasAndWrapper: ExtensionProject = addFile(fixtureProject(), {
+    path: 'md/unicode.xml',
+    kind: 'md',
+    content: `<mdscript name="Unicode"><cues>
+      <cue name="Alias"><actions><raise_lua_event name="'ai_influence.alias'" /></actions></cue>
+      <cue name="Wrapper"><actions><raise_lua_event name="'ai_influence.wrapper'" /></actions></cue>
+    </cues></mdscript>`,
+  });
+  unicodeAliasAndWrapper.files = unicodeAliasAndWrapper.files.map(f => f.path === 'ui/chat.lua' ? {
+    ...f,
+    content: `local prose = "unrelated — prose"
+local reg = RegisterEvent
+reg("ai_influence.alias", handler)
+local function wrap(event, handler) reg(event, handler) end
+wrap("ai_influence.wrapper", handler)
+RegisterEvent("ai_influence.chat", handler)
+AddUITriggeredEvent("ai_influence", "chat.response", {})`,
+  } : f);
+  const unicodeAliasAndWrapperResult = validateProjectCrossFile(unicodeAliasAndWrapper);
+  ok('unicode_prose_preserves_alias_and_wrapper_registers',
+    unicodeAliasAndWrapperResult.mdLua.parseUnavailable.length === 0
+      && unicodeAliasAndWrapperResult.mdLua.registered.some(e => e.event === 'ai_influence.alias')
+      && unicodeAliasAndWrapperResult.mdLua.registered.some(e => e.event === 'ai_influence.wrapper')
+      && !unicodeAliasAndWrapperResult.findings.some(f => f.code === 'md_lua.missing_register'),
+    unicodeAliasAndWrapperResult);
+
+  const taintedEventLiteral: ExtensionProject = {
+    ...fixtureProject(),
+    files: fixtureProject().files.map(f => f.path === 'ui/chat.lua' ? {
+      ...f,
+      content: `RegisterEvent("ai_influence.chat—", handler)
+AddUITriggeredEvent("ai_influence", "chat.response", {})`,
+    } : f),
+  };
+  const taintedEventResult = validateProjectCrossFile(taintedEventLiteral);
+  ok('unicode_event_literal_is_unavailable_not_sanitized',
+    taintedEventResult.summary.luaRegistrationUnavailable === 1
+      && taintedEventResult.mdLua.parseUnavailable.some(entry => entry.file === 'ui/chat.lua')
+      && taintedEventResult.findings.some(f => f.code === 'validation.lua_ast_unavailable' && f.file === 'ui/chat.lua')
+      && taintedEventResult.mdLua.missingRegisters.length === 0
+      && taintedEventResult.summary.mdLuaMissingRegisters === 0
+      && !taintedEventResult.mdLua.registered.some(e => e.event.includes('?')),
+    taintedEventResult);
+
+  const malformedLua: ExtensionProject = {
+    ...fixtureProject(),
+    files: fixtureProject().files.map(f => f.path === 'ui/chat.lua' ? {
+      ...f,
+      content: 'RegisterEvent("ai_influence.chat", handler',
+    } : f),
+  };
+  const malformedLuaResult = validateProjectCrossFile(malformedLua);
+  ok('malformed_lua_is_unavailable_not_missing_register',
+    malformedLuaResult.summary.luaRegistrationUnavailable === 1
+      && malformedLuaResult.mdLua.parseUnavailable.some(entry => entry.file === 'ui/chat.lua')
+      && malformedLuaResult.findings.some(f => f.code === 'validation.lua_ast_unavailable' && f.file === 'ui/chat.lua')
+      && malformedLuaResult.mdLua.missingRegisters.length === 0
+      && malformedLuaResult.summary.mdLuaMissingRegisters === 0,
+    malformedLuaResult);
 
   const payloadCollision = addFile(addFile(fixtureProject(), {
     path: 'ui/orders.lua', kind: 'lua',

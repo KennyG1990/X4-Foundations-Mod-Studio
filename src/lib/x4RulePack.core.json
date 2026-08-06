@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "packId": "x4.core.diagnostics",
+  "packVersion": "1.0.0",
+  "packSha256": "351cb0199c815df91861205bf0bce85b22ed98f1bb695dcaa9345f5001e2f9c0",
+  "rules": [
+    {
+      "id": "x4.bridge.md_event_register",
+      "version": "1.0.0",
+      "detector": {
+        "id": "diagnostic.code_exact",
+        "codes": [
+          "md_lua.missing_register"
+        ]
+      },
+      "applicability": {},
+      "evidence": {
+        "grade": "engine",
+        "basis": "Project-wide MD and Lua event-contract analysis for X4 RegisterEvent bindings.",
+        "digestSha256": "9a67cbd610d77c8657c03edb51d6066c89c39a5394ee93ddd5cf88e2dd8f265c"
+      },
+      "guidance": {
+        "title": "MD event has no Lua registration",
+        "why": "The project-wide contract scan found an MD-raised event that no project Lua source registers.",
+        "impact": "The intended MD-to-Lua handoff cannot reach a handler.",
+        "next": "Register the exact event in Lua or correct the MD event name so both sides match."
+      }
+    },
+    {
+      "id": "x4.bridge.ui_event_listener",
+      "version": "1.0.0",
+      "detector": {
+        "id": "diagnostic.code_exact",
+        "codes": [
+          "lua_md.missing_listener"
+        ]
+      },
+      "applicability": {},
+      "evidence": {
+        "grade": "engine",
+        "basis": "Project-wide Lua and MD event-contract analysis for X4 UI event listeners.",
+        "digestSha256": "912dc7f1e6c373b977ac46a847f59f9d0b00ea0a33a4cd5055553fd305065ba1"
+      },
+      "guidance": {
+        "title": "Lua UI event has no MD listener",
+        "why": "The project-wide contract scan found a Lua-emitted UI event that no project MD cue listens for.",
+        "impact": "The intended Lua-to-MD handoff cannot trigger its cue.",
+        "next": "Add the matching MD listener or correct the Lua event name so both sides match."
+      }
+    },
+    {
+      "id": "x4.schema.routed_validation",
+      "version": "1.0.0",
+      "detector": {
+        "id": "diagnostic.code_prefix",
+        "prefix": "XSD_"
+      },
+      "applicability": {},
+      "evidence": {
+        "grade": "schema",
+        "basis": "Configured X4 XSD selected by deterministic schema routing.",
+        "digestSha256": "f5786993e68ba1df76e89fba409a300ccd6e948dc84b9e1542e86e789bc0d847"
+      },
+      "guidance": {
+        "title": "Game schema rejected this structure",
+        "why": "The XML element, attribute, value, or placement does not satisfy the routed X4 game schema.",
+        "impact": "X4 may reject the document or ignore the affected structure.",
+        "next": "Align the named element or attribute with the schema diagnostic."
+      }
+    }
+  ]
+}

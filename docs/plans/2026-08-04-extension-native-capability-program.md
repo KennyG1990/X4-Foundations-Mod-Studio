@@ -133,6 +133,25 @@ Date: 2026-08-04
   finalization, compensation, fault-injection, and real-child acceptance remain open. All later program units and
   gates remain open.
 
+- W10's bounded data-only rule/evidence-pack authority and its blocking Lua Unicode registration-analysis repair are
+  now `VERIFIED` as a checkpoint; W10 overall remains `OPEN / PARTIAL`. The rule-pack hash is
+  `351cb0199c815df91861205bf0bce85b22ed98f1bb695dcaa9345f5001e2f9c0`, and it binds existing `XSD_`,
+  `md_lua.missing_register`, and `lua_md.missing_listener` diagnostics without creating a duplicate detector.
+  Project-crossfile selftest is `25/25`; the rule-pack selftest is `32/32`; the real read-only 26-file mod result is
+  Verdict `VALID`, cross-file errors `0`, missing Lua registers `0`, missing MD listeners `0`, project-rules errors
+  `0`, and four unrelated scriptproperty warnings. The pre-repair result was `77` false
+  `md_lua.missing_register` errors from pseudo-latin1 rejection on U+2014 in unrelated prose plus swallowed parse
+  unavailability.
+- W10 supporting evidence is `npm run test:oracles` exit `0` with runtime-index discovery and `131/131` green on the
+  isolated `127.0.0.1:8972` harness, including diagnostic-explain `8/8`; typecheck and build exit `0`; lint is
+  `0` errors / `593` warnings overall with the owned parser subset at `0` errors / `7` warnings; and Graphify is
+  `5,541` nodes / `13,555` edges / `215` communities. A raw oracle sweep invoked without its required server
+  returned `0/130` fetch failures and is recorded only as a harness-invocation AAR, not product evidence.
+- W10 closes only this native data-only authority/availability slice. No guidance/server/UI integration or
+  installed-product proof exists in this checkpoint. The next exact unit is rule provenance in existing Why?
+  guidance/server/selftest/E2E, requiring focused E2E plus packaged/installed/rendered Antigravity proof. Broader
+  rule families, update lifecycle, and W11 remain open.
+
 - Native Sol/Luna routing is restored and independently proven; diagnostic CLI execution was not used as product-
   code implementation evidence.
 - The workspace-create adapter now extends the real `WorkspaceRegistry`, `WorkspaceReceiptService`, W3A store, global
@@ -198,8 +217,10 @@ Date: 2026-08-04
 
 ## CLOSE
 
-- Current status: IN_PROGRESS / PARTIAL. W7's native engine merge-law/schema-routing unit is `VERIFIED` with the
-  exact engine, oracle, route, package, E2E, and installed Antigravity evidence recorded above. Its immediate
+- Current status: IN_PROGRESS / PARTIAL. W7's native engine merge-law/schema-routing unit is `VERIFIED`, and W10's
+  bounded data-only rule/evidence-pack plus Lua Unicode availability checkpoint is also `VERIFIED`, with the exact
+  evidence recorded above. W10 overall remains `OPEN / PARTIAL`. W7's exact engine, oracle, route, package, E2E, and
+  installed Antigravity evidence is recorded above. Its immediate
   checkpoint Git/GitHub parity is closed at pushed commit `1c912cf28bfe62509ba4ece06553949e514555b6`, with `#11`/
   `#18` readback complete. Native routing is proven; W3B1a remains 3/5 and lifecycle 96/96 is verified, while
   snapshot restore, bulk apply, and route-specific receipt, finalization, compensation, fault-injection, and
@@ -267,3 +288,13 @@ Date: 2026-08-04
   plain-object guard. Serial async slices then completed the bounded wrapper at 10/10. A closed broader test worker
   landed a late helper while a successor edited the same tail; independent rerun exposed the settled 3/3 state, and
   one final tail-only worker restored deterministic 4/4 before failure checks extended the suite.
+- Triggered W10 tooling fact: a raw `node scripts/oracle-sweep.mjs` invocation without a server on `localhost:3001`
+  exited `1` with `0/130` fetch-failed rows. This is a harness-invocation failure, not a product finding, and was not
+  relabeled green.
+- Corrected W10 validation: the owning `npm run test:oracles` isolated harness used runtime-index discovery at
+  `127.0.0.1:8972` and returned `131/131` green, including project-crossfile `25/25` and diagnostic-explain `8/8`.
+  Build exited `0`; lint exited `0` with `0` errors / `593` warnings overall and the owned parser subset at `0`
+  errors / `7` warnings; Graphify exited `0` at `5,541` nodes / `13,555` edges / `215` communities.
+- Highest-risk W10 weakness: validator unavailability must never become either a clean result or an empty registration
+  set that manufactures `md_lua.missing_register`; the reproduced cause was pseudo-latin1 rejection on U+2014 plus
+  swallowed parse unavailability, not a `StringLiteral.value`-only defect.
