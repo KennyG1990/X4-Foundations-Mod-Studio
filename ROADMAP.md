@@ -7620,3 +7620,32 @@ validator verdicts, agent-route authorization, or game/mod data. W3 remains `PAR
 checkpoint is the commit containing this entry, subject `fix(extension): retain busy managed sidecar`; its exact hash
 is recorded in the canonical GitHub owner readback after push. No version bump, marketplace publication, deploy, or
 overall-program completion is claimed.
+
+## 2026-08-06 — W3B1a snapshot-restore receipt authority — VERIFIED bounded checkpoint
+
+`POST /api/fs/restore-snapshot` now uses the installed extension sidecar's existing action-receipt transaction,
+addressed workspace registry, paired workspace/snapshot CAS, history projection, and durable recovery owners. The
+source reader accepts only a contained regular `snapshot_<safe-body>.json`, captures exact bytes and logical identity,
+enforces exact open/read/final file identity and length, rejects junction/symlink/path escape, and never persists raw
+snapshot bytes or host paths. The mutation boundary rereads both source and workspace state, prepares recovery before
+the single registry commit, verifies the terminal persisted receipt before 2xx, replays without another commit, and
+records compensation refusal/failure as non-success.
+
+Focused evidence is source `53/53` and adapter `27/27`. The final fresh production bundle route gate is `467/467`,
+exit `0`, including changed/no-change restore, exact replay, changed-source duplicate conflict, both stale CAS halves,
+missing/malformed source, junction escape, canonical receipt/recovery/history projections, redaction, and unchanged
+source/live roots. Containment readback found zero new route processes, zero new `x4-route-int-*` roots, and zero
+listeners on `3000/3001/3100/3101`.
+
+Governance gates were promoted through their exact candidate workflows. Capability authority is `11` capabilities /
+`294` disposed literal routes / one dynamic registrar / `10` MCP aliases. Receipt coverage is `82` routes / `51`
+surfaces at SHA-256 `2387d9db5bad96fa5040afed7d93f7eda90b6dfadf61ef8d64bd6f95ade6c637`; its
+candidate/promotion selftests are `57/57` and policy bundle `18/18`. Durable writers are `14/14` plus extension writer
+`8/8`; typecheck/build pass; focused lint is `0` errors; Graphify is `5,720` nodes / `14,041` edges / `209`
+communities; final precommit is `[precommit] OK` in `484.9s`.
+
+This is W3B1a route `4/5`, not W3B1 or W3 completion. Bulk-transform apply and the official full W3B1a E2E gate
+remain next; W3B1b-d, W3B2-B3, and visible installed receipt/history controls remain open. No user-visible surface,
+version bump, package publication, installed-host claim, mod/game write, or deploy occurred. The implementation
+checkpoint is the commit containing this entry, suggested subject
+`feat(authority): bind snapshot restore to action receipts`.

@@ -1965,6 +1965,951 @@ async function main() {
       }),
     `reopened=${mergeNoChangeReceiptEvidence.ok} outcome=${mergeNoChangeReceipt?.after?.outcome}`);
 
+  // W3B1 snapshot-restore Phase A: one contained changed restore proves the receipt,
+  // recovery, addressed workspace, and source/live-fixture boundaries.
+  const snapshotRestoreModId = 'w3b1_restore_phase_a';
+  const snapshotRestoreName = 'snapshot_w3b1_restore_phase_a.json';
+  const snapshotRestorePath = path.join(safeWorkspace, snapshotRestoreModId, '.snapshots', snapshotRestoreName);
+  const snapshotRestoreRedactionMarker = 'W3B1_RESTORE_RAW_REDACTION_MARKER';
+  const snapshotRestoreTarget = {
+    ...mergeNoChangeReceiptBefore.json?.workspace,
+    id: 'snapshot_restore_phase_a_target',
+    snapshotRestoreRedactionMarker,
+  };
+  const snapshotRestoreEnvelope = {
+    savedAt: '2026-08-06T12:34:56.000Z',
+    name: 'W3B1 Phase A Snapshot Restore',
+    modId: snapshotRestoreModId,
+    workspace: snapshotRestoreTarget,
+  };
+  fs.mkdirSync(path.dirname(snapshotRestorePath), { recursive: true });
+  fs.writeFileSync(snapshotRestorePath, JSON.stringify(snapshotRestoreEnvelope), 'utf8');
+  const snapshotRestoreSourceBytesBefore = fs.readFileSync(snapshotRestorePath);
+  const snapshotRestoreLiveExtensionsBefore = regularTreeHash(liveExtensions);
+  const snapshotRestoreWorkspaceBefore = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const snapshotRestoreReceiptFilesBefore = actionReceiptFiles();
+  const snapshotRestoreRecoveryRoot = path.join(dataDir, 'recoveries');
+  const snapshotRestoreRecoveryState = () => {
+    const files = [];
+    const entries = [];
+    if (!fs.existsSync(snapshotRestoreRecoveryRoot)) return { files, entries };
+    for (const entry of fs.readdirSync(snapshotRestoreRecoveryRoot, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))) {
+      if (!entry.isDirectory()) continue;
+      entries.push(entry.name);
+      const visit = (dir, relativeDir) => {
+        for (const childEntry of fs.readdirSync(dir, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))) {
+          const relative = path.join(relativeDir, childEntry.name);
+          const absolute = path.join(dir, childEntry.name);
+          if (childEntry.isDirectory()) visit(absolute, relative);
+          else if (childEntry.isFile()) files.push(relative.replace(/\\/g, '/'));
+        }
+      };
+      visit(path.join(snapshotRestoreRecoveryRoot, entry.name), entry.name);
+    }
+    return { files: files.sort(), entries };
+  };
+  const snapshotRestoreRecoveryBefore = snapshotRestoreRecoveryState();
+  const snapshotRestoreOperationId = 'forge_op_w3b1_restore_phase_a';
+  const snapshotRestoreRequestBody = {
+    modId: snapshotRestoreModId,
+    snapshotName: snapshotRestoreName,
+    expectedHead: snapshotRestoreWorkspaceBefore.json?.workspaceHash,
+    expectedSnapshotHash: snapshotRestoreWorkspaceBefore.json?.snapshotHash,
+    expectedVersion: snapshotRestoreWorkspaceBefore.json?.version,
+  };
+  const snapshotRestoreAttempt = await req(
+    'POST',
+    '/api/fs/restore-snapshot',
+    SESSION_TOKEN,
+    snapshotRestoreRequestBody,
+    { operationId: snapshotRestoreOperationId },
+  );
+  const snapshotRestoreWorkspaceAfter = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const snapshotRestoreProjection = snapshotRestoreAttempt.json?.receipt;
+  const snapshotRestoreReceiptEvidence = reopenPersistedActionReceipt(snapshotRestoreProjection);
+  const snapshotRestoreReceipt = snapshotRestoreReceiptEvidence.ok ? snapshotRestoreReceiptEvidence.record : undefined;
+  const snapshotRestoreRecoveryAfter = snapshotRestoreRecoveryState();
+  const snapshotRestoreNewRecoveryEntries = snapshotRestoreRecoveryAfter.entries.filter(entry => !snapshotRestoreRecoveryBefore.entries.includes(entry));
+  const snapshotRestoreNewReceiptFiles = actionReceiptFiles().filter(file => !snapshotRestoreReceiptFilesBefore.includes(file));
+  const snapshotRestoreBeforeHashes = workspaceReceiptHashes(snapshotRestoreWorkspaceBefore.json?.workspace);
+  const snapshotRestoreAfterHashes = workspaceReceiptHashes(snapshotRestoreWorkspaceAfter.json?.workspace);
+  const snapshotRestoreBeforeResources = snapshotRestoreReceipt?.authority?.resources || [];
+  const snapshotRestoreAfterResourceList = snapshotRestoreReceipt?.after?.resources || [];
+  const snapshotRestoreBeforeResourceMap = new Map(snapshotRestoreBeforeResources.map(resource => [resource.role, resource]));
+  const snapshotRestoreAfterResources = new Map((snapshotRestoreReceipt?.after?.resources || []).map(resource => [resource.role, resource]));
+  const snapshotRestorePairedResourcesAreCanonical = snapshotRestoreBeforeResources.length === 2
+    && snapshotRestoreAfterResourceList.length === 2
+    && snapshotRestoreBeforeResourceMap.size === 2
+    && snapshotRestoreAfterResources.size === 2
+    && ['workspace', 'snapshot'].every(role => {
+      const relativePath = role === 'workspace' ? `${WORKSPACE_ID}/content` : `${WORKSPACE_ID}/snapshot`;
+      const before = snapshotRestoreBeforeResourceMap.get(role);
+      const after = snapshotRestoreAfterResources.get(role);
+      return before?.root === 'workspace'
+        && before?.relativePath === relativePath
+        && before?.beforeHash === snapshotRestoreBeforeHashes[role]
+        && after?.root === 'workspace'
+        && after?.relativePath === relativePath
+        && after?.hash === snapshotRestoreAfterHashes[role];
+    });
+  const snapshotRestoreRecoveryRecordPath = path.join(snapshotRestoreRecoveryRoot, String(snapshotRestoreProjection?.id || ''), 'record.json');
+  let snapshotRestoreRecoveryRecordRaw = '';
+  try { snapshotRestoreRecoveryRecordRaw = fs.readFileSync(snapshotRestoreRecoveryRecordPath, 'utf8'); } catch { /* response assertions report missing recovery truth */ }
+  const snapshotRestoreSourceText = snapshotRestoreSourceBytesBefore.toString('utf8');
+  const snapshotRestoreEvidenceText = stableStringify({
+    returned: snapshotRestoreAttempt.json,
+    readback: snapshotRestoreWorkspaceAfter.json,
+    projection: snapshotRestoreProjection,
+    persistedReceipt: snapshotRestoreReceiptEvidence.raw,
+    recoveryRecord: snapshotRestoreRecoveryRecordRaw,
+  });
+  const snapshotRestoreForbiddenEvidence = [
+    snapshotRestorePath,
+    snapshotRestorePath.replaceAll('\\', '/'),
+    tmp,
+    tmp.replaceAll('\\', '/'),
+    liveExtensions,
+    liveExtensions.replaceAll('\\', '/'),
+    SESSION_TOKEN,
+    snapshotRestoreSourceText,
+    snapshotRestoreSourceBytesBefore.toString('base64'),
+    snapshotRestoreRedactionMarker,
+  ].filter(Boolean);
+  const snapshotRestoreChangedReceiptDiagnostic = {
+    projectionShape: snapshotRestoreProjection !== undefined
+      && Object.keys(snapshotRestoreProjection).sort().join(',') === 'hash,id,status'
+      && snapshotRestoreProjection.status === 'committed',
+    receiptReopen: snapshotRestoreReceiptEvidence.ok
+      && snapshotRestoreReceiptEvidence.canonical === true
+      && snapshotRestoreReceiptEvidence.computedHash === snapshotRestoreReceipt?.hash
+      && snapshotRestoreReceiptEvidence.projectionMatches === true,
+    actor: snapshotRestoreReceipt?.actor?.kind === 'human' && snapshotRestoreReceipt?.actor?.id === 'studio',
+    client: snapshotRestoreReceipt?.client?.channel === 'studio'
+      && snapshotRestoreReceipt?.client?.id === CLIENT_ID
+      && snapshotRestoreReceipt?.client?.version === '2026-07-30.agent.v4',
+    capability: snapshotRestoreReceipt?.capability?.legacyRoute === '/api/fs/restore-snapshot'
+      && snapshotRestoreReceipt?.capability?.method === 'POST'
+      && snapshotRestoreReceipt?.capability?.reviewed === true
+      && typeof snapshotRestoreReceipt?.capability?.reviewRef === 'string',
+    metadata: stableStringify(snapshotRestoreReceipt?.metadata) === stableStringify({
+      operation: 'restore', route: 'POST /api/fs/restore-snapshot', mode: 'restore',
+    }),
+    authority: snapshotRestoreReceipt?.authority?.scope === 'workspace'
+      && snapshotRestoreReceipt?.authority?.workspaceId === WORKSPACE_ID,
+    pairedResources: snapshotRestorePairedResourcesAreCanonical,
+    inputHashes: /^[a-f0-9]{64}$/.test(String(snapshotRestoreReceipt?.input?.requestHash || ''))
+      && /^[a-f0-9]{64}$/.test(String(snapshotRestoreReceipt?.input?.beforeHash || '')),
+    effect: snapshotRestoreReceipt?.effects?.declared?.length === 1
+      && snapshotRestoreReceipt?.effects?.declared?.[0]?.id === 'workspace-write'
+      && snapshotRestoreReceipt?.effects?.declared?.[0]?.operation === 'restore'
+      && snapshotRestoreReceipt?.effects?.declared?.[0]?.resource?.role === 'workspace'
+      && snapshotRestoreReceipt?.effects?.declared?.[0]?.reversible === true,
+    rollback: snapshotRestoreReceipt?.rollback?.required === true
+      && snapshotRestoreReceipt?.rollback?.mode === 'recovery'
+      && snapshotRestoreReceipt?.rollback?.reference === snapshotRestoreProjection?.id,
+    outcomeAndOperation: snapshotRestoreReceipt?.after?.outcome === 'applied'
+      && snapshotRestoreReceipt?.authority?.operationId === snapshotRestoreOperationId,
+    responseHashes: snapshotRestoreAttempt.json?.workspaceHash === snapshotRestoreWorkspaceAfter.json?.workspaceHash
+      && snapshotRestoreAttempt.json?.snapshotHash === snapshotRestoreWorkspaceAfter.json?.snapshotHash
+      && snapshotRestoreAfterResources.get('workspace')?.hash === snapshotRestoreAfterHashes.workspace
+      && snapshotRestoreAfterResources.get('snapshot')?.hash === snapshotRestoreAfterHashes.snapshot,
+    receiptInventory: snapshotRestoreNewReceiptFiles.length === 1
+      && snapshotRestoreNewReceiptFiles[0] === `${snapshotRestoreProjection?.id}.json`,
+    recoveryProjectionShapeAndHashes: snapshotRestoreAttempt.json?.recovery !== undefined
+      && Object.keys(snapshotRestoreAttempt.json.recovery).sort().join(',') === 'createdAt,expectedCurrentHash,expectedCurrentSnapshotHash,expiresAt,id,kind,summary'
+      && snapshotRestoreAttempt.json.recovery.id === snapshotRestoreProjection?.id
+      && snapshotRestoreAttempt.json.recovery.kind === 'workspace'
+      && /^[a-f0-9]{64}$/.test(String(snapshotRestoreAttempt.json.recovery.expectedCurrentHash || ''))
+      && /^[a-f0-9]{64}$/.test(String(snapshotRestoreAttempt.json.recovery.expectedCurrentSnapshotHash || '')),
+    recoveryRetention: snapshotRestoreNewRecoveryEntries.length === 1
+      && snapshotRestoreNewRecoveryEntries[0] === snapshotRestoreProjection?.id
+      && snapshotRestoreRecoveryAfter.entries.includes(snapshotRestoreProjection?.id)
+      && snapshotRestoreRecoveryAfter.entries
+        .filter(entry => entry !== snapshotRestoreProjection?.id)
+        .every(entry => snapshotRestoreRecoveryBefore.entries.includes(entry))
+      && snapshotRestoreRecoveryBefore.entries
+        .filter(entry => !snapshotRestoreRecoveryAfter.entries.includes(entry)).length <= 1
+      && snapshotRestoreRecoveryAfter.entries.length === snapshotRestoreRecoveryAfter.entries
+        .filter(entry => entry !== snapshotRestoreProjection?.id && snapshotRestoreRecoveryBefore.entries.includes(entry)).length + 1,
+    redaction: snapshotRestoreForbiddenEvidence.every(needle => !snapshotRestoreEvidenceText.includes(needle)),
+    evidenceHits: snapshotRestoreForbiddenEvidence
+      .map((needle, index) => snapshotRestoreEvidenceText.includes(needle) ? index : null)
+      .filter(index => index !== null),
+    beforeResourceRoles: snapshotRestoreBeforeResources.map(resource => resource.role),
+    afterResourceRoles: snapshotRestoreAfterResourceList.map(resource => resource.role),
+  };
+  ok('workspace_snapshot_restore_changed_commits_one_version_and_preserves_addressed_id',
+    snapshotRestoreAttempt.status === 200
+      && snapshotRestoreAttempt.json?.success === true
+      && snapshotRestoreAttempt.json?.status === 'SUCCESS'
+      && snapshotRestoreAttempt.json?.applied === true
+      && snapshotRestoreAttempt.json?.replayed === false
+      && Number.isSafeInteger(snapshotRestoreWorkspaceBefore.json?.version)
+      && Number.isSafeInteger(snapshotRestoreAttempt.json?.version)
+      && snapshotRestoreAttempt.json.version > snapshotRestoreWorkspaceBefore.json.version
+      && snapshotRestoreAttempt.json?.workspaceId === WORKSPACE_ID
+      && snapshotRestoreAttempt.json?.workspace?.id === snapshotRestoreTarget.id
+      && snapshotRestoreAttempt.json?.workspace?.description === snapshotRestoreTarget.description
+      && Number.isSafeInteger(snapshotRestoreWorkspaceAfter.json?.version)
+      && snapshotRestoreWorkspaceAfter.json.version === snapshotRestoreAttempt.json.version
+      && snapshotRestoreWorkspaceAfter.json?.workspaceId === WORKSPACE_ID
+      && snapshotRestoreWorkspaceAfter.json?.workspace?.id === snapshotRestoreTarget.id
+      && snapshotRestoreWorkspaceAfter.json?.workspace?.description === snapshotRestoreTarget.description,
+    `status=${snapshotRestoreAttempt.status} version=${snapshotRestoreAttempt.json?.version}`);
+  ok('workspace_snapshot_restore_changed_receipt_and_recovery_are_canonical',
+     snapshotRestoreChangedReceiptDiagnostic.projectionShape
+       && snapshotRestoreChangedReceiptDiagnostic.receiptReopen
+       && snapshotRestoreChangedReceiptDiagnostic.actor
+       && snapshotRestoreChangedReceiptDiagnostic.client
+       && snapshotRestoreChangedReceiptDiagnostic.capability
+       && snapshotRestoreChangedReceiptDiagnostic.metadata
+       && snapshotRestoreChangedReceiptDiagnostic.authority
+       && snapshotRestoreChangedReceiptDiagnostic.pairedResources
+       && snapshotRestoreChangedReceiptDiagnostic.inputHashes
+       && snapshotRestoreChangedReceiptDiagnostic.effect
+       && snapshotRestoreChangedReceiptDiagnostic.rollback
+       && snapshotRestoreChangedReceiptDiagnostic.outcomeAndOperation
+       && snapshotRestoreChangedReceiptDiagnostic.responseHashes
+       && snapshotRestoreChangedReceiptDiagnostic.receiptInventory
+       && snapshotRestoreChangedReceiptDiagnostic.recoveryProjectionShapeAndHashes
+       && snapshotRestoreChangedReceiptDiagnostic.recoveryRetention
+       && snapshotRestoreChangedReceiptDiagnostic.redaction,
+     `receipt=${snapshotRestoreProjection?.status} recovery=${snapshotRestoreAttempt.json?.recovery?.kind} diagnostic=${JSON.stringify(snapshotRestoreChangedReceiptDiagnostic)}`);
+  ok('workspace_snapshot_restore_source_and_live_fixture_are_unchanged',
+    Buffer.compare(fs.readFileSync(snapshotRestorePath), snapshotRestoreSourceBytesBefore) === 0
+      && regularTreeHash(liveExtensions) === snapshotRestoreLiveExtensionsBefore
+      && snapshotRestoreRecoveryAfter.files.length >= snapshotRestoreRecoveryBefore.files.length
+      && snapshotRestoreRecoveryAfter.files.every(file => file.startsWith(`${snapshotRestoreProjection?.id || 'missing'}/`) || snapshotRestoreRecoveryBefore.files.includes(file)),
+    `sourceBytes=${snapshotRestoreSourceBytesBefore.length} live=${snapshotRestoreLiveExtensionsBefore}`);
+  const snapshotRestoreHistory = await req('GET', '/api/agent/history?kind=snapshot', SESSION_TOKEN);
+  const snapshotRestoreHistoryRow = (snapshotRestoreHistory.json?.rows || [])
+    .find(row => row.receiptId === snapshotRestoreProjection?.id);
+  const snapshotRestoreHistoryRowText = snapshotRestoreHistoryRow === undefined
+    ? ''
+    : stableStringify(snapshotRestoreHistoryRow);
+  const snapshotRestoreHistoryRecovery = snapshotRestoreAttempt.json?.recovery;
+  ok('workspace_snapshot_restore_history_projects_receipt_and_recovery',
+    snapshotRestoreHistory.status === 200
+      && snapshotRestoreHistoryRow?.kind === 'snapshot'
+      && snapshotRestoreHistoryRow?.workspaceId === WORKSPACE_ID
+      && snapshotRestoreHistoryRow?.clientId === CLIENT_ID
+      && snapshotRestoreHistoryRow?.receiptId === snapshotRestoreProjection?.id
+      && snapshotRestoreHistoryRow?.receiptHash === snapshotRestoreProjection?.hash
+      && snapshotRestoreHistoryRow?.receiptStatus === snapshotRestoreProjection?.status
+      && snapshotRestoreHistoryRecovery !== undefined
+      && snapshotRestoreHistoryRow?.recoveryId === snapshotRestoreHistoryRecovery.id
+      && snapshotRestoreHistoryRow?.recoveryKind === snapshotRestoreHistoryRecovery.kind
+      && snapshotRestoreHistoryRow?.recoveryExpectedHash === snapshotRestoreHistoryRecovery.expectedCurrentHash
+      && snapshotRestoreHistoryRow?.recoveryExpectedSnapshotHash === snapshotRestoreHistoryRecovery.expectedCurrentSnapshotHash
+      && snapshotRestoreHistoryRow?.recoveryExpiresAt === snapshotRestoreHistoryRecovery.expiresAt
+      && snapshotRestoreForbiddenEvidence.every(needle => !snapshotRestoreHistoryRowText.includes(needle)),
+    `status=${snapshotRestoreHistory.status} receipt=${snapshotRestoreHistoryRow?.receiptId || 'missing'}`);
+  const snapshotRestoreReplayStateBefore = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const snapshotRestoreReplayReceiptFilesBefore = actionReceiptFiles();
+  const snapshotRestoreReplayRecoveryBefore = snapshotRestoreRecoveryState();
+  const snapshotRestoreReplaySourceBytesBefore = fs.readFileSync(snapshotRestorePath);
+  const snapshotRestoreReplayLiveExtensionsBefore = regularTreeHash(liveExtensions);
+  const snapshotRestoreReplay = await req(
+    'POST',
+    '/api/fs/restore-snapshot',
+    SESSION_TOKEN,
+    snapshotRestoreRequestBody,
+    { operationId: snapshotRestoreOperationId },
+  );
+  const snapshotRestoreReplayStateAfter = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const snapshotRestoreReplayReceiptFilesAfter = actionReceiptFiles();
+  const snapshotRestoreReplayRecoveryAfter = snapshotRestoreRecoveryState();
+  const snapshotRestoreReplayMatchesState = response => Number.isSafeInteger(response?.json?.version)
+    && response.json.version === snapshotRestoreReplayStateBefore.json?.version
+    && response.json.workspaceId === snapshotRestoreReplayStateBefore.json?.workspaceId
+    && stableStringify(response.json.workspace) === stableStringify(snapshotRestoreReplayStateBefore.json?.workspace)
+    && response.json.workspaceHash === snapshotRestoreReplayStateBefore.json?.workspaceHash
+    && response.json.snapshotHash === snapshotRestoreReplayStateBefore.json?.snapshotHash;
+  ok('workspace_snapshot_restore_changed_exact_replay_is_stable',
+    snapshotRestoreReplay.status === 200
+      && snapshotRestoreReplay.json?.success === true
+      && snapshotRestoreReplay.json?.status === 'SUCCESS'
+      && snapshotRestoreReplay.json?.replayed === true
+      && snapshotRestoreReplay.json?.applied === false
+      && Object.keys(snapshotRestoreReplay.json?.receipt || {}).sort().join(',') === 'hash,id,status'
+      && stableStringify(snapshotRestoreReplay.json?.receipt) === stableStringify(snapshotRestoreProjection)
+      && stableStringify(snapshotRestoreReplay.json?.recovery) === stableStringify(snapshotRestoreHistoryRecovery)
+      && snapshotRestoreReplayMatchesState(snapshotRestoreReplay)
+      && snapshotRestoreReplayMatchesState(snapshotRestoreReplayStateAfter)
+      && workspaceStateFingerprint(snapshotRestoreReplayStateAfter) === workspaceStateFingerprint(snapshotRestoreReplayStateBefore)
+      && stableStringify(snapshotRestoreReplayReceiptFilesAfter) === stableStringify(snapshotRestoreReplayReceiptFilesBefore)
+      && stableStringify(snapshotRestoreReplayRecoveryAfter) === stableStringify(snapshotRestoreReplayRecoveryBefore)
+      && Buffer.compare(fs.readFileSync(snapshotRestorePath), snapshotRestoreReplaySourceBytesBefore) === 0
+      && Buffer.compare(snapshotRestoreReplaySourceBytesBefore, snapshotRestoreSourceBytesBefore) === 0
+      && regularTreeHash(liveExtensions) === snapshotRestoreReplayLiveExtensionsBefore
+      && snapshotRestoreReplayLiveExtensionsBefore === snapshotRestoreLiveExtensionsBefore,
+    `status=${snapshotRestoreReplay.status} replayed=${snapshotRestoreReplay.json?.replayed}`);
+  const snapshotRestoreNoChangeName = 'snapshot_w3b1_restore_phase_a_no_change.json';
+  const snapshotRestoreNoChangePath = path.join(safeWorkspace, snapshotRestoreModId, '.snapshots', snapshotRestoreNoChangeName);
+  const snapshotRestoreNoChangeWorkspaceBefore = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const snapshotRestoreNoChangeEnvelope = {
+    savedAt: '2026-08-06T12:34:57.000Z',
+    name: 'W3B1 Phase A Snapshot Restore No Change',
+    modId: snapshotRestoreModId,
+    workspace: snapshotRestoreNoChangeWorkspaceBefore.json?.workspace,
+  };
+  fs.mkdirSync(path.dirname(snapshotRestoreNoChangePath), { recursive: true });
+  fs.writeFileSync(snapshotRestoreNoChangePath, JSON.stringify(snapshotRestoreNoChangeEnvelope), 'utf8');
+  const snapshotRestoreNoChangeSourceBytesBefore = fs.readFileSync(snapshotRestoreNoChangePath);
+  const snapshotRestoreNoChangeLiveExtensionsBefore = regularTreeHash(liveExtensions);
+  const snapshotRestoreNoChangeReceiptFilesBefore = actionReceiptFiles();
+  const snapshotRestoreNoChangeRecoveryBefore = snapshotRestoreRecoveryState();
+  const snapshotRestoreNoChangeOperationId = 'forge_op_w3b1_restore_phase_a_no_change';
+  const snapshotRestoreNoChangeRequestBody = {
+    modId: snapshotRestoreModId,
+    snapshotName: snapshotRestoreNoChangeName,
+    expectedHead: snapshotRestoreNoChangeWorkspaceBefore.json?.workspaceHash,
+    expectedSnapshotHash: snapshotRestoreNoChangeWorkspaceBefore.json?.snapshotHash,
+    expectedVersion: snapshotRestoreNoChangeWorkspaceBefore.json?.version,
+  };
+  const snapshotRestoreNoChangeAttempt = await req(
+    'POST',
+    '/api/fs/restore-snapshot',
+    SESSION_TOKEN,
+    snapshotRestoreNoChangeRequestBody,
+    { operationId: snapshotRestoreNoChangeOperationId },
+  );
+  const snapshotRestoreNoChangeWorkspaceAfter = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const snapshotRestoreNoChangeProjection = snapshotRestoreNoChangeAttempt.json?.receipt;
+  const snapshotRestoreNoChangeReceiptEvidence = reopenPersistedActionReceipt(snapshotRestoreNoChangeProjection);
+  const snapshotRestoreNoChangeReceipt = snapshotRestoreNoChangeReceiptEvidence.ok
+    ? snapshotRestoreNoChangeReceiptEvidence.record
+    : undefined;
+  const snapshotRestoreNoChangeRecoveryAfter = snapshotRestoreRecoveryState();
+  const snapshotRestoreNoChangeNewReceiptFiles = actionReceiptFiles()
+    .filter(file => !snapshotRestoreNoChangeReceiptFilesBefore.includes(file));
+  const snapshotRestoreNoChangeBeforeHashes = workspaceReceiptHashes(snapshotRestoreNoChangeWorkspaceBefore.json?.workspace);
+  const snapshotRestoreNoChangeAfterHashes = workspaceReceiptHashes(snapshotRestoreNoChangeWorkspaceAfter.json?.workspace);
+  const snapshotRestoreNoChangeBeforeResources = snapshotRestoreNoChangeReceipt?.authority?.resources || [];
+  const snapshotRestoreNoChangeAfterResourceList = snapshotRestoreNoChangeReceipt?.after?.resources || [];
+  const snapshotRestoreNoChangeBeforeResourceMap = new Map(snapshotRestoreNoChangeBeforeResources.map(resource => [resource.role, resource]));
+  const snapshotRestoreNoChangeAfterResources = new Map(snapshotRestoreNoChangeAfterResourceList.map(resource => [resource.role, resource]));
+  const snapshotRestoreNoChangePairedResourcesAreCanonical = snapshotRestoreNoChangeBeforeResources.length === 2
+    && snapshotRestoreNoChangeAfterResourceList.length === 2
+    && snapshotRestoreNoChangeBeforeResourceMap.size === 2
+    && snapshotRestoreNoChangeAfterResources.size === 2
+    && ['workspace', 'snapshot'].every(role => {
+      const relativePath = role === 'workspace' ? `${WORKSPACE_ID}/content` : `${WORKSPACE_ID}/snapshot`;
+      const before = snapshotRestoreNoChangeBeforeResourceMap.get(role);
+      const after = snapshotRestoreNoChangeAfterResources.get(role);
+      return before?.root === 'workspace'
+        && before?.relativePath === relativePath
+        && before?.beforeHash === snapshotRestoreNoChangeBeforeHashes[role]
+        && after?.root === 'workspace'
+        && after?.relativePath === relativePath
+        && after?.hash === snapshotRestoreNoChangeAfterHashes[role]
+        && after?.hash === before?.beforeHash;
+    });
+  const snapshotRestoreNoChangeMatchesState = response => Number.isSafeInteger(response?.json?.version)
+    && response.json.version === snapshotRestoreNoChangeWorkspaceBefore.json?.version
+    && response.json.workspaceId === snapshotRestoreNoChangeWorkspaceBefore.json?.workspaceId
+    && stableStringify(response.json.workspace) === stableStringify(snapshotRestoreNoChangeWorkspaceBefore.json?.workspace)
+    && response.json.workspaceHash === snapshotRestoreNoChangeWorkspaceBefore.json?.workspaceHash
+    && response.json.snapshotHash === snapshotRestoreNoChangeWorkspaceBefore.json?.snapshotHash;
+  ok('workspace_snapshot_restore_no_change_does_not_advance_state',
+    snapshotRestoreNoChangeAttempt.status === 200
+      && snapshotRestoreNoChangeAttempt.json?.success === true
+      && snapshotRestoreNoChangeAttempt.json?.status === 'SUCCESS'
+      && snapshotRestoreNoChangeAttempt.json?.applied === false
+      && snapshotRestoreNoChangeAttempt.json?.replayed === false
+      && !Object.hasOwn(snapshotRestoreNoChangeAttempt.json || {}, 'recovery')
+      && snapshotRestoreNoChangeMatchesState(snapshotRestoreNoChangeAttempt)
+      && snapshotRestoreNoChangeMatchesState(snapshotRestoreNoChangeWorkspaceAfter)
+      && workspaceStateFingerprint(snapshotRestoreNoChangeWorkspaceAfter) === workspaceStateFingerprint(snapshotRestoreNoChangeWorkspaceBefore)
+      && snapshotRestoreNoChangeNewReceiptFiles.length === 1
+      && snapshotRestoreNoChangeNewReceiptFiles[0] === `${snapshotRestoreNoChangeProjection?.id}.json`
+      && stableStringify(snapshotRestoreNoChangeRecoveryAfter) === stableStringify(snapshotRestoreNoChangeRecoveryBefore)
+      && Buffer.compare(fs.readFileSync(snapshotRestoreNoChangePath), snapshotRestoreNoChangeSourceBytesBefore) === 0
+      && Buffer.compare(fs.readFileSync(snapshotRestorePath), snapshotRestoreSourceBytesBefore) === 0
+      && regularTreeHash(liveExtensions) === snapshotRestoreNoChangeLiveExtensionsBefore
+      && snapshotRestoreNoChangeLiveExtensionsBefore === snapshotRestoreLiveExtensionsBefore,
+    `status=${snapshotRestoreNoChangeAttempt.status} applied=${snapshotRestoreNoChangeAttempt.json?.applied}`);
+  ok('workspace_snapshot_restore_no_change_receipt_is_canonical',
+    snapshotRestoreNoChangeProjection !== undefined
+      && Object.keys(snapshotRestoreNoChangeProjection).sort().join(',') === 'hash,id,status'
+      && snapshotRestoreNoChangeProjection.status === 'committed'
+      && snapshotRestoreNoChangeReceiptEvidence.ok
+      && snapshotRestoreNoChangeReceiptEvidence.canonical === true
+      && snapshotRestoreNoChangeReceiptEvidence.computedHash === snapshotRestoreNoChangeReceipt?.hash
+      && snapshotRestoreNoChangeReceiptEvidence.projectionMatches === true
+      && snapshotRestoreNoChangeReceipt?.schema === 'forge.action-receipt.v1'
+      && snapshotRestoreNoChangeReceipt?.status === 'committed'
+      && snapshotRestoreNoChangeReceipt?.actor?.kind === 'human'
+      && snapshotRestoreNoChangeReceipt?.actor?.id === 'studio'
+      && snapshotRestoreNoChangeReceipt?.client?.channel === 'studio'
+      && snapshotRestoreNoChangeReceipt?.client?.id === CLIENT_ID
+      && snapshotRestoreNoChangeReceipt?.client?.version === '2026-07-30.agent.v4'
+      && snapshotRestoreNoChangeReceipt?.capability?.legacyRoute === '/api/fs/restore-snapshot'
+      && snapshotRestoreNoChangeReceipt?.capability?.method === 'POST'
+      && snapshotRestoreNoChangeReceipt?.capability?.reviewed === true
+      && typeof snapshotRestoreNoChangeReceipt?.capability?.reviewRef === 'string'
+      && stableStringify(snapshotRestoreNoChangeReceipt?.metadata) === stableStringify({
+        operation: 'restore',
+        route: 'POST /api/fs/restore-snapshot',
+        mode: 'restore',
+      })
+      && snapshotRestoreNoChangeReceipt?.authority?.scope === 'workspace'
+      && snapshotRestoreNoChangeReceipt?.authority?.workspaceId === WORKSPACE_ID
+      && snapshotRestoreNoChangeReceipt?.authority?.operationId === snapshotRestoreNoChangeOperationId
+      && snapshotRestoreNoChangeReceipt?.authority?.requestScope === `workspace-${WORKSPACE_ID}`
+      && snapshotRestoreNoChangePairedResourcesAreCanonical
+      && snapshotRestoreNoChangeReceipt?.after?.outcome === 'no_change'
+      && snapshotRestoreNoChangeReceipt?.effects?.declared?.length === 1
+      && snapshotRestoreNoChangeReceipt?.effects?.declared?.[0]?.id === 'workspace-write'
+      && snapshotRestoreNoChangeReceipt?.effects?.declared?.[0]?.operation === 'restore'
+      && snapshotRestoreNoChangeReceipt?.effects?.declared?.[0]?.reversible === false
+      && snapshotRestoreNoChangeReceipt?.rollback?.required === false
+      && snapshotRestoreNoChangeReceipt?.rollback?.mode === 'none'
+      && snapshotRestoreNoChangeReceipt?.rollback?.reference === undefined,
+    `receipt=${snapshotRestoreNoChangeProjection?.status} outcome=${snapshotRestoreNoChangeReceipt?.after?.outcome}`);
+  const snapshotRestoreNoChangeReplayStateBefore = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const snapshotRestoreNoChangeReplayReceiptFilesBefore = actionReceiptFiles();
+  const snapshotRestoreNoChangeReplayRecoveryBefore = snapshotRestoreRecoveryState();
+  const snapshotRestoreNoChangeReplaySourceBytesBefore = fs.readFileSync(snapshotRestoreNoChangePath);
+  const snapshotRestoreNoChangeReplayLiveExtensionsBefore = regularTreeHash(liveExtensions);
+  const snapshotRestoreNoChangeReplay = await req(
+    'POST',
+    '/api/fs/restore-snapshot',
+    SESSION_TOKEN,
+    snapshotRestoreNoChangeRequestBody,
+    { operationId: snapshotRestoreNoChangeOperationId },
+  );
+  const snapshotRestoreNoChangeReplayStateAfter = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const snapshotRestoreNoChangeReplayReceiptFilesAfter = actionReceiptFiles();
+  const snapshotRestoreNoChangeReplayRecoveryAfter = snapshotRestoreRecoveryState();
+  const snapshotRestoreNoChangeReplayMatchesState = response => Number.isSafeInteger(response?.json?.version)
+    && response.json.version === snapshotRestoreNoChangeReplayStateBefore.json?.version
+    && response.json.workspaceId === snapshotRestoreNoChangeReplayStateBefore.json?.workspaceId
+    && stableStringify(response.json.workspace) === stableStringify(snapshotRestoreNoChangeReplayStateBefore.json?.workspace)
+    && response.json.workspaceHash === snapshotRestoreNoChangeReplayStateBefore.json?.workspaceHash
+    && response.json.snapshotHash === snapshotRestoreNoChangeReplayStateBefore.json?.snapshotHash;
+  ok('workspace_snapshot_restore_no_change_exact_replay_is_stable',
+    snapshotRestoreNoChangeReplay.status === 200
+      && snapshotRestoreNoChangeReplay.json?.success === true
+      && snapshotRestoreNoChangeReplay.json?.status === 'SUCCESS'
+      && snapshotRestoreNoChangeReplay.json?.replayed === true
+      && snapshotRestoreNoChangeReplay.json?.applied === false
+      && Object.keys(snapshotRestoreNoChangeReplay.json?.receipt || {}).sort().join(',') === 'hash,id,status'
+      && stableStringify(snapshotRestoreNoChangeReplay.json?.receipt) === stableStringify(snapshotRestoreNoChangeProjection)
+      && !Object.hasOwn(snapshotRestoreNoChangeReplay.json || {}, 'recovery')
+      && snapshotRestoreNoChangeReplayMatchesState(snapshotRestoreNoChangeReplay)
+      && snapshotRestoreNoChangeReplayMatchesState(snapshotRestoreNoChangeReplayStateAfter)
+      && workspaceStateFingerprint(snapshotRestoreNoChangeReplayStateAfter) === workspaceStateFingerprint(snapshotRestoreNoChangeReplayStateBefore)
+      && stableStringify(snapshotRestoreNoChangeReplayReceiptFilesAfter) === stableStringify(snapshotRestoreNoChangeReplayReceiptFilesBefore)
+      && stableStringify(snapshotRestoreNoChangeReplayRecoveryAfter) === stableStringify(snapshotRestoreNoChangeReplayRecoveryBefore)
+      && Buffer.compare(fs.readFileSync(snapshotRestoreNoChangePath), snapshotRestoreNoChangeReplaySourceBytesBefore) === 0
+      && Buffer.compare(snapshotRestoreNoChangeReplaySourceBytesBefore, snapshotRestoreNoChangeSourceBytesBefore) === 0
+      && Buffer.compare(fs.readFileSync(snapshotRestorePath), snapshotRestoreSourceBytesBefore) === 0
+      && regularTreeHash(liveExtensions) === snapshotRestoreNoChangeReplayLiveExtensionsBefore
+      && snapshotRestoreNoChangeReplayLiveExtensionsBefore === snapshotRestoreLiveExtensionsBefore,
+    `status=${snapshotRestoreNoChangeReplay.status} replayed=${snapshotRestoreNoChangeReplay.json?.replayed}`);
+  const snapshotRestoreIsolationFingerprint = async () => {
+    const currentWorkspace = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+    const changedSourceBytes = fs.readFileSync(snapshotRestorePath);
+    const noChangeSourceBytes = fs.readFileSync(snapshotRestoreNoChangePath);
+    return {
+      workspace: workspaceStateFingerprint(currentWorkspace),
+      receipts: actionReceiptFiles(),
+      recoveries: snapshotRestoreRecoveryState(),
+      sources: {
+        changed: {
+          bytes: changedSourceBytes.toString('base64'),
+          hash: crypto.createHash('sha256').update(changedSourceBytes).digest('hex'),
+        },
+        noChange: {
+          bytes: noChangeSourceBytes.toString('base64'),
+          hash: crypto.createHash('sha256').update(noChangeSourceBytes).digest('hex'),
+        },
+      },
+      liveExtensions: regularTreeHash(liveExtensions),
+    };
+  };
+  const snapshotRestoreIsolationForbiddenEvidence = [
+    ...snapshotRestoreForbiddenEvidence,
+    snapshotRestoreNoChangePath,
+    snapshotRestoreNoChangePath.replaceAll('\\', '/'),
+    snapshotRestoreNoChangeSourceBytesBefore.toString('utf8'),
+    snapshotRestoreNoChangeSourceBytesBefore.toString('base64'),
+  ].filter(Boolean);
+  const snapshotRestoreMissingOperationBefore = await snapshotRestoreIsolationFingerprint();
+  const snapshotRestoreMissingOperation = await req(
+    'POST',
+    '/api/fs/restore-snapshot',
+    SESSION_TOKEN,
+    snapshotRestoreRequestBody,
+    { operationId: null },
+  );
+  const snapshotRestoreMissingOperationAfter = await snapshotRestoreIsolationFingerprint();
+  const snapshotRestoreMissingOperationEvidence = `${snapshotRestoreMissingOperation.raw || ''}\n${stableStringify(snapshotRestoreMissingOperation.json)}`;
+  ok('workspace_snapshot_restore_missing_operation_id_is_rejected_without_mutation',
+    snapshotRestoreMissingOperation.status === 400
+      && snapshotRestoreMissingOperation.json?.success === false
+      && snapshotRestoreMissingOperation.json?.status === 'FAILED'
+      && snapshotRestoreMissingOperation.json?.code === 'ACTION_RECEIPT_OPERATION_ID_INVALID'
+      && snapshotRestoreMissingOperation.json?.error === 'Workspace snapshot restore failed.'
+      && stableStringify(snapshotRestoreMissingOperationAfter) === stableStringify(snapshotRestoreMissingOperationBefore)
+      && snapshotRestoreIsolationForbiddenEvidence.every(needle => !snapshotRestoreMissingOperationEvidence.includes(needle)),
+    `status=${snapshotRestoreMissingOperation.status} code=${snapshotRestoreMissingOperation.json?.code}`);
+  const snapshotRestoreMalformedOperationBefore = await snapshotRestoreIsolationFingerprint();
+  const snapshotRestoreMalformedOperation = await req(
+    'POST',
+    '/api/fs/restore-snapshot',
+    SESSION_TOKEN,
+    snapshotRestoreRequestBody,
+    { operationId: 'bad operation id' },
+  );
+  const snapshotRestoreMalformedOperationAfter = await snapshotRestoreIsolationFingerprint();
+  const snapshotRestoreMalformedOperationEvidence = `${snapshotRestoreMalformedOperation.raw || ''}\n${stableStringify(snapshotRestoreMalformedOperation.json)}`;
+  ok('workspace_snapshot_restore_malformed_operation_id_is_rejected_without_mutation',
+    snapshotRestoreMalformedOperation.status === 400
+      && snapshotRestoreMalformedOperation.json?.success === false
+      && snapshotRestoreMalformedOperation.json?.status === 'FAILED'
+      && snapshotRestoreMalformedOperation.json?.code === 'ACTION_RECEIPT_OPERATION_ID_INVALID'
+      && snapshotRestoreMalformedOperation.json?.error === 'Workspace snapshot restore failed.'
+      && stableStringify(snapshotRestoreMalformedOperationAfter) === stableStringify(snapshotRestoreMalformedOperationBefore)
+      && snapshotRestoreIsolationForbiddenEvidence.every(needle => !snapshotRestoreMalformedOperationEvidence.includes(needle)),
+    `status=${snapshotRestoreMalformedOperation.status} code=${snapshotRestoreMalformedOperation.json?.code}`);
+  const snapshotRestoreSchema = await req('GET', '/api/agent/schema', null);
+  const snapshotRestoreSchemaRoute = (snapshotRestoreSchema.json?.endpoints || [])
+    .find(route => route.method === 'POST' && route.path === '/api/fs/restore-snapshot');
+  ok('workspace_snapshot_restore_schema_documents_operation_and_cas_contract',
+    snapshotRestoreSchema.status === 200
+      && snapshotRestoreSchemaRoute?.method === 'POST'
+      && snapshotRestoreSchemaRoute?.path === '/api/fs/restore-snapshot'
+      && typeof snapshotRestoreSchemaRoute?.headers?.['x-forge-operation-id'] === 'string'
+      && /\brequired\b/i.test(snapshotRestoreSchemaRoute.headers['x-forge-operation-id'])
+      && typeof snapshotRestoreSchemaRoute?.body?.expectedHead === 'string'
+      && typeof snapshotRestoreSchemaRoute?.body?.expectedSnapshotHash === 'string'
+      && typeof snapshotRestoreSchemaRoute?.body?.expectedVersion === 'string'
+      && /\brequired\b/i.test(snapshotRestoreSchemaRoute.body.expectedHead)
+      && /\brequired\b/i.test(snapshotRestoreSchemaRoute.body.expectedSnapshotHash)
+      && /\boptional\b/i.test(snapshotRestoreSchemaRoute.body.expectedVersion),
+    `status=${snapshotRestoreSchema.status} route=${snapshotRestoreSchemaRoute?.path || 'missing'}`);
+  const snapshotRestoreDuplicateChangedMarker = 'W3B1_RESTORE_CHANGED_RAW_REDACTION_MARKER';
+  const snapshotRestoreDuplicateEnvelope = {
+    savedAt: '2026-08-06T12:34:58.000Z',
+    name: 'W3B1 Phase A Changed Source',
+    modId: snapshotRestoreModId,
+    workspace: {
+      ...snapshotRestoreTarget,
+      id: 'snapshot_restore_phase_a_duplicate_target',
+      snapshotRestoreRedactionMarker: snapshotRestoreDuplicateChangedMarker,
+    },
+  };
+  const snapshotRestoreDuplicateSourceBytes = Buffer.from(JSON.stringify(snapshotRestoreDuplicateEnvelope), 'utf8');
+  const snapshotRestoreDuplicateOriginalSourceBytes = fs.readFileSync(snapshotRestorePath);
+  const snapshotRestoreDuplicateBefore = await snapshotRestoreIsolationFingerprint();
+  let snapshotRestoreDuplicateAttempt;
+  try {
+    fs.writeFileSync(snapshotRestorePath, snapshotRestoreDuplicateSourceBytes);
+    snapshotRestoreDuplicateAttempt = await req(
+      'POST',
+      '/api/fs/restore-snapshot',
+      SESSION_TOKEN,
+      snapshotRestoreRequestBody,
+      { operationId: snapshotRestoreOperationId },
+    );
+  } finally {
+    fs.writeFileSync(snapshotRestorePath, snapshotRestoreDuplicateOriginalSourceBytes);
+  }
+  const snapshotRestoreDuplicateAfter = await snapshotRestoreIsolationFingerprint();
+  const snapshotRestoreDuplicateEvidence = `${snapshotRestoreDuplicateAttempt?.raw || ''}\n${stableStringify(snapshotRestoreDuplicateAttempt?.json)}`;
+  const snapshotRestoreDuplicateForbiddenEvidence = [
+    ...snapshotRestoreIsolationForbiddenEvidence,
+    snapshotRestoreDuplicateChangedMarker,
+    snapshotRestoreDuplicateSourceBytes.toString('utf8'),
+    snapshotRestoreDuplicateSourceBytes.toString('base64'),
+  ].filter(Boolean);
+  ok('workspace_snapshot_restore_changed_source_duplicate_operation_is_rejected_without_mutation',
+    snapshotRestoreDuplicateAttempt?.status === 409
+      && snapshotRestoreDuplicateAttempt.json?.success === false
+      && snapshotRestoreDuplicateAttempt.json?.status === 'FAILED'
+      && snapshotRestoreDuplicateAttempt.json?.code === 'ACTION_RECEIPT_DUPLICATE_CONFLICT'
+      && snapshotRestoreDuplicateAttempt.json?.replayed === false
+      && snapshotRestoreDuplicateAttempt.json?.error === 'Workspace snapshot restore failed.'
+      && !Object.hasOwn(snapshotRestoreDuplicateAttempt.json || {}, 'receipt')
+      && !Object.hasOwn(snapshotRestoreDuplicateAttempt.json || {}, 'recovery')
+      && stableStringify(snapshotRestoreDuplicateAfter) === stableStringify(snapshotRestoreDuplicateBefore)
+      && Buffer.compare(fs.readFileSync(snapshotRestorePath), snapshotRestoreDuplicateOriginalSourceBytes) === 0
+      && snapshotRestoreDuplicateForbiddenEvidence.every(needle => !snapshotRestoreDuplicateEvidence.includes(needle)),
+    `status=${snapshotRestoreDuplicateAttempt?.status} code=${snapshotRestoreDuplicateAttempt?.json?.code}`);
+  const snapshotRestoreStaleHeadCurrent = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const snapshotRestoreStaleHeadValue = snapshotRestoreStaleHeadCurrent.json?.workspaceHash === '0000000000000000'
+    ? '1111111111111111'
+    : '0000000000000000';
+  const snapshotRestoreStaleHeadRequestBody = {
+    modId: snapshotRestoreModId,
+    snapshotName: snapshotRestoreNoChangeName,
+    expectedHead: snapshotRestoreStaleHeadValue,
+    expectedSnapshotHash: snapshotRestoreStaleHeadCurrent.json?.snapshotHash,
+    expectedVersion: snapshotRestoreStaleHeadCurrent.json?.version,
+  };
+  const snapshotRestoreIsolationWithoutReceipts = fingerprint => stableStringify({
+    workspace: fingerprint.workspace,
+    recoveries: fingerprint.recoveries,
+    sources: fingerprint.sources,
+    liveExtensions: fingerprint.liveExtensions,
+  });
+  const snapshotRestoreStaleHeadBefore = await snapshotRestoreIsolationFingerprint();
+  const snapshotRestoreStaleHeadAttempt = await req(
+    'POST',
+    '/api/fs/restore-snapshot',
+    SESSION_TOKEN,
+    snapshotRestoreStaleHeadRequestBody,
+    { operationId: 'forge_op_w3b1_restore_phase_a_stale_head' },
+  );
+  const snapshotRestoreStaleHeadAfter = await snapshotRestoreIsolationFingerprint();
+  const snapshotRestoreStaleHeadProjection = snapshotRestoreStaleHeadAttempt.json?.receipt;
+  const snapshotRestoreStaleHeadReceiptEvidence = reopenPersistedActionReceipt(snapshotRestoreStaleHeadProjection);
+  const snapshotRestoreStaleHeadReceipt = snapshotRestoreStaleHeadReceiptEvidence.ok
+    ? snapshotRestoreStaleHeadReceiptEvidence.record
+    : undefined;
+  const snapshotRestoreStaleHeadNewReceiptFiles = snapshotRestoreStaleHeadAfter.receipts
+    .filter(file => !snapshotRestoreStaleHeadBefore.receipts.includes(file));
+  const snapshotRestoreStaleHeadEvidence = `${snapshotRestoreStaleHeadAttempt.raw || ''}\n${stableStringify(snapshotRestoreStaleHeadAttempt.json)}\n${snapshotRestoreStaleHeadReceiptEvidence.raw || ''}`;
+  ok('workspace_snapshot_restore_stale_head_is_rejected_without_mutation',
+    snapshotRestoreStaleHeadAttempt.status === 409
+      && snapshotRestoreStaleHeadAttempt.json?.success === false
+      && snapshotRestoreStaleHeadAttempt.json?.status === 'FAILED'
+      && snapshotRestoreStaleHeadAttempt.json?.code === 'WORKSPACE_SNAPSHOT_EXPECTED_HEAD_STALE'
+      && snapshotRestoreStaleHeadAttempt.json?.replayed === false
+      && snapshotRestoreStaleHeadAttempt.json?.error === 'Workspace snapshot restore failed.'
+      && Object.keys(snapshotRestoreStaleHeadProjection || {}).sort().join(',') === 'hash,id,status'
+      && snapshotRestoreStaleHeadProjection?.status === 'failed'
+      && snapshotRestoreStaleHeadReceiptEvidence.ok
+      && snapshotRestoreStaleHeadReceiptEvidence.canonical === true
+      && snapshotRestoreStaleHeadReceiptEvidence.computedHash === snapshotRestoreStaleHeadReceipt?.hash
+      && snapshotRestoreStaleHeadReceiptEvidence.projectionMatches === true
+      && snapshotRestoreStaleHeadReceipt?.schema === 'forge.action-receipt.v1'
+      && snapshotRestoreStaleHeadReceipt?.status === 'failed'
+      && snapshotRestoreStaleHeadReceipt?.validation?.status === 'failed'
+      && snapshotRestoreStaleHeadReceipt?.actor?.kind === 'human'
+      && snapshotRestoreStaleHeadReceipt?.actor?.id === 'studio'
+      && snapshotRestoreStaleHeadReceipt?.client?.channel === 'studio'
+      && snapshotRestoreStaleHeadReceipt?.client?.id === CLIENT_ID
+      && snapshotRestoreStaleHeadReceipt?.client?.version === '2026-07-30.agent.v4'
+      && snapshotRestoreStaleHeadReceipt?.capability?.legacyRoute === '/api/fs/restore-snapshot'
+      && snapshotRestoreStaleHeadReceipt?.capability?.method === 'POST'
+      && snapshotRestoreStaleHeadReceipt?.metadata?.operation === 'restore'
+      && snapshotRestoreStaleHeadReceipt?.metadata?.route === 'POST /api/fs/restore-snapshot'
+      && snapshotRestoreStaleHeadReceipt?.metadata?.mode === 'restore'
+      && snapshotRestoreStaleHeadReceipt?.authority?.scope === 'workspace'
+      && snapshotRestoreStaleHeadReceipt?.authority?.workspaceId === WORKSPACE_ID
+      && snapshotRestoreStaleHeadReceipt?.authority?.operationId === 'forge_op_w3b1_restore_phase_a_stale_head'
+      && snapshotRestoreStaleHeadReceipt?.authority?.requestScope === `workspace-${WORKSPACE_ID}`
+      && snapshotRestoreStaleHeadNewReceiptFiles.length === 1
+      && snapshotRestoreStaleHeadNewReceiptFiles[0] === `${snapshotRestoreStaleHeadProjection?.id}.json`
+      && !Object.hasOwn(snapshotRestoreStaleHeadAttempt.json || {}, 'recovery')
+      && stableStringify(snapshotRestoreStaleHeadAfter.recoveries) === stableStringify(snapshotRestoreStaleHeadBefore.recoveries)
+      && snapshotRestoreIsolationWithoutReceipts(snapshotRestoreStaleHeadAfter) === snapshotRestoreIsolationWithoutReceipts(snapshotRestoreStaleHeadBefore)
+      && snapshotRestoreIsolationForbiddenEvidence.every(needle => !snapshotRestoreStaleHeadEvidence.includes(needle)),
+    `status=${snapshotRestoreStaleHeadAttempt.status} code=${snapshotRestoreStaleHeadAttempt.json?.code} receipt=${snapshotRestoreStaleHeadProjection?.status}`);
+  const snapshotRestoreStaleSnapshotCurrent = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const snapshotRestoreStaleSnapshotValue = snapshotRestoreStaleSnapshotCurrent.json?.snapshotHash === '0000000000000000'
+    ? '1111111111111111'
+    : '0000000000000000';
+  const snapshotRestoreStaleSnapshotRequestBody = {
+    modId: snapshotRestoreModId,
+    snapshotName: snapshotRestoreNoChangeName,
+    expectedHead: snapshotRestoreStaleSnapshotCurrent.json?.workspaceHash,
+    expectedSnapshotHash: snapshotRestoreStaleSnapshotValue,
+    expectedVersion: snapshotRestoreStaleSnapshotCurrent.json?.version,
+  };
+  const snapshotRestoreStaleSnapshotBefore = await snapshotRestoreIsolationFingerprint();
+  const snapshotRestoreStaleSnapshotAttempt = await req(
+    'POST',
+    '/api/fs/restore-snapshot',
+    SESSION_TOKEN,
+    snapshotRestoreStaleSnapshotRequestBody,
+    { operationId: 'forge_op_w3b1_restore_phase_a_stale_snapshot' },
+  );
+  const snapshotRestoreStaleSnapshotAfter = await snapshotRestoreIsolationFingerprint();
+  const snapshotRestoreStaleSnapshotProjection = snapshotRestoreStaleSnapshotAttempt.json?.receipt;
+  const snapshotRestoreStaleSnapshotReceiptEvidence = reopenPersistedActionReceipt(snapshotRestoreStaleSnapshotProjection);
+  const snapshotRestoreStaleSnapshotReceipt = snapshotRestoreStaleSnapshotReceiptEvidence.ok
+    ? snapshotRestoreStaleSnapshotReceiptEvidence.record
+    : undefined;
+  const snapshotRestoreStaleSnapshotNewReceiptFiles = snapshotRestoreStaleSnapshotAfter.receipts
+    .filter(file => !snapshotRestoreStaleSnapshotBefore.receipts.includes(file));
+  const snapshotRestoreStaleSnapshotEvidence = `${snapshotRestoreStaleSnapshotAttempt.raw || ''}\n${stableStringify(snapshotRestoreStaleSnapshotAttempt.json)}\n${snapshotRestoreStaleSnapshotReceiptEvidence.raw || ''}`;
+  ok('workspace_snapshot_restore_stale_snapshot_is_rejected_without_mutation',
+    snapshotRestoreStaleSnapshotAttempt.status === 409
+      && snapshotRestoreStaleSnapshotAttempt.json?.success === false
+      && snapshotRestoreStaleSnapshotAttempt.json?.status === 'FAILED'
+      && snapshotRestoreStaleSnapshotAttempt.json?.code === 'WORKSPACE_SNAPSHOT_EXPECTED_SNAPSHOT_HASH_STALE'
+      && snapshotRestoreStaleSnapshotAttempt.json?.replayed === false
+      && snapshotRestoreStaleSnapshotAttempt.json?.error === 'Workspace snapshot restore failed.'
+      && Object.keys(snapshotRestoreStaleSnapshotProjection || {}).sort().join(',') === 'hash,id,status'
+      && snapshotRestoreStaleSnapshotProjection?.status === 'failed'
+      && snapshotRestoreStaleSnapshotReceiptEvidence.ok
+      && snapshotRestoreStaleSnapshotReceiptEvidence.canonical === true
+      && snapshotRestoreStaleSnapshotReceiptEvidence.computedHash === snapshotRestoreStaleSnapshotReceipt?.hash
+      && snapshotRestoreStaleSnapshotReceiptEvidence.projectionMatches === true
+      && snapshotRestoreStaleSnapshotReceipt?.schema === 'forge.action-receipt.v1'
+      && snapshotRestoreStaleSnapshotReceipt?.status === 'failed'
+      && snapshotRestoreStaleSnapshotReceipt?.validation?.status === 'failed'
+      && snapshotRestoreStaleSnapshotReceipt?.actor?.kind === 'human'
+      && snapshotRestoreStaleSnapshotReceipt?.actor?.id === 'studio'
+      && snapshotRestoreStaleSnapshotReceipt?.client?.channel === 'studio'
+      && snapshotRestoreStaleSnapshotReceipt?.client?.id === CLIENT_ID
+      && snapshotRestoreStaleSnapshotReceipt?.client?.version === '2026-07-30.agent.v4'
+      && snapshotRestoreStaleSnapshotReceipt?.capability?.legacyRoute === '/api/fs/restore-snapshot'
+      && snapshotRestoreStaleSnapshotReceipt?.capability?.method === 'POST'
+      && snapshotRestoreStaleSnapshotReceipt?.metadata?.operation === 'restore'
+      && snapshotRestoreStaleSnapshotReceipt?.metadata?.route === 'POST /api/fs/restore-snapshot'
+      && snapshotRestoreStaleSnapshotReceipt?.metadata?.mode === 'restore'
+      && snapshotRestoreStaleSnapshotReceipt?.authority?.scope === 'workspace'
+      && snapshotRestoreStaleSnapshotReceipt?.authority?.workspaceId === WORKSPACE_ID
+      && snapshotRestoreStaleSnapshotReceipt?.authority?.operationId === 'forge_op_w3b1_restore_phase_a_stale_snapshot'
+      && snapshotRestoreStaleSnapshotReceipt?.authority?.requestScope === `workspace-${WORKSPACE_ID}`
+      && snapshotRestoreStaleSnapshotNewReceiptFiles.length === 1
+      && snapshotRestoreStaleSnapshotNewReceiptFiles[0] === `${snapshotRestoreStaleSnapshotProjection?.id}.json`
+      && snapshotRestoreStaleHeadProjection?.id !== snapshotRestoreStaleSnapshotProjection?.id
+      && !Object.hasOwn(snapshotRestoreStaleSnapshotAttempt.json || {}, 'recovery')
+      && stableStringify(snapshotRestoreStaleSnapshotAfter.recoveries) === stableStringify(snapshotRestoreStaleSnapshotBefore.recoveries)
+      && snapshotRestoreIsolationWithoutReceipts(snapshotRestoreStaleSnapshotAfter) === snapshotRestoreIsolationWithoutReceipts(snapshotRestoreStaleSnapshotBefore)
+      && snapshotRestoreIsolationForbiddenEvidence.every(needle => !snapshotRestoreStaleSnapshotEvidence.includes(needle)),
+    `status=${snapshotRestoreStaleSnapshotAttempt.status} code=${snapshotRestoreStaleSnapshotAttempt.json?.code} receipt=${snapshotRestoreStaleSnapshotProjection?.status}`);
+  const snapshotRestoreMissingSnapshotName = 'snapshot_w3b1_restore_phase_a_missing.json';
+  const snapshotRestoreMissingSnapshotCurrent = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const snapshotRestoreMissingSnapshotRequestBody = {
+    modId: snapshotRestoreModId,
+    snapshotName: snapshotRestoreMissingSnapshotName,
+    expectedHead: snapshotRestoreMissingSnapshotCurrent.json?.workspaceHash,
+    expectedSnapshotHash: snapshotRestoreMissingSnapshotCurrent.json?.snapshotHash,
+    expectedVersion: snapshotRestoreMissingSnapshotCurrent.json?.version,
+  };
+  const snapshotRestoreMissingSnapshotPath = path.join(safeWorkspace, snapshotRestoreModId, '.snapshots', snapshotRestoreMissingSnapshotName);
+  const snapshotRestoreMissingSnapshotBefore = await snapshotRestoreIsolationFingerprint();
+  const snapshotRestoreMissingSnapshotAttempt = await req(
+    'POST',
+    '/api/fs/restore-snapshot',
+    SESSION_TOKEN,
+    snapshotRestoreMissingSnapshotRequestBody,
+    { operationId: 'forge_op_w3b1_restore_phase_a_missing_snapshot' },
+  );
+  const snapshotRestoreMissingSnapshotAfter = await snapshotRestoreIsolationFingerprint();
+  const snapshotRestoreMissingSnapshotEvidence = `${snapshotRestoreMissingSnapshotAttempt.raw || ''}\n${stableStringify(snapshotRestoreMissingSnapshotAttempt.json)}`;
+  const snapshotRestoreMissingSnapshotForbiddenEvidence = [
+    ...snapshotRestoreIsolationForbiddenEvidence,
+    snapshotRestoreMissingSnapshotPath,
+    snapshotRestoreMissingSnapshotPath.replaceAll('\\', '/'),
+  ].filter(Boolean);
+  ok('workspace_snapshot_restore_missing_snapshot_is_rejected_without_mutation',
+    snapshotRestoreMissingSnapshotAttempt.status === 404
+      && snapshotRestoreMissingSnapshotAttempt.json?.success === false
+      && snapshotRestoreMissingSnapshotAttempt.json?.status === 'FAILED'
+      && snapshotRestoreMissingSnapshotAttempt.json?.code === 'WORKSPACE_SNAPSHOT_NOT_FOUND'
+      && snapshotRestoreMissingSnapshotAttempt.json?.replayed === false
+      && snapshotRestoreMissingSnapshotAttempt.json?.error === 'Workspace snapshot restore failed.'
+      && !Object.hasOwn(snapshotRestoreMissingSnapshotAttempt.json || {}, 'receipt')
+      && !Object.hasOwn(snapshotRestoreMissingSnapshotAttempt.json || {}, 'recovery')
+      && stableStringify(snapshotRestoreMissingSnapshotAfter) === stableStringify(snapshotRestoreMissingSnapshotBefore)
+      && !fs.existsSync(snapshotRestoreMissingSnapshotPath)
+      && snapshotRestoreMissingSnapshotForbiddenEvidence.every(needle => !snapshotRestoreMissingSnapshotEvidence.includes(needle)),
+    `status=${snapshotRestoreMissingSnapshotAttempt.status} code=${snapshotRestoreMissingSnapshotAttempt.json?.code}`);
+  const snapshotRestoreMalformedJsonName = 'snapshot_w3b1_restore_phase_a_malformed_json.json';
+  const snapshotRestoreMalformedJsonPath = path.join(safeWorkspace, snapshotRestoreModId, '.snapshots', snapshotRestoreMalformedJsonName);
+  const snapshotRestoreMalformedJsonMarker = 'W3B1_RESTORE_MALFORMED_JSON_RAW_MARKER';
+  const snapshotRestoreMalformedJsonBytes = Buffer.from(`{"rawMarker":"${snapshotRestoreMalformedJsonMarker}",`, 'utf8');
+  const snapshotRestoreMalformedJsonCurrent = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const snapshotRestoreMalformedJsonRequestBody = {
+    modId: snapshotRestoreModId,
+    snapshotName: snapshotRestoreMalformedJsonName,
+    expectedHead: snapshotRestoreMalformedJsonCurrent.json?.workspaceHash,
+    expectedSnapshotHash: snapshotRestoreMalformedJsonCurrent.json?.snapshotHash,
+    expectedVersion: snapshotRestoreMalformedJsonCurrent.json?.version,
+  };
+  let snapshotRestoreMalformedJsonBefore;
+  let snapshotRestoreMalformedJsonAttempt;
+  try {
+    fs.writeFileSync(snapshotRestoreMalformedJsonPath, snapshotRestoreMalformedJsonBytes);
+    snapshotRestoreMalformedJsonBefore = await snapshotRestoreIsolationFingerprint();
+    snapshotRestoreMalformedJsonAttempt = await req(
+      'POST',
+      '/api/fs/restore-snapshot',
+      SESSION_TOKEN,
+      snapshotRestoreMalformedJsonRequestBody,
+      { operationId: 'forge_op_w3b1_restore_phase_a_malformed_json' },
+    );
+  } finally {
+    fs.rmSync(snapshotRestoreMalformedJsonPath, { force: true });
+  }
+  const snapshotRestoreMalformedJsonAfter = await snapshotRestoreIsolationFingerprint();
+  const snapshotRestoreMalformedJsonEvidence = `${snapshotRestoreMalformedJsonAttempt?.raw || ''}\n${stableStringify(snapshotRestoreMalformedJsonAttempt?.json)}`;
+  const snapshotRestoreMalformedJsonForbiddenEvidence = [
+    ...snapshotRestoreIsolationForbiddenEvidence,
+    snapshotRestoreMalformedJsonPath,
+    snapshotRestoreMalformedJsonPath.replaceAll('\\', '/'),
+    snapshotRestoreMalformedJsonMarker,
+    snapshotRestoreMalformedJsonBytes.toString('utf8'),
+    snapshotRestoreMalformedJsonBytes.toString('base64'),
+  ].filter(Boolean);
+  ok('workspace_snapshot_restore_malformed_json_is_rejected_without_mutation',
+    snapshotRestoreMalformedJsonAttempt?.status === 400
+      && snapshotRestoreMalformedJsonAttempt.json?.success === false
+      && snapshotRestoreMalformedJsonAttempt.json?.status === 'FAILED'
+      && snapshotRestoreMalformedJsonAttempt.json?.code === 'WORKSPACE_SNAPSHOT_JSON_INVALID'
+      && snapshotRestoreMalformedJsonAttempt.json?.replayed === false
+      && snapshotRestoreMalformedJsonAttempt.json?.error === 'Workspace snapshot restore failed.'
+      && !Object.hasOwn(snapshotRestoreMalformedJsonAttempt.json || {}, 'receipt')
+      && !Object.hasOwn(snapshotRestoreMalformedJsonAttempt.json || {}, 'recovery')
+      && stableStringify(snapshotRestoreMalformedJsonAfter) === stableStringify(snapshotRestoreMalformedJsonBefore)
+      && !fs.existsSync(snapshotRestoreMalformedJsonPath)
+      && snapshotRestoreMalformedJsonForbiddenEvidence.every(needle => !snapshotRestoreMalformedJsonEvidence.includes(needle)),
+    `status=${snapshotRestoreMalformedJsonAttempt?.status} code=${snapshotRestoreMalformedJsonAttempt?.json?.code}`);
+  const snapshotRestoreInvalidEnvelopeName = 'snapshot_w3b1_restore_phase_a_invalid_envelope.json';
+  const snapshotRestoreInvalidEnvelopePath = path.join(safeWorkspace, snapshotRestoreModId, '.snapshots', snapshotRestoreInvalidEnvelopeName);
+  const snapshotRestoreInvalidEnvelopeMarker = 'W3B1_RESTORE_INVALID_ENVELOPE_RAW_MARKER';
+  const snapshotRestoreInvalidEnvelopeBytes = Buffer.from(JSON.stringify({
+    savedAt: '2026-08-06T12:34:59.000Z',
+    name: 'W3B1 Phase A Invalid Envelope',
+    modId: snapshotRestoreModId,
+    workspace: snapshotRestoreTarget,
+    rawMarker: snapshotRestoreInvalidEnvelopeMarker,
+  }), 'utf8');
+  const snapshotRestoreInvalidEnvelopeCurrent = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const snapshotRestoreInvalidEnvelopeRequestBody = {
+    modId: snapshotRestoreModId,
+    snapshotName: snapshotRestoreInvalidEnvelopeName,
+    expectedHead: snapshotRestoreInvalidEnvelopeCurrent.json?.workspaceHash,
+    expectedSnapshotHash: snapshotRestoreInvalidEnvelopeCurrent.json?.snapshotHash,
+    expectedVersion: snapshotRestoreInvalidEnvelopeCurrent.json?.version,
+  };
+  let snapshotRestoreInvalidEnvelopeBefore;
+  let snapshotRestoreInvalidEnvelopeAttempt;
+  try {
+    fs.writeFileSync(snapshotRestoreInvalidEnvelopePath, snapshotRestoreInvalidEnvelopeBytes);
+    snapshotRestoreInvalidEnvelopeBefore = await snapshotRestoreIsolationFingerprint();
+    snapshotRestoreInvalidEnvelopeAttempt = await req(
+      'POST',
+      '/api/fs/restore-snapshot',
+      SESSION_TOKEN,
+      snapshotRestoreInvalidEnvelopeRequestBody,
+      { operationId: 'forge_op_w3b1_restore_phase_a_invalid_envelope' },
+    );
+  } finally {
+    fs.rmSync(snapshotRestoreInvalidEnvelopePath, { force: true });
+  }
+  const snapshotRestoreInvalidEnvelopeAfter = await snapshotRestoreIsolationFingerprint();
+  const snapshotRestoreInvalidEnvelopeEvidence = `${snapshotRestoreInvalidEnvelopeAttempt?.raw || ''}\n${stableStringify(snapshotRestoreInvalidEnvelopeAttempt?.json)}`;
+  const snapshotRestoreInvalidEnvelopeForbiddenEvidence = [
+    ...snapshotRestoreIsolationForbiddenEvidence,
+    snapshotRestoreInvalidEnvelopePath,
+    snapshotRestoreInvalidEnvelopePath.replaceAll('\\', '/'),
+    snapshotRestoreInvalidEnvelopeMarker,
+    snapshotRestoreInvalidEnvelopeBytes.toString('utf8'),
+    snapshotRestoreInvalidEnvelopeBytes.toString('base64'),
+  ].filter(Boolean);
+  ok('workspace_snapshot_restore_invalid_envelope_is_rejected_without_mutation',
+    snapshotRestoreInvalidEnvelopeAttempt?.status === 400
+      && snapshotRestoreInvalidEnvelopeAttempt.json?.success === false
+      && snapshotRestoreInvalidEnvelopeAttempt.json?.status === 'FAILED'
+      && snapshotRestoreInvalidEnvelopeAttempt.json?.code === 'WORKSPACE_SNAPSHOT_ENVELOPE_INVALID'
+      && snapshotRestoreInvalidEnvelopeAttempt.json?.replayed === false
+      && snapshotRestoreInvalidEnvelopeAttempt.json?.error === 'Workspace snapshot restore failed.'
+      && !Object.hasOwn(snapshotRestoreInvalidEnvelopeAttempt.json || {}, 'receipt')
+      && !Object.hasOwn(snapshotRestoreInvalidEnvelopeAttempt.json || {}, 'recovery')
+      && stableStringify(snapshotRestoreInvalidEnvelopeAfter) === stableStringify(snapshotRestoreInvalidEnvelopeBefore)
+      && !fs.existsSync(snapshotRestoreInvalidEnvelopePath)
+      && snapshotRestoreInvalidEnvelopeForbiddenEvidence.every(needle => !snapshotRestoreInvalidEnvelopeEvidence.includes(needle)),
+    `status=${snapshotRestoreInvalidEnvelopeAttempt?.status} code=${snapshotRestoreInvalidEnvelopeAttempt?.json?.code}`);
+
+  const snapshotRestoreJunctionModId = 'w3b1_restore_phase_a_junction';
+  const snapshotRestoreJunctionName = 'snapshot_w3b1_restore_phase_a_junction.json';
+  const snapshotRestoreJunctionOutsideRoot = path.join(tmp, 'snapshot-restore-junction-outside');
+  const snapshotRestoreJunctionOutsideModPath = path.join(snapshotRestoreJunctionOutsideRoot, snapshotRestoreJunctionModId);
+  const snapshotRestoreJunctionOutsideSnapshotDir = path.join(snapshotRestoreJunctionOutsideModPath, '.snapshots');
+  const snapshotRestoreJunctionOutsideSnapshotPath = path.join(snapshotRestoreJunctionOutsideSnapshotDir, snapshotRestoreJunctionName);
+  const snapshotRestoreJunctionPath = path.join(safeWorkspace, snapshotRestoreJunctionModId);
+  const snapshotRestoreJunctionMarker = 'W3B1_RESTORE_JUNCTION_RAW_MARKER';
+  const snapshotRestoreJunctionEnvelope = {
+    savedAt: '2026-08-06T12:35:00.000Z',
+    name: 'W3B1 Phase A Junction Source',
+    modId: snapshotRestoreJunctionModId,
+    workspace: {
+      ...snapshotRestoreTarget,
+      id: 'snapshot_restore_phase_a_junction_target',
+      snapshotRestoreRedactionMarker: snapshotRestoreJunctionMarker,
+    },
+  };
+  const snapshotRestoreJunctionSourceBytes = Buffer.from(JSON.stringify(snapshotRestoreJunctionEnvelope), 'utf8');
+  const snapshotRestoreJunctionCurrent = await req('GET', '/api/agent/workspace', SESSION_TOKEN);
+  const snapshotRestoreJunctionRequestBody = {
+    modId: snapshotRestoreJunctionModId,
+    snapshotName: snapshotRestoreJunctionName,
+    expectedHead: snapshotRestoreJunctionCurrent.json?.workspaceHash,
+    expectedSnapshotHash: snapshotRestoreJunctionCurrent.json?.snapshotHash,
+    expectedVersion: snapshotRestoreJunctionCurrent.json?.version,
+  };
+  fs.mkdirSync(snapshotRestoreJunctionOutsideSnapshotDir, { recursive: true });
+  fs.writeFileSync(snapshotRestoreJunctionOutsideSnapshotPath, snapshotRestoreJunctionSourceBytes);
+  fs.symlinkSync(
+    snapshotRestoreJunctionOutsideModPath,
+    snapshotRestoreJunctionPath,
+    process.platform === 'win32' ? 'junction' : 'dir',
+  );
+  const snapshotRestoreJunctionBefore = await snapshotRestoreIsolationFingerprint();
+  let snapshotRestoreJunctionAttempt;
+  try {
+    snapshotRestoreJunctionAttempt = await req(
+      'POST',
+      '/api/fs/restore-snapshot',
+      SESSION_TOKEN,
+      snapshotRestoreJunctionRequestBody,
+      { operationId: 'forge_op_w3b1_restore_phase_a_path_unsafe' },
+    );
+  } finally {
+    try {
+      fs.unlinkSync(snapshotRestoreJunctionPath);
+    } catch {}
+  }
+  const snapshotRestoreJunctionAfter = await snapshotRestoreIsolationFingerprint();
+  const snapshotRestoreJunctionEvidence = `${snapshotRestoreJunctionAttempt?.raw || ''}\n${stableStringify(snapshotRestoreJunctionAttempt?.json)}`;
+  const snapshotRestoreJunctionForbiddenEvidence = [
+    ...snapshotRestoreIsolationForbiddenEvidence,
+    snapshotRestoreJunctionPath,
+    snapshotRestoreJunctionPath.replaceAll('\\', '/'),
+    snapshotRestoreJunctionOutsideRoot,
+    snapshotRestoreJunctionOutsideRoot.replaceAll('\\', '/'),
+    snapshotRestoreJunctionOutsideModPath,
+    snapshotRestoreJunctionOutsideModPath.replaceAll('\\', '/'),
+    snapshotRestoreJunctionOutsideSnapshotPath,
+    snapshotRestoreJunctionOutsideSnapshotPath.replaceAll('\\', '/'),
+    snapshotRestoreJunctionMarker,
+    snapshotRestoreJunctionSourceBytes.toString('utf8'),
+    snapshotRestoreJunctionSourceBytes.toString('base64'),
+  ].filter(Boolean);
+  const snapshotRestoreJunctionEvidenceHits = snapshotRestoreJunctionForbiddenEvidence.filter((needle) => snapshotRestoreJunctionEvidence.includes(needle));
+  const snapshotRestoreJunctionOutsideSourceBytesAfter = fs.readFileSync(snapshotRestoreJunctionOutsideSnapshotPath);
+  ok('workspace_snapshot_restore_junction_path_is_rejected_without_mutation',
+    snapshotRestoreJunctionAttempt?.status === 403
+      && snapshotRestoreJunctionAttempt.json?.success === false
+      && snapshotRestoreJunctionAttempt.json?.status === 'FAILED'
+      && snapshotRestoreJunctionAttempt.json?.code === 'WORKSPACE_SNAPSHOT_PATH_UNSAFE'
+      && snapshotRestoreJunctionAttempt.json?.replayed === false
+      && snapshotRestoreJunctionAttempt.json?.error === 'Workspace snapshot restore failed.'
+      && !Object.hasOwn(snapshotRestoreJunctionAttempt.json || {}, 'receipt')
+      && !Object.hasOwn(snapshotRestoreJunctionAttempt.json || {}, 'recovery')
+      && stableStringify(snapshotRestoreJunctionAfter) === stableStringify(snapshotRestoreJunctionBefore)
+      && !fs.existsSync(snapshotRestoreJunctionPath)
+      && Buffer.compare(snapshotRestoreJunctionOutsideSourceBytesAfter, snapshotRestoreJunctionSourceBytes) === 0
+      && snapshotRestoreJunctionEvidenceHits.length === 0,
+    `snapshot restore junction-path isolation: ${stableStringify({
+      status: snapshotRestoreJunctionAttempt?.status,
+      code: snapshotRestoreJunctionAttempt?.json?.code,
+      success: snapshotRestoreJunctionAttempt?.json?.success,
+      stateUnchanged: stableStringify(snapshotRestoreJunctionAfter) === stableStringify(snapshotRestoreJunctionBefore),
+      junctionRemoved: !fs.existsSync(snapshotRestoreJunctionPath),
+      outsideUnchanged: Buffer.compare(snapshotRestoreJunctionOutsideSourceBytesAfter, snapshotRestoreJunctionSourceBytes) === 0,
+      evidenceHits: snapshotRestoreJunctionEvidenceHits,
+    })}`);
+
   // R11/R14: workspace conflicts carry evidence and each destructive choice has an honest
   // recovery path. All state lives under this harness's ephemeral state/data directories.
   const initialWorkspace = await req('GET', '/api/agent/workspace', SESSION_TOKEN);

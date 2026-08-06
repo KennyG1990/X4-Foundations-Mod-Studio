@@ -4,95 +4,85 @@ Updated: 2026-08-06 America/New_York
 
 ## One-line state
 
-The bounded installed managed-sidecar busy-liveness repair is `VERIFIED` in source, package, installed Antigravity,
-rendered UI, precommit, and full E2E. A still-running owned sidecar is retained when synchronous deterministic
-validation temporarily starves its HTTP loop; an exited child is still rejected, and external services still require
-the full Forge identity. W3 remains `PARTIAL` at `3/5`, W10 remains `OPEN / PARTIAL`, and the overall
-extension-native program remains `IN_PROGRESS / PARTIAL`.
+The W3B1a snapshot-restore receipt subunit is `VERIFIED` as route `4/5`: exact contained snapshot source authority,
+paired CAS, one registry commit, recovery-backed compensation, persisted receipt before success, replay/conflict,
+redaction, fault injection, governance promotion, precommit, and fresh `467/467` route containment are green. Bulk-
+transform apply is the remaining W3B1a route. W3B1, W3, and the extension-native program remain
+`IN_PROGRESS / PARTIAL`.
 
 ## Operator brief
 
-- **Project:** `F:\DEV_ENV\X4_Forge`, the Forge extension and its integrated Studio/sidecar/API surfaces.
-- **Eyeball queue:** none for this bounded hotfix. Installed rendered proof is closed by the two saved Antigravity
-  screenshots. The separate W3 snapshot-source candidate has no user-visible surface yet.
+- **Project:** `F:\DEV_ENV\X4_Forge`, the Forge extension and its integrated Studio/managed-sidecar/API surfaces.
+- **Eyeball queue:** none for this bounded checkpoint. It adds no visible control; installed/rendered proof remains a
+  W3C gate. Full W3B1a E2E is deliberately deferred until bulk apply completes route `5/5`.
 - **Machine state:** Ken granted standing permission to validate inside Antigravity for this work; do not pause to ask
   again. Do not stop or interact with his running game.
-- **Commit point:** `fix(extension): retain busy managed sidecar`. The implementation checkpoint is the commit
-  containing this handoff; use Git and canonical GitHub owner `#19` for the exact post-push hash/parity readback.
-
-## Reproduced diagnosis
-
-- The earlier `403` report used obsolete/guessed `POST /api/agent/validate`. Current project validation routes are
-  `/api/agent/project/validate` and `/api/agent/project/validate/check`; deploy verification correctly refuses writes
-  when validation is red.
-- The current installed `Failed to fetch` was a different real bug. The sidecar loaded `402` MD events, `35`
-  conditions, `807` actions, `32` factions, `1,902` wares, and `170` sectors, but synchronous validation blocked HTTP
-  longer than two `1,500 ms` probes plus the retry delay. The extension treated the still-running child as dead,
-  discarded it, and rebound panels to a new port.
-- Therefore the schema files were present and loaded. The fetch failure came from destructive sidecar lifecycle churn,
-  not a missing-schema path.
+- **Commit point:** `feat(authority): bind snapshot restore to action receipts`. Run final synchronized precommit after
+  durable docs, stage only the exact checkpoint paths, commit/push, assert local/origin/remote parity, and update the
+  marker blocks in GitHub `#20` and parent `#19` without closing either.
 
 ## Verified implementation
 
-- `vscode-extension/src/backendLiveness.ts` classifies `responsive`, `child-not-running`, and
-  `running-but-busy`. Process state is authoritative for an owned child after bounded probes.
-- `vscode-extension/src/extension.ts` supplies a fresh child-state callback at the final decision boundary and retains
-  the same handle for retry recovery or running-but-busy classification.
-- `vscode-extension/src/backendLiveness.selftest.ts` covers seven deterministic positive/negative cases.
-- `scripts/action-receipt-coverage-audit.ts` raises only the nested capability-audit wrapper from `300_000` to
-  `600_000 ms` after the prerequisite measured `295.8s`; its 4 MiB buffer and failure taxonomy are unchanged.
-- No schema path, validator verdict, route authorization, game/mod data, external attach, standalone/CLI, or
-  marketplace behavior changed. No capability-map delta.
+- `src/server/workspaceSnapshotSource.ts` normalizes caller logical identity, resolves only a contained regular
+  snapshot file, rejects junction/symlink/path escape, enforces byte ceiling and exact `fstat`/read length, closes the
+  descriptor exactly once, checks pre-open/open/final identity, decodes fatal UTF-8 and a strict snapshot envelope,
+  and returns only sanitized workspace plus bounded hashes/scalars.
+- `src/server/workspaceSnapshotRestoreReceiptAdapter.ts` binds source bytes/logical identity/target hashes and paired
+  current resources, serializes by addressed workspace, rereads source and paired CAS immediately before the single
+  `WorkspaceRegistry.commit`, prepares durable recovery first, reopens the terminal receipt, and implements exact
+  replay plus rollback success/refusal/failure truth.
+- `server.ts` routes `POST /api/fs/restore-snapshot` through that adapter, requires caller-owned
+  `x-forge-operation-id` and paired expected hashes, maps fixed redacted failures, captures history fail-soft, and
+  returns only after a committed receipt.
+- `scripts/route-integration.mjs` contains the final real-owner route proof. No standalone app, end-user CLI, external
+  provider/runtime/result, schema-path change, validator weakening, mod/game write, or deploy was introduced.
 
-## Gate and package evidence
+## Final evidence
 
-- Backend liveness `7/7`; extension/root builds exit `0`; root typecheck exit `0`; focused lint and diff checks exit
-  `0`; Graphify `5,634` nodes / `13,781` edges / `208` communities.
-- Final `npm run precommit:check` exits `0` with `[precommit] OK`; action-receipt coverage is `82` routes / `50`
-  surfaces.
-- Package `F:\DEV_ENV\X4_Forge\vscode-extension\x4-forge-studio-0.0.63-busy-liveness-20260806.vsix` is
-  `18,076,535` bytes, SHA256 `841A63185547E2FBB946815EF87AF663A7367B6DC3FB091F66307B6409F9F1A3`;
-  stage/probe is `16/16`, inspector PASS is `2,091` entries / `61,322,674` unpacked bytes.
-- Full E2E rerun is `96/96` in `1,396.3s`, failed/flaky/bad `0/0/0`. Fresh receipt generated
-  `2026-08-06T18:34:23Z` records complete report/lifecycle, `trigger=child-close`, `treeGone=true`, empty
-  `remainingPids`, and no runner interaction failure; independent readback found no listeners on `3100/3101`.
-- The first 20-minute observer killed an advancing E2E run and leaked only its isolated 3100/3101 stack. Exact PIDs
-  were resolved, stopped, and verified gone before the unchanged green rerun. The stale earlier receipt was rejected.
-- E2E writes were bound to `C:\Users\Moshi\AppData\Local\Temp\x4forge-e2e-state-44580` through both
-  `X4_STATE_DIR` and `X4_CONFIG_DIR`, outside live Forge state.
+- Source reader `53/53`; restore adapter `27/27`; receipt coverage candidate/promotion `57/57`; policy bundle
+  `18/18`; durable writer audit `14/14`; extension durable writer `8/8`.
+- Route disposition candidate SHA-256
+  `0fb6886180236dfbcae0defceea552c3409e6f6909e7270a5a78b43e797780bb` added only
+  `src/server/workspaceSnapshotRestoreReceiptAdapter.ts` and `src/server/workspaceSnapshotSource.ts` to the sorted
+  source boundary. Capability audit passes at `11` capabilities / `294` disposed literal routes / one dynamic
+  registrar / `10` MCP aliases.
+- Receipt coverage candidate SHA-256
+  `f95d5670ae9a0d615fadc2f876e8bbfc30fa92c022663069fac91572674d215e` added only one
+  `receipt-exempt / W3B0-internal / fixture-cache` selftest surface and six deterministic source-reference shifts.
+  Reviewed manifest/pin SHA-256 is
+  `2387d9db5bad96fa5040afed7d93f7eda90b6dfadf61ef8d64bd6f95ade6c637`; audit is `82/51`.
+- Typecheck/build exit `0`; focused lint `0` errors / `240` existing `server.ts` warnings; Graphify refresh is `5,720`
+  nodes / `14,041` edges / `209` communities and resolves the new adapter.
+- Final pre-doc precommit is `[precommit] OK` in `484.9s`. Final fresh production route suite is `467/467`, exit `0`,
+  with zero new route process, zero new `x4-route-int-*` directory, and zero listeners on
+  `3000/3001/3100/3101`. The nine visible route temp roots all predate this checkpoint.
 
-## Installed Antigravity proof
+## Reproduced failures and corrections
 
-- Candidate installed at
-  `C:\Users\Moshi\.antigravity-ide\extensions\x4forge.x4-forge-studio-0.0.63`; installed extension,
-  supervisor, and server bundle hashes/lengths match staged bytes.
-- Antigravity `1.107.0` rendered Forge `v1.0.426`. Managed sidecar port `63755` was retained after two timed-out
-  probes at `17:04:39.102Z`; validation completed at `17:04:49.828Z`; the same handle answered retry two at
-  `17:04:55.145Z`. Fresh-log counts for discard, no-answer, fetch-failure, auto-restart, and unexpected-exit markers
-  are zero.
-- Evidence:
-  `vscode-extension/evidence/2026-08-06-busy-liveness/installed-antigravity-busy-retained-recovered.png` and
-  `vscode-extension/evidence/2026-08-06-busy-liveness/installed-antigravity-schema-corpus-loaded.png`.
-  The latter visibly shows the configured unpacked 9.00 corpus found, `1,020,384` discovered items, read-only
-  discovery/canonical-ID availability, and no `Failed to fetch`.
-- No version bump or marketplace publication occurred; this is a local same-version installed candidate.
+- A first two-minute receipt-coverage wrapper timed out while its prerequisite was legitimately active; an earlier
+  overlapping attempt also remained. The two exact task-owned command trees were stopped and confirmed gone before
+  serialized reruns. Outer wrapper timeout is not child cleanup proof.
+- Writer audit correctly refused the new fixture writer and stale fingerprint. One exact fixture-only registry entry
+  and the scanner-derived fingerprint restored the gate.
+- Capability audit correctly refused the two newly reachable source files. Exact candidate review proved no route,
+  authority, capability, or MCP delta before atomic promotion.
+- Receipt coverage correctly refused one missing fixture surface plus shifted durable-writer references. Its separate
+  candidate/promotion added one exempt row; two positive selftests then exposed three stale `50` literals, corrected
+  to the reviewed `51`. No audit was weakened or hand-edited.
+- One JavaScript spawn-message template and one read-only PowerShell projection failed to parse before mutation; their
+  corrected structured forms succeeded. These are AAR/tooling events, not product failures.
 
-## Immediate close boundary
+## Immediate next unit
 
-- Task-owned checkpoint paths are the three liveness source/test files, the bounded audit-timeout file, this handoff,
-  `ROADMAP.md`, the owning plan, and the two new evidence PNGs.
-- Canonical GitHub issue `#19` remains open. Update its single marker block after push with the exact commit hash,
-  busy-liveness `7/7`, same-port installed proof, full E2E `96/96`, and W3 `3/5`; do not close the issue or program.
-- The W3 snapshot reader candidate remains separate and uncommitted:
-  `src/server/workspaceSnapshotSource.ts` and `src/server/workspaceSnapshotSource.selftest.ts`. It is not part of the
-  hotfix index. Fresh-eyes review identified a missing explicit byte-count comparison after `read(fd)`; address that
-  in the next W3 adversarial/integration slice.
+Implement `POST /api/agent/bulk-transform/apply` through the existing addressed-workspace receipt transaction. Reuse
+`buildPlan`, `mergeBulkTransformPatches`, paired CAS, current corpus/plan hashes, `WorkspaceRegistry`, recovery store,
+receipt service/store, history projection, deadline predicate, and redacted failure mapping. Prove exact plan/source
+intent, same-workspace serialization, replay/conflict, both stale CAS halves, plan/corpus drift, no-change, recovery,
+finalization rollback, rollback refusal/failure, and route integration. Then run the official full W3B1a E2E and
+containment gates for route `5/5`.
 
-## Next bounded program unit
-
-Resume W3 snapshot restore authority: harden the source reader against truncated/injected reads, add adversarial and
-integration coverage, then proceed to the remaining restore/bulk receipt paths. Keep all implementation and test
-writes on exact native `gpt-5.6-luna` `luna_executor` workers at `reasoning_effort=max` with no fallback writer.
+Every implementation/test edit remains on exact native `gpt-5.6-luna` `luna_executor` workers at
+`reasoning_effort=max`, `fork_context=false`; Sol coordinates, reviews, validates, documents, commits, and pushes.
 
 ## Preserved unrelated dirty boundary
 
@@ -106,12 +96,17 @@ Do not stage, reset, clean, restore, or claim ownership of:
   `vscode-extension/evidence/0.0.35-runtime-copy-startup.png`.
 - Untracked `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/feature_request.md`, `Note for Kimi.md`,
   and the six older screenshots under `vscode-extension/evidence/2026-07-31-r8-r17/`.
-- The two untracked W3 snapshot-source files named above are active program work, not unrelated baseline, but they
-  must remain outside this hotfix checkpoint.
+
+`BACKLOG.md` remains intentionally unstaged because its unrelated user edits predate this checkpoint. The accurate
+W3 `4/5` state is durable in the W3B1 plan, program plan, roadmap, this handoff, and GitHub owner projections.
 
 ## AAR summary
 
-The task triggered installed-runtime contradiction, validation concurrency, accidental artifact, installer-lock,
-prerequisite-timeout, E2E-observer/cleanup, and one read-only PowerShell parser events. All are documented in the
-owning plan and project/global AAR ledgers. Highest-risk lesson: synchronous deterministic work can make a healthy
-owned sidecar fail HTTP probes; destructive lifecycle decisions must use owned-process truth, not HTTP timeout alone.
+- **Sustain:** exact source capture, mutation-boundary reread, paired CAS, one commit owner, recovery before mutation,
+  terminal receipt reopen, redacted failure truth, exact candidate promotion, and independent route containment.
+- **Improve work/approach:** serialize long authority scans; a timed-out outer command can leave owned children
+  running. Treat each governance manifest as a separate source of truth and promote it through its own workflow.
+- **Improve tools:** receipt coverage suppresses prerequisite stderr; run the named prerequisite directly after its
+  wrapper fails. Graphify output is ignored, so verify loadability/counts rather than expecting Git status.
+- **Highest-risk evidenced weakness:** bulk-transform apply and all W3B1b-d mutation owners still lack complete native
+  receipt authority. Post-response history alone cannot close that gap.

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "sourceFingerprint": "cb9e18ed171d87406d31368e4e5faf59c9b33b215754c44bc5f8793084fff92a",
+  "sourceFingerprint": "99878fa7b6aa42c29a006d6fed2e90c0c41f86437cb7f7a3c23b4994595d5f24",
   "policy": "Every raw production filesystem mutation source is count-pinned here. Authoritative files use atomic sibling promotion; stronger tree, archive, append-log, SQLite, retention, ephemeral, and fixture contracts remain explicit exceptions.",
   "writers": [
     {
@@ -251,6 +251,14 @@
       "owners": ["runWorkspaceCreateReceiptAdapterSelftest"],
       "rationale": "Creates one unique temporary workspace-registry and action-receipt fixture root for the adapter selftest.",
       "failureContract": "Fixture cleanup is best effort; selftest mutations never target configured workspace, registry, receipt, or production roots."
+    },
+    {
+      "file": "src/server/workspaceSnapshotRestoreReceiptAdapter.selftest.ts",
+      "calls": { "writeFileSync": 3, "mkdirSync": 1, "rmSync": 1, "mkdtempSync": 1 },
+      "categories": ["fixture-only"],
+      "owners": ["runWorkspaceSnapshotRestoreReceiptAdapterSelftest"],
+      "rationale": "Creates snapshot-restore source and fault fixtures only beneath one unique OS temporary root and removes that root in the selftest finally block.",
+      "failureContract": "The selftest reports failed checks or an unexpected adapter failure; fixture cleanup is attempted in finally, and fixture mutations never target configured workspace, registry, receipt, recovery, or production roots."
     },
     {
       "file": "src/server/x4MergeLawOracleFs.ts",

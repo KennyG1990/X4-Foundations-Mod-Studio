@@ -233,6 +233,17 @@ service/transaction/store checks are 25/25, 23/23, and 119/119; the fresh produc
 2/5 W3B1a routes only: workspace create, snapshot restore, bulk-transform apply, W3B1a E2E, W3B1b-d, and W3C remain
 open. Exact record: `docs/plans/2026-08-02-w3b1-addressed-state-receipts.md`.
 
+**W3B1 snapshot-restore checkpoint (2026-08-06): VERIFIED bounded subunit; W3 remains IN_PROGRESS / PARTIAL.**
+The addressed snapshot-restore route is now the fourth of five W3B1a mutation families bound to the native receipt,
+workspace-registry, paired-CAS, history, and durable-recovery owners. Exact contained-source capture and reread,
+terminal persisted receipt before success, exact replay, changed-source conflict, stale-CAS halves, rollback success/
+refusal/failure, deadline refusal, and redaction are green. Final evidence is source `53/53`, adapter `27/27`, fresh
+production routes `467/467`, receipt policy `82/51` at SHA-256
+`2387d9db5bad96fa5040afed7d93f7eda90b6dfadf61ef8d64bd6f95ade6c637`, precommit `[precommit] OK`, and clean
+route containment. Bulk-transform apply is the remaining W3B1a route; full W3B1a E2E follows that fifth route.
+W3B1b-d, W3B2-B3, and visible W3C receipt/history controls remain open. Exact record:
+`docs/plans/2026-08-02-w3b1-addressed-state-receipts.md`.
+
 ### Wave 2 — reproducibility, native capability contract, and unlocked Kimi/UX units
 
 5. **W4:** normalize artifact/build/package/deploy/release results into receipt inputs; deterministic archives and

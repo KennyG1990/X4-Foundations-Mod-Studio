@@ -1,6 +1,6 @@
 # B115 W3B1 — addressed-state action-receipt integration
 
-Status: IN_PROGRESS / PARTIAL; shared runtime plus workspace replace/merge/create are route-green (3/5 W3B1a routes), while snapshot restore and bulk-transform apply remain open
+Status: IN_PROGRESS / PARTIAL; shared runtime plus workspace replace/merge/create/snapshot restore are route-green (4/5 W3B1a routes), while bulk-transform apply remains open
 Lane: FULL
 GitHub owners: `#20` primary, `#19` convergence projection
 Dependencies: W3A and W3B0 VERIFIED at `91463ee13300acabd252d29b12ce7ec0916312c3`
@@ -566,7 +566,7 @@ CLI are not. W3B1's sidecar transaction work remains required because the extens
   runtime identity, default workspace, deadline predicate, and projection callback by injection; it may instantiate
   no store, queue, registry, policy loader, or transaction kernel. The acceptance contract is unchanged.
 
-### Snapshot-restore receipt subunit (SPECIFIED 2026-08-03)
+### Snapshot-restore receipt subunit (VERIFIED bounded checkpoint 2026-08-06; specified 2026-08-03)
 
 - **Bounded unit:** bind only `POST /api/fs/restore-snapshot` through the existing addressed-workspace receipt
   transaction and recovery owners. Preserve the configured-root snapshot reader and `SnapshotManager`; do not fold
@@ -586,6 +586,23 @@ CLI are not. W3B1's sidecar transaction work remains required because the extens
   changed-file and both stale-CAS conflicts; traversal/host-path redaction; injected finalization rollback and rollback
   failure; history independence; focused route tests, full route suite, typecheck, lint, build, receipt/capability/
   writer audits, and precommit. Full E2E waits for bulk apply to complete the five-route W3B1a checkpoint.
+- **Verified implementation delta, 2026-08-06:** the configured-root reader now accepts only a contained regular
+  `snapshot_<safe-body>.json`, binds exact bytes and logical identity, rejects junction/symlink/path escapes, enforces
+  exact `fstat`/read length, closes once, and detects pre-open/open/final identity drift. The route now requires one
+  caller-owned operation ID plus paired expected workspace/snapshot hashes, rereads source and paired CAS at the
+  mutation boundary, prepares durable recovery before the single registry commit, verifies the terminal persisted
+  receipt before 2xx, replays without another version advance, and records rollback refusal/failure as non-success.
+- **Verified evidence, 2026-08-06:** source reader `53/53`; adapter `27/27`; final fresh production route suite
+  `467/467`; typecheck/build exit `0`; focused lint `0` errors / `240` existing `server.ts` warnings; durable writer
+  audit `14/14` plus extension writer `8/8`; capability authority `11` capabilities / `294` disposed literal routes /
+  one dynamic registrar / `10` MCP aliases; receipt coverage candidate/promotion `57/57`, policy bundle `18/18`, and
+  reviewed audit `82` routes / `51` surfaces at SHA-256
+  `2387d9db5bad96fa5040afed7d93f7eda90b6dfadf61ef8d64bd6f95ade6c637`; final precommit `[precommit] OK` in
+  `484.9s`. Graphify refreshed to `5,720` nodes / `14,041` edges / `209` communities.
+- **Containment:** the final route run returned exit `0` with zero new `x4-route-int-*` directories, zero new route
+  processes, and zero listeners on `3000/3001/3100/3101`. The nine visible route temp roots all predate this
+  checkpoint. No installed/rendered gate applies because this receipt-authority slice adds no user-visible surface;
+  full isolated E2E remains deliberately deferred until bulk apply completes all five W3B1a routes.
 
 ### Bulk-transform-apply receipt subunit (SPECIFIED 2026-08-03)
 
@@ -666,9 +683,9 @@ CLI are not. W3B1's sidecar transaction work remains required because the extens
   because `CODEX_CLI_PATH` contained concatenated executable paths, then because current `codex debug models` no
   longer accepts the launcher's obsolete `--json` flag. The manually updated ephemeral diagnostic reached exact
   Luna and returned `READY`; it made no file change and is not implementation evidence.
-- Current status: this is a `PARTIAL` 3/5 W3B1a checkpoint, not W3B1 or W3 completion. Replace, merge, and create
-  are runtime-green; snapshot restore and bulk-transform apply remain open. Route-specific finalization/
-  compensation/fault-injection proof and real-child receipt/restore/bulk acceptance remain required. The independent
+- Current status: this is a `PARTIAL` 4/5 W3B1a checkpoint, not W3B1 or W3 completion. Replace, merge, create, and
+  snapshot restore are runtime-green; bulk-transform apply remains open. Bulk-specific finalization/compensation/
+  fault-injection proof and real-child bulk acceptance remain required. The independent
   E2E harness/tooling lifecycle subunit is verified by the full isolated `96/96` receipt, but that result does not
   prove the missing route semantics. Package and later W3C installed-extension proof remain required; W7 is a
   separate workstream and is not conflated with this status.
@@ -682,10 +699,13 @@ CLI are not. W3B1's sidecar transaction work remains required because the extens
 - Coordinator correction: the initial exported convenience helper could instantiate an isolated queue per call.
   It was corrected and retested before acceptance.
 - W3B1a requirements 9-12: replace/merge satisfy paired CAS, pre-state recovery, terminal-before-success, exact
-  replay/conflict, redaction, stale/body failure, dry-run, and no-change truth. Create now adds global serialization,
+  replay/conflict, redaction, stale/body failure, dry-run, and no-change truth. Create adds global serialization,
   exact result identity, compensation, incomplete compensation-fault truth, authoritative reopen, replay/conflict,
-  and distinct-client proof through the 443/443 external route gate. Snapshot restore and bulk apply remain open,
-  including route-specific finalization/compensation/fault-injection proof. The independent E2E harness/tooling
+  and distinct-client proof. Snapshot restore now adds contained exact-byte source authority, mutation-boundary
+  source/CAS rechecks, recovery-backed compensation, replay/conflict, stale-half, deadline, redaction, finalization,
+  rollback-success, rollback-refusal, and rollback-failure proof through the final `467/467` external route gate.
+  Bulk apply remains open, including its route-specific finalization/compensation/fault-injection proof. The
+  independent E2E harness/tooling
   lifecycle subunit is verified by the full isolated `96/96` receipt, but that receipt does not prove the missing
   route semantics; real-child receipt/restore/bulk acceptance remains open. W3B1 and W3 remain `IN_PROGRESS` until
   acceptance item 16 is met.
@@ -697,19 +717,20 @@ CLI are not. W3B1's sidecar transaction work remains required because the extens
 
 ## CLOSE
 
-- Status: `IN_PROGRESS / PARTIAL` (shared runtime and 3/5 W3B1a routes green—replace, merge, and create; independent
+- Status: `IN_PROGRESS / PARTIAL` (shared runtime and 4/5 W3B1a routes green—replace, merge, create, and snapshot
+  restore; independent
   E2E harness/tooling lifecycle subunit `VERIFIED`; no W3B1 or W3 close).
-- Completed in current worktree evidence: addressed workspace replace/merge/create receipt transactions and their
-  focused/full route proof; the independent harness/tooling lifecycle receipt is `96/96` with child-close and
+- Completed in current worktree evidence: addressed workspace replace/merge/create/snapshot-restore receipt
+  transactions and their focused/full route proof; the independent harness/tooling lifecycle receipt is `96/96` with child-close and
   `treeGone=true`, zero failed/flaky/bad/quarantined-blocking outcomes, closed ports `3100/3101`, and removed
   ephemeral state. `npm run precommit:check` also passed.
-- Deliberately not changed: snapshot restore, bulk transform, route-specific finalization/compensation/fault-injection
-  acceptance, real-child receipt/restore/bulk acceptance, W3B1b-d, artifact/provider/external W3B2-B3 work, visible
+- Deliberately not changed: bulk transform, bulk-specific finalization/compensation/fault-injection acceptance,
+  real-child bulk acceptance, W3B1b-d, artifact/provider/external W3B2-B3 work, visible
   extension controls, game/mod state, and any standalone web/CLI surface. W7 remains separate from this status.
-- Remaining immediate unit: implement and validate snapshot restore and bulk-transform apply through the existing
-  registry/recovery owner, complete their route-specific finalization/compensation/fault-injection proof, and run
-  the real-child receipt/restore/bulk acceptance. The verified `96/96` harness receipt is lifecycle evidence only
-  and does not close those W3B1a route gates.
+- Remaining immediate unit: implement and validate bulk-transform apply through the existing registry/recovery owner,
+  complete its route-specific finalization/compensation/fault-injection proof, and run the official W3B1a E2E and
+  real-child receipt/restore/bulk acceptance. The prior verified `96/96` harness receipt is lifecycle evidence only
+  and does not close the remaining bulk route or final W3B1a acceptance gate.
 - Suggested eventual W3B1 close title: `feat(authority): bind addressed state to action receipts`.
 
 ## AAR
@@ -825,11 +846,28 @@ CLI are not. W3B1's sidecar transaction work remains required because the extens
   progress after the oversized server order stalled.
 - Improve tools: Graphify's profile shim requires the narrow host approval; use exact symbols because natural-language
   queries over common words such as “workspace” return low-value graph matches.
-- Highest-risk evidenced weakness: two W3B1a routes and every W3B1b-d owner can still mutate without this
-  authoritative receipt transaction. Replace/merge/create are repaired, but post-response history cannot cover the
-  remaining gap.
+- Highest-risk evidenced weakness: one W3B1a route and every W3B1b-d owner can still mutate without this
+  authoritative receipt transaction. Replace/merge/create/snapshot restore are repaired, but post-response history
+  cannot cover the remaining gap.
 - Lessons banked: pending verified implementation; do not bank a speculative procedural skill from this plan alone.
 - Continuation, 2026-08-05: the independent E2E harness/tooling lifecycle subunit reached `VERIFIED` through the
   isolated `96/96` lifecycle receipt and cleanup proof. Preserve the boundary: this does not promote the missing
   snapshot-restore/bulk route semantics, their fault-injection evidence, or real-child receipt/restore/bulk acceptance
   to green; W7 remains separate.
+- Triggered, 2026-08-06 snapshot restore: the first broad writer audit correctly refused the new fixture writer and
+  stale fingerprint. After exact registration, capability authority then refused the newly reachable source boundary;
+  its hashed candidate/promotion added only the two source files. Receipt coverage subsequently refused the new
+  fixture surface and six shifted source references; its separate candidate/promotion added one receipt-exempt row,
+  and a final selftest correction updated three stale positive `50` expectations to the reviewed `51`. Each refusal
+  remained red until its own authority was reviewed and promoted.
+- Triggered, 2026-08-06 tooling: an early two-minute coverage wrapper left two command trees from overlapping audit
+  attempts; only the exact task-owned process trees were stopped and verified absent before the clean serialized
+  rerun. One worker-spawn template literal and one read-only PowerShell projection failed to parse before execution;
+  corrected array-joined/structured commands succeeded without file mutation. Do not run duplicate long authority
+  scans, and do not infer cleanup from an outer wrapper timeout.
+- Sustain, 2026-08-06: exact-byte contained source capture, mutation-boundary reread, paired CAS, one commit owner,
+  recovery-before-mutation, persisted-receipt reopen, redacted failure envelopes, exact candidate/hash promotion,
+  and independent final route containment made the checkpoint reviewable.
+- Improve tools, 2026-08-06: the coverage wrapper hides prerequisite stderr and reports only the prerequisite label.
+  Run the named prerequisite directly after failure, then use the authority's candidate workflow; never hand-edit a
+  reviewed manifest. Graphify output is ignored by Git, so verify timestamp/loadability and graph counts explicitly.

@@ -180,6 +180,8 @@
     "src/server/workspaceCreateReceiptAdapter.ts",
     "src/server/workspaceReceiptService.selftest.ts",
     "src/server/workspaceReceiptService.ts",
+    "src/server/workspaceSnapshotRestoreReceiptAdapter.ts",
+    "src/server/workspaceSnapshotSource.ts",
     "src/types.ts"
   ],
   "routes": {

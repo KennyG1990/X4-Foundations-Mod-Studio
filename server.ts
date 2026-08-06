@@ -126,6 +126,7 @@ import {
   type WorkspaceReceiptTransactionDescription,
 } from "./src/server/workspaceReceiptService";
 import { executeWorkspaceCreateReceipt } from "./src/server/workspaceCreateReceiptAdapter";
+import { executeWorkspaceSnapshotRestoreReceipt } from "./src/server/workspaceSnapshotRestoreReceiptAdapter";
 import { runWorkspaceReceiptServiceSelftest } from "./src/server/workspaceReceiptService.selftest";
 import { mdStemFingerprint, runMdFileIdentitySelftest } from "./src/lib/mdFileIdentity";
 import { layoutImportedGraphBatch, runImportedGraphLayoutSelftest } from "./src/lib/importedGraphLayout";
@@ -4001,8 +4002,9 @@ app.get("/api/agent/schema", (req, res) => {
         method: "POST",
         path: "/api/fs/restore-snapshot",
         auth: true,
-        body: { modId: "string", snapshotName: "string" },
-        purpose: "Restore a snapshot into the active server workspace."
+        headers: { "x-forge-operation-id": "required caller-owned bounded operation identity; the server never fabricates it" },
+        body: { modId: "required safe snapshot mod segment", snapshotName: "required snapshot_<safe-body>.json", expectedHead: "required current workspaceHash", expectedSnapshotHash: "required current snapshotHash", expectedVersion: "optional current workspace version" },
+        purpose: "Restore a contained snapshot into the addressed workspace through the canonical receipt transaction, paired CAS, durable recovery, and exact replay contract."
       },
       {
         method: "POST",
@@ -4094,7 +4096,12 @@ function directoryRoleIssues(resolved: ResolvedXsdConfig) {
 }
 
 /** Block writes through an old unsafe config even if it predates save-time validation. */
-function rejectUnsafeDevelopmentWrite(res: express.Response, resolved: ResolvedXsdConfig, fields: DirectoryField[]): boolean {
+function rejectUnsafeDevelopmentWrite(
+  res: express.Response,
+  resolved: ResolvedXsdConfig,
+  fields: DirectoryField[],
+  redact = false,
+): boolean {
   const writableFields = fields.filter((field): field is 'modWorkspacePath' | 'filesystemPath' =>
     field === 'modWorkspacePath' || field === 'filesystemPath'
   );
@@ -4108,6 +4115,17 @@ function rejectUnsafeDevelopmentWrite(res: express.Response, resolved: ResolvedX
     }, writableFields),
   ].find(candidate => fields.includes(candidate.field));
   if (!issue) return false;
+  if (redact) {
+    res.status(403).json({
+      success: false,
+      status: 'FAILED',
+      code: 'WORKSPACE_SNAPSHOT_PATH_UNSAFE',
+      error: 'Workspace snapshot path is unsafe.',
+      failedStages: ['workspace_snapshot_restore_receipt'],
+      replayed: false,
+    });
+    return true;
+  }
   res.status(409).json({
     success: false,
     code: issue.code,
@@ -5183,44 +5201,157 @@ app.post("/api/fs/snapshot", (req, res) => {
   }
 });
 
+function workspaceSnapshotRestoreFailureStatus(code: string): number {
+  if (code === 'WORKSPACE_SNAPSHOT_PATH_UNSAFE') return 403;
+  if (code === 'WORKSPACE_SNAPSHOT_NOT_FOUND' || code === 'WORKSPACE_NOT_FOUND') return 404;
+  if (code === 'WORKSPACE_SNAPSHOT_TOO_LARGE') return 413;
+  if (code === 'ACTION_RECEIPT_DUPLICATE_CONFLICT'
+    || code === 'ACTION_RECEIPT_REPLAY'
+    || code === 'ACTION_RECEIPT_PREPARED_REPLAY'
+    || code === 'WORKSPACE_SNAPSHOT_EXPECTED_HEAD_STALE'
+    || code === 'WORKSPACE_SNAPSHOT_EXPECTED_SNAPSHOT_HASH_STALE'
+    || code === 'WORKSPACE_SNAPSHOT_EXPECTED_VERSION_STALE'
+    || code === 'WORKSPACE_SNAPSHOT_SOURCE_CHANGED'
+    || code === 'WORKSPACE_SNAPSHOT_WORKSPACE_CHANGED') return 409;
+  if (code === 'workspace_snapshot_restore_rollback_failed'
+    || code === 'ACTION_RECEIPT_INCOMPLETE_UNRECORDED'
+    || code.includes('RECOVERY')
+    || code.includes('ROLLBACK')
+    || code.includes('INCOMPLETE')) return 507;
+  if (code === 'WORKSPACE_SNAPSHOT_ROOT_INVALID'
+    || code === 'WORKSPACE_SNAPSHOT_READ_FAILED'
+    || code === 'WORKSPACE_SNAPSHOT_RESTORE_RESPONSE_DEADLINE'
+    || code === 'WORKSPACE_SNAPSHOT_RESTORE_RECEIPT_EXECUTION_FAILED'
+    || code === 'WORKSPACE_SNAPSHOT_RESTORE_RECEIPT_LOOKUP_FAILED'
+    || code === 'WORKSPACE_SNAPSHOT_RESTORE_RECEIPT_REOPEN_FAILED'
+    || code === 'WORKSPACE_SNAPSHOT_RESTORE_REPLAY_STATE_UNAVAILABLE'
+    || code.includes('STORE')
+    || code.includes('POLICY')
+    || code.includes('COVERAGE')
+    || code.includes('PREPARE')) return 503;
+  if (code === 'ACTION_RECEIPT_OPERATION_ID_INVALID'
+    || code === 'WORKSPACE_ID_INVALID'
+    || code === 'WORKSPACE_SNAPSHOT_LOGICAL_IDENTITY_INVALID'
+    || code === 'WORKSPACE_SNAPSHOT_MAX_BYTES_INVALID'
+    || code === 'WORKSPACE_SNAPSHOT_UTF8_INVALID'
+    || code === 'WORKSPACE_SNAPSHOT_JSON_INVALID'
+    || code === 'WORKSPACE_SNAPSHOT_ENVELOPE_INVALID'
+    || code === 'WORKSPACE_SNAPSHOT_VALUE_UNSAFE'
+    || code === 'WORKSPACE_SNAPSHOT_NOT_REGULAR'
+    || code === 'WORKSPACE_SNAPSHOT_EXPECTED_HEAD_INVALID'
+    || code === 'WORKSPACE_SNAPSHOT_EXPECTED_SNAPSHOT_HASH_INVALID'
+    || code === 'WORKSPACE_SNAPSHOT_EXPECTED_VERSION_INVALID'
+    || code === 'WORKSPACE_SNAPSHOT_WORKSPACE_INVALID'
+    || code === 'WORKSPACE_SNAPSHOT_RECEIPT_FACTS_INVALID'
+    || code.startsWith('ACTION_RECEIPT_RUNTIME_')) return 400;
+  return 500;
+}
+
+function workspaceSnapshotRestoreReadyRecovery(
+  receipt: ActionReceiptProjection | undefined,
+): Record<string, unknown> | undefined {
+  if (receipt === undefined) return undefined;
+  try {
+    const found = destructiveRecoveryStore.read(receipt.id);
+    if (!found.ok || found.record.kind !== 'workspace' || found.record.status !== 'ready') return undefined;
+    return recoveryResponse(found.record);
+  } catch {
+    return undefined;
+  }
+}
+
 // Server Filesystem restore snapshot endpoint
-app.post("/api/fs/restore-snapshot", (req, res) => {
+app.post("/api/fs/restore-snapshot", async (req, res) => {
+  const deadlineRequest = req as DeadlineAwareRequest;
+  const responseUnavailable = () => res.writableEnded
+    || res.destroyed
+    || deadlineRequest.__forgeResponseDeadlineExceeded === true;
+  const respondFailure = (
+    code: string,
+    replayed = false,
+    receipt?: ActionReceiptProjection,
+  ) => {
+    if (responseUnavailable()) return;
+    const recovery = workspaceSnapshotRestoreReadyRecovery(receipt);
+    return res.status(workspaceSnapshotRestoreFailureStatus(code)).json({
+      success: false,
+      status: 'FAILED',
+      code,
+      error: 'Workspace snapshot restore failed.',
+      failedStages: ['workspace_snapshot_restore_receipt'],
+      replayed,
+      ...(receipt === undefined ? {} : { receipt }),
+      ...(recovery === undefined ? {} : { recovery }),
+    });
+  };
+
+  if (responseUnavailable()) return;
+  const operationId = req.headers['x-forge-operation-id'];
+  if (typeof operationId !== 'string' || !ACTION_RECEIPT_OPERATION_ID_RE.test(operationId)) {
+    return respondFailure('ACTION_RECEIPT_OPERATION_ID_INVALID');
+  }
+
   try {
     const record = requestWorkspace(req);
-    const { modId, snapshotName } = req.body;
-    if (!modId || !snapshotName) {
-      return res.status(400).json({ error: "Missing modId or snapshotName parameter." });
-    }
     const resolved = resolveXsdConfig();
     const modWorkspacePath = resolved.modWorkspacePath;
-    if (!modWorkspacePath) {
-      return res.status(400).json({ error: "No mod workspace path configured." });
-    }
-    if (rejectUnsafeDevelopmentWrite(res, resolved, ['modWorkspacePath'])) return;
-    const snapDir = resolvePathInside(modWorkspacePath, modId, '.snapshots');
-    const snapFile = snapDir ? resolvePathInside(snapDir, snapshotName) : null;
-    if (!snapFile) return res.status(403).json({ error: "Forbidden: snapshot path escapes the Mod Workspace Folder." });
-    if (!fs.existsSync(snapFile)) {
-      return res.status(404).json({ error: "Snapshot not found." });
-    }
-    const content = fs.readFileSync(snapFile, 'utf8');
-    const parsed = JSON.parse(content);
-    if (!parsed.workspace) {
-      return res.status(400).json({ error: "Invalid snapshot format." });
-    }
-    
-    const committed = workspaceRegistry.commit(record.workspaceId, sanitizeWorkspace(parsed.workspace), 'restore-snapshot');
+    if (!modWorkspacePath) return respondFailure('WORKSPACE_SNAPSHOT_ROOT_INVALID');
+    if (rejectUnsafeDevelopmentWrite(res, resolved, ['modWorkspacePath'], true)) return;
 
-    return res.json({
-      success: true,
-      workspaceId: committed.workspaceId,
-      workspace: committed.workspace,
-      version: committed.version,
-      workspaceHash: workspaceHash(committed),
-      snapshotHash: workspaceRegistry.snapshotHash(committed),
+    const routedRequest = req as express.Request & {
+      __actor?: RequestActor;
+      __clientId?: string;
+    };
+    const actor = routedRequest.__actor;
+    const identity = actor?.kind === 'agent'
+      ? { kind: 'agent' as const, keyId: actor.keyId, version: ACTION_RECEIPT_RUNTIME_VERSION }
+      : {
+        kind: 'studio' as const,
+        clientId: String(routedRequest.__clientId || ''),
+        version: ACTION_RECEIPT_RUNTIME_VERSION,
+      };
+    const body = req.body || {};
+    const result = await executeWorkspaceSnapshotRestoreReceipt({
+      registry: workspaceRegistry,
+      receiptService: workspaceReceiptService,
+      recoveryStore: destructiveRecoveryStore,
+      store: actionReceiptStore,
+      captureProjection: projection => captureActionReceiptProjection(req, projection),
+    }, {
+      root: modWorkspacePath,
+      workspaceId: record.workspaceId,
+      modId: body.modId,
+      snapshotName: body.snapshotName,
+      expectedHead: body.expectedHead,
+      expectedSnapshotHash: body.expectedSnapshotHash,
+      expectedVersion: body.expectedVersion,
+      operationId,
+      identity,
+      mayProceed: () => !responseUnavailable(),
     });
-  } catch (error) {
-    return res.status(500).json({ error: error.message || "Failed to restore snapshot." });
+
+    if (responseUnavailable()) return;
+    if (result.ok === false) return respondFailure(result.code, result.replayed, result.receipt);
+    if (result.receipt.status !== 'committed') {
+      return respondFailure('WORKSPACE_SNAPSHOT_RESTORE_RECEIPT_MISMATCH', result.replayed, result.receipt);
+    }
+
+    const recovery = workspaceSnapshotRestoreReadyRecovery(result.receipt);
+    return res.status(200).json({
+      success: true,
+      status: 'SUCCESS',
+      applied: result.applied,
+      replayed: result.replayed,
+      workspaceId: result.record.workspaceId,
+      workspace: result.record.workspace,
+      version: result.record.version,
+      workspaceHash: workspaceHash(result.record),
+      snapshotHash: workspaceSnapshotHash(result.record.workspace),
+      receipt: result.receipt,
+      ...(recovery === undefined ? {} : { recovery }),
+    });
+  } catch {
+    return respondFailure('WORKSPACE_SNAPSHOT_RESTORE_RECEIPT_EXECUTION_FAILED');
   }
 });
 
