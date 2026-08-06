@@ -8,8 +8,9 @@ W7’s native X4 merge-law/schema-routing unit is `VERIFIED`, including runtime,
 package, and installed-extension proof. W3 remains `IN_PROGRESS / PARTIAL` at `3/5`: replace, merge, and create
 are runtime-green; snapshot restore and bulk apply remain open. Implementation commit
 [`1c912cf28bfe62509ba4ece06553949e514555b6`](https://github.com/KennyG1990/X4_Forge/commit/1c912cf28bfe62509ba4ece06553949e514555b6)
-is pushed with `HEAD == origin/main == remote/main`; GitHub `#11` and `#18` are each `OPEN / PARTIAL` with one
-updated ledger block and a commit link. Overall extension program status remains `IN_PROGRESS / PARTIAL`.
+is pushed. The follow-on close mirror is also pushed, and the current branch tip satisfies
+`HEAD == origin/main == remote/main`. GitHub `#11` and `#18` are each `OPEN / PARTIAL` with one updated ledger
+block and a commit link. Overall extension program status remains `IN_PROGRESS / PARTIAL`.
 The next step is a fresh task for the already-`SPECIFIED` deterministic rule/evidence-pack implementation.
 
 ## Operator brief
@@ -23,8 +24,8 @@ The next step is a fresh task for the already-`SPECIFIED` deterministic rule/evi
   receipt/finalization/compensation/fault-injection and real-child receipt/restore/bulk acceptance.
 - **Commit question:** yes. Implementation commit
   [`1c912cf28bfe62509ba4ece06553949e514555b6`](https://github.com/KennyG1990/X4_Forge/commit/1c912cf28bfe62509ba4ece06553949e514555b6)
-  is pushed, and `HEAD == origin/main == remote/main == 1c912cf28bfe62509ba4ece06553949e514555b6`. GitHub
-  [#11](https://github.com/KennyG1990/X4_Forge/issues/11) and
+  is pushed. The follow-on close mirror is also pushed, and the current branch tip satisfies
+  `HEAD == origin/main == remote/main`. GitHub [#11](https://github.com/KennyG1990/X4_Forge/issues/11) and
   [#18](https://github.com/KennyG1990/X4_Forge/issues/18) are each `OPEN / PARTIAL`, with one updated ledger
   block and the implementation commit linked.
 
@@ -110,8 +111,8 @@ Preserve these exact unrelated dirty paths and hunks:
 - **Close:** W7 `VERIFIED`; W3 `PARTIAL` at `3/5`; overall extension program `IN_PROGRESS / PARTIAL`.
   Implementation commit
   [`1c912cf28bfe62509ba4ece06553949e514555b6`](https://github.com/KennyG1990/X4_Forge/commit/1c912cf28bfe62509ba4ece06553949e514555b6)
-  is pushed with `HEAD == origin/main == remote/main`; GitHub
-  [#11](https://github.com/KennyG1990/X4_Forge/issues/11) and
+  is pushed. The follow-on close mirror is also pushed, and the current branch tip satisfies
+  `HEAD == origin/main == remote/main`. GitHub [#11](https://github.com/KennyG1990/X4_Forge/issues/11) and
   [#18](https://github.com/KennyG1990/X4_Forge/issues/18) are each `OPEN / PARTIAL`, each with one updated ledger
   block and a commit link. The W7 capability-map delta and AAR ledgers are applied; this handoff creates no second
   delta.

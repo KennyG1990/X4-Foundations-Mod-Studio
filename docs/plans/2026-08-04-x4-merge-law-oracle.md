@@ -176,8 +176,9 @@ Owner: GitHub #11, W7
   repository, E2E, packaged, and installed gates above passed.
 - W7's immediate checkpoint is fully closed. Capability-map, AAR, ROADMAP,
   SESSION-HANDOFF, and GitHub ledgers are synchronized with the implementation. Commit
-  `1c912cf28bfe62509ba4ece06553949e514555b6` is pushed, with local `HEAD`,
-  `origin/main`, and remote `main` all at that commit. GitHub #11 and #18 remain
+  `1c912cf28bfe62509ba4ece06553949e514555b6` is pushed. Follow-on close records are
+  pushed, and the current branch tip has `HEAD` == `origin/main` == remote `main`
+  parity. GitHub #11 and #18 remain
   OPEN/PARTIAL; W3 and the overall native-capability program remain PARTIAL.
 - Rollback is limited to restoring this plan's prior close text; the fixture roots were already
   removed and the isolated profile remains in its recoverable quarantine receipt.

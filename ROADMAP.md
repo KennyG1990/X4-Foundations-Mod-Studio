@@ -7488,7 +7488,8 @@ The same real load retained genuine mod findings, including
 these are findings in the loaded mod, not merge-law failures. Evidence receipt:
 `test-results/x4-merge-law-oracle/w7_20260805_a97e2186_03/`.
 
-Immediate W7 checkpoint is fully closed: `1c912cf28bfe62509ba4ece06553949e514555b6` is pushed with
-`HEAD == origin/main == remote` ([commit](https://github.com/KennyG1990/X4_Forge/commit/1c912cf28bfe62509ba4ece06553949e514555b6)).
+Immediate W7 checkpoint is fully closed: parity was proven for implementation checkpoint
+`1c912cf28bfe62509ba4ece06553949e514555b6` ([commit](https://github.com/KennyG1990/X4_Forge/commit/1c912cf28bfe62509ba4ece06553949e514555b6))
+and again at the current final branch tip (`HEAD == origin/main == remote main`).
 GitHub `#11` and `#18` each remain `OPEN` / `PARTIAL`, with exactly one updated ledger block and this commit link.
 W3 and the overall program remain `PARTIAL` where applicable; no broader closure is claimed.
