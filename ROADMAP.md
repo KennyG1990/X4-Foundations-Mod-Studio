@@ -7539,5 +7539,13 @@ match staged hashes. Rendered evidence separately proves governed XSD provenance
 before/after claim.
 
 This closes only the bounded W10 rule-provenance/lifecycle checkpoint. W10 remains `OPEN / PARTIAL`; the overall
-extension-native program remains `IN_PROGRESS / PARTIAL`; commit, push, remote parity, GitHub readback, broader rule
-families, and update lifecycle remain pending. No version bump or marketplace publication is claimed.
+extension-native program remains `IN_PROGRESS / PARTIAL`; broader rule families and update lifecycle remain pending.
+The exact `17`-path implementation checkpoint is commit `590308e46867817467262bc83b6ba34295fec271`, subject
+`feat(validation): surface governed rule provenance in Forge`. Its enforced pre-commit hook passed, push
+`main -> origin/main` succeeded, and read-only parity proves
+`HEAD == origin/main == remote/main == 590308e46867817467262bc83b6ba34295fec271`. Independent readback found
+issues `#9`, `#10`, and `#18` open, each with exactly one start marker and one end marker, the full checkpoint hash,
+and `Status: IN_PROGRESS / PARTIAL`; `#10` remains the canonical W10 owner, `#9` the parent program, and `#18` the
+no-gap projection. The index is empty and only the pre-existing unrelated preservation set remains dirty. No version
+bump or marketplace publication occurred. Only the documentation mirror commit remains pending; suggested title:
+`docs: record W10 provenance checkpoint parity`.

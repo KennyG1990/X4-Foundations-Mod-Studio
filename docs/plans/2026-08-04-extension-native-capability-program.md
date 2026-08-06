@@ -168,8 +168,13 @@ Date: 2026-08-04
   lint `0` errors / `593` warnings, runtime oracle `132/132`, Graphify `5,548` nodes / `13,586` edges /
   `222` communities, and final precommit `[precommit] OK` are recorded in the bounded plan.
 - This dependent unit is `VERIFIED` only as a bounded W10 checkpoint. W10 remains `OPEN / PARTIAL`; the overall
-  extension-native program remains `IN_PROGRESS / PARTIAL`; commit, push, remote-parity, and GitHub readback remain
-  pending.
+  extension-native program remains `IN_PROGRESS / PARTIAL`. The exact `17`-path implementation checkpoint is
+  commit `590308e46867817467262bc83b6ba34295fec271`, subject
+  `feat(validation): surface governed rule provenance in Forge`; its enforced hook passed, push
+  `main -> origin/main` succeeded, and read-only parity proves `HEAD == origin/main == remote/main` at that hash.
+  Independent readback found `#9`, `#10`, and `#18` open with one implementation-ledger block, the full hash, and
+  `Status: IN_PROGRESS / PARTIAL` each. `#10` remains the canonical W10 owner; `#9` is the parent and `#18` the
+  no-gap projection. Only the documentation mirror commit remains pending.
 
 - Native Sol/Luna routing is restored and independently proven; diagnostic CLI execution was not used as product-
   code implementation evidence.
@@ -247,6 +252,11 @@ Date: 2026-08-04
   real-child acceptance remain open. Later W3 units, W3C installed proof, and other program gates remain open.
 - Checkpoint: pushed commit `1c912cf28bfe62509ba4ece06553949e514555b6` with subject
   `feat(x4): prove merge laws and harden mutation receipts`.
+- W10 provenance checkpoint: pushed commit `590308e46867817467262bc83b6ba34295fec271` with subject
+  `feat(validation): surface governed rule provenance in Forge`; enforced hook, `main -> origin/main`, exact
+  `HEAD == origin/main == remote/main` parity, and open issue `#9`/`#10`/`#18` readback passed. The index is empty,
+  unrelated dirty paths remain preserved, and the documentation mirror commit is still pending under suggested title
+  `docs: record W10 provenance checkpoint parity`.
 
 ## AAR
 

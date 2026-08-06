@@ -21,7 +21,7 @@ Date: 2026-08-06
   focused validation; isolated E2E; packaged and installed extension proof; and rendered Why-panel proof.
 - **Out of scope:** broader rule families, rule updates or deprecation, target-version authority, W3 receipt work,
   overall native-capability-program completion, marketplace publication, version bump, real mod/game writes,
-  commit/push, GitHub mutation, and unrelated dirty files.
+  new Git/GitHub mutation by this documentation worker, and unrelated dirty files.
 - **Risks and authorization boundaries:** false applicability, conflicting guidance, API/UI drift, stale package
   bits, process-tree cleanup false reds, installed-host locking, and misleading cross-workspace screenshot
   comparisons. This documentation close performs no product, Git, GitHub, package-install, or game/mod mutation.
@@ -47,8 +47,10 @@ Date: 2026-08-06
 7. The packaged extension passes build/stage/probe/inspection, the package digest and size are recorded, installed
    extension bits match the staged package, and the installed Why-panel screenshots prove the governed provenance
    and restored validation state. DeadAir and `x4_ai_influence` screenshots remain identified separately.
-8. This bounded checkpoint is `VERIFIED`; W10 remains `OPEN / PARTIAL`; the overall extension-native program remains
-   `IN_PROGRESS / PARTIAL`; no commit, push, GitHub readback, version bump, or marketplace publication is claimed.
+8. This bounded checkpoint is `VERIFIED` at implementation commit
+   `590308e46867817467262bc83b6ba34295fec271`, with hook, push, parity, and issue readback complete. W10 remains
+   `OPEN / PARTIAL`; the overall extension-native program remains `IN_PROGRESS / PARTIAL`; no version bump,
+   marketplace publication, or overall completion is claimed.
 
 ### Required validation and negative paths
 
@@ -85,9 +87,11 @@ Date: 2026-08-06
 ## BASELINE
 
 - **Revision:** baseline commit `5541f7933b7fe54a6a519d95af01eb1b2b645054`.
-- **Working state:** the current implementation checkpoint is uncommitted. Commit, push, remote-parity, and
-  GitHub readback remain pending after this documentation close. The worktree contains unrelated modified,
-  deleted, and untracked paths; this worker preserves them.
+- **Working state:** the implementation checkpoint is committed and pushed at
+  `590308e46867817467262bc83b6ba34295fec271`; the enforced pre-commit hook passed; read-only parity proves
+  `HEAD == origin/main == remote/main`; and issues `#9`, `#10`, and `#18` passed independent readback while remaining
+  open/partial. The index is empty and only the pre-existing unrelated preservation set remains dirty. This
+  documentation mirror follow-up is not yet committed.
 - **Pre-repair lifecycle evidence:** the preserved red receipt records product `96/96` but
   `complete=false`, `treeGone=false`, and `termination-command-failed`; the reproduced explanation is a process
   exiting after stable identity recheck and before `taskkill`, with no fresh post-command identity check.
@@ -177,8 +181,13 @@ the documentation edits and are recorded separately.
 - **Worker checks:** passed. `git diff --check` passed on all owned in-repo documentation paths; read-only
   exact-path status/diff review passed; and the new-prose and false-overall-completion scans passed. The external
   wiki paths are outside the Forge Git worktree and are reported separately.
-- **Unavailable gates:** commit, push, remote-parity, and GitHub readback were not run by this worker and remain
-  pending. They are not silently treated as passed or as evidence that W10 or the overall program is complete.
+- **Git/GitHub close:** implementation commit `590308e46867817467262bc83b6ba34295fec271` has subject
+  `feat(validation): surface governed rule provenance in Forge`, contains exactly `17` checkpoint paths, and passed
+  the enforced pre-commit hook. Push `main -> origin/main` succeeded; read-only parity proves
+  `HEAD == origin/main == remote/main == 590308e46867817467262bc83b6ba34295fec271`; and the index is empty.
+  Independent readback of issues `#9`, `#10`, and `#18` found all three open, each with exactly one start marker and
+  one end marker, the full checkpoint hash, and `Status: IN_PROGRESS / PARTIAL`. Issue `#10` remains the canonical
+  W10 owner; `#9` is the parent program and `#18` is the no-gap projection. None was closed.
 
 ## REVIEW
 
@@ -188,8 +197,10 @@ the documentation edits and are recorded separately.
   checks, and the independent lifecycle test totals.
 - **Requirement 7:** done and evidenced by package/stage/probe/inspection, installed hash parity, and the correctly
   separated DeadAir and `x4_ai_influence` rendered screenshots.
-- **Requirement 8:** done for this bounded checkpoint. W10 remains `OPEN / PARTIAL`; the overall extension-native
-  program remains `IN_PROGRESS / PARTIAL`; commit/push/GitHub parity and other program gates remain pending.
+- **Requirement 8:** done for this bounded checkpoint. Commit `590308e46867817467262bc83b6ba34295fec271`
+  passed its enforced hook, pushed to `origin/main`, and matches `HEAD`, `origin/main`, and `remote/main`; issue
+  readback for `#9`, `#10`, and `#18` passed with all three open and exactly one implementation-ledger block each.
+  W10 remains `OPEN / PARTIAL`, and the overall extension-native program remains `IN_PROGRESS / PARTIAL`.
 - **Fresh-eyes review:** no remaining finding was reported. The review specifically retained the red lifecycle receipt,
   rejected false completion from product-only `96/96`, checked package-to-installed hashes, and checked that no
   `47`-to-`2` same-mod claim was introduced.
@@ -209,10 +220,16 @@ the documentation edits and are recorded separately.
 - **Baseline/rollback:** baseline is commit `5541f7933b7fe54a6a519d95af01eb1b2b645054`, the preserved red receipt,
   and the pre-existing dirty-worktree inventory. Product/harness rollback remains bounded source/test rollback;
   documentation rollback is limited to the owned documentation paths.
+- **Git/GitHub close:** the exact `17`-path implementation checkpoint is commit
+  `590308e46867817467262bc83b6ba34295fec271`, subject
+  `feat(validation): surface governed rule provenance in Forge`. Its enforced hook passed, push
+  `main -> origin/main` succeeded, parity is exact across `HEAD`, `origin/main`, and `remote/main`, and independent
+  issue readback passed for open issues `#9`, `#10`, and `#18` with one ledger block, the full hash, and
+  `Status: IN_PROGRESS / PARTIAL` on each.
 - **Remaining program state:** W10 remains `OPEN / PARTIAL`; the overall extension-native program remains
-  `IN_PROGRESS / PARTIAL`. Commit/push, remote-parity, and GitHub issue readback remain pending. No version bump,
-  marketplace publish, or overall completion is claimed.
-- **Suggested commit title:** `feat(validation): surface governed rule provenance in Forge`.
+  `IN_PROGRESS / PARTIAL`. Only this documentation close mirror remains uncommitted; no hash is claimed for it.
+  No version bump, marketplace publish, or overall completion is claimed.
+- **Suggested follow-up title:** `docs: record W10 provenance checkpoint parity`.
 
 ## AAR
 
@@ -221,7 +238,9 @@ the documentation edits and are recorded separately.
   product `96/96` with a lifecycle false-red race; the bounded lifecycle repair; correction of the mistaken
   assumption that per-run OS temp cleanup was a task gate; two EPERM install attempts requiring a full IDE close;
   one corrected PowerShell parser/hash-output issue; first precommit manifest omission; unavailable reviewctl; and
-  one corrected coordinator message-serialization failure.
+  one corrected coordinator message-serialization failure. The first issue-readback verification script later had a
+  JavaScript regex serialization error before producing any result; the corrected readback passed. This is the second
+  small coordinator serialization/tool-friction event, not a product failure.
 - **Sustain:** keep product verdict, process ownership/termination, package bytes, installed bits, and rendered UI as
   independent proof layers. Reuse the governed rule authority, preserve deterministic API/UI parity, retain generic
   fallback and explicit unavailability, and preserve the reproduced red receipt beside the green receipt.
@@ -231,12 +250,13 @@ the documentation edits and are recorded separately.
 - **Improve tools:** perform a fresh exact-identity recheck after command failure; verify staged/package/installed
   hashes independently; close the host before retrying a locked install; use corrected PowerShell hash/parser output;
   rerun the full precommit after manifest repair; and record reviewctl unavailability instead of implying review-tool
-  success. Keep coordinator close messages serialization-safe after the one corrected message failure.
+  success. Keep coordinator close/readback messages serialization-safe; the corrected issue readback passed after
+  the second small serialization error.
 - **Commit-hook tool friction:** the first commit wrapper used a `120`-second timeout and expired while the pre-commit
   hook was still running the capability audit. No commit was created; `HEAD` remained
   `5541f7933b7fe54a6a519d95af01eb1b2b645054`; the exact `17`-path index stayed intact with no unrelated path staged;
-  and the orphaned hook later exited. The separate final `npm run precommit:check` was already green; rerun the commit
-  with sufficient time and do not bypass the hook.
+  and the orphaned hook later exited. The separate final `npm run precommit:check` was already green; the corrective
+  long-timeout commit rerun retained the hook and produced the verified implementation commit above.
 - **Highest-risk evidenced weakness:** lifecycle cleanup and installed-host locking can produce false conclusions
   unless product verdict, process ownership, and installed bits are verified independently. The bounded repair reduces
   the lifecycle race but does not close the broader W10 or program gates.

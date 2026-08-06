@@ -212,5 +212,12 @@ Parent/program cross-reference: GitHub #18, no-unexplained-gap program ledger on
   before/after reduction.
 - Supporting validation is typecheck/build pass, lint `0` errors / `593` warnings, runtime oracle `132/132`, Graphify
   `5,548` nodes / `13,586` edges / `222` communities, and final precommit `[precommit] OK` with the recorded
-  governance/capability/receipt checks. Commit, push, remote parity, and GitHub readback remain pending; W10 stays
-  `OPEN / PARTIAL`, and the overall extension-native program stays `IN_PROGRESS / PARTIAL`.
+  governance/capability/receipt checks. The exact `17`-path implementation checkpoint is commit
+  `590308e46867817467262bc83b6ba34295fec271`, subject
+  `feat(validation): surface governed rule provenance in Forge`; its enforced hook passed, push
+  `main -> origin/main` succeeded, and read-only parity proves `HEAD == origin/main == remote/main` at that hash.
+  Independent readback found issues `#9`, `#10`, and `#18` open with exactly one implementation-ledger block, the
+  full hash, and `Status: IN_PROGRESS / PARTIAL` each. Issue `#10` remains the canonical W10 owner; `#9` is the
+  parent and `#18` is the no-gap projection. W10 stays `OPEN / PARTIAL`, the overall extension-native program stays
+  `IN_PROGRESS / PARTIAL`, and only the documentation mirror commit remains pending under suggested title
+  `docs: record W10 provenance checkpoint parity`.
