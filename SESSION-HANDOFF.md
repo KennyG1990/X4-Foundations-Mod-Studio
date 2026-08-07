@@ -7,8 +7,9 @@ Updated: 2026-08-07
 The installed X4 Forge extension's W3B1a workspace/CAS receipt checkpoint is implemented and validated at `5/5`;
 bulk-transform apply is the fifth verified route. W3B1/W3 and the extension-native program remain
 `IN_PROGRESS / PARTIAL`. Stable `0.0.65` is publicly available on OpenVSX with exact local/public byte-hash parity,
-installed in Antigravity, reloaded, rendered, and live-sidecar verified. Final synchronized precommit is green; exact
-staging, commit/push parity, and GitHub `#9`/`#19`/`#20` marker synchronization remain the current close steps.
+installed in Antigravity, reloaded, rendered, and live-sidecar verified. Implementation/release commit
+`77ce8a3091d9c6abf7c5470ae488528ddb1c6605` is pushed with exact parity, and GitHub `#9`/`#19`/`#20` marker
+readback is green. The next bounded unit is W3B1b guarded filesystem/recovery receipt authority.
 
 ## Project and product boundary
 
@@ -23,7 +24,8 @@ staging, commit/push parity, and GitHub `#9`/`#19`/`#20` marker synchronization 
 ## Current checkpoint
 
 - Branch baseline: `main`; pre-checkpoint `HEAD == origin/main == c334127888368993cf350e13839376a0d44507d4`.
-- Combined release commit: `release: publish X4 Forge Studio 0.0.65`.
+- Combined implementation/release commit: `77ce8a3091d9c6abf7c5470ae488528ddb1c6605`, subject
+  `release: publish X4 Forge Studio 0.0.65`; `HEAD == origin/main == remote main` immediately after its push.
 - The route requires caller-owned `x-forge-operation-id`, binds canonical plan/source/paired-state hashes, serializes
   same-workspace mutations, rechecks plan and paired CAS at the mutation boundary, prepares recovery before one
   registry commit, terminalizes/reopens before success, replays exactly without remutation, conflicts changed facts,
@@ -43,6 +45,8 @@ staging, commit/push parity, and GitHub `#9`/`#19`/`#20` marker synchronization 
   metadata report `0.0.65`; the public download is byte/hash identical to the local candidate.
 - Installed Antigravity reports `x4forge.x4-forge-studio@0.0.65`; the real host was reloaded and the rendered/live
   proof below passed. Evidence: `vscode-extension/evidence/0.0.65-release-validation.md`.
+- Exact 30-path commit hook reran precommit and returned `[precommit] OK` in `452.5s`; push
+  `c334127..77ce8a3 main -> main` succeeded.
 - Historical `0.0.64` remains `BLOCKED` and immutable. It was accepted once, never activated during its bounded
   monitor, contains the old `0A0A` changelog EOF, and was not republished. Preserve its plan/evidence/archive.
 
@@ -117,6 +121,21 @@ staging, commit/push parity, and GitHub `#9`/`#19`/`#20` marker synchronization 
   `vscode-extension/evidence/0.0.65-installed-antigravity-forge-v1.0.428.png`, SHA-256
   `FE26D7B81141970F3E80C82C1CEE2133797B04B6CD41B318D6BC75BA96AF0715`.
 
+## Git and GitHub close
+
+- Implementation/release commit: `77ce8a3091d9c6abf7c5470ae488528ddb1c6605`; exact `30` intended paths,
+  `5,180` insertions / `195` deletions; no unrelated owner path entered the index.
+- Push: PASS. Read-only parity:
+  `HEAD == origin/main == remote refs/heads/main == 77ce8a3091d9c6abf7c5470ae488528ddb1c6605`.
+- GitHub issues `#9`, `#19`, and `#20` remain open. Independent readback found exactly one start/end ledger marker
+  pair per issue, the full checkpoint hash, public `0.0.65`, complete W3B1a semantics, no stale bulk-open sentence,
+  no unresolved placeholder, and no prohibited source-product reference.
+- One first issue update serialized a literal commit placeholder in `#19`; the exact marker was corrected before the
+  independent green readback. One first readback checker required the exact string `5/5` although `#20` said
+  semantically equivalent `all five`; the corrected semantic checker passed without another issue mutation.
+- This documentation-only close commit contains the final handoff state. It changes no Forge runtime/package bytes;
+  the implementation checkpoint and public archive remain the hashes above.
+
 ## Preserved unrelated dirty state
 
 Never stage, revert, delete, or rewrite these owner paths:
@@ -152,11 +171,12 @@ Use `git add -- <exact checkpoint paths>` only. Do not use broad add, clean, res
 
 ## Exact continuation
 
-1. Stage only the checkpoint and release paths, inspect staged name/status and staged diff, commit with the release
-   subject, push `main`, and prove local/origin/remote full-hash parity.
-2. Update only the existing marker blocks in GitHub issues `#9`, `#19`, and `#20`; leave all three open and prove one
-   start/end marker per issue by readback.
-3. Reconcile and document the next Full-lane feature: W3B1b guarded filesystem/recovery receipt authority.
+1. Reconcile and document the W3B1b guarded filesystem/recovery receipt unit against the current route/resource
+   inventory, capability map, ADRs, and existing receipt/recovery owners.
+2. Decompose non-overlapping native Luna work orders with exact path ownership, acceptance criteria, and focused
+   failure tests. Do not begin W3B1c-d until the W3B1b checkpoint closes.
+3. Preserve the unrelated dirty set below; use the standing quiet-machine authorization for applicable isolated E2E,
+   package, and installed Antigravity validation. Do not write game/mod data.
 
 ## Eyeball queue
 
