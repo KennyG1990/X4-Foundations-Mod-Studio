@@ -166,6 +166,8 @@
     "src/lib/xsdParser.ts",
     "src/lib/xsdValidate.ts",
     "src/server/aiKeyStore.ts",
+    "src/server/bulkTransformApplyReceiptAdapter.ts",
+    "src/server/bulkTransformApplyReceiptFacts.ts",
     "src/server/bulkTransformRoutes.ts",
     "src/server/gameDetectRoutes.ts",
     "src/server/githubCredentialStore.ts",

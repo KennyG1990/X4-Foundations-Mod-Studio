@@ -18,7 +18,8 @@ Date: 2026-08-04
   product capabilities.
 - **Assumptions:** current repository and installed-product evidence supersede historical progress claims;
   unrelated dirty files remain user-owned; repository Markdown is implementation truth and GitHub is its
-  public projection; no release publication is authorized by this program.
+  public projection. The owner separately authorized one stable OpenVSX release for the verified checkpoint on
+  2026-08-07; that narrow authorization does not broaden the program's product boundary.
 - **Authoritative references:** the user-supplied completion request; `AGENTS.md`; `BACKLOG.md`;
   `SESSION-HANDOFF.md`; `ROADMAP.md`; the W3/W3B0/W3B1 and pending-feature plans; StarForge
   `x4-forge/capability-map.md` and `x4-forge/decisions.md`; current source, tests, installed extension, and
@@ -29,13 +30,14 @@ Date: 2026-08-04
   behavior; repository/GitHub status parity; exact checkpoint commits and pushes after required gates.
 - **Out of scope:** external/public analysis surfaces, user-facing CLI work, imported external analysis code/results,
   unrequested product comparison, real-game/mod writes without their separate write gate, provider spend,
-  marketplace publication, and unrelated dirty files.
+  marketplace publication other than the separately authorized stable OpenVSX checkpoint, and unrelated dirty files.
 - **Risks and authorization boundaries:** receipt work touches concurrency, rollback, persistence, and secret-
   redaction contracts; E2E supervision can leak processes or touch live ports if containment is wrong; installed
   proof can disturb the operator's active Antigravity canvas; configuration is loaded at Codex app-server start.
   User authorization covers the exact project routing repair, validated global snapshot refresh if required,
   restart after preserving handoff state, implementation, validation, Git checkpoints, push, and remote parity.
-  The mandatory machine-state ask still gates E2E, packaging, and installed UI work.
+  The owner supplied standing quiet-machine authorization for this program's Antigravity/E2E/package validation;
+  do not ask again unless that state is explicitly revoked.
 - **Rollback/checkpoint:** project routing rollback is deletion of `.codex/config.toml`; any global repair first
   receives a recoverable backup through the existing installer; each code subunit has exact-path Git rollback or
   its domain compensation/recovery owner; never reset, clean, or overwrite unrelated worktree state.
@@ -73,8 +75,8 @@ Date: 2026-08-04
   deadline; exact process/port/temp/live-state containment checks.
 - `npm run typecheck`, zero-error lint, runtime oracle sweep, route integration, `npm run build`, extension build/
   stage/package/inspect/probe, `npm run precommit:check`, and Graphify refresh.
-- Full isolated `npm run test:e2e` only after the operator confirms Antigravity/game/machine state; workers remain
-  serial and ports 3000/3001 and the live workspace must remain byte/state unchanged.
+- Full isolated `npm run test:e2e` uses the owner's standing quiet-machine authorization; workers remain serial and
+  ports 3000/3001 and the live workspace must remain byte/state unchanged.
 - Real installed Antigravity inspection for every user-visible or interaction claim; screenshots/machine receipts
   live under `vscode-extension/evidence/`.
 
@@ -272,6 +274,27 @@ Date: 2026-08-04
   provenance claim, version bump, marketplace publication, mod/game write, or deploy is made. The implementation
   checkpoint and GitHub projection close are recorded below.
 
+- 2026-08-07 W3B1a bulk-transform receipt delta: the fifth and final workspace/CAS mutation family now consumes the
+  existing deterministic receipt, registry, recovery, and history owners. Canonical plan/source/paired-state facts,
+  same-workspace serialization, mutation-boundary CAS, one commit, terminal-before-success, exact replay/conflict,
+  deadline refusal, and finalization rollback/refusal/failure truth are implemented without a new product surface.
+  Facts pass `12/12`; adapter `22/22`; real 9.00 reference API `85/85`; routes `467/467`; oracles `132/132`; receipt
+  coverage `82/52`; official full E2E `96/96` with `treeGone=true`; and pre-documentation precommit is `[precommit]
+  OK`. The inspected same-version VSIX was installed and reloaded in Antigravity: exact installed-byte parity, Forge
+  `v1.0.428`, loaded schema sources, managed installed-server provenance, live `25/25` receipt selftest, and schema
+  operation-header readback are recorded under
+  `vscode-extension/evidence/2026-08-07-w3b1a-bulk-receipts/installed-validation.md`. W3B1a is now `VERIFIED` at
+  `5/5`; W3B1b-d, W3B2-B3, W3C, and the overall extension-native program remain `IN_PROGRESS / PARTIAL`.
+
+- 2026-08-07 stable release delta: the owner separately authorized publication of this verified native checkpoint.
+  OpenVSX accepted exact stable `0.0.65` once; public metadata and the downloaded `18,098,264`-byte VSIX match local
+  SHA-256 `ACBF40475A0AB55AA269E5728FE2B0927C22C9B9CC1F38F12AAD473A1F392D21`. Antigravity now runs installed
+  `x4forge.x4-forge-studio@0.0.65`; the reloaded Forge `v1.0.428` rendered Mission Director `1507`, AI-script `1408`,
+  and script properties `2333`, while the installed sidecar returned receipt selftest `25/25` and the required
+  bulk-operation schema authority. The earlier accepted-but-withheld `0.0.64` remains immutable and was never
+  republished. Evidence: `vscode-extension/evidence/0.0.65-release-validation.md`. This publishes the bounded W3B1a
+  checkpoint; it does not close W3B1, W3, later native capabilities, or the overall program.
+
 ## CLOSE
 
 - Current status: IN_PROGRESS / PARTIAL. W7's native engine merge-law/schema-routing unit is `VERIFIED`, and W10's
@@ -280,9 +303,9 @@ Date: 2026-08-04
   likewise `VERIFIED` as recorded in the dated delta above. W10 overall remains `OPEN / PARTIAL`. W7's exact engine, oracle, route, package, E2E, and
   installed Antigravity evidence is recorded above. Its immediate
   checkpoint Git/GitHub parity is closed at pushed commit `1c912cf28bfe62509ba4ece06553949e514555b6`, with `#11`/
-  `#18` readback complete. Native routing is proven; W3B1a remains 3/5 and lifecycle 96/96 is verified, while
-  snapshot restore, bulk apply, and route-specific receipt, finalization, compensation, fault-injection, and
-  real-child acceptance remain open. Later W3 units, W3C installed proof, and other program gates remain open.
+  `#18` readback complete. Native routing is proven, and the dated 2026-08-07 delta above closes W3B1a at 5/5 with
+  receipt, fault-injection, official E2E, package, and installed-sidecar proof. W3B1b-d, W3B2-B3, W3C, later native
+  capabilities, and the overall program remain open.
 - Checkpoint: pushed commit `1c912cf28bfe62509ba4ece06553949e514555b6` with subject
   `feat(x4): prove merge laws and harden mutation receipts`.
 - W10 provenance checkpoint: pushed commit `590308e46867817467262bc83b6ba34295fec271` with subject
@@ -313,8 +336,8 @@ Date: 2026-08-04
 - Improve tools: never dump the global Codex config to inspect routing keys. One read-only command emitted an existing
   configured credential into private tool output; it was not used or written to the repository. Future checks select
   only the exact non-secret fields, and the credential owner must rotate the exposed value.
-- Highest-risk evidenced weakness: three W3B1a mutation routes and later W3 owners still lack authoritative
-  execution receipts; post-response history cannot substitute for terminal transaction truth.
+- Highest-risk evidenced weakness: W3B1b-d mutation owners still lack complete authoritative execution receipts;
+  post-response history cannot substitute for terminal transaction truth.
 - Triggered: one broad disappearance-executor test worker was closed before completion and then landed a valid late
   file. The coordinator froze overlapping work and reviewed the settled bytes before assigning a successor. One
   initial fixture also mislabeled a reused child PID/token as unrelated, exhausted its injected snapshot queue, and

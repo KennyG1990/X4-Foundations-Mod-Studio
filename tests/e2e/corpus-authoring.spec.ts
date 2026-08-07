@@ -118,6 +118,7 @@ test('corpus authoring blocks collisions, completes XPath, previews, applies, an
 
   await page.route('**/api/agent/bulk-transform/apply', async route => {
     const body = route.request().postDataJSON() as { rule: Record<string, unknown>; expectedPlanHash: string; expectedHead: string; expectedSnapshotHash: string };
+    expect(route.request().headers()['x-forge-operation-id']).toEqual(expect.stringMatching(/^[a-zA-Z][a-zA-Z0-9._:-]{0,127}$/));
     const before = await readServerWorkspaceEnvelope();
     expect(body.expectedPlanHash).toBe('plan-e2e');
     expect(body.expectedHead).toBe(before.workspaceHash);

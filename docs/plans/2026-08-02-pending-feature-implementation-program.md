@@ -1,6 +1,6 @@
 # X4 Forge pending-feature implementation program
 
-Status: IN_PROGRESS; W3A and W3B0 VERIFIED, implementation continues with W3B1
+Status: IN_PROGRESS; W3A, W3B0, and the 5/5 W3B1a workspace/CAS checkpoint are VERIFIED; implementation continues with W3B1b
 Lane: FULL
 Inventory cutoff: 2026-08-02
 Owner: active Sol coordinator; implementation code is delegated only to native `luna_executor` workers
@@ -243,6 +243,24 @@ production routes `467/467`, receipt policy `82/51` at SHA-256
 route containment. Bulk-transform apply is the remaining W3B1a route; full W3B1a E2E follows that fifth route.
 W3B1b-d, W3B2-B3, and visible W3C receipt/history controls remain open. Exact record:
 `docs/plans/2026-08-02-w3b1-addressed-state-receipts.md`.
+
+**W3B1a bulk-transform checkpoint (2026-08-07): VERIFIED 5/5 workspace/CAS checkpoint; W3 remains IN_PROGRESS /
+PARTIAL.** Bulk-transform apply now uses canonical plan/source/paired-state facts, same-workspace serialization,
+recovery-before-one-commit, terminal receipt before success, exact replay/conflict, mutation-boundary paired CAS,
+deadline refusal, rollback truth, and fail-soft history projection through the existing extension-managed sidecar
+owners. Facts are `12/12`, the adapter is `22/22`, real X4 9.00 reference API is `85/85`, production routes are
+`467/467`, runtime oracles are `132/132`, receipt coverage is `82/52`, and the final official isolated E2E is
+`96/96` with `treeGone=true`. The inspected VSIX was installed into Antigravity; installed bytes match the package,
+Forge `v1.0.428` rendered with all schema sources loaded, and the live installed sidecar returned receipt-service
+`25/25` plus the required caller-owned bulk operation header. W3B1b-d, W3B2-B3, and W3C remain open. Exact record:
+`docs/plans/2026-08-02-w3b1-addressed-state-receipts.md`.
+
+**Separately authorized stable release (2026-08-07): VERIFIED; program remains IN_PROGRESS / PARTIAL.** OpenVSX
+public `0.0.65` and its downloaded VSIX match the inspected local `18,098,264`-byte archive at SHA-256
+`ACBF40475A0AB55AA269E5728FE2B0927C22C9B9CC1F38F12AAD473A1F392D21`. Antigravity runs installed `0.0.65` after
+a real reload; Forge `v1.0.428` rendered schema counts `1507/1408/2333`, and the installed managed sidecar returned
+receipt selftest `25/25` plus the required operation-header authority. The accepted-but-withheld `0.0.64` was not
+republished. Exact record: `docs/plans/2026-08-07-openvsx-0.0.65-recovery-release.md`.
 
 ### Wave 2 — reproducibility, native capability contract, and unlocked Kimi/UX units
 

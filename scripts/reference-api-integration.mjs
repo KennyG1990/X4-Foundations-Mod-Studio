@@ -63,6 +63,7 @@ async function request(urlPath, options = {}) {
   if (options.token) headers.Authorization = `Bearer ${options.token}`;
   if (options.token === token) headers['x-client-id'] = clientId;
   if (options.token && workspaceId) headers['x-workspace-id'] = workspaceId;
+  if (options.operationId !== undefined) headers['x-forge-operation-id'] = options.operationId;
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
   return fetch(base + urlPath, {
     method: options.method || 'GET',
@@ -290,9 +291,18 @@ try {
   check('bulk preview requires authentication', (await request('/api/agent/bulk-transform/preview', { method: 'POST', body: { rule: bulkRule } })).status === 401);
   const readScopedPreview = await request('/api/agent/bulk-transform/preview', { method: 'POST', token: readToken, body: { rule: bulkRule } });
   check('read-scoped agent key can run no-write bulk preview', readScopedPreview.status === 200, `status=${readScopedPreview.status}`);
-  const readScopedApply = await request('/api/agent/bulk-transform/apply', { method: 'POST', token: readToken, body: { rule: bulkRule, expectedPlanHash: bulkPreview.planHash, expectedHead: bulkPreview.workspaceHash, expectedSnapshotHash: bulkPreview.snapshotHash } });
+  const readScopedApplyOperationId = 'forge_op_reference_bulk_read_scope';
+  const stalePlanOperationId = 'forge_op_reference_bulk_stale_plan';
+  const stalePlanHash = '0'.repeat(64);
+  const readScopedApply = await request('/api/agent/bulk-transform/apply', {
+    method: 'POST', token: readToken, operationId: readScopedApplyOperationId,
+    body: { rule: bulkRule, expectedPlanHash: bulkPreview.planHash, expectedHead: bulkPreview.workspaceHash, expectedSnapshotHash: bulkPreview.snapshotHash },
+  });
   check('read-scoped agent key cannot apply a bulk mutation', readScopedApply.status === 403, `status=${readScopedApply.status}`);
-  const stalePlanResponse = await request('/api/agent/bulk-transform/apply', { method: 'POST', token, body: { rule: bulkRule, expectedPlanHash: 'definitely-stale', expectedHead: beforeBulk.workspaceHash, expectedSnapshotHash: beforeBulk.snapshotHash } });
+  const stalePlanResponse = await request('/api/agent/bulk-transform/apply', {
+    method: 'POST', token, operationId: stalePlanOperationId,
+    body: { rule: bulkRule, expectedPlanHash: stalePlanHash, expectedHead: beforeBulk.workspaceHash, expectedSnapshotHash: beforeBulk.snapshotHash },
+  });
   const afterStale = await request('/api/agent/workspace', { token }).then((response) => response.json());
   check('stale bulk plan is rejected with zero mutation', stalePlanResponse.status === 409 && afterStale.workspaceHash === beforeBulk.workspaceHash, `status=${stalePlanResponse.status}`);
   const traversalBulk = await request('/api/agent/bulk-transform/preview', { method: 'POST', token, body: { rule: { ...bulkRule, pathPrefix: '../outside' } } });
@@ -318,9 +328,52 @@ try {
   const afterCap = await request('/api/agent/workspace', { token }).then((response) => response.json());
   check('bulk cap breach blocks all output and mutation', cappedBulk.status === 422 && cappedBody.droppedCount > 0 && cappedBody.rows?.length === 0 && afterCap.workspaceHash === beforeBulk.workspaceHash, JSON.stringify({ status: cappedBulk.status, dropped: cappedBody.droppedCount, rows: cappedBody.rows?.length }));
   if (bulkPreview.ok) {
-    const applyResponse = await request('/api/agent/bulk-transform/apply', { method: 'POST', token: writeToken, body: { rule: bulkRule, expectedPlanHash: bulkPreview.planHash, expectedHead: bulkPreview.workspaceHash, expectedSnapshotHash: bulkPreview.snapshotHash } });
+    const changedApplyOperationId = 'forge_op_reference_bulk_changed';
+    const noChangeApplyOperationId = 'forge_op_reference_bulk_no_change';
+    const changedApplyBody = {
+      rule: bulkRule,
+      expectedPlanHash: bulkPreview.planHash,
+      expectedHead: bulkPreview.workspaceHash,
+      expectedSnapshotHash: bulkPreview.snapshotHash,
+    };
+    const applyResponse = await request('/api/agent/bulk-transform/apply', {
+      method: 'POST', token: writeToken, operationId: changedApplyOperationId, body: changedApplyBody,
+    });
     const applied = await applyResponse.json();
+    const afterChangedApply = await request('/api/agent/workspace', { token }).then((response) => response.json());
     check('bulk apply atomically updates workspace patch state', applyResponse.status === 200 && applied.applied === true && applied.workspace?.xmlPatches?.length === bulkPreview.matchedFiles, JSON.stringify({ status: applyResponse.status, patches: applied.workspace?.xmlPatches?.length, expected: bulkPreview.matchedFiles }));
+    check('changed bulk apply commits receipt projection and returns current hashes', applyResponse.status === 200
+      && applied.success === true
+      && applied.status === 'SUCCESS'
+      && applied.applied === true
+      && applied.replayed === false
+      && Object.keys(applied.receipt || {}).sort().join(',') === 'hash,id,status'
+      && applied.receipt?.status === 'committed'
+      && applied.workspaceHash === afterChangedApply.workspaceHash
+      && applied.snapshotHash === afterChangedApply.snapshotHash
+      && afterChangedApply.workspaceHash !== beforeBulk.workspaceHash,
+    JSON.stringify({ status: applyResponse.status, receipt: applied.receipt, workspaceHash: applied.workspaceHash, snapshotHash: applied.snapshotHash }));
+
+    const beforeChangedReplay = await request('/api/agent/workspace', { token }).then((response) => response.json());
+    const exactReplayResponse = await request('/api/agent/bulk-transform/apply', {
+      method: 'POST', token: writeToken, operationId: changedApplyOperationId, body: changedApplyBody,
+    });
+    const exactReplay = await exactReplayResponse.json();
+    const afterChangedReplay = await request('/api/agent/workspace', { token }).then((response) => response.json());
+    check('changed bulk apply exact replay is replayed and nonmutating', exactReplayResponse.status === 200
+      && exactReplay.success === true
+      && exactReplay.replayed === true
+      && exactReplay.applied === false
+      && Object.keys(exactReplay.receipt || {}).sort().join(',') === 'hash,id,status'
+      && exactReplay.receipt?.status === 'committed'
+      && exactReplay.receipt?.id === applied.receipt?.id
+      && exactReplay.receipt?.hash === applied.receipt?.hash
+      && exactReplay.workspaceHash === beforeChangedReplay.workspaceHash
+      && exactReplay.snapshotHash === beforeChangedReplay.snapshotHash
+      && afterChangedReplay.workspaceHash === beforeChangedReplay.workspaceHash
+      && afterChangedReplay.snapshotHash === beforeChangedReplay.snapshotHash
+      && afterChangedReplay.version === beforeChangedReplay.version,
+    JSON.stringify({ status: exactReplayResponse.status, replayed: exactReplay.replayed, receipt: exactReplay.receipt }));
     const compileResponse = await request('/api/agent/compile', { method: 'POST', token, body: { workspace: applied.workspace } });
     const compiled = await compileResponse.json();
     const compiledTargets = bulkPreview.rows.every((row) => {
@@ -346,9 +399,28 @@ try {
 
     const rerunPreviewResponse = await request('/api/agent/bulk-transform/preview', { method: 'POST', token, body: { rule: bulkRule } });
     const rerunPreview = await rerunPreviewResponse.json();
-    const rerunApplyResponse = await request('/api/agent/bulk-transform/apply', { method: 'POST', token: writeToken, body: { rule: bulkRule, expectedPlanHash: rerunPreview.planHash, expectedHead: rerunPreview.workspaceHash, expectedSnapshotHash: rerunPreview.snapshotHash } });
+    const rerunApplyResponse = await request('/api/agent/bulk-transform/apply', {
+      method: 'POST', token: writeToken, operationId: noChangeApplyOperationId,
+      body: { rule: bulkRule, expectedPlanHash: rerunPreview.planHash, expectedHead: rerunPreview.workspaceHash, expectedSnapshotHash: rerunPreview.snapshotHash },
+    });
     const rerunApplied = await rerunApplyResponse.json();
+    const afterNoChangeApply = await request('/api/agent/workspace', { token }).then((response) => response.json());
     check('bulk rerun is idempotent and does not duplicate blocks', rerunPreviewResponse.status === 200 && rerunApplyResponse.status === 200 && rerunApplied.applied === false && rerunApplied.workspace?.xmlPatches?.length === bulkPreview.matchedFiles, JSON.stringify({ preview: rerunPreviewResponse.status, apply: rerunApplyResponse.status, applied: rerunApplied.applied, patches: rerunApplied.workspace?.xmlPatches?.length }));
+    check('new-operation bulk rerun commits no_change without recovery', rerunPreviewResponse.status === 200
+      && rerunApplyResponse.status === 200
+      && rerunApplied.success === true
+      && rerunApplied.status === 'SUCCESS'
+      && rerunApplied.applied === false
+      && rerunApplied.replayed === false
+      && Object.keys(rerunApplied.receipt || {}).sort().join(',') === 'hash,id,status'
+      && rerunApplied.receipt?.status === 'committed'
+      && !Object.prototype.hasOwnProperty.call(rerunApplied, 'recovery')
+      && rerunApplied.workspaceHash === afterNoChangeApply.workspaceHash
+      && rerunApplied.snapshotHash === afterNoChangeApply.snapshotHash
+      && afterNoChangeApply.workspaceHash === beforeChangedReplay.workspaceHash
+      && afterNoChangeApply.snapshotHash === beforeChangedReplay.snapshotHash
+      && afterNoChangeApply.version === beforeChangedReplay.version,
+    JSON.stringify({ preview: rerunPreviewResponse.status, apply: rerunApplyResponse.status, receipt: rerunApplied.receipt, workspaceHash: rerunApplied.workspaceHash, snapshotHash: rerunApplied.snapshotHash }));
 
     const conflictWorkspace = structuredClone(rerunApplied.workspace);
     conflictWorkspace.wares.push({
@@ -361,7 +433,10 @@ try {
       content: bulkPreview.rows[0].newValue, note: 'manual conflict fixture',
       targetFile: bulkPreview.rows[0].targetFile, includeInBuild: true,
     });
-    const seedConflictResponse = await request('/api/agent/workspace', { method: 'POST', token, body: { workspace: conflictWorkspace, expectedHead: rerunApplied.workspaceHash, expectedSnapshotHash: rerunApplied.snapshotHash } });
+    const seedConflictResponse = await request('/api/agent/workspace', {
+      method: 'POST', token, operationId: 'forge_op_reference_bulk_conflict_seed',
+      body: { workspace: conflictWorkspace, expectedHead: rerunApplied.workspaceHash, expectedSnapshotHash: rerunApplied.snapshotHash },
+    });
     const seededConflict = await seedConflictResponse.json();
     const conflictPreviewResponse = await request('/api/agent/bulk-transform/preview', { method: 'POST', token, body: { rule: bulkRule } });
     const conflictPreview = await conflictPreviewResponse.json();

@@ -3735,6 +3735,7 @@ app.get("/api/agent/schema", (req, res) => {
         method: "POST",
         path: "/api/agent/bulk-transform/apply",
         auth: true,
+        headers: { "x-forge-operation-id": "required caller-owned bounded operation identity; the server never fabricates it" },
         body: { rule: "the exact preview rule", expectedPlanHash: "planHash from preview", expectedHead: "workspaceHash from preview", expectedSnapshotHash: "snapshotHash from preview" },
         purpose: "Recompute the preview, reject corpus/workspace drift or any failed row, then atomically merge generated patch blocks into workspace.xmlPatches. Never writes the corpus or game directory."
       },
@@ -9247,7 +9248,39 @@ registerBulkTransformRoutes(app, {
   workspaceId: req => requestWorkspace(req).workspaceId,
   workspaceHash: req => workspaceHash(requestWorkspace(req)),
   workspaceSnapshotHash: req => workspaceRegistry.snapshotHash(requestWorkspace(req)),
-  applyWorkspaceMutation: (req, incoming, options) => applyWorkspaceMutation(requestWorkspace(req), incoming, options),
+  registry: workspaceRegistry,
+  receiptService: workspaceReceiptService,
+  store: actionReceiptStore,
+  recoveryStore: destructiveRecoveryStore,
+  operationId: req => req.headers['x-forge-operation-id'],
+  identity: req => {
+    const routedRequest = req as express.Request & { __actor?: RequestActor; __clientId?: string };
+    const actor = routedRequest.__actor;
+    return actor?.kind === 'agent'
+      ? { kind: 'agent', keyId: actor.keyId, version: ACTION_RECEIPT_RUNTIME_VERSION }
+      : {
+          kind: 'studio',
+          clientId: String(routedRequest.__clientId || ''),
+          version: ACTION_RECEIPT_RUNTIME_VERSION,
+        };
+  },
+  captureProjection: (req, projection) => captureActionReceiptProjection(req, projection),
+  mayProceed: (req, res) => {
+    const deadlineRequest = req as DeadlineAwareRequest;
+    return !res.writableEnded
+      && !res.destroyed
+      && deadlineRequest.__forgeResponseDeadlineExceeded !== true;
+  },
+  recoveryForReceipt: projection => {
+    if (projection === undefined) return undefined;
+    try {
+      const found = destructiveRecoveryStore.read(projection.id);
+      if (!found.ok || found.record.kind !== 'workspace' || found.record.status !== 'ready') return undefined;
+      return recoveryResponse(found.record);
+    } catch {
+      return undefined;
+    }
+  },
 });
 
 

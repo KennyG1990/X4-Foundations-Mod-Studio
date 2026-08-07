@@ -7649,3 +7649,57 @@ remain next; W3B1b-d, W3B2-B3, and visible installed receipt/history controls re
 version bump, package publication, installed-host claim, mod/game write, or deploy occurred. The implementation
 checkpoint is the commit containing this entry, suggested subject
 `feat(authority): bind snapshot restore to action receipts`.
+
+## 2026-08-07 — W3B1a bulk-transform receipt authority — VERIFIED 5/5 workspace checkpoint
+
+`POST /api/agent/bulk-transform/apply` now uses the extension-managed sidecar's existing action-receipt,
+workspace-registry, paired-CAS, destructive-recovery, and history owners. Canonical plan/source/paired-state facts
+exclude raw XML, rules, corpus paths, and host paths. Same-workspace operations serialize through mutation-boundary
+plan and paired-CAS rechecks; recovery is durable before the one workspace commit; the terminal receipt is reopened
+before success; exact replay never reapplies rows; changed facts conflict; response-deadline, finalization,
+rollback-refusal, and rollback-failure paths remain explicit non-success truth. Preview remains read-only.
+
+Focused facts are `12/12` and the transaction adapter is `22/22`. Real X4 9.00 reference API is `85/85`; production
+routes are `467/467`; the focused rendered corpus-authoring E2E is `1/1`; and the final official isolated E2E is
+`96/96`, failed/flaky/bad `0/0/0`, `trigger=child-close`, `treeGone=true`, empty `remainingPids`, closed ports, and
+unchanged live workspace. Receipt coverage is `82` routes / `52` surfaces at SHA-256
+`2c9678bf58ba39b4dfc81a9e2ee8874ee360a816a6d7e391779eb990a94a73f7`; writer, capability/MCP, receipt-policy,
+workspace-receipt, typecheck, lint, build, oracle `132/132`, diff, and precommit gates pass. Graphify is `5,888` nodes
+/ `14,501` edges / `210` communities.
+
+The inspected `0.0.63` VSIX is `18,097,543` bytes at SHA-256
+`B5EC4B9428FDF23D16711DA35D80F5068B0FA8E35E1FF2E11B7D22F3AF31DEF3`. It was installed and Antigravity reloaded;
+the installed server matches the staged SHA-256
+`28D789465936D5869DD3707E21821CF0697FB2FE5851DC5034E5C3F9DD685BD7`. Forge `v1.0.428` rendered the preserved
+workspace with Mission Director, AI-script, and script-property sources loaded. The managed sidecar ran the installed
+server on port `50853`, returned receipt-service `25/25`, and advertised the required caller-owned bulk operation
+header. The live config hash stayed unchanged. Durable installed evidence is
+`vscode-extension/evidence/2026-08-07-w3b1a-bulk-receipts/installed-validation.md`.
+
+This closes W3B1a at `5/5`; it does not close W3B1 or W3. W3B1b-d, W3B2-B3, visible W3C receipt/history controls,
+and the overall extension-native program remain `IN_PROGRESS / PARTIAL`. No standalone app, end-user CLI, alternate
+runtime, marketplace publication, game/mod write, or deploy was introduced. The implementation checkpoint is the
+commit containing this entry, suggested subject `feat(authority): bind bulk transforms to action receipts`.
+
+## 2026-08-07 — X4 Forge Studio 0.0.65 stable OpenVSX release — VERIFIED
+
+The verified native W3B1a checkpoint is now publicly downloadable as stable
+`x4forge.x4-forge-studio@0.0.65`. The deterministic changelog generator was repaired to emit exactly one terminal LF;
+its selftest is `12/12`, package/lock/release metadata agree at `0.0.65`, and the comprehensive generated changelog
+contains the exact `11` ordered release bullets.
+
+Root build, fresh staging, extension build, stable packaging, archive inspection, staged-sidecar probe `16/16`, and
+precommit `[precommit] OK` all pass. The inspected `2,091`-entry archive is `18,098,264` bytes at SHA-256
+`ACBF40475A0AB55AA269E5728FE2B0927C22C9B9CC1F38F12AAD473A1F392D21`. OpenVSX accepted it once; public latest and
+exact metadata report `0.0.65`, and the public download matches that byte count and hash exactly. The earlier
+accepted-but-withheld `0.0.64` remains immutable and was never republished.
+
+Antigravity was updated and genuinely reloaded. The installed `0.0.65` server, extension controller, and supervisor
+match the inspected package hashes; Forge `v1.0.428` rendered the preserved workspace with Mission Director `1507`,
+AI-script `1408`, and script properties `2333` loaded. The installed managed sidecar on port `52634` returned receipt
+selftest `25/25` and the required caller-owned bulk operation header, while `config.json` stayed byte-identical.
+Evidence: `vscode-extension/evidence/0.0.65-release-validation.md`.
+
+This release publishes the bounded W3B1a result; it does not close W3B1, W3, W3B1b-d, W3B2-B3, W3C, or the overall
+extension-native program. No game/mod directory was written or deployed. The release checkpoint is the commit
+containing this entry, subject `release: publish X4 Forge Studio 0.0.65`.

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "sourceFingerprint": "99878fa7b6aa42c29a006d6fed2e90c0c41f86437cb7f7a3c23b4994595d5f24",
+  "sourceFingerprint": "1fa9e816a1e7f11349a262cfdfb6f8851f7aac988809b373417e7388eab6386f",
   "policy": "Every raw production filesystem mutation source is count-pinned here. Authoritative files use atomic sibling promotion; stronger tree, archive, append-log, SQLite, retention, ephemeral, and fixture contracts remain explicit exceptions.",
   "writers": [
     {
@@ -219,6 +219,14 @@
       "owners": ["createAiKeyStore", "runAiKeyStoreSelftest"],
       "rationale": "Production credentials use restricted atomic JSON; the raw write creates a corrupt negative fixture only.",
       "failureContract": "Corrupt stores refuse mutation and failed promotion preserves every previous credential."
+    },
+    {
+      "file": "src/server/bulkTransformApplyReceiptAdapter.selftest.ts",
+      "calls": { "rmSync": 1, "mkdtempSync": 1 },
+      "categories": ["fixture-only"],
+      "owners": ["runBulkTransformApplyReceiptAdapterSelftest"],
+      "rationale": "Creates one unique temporary root for workspace-registry, action-receipt, recovery, and bulk-transform apply receipt adapter fixtures.",
+      "failureContract": "Fixture cleanup is best effort; selftest mutations never target configured workspace, registry, receipt, recovery, or production roots."
     },
     {
       "file": "src/server/gameDetectRoutes.ts",

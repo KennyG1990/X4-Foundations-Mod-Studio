@@ -48,7 +48,7 @@ export function buildChangelog(releases) {
     for (const c of changes) lines.push(`- ${c}`);
     lines.push("");
   }
-  return lines.join("\n");
+  return `${lines.join("\n").replace(/\r\n?/g, "\n").replace(/\n+$/g, "")}\n`;
 }
 
 /** Subjects that are pure version-bump bookkeeping — the version header already conveys them. */
@@ -170,6 +170,14 @@ function selftest() {
   ok("newest_first", md.indexOf("## 0.0.16") < md.indexOf("## 0.0.15"));
   ok("version_header_with_date", md.includes("## 0.0.16 — 2026-07-17"));
   ok("plain_line_present", md.includes("- New mod starters and a conflict checker."));
+  const mdBytes = Buffer.from(md, "utf8");
+  ok("terminal_byte_is_lf", mdBytes[mdBytes.length - 1] === 0x0a);
+  ok("no_terminal_double_lf", mdBytes[mdBytes.length - 2] !== 0x0a);
+  ok("no_carriage_returns", !md.includes("\r"));
+  ok("deterministic_output", buildChangelog([
+    { version: "0.0.16", date: "2026-07-17", changes: ["New mod starters and a conflict checker."] },
+    { version: "0.0.15", date: "2026-07-17", changes: ["Live error checking while you type."] },
+  ]) === md);
 
   // humanizer: strips conventional-commit prefix + internal Bxx codes, capitalizes
   ok("humanize_strips_prefix", humanizeSubject("feat(community): B58 patch — new starters") === "Patch — new starters");
@@ -191,6 +199,6 @@ if (process.argv.includes("--selftest")) {
   const releases = readReleasesFromGit();
   const md = buildChangelog(releases);
   const out = path.join(EXT_ROOT, "CHANGELOG.md");
-  fs.writeFileSync(out, `${md}\n`, "utf8");
+  fs.writeFileSync(out, md, "utf8");
   console.log(`[gen-changelog] wrote ${path.relative(REPO_ROOT, out)} — ${releases.length} version(s), newest ${releases[0]?.version || "?"}`);
 }
