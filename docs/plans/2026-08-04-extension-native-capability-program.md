@@ -4,6 +4,30 @@ Status: IN_PROGRESS / PARTIAL
 Lane: FULL
 Date: 2026-08-04
 
+## 2026-08-08 PRIORITY OVERRIDE — MOD-FIRST RECOVERY
+
+- The owner changed execution priority from dependency-first continuation at W3B1b to the shortest reliable path
+  back to everyday mod development. W3B1b is parked at `SPECIFIED`; its worker stopped before accepted code was
+  written, so pausing it loses no implementation work.
+- Immediate stopping line: (1) reproduce and restore the installed Antigravity `Failed to fetch` / schema-validator
+  workflow; (2) prove open/import, XSD/corpus validation, continuous diagnostics, guarded save, build/package, and
+  deploy dry-run/validation with an isolated scratch mod and no real mod/game mutation; (3) publish and verify the
+  recovery release, then stop Forge program work so mod development can resume.
+- Public/installed `0.0.66` is the verified marketplace-description release at `18,113,327` bytes and SHA-256
+  `6B3A5C032976046EE2A44BB5F67BC205A61368146E77E8621116EC4B70526763`. Its managed sidecar was green, but that
+  checkpoint did not reproduce the reported fetch/schema failure or prove the complete ordinary authoring loop.
+- Later priority is direct modding value: W8-W9 Effective Tree/provenance; W10/W13 deterministic knowledge;
+  W11/W16/U33 safe fixes and guidance; W14-W15 forensics/compatibility; W12/U35 runtime evidence; then
+  W17/W19/W20 semantic comparison and upstream intelligence.
+- Defer W3B1b-d, W3B2-B3, W3C, W4-W6, W18, and W21 until a concrete consumer or the post-recovery program requires
+  them. Park compact grid, duplicate action-strip cleanup, native MCP lifecycle, file-sync consolidation, and
+  research issue `#36`.
+- Planning ranges, not deadlines: immediate stopping line `1-3 focused working days`; highest-value later features
+  through deterministic guidance `2-4 additional weeks`; entire remaining documented program `4-8 weeks`.
+- Cross-system projections: GitHub initiative `#9` and safety owner `#20`; Google Drive `X4 Forge — Current
+  Roadmap` and `X4 Forge — Decision Record`; Notion program task `3b44618e-d15b-81d4-aa13-e3de17a23e96` and
+  accepted decision `3b64618e-d15b-8109-a3f1-f33e93ee355d`. Repository Markdown remains technical authority.
+
 ## PLAN
 
 - **Bounded program:** complete the already-authorized native-capability program in the installed X4 Forge
@@ -109,12 +133,15 @@ Date: 2026-08-04
 
 ## IMPLEMENTATION ORDER
 
-1. Restore and validate the exact project Sol/Luna config; prove a fresh native Luna child before product code.
-2. Implement workspace-create receipts, then snapshot restore, then bulk apply through existing owners.
-3. Repair E2E supervision under an independent timeout/tree-disappearance oracle; close W3B1a gates.
-4. Complete W3B1b-d, W3B2, W3B3, and W3C in dependency order.
-5. Reconcile and implement only still-missing native issue capabilities; reject CLI and parallel-analysis scope.
-6. Run installed Antigravity proof, synchronize durable/GitHub ledgers, and close checkpoint Git parity.
+1. Completed prerequisite path: native Sol/Luna proof, workspace-create/snapshot-restore/bulk receipts, E2E lifecycle
+   supervision, and W3B1a `5/5` remain verified within their recorded scopes.
+2. Restore installed Antigravity fetch/schema reliability and prove schema discovery, validator startup, managed
+   sidecar connectivity, and saved-path persistence.
+3. Prove the ordinary end-to-end authoring loop on an isolated scratch mod without changing the real mod or game
+   installation.
+4. Package, install, validate, publish, and verify the recovery release; stop at this line for mod development.
+5. Resume later native features in the value order recorded by the priority override. Resume broad receipt/surface
+   convergence only when a concrete consumer or the post-recovery program requires it.
 
 ## IMPLEMENT
 
@@ -297,6 +324,10 @@ Date: 2026-08-04
 
 ## CLOSE
 
+- 2026-08-08 scheduling delta: `PARTIAL`. The mod-first stopping line is now synchronized across this repository
+  plan, `SESSION-HANDOFF.md`, Google Drive, Notion, and GitHub issues `#9`/`#20`. W3B1b remains specified and parked;
+  installed fetch/schema recovery, scratch-mod loop proof, and the recovery release remain open. No product code,
+  real mod/game state, package, release, or implementation-completion claim changed in this documentation unit.
 - Current status: IN_PROGRESS / PARTIAL. W7's native engine merge-law/schema-routing unit is `VERIFIED`, and W10's
   bounded data-only rule/evidence-pack plus Lua Unicode availability checkpoint is also `VERIFIED`, with the exact
   evidence recorded above. The later bounded W10 rule-provenance guidance and lifecycle-race repair checkpoint is
@@ -392,3 +423,11 @@ Date: 2026-08-04
 - Highest-risk W10 weakness: validator unavailability must never become either a clean result or an empty registration
   set that manufactures `md_lua.missing_register`; the reproduced cause was pseudo-latin1 rejection on U+2014 plus
   swallowed parse unavailability, not a `StringLiteral.value`-only defect.
+- Triggered documentation-sync AAR: the required Google Docs trusted-read bridge first encountered two isolate
+  compatibility failures (`atob` and `TextDecoder` unavailable) before any remote write. A dependency-free byte
+  decoder and hash-checked file adapter completed the mandatory reads; post-write Drive, Notion, and GitHub readback
+  then proved exact priority and cross-link parity. A separate broad `rg` baseline returned nonzero because one
+  guessed evidence filename was wrong; the authoritative handoff supplied the actual filename.
+- Highest-risk scheduling weakness: external mirrors can silently drift back toward dependency-first W3 work. Keep
+  the repository plan, handoff, Drive roadmap/decision, Notion task/decision, and GitHub `#9`/`#20` synchronized in
+  the same task whenever this stopping line changes.

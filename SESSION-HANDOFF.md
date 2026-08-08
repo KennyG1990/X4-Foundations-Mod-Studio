@@ -7,8 +7,9 @@ Updated: 2026-08-08
 Stable X4 Forge Studio `0.0.66` is publicly downloadable with exact local/public archive parity and the new
 outcome-led Details story, clearer real Features metadata, and six-bullet changelog. It is installed and rendered in
 Antigravity with exact critical-file parity and the installed sidecar on `:57339`. W3B1a remains `VERIFIED` at `5/5`;
-W3B1/W3 and the extension-native program remain `IN_PROGRESS / PARTIAL`. The next documented implementation unit is
-W3B1b guarded filesystem/recovery receipt authority, but it was not started in this release task.
+W3B1/W3 and the extension-native program remain `IN_PROGRESS / PARTIAL`. The active execution priority is now the
+mod-first recovery stopping line. W3B1b guarded filesystem/recovery receipt authority is parked at `SPECIFIED`; its
+worker stopped before accepted code was written.
 
 ## Project and product boundary
 
@@ -17,6 +18,28 @@ W3B1b guarded filesystem/recovery receipt authority, but it was not started in t
 - No standalone app, end-user CLI, alternate runtime, game/mod write, deploy, or W3B1b implementation belongs to
   this checkpoint.
 - Standing quiet-machine permission for Antigravity validation remains active; do not ask again unless revoked.
+
+## Mod-first recovery stopping line
+
+1. Reproduce and restore the installed Antigravity `Failed to fetch` / schema-validator workflow. Prove schema
+   discovery, validator startup, managed-sidecar connectivity, and saved-path persistence.
+2. With an isolated scratch mod only, prove open/import, XSD/corpus validation, continuous diagnostics, guarded
+   save, build/package, and deploy dry-run/validation. Do not mutate the real mod or game installation.
+3. Package, inspect, install, validate, publish, and verify the recovery release with a comprehensive changelog.
+   Stop Forge program work at this line so mod development can resume.
+
+Installed `0.0.65` historically loaded the schema sources. Public/installed `0.0.66` is the marketplace-description
+release and its sidecar was green, but it did not reproduce the reported failure or prove the complete ordinary
+authoring loop. The newer failure report therefore remains unresolved until reproduced.
+
+Later priority: W8-W9 Effective Tree/provenance; W10/W13 deterministic knowledge; W11/W16/U33 safe fixes and
+guidance; W14-W15 forensics/compatibility; W12/U35 runtime evidence; then W17/W19/W20 semantic/upstream work.
+Defer broad W3/W4-W6/W18/W21 governance and park optional UX/research until the stopping line or a concrete consumer
+requires them.
+
+Cross-system records: GitHub `#9` and `#20`; Google Drive `X4 Forge — Current Roadmap` and `X4 Forge — Decision
+Record`; Notion program task `3b44618e-d15b-81d4-aa13-e3de17a23e96` and accepted decision
+`3b64618e-d15b-8109-a3f1-f33e93ee355d`.
 
 ## Current marketplace checkpoint
 
@@ -89,13 +112,14 @@ Use `git add -- <exact checkpoint paths>` only. Do not use broad add, clean, res
 - Short PowerShell probes should collect loop output in arrays; two direct loop-to-pipe forms failed to parse.
 - The package inspector requires the VSIX positional argument even though the npm alias does not supply one.
 - Highest remaining implementation risk is unchanged: W3B1b-d mutation owners still lack complete native receipt
-  authority.
+  authority, but that work is deliberately parked behind the mod-first stopping line.
 
 ## Exact continuation
 
-1. Stop this long session after the release commit point; do not begin another implementation unit here.
-2. When Forge work resumes, reconcile the already specified W3B1b guarded filesystem/recovery unit, preserving all
-   unrelated dirty state. The owner may instead return to mod development first; this checkpoint imposes no blocker.
+1. Reproduce the installed fetch/schema failure; do not infer recovery from the green 0.0.66 sidecar alone.
+2. Prove the ordinary authoring loop against an isolated scratch mod only.
+3. Publish the recovery release only after those installed-host gates pass, then return to mod development.
+4. Keep W3B1b parked unless recovery itself exposes a concrete dependency on its guarded owner.
 
 ## Eyeball queue
 
