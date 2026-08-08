@@ -1,90 +1,151 @@
 # X4 Forge Studio
 
-**Visual modding studio for X4: Foundations — inside your IDE.**
+**Build serious X4: Foundations mods in one local, X4-aware workspace.**
 
-Build, validate, and deploy X4 mods on a node canvas instead of hand-writing XML. X4 Forge
-Studio runs the full X4 Forge app right inside VS Code and compatible editors (Antigravity,
-Cursor, VSCodium, Windsurf), backed by a local engine that validates your work against the
-game's real schemas at every step.
+X4 Forge is a visual modding studio and VS Code-compatible extension for the full path from
+authoring to evidence. It connects a navigable Mission Director graph with native XML editing,
+X4 corpus and XSD intelligence, deterministic whole-project diagnostics, safe patching, and
+guarded package and deploy workflows.
 
-## What it does
+The result is fewer silent reference and selector failures, faster iteration, and a clear record
+of what Forge checked before changes reach the game.
 
-- **Node-graph mod editor** — assemble Mission Director logic (cues, conditions, actions) and
-  UI as a visual graph; the studio compiles it to the exact XML/Lua the game loads.
-- **Real-schema validation** — every change is checked against X4's own schemas, so you catch
-  mistakes before the game does.
-- **Compile, preview, package** — turn your graph into a ready-to-install extension folder or
-  a shareable package, without touching a text editor.
-- **Guided first mod** — a beginner rail walks a newcomer from idea to a working, deployable
-  mod; power users get the full studio.
-- **Optional AI assist** — off by default; the studio is a fully deterministic editor without it.
+**Start here:** [install X4 Forge Studio from Open VSX](https://open-vsx.org/extension/x4forge/x4-forge-studio),
+then run **X4 Forge: Open Studio** from your editor's Command Palette.
 
-**Built to be the opposite of a hallucinated mod.** AI output goes through the same real-schema
-validation as hand-built mods — invented tags, bad attributes, and dangling cue references get
-caught by Egosoft's own schemas, not by the AI grading itself. If it can't make a mod validate,
-it tells you — it doesn't hand you a broken mod that looks finished. ([How that works](#is-this-just-another-ai-mod-generator).)
+## One workflow, from idea to in-game evidence
 
-## Is this just another AI mod generator?
+1. **Configure** your X4 installation, reference/schema data, mod workspace, and deployment path.
+2. **Author** visually in the Mission Director graph, edit the native XML directly, or combine
+   both. Existing files stay visible and editable; the graph remains tied to its source.
+3. **Validate** the complete project while you work. Inspect findings, their Why/provenance, and
+   the proposed next action instead of debugging only the file currently open.
+4. **Prepare** a package, inspect the generated artifacts, and preview deployment effects.
+5. **Deploy** through guarded writes with verified backups and recovery protection.
+6. **Run X4** and bring runtime evidence back to the source. X4 remains the final authority.
 
-**Straight answer: no — and here's the mechanism.**
+## Shipped capability pillars
 
-The knock on AI-made mods is fair: a language model will happily invent a command that doesn't
-exist, an attribute the schema never had, or a cue reference that points at nothing — and you
-don't find out until the game silently ignores it or refuses to load.
+### Author visually or source-first
 
-X4 Forge doesn't trust the AI's output. It **runs it through the exact same validators a
-hand-built mod faces** — Egosoft's own XML schemas, cross-file cue resolution, script-property
-checks, and a set of known-pitfall rules pulled from real mods. Not a sanity check the AI grades
-itself on. The same wall your own hand-written XML would hit.
+- Turn Mission Director cues, events, conditions, actions, branches, loops, signals, and sub-cues
+  into a navigable graph.
+- Inspect and edit the real XML at any point. Forge supports both graph-first and native,
+  source-first workflows; it does not hide or remove the generated source.
+- Import existing extensions as complete graph lanes, while preserving unsupported or
+  extension-defined elements as localized raw XML at their original position.
+- Keep related X4 domains together, including AI scripts, wares and jobs, translations, patches,
+  HUD and Lua UI work, package metadata, and data-only extensions.
 
-If the generated mod passes on the first try, you're done — the AI is never asked to "fix"
-anything. If it doesn't, the **validator** — not the model — drives the repair: it hands the
-model the exact failing findings and asks for a correction, then re-validates. That loop is
-bounded (a few attempts, then it stops), and if the same problem survives two rounds, it gives
-up instead of spinning. When it still can't make a mod validate, **it tells you that plainly** —
-you get the findings, not a broken mod dressed up as finished.
+### Edit against X4's real reference data
 
-**What this does and doesn't buy you.** It catches the structural lies — invented tags, wrong
-attributes, dangling references, script properties that don't exist. It does **not** promise the
-mod does what you pictured; no validator can read your mind, and the game is still the final
-judge. What it promises is narrower and more useful: what the AI hands you is a mod that's
-actually *shaped like a real X4 mod*, not a plausible-looking hallucination you debug in-game.
+Point Forge at the game installation or configured unpacked reference corpus and it can provide:
 
-(And AI is off by default. The studio is a full deterministic editor without ever calling a
-model — the validation above runs on everything, AI-authored or not.)
+- XSD-aware completion for legal elements, attributes, enums, and typed script-expression chains.
+- Canonical faction, ware, sector, macro, job, and AI-script suggestions.
+- Hover documentation, types, provenance, near-match suggestions, and native IDE diagnostics.
+- Cross-file references grounded in effective base-game, DLC, and extension layers.
 
-## Getting started
+### Validate the whole project deterministically
 
-1. Install the extension.
-2. Run **"X4 Forge: Open Studio"** from the Command Palette (or turn on
-   `x4forge.autoOpen` to open it automatically).
-3. The first-run setup helps point the studio at your X4 installation, then you're building.
+Forge checks more than whether one XML file parses. Its deterministic checks cover XML and XSD
+validity, X4 identifiers and references, script properties and expressions, cue lineage,
+MD-to-Lua events and payloads, package completeness, patch simulation, and installed-extension
+dependencies and overrides.
 
-## Requirements
+Open **Why** on a finding to see the rule, evidence, likely impact, and bounded next action.
+Validation can also compare the current result with the last accepted green baseline, so new
+warnings are distinguishable from existing debt.
 
-- **Node.js** installed on your machine (the studio runs a small local engine). If it's
-  missing, the extension tells you.
-- **X4: Foundations** installed (the studio validates and deploys against your game files).
-- A **trusted** workspace — the studio writes and compiles mod files, so it stays disabled in
-  untrusted folders.
+### Make patches and bulk changes inspectable
 
-## Settings
+The XML Patching workbench targets real base-game, DLC, and extension files. Preview the effective
+document before and after a change, validate selectors, simulate every emitted operation, and
+keep the base file, candidate, revision, and generated patch aligned.
 
-| Setting | What it does |
-|---|---|
-| `x4forge.autoOpen` | Open the studio automatically when a trusted workspace loads. |
-| `x4forge.attachUrl` | Attach to an already-running X4 Forge instead of starting one. |
-| `x4forge.forgeRoot` | Use your own built X4 Forge checkout instead of the bundled app. |
-| `x4forge.debug` | Attach a debugger to the studio backend (for development). |
+Bounded numeric bulk transforms can preview several changes together and apply the complete,
+validated set atomically. Stale plans, traversal, ambiguous matches, invalid selectors, conflicts,
+and partial bundles are refused instead of being turned into silent edits.
 
-## Privacy
+### Find conflicts and prepare safer releases
 
-Everything runs locally on your machine. The studio talks only to a backend on your own
-computer (loopback), protected by a per-session token. No mod data leaves your machine, and
-AI features are opt-in and use your own API keys.
+**Extension Doctor** scans installed extensions for duplicate IDs, missing dependencies, override
+claims, selector and file conflicts, and load-order winners. It distinguishes softer curated or
+heuristic third-party findings from schema-backed validation.
 
-## Feedback
+For releases, Forge can validate a disk-backed project, reopen generated artifacts, preserve
+independent hashes, and prepare:
 
-This is an early release — issues and ideas are welcome.
+- An install-root ZIP for Nexus Mods.
+- Steam Workshop staging with CAT/DAT output, metadata and preview checks, a rollback archive,
+  and the exact WorkshopTool handoff.
+
+Forge does not upload releases, accept legal prompts, or press Enter for you. The irreversible
+step stays visible and under your control.
+
+## The trust boundary
+
+Forge is strong at making static structure, references, package contents, patch effects, and
+deployment state inspectable. That is not the same as proving gameplay intent. Schema-valid code
+can still behave incorrectly in X4; a cue may not fire, a menu may not open, or a mechanic may
+not produce the result you intended.
+
+Run the mod in X4 and inspect its runtime evidence. The game is the final authority, while Forge
+helps connect that evidence back to the source, validation baseline, and deployment that produced it.
+
+## Who it is for
+
+- **New modders:** use the visual graph and Studio workflow while keeping the generated
+  source available for learning and review.
+- **Existing mod authors:** open a real extension, work directly in native XML or combine source
+  edits with graph navigation, then validate the whole project before deployment.
+- **Power users and release maintainers:** use patch simulation, bulk transforms, Extension Doctor,
+  package preparation, deployment previews, recovery, and proof artifacts as one repeatable loop.
+
+## Optional integrations
+
+Multiple workspaces have server-owned identities, so validation, history, packaging, recovery,
+and agent keys stay attached to the correct project. The extension can open a mod folder in the
+IDE, create scoped agent keys, copy MCP configuration, refresh an agent brief, and generate a
+proof artifact. These integrations are secondary to the Studio's own deterministic checks.
+
+The optional AI Guide is off by default. If enabled, it uses providers and keys you configure to
+propose project work; proposals remain visible, require explicit confirmation before apply, and
+are still judged by deterministic Forge validation. Provider use can send requests over the
+network and consume the budget configured for that provider.
+
+## Start in three steps
+
+1. Install X4 Forge Studio from [Open VSX](https://open-vsx.org/extension/x4forge/x4-forge-studio)
+   in VS Code, Antigravity, or another compatible editor.
+2. Open a trusted workspace, run **X4 Forge: Open Studio**, and configure the X4 installation,
+   workspace, and reference/schema paths.
+3. Create or load a mod, author in the graph or native editor, validate before the first package
+   or deploy, then test the result in X4.
+
+## Requirements, privacy, and limits
+
+- Windows is the primary supported environment because X4 and the current deployment workflow are
+  Windows-focused.
+- Install Node.js. The extension runs the Forge engine locally and uses a real Node installation
+  for its sidecar.
+- Have X4: Foundations installed when you need game-backed reference data or deployment. Forge is
+  a development tool; it does not supply X4.
+- Use a trusted workspace. Forge compiles projects, writes local files, and can deploy into the
+  game installation, so it stays disabled in untrusted workspaces.
+
+The Forge backend runs on your machine over a protected local connection. Projects, game files,
+validation data, credentials, and generated artifacts remain local during local workflows. The
+optional AI path is different: requests go to the provider you configure and use your keys.
+
+Forge is not an in-game replacement, an automatic release uploader, or an asset-modelling suite.
+Static validation reduces avoidable failures; it does not replace running X4 and checking the
+behaviour you intended.
+
+## Support
+
+For installation problems, reproducible validation failures, or feature requests, [open an issue
+on GitHub](https://github.com/KennyG1990/X4_Forge/issues) with your editor, operating system, and
+the smallest project or diagnostic that reproduces the problem.
 
 Licensed under MIT.

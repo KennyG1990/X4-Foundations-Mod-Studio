@@ -1,184 +1,102 @@
 # X4 Forge session handoff
 
-Updated: 2026-08-07
+Updated: 2026-08-08
 
 ## One-line state
 
-The installed X4 Forge extension's W3B1a workspace/CAS receipt checkpoint is implemented and validated at `5/5`;
-bulk-transform apply is the fifth verified route. W3B1/W3 and the extension-native program remain
-`IN_PROGRESS / PARTIAL`. Stable `0.0.65` is publicly available on OpenVSX with exact local/public byte-hash parity,
-installed in Antigravity, reloaded, rendered, and live-sidecar verified. Implementation/release commit
-`77ce8a3091d9c6abf7c5470ae488528ddb1c6605` is pushed with exact parity, and GitHub `#9`/`#19`/`#20` marker
-readback is green. The next bounded unit is W3B1b guarded filesystem/recovery receipt authority.
+Stable X4 Forge Studio `0.0.66` is publicly downloadable with exact local/public archive parity and the new
+outcome-led Details story, clearer real Features metadata, and six-bullet changelog. It is installed and rendered in
+Antigravity with exact critical-file parity and the installed sidecar on `:57339`. W3B1a remains `VERIFIED` at `5/5`;
+W3B1/W3 and the extension-native program remain `IN_PROGRESS / PARTIAL`. The next documented implementation unit is
+W3B1b guarded filesystem/recovery receipt authority, but it was not started in this release task.
 
 ## Project and product boundary
 
-- Repository: `F:\DEV_ENV\X4_Forge`.
-- Product: the Antigravity/VS Code Forge extension, including its Studio webview and extension-managed loopback
-  sidecar.
-- No standalone app, end-user CLI, alternate runtime, imported-result path, game/mod write, or deploy belongs to this
-  checkpoint.
-- The owner granted standing quiet-machine permission for Antigravity validation; do not ask again in this program
-  continuation unless the owner explicitly revokes that state.
+- Repository: `F:\DEV_ENV\X4_Forge` on `main`.
+- Product: the Antigravity/VS Code Forge extension, Studio webview, and extension-managed loopback sidecar.
+- No standalone app, end-user CLI, alternate runtime, game/mod write, deploy, or W3B1b implementation belongs to
+  this checkpoint.
+- Standing quiet-machine permission for Antigravity validation remains active; do not ask again unless revoked.
 
-## Current checkpoint
+## Current marketplace checkpoint
 
-- Branch baseline: `main`; pre-checkpoint `HEAD == origin/main == c334127888368993cf350e13839376a0d44507d4`.
-- Combined implementation/release commit: `77ce8a3091d9c6abf7c5470ae488528ddb1c6605`, subject
-  `release: publish X4 Forge Studio 0.0.65`; `HEAD == origin/main == remote main` immediately after its push.
-- The route requires caller-owned `x-forge-operation-id`, binds canonical plan/source/paired-state hashes, serializes
-  same-workspace mutations, rechecks plan and paired CAS at the mutation boundary, prepares recovery before one
-  registry commit, terminalizes/reopens before success, replays exactly without remutation, conflicts changed facts,
-  preserves deadline/finalization/rollback truth, and leaves Agent History fail-soft.
-- Preview remains read-only. No new visible control or public product surface was added.
+- Plan: `docs/plans/2026-08-08-openvsx-marketplace-story-refresh.md`.
+- Evidence: `vscode-extension/evidence/0.0.66-marketplace-release-validation.md`.
+- GitHub owner: `#38`; external trust follow-up `#39`; release-tooling follow-up `#40`.
+- Pre-checkpoint repository parity:
+  `HEAD == origin/main == 7729a9dea5a49ad76019ca1ca92abdc7b6c0f294`.
+- Commit subject: `release: sharpen the X4 Forge marketplace story and publish 0.0.66`.
+- Capability-map delta: none.
 
-## OpenVSX 0.0.65 verified release
+## Exact release proof
 
-- Recovery plan: `docs/plans/2026-08-07-openvsx-0.0.65-recovery-release.md`; release artifact status `VERIFIED`.
-- The native changelog generator now emits exactly one terminal LF and passes `12/12`. Package, lock top/root, and
-  release metadata agree at `0.0.65`; curated/generated notes contain the same `11` ordered user-facing bullets.
-- Exact stable archive: `vscode-extension/x4-forge-studio-0.0.65.vsix`, `18,098,264` bytes, SHA-256
-  `ACBF40475A0AB55AA269E5728FE2B0927C22C9B9CC1F38F12AAD473A1F392D21`.
-- Root build, fresh staging, extension build, archive inspection (`2,091` entries / `61,446,861` unpacked bytes),
-  staged-sidecar probe `16/16`, and full precommit `[precommit] OK` in `492.9s` pass.
-- OpenVSX command returned `Published x4forge.x4-forge-studio v0.0.65`, exit `0`, exactly once. Public latest/exact
-  metadata report `0.0.65`; the public download is byte/hash identical to the local candidate.
-- Installed Antigravity reports `x4forge.x4-forge-studio@0.0.65`; the real host was reloaded and the rendered/live
-  proof below passed. Evidence: `vscode-extension/evidence/0.0.65-release-validation.md`.
-- Exact 30-path commit hook reran precommit and returned `[precommit] OK` in `452.5s`; push
-  `c334127..77ce8a3 main -> main` succeeded.
-- Historical `0.0.64` remains `BLOCKED` and immutable. It was accepted once, never activated during its bounded
-  monitor, contains the old `0A0A` changelog EOF, and was not republished. Preserve its plan/evidence/archive.
+- Candidate: `vscode-extension/x4-forge-studio-0.0.66.vsix`.
+- Entries/unpacked/archive: `2,091` / `61,507,076` / `18,113,327` bytes.
+- SHA-256: `6B3A5C032976046EE2A44BB5F67BC205A61368146E77E8621116EC4B70526763`.
+- Stable package, lock root/top, release notes, generated changelog, manifest, installed extension, exact/latest public
+  API, rendered public version selector, and public download all report `0.0.66`.
+- OpenVSX accepted the exact archive once. Public download size/hash and public README hash exactly match local.
+- Public manifest has the new description, zero mojibake, and unchanged `10` commands / `8` settings / `1` view
+  container / `1` view / `2` activation events.
+- Public URL: `https://open-vsx.org/extension/x4forge/x4-forge-studio`.
 
-## Owned implementation and governance paths
+## Installed proof
 
-- `config/action-receipt-coverage.json`
-- `config/durable-writers.json`
-- `config/forge-route-dispositions.json`
-- `scripts/reference-api-integration.mjs`
-- `server.ts`
-- `src/lib/actionReceiptPolicyBundle.selftest.ts`
-- `src/lib/actionReceiptPolicyBundle.ts`
-- `src/server/bulkTransformApplyReceiptAdapter.selftest.ts`
-- `src/server/bulkTransformApplyReceiptAdapter.ts`
-- `src/server/bulkTransformApplyReceiptFacts.selftest.ts`
-- `src/server/bulkTransformApplyReceiptFacts.ts`
-- `src/server/bulkTransformRoutes.ts`
-- `tests/e2e/corpus-authoring.spec.ts`
-
-## Durable close/evidence paths
-
-- `docs/plans/2026-08-02-w3b1-addressed-state-receipts.md`
-- `docs/plans/2026-08-02-pending-feature-implementation-program.md`
-- `docs/plans/2026-08-04-extension-native-capability-program.md`
-- `ROADMAP.md`
-- `SESSION-HANDOFF.md`
-- `vscode-extension/evidence/2026-08-07-w3b1a-bulk-receipts/installed-validation.md`
-- `vscode-extension/evidence/2026-08-07-w3b1a-bulk-receipts/installed-antigravity-forge-v1.0.428.jpg`
-- `docs/plans/2026-08-07-openvsx-0.0.64-release.md`
-- `docs/plans/2026-08-07-openvsx-0.0.65-recovery-release.md`
-- `vscode-extension/evidence/0.0.64-release-validation.md`
-- `vscode-extension/evidence/0.0.65-release-validation.md`
-- `vscode-extension/evidence/0.0.65-installed-antigravity-forge-v1.0.428.png`
-- `vscode-extension/scripts/gen-changelog.mjs`
-- `vscode-extension/package.json`, `package-lock.json`, `release-notes.json`, and generated `CHANGELOG.md`
-- External capability-map and project-AAR deltas for W3B1a are already recorded in
-  `F:\StarForge\wiki\x4-forge\`; no global AAR delta was warranted.
-
-## Validation already green
-
-- Facts `12/12`; receipt adapter `22/22`; receipt policy `18/18`; workspace receipt service `25/25`.
-- Real X4 9.00 reference API `85/85`; production routes `467/467`; runtime-discovered oracles `132/132`.
-- Focused rendered corpus-authoring E2E `1/1`; final official full E2E `96/96`, failed/flaky/bad `0/0/0`,
-  `trigger=child-close`, `treeGone=true`, empty `remainingPids`, and closed ephemeral ports.
-- Receipt coverage `82` routes / `52` surfaces at SHA-256
-  `2c9678bf58ba39b4dfc81a9e2ee8874ee360a816a6d7e391779eb990a94a73f7`.
-- Writers `38` filesystem / `11` host / `2` browser, selftest `14/14`, extension `8/8`.
-- Capability contract `11` capabilities / `294` routes / one registrar / `10` MCP aliases.
-- Typecheck, build, authoritative lint (zero errors / 591 existing warnings), owned diff check, and Graphify all pass.
-  Graphify is `5,888` nodes / `14,501` edges / `210` communities.
-- Release-specific `npm run precommit:check` returned `[precommit] OK` in `492.9s`, including E2E verdict `54/54` and
-  receipt coverage `82/52`. The final synchronized run after durable close records also returned `[precommit] OK`,
-  exit `0`, in `465.4s`; the commit hook repeats that gate against exact staging.
-
-## Installed-extension proof
-
-- Public/stable VSIX: `vscode-extension/x4-forge-studio-0.0.65.vsix`, 18,098,264 bytes, SHA-256
-  `ACBF40475A0AB55AA269E5728FE2B0927C22C9B9CC1F38F12AAD473A1F392D21`.
-- Installed extension: `x4forge.x4-forge-studio@0.0.65`.
-- Installed server SHA-256 matches staged at
-  `28D789465936D5869DD3707E21821CF0697FB2FE5851DC5034E5C3F9DD685BD7`; extension and supervisor hashes also match.
-- Antigravity was reloaded. Forge `v1.0.428` rendered the preserved workspace with Mission Director `1507`,
-  AI-script `1408`, and script properties `2333` loaded.
-- Managed sidecar port `52634` is owned by `node.exe` executing the installed `0.0.65` extension's
-  `app/dist/server.cjs`.
-- Live read-only schema advertises the required bulk operation header; live receipt selftest is `25/25`.
-- Live `config.json` stayed byte-identical at SHA-256
+- Antigravity reports `x4forge.x4-forge-studio@0.0.66` and was reloaded.
+- Rendered Details shows the new opening/workflow/capability/trust content; Features/Commands shows clarified existing
+  titles; Changelog shows the six exact `0.0.66` bullets.
+- Installed README, changelog, controller, and server hashes match candidate entries.
+- Managed sidecar port `57339`, PID `51808`, executes installed `0.0.66/app/dist/server.cjs`.
+- Standing `config.json` remains 478 bytes at SHA-256
   `ABEC6AE6AD169392878E06E19346C5E85C1DFB5D9BDFACDD80BA77DAF227C697`.
-- Rollback VSIX remains `vscode-extension/x4-forge-studio-0.0.63-busy-liveness-20260806.vsix`, SHA-256
-  `841A63185547E2FBB946815EF87AF663A7367B6DC3FB091F66307B6409F9F1A3`.
-- Rendered screenshot:
-  `vscode-extension/evidence/0.0.65-installed-antigravity-forge-v1.0.428.png`, SHA-256
-  `FE26D7B81141970F3E80C82C1CEE2133797B04B6CD41B318D6BC75BA96AF0715`.
+- Antigravity's extension-list/header summary remains an old cached gallery string; installed/public manifests and
+  rendered Details are current. Do not use that cache as package authority.
 
-## Git and GitHub close
+## Validation
 
-- Implementation/release commit: `77ce8a3091d9c6abf7c5470ae488528ddb1c6605`; exact `30` intended paths,
-  `5,180` insertions / `195` deletions; no unrelated owner path entered the index.
-- Push: PASS. Read-only parity:
-  `HEAD == origin/main == remote refs/heads/main == 77ce8a3091d9c6abf7c5470ae488528ddb1c6605`.
-- GitHub issues `#9`, `#19`, and `#20` remain open. Independent readback found exactly one start/end ledger marker
-  pair per issue, the full checkpoint hash, public `0.0.65`, complete W3B1a semantics, no stale bulk-open sentence,
-  no unresolved placeholder, and no prohibited source-product reference.
-- One first issue update serialized a literal commit placeholder in `#19`; the exact marker was corrected before the
-  independent green readback. One first readback checker required the exact string `5/5` although `#20` said
-  semantically equivalent `all five`; the corrected semantic checker passed without another issue mutation.
-- This documentation-only close commit contains the final handoff state. It changes no Forge runtime/package bytes;
-  the implementation checkpoint and public archive remain the hashes above.
+- Typecheck and product-copy checks pass.
+- Extension build, root production build, fresh staging, stable packaging, package inspection, secret checks, and
+  staged-app probe `16/16` pass.
+- Changelog generation reports 54 versions, newest `0.0.66`, six ordered bullets, exactly one LF.
+- First full precommit passed `[precommit] OK`, exit `0`, in 535.9 seconds. The final synchronized run after these
+  close records also passed `[precommit] OK`, exit `0`, in 496.2 seconds; the commit hook repeats the gate against
+  exact staging.
+- Ephemeral ports `3100/3101` are closed; standing config and pre-existing test-results hashes are unchanged.
 
 ## Preserved unrelated dirty state
 
-Never stage, revert, delete, or rewrite these owner paths:
+Never stage, revert, delete, or rewrite:
 
 - `BACKLOG.md`, `CODEX-ONBOARDING.md`, `KNOWN-BUGS.md`.
-- Deleted Discord/data files already present in the worktree.
-- `test-results/.last-run.json`.
-- Existing `vscode-extension/evidence/0.0.35-*` files and six older `2026-07-31-r8-r17` screenshots.
-- `.github/ISSUE_TEMPLATE/*`, `Note for Kimi.md`, and any other pre-existing untracked owner file.
+- `docs/plans/2026-08-02-w3b1-addressed-state-receipts.md` and the untracked parked
+  `docs/plans/2026-08-07-w3b1b-guarded-filesystem-recovery-receipts.md`.
+- Pre-existing deleted Discord/data files and `test-results/.last-run.json`.
+- Existing modified `vscode-extension/evidence/0.0.35-*` and six untracked
+  `vscode-extension/evidence/2026-07-31-r8-r17/*` screenshots.
+- `.github/ISSUE_TEMPLATE/*`, `Note for Kimi.md`, and every other pre-existing owner path.
 
 Use `git add -- <exact checkpoint paths>` only. Do not use broad add, clean, reset, checkout, or stash.
 
 ## Triggered AAR hazards
 
-- Governance correctly refused the new writer/source/surface rows until exact candidate review and hash-pinned
-  promotion; never hand-edit around those authorities.
-- An ad hoc lint scope produced false Node-global errors; `npm run lint` is authoritative.
-- A 15-minute outer E2E observer killed a healthy approximately 19-minute run, and another run hit the known
-  post-verdict Windows `0xC0000409`; exact cleanup plus the final `96/96` full run is the accepted evidence.
-- Several broad Luna route-test workers remained byte-silent. Their residue was rejected; only settled native Luna
-  facts/adapter/governance bytes are accepted.
-- Antigravity shortcut focus opened Quick Open during the first reload attempt. The native View-menu command path
-  performed the actual reload without losing the canvas.
-- OpenVSX accepted `0.0.64` but withheld it beyond the normal poll and default timeout horizons while activating other
-  releases. Publisher acknowledgment is not public-download evidence; never retry the occupied version.
-- The deterministic changelog generator's old EOF contract produced `0A0A`; stable `0.0.65` fixes and directly tests
-  exactly-one-LF output. Never occupy a version before terminal-byte and full diff checks pass.
-- PowerShell's normal `ConvertFrom-Json` rejects `package-lock.json`'s empty root package key. Use `-AsHashtable` and
-  index `['packages']['']`; this known trap recurred once during pre-publish readback.
-- A broad supplemental secret regex matched harmless dependency test-data paths. Keep the package inspector
-  authoritative and scope supplemental scans to package-root contract paths.
-- Highest remaining risk: W3B1b-d mutation owners still lack complete native receipt authority.
+- Publisher acknowledgment is not public-download proof. The first `0.0.66` public window remained `404`; no
+  republish occurred, and exact/latest/API/archive/rendered evidence was required after propagation.
+- VSCE auto-links bare historical `#NN` text to GitHub, which can turn internal backlog numbers into false links;
+  follow-up `#40` owns a deterministic guard.
+- OpenVSX shows an unverified-namespace warning that weakens public trust; follow-up `#39` owns the claim process.
+- Antigravity can cache stale gallery summary text across local installation and refresh. Verify installed manifest
+  bytes and rendered README/Features instead.
+- Short PowerShell probes should collect loop output in arrays; two direct loop-to-pipe forms failed to parse.
+- The package inspector requires the VSIX positional argument even though the npm alias does not supply one.
+- Highest remaining implementation risk is unchanged: W3B1b-d mutation owners still lack complete native receipt
+  authority.
 
 ## Exact continuation
 
-1. Reconcile and document the W3B1b guarded filesystem/recovery receipt unit against the current route/resource
-   inventory, capability map, ADRs, and existing receipt/recovery owners.
-2. Decompose non-overlapping native Luna work orders with exact path ownership, acceptance criteria, and focused
-   failure tests. Do not begin W3B1c-d until the W3B1b checkpoint closes.
-3. Preserve the unrelated dirty set below; use the standing quiet-machine authorization for applicable isolated E2E,
-   package, and installed Antigravity validation. Do not write game/mod data.
+1. Stop this long session after the release commit point; do not begin another implementation unit here.
+2. When Forge work resumes, reconcile the already specified W3B1b guarded filesystem/recovery unit, preserving all
+   unrelated dirty state. The owner may instead return to mod development first; this checkpoint imposes no blocker.
 
 ## Eyeball queue
 
-Empty for this invisible authority checkpoint. The installed rendered host and schema-source loading were observed
-directly; no owner interaction or game-side experience gate remains for W3B1a.
+Empty. Installed Antigravity and public OpenVSX Details/Features/Changelog surfaces were directly inspected.

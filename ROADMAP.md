@@ -7703,3 +7703,34 @@ Evidence: `vscode-extension/evidence/0.0.65-release-validation.md`.
 This release publishes the bounded W3B1a result; it does not close W3B1, W3, W3B1b-d, W3B2-B3, W3C, or the overall
 extension-native program. No game/mod directory was written or deployed. The release checkpoint is the commit
 containing this entry, subject `release: publish X4 Forge Studio 0.0.65`.
+
+## 2026-08-08 — X4 Forge Studio 0.0.66 marketplace story refresh — VERIFIED public release
+
+Stable `x4forge.x4-forge-studio@0.0.66` is publicly downloadable with an outcome-led marketplace story for the
+native Forge extension. The Details page now starts with the authoring-to-evidence workflow, explains visual and
+source-first authoring, X4 corpus/XSD intelligence, deterministic whole-project validation, patch and conflict
+analysis, guarded packaging/deployment/recovery, and an honest in-game trust boundary. AI is optional and no longer
+dominates the opening argument. Existing launcher, command, setting, activity-container, view, discovery, and UTF-8
+metadata are clearer without changing IDs, contribution counts, activation behavior, dependencies, or runtime code.
+
+The stable archive contains `2,091` entries, is `18,113,327` bytes, and has SHA-256
+`6B3A5C032976046EE2A44BB5F67BC205A61368146E77E8621116EC4B70526763`. Typecheck, product-copy checks,
+root/extension builds, deterministic changelog generation, fresh staging, archive inspection, secret checks,
+staged-app probe `16/16`, and the first full precommit `[precommit] OK` pass. Antigravity was reloaded with installed
+`0.0.66`; rendered Details, Features/Commands, and Changelog are green, critical installed files match candidate
+hashes, the managed sidecar runs the installed server on `:57339`, and standing `config.json` is byte-identical.
+
+The synchronized precommit after all durable close records also passes `[precommit] OK`, exit `0`, in 496.2 seconds;
+its post-run containment readback has zero listeners on `3100/3101` and unchanged config/test-result hashes.
+
+OpenVSX accepted the exact archive once. After normal propagation, latest/exact metadata report downloadable
+`0.0.66`; the public archive and README are byte-identical to local source/candidate, the public manifest has zero
+mojibake and the unchanged `10` commands / `8` settings / `1` view container / `1` view / `2` activation events, and
+rendered Overview/Changes show the new copy and all six release bullets. Evidence is
+`vscode-extension/evidence/0.0.66-marketplace-release-validation.md`.
+
+OpenVSX namespace verification remains an external trust follow-up in GitHub `#39`; ambiguous VSCE historical
+bare-number autolinks are owned by `#40`. Neither changes or blocks the verified `0.0.66` bytes. This release changes
+no Forge execution contract and has no capability-map delta. It does not close W3B1, W3, W3B1b-d, W3B2-B3, W3C,
+or the overall extension-native program. No game/mod directory was written or deployed. The release checkpoint is
+the commit containing this entry, subject `release: sharpen the X4 Forge marketplace story and publish 0.0.66`.

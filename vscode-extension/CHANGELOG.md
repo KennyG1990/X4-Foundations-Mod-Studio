@@ -3,6 +3,15 @@
 The latest changes, newest first. (This page is generated automatically — see
 `release-notes.json` to edit the wording.)
 
+## 0.0.66 — 2026-08-08
+
+- The marketplace page now explains the complete authoring loop: build Mission Director logic visually or edit native XML, then validate, package, deploy, and connect runtime evidence back to source.
+- X4-aware completion, hover, references, and whole-project diagnostics are described in modder terms, including deterministic Why/provenance and the boundary between Forge's reference data and X4 runtime behaviour.
+- Patch and release workflows are easier to find: preview safe diff patches and bulk transforms, inspect Extension Doctor conflicts, and prepare verified Nexus Mods ZIPs or Steam Workshop staging with rollback protection.
+- The extension launcher and Features metadata now describe the existing Studio, backend, workspace, agent, proof, and conflict actions in plain language without changing their commands or runtime behaviour.
+- Setup and privacy guidance now clearly covers trusted workspaces, Node.js, a local X4 installation, local-first operation, and optional provider-backed AI that is off by default.
+- The stable extension is now version 0.0.66 with corrected UTF-8 metadata. Static validation still cannot prove gameplay intent, and Forge does not upload releases or provide X4.
+
 ## 0.0.65 — 2026-08-07
 
 - Agent actions now use exact route and effect authority, so Forge checks that the requested operation, target, and result are covered before it changes a workspace.

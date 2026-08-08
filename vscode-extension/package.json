@@ -1,8 +1,8 @@
 {
   "name": "x4-forge-studio",
   "displayName": "X4 Forge Studio",
-  "description": "Visual modding studio for X4: Foundations â€” build, validate, and deploy mods with a node canvas and real-schema validation, no hand-written XML required.",
-  "version": "0.0.65",
+  "description": "X4: Foundations modding studio for visual Mission Director graphs, native X4-aware XML editing, deterministic validation, safe patches, and guarded package and deploy workflows.",
+  "version": "0.0.66",
   "icon": "icon.png",
   "publisher": "x4forge",
   "license": "MIT",
@@ -16,11 +16,15 @@
   "keywords": [
     "x4",
     "x4 foundations",
+    "x4 forge",
+    "x4 modding",
     "egosoft",
-    "modding",
     "mission director",
     "xml",
-    "game modding"
+    "visual modding",
+    "mod validation",
+    "nexus mods",
+    "steam workshop"
   ],
   "galleryBanner": {
     "color": "#0d1117",
@@ -43,7 +47,7 @@
       "activitybar": [
         {
           "id": "x4forge",
-          "title": "X4 Forge",
+          "title": "X4 Forge Studio",
           "icon": "media/activitybar.svg"
         }
       ]
@@ -52,7 +56,7 @@
       "x4forge": [
         {
           "id": "x4forge.launcher",
-          "name": "Studio",
+          "name": "Open Studio",
           "icon": "media/activitybar.svg"
         }
       ]
@@ -60,7 +64,7 @@
     "viewsWelcome": [
       {
         "view": "x4forge.launcher",
-        "contents": "Build, validate, and deploy X4: Foundations mods on a visual canvas.\n\n[Open Studio](command:x4forge.openStudio)\n\nOpens the full studio in an editor tab, starts the local backend automatically, and continuously validates open X4 mod files while you type.\n\n[Open Mod Folder](command:x4forge.openModFolder)\n[Create Agent Key](command:x4forge.createAgentKey)\n[Show Backend Logs](command:x4forge.showLogs)\n[Stop Backend](command:x4forge.stopSidecar)"
+        "contents": "Author, validate, package, and deploy X4: Foundations mods in one local workspace.\n\n[Open Studio](command:x4forge.openStudio)\n\nThe Studio connects a visual Mission Director graph with native X4-aware XML editing, deterministic diagnostics, and guarded package and deploy workflows. Configure your X4 installation and reference/schema data in Studio Settings.\n\n[Open Mod Folder](command:x4forge.openModFolder)\n[Create Agent Key](command:x4forge.createAgentKey)\n[Show Backend Logs](command:x4forge.showLogs)\n[Stop Local Backend](command:x4forge.stopSidecar)"
       }
     ],
     "commands": [
@@ -70,7 +74,7 @@
       },
       {
         "command": "x4forge.stopSidecar",
-        "title": "X4 Forge: Stop Backend Sidecar"
+        "title": "X4 Forge: Stop Local Backend"
       },
       {
         "command": "x4forge.showLogs",
@@ -90,19 +94,19 @@
       },
       {
         "command": "x4forge.copyMcpConfig",
-        "title": "X4 Forge: Copy MCP Server Config (for coding agents)"
+        "title": "X4 Forge: Copy MCP Config for Agents"
       },
       {
         "command": "x4forge.refreshAgentBrief",
-        "title": "X4 Forge: Refresh Agent Brief (AGENTS.md + X4_NOTES.md)"
+        "title": "X4 Forge: Refresh Agent Brief"
       },
       {
         "command": "x4forge.generateProof",
-        "title": "X4 Forge: Generate Proof Artifact (PROOF.md)"
+        "title": "X4 Forge: Generate Proof Report"
       },
       {
         "command": "x4forge.checkModConflicts",
-        "title": "X4 Forge: Check Mod Conflicts (installed extensions)"
+        "title": "X4 Forge: Check Installed Mod Conflicts"
       }
     ],
     "configuration": {
@@ -111,22 +115,22 @@
         "x4forge.attachUrl": {
           "type": "string",
           "default": "http://127.0.0.1:3000",
-          "description": "URL of an already-running Forge to attach to before spawning a sidecar. The extension attaches only if this URL answers the Forge agent-schema probe; it never stops a server it attached to."
+          "description": "Attach to an already-running local Forge before starting a sidecar. The extension attaches only after this URL answers the Forge agent-schema probe and never stops a server it attached to."
         },
         "x4forge.forgeRoot": {
           "type": "string",
           "default": "",
-          "description": "Optional path to a built Forge checkout (must contain dist/server.cjs and node_modules). When empty, the app bundled inside the extension is used."
+          "description": "Optional path to a built Forge checkout containing dist/server.cjs and node_modules. Leave empty to use the app bundled inside the extension."
         },
         "x4forge.stateDir": {
           "type": "string",
           "default": "",
-          "description": "Directory for the sidecar's workspace state (X4_STATE_DIR). When empty, a per-user directory in the extension's global storage is used. Point it at an existing Forge checkout's .studio-state to open the real workspace â€” do NOT do this while that Forge's own server is running (the attach probe normally prevents this)."
+          "description": "Directory for the sidecar's workspace state (X4_STATE_DIR). Leave empty for per-user extension storage. Point it at an existing Forge checkout's .studio-state only while that checkout's server is stopped; the attach probe normally prevents unsafe sharing."
         },
         "x4forge.nodePath": {
           "type": "string",
           "default": "",
-          "description": "Path to the Node.js executable used to run the sidecar. When empty, 'node' from PATH is used. The sidecar requires a real Node install (native modules are ABI-matched to it)."
+          "description": "Path to the Node.js executable used to run the sidecar. Leave empty to use node from PATH. The sidecar requires a real Node installation with ABI-compatible native modules."
         },
         "x4forge.autoOpen": {
           "type": "boolean",
@@ -142,7 +146,7 @@
           ],
           "default": "off",
           "enumDescriptions": [
-            "Normal â€” no debugger.",
+            "Normal mode; no debugger.",
             "Launch the backend with --inspect and auto-attach the Node debugger (breakpoints, stepping). Works in VS Code and Antigravity.",
             "Like inspect, but pause at the first line so you can debug startup; continue execution in the debugger to start the server."
           ],
@@ -151,12 +155,12 @@
         "x4forge.writeXmlAssociations": {
           "type": "boolean",
           "default": false,
-          "description": "When opening a mod folder, also write per-file xml.fileAssociations to the game XSDs (plain-rooted factions/gamestarts/addon files only — never diff patches). Requires an XML extension (e.g. Red Hat XML) to take effect. Default off: the Forge validator remains the single referee unless you opt in."
+          "description": "When opening a mod folder, optionally write per-file xml.fileAssociations for applicable game XSDs (plain-rooted factions, gamestarts, and addon files; never diff patches). Requires an XML extension to use these associations. Off by default; Forge validation remains authoritative."
         },
         "x4forge.twoWayEditing": {
           "type": "boolean",
           "default": true,
-          "description": "When an opened mod folder's authored text changes on disk, offer to adopt the folder into the canvas via the guarded importer. Adoption is always explicit and compare-and-swap protected; a lossy import or concurrent canvas change refuses instead of overwriting."
+          "description": "When authored text changes on disk, offer an explicit guarded import into the canvas. Compare-and-swap protection refuses lossy imports or concurrent canvas changes instead of overwriting."
         }
       }
     }
