@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "sourceFingerprint": "1fa9e816a1e7f11349a262cfdfb6f8851f7aac988809b373417e7388eab6386f",
+  "sourceFingerprint": "5c5a82d9c66897cc9df2fccb91387a005070b083a0d306f8d5c9cde84ad84305",
   "policy": "Every raw production filesystem mutation source is count-pinned here. Authoritative files use atomic sibling promotion; stronger tree, archive, append-log, SQLite, retention, ephemeral, and fixture contracts remain explicit exceptions.",
   "writers": [
     {
@@ -149,6 +149,22 @@
       "failureContract": "Production overlay resolution is read-only; the temp root is always cleaned."
     },
     {
+      "file": "src/lib/runtimeDebugSession.selftest.ts",
+      "calls": { "writeFileSync": 5, "rmSync": 1, "mkdtempSync": 1 },
+      "categories": ["fixture-only"],
+      "owners": ["runRuntimeDebugSessionSelftest"],
+      "rationale": "Creates bounded cursor/session, corruption, and failed-promotion fixtures only beneath one unique temporary root.",
+      "failureContract": "Fixture cleanup is best effort; persisted-session corruption and promotion-failure fixtures never target configured data, workspace, game, mod, or corpus roots."
+    },
+    {
+      "file": "src/lib/runtimeDebugSession.ts",
+      "calls": { "mkdirSync": 1 },
+      "categories": ["authoritative-atomic"],
+      "owners": ["RuntimeDebugSessionStore.ensureRoot", "RuntimeDebugSessionStore.persist"],
+      "rationale": "Creates validated runtime debug session root segments; persisted bounded session JSON delegates to the shared atomic writer.",
+      "failureContract": "Filesystem-root, forbidden-root, non-directory, link, and unavailable-root checks refuse unsafe state roots; atomic promotion preserves prior session bytes on failure."
+    },
+    {
       "file": "src/lib/schemaRegistry.ts",
       "calls": { "writeFileSync": 1, "mkdirSync": 1, "rmSync": 1, "mkdtempSync": 1 },
       "categories": ["fixture-only"],
@@ -251,6 +267,14 @@
       "owners": ["runNpcIdentityProbeSelftest"],
       "rationale": "Writes only disposable plain/gzip/corrupt save fixtures for identity correlation.",
       "failureContract": "Production identity probes read user-selected saves only and never mutate them."
+    },
+    {
+      "file": "src/server/runtimeDebuggerAdapter.selftest.ts",
+      "calls": { "writeFileSync": 16, "appendFileSync": 3, "mkdirSync": 1, "rmSync": 1, "mkdtempSync": 1 },
+      "categories": ["fixture-only"],
+      "owners": ["runRuntimeDebuggerAdapterSelftest", "appendLine"],
+      "rationale": "Creates disposable debug-log and corrupt persisted-session fixtures beneath one unique temporary adapter root and appends bounded log evidence for selection and rotation cases.",
+      "failureContract": "Fixture cleanup is best effort; every log and store mutation remains under the unique temporary root and never targets configured game, mod, corpus, workspace, or production roots."
     },
     {
       "file": "src/server/workspaceCreateReceiptAdapter.selftest.ts",

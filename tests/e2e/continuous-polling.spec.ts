@@ -1654,6 +1654,20 @@ test('CueViewer clears old cue evidence when the active tail feed fails', async 
 
 test('Playtest replaces a prior clean verdict with explicit polling failure truth', async ({ page }) => {
   await seedServerWorkspace(buildTemplateWorkspace('welcome'));
+  await page.route('**/api/agent/debug-watcher/brief**', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      ok: true,
+      status: { lastDeploy: null },
+      verdict: { state: 'not_seen', detail: 'No current game evidence in the isolated legacy fallback fixture.', errorCount: 0 },
+      sinceDeploy: { hasDeploy: false, changedSinceDeploy: false, summary: 'No deploy evidence in the isolated fixture.' },
+      timeline: [],
+      expectedChain: [],
+      evidence: [],
+      artifact: '',
+    }),
+  }));
   let calls = 0;
   await page.route('**/api/agent/game-log/status?*', async route => {
     calls += 1;

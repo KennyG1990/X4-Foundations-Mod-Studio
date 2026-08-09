@@ -3,6 +3,26 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const MAX_SNAPSHOT_ROWS = 100_000;
+const MICROSECONDS_PER_SECOND = 1_000_000n;
+const MICROSECONDS_PER_MINUTE = 60n * MICROSECONDS_PER_SECOND;
+const MICROSECONDS_PER_DAY = 24n * 60n * MICROSECONDS_PER_MINUTE;
+const DMTF_CREATION_TOKEN_PATTERN = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})\.(\d{6})([+-])(\d{3})$/u;
+const POSIX_CREATION_TOKEN_PATTERN = /^(Sun|Mon|Tue|Wed|Thu|Fri|Sat) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (0?[1-9]|[12]\d|3[01]) ([01]\d|2[0-3]):([0-5]\d):([0-5]\d) (\d{4})$/u;
+const POSIX_WEEKDAY_NUMBERS = Object.freeze({ Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 });
+const POSIX_MONTH_NUMBERS = Object.freeze({
+  Jan: 1,
+  Feb: 2,
+  Mar: 3,
+  Apr: 4,
+  May: 5,
+  Jun: 6,
+  Jul: 7,
+  Aug: 8,
+  Sep: 9,
+  Oct: 10,
+  Nov: 11,
+  Dec: 12,
+});
 const ERROR_ORDER = Object.freeze([
   'invalid-input',
   'invalid-root',
@@ -71,6 +91,101 @@ function isValidCreationToken(value) {
     value.trim() === value &&
     !/[\u0000-\u001F\u007F]/u.test(value)
   );
+}
+
+function daysFromCivil(year, month, day) {
+  const adjustedYear = year - (month <= 2 ? 1 : 0);
+  const era = Math.floor(
+    (adjustedYear >= 0 ? adjustedYear : adjustedYear - 399) / 400,
+  );
+  const yearOfEra = adjustedYear - era * 400;
+  const dayOfYear = Math.floor((153 * (month + (month > 2 ? -3 : 9)) + 2) / 5) + day - 1;
+  const dayOfEra = yearOfEra * 365
+    + Math.floor(yearOfEra / 4)
+    - Math.floor(yearOfEra / 100)
+    + dayOfYear;
+  return era * 146097 + dayOfEra - 719468;
+}
+
+function isValidCivilDate(year, month, day) {
+  if (year < 1 || year > 9999 || month < 1 || month > 12) {
+    return false;
+  }
+
+  const daysInMonth = [31, (year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return day >= 1 && day <= daysInMonth[month - 1];
+}
+
+function parseDmtfCreationTime(creationToken) {
+  const match = DMTF_CREATION_TOKEN_PATTERN.exec(creationToken);
+  if (match === null) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const microsecond = Number(match[7]);
+  const offsetMinutes = Number(match[9]);
+  if (
+    !isValidCivilDate(year, month, day)
+    || hour > 23
+    || minute > 59
+    || second > 59
+    || offsetMinutes > 999
+  ) {
+    return null;
+  }
+
+  const localMicroseconds = BigInt(daysFromCivil(year, month, day)) * MICROSECONDS_PER_DAY
+    + BigInt(hour * 60 * 60 + minute * 60 + second) * MICROSECONDS_PER_SECOND
+    + BigInt(microsecond);
+  const signedOffsetMinutes = match[8] === '+' ? offsetMinutes : -offsetMinutes;
+  return localMicroseconds - BigInt(signedOffsetMinutes) * MICROSECONDS_PER_MINUTE;
+}
+
+function parsePosixCreationTime(creationToken) {
+  const match = POSIX_CREATION_TOKEN_PATTERN.exec(creationToken);
+  if (match === null) {
+    return null;
+  }
+
+  const weekday = POSIX_WEEKDAY_NUMBERS[match[1]];
+  const month = POSIX_MONTH_NUMBERS[match[2]];
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const year = Number(match[7]);
+  if (!isValidCivilDate(year, month, day)) {
+    return null;
+  }
+
+  const days = daysFromCivil(year, month, day);
+  const calculatedWeekday = ((days + 4) % 7 + 7) % 7;
+  if (calculatedWeekday !== weekday) {
+    return null;
+  }
+
+  return BigInt(days) * MICROSECONDS_PER_DAY
+    + BigInt(hour * 60 * 60 + minute * 60 + second) * MICROSECONDS_PER_SECOND;
+}
+
+function parseCreationTime(creationToken) {
+  if (typeof creationToken !== 'string') {
+    return null;
+  }
+
+  return parseDmtfCreationTime(creationToken) ?? parsePosixCreationTime(creationToken);
+}
+
+function canTraverseChild(parentRow, childRow) {
+  const parentTime = parseCreationTime(parentRow.creationToken);
+  const childTime = parseCreationTime(childRow.creationToken);
+  return parentTime === null || childTime === null || childTime >= parentTime;
 }
 
 function hasParentCycle(rowsByPid) {
@@ -455,7 +570,9 @@ export function captureInitialOwnedProcessClosure(rootIdentity, snapshotRows) {
       const children = childrenByParentPid.get(currentPid);
       if (children !== undefined) {
         for (const child of children) {
-          pendingPids.push(child.pid);
+          if (canTraverseChild(currentRow, child)) {
+            pendingPids.push(child.pid);
+          }
         }
       }
     }
@@ -588,7 +705,9 @@ export function captureOwnedProcessClosure(input = {}) {
       const children = childrenByParentPid.get(currentPid);
       if (children !== undefined) {
         for (const child of children) {
-          pendingPids.push(child.pid);
+          if (canTraverseChild(currentRow, child)) {
+            pendingPids.push(child.pid);
+          }
         }
       }
     }
@@ -768,6 +887,113 @@ function runSelftest() {
         rows.slice().reverse(),
       );
       assert.deepEqual(first, second);
+    }],
+    ['chronology-rejects-pre-root-child-and-descendant', () => {
+      const result = captureInitialOwnedProcessClosure(
+        { pid: 10, creationToken: '20260809024500.000000+000' },
+        [
+          { pid: 30, parentPid: 20, creationToken: '20260101000100.000000+000' },
+          { pid: 20, parentPid: 10, creationToken: '20260101000000.000000+000' },
+          { pid: 10, parentPid: 0, creationToken: '20260809024500.000000+000' },
+        ],
+      );
+      assert.deepEqual(result.captured, [
+        { pid: 10, creationToken: '20260809024500.000000+000' },
+      ]);
+    }],
+    ['chronology-accepts-legitimate-newer-child', () => {
+      const result = captureInitialOwnedProcessClosure(
+        { pid: 10, creationToken: '20260809024500.000000+000' },
+        [
+          { pid: 20, parentPid: 10, creationToken: '20260809024501.000000+000' },
+          { pid: 10, parentPid: 0, creationToken: '20260809024500.000000+000' },
+        ],
+      );
+      assert.deepEqual(result.captured, [
+        { pid: 10, creationToken: '20260809024500.000000+000' },
+        { pid: 20, creationToken: '20260809024501.000000+000' },
+      ]);
+    }],
+    ['chronology-dmtf-offset-comparison', () => {
+      const equalUtc = captureInitialOwnedProcessClosure(
+        { pid: 10, creationToken: '20260809024500.000000+000' },
+        [
+          { pid: 20, parentPid: 10, creationToken: '20260809014500.000000-060' },
+          { pid: 10, parentPid: 0, creationToken: '20260809024500.000000+000' },
+        ],
+      );
+      assert.deepEqual(equalUtc.captured, [
+        { pid: 10, creationToken: '20260809024500.000000+000' },
+        { pid: 20, creationToken: '20260809014500.000000-060' },
+      ]);
+
+      const olderUtc = captureInitialOwnedProcessClosure(
+        { pid: 10, creationToken: '20260809024500.000000-240' },
+        [
+          { pid: 20, parentPid: 10, creationToken: '20260809050000.000000+000' },
+          { pid: 10, parentPid: 0, creationToken: '20260809024500.000000-240' },
+        ],
+      );
+      assert.deepEqual(olderUtc.captured, [
+        { pid: 10, creationToken: '20260809024500.000000-240' },
+      ]);
+    }],
+    ['chronology-posix-lstart-comparison', () => {
+      const newer = captureInitialOwnedProcessClosure(
+        { pid: 10, creationToken: 'Mon Aug 3 05:06:07 2026' },
+        [
+          { pid: 20, parentPid: 10, creationToken: 'Tue Aug 4 05:06:07 2026' },
+          { pid: 10, parentPid: 0, creationToken: 'Mon Aug 3 05:06:07 2026' },
+        ],
+      );
+      assert.deepEqual(newer.captured, [
+        { pid: 10, creationToken: 'Mon Aug 3 05:06:07 2026' },
+        { pid: 20, creationToken: 'Tue Aug 4 05:06:07 2026' },
+      ]);
+
+      const older = captureInitialOwnedProcessClosure(
+        { pid: 10, creationToken: 'Tue Aug 4 05:06:07 2026' },
+        [
+          { pid: 20, parentPid: 10, creationToken: 'Thu Jan 1 00:00:00 2026' },
+          { pid: 10, parentPid: 0, creationToken: 'Tue Aug 4 05:06:07 2026' },
+        ],
+      );
+      assert.deepEqual(older.captured, [
+        { pid: 10, creationToken: 'Tue Aug 4 05:06:07 2026' },
+      ]);
+    }],
+    ['chronology-repeated-rejects-pre-parent-child-and-descendant', () => {
+      const result = captureOwnedProcessClosure({
+        rootIdentity: { pid: 10, creationToken: 'Tue Aug 4 05:06:07 2026' },
+        previousCaptured: [{ pid: 10, creationToken: 'Tue Aug 4 05:06:07 2026' }],
+        snapshotRows: [
+          { pid: 30, parentPid: 20, creationToken: 'Thu Jan 1 00:01:00 2026' },
+          { pid: 20, parentPid: 10, creationToken: 'Thu Jan 1 00:00:00 2026' },
+          { pid: 10, parentPid: 0, creationToken: 'Tue Aug 4 05:06:07 2026' },
+        ],
+      });
+      assert.deepEqual(result.captured, [
+        { pid: 10, creationToken: 'Tue Aug 4 05:06:07 2026' },
+      ]);
+      assert.deepEqual(result.newlyCaptured, []);
+      assert.deepEqual(result.activeOwned, [
+        { pid: 10, parentPid: 0, creationToken: 'Tue Aug 4 05:06:07 2026' },
+      ]);
+    }],
+    ['chronology-unparseable-token-preserves-capture', () => {
+      const result = captureInitialOwnedProcessClosure(
+        { pid: 10, creationToken: '20260809024500.000000+000' },
+        [
+          { pid: 30, parentPid: 20, creationToken: 'fixture-grandchild' },
+          { pid: 20, parentPid: 10, creationToken: '20261301000000.000000+000' },
+          { pid: 10, parentPid: 0, creationToken: '20260809024500.000000+000' },
+        ],
+      );
+      assert.deepEqual(result.captured, [
+        { pid: 10, creationToken: '20260809024500.000000+000' },
+        { pid: 20, creationToken: '20261301000000.000000+000' },
+        { pid: 30, creationToken: 'fixture-grandchild' },
+      ]);
     }],
     ['same-pid-wrong-root-token', () => {
       const result = captureInitialOwnedProcessClosure(

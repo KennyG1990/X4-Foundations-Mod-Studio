@@ -3,6 +3,33 @@
 The latest changes, newest first. (This page is generated automatically — see
 `release-notes.json` to edit the wording.)
 
+## 0.0.68 — 2026-08-09
+
+- The runtime watcher is back to a compact at-a-glance hierarchy: confirmed active-mod issues lead, authored activity is clearly separate, and cause, impact, evidence, session, coverage, and timeline details stay available through progressive disclosure.
+- Selecting a confirmed incident row now highlights the deepest mapped Forge Mission Director XML node; when no canvas node exists, Forge opens the exact active-workspace Lua or other source line in the native IDE. Ambiguous ownership never triggers a guess.
+- Deterministic authored-emitter provenance traces real tagged activity to its exact source emitter, excludes uniquely identified emitters from other mods, and keeps collisions or no-match cases explicitly unresolved.
+- A uniquely correlated installed copy now merges into the active workspace authority even when bounded inventory is incomplete; genuine collisions remain ambiguous.
+- Confirmed active engine failures are retained and stay prioritized above later routine diagnostic noise, including failures observed during startup after a restart.
+- Corrected debugger policies can safely reanalyze derived state without changing source logs, mod files, or game files.
+- Tagged routine diagnostics remain informational, while governed genuine exact file-and-line runtime faults continue to appear as errors.
+- Copyable UI paths now redact the user-home prefix for readable sharing while Forge preserves the exact machine path internally.
+- Zero-evidence and coverage gaps stay visible and bounded: unavailable evidence is reported as unknown or not observed rather than a clean result or inferred success.
+- Silent gameplay semantics remain explicitly unproven; runtime diagnostics show observed Forge evidence without claiming gameplay correctness or complete detection.
+
+## 0.0.67 — 2026-08-09
+
+- Runtime debugging now identifies the active mod from immutable workspace identity, content metadata, deployed-folder identity, owned files, and real X4 paths, so a display-name change cannot silently move evidence to the wrong project.
+- The log watcher ingests incrementally into bounded persistent session state. Attributable incidents remain available after later log traffic exceeds 256 KiB and after the local sidecar restarts, without persisting the complete game log.
+- Evidence from unrelated extensions is excluded from the active-mod incident list while its count and attribution state remain visible. Shared paths, ownership collisions, and alias-only matches are reported as ambiguous or unknown instead of being guessed.
+- Direct extension paths, Mission Director script and cue contexts, AI-script contexts, and Lua paths or stack frames resolve to an exact file and line and, when source spans exist, the deepest modeled node. Unsupported node mappings fall back to the exact file and line.
+- Each known incident now includes a deterministic cause, likely impact, next bounded action, and supporting evidence or provenance, so the debugger explains what it knows and what it cannot establish.
+- Engine failures are separated from authored diagnostics, including error-channel text, and from FileIO or other log noise. Authored evidence remains informational or explicitly unknown rather than becoming an engine failure by wording alone.
+- Zero matches, unreadable logs, and unavailable evidence no longer appear as a clean runtime result. The session reports no evidence, not seen, or unknown when that is what the available data supports.
+- Log truncation, rotation, and X4 profile or path changes create named session segments without erasing retained incidents. Current deploy baselines are kept separate from historical evidence, so an old line cannot satisfy a new deploy verdict.
+- Declared runtime cues and markers now report observed, missing, or evidence-unavailable against the current segment. Missing or unavailable expected steps never become an inferred success.
+- Repeated equivalent incidents collapse into bounded records with occurrence counts and first and last evidence, while coverage accounting keeps recognized, excluded, ambiguous, and unknown candidates visible.
+- The debugger operates locally and deterministically without requiring an AI service. It reports bounded runtime evidence rather than claiming complete detection, gameplay correctness, or certainty about silent semantic failures.
+
 ## 0.0.66 — 2026-08-08
 
 - The marketplace page now explains the complete authoring loop: build Mission Director logic visually or edit native XML, then validate, package, deploy, and connect runtime evidence back to source.

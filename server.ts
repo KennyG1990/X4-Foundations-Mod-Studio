@@ -175,6 +175,8 @@ import { runReferenceLiteralLintSelftest } from "./src/lib/referenceLint";
 import { parse as luaParse } from "luaparse";
 import { registerNpcIdentityProbeRoutes } from "./src/server/npcIdentityProbe";
 import { registerSelftests } from "./src/server/selftestRegistry";
+import { RuntimeDebuggerAdapter, expectedInputFromLegacy } from "./src/server/runtimeDebuggerAdapter";
+import { runRuntimeDebuggerAdapterSelftest } from "./src/server/runtimeDebuggerAdapter.selftest";
 import {
   createAgentKeyStore,
   resolveAgentRouteAuthority,
@@ -1278,12 +1280,28 @@ function recordSuccessfulDeploy(req: express.Request, info: LastDeployInfo): Las
   // addressed workspace's readiness/status surface only observes its own deployment.
   lastDeployInfo = info;
   const record = (req as any).__workspaceRecord as WorkspaceRecord | undefined;
-  if (record) lastDeployByWorkspaceId.set(record.workspaceId, info);
+  if (record) {
+    lastDeployByWorkspaceId.set(record.workspaceId, info);
+    const baseline = runtimeDebuggerAdapter.recordSuccessfulDeploy(record.workspaceId, {
+      workspaceId: record.workspaceId,
+      modId: info.modId,
+      workspaceName: info.workspaceName,
+      workspaceHash: info.workspaceHash,
+      deployedAt: info.deployedAt,
+      ...(info.stagingPath ? { stagingPath: info.stagingPath } : {}),
+      ...(info.deployedPath ? { deployedPath: info.deployedPath } : {}),
+    });
+    if (baseline.ok === false) {
+      console.warn(`[runtime-debugger] successful deploy baseline unavailable: ${baseline.error}`);
+    }
+  }
   return info;
 }
 
 function deployInfoForWorkspace(record: WorkspaceRecord): LastDeployInfo | null {
-  return lastDeployByWorkspaceId.get(record.workspaceId) || null;
+  const inMemory = lastDeployByWorkspaceId.get(record.workspaceId);
+  if (inMemory) return inMemory;
+  return runtimeDebuggerAdapter.readDeployInfo(record.workspaceId);
 }
 type ArtifactBuildReport = {
   mode: 'loose' | 'catalog';
@@ -2260,6 +2278,73 @@ function buildDebugWatcherBrief(modIdInput?: string, expectedInput: string[] = [
 }
 
 /**
+ * Addressed-workspace watcher adapter. The legacy envelope is retained, but
+ * every runtime fact comes from the deterministic parser/session authority.
+ */
+function buildAddressedDebugWatcherBrief(record: WorkspaceRecord, expectedInput: string[] = []) {
+  const ws = sanitizeWorkspace(record.workspace);
+  const { modId, files } = buildWorkspaceFileManifest(ws);
+  const runtime = runtimeDebuggerAdapter.buildBrief({
+    record,
+    manifest: files,
+    // Compatibility input only; the adapter derives exact ownership from the
+    // addressed record, manifest, source identity, and deploy metadata.
+    modId,
+    deployInfo: deployInfoForWorkspace(record),
+    expectedSteps: expectedInputFromLegacy(expectedInput),
+  });
+  const verdict = runtime.payload.verdict;
+  const legacyStatus = {
+    status: runtime.status,
+    modId: runtime.deployInfo?.modId || runtime.payload.identity.deployedFolders[0] || modId,
+    workspaceName: ws.name,
+    summary: runtime.summary,
+    selectedLogPath: runtime.selectedLogPath,
+    logUpdatedAt: runtime.logUpdatedAt,
+    logBytes: runtime.logBytes,
+    lastDeploy: runtime.deployInfo,
+    modRuntime: {
+      markersSeen: verdict.positiveExecutionEvidence,
+      errorCount: verdict.errorCount,
+    },
+    counts: { activeErrors: verdict.errorCount },
+    issues: runtime.timeline,
+    tailLines: [],
+  };
+  const expectedChain = runtime.payload.expectedSteps.map(step => ({
+    step: step.label,
+    seen: step.truth === "observed",
+    evidence: step.evidence[0],
+  }));
+  const sinceDeploy = {
+    hasDeploy: Boolean(runtime.deployInfo),
+    changedSinceDeploy: runtime.changedSinceDeploy,
+    ...(runtime.deployInfo?.deployedAt ? { deployedAt: runtime.deployInfo.deployedAt } : {}),
+    ...(runtime.logUpdatedAt ? { logUpdatedAt: runtime.logUpdatedAt } : {}),
+    summary: !runtime.deployInfo
+      ? "No Studio deploy metadata is available for this addressed workspace."
+      : runtime.changedSinceDeploy
+        ? "The log has changed since the last Studio deploy; current findings are relevant to this deploy window."
+        : "The log has not changed since the last Studio deploy; findings may be stale.",
+  };
+  const evidence = runtime.payload.incidents
+    .flatMap(incident => incident.evidence.slice(0, 2).map(item => `${incident.classification || "runtime"}: ${item}`))
+    .slice(0, 16);
+  return {
+    ok: runtime.status !== "error",
+    status: legacyStatus,
+    brief: runtime.summary,
+    verdict,
+    timeline: runtime.timeline,
+    expectedChain,
+    sinceDeploy,
+    evidence,
+    artifact: runtime.artifact,
+    runtimeDebugger: runtime.payload,
+  };
+}
+
+/**
  * Invalidation stamps for the SQLite-cached object index: every .cat archive
  * (game root + extension subfolders + mod workspace) plus the top-level mtimes
  * of the scan roots. Cheap to collect; catches archive/install changes. Deeply
@@ -2803,6 +2888,19 @@ function writeReleasePreferencesState(raw: unknown): ReleasePreferences {
 workspaceRegistry = new WorkspaceRegistry({
   root: STUDIO_STATE_DIR,
   defaultWorkspace: JSON.parse(JSON.stringify(DEFAULT_WORKSPACE)),
+});
+const runtimeDebuggerRoots = resolveXsdConfig();
+const runtimeDebuggerAdapter = new RuntimeDebuggerAdapter({
+  root: dataPath("runtime-debug-sessions"),
+  forbiddenRoots: [
+    runtimeDebuggerRoots.x4GamePath,
+    runtimeDebuggerRoots.modWorkspacePath,
+    runtimeDebuggerRoots.filesystemPath,
+    runtimeDebuggerRoots.x4ReferenceRoot,
+    runtimeDebuggerRoots.schemaDir,
+  ].filter((value): value is string => typeof value === "string" && value.trim().length > 0),
+  preferredLogPath: runtimeDebuggerRoots.x4LogPath,
+  logCandidates: findDebugLogCandidates,
 });
 console.log(`[state] workspace registry ready: ${workspaceRegistry.list().length} record(s), default ${workspaceRegistry.defaultWorkspaceId}`);
 
@@ -6748,10 +6846,11 @@ app.get("/api/agent/game-log/status", (req, res) => {
  */
 app.get("/api/agent/debug-watcher/brief", (req, res) => {
   try {
-    const modId = typeof req.query.modId === "string" ? req.query.modId : undefined;
+    const record = resolveWorkspaceAuthority(req, res, true);
+    if (!record) return;
     const expectRaw = typeof req.query.expect === "string" ? req.query.expect : "";
     const expected = expectRaw.split(",").map(s => s.trim()).filter(Boolean);
-    return res.json(buildDebugWatcherBrief(modId, expected));
+    return res.json(buildAddressedDebugWatcherBrief(record, expected));
   } catch (error) {
     return res.status(500).json({ ok: false, error: error?.message || "debug-watcher brief failed" });
   }
@@ -8986,7 +9085,7 @@ function computeServerReadiness(record: WorkspaceRecord) {
   // The stage builder only counts severities; adapt server diagnostics to its shape.
   const packageDiagnostics = runFullWorkspaceValidation(ws, { modId, files }).diagnostics
     .map(d => ({ severity: d.severity, message: d.message, category: "egosoft" as const }));
-  const brief = buildDebugWatcherBrief(modId, [], ws.name, deployInfoForWorkspace(record));
+  const brief = buildAddressedDebugWatcherBrief(record, []);
   const stages = buildReadinessStages({
     workspaceName: ws.name,
     workspaceHash: workspaceHash(record),
@@ -9130,6 +9229,7 @@ app.get("/api/agent/galaxy-map", (_req, res) => {
 // registered by the validation module (src/server/validationRoutes.ts, stage-1 split).
 // SELFTEST REGISTRY (audit R1): one line per oracle — route + public allowlist wired together.
 const SELFTESTS: Record<string, () => unknown> = {
+  "runtime-debugger-selftest": runRuntimeDebuggerAdapterSelftest,
   "agent-history-selftest": runAgentHistorySelftest,
   "action-receipt-selftest": runActionReceiptSelftest,
   "instance-discovery-selftest": runInstanceDiscoverySelftest,

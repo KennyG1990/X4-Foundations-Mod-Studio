@@ -125,6 +125,8 @@
     "src/lib/referenceSuggestions.ts",
     "src/lib/releasePreferences.ts",
     "src/lib/requestDeadline.ts",
+    "src/lib/runtimeDebugger.ts",
+    "src/lib/runtimeDebugSession.ts",
     "src/lib/schemaRegistry.ts",
     "src/lib/schemaRouting.ts",
     "src/lib/schemaTypes.ts",
@@ -177,6 +179,8 @@
     "src/server/npcIdentityProbe.ts",
     "src/server/projectValidation.ts",
     "src/server/referenceRoutes.ts",
+    "src/server/runtimeDebuggerAdapter.selftest.ts",
+    "src/server/runtimeDebuggerAdapter.ts",
     "src/server/selftestRegistry.ts",
     "src/server/validationRoutes.ts",
     "src/server/workspaceCreateReceiptAdapter.ts",
@@ -1876,6 +1880,18 @@
     "GET /api/agent/request-deadline-selftest": {
       "disposition": "public-selftest",
       "owner": "runRequestDeadlineSelftest",
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
+    },
+    "GET /api/agent/runtime-debugger-selftest": {
+      "disposition": "public-selftest",
+      "owner": "runRuntimeDebuggerAdapterSelftest",
       "registrations": 1,
       "agentScopes": [
         "read",

@@ -1,126 +1,105 @@
 # X4 Forge session handoff
 
-Updated: 2026-08-08
+Updated: 2026-08-09
 
 ## One-line state
 
-Stable X4 Forge Studio `0.0.66` is publicly downloadable with exact local/public archive parity and the new
-outcome-led Details story, clearer real Features metadata, and six-bullet changelog. It is installed and rendered in
-Antigravity with exact critical-file parity and the installed sidecar on `:57339`. W3B1a remains `VERIFIED` at `5/5`;
-W3B1/W3 and the extension-native program remain `IN_PROGRESS / PARTIAL`. The active execution priority is now the
-mod-first recovery stopping line. W3B1b guarded filesystem/recovery receipt authority is parked at `SPECIFIED`; its
-worker stopped before accepted code was written.
+The native X4 Forge extension's mod-aware runtime debugger is `VERIFIED` in public Open VSX release `0.0.68`,
+installed from the public archive, running in Antigravity, and visually proven to open the exact failing Forge node.
+The selected real log is historical; GitHub #35 still owns successful-deploy/current-session experience proof.
 
-## Project and product boundary
+## Project and boundary
 
-- Repository: `F:\DEV_ENV\X4_Forge` on `main`.
-- Product: the Antigravity/VS Code Forge extension, Studio webview, and extension-managed loopback sidecar.
-- No standalone app, end-user CLI, alternate runtime, game/mod write, deploy, or W3B1b implementation belongs to
-  this checkpoint.
+- Repository: `F:\DEV_ENV\X4_Forge`, branch `main`.
+- Product: the Forge extension, embedded Studio, and extension-managed loopback sidecar.
+- This release did not write/deploy a real mod, change the game installation, add a standalone product/CLI, or
+  resume W3 receipt/governance work.
 - Standing quiet-machine permission for Antigravity validation remains active; do not ask again unless revoked.
 
-## Mod-first recovery stopping line
+## Public and installed release
 
-1. Reproduce and restore the installed Antigravity `Failed to fetch` / schema-validator workflow. Prove schema
-   discovery, validator startup, managed-sidecar connectivity, and saved-path persistence.
-2. With an isolated scratch mod only, prove open/import, XSD/corpus validation, continuous diagnostics, guarded
-   save, build/package, and deploy dry-run/validation. Do not mutate the real mod or game installation.
-3. Package, inspect, install, validate, publish, and verify the recovery release with a comprehensive changelog.
-   Stop Forge program work at this line so mod development can resume.
-
-Installed `0.0.65` historically loaded the schema sources. Public/installed `0.0.66` is the marketplace-description
-release and its sidecar was green, but it did not reproduce the reported failure or prove the complete ordinary
-authoring loop. The newer failure report therefore remains unresolved until reproduced.
-
-Later priority: W8-W9 Effective Tree/provenance; W10/W13 deterministic knowledge; W11/W16/U33 safe fixes and
-guidance; W14-W15 forensics/compatibility; W12/U35 runtime evidence; then W17/W19/W20 semantic/upstream work.
-Defer broad W3/W4-W6/W18/W21 governance and park optional UX/research until the stopping line or a concrete consumer
-requires them.
-
-Cross-system records: GitHub `#9` and `#20`; Google Drive `X4 Forge — Current Roadmap` and `X4 Forge — Decision
-Record`; Notion program task `3b44618e-d15b-81d4-aa13-e3de17a23e96` and accepted decision
-`3b64618e-d15b-8109-a3f1-f33e93ee355d`.
-
-## Current marketplace checkpoint
-
-- Plan: `docs/plans/2026-08-08-openvsx-marketplace-story-refresh.md`.
-- Evidence: `vscode-extension/evidence/0.0.66-marketplace-release-validation.md`.
-- GitHub owner: `#38`; external trust follow-up `#39`; release-tooling follow-up `#40`.
-- Pre-checkpoint repository parity:
-  `HEAD == origin/main == 7729a9dea5a49ad76019ca1ca92abdc7b6c0f294`.
-- Commit subject: `release: sharpen the X4 Forge marketplace story and publish 0.0.66`.
-- Capability-map delta: none.
-
-## Exact release proof
-
-- Candidate: `vscode-extension/x4-forge-studio-0.0.66.vsix`.
-- Entries/unpacked/archive: `2,091` / `61,507,076` / `18,113,327` bytes.
-- SHA-256: `6B3A5C032976046EE2A44BB5F67BC205A61368146E77E8621116EC4B70526763`.
-- Stable package, lock root/top, release notes, generated changelog, manifest, installed extension, exact/latest public
-  API, rendered public version selector, and public download all report `0.0.66`.
-- OpenVSX accepted the exact archive once. Public download size/hash and public README hash exactly match local.
-- Public manifest has the new description, zero mojibake, and unchanged `10` commands / `8` settings / `1` view
-  container / `1` view / `2` activation events.
-- Public URL: `https://open-vsx.org/extension/x4forge/x4-forge-studio`.
-
-## Installed proof
-
-- Antigravity reports `x4forge.x4-forge-studio@0.0.66` and was reloaded.
-- Rendered Details shows the new opening/workflow/capability/trust content; Features/Commands shows clarified existing
-  titles; Changelog shows the six exact `0.0.66` bullets.
-- Installed README, changelog, controller, and server hashes match candidate entries.
-- Managed sidecar port `57339`, PID `51808`, executes installed `0.0.66/app/dist/server.cjs`.
-- Standing `config.json` remains 478 bytes at SHA-256
+- Open VSX: `x4forge.x4-forge-studio@0.0.68`.
+- Public artifact: 18,168,674 bytes; SHA-256
+  `247C3AE2D2CFD57FDE4F9AD030A756B088C8E0BED9B18C283CA536BD8E475BFB`.
+- Public download: `https://open-vsx.org/api/x4forge/x4-forge-studio/0.0.68/file/x4forge.x4-forge-studio-0.0.68.vsix`.
+- Antigravity installed the public archive and reloaded. One current Forge sidecar remains: supervisor PID `58440`,
+  child PID `42440`, port `62626`, executing the installed `0.0.68` app.
+- Packaged startup loaded 402 events, 35 conditions, 807 actions, five workspaces, and corpus counts of 32 factions,
+  1,902 wares, and 170 sectors from 383 files.
+- Standing `config.json`: 478 bytes; SHA-256
   `ABEC6AE6AD169392878E06E19346C5E85C1DFB5D9BDFACDD80BA77DAF227C697`.
-- Antigravity's extension-list/header summary remains an old cached gallery string; installed/public manifests and
-  rendered Details are current. Do not use that cache as package authority.
+
+## Runtime debugger result
+
+- Ownership uses immutable workspace/content/deploy/file/script evidence rather than the current mod display name.
+- A uniquely correlated installed copy merges with active ownership; true collisions remain ambiguous and inert.
+- Confirmed active engine failures survive later log noise and restart; response bounds are applied after priority.
+- Tagged/path-bearing authored telemetry remains informational and is separated from actual game errors.
+- The default UI is compact: raw message, source/count, and exact node/file action first; audit detail is collapsed.
+- Home paths render as `%USERPROFILE%`; internal operations keep the exact local path.
+- Installed proof showed two confirmed issues, six unresolved, zero unrelated in the primary list, and the exact
+  `md/ai_influence_conversation.xml:98` error. `OPEN DEEPEST NODE` centered/highlighted `Cancel Conversation`.
+- Screenshot:
+  `vscode-extension/evidence/2026-08-09-runtime-debugger/0.0.68-installed-antigravity-node-navigation.jpg`.
 
 ## Validation
 
-- Typecheck and product-copy checks pass.
-- Extension build, root production build, fresh staging, stable packaging, package inspection, secret checks, and
-  staged-app probe `16/16` pass.
-- Changelog generation reports 54 versions, newest `0.0.66`, six ordered bullets, exactly one LF.
-- First full precommit passed `[precommit] OK`, exit `0`, in 535.9 seconds. The final synchronized run after these
-  close records also passed `[precommit] OK`, exit `0`, in 496.2 seconds; the commit hook repeats the gate against
-  exact staging.
-- Ephemeral ports `3100/3101` are closed; standing config and pre-existing test-results hashes are unchanged.
+- Parser `47/47`; session `39/39`; adapter `42/42`; view `14/14`.
+- Focused Playwright `6/6`; full verdict-parsed E2E `102/102`, zero fail/flaky/bad, `treeGone=true`, ports clean.
+- Typecheck and scoped lint pass; production and extension builds pass.
+- Runtime oracle `133/133`; staged-app probe `16/16`; VSIX inspector `13/13`; package inspection passes.
+- Final synchronized precommit passes `[precommit] OK` in 562.6 seconds.
+- Graphify: 6,307 nodes, 15,550 edges, 219 communities.
+- Plan/evidence: `docs/plans/2026-08-08-mod-aware-runtime-debugger.md` and
+  `test-results/runtime-debugger/2026-08-09-release-validation.md`.
+
+## Honest boundary
+
+- The installed real-log panel is historical. It does not prove a new successful deploy or current X4 session is
+  clean; #35 remains open.
+- No watcher can detect silent semantic failures that emit no engine, script, probe, or authored evidence.
+- Public `0.0.67` is installable but failed acceptance and was superseded by corrective `0.0.68`.
 
 ## Preserved unrelated dirty state
 
 Never stage, revert, delete, or rewrite:
 
 - `BACKLOG.md`, `CODEX-ONBOARDING.md`, `KNOWN-BUGS.md`.
-- `docs/plans/2026-08-02-w3b1-addressed-state-receipts.md` and the untracked parked
+- `docs/plans/2026-08-02-w3b1-addressed-state-receipts.md` and
   `docs/plans/2026-08-07-w3b1b-guarded-filesystem-recovery-receipts.md`.
 - Pre-existing deleted Discord/data files and `test-results/.last-run.json`.
-- Existing modified `vscode-extension/evidence/0.0.35-*` and six untracked
+- Existing modified `vscode-extension/evidence/0.0.35-*` and untracked
   `vscode-extension/evidence/2026-07-31-r8-r17/*` screenshots.
 - `.github/ISSUE_TEMPLATE/*`, `Note for Kimi.md`, and every other pre-existing owner path.
 
-Use `git add -- <exact checkpoint paths>` only. Do not use broad add, clean, reset, checkout, or stash.
+Use `git add -- <exact checkpoint paths>` only. Never use broad add, clean, reset, checkout, or stash.
 
 ## Triggered AAR hazards
 
-- Publisher acknowledgment is not public-download proof. The first `0.0.66` public window remained `404`; no
-  republish occurred, and exact/latest/API/archive/rendered evidence was required after propagation.
-- VSCE auto-links bare historical `#NN` text to GitHub, which can turn internal backlog numbers into false links;
-  follow-up `#40` owns a deterministic guard.
-- OpenVSX shows an unverified-namespace warning that weakens public trust; follow-up `#39` owns the claim process.
-- Antigravity can cache stale gallery summary text across local installation and refresh. Verify installed manifest
-  bytes and rendered README/Features instead.
-- Short PowerShell probes should collect loop output in arrays; two direct loop-to-pipe forms failed to parse.
-- The package inspector requires the VSIX positional argument even though the npm alias does not supply one.
-- Highest remaining implementation risk is unchanged: W3B1b-d mutation owners still lack complete native receipt
-  authority, but that work is deliberately parked behind the mod-first stopping line.
+- `0.0.67` passed isolated/package gates but failed installed-product ownership, retention, and severity acceptance.
+  An installed visual gate is mandatory for this surface.
+- Full E2E exposed stale Windows parent-PID reuse; chronological edge validation now rejects that ownership class.
+- One later E2E run had an unreproduced ephemeral web-server outage; the decisive direct rerun passed `102/102`.
+- Oracle must run against a current production server; the first no-server attempt correctly failed.
+- Open VSX latest metadata lagged accepted publication for about 52 seconds; use exact no-cache archive/hash readback.
+- Antigravity reload left the superseded `0.0.67` sidecar alive beside `0.0.68`. Exact version/path cleanup restored
+  one owner; lifecycle cleanup needs a separate bounded follow-up.
+- An isolated stopped oracle directory remains at
+  `C:\Users\Moshi\AppData\Local\Temp\x4forge-oracle-17c12853bc0040b6866ef4660db209c3`; recursive deletion was
+  policy-blocked. Port 3001 is clean; do not bypass policy.
 
 ## Exact continuation
 
-1. Reproduce the installed fetch/schema failure; do not infer recovery from the green 0.0.66 sidecar alone.
-2. Prove the ordinary authoring loop against an isolated scratch mod only.
-3. Publish the recovery release only after those installed-host gates pass, then return to mod development.
-4. Keep W3B1b parked unless recovery itself exposes a concrete dependency on its guarded owner.
+1. Confirm `HEAD == origin/main == remote main` before new work; if parity is absent, push this exact checkpoint.
+2. Keep #35 open until a successful deploy/current X4 session proves the live experience path.
+3. Return to the mod-first stopping line; do not resume broad governance unless a concrete consumer requires it.
 
 ## Eyeball queue
 
-Empty. Installed Antigravity and public OpenVSX Details/Features/Changelog surfaces were directly inspected.
+- #35 only: after a future successful scratch deployment, load/trigger the mod in X4 and verify the current-session
+  panel. The installed historical node-navigation experience itself is already visually verified.
+
+## Commit point
+
+This handoff belongs to checkpoint subject `feat(runtime): ship mod-aware X4 incident debugger`. Resolve its exact
+final SHA from `git log -1`; a file cannot embed its own commit hash without changing that hash.

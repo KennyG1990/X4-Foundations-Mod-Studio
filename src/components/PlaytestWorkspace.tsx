@@ -4,6 +4,11 @@ import ReleaseCenter from './ReleaseCenter';
 import { DEFAULT_RELEASE_PREFERENCES, type ReleasePreferences } from '../lib/releasePreferences';
 import { fetchPollingJson } from '../lib/continuousPolling';
 import { useContinuousPolling } from '../lib/useContinuousPolling';
+import {
+  buildRuntimeDebuggerViewModel,
+  type RuntimeDebuggerPayload,
+} from '../lib/runtimeDebuggerView';
+import { openInNativeEditor } from '../lib/nativeEditor';
 import { 
   Folder, 
   Terminal, 
@@ -99,6 +104,7 @@ interface DebugWatcherBrief {
   sinceDeploy?: { hasDeploy: boolean; changedSinceDeploy: boolean; summary: string; deployedAt?: string; logUpdatedAt?: string };
   evidence?: string[];
   artifact?: string;
+  runtimeDebugger?: RuntimeDebuggerPayload;
   error?: string;
 }
 
@@ -113,6 +119,315 @@ const GAME_LOG_STATUS_LABELS: Record<GameLogStatus['status'], string> = {
   errors: 'LOG ERRORS',
   error: 'LOG READ ERROR',
 };
+
+function RuntimeDebuggerPanel({
+  runtimeDebugger,
+  brief,
+  timeline,
+  expectedChain,
+  artifact,
+}: {
+  runtimeDebugger: RuntimeDebuggerPayload;
+  brief?: DebugWatcherBrief['brief'];
+  timeline?: DebugWatcherBrief['timeline'];
+  expectedChain?: DebugWatcherBrief['expectedChain'];
+  artifact?: DebugWatcherBrief['artifact'];
+}) {
+  const view = buildRuntimeDebuggerViewModel(runtimeDebugger);
+  const sessionTone = view.session.state === 'current'
+    ? 'border-cyan-500/30 bg-cyan-500/5 text-cyan-100'
+    : view.session.state === 'historical'
+      ? 'border-amber-500/30 bg-amber-500/5 text-amber-100'
+      : 'border-slate-500/30 bg-slate-500/5 text-slate-200';
+  const coverageTone = view.coverage.status === 'met'
+    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+    : view.coverage.status === 'below_target'
+      ? 'border-red-500/30 bg-red-500/10 text-red-200'
+      : 'border-amber-500/30 bg-amber-500/10 text-amber-200';
+  const incidentEntries = view.incidents.map((row, index) => ({ row, index }));
+  const issueEntries = incidentEntries.filter(({ row }) => row.severity !== 'info');
+  const activityEntries = incidentEntries.filter(({ row }) => row.severity === 'info');
+  const confirmedEngineErrorEntries = incidentEntries.filter(({ row }) => row.disposition === 'confirmed_active' && row.isEngineFailure);
+  const unresolvedIssueEntries = incidentEntries.filter(({ row }) => row.unresolved);
+  const confirmedIssueOccurrences = confirmedEngineErrorEntries.reduce((total, { row }) => total + row.count, 0);
+  const unresolvedIssueOccurrences = unresolvedIssueEntries.reduce((total, { row }) => total + row.count, 0);
+  const activityOccurrences = activityEntries.reduce((total, { row }) => total + row.count, 0);
+  const observedExpectedSteps = view.expectedSteps.filter(step => step.truth === 'observed').length;
+  const missingExpectedSteps = view.expectedSteps.filter(step => step.truth === 'missing').length;
+  const unavailableExpectedSteps = view.expectedSteps.filter(step => step.truth === 'unavailable').length;
+  const coverageWarning = view.coverage.status !== 'met';
+  const statusSummary = view.session.state === 'historical'
+    ? 'Historical runtime evidence is shown; it cannot prove the current session is clean.'
+    : view.session.state === 'unavailable'
+      ? 'The runtime watcher is unavailable; no current clean proof is available.'
+      : confirmedIssueOccurrences > 0 && unresolvedIssueOccurrences > 0
+        ? `${confirmedIssueOccurrences} confirmed mod error${confirmedIssueOccurrences === 1 ? '' : 's'}; ${unresolvedIssueOccurrences} unresolved log issue${unresolvedIssueOccurrences === 1 ? '' : 's'}.${coverageWarning ? ` Coverage warning: ${view.coverage.statusLabel}.` : ''}`
+        : confirmedIssueOccurrences > 0
+          ? `${confirmedIssueOccurrences} confirmed mod error${confirmedIssueOccurrences === 1 ? '' : 's'} across ${confirmedEngineErrorEntries.length} group${confirmedEngineErrorEntries.length === 1 ? '' : 's'}.${coverageWarning ? ` Coverage warning: ${view.coverage.statusLabel}.` : ''}`
+          : unresolvedIssueOccurrences > 0
+            ? `No confirmed mod errors; ${unresolvedIssueOccurrences} unresolved log issue${unresolvedIssueOccurrences === 1 ? '' : 's'} remain visible.${coverageWarning ? ` Coverage warning: ${view.coverage.statusLabel}.` : ''}`
+        : coverageWarning
+          ? view.noCandidateMessage || `No active-mod errors are shown, but ${view.coverage.statusLabel.toLowerCase()}.`
+          : 'No active-mod errors observed in the current session; coverage target met.';
+  const isNestedInteractiveTarget = (
+    target: EventTarget | null,
+    currentTarget: EventTarget | null,
+  ): boolean => {
+    if (!(target instanceof Element) || !(currentTarget instanceof Element)) return false;
+    const interactiveTarget = target.closest('a,button,details,summary,input,select,textarea,[role="button"]');
+    return Boolean(
+      interactiveTarget
+      && interactiveTarget !== currentTarget
+      && currentTarget.contains(interactiveTarget),
+    );
+  };
+  const [nativeEditorMessage, setNativeEditorMessage] = useState<string | null>(null);
+
+  const navigateToNode = (nodeId: string, nodeLabel?: string) => {
+    window.dispatchEvent(new CustomEvent('navigate-to-source', {
+      detail: { kind: 'md_node', id: nodeId, ...(nodeLabel ? { label: nodeLabel } : {}) },
+    }));
+  };
+
+  const activateIncident = (target: NonNullable<(typeof view.incidents)[number]['navigationTarget']>) => {
+    if (target.kind === 'md_node') {
+      setNativeEditorMessage(null);
+      navigateToNode(target.nodeId, target.nodeLabel);
+      return;
+    }
+    const requested = openInNativeEditor(
+      target.file,
+      { line: target.nativeLine },
+    );
+    setNativeEditorMessage(requested
+      ? `Native editor request sent for ${target.file}:${target.sourceLine}.`
+      : 'Native editor unavailable in the standalone browser; the source was not opened.');
+  };
+
+  const renderIncidentRow = ({ row, index }: { row: (typeof view.incidents)[number]; index: number }) => {
+    const navigationTarget = row.navigationTarget;
+    const sourceLabel = row.mapping.nodeLabel
+      ? `${row.mapping.nodeLabel} · ${row.mapping.locationLabel}`
+      : row.mapping.locationLabel;
+    const primaryMessage = row.samples[0]?.text || row.cause;
+    const actionable = Boolean(navigationTarget);
+    const rowTone = row.severity === 'error'
+      ? 'border-red-500/30 bg-red-500/5'
+      : row.severity === 'info'
+        ? 'border-cyan-500/30 bg-cyan-500/5'
+        : 'border-amber-500/30 bg-amber-500/5';
+
+    return (
+      <article
+        key={`${row.key}-${index}`}
+        className={`space-y-1.5 rounded border p-1.5 text-[9px] leading-tight ${rowTone} ${actionable ? 'cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/80 focus-visible:ring-offset-1 focus-visible:ring-offset-slate-950' : ''}`}
+        data-testid={`runtime-incident-${index}`}
+        data-navigation-kind={navigationTarget?.kind}
+        {...(actionable ? {
+          role: 'button' as const,
+          tabIndex: 0,
+          'aria-label': `${navigationTarget!.actionLabel}: ${primaryMessage}`,
+        } : {})}
+        onClick={event => {
+          if (!navigationTarget || isNestedInteractiveTarget(event.target, event.currentTarget)) return;
+          activateIncident(navigationTarget);
+        }}
+        onKeyDown={event => {
+          if (!navigationTarget || isNestedInteractiveTarget(event.target, event.currentTarget)) return;
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          event.preventDefault();
+          activateIncident(navigationTarget);
+        }}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className={`font-mono font-bold ${row.severity === 'error' ? 'text-red-300' : row.severity === 'info' ? 'text-cyan-300' : 'text-amber-300'}`}>
+              {row.severity === 'error' ? 'ERROR' : row.severity === 'warning' ? 'WARNING' : 'ACTIVITY'} · {row.dispositionLabel}
+            </div>
+            <div className="break-words font-mono text-slate-200" title={row.key}>{primaryMessage}</div>
+          </div>
+          <div className="shrink-0 text-right font-mono text-slate-300">
+            <div>{row.count}×</div>
+            <div>{row.lineLabel}</div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1 font-mono">
+          <span className="truncate text-cyan-200" title={row.mapping.reason}>{sourceLabel}</span>
+          {navigationTarget && <span className="ml-auto rounded border border-cyan-500/40 bg-cyan-500/10 px-1 py-0.5 text-cyan-200">{navigationTarget.actionLabel} ↗</span>}
+        </div>
+
+        {row.unresolved && (
+          <div className="truncate text-amber-200" title={row.attributionReason}>
+            unresolved: {row.attributionReason}
+          </div>
+        )}
+
+        <details className="rounded border border-white/10 bg-black/20 p-1 font-mono" data-testid={`runtime-incident-details-${index}`}>
+          <summary className="cursor-pointer text-slate-500">incident details · cause, attribution, evidence</summary>
+          <div className="mt-1 space-y-1 text-slate-300">
+            <div><span className="text-slate-500">SUMMARY · </span>{row.summary}</div>
+            <div><span className="text-slate-500">CAUSE · </span>{row.cause}</div>
+            <div><span className="text-slate-500">IMPACT · </span>{row.impact}</div>
+            <div><span className="text-slate-500">NEXT ACTION · </span>{row.nextAction}</div>
+            <div><span className="text-slate-500">ATTRIBUTION · </span>{row.attributionReason}</div>
+            <div className="rounded border border-white/10 bg-black/20 p-1">
+              <div className="text-slate-500">EVIDENCE · {row.evidenceLabel}</div>
+              {row.evidence.map((evidence, evidenceIndex) => <div key={`${evidence}-${evidenceIndex}`} className="truncate" title={evidence}>· {evidence}</div>)}
+            </div>
+            <div className="rounded border border-white/10 bg-black/20 p-1">
+              <div className="text-slate-500">SOURCE MAPPING · {row.mapping.mappingLabel}</div>
+              <div title={row.mapping.reason}>{row.mapping.locationLabel}</div>
+              <div className="text-slate-500">{row.mapping.reason}</div>
+            </div>
+            {row.samples.length > 0 && (
+              <div className="rounded border border-white/10 bg-black/20 p-1">
+                <div className="text-slate-500">SAMPLES · {row.samples.length}</div>
+                {row.samples.map((sample, sampleIndex) => (
+                  <pre key={`${sample.lineLabel}-${sampleIndex}`} className="mt-1 whitespace-pre-wrap break-words text-slate-300">{sample.lineLabel}: {sample.text}</pre>
+                ))}
+              </div>
+            )}
+          </div>
+        </details>
+      </article>
+    );
+  };
+
+  return (
+    <div className="mt-2 space-y-2 rounded border border-cyan-500/25 bg-cyan-500/5 p-2" data-testid="runtime-debugger-panel">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="truncate text-[9px] font-mono uppercase tracking-wider text-cyan-200" title={view.authority.displayName}>
+            Runtime Debugger · {view.authority.displayName}
+          </div>
+          <div className="mt-0.5 text-[10px] leading-tight text-slate-200" data-testid="runtime-debugger-status">
+            {statusSummary}
+          </div>
+          <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[9px] font-mono text-slate-400">
+            <span>{confirmedIssueOccurrences} confirmed issue{confirmedIssueOccurrences === 1 ? '' : 's'}</span>
+            <span>{unresolvedIssueOccurrences} unresolved</span>
+            <span>{activityOccurrences} activity</span>
+            <span>{view.hiddenOtherModCount} unrelated hidden</span>
+          </div>
+        </div>
+        <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-mono font-bold ${sessionTone}`}>
+          {view.session.stateLabel}
+        </span>
+      </div>
+
+      {nativeEditorMessage && (
+        <div className="rounded border border-amber-500/30 bg-amber-500/5 p-1.5 text-[9px] font-mono text-amber-200" aria-live="polite" data-testid="runtime-debugger-native-editor-status">
+          {nativeEditorMessage}
+        </div>
+      )}
+
+      <div className="space-y-1.5" data-testid="runtime-debugger-incidents">
+        <div className="flex items-center justify-between gap-2 text-[9px] font-mono uppercase tracking-wider text-slate-500">
+          <span>Confirmed errors & unresolved issues</span>
+          <span>{confirmedEngineErrorEntries.length} confirmed · {unresolvedIssueEntries.length} unresolved{view.omittedIncidentCount > 0 ? ` · +${view.omittedIncidentCount} bounded` : ''}</span>
+        </div>
+        <div className="space-y-1.5" data-testid="runtime-debugger-active-issues">
+          {issueEntries.length === 0 ? (
+            <div className="rounded border border-white/10 bg-black/20 p-1.5 text-[9px] font-mono leading-tight text-slate-400">
+              {view.noCandidateMessage || 'No active-mod errors or warnings are shown; absence is not clean proof.'}
+            </div>
+          ) : issueEntries.map(renderIncidentRow)}
+        </div>
+      </div>
+
+      <details className="rounded border border-white/10 bg-black/20 p-1.5 text-[9px] font-mono text-slate-300" data-testid="runtime-debugger-expected-steps">
+        <summary className="cursor-pointer">
+          Expected flow / cue health · {observedExpectedSteps} observed · {missingExpectedSteps} missing · {unavailableExpectedSteps} unavailable
+        </summary>
+        {view.expectedSteps.length === 0 ? (
+          <div className="mt-1 text-slate-500">No declared expected steps.</div>
+        ) : (
+          <div className="mt-1 grid grid-cols-1 gap-1">
+            {view.expectedSteps.map(step => (
+              <div key={step.id} className={`flex items-start gap-1.5 rounded border p-1 ${step.truth === 'observed' ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-200' : step.truth === 'missing' ? 'border-amber-500/30 bg-amber-500/5 text-amber-200' : 'border-slate-500/30 bg-slate-500/5 text-slate-300'}`}>
+                <span className="w-3 shrink-0 text-center">{step.truth === 'observed' ? '✓' : step.truth === 'missing' ? '!' : '—'}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="font-bold">{step.truthLabel}</span> <span className="break-words">{step.label}</span>
+                  {step.evidence.length > 0 && (
+                    <details className="mt-0.5 rounded border border-white/10 bg-black/20 p-1">
+                      <summary className="cursor-pointer text-slate-500">step evidence</summary>
+                      <div className="mt-0.5 truncate text-slate-400" title={step.evidence.join(' · ')}>{step.evidence.join(' · ')}</div>
+                    </details>
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </details>
+
+      {activityEntries.length > 0 && (
+        <details className="rounded border border-cyan-500/20 bg-cyan-500/5 p-1.5" data-testid="runtime-debugger-activity">
+          <summary className="cursor-pointer text-[9px] font-mono text-cyan-200">
+            Activity / runtime evidence · {activityOccurrences} event{activityOccurrences === 1 ? '' : 's'} · {activityEntries.length} group{activityEntries.length === 1 ? '' : 's'}
+          </summary>
+          <div className="mt-1.5 space-y-1.5">{activityEntries.map(renderIncidentRow)}</div>
+        </details>
+      )}
+
+      {(brief || (timeline && timeline.length > 0) || (expectedChain && expectedChain.length > 0) || artifact) && (
+        <details className="rounded border border-white/10 bg-black/20 p-1.5 text-[9px] font-mono text-slate-300" data-testid="runtime-debugger-advanced">
+          <summary className="cursor-pointer text-cyan-200">Advanced watcher details</summary>
+          {brief && <div className="mt-1 leading-tight">{brief}</div>}
+          {expectedChain && expectedChain.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {expectedChain.map(step => <span key={step.step} className={`rounded border px-1 py-0.5 ${step.seen ? 'border-emerald-500/30 text-emerald-300' : 'border-amber-500/30 text-amber-300'}`}>{step.seen ? '✓' : '·'} {step.step}</span>)}
+            </div>
+          )}
+          {timeline && timeline.length > 0 && (
+            <div className="mt-1 space-y-1">
+              {timeline.slice(-8).map((item, index) => (
+                <div key={`${item.lineNumber}-${index}`} className="grid grid-cols-[70px_1fr] gap-2 leading-tight">
+                  <span className={item.severity === 'error' ? 'text-red-300' : item.severity === 'warning' ? 'text-amber-300' : 'text-cyan-300'}>{item.kind}{item.lineNumber ? `:${item.lineNumber}` : ''}</span>
+                  <span className="truncate" title={item.evidence}>{item.evidence}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {artifact && (
+            <details className="mt-1 rounded border border-white/10 bg-black/20 p-1">
+              <summary className="cursor-pointer text-cyan-300">copyable agent artifact</summary>
+              <pre className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap text-[9px] leading-tight text-slate-300">{artifact}</pre>
+            </details>
+          )}
+        </details>
+      )}
+
+      <details className="rounded border border-white/10 bg-black/20 p-1.5 text-[9px] font-mono text-slate-300" data-testid="runtime-debugger-session-detail">
+        <summary className="cursor-pointer text-slate-300">Session & workspace details · {view.session.stateLabel}</summary>
+        <div className="mt-1 grid grid-cols-2 gap-x-2 gap-y-1">
+          <span className="col-span-2 truncate" title={view.authority.workspaceId}>workspace authority: {view.authority.workspaceId}</span>
+          {view.authority.contentId && <span className="truncate" title={view.authority.contentId}>content: {view.authority.contentId}</span>}
+          {view.authority.deployedFolder && <span className="truncate" title={view.authority.deployedFolder}>deployed: {view.authority.deployedFolder}</span>}
+          {view.authority.sourceFolder && <span className="col-span-2 truncate" title={view.authority.sourceFolder}>source: {view.authority.sourceFolder}</span>}
+          {view.session.sessionId && <span className="truncate" title={view.session.sessionId}>session: {view.session.sessionId}</span>}
+          {view.session.logPath && <span className="col-span-2 truncate" title={view.session.logPath}>log: {view.session.logPath}</span>}
+          {view.session.generation !== undefined && <span>generation: {view.session.generation}</span>}
+          {(view.session.firstLine !== undefined || view.session.lastLine !== undefined) && <span>lines: {view.session.firstLine ?? '—'}–{view.session.lastLine ?? '—'}</span>}
+          {view.session.newlyReadBytes !== undefined && <span>new bytes: {view.session.newlyReadBytes}</span>}
+          {view.session.observedAt && <span className="truncate" title={view.session.observedAt}>observed: {view.session.observedAt}</span>}
+        </div>
+        <div className="mt-1 text-slate-300">SESSION EVIDENCE · {view.session.detail}</div>
+        {view.session.resetReason && <div className="mt-0.5 text-amber-300">reset: {view.session.resetReason}</div>}
+        {view.noCandidateMessage && <div className="mt-1 rounded border border-amber-500/25 bg-amber-500/5 p-1 text-amber-200">{view.noCandidateMessage}</div>}
+      </details>
+
+      <details className={`rounded border p-1.5 text-[9px] font-mono ${coverageTone}`} data-testid="runtime-debugger-coverage">
+        <summary className="cursor-pointer">Coverage · {view.coverage.statusLabel} · {view.coverage.targetLabel}</summary>
+        <div className="mt-1 space-y-1 text-slate-200">
+          <div>{view.coverage.arithmeticLabel}</div>
+          <div>{view.unresolvedCount} unresolved · {view.hiddenOtherModCount} unrelated hidden · {view.coverage.silentlyDropped} silently dropped</div>
+        </div>
+      </details>
+    </div>
+  );
+}
 
 interface PlaytestWorkspaceProps {
   workspace: ModWorkspace;
@@ -168,7 +483,7 @@ export default function PlaytestWorkspace({
     setGameLogError('');
     setGameLogLoading(true);
     setDebugBrief(null);
-  }, [activeModId]);
+  }, [activeModId, workspace.id]);
   // NPC Identity Probe UI removed 2026-07-09 (Ken): it was a one-off research rig from
   // the cross-session NPC-id investigation, never meant to ship in the product surface.
   // The agent API endpoints (/api/agent/npc-identity-probe/*) remain for agent use.
@@ -250,6 +565,7 @@ export default function PlaytestWorkspace({
 
   const gameLogStatusUrl = `/api/agent/game-log/status?modId=${encodeURIComponent(activeModId)}`;
   useContinuousPolling<GameLogStatus>({
+    enabled: !debugBrief?.runtimeDebugger,
     resourceKey: `game-log-status:${activeModId}`,
     contract: `GET ${gameLogStatusUrl}`,
     intervalMs: 4000,
@@ -263,9 +579,11 @@ export default function PlaytestWorkspace({
   });
 
   const expectedCues = ['Save_identity', 'Chat_boot', 'Poll_tick', 'On_action'].join(',');
-  const debugBriefUrl = `/api/agent/debug-watcher/brief?modId=${encodeURIComponent(activeModId)}&expect=${encodeURIComponent(expectedCues)}`;
+  // The enhanced runtime debugger is workspace-authoritative. The global fetch
+  // wrapper supplies x-workspace-id; do not let an editable mod id select it.
+  const debugBriefUrl = `/api/agent/debug-watcher/brief?expect=${encodeURIComponent(expectedCues)}`;
   useContinuousPolling<DebugWatcherBrief>({
-    resourceKey: `debug-watcher-playtest:${activeModId}`,
+    resourceKey: `debug-watcher-playtest:${workspace.id}`,
     contract: `GET ${debugBriefUrl}`,
     intervalMs: 4000,
     run: signal => fetchPollingJson(debugBriefUrl, undefined, signal),
@@ -468,6 +786,15 @@ export default function PlaytestWorkspace({
           </p>
         </div>
 
+        {debugBrief?.runtimeDebugger ? (
+          <RuntimeDebuggerPanel
+            runtimeDebugger={debugBrief.runtimeDebugger}
+            brief={debugBrief.brief}
+            timeline={debugBrief.timeline}
+            expectedChain={debugBrief.expectedChain}
+            artifact={debugBrief.artifact}
+          />
+        ) : (
         <div data-testid="playtest-game-log-status" className={`rounded-lg border p-3 space-y-2 ${gameLogTone}`}>
           <div className="flex items-center justify-between gap-3">
             <div className="space-y-0.5 min-w-0">
@@ -575,8 +902,8 @@ export default function PlaytestWorkspace({
             </div>
           )}
 
-          {/* A2 — deterministic root-cause layer (named hypotheses, NOT AI). Pasted-trace
-              result takes precedence over the live watcher so a dev can diagnose on demand. */}
+          {/* A2 — deterministic root-cause layer (named hypotheses, NOT AI). In the
+              legacy fallback, pasted-trace results take precedence over live hypotheses. */}
           {(() => {
             const diag = pastedDiagnosis || gameLogStatus?.diagnosis;
             if (!diag) return null;
@@ -608,7 +935,7 @@ export default function PlaytestWorkspace({
 
           {/* Agent-facing watcher brief — the same deterministic endpoint external agents can call
               headlessly. This is intentionally compact: sequence/proof first, raw log last. */}
-          {debugBrief && !debugBrief.error && (
+          {debugBrief && !debugBrief.error && !debugBrief.runtimeDebugger && (
             <div className="mt-2 space-y-2 rounded border border-cyan-500/20 bg-cyan-500/5 p-2" data-testid="debug-watcher-brief">
               <div className="flex items-center justify-between gap-2">
                 <div className="text-[9px] font-mono uppercase tracking-wider text-cyan-200">Agent Debug Brief</div>
@@ -680,6 +1007,8 @@ export default function PlaytestWorkspace({
               Debug watcher brief failed: {debugBrief.error}
             </div>
           )}
+        </div>
+        )}
 
           {/* B24s1 (ADR-F3): read-only game-state Inspector. Renders whatever FORGE-STATE
               topics arrive in the debuglog tail — works with hand-authored probe cues today,
@@ -718,7 +1047,6 @@ export default function PlaytestWorkspace({
           </div>
 
           {/* (NPC Identity Probe panel removed 2026-07-09 — one-off research rig, not product surface.) */}
-        </div>
 
         {/* LOG TEXTAREA BUFFER */}
         <div className="space-y-2">
@@ -769,6 +1097,25 @@ export default function PlaytestWorkspace({
             )}
           </div>
         </div>
+
+        {debugBrief?.runtimeDebugger && pastedDiagnosis && (
+          <div className="mt-1 space-y-1.5 rounded border border-amber-500/30 bg-amber-500/5 p-2 text-[9px] font-mono" data-testid="pasted-log-diagnosis">
+            <div className="flex items-center gap-2">
+              <span className="text-slate-500">ROOT-CAUSE (pasted)</span>
+              <span className={pastedDiagnosis.filesLoaded ? 'text-cyan-300' : 'text-slate-500'}>files {pastedDiagnosis.filesLoaded ? 'loaded' : '—'}</span>
+              <span className={pastedDiagnosis.markersSeen ? 'text-emerald-300' : 'text-amber-300'}>markers {pastedDiagnosis.markersSeen ? 'seen' : 'not seen'}</span>
+            </div>
+            {pastedDiagnosis.hypotheses.length === 0 ? (
+              <div className="text-slate-500">No root-cause hypotheses for this trace.</div>
+            ) : pastedDiagnosis.hypotheses.map((hypothesis, index) => (
+              <div key={`${hypothesis.code}-${index}`} className="rounded border border-amber-500/20 bg-black/15 p-1.5 leading-tight">
+                <div className="text-amber-300">{hypothesis.code} <span className="text-slate-500">· {hypothesis.confidence}</span></div>
+                <div className="mt-0.5 text-slate-300">{hypothesis.explanation}</div>
+                <div className="mt-0.5 text-cyan-300/90">→ {hypothesis.suggestion}</div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* ERROR/SUCCESS STATUS ON ANALYSIS INGESTION */}
         {successfulFixApplied && (

@@ -150,6 +150,12 @@ const safeWorkspace = path.join(tmp, 'X4ForgeMods');
 fs.mkdirSync(liveExtensions, { recursive: true });
 fs.mkdirSync(safeWorkspace, { recursive: true });
 fs.writeFileSync(path.join(gameRoot, 'X4.exe'), 'fixture');
+const runtimeInstalledExtension = path.join(liveExtensions, 'x4_ai_influence');
+fs.mkdirSync(runtimeInstalledExtension, { recursive: true });
+fs.writeFileSync(path.join(runtimeInstalledExtension, 'content.xml'), '<content id="x4_ai_influence" name="Ai Influence" version="1.0.0"/>');
+// Runtime-debugger route assertions must select only this empty ephemeral log, never a
+// developer's real X4 profile/debuglog discovered through the inherited user environment.
+fs.writeFileSync(path.join(gameRoot, 'debuglog.txt'), '');
 
 const checks = [];
 const ok = (name, pass, detail) => { checks.push({ name, pass: !!pass, detail }); console.log(`${pass ? '  ok  ' : ' FAIL '}${name}${detail ? `  [${detail}]` : ''}`); };
@@ -349,6 +355,7 @@ async function main() {
       X4_STATE_DIR: stateDir,
       X4_DATA_DIR: dataDir,
       X4_CONFIG_DIR: configDir,
+      X4_GAME_PATH: gameRoot,
       X4_REFERENCE_ROOT: referenceRoot,
       X4FORGE_DISCOVERY_DIR: path.join(tmp, 'discovery'),
       FORGE_TIMEOUT_DRILL_MS: '300',
@@ -400,6 +407,8 @@ async function main() {
       ...workspaceSuccess.json.workspace,
       name: workspaceSuccess.json.workspace.name,
       description: secondCreateDescriptionMarker,
+      contentId: 'x4_ai_influence',
+      sourceFolder: path.join(safeWorkspace, 'x4_ailive'),
       nodes: [],
     },
   };
@@ -975,6 +984,104 @@ async function main() {
   ok('minted_read_write_and_deploy_keys', !!readKey && !!writeKey && !!deployKey &&
     [readMint, writeMint, deployMint].every(result => result.response.json?.record?.authorityMode === 'preset'),
   `read=${!!readKey} write=${!!writeKey} deploy=${!!deployKey}`);
+
+  // --- mod-aware runtime debugger route: immutable authority, compatibility shape, and oracle ---
+  const hostileRuntimeAlias = 'x4_ailive';
+  const runtimeBriefPath = `/api/agent/debug-watcher/brief?${new URLSearchParams({
+    modId: hostileRuntimeAlias,
+    expect: 'marker:never-seen',
+  })}`;
+  const runtimeBrief = await req('GET', runtimeBriefPath, SESSION_TOKEN, undefined, {
+    workspaceId: SECOND_WORKSPACE_ID,
+    clientId: SECOND_CLIENT_ID,
+  });
+  const runtimeJson = runtimeBrief.json || {};
+  const runtimePayload = runtimeJson.runtimeDebugger;
+  const runtimeAuthority = runtimePayload?.authority;
+  const runtimeIdentity = runtimePayload?.identity;
+  const runtimeVerdict = runtimePayload?.verdict;
+  const runtimeLogPath = path.resolve(path.join(gameRoot, 'debuglog.txt'));
+  ok('runtime_debugger_brief_preserves_legacy_shape_and_adds_payload',
+    runtimeBrief.status === 200
+      && typeof runtimeJson.status?.status === 'string'
+      && typeof runtimeJson.status?.summary === 'string'
+      && Array.isArray(runtimeJson.timeline)
+      && typeof runtimeJson.brief === 'string'
+      && Object.prototype.hasOwnProperty.call(runtimeJson.sinceDeploy || {}, 'changedSinceDeploy')
+      && typeof runtimeJson.sinceDeploy?.changedSinceDeploy === 'boolean'
+      && runtimePayload?.schemaVersion === 1
+      && runtimeAuthority && runtimeIdentity && runtimePayload?.session
+      && typeof runtimePayload.coverage?.target === 'number'
+      && runtimePayload.coverage.target === 0.99
+      && Array.isArray(runtimePayload.incidents) && runtimePayload.incidents.length <= 64
+      && Array.isArray(runtimePayload.expectedSteps) && runtimePayload.expectedSteps.length <= 32
+      && Number.isFinite(runtimePayload.hiddenOtherModCount)
+      && Number.isFinite(runtimePayload.ambiguousCount)
+      && typeof runtimeVerdict?.state === 'string',
+    JSON.stringify({ status: runtimeBrief.status, legacy: Object.keys(runtimeJson), runtime: runtimePayload }));
+  ok('runtime_debugger_brief_uses_addressed_workspace_not_hostile_alias',
+    runtimeBrief.status === 200
+      && runtimeAuthority?.workspaceId === SECOND_WORKSPACE_ID
+      && runtimeAuthority?.contentId === 'x4_ai_influence'
+      && runtimeAuthority?.deployedFolder === 'x4_ai_influence'
+      && runtimeIdentity?.workspaceId === SECOND_WORKSPACE_ID
+      && runtimeIdentity?.contentIds?.includes('x4_ai_influence')
+      && runtimeIdentity?.deployedFolders?.includes('x4_ai_influence')
+      && runtimeIdentity?.inventoryComplete === true
+      && runtimeIdentity?.inventoryOtherExtensionCount === 0
+      && !runtimeIdentity?.contentIds?.includes(hostileRuntimeAlias)
+      && !runtimeIdentity?.deployedFolders?.includes(hostileRuntimeAlias)
+      && path.resolve(String(runtimePayload?.session?.logPath || '')) === runtimeLogPath,
+    JSON.stringify({ authority: runtimeAuthority, identity: runtimeIdentity, logPath: runtimePayload?.session?.logPath }));
+  ok('runtime_debugger_brief_rejects_false_clean_without_current_execution_evidence',
+    runtimeBrief.status === 200
+      && runtimeJson.status?.status !== 'clean'
+      && runtimeVerdict?.state !== 'loaded_clean'
+      && runtimePayload?.session?.state !== 'current'
+      && runtimeVerdict?.currentSession !== true,
+    JSON.stringify({ legacyStatus: runtimeJson.status?.status, session: runtimePayload?.session, verdict: runtimeVerdict }));
+
+  const runtimeBriefMissingWorkspace = await req('GET', runtimeBriefPath, SESSION_TOKEN, undefined, { workspaceId: '' });
+  const runtimeBriefUnknownWorkspace = await req('GET', runtimeBriefPath, SESSION_TOKEN, undefined, { workspaceId: 'ws_ffffffffffffffffffffffff' });
+  const runtimeBriefBoundMismatch = await req('GET', runtimeBriefPath, readKey, undefined, { workspaceId: SECOND_WORKSPACE_ID });
+  ok('runtime_debugger_brief_missing_workspace_identity_fails_named',
+    runtimeBriefMissingWorkspace.status === 400 && runtimeBriefMissingWorkspace.json?.code === 'WORKSPACE_ID_REQUIRED',
+    JSON.stringify(runtimeBriefMissingWorkspace.json || {}));
+  ok('runtime_debugger_brief_unknown_workspace_fails_named',
+    runtimeBriefUnknownWorkspace.status === 404 && runtimeBriefUnknownWorkspace.json?.code === 'WORKSPACE_NOT_FOUND',
+    JSON.stringify(runtimeBriefUnknownWorkspace.json || {}));
+  ok('runtime_debugger_brief_bound_mismatch_fails_named',
+    runtimeBriefBoundMismatch.status === 403 && runtimeBriefBoundMismatch.json?.code === 'WORKSPACE_BINDING_MISMATCH',
+    JSON.stringify(runtimeBriefBoundMismatch.json || {}));
+
+  const runtimeSelftest = await req('GET', '/api/agent/runtime-debugger-selftest', null);
+  const runtimeSelftestChecks = Array.isArray(runtimeSelftest.json?.checks) ? runtimeSelftest.json.checks : [];
+  const runtimeSelftestCheckMap = new Map(runtimeSelftestChecks.map(check => [check?.name, check?.pass]));
+  const criticalRuntimeSelftestChecks = [
+    'hostile_query_mod_id_cannot_replace_exact_deployed_identity',
+    'exact_real_line_renamed_workspace_is_active_engine_failure',
+    '>256KiB_noise_retains_failure_after_restart',
+    'file_io_signature_is_not_engine_failure',
+    'zero_candidates_are_not_clean',
+    'unavailable_log_is_not_clean_and_expected_is_unavailable',
+    'corrupt_state_is_honestly_unavailable',
+    'post_baseline_bytes_set_durable_freshness',
+    'bounded_multi_megabyte_ingest_calls_are_capped',
+  ];
+  ok('runtime_debugger_selftest_route_is_registered_and_green',
+    runtimeSelftest.status === 200
+      && runtimeSelftest.json?.pass === true
+      && runtimeSelftest.json?.allPassed === true
+      && Number.isInteger(runtimeSelftest.json?.passed)
+      && Number.isInteger(runtimeSelftest.json?.total)
+      && runtimeSelftest.json.passed === runtimeSelftest.json.total
+      && runtimeSelftest.json.total >= 22
+      && runtimeSelftestChecks.length === runtimeSelftest.json.total
+      && runtimeSelftestChecks.every(check => check?.pass === true),
+    JSON.stringify({ status: runtimeSelftest.status, passed: runtimeSelftest.json?.passed, total: runtimeSelftest.json?.total }));
+  ok('runtime_debugger_selftest_covers_critical_route_contracts',
+    criticalRuntimeSelftestChecks.every(name => runtimeSelftestCheckMap.get(name) === true),
+    JSON.stringify(Object.fromEntries(criticalRuntimeSelftestChecks.map(name => [name, runtimeSelftestCheckMap.get(name)]))));
 
   // B117/W2A: the manifest is the exact, versioned grant source. Prove each preset has
   // a real positive, exact denials carry stable policy evidence, and Studio-only routes
@@ -2867,7 +2974,7 @@ async function main() {
   } finally {
     try {
       fs.unlinkSync(snapshotRestoreJunctionPath);
-    } catch {}
+    } catch { /* best-effort fixture cleanup */ }
   }
   const snapshotRestoreJunctionAfter = await snapshotRestoreIsolationFingerprint();
   const snapshotRestoreJunctionEvidence = `${snapshotRestoreJunctionAttempt?.raw || ''}\n${stableStringify(snapshotRestoreJunctionAttempt?.json)}`;

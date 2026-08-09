@@ -7734,3 +7734,34 @@ bare-number autolinks are owned by `#40`. Neither changes or blocks the verified
 no Forge execution contract and has no capability-map delta. It does not close W3B1, W3, W3B1b-d, W3B2-B3, W3C,
 or the overall extension-native program. No game/mod directory was written or deployed. The release checkpoint is
 the commit containing this entry, subject `release: sharpen the X4 Forge marketplace story and publish 0.0.66`.
+
+## 2026-08-09 — Mod-aware runtime debugger / Open VSX 0.0.68 — VERIFIED public release
+
+The native Forge extension now owns a durable, incremental, workspace-aware X4 runtime-debugging layer. It resolves
+active-mod incidents from stable content/deploy/file/script ownership instead of an editable display name, keeps
+true collisions ambiguous, separates authored telemetry from engine failures, retains high-value startup faults
+through later log noise and sidecar restarts, and accounts for unrelated or unsupported evidence without claiming a
+false clean result. The compact Playtest surface shows raw actionable errors first and restores exact click-through
+to the deepest modeled node or safe native file/line fallback; attribution, session, coverage, samples, and evidence
+remain available under progressive disclosure.
+
+Public `0.0.67` proved the package/install path but failed installed-runtime acceptance because the active workspace
+and its installed copy became competing owners, newest-first bounds dropped the real early fault, and tagged
+path-bearing telemetry could be elevated to an engine failure. Corrective `0.0.68` merges only a uniquely correlated
+installed copy, retains and returns incidents by deterministic priority, preserves tagged authored activity, and
+reanalyzes persisted state under analyzer policy v2.
+
+Parser `47/47`, durable-session `39/39`, adapter `42/42`, view `14/14`, focused Playwright `6/6`, final full
+verdict-parsed E2E `102/102`, runtime oracle `133/133`, typecheck, scoped lint, production/extension builds,
+staged-app probe `16/16`, VSIX inspector `13/13`, package inspection, full precommit, and graph refresh all pass.
+The public and local 18,168,674-byte archives have identical SHA-256
+`247C3AE2D2CFD57FDE4F9AD030A756B088C8E0BED9B18C283CA536BD8E475BFB`. Open VSX reports `0.0.68`, and
+Antigravity is running the publicly downloaded installed copy on port 62626 with 402 events, 35 conditions, 807
+actions, and the unpacked corpus loaded.
+
+Installed visual proof shows the real `md/ai_influence_conversation.xml:98` error and clicking `OPEN DEEPEST NODE`
+centers/highlights `Cancel Conversation`; evidence is
+`vscode-extension/evidence/2026-08-09-runtime-debugger/0.0.68-installed-antigravity-node-navigation.jpg`.
+The selected real log is historical, so GitHub #35 remains open for a successful-deploy/current-session experience
+gate. Silent semantics that emit no evidence remain outside any log watcher's boundary. No real mod/game file was
+written or deployed. The release checkpoint subject is `feat(runtime): ship mod-aware X4 incident debugger`.

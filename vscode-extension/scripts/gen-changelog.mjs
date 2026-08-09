@@ -2,12 +2,16 @@
  * gen-changelog.mjs — B60 (2026-07-17): generate vscode-extension/CHANGELOG.md so the Open VSX
  * "Changes" tab is never empty and stays current with ONE small human step per release.
  *
- * The version list, dates, and ordering are derived automatically from git (the commits that
- * changed the `version` field in vscode-extension/package.json). The USER-FACING text for each
- * version comes from the curated `release-notes.json` (plain language, for modders — not
- * engineers). A version with no curated entry falls back to a cleaned-up commit subject.
+ * Committed version bumps and their dates are derived automatically from git (the commits that
+ * changed the `version` field in vscode-extension/package.json). A published version that was
+ * released before its corrective bump was committed is retained by the reserved `_published`
+ * date ledger in `release-notes.json`. The USER-FACING text for every version comes from the
+ * curated note arrays (plain language, for modders — not engineers); a version with no curated
+ * entry falls back to a cleaned-up commit subject when git provides one.
  *
- * Per release: add a `"<version>": ["plain bullet", ...]` block to release-notes.json. That's it.
+ * Per release: add a `"<version>": ["plain bullet", ...]` block to release-notes.json. For the
+ * exceptional publish-before-commit flow, also add `"<version>": "YYYY-MM-DD"` under the
+ * reserved `_published` object. The generator validates that metadata and merges exact versions.
  *
  * Publish-before-commit (the intended flow): bump package.json, run this, publish — the bumped
  * working-tree version is emitted as the top entry, exactly matching what ships. Then commit.
@@ -22,6 +26,35 @@ import { fileURLToPath } from "node:url";
 const EXT_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url))); // .../vscode-extension
 const REPO_ROOT = path.dirname(EXT_ROOT); // worktree root (git pathspecs are relative to here)
 const PKG_REL = "vscode-extension/package.json";
+const SUPPORTED_VERSION_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function isSupportedVersion(version) {
+  return typeof version === "string" && SUPPORTED_VERSION_RE.test(version);
+}
+
+function isCalendarDate(date) {
+  if (typeof date !== "string" || !ISO_DATE_RE.test(date)) return false;
+  const [year, month, day] = date.split("-").map(Number);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth[month - 1];
+}
+
+function compareVersionsDesc(a, b) {
+  const aParts = a.version.split(".").map(Number);
+  const bParts = b.version.split(".").map(Number);
+  for (let i = 0; i < aParts.length; i++) {
+    if (aParts[i] !== bParts[i]) return bParts[i] - aParts[i];
+  }
+  return a.version.localeCompare(b.version);
+}
+
+function sortReleases(releases) {
+  return releases
+    .filter((release) => release && isSupportedVersion(release.version))
+    .sort(compareVersionsDesc);
+}
 
 /** Turn a conventional-commit subject into something a non-engineer can read. */
 export function humanizeSubject(subject) {
@@ -32,7 +65,7 @@ export function humanizeSubject(subject) {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : "Maintenance and fixes.";
 }
 
-/** Pure: releases (newest-first) → CHANGELOG.md markdown. Testable in isolation. */
+/** Pure: supported releases → deterministic newest-first CHANGELOG.md markdown. Testable in isolation. */
 export function buildChangelog(releases) {
   const lines = [
     "# What's New in X4 Forge Studio",
@@ -41,7 +74,7 @@ export function buildChangelog(releases) {
     "`release-notes.json` to edit the wording.)",
     "",
   ];
-  for (const r of releases) {
+  for (const r of sortReleases(releases)) {
     lines.push(`## ${r.version}${r.date ? ` — ${r.date}` : ""}`);
     lines.push("");
     const changes = r.changes && r.changes.length ? r.changes : ["(no recorded changes)"];
@@ -70,21 +103,79 @@ function versionAt(sha) {
   }
 }
 
-/** Curated plain-English notes: { "<version>": ["bullet", ...] }. Missing file = all fallback. */
-function loadCuratedNotes() {
+/** Read release-notes.json; missing or malformed JSON leaves an empty document for fallback behavior. */
+function readReleaseNotesDocument() {
   try {
     const raw = JSON.parse(fs.readFileSync(path.join(EXT_ROOT, "release-notes.json"), "utf8"));
-    const out = {};
-    for (const [k, v] of Object.entries(raw)) if (!k.startsWith("_") && Array.isArray(v)) out[k] = v;
-    return out;
+    return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   } catch {
     return {};
   }
 }
 
-/** Read git → releases[] (newest-first). Each entry: {version, date, sha, changes[]}. */
-function readReleasesFromGit() {
-  const notes = loadCuratedNotes();
+/** Curated note arrays are content authority; underscore-prefixed metadata is not note content. */
+function loadCuratedNotes(raw = readReleaseNotesDocument()) {
+  const out = {};
+  for (const [k, v] of Object.entries(raw)) if (!k.startsWith("_") && Array.isArray(v)) out[k] = v;
+  return out;
+}
+
+/**
+ * Validate and read the exceptional publish-before-commit date ledger.
+ * Invalid metadata is rejected instead of silently acquiring an invented date.
+ */
+export function parsePublishedLedger(raw) {
+  if (raw?._published === undefined) return [];
+  const ledger = raw._published;
+  if (!ledger || typeof ledger !== "object" || Array.isArray(ledger)) {
+    throw new Error("_published must be an object mapping x.y.z versions to YYYY-MM-DD dates");
+  }
+  return Object.entries(ledger).map(([version, date]) => {
+    if (!isSupportedVersion(version)) {
+      throw new Error(`_published version is not supported x.y.z semver: ${version}`);
+    }
+    if (!isCalendarDate(date)) {
+      throw new Error(`_published date for ${version} is not a valid YYYY-MM-DD calendar date: ${date}`);
+    }
+    return { version, date, source: "published" };
+  });
+}
+
+function loadPublishedReleases(raw = readReleaseNotesDocument()) {
+  return parsePublishedLedger(raw);
+}
+
+/** Merge exact versions from git, the published ledger, and the working tree. */
+export function mergeReleases(gitReleases, publishedReleases, workingReleases, notes = {}) {
+  const byVersion = new Map();
+  for (const release of [...gitReleases, ...publishedReleases, ...workingReleases]) {
+    if (!release || !isSupportedVersion(release.version)) continue;
+    const previous = byVersion.get(release.version);
+    const published = release.source === "published" || previous?.source === "published";
+    const date = release.source === "published"
+      ? release.date
+      : previous?.source === "published"
+        ? previous.date
+        : (release.date ?? previous?.date);
+    const changes = Array.isArray(notes[release.version]) && notes[release.version].length
+      ? notes[release.version]
+      : (Array.isArray(release.changes) && release.changes.length
+        ? release.changes
+        : (previous?.changes || []));
+    byVersion.set(release.version, {
+      ...previous,
+      ...release,
+      version: release.version,
+      date,
+      changes,
+      source: published ? "published" : (release.source || previous?.source),
+    });
+  }
+  return sortReleases([...byVersion.values()]).map(({ source, ...release }) => release);
+}
+
+/** Read committed git bump points. Each entry: {version, date, sha, changes[]}. */
+function readCommittedReleases(notes) {
   // Commits that touched the manifest, OLDEST first, with date.
   const raw = git(`log --reverse --format=%H%x1f%cs -- ${PKG_REL}`);
   const touches = raw
@@ -126,37 +217,46 @@ function readReleasesFromGit() {
       : (filtered.length ? filtered : subjects).map(humanizeSubject);
     releases.push({ version: cur.version, date: cur.date, sha: cur.sha, changes });
   }
-  releases.reverse(); // newest-first for the changelog
-
-  // Publish-time exactness: if the WORKING TREE version is ahead of the newest committed bump
-  // (i.e. run right after `npm version`/manual bump, before the bump is committed), emit a
-  // correct top entry for it from newestCommittedBump..HEAD — the exact feature HEAD being
-  // packaged. This is what keeps future releases from lagging a cycle behind their features.
-  try {
-    const workingVersion = JSON.parse(fs.readFileSync(path.join(EXT_ROOT, "package.json"), "utf8")).version;
-    const newestCommitted = releases[0];
-    if (workingVersion && (!newestCommitted || workingVersion !== newestCommitted.version)) {
-      const since = newestCommitted ? `${newestCommitted.sha}..HEAD` : "HEAD";
-      const subjects = git(`log --no-merges --format=%s ${since}`).split("\n").filter(Boolean);
-      const filtered = subjects.filter((s) => !isReleaseNoise(s));
-      const curated = notes[workingVersion];
-      releases.unshift({
-        version: workingVersion,
-        date: new Date().toISOString().slice(0, 10),
-        sha: "(uncommitted)",
-        changes: curated && curated.length
-          ? curated
-          : ((filtered.length ? filtered : subjects).map(humanizeSubject).filter(Boolean).length
-            ? (filtered.length ? filtered : subjects).map(humanizeSubject)
-            : ["Maintenance and fixes."]),
-      });
-    }
-  } catch { /* no working package.json / git edge — committed history is enough */ }
+  releases.reverse(); // newest-first for the working-tree range calculation
   return releases;
 }
 
+/** Read the current package version when it is ahead of the newest committed bump. */
+function readWorkingTreeRelease(notes, newestCommitted) {
+  try {
+    const workingVersion = JSON.parse(fs.readFileSync(path.join(EXT_ROOT, "package.json"), "utf8")).version;
+    if (!workingVersion || (newestCommitted && workingVersion === newestCommitted.version)) return null;
+    const since = newestCommitted ? `${newestCommitted.sha}..HEAD` : "HEAD";
+    const subjects = git(`log --no-merges --format=%s ${since}`).split("\n").filter(Boolean);
+    const filtered = subjects.filter((s) => !isReleaseNoise(s));
+    const curated = notes[workingVersion];
+    return {
+      version: workingVersion,
+      date: new Date().toISOString().slice(0, 10),
+      sha: "(uncommitted)",
+      source: "working",
+      changes: curated && curated.length
+        ? curated
+        : ((filtered.length ? filtered : subjects).map(humanizeSubject).filter(Boolean).length
+          ? (filtered.length ? filtered : subjects).map(humanizeSubject)
+          : ["Maintenance and fixes."]),
+    };
+  } catch { /* no working package.json / git edge — committed history is enough */ }
+  return null;
+}
+
+/** Read git, published-ledger, and working-tree releases into one deterministic list. */
+function readReleasesFromGit() {
+  const document = readReleaseNotesDocument();
+  const notes = loadCuratedNotes(document);
+  const committed = readCommittedReleases(notes);
+  const working = readWorkingTreeRelease(notes, committed[0]);
+  const published = loadPublishedReleases(document);
+  return mergeReleases(committed, published, working ? [working] : [], notes);
+}
+
 /* ------------------------------------------------------------------ *
- * Selftest — pure builder against a fixture (no git needed).
+ * Selftest — pure builder and release-source merge fixtures (no git needed).
  * ------------------------------------------------------------------ */
 function selftest() {
   const checks = [];
@@ -184,6 +284,87 @@ function selftest() {
   ok("humanize_chore", humanizeSubject("chore(release): bump extension to v0.0.16") === "Bump extension to v0.0.16");
   ok("humanize_empty_fallback", humanizeSubject("feat(x): B99") === "Maintenance and fixes.");
   ok("release_noise_helper", isReleaseNoise("chore(release): Bump extension to v0.0.16") && !isReleaseNoise("feat(x): y"));
+
+  const committedVersion = "0.0.66";
+  const intermediateVersion = committedVersion.replace(/\d+$/, (n) => String(Number(n) + 1));
+  const workingVersion = intermediateVersion.replace(/\d+$/, (n) => String(Number(n) + 1));
+  const publishedDate = "2026-08-09";
+  const fixtureNotes = {
+    [workingVersion]: ["Corrective working-tree release."],
+    [intermediateVersion]: ["Published before its corrective commit."],
+    [committedVersion]: ["Committed release."],
+  };
+  const fixtureGit = [{
+    version: committedVersion,
+    date: "2026-08-08",
+    sha: "sha-66",
+    changes: ["Git fallback that curated notes replace."],
+  }];
+  const fixturePublished = parsePublishedLedger({
+    _published: { [intermediateVersion]: publishedDate },
+  });
+  const fixtureWorking = [{
+    version: workingVersion,
+    date: publishedDate,
+    sha: "(uncommitted)",
+    source: "working",
+    changes: fixtureNotes[workingVersion],
+  }];
+  const merged = mergeReleases(fixtureGit, fixturePublished, fixtureWorking, fixtureNotes);
+  const mergedMd = buildChangelog(merged);
+  const headings = mergedMd.split("\n").filter((line) => line.startsWith("## "));
+  ok(
+    "published_intermediate_inserted_with_exact_date_and_notes",
+    mergedMd.includes(`## ${intermediateVersion} — ${publishedDate}`)
+      && mergedMd.includes(`- ${fixtureNotes[intermediateVersion][0]}`),
+  );
+
+  const laterGit = [
+    ...fixtureGit,
+    {
+      version: intermediateVersion,
+      date: "2026-08-10",
+      sha: "sha-67",
+      changes: ["Later git fallback must not replace curated content."],
+    },
+  ];
+  const dedupedMd = buildChangelog(mergeReleases(laterGit, fixturePublished, fixtureWorking, fixtureNotes));
+  const intermediateHeadings = dedupedMd
+    .split("\n")
+    .filter((line) => line === `## ${intermediateVersion} — ${publishedDate}`);
+  ok(
+    "published_intermediate_deduplicates_later_git_bump",
+    intermediateHeadings.length === 1
+      && !dedupedMd.includes("Later git fallback must not replace curated content."),
+  );
+
+  let firstMalformedError = "";
+  let secondMalformedError = "";
+  for (const setError of [
+    (error) => { firstMalformedError = error.message; },
+    (error) => { secondMalformedError = error.message; },
+  ]) {
+    try {
+      parsePublishedLedger({ _published: { [intermediateVersion]: "2026-02-30" } });
+    } catch (error) {
+      setError(error);
+    }
+  }
+  ok(
+    "malformed_published_ledger_rejected_deterministically",
+    firstMalformedError === secondMalformedError
+      && firstMalformedError === `_published date for ${intermediateVersion} is not a valid YYYY-MM-DD calendar date: 2026-02-30`,
+  );
+
+  ok(
+    "reserved_metadata_is_not_a_changelog_version",
+    !mergedMd.includes("##_published") && !loadCuratedNotes({ _published: fixturePublished })._published,
+  );
+  ok(
+    "supported_semver_order",
+    headings.slice(0, 3).map((line) => line.split(" ")[1]).join(" > ")
+      === `${workingVersion} > ${intermediateVersion} > ${committedVersion}`,
+  );
 
   const passed = checks.filter((c) => c.pass).length;
   const allPassed = passed === checks.length;
