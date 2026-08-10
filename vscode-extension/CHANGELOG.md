@@ -3,6 +3,17 @@
 The latest changes, newest first. (This page is generated automatically — see
 `release-notes.json` to edit the wording.)
 
+## 0.0.69 — 2026-08-09
+
+- Agents can now retrieve the addressed mod-aware runtime debugger through the authenticated Agent API (GET /api/agent/runtime-debugger) or the runtime_debugger MCP operation without opening a browser or using computer control. The read is governed by the runtime.debug.read@1 capability and exact route and effect authority.
+- Runtime evidence is bound to immutable workspace ownership and the exact authorized capability and effect, so a display-name match or differently addressed mod cannot redirect the response.
+- The debugger returns bounded session and verdict state: coverage, expected steps, and incidents stay finite and explicit, with observed, missing, unavailable, excluded, ambiguous, and unknown evidence kept distinct.
+- Each confirmed incident includes a deterministic cause, likely impact, and next bounded action, with navigation to the confirmed deepest Forge node or exact source file and line when that mapping exists.
+- Evidence from unrelated mods is excluded from the addressed mod's results. Shared paths, collisions, incomplete ownership, and other ambiguous matches remain unresolved instead of being guessed.
+- MCP responses enforce bounded result and context caps, redact the user-home prefix in returned paths, and do not expose the complete game log or accept arbitrary log-path reads.
+- The runtime debugger is local and deterministic: it does not use AI to decide authority, interpret success, or replace the evidence rules.
+- Historical sessions and unavailable or incomplete evidence remain labeled as such; the debugger does not turn missing observations into a clean verdict or claim that gameplay semantics are correct.
+
 ## 0.0.68 — 2026-08-09
 
 - The runtime watcher is back to a compact at-a-glance hierarchy: confirmed active-mod issues lead, authored activity is clearly separate, and cause, impact, evidence, session, coverage, and timeline details stay available through progressive disclosure.

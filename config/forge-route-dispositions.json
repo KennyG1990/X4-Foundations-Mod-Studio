@@ -1889,6 +1889,18 @@
       "resourceClass": "public",
       "workspaceMode": "optional"
     },
+    "GET /api/agent/runtime-debugger": {
+      "disposition": "canonical-capability",
+      "owner": "runtime.debug.read",
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "workspace",
+      "workspaceMode": "required"
+    },
     "GET /api/agent/runtime-debugger-selftest": {
       "disposition": "public-selftest",
       "owner": "runRuntimeDebuggerAdapterSelftest",
@@ -3553,6 +3565,7 @@
     "patch.readiness.analyze@2": "7baa90f99f4f1a7cc4382caaf009c107388e9de6124d0d2b5bf155769ab91812",
     "project.validate@1": "34e6c5a213b07038e58d70dca27db474370300e38599f6299b5664a974dedf06",
     "readiness.read@1": "8a1e349ea4a481e12be506a20cc246957898faed7a9548a523d5a0359195add0",
+    "runtime.debug.read@1": "8d0d15b310655431fa08afdf161575c5873a62261f1e511e9b0ccf9260d84311",
     "schema.domains.list@1": "c2ecae2906cf231eb4384a63ea601c7449f4fc691b629b97bff9fa81e32f21b5",
     "schema.element.explain@1": "066fc8d2153c753a7f498044a0fb2e4a6921f81a2fe1deb6445a02894194286d",
     "workspace.compile@1": "f499ed768aa66f810f0da7ea3c230c98fdd0493d54ec0c08055b0ba2abed51de",
@@ -3560,8 +3573,8 @@
     "workspace.read@2": "962774de4a25e8725a0d90d4982298cc72f100312075b1f6f4ff9de1482752d7"
   },
   "mcpModuleSignature": {
-    "version": 11,
-    "hash": "43e84c05b24b350b49957f9d896d17c12f97833c36c86ea9173939c19a37051c"
+    "version": 12,
+    "hash": "cb2660085f5c295719d3bc901a7a70b8470eee20c8a913da0f0db20543b3bf0e"
   },
   "mcpSignatures": {
     "validate_mod": "536c11b1ddbd5575f54ee832e887149947ae5b302a0fa873c04113d474b64448",
@@ -3571,6 +3584,7 @@
     "author_check": "536c11b1ddbd5575f54ee832e887149947ae5b302a0fa873c04113d474b64448",
     "stage_and_validate": "536c11b1ddbd5575f54ee832e887149947ae5b302a0fa873c04113d474b64448",
     "readiness": "8791e498bef78bc853bfd48e07e3404adc25171cb7ffdd16ffa183ff097c3fa7",
+    "runtime_debugger": "4dace68d60d8096f0593ce1e933aa9a535da5621584656b2f0248caf2b28cc3c",
     "check_conflicts": "0bd9187ac3d013b361c04d91395f72e2859dd923cc8f167efe08696527ab1703",
     "check_patch_readiness": "a38c6f472937bb8f4df3f8aec0e8f43c3a8a9348120b7c577c2ac1c5d6543dec",
     "explain_element": "1ca4792d3d94435a3657f6dd2acad01d71f3ef6b138bab61ad456aaeb5f146d4"
@@ -3583,6 +3597,7 @@
     "author_check": "project.validate@1",
     "stage_and_validate": "project.validate@1",
     "readiness": "readiness.read@1",
+    "runtime_debugger": "runtime.debug.read@1",
     "check_conflicts": "extensions.conflicts.analyze@1",
     "check_patch_readiness": "patch.readiness.analyze@2",
     "explain_element": "schema.element.explain@1"

@@ -32,6 +32,13 @@ const CAPABILITY_RETRY_MS = Math.max(100, Number(process.env.X4FORGE_CAPABILITY_
 const EFFECTIVE_AUTHORITY_API_VERSION = "2026-08-01.agent-effective.v1";
 const EFFECTIVE_AUTHORITY_SCHEMA_VERSION = "forge.agent-capability-authority.v1";
 const ROUTE_AUTHORITY_VERSION = "forge.route-dispositions.v4";
+const RUNTIME_EXPECT_MAX_LENGTH = 256;
+const RUNTIME_MAX_INCIDENTS = 8;
+const RUNTIME_MAX_EXPECTED_STEPS = 16;
+const RUNTIME_MAX_EVIDENCE_ITEMS = 5;
+const RUNTIME_MAX_STRING_ARRAY_ITEMS = 16;
+const RUNTIME_MAX_COUNT = 1_000_000;
+const RUNTIME_MAX_LINE = 1_000_000_000;
 
 /** Curated tool surface — additions require the B56s4 security review, not just code. */
 const TOOLS = [
@@ -159,6 +166,37 @@ const TOOLS = [
     }),
   },
   {
+    name: "runtime_debugger",
+    capabilityId: "runtime.debug.read",
+    capabilityVersion: 1,
+    description:
+      "Read the addressed workspace's bounded deterministic runtime-debugger payload. Returns schema, authority, session, verdict, coverage, expected steps, ambiguity, hidden unrelated-extension evidence, and bounded source-navigation evidence; it never returns the whole log or accepts a log path.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        expect: {
+          type: "string",
+          maxLength: RUNTIME_EXPECT_MAX_LENGTH,
+          description: "Optional bounded comma-separated expected cue or marker names.",
+        },
+      },
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      const query = new URLSearchParams();
+      const expect = typeof args?.expect === "string" ? args.expect.trim() : "";
+      if (expect.length > RUNTIME_EXPECT_MAX_LENGTH) {
+        throw new Error(`runtime debugger expect must be at most ${RUNTIME_EXPECT_MAX_LENGTH} characters`);
+      }
+      if (expect) query.set("expect", expect);
+      const d = requireRuntimeDebuggerResponse(
+        await forge("GET", `/api/agent/runtime-debugger?${query}`),
+        "runtime debugger",
+      );
+      return projectRuntimeDebugger(d);
+    },
+  },
+  {
     name: "check_conflicts",
     capabilityId: "extensions.conflicts.analyze",
     capabilityVersion: 1,
@@ -239,6 +277,7 @@ const TOOLS = [
   },
 ];
 const STATIC_TOOL_NAMES = new Set(TOOLS.map((tool) => tool.name));
+STATIC_TOOL_NAMES.delete("runtime_debugger");
 
 function stableStringify(value) {
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
@@ -265,6 +304,10 @@ function schemaValueError(schema, value, location = "arguments") {
       : type === "number" ? typeof value === "number" && Number.isFinite(value)
       : typeof value === type);
     if (!matches) return `${location} must be ${types.join(" or ")}`;
+  }
+  if (typeof value === "string" && typeof schema?.maxLength === "number" &&
+    schema.maxLength >= 0 && schema.maxLength % 1 === 0 && value.length > schema.maxLength) {
+    return `${location} must be at most ${schema.maxLength} characters`;
   }
   if (schema?.type === "object" && value && typeof value === "object" && !Array.isArray(value)) {
     for (const key of schema.required || []) if (!Object.hasOwn(value, key)) return `${location}.${key} is required`;
@@ -308,6 +351,211 @@ function requireResponse(value, label, fields = {}) {
     }
   }
   return value;
+}
+
+function requireRuntimeDebuggerResponse(value, label) {
+  const payload = requireResponse(value, label, {
+    schemaVersion: "number", authority: "object", identity: "object", session: "object",
+    incidents: "array", coverage: "object", expectedSteps: "array",
+    hiddenOtherModCount: "number", ambiguousCount: "number", hiddenOtherModSummary: "string", verdict: "object",
+  });
+  const invalid = (field, type) => {
+    const error = new Error(`${label} response is missing ${field}:${type}`);
+    error.invalidResponse = true;
+    throw error;
+  };
+  if (typeof payload.authority.workspaceId !== "string") invalid("authority.workspaceId", "string");
+  if (typeof payload.identity.workspaceId !== "string") invalid("identity.workspaceId", "string");
+  if (typeof payload.session.state !== "string") invalid("session.state", "string");
+  if (typeof payload.verdict.state !== "string") invalid("verdict.state", "string");
+  if (typeof payload.coverage.target !== "number" || !Number.isFinite(payload.coverage.target)) {
+    invalid("coverage.target", "number");
+  }
+  if (typeof payload.coverage.met !== "boolean") invalid("coverage.met", "boolean");
+  for (const field of [
+    "candidates", "recognized", "explicitUnknown", "silentlyDropped",
+    "recognizedOrExplicitUnknown", "dispositionSum",
+  ]) {
+    if (typeof payload.coverage[field] !== "number" || !Number.isFinite(payload.coverage[field])) {
+      invalid(`coverage.${field}`, "number");
+    }
+  }
+  if (typeof payload.coverage.recognizedOrExplicitUnknownRatio !== "number" ||
+    !Number.isFinite(payload.coverage.recognizedOrExplicitUnknownRatio)) {
+    invalid("coverage.recognizedOrExplicitUnknownRatio", "number");
+  }
+  if (!isRecord(payload.coverage.dispositionCounts)) invalid("coverage.dispositionCounts", "object");
+  for (const field of ["confirmed_active", "ambiguous", "excluded_other_mod", "unknown"]) {
+    if (typeof payload.coverage.dispositionCounts[field] !== "number" ||
+      !Number.isFinite(payload.coverage.dispositionCounts[field])) {
+      invalid(`coverage.dispositionCounts.${field}`, "number");
+    }
+  }
+  return payload;
+}
+
+function runtimeText(value, limit = 360) {
+  let text = typeof value === "string" ? value : value == null ? "" : String(value);
+  const roots = [process.env.USERPROFILE, process.env.HOME]
+    .filter((root) => typeof root === "string" && root.trim())
+    .map((root) => root.trim())
+    .filter((root, index, all) => all.findIndex((candidate) => candidate.toLowerCase() === root.toLowerCase()) === index);
+  for (const root of roots) {
+    const escaped = root.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    text = text.replace(new RegExp(`${escaped}(?=$|[\\\\/])`, "gi"), "%USERPROFILE%");
+  }
+  text = text.replace(/(?:[A-Za-z]:[\\/]Users[\\/][^\\/]+|[\\/]Users[\\/][^\\/]+|[\\/]home[\\/][^\\/]+|[A-Za-z]:[\\/]Documents and Settings[\\/][^\\/]+)/gi, "%USERPROFILE%");
+  const boundedLimit = Math.max(1, Math.floor(limit));
+  return text.length <= boundedLimit ? text : `${text.slice(0, Math.max(0, boundedLimit - 1))}…`;
+}
+
+function runtimeStringArray(value, count, limit = 280) {
+  return (Array.isArray(value) ? value : [])
+    .filter((item) => typeof item === "string")
+    .map((item) => runtimeText(item, limit).trim())
+    .filter(Boolean)
+    .slice(0, count);
+}
+
+function runtimeOptionalText(value, limit = 360) {
+  if (typeof value !== "string") return undefined;
+  const text = runtimeText(value, limit).trim();
+  return text || undefined;
+}
+
+function runtimeCount(value, limit = RUNTIME_MAX_COUNT) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  return Math.min(limit, Math.max(0, Math.floor(value)));
+}
+
+function runtimeLine(value) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.min(RUNTIME_MAX_LINE, Math.floor(value)) : undefined;
+}
+
+function runtimeRatio(value) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  return Math.min(1, Math.max(0, value));
+}
+
+function projectRuntimeIncident(incident) {
+  const attribution = incident?.attribution && typeof incident.attribution === "object" ? incident.attribution : {};
+  const mapping = incident?.mapping && typeof incident.mapping === "object" ? incident.mapping : {};
+  const disposition = ["confirmed_active", "ambiguous", "excluded_other_mod", "unknown"].includes(attribution.disposition)
+    ? attribution.disposition : "unknown";
+  const mappingKind = ["node", "file_line", "unmapped"].includes(mapping.kind) ? mapping.kind : "unmapped";
+  const nodeId = runtimeOptionalText(mapping.nodeId, 180);
+  const nodeLabel = runtimeOptionalText(mapping.nodeLabel, 280);
+  const file = runtimeOptionalText(mapping.file, 300);
+  const line = runtimeLine(mapping.line);
+  const navigationEvidence = disposition === "confirmed_active" && mappingKind === "node" && nodeId
+    ? { kind: "md_node", nodeId, ...(nodeLabel ? { nodeLabel } : {}), actionLabel: "OPEN DEEPEST NODE" }
+    : disposition === "confirmed_active" && mappingKind === "file_line" && file && line
+      ? { kind: "file_line", file, sourceLine: line, nativeLine: Math.max(0, line - 1), actionLabel: "OPEN FILE IN NATIVE EDITOR" }
+      : undefined;
+  return {
+    key: runtimeText(incident?.key, 180),
+    count: Math.max(1, runtimeCount(incident?.count)),
+    ...(runtimeLine(incident?.firstLine) ? { firstLine: runtimeLine(incident.firstLine) } : {}),
+    ...(runtimeLine(incident?.lastLine) ? { lastLine: runtimeLine(incident.lastLine) } : {}),
+    ...(runtimeOptionalText(incident?.classification, 180) ? { classification: runtimeOptionalText(incident.classification, 180) } : {}),
+    ...(runtimeOptionalText(incident?.severity, 32) ? { severity: runtimeOptionalText(incident.severity, 32) } : {}),
+    isEngineFailure: incident?.isEngineFailure === true,
+    disposition,
+    unresolved: disposition === "ambiguous" || disposition === "unknown",
+    attributionReason: runtimeText(attribution.reason, 360),
+    evidence: runtimeStringArray(incident?.evidence, RUNTIME_MAX_EVIDENCE_ITEMS),
+    explanation: {
+      cause: runtimeText(incident?.explanation?.cause, 360),
+      impact: runtimeText(incident?.explanation?.impact, 360),
+      nextAction: runtimeText(incident?.explanation?.nextAction, 360),
+      summary: runtimeText(incident?.explanation?.summary, 360),
+      evidenceLabel: runtimeText(incident?.explanation?.evidenceLabel, 280),
+    },
+    mapping: {
+      kind: mappingKind,
+      ...(file ? { file } : {}),
+      ...(line ? { line } : {}),
+      ...(nodeId ? { nodeId } : {}),
+      ...(nodeLabel ? { nodeLabel } : {}),
+      reason: runtimeText(mapping.reason, 360),
+    },
+    ...(navigationEvidence ? { navigationEvidence } : {}),
+  };
+}
+
+function projectRuntimeDebugger(payload) {
+  const authority = payload.authority || {};
+  const identity = payload.identity || {};
+  const session = payload.session || {};
+  const verdict = payload.verdict || {};
+  const coverage = payload.coverage || {};
+  return {
+    schemaVersion: runtimeCount(payload.schemaVersion, 1_000),
+    authority: {
+      workspaceId: runtimeText(authority.workspaceId, 180),
+      displayName: runtimeText(authority.displayName, 180),
+      ...(runtimeOptionalText(authority.contentId, 180) ? { contentId: runtimeOptionalText(authority.contentId, 180) } : {}),
+    },
+    identity: {
+      workspaceId: runtimeText(identity.workspaceId, 180),
+      contentIds: runtimeStringArray(identity.contentIds, RUNTIME_MAX_STRING_ARRAY_ITEMS, 180),
+      deployedFolders: runtimeStringArray(identity.deployedFolders, RUNTIME_MAX_STRING_ARRAY_ITEMS, 180),
+      ownedFileCount: runtimeCount(identity.ownedFileCount),
+      inventoryComplete: identity.inventoryComplete === true,
+      inventoryOtherExtensionCount: runtimeCount(identity.inventoryOtherExtensionCount),
+      ...(runtimeOptionalText(identity.inventoryScannedAt, 64) ? { inventoryScannedAt: runtimeOptionalText(identity.inventoryScannedAt, 64) } : {}),
+    },
+    session: {
+      state: ["current", "historical", "unavailable"].includes(session.state) ? session.state : "unavailable",
+      ...(runtimeOptionalText(session.sessionId, 180) ? { sessionId: runtimeOptionalText(session.sessionId, 180) } : {}),
+      ...(typeof session.generation === "number" && Number.isFinite(session.generation) ? { generation: runtimeCount(session.generation) } : {}),
+      ...(runtimeLine(session.firstLine) ? { firstLine: runtimeLine(session.firstLine) } : {}),
+      ...(runtimeLine(session.lastLine) ? { lastLine: runtimeLine(session.lastLine) } : {}),
+      ...(typeof session.newlyReadBytes === "number" && Number.isFinite(session.newlyReadBytes) ? { newlyReadBytes: runtimeCount(session.newlyReadBytes) } : {}),
+      ...(runtimeOptionalText(session.resetReason, 280) ? { resetReason: runtimeOptionalText(session.resetReason, 280) } : {}),
+      ...(runtimeOptionalText(session.observedAt, 64) ? { observedAt: runtimeOptionalText(session.observedAt, 64) } : {}),
+      detail: runtimeText(session.detail, 360),
+    },
+    verdict: {
+      state: runtimeText(verdict.state, 48),
+      detail: runtimeText(verdict.detail, 360),
+      errorCount: runtimeCount(verdict.errorCount),
+      currentSession: verdict.currentSession === true,
+      positiveExecutionEvidence: verdict.positiveExecutionEvidence === true,
+      coverageMet: verdict.coverageMet === true,
+      unresolvedBlocker: verdict.unresolvedBlocker === true,
+    },
+    coverage: {
+      target: runtimeRatio(coverage.target),
+      met: coverage.met === true,
+      candidates: runtimeCount(coverage.candidates),
+      recognized: runtimeCount(coverage.recognized),
+      explicitUnknown: runtimeCount(coverage.explicitUnknown),
+      silentlyDropped: runtimeCount(coverage.silentlyDropped),
+      recognizedOrExplicitUnknown: runtimeCount(coverage.recognizedOrExplicitUnknown),
+      recognizedOrExplicitUnknownRatio: runtimeRatio(coverage.recognizedOrExplicitUnknownRatio),
+      dispositionCounts: {
+        confirmed_active: runtimeCount(coverage.dispositionCounts?.confirmed_active),
+        ambiguous: runtimeCount(coverage.dispositionCounts?.ambiguous),
+        excluded_other_mod: runtimeCount(coverage.dispositionCounts?.excluded_other_mod),
+        unknown: runtimeCount(coverage.dispositionCounts?.unknown),
+      },
+      dispositionSum: runtimeCount(coverage.dispositionSum),
+    },
+    expectedSteps: (Array.isArray(payload.expectedSteps) ? payload.expectedSteps : []).slice(0, RUNTIME_MAX_EXPECTED_STEPS).map((step) => ({
+      id: runtimeText(step?.id, 180),
+      label: runtimeText(step?.label, 280),
+      truth: ["observed", "missing", "unavailable"].includes(step?.truth) ? step.truth : "unavailable",
+      observed: step?.observed === true,
+      success: step?.success === true,
+      evidence: runtimeStringArray(step?.evidence, RUNTIME_MAX_EVIDENCE_ITEMS),
+    })),
+    incidents: (Array.isArray(payload.incidents) ? payload.incidents : []).slice(0, RUNTIME_MAX_INCIDENTS).map(projectRuntimeIncident),
+    hiddenOtherModCount: runtimeCount(payload.hiddenOtherModCount),
+    ambiguousCount: runtimeCount(payload.ambiguousCount),
+    hiddenOtherModSummary: runtimeText(payload.hiddenOtherModSummary, 360),
+  };
 }
 
 async function forgeValidation(context, body) {

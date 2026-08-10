@@ -14,6 +14,11 @@ import * as path from 'path';
 export const E2E_WEB_PORT = 3100;
 export const E2E_API_PORT = 3101;
 export const E2E_TOKEN = 'x4forge-e2e-ephemeral-token';
+export const E2E_VITE_ENV = {
+  API_PORT: String(E2E_API_PORT),
+  STUDIO_API_TOKEN: E2E_TOKEN,
+  DISABLE_HMR: 'true',
+} as const;
 // Per-run state dir: unique-ish per process start; OS temp cleanup owns the leftovers.
 const E2E_STATE_DIR = path.join(os.tmpdir(), `x4forge-e2e-state-${process.pid}`);
 // B41: 127.0.0.1 EVERYWHERE, never "localhost" — vite binds whichever family
@@ -54,8 +59,8 @@ const E2E_REFERENCE_ROOT = resolveE2eReferenceRoot();
 const ephemeralEnv = {
   STUDIO_API_TOKEN: E2E_TOKEN,
   API_PORT: String(E2E_API_PORT),
-  // The e2e stack already starts a standalone Vite process below. Keep server.ts
-  // API-only so it never starts a second embedded Vite/HMR server (port 24678).
+  // The Playwright global setup starts Vite through its JS API. Keep server.ts API-only
+  // so it never starts a second embedded Vite/HMR server (port 24678).
   API_ONLY: 'true',
   X4_STATE_DIR: E2E_STATE_DIR,
   // Config is mutable API state too. Keep schema/directory writes inside the same
@@ -74,6 +79,7 @@ const ephemeralEnv = {
 export default defineConfig({
   testDir: './tests/e2e',
   outputDir: path.resolve(process.cwd(), 'test-results', 'e2e'),
+  globalSetup: './tests/e2e/global-setup.ts',
   // ONE worker still: specs share the ONE ephemeral server's active workspace.
   // (Per-worker servers would allow parallelism later — ports would need to shard.)
   fullyParallel: false,
@@ -92,9 +98,9 @@ export default defineConfig({
   },
   webServer: [
     {
-      // Own the real long-lived Node process directly. `npx` adds a wrapper process on
-      // Windows, which can exit independently and leave Playwright with no useful reason
-      // when the child server disappears mid-suite.
+      // Keep the API server isolated under Playwright's existing webServer process owner.
+      // The UI server is intentionally started by global setup through the Vite JS API;
+      // Playwright's webServer command path uses shell:true and is not a direct Vite owner.
       command: 'node node_modules/tsx/dist/cli.mjs server.ts',
       url: `http://127.0.0.1:${E2E_API_PORT}/api/agent/schema`,
       reuseExistingServer: false,
@@ -102,15 +108,6 @@ export default defineConfig({
       stdout: 'pipe',
       stderr: 'pipe',
       env: { ...ephemeralEnv, PORT: String(E2E_API_PORT) },
-    },
-    {
-      command: `node node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${E2E_WEB_PORT} --strictPort`,
-      url: `http://127.0.0.1:${E2E_WEB_PORT}`,
-      reuseExistingServer: false,
-      timeout: 120_000,
-      stdout: 'pipe',
-      stderr: 'pipe',
-      env: ephemeralEnv,
     },
   ],
   projects: [

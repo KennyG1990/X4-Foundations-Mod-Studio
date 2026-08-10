@@ -4,61 +4,130 @@ Updated: 2026-08-09
 
 ## One-line state
 
-The native X4 Forge extension's mod-aware runtime debugger is `VERIFIED` in public Open VSX release `0.0.68`,
-installed from the public archive, running in Antigravity, and visually proven to open the exact failing Forge node.
-The selected real log is historical; GitHub #35 still owns successful-deploy/current-session experience proof.
+The Forge extension now has canonical runtime-debugger access for agents through `GET /api/agent/runtime-debugger`
+and MCP tool `runtime_debugger`; the repaired direct Playwright/Vite-JS-API lifecycle passed the authoritative
+`102/102` E2E suite and precommit. The exact `0.0.69` VSIX is published on Open VSX, installed and running in
+Antigravity, and verified through the installed Agent API, MCP tool, and schema registry. Repository/external-ledger
+close and commit/push parity remain.
 
 ## Project and boundary
 
 - Repository: `F:\DEV_ENV\X4_Forge`, branch `main`.
-- Product: the Forge extension, embedded Studio, and extension-managed loopback sidecar.
-- This release did not write/deploy a real mod, change the game installation, add a standalone product/CLI, or
-  resume W3 receipt/governance work.
-- Standing quiet-machine permission for Antigravity validation remains active; do not ask again unless revoked.
+- Baseline: `HEAD == origin/main == c454d2c240965e4775b5929f8e54b5e5f5a02880` at task start.
+- Product: the Forge extension, embedded Studio, extension-managed sidecar, Agent API, and native MCP projection.
+- No real mod, game installation, live workspace content, or source debug log was written.
+- GitHub #14 owns this bounded runtime-debugger API/MCP slice; #35 still owns current-X4-session experience proof.
 
-## Public and installed release
+## Implemented and publicly verified 0.0.69 release
 
-- Open VSX: `x4forge.x4-forge-studio@0.0.68`.
-- Public artifact: 18,168,674 bytes; SHA-256
-  `247C3AE2D2CFD57FDE4F9AD030A756B088C8E0BED9B18C283CA536BD8E475BFB`.
-- Public download: `https://open-vsx.org/api/x4forge/x4-forge-studio/0.0.68/file/x4forge.x4-forge-studio-0.0.68.vsix`.
-- Antigravity installed the public archive and reloaded. One current Forge sidecar remains: supervisor PID `58440`,
-  child PID `42440`, port `62626`, executing the installed `0.0.68` app.
-- Packaged startup loaded 402 events, 35 conditions, 807 actions, five workspaces, and corpus counts of 32 factions,
-  1,902 wares, and 170 sectors from 383 files.
-- Standing `config.json`: 478 bytes; SHA-256
-  `ABEC6AE6AD169392878E06E19346C5E85C1DFB5D9BDFACDD80BA77DAF227C697`.
+- Capability: `runtime.debug.read@1`, workspace required, authenticated, with declared `read`, `analyze`,
+  `audit-write`, and `audit-retention-delete` effects.
+- Canonical Agent API: `GET /api/agent/runtime-debugger?expect=<optional bounded names>`.
+- MCP tool: `runtime_debugger`; available only from live effective-capability discovery, never legacy static fallback.
+- API and MCP reject arbitrary log paths/mod IDs. `expect` is the only canonical input and is capped at 256 chars.
+- MCP output caps incidents, expected steps, evidence, counts, lines, strings, and arrays; excludes whole-log/raw fields;
+  redacts user-home paths; and exposes navigation only for confirmed active-mod node or file/line ownership.
+- Existing Studio route `/api/agent/debug-watcher/brief` remains a compatibility envelope over the same adapter path.
+- Version/changelog metadata is prepared at `0.0.69`; notes mention only the implemented Forge capability.
 
-## Runtime debugger result
+## Green validation so far
 
-- Ownership uses immutable workspace/content/deploy/file/script evidence rather than the current mod display name.
-- A uniquely correlated installed copy merges with active ownership; true collisions remain ambiguous and inert.
-- Confirmed active engine failures survive later log noise and restart; response bounds are applied after priority.
-- Tagged/path-bearing authored telemetry remains informational and is separated from actual game errors.
-- The default UI is compact: raw message, source/count, and exact node/file action first; audit detail is collapsed.
-- Home paths render as `%USERPROFILE%`; internal operations keep the exact local path.
-- Installed proof showed two confirmed issues, six unresolved, zero unrelated in the primary list, and the exact
-  `md/ai_influence_conversation.xml:98` error. `OPEN DEEPEST NODE` centered/highlighted `Cancel Conversation`.
-- Screenshot:
-  `vscode-extension/evidence/2026-08-09-runtime-debugger/0.0.68-installed-antigravity-node-navigation.jpg`.
+- `npm run test:capabilities`: 12 capabilities, 296 disposed routes, 1 dynamic registrar, 11 MCP aliases; contract
+  SHA-256 `bb467c4b70402b3dd31571dbe10d60ec05653dc6f6600f043037e993f292037c`.
+- `npm run test:mcp-capabilities`: PASS; read 6, write 10, deploy 11.
+- `npm run test:routes`: `487/487` PASS, including auth/workspace/capability/effect denial, compatibility parity,
+  canonical output schema, and no workspace/game-log write.
+- Runtime-debugger adapter `42/42`; capability registry `27/27`; typecheck PASS.
+- Lint PASS with 0 errors and 592 pre-existing warnings.
+- Runtime-index oracle sweep `133/133` PASS.
+- Focused repaired capability-contract E2E `5/5`; focused canvas reproduction `3/3`.
+- Production build PASS; extension build PASS; staged-app probe `16/16` PASS.
+- VSIX inspector PASS: 2,091 entries, 61,789,011 unpacked bytes, 18,173,930 archive bytes.
+- Repaired authoritative full E2E: `102/102` PASS, zero failed/flaky/bad, complete structured report,
+  `childExit=0`, `treeGone=true`, and ports 3100/3101 clean.
+- `npm run precommit:check`: PASS, including E2E verdict/lifecycle, product-copy, durable-writer,
+  capability/MCP, action-receipt, typecheck, mirror, tripwire, and large-file gates.
+- Fresh local candidate: `vscode-extension/x4-forge-studio-0.0.69.vsix`, SHA-256
+  `73482D3E8FC716B19DA82F8199A0F4DFFE063146514C7E11DF65B1182E06A91F`.
+- Archive readback confirms package version `0.0.69`, MCP tool/route, server route, and capability bytes.
+- Open VSX exact/latest metadata reports `0.0.69`; independently downloaded public bytes exactly match the local
+  candidate at 18,173,930 bytes and SHA-256
+  `73482D3E8FC716B19DA82F8199A0F4DFFE063146514C7E11DF65B1182E06A91F`.
+- Antigravity was reloaded from the public archive. Only the installed `0.0.69` sidecar tree remains active; its
+  schema registry reports 40 domains including Mission Director and AI scripts.
+- Installed Agent API proof returned schema 1, rejected missing auth with `401` and the wrong workspace with `403`,
+  and retained truthful `historical` / `stale` evidence state.
+- Installed MCP discovery and invocation returned a bounded/redacted runtime-debugger projection with one safe
+  confirmed navigation target and no guessed navigation. The temporary exact workspace key was revoked.
+- Durable validation is recorded at
+  `vscode-extension/evidence/2026-08-09-agent-runtime-debugger-access/validation.md`; the task plan records the exact
+  implemented API/MCP boundary, every green gate, both red full-E2E runs, review state, and triggered AAR facts.
+- Installed/public proof is recorded at
+  `vscode-extension/evidence/2026-08-09-agent-runtime-debugger-access/installed-validation.md`.
+- Fresh connector reads resolved the exact Google Drive Project README, Current Status, Current Roadmap, and GitHub
+  Changelog Snapshot identities/revisions before external synchronization. No Drive document has yet been written.
 
-## Validation
+## Isolated E2E Vite lifecycle repair — VERIFIED (2026-08-09)
 
-- Parser `47/47`; session `39/39`; adapter `42/42`; view `14/14`.
-- Focused Playwright `6/6`; full verdict-parsed E2E `102/102`, zero fail/flaky/bad, `treeGone=true`, ports clean.
-- Typecheck and scoped lint pass; production and extension builds pass.
-- Runtime oracle `133/133`; staged-app probe `16/16`; VSIX inspector `13/13`; package inspection passes.
-- Final synchronized precommit passes `[precommit] OK` in 562.6 seconds.
-- Graphify: 6,307 nodes, 15,550 edges, 219 communities.
-- Plan/evidence: `docs/plans/2026-08-08-mod-aware-runtime-debugger.md` and
-  `test-results/runtime-debugger/2026-08-09-release-validation.md`.
+- `playwright.config.ts` no longer launches Vite through `webServer.command`; the existing isolated API server on
+  3101 remains the only Playwright webServer process with API-only state/config/discovery and the fixed E2E token.
+- `tests/e2e/global-setup.ts` starts Vite in the Playwright runner process through the Vite JS API and returns a
+  deterministic cleanup callback. `tests/e2e/e2e-vite-server.ts` loads the repository `vite.config.ts`, preserves
+  127.0.0.1, strict port, 3100/3101 proxy, token injection, `DISABLE_HMR=true`, and `watch:null`, rejects occupied
+  ports, cleans partial startup, and restores its environment keys on close/failure.
+- `npm run test:e2e-vite-server`: PASS on disposable ports, including readiness/close, occupied-port rejection,
+  environment restoration, and post-failure port cleanup. The named selftest is green inside precommit.
+- `npm run typecheck`: PASS. `npm run lint`: PASS, 0 errors and 592 established warnings.
+- Official early focused wrapper: first invocation failed before test collection because global setup assumed
+  `FullConfig.rootDir` was the repository root; after the `configFile`-based correction it passed `5/5`, zero
+  flaky/bad, `treeGone=true`. Official runtime-debugger wrapper passed `6/6`, zero flaky/bad, `treeGone=true`.
+- Listener checks found 3100/3101 clear before/after each focused run and after the selftest. The coordinator's
+  repaired authoritative run passed `102/102` with complete reporting, `treeGone=true`, and clean ports; precommit
+  also passed. The direct-owner lifecycle is therefore VERIFIED.
 
-## Honest boundary
+## Red full-E2E evidence — do not relabel
 
-- The installed real-log panel is historical. It does not prove a new successful deploy or current X4 session is
-  clean; #35 remains open.
-- No watcher can detect silent semantic failures that emit no engine, script, probe, or authored evidence.
-- Public `0.0.67` is installable but failed acceptance and was superseded by corrective `0.0.68`.
+1. First full run: `99/102`, three stale capability-contract expectations. The registry count moved 11 -> 12 and
+   the exact one-capability key fixture had not deselected `runtime.debug.read@1`. The one-file test repair is focused
+   green `5/5`.
+2. Second full run: `6/102`; after test 1, Vite on port 3100 disappeared and all remaining browser tests failed with
+   `ERR_CONNECTION_REFUSED`. Structured report was complete and teardown was clean (`treeGone=true`, ports clean).
+   The exact first affected three-test file then passed `3/3` unchanged, so this is a reproduced ephemeral server
+   death but not a repeatable product failure.
+3. Third old-harness full run: `81/102`; tests 1-81 passed, Vite disappeared before test 82, and tests 82-102
+   inherited `ERR_CONNECTION_REFUSED`. Reporting/cleanup completed and Windows logged no relevant resource or crash
+   event.
+4. The repaired authoritative run passed `102/102`; all three prior failures remain red historical evidence.
+5. The Google Docs trusted-read bridge initially rejected Windows paths, then exact readback caught connector-tool
+   output truncation in a local evidence adapter. A POSIX virtual-root adapter plus apply-patch writes and SHA-256
+   readback completed all four trusted reads. These were local evidence-path failures only; no Google document write
+   occurred.
+
+## Exact task-owned paths
+
+- `server.ts`
+- `src/lib/forgeCapabilities.ts`
+- `src/lib/forgeCapabilities.selftest.ts`
+- `scripts/capability-contract-audit.ts`
+- `config/forge-route-dispositions.json`
+- `scripts/route-integration.mjs`
+- `vscode-extension/mcp/x4forge-mcp.cjs`
+- `scripts/mcp-capability-selftest.ts`
+- `tests/e2e/capability-contract.spec.ts`
+- `vscode-extension/package.json`
+- `vscode-extension/package-lock.json`
+- `vscode-extension/release-notes.json`
+- `vscode-extension/CHANGELOG.md`
+- `docs/plans/2026-08-09-agent-runtime-debugger-access.md`
+- `SESSION-HANDOFF.md`
+- `vscode-extension/evidence/2026-08-09-agent-runtime-debugger-access/validation.md`
+- `package.json`
+- `playwright.config.ts`
+- `scripts/precommit-check.mjs`
+- `scripts/e2e-vite-server.selftest.ts`
+- `tests/e2e/global-setup.ts`
+- `tests/e2e/e2e-vite-server.ts`
+- release evidence/ROADMAP/capability-map/AAR files after final release validation.
 
 ## Preserved unrelated dirty state
 
@@ -74,32 +143,21 @@ Never stage, revert, delete, or rewrite:
 
 Use `git add -- <exact checkpoint paths>` only. Never use broad add, clean, reset, checkout, or stash.
 
-## Triggered AAR hazards
-
-- `0.0.67` passed isolated/package gates but failed installed-product ownership, retention, and severity acceptance.
-  An installed visual gate is mandatory for this surface.
-- Full E2E exposed stale Windows parent-PID reuse; chronological edge validation now rejects that ownership class.
-- One later E2E run had an unreproduced ephemeral web-server outage; the decisive direct rerun passed `102/102`.
-- Oracle must run against a current production server; the first no-server attempt correctly failed.
-- Open VSX latest metadata lagged accepted publication for about 52 seconds; use exact no-cache archive/hash readback.
-- Antigravity reload left the superseded `0.0.67` sidecar alive beside `0.0.68`. Exact version/path cleanup restored
-  one owner; lifecycle cleanup needs a separate bounded follow-up.
-- An isolated stopped oracle directory remains at
-  `C:\Users\Moshi\AppData\Local\Temp\x4forge-oracle-17c12853bc0040b6866ef4660db209c3`; recursive deletion was
-  policy-blocked. Port 3001 is clean; do not bypass policy.
-
 ## Exact continuation
 
-1. Confirm `HEAD == origin/main == remote main` before new work; if parity is absent, push this exact checkpoint.
-2. Keep #35 open until a successful deploy/current X4 session proves the live experience path.
-3. Return to the mod-first stopping line; do not resume broad governance unless a concrete consumer requires it.
+1. Exact-stage the task-owned release files, rerun `npm run precommit:check`, commit
+   `feat(runtime): expose debugger to agents through API and MCP`, push `main`, and prove remote parity.
+2. Synchronize Google Drive, Notion, and the existing GitHub #14 implementation-ledger marker against the exact
+   feature commit. Keep #14 open for the broader static-to-engine precision loop.
+3. Mark the local plan/evidence close VERIFIED, overwrite this handoff with final parity/readback, and create the
+   documentation-close commit/push without changing the published package bytes.
 
 ## Eyeball queue
 
-- #35 only: after a future successful scratch deployment, load/trigger the mod in X4 and verify the current-session
-  panel. The installed historical node-navigation experience itself is already visually verified.
+- None for this non-visual API/MCP slice. #35 retains the future current-X4-session experience gate.
 
 ## Commit point
 
-This handoff belongs to checkpoint subject `feat(runtime): ship mod-aware X4 incident debugger`. Resolve its exact
-final SHA from `git log -1`; a file cannot embed its own commit hash without changing that hash.
+Commit point: `feat(runtime): expose debugger to agents through API and MCP`. Status is `PARTIAL`: implementation,
+full E2E, precommit, public publication/hash parity, installed Agent API/MCP/schema proof, and release records are
+green; exact staging, commit/push parity, external record synchronization, and the documentation-close commit remain.

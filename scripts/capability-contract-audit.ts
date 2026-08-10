@@ -40,7 +40,7 @@ const ROOT = process.cwd();
 const MANIFEST_PATH = path.join(ROOT, 'config', 'forge-route-dispositions.json');
 const CANDIDATE_PATH = path.join(ROOT, 'test-results', 'forge-route-dispositions.candidate.json');
 const MCP_MODULE_PATH = path.join(ROOT, 'vscode-extension', 'mcp', 'x4forge-mcp.cjs');
-const MCP_MODULE_AUDIT_VERSION = 11;
+const MCP_MODULE_AUDIT_VERSION = 12;
 const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'all']);
 
 type RouteDisposition =
@@ -2615,6 +2615,10 @@ const MCP_COMPATIBILITY_CALLS: Readonly<Record<string, readonly string[]>> = {
   author_check: ['POST /api/agent/project/validate'],
   stage_and_validate: ['POST /api/agent/project/validate'],
   explain_element: ['GET /api/agent/lang/hover', 'GET /api/agent/lang/attrs'],
+};
+
+const REVIEWED_UI_COMPATIBILITY_BINDINGS: Readonly<Record<string, { method: string; path: string }>> = {
+  'runtime.debug.read@1|studio-debug-watcher': { method: 'GET', path: '/api/agent/debug-watcher/brief' },
 };
 
 function parseMcpMappings(text: string, relative = 'vscode-extension/mcp/x4forge-mcp.cjs'): McpInventory {
@@ -5388,11 +5392,15 @@ function projectionAnchorErrors(capability: ForgeCapabilityDescriptorV1, surface
   }
   const file = cachedProjectionFile(relative);
   const primary = capability.apiBindings.find(binding => binding.role === 'primary');
+  const reviewedUiCompatibility = REVIEWED_UI_COMPATIBILITY_BINDINGS[
+    `${capability.id}@${capability.version}|${projection.id}`
+  ];
+  const uiBinding = reviewedUiCompatibility || primary;
   let found = false;
-  if (surface === 'ui' && token.includes('/api/') && primary) {
+  if (surface === 'ui' && token.includes('/api/') && uiBinding) {
     const anchorRoute = normalizeRouteSkeleton(token);
-    const primaryRoute = normalizeRouteSkeleton(primary.path);
-    found = !!anchorRoute && anchorRoute === primaryRoute && hasRequestEvidence(file, primary.method, primary.path);
+    const reviewedRoute = normalizeRouteSkeleton(uiBinding.path);
+    found = !!anchorRoute && anchorRoute === reviewedRoute && hasRequestEvidence(file, uiBinding.method, uiBinding.path);
   }
   else if (surface === 'ui' && token.includes('.')) found = hasJsxPropertyRead(file, token);
   else if (surface === 'ui') found = hasCallEvidence(file, token);
@@ -5404,8 +5412,8 @@ function projectionAnchorErrors(capability: ForgeCapabilityDescriptorV1, surface
       inventory.mappings.some(mapping => mapping.name === projection.id && mapping.capabilityId === capability.id && mapping.capabilityVersion === capability.version);
   } else if (surface === 'externalAgents') found = hasRouteRegistration(file, token);
   if (found) return [];
-  const detail = surface === 'ui' && token.includes('/api/') && primary
-    ? ` (${requestEvidenceDiagnostics(file, primary.method, primary.path)})`
+  const detail = surface === 'ui' && token.includes('/api/') && uiBinding
+    ? ` (${requestEvidenceDiagnostics(file, uiBinding.method, uiBinding.path)})`
     : '';
   return [`${capability.id}: ${surface}/${projection.id} typed semantic anchor is missing from ${relative}: ${token}${detail}`];
 }
@@ -7191,7 +7199,9 @@ function audit(manifestOverride?: RouteDispositionManifest): { errors: string[];
         errors.push(...projectionAnchorErrors(capability, surface, projection));
       }
     }
-    if (!capability.surfaces.ui.some(projection => projection.id.startsWith('vscode-extension-'))) {
+    const reviewedNativeMcpHost = capability.id === 'runtime.debug.read' && capability.version === 1 &&
+      capability.surfaces.mcp.some(projection => projection.id === 'runtime_debugger' && projection.status !== 'disconnected');
+    if (!capability.surfaces.ui.some(projection => projection.id.startsWith('vscode-extension-')) && !reviewedNativeMcpHost) {
       errors.push(`${capability.id}: UI projections omit the VS Code/Antigravity host state`);
     }
     if (!capability.surfaces.ui.some(projection => !projection.id.startsWith('vscode-extension-'))) {
@@ -7671,7 +7681,7 @@ function audit(manifestOverride?: RouteDispositionManifest): { errors: string[];
     truthyTerminationProbes.some(probe => probe.mappings[0]?.calls.length)) {
     errors.push('MCP TOOLS guard failed top-level/escape/handler/indirect-transport/full-truthiness probes');
   }
-  if (mappings.length !== 10) errors.push(`MCP tool inventory changed: expected 10 mappings, found ${mappings.length}`);
+  if (mappings.length !== 11) errors.push(`MCP tool inventory changed: expected 11 mappings, found ${mappings.length}`);
   const mappingNames = new Set<string>();
   for (const mapping of mappings) {
     if (mappingNames.has(mapping.name)) errors.push(`duplicate MCP tool name: ${mapping.name}`);

@@ -22,7 +22,7 @@ test('Agent API Bridge renders the live canonical capability contract', async ({
   const banner = page.getByTestId('agent-capability-contract');
   await expect(banner).toHaveAttribute('data-contract-source', 'live');
   await expect(banner).toHaveAttribute('data-contract-version', 'forge.capability.v1');
-  await expect(banner).toHaveAttribute('data-capability-count', '11');
+  await expect(banner).toHaveAttribute('data-capability-count', '12');
 
   const contract = await page.evaluate(async () => {
     const response = await fetch('/api/agent/schema');
@@ -30,7 +30,7 @@ test('Agent API Bridge renders the live canonical capability contract', async ({
     return schema.capability_contract;
   });
   expect(contract.contractHash).toMatch(/^[a-f0-9]{64}$/);
-  expect(new Set(contract.capabilities.map((capability: { id: string }) => capability.id)).size).toBe(11);
+  expect(new Set(contract.capabilities.map((capability: { id: string }) => capability.id)).size).toBe(12);
   await expect(banner).toContainText(contract.contractHash.slice(0, 12));
   await expect(banner).toContainText('LIVE CONTRACT');
   await page.screenshot({ path: 'test-results/capability-contract-live.png', fullPage: true });
@@ -49,7 +49,7 @@ test('Agent API Bridge labels old-server discovery as a local catalog with unkno
   await expect(banner).toHaveAttribute('data-contract-source', 'legacy');
   await expect(banner).toHaveAttribute('data-catalog-scope', 'local');
   await expect(banner).toHaveAttribute('data-contract-version', 'forge.capability.v1');
-  await expect(banner).toHaveAttribute('data-capability-count', '11');
+  await expect(banner).toHaveAttribute('data-capability-count', '12');
   await expect(banner).toContainText('Server capabilities unknown');
   await expect(banner).toContainText('LEGACY SERVER');
 });
@@ -97,6 +97,7 @@ test('Agent Keys guides an exact contract-only key and proves its effective subs
     'readiness.read@1',
     'workspace.compile@1',
     'workspace.read@2',
+    'runtime.debug.read@1',
   ]) {
     await page.getByTestId(`agent-key-capability-${identity}`).uncheck();
   }

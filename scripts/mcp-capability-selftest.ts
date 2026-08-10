@@ -20,14 +20,16 @@ const EXPECTED_TOOLS = [
   'author_check',
   'stage_and_validate',
   'readiness',
+  'runtime_debugger',
   'check_conflicts',
   'check_patch_readiness',
   'explain_element',
 ];
-const READ_TOOLS = ['list_schema_domains', 'get_workspace', 'readiness', 'check_conflicts', 'explain_element'];
+const LEGACY_TOOLS = EXPECTED_TOOLS.filter(tool => tool !== 'runtime_debugger');
+const READ_TOOLS = ['list_schema_domains', 'get_workspace', 'readiness', 'runtime_debugger', 'check_conflicts', 'explain_element'];
 const WRITE_TOOLS = [
   'validate_mod', 'list_schema_domains', 'get_workspace', 'compile_workspace', 'author_check',
-  'stage_and_validate', 'readiness', 'check_conflicts', 'explain_element',
+  'stage_and_validate', 'readiness', 'runtime_debugger', 'check_conflicts', 'explain_element',
 ];
 const CUSTOM_TOOLS = ['validate_mod', 'list_schema_domains', 'author_check', 'stage_and_validate', 'explain_element'];
 const MCP_KEY = `x4fk_${'a'.repeat(64)}`;
@@ -35,6 +37,8 @@ const MCP_WORKSPACE_ID = 'ws_111111111111111111111111';
 const EFFECTIVE_API_VERSION = '2026-08-01.agent-effective.v1';
 const EFFECTIVE_SCHEMA_VERSION = 'forge.agent-capability-authority.v1';
 const ROUTE_POLICY_VERSION = 'forge.route-dispositions.v4';
+const RUNTIME_EXPECT_MAX_LENGTH = 256;
+const RUNTIME_MAX_COUNT = 1_000_000;
 
 function sha256(value: string): string {
   return crypto.createHash('sha256').update(value, 'utf8').digest('hex');
@@ -331,6 +335,7 @@ function effectiveAuthority(
 }
 const routeCalls: Array<{ method: string; path: string; body: unknown }> = [];
 const discoveryCalls: Array<{ path: string; authorization?: string; workspaceId?: string }> = [];
+const runtimeHostileHome = `${process.env.USERPROFILE || 'C:\\Users\\Fixture'}\\private\\debuglog.txt`;
 const server = http.createServer((request, response) => {
   if (request.url === '/api/agent/schema') {
     discoveryCalls.push({
@@ -477,6 +482,114 @@ const server = http.createServer((request, response) => {
     }));
     return;
   }
+  if (request.method === 'GET' && request.url?.startsWith('/api/agent/runtime-debugger')) {
+    routeCalls.push({ method: request.method, path: request.url, body: null });
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    const hostileHome = runtimeHostileHome;
+    const longRuntimeText = 'L'.repeat(1_000);
+    response.end(JSON.stringify({
+      schemaVersion: 1,
+      authority: {
+        workspaceId: MCP_WORKSPACE_ID,
+        displayName: 'MCP runtime fixture',
+        contentId: 'x4_runtime_fixture',
+        sourceFolder: hostileHome,
+        deployedFolder: 'x4_runtime_fixture',
+      },
+      identity: {
+        workspaceId: MCP_WORKSPACE_ID,
+        contentIds: ['x4_runtime_fixture'],
+        deployedFolders: ['x4_runtime_fixture'],
+        sourceFolders: [hostileHome],
+        ownedFileCount: 12,
+        inventoryComplete: true,
+        inventoryOtherExtensionCount: 2,
+        inventoryScannedAt: '2030-01-01T00:00:00.000Z',
+      },
+      session: {
+        state: 'historical',
+        sessionId: 'segment_fixture',
+        logPath: hostileHome,
+        generation: 3,
+        firstLine: 1,
+        lastLine: 90,
+        newlyReadBytes: 1024,
+        observedAt: '2030-01-01T00:00:00.000Z',
+        detail: longRuntimeText,
+      },
+      incidents: Array.from({ length: 20 }, (_, index) => ({
+        key: `incident-${index}`,
+        count: index === 0 ? Number.MAX_SAFE_INTEGER : index + 1,
+        firstLine: index + 1,
+        lastLine: index + 2,
+        classification: 'engine_fault',
+        severity: 'error',
+        isEngineFailure: true,
+        raw: 'WHOLE LOG MUST NOT LEAK',
+        lines: ['WHOLE LOG MUST NOT LEAK'],
+        samples: [{ text: 'WHOLE LOG MUST NOT LEAK' }],
+        attribution: {
+          disposition: index === 1 ? 'ambiguous' : 'confirmed_active',
+          confidence: 0.8,
+          reason: 'Fixture attribution',
+          evidence: [{ label: 'fixture', value: 'active extension', strength: 'exact', rank: 1 }],
+        },
+        evidence: Array.from({ length: 10 }, (_, evidenceIndex) => `bounded runtime evidence ${evidenceIndex}`),
+        explanation: {
+          cause: 'Deterministic fixture cause',
+          impact: 'Fixture impact',
+          nextAction: 'Inspect the addressed source',
+          summary: longRuntimeText,
+          evidenceLabel: 'fixture evidence',
+        },
+        mapping: {
+          kind: index === 0 ? 'node' : 'file_line',
+          file: hostileHome,
+          line: 41,
+          nodeId: index === 0 ? 'cue_fixture' : undefined,
+          nodeLabel: index === 0 ? 'Fixture cue' : undefined,
+          reason: longRuntimeText,
+        },
+      })),
+      coverage: {
+        target: 0.99,
+        met: false,
+        candidates: Number.MAX_SAFE_INTEGER,
+        recognized: 18,
+        explicitUnknown: 1,
+        silentlyDropped: 1,
+        recognizedOrExplicitUnknown: Number.MAX_SAFE_INTEGER,
+        recognizedOrExplicitUnknownRatio: 0.95,
+        dispositionCounts: { confirmed_active: Number.MAX_SAFE_INTEGER, ambiguous: 1, excluded_other_mod: 1, unknown: 0 },
+        dispositionSum: Number.MAX_SAFE_INTEGER,
+      },
+      expectedSteps: Array.from({ length: 20 }, (_, index) => ({
+        id: `step-${index}`,
+        label: `Expected step ${index}`,
+        truth: index === 0 ? 'observed' : 'missing',
+        observed: index === 0,
+        success: index === 0,
+        evidence: index === 0
+          ? Array.from({ length: 10 }, (_, evidenceIndex) => `observed fixture marker ${evidenceIndex}`)
+          : [],
+      })),
+      hiddenOtherModCount: Number.MAX_SAFE_INTEGER,
+      ambiguousCount: Number.MAX_SAFE_INTEGER,
+      hiddenOtherModSummary: longRuntimeText,
+      ...(endpointMode === 'missing-fields' ? {} : {
+        verdict: {
+          state: 'stale',
+          detail: 'Historical evidence is not current proof.',
+          errorCount: 8,
+          currentSession: false,
+          positiveExecutionEvidence: false,
+          coverageMet: false,
+          unresolvedBlocker: true,
+        },
+      }),
+    }));
+    return;
+  }
   if (request.method === 'GET' && request.url === '/api/agent/workspace') {
     routeCalls.push({ method: request.method, path: request.url, body: null });
     response.writeHead(200, { 'Content-Type': 'application/json' });
@@ -571,11 +684,76 @@ try {
     const liveReadiness = await client.request('tools/call', { name: 'readiness', arguments: {} });
     assert.equal(liveReadiness.error, undefined, liveReadiness.error?.message);
     assert.equal((liveReadiness.result as any)?.isError, undefined);
+    const runtimeTool = liveTools.find(tool => tool.name === 'runtime_debugger');
+    assert.ok(runtimeTool, 'runtime debugger must be present in a live effective contract');
+    assert.equal(runtimeTool._meta?.['x4forge/capabilityId'], 'runtime.debug.read');
+    assert.equal(runtimeTool._meta?.['x4forge/capabilityVersion'], 1);
+    assert.equal(runtimeTool.inputSchema?.properties?.expect?.maxLength, RUNTIME_EXPECT_MAX_LENGTH);
+    assert.equal(runtimeTool.inputSchema?.properties?.logPath, undefined,
+      'runtime debugger must not accept a log path');
+    assert.equal(runtimeTool.inputSchema?.properties?.modId, undefined,
+      'runtime debugger must remain addressed by workspace authority, not modId');
+    const liveRuntime = await client.request('tools/call', {
+      name: 'runtime_debugger', arguments: { expect: 'cue_fixture,marker_fixture' },
+    });
+    assert.equal(liveRuntime.error, undefined, liveRuntime.error?.message);
+    assert.equal((liveRuntime.result as any)?.isError, undefined);
+    const runtimeSummary = JSON.parse(String(liveRuntime.result?.content?.[0]?.text || '{}'));
+    assert.equal(runtimeSummary.schemaVersion, 1);
+    assert.deepEqual(runtimeSummary.authority, {
+      workspaceId: MCP_WORKSPACE_ID,
+      displayName: 'MCP runtime fixture',
+      contentId: 'x4_runtime_fixture',
+    });
+    assert.deepEqual(runtimeSummary.identity, {
+      workspaceId: MCP_WORKSPACE_ID,
+      contentIds: ['x4_runtime_fixture'],
+      deployedFolders: ['x4_runtime_fixture'],
+      ownedFileCount: 12,
+      inventoryComplete: true,
+      inventoryOtherExtensionCount: 2,
+      inventoryScannedAt: '2030-01-01T00:00:00.000Z',
+    });
+    assert.equal(runtimeSummary.session.state, 'historical');
+    assert.equal(runtimeSummary.session.detail.length, 360);
+    assert.equal(runtimeSummary.verdict.state, 'stale');
+    assert.equal(runtimeSummary.verdict.currentSession, false);
+    assert.equal(runtimeSummary.verdict.unresolvedBlocker, true);
+    assert.equal(runtimeSummary.expectedSteps.length, 16, 'expected steps must be capped');
+    assert.equal(runtimeSummary.expectedSteps[0].evidence.length, 5, 'expected-step evidence must be capped');
+    assert.equal(runtimeSummary.incidents.length, 8, 'incidents must be capped');
+    assert.equal(runtimeSummary.incidents[0].count, RUNTIME_MAX_COUNT, 'incident counts must be capped');
+    assert.equal(runtimeSummary.incidents[0].evidence.length, 5, 'incident evidence must be capped');
+    assert.equal(runtimeSummary.incidents[0].navigationEvidence.kind, 'md_node',
+      'confirmed node attribution must expose safe node navigation');
+    assert.equal(runtimeSummary.incidents[0].navigationEvidence.nodeId, 'cue_fixture');
+    assert.equal(runtimeSummary.incidents[1].navigationEvidence, undefined,
+      'ambiguous attribution must never synthesize navigation');
+    assert.equal(runtimeSummary.incidents[1].unresolved, true);
+    assert.equal(runtimeSummary.incidents[2].navigationEvidence.kind, 'file_line',
+      'confirmed file attribution must expose safe file navigation');
+    assert.equal(runtimeSummary.coverage.candidates, RUNTIME_MAX_COUNT);
+    assert.equal(runtimeSummary.coverage.recognizedOrExplicitUnknown, RUNTIME_MAX_COUNT);
+    assert.equal(runtimeSummary.coverage.dispositionCounts.confirmed_active, RUNTIME_MAX_COUNT);
+    assert.equal(runtimeSummary.coverage.dispositionSum, RUNTIME_MAX_COUNT);
+    assert.equal(runtimeSummary.hiddenOtherModCount, RUNTIME_MAX_COUNT);
+    assert.equal(runtimeSummary.ambiguousCount, RUNTIME_MAX_COUNT);
+    assert.equal(runtimeSummary.hiddenOtherModSummary.length, 360);
+    const runtimeWire = JSON.stringify(runtimeSummary);
+    assert.ok(runtimeWire.includes('%USERPROFILE%'), 'runtime projection must retain only redacted path evidence');
+    assert.ok(!runtimeWire.includes(runtimeHostileHome), 'runtime projection must redact user-profile paths');
+    for (const forbiddenField of ['logPath', 'sourceFolder', 'raw', 'lines', 'samples']) {
+      assert.equal(runtimeWire.includes(`"${forbiddenField}"`), false,
+        `runtime projection must exclude ${forbiddenField}`);
+    }
+    assert.equal(runtimeWire.includes('WHOLE LOG MUST NOT LEAK'), false,
+      'runtime projection must exclude whole-log/raw fixture content');
     assert.deepEqual(routeCalls.map(call => `${call.method} ${call.path}`), [
       'POST /api/agent/project/validate/check',
       'GET /api/agent/workspace',
       'GET /api/agent/lang/element-explain?file=md%2Fx.xml&tag=cue',
       'GET /api/agent/readiness',
+      'GET /api/agent/runtime-debugger?expect=cue_fixture%2Cmarker_fixture',
     ], 'current-contract execution must use current capability routes');
 
     routeCalls.length = 0;
@@ -596,6 +774,10 @@ try {
       { name: 'explain_element', arguments: { tag: 'cue', recordBaseline: true } },
       { name: 'author_check', arguments: { files: [{ path: 'md/x.xml', content: '<mdscript/>', ignored: true }] } },
       { name: 'author_check', arguments: { files: [{ path: 'md/x.xml', content: '<mdscript/>', toString: 'x' }] } },
+      { name: 'runtime_debugger', arguments: { expect: 42 } },
+      { name: 'runtime_debugger', arguments: { expect: 'e'.repeat(RUNTIME_EXPECT_MAX_LENGTH + 1) } },
+      { name: 'runtime_debugger', arguments: { expect: 'cue_fixture', logPath: 'C:\\Users\\Fixture\\debuglog.txt' } },
+      { name: 'runtime_debugger', arguments: { modId: 'x4_runtime_fixture' } },
     ]) {
       const denied = await client.request('tools/call', invalid);
       assert.equal(denied.error?.code, -32602, `${invalid.name} malformed input must fail before HTTP`);
@@ -612,6 +794,11 @@ try {
     const incompleteEnvelope = await client.request('tools/call', { name: 'explain_element', arguments: { tag: 'cue' } });
     assert.equal((incompleteEnvelope.result as any)?.isError, true,
       'successful API response missing canonical output fields must fail the MCP call');
+    const incompleteRuntime = await client.request('tools/call', { name: 'runtime_debugger', arguments: {} });
+    assert.equal((incompleteRuntime.result as any)?.isError, true,
+      'runtime debugger must fail closed when a required verdict field is missing');
+    assert.match(String(incompleteRuntime.result?.content?.[0]?.text || ''), /verdict/,
+      'runtime debugger malformed payload failure must name the missing verdict field');
     endpointMode = 'missing-workspace-snapshot';
     const missingSnapshot = await client.request('tools/call', { name: 'get_workspace', arguments: {} });
     assert.equal((missingSnapshot.result as any)?.isError, true,
@@ -624,7 +811,9 @@ try {
   mode = 'legacy';
   await withMcp(baseUrl, async client => {
     const legacyTools = await toolsFor(client);
-    assert.deepEqual(legacyTools.map(tool => tool.name), EXPECTED_TOOLS, 'legacy fallback changed the curated MCP inventory');
+    assert.deepEqual(legacyTools.map(tool => tool.name), LEGACY_TOOLS, 'legacy fallback changed the curated MCP inventory');
+    assert.equal(legacyTools.find(tool => tool.name === 'runtime_debugger'), undefined,
+      'runtime debugger must not bypass live capability discovery through legacy fallback');
     assert.ok(legacyTools.every(tool => tool._meta?.['x4forge/contractVersion'] === 'legacy-static-fallback'));
     const legacyWorkspaceTool = legacyTools.find(tool => tool.name === 'get_workspace');
     assert.equal(legacyWorkspaceTool?._meta?.['x4forge/capabilityVersion'], 1,

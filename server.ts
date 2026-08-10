@@ -175,7 +175,7 @@ import { runReferenceLiteralLintSelftest } from "./src/lib/referenceLint";
 import { parse as luaParse } from "luaparse";
 import { registerNpcIdentityProbeRoutes } from "./src/server/npcIdentityProbe";
 import { registerSelftests } from "./src/server/selftestRegistry";
-import { RuntimeDebuggerAdapter, expectedInputFromLegacy } from "./src/server/runtimeDebuggerAdapter";
+import { RuntimeDebuggerAdapter, expectedInputFromLegacy, type RuntimeDebuggerAdapterResult } from "./src/server/runtimeDebuggerAdapter";
 import { runRuntimeDebuggerAdapterSelftest } from "./src/server/runtimeDebuggerAdapter.selftest";
 import {
   createAgentKeyStore,
@@ -2281,7 +2281,41 @@ function buildDebugWatcherBrief(modIdInput?: string, expectedInput: string[] = [
  * Addressed-workspace watcher adapter. The legacy envelope is retained, but
  * every runtime fact comes from the deterministic parser/session authority.
  */
-function buildAddressedDebugWatcherBrief(record: WorkspaceRecord, expectedInput: string[] = []) {
+type AddressedDebugWatcherLegacyBrief = {
+  status: {
+    lastDeploy: RuntimeDebuggerAdapterResult["deployInfo"];
+  };
+  sinceDeploy: {
+    hasDeploy: boolean;
+    changedSinceDeploy: boolean;
+    summary: string;
+    deployedAt?: string;
+    logUpdatedAt?: string;
+  };
+  verdict: RuntimeDebuggerAdapterResult["payload"]["verdict"];
+  [key: string]: unknown;
+};
+
+function buildAddressedDebugWatcherBrief(
+  record: WorkspaceRecord,
+  expectedInput?: string[],
+  compatibilityEnvelope?: true,
+): AddressedDebugWatcherLegacyBrief;
+function buildAddressedDebugWatcherBrief(
+  record: WorkspaceRecord,
+  expectedInput: string[] | undefined,
+  compatibilityEnvelope: false,
+): RuntimeDebuggerAdapterResult["payload"];
+function buildAddressedDebugWatcherBrief(
+  record: WorkspaceRecord,
+  expectedInput: string[] | undefined,
+  compatibilityEnvelope: boolean,
+): AddressedDebugWatcherLegacyBrief | RuntimeDebuggerAdapterResult["payload"];
+function buildAddressedDebugWatcherBrief(
+  record: WorkspaceRecord,
+  expectedInput: string[] = [],
+  compatibilityEnvelope = true,
+): AddressedDebugWatcherLegacyBrief | RuntimeDebuggerAdapterResult["payload"] {
   const ws = sanitizeWorkspace(record.workspace);
   const { modId, files } = buildWorkspaceFileManifest(ws);
   const runtime = runtimeDebuggerAdapter.buildBrief({
@@ -2330,6 +2364,7 @@ function buildAddressedDebugWatcherBrief(record: WorkspaceRecord, expectedInput:
   const evidence = runtime.payload.incidents
     .flatMap(incident => incident.evidence.slice(0, 2).map(item => `${incident.classification || "runtime"}: ${item}`))
     .slice(0, 16);
+  if (!compatibilityEnvelope) return runtime.payload;
   return {
     ok: runtime.status !== "error",
     status: legacyStatus,
@@ -3996,7 +4031,13 @@ app.get("/api/agent/schema", (req, res) => {
       },
       {
         method: "GET",
-        path: "/api/agent/debug-watcher/brief?modId=<optionalModId>&expect=<commaSeparatedCueOrMarkerNames>",
+        path: "/api/agent/runtime-debugger?expect=<commaSeparatedCueOrMarkerNames>",
+        auth: true,
+        purpose: "Canonical addressed runtime-debugger capability: return the bounded deterministic payload for the explicit workspace authority, including schema, identity, session, verdict, coverage, expected steps, incidents, hidden unrelated-mod evidence, ambiguity, and safe source-navigation evidence. No whole log is returned.",
+      },
+      {
+        method: "GET",
+        path: "/api/agent/debug-watcher/brief?expect=<commaSeparatedCueOrMarkerNames>",
         auth: true,
         purpose: "Headless debug watcher report for agents: active-mod status, timeline, expected-chain pass/miss, since-deploy freshness, and copyable evidence artifact."
       },
@@ -6839,22 +6880,49 @@ app.get("/api/agent/game-log/status", (req, res) => {
 });
 
 /**
- * GET /api/agent/debug-watcher/brief
- * Headless, agent-friendly debug-log watcher report. Extends game-log/status with
- * a compact timeline, optional expected-chain checks, deploy freshness, and a
- * copyable evidence artifact. Deterministic only; no AI provider involved.
+ * Addressed runtime-debugger Agent API. The canonical route returns only the
+ * bounded adapter payload; the Studio-facing legacy route below retains its
+ * compatibility envelope while sharing this exact handler and adapter path.
  */
-app.get("/api/agent/debug-watcher/brief", (req, res) => {
+function handleAddressedRuntimeDebugger(
+  req: express.Request,
+  res: express.Response,
+  compatibilityEnvelope: boolean,
+) {
   try {
     const record = resolveWorkspaceAuthority(req, res, true);
     if (!record) return;
+    if (!compatibilityEnvelope) {
+      const unknown = Object.keys(req.query).filter(key => key !== "expect");
+      if (unknown.length) {
+        return res.status(400).json({
+          code: "CAPABILITY_INPUT_INVALID",
+          error: `runtime.debug.read does not accept: ${unknown.join(", ")}`,
+        });
+      }
+    }
+    if (!compatibilityEnvelope && req.query.expect !== undefined && typeof req.query.expect !== "string") {
+      return res.status(400).json({
+        code: "CAPABILITY_INPUT_INVALID",
+        error: "runtime.debug.read expect must be a single query string.",
+      });
+    }
     const expectRaw = typeof req.query.expect === "string" ? req.query.expect : "";
+    if (!compatibilityEnvelope && expectRaw.length > 256) {
+      return res.status(400).json({
+        code: "CAPABILITY_INPUT_INVALID",
+        error: "runtime.debug.read expect must be at most 256 characters.",
+      });
+    }
     const expected = expectRaw.split(",").map(s => s.trim()).filter(Boolean);
-    return res.json(buildAddressedDebugWatcherBrief(record, expected));
-  } catch (error) {
-    return res.status(500).json({ ok: false, error: error?.message || "debug-watcher brief failed" });
+    return res.json(buildAddressedDebugWatcherBrief(record, expected, compatibilityEnvelope));
+  } catch {
+    return res.status(500).json({ ok: false, error: "debug-watcher brief failed" });
   }
-});
+}
+
+app.get("/api/agent/runtime-debugger", (req, res) => handleAddressedRuntimeDebugger(req, res, false));
+app.get("/api/agent/debug-watcher/brief", (req, res) => handleAddressedRuntimeDebugger(req, res, true));
 
 // NPC Identity Probe (agent-only legacy) moved to src/server/npcIdentityProbe.ts — audit A6.
 registerNpcIdentityProbeRoutes(app, { findDebugLogCandidates, readTail, errorMessage });

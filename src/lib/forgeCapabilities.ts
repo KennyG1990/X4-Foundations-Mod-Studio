@@ -53,6 +53,7 @@ export type ForgeApiBindingRole = 'primary' | 'supporting';
 export interface ForgeJsonSchema {
   readonly type?: string | readonly string[];
   readonly description?: string;
+  readonly maxLength?: number;
   readonly properties?: Readonly<Record<string, ForgeJsonSchema>>;
   readonly required?: readonly string[];
   readonly additionalProperties?: boolean | ForgeJsonSchema;
@@ -381,6 +382,61 @@ export const FORGE_CAPABILITIES = [
     },
   },
   {
+    id: 'runtime.debug.read',
+    version: 1,
+    title: 'Read addressed runtime-debugger evidence',
+    description: 'Read the existing bounded deterministic runtime-debugger payload for the explicitly addressed workspace, including honest session, verdict, coverage, expected-step, incident, ambiguity, and unrelated-extension evidence.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        expect: { type: 'string', maxLength: 256, description: 'Optional comma-separated expected cue or marker names evaluated in the addressed runtime session. Maximum 256 characters.' },
+      },
+      additionalProperties: false,
+    },
+    outputSchema: objectOutput({
+      schemaVersion: { type: 'number' },
+      authority: { type: 'object', additionalProperties: true },
+      identity: { type: 'object', additionalProperties: true },
+      session: { type: 'object', additionalProperties: true },
+      incidents: { type: 'array', items: { type: 'object', additionalProperties: true } },
+      coverage: { type: 'object', additionalProperties: true },
+      expectedSteps: { type: 'array', items: { type: 'object', additionalProperties: true } },
+      hiddenOtherModCount: { type: 'number' },
+      ambiguousCount: { type: 'number' },
+      hiddenOtherModSummary: { type: 'string' },
+      verdict: { type: 'object', additionalProperties: true },
+    }, [
+      'schemaVersion',
+      'authority',
+      'identity',
+      'session',
+      'incidents',
+      'coverage',
+      'expectedSteps',
+      'hiddenOtherModCount',
+      'ambiguousCount',
+      'hiddenOtherModSummary',
+      'verdict',
+    ]),
+    context: { workspace: 'required', profile: 'none' },
+    access: { public: false, studioSession: true, agentScopes: ['read', 'write', 'deploy'] },
+    effects: ['read', 'analyze', 'audit-write', 'audit-retention-delete'],
+    confirmation: 'none',
+    apiBindings: [
+      { method: 'GET', path: '/api/agent/runtime-debugger', inputLocation: 'query', role: 'primary' },
+    ],
+    surfaces: {
+      ui: [
+        partial('studio-debug-watcher', 'src/App.tsx::/api/agent/debug-watcher/brief', 'Studio retains the compatibility envelope; canonical callers receive the addressed runtime payload directly.'),
+      ],
+      cli: [],
+      mcp: [connected('runtime_debugger', 'vscode-extension/mcp/x4forge-mcp.cjs::name: "runtime_debugger"')],
+      agentApi: true,
+      builtInHarness: [disconnected('runtime-debugger', 'No built-in harness capability dispatcher is bound yet.')],
+      externalAgents: [connected('agent-api', 'server.ts::app.get("/api/agent/runtime-debugger"')],
+    },
+  },
+  {
     id: 'schema.domains.list',
     version: 1,
     title: 'List X4 schema domains',
@@ -664,6 +720,7 @@ function forgeJsonValueMatchesSchema(schema: ForgeJsonSchema, value: unknown, de
     return typeof value === type;
   };
   if (types.length && !types.some(matchesType)) return false;
+  if (typeof value === 'string' && schema.maxLength !== undefined && value.length > schema.maxLength) return false;
   if (isRecord(value)) {
     for (const key of schema.required || []) if (!Object.hasOwn(value, key)) return false;
     for (const [key, child] of Object.entries(value)) {
@@ -688,6 +745,7 @@ function isForgeJsonSchema(value: unknown, depth = 0): value is ForgeJsonSchema 
     if (!isStringArray(types, JSON_SCHEMA_TYPES) || types.length === 0 || !hasUniqueStrings(types)) return false;
   }
   if (value.description !== undefined && typeof value.description !== 'string') return false;
+  if (value.maxLength !== undefined && (typeof value.maxLength !== 'number' || !Number.isSafeInteger(value.maxLength) || value.maxLength < 0)) return false;
   if (value.properties !== undefined) {
     if (!isRecord(value.properties) || !Object.values(value.properties).every(schema => isForgeJsonSchema(schema, depth + 1))) return false;
   }

@@ -22,6 +22,7 @@
     "test:action-receipt-coverage:selftest": "tsx scripts/action-receipt-coverage-audit.ts --candidate-selftest && tsx scripts/action-receipt-coverage-audit.ts --promotion-selftest",
     "test:canvas": "node scripts/run-e2e.mjs tests/e2e/canvas-interactions.spec.ts tests/e2e/canvas-coverage.spec.ts",
     "test:e2e": "node scripts/run-e2e.mjs",
+    "test:e2e-vite-server": "tsx scripts/e2e-vite-server.selftest.ts",
     "test:e2e-policy": "node scripts/e2e-flake-policy-selftest.mjs",
     "test:routes": "node scripts/route-integration.mjs",
     "test:capabilities": "tsx scripts/capability-contract-audit.ts",

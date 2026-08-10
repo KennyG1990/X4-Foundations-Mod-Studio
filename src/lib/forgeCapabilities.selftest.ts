@@ -45,7 +45,7 @@ export async function runForgeCapabilitiesSelftest(): Promise<{ pass: boolean; c
 
   const validationErrors = validateForgeCapabilityRegistry();
   check('registry invariants', validationErrors.length === 0, validationErrors.join(' | ') || undefined);
-  check('bounded initial registry', FORGE_CAPABILITIES.length === 11, `count=${FORGE_CAPABILITIES.length}`);
+  check('bounded initial registry', FORGE_CAPABILITIES.length === 12, `count=${FORGE_CAPABILITIES.length}`);
 
   const canonical = canonicalCapabilityContractPayload();
   const contract = buildForgeCapabilityContract(sha256);
@@ -180,6 +180,26 @@ export async function runForgeCapabilitiesSelftest(): Promise<{ pass: boolean; c
   const known = findForgeCapability('project.validate');
   check('known capability lookup', known?.version === 1);
   check('unknown capability refusal', findForgeCapability('project.validate', 99) === undefined && findForgeCapability('unknown.capability') === undefined);
+  check(
+    'runtime debugger capability identity is unique and versioned once',
+    FORGE_CAPABILITIES.filter(capability => capability.id === 'runtime.debug.read' && capability.version === 1).length === 1,
+    JSON.stringify(FORGE_CAPABILITIES.filter(capability => capability.id === 'runtime.debug.read')),
+  );
+  const runtimeDebugger = findForgeCapability('runtime.debug.read');
+  check(
+    'runtime debugger has one canonical addressed API and one MCP projection',
+    runtimeDebugger?.version === 1 &&
+      runtimeDebugger.context.workspace === 'required' &&
+      runtimeDebugger.inputSchema.properties?.expect?.type === 'string' &&
+      runtimeDebugger.inputSchema.properties?.expect?.maxLength === 256 &&
+      JSON.stringify(runtimeDebugger.apiBindings) === JSON.stringify([{
+        method: 'GET', path: '/api/agent/runtime-debugger', inputLocation: 'query', role: 'primary',
+      }]) &&
+      JSON.stringify(runtimeDebugger.surfaces.mcp.map(projection => projection.id)) === JSON.stringify(['runtime_debugger']) &&
+      JSON.stringify(runtimeDebugger.effects) === JSON.stringify(['read', 'analyze', 'audit-write', 'audit-retention-delete']) &&
+      !runtimeDebugger.effects.some(effect => ['workspace-write', 'filesystem-write', 'package', 'deploy', 'delete'].includes(effect)),
+    JSON.stringify(runtimeDebugger),
+  );
   check(
     'validation aliases converge',
     JSON.stringify(known?.surfaces.mcp.map(projection => projection.id)) === JSON.stringify(['validate_mod', 'author_check', 'stage_and_validate']) &&

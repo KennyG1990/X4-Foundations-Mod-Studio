@@ -141,6 +141,13 @@ function checkE2eVerdict() {
   if (result.status !== 0) throw new Error(`e2e verdict selftest failed with exit ${result.status ?? "unknown"}`);
 }
 
+function checkE2eViteLifecycle() {
+  console.log("[precommit] e2e Vite lifecycle selftest");
+  const result = spawnSync("npm run test:e2e-vite-server", { cwd: root, shell: true, stdio: "inherit" });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(`e2e Vite lifecycle selftest failed with exit ${result.status ?? "unknown"}`);
+}
+
 function checkProductCopy() {
   console.log("[precommit] shipped product-copy guard");
   const result = spawnSync("npm run test:product-copy", { cwd: root, shell: true, stdio: "inherit" });
@@ -181,6 +188,7 @@ try {
   checkTripwires();
   checkMirrorDrift();
   checkE2eVerdict();
+  checkE2eViteLifecycle();
   checkProductCopy();
   checkDurableWriters();
   checkCapabilityContracts();

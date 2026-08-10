@@ -7765,3 +7765,32 @@ centers/highlights `Cancel Conversation`; evidence is
 The selected real log is historical, so GitHub #35 remains open for a successful-deploy/current-session experience
 gate. Silent semantics that emit no evidence remain outside any log watcher's boundary. No real mod/game file was
 written or deployed. The release checkpoint subject is `feat(runtime): ship mod-aware X4 incident debugger`.
+
+## 2026-08-09 — X4 Forge Studio 0.0.69 Agent API/MCP runtime debugger — VERIFIED public release
+
+The installed mod-aware runtime debugger is now available directly to coding agents through canonical capability
+`runtime.debug.read@1`, authenticated `GET /api/agent/runtime-debugger`, and MCP tool `runtime_debugger`. All three
+reuse the same deterministic workspace authority, ownership inventory, session, verdict, coverage, explanation, and
+source/node mapping owners shipped in 0.0.68. The agent projection accepts only bounded expected cue/marker names;
+it does not accept a log path or mod ID, expose the whole log, or use AI to decide correctness.
+
+Capability/MCP audits, routes `487/487`, runtime adapter `42/42`, runtime oracles `133/133`, focused E2E `5/5` and
+`6/6`, typecheck, lint with zero errors, Graphify refresh, root/extension builds, staged probe `16/16`, repaired
+authoritative E2E `102/102`, and precommit all pass. A recurring old-harness Vite disappearance was corrected by
+moving the isolated UI server from a shell-launched Playwright command to a runner-owned Vite JS-API lifecycle with
+deterministic conflict, cleanup, and environment-restoration tests.
+
+Open VSX exact/latest metadata report public `0.0.69`. The independent public and local archives are both
+18,173,930 bytes with SHA-256 `73482D3E8FC716B19DA82F8199A0F4DFFE063146514C7E11DF65B1182E06A91F`; inspection
+passes at 2,091 entries / 61,789,011 unpacked bytes. Antigravity was reloaded from the public archive and now runs
+only the installed `0.0.69` sidecar. Its schema registry reports 40 domains including MD and AI scripts.
+
+Installed API proof returned schema 1, missing-auth `401`, wrong-workspace `403`, and honest historical/stale
+evidence. Installed MCP dynamic discovery and invocation returned eight capped incidents, two expected steps, one
+confirmed safe navigation target, and no raw/whole-log, arbitrary-path, or unredacted-home data; the temporary exact
+key was revoked. Evidence is
+`vscode-extension/evidence/2026-08-09-agent-runtime-debugger-access/installed-validation.md`.
+
+This release does not close GitHub #14's broader runtime-oracle precision program or #35's successful-deploy/current
+X4-session experience gate. No real mod/game file was written or deployed. The release checkpoint subject is
+`feat(runtime): expose debugger to agents through API and MCP`.

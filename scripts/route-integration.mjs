@@ -689,7 +689,7 @@ async function main() {
   ok('capability_contract_is_versioned_and_hashed',
     capabilityContract?.schemaVersion === 'forge.capability.v1' &&
     /^[a-f0-9]{64}$/.test(String(capabilityContract?.contractHash || '')) &&
-    capabilityIds.length === 11 && new Set(capabilityIds).size === capabilityIds.length,
+    capabilityIds.length === 12 && new Set(capabilityIds).size === capabilityIds.length,
     JSON.stringify({ schemaVersion: capabilityContract?.schemaVersion, contractHash: capabilityContract?.contractHash, capabilityIds }));
   const validationCapability = capabilityContract?.capabilities?.find(capability => capability?.id === 'project.validate');
   ok('capability_validation_aliases_share_one_id',
@@ -1001,6 +1001,9 @@ async function main() {
   const runtimeIdentity = runtimePayload?.identity;
   const runtimeVerdict = runtimePayload?.verdict;
   const runtimeLogPath = path.resolve(path.join(gameRoot, 'debuglog.txt'));
+  const redactedRuntimeLogPath = process.env.USERPROFILE && runtimeLogPath.toLowerCase().startsWith(process.env.USERPROFILE.toLowerCase())
+    ? `%USERPROFILE%${runtimeLogPath.slice(process.env.USERPROFILE.length)}`
+    : runtimeLogPath;
   ok('runtime_debugger_brief_preserves_legacy_shape_and_adds_payload',
     runtimeBrief.status === 200
       && typeof runtimeJson.status?.status === 'string'
@@ -1031,7 +1034,7 @@ async function main() {
       && runtimeIdentity?.inventoryOtherExtensionCount === 0
       && !runtimeIdentity?.contentIds?.includes(hostileRuntimeAlias)
       && !runtimeIdentity?.deployedFolders?.includes(hostileRuntimeAlias)
-      && path.resolve(String(runtimePayload?.session?.logPath || '')) === runtimeLogPath,
+      && String(runtimePayload?.session?.logPath || '').toLowerCase() === redactedRuntimeLogPath.toLowerCase(),
     JSON.stringify({ authority: runtimeAuthority, identity: runtimeIdentity, logPath: runtimePayload?.session?.logPath }));
   ok('runtime_debugger_brief_rejects_false_clean_without_current_execution_evidence',
     runtimeBrief.status === 200
@@ -1040,6 +1043,126 @@ async function main() {
       && runtimePayload?.session?.state !== 'current'
       && runtimeVerdict?.currentSession !== true,
     JSON.stringify({ legacyStatus: runtimeJson.status?.status, session: runtimePayload?.session, verdict: runtimeVerdict }));
+
+  const canonicalRuntimePath = `/api/agent/runtime-debugger?${new URLSearchParams({ expect: 'marker:never-seen' })}`;
+  const runtimeLogBeforeCanonical = fs.readFileSync(runtimeLogPath);
+  const addressedWorkspaceBeforeCanonical = await req('GET', '/api/agent/workspace', SESSION_TOKEN, undefined, {
+    workspaceId: SECOND_WORKSPACE_ID,
+    clientId: SECOND_CLIENT_ID,
+  });
+  const canonicalRuntime = await req('GET', canonicalRuntimePath, SESSION_TOKEN, undefined, {
+    workspaceId: SECOND_WORKSPACE_ID,
+    clientId: SECOND_CLIENT_ID,
+  });
+  const canonicalRuntimeJson = canonicalRuntime.json || {};
+  const runtimeLogAfterCanonical = fs.readFileSync(runtimeLogPath);
+  const addressedWorkspaceAfterCanonical = await req('GET', '/api/agent/workspace', SESSION_TOKEN, undefined, {
+    workspaceId: SECOND_WORKSPACE_ID,
+    clientId: SECOND_CLIENT_ID,
+  });
+  const comparableRuntimePayload = payload => {
+    const copy = JSON.parse(JSON.stringify(payload || null));
+    if (copy?.session) delete copy.session.observedAt;
+    return copy;
+  };
+  const noLeak = response => !String(response.raw || '').includes(SESSION_TOKEN) && !String(response.raw || '').includes(runtimeLogPath);
+  capabilityResponses.set('runtime.debug.read', canonicalRuntime);
+  ok('canonical_runtime_debugger_returns_addressed_payload',
+    canonicalRuntime.status === 200
+      && canonicalRuntimeJson?.schemaVersion === 1
+      && canonicalRuntimeJson?.authority?.workspaceId === SECOND_WORKSPACE_ID
+      && canonicalRuntimeJson?.identity?.workspaceId === SECOND_WORKSPACE_ID
+      && canonicalRuntimeJson?.session
+      && canonicalRuntimeJson?.coverage
+      && Array.isArray(canonicalRuntimeJson?.expectedSteps)
+      && Array.isArray(canonicalRuntimeJson?.incidents)
+      && canonicalRuntimeJson?.verdict
+      && !Object.prototype.hasOwnProperty.call(canonicalRuntimeJson, 'runtimeDebugger')
+      && !Object.prototype.hasOwnProperty.call(canonicalRuntimeJson, 'brief')
+      && !Object.prototype.hasOwnProperty.call(canonicalRuntimeJson, 'status'),
+    JSON.stringify({ status: canonicalRuntime.status, keys: Object.keys(canonicalRuntimeJson), authority: canonicalRuntimeJson.authority }));
+  ok('canonical_runtime_debugger_matches_legacy_payload',
+    canonicalRuntime.status === 200
+      && JSON.stringify(comparableRuntimePayload(canonicalRuntimeJson)) === JSON.stringify(comparableRuntimePayload(runtimePayload)),
+    JSON.stringify({ canonical: canonicalRuntimeJson, legacy: runtimePayload }));
+  ok('canonical_runtime_debugger_does_not_write_workspace_or_game_log',
+    Buffer.compare(runtimeLogBeforeCanonical, runtimeLogAfterCanonical) === 0
+      && addressedWorkspaceBeforeCanonical.status === 200
+      && addressedWorkspaceAfterCanonical.status === 200
+      && addressedWorkspaceBeforeCanonical.json?.workspaceHash === addressedWorkspaceAfterCanonical.json?.workspaceHash
+      && addressedWorkspaceBeforeCanonical.json?.snapshotHash === addressedWorkspaceAfterCanonical.json?.snapshotHash,
+    JSON.stringify({
+      logBytesBefore: runtimeLogBeforeCanonical.length,
+      logBytesAfter: runtimeLogAfterCanonical.length,
+      workspaceBefore: addressedWorkspaceBeforeCanonical.json?.workspaceHash,
+      workspaceAfter: addressedWorkspaceAfterCanonical.json?.workspaceHash,
+      snapshotBefore: addressedWorkspaceBeforeCanonical.json?.snapshotHash,
+      snapshotAfter: addressedWorkspaceAfterCanonical.json?.snapshotHash,
+    }));
+  const canonicalExpectTooLongPath = `/api/agent/runtime-debugger?${new URLSearchParams({ expect: 'x'.repeat(257) })}`;
+  const canonicalExpectTooLong = await req('GET', canonicalExpectTooLongPath, SESSION_TOKEN, undefined, {
+    workspaceId: SECOND_WORKSPACE_ID,
+    clientId: SECOND_CLIENT_ID,
+  });
+  ok('canonical_runtime_debugger_rejects_expect_over_256_characters',
+    canonicalExpectTooLong.status === 400
+      && canonicalExpectTooLong.json?.code === 'CAPABILITY_INPUT_INVALID'
+      && /at most 256 characters/i.test(String(canonicalExpectTooLong.json?.error || ''))
+      && noLeak(canonicalExpectTooLong),
+    JSON.stringify(canonicalExpectTooLong.json || {}));
+  const canonicalUnknownQuery = await req('GET', `/api/agent/runtime-debugger?${new URLSearchParams({ expect: 'marker:never-seen', modId: hostileRuntimeAlias })}`, SESSION_TOKEN, undefined, {
+    workspaceId: SECOND_WORKSPACE_ID,
+    clientId: SECOND_CLIENT_ID,
+  });
+  ok('canonical_runtime_debugger_rejects_non_expect_query_authority',
+    canonicalUnknownQuery.status === 400
+      && canonicalUnknownQuery.json?.code === 'CAPABILITY_INPUT_INVALID'
+      && /does not accept: modId/i.test(String(canonicalUnknownQuery.json?.error || ''))
+      && noLeak(canonicalUnknownQuery),
+    JSON.stringify(canonicalUnknownQuery.json || {}));
+
+  const canonicalNoAuth = await req('GET', canonicalRuntimePath, null, undefined, { workspaceId: SECOND_WORKSPACE_ID });
+  const canonicalMissingWorkspace = await req('GET', canonicalRuntimePath, SESSION_TOKEN, undefined, { workspaceId: '' });
+  const canonicalUnknownWorkspace = await req('GET', canonicalRuntimePath, SESSION_TOKEN, undefined, { workspaceId: 'ws_ffffffffffffffffffffffff' });
+  const canonicalBoundMismatch = await req('GET', canonicalRuntimePath, readKey, undefined, { workspaceId: SECOND_WORKSPACE_ID });
+  ok('canonical_runtime_debugger_requires_authentication',
+    canonicalNoAuth.status === 401 && noLeak(canonicalNoAuth), JSON.stringify(canonicalNoAuth.json || {}));
+  ok('canonical_runtime_debugger_missing_workspace_fails_named',
+    canonicalMissingWorkspace.status === 400 && canonicalMissingWorkspace.json?.code === 'WORKSPACE_ID_REQUIRED' && noLeak(canonicalMissingWorkspace),
+    JSON.stringify(canonicalMissingWorkspace.json || {}));
+  ok('canonical_runtime_debugger_unknown_workspace_fails_named',
+    canonicalUnknownWorkspace.status === 404 && canonicalUnknownWorkspace.json?.code === 'WORKSPACE_NOT_FOUND' && noLeak(canonicalUnknownWorkspace),
+    JSON.stringify(canonicalUnknownWorkspace.json || {}));
+  ok('canonical_runtime_debugger_bound_workspace_mismatch_fails_named',
+    canonicalBoundMismatch.status === 403 && canonicalBoundMismatch.json?.code === 'WORKSPACE_BINDING_MISMATCH' && noLeak(canonicalBoundMismatch),
+    JSON.stringify(canonicalBoundMismatch.json || {}));
+
+  const runtimeOmissionMint = await mkKey('read', {
+    label: 'route-int-runtime-omission',
+    authorityMode: 'exact',
+    capabilityIdentities: ['readiness.read@1'],
+    allowedEffects: ['read', 'analyze'],
+  });
+  const runtimeEffectMint = await mkKey('read', {
+    label: 'route-int-runtime-effect-denied',
+    authorityMode: 'exact',
+    capabilityIdentities: ['runtime.debug.read@1'],
+    allowedEffects: ['read', 'analyze'],
+  });
+  const canonicalCapabilityOmission = await req('GET', canonicalRuntimePath, runtimeOmissionMint.token, undefined, { workspaceId: WORKSPACE_ID });
+  const canonicalMissingEffect = await req('GET', canonicalRuntimePath, runtimeEffectMint.token, undefined, { workspaceId: WORKSPACE_ID });
+  ok('canonical_runtime_debugger_omits_unselected_capability',
+    canonicalCapabilityOmission.status === 403
+      && canonicalCapabilityOmission.json?.authorityCode === 'CAPABILITY_NOT_GRANTED'
+      && canonicalCapabilityOmission.json?.capabilityIdentity === 'runtime.debug.read@1'
+      && noLeak(canonicalCapabilityOmission),
+    JSON.stringify(canonicalCapabilityOmission.json || {}));
+  ok('canonical_runtime_debugger_requires_all_declared_effects',
+    canonicalMissingEffect.status === 403
+      && canonicalMissingEffect.json?.authorityCode === 'CAPABILITY_EFFECT_DENIED'
+      && JSON.stringify(canonicalMissingEffect.json?.disallowedEffects) === JSON.stringify(['audit-write', 'audit-retention-delete'])
+      && noLeak(canonicalMissingEffect),
+    JSON.stringify(canonicalMissingEffect.json || {}));
 
   const runtimeBriefMissingWorkspace = await req('GET', runtimeBriefPath, SESSION_TOKEN, undefined, { workspaceId: '' });
   const runtimeBriefUnknownWorkspace = await req('GET', runtimeBriefPath, SESSION_TOKEN, undefined, { workspaceId: 'ws_ffffffffffffffffffffffff' });
@@ -1094,7 +1217,7 @@ async function main() {
     JSON.stringify(authorityView.json?.authority || {}));
   ok('key_management_exposes_custom_contract_options_without_public_capabilities',
     authorityView.json?.authority?.customAuthority?.includes('contract-only') &&
-    Array.isArray(authorityView.json?.capabilityOptions) && authorityView.json.capabilityOptions.length === 9 &&
+    Array.isArray(authorityView.json?.capabilityOptions) && authorityView.json.capabilityOptions.length === 10 &&
     authorityView.json.capabilityOptions.every(option => !['schema.domains.list@1', 'schema.element.explain@1'].includes(option.identity)) &&
     Array.isArray(authorityView.json?.effectOptions) && authorityView.json.effectOptions.includes('spend'),
     JSON.stringify({ options: authorityView.json?.capabilityOptions?.length, effects: authorityView.json?.effectOptions }));
@@ -1117,12 +1240,12 @@ async function main() {
   const keyStoreAfterDiscovery = fs.readFileSync(agentKeysFile);
   ok('effective_discovery_is_protected_and_studio_sees_full_contract', publicEffective.status === 401 && bogusEffective.status === 401 &&
     studioEffective.status === 200 && studioEffective.json?.actor?.kind === 'studio' &&
-    effectiveIds(studioEffective)?.length === 11 && effectiveHashIsValid(studioEffective),
+    effectiveIds(studioEffective)?.length === 12 && effectiveHashIsValid(studioEffective),
   JSON.stringify({ public: publicEffective.json, bogus: bogusEffective.json, studio: { actor: studioEffective.json?.actor, ids: effectiveIds(studioEffective) } }));
   for (const [name, response, scope, expectedCount] of [
-    ['read', readEffective, 'read', 6],
-    ['write', writeEffective, 'write', 8],
-    ['deploy', deployEffective, 'deploy', 11],
+    ['read', readEffective, 'read', 7],
+    ['write', writeEffective, 'write', 9],
+    ['deploy', deployEffective, 'deploy', 12],
   ]) {
     ok(`${name}_key_effective_capabilities_are_exact_and_hashed`, response.status === 200 &&
       response.json?.api_version === '2026-08-01.agent-effective.v1' &&
@@ -4104,7 +4227,7 @@ async function main() {
   const capabilityOutputReport = (capabilityContract?.capabilities || [])
     .map(capability => assertCapabilityOutput(capability.id, capabilityResponses.get(capability.id)));
   ok('all_canonical_capability_outputs_exercised',
-    capabilityOutputReport.length === 11 && capabilityResponses.size === 11 && capabilityOutputReport.every(row => row.status >= 200 && row.status < 300 && row.errors.length === 0),
+    capabilityOutputReport.length === 12 && capabilityResponses.size === 12 && capabilityOutputReport.every(row => row.status >= 200 && row.status < 300 && row.errors.length === 0),
     JSON.stringify(capabilityOutputReport));
 
   // --- PRODUCTION SURFACE ---------------------------------------------------------------------
