@@ -4,16 +4,17 @@ Updated: 2026-08-09
 
 ## One-line state
 
-The Forge extension now has canonical runtime-debugger access for agents through `GET /api/agent/runtime-debugger`
-and MCP tool `runtime_debugger`; the repaired direct Playwright/Vite-JS-API lifecycle passed the authoritative
-`102/102` E2E suite and precommit. The exact `0.0.69` VSIX is published on Open VSX, installed and running in
-Antigravity, and verified through the installed Agent API, MCP tool, and schema registry. Repository/external-ledger
-close and commit/push parity remain.
+The Forge extension's canonical agent-readable runtime debugger is VERIFIED and shipped in public/installed `0.0.69`:
+stable capability `runtime.debug.read@1`, authenticated `GET /api/agent/runtime-debugger`, and MCP `runtime_debugger`
+all reuse the same deterministic owner. Public hash, installed Antigravity API/MCP/schema proof, full `102/102` E2E,
+precommit, Google Drive, Notion, GitHub #14, feature commit, push, and remote parity all pass.
 
 ## Project and boundary
 
 - Repository: `F:\DEV_ENV\X4_Forge`, branch `main`.
 - Baseline: `HEAD == origin/main == c454d2c240965e4775b5929f8e54b5e5f5a02880` at task start.
+- Verified feature checkpoint: `75dc088ed35f76e066d4f1d20b990d08b546db8a`, with local, tracking, and remote
+  refs identical after push.
 - Product: the Forge extension, embedded Studio, extension-managed sidecar, Agent API, and native MCP projection.
 - No real mod, game installation, live workspace content, or source debug log was written.
 - GitHub #14 owns this bounded runtime-debugger API/MCP slice; #35 still owns current-X4-session experience proof.
@@ -64,8 +65,12 @@ close and commit/push parity remain.
   implemented API/MCP boundary, every green gate, both red full-E2E runs, review state, and triggered AAR facts.
 - Installed/public proof is recorded at
   `vscode-extension/evidence/2026-08-09-agent-runtime-debugger-access/installed-validation.md`.
-- Fresh connector reads resolved the exact Google Drive Project README, Current Status, Current Roadmap, and GitHub
-  Changelog Snapshot identities/revisions before external synchronization. No Drive document has yet been written.
+- Google Drive Project README, Current Status, Current Roadmap, and GitHub Changelog Snapshot each read back the
+  current `0.0.69` feature commit, public hash, canonical API/MCP boundary, and remaining #14/#35 limits.
+- Notion Project Hub is current. Release page `3b84618e-d15b-81eb-b99c-ccfdc8d2a494` is uniquely `Published` /
+  `Verified` across Open VSX, GitHub, and Internal channels.
+- GitHub #14 remains OPEN/PARTIAL with exactly one implementation-ledger marker containing the verified `0.0.69`
+  agent-access slice and the still-open broader oracle scope.
 
 ## Isolated E2E Vite lifecycle repair — VERIFIED (2026-08-09)
 
@@ -145,12 +150,10 @@ Use `git add -- <exact checkpoint paths>` only. Never use broad add, clean, rese
 
 ## Exact continuation
 
-1. Exact-stage the task-owned release files, rerun `npm run precommit:check`, commit
-   `feat(runtime): expose debugger to agents through API and MCP`, push `main`, and prove remote parity.
-2. Synchronize Google Drive, Notion, and the existing GitHub #14 implementation-ledger marker against the exact
-   feature commit. Keep #14 open for the broader static-to-engine precision loop.
-3. Mark the local plan/evidence close VERIFIED, overwrite this handoff with final parity/readback, and create the
-   documentation-close commit/push without changing the published package bytes.
+The bounded `0.0.69` agent-access release is complete. Do not resume deferred Forge governance by default. Return to
+mod development. When Forge work is deliberately resumed, the mod-first next unit remains an isolated scratch deploy
+and current-X4-session experience proof under #35; #14 separately retains static-to-engine precision, scorecards, and
+governed validator-miss promotion. Do not use the real mod as the acceptance fixture.
 
 ## Eyeball queue
 
@@ -158,6 +161,7 @@ Use `git add -- <exact checkpoint paths>` only. Never use broad add, clean, rese
 
 ## Commit point
 
-Commit point: `feat(runtime): expose debugger to agents through API and MCP`. Status is `PARTIAL`: implementation,
-full E2E, precommit, public publication/hash parity, installed Agent API/MCP/schema proof, and release records are
-green; exact staging, commit/push parity, external record synchronization, and the documentation-close commit remain.
+Commit point: `docs(runtime): close 0.0.69 agent access release`. Status is `VERIFIED`: implementation, full E2E,
+both final precommit executions, public publication/hash parity, installed Agent API/MCP/schema proof, feature commit
+and remote parity, Google Drive, Notion, and GitHub #14 readbacks are green. This documentation-close commit changes
+no published package bytes, mod files, game files, or installed extension bytes.

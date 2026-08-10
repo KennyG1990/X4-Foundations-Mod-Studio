@@ -7794,3 +7794,18 @@ key was revoked. Evidence is
 This release does not close GitHub #14's broader runtime-oracle precision program or #35's successful-deploy/current
 X4-session experience gate. No real mod/game file was written or deployed. The release checkpoint subject is
 `feat(runtime): expose debugger to agents through API and MCP`.
+
+## 2026-08-09 — X4 Forge Studio 0.0.69 external-record parity — VERIFIED documentation close
+
+Feature commit `75dc088ed35f76e066d4f1d20b990d08b546db8a` is pushed with exact
+`HEAD == origin/main == ls-remote origin/main` parity. Google Drive Project README, Current Status, Current Roadmap,
+and GitHub Changelog Snapshot each read back the current `0.0.69` version, source commit, public hash, deterministic
+Agent API/MCP boundary, and explicit #14/#35 remaining limits.
+
+Notion Project Hub is current. Release page `3b84618e-d15b-81eb-b99c-ccfdc8d2a494` is uniquely `Published` /
+`Verified` with Open VSX, GitHub, and Internal channels and links exact public/source/evidence records. GitHub issue
+#14 remains OPEN/PARTIAL with exactly one implementation-ledger marker recording verified `runtime.debug.read@1`,
+canonical API, MCP, public/install evidence, and the broader unfinished oracle scope.
+
+This close changes documentation only. Public VSIX bytes, installed Antigravity bytes, mod/game files, and source
+debug-log content are unchanged.

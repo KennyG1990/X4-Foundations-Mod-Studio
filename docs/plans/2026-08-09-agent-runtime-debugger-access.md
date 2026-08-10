@@ -3,7 +3,7 @@
 Task: Promote the installed mod-aware runtime debugger to a canonical, machine-readable Agent API capability and MCP projection.
 Lane: FULL
 Owner issue: GitHub #14 (existing runtime-debugger owner; no duplicate issue)
-Status: IN PROGRESS / PARTIAL
+Status: VERIFIED
 
 ## PLAN
 
@@ -173,12 +173,24 @@ Status: IN PROGRESS / PARTIAL
   - installed canonical API/MCP -> PASS: schema version 1, missing auth `401`, wrong workspace `403`, live dynamic
     MCP discovery, bounded/redacted `runtime_debugger` invocation, one confirmed navigation item, no unresolved
     navigation, and temporary exact key revoked. See `installed-validation.md`.
+  - feature source close -> PASS: commit `75dc088ed35f76e066d4f1d20b990d08b546db8a` was created after the mandatory
+    commit-hook precommit rerun; `HEAD`, `origin/main`, and `ls-remote origin refs/heads/main` matched exactly.
+  - Google Drive close -> PASS: Project README, Current Status, Current Roadmap, and GitHub Changelog Snapshot each
+    contain exactly one current `0.0.69` checkpoint with the feature commit, public hash, deterministic API/MCP
+    boundary, and remaining #14/#35 limits; fresh connector readback found no stale top-level `c454d2c` baseline.
+  - Notion close -> PASS: Project Hub reports manifest/public `0.0.69`, 40-domain installed schema proof, canonical
+    Agent API/MCP access, and the #35 stopping line; release row
+    `3b84618e-d15b-81eb-b99c-ccfdc8d2a494` is uniquely `Published` / `Verified` across Open VSX, GitHub, and Internal
+    channels and links the exact source/evidence.
+  - GitHub close -> PASS: issue #14 remains OPEN/PARTIAL with exactly one implementation-ledger marker; readback
+    contains the `0.0.69` capability/API/MCP boundary, public hash, feature/evidence links, and remaining oracle scope.
 - Negative/rollback result: auth, missing/wrong workspace, capability/effect denial, arbitrary-path/mod-id input,
   unknown/multiple/overlong query input, static-fallback omission, response caps, redaction, unrelated-mod exclusion,
   ambiguous-navigation refusal, and no-source-write checks pass. Rollback remains the source baseline; no real mod,
   game installation, standing workspace content, or source debug log was changed.
-- Visual/live result when applicable: no rendered UI gate applies because no visible surface changed. Installed Agent
-  API and MCP readback remains required after public publication. The repaired full E2E and precommit gates are green.
+- Visual/live result when applicable: no rendered UI gate applies because no visible surface changed. Public-install
+  Antigravity process provenance plus installed Agent API, MCP, and schema readback pass. The repaired full E2E and
+  both final precommit executions are green.
 
 ## REVIEW
 
@@ -194,13 +206,14 @@ Status: IN PROGRESS / PARTIAL
 - Fresh-eyes findings: capability discovery, route authority, effect honesty, bounded projection, redaction,
   fail-closed input, compatibility reuse, and rebuilt archive bytes were re-read. No duplicate debugger, independent
   parser, guessed navigation, whole-log surface, or AI authority was introduced. The repaired lifecycle survived the
-  full 102-test load. The release is not complete while the public and installed-product gates remain open.
+  full 102-test load. Public/archive/install/API/MCP/schema and external-ledger readbacks all pass.
 
 ## CLOSE
 
-- Status: PARTIAL
-- Remaining risks/deferred work: external record synchronization, commit, and push remain. #35 current-X4-session
-  experience proof, the broader #14 precision loop, and sidecar lifecycle cleanup remain separate.
+- Status: VERIFIED
+- Remaining risks/deferred work: #35 current-X4-session experience proof, the broader #14 precision loop, silent
+  semantics with no emitted evidence, and later sidecar lifecycle cleanup remain separate. They do not block this
+  bounded canonical Agent API/MCP release.
 - Suggested commit title: `feat(runtime): expose debugger to agents through API and MCP`
 
 ## AAR
@@ -211,13 +224,15 @@ Status: IN PROGRESS / PARTIAL
   second and third old-harness full E2E runs lost their ephemeral Vite server; the first package inspection and the
   rebuilt package inspection omitted their required artifact argument; the first precommit wrapper invocation used
   an invalid short timeout; several PowerShell probes had quoting/exit-code errors; task-owned worker helper
-  processes required exact cleanup; the machine ceased to be quiet when WoW started; and the first repaired focused
-  wrapper exposed a wrong `FullConfig.rootDir` assumption before any test ran.
+  processes required exact cleanup; the machine ceased to be quiet when WoW started; the first repaired focused
+  wrapper exposed a wrong `FullConfig.rootDir` assumption before any test ran; and the first Google Docs batches for
+  two files placed insertion after length-changing replacements, failed atomically, and required request reordering.
 - Sustain: resource-level reconciliation prevented a duplicate debugger implementation.
 - Improve work/approach: close native workers and verify exact helper cleanup, memory, and ephemeral ports before
   launching the full serialized browser gate; do not start it immediately after worker shutdown. For Playwright
   global hooks, derive repository resources from `configFile` or an explicit project root rather than assuming
-  `FullConfig.rootDir` equals the repository root.
+  `FullConfig.rootDir` equals the repository root. In Google Docs batches, perform end-of-document insertion before
+  length-changing replacements or recalculate all later UTF-16 indexes from the mutated request sequence.
 - Improve tools: native worker closure can leave MCP helper trees behind, and the Google Docs trusted-read bridge's
   default POSIX file I/O is unavailable in this Windows tool surface; both require explicit exact-path reconciliation.
   Graphify's broad natural-language query also matched generic snapshot symbols, so targeted route/resource
@@ -227,4 +242,5 @@ Status: IN PROGRESS / PARTIAL
   ending the runner, producing a large misleading cascade of connection refusals. The direct runner-owned Vite
   JS-API lifecycle removes that ownership gap and survived the authoritative full suite; keep its occupied-port,
   cleanup, and environment-restoration selftest in precommit.
-- Global/project lessons banked: pending close.
+- Global/project lessons banked: `F:\StarForge\wiki\workflow\aar-log.md` and
+  `F:\StarForge\wiki\x4-forge\aar-log.md`; the Docs request-order failure is retained in this close record.

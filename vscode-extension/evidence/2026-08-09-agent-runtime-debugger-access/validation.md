@@ -1,6 +1,6 @@
 # Agent runtime debugger access — validation record
 
-Status: PARTIAL
+Status: VERIFIED
 Date: 2026-08-09
 Candidate: X4 Forge Studio 0.0.69
 
@@ -102,7 +102,18 @@ authoritative full-suite acceptance contract.
   navigation. The temporary exact key was revoked.
 - Detailed evidence: `installed-validation.md`.
 
-Remaining close gates: repository/external record synchronization, exact-path final staging, commit, push, and remote
-parity.
+## Source and external-ledger close
+
+- Feature commit: `75dc088ed35f76e066d4f1d20b990d08b546db8a`.
+- Source parity: `HEAD == origin/main == ls-remote origin/main` after the feature push.
+- Google Drive: Project README, Current Status, Current Roadmap, and GitHub Changelog Snapshot read back current
+  `0.0.69`, the exact commit/public hash, canonical Agent API/MCP boundary, and remaining #14/#35 limits.
+- Notion: Project Hub readback is current; unique release page
+  `3b84618e-d15b-81eb-b99c-ccfdc8d2a494` is `Published` / `Verified` with Open VSX, GitHub, and Internal channels.
+- GitHub: issue #14 readback is OPEN with exactly one implementation-ledger marker containing the `0.0.69` slice,
+  exact commit/evidence links, public hash, and remaining broader oracle scope.
+
+This bounded release is VERIFIED. #14's broader precision loop, #35 current-session proof, and silent no-evidence
+semantics remain explicitly open and are not relabelled.
 
 No real mod, game installation, source debug log, or standing workspace content was written by this task.
