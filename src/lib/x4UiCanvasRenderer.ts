@@ -1,0 +1,1527 @@
+import {
+  isX4UiCorpusCanonicalSuccess,
+  X4_UI_CORPUS_9_00_CONTRACT,
+  type X4UiCorpusCanonicalSuccess,
+} from './x4UiCorpusAssets';
+import {
+  ZEKTON_CORPUS_ASSETS,
+  ZEKTON_EVIDENCE_STATE,
+} from './x4UiFontMetrics';
+import {
+  X4_UI_PAINT_GAME_TRUTH,
+  X4_UI_PAINT_PLAN_FORMAT,
+  X4_UI_PAINT_PLAN_VERSION,
+  type X4UiPaintPlanResult,
+} from './x4UiPaintPlan';
+
+export const X4_UI_CANVAS_RENDERER_FORMAT = 'x4-ui-canvas-renderer' as const;
+export const X4_UI_CANVAS_RENDERER_VERSION = 1 as const;
+export const X4_UI_CANVAS_GAME_TRUTH = X4_UI_PAINT_GAME_TRUTH;
+
+/** Diagnostic-only colors. These are not X4 colors, materials, or engine state. */
+export const X4_UI_CANVAS_DIAGNOSTIC_PALETTE = Object.freeze({
+  id: 'diagnostic-only',
+  description: 'Diagnostic palette only; not an X4 color/material claim.',
+  background: '#111827',
+  geometry: '#64748b',
+  glyph: '#e5e7eb',
+  selection: '#f59e0b',
+  gap: '#ef4444',
+  unsupported: '#a855f7',
+  unavailable: '#6b7280',
+  emptyClip: '#dc2626',
+  invalidRaster: '#f97316',
+  keepOut: '#22d3ee',
+  unavailableKeepOut: '#fb7185',
+} as const);
+
+export type X4UiCanvasSurfaceRole = 'regular-atlas' | 'bold-atlas' | 'composite';
+
+export interface X4UiCanvasSurface {
+  width: number;
+  height: number;
+  getContext(contextId: '2d'): unknown | null;
+}
+
+/**
+ * Allocates a fresh, unmounted surface for one renderer-owned stage.
+ * Every returned surface transfers to the renderer for the duration of the
+ * render; callers do not supply a target or existing surface through this API.
+ */
+export type X4UiCanvasSurfaceFactory = (
+  width: number,
+  height: number,
+  role: X4UiCanvasSurfaceRole,
+) => X4UiCanvasSurface | null | undefined;
+
+/** Renderer options select an allocator only; there is no caller-target surface option. */
+export interface X4UiCanvasRenderOptions {
+  readonly surfaceFactory?: X4UiCanvasSurfaceFactory;
+}
+
+export type X4UiCanvasRenderRefusalCode =
+  | 'invalid-input'
+  | 'input-refused'
+  | 'invalid-result'
+  | 'invalid-plan'
+  | 'invalid-layer'
+  | 'invalid-command'
+  | 'duplicate-command'
+  | 'out-of-order-command'
+  | 'unsupported-command'
+  | 'invalid-truth'
+  | 'invalid-corpus'
+  | 'invalid-font'
+  | 'invalid-atlas'
+  | 'atlas-bounds'
+  | 'invalid-geometry'
+  | 'invalid-clip'
+  | 'invalid-keepout'
+  | 'game-truth'
+  | 'missing-context'
+  | 'allocation-failure'
+  | 'post-validation-mutation'
+  | 'surface-failure';
+
+export interface X4UiCanvasRenderRefusal {
+  readonly code: X4UiCanvasRenderRefusalCode;
+  readonly message: string;
+}
+
+interface X4UiCanvasTruthReceipt {
+  readonly gameTruth: typeof X4_UI_CANVAS_GAME_TRUTH;
+  readonly gameVerified: false;
+  readonly verification: {
+    readonly game: typeof X4_UI_CANVAS_GAME_TRUTH;
+    readonly gameVerified: false;
+  };
+}
+
+export type X4UiCanvasRenderReceipt =
+  | X4UiCanvasTruthReceipt & {
+    readonly format: typeof X4_UI_CANVAS_RENDERER_FORMAT;
+    readonly version: typeof X4_UI_CANVAS_RENDERER_VERSION;
+    readonly status: 'rendered';
+    readonly width: number;
+    readonly height: number;
+    readonly layers: readonly [
+      'diagnostic-background',
+      'glyph-alpha-blits',
+      'diagnostics',
+      'keep-out-overlays',
+    ];
+    readonly commandIds: readonly string[];
+    readonly commandCount: number;
+    readonly atlasRoles: readonly ('regular' | 'bold')[];
+    readonly palette: {
+      readonly id: typeof X4_UI_CANVAS_DIAGNOSTIC_PALETTE.id;
+      readonly diagnosticOnly: true;
+    };
+  }
+  | X4UiCanvasTruthReceipt & {
+    readonly format: typeof X4_UI_CANVAS_RENDERER_FORMAT;
+    readonly version: typeof X4_UI_CANVAS_RENDERER_VERSION;
+    readonly status: 'refused';
+    readonly refusal: X4UiCanvasRenderRefusal;
+  };
+
+export type X4UiCanvasRenderedReceipt = Extract<X4UiCanvasRenderReceipt, { readonly status: 'rendered' }>;
+export type X4UiCanvasRefusedReceipt = Extract<X4UiCanvasRenderReceipt, { readonly status: 'refused' }>;
+
+export type X4UiCanvasRenderResult =
+  | {
+    readonly status: 'rendered';
+    readonly receipt: X4UiCanvasRenderedReceipt;
+    readonly surface: X4UiCanvasSurface;
+  }
+  | {
+    readonly status: 'refused';
+    readonly receipt: X4UiCanvasRefusedReceipt;
+  };
+
+type UnknownRecord = Record<string, unknown>;
+type Rect = { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+
+interface Method {
+  (...args: unknown[]): unknown;
+}
+
+interface PaintApi {
+  readonly save: Method;
+  readonly restore: Method;
+  readonly beginPath: Method;
+  readonly rect: Method;
+  readonly clip: Method;
+  readonly fillRect: Method;
+  readonly drawImage: Method;
+  readonly moveTo: Method;
+  readonly lineTo: Method;
+  readonly closePath: Method;
+  readonly stroke: Method;
+  readonly setFillStyle: (value: string) => void;
+  readonly setStrokeStyle: (value: string) => void;
+}
+
+interface AtlasApi extends PaintApi {
+  readonly createImageData: Method;
+  readonly putImageData: Method;
+}
+
+interface FontBinding {
+  readonly role: 'regular' | 'bold';
+  readonly font: UnknownRecord;
+  readonly descriptor: UnknownRecord;
+  readonly atlas: UnknownRecord;
+  readonly alphaBytes: Uint8Array;
+  readonly width: number;
+  readonly height: number;
+  readonly descriptorPath: string;
+  readonly descriptorSha256: string;
+  readonly atlasPath: string;
+  readonly atlasSha256: string;
+}
+
+interface AtlasSnapshot {
+  readonly role: 'regular' | 'bold';
+  readonly alphaBytes: Uint8Array;
+  readonly width: number;
+  readonly height: number;
+}
+
+interface FontIdentity {
+  readonly descriptor: { readonly relativePath: string; readonly sha256: string };
+  readonly atlas: { readonly relativePath: string; readonly sha256: string };
+}
+
+interface DetachedCommandBase {
+  readonly id: string;
+  readonly order: number;
+  readonly clip?: Rect;
+}
+
+interface DetachedGeometryCommand extends DetachedCommandBase {
+  readonly kind: 'node-geometry';
+  readonly geometry?: Rect;
+  readonly color: string;
+}
+
+interface DetachedGlyphCommand extends DetachedCommandBase {
+  readonly kind: 'glyph-alpha-blit';
+  readonly role: 'regular' | 'bold';
+  readonly source: Rect;
+  readonly destination: Rect;
+}
+
+interface DetachedDiagnosticCommand extends DetachedCommandBase {
+  readonly kind: 'selection' | 'gap' | 'unsupported-runtime-paint' | 'unavailable-node' | 'empty-clip' | 'invalid-raster-candidate';
+  readonly geometry?: Rect;
+  readonly color: string;
+}
+
+type DetachedKeepOutGeometry =
+  | { readonly kind: 'horizontal-guide'; readonly y: number }
+  | { readonly kind: 'vertical-guide'; readonly x: number }
+  | { readonly kind: 'polygon'; readonly points: readonly { readonly x: number; readonly y: number }[] }
+  | null;
+
+interface DetachedKeepOutCommand extends DetachedCommandBase {
+  readonly kind: 'keep-out';
+  readonly geometry: DetachedKeepOutGeometry;
+}
+
+type ValidatedCommand = DetachedGeometryCommand | DetachedGlyphCommand | DetachedDiagnosticCommand | DetachedKeepOutCommand;
+
+interface ValidatedPlan {
+  readonly width: number;
+  readonly height: number;
+  readonly layers: readonly [
+    readonly ValidatedCommand[],
+    readonly ValidatedCommand[],
+    readonly ValidatedCommand[],
+    readonly ValidatedCommand[],
+  ];
+  readonly flattened: readonly ValidatedCommand[];
+  readonly atlasRoles: readonly ('regular' | 'bold')[];
+}
+
+interface ValidationSuccess<T> {
+  readonly ok: true;
+  readonly value: T;
+}
+
+interface ValidationFailure {
+  readonly ok: false;
+  readonly refusal: X4UiCanvasRenderRefusal;
+}
+
+type Validation<T> = ValidationSuccess<T> | ValidationFailure;
+
+const isValidationFailure = <T>(value: Validation<T>): value is ValidationFailure => value.ok === false;
+
+const TRUTH_VERIFICATION = Object.freeze({
+  game: X4_UI_CANVAS_GAME_TRUTH,
+  gameVerified: false as const,
+});
+
+const LAYER_KINDS = [
+  'diagnostic-background',
+  'glyph-alpha-blits',
+  'diagnostics',
+  'keep-out-overlays',
+] as const;
+
+const DIAGNOSTIC_KINDS = new Set([
+  'selection',
+  'gap',
+  'unsupported-runtime-paint',
+  'unavailable-node',
+  'empty-clip',
+  'invalid-raster-candidate',
+]);
+
+const KEEP_OUT_CONTEXTS = new Set([
+  'cockpit-conversation',
+  'map-open',
+  'fullscreen-menu',
+  'first-person',
+]);
+
+const KEEP_OUT_IDS = new Set([
+  'conversation-back-row',
+  'conversation-option-stack-start',
+  'information-panel-left-edge',
+  'mission-messages-ticker',
+  'top-hud-strip',
+]);
+
+const EVIDENCE_GRADES = new Set(['measured-guide', 'calibrated', 'reference-unmeasured']);
+const MAX_DRAWABLE_DIMENSION = 1_000_000;
+const MAX_COMMANDS = 100_000;
+
+const isObject = (value: unknown): value is object => value !== null && typeof value === 'object';
+
+const ownField = (value: object, key: string): { readonly present: boolean; readonly valid: boolean; readonly value?: unknown } => {
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined) return { present: false, valid: true };
+    if (!descriptor.enumerable || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
+      return { present: true, valid: false };
+    }
+    return { present: true, valid: true, value: descriptor.value };
+  } catch {
+    return { present: true, valid: false };
+  }
+};
+
+const isPlainDataRecord = (value: unknown): value is UnknownRecord => {
+  if (!isObject(value) || Array.isArray(value)) return false;
+  try {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return false;
+    if (Object.getOwnPropertySymbols(value).length !== 0) return false;
+    return Object.getOwnPropertyNames(value).every(key => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      return descriptor !== undefined
+        && descriptor.enumerable
+        && Object.prototype.hasOwnProperty.call(descriptor, 'value');
+    });
+  } catch {
+    return false;
+  }
+};
+
+const isDenseArray = (value: unknown, maximum = MAX_COMMANDS): value is readonly unknown[] => {
+  if (!Array.isArray(value)) return false;
+  try {
+    if (Object.getPrototypeOf(value) !== Array.prototype || Object.getOwnPropertySymbols(value).length !== 0) return false;
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
+    if (lengthDescriptor === undefined
+      || !Object.prototype.hasOwnProperty.call(lengthDescriptor, 'value')
+      || lengthDescriptor.enumerable
+      || !Number.isSafeInteger(lengthDescriptor.value)
+      || lengthDescriptor.value < 0
+      || lengthDescriptor.value > maximum) return false;
+    const names = Object.getOwnPropertyNames(value);
+    if (names.length !== value.length + 1 || !names.includes('length')) return false;
+    for (let index = 0; index < value.length; index += 1) {
+      const key = String(index);
+      if (!names.includes(key)) return false;
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor === undefined
+        || !descriptor.enumerable
+        || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) return false;
+    }
+    return names.every(name => name === 'length' || /^(0|[1-9][0-9]*)$/.test(name));
+  } catch {
+    return false;
+  }
+};
+
+const exactRecord = (value: unknown, required: readonly string[], optional: readonly string[] = []): value is UnknownRecord => {
+  if (!isPlainDataRecord(value)) return false;
+  try {
+    const names = Object.getOwnPropertyNames(value);
+    const allowed = new Set([...required, ...optional]);
+    return required.every(key => names.includes(key)) && names.every(key => allowed.has(key));
+  } catch {
+    return false;
+  }
+};
+
+const structuralFingerprint = (root: unknown): string | undefined => {
+  const seen = new Map<object, number>();
+  const active = new Set<object>();
+  let nextId = 0;
+  const atom = (value: string): string => `${value.length}:${value}`;
+  const flags = (descriptor: PropertyDescriptor): string => `${descriptor.enumerable === true ? 'e' : '-'}${descriptor.configurable === true ? 'c' : '-'}${descriptor.writable === true ? 'w' : '-'}`;
+  const visit = (value: unknown): string | undefined => {
+    if (value === null) return 'null;';
+    if (typeof value === 'string') return `s${atom(value)};`;
+    if (typeof value === 'boolean') return value ? 'b1;' : 'b0;';
+    if (typeof value === 'number') {
+      if (!Number.isFinite(value)) return undefined;
+      return `n${Object.is(value, -0) ? '-0' : String(value)};`;
+    }
+    if (typeof value !== 'object') return undefined;
+    const object = value as object;
+    if (active.has(object)) return undefined;
+    const prior = seen.get(object);
+    if (prior !== undefined) return `r${prior};`;
+    const identity = nextId;
+    nextId += 1;
+    seen.set(object, identity);
+    active.add(object);
+    try {
+      if (Object.getOwnPropertySymbols(object).length !== 0 || ArrayBuffer.isView(object) || object instanceof ArrayBuffer) return undefined;
+      const prototype = Object.getPrototypeOf(object);
+      const names = Object.getOwnPropertyNames(object);
+      if (Array.isArray(object)) {
+        if (prototype !== Array.prototype) return undefined;
+        const lengthDescriptor = Object.getOwnPropertyDescriptor(object, 'length');
+        if (lengthDescriptor === undefined || !Object.prototype.hasOwnProperty.call(lengthDescriptor, 'value') || !Number.isSafeInteger(lengthDescriptor.value) || lengthDescriptor.value < 0) return undefined;
+        if (names.length !== object.length + 1 || !names.includes('length')) return undefined;
+        let output = `a${identity}[${object.length}|${flags(lengthDescriptor)}|`;
+        for (let index = 0; index < object.length; index += 1) {
+          const key = String(index);
+          const descriptor = Object.getOwnPropertyDescriptor(object, key);
+          if (descriptor === undefined || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) return undefined;
+          const nested = visit(descriptor.value);
+          if (nested === undefined) return undefined;
+          output += `${flags(descriptor)}${nested}`;
+        }
+        if (!names.every(name => name === 'length' || /^(0|[1-9][0-9]*)$/.test(name))) return undefined;
+        return `${output}];`;
+      }
+      if (prototype !== Object.prototype && prototype !== null) return undefined;
+      let output = `o${identity}${prototype === null ? '0' : '1'}{`;
+      for (const name of names) {
+        const descriptor = Object.getOwnPropertyDescriptor(object, name);
+        if (descriptor === undefined || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) return undefined;
+        const nested = visit(descriptor.value);
+        if (nested === undefined) return undefined;
+        output += `${atom(name)}${flags(descriptor)}${nested}`;
+      }
+      return `${output}};`;
+    } catch {
+      return undefined;
+    } finally {
+      active.delete(object);
+    }
+  };
+  return visit(root);
+};
+
+const fieldValue = (value: object, key: string): unknown => ownField(value, key).value;
+
+const hasField = (value: object, key: string): boolean => ownField(value, key).present;
+
+const nonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
+
+const safeNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= Number.MAX_SAFE_INTEGER;
+
+const safeInteger = (value: unknown, minimum = 0): value is number =>
+  safeNumber(value) && Number.isSafeInteger(value) && value >= minimum;
+
+const dimension = (value: unknown, positive = false): value is number =>
+  safeNumber(value) && (positive ? value > 0 : value >= 0) && value <= MAX_DRAWABLE_DIMENSION;
+
+const sha256 = (value: unknown): value is string =>
+  typeof value === 'string' && /^[0-9a-fA-F]{64}$/.test(value) && !/^0+$/.test(value);
+
+const refusal = (code: X4UiCanvasRenderRefusalCode, message: string): ValidationFailure => ({
+  ok: false,
+  refusal: { code, message },
+});
+
+const freezeReceipt = <T extends X4UiCanvasRenderReceipt>(value: T): T => {
+  Object.freeze(value.verification);
+  if (value.status === 'refused') {
+    Object.freeze(value.refusal);
+  } else {
+    Object.freeze(value.layers);
+    Object.freeze(value.commandIds);
+    Object.freeze(value.atlasRoles);
+    Object.freeze(value.palette);
+  }
+  return Object.freeze(value);
+};
+
+const makeRefusalReceipt = (failure: ValidationFailure): X4UiCanvasRefusedReceipt => freezeReceipt({
+  format: X4_UI_CANVAS_RENDERER_FORMAT,
+  version: X4_UI_CANVAS_RENDERER_VERSION,
+  status: 'refused',
+  gameTruth: X4_UI_CANVAS_GAME_TRUTH,
+  gameVerified: false,
+  verification: TRUTH_VERIFICATION,
+  refusal: failure.refusal,
+});
+
+const makeRenderedReceipt = (
+  width: number,
+  height: number,
+  commandIds: readonly string[],
+  atlasRoles: readonly ('regular' | 'bold')[],
+): X4UiCanvasRenderedReceipt => freezeReceipt({
+  format: X4_UI_CANVAS_RENDERER_FORMAT,
+  version: X4_UI_CANVAS_RENDERER_VERSION,
+  status: 'rendered',
+  gameTruth: X4_UI_CANVAS_GAME_TRUTH,
+  gameVerified: false,
+  verification: TRUTH_VERIFICATION,
+  width,
+  height,
+  layers: LAYER_KINDS,
+  commandIds: [...commandIds],
+  commandCount: commandIds.length,
+  atlasRoles: [...atlasRoles],
+  palette: { id: X4_UI_CANVAS_DIAGNOSTIC_PALETTE.id, diagnosticOnly: true },
+});
+
+const makeRefusalResult = (failure: ValidationFailure): X4UiCanvasRenderResult => Object.freeze({
+  status: 'refused' as const,
+  receipt: makeRefusalReceipt(failure),
+});
+
+const makeRenderedResult = (
+  surface: X4UiCanvasSurface,
+  width: number,
+  height: number,
+  commandIds: readonly string[],
+  atlasRoles: readonly ('regular' | 'bold')[],
+): X4UiCanvasRenderResult => Object.freeze({
+  status: 'rendered' as const,
+  receipt: makeRenderedReceipt(width, height, commandIds, atlasRoles),
+  surface,
+});
+
+const noForbiddenTruth = (value: unknown, active = new WeakSet<object>()): boolean => {
+  if (value === null || typeof value !== 'object') return true;
+  if (value instanceof Uint8Array || ArrayBuffer.isView(value) || value instanceof ArrayBuffer) return true;
+  const object = value as object;
+  if (active.has(object)) return false;
+  active.add(object);
+  try {
+    for (const key of Object.getOwnPropertyNames(value)) {
+      const field = ownField(object, key);
+      if (!field.valid) continue;
+      if (key === 'gameVerified' && field.value === true) return false;
+      if (key === 'engineColor') return false;
+      if (key === 'engineAccepted' && field.value !== false) return false;
+      if (!noForbiddenTruth(field.value, active)) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  } finally {
+    active.delete(object);
+  }
+};
+
+const validTruthRecord = (value: unknown): value is { readonly game: typeof X4_UI_CANVAS_GAME_TRUTH; readonly gameVerified: false } =>
+  exactRecord(value, ['game', 'gameVerified'])
+  && fieldValue(value, 'game') === X4_UI_CANVAS_GAME_TRUTH
+  && fieldValue(value, 'gameVerified') === false;
+
+const validSource = (value: unknown): boolean => {
+  if (!exactRecord(value, ['file', 'start', 'end'], ['sourcePath'])) return false;
+  const file = fieldValue(value, 'file');
+  const sourcePath = fieldValue(value, 'sourcePath');
+  const start = fieldValue(value, 'start');
+  const end = fieldValue(value, 'end');
+  if (!nonEmptyString(file)
+    || sourcePath !== undefined && !nonEmptyString(sourcePath)
+    || !exactRecord(start, ['line', 'column', 'offset'])
+    || !exactRecord(end, ['line', 'column', 'offset'])) return false;
+  return safeInteger(fieldValue(start, 'line'), 1)
+    && safeInteger(fieldValue(start, 'column'))
+    && safeInteger(fieldValue(start, 'offset'))
+    && safeInteger(fieldValue(end, 'line'), 1)
+    && safeInteger(fieldValue(end, 'column'))
+    && safeInteger(fieldValue(end, 'offset'), fieldValue(start, 'offset') as number)
+    && (fieldValue(end, 'offset') as number) >= (fieldValue(start, 'offset') as number);
+};
+
+const validRect = (value: unknown, bounds?: Rect, positive = false): value is Rect => {
+  if (!exactRecord(value, ['x', 'y', 'width', 'height'])) return false;
+  const x = fieldValue(value, 'x');
+  const y = fieldValue(value, 'y');
+  const width = fieldValue(value, 'width');
+  const height = fieldValue(value, 'height');
+  if (!safeNumber(x) || !safeNumber(y) || !dimension(width, positive) || !dimension(height, positive)) return false;
+  if (!safeNumber((x as number) + (width as number)) || !safeNumber((y as number) + (height as number))) return false;
+  if (bounds === undefined) return true;
+  return (x as number) >= bounds.x
+    && (y as number) >= bounds.y
+    && (x as number) + (width as number) <= bounds.x + bounds.width
+    && (y as number) + (height as number) <= bounds.y + bounds.height;
+};
+
+const validRange = (value: unknown): boolean => {
+  if (!exactRecord(value, ['start', 'end'])) return false;
+  const start = fieldValue(value, 'start');
+  const end = fieldValue(value, 'end');
+  return safeInteger(start) && safeInteger(end, start as number) && (end as number) >= (start as number);
+};
+
+const validIdentity = (value: unknown, relativePath: string, expectedSha256: string): value is UnknownRecord =>
+  exactRecord(value, ['relativePath', 'sha256'])
+  && fieldValue(value, 'relativePath') === relativePath
+  && fieldValue(value, 'sha256') === expectedSha256;
+
+const validBytes = (value: unknown): value is Uint8Array => {
+  if (!(value instanceof Uint8Array)) return false;
+  try {
+    return Object.getPrototypeOf(value) === Uint8Array.prototype;
+  } catch {
+    return false;
+  }
+};
+
+const validBinaryEvidence = (
+  value: unknown,
+  kind: string,
+  relativePath: string,
+  expectedSha256: string,
+): boolean => {
+  if (!exactRecord(value, ['kind', 'path', 'relativePath', 'sha256', 'size', 'bytes'])) return false;
+  const bytes = fieldValue(value, 'bytes');
+  return fieldValue(value, 'kind') === kind
+    && fieldValue(value, 'path') === relativePath
+    && fieldValue(value, 'relativePath') === relativePath
+    && fieldValue(value, 'sha256') === expectedSha256
+    && safeInteger(fieldValue(value, 'size'))
+    && validBytes(bytes)
+    && bytes.byteLength === fieldValue(value, 'size');
+};
+
+const validTextEvidence = (
+  value: unknown,
+  kind: string,
+  relativePath: string,
+  expectedSha256: string,
+): boolean => exactRecord(value, ['kind', 'path', 'relativePath', 'sha256', 'size', 'bytes', 'encoding', 'text'])
+  && validBinaryEvidence({
+    kind: fieldValue(value, 'kind'),
+    path: fieldValue(value, 'path'),
+    relativePath: fieldValue(value, 'relativePath'),
+    sha256: fieldValue(value, 'sha256'),
+    size: fieldValue(value, 'size'),
+    bytes: fieldValue(value, 'bytes'),
+  }, kind, relativePath, expectedSha256)
+  && fieldValue(value, 'encoding') === 'utf-8'
+  && typeof fieldValue(value, 'text') === 'string';
+
+const validHeader = (value: unknown, width: number, height: number, maxCodepoint: number): boolean => {
+  if (!exactRecord(value, ['formatVersion', 'lineMetrics', 'reserved32', 'atlasWidth', 'atlasHeight', 'maxCodepoint'])) return false;
+  const lineMetrics = fieldValue(value, 'lineMetrics');
+  return fieldValue(value, 'formatVersion') === 9
+    && fieldValue(value, 'reserved32') === 0
+    && fieldValue(value, 'atlasWidth') === width
+    && fieldValue(value, 'atlasHeight') === height
+    && fieldValue(value, 'maxCodepoint') === maxCodepoint
+    && exactRecord(lineMetrics, ['outer', 'top', 'bottom', 'inner', 'split20', 'split24', 'rawMetric28'])
+    && ['outer', 'top', 'bottom', 'inner', 'split20', 'split24', 'rawMetric28'].every(key => safeNumber(fieldValue(lineMetrics as object, key)));
+};
+
+const validByteArray = (value: unknown): boolean => isDenseArray(value, 20_000_000)
+  && (value as readonly unknown[]).every(item => safeInteger(item, 0) && (item as number) <= 255);
+
+const validDescriptor = (value: unknown, binding: FontIdentity): value is UnknownRecord => {
+  if (!exactRecord(value, [
+    'format',
+    'atlasWidth',
+    'atlasHeight',
+    'maxCodepoint',
+    'codePointToGlyphIndex',
+    'map',
+    'glyphRecords',
+    'glyphs',
+    'glyphCount',
+    'recordSize',
+    'headerBytes',
+    'header',
+    'lineMetrics',
+    'trailingBytes',
+    'identity',
+    'provenance',
+    'evidenceState',
+  ])) return false;
+  const width = fieldValue(value, 'atlasWidth');
+  const height = fieldValue(value, 'atlasHeight');
+  const maxCodepoint = fieldValue(value, 'maxCodepoint');
+  const map = fieldValue(value, 'codePointToGlyphIndex');
+  const mapAlias = fieldValue(value, 'map');
+  const glyphs = fieldValue(value, 'glyphRecords');
+  const glyphAlias = fieldValue(value, 'glyphs');
+  const identity = fieldValue(value, 'identity');
+  const provenance = fieldValue(value, 'provenance');
+  const descriptorProvenance = isPlainDataRecord(provenance) ? fieldValue(provenance, 'identity') : undefined;
+  return fieldValue(value, 'format') === 'x4-zekton-abc'
+    && safeInteger(width, 1)
+    && safeInteger(height, 1)
+    && safeInteger(maxCodepoint)
+    && (maxCodepoint as number) <= 0x10ffff
+    && isDenseArray(map, 0x110000)
+    && mapAlias === map
+    && (map as readonly unknown[]).length === (maxCodepoint as number) + 1
+    && (map as readonly unknown[]).every(item => safeInteger(item))
+    && isDenseArray(glyphs, 0xffff)
+    && glyphAlias === glyphs
+    && fieldValue(value, 'glyphCount') === (glyphs as readonly unknown[]).length
+    && fieldValue(value, 'recordSize') === 24
+    && validByteArray(fieldValue(value, 'headerBytes'))
+    && validHeader(fieldValue(value, 'header'), width as number, height as number, maxCodepoint as number)
+    && exactRecord(fieldValue(value, 'lineMetrics'), ['outer', 'top', 'bottom', 'inner', 'split20', 'split24', 'rawMetric28'])
+    && validByteArray(fieldValue(value, 'trailingBytes'))
+    && validIdentity(identity, binding.descriptor.relativePath, binding.descriptor.sha256)
+    && exactRecord(provenance, ['identity', 'evidenceState'])
+    && descriptorProvenance === identity
+    && fieldValue(provenance, 'evidenceState') === ZEKTON_EVIDENCE_STATE
+    && fieldValue(value, 'evidenceState') === ZEKTON_EVIDENCE_STATE;
+};
+
+const validAtlas = (value: unknown, binding: FontIdentity): value is UnknownRecord => {
+  if (!exactRecord(value, [
+    'format',
+    'width',
+    'height',
+    'dimensions',
+    'payloadOffset',
+    'payloadLength',
+    'mipMapCount',
+    'depth',
+    'alphaBytes',
+    'identity',
+    'provenance',
+    'evidenceState',
+  ])) return false;
+  const width = fieldValue(value, 'width');
+  const height = fieldValue(value, 'height');
+  const dimensions = fieldValue(value, 'dimensions');
+  const bytes = fieldValue(value, 'alphaBytes');
+  const identity = fieldValue(value, 'identity');
+  const provenance = fieldValue(value, 'provenance');
+  const product = safeInteger(width, 1) && safeInteger(height, 1) ? (width as number) * (height as number) : -1;
+  return fieldValue(value, 'format') === 'x4-zekton-a8-dds'
+    && safeInteger(width, 1)
+    && safeInteger(height, 1)
+    && product <= 64 * 1024 * 1024
+    && exactRecord(dimensions, ['width', 'height'])
+    && fieldValue(dimensions, 'width') === width
+    && fieldValue(dimensions, 'height') === height
+    && fieldValue(value, 'payloadOffset') === 128
+    && fieldValue(value, 'payloadLength') === product
+    && fieldValue(value, 'mipMapCount') === 0
+    && fieldValue(value, 'depth') === 0
+    && validBytes(bytes)
+    && bytes.byteLength === product
+    && validIdentity(identity, binding.atlas.relativePath, binding.atlas.sha256)
+    && exactRecord(provenance, ['identity', 'evidenceState'])
+    && fieldValue(provenance, 'identity') === identity
+    && fieldValue(provenance, 'evidenceState') === ZEKTON_EVIDENCE_STATE
+    && fieldValue(value, 'evidenceState') === ZEKTON_EVIDENCE_STATE;
+};
+
+const validFont = (
+  value: unknown,
+  assetValue: unknown,
+  role: 'regular' | 'bold',
+): Validation<FontBinding> => {
+  const binding = role === 'regular' ? ZEKTON_CORPUS_ASSETS.regular : ZEKTON_CORPUS_ASSETS.bold;
+  if (!exactRecord(value, ['format', 'descriptor', 'atlas', 'descriptorIdentity', 'atlasIdentity', 'evidenceState', 'provenance'])) {
+    return refusal('invalid-font', `${role} Zekton font assets have an unexpected shape`);
+  }
+  const descriptor = fieldValue(value, 'descriptor');
+  const atlas = fieldValue(value, 'atlas');
+  const descriptorIdentity = fieldValue(value, 'descriptorIdentity');
+  const atlasIdentity = fieldValue(value, 'atlasIdentity');
+  const provenance = fieldValue(value, 'provenance');
+  if (fieldValue(value, 'format') !== 'x4-zekton-font-assets'
+    || !validDescriptor(descriptor, binding)
+    || !validAtlas(atlas, binding)
+    || !validIdentity(descriptorIdentity, binding.descriptor.relativePath, binding.descriptor.sha256)
+    || !validIdentity(atlasIdentity, binding.atlas.relativePath, binding.atlas.sha256)
+    || descriptorIdentity !== fieldValue(descriptor as object, 'identity')
+    || atlasIdentity !== fieldValue(atlas as object, 'identity')
+    || fieldValue(value, 'evidenceState') !== ZEKTON_EVIDENCE_STATE
+    || !exactRecord(provenance, ['descriptor', 'atlas'])
+    || fieldValue(provenance, 'descriptor') !== fieldValue(descriptor as object, 'provenance')
+    || fieldValue(provenance, 'atlas') !== fieldValue(atlas as object, 'provenance')) {
+    return refusal('invalid-font', `${role} Zekton font assets are not canonical decoded assets`);
+  }
+  if (!exactRecord(assetValue, ['descriptor', 'atlas', 'decoded', 'evidenceState'])
+    || fieldValue(assetValue, 'decoded') !== value
+    || fieldValue(assetValue, 'descriptor') === undefined
+    || fieldValue(assetValue, 'atlas') === undefined
+    || !validBinaryEvidence(
+      fieldValue(assetValue as object, 'descriptor'),
+      `${role}-descriptor`,
+      binding.descriptor.relativePath,
+      binding.descriptor.sha256,
+    )
+    || !validBinaryEvidence(
+      fieldValue(assetValue as object, 'atlas'),
+      `${role}-atlas`,
+      binding.atlas.relativePath,
+      binding.atlas.sha256,
+    )
+    || fieldValue(assetValue, 'evidenceState') !== ZEKTON_EVIDENCE_STATE) {
+    return refusal('invalid-font', `${role} corpus evidence is detached from its decoded font`);
+  }
+  const alphaBytes = fieldValue(atlas as object, 'alphaBytes');
+  const width = fieldValue(atlas as object, 'width');
+  const height = fieldValue(atlas as object, 'height');
+  if (fieldValue(descriptor as object, 'atlasWidth') !== width || fieldValue(descriptor as object, 'atlasHeight') !== height) {
+    return refusal('invalid-atlas', `${role} descriptor and A8 atlas dimensions do not match`);
+  }
+  return {
+    ok: true,
+    value: {
+      role,
+      font: value,
+      descriptor: descriptor as UnknownRecord,
+      atlas: atlas as UnknownRecord,
+      alphaBytes: new Uint8Array(alphaBytes as Uint8Array),
+      width: width as number,
+      height: height as number,
+      descriptorPath: binding.descriptor.relativePath,
+      descriptorSha256: binding.descriptor.sha256,
+      atlasPath: binding.atlas.relativePath,
+      atlasSha256: binding.atlas.sha256,
+    },
+  };
+};
+
+const validateCorpus = (value: unknown): Validation<{
+  readonly regular: FontBinding;
+  readonly bold: FontBinding;
+}> => {
+  try {
+    if (!isX4UiCorpusCanonicalSuccess(value)) return refusal('invalid-corpus', 'renderer requires the exact loader-issued canonical X4 corpus result');
+    if (!exactRecord(value, [
+      'ok',
+      'statusIdentity',
+      'manifestGeneration',
+      'assets',
+      'fonts',
+      'helperSourceHash',
+      'widgetSourceHash',
+      'fontEvidence',
+      'verification',
+      'evidenceKind',
+      'canonical',
+      'canonicalIdentity',
+    ])) return refusal('invalid-corpus', 'canonical corpus result has an unexpected shape');
+    if (fieldValue(value, 'ok') !== true
+      || fieldValue(value, 'evidenceKind') !== 'canonical-9.00'
+      || fieldValue(value, 'canonical') !== true
+      || fieldValue(value, 'canonicalIdentity') !== 'x4-9.00'
+      || fieldValue(value, 'verification') !== 'Not verified in game'
+      || !exactRecord(fieldValue(value, 'statusIdentity'), ['root', 'generatedAt', 'manifestGeneration', 'manifestRoot', 'manifestGeneratedAt'])
+      || !['root', 'generatedAt', 'manifestGeneration', 'manifestRoot', 'manifestGeneratedAt'].every(key => nonEmptyString(fieldValue(fieldValue(value, 'statusIdentity') as object, key)))
+      || !nonEmptyString(fieldValue(value, 'manifestGeneration'))
+      || !sha256(fieldValue(value, 'helperSourceHash'))
+      || !sha256(fieldValue(value, 'widgetSourceHash'))
+      || fieldValue(value, 'helperSourceHash') !== X4_UI_CORPUS_9_00_CONTRACT.helper.sha256
+      || fieldValue(value, 'widgetSourceHash') !== X4_UI_CORPUS_9_00_CONTRACT.widget.sha256
+      || fieldValue(value, 'fontEvidence') !== ZEKTON_EVIDENCE_STATE) {
+      return refusal('invalid-corpus', 'canonical corpus truth or status identity is invalid');
+    }
+    const assets = fieldValue(value, 'assets');
+    const fonts = fieldValue(value, 'fonts');
+    if (!exactRecord(assets, ['helper', 'widget', 'regular', 'bold']) || !exactRecord(fonts, ['regular', 'bold'])) {
+      return refusal('invalid-corpus', 'canonical corpus font evidence is missing');
+    }
+    if (!validTextEvidence(
+      fieldValue(assets, 'helper'),
+      'helper',
+      X4_UI_CORPUS_9_00_CONTRACT.helper.relativePath,
+      X4_UI_CORPUS_9_00_CONTRACT.helper.sha256,
+    ) || !validTextEvidence(
+      fieldValue(assets, 'widget'),
+      'widget',
+      X4_UI_CORPUS_9_00_CONTRACT.widget.relativePath,
+      X4_UI_CORPUS_9_00_CONTRACT.widget.sha256,
+    )) return refusal('invalid-corpus', 'canonical source evidence is invalid');
+    const regular = validFont(fieldValue(fonts, 'regular'), fieldValue(assets, 'regular'), 'regular');
+    if (isValidationFailure(regular)) return { ok: false, refusal: regular.refusal };
+    const bold = validFont(fieldValue(fonts, 'bold'), fieldValue(assets, 'bold'), 'bold');
+    if (isValidationFailure(bold)) return { ok: false, refusal: bold.refusal };
+    return { ok: true, value: { regular: regular.value, bold: bold.value } };
+  } catch {
+    return refusal('invalid-corpus', 'canonical corpus validation failed without executing a product exception');
+  }
+};
+
+const validPlanSource = (value: unknown): boolean => {
+  if (!exactRecord(value, ['file', 'sha256'], ['sourcePath'])) return false;
+  const sourcePath = fieldValue(value, 'sourcePath');
+  return nonEmptyString(fieldValue(value, 'file'))
+    && (sourcePath === undefined || nonEmptyString(sourcePath))
+    && sha256(fieldValue(value, 'sha256'));
+};
+
+const validateCommandBase = (
+  value: UnknownRecord,
+  expectedLayer: string,
+  drawable: Rect,
+): Validation<true> => {
+  const base = ['id', 'layer', 'order', 'gameTruth', 'gameVerified'];
+  const optional = ['nodeId', 'frameId', 'source', 'clipRect'];
+  if (fieldValue(value, 'layer') !== expectedLayer) return refusal('invalid-command', 'command layer membership does not match its issued layer');
+  if (!nonEmptyString(fieldValue(value, 'id'))) return refusal('invalid-command', 'paint command id is empty');
+  if (fieldValue(value, 'gameTruth') !== X4_UI_CANVAS_GAME_TRUTH || fieldValue(value, 'gameVerified') !== false) {
+    return refusal('game-truth', 'paint command carries escalated game truth');
+  }
+  const nodeId = fieldValue(value, 'nodeId');
+  const frameId = fieldValue(value, 'frameId');
+  if (nodeId !== undefined && !nonEmptyString(nodeId) || frameId !== undefined && !nonEmptyString(frameId)) {
+    return refusal('invalid-command', 'paint command node or frame identity is malformed');
+  }
+  if (hasField(value, 'source') && !validSource(fieldValue(value, 'source'))) {
+    return refusal('invalid-command', 'paint command source location is malformed');
+  }
+  if (hasField(value, 'clipRect') && !validRect(fieldValue(value, 'clipRect'), drawable, false)) {
+    return refusal('invalid-clip', 'paint command clip rectangle is unsafe or outside the drawable');
+  }
+  if (!base.every(key => hasField(value, key)) || !optional.every(key => !hasField(value, key) || ownField(value, key).valid)) {
+    return refusal('invalid-command', 'paint command contains an accessor or malformed base field');
+  }
+  return { ok: true, value: true };
+};
+
+const fontForGlyph = (
+  descriptorValue: unknown,
+  atlasValue: unknown,
+  fonts: { readonly regular: FontBinding; readonly bold: FontBinding },
+): FontBinding | undefined => {
+  const matches = [fonts.regular, fonts.bold].filter(font =>
+    validIdentity(descriptorValue, font.descriptorPath, font.descriptorSha256)
+    && exactRecord(atlasValue, ['relativePath', 'sha256', 'width', 'height'])
+    && fieldValue(atlasValue, 'relativePath') === font.atlasPath
+    && fieldValue(atlasValue, 'sha256') === font.atlasSha256
+    && fieldValue(atlasValue, 'width') === font.width
+    && fieldValue(atlasValue, 'height') === font.height,
+  );
+  return matches.length === 1 ? matches[0] : undefined;
+};
+
+const validKeepOutGeometry = (value: unknown, drawable: Rect): boolean => {
+  if (value === null) return true;
+  if (!isPlainDataRecord(value) || !hasField(value, 'kind')) return false;
+  const kind = fieldValue(value, 'kind');
+  if (kind === 'horizontal-guide') {
+    return exactRecord(value, ['kind', 'y']) && safeNumber(fieldValue(value, 'y'))
+      && (fieldValue(value, 'y') as number) >= 0 && (fieldValue(value, 'y') as number) <= drawable.height;
+  }
+  if (kind === 'vertical-guide') {
+    return exactRecord(value, ['kind', 'x']) && safeNumber(fieldValue(value, 'x'))
+      && (fieldValue(value, 'x') as number) >= 0 && (fieldValue(value, 'x') as number) <= drawable.width;
+  }
+  if (kind !== 'polygon' || !exactRecord(value, ['kind', 'points']) || !isDenseArray(fieldValue(value, 'points'), 100_000)) return false;
+  const points = fieldValue(value, 'points') as readonly unknown[];
+  return points.length >= 3 && points.every(point => exactRecord(point, ['x', 'y'])
+    && safeNumber(fieldValue(point as object, 'x'))
+    && safeNumber(fieldValue(point as object, 'y'))
+    && (fieldValue(point as object, 'x') as number) >= 0
+    && (fieldValue(point as object, 'x') as number) <= drawable.width
+    && (fieldValue(point as object, 'y') as number) >= 0
+    && (fieldValue(point as object, 'y') as number) <= drawable.height);
+};
+
+const copyValidatedRect = (value: unknown): Rect => ({
+  x: fieldValue(value as object, 'x') as number,
+  y: fieldValue(value as object, 'y') as number,
+  width: fieldValue(value as object, 'width') as number,
+  height: fieldValue(value as object, 'height') as number,
+});
+
+const detachedCommandBase = (value: UnknownRecord): DetachedCommandBase => {
+  const clipValue = fieldValue(value, 'clipRect');
+  return {
+    id: fieldValue(value, 'id') as string,
+    order: fieldValue(value, 'order') as number,
+    ...(clipValue === undefined ? {} : { clip: copyValidatedRect(clipValue) }),
+  };
+};
+
+const diagnosticColor = (kind: string): string => {
+  switch (kind) {
+    case 'selection': return X4_UI_CANVAS_DIAGNOSTIC_PALETTE.selection;
+    case 'gap': return X4_UI_CANVAS_DIAGNOSTIC_PALETTE.gap;
+    case 'unsupported-runtime-paint': return X4_UI_CANVAS_DIAGNOSTIC_PALETTE.unsupported;
+    case 'unavailable-node': return X4_UI_CANVAS_DIAGNOSTIC_PALETTE.unavailable;
+    case 'empty-clip': return X4_UI_CANVAS_DIAGNOSTIC_PALETTE.emptyClip;
+    case 'invalid-raster-candidate': return X4_UI_CANVAS_DIAGNOSTIC_PALETTE.invalidRaster;
+    default: return X4_UI_CANVAS_DIAGNOSTIC_PALETTE.background;
+  }
+};
+
+const validateCommand = (
+  value: unknown,
+  expectedLayer: typeof LAYER_KINDS[number],
+  drawable: Rect,
+  fonts: { readonly regular: FontBinding; readonly bold: FontBinding },
+): Validation<ValidatedCommand> => {
+  if (!isPlainDataRecord(value) || !hasField(value, 'kind')) return refusal('invalid-command', 'paint command is not a plain data record');
+  const kind = fieldValue(value, 'kind');
+  const baseResult = (extraRequired: readonly string[], extraOptional: readonly string[] = []): Validation<true> => {
+    if (!exactRecord(value, ['id', 'layer', 'order', 'gameTruth', 'gameVerified', 'kind', ...extraRequired], ['nodeId', 'frameId', 'source', 'clipRect', ...extraOptional])) {
+      return refusal('invalid-command', 'paint command has unexpected, inherited, sparse, or accessor fields');
+    }
+    return validateCommandBase(value, expectedLayer, drawable);
+  };
+  if (expectedLayer === 'diagnostic-background') {
+    if (kind !== 'node-geometry') return refusal('unsupported-command', 'diagnostic background contains a non-geometry command');
+    const valid = baseResult(['completeness', 'style'], ['geometry']);
+    if (isValidationFailure(valid)) return { ok: false, refusal: valid.refusal };
+    const geometry = fieldValue(value, 'geometry');
+    if (geometry !== undefined && !validRect(geometry, drawable, true)) return refusal('invalid-geometry', 'node geometry is unsafe or outside the drawable');
+    if (!['complete', 'partial', 'unavailable'].includes(String(fieldValue(value, 'completeness'))) || !['source-derived', 'unavailable'].includes(String(fieldValue(value, 'style')))) {
+      return refusal('invalid-command', 'node geometry completeness or style is invalid');
+    }
+    const base = detachedCommandBase(value);
+    return {
+      ok: true,
+      value: {
+        ...base,
+        kind: 'node-geometry',
+        ...(geometry === undefined ? {} : { geometry: copyValidatedRect(geometry) }),
+        color: fieldValue(value, 'style') === 'unavailable' || fieldValue(value, 'completeness') !== 'complete'
+          ? X4_UI_CANVAS_DIAGNOSTIC_PALETTE.unavailable
+          : X4_UI_CANVAS_DIAGNOSTIC_PALETTE.geometry,
+      },
+    };
+  }
+  if (expectedLayer === 'glyph-alpha-blits') {
+    if (kind !== 'glyph-alpha-blit') return refusal('unsupported-command', 'glyph layer contains a non-glyph command');
+    const valid = baseResult(['textId', 'lineIndex', 'codePoint', 'glyphIndex', 'descriptor', 'atlas', 'sourceRect', 'destinationRect', 'sourceRange', 'sourceCodePointRange', 'isEllipsis']);
+    if (isValidationFailure(valid)) return { ok: false, refusal: valid.refusal };
+    const descriptor = fieldValue(value, 'descriptor');
+    const atlas = fieldValue(value, 'atlas');
+    const font = fontForGlyph(descriptor, atlas, fonts);
+    if (font === undefined) return refusal('invalid-atlas', 'glyph descriptor and atlas do not map to one canonical regular or bold font');
+    const sourceRect = fieldValue(value, 'sourceRect');
+    const destinationRect = fieldValue(value, 'destinationRect');
+    if (!validRect(sourceRect, { x: 0, y: 0, width: font.width, height: font.height }, true)) return refusal('atlas-bounds', 'glyph source rectangle is outside the selected A8 atlas');
+    if (!validRect(destinationRect, drawable, true)) return refusal('invalid-geometry', 'glyph destination rectangle is unsafe or outside the drawable');
+    if (!hasField(value, 'clipRect') || !validRect(fieldValue(value, 'clipRect'), drawable, false)) return refusal('invalid-clip', 'glyph command must carry an accepted clip rectangle');
+    const lineIndex = fieldValue(value, 'lineIndex');
+    const codePoint = fieldValue(value, 'codePoint');
+    const glyphIndex = fieldValue(value, 'glyphIndex');
+    if (!safeInteger(lineIndex) || !safeInteger(codePoint) || (codePoint as number) > 0x10ffff || (codePoint as number) >= 0xd800 && (codePoint as number) <= 0xdfff || !safeInteger(glyphIndex, 1) || !nonEmptyString(fieldValue(value, 'textId')) || !validRange(fieldValue(value, 'sourceRange')) || !validRange(fieldValue(value, 'sourceCodePointRange')) || typeof fieldValue(value, 'isEllipsis') !== 'boolean') {
+      return refusal('invalid-command', 'glyph command metadata is unsafe or malformed');
+    }
+    const map = fieldValue(font.descriptor, 'codePointToGlyphIndex') as readonly unknown[];
+    const records = fieldValue(font.descriptor, 'glyphRecords') as readonly unknown[];
+    const mapped = map[codePoint as number];
+    const record = records[(glyphIndex as number) - 1];
+    if (mapped !== glyphIndex || !isPlainDataRecord(record) || fieldValue(record, 'glyphIndex') !== glyphIndex) return refusal('invalid-atlas', 'glyph command does not match the selected canonical descriptor mapping');
+    const pixelBounds = fieldValue(record, 'pixelBounds');
+    if (!exactRecord(pixelBounds, ['left', 'top', 'right', 'bottom'])) return refusal('invalid-atlas', 'canonical glyph pixel bounds are malformed');
+    const recordRect: Rect = {
+      x: fieldValue(pixelBounds, 'left') as number,
+      y: fieldValue(pixelBounds, 'top') as number,
+      width: (fieldValue(pixelBounds, 'right') as number) - (fieldValue(pixelBounds, 'left') as number),
+      height: (fieldValue(pixelBounds, 'bottom') as number) - (fieldValue(pixelBounds, 'top') as number),
+    };
+    if (!validRect(recordRect, { x: 0, y: 0, width: font.width, height: font.height }, true)
+      || !validRect(sourceRect, recordRect, true)) return refusal('atlas-bounds', 'glyph source rectangle is not within its canonical glyph bounds');
+    return {
+      ok: true,
+      value: {
+        ...detachedCommandBase(value),
+        kind: 'glyph-alpha-blit',
+        role: font.role,
+        source: copyValidatedRect(sourceRect),
+        destination: copyValidatedRect(destinationRect),
+      },
+    };
+  }
+  if (expectedLayer === 'diagnostics') {
+    if (typeof kind !== 'string' || !DIAGNOSTIC_KINDS.has(kind)) return refusal('unsupported-command', 'diagnostics layer contains an unsupported command kind');
+    const valid = baseResult(['reason'], ['geometry', 'category', 'status', 'operationId']);
+    if (isValidationFailure(valid)) return { ok: false, refusal: valid.refusal };
+    if (!nonEmptyString(fieldValue(value, 'reason'))) return refusal('invalid-command', 'diagnostic reason is empty');
+    const geometry = fieldValue(value, 'geometry');
+    if (geometry !== undefined && !validRect(geometry, drawable, true)) return refusal('invalid-geometry', 'diagnostic geometry is unsafe or outside the drawable');
+    for (const key of ['category', 'status', 'operationId']) {
+      if (hasField(value, key) && !nonEmptyString(fieldValue(value, key))) return refusal('invalid-command', 'diagnostic metadata is malformed');
+    }
+    return {
+      ok: true,
+      value: {
+        ...detachedCommandBase(value),
+        kind: kind as DetachedDiagnosticCommand['kind'],
+        ...(geometry === undefined ? {} : { geometry: copyValidatedRect(geometry) }),
+        color: diagnosticColor(kind),
+      },
+    };
+  }
+  if (kind !== 'keep-out') return refusal('unsupported-command', 'keep-out layer contains an unsupported command kind');
+  const valid = baseResult(['context', 'entryId', 'status', 'evidenceGrade', 'advisoryOnly', 'gameVerification', 'geometry'], ['reason']);
+  if (isValidationFailure(valid)) return { ok: false, refusal: valid.refusal };
+  const context = fieldValue(value, 'context');
+  const entryId = fieldValue(value, 'entryId');
+  const status = fieldValue(value, 'status');
+  const geometry = fieldValue(value, 'geometry');
+  if (typeof context !== 'string' || !KEEP_OUT_CONTEXTS.has(context)
+    || typeof entryId !== 'string' || !KEEP_OUT_IDS.has(entryId)
+    || (status !== 'projected' && status !== 'unavailable')
+    || typeof fieldValue(value, 'evidenceGrade') !== 'string' || !EVIDENCE_GRADES.has(fieldValue(value, 'evidenceGrade') as string)
+    || fieldValue(value, 'advisoryOnly') !== true
+    || fieldValue(value, 'gameVerification') !== X4_UI_CANVAS_GAME_TRUTH
+    || !validKeepOutGeometry(geometry, drawable)
+    || status === 'projected' && geometry === null
+    || status === 'unavailable' && geometry !== null
+    || hasField(value, 'reason') && !nonEmptyString(fieldValue(value, 'reason'))) {
+    return refusal('invalid-keepout', 'keep-out overlay geometry, identity, or truth is malformed');
+  }
+  let detachedGeometry: DetachedKeepOutGeometry = null;
+  if (isPlainDataRecord(geometry)) {
+    const geometryKind = fieldValue(geometry, 'kind');
+    if (geometryKind === 'horizontal-guide') detachedGeometry = { kind: 'horizontal-guide', y: fieldValue(geometry, 'y') as number };
+    else if (geometryKind === 'vertical-guide') detachedGeometry = { kind: 'vertical-guide', x: fieldValue(geometry, 'x') as number };
+    else {
+      const points = fieldValue(geometry, 'points') as readonly unknown[];
+      detachedGeometry = {
+        kind: 'polygon',
+        points: points.map(point => ({ x: fieldValue(point as object, 'x') as number, y: fieldValue(point as object, 'y') as number })),
+      };
+    }
+  }
+  return { ok: true, value: { ...detachedCommandBase(value), kind: 'keep-out', geometry: detachedGeometry } };
+};
+
+const validateResultEnvelope = (value: unknown): Validation<{ readonly status: 'projected' | 'partial'; readonly plan: unknown }> => {
+  if (!isPlainDataRecord(value) || !hasField(value, 'status')) return refusal('invalid-result', 'paint result is not a plain data record');
+  const status = fieldValue(value, 'status');
+  if (status === 'refused') {
+    if (!exactRecord(value, ['status', 'refusal', 'gameTruth', 'verification']) || fieldValue(value, 'gameTruth') !== X4_UI_CANVAS_GAME_TRUTH || !validTruthRecord(fieldValue(value, 'verification'))) {
+      return refusal('invalid-result', 'refused paint result has malformed truth or envelope fields');
+    }
+    const paintRefusal = fieldValue(value, 'refusal');
+    if (!exactRecord(paintRefusal, ['code', 'message']) || !nonEmptyString(fieldValue(paintRefusal, 'code')) || !nonEmptyString(fieldValue(paintRefusal, 'message'))) return refusal('invalid-result', 'refused paint result has malformed refusal details');
+    return refusal('input-refused', `accepted paint plan result is refused: ${fieldValue(paintRefusal, 'message') as string}`);
+  }
+  if (status !== 'projected' && status !== 'partial') return refusal('invalid-result', 'paint result status is unsupported');
+  if (!exactRecord(value, ['status', 'plan', 'verification']) || !validTruthRecord(fieldValue(value, 'verification'))) return refusal('invalid-result', 'paint result has malformed truth or envelope fields');
+  return { ok: true, value: { status, plan: fieldValue(value, 'plan') } };
+};
+
+const validatePlan = (
+  value: unknown,
+  resultStatus: 'projected' | 'partial',
+  fonts: { readonly regular: FontBinding; readonly bold: FontBinding },
+): Validation<ValidatedPlan> => {
+  if (!isPlainDataRecord(value) || !exactRecord(value, ['format', 'version', 'status', 'gameTruth', 'gameVerified', 'source', 'logicalDrawable', 'layers', 'sceneStatus', 'selectedNodeIds', 'keepOuts', 'diagnostics', 'verification'])) return refusal('invalid-plan', 'paint plan has unexpected, inherited, or accessor fields');
+  if (!noForbiddenTruth(value)) return refusal('game-truth', 'paint plan contains forbidden engine or escalated game truth');
+  if (fieldValue(value, 'format') !== X4_UI_PAINT_PLAN_FORMAT || fieldValue(value, 'version') !== X4_UI_PAINT_PLAN_VERSION || fieldValue(value, 'status') !== resultStatus || (fieldValue(value, 'status') !== 'projected' && fieldValue(value, 'status') !== 'partial') || fieldValue(value, 'gameTruth') !== X4_UI_CANVAS_GAME_TRUTH || fieldValue(value, 'gameVerified') !== false || !validTruthRecord(fieldValue(value, 'verification')) || (fieldValue(value, 'sceneStatus') !== 'projected' && fieldValue(value, 'sceneStatus') !== 'partial') || !validPlanSource(fieldValue(value, 'source'))) {
+    return refusal('invalid-plan', 'paint plan format, status, source, or truth fields are invalid');
+  }
+  const drawableValue = fieldValue(value, 'logicalDrawable');
+  if (!exactRecord(drawableValue, ['width', 'height']) || !safeInteger(fieldValue(drawableValue, 'width'), 1) || !safeInteger(fieldValue(drawableValue, 'height'), 1) || (fieldValue(drawableValue, 'width') as number) > MAX_DRAWABLE_DIMENSION || (fieldValue(drawableValue, 'height') as number) > MAX_DRAWABLE_DIMENSION) return refusal('invalid-geometry', 'paint plan logical drawable dimensions are unsafe');
+  const drawable: Rect = { x: 0, y: 0, width: fieldValue(drawableValue, 'width') as number, height: fieldValue(drawableValue, 'height') as number };
+  const selected = fieldValue(value, 'selectedNodeIds');
+  if (!isDenseArray(selected, MAX_COMMANDS) || !(selected as readonly unknown[]).every(item => nonEmptyString(item)) || new Set(selected as readonly unknown[]).size !== (selected as readonly unknown[]).length) return refusal('invalid-plan', 'selected node ids are sparse, duplicated, or malformed');
+  const layers = fieldValue(value, 'layers');
+  if (!isDenseArray(layers, 4) || layers.length !== 4) return refusal('invalid-layer', 'paint plan must issue exactly four dense layers');
+  const validatedLayers: ValidatedCommand[][] = [[], [], [], []];
+  const flattened: ValidatedCommand[] = [];
+  const ids = new Set<string>();
+  const keepOutEntries = new Set<string>();
+  const issuedOrders = new Set<number>();
+  const previousLayerOrders = [-1, -1, -1, -1];
+  for (let layerIndex = 0; layerIndex < 4; layerIndex += 1) {
+    const layer = layers[layerIndex];
+    if (!exactRecord(layer, ['kind', 'commands']) || fieldValue(layer as object, 'kind') !== LAYER_KINDS[layerIndex] || !isDenseArray(fieldValue(layer as object, 'commands'), MAX_COMMANDS)) return refusal('invalid-layer', 'paint layer tuple or command array is malformed');
+    const commands = fieldValue(layer as object, 'commands') as readonly unknown[];
+    for (const commandValue of commands) {
+      if (!isPlainDataRecord(commandValue) || !safeInteger(fieldValue(commandValue, 'order'))) return refusal('invalid-command', 'paint command order is unsafe or malformed');
+      const order = fieldValue(commandValue, 'order') as number;
+      if (issuedOrders.has(order)) return refusal('out-of-order-command', 'paint command order is duplicated');
+      if (order <= previousLayerOrders[layerIndex]) return refusal('out-of-order-command', 'paint command order is not increasing within its issued layer');
+      if (order !== flattened.length) return refusal('out-of-order-command', 'paint command order must equal its flattened issued index');
+       previousLayerOrders[layerIndex] = order;
+      issuedOrders.add(order);
+      const command = validateCommand(commandValue, LAYER_KINDS[layerIndex], drawable, fonts);
+      if (isValidationFailure(command)) return { ok: false, refusal: command.refusal };
+      const id = fieldValue(commandValue as object, 'id') as string;
+      if (ids.has(id)) return refusal('duplicate-command', `paint command id ${id} is duplicated`);
+      ids.add(id);
+      if (layerIndex === 3) {
+        const entryId = fieldValue(commandValue as object, 'entryId');
+        if (typeof entryId === 'string' && keepOutEntries.has(entryId)) return refusal('duplicate-command', `keep-out entry ${entryId} is duplicated`);
+        if (typeof entryId === 'string') keepOutEntries.add(entryId);
+      }
+      validatedLayers[layerIndex].push(command.value);
+      flattened.push(command.value);
+    }
+  }
+  for (let expectedOrder = 0; expectedOrder < flattened.length; expectedOrder += 1) {
+    if (!issuedOrders.has(expectedOrder)) return refusal('out-of-order-command', 'global paint command orders must be exactly contiguous from zero');
+  }
+  const diagnostics = fieldValue(value, 'diagnostics');
+  const keepOuts = fieldValue(value, 'keepOuts');
+  const layerDiagnostics = fieldValue(layers[2] as object, 'commands');
+  const layerKeepOuts = fieldValue(layers[3] as object, 'commands');
+  if (!isDenseArray(diagnostics, MAX_COMMANDS) || diagnostics.length !== (layerDiagnostics as readonly unknown[]).length || !(diagnostics as readonly unknown[]).every((item, index) => item === (layerDiagnostics as readonly unknown[])[index])) return refusal('invalid-plan', 'diagnostics projection is detached or reordered from its issued layer');
+  if (!isDenseArray(keepOuts, MAX_COMMANDS) || keepOuts.length !== (layerKeepOuts as readonly unknown[]).length || !(keepOuts as readonly unknown[]).every((item, index) => item === (layerKeepOuts as readonly unknown[])[index])) return refusal('invalid-plan', 'keep-out projection is detached or reordered from its issued layer');
+  const atlasRoles: ('regular' | 'bold')[] = [];
+  for (const item of validatedLayers[1]) {
+    if (item.kind === 'glyph-alpha-blit' && !atlasRoles.includes(item.role)) atlasRoles.push(item.role);
+  }
+  return {
+    ok: true,
+    value: {
+      width: drawable.width,
+      height: drawable.height,
+      layers: validatedLayers as unknown as ValidatedPlan['layers'],
+      flattened,
+      atlasRoles,
+    },
+  };
+};
+
+const readMethod = (receiver: unknown, name: string): Method | undefined => {
+  if (!isObject(receiver)) return undefined;
+  let current: object | null = receiver;
+  try {
+    while (current !== null) {
+      const descriptor = Object.getOwnPropertyDescriptor(current, name);
+      if (descriptor !== undefined) {
+        if (!Object.prototype.hasOwnProperty.call(descriptor, 'value') || typeof descriptor.value !== 'function') return undefined;
+        const method = descriptor.value as (...args: unknown[]) => unknown;
+        return (...args: unknown[]) => method.apply(receiver, args);
+      }
+      current = Object.getPrototypeOf(current);
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+};
+
+const canWriteProperty = (receiver: unknown, name: string): boolean => {
+  if (!isObject(receiver)) return false;
+  let current: object | null = receiver;
+  try {
+    while (current !== null) {
+      const descriptor = Object.getOwnPropertyDescriptor(current, name);
+      if (descriptor !== undefined) {
+        return Object.prototype.hasOwnProperty.call(descriptor, 'value')
+          ? descriptor.writable === true
+          : typeof descriptor.set === 'function';
+      }
+      current = Object.getPrototypeOf(current);
+    }
+  } catch {
+    return false;
+  }
+  return false;
+};
+
+const setProperty = (receiver: object, name: string, value: unknown): void => {
+  (receiver as UnknownRecord)[name] = value;
+};
+
+const readDimension = (surface: object, name: 'width' | 'height'): number | undefined => {
+  try {
+    const value = (surface as UnknownRecord)[name];
+    return safeInteger(value) && (value as number) <= MAX_DRAWABLE_DIMENSION ? value as number : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const paintApi = (context: unknown, includeAtlas: boolean): Validation<PaintApi | AtlasApi> => {
+  if (!isObject(context)) return refusal('missing-context', '2D context is missing');
+  const names = ['save', 'restore', 'beginPath', 'rect', 'clip', 'fillRect', 'drawImage', 'moveTo', 'lineTo', 'closePath', 'stroke'];
+  const methods = new Map<string, Method>();
+  for (const name of names) {
+    const method = readMethod(context, name);
+    if (method === undefined) return refusal('missing-context', `2D context lacks ${name}`);
+    methods.set(name, method);
+  }
+  if (!canWriteProperty(context, 'fillStyle') || !canWriteProperty(context, 'strokeStyle')) return refusal('missing-context', '2D context lacks writable diagnostic styles');
+  const base: PaintApi = {
+    save: methods.get('save') as Method,
+    restore: methods.get('restore') as Method,
+    beginPath: methods.get('beginPath') as Method,
+    rect: methods.get('rect') as Method,
+    clip: methods.get('clip') as Method,
+    fillRect: methods.get('fillRect') as Method,
+    drawImage: methods.get('drawImage') as Method,
+    moveTo: methods.get('moveTo') as Method,
+    lineTo: methods.get('lineTo') as Method,
+    closePath: methods.get('closePath') as Method,
+    stroke: methods.get('stroke') as Method,
+    setFillStyle: value => setProperty(context, 'fillStyle', value),
+    setStrokeStyle: value => setProperty(context, 'strokeStyle', value),
+  };
+  if (!includeAtlas) return { ok: true, value: base };
+  const createImageData = readMethod(context, 'createImageData');
+  const putImageData = readMethod(context, 'putImageData');
+  if (createImageData === undefined || putImageData === undefined) return refusal('missing-context', 'atlas staging context lacks image-data APIs');
+  return { ok: true, value: { ...base, createImageData, putImageData } };
+};
+
+const surfaceFactoryDefault: X4UiCanvasSurfaceFactory = (_width, _height): X4UiCanvasSurface | undefined => {
+  try {
+    const globalValue = globalThis as unknown as { readonly document?: unknown };
+    const documentValue = globalValue.document;
+    const createElement = readMethod(documentValue, 'createElement');
+    if (createElement === undefined) return undefined;
+    const surface = createElement('canvas');
+    return isObject(surface) ? surface as X4UiCanvasSurface : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const validatedFactory = (options: unknown): Validation<X4UiCanvasSurfaceFactory> => {
+  if (options === undefined) return { ok: true, value: surfaceFactoryDefault };
+  if (!exactRecord(options, [], ['surfaceFactory'])) return refusal('invalid-input', 'renderer options are malformed');
+  const candidate = fieldValue(options, 'surfaceFactory');
+  if (candidate === undefined) return { ok: true, value: surfaceFactoryDefault };
+  if (typeof candidate !== 'function') return refusal('invalid-input', 'surfaceFactory must be callable');
+  return { ok: true, value: candidate as X4UiCanvasSurfaceFactory };
+};
+
+const allocateSurface = (
+  factory: X4UiCanvasSurfaceFactory,
+  width: number,
+  height: number,
+  role: X4UiCanvasSurfaceRole,
+  includeAtlas: boolean,
+): Validation<{ readonly surface: X4UiCanvasSurface; readonly api: PaintApi | AtlasApi }> => {
+  try {
+    const surface = factory(width, height, role);
+    if (!isObject(surface) || !canWriteProperty(surface, 'width') || !canWriteProperty(surface, 'height')) return refusal('allocation-failure', `${role} surface allocation returned an invalid surface`);
+    setProperty(surface, 'width', width);
+    setProperty(surface, 'height', height);
+    if (readDimension(surface, 'width') !== width || readDimension(surface, 'height') !== height) return refusal('allocation-failure', `${role} surface dimensions could not be established`);
+    const getContext = readMethod(surface, 'getContext');
+    if (getContext === undefined) return refusal('missing-context', `${role} surface lacks getContext`);
+    const context = getContext('2d');
+    const api = paintApi(context, includeAtlas);
+    if (isValidationFailure(api)) return { ok: false, refusal: api.refusal };
+    return { ok: true, value: { surface, api: api.value } };
+  } catch {
+    return refusal('allocation-failure', `${role} surface allocation or context acquisition failed`);
+  }
+};
+
+const stageAtlas = (
+  factory: X4UiCanvasSurfaceFactory,
+  binding: AtlasSnapshot,
+): Validation<{ readonly surface: X4UiCanvasSurface; readonly api: PaintApi }> => {
+  const allocated = allocateSurface(factory, binding.width, binding.height, `${binding.role}-atlas`, true);
+  if (isValidationFailure(allocated)) return { ok: false, refusal: allocated.refusal };
+  const api = allocated.value.api as AtlasApi;
+  try {
+    const imageData = api.createImageData(binding.width, binding.height);
+    if (!isObject(imageData)) return refusal('allocation-failure', `${binding.role} atlas image-data allocation failed`);
+    const data = (imageData as UnknownRecord).data;
+    if (!(data instanceof Uint8ClampedArray) || data.length !== binding.alphaBytes.length * 4) return refusal('allocation-failure', `${binding.role} atlas image-data has unsafe dimensions`);
+    for (let index = 0; index < binding.alphaBytes.length; index += 1) {
+      const offset = index * 4;
+      data[offset] = 229;
+      data[offset + 1] = 231;
+      data[offset + 2] = 235;
+      data[offset + 3] = binding.alphaBytes[index] as number;
+    }
+    api.putImageData(imageData, 0, 0);
+    return { ok: true, value: { surface: allocated.value.surface, api } };
+  } catch {
+    return refusal('allocation-failure', `${binding.role} atlas image-data staging failed`);
+  }
+};
+
+const withClip = (api: PaintApi, clip: Rect | undefined, draw: () => void): void => {
+  if (clip === undefined) {
+    draw();
+    return;
+  }
+  api.save();
+  try {
+    api.beginPath();
+    api.rect(clip.x, clip.y, clip.width, clip.height);
+    api.clip();
+    draw();
+  } finally {
+    api.restore();
+  }
+};
+
+type PaintOperation = (api: PaintApi) => void;
+
+const buildOperations = (
+  validated: ValidatedPlan,
+  atlasSurfaces: ReadonlyMap<'regular' | 'bold', X4UiCanvasSurface>,
+): Validation<readonly PaintOperation[]> => {
+  try {
+    const operations: PaintOperation[] = [];
+    for (const layer of validated.layers) {
+      for (const item of layer) {
+        if (item.kind === 'node-geometry') {
+          const geometry = item.geometry;
+          const clip = item.clip;
+          const color = item.color;
+          operations.push(api => {
+            api.setFillStyle(color);
+            if (geometry !== undefined) withClip(api, clip, () => { api.fillRect(geometry.x, geometry.y, geometry.width, geometry.height); });
+          });
+          continue;
+        }
+        if (item.kind === 'glyph-alpha-blit') {
+          const surface = atlasSurfaces.get(item.role);
+          const source = item.source;
+          const destination = item.destination;
+          const clip = item.clip;
+          if (surface === undefined) return refusal('invalid-atlas', 'validated glyph command lost its canonical atlas staging surface');
+          operations.push(api => withClip(api, clip, () => {
+            api.setFillStyle(X4_UI_CANVAS_DIAGNOSTIC_PALETTE.glyph);
+            api.drawImage(surface, source.x, source.y, source.width, source.height, destination.x, destination.y, destination.width, destination.height);
+          }));
+          continue;
+        }
+        if (item.kind === 'keep-out') {
+          const geometry = item.geometry;
+          operations.push(api => {
+            api.setStrokeStyle(geometry === null ? X4_UI_CANVAS_DIAGNOSTIC_PALETTE.unavailableKeepOut : X4_UI_CANVAS_DIAGNOSTIC_PALETTE.keepOut);
+            if (geometry === null) return;
+            if (geometry.kind === 'horizontal-guide') {
+              api.beginPath();
+              api.moveTo(0, geometry.y);
+              api.lineTo(validated.width, geometry.y);
+              api.stroke();
+            } else if (geometry.kind === 'vertical-guide') {
+              api.beginPath();
+              api.moveTo(geometry.x, 0);
+              api.lineTo(geometry.x, validated.height);
+              api.stroke();
+            } else {
+              const points = geometry.points;
+              const first = points[0];
+              if (first === undefined) return;
+              api.beginPath();
+              api.moveTo(first.x, first.y);
+              for (const point of points.slice(1)) {
+                api.lineTo(point.x, point.y);
+              }
+              api.closePath();
+              api.stroke();
+            }
+          });
+          continue;
+        }
+        if (DIAGNOSTIC_KINDS.has(item.kind)) {
+          const geometry = item.geometry ?? item.clip;
+          const clip = item.clip;
+          const color = item.color;
+          operations.push(api => {
+            api.setFillStyle(color);
+            if (geometry !== undefined) withClip(api, clip, () => { api.fillRect(geometry.x, geometry.y, geometry.width, geometry.height); });
+          });
+          continue;
+        }
+        return refusal('unsupported-command', 'validated command kind has no Canvas operation');
+      }
+    }
+    return { ok: true, value: operations };
+  } catch {
+    return refusal('surface-failure', 'paint operation staging failed deterministically');
+  }
+};
+
+/** Convert an accepted logical X4 paint plan into diagnostic Canvas pixels. */
+export function renderX4UiPaintPlanToCanvas(
+  result: X4UiPaintPlanResult,
+  corpus: X4UiCorpusCanonicalSuccess,
+  options?: X4UiCanvasRenderOptions,
+): X4UiCanvasRenderResult {
+  try {
+    const resultValidation = validateResultEnvelope(result);
+    if (isValidationFailure(resultValidation)) return makeRefusalResult({ ok: false, refusal: resultValidation.refusal });
+    const corpusValidation = validateCorpus(corpus);
+    if (isValidationFailure(corpusValidation)) return makeRefusalResult({ ok: false, refusal: corpusValidation.refusal });
+    const planValidation = validatePlan(resultValidation.value.plan, resultValidation.value.status, corpusValidation.value);
+    if (isValidationFailure(planValidation)) return makeRefusalResult({ ok: false, refusal: planValidation.refusal });
+    const acceptedResultFingerprint = structuralFingerprint(result);
+    if (acceptedResultFingerprint === undefined) return makeRefusalResult(refusal('invalid-result', 'paint result cannot be fingerprinted as exact own data'));
+    const atlasSnapshots: { readonly regular: AtlasSnapshot; readonly bold: AtlasSnapshot } = {
+      regular: {
+        role: 'regular',
+        width: corpusValidation.value.regular.width,
+        height: corpusValidation.value.regular.height,
+        alphaBytes: corpusValidation.value.regular.alphaBytes,
+      },
+      bold: {
+        role: 'bold',
+        width: corpusValidation.value.bold.width,
+        height: corpusValidation.value.bold.height,
+        alphaBytes: corpusValidation.value.bold.alphaBytes,
+      },
+    };
+    const factoryValidation = validatedFactory(options);
+    if (isValidationFailure(factoryValidation)) return makeRefusalResult({ ok: false, refusal: factoryValidation.refusal });
+
+    const atlasSurfaces = new Map<'regular' | 'bold', X4UiCanvasSurface>();
+    for (const role of planValidation.value.atlasRoles) {
+      const binding = atlasSnapshots[role];
+      const staged = stageAtlas(factoryValidation.value, binding);
+      if (isValidationFailure(staged)) return makeRefusalResult({ ok: false, refusal: staged.refusal });
+      atlasSurfaces.set(role, staged.value.surface);
+    }
+
+    const composite = allocateSurface(
+      factoryValidation.value,
+      planValidation.value.width,
+      planValidation.value.height,
+      'composite',
+      false,
+    );
+    if (isValidationFailure(composite)) return makeRefusalResult({ ok: false, refusal: composite.refusal });
+    const compositeApi = composite.value.api as PaintApi;
+    const operations = buildOperations(planValidation.value, atlasSurfaces);
+    if (isValidationFailure(operations)) return makeRefusalResult({ ok: false, refusal: operations.refusal });
+    try {
+      for (const operation of operations.value) operation(compositeApi);
+    } catch {
+      return makeRefusalResult(refusal('surface-failure', 'renderer-owned composite Canvas paint failed'));
+    }
+
+    const finalFingerprint = structuralFingerprint(result);
+    if (finalFingerprint === undefined || finalFingerprint !== acceptedResultFingerprint || !isX4UiCorpusCanonicalSuccess(corpus)) {
+      return makeRefusalResult(refusal('post-validation-mutation', 'paint result or canonical corpus changed during renderer callbacks'));
+    }
+    const commandIds = planValidation.value.flattened.map(item => item.id);
+    return makeRenderedResult(composite.value.surface, planValidation.value.width, planValidation.value.height, commandIds, planValidation.value.atlasRoles);
+  } catch {
+    return makeRefusalResult(refusal('invalid-input', 'renderer rejected malformed input without producing a product exception'));
+  }
+}
+
+export const renderX4UiCanvas = renderX4UiPaintPlanToCanvas;

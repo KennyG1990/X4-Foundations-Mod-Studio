@@ -48,6 +48,21 @@ export const toSafeModId = (name: string): string => {
   return safe || 'x4_md_studio_mod';
 };
 
+/** Resolve the artifact/deploy folder id using the existing imported-workspace precedence. */
+export const resolveWorkspaceArtifactId = (
+  workspace: { sourceFolder?: unknown; contentId?: unknown; name?: unknown } | null | undefined,
+): string => {
+  if (workspace && typeof workspace.sourceFolder === 'string' && workspace.sourceFolder) {
+    const base = workspace.sourceFolder.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || '';
+    const fromFolder = toSafeModId(base);
+    if (fromFolder) return fromFolder;
+  }
+  const cid = workspace?.contentId;
+  return (typeof cid === 'string' && /^[A-Za-z][\w.-]*$/.test(cid))
+    ? cid
+    : toSafeModId(typeof workspace?.name === 'string' ? workspace.name : '');
+};
+
 /**
  * Workspace version → X4 content.xml version integer (X4 shows 100 as "1.00").
  * Audit #1 (2026-07-10): format-aware. A PURE INTEGER is treated as ALREADY being the X4
@@ -360,15 +375,15 @@ export const hasEffectiveAuthoredOutput = (workspace: ModWorkspace): boolean => 
     || (enabled('library') && (included(workspace.wares) || included(workspace.jobs)))
     || (enabled('translations') && included(workspace.tFiles))
     || (enabled('patches') && included(workspace.xmlPatches))
-    || !!workspace.customLua?.trim()
+    || (enabled('ui') && !!workspace.customLua?.trim())
     || !!workspace.integrationContract
     || modeledOriginalHasPayload
     || passthroughHasPayload;
 };
 
-export const validatePackageReadiness = (workspace: ModWorkspace): PackageDiagnostic[] => {
+export const validatePackageReadiness = (workspace: ModWorkspace, artifactId?: string): PackageDiagnostic[] => {
   const reports: PackageDiagnostic[] = [];
-  const modId = toSafeModId(workspace.name);
+  const modId = artifactId?.trim() || resolveWorkspaceArtifactId(workspace);
 
   if (!workspace.name?.trim()) {
     reports.push({
@@ -439,28 +454,169 @@ export const validatePackageReadiness = (workspace: ModWorkspace): PackageDiagno
     });
   }
 
-  // P5: custom Lua is written verbatim to ui/<id>_custom.lua regardless of the analyzer, so
-  // broken Lua would ship while the package badge stays green. Surface syntax errors here.
-  if (workspace.customLua && workspace.customLua.trim()) {
+  // P5: custom Lua is written verbatim to ui/<id>_custom.lua when UI output is enabled, so
+  // analyze the exact bytes that the package will contain and carry every analyzer finding
+  // through without changing its severity, location, code, or message.
+  const customLuaPath = `ui/${modId}_custom.lua`;
+  if (workspace.compileSettings?.ui !== false && workspace.customLua && workspace.customLua.trim()) {
     try {
       const lua = analyzeLuaFiles([{
-        rel: `ui/${modId}_custom.lua`,
+        rel: customLuaPath,
         text: workspace.customLua,
         source: 'loose',
-        sourcePath: `ui/${modId}_custom.lua`,
+        sourcePath: customLuaPath,
         extension: { folder: modId, id: modId, name: workspace.name },
       }]);
       for (const f of lua.findings) {
-        if (f.severity === 'error') {
-          reports.push({
-            severity: 'error',
-            message: `Custom Lua won't compile (${f.message}). It ships verbatim — fix it before packaging.`,
-            category: 'egosoft'
-          });
-        }
+        reports.push({
+          severity: f.severity,
+          code: f.code,
+          filePath: f.sourcePath || f.rel || customLuaPath,
+          line: f.line,
+          message: f.message,
+          domain: 'ui_layout',
+          category: 'egosoft'
+        });
       }
-    } catch { /* analyzer unavailable — never block the readiness report */ }
+    } catch {
+      reports.push({
+        severity: 'info',
+        code: 'x4-ui.analysis-unavailable',
+        filePath: customLuaPath,
+        message: 'Custom Lua was not statically verified because the Lua analyzer failed unexpectedly. Package readiness is not clean; inspect the analyzer failure before relying on this output.',
+        domain: 'ui_layout',
+        category: 'egosoft'
+      });
+    }
   }
 
   return reports;
 };
+
+export function runPackageReadinessParitySelftest() {
+  const checks: { name: string; pass: boolean; detail?: unknown }[] = [];
+  const ok = (name: string, pass: boolean, detail?: unknown) => checks.push({ name, pass, detail });
+  const base = {
+    id: 'package_parity_fixture',
+    name: 'Package Parity Fixture',
+    version: '1.0.0',
+    author: 'Forge',
+    description: 'Parity fixture',
+    nodes: [],
+    links: [],
+    uiWidgets: [],
+    uiTheme: { backgroundColor: '#000', borderColor: '#000', accentColor: '#0ff', opacity: 1, showIcons: true },
+    compileSettings: { md: false, ui: true, ai: false, library: false, translations: false, patches: false },
+  } as ModWorkspace;
+
+  const importedIdentity = {
+    ...base,
+    sourceFolder: 'F:\\Mods\\x4_ai_influence - Copy\\',
+    contentId: 'x4_ai_influence',
+    name: 'AI Influence Friendly Name',
+    customLua: 'frame:addTable(13)',
+  };
+  const importedIdentityFinding = validatePackageReadiness(importedIdentity)
+    .find(finding => finding.code === 'x4-ui.add-table-column-limit');
+  ok(
+    'artifact_id_prefers_source_folder_over_content_id_and_name',
+    resolveWorkspaceArtifactId(importedIdentity) === 'x4_ai_influence_copy',
+    resolveWorkspaceArtifactId(importedIdentity),
+  );
+  ok(
+    'readiness_diagnostic_path_matches_resolved_artifact_id',
+    importedIdentityFinding?.filePath === 'ui/x4_ai_influence_copy_custom.lua',
+    importedIdentityFinding,
+  );
+  ok(
+    'artifact_id_uses_valid_content_id_when_source_folder_is_absent',
+    resolveWorkspaceArtifactId({ ...base, contentId: 'valid.content-id', name: 'Display Name' }) === 'valid.content-id',
+    resolveWorkspaceArtifactId({ ...base, contentId: 'valid.content-id', name: 'Display Name' }),
+  );
+  ok(
+    'artifact_id_falls_back_to_safe_name_for_invalid_content_id',
+    resolveWorkspaceArtifactId({ ...base, contentId: 'invalid content/id', name: 'Friendly Name' }) === 'friendly_name',
+    resolveWorkspaceArtifactId({ ...base, contentId: 'invalid content/id', name: 'Friendly Name' }),
+  );
+
+  const fatal = validatePackageReadiness({
+    ...base,
+    name: 'Parity Fatal',
+    customLua: 'frame:addTable(24)',
+  });
+  const fatalFinding = fatal.find(finding => finding.code === 'x4-ui.add-table-column-limit');
+  ok(
+    'readiness_preserves_fatal_lua_location_and_failure_mode',
+    fatalFinding?.severity === 'error'
+      && fatalFinding.filePath === 'ui/parity_fatal_custom.lua'
+      && fatalFinding.line === 1
+      && fatalFinding.domain === 'ui_layout'
+      && fatalFinding.message.includes('Failure mode: Engine refuses the ENTIRE frame')
+      && !fatalFinding.message.includes("Custom Lua won't compile"),
+    fatalFinding,
+  );
+
+  const warning = validatePackageReadiness({
+    ...base,
+    name: 'Parity Warning',
+    customLua: [
+      'local menu = { name = "sample" }',
+      'menu.frame = Helper.createFrameHandle(menu)',
+      'Helper.registerMenu(menu)',
+      'OpenMenu(menu.name)',
+      'local table = menu.frame:addTable(2, { width = 100, height = 100 })',
+      'table:addRow({{ text = "a" }, { text = "b" }}, { height = 200 })',
+    ].join('\n'),
+  });
+  const warningFinding = warning.find(finding => finding.code === 'x4-ui.row-height-budget');
+  ok(
+    'readiness_preserves_x4_warning_without_blocking',
+    warningFinding?.severity === 'warning'
+      && warningFinding.filePath === 'ui/parity_warning_custom.lua'
+      && warningFinding.domain === 'ui_layout'
+      && warningFinding.message.includes('Literal row heights sum to 200')
+      && !warning.some(finding => finding.severity === 'error'),
+    warningFinding,
+  );
+
+  const dynamic = validatePackageReadiness({
+    ...base,
+    name: 'Parity Dynamic',
+    customLua: 'frame:addTable(columns)',
+  });
+  const dynamicFinding = dynamic.find(finding => finding.code === 'x4-ui.verification-gap');
+  ok(
+    'readiness_keeps_dynamic_ui_nonblocking_and_explicit',
+    dynamicFinding?.severity === 'info'
+      && dynamicFinding.filePath === 'ui/parity_dynamic_custom.lua'
+      && dynamicFinding.domain === 'ui_layout'
+      && dynamicFinding.message.includes('Not statically verified')
+      && !dynamic.some(finding => finding.severity === 'error' && finding.code === 'x4-ui.verification-gap'),
+    dynamicFinding,
+  );
+
+  const disabled = { ...base, name: 'Parity Disabled', compileSettings: { ...base.compileSettings, ui: false }, customLua: 'return true' };
+  const disabledReports = validatePackageReadiness(disabled);
+  ok(
+    'disabled_custom_lua_is_not_effective_authored_output',
+    !hasEffectiveAuthoredOutput(disabled)
+      && disabledReports.some(finding => finding.code === 'package.empty_extension' && finding.severity === 'error'),
+    disabledReports,
+  );
+
+  const suppliedArtifact = validatePackageReadiness({
+    ...base,
+    name: 'Display Name Is Not The Artifact Id',
+    customLua: 'frame:addTable(13)',
+  }, 'imported_artifact_id');
+  const suppliedArtifactFinding = suppliedArtifact.find(finding => finding.code === 'x4-ui.add-table-column-limit');
+  ok(
+    'readiness_uses_supplied_artifact_id_for_custom_lua_path',
+    suppliedArtifactFinding?.filePath === 'ui/imported_artifact_id_custom.lua'
+      && suppliedArtifactFinding.domain === 'ui_layout',
+    suppliedArtifactFinding,
+  );
+
+  const passed = checks.filter(check => check.pass).length;
+  return { allPassed: passed === checks.length, pass: passed === checks.length, passed, total: checks.length, checks };
+}

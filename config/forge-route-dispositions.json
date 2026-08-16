@@ -158,6 +158,8 @@
     "src/lib/x4RulePacks.selftest.ts",
     "src/lib/x4RulePacks.ts",
     "src/lib/x4RulePackTypes.ts",
+    "src/lib/x4UiCallModel.ts",
+    "src/lib/x4UiLint.ts",
     "src/lib/xmlInputLimits.ts",
     "src/lib/xmlLite.ts",
     "src/lib/xmlParser.ts",
@@ -188,7 +190,9 @@
     "src/server/workspaceReceiptService.ts",
     "src/server/workspaceSnapshotRestoreReceiptAdapter.ts",
     "src/server/workspaceSnapshotSource.ts",
-    "src/types.ts"
+    "src/server/x4UiIntegration.selftest.ts",
+    "src/types.ts",
+    "vscode-extension/src/diagnosticsMap.ts"
   ],
   "routes": {
     "DELETE /api/github/credential": {
@@ -1889,6 +1893,18 @@
       "resourceClass": "public",
       "workspaceMode": "optional"
     },
+    "GET /api/agent/round-trip-selftest": {
+      "disposition": "public-selftest",
+      "owner": "agent-api",
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
+    },
     "GET /api/agent/runtime-debugger": {
       "disposition": "canonical-capability",
       "owner": "runtime.debug.read",
@@ -1904,18 +1920,6 @@
     "GET /api/agent/runtime-debugger-selftest": {
       "disposition": "public-selftest",
       "owner": "runRuntimeDebuggerAdapterSelftest",
-      "registrations": 1,
-      "agentScopes": [
-        "read",
-        "write",
-        "deploy"
-      ],
-      "resourceClass": "public",
-      "workspaceMode": "optional"
-    },
-    "GET /api/agent/round-trip-selftest": {
-      "disposition": "public-selftest",
-      "owner": "agent-api",
       "registrations": 1,
       "agentScopes": [
         "read",
@@ -2332,6 +2336,18 @@
     "GET /api/agent/x4-rule-packs-selftest": {
       "disposition": "public-selftest",
       "owner": "runX4RulePacksSelftest",
+      "registrations": 1,
+      "agentScopes": [
+        "read",
+        "write",
+        "deploy"
+      ],
+      "resourceClass": "public",
+      "workspaceMode": "optional"
+    },
+    "GET /api/agent/x4-ui-integration-selftest": {
+      "disposition": "public-selftest",
+      "owner": "runX4UiIntegrationSelftest",
       "registrations": 1,
       "agentScopes": [
         "read",

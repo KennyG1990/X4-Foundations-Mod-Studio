@@ -137,10 +137,19 @@ export function packageAgentProject(project: ExtensionProject) {
   const cueIndex = indexCueReferences(normalized);
   const luaFiles = normalized.files
     .filter(f => f.path.toLowerCase().endsWith('.lua'))
-    .map(f => ({ rel: f.path, text: f.content || '', source: 'loose' as const, sourcePath: 'project', extension: { folder: normalized.id, id: normalized.id, name: normalized.name } }));
+    .map(f => {
+      const rel = f.path.replace(/\\/g, '/').replace(/^\/+/, '');
+      return { rel, text: f.content || '', source: 'loose' as const, sourcePath: rel, extension: { folder: normalized.id, id: normalized.id, name: normalized.name } };
+    });
   const lua = analyzeLuaFiles(luaFiles);
   const crossFile = validateProjectCrossFile(normalized);
   const errors = structure.filter(i => i.severity === 'error').length + cueIndex.unresolved.length + lua.findings.filter(f => f.severity === 'error').length + crossFile.summary.errors;
+  const luaWarnings = lua.findings.filter(f => f.severity === 'warning').length;
+  const x4UiFiles = lua.x4UiSummary.filesAnalyzed;
+  const x4UiErrors = lua.x4UiSummary.errorCount;
+  const x4UiWarnings = lua.x4UiSummary.warningCount;
+  const x4UiUnverified = lua.x4UiSummary.unverifiedCount;
+  const x4UiTruncated = lua.x4UiSummary.truncatedCount;
   return {
     ok: errors === 0,
     project: normalized,
@@ -151,6 +160,12 @@ export function packageAgentProject(project: ExtensionProject) {
       unresolvedCueRefs: cueIndex.unresolved.length,
       luaFiles: lua.filesScanned,
       luaErrors: lua.findings.filter(f => f.severity === 'error').length,
+      luaWarnings,
+      x4UiFiles,
+      x4UiErrors,
+      x4UiWarnings,
+      x4UiUnverified,
+      x4UiTruncated,
       crossFileErrors: crossFile.summary.errors,
       mdLuaMissingRegisters: crossFile.summary.mdLuaMissingRegisters,
       luaMdMissingListeners: crossFile.summary.luaMdMissingListeners,
@@ -177,7 +192,42 @@ export function runProjectOrchestrationSelftest() {
   ok('package_returns_file_manifest', pkg.ok && Object.keys(pkg.files).includes('content.xml'), pkg.summary);
   ok('package_validates_cross_file_refs', pkg.validation.cueIndex.references.some(r => r.scope === 'cross_file' && r.resolved), pkg.validation.cueIndex);
   ok('package_luaparse_clean', pkg.summary.luaFiles >= 2 && pkg.summary.luaErrors === 0, pkg.validation.lua.findings);
+  ok('package_exposes_shared_x4_summary', pkg.summary.x4UiFiles >= 2 && pkg.summary.x4UiErrors === 0 && pkg.summary.x4UiWarnings === 0 && pkg.summary.x4UiUnverified === 0 && pkg.summary.x4UiTruncated === 0, pkg.summary);
   ok('package_cross_file_validation_clean', pkg.summary.crossFileErrors === 0 && pkg.validation.crossFile.ok, pkg.validation.crossFile.findings);
+
+  const dynamicProject = createProjectFile(created, { path: 'ui/dynamic.lua', content: 'frame:addTable(columns)' });
+  const dynamicPkg = packageAgentProject(dynamicProject);
+  ok(
+    'package_dynamic_x4_ui_is_nonblocking_but_unverified',
+    dynamicPkg.ok && dynamicPkg.summary.x4UiUnverified >= 1 && dynamicPkg.summary.x4UiErrors === 0,
+    dynamicPkg.summary,
+  );
+
+  const warningProject = createProjectFile(created, {
+    path: 'ui/warning.lua',
+    content: [
+      'local menu = { name = "sample" }',
+      'menu.frame = Helper.createFrameHandle(menu)',
+      'Helper.registerMenu(menu)',
+      'OpenMenu(menu.name)',
+      'local table = menu.frame:addTable(2, { width = 100, height = 100 })',
+      'table:addRow({{ text = "a" }, { text = "b" }}, { height = 200 })',
+    ].join('\n'),
+  });
+  const warningPkg = packageAgentProject(warningProject);
+  ok(
+    'package_x4_warning_is_nonblocking_and_counted',
+    warningPkg.ok && warningPkg.summary.x4UiWarnings >= 1 && warningPkg.summary.x4UiErrors === 0,
+    warningPkg.summary,
+  );
+
+  const fatalProject = createProjectFile(created, { path: 'ui/fatal.lua', content: 'frame:addTable(13)' });
+  const fatalPkg = packageAgentProject(fatalProject);
+  ok(
+    'package_blocks_x4_column_error',
+    !fatalPkg.ok && fatalPkg.summary.x4UiErrors >= 1 && fatalPkg.summary.luaErrors >= 1,
+    fatalPkg.summary,
+  );
 
   const badPkg = packageAgentProject(createProjectFile(created, { path: '../evil.lua', content: 'return true' }));
   ok('package_blocks_invalid_paths', !badPkg.ok && badPkg.validation.structure.some(i => i.code === 'invalid_path'), badPkg.validation.structure);

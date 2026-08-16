@@ -104,12 +104,12 @@ export function runModDoctor(
     });
   }
 
-  validatePackageReadiness(workspace).forEach(diagnostic => {
+  validatePackageReadiness(workspace, modId).forEach(diagnostic => {
     diagnostics.push({
       ...diagnostic,
-      code: diagnostic.code || 'package.readiness',
-      domain: 'manifest',
-      filePath: 'content.xml'
+      code: diagnostic.code ?? 'package.readiness',
+      domain: (diagnostic.domain as ModDoctorDiagnostic['domain']) ?? 'manifest',
+      filePath: diagnostic.filePath ?? 'content.xml'
     });
   });
 
@@ -150,13 +150,18 @@ export function runModDoctor(
       }
     });
 
-  } else if ((workspace.uiWidgets || []).length > 0) {
+  } else if ((workspace.uiWidgets || []).length > 0 || !!workspace.customLua?.trim()) {
+    const uiWidgetCount = (workspace.uiWidgets || []).length;
+    const disabledUiOutputs = [
+      uiWidgetCount > 0 ? `${uiWidgetCount} UI widget(s)` : '',
+      workspace.customLua?.trim() ? 'custom Lua' : ''
+    ].filter(Boolean).join(' and ');
     push(diagnostics, {
       severity: 'info',
       category: 'egosoft',
       code: 'build.ui_disabled',
       domain: 'build',
-      message: `${workspace.uiWidgets.length} UI widget(s) exist, but UI output is disabled in compile settings.`
+      message: `${disabledUiOutputs} exist, but UI output is disabled in compile settings.`
     });
   }
 
@@ -493,9 +498,35 @@ export function runModDoctorReferenceSelftest() {
   const canonical = runModDoctor(workspace, files, 'doctor_reference_fixture', { canonicalAiScripts: new Set(['order.patrol']) });
   const unknownWorkspace = { ...workspace, jobs: workspace.jobs!.map(job => ({ ...job, taskScript: 'order.definitely_missing' })) };
   const unknown = runModDoctor(unknownWorkspace, files, 'doctor_reference_fixture', { canonicalAiScripts: new Set(['order.patrol']) });
+  const luaWorkspace = {
+    ...workspace,
+    name: 'Doctor Display Name',
+    compileSettings: { ...workspace.compileSettings, ui: true },
+    customLua: 'frame:addTable(13)',
+  } as ModWorkspace;
+  const luaDoctor = runModDoctor(luaWorkspace, files, 'doctor_artifact_id');
+  const luaFinding = luaDoctor.find(finding => finding.code === 'x4-ui.add-table-column-limit');
+  const disabledWorkspace = {
+    ...workspace,
+    customLua: 'return true',
+  } as ModWorkspace;
+  const disabledDoctor = runModDoctor(disabledWorkspace, files, 'doctor_reference_fixture');
   const checks = [
     { name: 'canonical AI task does not false-warn', pass: !canonical.some(finding => finding.code === 'job.task_script_missing') },
     { name: 'unknown AI task remains an advisory warning', pass: unknown.some(finding => finding.code === 'job.task_script_missing' && finding.severity === 'warning') },
+    {
+      name: 'readiness Lua diagnostic keeps its code path and line',
+      pass: luaFinding?.code === 'x4-ui.add-table-column-limit'
+        && luaFinding.filePath === 'ui/doctor_artifact_id_custom.lua'
+        && luaFinding.domain === 'ui_layout'
+        && luaFinding.line === 1,
+      detail: luaFinding,
+    },
+    {
+      name: 'disabled UI information includes custom Lua',
+      pass: disabledDoctor.some(finding => finding.code === 'build.ui_disabled' && finding.message.includes('custom Lua')),
+      detail: disabledDoctor,
+    },
   ];
   const passed = checks.filter(check => check.pass).length;
   return { allPassed: passed === checks.length, pass: passed === checks.length, passed, total: checks.length, checks };

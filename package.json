@@ -46,7 +46,9 @@
     "test:artifact-pipeline": "tsx scripts/artifact-pipeline-check.ts",
     "test:writers": "node scripts/durable-writer-audit.mjs --selftest && node scripts/durable-writer-audit.mjs && tsx vscode-extension/src/durableWrite.ts",
     "test:x4-merge-law-oracle": "tsx scripts/x4-merge-law-oracle.selftest.ts && tsx scripts/x4-merge-law-oracle-fixture.selftest.ts && tsx scripts/x4-merge-law-oracle-fs.selftest.ts && tsx scripts/x4-merge-law-oracle-evidence.selftest.ts",
-    "test:x4-rule-packs": "tsx scripts/x4-rule-packs.selftest.ts"
+    "test:x4-rule-packs": "tsx scripts/x4-rule-packs.selftest.ts",
+    "test:x4-ui-integration": "tsx src/server/x4UiIntegration.selftest.ts",
+    "test:x4-ui-corpus": "tsx scripts/x4-ui-lint-corpus-check.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

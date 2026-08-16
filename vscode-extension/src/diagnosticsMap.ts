@@ -96,13 +96,31 @@ export function runDiagnosticsMapSelftest() {
   ok("unanchored_counted_when_no_content_xml", noContent.unanchored === 1 && noContent.byFile.size === 0);
   const empty = mapFlatFindings([], []);
   ok("empty_inputs_safe", empty.total === 0 && empty.unanchored === 0);
+  const luaFailureMessage = "Literal addTable(24) exceeds the measured X4 mod boundary. Failure mode: Engine refuses the ENTIRE frame: no partial draw/Lua error; UI auto-reloads. Next action: verify this boundary in-game.";
+  const luaResult = mapFlatFindings([{
+    severity: "error",
+    message: luaFailureMessage,
+    code: "x4-ui.add-table-column-limit",
+    filePath: "ui/too_many_columns.lua",
+    line: 3,
+  }], ["content.xml", "ui/too_many_columns.lua"]);
+  const luaDiagnostic = luaResult.byFile.get("ui/too_many_columns.lua")?.[0];
+  ok(
+    "lua_path_code_line_message_preserved",
+    luaDiagnostic?.relPath === "ui/too_many_columns.lua"
+      && luaDiagnostic.line === 2
+      && luaDiagnostic.severity === "error"
+      && luaDiagnostic.code === "x4-ui.add-table-column-limit"
+      && luaDiagnostic.message === luaFailureMessage,
+  );
 
   const passed = checks.filter(c => c.pass).length;
   return { allPassed: passed === checks.length, passed, total: checks.length, checks };
 }
 
 // Headless runner: `npx tsx vscode-extension/src/diagnosticsMap.ts`
-if (typeof require !== "undefined" && require.main === module) {
+const invokedScript = process.argv[1]?.replace(/\\/g, "/");
+if (invokedScript?.endsWith("vscode-extension/src/diagnosticsMap.ts")) {
   const r = runDiagnosticsMapSelftest();
   console.log(`diagnosticsMap selftest: ${r.passed}/${r.total} allPassed=${r.allPassed}`);
   for (const c of r.checks) if (!c.pass) console.log("FAIL", c.name, c.detail || "");

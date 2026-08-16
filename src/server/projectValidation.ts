@@ -49,6 +49,7 @@ import { lintFactionRelations, type FactionLintFinding } from "../lib/factionsLi
 import { lintGodMacros, type GodLintFinding } from "../lib/godLint";
 import { lintReferenceLiterals, type ReferenceLiteralFinding } from "../lib/referenceLint";
 import { buildProjectSymbols, type ProjectVariableSymbol } from "../lib/projectSymbols";
+import { analyzeLuaFiles, type LuaStaticAnalysisResult } from "../lib/luaStaticAnalysis";
 import {
   applyProjectRuleSuppressions,
   evaluateProjectRuleContracts,
@@ -86,6 +87,14 @@ export interface ProjectValidationResult {
   ok: boolean;
   summary: {
     files: number;
+    luaFiles: number;
+    luaErrors: number;
+    luaWarnings: number;
+    x4UiFiles: number;
+    x4UiErrors: number;
+    x4UiWarnings: number;
+    x4UiUnverified: number;
+    x4UiTruncated: number;
     structuralErrors: number;
     definedCues: number;
     cueReferences: number;
@@ -114,6 +123,7 @@ export interface ProjectValidationResult {
     activeWarnings: number;
   };
   structure: ReturnType<typeof validateProjectStructure>;
+  lua: LuaStaticAnalysisResult;
   cueIndex: ReturnType<typeof indexCueReferences>;
   crossFile: ReturnType<typeof validateProjectCrossFile>;
   schema: {
@@ -230,6 +240,20 @@ export function runProjectValidation(
 
   const cueIndex = indexCueReferences(project);
   const crossFile = validateProjectCrossFile(project);
+  const lua = analyzeLuaFiles(project.files
+    .filter(file => /\.lua$/i.test(file.path) && typeof file.content === "string")
+    .map(file => {
+      const rel = file.path.replace(/\\/g, "/");
+      return {
+        rel,
+        text: file.content as string,
+        source: "loose" as const,
+        sourcePath: rel,
+        extension: { folder: project.id, id: project.id },
+      };
+    }));
+  const luaErrors = lua.findings.filter(finding => finding.severity === "error").length;
+  const luaWarnings = lua.findings.filter(finding => finding.severity === "warning").length;
   const references = referencesForProject(project, opts.references);
   const structuralErrors = structure.filter(i => i.severity === "error").length;
 
@@ -479,9 +503,18 @@ export function runProjectValidation(
   });
   const result: ProjectValidationResult = {
     ok: structuralErrors === 0 && cueIndex.unresolved.length === 0 && crossFile.ok
-      && schemaErrors === 0 && aiscriptErrors === 0 && diffErrors === 0 && rules.valid,
+      && schemaErrors === 0 && aiscriptErrors === 0 && diffErrors === 0 && rules.valid
+      && luaErrors === 0,
     summary: {
       files: project.files.length,
+      luaFiles: lua.filesScanned,
+      luaErrors,
+      luaWarnings,
+      x4UiFiles: lua.x4UiSummary.filesAnalyzed,
+      x4UiErrors: lua.x4UiSummary.errorCount,
+      x4UiWarnings: lua.x4UiSummary.warningCount,
+      x4UiUnverified: lua.x4UiSummary.unverifiedCount,
+      x4UiTruncated: lua.x4UiSummary.truncatedCount,
       structuralErrors,
       definedCues: cueIndex.defined.length,
       cueReferences: cueIndex.references.length,
@@ -510,6 +543,7 @@ export function runProjectValidation(
       activeWarnings: 0,
     },
     structure,
+    lua,
     cueIndex,
     crossFile,
     schema: {
@@ -561,6 +595,17 @@ function flattenProjectValidationRaw(result: ProjectValidationResult): FlatProje
   const out: FlatProjectDiagnostic[] = [];
   for (const i of result.structure) {
     out.push({ severity: i.severity, code: `project.${i.code}`, filePath: i.path, message: i.detail });
+  }
+  for (const finding of result.lua.findings) {
+    const flatFinding: FlatProjectDiagnostic = {
+      severity: finding.severity,
+      code: finding.code,
+      filePath: finding.rel,
+      line: finding.line,
+      message: finding.message,
+    };
+    if (finding.symbol) flatFinding.sourceRef = finding.symbol;
+    out.push(flatFinding);
   }
   for (const r of result.cueIndex.unresolved) {
     out.push({ severity: "error", code: "project.unresolved_cue_ref", filePath: r.file, sourceRef: r.ref, message: `Cue reference "${r.ref}" resolves to nothing in this project.` });
@@ -636,6 +681,104 @@ function flattenProjectValidationRaw(result: ProjectValidationResult): FlatProje
 /** Active diagnostic view after exact, warning-only project rules are applied. */
 export function flattenProjectValidation(result: ProjectValidationResult): FlatProjectDiagnostic[] {
   return applyProjectRuleSuppressions(result.rules, flattenProjectValidationRaw(result)).active;
+}
+
+/** Focused B119 proof: shared validation consumes the real Lua analyzer and flat view. */
+export function runProjectValidationSelftest(): { pass: boolean; checks: { name: string; pass: boolean; detail?: string }[] } {
+  const contentXml = [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    '<content id="b119-project-validation-selftest" name="B119 project validation selftest" description="Deterministic selftest" author="OpenAI" version="1.0" date="2026-08-10" />',
+    '',
+  ].join("\n");
+  const cleanLua = [
+    "local menu = { name = 'B119' }",
+    "local frame = Helper.createFrameHandle(menu, {})",
+    "local table = frame:addTable(12)",
+    "OpenMenu('B119', nil, nil, true)",
+    '',
+  ].join("\n");
+  const dynamicLua = [
+    "local menu = { name = 'B119' }",
+    "local frame = Helper.createFrameHandle(menu, {})",
+    "local count = getCount()",
+    "local table = frame:addTable(count)",
+    "OpenMenu('B119', nil, nil, true)",
+    '',
+  ].join("\n");
+  const warningLua = [
+    "local menu = { name = 'B119' }",
+    "local frame = Helper.createFrameHandle(menu, {})",
+    "local table = frame:addTable(2)",
+    "table:setColWidthPercent(1, 40)",
+    "table:setColWidthPercent(2, 40)",
+    "OpenMenu('B119', nil, nil, true)",
+    '',
+  ].join("\n");
+  const projectFor = (luaPath: string, luaText: string): ExtensionProject => ({
+    id: "b119-project-validation-selftest",
+    name: "B119 project validation selftest",
+    files: [
+      { path: "content.xml", kind: classifyPath("content.xml"), content: contentXml },
+      { path: luaPath, kind: classifyPath(luaPath), content: luaText },
+    ],
+  });
+  const clean = runProjectValidation(projectFor("ui/clean12.lua", cleanLua));
+  const fatal = runProjectValidation(projectFor("ui/too_many_columns.lua", cleanLua.replace("addTable(12)", "addTable(13)")));
+  const dynamic = runProjectValidation(projectFor("ui/dynamic_count.lua", dynamicLua));
+  const warning = runProjectValidation(projectFor("ui/partial_columns.lua", warningLua));
+  const cleanFlat = flattenProjectValidation(clean);
+  const fatalFlat = flattenProjectValidation(fatal);
+  const dynamicFlat = flattenProjectValidation(dynamic);
+  const fatalFindings = fatalFlat.filter(finding =>
+    finding.code === "x4-ui.add-table-column-limit" && finding.filePath === "ui/too_many_columns.lua"
+  );
+  const fatalFinding = fatalFindings[0];
+  const warningFlat = flattenProjectValidation(warning);
+  const checks = [
+    {
+      name: "clean_12_columns_remains_ok",
+      pass: clean.ok
+        && clean.summary.luaFiles === 1
+        && clean.summary.luaErrors === 0
+        && clean.summary.x4UiErrors === 0
+        && clean.summary.x4UiWarnings === 0
+        && !cleanFlat.some(finding => finding.filePath === "ui/clean12.lua" && (finding.severity === "error" || finding.severity === "warning")),
+    },
+    {
+      name: "literal_13_columns_is_fatal_and_source_located",
+      pass: !fatal.ok
+        && fatal.summary.luaErrors > 0
+        && fatal.summary.x4UiErrors === 1
+        && fatalFindings.length === 1
+        && fatalFinding?.severity === "error"
+        && fatalFinding.line === 3
+        && fatalFinding.message.includes("ENTIRE frame")
+        && fatalFinding.message.includes("Failure mode:"),
+    },
+    {
+      name: "dynamic_columns_are_one_unverified_info_summary",
+      pass: dynamic.ok
+        && dynamic.summary.luaErrors === 0
+        && dynamic.summary.x4UiUnverified === 1
+        && dynamic.summary.x4UiTruncated === 0
+        && dynamicFlat.filter(finding => finding.code === "x4-ui.verification-gap").length === 1
+        && dynamicFlat.filter(finding => finding.code === "x4-ui.verification-gap")[0]?.severity === "info"
+        && !dynamicFlat.some(finding => finding.filePath === "ui/dynamic_count.lua" && finding.severity === "error"),
+    },
+    {
+      name: "x4_ui_warning_does_not_fail_validation",
+      pass: warning.ok
+        && warning.summary.luaErrors === 0
+        && warning.summary.x4UiWarnings > 0
+        && warning.summary.x4UiErrors === 0
+        && warningFlat.some(finding =>
+          finding.code === "x4-ui.column-percentage-total"
+            && finding.filePath === "ui/partial_columns.lua"
+            && finding.severity === "warning"
+        ),
+    },
+  ];
+  return { pass: checks.every(check => check.pass), checks };
 }
 
 /* ------------------------------------------------------------------ *

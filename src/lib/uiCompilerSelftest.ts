@@ -5,7 +5,7 @@
  * Deterministic contract for the visual UI package emitter. This guards the exact
  * regression where UIBuilder previewed a runnable menu while package output was a scaffold.
  */
-import { generateUILuaScript, sanitizeWorkspace, type ModWorkspace, type UIWidget } from '../types';
+import { generateUIIndexXML, generateUILuaScript, sanitizeWorkspace, type ModWorkspace, type UIWidget } from '../types';
 import { analyzeLuaFiles } from './luaStaticAnalysis';
 import { runModDoctor } from './modDoctor';
 import { runPackageStatusSelftest } from './packageStatus';
@@ -22,6 +22,8 @@ const widget = (type: UIWidget['type'], index: number, extra: Partial<UIWidget> 
   includeInBuild: true,
   ...extra,
 });
+
+const indexFiles = (xml: string): string[] => [...xml.matchAll(/<file\s+name="([^"]+)"\s*\/>/g)].map(match => match[1]);
 
 export function runUiCompilerSelftest() {
   const checks: { name: string; pass: boolean; detail?: unknown }[] = [];
@@ -62,6 +64,31 @@ export function runUiCompilerSelftest() {
     name: 'Normal Menu', nodes: [], links: [], uiWidgets: [widget('button', 1)],
   } as Partial<ModWorkspace>), 'normal_menu');
   ok('normal_menu_does_not_auto_open', !normal.includes('autoOpenWhenReady') && normal.includes('normal_menu_menu.open'));
+
+  const widgetOnlyIndex = generateUIIndexXML(ws, 'ui_compiler_test');
+  const widgetOnlyFiles = indexFiles(widgetOnlyIndex);
+  ok('index_widget_only_registers_generated', widgetOnlyFiles.length === 1 && widgetOnlyFiles[0] === 'ui/ui_compiler_test.lua');
+  ok('index_widget_only_has_no_custom', !widgetOnlyFiles.includes('ui/ui_compiler_test_custom.lua'));
+
+  const customOnlyWorkspace = sanitizeWorkspace({
+    name: 'Custom Lua Only', nodes: [], links: [], uiWidgets: [], customLua: 'return {}\n',
+  } as Partial<ModWorkspace>);
+  const customOnlyFiles = indexFiles(generateUIIndexXML(customOnlyWorkspace, 'custom_only'));
+  ok('index_custom_only_registers_custom', customOnlyFiles.length === 1 && customOnlyFiles[0] === 'ui/custom_only_custom.lua');
+  ok('index_custom_only_has_no_generated', !customOnlyFiles.includes('ui/custom_only.lua'));
+
+  const bothWorkspace = sanitizeWorkspace({
+    name: 'Generated And Custom Lua', nodes: [], links: [], uiWidgets: [widget('button', 1)], customLua: '-- custom\n',
+  } as Partial<ModWorkspace>);
+  const bothFiles = indexFiles(generateUIIndexXML(bothWorkspace, 'both'));
+  ok('index_both_has_exactly_two_unique_entries', bothFiles.length === 2 && new Set(bothFiles).size === 2);
+  ok('index_both_orders_generated_before_custom', bothFiles[0] === 'ui/both.lua' && bothFiles[1] === 'ui/both_custom.lua');
+
+  const whitespaceCustomWorkspace = sanitizeWorkspace({
+    name: 'Whitespace Custom Lua', nodes: [], links: [], uiWidgets: [], customLua: ' \n\t ',
+  } as Partial<ModWorkspace>);
+  const whitespaceCustomFiles = indexFiles(generateUIIndexXML(whitespaceCustomWorkspace, 'whitespace_custom'));
+  ok('index_whitespace_custom_is_not_registered', whitespaceCustomFiles.length === 0 && !whitespaceCustomFiles.includes('ui/whitespace_custom_custom.lua'));
 
   const staticResult = analyzeLuaFiles([{
     rel: 'ui/ui_compiler_test.lua',

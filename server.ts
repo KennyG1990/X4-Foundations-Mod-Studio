@@ -33,6 +33,7 @@ import {
 } from "./src/types";
 import {
   toSafeModId,
+  resolveWorkspaceArtifactId,
   toTFileName,
   generateContentXML,
   compileScriptToXML,
@@ -106,6 +107,7 @@ import { getAiSchemaIndex, getScriptPropertyIndex, registerValidationAgentRoutes
 import { getCanonicalReferenceSets, initializeReferenceCorpus, registerReferenceRoutes, startCanonicalReferenceManifest } from "./src/server/referenceRoutes";
 import { registerBulkTransformRoutes } from "./src/server/bulkTransformRoutes";
 import { computeModDrift, fingerprintModFolder, flattenProjectValidation, getSchemaIndex, loadProjectFromDisk, runProjectValidation } from "./src/server/projectValidation";
+import { runX4UiIntegrationSelftest } from "./src/server/x4UiIntegration.selftest";
 import { buildRemediationCapsules, runAgentLoopSelftest, runRepairLoop, type LoopDiagnostic } from "./src/lib/agentLoop";
 import { assessSourceSync, hashFolderFingerprint, runCompileFidelitySelftest } from "./src/lib/compileFidelity";
 import { workspaceContentHash, workspaceSnapshotHash, runWorkspaceIdentitySelftest } from "./src/lib/workspaceIdentity";
@@ -1516,13 +1518,22 @@ function buildWorkspaceFileManifest(workspaceInput: unknown, options: { includeP
     }
   }
 
-  if (settings.ui && ws.uiWidgets?.length) {
+  const hasActiveUiWidgets = Boolean(ws.uiWidgets?.length);
+  const customLua = typeof ws.customLua === "string" ? ws.customLua : "";
+  const hasCustomLua = customLua.trim().length > 0;
+
+  if (settings.ui && (hasActiveUiWidgets || hasCustomLua)) {
     // X4-correct UI packaging: an extension-root ui.xml index registering a Lua
     // entry point under ui/. (The legacy md_ui_layouts/<id>_ui.xml used a
     // non-standard <ui_menu> schema X4 ignores; it is no longer packaged but is
     // still available as a design-time descriptor via generateUIXML.)
     files["ui.xml"] = generateUIIndexXML(ws, modId);
-    files[`ui/${modId}.lua`] = generateUILuaScript(ws, modId);
+    if (hasActiveUiWidgets) {
+      files[`ui/${modId}.lua`] = generateUILuaScript(ws, modId);
+    }
+    if (hasCustomLua) {
+      files[`ui/${modId}_custom.lua`] = customLua;
+    }
   }
 
   if (settings.ai) {
@@ -7085,13 +7096,7 @@ function effectiveModId(ws: any): string {
   // targets the directory you opened — not the content.xml display title. This keeps a copy
   // (e.g. "x4_ai_influence - Copy") a DISTINCT mod ("x4_ai_influence_copy") and stops it
   // silently deploying over the original via the copied content.xml id.
-  if (ws && typeof ws.sourceFolder === 'string' && ws.sourceFolder) {
-    const base = ws.sourceFolder.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || '';
-    const fromFolder = toSafeModId(base);
-    if (fromFolder) return fromFolder;
-  }
-  const cid = ws && ws.contentId;
-  return (typeof cid === 'string' && /^[A-Za-z][\w.-]*$/.test(cid)) ? cid : toSafeModId(ws?.name);
+  return resolveWorkspaceArtifactId(ws);
 }
 
 /** The id declared inside content.xml. Never silently rewrite an imported extension's
@@ -9394,6 +9399,7 @@ const SELFTESTS: Record<string, () => unknown> = {
   "node-toolbox-selftest": runNodeToolboxSelftest,
   "readiness-selftest": runReadinessSelftest,
   "experience-mode-selftest": runExperienceModeSelftest,
+  "x4-ui-integration-selftest": runX4UiIntegrationSelftest,
 };
 registerSelftests(app, PUBLIC_READONLY_GETS, SELFTESTS, errorMessage);
 
@@ -11673,6 +11679,74 @@ function runCompileArtifactSelftest() {
     record('patch-only workspace emits no synthetic MD file', !Object.keys(patchManifest).some(file => file.startsWith('md/')), Object.keys(patchManifest).join(', '));
     record('patch-only workspace still emits its library diff', typeof patchManifest['libraries/wares.xml'] === 'string' && patchManifest['libraries/wares.xml'].includes('<diff>'));
 
+    const b119Widget = { id: 'b119_window', type: 'window', x: 100, y: 100, w: 420, h: 300, label: 'B119 UI', properties: {} };
+    const b119CustomLua = '\r\n-- B119 custom bytes  \r\nreturn "exact"\r\n';
+    const customOnlyWorkspace = sanitizeWorkspace({
+      id: 'b119-custom-only', name: 'B119 Custom Only', version: '1.0', author: 'Forge', description: 'custom UI only',
+      nodes: [], links: [], uiWidgets: [], uiTheme: {}, customLua: b119CustomLua,
+    });
+    const customOnlyBuild = buildWorkspaceFileManifest(customOnlyWorkspace);
+    const customOnlyManifest = customOnlyBuild.files;
+    const customOnlyGeneratedPath = `ui/${customOnlyBuild.modId}.lua`;
+    const customOnlyCustomPath = `ui/${customOnlyBuild.modId}_custom.lua`;
+    const customOnlyUiIndex = typeof customOnlyManifest['ui.xml'] === 'string' ? customOnlyManifest['ui.xml'] : '';
+    record('custom-only UI emits ui index and exact custom Lua bytes',
+      customOnlyUiIndex.includes(customOnlyCustomPath)
+        && customOnlyManifest[customOnlyCustomPath] === b119CustomLua
+        && !Object.prototype.hasOwnProperty.call(customOnlyManifest, customOnlyGeneratedPath));
+    record('custom-only UI does not collapse to content.xml and README.md', Object.keys(customOnlyManifest).length > 2, Object.keys(customOnlyManifest).join(', '));
+
+    const widgetOnlyWorkspace = sanitizeWorkspace({
+      id: 'b119-widget-only', name: 'B119 Widget Only', version: '1.0', author: 'Forge', description: 'generated UI only',
+      nodes: [], links: [], uiWidgets: [b119Widget], uiTheme: {},
+    });
+    const widgetOnlyBuild = buildWorkspaceFileManifest(widgetOnlyWorkspace);
+    const widgetOnlyManifest = widgetOnlyBuild.files;
+    const widgetOnlyGeneratedPath = `ui/${widgetOnlyBuild.modId}.lua`;
+    const widgetOnlyCustomPath = `ui/${widgetOnlyBuild.modId}_custom.lua`;
+    const widgetOnlyUiIndex = typeof widgetOnlyManifest['ui.xml'] === 'string' ? widgetOnlyManifest['ui.xml'] : '';
+    record('widget-only UI keeps generated Lua and omits custom Lua',
+      typeof widgetOnlyManifest[widgetOnlyGeneratedPath] === 'string'
+        && !Object.prototype.hasOwnProperty.call(widgetOnlyManifest, widgetOnlyCustomPath)
+        && widgetOnlyUiIndex.includes(widgetOnlyGeneratedPath)
+        && !widgetOnlyUiIndex.includes(widgetOnlyCustomPath));
+
+    const bothWorkspace = sanitizeWorkspace({
+      id: 'b119-both', name: 'B119 Both', version: '1.0', author: 'Forge', description: 'generated and custom UI',
+      nodes: [], links: [], uiWidgets: [b119Widget], uiTheme: {}, customLua: b119CustomLua,
+    });
+    const bothBuild = buildWorkspaceFileManifest(bothWorkspace);
+    const bothManifest = bothBuild.files;
+    const bothGeneratedPath = `ui/${bothBuild.modId}.lua`;
+    const bothCustomPath = `ui/${bothBuild.modId}_custom.lua`;
+    const bothUiIndex = typeof bothManifest['ui.xml'] === 'string' ? bothManifest['ui.xml'] : '';
+    const bothGeneratedRegistration = bothUiIndex.indexOf(bothGeneratedPath);
+    const bothCustomRegistration = bothUiIndex.indexOf(bothCustomPath);
+    record('combined UI emits generated and exact custom Lua files',
+      typeof bothManifest[bothGeneratedPath] === 'string' && bothManifest[bothCustomPath] === b119CustomLua);
+    record('combined UI registers generated Lua before custom Lua',
+      bothGeneratedRegistration >= 0 && bothCustomRegistration >= 0 && bothGeneratedRegistration < bothCustomRegistration,
+      bothUiIndex);
+
+    const whitespaceOnlyWorkspace = sanitizeWorkspace({
+      id: 'b119-whitespace-only', name: 'B119 Whitespace Only', version: '1.0', author: 'Forge', description: 'blank custom UI',
+      nodes: [], links: [], uiWidgets: [], uiTheme: {}, customLua: ' \r\n\t ',
+    });
+    const whitespaceOnlyManifest = buildWorkspaceFileManifest(whitespaceOnlyWorkspace).files;
+    record('whitespace-only custom Lua emits no UI artifact',
+      !Object.keys(whitespaceOnlyManifest).some(file => file === 'ui.xml' || file.startsWith('ui/')),
+      Object.keys(whitespaceOnlyManifest).join(', '));
+
+    const uiDisabledWorkspace = sanitizeWorkspace({
+      id: 'b119-ui-disabled', name: 'B119 UI Disabled', version: '1.0', author: 'Forge', description: 'disabled UI output',
+      nodes: [], links: [], uiWidgets: [b119Widget], uiTheme: {}, customLua: b119CustomLua,
+      compileSettings: { ui: false },
+    });
+    const uiDisabledManifest = buildWorkspaceFileManifest(uiDisabledWorkspace).files;
+    record('UI-disabled workspace emits no UI artifact',
+      !Object.keys(uiDisabledManifest).some(file => file === 'ui.xml' || file.startsWith('ui/')),
+      Object.keys(uiDisabledManifest).join(', '));
+
     const malformedMdModel = sanitizeWorkspace({
       id: 'bad-md', name: 'Bad MD', version: '1.0', author: 'Forge', description: 'bad md',
       nodes: [{ id: 'a1', type: 'action', xmlTag: 'debug_text', label: 'orphan action', properties: { text: 'x' }, inputs: [], outputs: [] }],
@@ -11706,6 +11780,25 @@ function runCompileArtifactSelftest() {
     sourceWrite('.forgeartifact.json', JSON.stringify({ runtimeOwned: ['runtime/**'] }));
 
     const imported = importModFolder(source);
+    const importedIdentityWorkspace = {
+      ...imported.workspace,
+      sourceFolder: 'F:\\Mods\\x4_ai_influence - Copy\\',
+      contentId: 'x4_ai_influence',
+      name: 'AI Influence Friendly Name',
+      uiWidgets: [b119Widget],
+      customLua: b119CustomLua,
+      compileSettings: { ...(imported.workspace.compileSettings || {}), ui: true },
+    };
+    const importedIdentityBuild = buildWorkspaceFileManifest(importedIdentityWorkspace);
+    record('imported artifact id follows source folder', importedIdentityBuild.modId === 'x4_ai_influence_copy', importedIdentityBuild.modId);
+    record(
+      'imported UI filenames follow source folder identity',
+      Object.prototype.hasOwnProperty.call(importedIdentityBuild.files, 'ui/x4_ai_influence_copy.lua')
+        && Object.prototype.hasOwnProperty.call(importedIdentityBuild.files, 'ui/x4_ai_influence_copy_custom.lua')
+        && !Object.prototype.hasOwnProperty.call(importedIdentityBuild.files, 'ui/x4_ai_influence.lua')
+        && !Object.prototype.hasOwnProperty.call(importedIdentityBuild.files, 'ui/ai_influence_friendly_name.lua'),
+      Object.keys(importedIdentityBuild.files).filter(file => file.startsWith('ui/')).join(', '),
+    );
     const target = path.join(deployRoot, effectiveModId(imported.workspace));
     fs.mkdirSync(path.join(target, 'runtime'), { recursive: true });
     fs.writeFileSync(path.join(target, 'runtime', 'state.db'), 'deployed mutable state');

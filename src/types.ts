@@ -1203,11 +1203,15 @@ export function generateUIXML(originalWorkspace: ModWorkspace): string {
  * noNamespaceSchemaLocation pointing at the game's ui/core/addon.xsd.
  */
 export function generateUIIndexXML(workspace: ModWorkspace, modId: string): string {
-  const luaPath = `ui/${modId}.lua`;
+  const files = [
+    ...((workspace.uiWidgets || []).some(w => w.includeInBuild !== false) ? [`ui/${modId}.lua`] : []),
+    ...(typeof workspace.customLua === 'string' && workspace.customLua.trim() ? [`ui/${modId}_custom.lua`] : [])
+  ];
+  const fileEntries = files.map(file => `    <file name="${file}" />`).join('\n');
   return `<?xml version="1.0" encoding="utf-8"?>
 <addon name="${modId}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../ui/core/addon.xsd">
   <environment type="menus">
-    <file name="${luaPath}" />
+${fileEntries}
   </environment>
 </addon>`;
 }

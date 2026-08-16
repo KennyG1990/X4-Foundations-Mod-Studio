@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import {
   Palette,
   Trash2,
@@ -19,8 +20,15 @@ import { analyzeLuaRuntimeLog } from '../lib/luaRuntimeLog';
 import { aiInfluenceChatBlocks, buildLuaLogicScript } from '../lib/luaLogicBlocks';
 import { validateUiWidgets } from '../lib/uiWidgetValidate';
 import { pixelLayoutToGrid } from '../lib/uiLayout';
-import { toSafeModId } from '../lib/modCompiler';
+import { resolveWorkspaceArtifactId } from '../lib/modCompiler';
 import { UIWidget, ModWorkspace, generateUILuaScript } from '../types';
+import X4UiSourceEditor, {
+  classifyX4UiWorkspaceCommit,
+  createX4UiWorkspaceEditPending,
+  type X4UiWorkspaceEditAcknowledgement,
+  type X4UiWorkspaceEditRequest,
+  type X4UiWorkspaceEditSubmission,
+} from './X4UiSourceEditor';
 
 interface UIBuilderProps {
   workspace: ModWorkspace;
@@ -29,16 +37,105 @@ interface UIBuilderProps {
   setSelectedWidget: (widget: UIWidget | null) => void;
 }
 
+type X4UiWorkspaceEditAcknowledger = (
+  currentWorkspace: unknown,
+) => X4UiWorkspaceEditAcknowledgement;
+
+type X4UiWorkspaceUpdateScheduler = (
+  updater: (currentWorkspace: unknown) => unknown,
+  acknowledge: X4UiWorkspaceEditAcknowledger,
+) => void;
+
+/** Issue queued acknowledgements only after React commits the workspace readback render. */
+export const acknowledgeX4UiWorkspaceCommitBoundary = (
+  acknowledgements: ReadonlyArray<X4UiWorkspaceEditAcknowledger>,
+  currentWorkspace: unknown,
+): ReadonlyArray<X4UiWorkspaceEditAcknowledgement> => (
+  acknowledgements.map(acknowledge => acknowledge(currentWorkspace))
+);
+
+/** Schedule exact-object CAS and return pending until the child observes parent workspace readback. */
+export const beginX4UiWorkspaceCommit = (
+  renderedWorkspace: unknown,
+  request: X4UiWorkspaceEditRequest,
+  scheduleWorkspaceUpdate: X4UiWorkspaceUpdateScheduler,
+): X4UiWorkspaceEditSubmission => {
+  const closureDecision = classifyX4UiWorkspaceCommit(renderedWorkspace, request.expectedWorkspace, request.workspace);
+  if (closureDecision.accepted === false) {
+    return { status: 'refused', reason: closureDecision.reason, detail: closureDecision.detail };
+  }
+  const pending = createX4UiWorkspaceEditPending(request.expectedWorkspace, request.workspace);
+  scheduleWorkspaceUpdate(
+    currentWorkspace => {
+      const liveDecision = classifyX4UiWorkspaceCommit(currentWorkspace, request.expectedWorkspace, request.workspace);
+      return liveDecision.accepted ? request.workspace : currentWorkspace;
+    },
+    pending.acknowledge,
+  );
+  return pending.submission;
+};
+
+interface UiLintSummary {
+  filesAnalyzed: number;
+  errorCount: number;
+  warningCount: number;
+  unverifiedCount: number;
+  truncatedCount: number;
+}
+
+const uiLintStatusText = (summary: UiLintSummary | null, analyzed: boolean) => {
+  if (!analyzed || !summary) return 'Not analyzed — empty buffer';
+  if (summary.filesAnalyzed === 0) return 'No source analyzed';
+  if (summary.errorCount > 0) return 'Static errors found';
+  if (summary.warningCount > 0) return 'Static warnings found';
+  if (summary.unverifiedCount > 0 || summary.truncatedCount > 0) return 'Static checks incomplete';
+  return 'No known static rule violated';
+};
+
+const uiLintStatusClass = (summary: UiLintSummary | null, analyzed: boolean) => {
+  if (!analyzed || !summary || summary.filesAnalyzed === 0) return 'text-slate-400';
+  if (summary.errorCount > 0) return 'text-red-400';
+  if (summary.warningCount > 0 || summary.unverifiedCount > 0 || summary.truncatedCount > 0) return 'text-amber-400';
+  return 'text-emerald-400';
+};
+
+const uiLintAxisText = (summary: UiLintSummary | null, analyzed: boolean) => {
+  if (!analyzed || !summary) return 'files not analyzed · errors — · warnings — · unverified — · truncated —';
+  return `${summary.filesAnalyzed} file${summary.filesAnalyzed === 1 ? '' : 's'} · ${summary.errorCount} errors · ${summary.warningCount} warnings · ${summary.unverifiedCount} unverified · ${summary.truncatedCount} truncated`;
+};
+
+const uiLintSummaryFromResult = (
+  result: {
+    findings: ReadonlyArray<{ severity: string }>;
+    x4UiSummary: Pick<UiLintSummary, 'unverifiedCount' | 'truncatedCount'>;
+  },
+  filesAnalyzed: number
+): UiLintSummary => ({
+  filesAnalyzed,
+  errorCount: result.findings.filter(fd => fd.severity === 'error').length,
+  warningCount: result.findings.filter(fd => fd.severity === 'warning').length,
+  unverifiedCount: result.x4UiSummary.unverifiedCount,
+  truncatedCount: result.x4UiSummary.truncatedCount
+});
+
 export default function UIBuilder({
   workspace,
   setWorkspace,
   selectedWidget,
   setSelectedWidget
 }: UIBuilderProps) {
+  const pendingWorkspaceAcknowledgementsRef = useRef<ReadonlyArray<X4UiWorkspaceEditAcknowledger>>([]);
+  const [workspaceCommitBoundary, setWorkspaceCommitBoundary] = useState(0);
+  useLayoutEffect(() => {
+    const acknowledgements = pendingWorkspaceAcknowledgementsRef.current;
+    if (acknowledgements.length === 0) return;
+    pendingWorkspaceAcknowledgementsRef.current = [];
+    acknowledgeX4UiWorkspaceCommitBoundary(acknowledgements, workspace);
+  }, [workspace, workspaceCommitBoundary]);
   const [activePresetTheme, setActivePresetTheme] = useState<string>('argon-amber');
   const [draggedWidgetId, setDraggedWidgetId] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [activeUiSubTab, setActiveUiSubTab] = useState<'canvas' | 'lua'>('canvas');
+  const [activeUiSubTab, setActiveUiSubTab] = useState<'source' | 'canvas' | 'lua'>('source');
   const [selectedLuaTemplate, setSelectedLuaTemplate] = useState<string>('standard');
   const [runtimeLogText, setRuntimeLogText] = useState<string>('');
   // Pre-fill vetted-snippet placeholders from the active integration contract, if any.
@@ -51,37 +148,65 @@ export default function UIBuilder({
     HTTP_CLIENT: _contract.httpClientExpr || 'require("extensions.sn_mod_support_apis.lua.simple_http")'
   } : {};
   const [luaMode, setLuaMode] = useState<'preview' | 'edit'>('preview');
-  // Layout validation over the free-form designer widgets (overlap/bounds/dupes/degenerate).
-  const widgetFindings = useMemo(() => validateUiWidgets((workspace.uiWidgets || []) as any), [workspace.uiWidgets]);
+  // Geometry checks over the free-form designer widgets (overlap/bounds/dupes/degenerate).
+  const widgetFindings = useMemo(() => validateUiWidgets(workspace.uiWidgets || []), [workspace.uiWidgets]);
   const widgetErrors = widgetFindings.filter(fd => fd.severity === 'error').length;
   const widgetWarns = widgetFindings.filter(fd => fd.severity === 'warning').length;
-  const customLuaText = workspace.customLua || '';
-  const customLuaAnalysis = useMemo(() => analyzeLuaFiles([{
-    rel: `ui/${workspace.id || 'custom'}_custom.lua`,
-    text: customLuaText,
+  const artifactId = resolveWorkspaceArtifactId(workspace);
+  const generatedUiPath = `ui/${artifactId}.lua`;
+  const customUiPath = `ui/${artifactId}_custom.lua`;
+  // Package output is the preview source of truth. Never maintain a second menu emitter here.
+  const compiledStandardLua = useMemo(
+    () => generateUILuaScript(workspace, artifactId),
+    [artifactId, workspace]
+  );
+  const generatedLuaAnalysis = useMemo(() => analyzeLuaFiles([{
+    rel: generatedUiPath,
+    text: compiledStandardLua,
     source: 'loose',
     sourcePath: 'workspace',
-    extension: { folder: workspace.id || 'workspace', id: workspace.id || 'workspace', name: workspace.name }
-  }]), [customLuaText, workspace.id, workspace.name]);
-  const customLuaFindings = customLuaText.trim() ? customLuaAnalysis.findings : [];
-  const customLuaErrors = customLuaFindings.filter(fd => fd.severity === 'error').length;
-  const customLuaWarnings = customLuaFindings.filter(fd => fd.severity === 'warning').length;
+    extension: { folder: artifactId, id: artifactId, name: workspace.name }
+  }]), [compiledStandardLua, generatedUiPath, artifactId, workspace.name]);
+  const generatedLuaFindings = generatedLuaAnalysis.findings;
+  const generatedLuaSummary = uiLintSummaryFromResult(generatedLuaAnalysis, 1);
+  const customLuaText = workspace.customLua || '';
+  const customLuaAnalysis = useMemo(() => {
+    if (!customLuaText.trim()) return null;
+    return analyzeLuaFiles([{
+      rel: customUiPath,
+      text: customLuaText,
+      source: 'loose',
+      sourcePath: 'workspace',
+      extension: { folder: artifactId, id: artifactId, name: workspace.name }
+    }]);
+  }, [customLuaText, customUiPath, artifactId, workspace.name]);
+  const customLuaFindings = customLuaAnalysis?.findings || [];
+  const customLuaSummary = customLuaAnalysis ? uiLintSummaryFromResult(customLuaAnalysis, 1) : null;
+  const customLuaAnalyzed = Boolean(customLuaAnalysis);
   const runtimeLuaFile = useMemo(() => ({
-    rel: `ui/${workspace.id || 'custom'}_custom.lua`,
+    rel: `ui/${artifactId}_custom.lua`,
     text: customLuaText,
     source: 'workspace'
-  }), [customLuaText, workspace.id]);
+  }), [artifactId, customLuaText]);
   const runtimeLogAnalysis = useMemo(
     () => analyzeLuaRuntimeLog(runtimeLogText, [runtimeLuaFile]),
     [runtimeLogText, runtimeLuaFile]
   );
-  // Package output is the preview source of truth. Never maintain a second menu emitter here.
-  const compiledStandardLua = useMemo(
-    () => generateUILuaScript(workspace, toSafeModId(workspace.name || 'custom_menu')),
-    [workspace]
+
+  const commitX4UiSourceEditWorkspace = (request: X4UiWorkspaceEditRequest): X4UiWorkspaceEditSubmission => (
+    beginX4UiWorkspaceCommit(workspace, request, (updater, acknowledge) => {
+      pendingWorkspaceAcknowledgementsRef.current = [
+        ...pendingWorkspaceAcknowledgementsRef.current,
+        acknowledge,
+      ];
+      flushSync(() => {
+        setWorkspace(current => updater(current) as ModWorkspace);
+        setWorkspaceCommitBoundary(boundary => boundary + 1);
+      });
+    })
   );
-  // Bridge: the engine-correct responsive grid this free-form layout compiles to (X4 is fTable-based).
-  const derivedGrid = useMemo(() => pixelLayoutToGrid((workspace.uiWidgets || []) as any, 'preview_layout'), [workspace.uiWidgets]);
+  // Legacy pixel geometry summary for the design map; it is not an X4 renderer claim.
+  const derivedGrid = useMemo(() => pixelLayoutToGrid(workspace.uiWidgets || [], 'preview_layout'), [workspace.uiWidgets]);
   const insertSelectedPattern = () => {
     const snip = LUA_SNIPPETS.find(sn => sn.id === selectedLuaTemplate);
     const code = snip ? fillLuaSnippet(selectedLuaTemplate, snippetValues) : '';
@@ -123,7 +248,7 @@ export default function UIBuilder({
   };
 
   // Modify individual theme variables in the builder
-  const updateThemeProp = (key: string, value: any) => {
+  const updateThemeProp = <K extends keyof ModWorkspace['uiTheme']>(key: K, value: ModWorkspace['uiTheme'][K]) => {
     setWorkspace(prev => ({
       ...prev,
       uiTheme: {
@@ -208,12 +333,20 @@ export default function UIBuilder({
         <div className="flex items-center gap-3">
           <div className="flex items-center bg-black/45 border border-white/10 p-0.5 rounded-md">
             <button
+              onClick={() => setActiveUiSubTab('source')}
+              className={`px-3 py-1 rounded text-[10px] uppercase font-bold transition-all cursor-pointer ${
+                activeUiSubTab === 'source' ? 'bg-cyan-500/15 text-cyan-400 font-extrabold' : 'text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              X4 Source Preview
+            </button>
+            <button
               onClick={() => setActiveUiSubTab('canvas')}
               className={`px-3 py-1 rounded text-[10px] uppercase font-bold transition-all cursor-pointer ${
                 activeUiSubTab === 'canvas' ? 'bg-cyan-500/15 text-cyan-400 font-extrabold' : 'text-slate-500 hover:text-slate-300'
               }`}
             >
-              Layout GUI Designer
+              Legacy pixel designer
             </button>
             <button
               onClick={() => setActiveUiSubTab('lua')}
@@ -224,18 +357,6 @@ export default function UIBuilder({
               LUA Script Event Manager
             </button>
           </div>
-
-          {activeUiSubTab === 'canvas' && (widgetFindings.length > 0 ? (
-            <div className="flex items-center gap-2 text-[9px] font-mono font-bold" title={widgetFindings.map(fd => fd.message).join("\n")}>
-              {widgetErrors > 0 && <span className="text-red-400">{widgetErrors} layout error{widgetErrors === 1 ? '' : 's'}</span>}
-              {widgetWarns > 0 && <span className="text-amber-400">{widgetWarns} warning{widgetWarns === 1 ? '' : 's'}</span>}
-            </div>
-          ) : ((workspace.uiWidgets || []).length > 0 ? (
-            <span className="text-[9px] text-emerald-400 font-mono font-bold">layout valid</span>
-          ) : null))}
-          {activeUiSubTab === 'canvas' && (workspace.uiWidgets || []).length > 0 && (
-            <span className="text-[9px] text-cyan-400/80 font-mono" title="X4 UI is fTable-based; your layout compiles to this responsive grid (ui/<id>_layout.lua) that scales across resolutions.">→ responsive grid {derivedGrid.rows}×{derivedGrid.cols}</span>
-          )}
 
           <div className="h-4 w-px bg-white/10" />
 
@@ -259,7 +380,70 @@ export default function UIBuilder({
         </div>
       </div>
 
-      {activeUiSubTab === 'canvas' ? (
+      <div className="border-b border-white/10 bg-[#10131a] p-2 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2 font-mono text-[10px]">
+        <div data-testid="ui-game-verification-status" className="rounded border border-amber-500/25 bg-amber-950/15 p-2">
+          <div className="text-[9px] uppercase font-bold tracking-wider text-slate-500">Game verification</div>
+          <div className="font-bold text-amber-300">Not verified in game</div>
+          <div className="mt-1 text-slate-500">Static preview and geometry checks do not establish engine acceptance.</div>
+        </div>
+
+        <div data-testid="ui-generated-lint-status" className="rounded border border-white/10 bg-black/20 p-2 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <span className="text-[9px] uppercase font-bold tracking-wider text-slate-500">Generated Lua static status</span>
+            <span className={`font-bold text-right ${uiLintStatusClass(generatedLuaSummary, true)}`}>
+              {uiLintStatusText(generatedLuaSummary, true)}
+            </span>
+          </div>
+          <div className="mt-1 break-all text-slate-500">{generatedUiPath}</div>
+          <div className="text-slate-500">{uiLintAxisText(generatedLuaSummary, true)}</div>
+          <div className="mt-1 space-y-1 break-words whitespace-pre-wrap">
+            {generatedLuaFindings.slice(0, 3).map((fd, idx) => (
+              <div key={`generated-${idx}`} className={fd.severity === 'error' ? 'text-red-300' : fd.severity === 'warning' ? 'text-amber-300' : 'text-slate-400'}>
+                {generatedUiPath}{fd.line ? `:${fd.line}` : ''} {fd.code ? `${fd.code} ` : ''}{fd.message}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div data-testid="ui-custom-lint-status" className="rounded border border-white/10 bg-black/20 p-2 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <span className="text-[9px] uppercase font-bold tracking-wider text-slate-500">Custom Lua static status</span>
+            <span className={`font-bold text-right ${uiLintStatusClass(customLuaSummary, customLuaAnalyzed)}`}>
+              {uiLintStatusText(customLuaSummary, customLuaAnalyzed)}
+            </span>
+          </div>
+          <div className="mt-1 break-all text-slate-500">{customUiPath}</div>
+          <div className="text-slate-500">{uiLintAxisText(customLuaSummary, customLuaAnalyzed)}</div>
+          <div className="mt-1 space-y-1 break-words whitespace-pre-wrap">
+            {customLuaFindings.slice(0, 3).map((fd, idx) => (
+              <div key={`custom-${idx}`} className={fd.severity === 'error' ? 'text-red-300' : fd.severity === 'warning' ? 'text-amber-300' : 'text-slate-400'}>
+                {customUiPath}{fd.line ? `:${fd.line}` : ''} {fd.code ? `${fd.code} ` : ''}{fd.message}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div data-testid="ui-geometry-status" className="rounded border border-white/10 bg-black/20 p-2 min-w-0" title="Pixel geometry summary for the design map only; not an X4 renderer.">
+          <div className="text-[9px] uppercase font-bold tracking-wider text-slate-500">Geometry design map</div>
+          <div className={`font-bold ${widgetErrors > 0 ? 'text-red-400' : widgetWarns > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+            {widgetErrors > 0 || widgetWarns > 0
+              ? `${widgetErrors} geometry errors · ${widgetWarns} warnings`
+              : 'No geometry issues detected'}
+          </div>
+          <div className="mt-1 text-slate-500">
+            {(workspace.uiWidgets || []).length > 0 ? `Legacy pixel map ${derivedGrid.rows}×${derivedGrid.cols}` : 'No widgets in design map'}
+          </div>
+          {widgetFindings.slice(0, 2).map((fd, idx) => (
+            <div key={`geometry-${idx}`} className={fd.severity === 'error' ? 'text-red-300' : 'text-amber-300'}>
+              {fd.message}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {activeUiSubTab === 'source' ? (
+        <X4UiSourceEditor workspace={workspace} onWorkspaceEdit={commitX4UiSourceEditWorkspace} />
+      ) : activeUiSubTab === 'canvas' ? (
         <div className="flex-1 flex overflow-hidden">
           {/* Custom Theme sliders & HUD hierarchy tree */}
           <div className="w-[290px] border-r border-[#1e2230]/50 bg-[#12141a] flex flex-col justify-between shadow-inner shrink-0 overflow-y-auto">
@@ -891,8 +1075,10 @@ end`
 
             {luaMode === 'edit' && (
               <div className="shrink-0 border-t border-white/10 bg-black/40 px-3 py-2 text-[10px] font-mono">
-                <div className={`font-bold ${customLuaErrors ? 'text-red-400' : customLuaWarnings ? 'text-amber-400' : 'text-emerald-400'}`}>
-                  Lua analysis: {customLuaText.trim() ? `${customLuaErrors} errors / ${customLuaWarnings} warnings / ${customLuaFindings.length} findings` : 'empty buffer'}
+                <div className={`font-bold ${uiLintStatusClass(customLuaSummary, customLuaAnalyzed)}`}>
+                  Lua analysis: {customLuaAnalyzed
+                    ? `${uiLintStatusText(customLuaSummary, true)} · ${uiLintAxisText(customLuaSummary, true)}`
+                    : uiLintStatusText(customLuaSummary, false)}
                 </div>
                 {customLuaFindings.slice(0, 3).map((fd, idx) => (
                   <div key={idx} className={fd.severity === 'error' ? 'text-red-300' : fd.severity === 'warning' ? 'text-amber-300' : 'text-slate-400'}>
