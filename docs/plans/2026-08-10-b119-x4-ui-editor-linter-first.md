@@ -5918,3 +5918,2761 @@ Fresh Notion all-comments readback still exposes neither prior success ID, so th
 `PARTIAL / UNVERIFIED`; no third blind write is authorized. The initial precommit failure, two newly exposed guard
 defects, one malformed worker-spawn command, long authority checks, and the Windows trusted-read transport correction
 are AAR triggers.
+
+#### Post-checkpoint exact-menu layout repair — 2026-08-16
+
+Status: `PARTIAL`; the bounded layout-owner defect is accepted, while Scene/preview/paint and in-game proof remain open.
+Checkpoint `77138741a9f470e2c6c37c2d6857688dd1e2b13e` is committed and pushed with remote parity. Native Luna
+`01a008e2-3017-7813-a890-c6df3af4552d` then changed only `x4UiLayoutProgram.ts` and its selftest. The exact causal
+failure was a conditional `addRow` with no source-owner cells: deferred line-726/model-order-219 `setColSpan` resolved
+to a later materialized row instead of its emitted `row[1]` source identity. Selftest-only fail-first receipts were
+`558/559` and exact multi-row `564/565`, each preserving the applicable production hash.
+
+The repaired producer emits authority-bound non-kernel source-owner cells for conditional rows without adding those
+rows to drawable table/kernel geometry. Final hashes are production
+`334BBD62869559385537E610BEBD1B8FCBE24F5515357FE1C4C20EA674669A42` and selftest
+`595AFA93EEE1893D591798F73F49D09717650BC06853D01E9FD4EBB15C070C0D`. Worker and coordinator validations pass layout
+`565/565`, repository typecheck, exact two-file ESLint, and diff hygiene; receiver/result/semantic/owner, cross-cell,
+forged-sibling, and reversed-ledger negatives still refuse without throws.
+
+The exact byte-identical workspace/installed menu hash remains
+`4253D9BD9DE4113D4DE0B881DBF5A1E90CAA7B30F735BA925403EBEF7EC47DD7`. With the canonical 9.00 corpus,
+`1920x1080`, UI scale 1, and all 16 consumer-aware samples, the real menu now emits `partial` layout geometry
+`1 frame / 4 tables / 9 rows / 88 cells / 66 operations / 95 gaps`. Scene is the first refusal at
+`malformed-structure`; preview refuses at `scene`, `canRender=false`, and paint is not reached. No mod, game, corpus,
+configuration, installed extension, preview, paint, or Canvas path changed. Scene-only native Luna
+`01a00937-79f9-7af0-a73c-a5ae7ac30685` is active tests-first against the exact menu/hub/comm structures.
+
+AAR trigger: the first compact synthetic row-rebind positive was green while the real multi-row menu still refused.
+Sustain exact real-source censuses before promoting a producer candidate. Highest-risk weakness remains a convincing
+standalone preview or synthetic fixture that does not exercise the native game acceptance boundary; retain permanent
+`Not verified in game` state and keep game deployment authoritative.
+
+#### Preview-to-Paint exact-origin audit rejection and Paint-ingress repair contract — 2026-08-16
+
+Status: `FINDINGS / PARTIAL`; the real configured MENU/HUB/COMM projection is now positive, but the public Paint input
+boundary is rejected and overall B119 remains `IN_PROGRESS / PARTIAL — Not verified in game`. The tests-first Preview
+repair changed `x4UiPreviewPipeline.ts`, its selftest, and `x4UiPaintPlan.selftest.ts`. It replaced structural Scene-copy
+authority with one private `WeakMap` binding between the exact issued Preview result and exact raw Scene object. Worker
+and coordinator focused validation passed Preview `92/92`, Paint `136/136`, Scene `127/127`, Layout `565/565`, typecheck,
+exact lint, and diff hygiene.
+
+Fresh zero-write native Luna audit `01a00c3e-2f3c-74d2-acad-b5b5ac335a5b` preserved every supplied hash and returned
+`FINDINGS`. Its corrected configured file-backed census used all exact consumer-aware samples at `1920x1080`, UI scale
+1: MENU `16` (`11 applied / 5 not applied`), HUB `11` (`9/2`), and COMM `5` (`5/0`). All three reach non-refused
+`partial` Layout, Scene, and Paint; the editor-session projections report `canRender=true`; every result remains
+`Not verified in game`. Paint totals are MENU `66 operations / 27 applied`, geometry `1/4/2/16/3/5/7`, `158`
+diagnostics; HUB `18/11`, geometry `1/2/2/8/2/3/5`, `38`; COMM `14/12`, geometry `1/1/1/3/3/5/10`, `40`.
+
+The same independent 14-case hostile matrix found two causal ingress defects despite zero thrown exceptions. A Scene
+wrapper with a custom prototype and otherwise exact own fields reached Paint as `partial`; `exactOwnDataKeys()` checks
+own descriptors but not the wrapper prototype. A Proxy around the exact raw Scene refused, but one descriptor trap fired
+because `sceneCandidateFromInput()` probes the candidate's `format` descriptor before the private exact-identity
+materializer. Accessor-wrapper getter calls remained zero. The earlier auditor's status-envelope, catalog-envelope,
+selection, expression-mapping, import, and buffered-output failures are audit-harness friction only; they changed no
+files and do not weaken or satisfy the product oracle.
+
+Reconciliation expands the bounded implementation unit to exactly `src/lib/x4UiPreviewPipeline.ts`,
+`src/lib/x4UiPreviewPipeline.selftest.ts`, `src/lib/x4UiPaintPlan.ts`, and `src/lib/x4UiPaintPlan.selftest.ts`.
+JavaScript provides no trap-free reflection that distinguishes an arbitrary plain object from a Proxy; therefore the
+earlier Paint-only plan could not both inspect an arbitrary reconstructed wrapper and guarantee zero Proxy observation.
+The private Preview authority must also bind the exact issued Scene-result wrapper identity alongside the exact raw
+Scene identity. Paint must pass its candidate directly to that private materializer before any candidate descriptor,
+key, or prototype observation and accept only either exact issued identity. The positive wrapper control becomes the
+actual Preview-issued wrapper, not a structurally matching caller reconstruction.
+
+Tests must first reproduce both failures against the public Paint entry: custom-prototype wrapper accepted, and Proxy
+Scene refused only after a nonzero trap count. They must also prove that the exact issued raw Scene and exact issued
+Scene-result wrapper remain accepted. Accessor wrappers, arbitrary matching plain wrappers, inherited/custom-prototype
+wrappers, copied Scenes/results/authorities, cross-result identities, mismatched status copies, and Proxy Scenes must
+refuse deterministically with zero getter/proxy observation and zero throws. No public token or caller-computable digest
+may replace the private object-identity boundary.
+
+Acceptance requires a causal red receipt, final Paint/Preview/Scene/Layout focused suites, typecheck, exact four-file
+zero-warning ESLint, diff hygiene, protected-hash parity outside the four owned files, and a fresh independent zero-write
+audit. That audit must repeat the complete three-menu census and hostile matrix. Broad Forge E2E/build/browser and X4
+gates remain locked; a non-refused Paint plan is layout-preview evidence, not game acceptance.
+
+#### Exact-origin authority accepted; sampled Scene census rejected — 2026-08-16
+
+Status: `FINDINGS / PARTIAL`; exact Preview-to-Paint object authority is focused-accepted, while the complete sampled
+MENU/HUB/COMM editor-session path refuses in Scene. Overall B119 remains
+`IN_PROGRESS / PARTIAL — Not verified in game`.
+
+The tests-first exact-origin correction changed only the Preview and Paint production/selftest pairs. Final hashes are
+Preview production `A28179C95B14B2D84583332FC94E0E27C78EDB5240E7BA6A102FE18D271B8EC6`, Preview selftest
+`DFE82E76A329DCB2236F3985414532B211287914D87C48C3FD65F66FC7EFA1D5`, Paint production
+`711388F4B66F53DCE31F6E33CFF83B125C967B81822003CAF074447258D964FB`, and Paint selftest
+`7E8CB62F6112F0653AED0F9A0EB650C5301A06ABE706DFC616E8E7ECD1EB6E48`. Coordinator validation passes Preview `94/94`,
+Paint `138/138`, Scene `127/127`, Layout `565/565`, repository typecheck, exact four-file ESLint, and diff hygiene.
+Independent hostile testing passes `14/14`: only the exact issued raw Scene and exact issued Preview Scene-result
+wrapper produce partial Paint. Structural/custom-prototype copies, mutated/cross-result/mismatched-status wrappers,
+copied verification fields, caller-computable clones, accessors, and Proxies refuse deterministically with zero getter
+or Proxy observation and zero throws. This closes the exact-origin defect; it does not prove sampled layout acceptance.
+
+Fresh zero-write native Luna audit `01a00d23-038e-7592-8df0-df19402cf280` preserved all 42 worktree entries byte-for-byte
+and returned `FINDINGS` on the complete configured-corpus path. The configured unpacked authority resolves to
+`F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00`; workspace and installed MENU/HUB/COMM sources are byte-identical at
+hashes `4253D9BD9DE4113D4DE0B881DBF5A1E90CAA7B30F735BA925403EBEF7EC47DD7`,
+`657476EAD08229977E1F2A69079FFDCAB56D908B72AF5C87BD4F4734DCCB8C4F`, and
+`88FAB05A79EF33CB28E098081EA6A5E29E8F3B7C4150C39BF38913C51C063511`. Consumer-aware sampling materially changes
+the programs and preserves valid sampled/unsampled authority pairs:
+
+- MENU: `16` samples (`11 applied / 5 not applied`), `66 operations / 27 applied`, `88` cells, `95` gaps;
+- HUB: `11` samples (`9/2`), `18/11`, `4` cells, `16` gaps;
+- COMM: `5` samples (`5/0`), `14/12`, `3` cells, `11` gaps.
+
+All three exact editor sessions then refuse at Scene with public code `malformed-structure` and message
+`layout program is malformed, incomplete in required structure, or internally mismatched`. Paint is not reached,
+`canRender=false`, Preview records one `scene` gap, and every verification label remains `Not verified in game` /
+`gameVerified=false`. Geometry and Paint diagnostics are not zero; they are unavailable because Scene refused first.
+The first failing invariant is not yet known: `validateProgramStructure` reaches its refusal path, but
+`refuseStructure(_stage)` discards the stage before `validateInputs` emits the generic public result. The prior positive
+sampled Paint receipt used a weaker harness and is superseded by this complete public editor-session audit.
+
+The reconciled correction is sequential and tests-first. Initially only `src/lib/x4UiScene.ts` and
+`src/lib/x4UiScene.selftest.ts` are writable. With production frozen, add portable minimal fixtures that preserve the
+materialized row/cell/kernel ownership relations from all three real sampled programs and capture causal red receipts.
+Expose the exact first failing structural stage to tests without weakening or broadening the public acceptance surface,
+then repair only the invariant named by that evidence. No source/index/target-name special case is allowed. Every prior
+hostile owner/source/ledger mutation must still refuse. If the stage proves the Layout producer is wrong, stop and
+revise the documented scope before any Layout write.
+
+Focused acceptance requires Scene prior plus new sampled checks, Layout `565/565`, Preview `94/94`, Paint `138/138`,
+repository typecheck, exact owned-file zero-warning ESLint, diff hygiene, the complete exact MENU/HUB/COMM census through
+non-refused Paint with `canRender=true`, the 14-case zero-observation origin matrix, and a fresh independent zero-write
+combined `CLEAN`. Source-canonical insertion/deletion, keep-out calibration UI, unsupported widget paint, broad Forge
+gates, deploy identity, and game screenshot comparisons remain locked. A non-refused standalone Paint plan remains
+layout-preview evidence only; game deployment remains the authority.
+
+AAR triggers: the earlier sampled positive was not reproduced through the same complete public session path; the audit
+harness also incurred one approval wait and several malformed inline-TSX attempts before producing the accepted
+read-only receipt. Sustain exact public-path censuses and byte-preservation checks. Highest-risk weakness remains a
+convincing standalone preview whose sampled or authority path differs from deployment; retain permanent
+`Not verified in game` state and require exact deploy plus in-game comparison for final verification.
+
+#### Owning-frame correction accepted causally; candidate rejected at cell outer height — 2026-08-16
+
+Status: `FINDINGS / PARTIAL`; the first shared Scene invariant is causally corrected, but the complete exact public
+session still refuses one stage later. Overall B119 remains `IN_PROGRESS / PARTIAL — Not verified in game`.
+
+Native Luna `01a00d4f-1b2b-7280-8a70-7ea4b302f569` kept Scene production frozen at
+`A78B6468B400C87DC9F6D36DD800032682885D2887E62AEDCEECF40445684EA5` while three portable consumer-aware
+MENU/HUB/COMM source shapes reproduced public `malformed-structure`. The new internal test-only diagnostic named the
+same first stage for all three: `table-kernel-frame-width`. Reconciliation against the accepted Layout owner proves the
+existing producer contract already requires `kernelState.frameWidth` to equal the owning frame width. Scene alone was
+comparing that kernel value to the global profile frame width. The bounded repair now resolves the owning frame through
+the table's exact owner relation and uses the profile width only when the owner has no resolved width.
+
+The candidate hashes are Scene production
+`6AAA2CD37676831A70737F204EE40A3749CC91224D6FF457A422D0D88D082A26` and selftest
+`DE2A85CEF1032588D7ECA72C061DD3512845D3C3A6A75C1719C1E57A59C526DE`. Worker and coordinator gates pass Scene
+`128/128`, Layout `565/565`, Preview `94/94`, Paint `138/138`, repository typecheck, exact Scene-pair zero-warning
+ESLint, and diff hygiene. One-field kernel-width, reciprocal owner, operation-ledger, and source-owner mutations still
+refuse. The 14-case exact Preview/Paint origin matrix remains green with zero Proxy/getter observation and no throws.
+
+Fresh zero-write native Luna audit `01a00d6d-179c-71b2-b740-b894206c4ecd` rejects this as a complete Scene candidate.
+It minted the exact sample catalog, binding, and private catalog authority through `projectX4UiEditorSession`, supplied
+consumer-aware values, reproduced every expected configured count, and preserved all candidate/protected/source/corpus
+hashes plus the 42-entry status. Exact outcomes are:
+
+- MENU: `16` samples (`11/5`), Layout `partial` with `1 frame / 4 tables / 9 rows / 88 cells`, `66 operations / 27
+  applied / 95 gaps`; Scene refuses at `cell-outer-height`, Preview refuses with one Scene gap, Paint is not reached,
+  `canRender=false`.
+- HUB: `11` (`9/2`), `1/2/2/4`, `18/11/16`; the same `cell-outer-height` refusal and downstream result.
+- COMM: `5` (`5/0`), `1/1/1/3`, `14/12/11`; the same `cell-outer-height` refusal and downstream result.
+
+All remain exactly `Not verified in game` / `gameVerified=false`; Scene geometry and Paint diagnostics are unavailable,
+not zero. The audit also finds the new `B119 configured ...` selftest output materially misleading: it combines fixed
+configured-source receipt constants with portable-fixture Scene geometry, so a reader can mistake fixture acceptance for
+the exact session result. That label/evidence mixture must be removed before acceptance. The audit's initial quoted-path
+containment parser omitted `Note for Kimi.md` from its baseline hash, but status counts stayed exact and no audit write
+occurred; this is harness friction, not product evidence.
+
+The next bounded correction remains in `src/lib/x4UiScene.ts` and `src/lib/x4UiScene.selftest.ts`. Preserve the valid
+owning-frame rule. First capture, from each exact real program, the failing cell ID/kind, cell/kernel type, scaling,
+height, affect-row-height, row/column, `cell.height`, and complete `descriptorFacts.outerHeight`, plus the exact Helper
+`cell:getHeight`, icon, button, or edit-box branch that governs it. Add portable positives reproducing that exact branch
+and one-field hostile mutations for descriptor value/provenance/source pin, kernel height/scaling/type, and owner slot.
+Repair only the invariant named by that evidence; do not make unknown/unavailable facts known, skip valid consistency
+checks, special-case source names/hashes, or touch Layout without a documented scope revision. Separately label portable
+fixture output as fixture evidence and real public-session output as real-session evidence.
+
+Acceptance remains Scene prior plus new checks, Layout `565/565`, Preview `94/94`, Paint `138/138`, typecheck, exact
+lint, diff hygiene, the complete exact public MENU/HUB/COMM session through non-refused Paint with `canRender=true`, the
+14-case origin matrix, protected-hash/42-entry containment, and a fresh zero-write combined `CLEAN`. Source insertion,
+keep-out calibration UI, widget paint, broad Forge gates, deploy identity, and game comparison remain locked.
+
+AAR triggers: the portable test passed while the exact session failed one stage later, and its console label mixed two
+proof levels. Sustain staged internal diagnostics and exact public-session reruns after every repaired invariant. Improve
+the audit harness by using a quote-safe status manifest so filenames with spaces cannot be omitted. Highest-risk
+weakness remains fixture output presented next to real-source receipt data; proof surfaces must state which object was
+actually executed.
+
+#### Exact sampled Scene/session path accepted; structural-edit provenance specified — 2026-08-17
+
+Status: sampled source-first projection `FOCUSED VERIFIED / CLEAN`; overall B119 remains
+`IN_PROGRESS / PARTIAL — Not verified in game`. Broad Forge, installed-host, package/deploy, C++ frame-acceptance, and
+in-game experience gates have not run and are not implied by this checkpoint.
+
+The final Scene/session correction is accepted at production/selftest hashes
+`DA6AFE26435BA19758FBF8CB2BFCF0EAD7C61B7CEB4B4783E28810E4142215D7` /
+`B6B16C7732E39853A693E9C7A5F0EE406C969FAFF29A0A0AAE5EF8A21F8111FD`. It preserves the owning-frame relation,
+ports the exact Helper outer-height branches represented by available source facts, leaves unavailable `cell.height`
+unasserted, and physically contains configured workspace reads after resolving child reparse points. The editor-session
+test correction separately proves that a stateless resize with no supplied samples/catalog/binding authority issues a
+fresh `1280x720 @ 1.1` Scene/Paint; it does not inherit stale profile authority. Profile drift still clears genuinely
+supplied stale samples.
+
+Fresh zero-write native Luna auditor `01a00ea1-1ceb-7ad0-9b37-0360caa26e31` returned `CLEAN`. `HEAD` and
+`origin/main` remained `77138741a9f470e2c6c37c2d6857688dd1e2b13e`; all ten supplied production/selftest hashes
+remained exact; worktree status stayed exactly 43 entries before and after. Required evidence passed: EditorSession;
+Scene default and strict `136/136` each with configured MENU/HUB/COMM `3/3`; Layout `565/565`; Preview `94/94`;
+Paint `138/138`; repository typecheck; exact corrected-selftest ESLint with zero warnings; exact diff hygiene; hostile
+frame/cell owner, issued-origin, copy, prototype, accessor, Proxy, and mismatch matrices with zero throws or observation.
+The no-config ordinary path remains truthfully `NOT RUN`; strict mode fails only `configured-census-unavailable`.
+
+Exact configured receipts at `1920x1080`, UI scale 1 are:
+
+- MENU: Layout `16 samples (11 applied / 5 not applied)`, `66/27 operations`, `1/4/9/88`, `95` gaps; Scene
+  `1/4/2/16/3/5/7`, `137` diagnostics; Paint `203/165`.
+- HUB: Layout `11 (9/2)`, `18/11`, `1/2/2/4`, `16`; Scene `1/2/2/4/0/0/0`, `29`; Paint `44/35`.
+- COMM: Layout `5 (5/0)`, `14/12`, `1/1/1/3`, `11`; Scene `1/1/1/3/0/0/0`, `22`; Paint `34/28`.
+
+Every exact session reaches non-refused Paint, zero Preview gaps, and `canRender=true`, while retaining permanent
+`Not verified in game` / `gameVerified=false`. These receipts unlock source-canonical editing work only; they do not
+unlock broad/runtime/game claims.
+
+Recovery/AAR evidence is non-clean. During the preceding tests-only correction, `apply_patch` unexpectedly zero-filled
+`src/lib/x4UiScene.selftest.ts` to 456,225 NUL bytes. Production was frozen immediately. No exact sibling, temp, IDE,
+or Git blob existed; the worker restored the exact pre-failure hash by replaying all 78 recorded patches from `HEAD`
+before applying the final bounded test changes. No approximate reconstruction was accepted. Reconciliation also
+corrected two false assumptions: the old resized-session null-Paint assertion was a surrogate that passed only while
+Scene rejected downstream, and requiring status to remain 42 was impossible after intentionally modifying the formerly
+clean EditorSession selftest. The truthful accepted baseline is 43. Sustain exact hashes, causal public-path receipts,
+and immediate write-freeze/recovery on patch anomalies.
+
+## BATCH 8A ACCEPTANCE CONTRACT — ENCLOSING LUA STATEMENT PROVENANCE
+
+Status: `FINDINGS / CORRECTION ACTIVE`. This is the first bounded prerequisite for direct-call insertion/deletion. It adds
+provenance only; it does not mutate source, emit Lua, mount controls, generate a scaffold, package, deploy, or claim
+game acceptance.
+
+### Reconciliation and bounded ownership
+
+- Existing owners are reused: `X4UiCallRecord` in `src/lib/x4UiCallModel.ts`, owner-issued layout evidence,
+  `spliceX4UiWorkspaceSource()`, `x4UiSourceEdits.ts`, and `X4UiSourceEditor`. No second parser, AST, source bundle,
+  workspace model, emitter, formatter, or descriptor DSL is allowed.
+- Current `X4UiCallRecord.source` proves only the call expression. `processStatement()` sees the enclosing luaparse
+  statement but discards that association before `evaluateCall()` emits a record. Therefore deletion cannot yet prove a
+  complete syntactic statement, and insertion cannot prove a stable before-statement anchor. Inferring line ranges from
+  whitespace or call text is forbidden.
+- Fail-first reconciliation found one necessary existing traversal defect: luaparse exposes numeric-for `start`, `end`,
+  and optional `step` as scalar child nodes, while the current implementation calls `nodeArray()` and therefore skips
+  every call expression in those bounds. Batch 8A may correct only that traversal so such relevant calls receive the
+  required non-standalone numeric-for provenance. This is not permission for new folding or layout semantics; existing
+  real-menu counts and every coupled authority must remain unchanged.
+- Batch 8A may modify only `src/lib/x4UiCallModel.ts` and `src/lib/x4UiCallModel.selftest.ts`. All other production,
+  test, documentation, corpus, mod, game, package, and configuration paths are frozen.
+
+### Required behavior
+
+- Every relevant call record must carry exact, immutable enclosing-statement provenance from the luaparse node already
+  being processed: source file/path, UTF-16 start/end offsets, line/column range, normalized statement kind, and whether
+  this call node is the root expression of a standalone `CallStatement`.
+- Nested receiver/chained calls in the same statement share the exact statement range, but only the outer root call may
+  be marked standalone. Calls used as local/assignment initializers, return values, conditions, loop bounds, arguments,
+  or nested expressions must never be marked standalone.
+- Provenance must remain source-derived and context-local across branches, loops, handlers, and local helper expansion.
+  It may not be reconstructed from rendered text, indentation guesses, model order, or caller-supplied objects.
+- Existing call expression ranges, ordering, semantics, source literals, branch/loop paths, authority issuance, and all
+  public truth labels must remain unchanged.
+
+### Tests-first acceptance and negative path
+
+The Luna owner must first add failing tests against unchanged production for direct call statements, fluent chains,
+local and assignment initializers, return/condition/loop/argument nesting, semicolon spelling, CRLF and LF sources,
+UTF-16 offsets, branches, loops, and handlers. Tests must prove exact source slices and containment, identical statement
+ranges for calls sharing one statement, root-only standalone classification, immutable emitted provenance, and no
+cross-statement leakage. Malformed/unlocatable nodes must fail closed without inventing an insertion/deletion range.
+
+The accepted fail-first shape must distinguish implementation evidence from harness defects: unchanged production must
+fail only the new provenance assertions; a quoting failure in an exploratory AST probe and any mistaken test access
+path are tooling/test defects, not product diagnoses. Any such correction keeps the AAR non-clean and must not weaken
+the final matrix.
+
+Required validation is the complete call-model selftest; the directly coupled layout-program, linter, source-edit,
+workspace-source, EditorSession, Scene, Preview, and Paint focused selftests; repository typecheck; zero-warning ESLint
+on exactly the owned pair; `git diff --check` on exactly the owned pair; forbidden-path/hash and exact 43-entry status
+baseline containment. Because both owned files are currently clean, an intentional two-file candidate must have exactly
+45 status entries, with those two owned paths as the only additions to the preserved 43-entry baseline. A fresh
+independent zero-write Luna audit must return `CLEAN` before Batch 8A is accepted.
+
+Rollback is deletion of the new provenance field/type and its tests. After acceptance, Batch 8B may extend the existing
+`x4UiSourceEdits` owner with typed structural edit discovery/application using those exact statement/anchor facts and
+`spliceX4UiWorkspaceSource()` CAS. Batch 8C may then mount insertion/deletion controls in the existing source editor;
+minimal tested scaffold creation remains a separate bounded subunit. Whole-file pretty-printing and descriptor-to-Lua
+translation remain forbidden throughout.
+
+#### Batch 8A round-one audit rejection and terminator correction — 2026-08-17
+
+Fresh zero-write native Luna auditor `01a00ec4-e1c1-7893-bc4e-28765d8013a1` returned `FINDINGS`. The candidate is
+valid for before-statement anchors and all non-deletion provenance: the complete hostile matrix passed; call model
+`51/51`, Layout `565/565`, Lint `112/112`, SourceEdits `34/34`, Scene default/strict `136/136` with configured
+MENU/HUB/COMM `3/3`, Preview `94/94`, Paint `138/138`, typecheck, lint, and diff hygiene all passed; status remained
+45 and all 16 protected hashes stayed exact. It is nevertheless rejected for Batch 8A acceptance because luaparse's
+statement node range ends immediately before a trailing semicolon. The candidate records that exact AST span but no
+terminator/deletion-span evidence, so it cannot truthfully claim a complete semicolon-terminated deletion range.
+
+The correction remains confined to the same two call-model files and preserves the valid round-one implementation.
+Extend `X4UiCallStatementProvenance` with an exact safe CAS deletion range and explicit terminator classification while
+retaining the raw AST `source` range separately. Terminator recognition is a bounded lexical suffix check anchored at
+the AST end: it may consume only horizontal spaces/tabs followed by the first semicolon on the same line. It must never
+cross CR/LF, absorb a comment, consume a second semicolon, or reach into the next statement. This is not a second parser,
+general line scanner, formatter, or permission to infer the statement body.
+
+Required fail-first controls are immediate `call();`, horizontally spaced `call() ;`, no-semicolon calls, two
+same-line statements, doubled semicolons, semicolon plus trailing comment, comment before semicolon, CRLF/LF, astral
+text, fluent inner/outer calls sharing one deletion range, and non-standalone contexts. For every standalone positive,
+deleting exactly the issued deletion range from an in-memory source must reparse, remove only that root statement, and
+preserve the following statement and all bytes outside the range. No-semicolon/comment-before-semicolon cases must
+preserve unowned trivia rather than overclaim it. Provenance and all nested locations remain deeply frozen.
+
+Round-two acceptance repeats every round-one gate and hostile probe, exact status 45 containment, configured receipts,
+and a fresh zero-write `CLEAN`. Batch 8B remains locked until then. AAR triggers include the rejected semicolon
+overclaim plus the auditor's graphify canonicalization failure, inline-command quoting failures, Windows command-length
+failure, invalid top-level/early-return Lua fixtures, incorrect call/UTF-16 counts, and strict-mode throw assumption;
+none was treated as product evidence.
+
+#### Batch 8A round-two acceptance — 2026-08-17
+
+Status: `FOCUSED VERIFIED / CLEAN`; overall B119 remains
+`IN_PROGRESS / PARTIAL — Not verified in game`. Batch 8A is accepted and unlocks only the bounded structural source-edit
+owner below. It does not prove Forge rendering, package/deploy identity, C++ frame acceptance, or in-game experience.
+
+The accepted call-model hashes are production
+`E0842D11D156764917DC36740294D43FA7CBCC75089C4B4187E17190DBF4CD4C` and selftest
+`7CDB2CA96D5E545E1DAB4CDF44FF874CA507066373C8DBE818E43EBB3977D432`. The tests-first correction moved unchanged
+round-one production from `52/57` to `57/57`: all prior 51 checks stayed green while the five new deletion-provenance
+families failed first. The final implementation retains the raw luaparse statement range, adds a separately frozen
+`deletionSource` and `none | semicolon` terminator fact, and extends ownership only through horizontal spaces/tabs and
+the first same-line semicolon. Numeric-for scalar traversal, statement-stack restoration, root-only standalone-call
+classification, malformed/NUL fail-closed behavior, and existing call semantics remain intact.
+
+Coordinator review and rerun passed call model `57/57`, SourceEdits `34/34`, repository typecheck, exact owned-file
+ESLint, exact diff hygiene, hash/NUL/newline checks, and exact 45-entry containment. Fresh zero-write native Luna auditor
+`01a00eed-8a23-7080-93cd-4217a691df66` then returned `CLEAN` with no repository writes. Its independent matrix passed
+all ten deletion-boundary forms, fluent inner/outer root identity, local/assignment/return/condition/loop/argument/
+handler non-root contexts, exact deletion-and-reparse byte locality, malformed/NUL refusal, and immutable UTF-16
+locations. Coupled receipts passed Layout `565/565`, current lint `112/112`, Scene default and strict `136/136` with
+configured MENU/HUB/COMM `3/3`, Preview `94/94`, Paint `138/138`, WorkspaceSource, SourceBundle, EditorSession,
+typecheck, exact ESLint, and diff hygiene. The configured operation receipts stayed MENU `66/27`, HUB `18/11`, and
+COMM `14/12`; all remained `canRender=true`, `gameVerified=false`, and `Not verified in game`.
+
+This close is non-clean. The round-one implementation overclaimed complete deletion while luaparse excluded a trailing
+semicolon; independent review caught it. The round-two auditor also corrected one read-only fluent-call lookup mistake,
+and the work order named stale `luaStaticAnalysis.selftest.ts` before resolving the current owner to
+`x4UiLint.selftest.ts`. Sustain independent hostile review and separate raw-AST versus safe-deletion ranges. Improve
+audit commands by resolving current selftest owners before execution. Highest-risk evidenced weakness remains source
+mutation that can look byte-local while deleting unowned trivia; Batch 8B must consume only the accepted owner-issued
+range and re-establish complete source/layout provenance after every splice.
+
+## BATCH 8B ACCEPTANCE CONTRACT — SOURCE-CANONICAL STRUCTURAL CAS
+
+Status: `SPECIFIED / READY FOR TESTS-FIRST IMPLEMENTATION`. This unit adds typed direct-call insertion/deletion to the
+existing source-edit owner. It does not mount UI controls, generate a scaffold, pretty-print a file, write the configured
+mod/corpus/game, package, deploy, or claim game verification.
+
+### Reconciliation and bounded ownership
+
+- Graphify and source review confirm one existing mutation path: `discoverX4UiSourceEdits()` owns issued layout/source
+  authority; `applyX4UiSourceEdit()` owns CAS, byte locality, complete reparse, and provenance re-establishment;
+  `spliceX4UiWorkspaceSource()` delegates to `spliceX4UiSourceBundle()` and already accepts zero-length insertion and
+  ranged deletion. `X4UiSourceEditor` consumes this owner. There is no capability-map delta and no second emitter,
+  formatter, parser, workspace adapter, or descriptor language is allowed.
+- Modify only `src/lib/x4UiSourceEdits.ts` and `src/lib/x4UiSourceEdits.selftest.ts`. All other production, test,
+  documentation, corpus, mod, game, package, configuration, Git, and external-record paths are frozen during the code
+  unit. The accepted pre-write hashes are production
+  `C90FFC54AE7E4A7DF655222D61872CF7935195CA70E23EC1EB7B4C584E7BD2D9` and selftest
+  `50FA05F041007DC96B130845082DF74933BCC21D7581C4C1C24CA0707A986F65`. The truthful status baseline is 45; a
+  two-file candidate must be exactly 47 entries and preserve the other 45 byte-for-byte.
+
+### Required structural contract
+
+- Structural discovery must consume the exact issued workspace/source and projected program/evidence pair plus the
+  accepted call-model `enclosingStatement` facts. Caller-authored clones, crossed pairs, stale catalogs, Proxies,
+  accessors, custom prototypes, malformed collections, and foreign source/target facts fail closed without observation
+  or mutation.
+- A delete entry is issued only for a unique complete root standalone call statement whose complete relevant-call set is
+  exactly bound to applied operations inside the selected layout target. Calls that are nested, non-root, dynamic,
+  outside the target, unbound to the issued program, or share a statement with any unproven relevant call are locked.
+  Fluent calls sharing one statement produce one deletion action over the accepted `deletionSource`; no duplicate or
+  partial-chain delete is allowed.
+- An insertion anchor is issued only at the accepted source start of the selected table's first proven standalone row
+  statement, or before the selected frame's proven standalone display statement when no earlier table-row anchor is
+  available. The anchor is a zero-length CAS range with `expectedText === ''`. Its local indentation and LF/CRLF style
+  are derived from bounded adjacent source bytes; no whole-file formatting or line-range inference is allowed.
+- Insertion accepts direct Lua call source, not a descriptor or intermediate DSL. The inserted payload must be exactly
+  one parseable standalone relevant X4 UI call statement after local indentation/newline framing; assignment, return,
+  control flow, multiple statements, comments-as-payload, unrelated calls, or text that changes the selected source
+  outside the issued zero-length range must refuse. The post-splice call model must prove the one intended new root
+  statement and preserve every prior call/operation fact modulo the exact offset/order shift.
+- Deletion must remove exactly the issued `deletionSource`, reparse, remove exactly that statement's bound relevant-call
+  set, preserve all outside bytes, and preserve every unaffected call/operation fact modulo the exact offset/order shift.
+  Both mutation kinds must return the original workspace/source objects on refusal, rebuild through the existing
+  workspace-source owner on success, re-establish a newly issued catalog/program/evidence path, and retain permanent
+  `Not verified in game` truth.
+
+### Tests-first, negative path, and acceptance
+
+The Luna owner must first add causal failing tests against unchanged production. Required positives cover deletion of
+plain and semicolon-terminated direct statements, one fluent-chain statement, insertion before first row and fallback
+display anchors, empty-range CAS, local indentation, LF/CRLF, and astral-prefix UTF-16 offsets. Exact in-memory before/
+after assertions must prove reparse, one intended call-ledger delta, outside-byte identity, unchanged unrelated files,
+and newly issued source/layout authority.
+
+Required refusals cover nested/local/assignment/return/condition/loop/argument calls, partial fluent deletion,
+statements with foreign or unbound relevant calls, missing/ambiguous anchors, stale expected ranges/text, malformed or
+multi-statement insertion, comments/unrelated calls, parse failure, dynamic/foreign targets, crossed/clone/proxy/
+accessor/prototype inputs, repeated use of stale entries, and any attempt to absorb a second semicolon, comment,
+newline, or next statement. Existing scalar discovery/application must remain exactly compatible and all prior
+`34/34` checks must stay green.
+
+Focused acceptance requires the expanded SourceEdits suite; CallModel `57/57`; Layout `565/565`; current lint
+`112/112`; WorkspaceSource, SourceBundle, EditorSession, Scene default/strict `136/136` with configured
+MENU/HUB/COMM `3/3`; Preview `94/94`; Paint `138/138`; repository typecheck; exact owned-file zero-warning ESLint;
+exact diff hygiene; protected-hash and 47-entry containment; and a fresh independent zero-write Luna `CLEAN`.
+Broad precommit/oracle/E2E/build/rendered-Forge, package/deploy, configured-mod writes, and X4 gates remain locked.
+Rollback is exact restoration of the two accepted pre-write hashes; no other path is part of this unit.
+
+### Round-one candidate rejection and correction contract — 2026-08-17
+
+Status: `FINDINGS / REJECTED / CORRECTION REQUIRED`. The two-file candidate at production
+`4A2A3DE1E0DA89AF39799BBBC5DF248126B58013CC3750853F1E88FE8DA3EF6F` and selftest
+`05C14B3B61E9FF673F1E80D2DBE39D097EA60B99099AA635D55FE7C3AC4BD37B` is not accepted. It retained exact 47-entry
+containment, was NUL-free and LF-terminated, passed diff hygiene and every declared focused/coupled test, but fresh
+zero-write native Luna auditor `01a00f3e-f4e6-76f0-a8fb-5dbbfe602da9` reproduced six contract failures without changing
+any file:
+
+- receiver spelling was used as insertion ownership: two different applied table identities both named `table`
+  incorrectly issued one anchor, while one table reached through `table` and `alias` incorrectly issued none;
+- a `tableA` first-row anchor accepted an applied `tableB:setColWidthPercent(1, 50)` payload, and the same foreign-table
+  escape reproduced against a different frame's fallback anchor;
+- `frame:display(print("x"))` and `frame:display(foo())` each hid an unrelated executable call in `localInvocations`;
+  both insertion and whole-statement deletion accepted them because only relevant `model.calls` were counted;
+- structural success shallow-froze only the result wrapper; the newly issued workspace, passthrough array, and changed
+  source record remained caller-mutable;
+- adding the first row at a fallback-display anchor was refused because the correct reissued authority transitioned to
+  `first-row`; and
+- inserting before a valid fluent `addRow(...)[1]:createText(...)` statement falsely refused because source-derived
+  row/cell paths, owner IDs, and related invocation identities were compared without a causal offset/owner remap.
+
+The correction stays in the same two files and must begin with causal red tests against the rejected production hash.
+It must use exact issued `tableId` / `frameId` ownership rather than receiver text, bind the inserted applied operation
+to the anchor owner (including table-to-frame ancestry), reject every unproven nested executable invocation for both
+discovery and payloads, immutably seal successful authority state, permit only the proven fallback-to-first-row
+transition, and map source-derived row/cell/invocation identities through the exact splice without blanket owner/kernel
+suppression. Required tests include table and frame alias/reassignment pairs, foreign-owner calls at both anchor kinds,
+hidden `print` / `foo` insertion and deletion, post-success mutation attempts, fallback transition, and the configured
+mod's fluent row/widget shape. All previous 62 SourceEdits checks and every coupled gate remain mandatory; exact
+47-entry containment and a new zero-write `CLEAN` are still required before Batch 8C. No capability-map delta.
+
+This review is non-clean. The round-one green suite proved syntax, CAS, and basic ledger counts but not semantic owner
+identity, complete executable-call coverage, immutable returned authority, or realistic fluent-call remapping. The
+highest-risk evidenced weakness is an apparently byte-local edit being accepted for the wrong X4 table/frame. Sustain
+the independent hostile audit; improve the test oracle from receiver spelling/count equality to issued owner identity
+and causal state correspondence. Broad, UI, deploy, and game gates remain locked, and all truth stays
+`Not verified in game`.
+
+### Round-two candidate rejection and expanded correction contract — 2026-08-17
+
+Status: `FINDINGS / REJECTED / TESTS-FIRST CORRECTION REQUIRED`. The SourceEdits candidate at production
+`E074705A76469F64E5833329B5A6DB7D8479C78F3B6D3839303AFEABB8C3347A` and selftest
+`090A572AAAD5DDDC6629FCD207C8D0FE0B13CE61A77C903BAB739D427ECAD430` is not accepted. Owner and coordinator runs
+passed prior SourceEdits `62/62` plus causal `16/16`, CallModel `57/57`, Layout `565/565`, lint `112/112`, Scene
+default/strict `136/136` with configured `3/3`, Preview `94/94`, Paint `138/138`, WorkspaceSource, SourceBundle,
+EditorSession, typecheck, exact pair ESLint, pair/repository diff hygiene, hash/NUL/final-LF checks, and exact 47-entry
+containment. Those results are candidate evidence only.
+
+Fresh zero-write native Luna auditor `01a00fbb-2c42-7f61-beb9-cbaf727bd260` preserved every file and returned
+`FINDINGS`. It independently reproduced:
+
+- P2 false acceptance: `frame:display(function() foo() end)` hides executable body calls not represented by the
+  current `localInvocations` ledger;
+- P2 false refusal: generic string remapping treats ordinary literal text such as `@row:999999` as a source-derived
+  identity;
+- P2 authority mutation: deep-freezing a success result freezes shared caller-owned workspace/source records; and
+- P2 metadata drift: workspace-source splicing changes `content` but preserves the old `bytes` count.
+
+It also proved the oracle is not acceptance-grade: F3 insertion rows can refuse on owner mismatch without testing the
+hidden-call gate; F4 samples selected surfaces rather than recursively proving the returned graph and original inputs;
+F5 does not prove the exact transitioned owner/target/entry sequence; F6 does not prove every row/cell/parent/related/
+invocation/call-location identity or kernel/state transition. First-row post-reparse owner matching also checks only
+`tableId`, not the complete issued `tableId + frameId` tuple. No P0/P1 finding was reported, but every P2/P3 item blocks
+Batch 8B acceptance.
+
+Reconciliation expands ownership only where the defect actually lives. SourceEdits remains the structural CAS owner;
+WorkspaceSource remains the splice/byte-metadata owner. No parser, formatter, emitter, splicer, workspace adapter, or
+authority parallel is allowed. The correction write set is exactly:
+
+- `src/lib/x4UiSourceEdits.ts`;
+- `src/lib/x4UiSourceEdits.selftest.ts`;
+- `src/lib/x4UiWorkspaceSource.ts`; and
+- `src/lib/x4UiWorkspaceSource.selftest.ts`.
+
+The frozen WorkspaceSource production/selftest baseline is
+`8D4B00CE3D2905EC84F3ED4EFEA4E81B877AF31BE121CF8C768B30811DC9B109` /
+`F3EA35258BB763718DB0AB5E21B303249F814685340B783A1CC0B0A3C937123A`. Current worktree inventory is exactly 47;
+if both currently clean WorkspaceSource files are intentionally modified, the truthful final inventory is exactly 49.
+All other files and accepted hashes remain frozen.
+
+Tests must fail first against the rejected round-two hashes and isolate each contract. WorkspaceSource must recompute
+or remove stale byte metadata at the single existing splice owner and prove ASCII plus astral/UTF-8 byte counts.
+SourceEdits must reject hidden executable function/table bodies using existing call-model evidence or a conservative
+source-shape refusal, never a second parser; remap only schema-proven identity fields while comparing user literals
+verbatim; clone the successful authority graph before deep freeze so caller-owned input remains unchanged; compare the
+complete issued owner tuple; and deeply assert exact transition/catalog identity, source/layout authority, semantic
+call/operation ledgers, kernel envelopes/state continuity, outside-byte identity, and refusal reason isolation.
+
+Acceptance repeats every prior/coupled focused gate, exact four-file ESLint/diff/NUL/LF/hash containment, exact final
+status, coordinator hostile-probe review, and a fresh independent zero-write Luna `CLEAN`. Broad precommit/oracle/E2E/
+build/rendered-Forge, package/deploy, configured mod/corpus/game writes, and X4 validation remain locked. Truth remains
+`Not verified in game`. This review is non-clean: green tests again failed to prove the authority contract; sustain
+fresh hostile audits and require every negative test to identify its causal refusal path.
+
+### Round-three candidate rejection and SourceEdits-only correction — 2026-08-17
+
+Status: `FINDINGS / REJECTED / TESTS-FIRST CORRECTION REQUIRED`. Overall B119 remains
+`IN_PROGRESS / PARTIAL — Not verified in game`.
+
+The integrated round-three candidate hashes are SourceEdits production
+`F83C11B3E997F205C409CE889355A7785A3CBACB4CAEEDB0D77C363A0FDD6918`, SourceEdits selftest
+`83C63057A2487C4ECE4941A9419F6CBD1E951790B66C62B6CB837F46B0862DBC`, WorkspaceSource production
+`B56B7A1ADD1AFD52EAFDBC077AF747DD93148CA9A62DAEDFC89CAD096D0F813E`, and WorkspaceSource selftest
+`358F0C7837C42B13097EB0D053C0100F8AFEBF1595C19FC855619E5E2D311CFE`. The exact worktree inventory is 49.
+
+Coordinator reproduction passed SourceEdits prior `62/62`, causal `18/18`, aggregate `12/12`; WorkspaceSource causal
+`5/5`; SourceBundle and EditorSession; CallModel `57/57`; Layout `565/565`; current lint `112/112`; Scene `136/136`
+plus configured MENU/HUB/COMM `3/3`; Preview `94/94`; Paint `138/138`; typecheck; exact four-file zero-warning ESLint;
+and exact diff/hash/NUL/LF/status containment. Fresh zero-write native Luna auditor
+`01a0100d-17ef-7ab2-94b3-ce34ef9645c5` repeated all 13 command families, preserved every hash and status entry, and
+still returned `FINDINGS` from independent process-memory probes:
+
+- direct payloads containing inert nested strings such as `frame:display({ value = "foo()" })` are falsely refused by
+  raw call-shaped expression matching, although actual function/IIFE/load/table-body executions fail closed;
+- `structuralInvariant()` treats any nested object with string `kind`, string `origin`, and a `path` shaped like
+  `@name:digits` as parser provenance, so an arbitrary user record can enter source-derived normalization;
+- WorkspaceSource correctly clones all own keys, but SourceEdits `freezeDeep()` walks only enumerable values, leaving
+  accepted non-enumerable and symbol-owned nested records mutable; and
+- the F6 selftest's retained-operation comparator strips kernel `stateBefore` / `stateAfter`, omits operation metadata,
+  and omits singular source-derived ID fields. Its isolated state-continuity corruption does not prove the complete
+  retained semantic ledger.
+
+The independent byte/ownership probe accepted ASCII and astral/non-ASCII edits, refreshed `bytes` only when that
+metadata existed, preserved absent metadata, rebuilt source/bundle authority, detached every mutable caller-owned graph,
+and left original inputs exact and mutable. Owner aliases/reassignments, complete table/frame ancestry, foreign payloads,
+and fallback-to-first-row transition also passed. Therefore freeze WorkspaceSource production/selftest at the hashes
+above and return correction ownership to the two SourceEdits files only. No capability-map delta.
+
+The SourceEdits owner must work tests-first against the rejected production hash and record causal reds for all four
+findings before production changes. The executable-shape correction must consume existing call-model facts and a
+bounded string/comment-aware shape check only where the call model lacks body evidence; it must not add a second Lua
+parser or make actual executable bodies acceptable. Short quoted strings, escapes, Lua long-bracket strings, and
+comments containing call-shaped text require positive byte-verbatim controls. Identity remapping must use explicit
+schema-owned fields; object-shape heuristics such as `{kind, origin, path}` are forbidden. Deep freeze must traverse
+every own key, including non-enumerable and symbol keys, without observing hostile public inputs before exact issued
+authority is established.
+
+F6 must compare retained call and operation facts including singular and plural row/cell/parent/related/local-invocation/
+call-location IDs, operation metadata, kernel envelope, and exact `stateBefore` / `stateAfter` after causal line/column/
+offset remapping. Negative controls must mutate each family independently and prove rejection or comparator failure;
+they may not pass through an unrelated owner/refusal gate. Preserve all previous 62 + 18 + 12 rows, every coupled gate,
+the frozen WorkspaceSource pair, exact status 49, permanent `Not verified in game`, and refusal identity. A new fresh
+zero-write Luna `CLEAN` remains mandatory before Batch 8B acceptance or any editor integration.
+
+This close is non-clean. The first correction overfit raw expression text and enumerable-only fixtures, while the F6
+test mirrored production omissions. Sustain hostile process-memory probes. Improve the oracle by proving inert syntax
+and every hidden own-key/ledger family explicitly. Highest-risk evidenced weakness is a source edit comparator that can
+normalize or omit caller-visible semantic data and thereby call a drifted edit safe.
+
+### Round-four through round-seven audit sequence and current rejection — 2026-08-17
+
+Status: `FINDINGS / REJECTED / TESTS-FIRST CORRECTION REQUIRED`. Overall B119 remains
+`IN_PROGRESS / PARTIAL — Not verified in game`. Batch 8C editor controls, keep-out calibration UI, widget paint,
+broad Forge gates, deploy identity, and game comparison remain locked.
+
+The intervening candidates were not accepted merely because their declared matrices were green. Round four
+`9A4F...39E3` / `50AE...9927` collapsed nested source locations and grouped mutations in ways that could hide omitted
+branches. Round five `49001A56...A47B` / `920EC45D...BEF1` still blanket-remapped nested lookalike keys, observed
+accessors, and accepted coherent downstream state drift. Round six
+`9BB7FA6527DDE7A7DD9D4C14CB7533EB38EE256C9FF67EB5E7E59342FD553A8D` /
+`4D44B924390642562473C0F4CDE660CC1743BE6E00BF105E90B7DF6125196996` passed its declared suites but fresh auditor
+`01a010ec-1266-7e12-8b0d-0cc1de3c878e` reproduced malformed producer-shaped ledgers accepted at the correspondence
+seam and a valid retained range ending exactly at the deletion anchor falsely refused.
+
+The round-seven candidate is SourceEdits production
+`509D8477E2912A034A7FDF4DFB962CD683807DE73FD4CDCD92D0A547A29B881F` (203080 bytes) and selftest
+`06628B888FEF02C0E8F3BA526146498CB3CDB17DC01124ED653BDDDB4EEF7D4C` (290915 bytes). Frozen WorkspaceSource remains
+`B56B7A1ADD1AFD52EAFDBC077AF747DD93148CA9A62DAEDFC89CAD096D0F813E` /
+`358F0C7837C42B13097EB0D053C0100F8AFEBF1595C19FC855619E5E2D311CFE`. All four are NUL-free, CR-free, LF-terminated,
+and the exact worktree inventory remained 49 before and after audit.
+
+Worker and coordinator validation passed SourceEdits prior `62/62`, causal `18/18`, aggregate `12/12`, round four
+`31/31`, round five `95/95`, round six `97/97`, and round seven `125/125`; WorkspaceSource `5/5`; SourceBundle and
+EditorSession; CallModel `57/57`; Layout `565/565`; lint `112/112`; Scene `136/136` with embedded configured
+MENU/HUB/COMM `3/3`; Preview `94/94`; Paint `138/138`; repository typecheck; exact pair ESLint; and diff hygiene.
+Those green gates are insufficient.
+
+Fresh zero-write native Luna auditor `01a01160-a980-7b23-a1f6-64dd37839b1c` preserved every byte and returned
+`FINDINGS`:
+
+- a valid direct `createText` statement deletion returns `accepted:false` with `reparse-provenance-drift`, although
+  the reparsed layout is projected with four calls, four operations, and zero gaps. `call.order` is the index in the
+  complete call-model `records` stream, which includes property, handler, and alias records. The candidate's
+  `structuralOrderShift()` subtracts only removed relevant-call bindings. In the reproduced case the retained
+  `display` operation moves from model order 17 to 14 while the comparator predicts a one-call shift;
+- kernel transition shape validation checks only the `stateBefore` / `stateAfter` / `refusal` envelope. It does not
+  validate `stateBefore` and `stateAfter` against the actual closed `HelperTableState` producer contract, and the
+  round-seven schema matrix has no kernel-state branch.
+
+The next correction owns only `src/lib/x4UiSourceEdits.ts` and
+`src/lib/x4UiSourceEdits.selftest.ts`. Production must remain frozen until selftest-only changes reproduce both defects:
+the exact valid `createText` deletion red through the public structural-apply path, and a complete malformed-kernel-state
+matrix that is valid at every enclosing producer branch but rejected only because each kernel-state field is missing,
+invalid, inherited, accessor-bearing, cyclic, or semantically inconsistent. The order repair must derive shifts from the
+complete producer record stream or another independently proven equivalent; it may not trust caller-supplied after
+orders, infer from relevant-call count, or weaken retained call/operation equality. Kernel validation must port the
+current Layout/Helper closed state contract, including provenance, metrics, properties, columns, rows/cells, row groups,
+diagnostics, and transition/refusal consistency, without importing a private validator or inventing a parallel schema.
+
+All prior matrices and coupled focused gates remain mandatory, as do exact two-file containment, frozen WorkspaceSource
+hashes, status 49, coordinator hostile probes, and a new fresh zero-write Luna `CLEAN`. The audit harness incurred
+non-evidence graphify path-canonicalization, Windows quote-stripping, and malformed inline-fixture failures; none changed
+files or counts and none is acceptance evidence. No capability-map delta. External records remain unchanged for this
+rejected candidate.
+
+This review is non-clean. Sustain independent public-path deletion probes. Improve the permanent oracle so a deletion
+before property-bearing calls proves global record-order remapping, and so every emitted kernel transition is checked
+against the producer's closed state schema. Highest-risk evidenced weakness is a convincing source edit that reparses
+cleanly but is falsely refused because its provenance comparator models a narrower order domain than the parser emits.
+
+### Round-eight retained-record audit and round-nine correction — 2026-08-17
+
+Status: `FINDINGS / REJECTED / TESTS-FIRST CORRECTION ACTIVE`. Overall B119 remains
+`IN_PROGRESS / PARTIAL — Not verified in game`; keep-out calibration, widget paint, broad Forge gates, deploy identity,
+and game comparison remain locked.
+
+Round eight closed the prior valid-deletion/global-order and closed-kernel-state defects. Its exact SourceEdits hashes
+are production `8E37F18D2E4F0D2E79666CFC1F572DE598BD1BE50080CFC2529589C867139E79` (219299 bytes) and selftest
+`E0F7A257A158E61D440EC49EC0CF185FEE566B9AD7BA8EA85F995161C1332BAE` (341593 bytes). Frozen WorkspaceSource remains
+`B56B7A1ADD1AFD52EAFDBC077AF747DD93148CA9A62DAEDFC89CAD096D0F813E` /
+`358F0C7837C42B13097EB0D053C0100F8AFEBF1595C19FC855619E5E2D311CFE`. All four are NUL-free, CR-free, LF-terminated;
+the worktree inventory remained exactly 49.
+
+Worker and coordinator validation passed SourceEdits prior `62/62`, round-two `18/18`, round-three `12/12`, round-four
+`31/31`, round-five `95/95`, round-six `97/97`, round-seven `125/125`, audit `10/10`, producer-kernel `63/63`, every
+coupled focused suite, typecheck, exact pair ESLint, diff hygiene, byte shape, and frozen dependency checks. A real
+producer-shaped public deletion also reparsed successfully, matched exact workspace CAS, and retained four calls, four
+operations, and zero gaps. These greens do not establish complete source authority.
+
+Fresh zero-write native Luna auditor `01a011f7-206a-70b3-ad17-0824cc581eb0` preserved every byte and returned
+`FINDINGS`. Five independent after-side retained-record mutations incorrectly compared equal: property
+`value.expression`, property `path`, handler `path`, handler `context.reachability`, and alias `value.expression`.
+`structuralCompleteRecordIdentityAfterSplice()` compared the common record identity/order shell but omitted current
+producer payloads. The closed comparison must include property `path`, `value`, optional `owner`, `assignment`, and
+`context`; handler `path`, `value`, optional `functionSource`, `bodySource`, `parameters`, and `context`; and alias
+`value`, `aliasKind`, and `context`. Missing, extra, inherited, accessor-bearing, and explicit-undefined variants must
+follow the exact producer contract. Generic key remapping and fixture-value special cases remain forbidden.
+
+The same audit measured the public-input Proxy boundary at one `getPrototypeOf` trap and zero getter observations. No
+avoidable browser-language alternative was found, so this is recorded as a residual boundary rather than the present
+acceptance blocker. Initial inline/base64/fixture harness failures were non-evidence and made zero writes.
+
+Exact native `luna_executor` Meitner `01a01212-e38e-7f12-93d7-9536a6bf2bf2` owns only
+`src/lib/x4UiSourceEdits.ts` and `src/lib/x4UiSourceEdits.selftest.ts`. Production remains frozen until the separate
+retained-payload matrix is causally red. Each row must prove baseline true, mutation applied, comparator false, and no
+throw; cover every property, handler, and alias producer field plus extra/missing/undefined shapes. The production
+repair must be schema-aware and preserve both public deletion positives, fluent/insertion behavior, complete-record
+order, closed kernel-state validation, Proxy boundary, all prior suites, exact two-file containment, frozen
+WorkspaceSource hashes, byte shape, and exact status 49. Coordinator reproduction and a new fresh zero-write native
+Luna `CLEAN` are mandatory before Batch 8B acceptance.
+
+The tests-first gate has now passed honestly. With production still exactly `8E37...39E79`, the new matrix produced 28
+named rows: 16 causal reds and 12 rows already rejected by existing guards. Every row proved `baseline=true`,
+`mutationApplied=true`, and `threw=false`; the 16 reds isolated the defect as `comparator=true`. All earlier SourceEdits
+families remained green at scalar `34/34`, structural `1/1`, prior `62/62`, round two `18/18`, round three `12/12`,
+round four `31/31`, round five `95/95`, round six `97/97`, round seven `125/125`, audit `10/10`, and producer-kernel
+`63/63`. Only the selftest changed for the red receipt. Production repair is now active in the same bounded ownership.
+
+Interim implementation checkpoint: the original retained-payload matrix is now `28/28` green, and the expanded final
+matrix is `43/43` green across property 23, handler 12, and alias 8. The first closed normalization made 103 prior
+round-seven rows red because source-derived complete-record paths were not remapped through their exact schema parent
+field; the worker corrected that schema-path handling rather than weakening the older correspondence oracle. A broad
+temporary diagnostic then exited `0xC0000409` before output; it was removed in favor of narrow diagnostics, and no
+production debug output remains. SourceEdits now exits 0 with all earlier matrix counts unchanged. This is still an
+interim candidate: coupled suites, typecheck, exact ESLint, pair/full diff hygiene, final hashes/sizes/byte shape,
+status 49, and exact two-file containment remain required before coordinator review and fresh zero-write audit.
+
+The final round-nine candidate is production
+`CA4DFD33245A5EE04451E9038AE97A3A342CA5A8DB1C53E1F5215FFC1AF12BB0` (224786 bytes) and selftest
+`D1DB935DFCB43C4DB4FF108950A00A69D043DC5CDEEFEE56479073BD1307FBD9` (356324 bytes). Worker and coordinator each
+reproduced retained payload `43/43`, all prior SourceEdits matrices, WorkspaceSource `5/5`, SourceBundle, EditorSession,
+CallModel `57/57`, Layout `565/565`, lint `112/112`, Scene `136/136` with configured MENU/HUB/COMM `3/3`, Preview
+`94/94`, Paint `138/138`, repository typecheck, exact pair ESLint, pair/full diff hygiene, frozen WorkspaceSource
+hashes, NUL/CR/final-LF shape, exact status 49, and two-file implementation containment. The permanent matrix emits all
+43 row receipts and independently records baseline, mutation application, comparator result, throw result, and boundary
+observation result. Coordinator static review also confirmed closed Reflect-owned keys, exact producer schema branches,
+nested parser-value/context normalization, and exact schema-owned source remapping.
+
+This evidence advances the unit to `CANDIDATE`, not acceptance. Fresh zero-write native Luna auditor McClintock
+`01a01240-6c6c-72d0-9a00-ab9723d3f265` is now independently reviewing the code, rebuilding a file-free real-producer
+public deletion with a second variant, mutating retained property/handler/alias fields beyond the permanent rows,
+checking hostile closed-data boundaries, rerunning every focused/coupled gate, and proving exact hash/status readback.
+Batch 8B becomes accepted only on `CLEAN`; any causal finding returns it to a bounded tests-first correction. Broad
+Forge, deploy, external-record, and game gates remain locked. Preview remains `Not verified in game`.
+
+This review is non-clean. Sustain fresh producer-shaped public probes even after large green matrices. Improve the
+permanent oracle by mutating every field in every producer record type rather than mirroring the comparator's selected
+keys. Highest-risk evidenced weakness is a source edit that preserves call/layout shape and exact CAS while silently
+accepting drift in property, handler, or alias semantics. No capability-map delta; external records remain unchanged.
+
+### Batch 8B round-nine accepted — 2026-08-17
+
+Status: `FOCUSED VERIFIED / ACCEPTED`. Overall B119 remains `IN_PROGRESS / PARTIAL — Not verified in game`.
+
+Mandatory zero-write native Luna auditor McClintock `01a01240-6c6c-72d0-9a00-ab9723d3f265` returned `CLEAN` against
+SourceEdits production/selftest
+`CA4DFD33245A5EE04451E9038AE97A3A342CA5A8DB1C53E1F5215FFC1AF12BB0` /
+`D1DB935DFCB43C4DB4FF108950A00A69D043DC5CDEEFEE56479073BD1307FBD9` and frozen WorkspaceSource production/selftest
+`B56B7A1ADD1AFD52EAFDBC077AF747DD93148CA9A62DAEDFC89CAD096D0F813E` /
+`358F0C7837C42B13097EB0D053C0100F8AFEBF1595C19FC855619E5E2D311CFE`. It preserved HEAD/origin parity, exact status
+49, and digest `49CD893BB8085161CA5C37BB249C8E273E6B7D9CBC111E731233104C11A212AC` with no writes.
+
+The auditor independently reviewed the closed property/handler/alias schemas, exact source remap, global order and
+cardinality, insertion/deletion bounds, and independent call substreams. Two file-free real-producer public positives
+on distinct paths/layouts each passed discovery, apply, complete reparse, exact CAS, byte locality, provenance
+restoration, and `4 calls / 4 operations / 0 gaps`. A separate issued stream transitioned `5→4` calls, `5→4`
+operations, and `22→19` complete records. Hostile retained-record and boundary matrices passed `47/47` and `12/12`;
+every row proved the baseline, applied mutation, comparator refusal, no throw, and zero getter observations. A hostile
+Proxy produced exactly one caught `getPrototypeOf` trap and no other trap. All focused/coupled suites, typecheck, exact
+ESLint, diff hygiene, hashes, byte shape, and containment repeated green.
+
+Supplemental zero-write auditor Halley `01a01254-6064-72c3-b0ca-05137b761e05` independently agreed on code review,
+hashes, inventory, operation catalog, and focused selftests, but its public apply/hostile matrix did not run because of
+transport/selector failures. Per its stop rule it returned `FINDINGS — PARTIAL AUDIT LIMITATION`, not a product
+finding. This does not contradict McClintock's complete mandatory CLEAN receipt.
+
+Review classification: source-canonical insertion/deletion and WorkspaceSource CAS authority are done and evidenced
+at focused scope. Broad Forge UI, packaged product, deploy, C++ frame acceptance, and in-game experience remain
+deliberately unproven. No capability-map delta.
+
+AAR trigger: the supplemental audit harness failed. Sustain exact hashes, disjoint ownership, and independent public
+producer probes. Improve audit tooling by separating fixture selection from transport so a harness failure cannot look
+like a product result. Highest-risk evidenced weakness remains false acceptance at a source-authority boundary; the
+accepted closed-schema comparator and mandatory independent CLEAN materially reduce that risk.
+
+### Batch 8C reconciled plan — manual screenshot-calibrated keep-outs
+
+Status: `SPECIFIED`. Lane: `FULL`.
+
+PLAN
+- Bounded unit: connect manual screenshot polygon calibration to the existing keep-out authority, editor session,
+  logical paint plan, and existing canvas overlay; then mount local design-time controls in the existing source editor.
+- Assumptions: v1 receives user-entered screenshot evidence and pixel points. It does not capture screenshots or infer
+  regions with computer vision. Calibrations are editor-session state only; no project/source/config persistence is
+  authorized in this unit.
+- Authoritative references: the source-first design's Keep-out overlays contract; existing
+  `calibrateKeepOutPolygon()`, `projectKeepOut()`, EditorSession, PaintPlan, Canvas renderer, and source-editor owners.
+- In scope: exact drawable bounds, screenshot SHA-256/profile, stable ID/context/note, normalized polygon points,
+  explicit enabled state, provenance/evidence display, deterministic reprojection at the active drawable size, and
+  advisory paint commands carrying `Not verified in game`.
+- Out of scope: automatic screenshot capture/CV, invented ticker/top-HUD geometry, persistence, package/deploy policy,
+  overlap blocking, widget texture paint, deploy-confirm identity, broad installed-host proof, and X4 validation.
+- Risks/authorization: malformed or forged calibration data must not become paint authority. No mod, corpus, game,
+  configuration, network, spending, deletion, or external filesystem mutation is required.
+- Rollback: revert only Batch 8C-owned files to their recorded pre-unit hashes; accepted Batch 8B files remain frozen.
+
+RECONCILE
+- Existing chain reused: `x4UiKeepOuts` already normalizes and projects polygons; EditorSession currently admits only
+  preset members; PaintPlan currently revalidates only built-ins; Canvas already paints polygon commands; the source
+  editor already owns context keep-out controls. Building a second overlay/persistence/emitter path is forbidden.
+- Couplings: calibration input → issued normalized entry → session projection → paint revalidation → canvas command;
+  viewport/profile changes must reproject normalized points without changing calibration provenance.
+- Capability-map delta: none; this extends the existing keep-out capability.
+
+IMPLEMENT
+- Batch 8C.1 authority spine owns only `x4UiKeepOuts.ts/.selftest.ts`, `x4UiEditorSession.ts/.selftest.ts`, and
+  `x4UiPaintPlan.ts/.selftest.ts`. Session accepts calibration inputs plus explicitly enabled manual IDs, invokes the
+  existing calibrator, and exposes immutable result/projection/evidence. Paint input carries the issued entry and its
+  projection; Paint reprojects with `projectKeepOut(entry, drawable)` and accepts only exact correspondence. Built-in
+  overlays use the same entry-plus-projection path. For a built-in, paint `context` is the selected preset application
+  context and Paint must prove that preset contains the production-evidence entry; `entry.context` remains the evidence
+  origin and need not equal the selected preset. For a manual entry, paint `context` must exactly equal the issued
+  `entry.context`. A duplicated manual stable ID makes every occurrence ambiguous: all occurrences refuse, issue no
+  entry/projection, and emit no paint command.
+- Batch 8C.2 UI controls owns only `X4UiSourceEditor.tsx/.selftest.tsx`, after 8C.1 acceptance. Controls collect stable
+  ID, context, source note, screenshot hash/profile, exact drawable origin/size, and at least three `x,y` pixel points;
+  they show refusal or calibrated provenance and allow explicit enable/remove without editing Lua or workspace files.
+
+VALIDATE
+- Acceptance: one valid polygon calibrates, retains exact screenshot identity, projects at two viewport sizes, reaches
+  Paint and the existing polygon Canvas command, remains advisory, and always states `Not verified in game`. Built-in
+  guides remain byte/behavior compatible. Invalid calibration is visible and emits no paint command. Polygon overlap
+  never blocks preview/package/deploy state.
+- Negative paths: malformed/empty hash/profile/context/note/ID, invalid bounds, too few/duplicate/collinear/non-finite/
+  out-of-bounds points, duplicate IDs, built-in ID collision, context mismatch, stale viewport projection, forged
+  evidence/game truth, unknown/extra/inherited/accessor keys, cycles, symbols/non-enumerables, caller mutation, and a
+  hostile Proxy must fail closed without getters, mutation, throw escape, or stale overlay retention.
+- Required focused evidence: causal fail-first rows; keep-out/session/paint/component selftests; coupled preview/canvas
+  tests where affected; `npm run typecheck`; exact ESLint; diff/hash/NUL/CR/final-LF/dirty-set containment; coordinator
+  review; fresh zero-write native Luna CLEAN. Broad precommit/oracle/E2E/build, rendered Forge, package/deploy, and game
+  gates remain locked pending the machine-state ask.
+
+RECONCILE DELTA — 2026-08-18
+- Coordinator review reproduced two acceptance-boundary defects in the first candidate: only the later duplicate stable
+  ID refused while the first occurrence still painted, and built-ins used `entry.context` rather than the selected
+  preset application context. The prior unqualified context-equality wording was therefore incorrect for composed
+  built-in presets and is replaced by the split rule above.
+- Correction remains within the same six authority files and must start with causal Session/Paint reds against the
+  recorded candidate hashes. Required positives cover all four preset contexts through the entry-plus-projection path;
+  required negatives cover every-occurrence duplicate refusal/no-paint, built-in preset-membership mismatch, manual
+  context mismatch, and forged/stale entry/projection correspondence. The original six calibration-seam reds remain
+  necessary but are not sufficient end-to-end evidence.
+- Zero-write audit `01a012fa-45f9-7371-a895-cd84d13ed486` returned `FINDINGS`, with 52 status records unchanged and
+  all six candidate hashes exact. It reproduced four defects: group-wide duplicate refusal is missing; built-in context
+  is evidence-origin rather than selected-preset; production Canvas rejects a valid issued manual polygon because its
+  command validator permits only built-in IDs/contexts; and Paint still accepts the legacy no-entry built-in bypass.
+- Correction is sequential. First, the Session/Paint pair and selftests must remove or strictly close the no-entry path,
+  implement group-wide duplicate refusal, and split preset application context from evidence origin with causal reds
+  against the rejected hashes. Second, the Canvas pair must consume the corrected required-entry Paint fixture and
+  admit only the valid closed shape for calibrated manual polygon commands while preserving built-in validation,
+  duplicate-command rejection, advisory-only truth, and `Not verified in game`.
+- The untouched Canvas literal trace mismatch is a separate test-oracle issue: the auditor mapped operation 365 to gap
+  command `gap:scene-gap:000002` order 58 and proved runtime plus dynamic oracle agree while the literal golden repeats
+  `setFillStyle` eight times. An in-memory HEAD fixture reproduced the same `rendered / 73 / 403 / firstDiff=365`, so
+  that mismatch pre-existed Batch 8C.1. Its maintenance is selftest-only, even though the distinct manual-ID validation
+  finding now requires a bounded Canvas production change. Each mechanism needs a separate causal receipt.
+
+CLOSE
+- Batch 8C may reach focused acceptance only after both subunits and the fresh zero-write audit pass. The program still
+  remains `PARTIAL / Not verified in game` until its later broad, installed-host, deploy, and in-game gates.
+
+### Batch 8C.1 candidate — focused green, coupled Canvas red — 2026-08-17
+
+Status: `PARTIAL / CANDIDATE`. Exact native Luna Parfit `01a0127c-145a-70a1-9d2c-7a4cc1fb214c` changed only the six
+documented KeepOuts, EditorSession, and PaintPlan production/selftest files. The causal fail-first matrix was `6/6` red
+before production and is `6/6` green after repair. The exact pre-production hashes were KeepOuts
+`3715EB1380A2913FD41BAE756493DA1B388CB65EF8B7C3A6C199061343860C8F`, EditorSession
+`3B76B8962E5423BED24EC6FFE1B3CC7362DEC81F16D1A3857DB3C2D7426E0F9F`, and PaintPlan
+`711388F4B66F53DCE31F6E33CFF83B125C967B81822003CAF074447258D964FB`. The six rows causally covered canonical
+drawable bounds, `x/y` origin aliases, built-in-ID collision, an extra calibration-input key, an accessor field without
+getter execution, and an extra point key. They exercised the `calibrateKeepOutPolygon()` seam only; no Session or
+Paint end-to-end row was captured red before production changed. Final hashes are:
+
+- KeepOuts `0325012641209481DFAE32E55933B76F1F163A2FDD2A5538F377623B49723301` /
+  `E91CE59288A1EC67B19EDE64BD90FD59F5AC5701EAEDF64BE0612A52CD1D9822`;
+- EditorSession `379356DC830B1EF1EA46AAAACF4A709A6B5D3024BA5A812471BCA6868B844099` /
+  `29563E78EAFE2FA3F5C14C559FF0E5EFF2CE53DB862DE43A727CB64206453D01`;
+- PaintPlan `26228E25C83023004822C58B02AF7B72D78E003B092739BEB4AE261AEBEBBFD6` /
+  `774A7CEF63CE19E75BBC626848A62BEB0429F04C5B01AAD95C4F2FF7FA2E187E`.
+
+Worker and coordinator focused validation passed KeepOuts `17/17`, EditorSession, Paint `143/143`, Preview `94/94`,
+typecheck, exact six-file ESLint, and diff hygiene. Every owned file is NUL-free, CR-free, and LF-terminated.
+
+The coupled Canvas selftest is `65/70`, so acceptance is withheld. All five failures share one first divergence at
+composite trace operation 365: the literal oracle expects `setFillStyle #ef4444`, while the actual renderer emits
+`save`. The renderer returns `rendered`, all 73 command IDs/orders are exact, and expected/actual trace lengths are both
+403; the four other failures are downstream equality/sensitivity assertions. This is not yet classified as a stale
+golden or a product ordering defect. Canvas production/selftest were untouched.
+
+Fresh zero-write native auditor Lagrange `01a012fa-45f9-7371-a895-cd84d13ed486` is independently mapping the mismatch
+to the exact command and auditing manual issuance, built-in context composition, duplicate-ID behavior, forged/stale
+authority, and closed-data boundaries. Batch 8C.2 React controls, broad gates, and game gates remain frozen. AAR trigger:
+the required coupled test failed; no acceptance claim may be based on the narrower greens.
+
+The audit returned `FINDINGS`, zero writes, with status count `52` before/after and every supplied hash exact. It
+classified the five Canvas reds as one pre-existing stale literal-golden cascade, then reproduced four product findings:
+group-wide duplicate refusal missing; selected-preset context replaced by evidence-origin context; valid manual Paint
+rejected by Canvas's built-in-only command validator; and the legacy no-entry built-in Paint bypass. The candidate is
+rejected. Correction order is Session/Paint authority first, then Canvas manual-command validation plus independent
+literal-golden maintenance, then all coupled focused gates and a new zero-write audit.
+
+### Batch 8C.1 correction candidate and proxy re-audit — 2026-08-18
+
+Status: `FINDINGS / CORRECTION ACTIVE`. Native Luna Parfit corrected the four prior findings tests-first. Exact red
+evidence against unchanged production covered the group-wide duplicate winner, three non-cockpit selected-preset
+contexts, the no-entry built-in bypass, and valid manual Paint refused by Canvas. Coordinator and fresh zero-write Luna
+Pasteur then reproduced Session causal `1/1`, Paint `148/148` with causal `9/9`, Canvas `75/75` with causal `10/10`,
+KeepOuts `17/17`, Preview `94/94`, typecheck, exact six-file ESLint, and diff hygiene. The stale Canvas literal is now
+exactly 73 commands / 403 operations with oracle sensitivity `3/3`; the real manual polygon path reaches Canvas.
+
+Final audited hashes before the next correction are Session `6EDA944663241569CF6E9F15F5BC82F5F70C33D4396F3DE6A228F8D1E683D41D`
+/ `AFA6FB1274B105838F4509ACED3754ADF28EEAB3FCE46004699D9436843A418C`, Paint
+`0C488162BD5D301BC725211C14DE0D4893EB754E00FF7D74A5954E2A1C2B0266` /
+`07BF5DBC022F953D86968D30D621F752AD8B38D2E7DB6CE5C61287FFC7B170B1`, and Canvas
+`CF7AFAF3ED76E98DF27CAE5143E04B4E8E97D48704ADE261A4C8CBABBE9A8AC2` /
+`B45116AB3455317F25DE641C9F9D1687B59820D817D8CE596EF679D8E1C6228F`. Audit status count was 54 before/after with
+zero writes.
+
+Pasteur's hostile matrix closed safely-known duplicate identity: 12/12 cases and 26/26 occurrences refused, with no
+entry, projection, enablement, or Paint authority. Unknown accessor/inherited identities correctly refused only
+themselves and remained nonblocking. It found one new HIGH defect: a transparent Proxy around a valid manual-calibration
+array is accepted by Session, and a transparent Proxy around valid issued keep-out input is accepted by Paint after
+proxy traps run. That violates the specified hostile-Proxy fail-closed boundary.
+
+The next bounded correction owns only Session/Paint production and selftests. It is tests-first against the exact hashes
+above. Permanent reds must reproduce both accepted transparent Proxy containers, prove the intended seam and trap
+census, and add mixed accessor/proxy controls. The correction should reuse the existing browser-safe repository
+precedent of descriptor/accessor validation plus `structuredClone` admissibility; Node-only `util.types.isProxy`, a new
+server owner, or parallel authority infrastructure is forbidden. It must refuse Proxy containers before issuing entry,
+projection, enablement, command, or stale overlay, preserve zero getter invocation and throw containment, and preserve
+visible/nonblocking invalid calibrations. If those requirements cannot all be met for a combined hostile case using
+portable browser semantics, stop and document the exact contradiction rather than weakening a test or inventing proof.
+Canvas, KeepOuts, React, broad gates, and game truth remain frozen until this correction and a fresh zero-write audit are
+CLEAN.
+
+The accepted Batch 8B checkpoint was synchronized and read back at GitHub #41 comment `5322307397`, Drive revision
+`AIroW37jpAOMfCUlSFwOXv_uXS1YYM94MujBar8ureU3U5V06iBJpgWyL2cVfNYsUaiQOAonke94ZCJD-LRJsAjmq6AOtu_0NPuAZQGa1F2m`,
+and Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a`.
+
+### Batch 8C.1 transparent-Proxy contradiction and reconciled boundary — 2026-08-18
+
+Status: `SPECIFIED / CORRECTION ACTIVE`. The strict transparent-Proxy correction stopped before production exactly as
+required. Its permanent fail-first rows left Session `3/6` and Paint `150/152`: transparent Proxy containers and direct
+Proxy elements could present otherwise-valid calibration or issued keep-out data. Session and Paint production stayed
+byte-identical at `6EDA944663241569CF6E9F15F5BC82F5F70C33D4396F3DE6A228F8D1E683D41D` and
+`0C488162BD5D301BC725211C14DE0D4893EB754E00FF7D74A5954E2A1C2B0266`; Canvas `75/75`, KeepOuts `17/17`, Preview
+`94/94`, typecheck, exact lint, diff hygiene, byte shape, and status count 54 remained unchanged.
+
+RECONCILE
+- Portable browser JavaScript has no semantic operation that identifies a fully transparent Proxy while preserving the
+  target's behavior. Descriptor reflection is intentionally transparent. `structuredClone` rejects a Proxy, but cloning
+  an ordinary mixed array traverses its values and invokes accessors. Therefore unconditional transparent-Proxy refusal,
+  zero getter execution, and nonblocking treatment of malformed peers cannot all be guaranteed. The previous acceptance
+  conjunction is impossible and is replaced; no product code will pretend otherwise.
+- The enforceable authority property is detached, one-boundary consumption. Session must materialize each calibration
+  candidate through own data descriptors into a fresh closed-data snapshot before duplicate counting or calibration.
+  Paint must capture each keep-out item's `context`, exact issued-entry identity, and exact issued-projection identity
+  from one descriptor admission, then materialize only those captured issued objects into fresh closed data. No later
+  validation, projection, output, or diagnostic may read from or retain the caller's container, item, nested object, or
+  Proxy.
+- A transparent Proxy is consequently treated as an untrusted data facade, not as authority and not as a detectable
+  type. Its traps may run during the bounded descriptor capture. Throwing/revoked traps refuse without escaping;
+  accessors, symbols, cycles, decorated/sparse arrays, unknown shapes, and non-enumerable data remain closed. A malformed
+  Session item remains visible/refused while unrelated valid items remain nonblocking. Paint keeps its all-or-nothing
+  issued-authority boundary.
+- The correction remains bounded to the Session/Paint production/selftest pairs. KeepOuts, Canvas, React, external
+  records, broad gates, and game truth remain frozen. This is a reconciled acceptance change caused by a language-level
+  contradiction, not a test relaxation over a feasible defect.
+
+VALIDATE
+- Before production edits, add causal time-of-check/time-of-use rows that make a Proxy present one stable ID during
+  duplicate discovery and another during calibration, and make Paint present issued entry/projection identities during
+  admission but forged structural values during later materialization. Both must be red against the unchanged production
+  hashes and green only when every downstream decision consumes the detached snapshot.
+- Retain the transparent-container/direct-element rows as facade controls: require zero getter execution, bounded/caught
+  traps, immutable detached outputs, no output change after target mutation or post-call trap arming, exact issued
+  identity at Paint admission, no stale overlay, and deterministic replay. Retain revoked/throwing, mixed accessor,
+  symbol, cycle, duplicate, selected-context, no-entry, copied/stale/mismatch, Canvas, KeepOuts, and Preview controls.
+- Focused acceptance still requires every Session/Paint row green, Canvas `75/75`, KeepOuts `17/17`, Preview `94/94`,
+  typecheck, exact four-file ESLint, diff/hash/NUL/CR/final-LF/status containment, coordinator reproduction, and a fresh
+  zero-write native Luna `CLEAN`. The product remains `Not verified in game`.
+
+### Batch 8C.1 detached-snapshot correction and final CLEAN — 2026-08-18
+
+Status: `FOCUSED VERIFIED / ACCEPTED`; overall B119 remains `IN_PROGRESS / PARTIAL — Not verified in game`.
+
+The detached-snapshot repair began with causal fail-first evidence against unchanged Session/Paint production. Session
+was `6/7`, with only `causal-session-toctou-snapshot-stops-collision-swap` red; Paint was `152/153`, with only
+`causal-paint-toctou-snapshot-stops-forged-second-story` red. The repair snapshots each Session candidate from its own
+data descriptors before duplicate/calibration work and makes Paint capture the exact issued entry/projection identities
+once before materialization. Final production hashes are Session
+`20B7429079DA6C7297A505667C07C1FDD015827839BB468C4412402E7E7D5AF0` and Paint
+`4F1F783526D201EBAF1CE0156592CF27924EF40B47EE004446880FB62BF870B5`.
+
+The first fresh audit found no production authority escape but rejected acceptance because the permanent tests asserted
+only aggregate Proxy activity in several accepted facade rows and a Session getter counter was disconnected from the
+real `get` trap. A tests-only correction made every accepted Session/Paint facade and TOCTOU row use the same exact
+five-field census predicate (`total/get/getPrototypeOf/ownKeys/getOwnPropertyDescriptor`) and added sensitivity controls
+that accept the real vector and reject `get + 1`, `ownKeys + 1`, `getPrototypeOf + 1`, descriptor `+1`, and descriptor
+`-1`. Final selftest hashes are Session
+`49C10D546016338A2E482D26D0B48187B0CD53366A7F9D3EC2F0EF613DC6F518` and Paint
+`E221AC858AE9FE47C75EC2844DFB0DBD113AD3A7E4D69F073164DA82CE4A7AC8`.
+
+Coordinator reproduction passed Session `7/7`, Paint `153/153` with causal `14/14`, CanvasRenderer `75/75`, KeepOuts
+`17/17` with causal `6/6`, Preview `94/94`, repository typecheck, exact four-file ESLint, and diff hygiene. All four
+Session/Paint files have no NUL or CR and retain a final LF; production hashes remained frozen. Final independent
+zero-write native Luna auditor `01a013a2-01a8-7f82-ae3e-66c9d2555399` returned `CLEAN`, changed no files, preserved
+HEAD/origin at `77138741a9f470e2c6c37c2d6857688dd1e2b13e`, and preserved the exact 54-entry status digest
+`82a0d89d8ba0208e9aa75dadeeb327d4773a79922ace04059e380b72c52d117b`. Its independent nested transparent-Proxy probe
+also produced detached recursively frozen output with zero getter calls. Batch 8C.2 may now mount only the specified
+session-local manual controls in the existing source-editor keep-out section. Broad, installed-host, deploy, and game
+gates remain locked behind their later machine-state gate; no game verification is claimed.
+
+### Batch 8C.2 React candidate — fresh audit FINDINGS and row-local correction — 2026-08-18
+
+Status: `FINDINGS / CORRECTION ACTIVE`; overall B119 remains `IN_PROGRESS / PARTIAL — Not verified in game`.
+
+The initial two-file candidate reached a focused green matrix at production/selftest hashes
+`8FF6C50835EE0C6DE1397AA1EDFF1CE480B25B407294BB07A2941DA2EFDC0AA8` and
+`2F15ED9B12797581B30E765DDBC474C7D8088ABF08D149349BF10EF14C74D79D`: component, Session `7/7`, Paint `153/153`,
+CanvasRenderer `75/75`, KeepOuts `17/17`, Preview `94/94`, typecheck, exact two-file ESLint, and diff hygiene all passed.
+Those greens do not accept the candidate.
+
+Fresh zero-write Luna auditor `01a013de-066a-7172-8006-a450058ce543` independently reproduced a P1 row-identity
+escape. `setX4UiManualCalibrationRowEnabled()` stores stable IDs, and the rendered checkbox reads the same stable-ID
+set. Two rows sharing an ID therefore alias: enabling row one produces the visible vector `[true, true]`, and toggling
+row two clears row one's explicit state. Duplicate admission still correctly blocks Session/Paint, but the local UI
+violates the documented distinct-row contract. The audit also identified ambiguous evidence labels around historical
+pre-correction hashes; those receipts are useful but must not read as current hashes, and no selftest may pretend to
+embed its own current hash.
+
+The audit changed no files and preserved all ten supplied hashes, `HEAD=origin/main` at
+`77138741a9f470e2c6c37c2d6857688dd1e2b13e`, status count `56`, and full status digest
+`9EC85F3E3CF4B1010D3CAA68FCE0E438A22FC035FDDDC0D3C1DDD47B363DF2BD`. Original exact Luna owner
+`01a013b5-007b-7da1-ba20-b03b260f5c5e` now owns only the same two React files. It must first capture a causal red, then
+key local explicit enablement by immutable `rowId`; derive primitive stable IDs only in the validated Session input;
+keep valid-valid and valid-malformed duplicates ambiguity-blocked; preserve each surviving row's own enable state;
+remove only the deleted row's state; retain plain session-local controls and `Not verified in game`; and relabel the
+historical hash receipt without inventing current evidence. Full focused reproduction plus a new independent zero-write
+`CLEAN` remain mandatory.
+
+In parallel, Luna `01a013ee-8dc8-7292-a1d8-c44281fadb9d` has a read-only reconciliation task for the later real-widget
+paint boundary. It must classify shipped `widget_fullscreen.lua`/Helper/assets and C++ getters before any producer or
+paint owner is assigned. This research is not implementation or acceptance. Broad Forge, installed-host, deploy-byte,
+C++ frame-acceptance, and X4 screenshot gates remain unrun and unclaimed.
+
+### Batch 8C.2 row-local correction and final CLEAN — 2026-08-18
+
+Status: `FOCUSED VERIFIED / ACCEPTED`; overall B119 remains `IN_PROGRESS / PARTIAL — Not verified in game`.
+
+The exact Luna owner captured the required causal red before production, then changed only
+`src/components/X4UiSourceEditor.tsx` and its selftest. Final hashes are production
+`B085A0A542D6B17E287DE52CB19452D2E75D67ACA15454274D61D20C3E85C3C2` and selftest
+`9FF34E6471C045CB4FC7F3A2CEAF94391548967D8E5BFE2F20D8994F79EFE3ED`. Session-local enablement stores immutable
+row IDs; stable IDs are projected only after parse and duplicate validation. Valid-valid and valid-malformed duplicate
+rows retain independent checkbox state while both remain ambiguity-blocked. Removing a row activates the survivor only
+when that survivor was independently enabled, and stable-ID edits preserve row-local intent through collision and
+recovery. Historical hashes are explicitly labelled pre-correction receipts.
+
+Coordinator reproduction passed the component selftest, Session `7/7`, Paint `153/153`, CanvasRenderer `75/75`,
+KeepOuts `17/17`, Preview `94/94`, typecheck, exact two-file ESLint, and diff hygiene. Its independent executable probe
+produced row vectors `[true,false]` and `[true,true]`, ambiguous Session IDs `[]`, enabled-survivor recovery
+`["probe-shared"]`, and disabled-survivor recovery `[]`. Fresh zero-write Luna
+`01a013ff-fca7-7c50-bb49-4aba524aee30` returned `CLEAN`: it repeated the full matrix, found no weakened assertion or
+production escape, changed no files, matched every supplied hash, and preserved
+`HEAD=origin/main=77138741a9f470e2c6c37c2d6857688dd1e2b13e` plus the exact 56-entry status digest
+`9EC85F3E3CF4B1010D3CAA68FCE0E438A22FC035FDDDC0D3C1DDD47B363DF2BD`. Batch 8C is complete at focused scope.
+
+### Added end-to-end AI Influence visual acceptance fixture — 2026-08-18
+
+Status: `SPECIFIED`; it extends the final product proof and does not weaken or replace any existing B119 gate.
+
+The required fixture is
+`C:\Users\Moshi\Desktop\# AI Influence mod UI design\design_handoff_ai_influence`. The coordinator read the complete
+README and visually inspected all twelve supplied references: `00-brief.png`, `00-vanilla-reference.webp`, and every
+`1a`-`1j` PNG. `AI Influence UI.dc.html` is an interactive visual reference only and must not be translated into the
+product. The completed Forge must author source-preserving X4 Lua using the real Helper/widget calls and the configured
+unpacked corpus.
+
+Acceptance sequence:
+
+1. Build recommended comm-link screen `1b` through the Forge first. Preserve the left state rail, fixed bottom anchors,
+   internally scrolling transcript, static side-by-side choices and input dock, unobscured NPC centre, and native-wheel
+   keep-out band.
+2. Build the remaining comm-link (`1a`, `1c`), confirmation gate (`1d`-`1f`), and hub (`1g`-`1j`) surfaces through the
+   same editor/emitter. Use flat square X4 chrome, 1 px blue rules, state-only colour, Zekton-backed text, scaled row
+   heights, solid table-backed meters, and disabled-visible gated actions.
+3. Capture Forge renders at the design resolution and applicable UI scales; compare geometry, wrapping, truncation,
+   fixed/scroll regions, and keep-outs against the supplied images. A browser match remains `Not verified in game`.
+4. Deploy the exact emitted bytes through the validated Forge path, prove deploy hash identity, and capture matching X4
+   screenshots. Only game-reported frame acceptance plus visual comparison can promote the result to 1:1 in game.
+
+Negative paths: the HTML/CSS prototype is never used as implementation code; preview never claims engine acceptance;
+the conversation wheel/NPC keep-outs may not be occluded; gated actions may not disappear; and streaming/dice variants
+may not shift the static action region.
+
+Visual-inspection ledger (the PNG/WebP pixels, not the HTML, are authoritative):
+
+- `1a` deliberately spends most of the screen on unobscured live scene; the right dock is a tall, dense information
+  column whose transcript owns the only expanding/scrolling region and whose choice stack is pinned below it.
+- `1b` is not a centred modal. Its sparse state rail, untouched NPC-safe centre, and three independent bottom-anchored
+  transcript/choice/input plates are the composition. The entire lowest band remains visually empty for the native
+  wheel. Matching labels while shifting those masses is a failed visual comparison.
+- `1c` is a three-column full-screen ledger with a deliberately empty upper centre and the active conversation pinned
+  to the centre bottom. The narrow correspondent history and leverage columns frame that empty live-conversation field.
+- `1d`-`1f` are compact centred decision plates surrounded by large quiet margins. Their hierarchy comes from one
+  dominant blue header/action, thin row rules, fixed numeric gutters, and visibly retained disabled/gated rows—not from
+  ornament, shadows, rounded cards, or extra colour.
+- `1g` uses a narrow faction master list and a much wider detail/ledger pane; the selected faction row is the strongest
+  blue mass. `1h` is three equal audit columns with independently pinned footers. Their large lower empty fields are
+  intentional and must not be compressed away by auto-height layout.
+- `1i` and `1j` show two tabs stacked only for the handoff image. They must become separate tab states. Both rely on
+  long, low-density rows, fixed right-aligned status/action columns, and colour that encodes source/outcome rather than
+  decoration.
+- Across every screen, the most important visual invariants are proportional column widths, deliberate negative space,
+  thin square blue chrome, bottom/static anchoring, and restrained state-only colour. Presence of all copy is necessary
+  but insufficient for visual acceptance.
+
+#### Visual source freeze and `1b` keep-out reconciliation — 2026-08-19
+
+Status: `SPECIFIED / REPRODUCED CONFLICT`; no product, mod, game, corpus, or configuration file changed during this
+read-only reconciliation.
+
+The coordinator re-opened the supplied pixels, including `1b` and the vanilla reference, rather than relying on the
+README or HTML alone. Immutable handoff identities are README
+`413970EB6BE9D199A98918EE6352DF1595E1F41B1007BFA46627DA0F3D2F7163`, reference-only HTML
+`0AF1FBEC4BC7C8C32C5C4DAE927F7357BBEB91F706197361C176D07E60E5D7D2`, and support script
+`8FE7DF74405F3C55F49B7249C74EA1397E65D07DEA2B1BD3B4A489BEC2E28CBE`. Image SHA-256 identities are:
+
+- `00-brief.png` `B7FD3CA46BDE57AB9031CBBC20FA9D6C3B7CEBD8525E608F23F732437F8BF857` (`1278x803`) and
+  `00-vanilla-reference.webp` `D943111D010FFDC0DF96D58CCA00D906B94DA4317BB7CE24EC9062D2A09A43CB` (`2560x1440`);
+- `1a` `B7645A19FDBFC81D50618E82144895E8249CE910D65498F8850E6E42400A5EB3`, `1b`
+  `C22D77069445514B52D0258D9AF98907AFAA2B4B2438D08EFE73FD9E67554CF2`, `1c`
+  `ED58A9F6287D2347E66D2BAF4AEE9AD0B6A1150EEE4D491BAB6D6DF6A3A7AB9B`, `1g`
+  `6CD8E74ED44B65A8E110D623EC18498502D6D58A4385CD9E4384F2F52F67362C`, `1h`
+  `7BF5A7726105750C157BC0FB62F41576A2BA5D310EC1EBD4092BEFE040D8F03A`, `1i`
+  `92171B690EEAD994F776406F5FC7A8275E21C40AF3106E8E70C3090678F138E9`, and `1j`
+  `7E32CA4B9BAC1D615C632E3EBB89E85ED31DD1BE5F1D26A581AFE5327F5D9DA7` are `2562x1442` source images whose
+  visual card is the specified `2560x1440` canvas plus border;
+- cropped decision-card references `1d` `195C20E272EF09AAF00D237C84FD18EB0EF60780EB0F06E39F01EC4F20AC25B9`
+  (`1380x840`), `1e` `25778A56F6F2787DABC6B465209022BE99821F9958487BFFD4E1A9650B704710`
+  (`1382x1002`), and `1f` `25F09C3E4D1DC92B00900A0C85033F6E200F1F18FB5EDD924A44DD6F8AF96566`
+  (`1382x1002`) do not prove an absolute full-screen position; centre them in the `2560x1440` Forge canvas using the
+  README plate dimensions and compare their internal geometry.
+
+`[REPRODUCED]` Forge already owns and tests the source-requested cockpit-conversation guides: Back row `y=0.788`,
+option-stack start `y=0.740`, and INFORMATION/NPC-video left edge `x=0.664`. At `2560x1440` these project without
+rounding to `y=1134.72`, `y=1065.6`, and `x=1699.84`; the existing SourceEditor exposes the preset and Session -> Paint
+-> Canvas carries the active guides. The `1b` source places a centred choice plate at `bottom=236` with content-box
+width `1360` plus `26px` horizontal padding, so its visible outer span is `x=574..1986`, its bottom is `y=1204`, and
+the supplied pixels visibly span both horizontal guides. The `1360px` input dock spans `x=600..1960` at input-bar
+height and crosses the measured `x=1699.84` information-panel edge. This conflicts with the handoff's simultaneous
+claims that the native wheel remains unobscured and nothing need be blank until approximately `y=1290`.
+
+`[INFERENCE — high confidence, not game proof]` the mock cannot be copied pixel-for-pixel and also be declared clear of
+the measured cockpit-conversation guides unless that exact X4 state suppresses, clips, or relocates the native wheel or
+INFORMATION panel. The built-ins are guides, not measured full polygons, so intersection identifies a release-blocking
+design risk rather than proving the exact occluded area. During Forge dogfood, enable `Cockpit conversation`, render the
+literal `1b` geometry first to expose the collision, then preserve that evidence and create the smallest adjusted
+variant that clears the active native regions. Do not silently shift the mock and do not promote either variant until
+the deployed X4 screenshot establishes which native elements are present in the exact comm-link state.
+
+External-record synchronization was read back without closing B119: GitHub #41 comment `5347871212` contains the
+exact conflict checkpoint; Notion accepted comment `3c14618e-d15b-815e-968b-001d3fd913c1`, while its comments reader
+again returned a stale discussion snapshot, so the schema-confirmed `Reverse Sync Result` property was updated and
+read back with the three projected coordinates and pending gates instead of posting a duplicate. Drive appended the
+same checkpoint under required revision
+`AIroW34ec3tH_2d7m2zQDfMCm8rxh5dZp1CK8EbCPjrq4507c_TrVbTtqXFH7G4KeMGSC7OYBgz5ZhE4621LDPzvuG_Yz_MnmpuYTWq8Rnux`;
+readback revision is
+`AIroW35HtnX_2zZyHPLJwj9JIih8FTNVwLDSx2NZsJFb-l4bzsQD3tIkHbViIOHKLsZCeNFWPN8t5FDokUpSJvyQjEEcjHvQ3ayDbyb-JXKc`,
+with the exact heading at indexes `90605..90667`, `HEADING_2` paragraph authority through index `90668`, and the
+final pending-X4 sentence present.
+
+Reconciliation found no ADR conflict and no capability-map delta: this checkpoint strengthens the open B119 acceptance
+fixture but does not promote the uncommitted editor to a verified cumulative capability. Triggered AAR: the first HTML
+search used a PowerShell-sensitive regex and failed before execution; the corrected read used fixed-string searches.
+The first hash census also passed a wildcard to `Get-FileHash -LiteralPath`, which correctly did not expand it; explicit
+`Get-ChildItem` enumeration produced the frozen hashes above. Neither failed read wrote data. Sustain the direct pixel
+inspection plus exact source/geometry trace. Highest-risk evidenced weakness is that measured guides are not complete
+native polygons; the bounded reduction is the literal-versus-clear dual render followed by exact-state X4 capture.
+
+### Widget-paint source reconciliation amendment — 2026-08-18
+
+Status: `SPECIFIED`; overall B119 remains `IN_PROGRESS / PARTIAL — Not verified in game`.
+
+The read-only audit completed with no repository writes and corrected an overly broad first classification. Shipped X4
+9.00 `libraries/colors.xml` is exact canonical default-theme data at SHA-256
+`6A57FE660D546F5144206581A40194CE13D0D11478B584A46467F0AAE715B883`, 72,950 bytes. Its schema
+`libraries/colors.xsd` is SHA-256 `F0D31824E00227EFF6288B084E29346C5AA9D2694BFB0D62D6008EE3DBD879DF`, 7,981 bytes. The
+canonical graph has 224 unique `<color>` definitions, 804 unique one-hop `<mapping>` entries, zero duplicate IDs, zero
+invalid references, and no mapping-to-mapping chains. Omitted XML `r/g/b` default to `0`, `a` to `255`, and `glow` to
+`0` under the shipped schema.
+
+This promotes default flat fills, row backgrounds, text/icon colors, button defaults, edit-box defaults, and known
+`Color["id"]` references from unavailable to canonical-default-only evidence. It does not promote them to current
+runtime truth: `widget_fullscreen.lua` receives the effective map from C++, while `gameoptions.lua` exposes profile,
+definition, mapping, import/export, and colorblind controls. Personal overrides, active profile, daltonization mode and
+strength, hover/active/selection state, materials, textures, glow rendering, and C++ metrics remain unavailable until
+captured from the running game. Source-literal TOK color tables are independently source-known. Their Lua alpha semantics
+must remain distinct from XML's 0-255 domain; no silent conversion is permitted.
+
+Sequential bounded owner graph:
+
+1. **P1 — CallModel color expression producer.** Own only `src/lib/x4UiCallModel.ts` and its selftest. Tests first for
+   literal `{r,g,b,a}`, known symbolic `Color["id"]`, unknown ID, dynamic key, conditional expression,
+   function-returned color, and omitted glow. Preserve exact fields, source locations, and provenance; never infer an
+   effective runtime value or resolve the canonical map in this layer.
+2. **P2 — CorpusAssets color loader.** Own only `src/lib/x4UiCorpusAssets.ts` and its selftest. Add exact XML/XSD
+   identities and parse the closed default graph. Require canonical counts above plus negatives for hash mismatch,
+   malformed/truncated XML, duplicate IDs, absent base references, mapping-to-mapping references, and invalid
+   RGBA/glow domains. A captured C++ map must remain a separate non-canonical input.
+3. **P3 — LayoutProgram default resolution.** Own only `src/lib/x4UiLayoutProgram.ts` and its selftest. Resolve known
+   symbolic IDs against accepted canonical assets with base ref, RGBA, glow, and `default-only` grade; preserve literal
+   TOK colors as source-known. Unknown/dynamic/conditional IDs, missing assets, and runtime mismatch remain explicit
+   gaps.
+4. **P4-P7 — Scene, Paint, Canvas, preview/editor.** Proceed serially after each upstream pair is accepted. Propagate
+   color provenance and runtime gaps, add exact flat paint only where evidence permits, and retain diagnostic treatment
+   for materials/glow/state/metrics. Every visible preview continues to carry `Not verified in game`.
+
+Each code pair requires a causal fail-first receipt, its focused and coupled dependency matrix, typecheck and exact
+lint/diff hygiene, immutable hash readback, and a fresh zero-write Luna audit before the next owner starts. Broad
+precommit/oracle/E2E/build, installed-host inspection, deploy-byte proof, and X4 screenshot comparison stay locked until
+all focused widget batches are accepted and the machine-state question is answered.
+
+P1 execution started with exact native Luna `01a01611-35b0-72c3-86ec-b1e730b5a118`, owning only the CallModel pair.
+Starting hashes are production `E0842D11D156764917DC36740294D43FA7CBCC75089C4B4187E17190DBF4CD4C` and selftest
+`7CDB2CA96D5E545E1DAB4CDF44FF874CA507066373C8DBE818E43EBB3977D432`; coordinator baseline is `57/57`. No
+candidate is accepted until a fail-first receipt, complete focused/coupled green matrix, exact containment, and fresh
+zero-write audit are recorded.
+
+Triggered AAR evidence retained for this unit: the revision-guarded Drive append refused because a concurrent writer had
+already advanced the document; latest readback contained the intended equivalent checkpoint, so no retry or duplicate
+entry was written. The first independent PowerShell XML census used the wrong assumed root and returned a false `1/1`;
+inspection proved the root is `<colormap>`, and the corrected XPath census returned `224/804/0/0/0` for colors,
+mappings, duplicate color IDs, duplicate mapping IDs, and invalid references. Do not bank or cite the failed selector.
+Repeated blank native-worker waits are non-terminal mailbox timeouts, not worker-failure evidence; no interrupt or
+fallback executor is authorized from elapsed time alone.
+
+### P1 first CallModel candidate — real-source rejection — 2026-08-18
+
+Status: `FINDINGS / REJECTED`; P2 and every downstream owner remain locked.
+
+The worker captured a causal `57/65` fail-first receipt with eight named color families before production, then reported
+CallModel `65/65`, LayoutProgram `565/565`, SourceEdits `62/62`, Lint `112/112`, typecheck, exact ESLint, and diff check
+green. Coordinator reproduction matched those results. The exact candidate hashes are production
+`D314F111E95385D57BF039A85C65360000551EB83C2BCA6B53FCA472FB4DB6B0` and selftest
+`C7ABAC0785184B533251EFCB3A0635A2B4C7302F994F324FA269404FF7F8E3FA`; the worker's terminal receipt omitted the
+production digest's final `0`, so its written hash is not accepted evidence.
+
+The synthetic green does not cover the authoritative production shape. Public-model probes over the exact AI Influence
+sources returned menu `23` total color records / `15` TOK uses, hub `56/50`, and comm `29/27`. Every direct stable
+`TOK.member` example inspected remains `kind=unresolved` with reason `MemberExpression is not source-resolvable`.
+Because P1 emits neither the resolved literal channels nor sufficient declaration provenance in that result, P3 cannot
+recover the exact source-known RGBA without adding a second Lua parser. This is a release-blocking P1 failure, not a
+permitted runtime gap.
+
+Fresh zero-write Luna `01a0162c-5b40-74b2-9ec9-b90b938ecbaf` is auditing the complete candidate, including real
+`TOK.member` and static-index variants, aliases and mutations, lexical/global `Color` shadowing, UTF-16 source identity,
+all six color-bearing properties, deep freeze/JSON closure, and the non-enumerable per-property `colorExpression` versus
+the enumerable top-level `model.colorExpressions` authority. Production stays frozen until the audit returns; the same
+original worker may receive a targeted correction only after findings are reconciled.
+
+The audit returned `FINDINGS` with no writes and exact hash/gate parity. It independently reproduced:
+
+- **P1 real-source failure:** menu/hub/comm have `23/56/29` color records, `15/50/27` TOK-bearing records, and
+  `11/35/20` direct stable `TOK.member` records; every direct row is unresolved and exposes no channel/declaration fact
+  sufficient for a downstream consumer without reparsing Lua.
+- **P1 duplicate authority:** projection `colorExpression` is public-but-non-enumerable, omitted by JSON, and attached
+  to a mutable projection while the top-level sidecar is frozen. Mutating the projection name leaves the sidecar
+  unchanged.
+- **P1 weakened oracle:** an unmutated `validAlias` is deliberately required to remain unresolved, and the test labels
+  the evidence serializable while explicitly requiring `Object.keys` to hide the per-property field.
+- **P2 separate boundary:** direct BOM-prefixed CallModel input fails parse while CRLF/astral ranges pass. The accepted
+  source-bundle adapter already uses an equal-length BOM parser sentinel; no active product path or real menu reproduced
+  a BOM failure, so this remains a named deferred boundary rather than P1 scope expansion.
+
+Original exact Luna `01a01611-35b0-72c3-86ec-b1e730b5a118` now owns the correction in the same two files. It must first
+make the corrected TOK/single-authority cases causally red against rejected production, then remove all hidden projection
+color fields, retain one frozen enumerable `model.colorExpressions` authority, and resolve stable inline/local-alias/
+`TOK.member`/`TOK["member"]` literals through the existing object graph. Literal evidence must carry exact use and
+declaration ranges plus channel/key ranges; pre-use direct/alias/branch mutations remain unresolved, while post-use
+mutation cannot retroactively erase earlier exact evidence. Reconciliation below supersedes the original menu `11/11`
+assumption after the real source proved two uses undeclared. P2 remains locked pending a new independent audit.
+
+### P1 correction candidate and reconciled real-source contract — 2026-08-18
+
+Status: `CANDIDATE / AUDIT ACTIVE`; P2 and downstream owners remain locked.
+
+The tests-first correction produced causal `64/68` before production and now passes CallModel `68/68`, LayoutProgram
+`565/565`, SourceEdits `62/62`, Lint `112/112`, typecheck, exact ESLint, and diff hygiene. Exact candidate SHA-256 values
+are production `35A75178A444232D0EB41F0D8A65CDEDFFCC15A224467C35AAB121A2BF19EC6C` and selftest
+`6DD840BB51E381EB754AB0440C06DBB4BBC846E632CC20FE55FCEEC752323E4B`.
+
+Coordinator public-API probes over the exact installed AI Influence menu sources return total/TOK-bearing/direct TOK
+color-expression counts of menu `23/15/11`, hub `56/50/35`, and comm `29/27/20`. Hub resolves all `35/35` direct
+expressions to source-literal evidence and comm resolves all `20/20`. Menu resolves all nine declared direct values; its
+two remaining direct expressions are `TOK.header` at lines 728 and 731. The source `TOK` declaration at lines 211-223
+contains no `header` member. Those two calls are source defects, so unresolved/fail-closed is the only truthful result.
+The previous `11/11` menu acceptance requirement is therefore superseded by `9/9 declared literal-table + 2/2 exact
+undeclared unresolved`, while hub `35/35` and comm `20/20` remain unchanged.
+
+Independent coordinator probes additionally establish that all 484 public property projections are ordinary enumerable
+records with no hidden `colorExpression`; the original model sidecar arrays and every one of their 108 entries are
+deeply frozen, plain, and enumerable-only; JSON round-trip is exact; all 66 real literal-table entries retain exact use,
+declaration, channel, and key source slices; and no resolved/runtime/default/effective RGBA field exists. Two read-only
+inline probe mistakes occurred before that receipt (one regular-expression quoting error and one `Array.every` callback
+signature error); both failed before product assertions and were corrected without writes. Fresh zero-write Luna
+`01a01654-41a8-7db0-8b9f-8bee0a5d4b43` is auditing the exact hashes and adjusted contract. P1 is accepted only on
+`CLEAN`.
+
+### P1 final focused acceptance — 2026-08-18
+
+Status: `FOCUSED VERIFIED / CLEAN`; overall B119 remains `IN_PROGRESS / PARTIAL — Not verified in game`.
+
+Fresh zero-write Luna `01a01654-41a8-7db0-8b9f-8bee0a5d4b43` changed no files and preserved production/selftest
+SHA-256 `35A75178A444232D0EB41F0D8A65CDEDFFCC15A224467C35AAB121A2BF19EC6C` /
+`6DD840BB51E381EB754AB0440C06DBB4BBC846E632CC20FE55FCEEC752323E4B`. It independently passed CallModel `68/68`,
+LayoutProgram `565/565`, SourceEdits `62/62`, Lint `112/112`, typecheck, exact ESLint, diff hygiene, the adjusted exact
+menu/hub/comm census, deep freeze/plain/enumerable/JSON checks, source range reconstruction, and hostile stable-alias,
+pre/post-mutation, malformed table, dynamic key, and Color shadow/reassignment cases. No alternate projection-owned
+color authority or runtime/default/effective RGBA claim remains. P1 is accepted; its two `TOK.header` gaps remain exact
+source-defect diagnostics for the future linter and are not silently resolved.
+
+The audit itself had non-product probe corrections: two inline quoting errors, one over-strict assertion, one incorrect
+conditional/function-kind expectation, and the known graphify canonicalization failure. These are AAR triggers but do
+not weaken the independent product result. Sustain exact hashes, public-API real-source census, and zero-write hostile
+review. Improve future audit harnesses by using checked-in or quote-safe reusable probes instead of dense shell inline
+scripts. Highest-risk evidenced weakness remains the installed mod's undeclared `TOK.header`: without this linter its
+visible frame failure can point far away from the source error.
+
+External projection was synchronized and read back in the same checkpoint: GitHub #41 comment `5333191082`; Notion
+page `3b84618e-d15b-8190-821e-c0eb96f43d5a`; and Drive document
+`17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE` at returned revision
+`AIroW36kbsNOqwpPsO6YTAqqGIUkQIXeOih56K-iaaNEI_1Vd9Jn-vqgTak39AoOfe5MrJnPI8gS_ZJjHu0ycvZWZvs9l_QufySQXDkR0z5K`.
+
+### P2 reconciled implementation boundary — configured-corpus color evidence
+
+Status: `FOCUSED VERIFIED / ACCEPTED`; P1 is accepted and exact native Luna
+`01a01665-4e66-7712-856a-c4fb35e37b74` owned only
+`src/lib/x4UiCorpusAssets.ts` and `src/lib/x4UiCorpusAssets.selftest.ts`. Starting SHA-256 values are
+`F08195B48B858F4721A50CA946FA73672F87FD87C923CE5DFBD9D18F32BEC4D2` /
+`33D12EF151CDB0163E9AB7CB61E20861C9041733763AF0F994CEB45EE0277F53`; baseline was `28/28`. P3 is unlocked.
+
+No new directory discovery or backend endpoint is needed. `x4UiCorpusAssets` already reaches the user-selected unpacked
+corpus through `/api/reference/status`, `/api/reference/manifest`, and `/api/reference/file`, with manifest-generation
+coherence, size caps, UTF-8 checks, platform SHA-256, detached bytes, and loader-issued canonical authority. P2 must
+extend that owner and reuse those exact transport/evidence helpers. It may not read the local filesystem in browser code,
+introduce a second scanner, add a hard-coded `F:` path, or accept caller-supplied canonical hashes.
+
+The existing six-asset canonical success shape is consumed by Scene and other accepted owners using exact-key checks.
+Adding color fields to that default result now would deliberately break accepted coupled suites before their serial
+owner stage. P2 must therefore expose color evidence through a distinct opt-in canonical result/function or an
+equivalently non-breaking extension inside the same module, while preserving the existing loader's bytes, public shape,
+authority behavior, and all current downstream tests. Later LayoutProgram/Scene integration will consume the opt-in
+result under their own bounded owners.
+
+Pinned inputs are `libraries/colors.xml` SHA-256
+`6A57FE660D546F5144206581A40194CE13D0D11478B584A46467F0AAE715B883` and `libraries/colors.xsd` SHA-256
+`F0D31824E00227EFF6288B084E29346C5AA9D2694BFB0D62D6008EE3DBD879DF`. The exact XSD defines ID pattern
+`[a-zA-Z_][a-zA-Z0-9_]*`, integer `r/g/b/a` domain `0..255` with defaults `0/0/0/255`, and float `glow` domain `0..1`
+with default `0`. Its keys require unique color IDs, unique mapping IDs, and every mapping `ref` to target a base color,
+not another mapping. Canonical acceptance is exactly 224 colors and 804 mappings, with zero duplicate IDs, invalid base
+references, or mapping chains.
+
+The result must be detached, recursively frozen, plain/enumerable, JSON-stable default-only evidence with separate base
+definitions and mapping references. It must carry both source identities and permanent `Not verified in game` /
+`canonical-default-only` grading; it must not claim active profile, personal overrides, C++ effective map,
+daltonization, widget state, material, texture, glow rendering, or engine acceptance. Required fail-first families include
+both hash mismatches, malformed/truncated or wrong-root XML, missing/duplicate containers, duplicate color/mapping IDs,
+invalid IDs, invalid/missing/non-finite/out-of-domain channels or glow, absent base refs, mapping-to-mapping refs,
+generation drift, forged/structurally cloned authority, and exposed-byte mutation. Existing CorpusAssets `28/28`, all
+current canonical consumers, typecheck, exact two-file ESLint, diff hygiene, immutable hashes, and a fresh zero-write
+audit remain required.
+
+P2 closed tests-first at production/selftest SHA-256
+`FFC90BE312FFC3ACA728C039A00F6FE410F291EFBC49C3DF6D9775E24606D818` /
+`AB57AE45BCBFB13D8B8A26D02425E4D25297E48874B74831C6F750D707326609`. The first candidate passed `36/36`, but
+fresh zero-write auditor `01a0176b-8fee-7f01-8e1b-649bd39e71b2` found three real defects: malformed XML declarations
+were accepted, an unbound XSD `schema` root was accepted, and the legacy six-asset Lua UTF-8 error contract drifted.
+The correction captured those exact families fail-first at `36/39`, then passed CorpusAssets `39/39`, CallModel
+`68/68`, EditorSession `7/7`, PreviewPipeline `94/94`, Scene `136/136`, PaintPlan `153/153`, CanvasRenderer `75/75`,
+typecheck, exact two-file ESLint, and scoped diff hygiene. The existing six-asset loader shape and Lua error wording are
+preserved.
+
+The configured-corpus public loader was independently exercised over the exact pinned real corpus bytes: it made the
+expected six transport reads, issued canonical authority, returned exactly 224 base colors and 804 mappings, and kept
+`canonical-default-only` / `Not verified in game`. Final zero-write auditor
+`01a01787-dd5b-7301-ae6d-ed97a1ea72f1` returned `CLEAN`; its separately authorized Scene fixture run passed `136/136`,
+removed its unique temporary directory, preserved both final hashes, changed no file, and retained an exact 56-entry
+repository status. P2 is accepted at focused scope; no active profile, C++ effective map, material, glow, widget-state,
+or game-acceptance claim was added.
+
+### P3 pre-reconciliation — color facts into LayoutProgram
+
+Status: `FINDINGS / CORRECTION GATE`; P2 fixes the exact public input, but the first P3 focused-green candidate is not
+accepted. Scene remains locked.
+
+P3 extends the existing optional-input projection boundary; calls without accepted canonical color evidence must remain
+byte-for-byte behaviorally identical. It consumes P1's sole `model.colorExpressions` sidecar by exact call source,
+property name, and expression source. It may not reparse Lua, read XML, consult ambient UI state, or accept a structural
+clone of P2 authority. Source-literal tables become known source facts only when P1 marked them `literal-table`;
+symbolic `Color["id"]` becomes known only when P2 proves the ID and base mapping. Dynamic, conditional, function,
+scalar, unknown-ID, malformed, or undeclared expressions remain explicit gaps.
+
+The numeric domains remain distinct in the public fact. Shipped Helper line 8845 converts Lua color text alpha as
+`color.a * 255 / 100`, and the real AI Influence TOK declarations use RGB `0..255` with alpha `0..100`. The pinned XSD
+defines corpus XML `r/g/b/a` as raw `0..255`. P3 must retain an explicit source-literal-percent-alpha versus
+canonical-XML-byte-alpha domain and raw values; it must not silently normalize or merge them. Paint/Canvas may later
+derive browser opacity as `a/100` or `a/255` according to that domain under their own owners.
+
+Read-only census gives a bounded real-source target: helper/widget contain 145 distinct textual `Color["..."]` IDs,
+144 present in the canonical graph; the sole missing `foo` occurs only in commented example lines. The three active AI
+Influence menus expose four symbolic color records, all known `text_inactive`; their remaining exact literal colors are
+P1 TOK evidence. P3 tests must cover those real facts plus known helper defaults such as `table_background_default`,
+unknown IDs, absent/forged/mutated P2 authority, mapping/base identity, source/declaration ranges, alpha-domain
+separation, default-only provenance, no regression without the optional input, evidence-pair validation, and JSON/freeze
+closure. It still cannot claim current C++ map, active profile, state colors, glow/material appearance, or game parity.
+
+Exact native Luna `01a0179d-1fe2-7962-a07a-d1632e0aebcc` captured old LayoutProgram `565/565` plus new color assertions
+at `4/18` green and 14 causal reds while production remained at
+`334BBD62869559385537E610BEBD1B8FCBE24F5515357FE1C4C20EA674669A42`. Its candidate is production/selftest
+`1761BBE388C16FA80C49DE6A1F8D26EAA558221CEBE142B2EFC1C97904DB093A` /
+`E6FC8E440953DA665A7E9C748D4AAD8477AADDD4E8093A87C67064FC2D7CEFFA`, with LayoutProgram `583/583`, CallModel
+`68/68`, CorpusAssets `39/39`, SourceEdits `62/62`, Lint `112/112`, typecheck, exact ESLint, and scoped diff hygiene
+green. Those greens are insufficient.
+
+Coordinator source readback reproduced a release-blocking `Port it, don't invent it` violation. Shipped Helper uses
+`Color["row_background"]` at line 3200, `Color["text_normal"]` at line 3207 and nested textproperty line 3422, and
+`Color["icon_normal"]` at line 3220. The candidate instead uses invented `cell_background_default` / `icon_default`
+and substitutes `text_inactive`; the first two IDs are absent from the real pinned `colors.xml`. Its default-color test
+asserts only that every result is known against a synthetic graph containing those invented IDs, so it cannot catch the
+source mismatch. The candidate is rejected pending tests-first exact-ID correction. Fresh zero-write Luna
+`01a01860-ac30-73a2-8aef-edfed9e884a5` is auditing the complete pair, P1 gap suppression, evidence schema/oracles, and
+real corpus/source agreement before the original owner receives the correction. Native file-change readback confirms
+the older row-receiver/conditional-cell hunks were present in the supplied starting hashes and were not P3 writes.
+
+The zero-write audit is complete with `FINDINGS`, no repository writes, unchanged candidate hashes, and all existing
+focused gates green: LayoutProgram `583/583`, CallModel `68/68`, CorpusAssets `39/39`, SourceEdits `62/62`, Lint
+`112/112`, typecheck, exact two-file ESLint, and scoped diff hygiene. Those greens missed four additional P3 defects.
+The expression/source-only suppression predicate can erase a forged non-color width gap; the pure evidence-pair schema
+accepts consistently cloned color facts whose channel domains, top-level values, source identities, requested/base IDs,
+or canonical pins are forged; a throwing `model.colorExpressions` container accessor escapes typed refusal; and the
+post-authority-mutation selftest reads the original program instead of the rerun result.
+
+The required real-source receipt also failed. A direct six-argument probe used genuine loader-issued 224/804 P2 evidence
+over the exact MENU/HUB/COMM sources, but selected display targets produced zero known color facts; enabling local
+expansion then self-refused on evidence-catalog reciprocity. The same audit separately proved that PreviewPipeline omits
+the sixth color-evidence argument, while Scene accepts an unissued cloned no-color pair and its current generic fact
+validator rejects known `color-object` facts. Those are downstream integration findings, not authority to expand the
+two-file P3 owner.
+
+Original exact Luna `01a0179d-1fe2-7962-a07a-d1632e0aebcc` is active on the tests-first P3 correction. It must use the
+exact shipped defaults and distinct line-3422 nested-text pin, retain unrelated gaps, close semantic schema invariants,
+contain hostile sidecar access, assert actual reruns, and fix the P3 local-expansion reciprocity mechanism. Coordinator
+reproduction plus a new fresh zero-write `CLEAN` remain mandatory. The canonical raw NUL-delimited status receipt remains
+56 entries, 2,279 bytes, SHA-256 `A644998111590D20DF8AED18DBC79C98F8D78946BED5CA1D8E691EAD861273A2`;
+the auditor's larger newline-normalized byte count was not worktree drift.
+
+### P3 final focused acceptance — 2026-08-19
+
+Status: `FOCUSED VERIFIED / CLEAN`. Overall B119 remains `PARTIAL / Not verified in game`.
+
+The correction preserved rejected production while the expanded selftest failed `579/603` with exactly 24 causal reds
+across exact defaults/pins, non-color gap retention, hostile sidecar access, actual reruns, and semantic color-pair
+closure. A later real-source discovery added a second fail-first receipt at `603/604`: the static preview-path catalog
+retained descendant invocation IDs absent from the bounded expansion ledger, so MENU self-refused on evidence
+reciprocity. The narrow correction emits only catalog invocation IDs reciprocal with the exact ledger. Final hashes are
+production `F2E877693DAD16ACF59846E26FEC2BDE8FCE7C69AC1D86623A2F3109D5CD6D17` and selftest
+`758C622CF0289F231AF710B9EC8EEB86AAC12773F4B2D1A79757F5B0A03353B8`.
+
+Coordinator reproduction passed LayoutProgram `604/604` with historical Phase 3D `15/15`, 3G `49/49`, and 3J
+`11/11`; CallModel `68/68`; CorpusAssets `39/39`; SourceEdits `62/62`; Lint `112/112`; typecheck; exact two-file
+ESLint; and scoped diff hygiene. The owner and fresh zero-write auditor independently loaded genuine P2 authority from
+the pinned XML/XSD at exactly 224 bases / 804 mappings. With `maxDepth=4` and `maxInvocations=64`, both reproduced:
+
+| Target | Expansion expanded/rejected/conditional/unreachable/looped | P1 -> projected TOK gaps | Known color facts | Pair |
+|---|---:|---:|---:|---|
+| MENU | 7/35/76/1/25 | 6 -> 5 | 0 | valid |
+| HUB | 6/10/8/1/1 | 11 -> 0 | 0 | valid |
+| COMM | 5/14/7/1/2 | 7 -> 0 | 0 | valid |
+
+Fresh auditor `01a018bf-ac7d-77d1-aae8-0e85571516b0` returned `CLEAN` with zero writes and exact 56-entry /
+2,279-byte / `A644998111590D20DF8AED18DBC79C98F8D78946BED5CA1D8E691EAD861273A2` raw status parity. Its coordinated
+eight-fact clone mutation passed pure semantic pair validation but failed `isIssuedX4UiLayoutEvidencePair`; that is the
+intended separation and makes Scene's missing issuance check a downstream blocker rather than a P3 defect. The audit's
+first OS-temp probe paused on a hidden mandatory approval, was abandoned with zero artifacts, and a no-temp inline probe
+then produced the exact real-source receipt. The LayoutProgram selftest's roughly 50 MB successful output is a tooling
+debt/AAR item, not a failed oracle.
+
+P3 is accepted. The next bounded integration must carry loader-issued color authority through the existing
+SourceEditor -> EditorSession -> PreviewPipeline chain into the sixth LayoutProgram input. A disjoint Scene owner must
+require issued-pair authority, admit known color-object facts, expose base tint separately, and retain material, texture,
+glow, active/hover/selection, C++ effective-map, and game-acceptance gaps. No capability-map delta yet.
+
+### Scene/Paint pre-reconciliation — known tint is not complete material truth
+
+Status: `P4 SCENE ACCEPTED / CLEAN`; P3 is accepted. Final Scene production/selftest hashes are
+`FE85C52848C7643EA6B5195FCA4C4270E7036F763BE756CB48327D599050BF99` /
+`34A4D496C968366A18DB6023D2F6BD91F50C2C1A066F6D75BC0944F49FF35C8F`; coordinator validation passed Scene
+`139/139`, typecheck, exact ESLint, and diff hygiene, and final zero-write Luna
+`01a01938-d17c-76a2-9e17-d910b66e9e80` returned `CLEAN`. Paint and Canvas remain serially locked behind P4.5.
+
+Color availability alone must not erase existing paint/state/material gaps. Shipped Helper passes row/cell backgrounds
+through direct `SetTableCellColor` and text through direct color channels, so those can carry a known base color while
+retaining separate glow/font-rendering limits. Buttons and edit boxes pass background/highlight/border colors into C++
+widget descriptors, where active/inactive/hover selection is runtime state; tables pass `backgroundID` plus
+`backgroundColor` into `CreateTable`, where the material/texture behavior is not present in Lua. For example, canonical
+`table_background_default` resolves to opaque white, which is a tint fact and plainly not proof that the visible table
+surface is an opaque white rectangle.
+
+Scene must therefore store color facts separately from completeness and retain diagnostic links for unknown state,
+material, texture, and glow. Paint may emit a base-state preview tint only with explicit provenance and partial status;
+it may call a surface `complete` only when every relevant primitive and state input is source/corpus-known. Canvas must
+consume the typed alpha domain, never substitute its diagnostic palette as X4 color evidence, and keep
+`Not verified in game` visible. X4 screenshots remain the oracle for material/state appearance.
+
+P4 owns only `src/lib/x4UiScene.ts` and `src/lib/x4UiScene.selftest.ts`. Its fail-first contract covers the currently
+accepted coordinated-but-unissued LayoutProgram/evidence clone, the currently refused issued known color-object facts,
+exact per-owner/slot retention for table, cell, widget and nested text colours, hostile closed-schema inputs, and the
+coexistence of known base tint with unresolved material/state/glow/game gaps. It may add a typed Scene colour-fact
+contract even though current Paint exact-shape validation will intentionally refuse colour-bearing Scene until P5;
+hiding values only in provenance links to preserve an obsolete downstream shape is not acceptable. Existing no-colour
+issued paths must remain green. P5 will then update the Paint pair against the accepted P4 shape; P6 updates Canvas;
+only after both are accepted may the configured colour loader be wired through SourceEditor, EditorSession and
+PreviewPipeline.
+
+### P4.5 reconciliation — public Paint authority requires Preview colour ingress
+
+Status: `FOCUSED VERIFIED / CLEAN`. Final production/selftest hashes are
+`CF429EB982BED6C424DCB778AC7D184EBABDA4C9330364DAC12431BCA223CA82` /
+`5D85E9810C9776B87D24A8EFFF6AF57740534998E0D4AC8C7B3EEABEFA328324`. Baseline `94/94` plus new tests against
+unchanged production produced exactly four reds at `98/102`; final Preview is `102/102`, Scene `139/139`,
+LayoutProgram `604/604`, with typecheck, exact ESLint, and diff hygiene green. Fresh zero-write Luna
+`01a01955-12ed-73a2-9c8e-06b8a4130d8b` returned `CLEAN` with no findings or writes.
+
+The original P4 -> P5 ordering omitted an authority dependency. `projectX4UiPaintPlan()` accepts only the exact Scene
+privately issued by `projectX4UiPreviewPipeline()`, while Preview currently calls `projectX4UiLayoutProgram()` with five
+arguments and omits the sixth colour-evidence input. A direct Scene fixture, cloned Preview result, or test-only Paint
+bypass would therefore prove a surrogate contract rather than the public path. P5 cannot honestly go green until a
+colour-bearing Scene can be issued by Preview.
+
+P4.5 is the narrow prerequisite and owns only `src/lib/x4UiPreviewPipeline.ts` and
+`src/lib/x4UiPreviewPipeline.selftest.ts`. It adds an optional loader-issued colour-evidence input and forwards that
+exact value as LayoutProgram's sixth argument. It does not discover files, load the configured corpus, change
+EditorSession/SourceEditor, paint pixels, or relax LayoutProgram's existing authority checks. Tests must begin red
+against unchanged Preview production and prove that an issued `224`-base / `804`-mapping authority reaches exact
+LayoutProgram facts, Scene owners, and the existing private Preview-to-Paint authority boundary. Absent evidence must
+preserve the current no-colour path; forged, cloned, malformed, stale, or unissued evidence must not create known colour
+facts; every outcome remains `Not verified in game` / `gameVerified=false`.
+
+The corrected serial order is P4 Scene -> P4.5 Preview ingress -> P5 Paint -> P6 Canvas -> P7 configured loader and
+SourceEditor/EditorSession wiring. This is a reconciliation-driven acceptance-contract change, not a scope expansion:
+it closes the already-required public authority path and prevents Paint tests from passing through a test-only bypass.
+
+### P5 specified contract — source-backed base tints in the public Paint plan
+
+Status: `FOCUSED VERIFIED / CLEAN`; P4.5 passed coordinator reproduction and a fresh zero-write audit.
+
+P5 owns only `src/lib/x4UiPaintPlan.ts` and `src/lib/x4UiPaintPlan.selftest.ts`. It must consume a colour-bearing Scene
+through the exact P4.5 Preview authority; a direct Scene call, cloned authority, internal-validator export, or test-only
+Paint issuer is not acceptance evidence. Current Paint `153/153` is the no-colour baseline and must remain green.
+
+Paint must validate the complete P4 Scene colour-fact shape and copy each fact into an explicit immutable
+`base-preview-tint` command payload. The payload retains field, slot, raw value and domain, provenance, expression,
+source, optional source pin/sample, and `Not verified in game`; it also states `partial` colour completeness. No RGBA or
+CSS normalization occurs in Paint. A node-geometry command carries every exact tint owned by its table, cell, widget, or
+text node. Each glyph command additionally carries the one exact tint owned by its parent text slot. Button highlight
+and border, icon tint, and other non-base-state facts remain present as typed payloads even when Canvas cannot yet draw
+their unresolved material/state primitive.
+
+Known tint must never remove Scene's runtime/material/state/glow/C++/font/game diagnostics, promote a node or plan to
+complete, or replace Paint's unsupported-runtime diagnostics. Missing/unavailable colour remains diagnostic-only and
+must not generate a tint payload. The four accepted layer identities and global command ordering remain unchanged.
+Current Canvas exact-command validation is expected to refuse colour-bearing Paint until P6; hiding tint to preserve
+that obsolete shape is forbidden.
+
+Tests start red against frozen Paint production and must prove all table/cell/button background/highlight/border,
+editbox, icon, direct-text, and nested primary/secondary owner paths through the exact public
+Preview -> Paint authority. They also prove raw percent-alpha versus byte-alpha retention, full provenance, immutable
+detachment, omission behavior, malformed colour refusal without observation, continued copied-authority rejection,
+partial truth, four-layer ordering, and no regression in the existing 153-case hostile/keep-out/selection matrix.
+
+P5 acceptance receipt, 2026-08-19: the public colour-bearing fixture issued ten exact Scene owner facts. With Paint
+production frozen, the expanded selftest was `159/165`, with exactly six causal reds for projection, owner retention,
+glyph inheritance, partial truth, no-colour compatibility, and immutable detachment. Final Paint is `165/165` at
+production/selftest hashes `9FDBE53D68F516DD36670ABC1DF75F65611F81C3EA34E99BEA546EE905005A85` /
+`A0680C4B1B748695EE59BB63858B11A7693D3721CE2F09BB8C101E46B46799BF`. Coordinator reruns passed Preview `102/102`,
+Scene `139/139`, typecheck, exact-pair ESLint, and diff hygiene. Canvas remained the expected pre-P6 `70/75` boundary.
+Fresh zero-write Luna `01a0198b-0877-76e2-b229-988ca8ce9e7b` returned `CLEAN`, confirmed the supplied hashes and outside-
+write hygiene, and reported no findings. P5 is accepted; it does not establish Canvas pixels, browser rendering, game
+frame acceptance, or in-game parity.
+
+### P6 specified contract — typed Canvas tint consumption without an engine-parity claim
+
+Status: `FOCUSED VERIFIED / ACCEPTED`; browser, package, deploy, C++ frame acceptance, and X4 remain open.
+
+P6 owns only `src/lib/x4UiCanvasRenderer.ts` and `src/lib/x4UiCanvasRenderer.selftest.ts`. The frozen starting hashes
+are Canvas production `CF7AFAF3ED76E98DF27CAE5143E04B4E8E97D48704ADE261A4C8CBABBE9A8AC2` and selftest
+`B45116AB3455317F25DE641C9F9D1687B59820D817D8CE596EF679D8E1C6228F`. It extends the existing strict Paint-result
+validator, detached command snapshot, renderer-owned atlas staging, four fixed layers, and deterministic trace. It must
+not introduce a second renderer, consume Scene/Layout evidence directly, mislabel a structurally accepted Paint-shaped
+value as producer-origin-authenticated, or weaken the post-validation mutation boundary. The accepted Batch 6D Canvas
+contract is deliberately structural and explicitly lacks producer-origin authentication; exact hostile structural
+copies must continue reaching the Canvas validator so malformed payloads are rejected causally.
+
+Reconciliation correction, 2026-08-19: the original P6 sentence incorrectly required rejection of every structural
+Paint clone. That contradicted the accepted Batch 6D record and permanent positive structural-boundary test. The
+acceptance contract above restores the existing architecture; this is a non-clean documentation correction, not a
+new authority claim or a weakened payload/post-callback check.
+
+The present Canvas result is `70/75`, but those five rows are one stale literal-trace cascade: P4 added two accepted
+owner-linked unavailable-colour diagnostics to the no-colour Scene, taking the fixture from 73 commands / 403 composite
+operations to 75 / 417. The raw plan still renders and no tint-bearing Canvas fixture is exercised. P6 must first prove
+that exact upstream delta and correct the trace oracle with Canvas production frozen, restoring the existing 75 rows.
+It must then add a public configured-colour Preview -> Paint -> Canvas fixture and capture a separate fail-first receipt
+against unchanged Canvas production. A test-only golden correction is not evidence that tint rendering works.
+
+Canvas admits `base-preview-tint` only as the exact optional P5 payload on geometry and glyph commands. Admission is a
+closed own-data validation of every nested fact and retains the raw Paint object unchanged. At the rendering boundary
+only, source-literal alpha derives as `a / 100`; canonical XML alpha derives as `a / 255`. RGB channels remain their
+validated `0..255` values. The two domains remain distinguishable in validation and tests; Canvas must not silently
+clamp, merge, reinterpret, or write normalized values back into Paint evidence. Glow is retained evidence but is not a
+drawable colour channel and must not affect pixels.
+
+Known table-background, cell-background, and widget-background slots replace the diagnostic fill for their exact owner
+geometry. A widget-border slot adds an outline on that same geometry. Widget-highlight is retained but is not painted as
+the active base state because hover/selection state is unavailable. Widget-icon remains diagnostic-only because its
+texture/mask/material is unavailable. Text tint applies only to glyphs owned by that exact primary or secondary text
+node. Untinted geometry and glyphs retain the existing diagnostic palette and exact no-colour behavior.
+
+Tinted glyphs use deterministic renderer-owned A8 atlas staging keyed by canonical font identity plus exact drawable
+tint. Their RGB bytes come from the accepted tint; each staged pixel alpha is the canonical A8 byte multiplied by the
+typed derived alpha with one documented deterministic byte-rounding rule. Distinct primary/secondary tints must not
+share a staged surface accidentally. Repeated identical tints may reuse a renderer-owned surface. No caller surface,
+CSS parser, global composite state, material, texture, active profile, daltonization, C++ colour map, or font-engine
+behavior may be inferred.
+
+Acceptance requires causal coverage for both alpha domains; exact table/cell/button/editbox background; button border;
+withheld highlight and icon paint; direct, primary, and secondary text; tint-specific atlas bytes and reuse; clipping;
+four-layer/global command order; deep detachment; accessor/proxy/prototype/symbol/sparse/duplicate/reassigned/extra-key
+refusal before allocation; callback mutation refusal; unchanged no-colour trace; unchanged keep-outs/diagnostics; and
+permanent `Not verified in game` / `gameVerified=false`. Focused Canvas, Paint, Preview, and Scene suites, typecheck,
+exact-pair ESLint, diff hygiene, and a fresh zero-write Luna audit must pass before P6 is accepted. Real browser pixels,
+packaged Forge UI, and X4 remain later validation layers.
+
+P6 audit rejection, 2026-08-19: the first colour-bearing Canvas candidate is not accepted despite focused green. The
+candidate is Canvas `100/100` with Stage-B `25/25` at production/selftest hashes
+`490F430673C51957751A3113C68046A10C811F355A349FDDBC2C064AB119DBB3` /
+`CB8D89BEE59294BE7E28BE9CD6171B160ADF8F9AA31784448A50A993AE69D4C2`; Paint `165/165`, Preview `102/102`, Scene
+`139/139`, typecheck, exact-pair ESLint, and diff hygiene also pass. Fresh zero-write Luna
+`01a019d2-fc1c-7223-b008-ee7a2403ab69` preserved every hash and reproduced three producer/consumer mismatches: Canvas
+accepts string and full-location `sourcePin` forms that P5 cannot emit; containment ignores `sourcePath`; and a
+`mappingSource` can accompany `requestedId === resolvedBaseId` even though Scene refuses that relationship. The audit
+also found no independent causal row for duplicate/reassigned tint facts or slots.
+
+The next bounded correction keeps production frozen at `490F4306...19DBB3` while tests first replace the impossible
+positive `sourcePin` fixture with the exact `{sourcePath,lineStart,lineEnd}` contract and capture causal reds for hostile
+string/full-location pins, `sourcePath` drift, same-ID mapping provenance, and duplicate/reassigned facts. Production may
+then narrow only those three validators. The original implementation receipt is permanently non-clean: a complete
+`76/86` fail-first result exists in worker chronology for ten initial Stage-B behaviors, but no durable repository
+receipt proves red chronology for the fourteen later rows, including the explicit half-up byte-rounding change. Do not
+rewrite that history or label the final 25-row matrix fully tests-first. The correction needs a new exact red receipt,
+full focused/coupled green, immutable hashes, coordinator reproduction, and another fresh zero-write audit.
+
+P6 correction fail-first receipt, 2026-08-19: the first tests-only run printed `107/113`, Stage-B `32/38`, but four of
+its six rows had `mutationApplied=false`. The worker incorrectly treated the row names as a valid receipt and changed
+production before coordinator review. The coordinator detected the hash drift, interrupted writes, preserved the
+evidence, and required an exact byte recovery. Forensics over the retained patch preimage showed that the attempted
+inverse had only split one frozen condition across two lines; a one-line recovery restored exact production
+`490F430673C51957751A3113C68046A10C811F355A349FDDBC2C064AB119DBB3`.
+
+With corrected mutation construction and production frozen, the authoritative fail-first checkpoint is selftest
+`F401AE90628E26D261AEBD0D4C785B247ED6C022E0086765F04EF334C0BE4351`: Canvas `107/113`, Stage-B `32/38`, exactly six
+causal reds for string and full-location pins, declaration/channel/key `sourcePath` drift, and same-ID mapping
+provenance. Every row reports `mutationApplied=true` and the old production incorrectly completes the full render
+(`5` factories, `20` dimension reads, `5` contexts, `570` paint operations, `4/4` image-data stage/put, `48` fills,
+`25` draws, `1` stroke) instead of pre-allocation refusal. Offset, glow, duplicate-fact, reassigned-owner, and
+duplicate-slot rows are explicitly already-green strengthening coverage. Only the three-validator production repair is
+authorized next; this interruption/recovery remains a non-clean AAR trigger even if final validation passes.
+
+P6 final acceptance receipt, 2026-08-19: fresh replacement Luna `01a01a8e-7caf-7b61-b62b-0f3cd927616d` applied only
+the three authorized production validators; typecheck required three compile-only `unknown` narrowings in the new
+offset-strengthening rows. Final production/selftest hashes are
+`C7B277D7A471C77A352A184881015E1F3C5C867CE1443108D84CE965D2278B94` /
+`FC493F3B263C9A1340A3E2BB264DAFBFDDBB9043CCB265C16343797CAC9CAE9C`. Worker and coordinator independently passed
+Canvas `113/113` with Stage-B `38/38`, Paint `165/165`, Preview `102/102`, Scene `139/139`, typecheck, exact-pair
+ESLint, diff hygiene, and exact hashes. Fresh zero-write Luna `01a01a94-1779-7d80-965a-cae9d3278d53` returned
+`CLEAN`: no files changed; pre/post raw status stayed 56 entries / 2,279 bytes /
+`A644998111590D20DF8AED18DBC79C98F8D78946BED5CA1D8E691EAD861273A2`; all protected hashes and
+`HEAD === origin/main === 77138741a9f470e2c6c37c2d6857688dd1e2b13e` matched. It independently supported exact pin shape,
+`sourcePath` containment, mapping provenance, coherent structural clones, mutation/refusal, quantization, withheld
+highlight/icon tint, no-colour trace, and permanent game-truth boundaries. P6 is accepted at focused scope. The original
+25-row chronology and premature-edit recovery remain non-clean history; acceptance does not establish browser pixels,
+packaged Forge rendering, C++ frame acceptance, or in-game parity.
+
+### P7 specified contract — configured colour authority through SourceEditor and EditorSession
+
+Status: `SPECIFIED / ACTIVE`; P6 passed coordinator reproduction and a fresh zero-write audit.
+
+Frozen P7 baseline, 2026-08-19: SourceEditor production/selftest are
+`B085A0A542D6B17E287DE52CB19452D2E75D67ACA15454274D61D20C3E85C3C2` /
+`9FF34E6471C045CB4FC7F3A2CEAF94391548967D8E5BFE2F20D8994F79EFE3ED`; EditorSession production/selftest are
+`20B7429079DA6C7297A505667C07C1FDD015827839BB468C4412402E7E7D5AF0` /
+`49C10D546016338A2E482D26D0B48187B0CD53366A7F9D3EC2F0EF613DC6F518`. Coordinator baseline passed EditorSession
+`7/7` and the complete SourceEditor SSR/authority/CAS/manual-calibration matrix. These exact hashes are the P7
+tests-first starting boundary; P6 acceptance now unlocks only the four declared P7 files.
+
+Reconciliation found one missing public seam, not a missing subsystem. `x4UiCorpusAssets.ts` already owns both pinned
+configured loaders, and `X4UiSourceEditor.tsx` already owns the bounded status/manifest/file transport and the single
+configured-corpus request lifecycle. `x4UiPreviewPipeline.ts` already accepts the exact optional P2 colour authority.
+The remaining gap is that SourceEditor calls only `loadConfiguredX4UiCorpusAssets()`, while `X4UiEditorSessionInput` and
+its two Preview projections carry only the six-asset corpus. P7 extends those existing owners; it must not add another
+transport, endpoint, renderer, colour parser, or authority brand. No capability-map delta is expected.
+
+P7 owns only `src/components/X4UiSourceEditor.tsx`, `src/components/X4UiSourceEditor.selftest.tsx`,
+`src/lib/x4UiEditorSession.ts`, and `src/lib/x4UiEditorSession.selftest.ts`. The configured default loader must invoke
+the existing core and colour loaders over the same bounded transport and abort signal. Its result keeps the two issued
+authorities distinct. The core result remains the geometry/font authority; the colour result remains optional
+canonical-default-only evidence. Existing custom `corpusLoader` callers that return only an exact loader-issued core
+result remain compatible and must be reported as core-canonical with colour unavailable, never as colour-canonical.
+
+SourceEditor classification must inspect only own enumerable data properties without invoking accessors. An exact
+core-plus-colour result accepts both authorities. Exact core success plus a refused, malformed, stale, offline, late,
+aborted, or absent colour result keeps the core usable and exposes a separate visible colour status/detail. Colour
+success without exact core success cannot make the editor canonical or paintable. Structural copies, inherited values,
+accessor wrappers, extra/reassigned nested values, throwing or revoked reflection traps, and stale request generations
+cannot become either authority. Classification snapshots exact own data descriptors once, invokes no `get` trap, never
+retains the outer envelope, and preserves only exact loader-issued inner core/colour authorities. A transparent get-only
+Proxy facade around that exact envelope is therefore admissible but grants no authority of its own; accessor,
+inherited, decorated, structural-clone, reassigned, throwing-`ownKeys`, throwing-`getOwnPropertyDescriptor`, and
+throwing-`getPrototypeOf` forms refuse safely. Reload/abort handling remains one request generation, and both results
+are discarded together when late.
+
+EditorSession adds one optional colour-evidence input and safely snapshots only its own data descriptor. It forwards
+the exact still-valid loader-issued authority unchanged into both the catalog Preview and the selected/sample Preview;
+it never reparses, clones, brands, or discovers colour evidence. Missing or invalid colour evidence degrades to the
+existing source-backed no-colour path without manufacturing tints. Valid evidence must reach the already-accepted
+Layout -> Scene -> Paint chain and produce the exact owner-linked partial base tints; Paint still receives colour only
+through Preview authority. Every session and UI state remains `Not verified in game` / `gameVerified=false`.
+
+Tests must start red with all four production files frozen. Required causal families are: configured default dual-load
+over the existing allowlisted endpoints; legacy custom-loader compatibility; exact dual-authority acceptance; core
+success with colour offline/refused/malformed/stale; colour success with core failure; abort/late/reload discard;
+accessor/inherited/decorated/clone/reassignment and throwing-reflection refusal without reads or false colour claims;
+transparent-facade detachment with zero `get` trap reads; exact authority identity through both Session Preview passes;
+selected and sampled public paths producing the expected Scene/Paint tint owners; unchanged
+no-colour rendering; and permanent game-truth labels. Focused SourceEditor and EditorSession suites plus CorpusAssets,
+Preview, Paint, Canvas, typecheck, exact four-file ESLint, diff hygiene, and a fresh zero-write Luna audit must pass.
+Browser-rendered status/pixels, production build, installed Forge, and X4 screenshot comparison remain later broad/live
+gates. Rollback is the exact four-file diff; no corpus, workspace, mod, game, or standing configuration bytes are written.
+
+P7 fail-first receipt, 2026-08-19: both production files remained exact at SourceEditor
+`B085A0A542D6B17E287DE52CB19452D2E75D67ACA15454274D61D20C3E85C3C2` and EditorSession
+`20B7429079DA6C7297A505667C07C1FDD015827839BB468C4412402E7E7D5AF0`. Tests-only hashes are SourceEditor
+`ABFB4C59E81BF171FB1AE88978EE64823024A0A5CBA82F6AD62078D366294339` and EditorSession
+`09C753537C69FB60A84435C7D33F91309CD34FFC06754C8572B42BE5BA16D86B`. Existing SourceEditor and Session `7/7`
+matrices remained green; typecheck, exact two-test-file ESLint, and diff hygiene passed. The new P7 matrix is `4/19`,
+with exactly fifteen behavioral reds: SourceEditor `1/12` and EditorSession `3/7`.
+
+The eleven SourceEditor reds cover the missing shared-signal dual loader, exact dual classification, legacy core-only
+colour-unavailable state, independent absent/offline/thrown/malformed/stale colour handling, hostile envelope safety,
+late/abort/reload lifecycle, and visible separate colour detail. Its color-without-core rejection is already green. The
+four Session reds cover selected and sampled owner-linked tints, separately observable issued catalog/final coloured
+outcomes, and a sampled one-descriptor TOCTOU facade. That facade preserves keys/descriptors and proves catalog issuance,
+sample reconciliation/binding consumption, and post-call stability under old production, but reports exactly zero
+`colorEvidence` descriptor reads and no final colour owners. Invalid colour degradation, color-without-core refusal, and
+permanent game truth are already green. No production test hook is required: production must capture the descriptor
+once, and source review plus the real sampled outcome must prove the captured local reaches both existing Preview calls.
+
+P7 envelope reconciliation correction, 2026-08-19: the first SourceEditor hostile-envelope oracle was internally
+contradictory because portable JavaScript cannot distinguish a transparent Proxy from its target through safe own-data
+descriptor reflection while also guaranteeing zero trap invocation. Production remains frozen. The test must instead
+prove the safe enforceable boundary above: one detached descriptor snapshot, zero `get` reads, exact inner-authority
+identity only, transparent-facade admissibility, and safe refusal of accessor/inherited/decorated/clone/reassigned and
+throwing-reflection forms. A revised causal red receipt is required before production implementation is authorized.
+
+Revised P7 fail-first receipt, 2026-08-19: SourceEditor selftest is now
+`6213F20B263855A1DA725C9A0CDAC4E6A9FE0FA5A88079E287DFFE17FAD11D05`; EditorSession selftest remains
+`09C753537C69FB60A84435C7D33F91309CD34FFC06754C8572B42BE5BA16D86B`. Coordinator reproduction preserved exact
+production hashes `B085A0A5...5C3C2` / `20B74290...AF0`, the complete pre-P7 matrices, typecheck, exact two-test-file
+ESLint, and diff hygiene. The P7 census remains SourceEditor `1/12`, EditorSession `3/7`, aggregate `4/19`. The revised
+envelope row is genuinely causal: current production performs eight direct `get` reads, accepts no dual authority, and
+does not exercise the intended reflection boundary; the transparent exact facade, five negative forms, and three
+throwing-reflection cases therefore remain red for the specified reasons. Production implementation in the two declared
+owners is now authorized; tests may change only for compile/correctness, not to weaken this receipt.
+
+P7 focused candidate, 2026-08-19: SourceEditor production/selftest are
+`F4CF7F877A149A691E2D8FB05511DF3D1191A30D305EE92209830725F229D662` /
+`3A90005C647EDB6724A6B0F38CECF646B68E5F4C378985ED9B991D2EE328F5E4`; EditorSession production/selftest are
+`990B1338BEF3F2CA14857EA236B517EF9DE23CC4884F60987A206C78BE4E8213` /
+`A7FCAAE150E2EC85BE67F949BF7962E4726277C544E38135BBA2C0BAB66CAC29`. Worker and coordinator independently pass
+SourceEditor P7 `12/12`, EditorSession baseline `7/7` plus P7 `7/7`, CorpusAssets `39/39`, Preview `102/102`, Paint
+`165/165`, Canvas `113/113`, Scene `139/139`, typecheck, exact four-file ESLint, and exact diff hygiene. The transparent
+envelope executes zero `get` traps and preserves only exact detached inner authorities; five hostile envelope families
+refuse with zero getter reads; all three throwing-reflection controls are contained at exactly one relevant trap. The
+Session descriptor facade reads `colorEvidence` exactly once and the same captured authority reaches both catalog and
+final Preview owner-linked tints. Exact core plus independently aborted colour now remains core-usable with colour
+unavailable, its original detail, and no colour authority.
+
+One tests-only fixture correction was necessary: both P7 Lua fixtures used `row[1]:setColSpan(2)` and then populated
+`row[2]`, creating an overlapping cell that the accepted Layout/Scene owners correctly dropped. Changing those two
+fixture spans to `1` made the already-specified button/text owners reachable without changing expected owners or row
+counts. Session sample binding now keys the selected target plus issued sample catalog rather than colour-resolved full
+program data, so adding colour evidence does not falsely stale orthogonal layout samples while profile/selection/catalog
+drift remains guarded. Fresh zero-write audit is still required; browser pixels, build/package, installed Forge, deploy,
+and X4 remain unverified.
+
+AAR trigger: after the first green worker receipt, a coordinator-found independent-colour-abort defect was sent back.
+The Luna worker incorrectly attempted nested Sol-Luna routing and entered `waitingOnApproval`. Runtime thread metadata,
+not elapsed time or file timing, reproduced the blocker. The coordinator interrupted only that workflow violation and
+returned the correction to the existing Luna owner; no additional implementation agent or approval was needed.
+
+P7 fresh-audit result and correction contract, 2026-08-19: zero-write Luna
+`01a01af6-6d38-7870-ab01-a4b64912ce08` returned `FINDINGS`. It preserved all four candidate hashes, the 57-row
+unstaged worktree, every focused count, typecheck, exact lint, and diff hygiene; `graphify` failed before execution with
+`Failed to canonicalize script path`, so the reviewer used direct source inspection. The implementation remains a
+focused-green candidate but is not accepted because four test-proof gaps remain:
+
+- the default-loader row always resolves an offline response and therefore proves neither concurrent branch start nor
+  rejection isolation; a `Promise.all` regression could pass;
+- the hostile-envelope matrix has throwing reflection proxies but no actually revoked `Proxy.revocable` envelope;
+- the Session colour-owner oracle proves only at-least-one presence, not exact frame/table/row/cell/widget/text/tint
+  counts, so duplicate geometry or owner facts could pass after the fixture colspan correction; and
+- SSR/pure classification does not mount the React component across delayed reload, abort/rejection, and cleanup, so a
+  stale effect write could regress without detection.
+
+The narrow correction is tests-first and must not change the current P7 production hashes. It may edit the two existing
+selftests plus one focused existing-host Playwright spec under `tests/e2e/`; it may not add a DOM package, test-only
+production hook, endpoint, transport, renderer, or authority brand. The SourceEditor selftest must use controlled
+deferred transport calls to prove both configured loaders overlap, then reject one branch while the other reaches exact
+canonical authority. It must classify a revoked facade without outward throw or authority. The Session selftest must
+lock exact projection geometry and owner/tint cardinalities and include mutation sensitivity for duplicate or drifted
+facts. The browser spec must mount the real SourceEditor in Forge's existing Vite/Playwright host, delay configured
+corpus requests across Reload, force one rejection/abort, unmount with another request outstanding, and prove the late
+generation cannot overwrite current UI or produce an uncaught error. This focused browser spec becomes applicable P7
+evidence because the audit showed the prior pure surrogate was insufficient; the broader E2E suite, build, installed
+Forge, deploy, and X4 remain later gates. Require coordinator reproduction and another fresh zero-write `CLEAN` audit
+before P7 acceptance. Overall B119 remains `PARTIAL / Not verified in game`; no capability-map delta.
+
+P7 audit-proof correction candidate, 2026-08-19: native Luna `01a01b0b-6f60-7c82-93ba-d7282939cab4` changed only
+the two selftests and new `tests/e2e/x4-ui-source-editor.spec.ts`. Frozen production stayed exact at SourceEditor
+`F4CF7F877A149A691E2D8FB05511DF3D1191A30D305EE92209830725F229D662` and EditorSession
+`990B1338BEF3F2CA14857EA236B517EF9DE23CC4884F60987A206C78BE4E8213`. Final test hashes are SourceEditor
+`59D66E776C95C7A5EF175F315840F07A95437DE302EF43D09235DAAADAFF1812`, Session
+`71356DBE3B1A5DB7DE345D8EF49A2A94E6806122693C7D476F12F8F7B5FC8FED`, and Playwright
+`FF14DAC4D5F69AEF39243478CEFB440624D868DEF98EB9F65ED5F855F835220C`.
+
+The strengthened default-loader oracle now requires both configured branches to issue status work before either
+settles, rejects one transport branch, and proves the other still reaches one exact canonical authority as an ordinary
+all-settled pair. A sequential implementation times out the row and `Promise.all` rejection fails it. The hostile
+matrix now classifies an actually revoked `Proxy.revocable` envelope without outward throw or authority. Selected and
+sampled span-1 fixtures have separate measured shape oracles and duplicate/drift sensitivity. Both project exactly one
+frame, one table, one row, four cells, four widgets, six texts, thirteen Scene colour facts, and thirty-two Paint tint
+attachments; their exact owner multiplicities differ legitimately because sampled dynamic text resolves canonical
+primary colour where the selected fixture retains a source-literal primary colour.
+
+The new Playwright spec uses the real seeded Forge app and `[data-workspace-view="ui-designer"]`; it delays both initial
+`/api/reference/status` requests, reloads into a controlled current 503 generation, settles the old generation late and
+aborted, verifies core and colour status/detail do not regress, retains exact `Not verified in game`, then unmounts via
+the Blueprint view with another generation outstanding and requires no page error or remount. This spec is authored but
+not yet executed: the project machine-state ask is mandatory before Playwright starts the ephemeral 3100/3101 stack.
+Focused SourceEditor is `12/12`; Session baseline/P7 is `7/7 + 7/7`; typecheck, exact three-file ESLint, and exact diff
+hygiene pass. An intermediate typecheck rejected an unsupported Playwright `toHaveText(..., { exact })` option; the
+test retained exact anchored/string assertions using the installed API and the final typecheck is green. Status remains
+`PARTIAL / candidate` until the focused browser spec runs and a fresh zero-write audit returns `CLEAN`.
+
+P7 mounted-oracle static review correction, 2026-08-19: coordinator review found that the first Playwright candidate
+made both colour test IDs optional, so removing the P7 colour status/detail UI could falsely pass. Exact native Luna
+`01a01b2b-76a7-7532-9ba5-e09245275442` changed only `tests/e2e/x4-ui-source-editor.spec.ts`: both colour signals are
+now required exactly once and visible, and their settled current-generation state is included in the late-generation
+non-overwrite proof. The first correction then asserted a marker from the body of a controlled HTTP 503. Source
+reconciliation reproduced that `readStatus()` intentionally returns the fixed `status-http` failure before parsing a
+non-success body, making that assertion impossible. The same Luna owner corrected the oracle to require exact
+`unavailable` core/colour status and the public fixed non-success-response detail. Final Playwright hash is
+`136F613690B1AE44A7B2F950DACCEE2A1040476EBFB13E215FA0484856D4D831`; production remains byte-exact at SourceEditor
+`F4CF7F877A149A691E2D8FB05511DF3D1191A30D305EE92209830725F229D662` and EditorSession
+`990B1338BEF3F2CA14857EA236B517EF9DE23CC4884F60987A206C78BE4E8213`. Worker and coordinator both pass typecheck,
+exact-file ESLint, and diff hygiene. Playwright remains deliberately unexecuted pending the mandatory machine-state
+confirmation; P7 therefore remains `PARTIAL / candidate`. AAR triggers: optional mounted colour assertions and the
+unparsed-503-body assumption both reached static review before runtime and were corrected without production changes.
+
+P7 second zero-write audit, 2026-08-19: native Luna `01a01b37-d15d-7cf2-9a16-0be108ffb162` preserved all five
+declared hashes, exact `HEAD == origin/main` at `77138741a9f470e2c6c37c2d6857688dd1e2b13e`, 58 porcelain rows, and zero
+staged paths. SourceEditor P7 `12/12`, EditorSession P7 `7/7`, typecheck, exact five-file ESLint, and exact-path diff
+hygiene remained green. The candidate is nevertheless `FINDINGS`, not accepted: the transport-throw row is normalized
+to a fulfilled failure inside CorpusAssets and therefore cannot distinguish `Promise.all` from `Promise.allSettled`;
+the Paint tint multiplicity omits the actual command `ownerId`; and the mounted generation-three path proves only
+unmount/no-pageerror after test-controlled settlement, not that the component cleanup aborted the shared generation
+signal before settlement. These are test-authority defects, not reproduced production failures.
+
+The reconciled correction is three independent tests-first slices. Exact native Luna
+`01a01b44-847d-7ec1-a810-4519dd068fe1` owns only SourceEditor production/selftest and may add the smallest defaulted
+branch-loader seam necessary to produce a true rejected promise while preserving concurrent start, one shared signal,
+the canonical fulfilled branch, and the permanent game-truth boundary. Exact native Luna
+`01a01b44-8589-7f02-855f-b31449727aaf` owns only the EditorSession selftest and must bind Paint multiplicities to exact
+static `ownerId` values plus wrong-owner and same-colour duplicate/missing mutation sensitivity; production remains
+frozen. Exact native Luna `01a01b44-86c4-7dd3-8784-af365ee125f2` owns only the mounted Playwright spec and must observe
+the real generation-three fetch signal become aborted after unmount and before manual route settlement, while retaining
+the exact core/colour HTTP-503, stale-generation, no-pageerror, and `Not verified in game` assertions. No worker may run
+Playwright before the machine-state gate. Coordinator review, combined focused gates, and a new zero-write audit are
+required before P7 acceptance; broad/build/install/deploy/X4 remain locked. No capability-map delta.
+
+P7 post-correction audit, 2026-08-19: SourceEditor production/selftest
+`335AB14EA7EF2800E4E3B08E288E0E7EF4E031CD651FA8DD6F21B46D4F81CE57` /
+`3E8FD64C40DF6526401879228FBFD9678342D9D7F53F9D11255D0A046D714CCD`, frozen EditorSession production
+`990B1338BEF3F2CA14857EA236B517EF9DE23CC4884F60987A206C78BE4E8213`, Session selftest
+`A86B49EDFCB0BBB4BB41F8E305E3C99F0D6268D7D113AFDDE76627743943DD9B`, and mounted spec
+`E9D745F18813DFFBFBBC604F67CF603F2B1A0E48BEA635F57DDA1A249BB52DB2` passed SourceEditor `12/12`, Session
+`7/7`, typecheck, exact five-file lint, and diff hygiene. Fresh zero-write Luna
+`01a01b57-696b-7172-ba36-0f8a82c19204` independently accepted the real rejected-promise/`Promise.all` mutant,
+reflection/game-truth boundaries, and the mounted shared-signal cleanup oracle at static scope, but returned `FINDINGS`
+for one remaining owner-test escape: the Session helpers used `command.nodeId ?? command.id`. Deleting the real
+`nodeId` and forging `id` to an expected fixture owner therefore preserved cardinality and legacy colour multiplicity
+while the supposedly exact oracle still passed.
+
+The same Session selftest owner `01a01b44-8589-7f02-855f-b31449727aaf` is correcting only that file. Exact authority
+must require `nodeId` for every tint-bearing command, never synthesize owner identity from `id`, and include selected
+and sampled mutants that delete `nodeId` while preserving `id` and tint data. Those mutants must pass an explicit
+legacy fallback oracle and fail the corrected exact oracle while the prior wrong-owner and same-colour duplicate/missing
+receipts remain green. Production stays frozen. Require combined static gates and another zero-write audit before P7
+promotion; Playwright remains machine-gated. AAR triggers now include the first tuple-inference typecheck failure, the
+auditor's corrected staged-path census, graphify's Windows canonicalization failure, and the first CJS top-level-await
+mutant-probe failure. No capability-map delta.
+
+P7 second post-correction audit, 2026-08-19: fresh zero-write Luna
+`01a01b6a-4ba3-7291-9365-68ab44d3a2db` confirmed that exact tint extraction and command lookup now use only `nodeId`,
+the sole `nodeId ?? id` path is isolated in the named legacy helper, expected owner maps are static, every focused gate
+is green, and loader/mounted/reflection/game-truth boundaries remain intact. It still returned `FINDINGS`: the
+delete-`nodeId` mutant assigned `command.id` to the expected owner before deletion, so its `fallbackIdPreserved` receipt
+proved a manufactured post-write value rather than preservation of the original command. The Session selftest owner
+must snapshot the original own `id`, never rewrite it, delete only `nodeId`, and require exact original-`id` and tint
+preservation. If the real fixture's original `id` cannot satisfy the legacy fallback, the test must report that shape
+and construct a separate honest causal control rather than manufacture preservation. Production remains frozen;
+combined gates and another zero-write audit remain mandatory. No capability-map delta.
+
+## P7 FINAL STATIC CHECKPOINT — CLEAN / MOUNTED VALIDATION PENDING (2026-08-19)
+
+Status: `PARTIAL`. The P7 five-file candidate is accepted at static/focused scope after final zero-write review; the
+real mounted Forge interaction is still unexecuted and therefore P7 is not runtime-verified.
+
+### Reconciled correction
+
+- The real selected and sampled Paint commands already have own geometry-prefixed `id` values distinct from `nodeId`.
+  The corrected mutant snapshots that original `id`, never rewrites it, deletes only `nodeId`, and proves unchanged
+  tint data, cardinality, and non-owner colour multiplicity. The strict owner oracle rejects it; the legacy fallback is
+  honestly false for those real fixtures.
+- A separate minimal control starts with original `id === nodeId`. Deleting only `nodeId` makes the named legacy
+  `command.nodeId ?? command.id` oracle accept while the strict `nodeId` oracle rejects. This establishes the fallback
+  escape without manufacturing evidence in the real fixture.
+- The SourceEditor loader seam remains optional and defaults to the production configured core/colour loaders. Its
+  causal test starts both branches before settlement, shares one signal, produces a genuinely rejected loader promise,
+  retains the canonical fulfilled branch through `Promise.allSettled`, and rejects a `Promise.all` mutant.
+- The mounted spec statically records exactly two generation-three status requests, one shared signal, no pre-unmount
+  abort, then abort events after unmount and before manual settlement. It retains mandatory core/colour status/detail,
+  controlled HTTP 503, stale-generation, no-pageerror, and `Not verified in game` assertions.
+
+### Frozen candidate and host-native evidence
+
+- `src/components/X4UiSourceEditor.tsx`:
+  `335AB14EA7EF2800E4E3B08E288E0E7EF4E031CD651FA8DD6F21B46D4F81CE57`.
+- `src/components/X4UiSourceEditor.selftest.tsx`:
+  `3E8FD64C40DF6526401879228FBFD9678342D9D7F53F9D11255D0A046D714CCD`.
+- `src/lib/x4UiEditorSession.ts`:
+  `990B1338BEF3F2CA14857EA236B517EF9DE23CC4884F60987A206C78BE4E8213`.
+- `src/lib/x4UiEditorSession.selftest.ts`:
+  `751E520F77EA28E1635A3CD87D63BF6ACFB721942FCA3B610E79A4D2F8DFC7AC`.
+- `tests/e2e/x4-ui-source-editor.spec.ts`:
+  `E9D745F18813DFFBFBBC604F67CF603F2B1A0E48BEA635F57DDA1A249BB52DB2`.
+- Host-native SourceEditor selftest: `12/12`, exit 0.
+- Host-native EditorSession selftest: `7/7`, exit 0; selected and sampled receipts retain their real original IDs and
+  the separate static legacy-fallback control passes.
+- Host-native `npm run typecheck`: exit 0.
+- Host-native exact five-file ESLint: exit 0.
+- Host-native exact five-file `git diff --check`: exit 0.
+- `HEAD == origin/main == 77138741a9f470e2c6c37c2d6857688dd1e2b13e`; 58 porcelain rows; zero staged paths.
+- Final zero-write Luna `01a01b8a-9132-7a61-92bd-d327e947700b`: `CLEAN`, no files changed, no findings. It independently
+  verified exact hashes, focused rows, loader seam, static owner maps and mutants, absence of a production `nodeId -> id`
+  fallback, permanent game-truth boundary, and mounted abort assertions.
+
+### Mounted-validation isolation amendment — 2026-08-19
+
+Status: `FOCUSED VERIFIED / CLEAN`; the mounted SourceEditor spec remains unexecuted.
+
+Read-only reconciliation found that the Playwright API stack redirects `X4_STATE_DIR`, `X4_CONFIG_DIR`, and discovery
+state into its per-process OS-temp root but does not set `X4_DATA_DIR`. The mounted spec calls
+`seedServerWorkspace()`, which performs `POST /api/agent/workspace`; that transaction creates recovery and authoritative
+action-receipt records and projects history through stores rooted by `dataPath()`. With the current environment those
+stores resolve to this checkout's live `data/` directory. Running the supposedly isolated spec would therefore mutate
+live Forge persistence even though its workspace registry and configuration are ephemeral. This is a reproduced harness
+isolation defect, not a hypothetical runtime risk, and the machine-sensitive gate stays locked until it is repaired.
+
+The bounded tests-first repair owns only `playwright.config.ts` and a new focused
+`scripts/e2e-ephemeral-environment.selftest.ts`. The selftest must inspect the actual Playwright configuration object and
+fail against the frozen configuration because `X4_DATA_DIR` is absent. Production then sets `X4_DATA_DIR` to an absolute
+child of the same `E2E_STATE_DIR`, while the configured `X4_REFERENCE_ROOT` remains a deliberately external read-only
+input. Acceptance requires the causal red receipt, focused selftest, typecheck, exact-file ESLint and diff hygiene,
+immutable hashes, coordinator reproduction, and a fresh zero-write Luna audit. The later mounted run must additionally
+fingerprint the live `.studio-state`, `config.json`, and `data/` roots before and after, parse the E2E harness verdict,
+and prove ports `3100/3101` and the owned process tree are gone. Rollback is the exact two-file repair diff. There is no
+capability-map delta; this restores the already-declared ephemeral-test boundary.
+
+Acceptance receipt: exact native Luna `01a01c17-1ae3-7b43-9721-61dcc0a5054c` captured the required fail-first exit `1`
+with `X4_DATA_DIR must be defined in the API webServer environment`, then changed only the declared pair. Final SHA-256
+values are `playwright.config.ts`
+`E53CBC377066A77E30306A3E384598E2064B889F0B2F9A4B1150B5C8E0843A41` and the new selftest
+`DDC899A834FB7E15B20C2FA9503E77D436AC76262D6624805EB8602762A662B5`. Worker and coordinator independently passed
+the focused selftest, typecheck, exact two-file ESLint, and diff hygiene without running Playwright. Fresh zero-write
+Luna `01a01c1e-1cb0-7761-bf22-1dfe8b16c003` returned `CLEAN`, changed no files, preserved both hashes and zero staged
+paths, and passed the same four gates. It confirmed that the configured child environment closes every `dataPath()`
+consumer reached by the API stack; an extra assertion that `X4_STATE_DIR` is beneath `os.tmpdir()` is optional
+strengthening rather than a release-relevant escape because the actual public config already constructs that per-process
+root. Static acceptance does not prove runtime cleanup or live-root byte stability. Overall B119 remains
+`PARTIAL / Not verified in game`.
+
+External projection was synchronized and read back without closing B119: GitHub #41 comment `5348802753` contains the
+exact isolation checkpoint; Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a` now reads
+`P7 static CLEAN; mounted-harness X4_DATA_DIR isolation repair CLEAN at GitHub #41 comment 5348802753; mounted
+Playwright, broad/install, AI Influence dogfood, deploy, and X4 remain pending; Not verified in game`; and Drive document
+`17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE` advanced under required revision
+`AIroW35HtnX_2zZyHPLJwj9JIih8FTNVwLDSx2NZsJFb-l4bzsQD3tIkHbViIOHKLsZCeNFWPN8t5FDokUpSJvyQjEEcjHvQ3ayDbyb-JXKc`
+to read-back revision
+`AIroW34XpQzBJ5NRIzi9GCDV97S8idXzYqEdJo5jgBbhA6avhPuNrZnFDbj_NfKeK0pP4aXsfotYXFqGjp710FS--upL0orCwd8VErzIcOKS`.
+Its exact heading is `HEADING_2` at indexes `91675..91747`, and both the fail-first and pending-X4 sentences are present.
+
+### Remaining required validation
+
+After the mandatory machine-state answer, run only
+`node scripts/run-e2e.mjs tests/e2e/x4-ui-source-editor.spec.ts`; parse the harness verdict, verify the ephemeral
+3100/3101 stack stopped, and prove the live workspace remained unchanged. Then re-freeze hashes/focused gates and run a
+fresh post-runtime zero-write audit. Broad oracle/precommit/build/package, installed Forge rendering, AI Influence 1b
+dogfood through Forge with fresh visual comparison to every relevant supplied photo, deploy-byte identity, and X4
+runtime/screenshot truth remain later gates. Product copy remains `Not verified in game`.
+
+### AAR delta
+
+- A coordinator check first resolved through the Codex sandbox mirror. The path exposed the host-truth violation, so
+  those matching results were not treated as authority; every frozen hash and focused gate was repeated host-native.
+- A Google Docs refresh used an invalid partial-response field mask with one unmatched parenthesis and returned HTTP
+  400. It wrote nothing. The full indexed document read then succeeded and supplied revision/end-index authority before
+  any synchronization write.
+- Sustain: static green is not promotion. Three successive no-write audits found genuine proof defects before this
+  CLEAN candidate; the bounded correction/audit loop prevented a convincing but weak renderer test from becoming the
+  release authority.
+
+### External checkpoint readback
+
+- GitHub #41 comment `5347454408`: exact P7 static-clean / mounted-pending checkpoint read back.
+- Notion accepted comment `3c14618e-d15b-814a-9d69-001d190c9b03`. Because the comments reader remained on its
+  pre-write discussion snapshot, no duplicate was posted. The data-source schema confirmed `Reverse Sync Result` is a
+  text property; a minimal update now states the static-clean and remaining mounted/broad/dogfood/deploy/X4 boundary,
+  and the page fetch read it back exactly.
+- Google Doc `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`: revision-guarded append succeeded from revision
+  `AIroW34pUzWukpvgsk9Qv5OVdfpbAsma3UhA2etwamLgJJfmSdpATPCWOTEmbct9GlBtBWfyiz7Rv96XKCHgK-IVpa4h6lHQBioPXRpYJCaX`
+  to revision
+  `AIroW34ec3tH_2d7m2zQDfMCm8rxh5dZp1CK8EbCPjrq4507c_TrVbTtqXFH7G4KeMGSC7OYBgz5ZhE4621LDPzvuG_Yz_MnmpuYTWq8Rnux`.
+  Readback found the `HEADING_2` marker at index 89070 plus the final repository-authority sentence.
+- Tool AAR: fetching a returned Notion comment ID as though it were a page returned the expected `object_not_found`;
+  comment IDs and page IDs are different object classes. The schema-backed property readback supplied durable proof.
+
+### Mounted SourceEditor run — isolated cleanup verified, lifecycle oracle failed (2026-08-19)
+
+Status: `PARTIAL / FAILED REQUIRED METHOD`. Ken supplied the required machine-state answer: Antigravity open, X4 not
+running, machine quiet. The coordinator ran exactly
+`node scripts/run-e2e.mjs tests/e2e/x4-ui-source-editor.spec.ts` against the repaired ephemeral stack.
+
+The harness result was deterministic across its retry: `0 passed / 1 failed / 0 flaky / 1 bad-result`, child exit `1`.
+The failure is at `tests/e2e/x4-ui-source-editor.spec.ts:281`: generation-three recorded two status fetches but their
+observed `AbortSignal` identities had set size `2`, while the static oracle expected size `1`. The new structured verdict
+is `test-results/e2e-verdict.json` SHA-256
+`63CA15C9604E684516C756B69C1E5099C045FD54BADB4D84E6C9FE4C57D5EE53`, timestamp
+`2026-08-19T23:26:16.9958005Z`.
+
+Isolation and cleanup passed independently of the behavioral failure. The runner reported lifecycle complete,
+`treeGone=true`, no cleanup errors, one termination pass, root PID `37436`, and no remaining owned PIDs. Ports
+`3000/3001/3100/3101` were free and no X4 process existed after the run. The complete untracked-file worktree census
+remained exactly `59` entries / `2387` bytes of porcelain output / SHA-256
+`E7F3756DF0BD50D7D8CC5A117550604F394EB0647F4BA8E3E1642F8FCC781EDA`, with zero staged paths. Live roots were
+byte-identical before and after: `.studio-state` `9` files / `4` directories / `12,382,674` bytes / tree digest
+`A70776B8CF69435702A2BB48DF73F9B5A5DC35985B51268298DAE311649C025C`; `config.json` `463` bytes / digest
+`E4C090258945687435565FB8E728C8722A51D113EBAD4CD0A26BC5665EE26772`; and `data/` `3,686` files / `42`
+directories / `607,386,585` bytes / tree digest
+`A81D43E9BF19C5311FD1A1F9E593D98978C299E35614D7FCBB201D935AE20726`. The `X4_DATA_DIR` repair is therefore
+runtime-proven to preserve the live Forge roots.
+
+Reconciliation classifies the failed identity assertion as a reproduced test-authority discrepancy, not yet a
+production abort defect. `X4UiSourceEditor` creates one controller per effect invocation and passes its exact signal to
+`loadX4UiSourceEditorCorpusEnvelope`; that function passes the same value to both branch loaders, and `request()` passes
+that value to the bounded fetch transport. The accepted focused selftest independently proves branch-loader and
+transport object identity. Since the mounted fetch wrapper runs before native `fetch()` and observes the supplied
+`RequestInit.signal` directly, two identities imply two effect/loader invocations were grouped under the harness's
+manually assigned generation label. The current test labels requests by an external mutable counter and therefore does
+not identify their owning effect lifecycle.
+
+The next bounded tests-first unit owns only `tests/e2e/x4-ui-source-editor.spec.ts` unless causal evidence proves a
+production change is required. It must make the mounted harness lifecycle-aware without adding a production test hook:
+group observable fetches by their signal identity, distinguish aborted StrictMode/stale invocations from the active
+invocation, require one active lifecycle to issue both core/colour initial status requests, prove every request in that
+active lifecycle shares one signal, then prove unmount aborts that signal before any manually controlled route settles.
+It must retain the exact HTTP-503 current-generation core/colour result, stale-generation non-overwrite, no-pageerror,
+unmount/no-remount, and permanent `Not verified in game` assertions. A deliberately flattened external-generation
+oracle must fail first against the observed mounted behavior; the lifecycle-aware oracle must pass only if same-owner
+requests abort together. If the new evidence instead shows two independently active non-aborted lifecycles at the
+unmount boundary, stop and reclassify it as a production lifecycle defect before touching production.
+
+Acceptance requires exact test diff review, typecheck, owned-file ESLint, diff hygiene, the isolated mounted spec with
+authoritative structured verdict, post-run process/port/live-root parity, and a fresh zero-write Luna audit. Frozen P7
+production and focused-test hashes may not change without a documented reproduced production defect. Broad E2E,
+build/package/install, AI Influence dogfood, deploy, and X4 remain locked. Rollback is the exact mounted-spec-only diff;
+no capability-map delta. Overall B119 remains `PARTIAL / Not verified in game`.
+
+First lifecycle-aware attempt and coordinator rejection: Luna `01a01c5d-11e9-70c3-b5fa-cbad6bf2b1cc` changed only the
+mounted spec to group observations by signal identity and passed exact ESLint, typecheck, and diff hygiene. Its mounted
+run remained red at `0/1`, with lifecycle IDs `5` and `6` each owning one non-aborted request; cleanup again completed
+with no remaining PIDs or listeners. The worker classified that as a production/runtime discrepancy and stopped without
+touching production. Coordinator review rejected that conclusion because the test sampled immediately after the route
+layer reached `>= 2` requests. That boundary can observe one request from each lifecycle before either lifecycle's paired
+branch reaches the browser harness; it is not the declared unmount-boundary condition and cannot prove a duplicate active
+lifecycle. The same Luna owner was resumed for a targeted test-only correction: poll until exactly one complete
+two-request non-aborted signal group exists and every other observed group is cleanup-aborted, then select that group and
+prove its unmount abort before route settlement. Only a causal timeout/final readback with multiple non-aborted groups and
+no complete pair may reclassify production. This review-forced reimplementation is an AAR trigger; production remains
+frozen and the mounted gate remains failed.
+
+### Reproduced mounted owner-signal defect and bounded production repair — 2026-08-19
+
+Status: `FAILED / REPRODUCED`. The corrected lifecycle-aware oracle is frozen at
+`tests/e2e/x4-ui-source-editor.spec.ts` SHA-256
+`C810FDAA7AF5901F3F057E75794F9058BD22A53EC9950DD1ACD924E2D2E01496`. It polls for ten seconds for exactly one
+complete two-request live signal group while requiring every competing group to be cleanup-aborted. Both retry attempts
+ended identically: lifecycle/signal `5` owned one non-aborted request with zero abort events; lifecycle/signal `6` owned
+one non-aborted request with zero abort events; no same-signal core/colour pair ever formed. The authoritative structured
+verdict is `0 passed / 1 failed / 0 flaky / 1 bad-result`, child exit `1`, receipt SHA-256
+`41B159D6D8D35E76AEEC25CA070D18E8C3B113EB80143046E920016C45B72BAF`, timestamp
+`2026-08-19T23:42:32.2519675Z`. Lifecycle cleanup remained complete with `treeGone=true`, no remaining captured PID,
+ports `3000/3001/3100/3101` free, and no X4 process. Exact-file ESLint, typecheck, and diff hygiene passed. The test did
+not weaken or reach the later unmount assertion because the required active owner pair was absent.
+
+This is now a reproduced production/runtime contract defect. Frozen SourceEditor production/selftest hashes remain
+`335AB14EA7EF2800E4E3B08E288E0E7EF4E031CD651FA8DD6F21B46D4F81CE57` /
+`3E8FD64C40DF6526401879228FBFD9678342D9D7F53F9D11255D0A046D714CCD`. Source reconciliation shows the intended
+outer signal is supplied to both branch loaders, but the mounted fetch boundary does not retain one identity. The
+narrowest repair is therefore to make the envelope owner authoritative at its transport boundary: create one transport
+facade closed over the envelope's `signal`, ignore any branch-supplied transport signal, and pass that same facade to
+both configured loaders. This makes cancellation ownership explicit at the last application-controlled boundary before
+`fetch` rather than relying on branch option propagation.
+
+The tests-first production unit owns only `src/components/X4UiSourceEditor.tsx` and
+`src/components/X4UiSourceEditor.selftest.tsx`; the mounted spec is frozen read-only at the hash above. Its fail-first
+selftest must inject both branches, have each attempt transport with a distinct rogue signal, and prove the current raw
+transport leaks those identities. The repaired envelope must preserve concurrent branch start and `Promise.allSettled`
+behavior while the underlying transport sees only the exact outer owner signal for every call. It must also prove owner
+abort propagation and refuse any mutation that restores branch-supplied signal authority. No corpus loader, Session,
+Paint, Canvas, UIBuilder, API, or harness configuration change is permitted.
+
+Acceptance requires the causal selftest red/green receipt; exact SourceEditor focused rows; typecheck; exact production,
+selftest, and frozen mounted-spec ESLint/diff hygiene; hash/containment readback; then the exact mounted harness command.
+The mounted gate must form one same-signal two-request live group, retain all current 503/stale/colour/pageerror/game-truth
+checks, and prove unmount abort before settlement. Post-run process/port and live-root parity plus a fresh independent
+zero-write Luna audit remain mandatory. Rollback is the exact two-file production/selftest diff. Broad and downstream
+gates remain locked; no capability-map delta. Overall B119 remains `PARTIAL / Not verified in game`.
+
+### Cross-layer reconciliation supersedes the owner-signal defect diagnosis — 2026-08-19
+
+The production-defect classification above is superseded. Repository-wide fetch ownership search found the missing
+reader/writer coupling in `src/main.tsx:34-160`: the Playwright init script installs its observing `window.fetch` first;
+Forge startup captures that function as `originalFetch`, then installs `customFetch`. For every bounded API request,
+`customFetch` reads the caller's upstream signal, invokes `createAbortDeadline(upstreamSignal, deadlineMs)`, replaces
+`RequestInit.signal` with that request-specific `deadline.signal`, and only then delegates to the test observer. The two
+mounted identities are therefore the expected per-request deadline signals, not evidence that SourceEditor issued two
+upstream lifecycle signals. Both derived signals remain live while their held requests are pending and are designed to
+abort when the one upstream owner aborts or their independent deadline expires.
+
+The explicit owner-transport facade experiment did not change the mounted result—still exact one-request live groups
+`5` and `6`—which is the expected falsification: the downstream deadline owner intentionally derives a fresh signal
+after the SourceEditor boundary. The experimental production/selftest hashes were
+`D72F041519EFC9FD42494F323E51D18D26B20FBF56F8A7C9AF80B5BBDEB0FD24` /
+`F283084972BEDC402943A4061A73179C499789876C7F4D1AA71ACB1DF0812F32`; its mounted receipt was structured red at
+`0/1`, SHA-256 `2FF9F369BB6C027A6A0ACD1C03345E22A46EBC56BEA6DA600386F68A2AE340AE`, timestamp
+`2026-08-19T23:50:19.4872623Z`, with complete process cleanup. This experiment is `REVERTED`, not accepted. Exact Luna
+`01a01c69-cb53-76b0-bfae-fb794e3518c0` must restore only its two files to frozen hashes
+`335AB14EA7EF2800E4E3B08E288E0E7EF4E031CD651FA8DD6F21B46D4F81CE57` /
+`3E8FD64C40DF6526401879228FBFD9678342D9D7F53F9D11255D0A046D714CCD` and rerun static gates without another
+mounted run.
+
+The corrected acceptance contract is cross-layer, with no production change: the accepted SourceEditor selftest proves
+both configured branch loaders receive the exact one upstream owner signal and its raw injected transport preserves that
+identity; the mounted test proves the two expected request-deadline derivatives are both live before unmount and both
+receive abort events after unmount but before either held route is manually settled. Native-fetch object identity must
+not be asserted equal. The next test-only unit owns only the mounted spec, removes lifecycle grouping by downstream
+signal, records one exact post-click request cohort, requires two non-null distinct deadline-signal identities with zero
+pre-unmount abort events, and then requires both to abort synchronously at the cleanup boundary before settlement. It
+must retain every current 503/stale/colour/pageerror/no-remount/game-truth assertion. A one-signal cohort, a missing abort,
+an abort only after settlement, or a stale UI overwrite must fail.
+
+Acceptance requires the exact restored production/selftest hashes; causal test-only diff; SourceEditor `12/12`;
+request-deadline focused tests if present; typecheck; exact ESLint/diff hygiene; frozen non-owned hashes; exact mounted
+structured green; full process/port and live-root parity; then a fresh zero-write Luna audit. This reconciliation and the
+review-forced production revert are AAR triggers. No capability-map delta; overall B119 remains
+`PARTIAL / Not verified in game`.
+
+### P7 mounted acceptance and broad-gate promotion — 2026-08-19
+
+Status: `FOCUSED VERIFIED / CLEAN`; P7 is promoted into broad host validation, not game verification.
+
+The final mounted-spec-only correction is frozen at `tests/e2e/x4-ui-source-editor.spec.ts` SHA-256
+`5ABE7E0235FC41EAD822AC07CF59B403761ADAB2573C764D3DF67B3B1D63AC3E`. It records exactly the two post-click
+core/colour status requests, requires two non-null distinct live request-deadline signals with no pre-unmount abort,
+freezes those exact identities, unmounts SourceEditor through Blueprint, and requires both derived signals to emit abort
+before either held route is manually settled. It retains controlled HTTP 503 core/colour failure rendering,
+stale-generation non-overwrite, no page error or remount, and exact `Not verified in game` copy. Static SourceEditor
+coverage remains the complementary authority that both branch loaders receive one shared upstream owner signal.
+
+The exact isolated mounted command
+`node scripts/run-e2e.mjs tests/e2e/x4-ui-source-editor.spec.ts` passed `1/1`, with zero failed, flaky, bad, or missing
+results. `test-results/e2e-verdict.json` is SHA-256
+`95BD5006AD61E8E16CDDD3B7C66B090634A7DED00E0D2A684052B52ED37B9714`, generated
+`2026-08-19T23:58:12.183Z`; its lifecycle is complete, `treeGone=true`, and `remainingPids=[]`. Ports
+`3000/3001/3100/3101` and the X4 process were absent afterward. The complete worktree remained exactly 59 NUL entries,
+2,387 bytes, SHA-256 `E7F3756DF0BD50D7D8CC5A117550604F394EB0647F4BA8E3E1642F8FCC781EDA`, with zero staged paths and
+`HEAD == origin/main == 77138741a9f470e2c6c37c2d6857688dd1e2b13e`. The earlier pre/post live-root receipts remained exact, so the
+`X4_DATA_DIR` isolation repair is runtime proven.
+
+Coordinator reproduction passed SourceEditor `12/12`, EditorSession `7/7`, the E2E environment containment selftest,
+typecheck, exact seven-file ESLint, and exact seven-file diff hygiene. Fresh zero-write native Luna
+`01a01c7a-34f9-78c1-ab77-61707af2ce94` returned `CLEAN`, changed no files, preserved every accepted hash and the complete
+worktree fingerprint, independently traced the upstream-to-deadline abort coupling, and found no material false-green or
+unsafe broad-gate blocker. P7 is accepted. The next gates are the runtime-discovered oracle sweep, full verdict-parsed
+E2E, precommit, production build/package, and real rendered Forge inspection. AI Influence dogfood, deploy-byte identity,
+and X4 remain pending; overall B119 remains `PARTIAL / Not verified in game`.
+
+### AAR delta — mounted lifecycle correction
+
+- Sustain: the static and mounted tests now prove different ownership boundaries instead of asserting impossible native
+  object identity across `customFetch` deadline derivation.
+- Improve work/approach: the first lifecycle interpretation and the later production-defect diagnosis were both wrong;
+  repository-wide reader/writer reconciliation should have included `src/main.tsx` before authorizing production work.
+- Improve tools: the verdict-parsed isolated runner and exact live-root/worktree receipts prevented both false success and
+  persistence contamination despite the failed attempts.
+- Highest-risk evidenced weakness: a highly convincing mounted oracle can still test the wrong observation boundary.
+  The bounded mitigation is the accepted cross-layer static-plus-mounted contract and the permanent game-truth label.
+
+### Broad runtime-oracle fail-first — 2026-08-19
+
+Status: `FAILED REQUIRED METHOD / correction active`. The isolated runtime index discovered 134 oracles. The first real
+execution of `npm run test:oracles` returned `132/134`; the only reds were `/agent/lua-static-selftest` and
+`/agent/project-orchestration-selftest` (`12/14`). The isolated server and temporary config root were torn down, the
+oracle port was released, no X4 process started, the exact 59-entry/2,387-byte worktree fingerprint remained unchanged,
+and zero paths were staged.
+
+Read-only reconciliation reproduced one shared stale expectation. The accepted linter implementation correctly emits a
+warning for literal `addTable(13..23)` because official X4 9.00 has valid 13-column tables and the mod range is
+unbisected; it emits a blocking error only at `24+`, the measured refusal boundary. `runLuaStaticAnalysisSelftest()`
+still builds its fatal, BOM-fatal, mixed-error, and deterministic fixtures from `addTable(13)`, while
+`runProjectOrchestrationSelftest()` still expects a package containing `addTable(13)` to block. The runtime reds are
+therefore tests that contradict the accepted policy, not evidence that the linter or renderer changed incorrectly.
+
+Exact native Luna `01a01c83-fdbc-70d3-bdbb-65890016f6e1` owns only
+`src/lib/luaStaticAnalysis.ts` and `src/lib/projectOrchestration.ts`. It must preserve production analysis/package code,
+add mutation-sensitive 13-warning/nonblocking and 24-error/blocking rows, retain clean/dynamic/BOM/truncation/determinism
+coverage, pass focused selftests/typecheck/exact lint/diff hygiene, and make the isolated runtime sweep `134/134`. Full
+E2E remains paused. No capability-map delta.
+
+Tool AAR: the first wrapper command was rejected before execution because the host command-policy parser mangled an
+inline drive-path/environment assignment. It created no process or file. The simplified process-scoped temporary-config
+wrapper executed successfully and supplied the authoritative fail-first receipt.
+
+Correction candidate: Luna `01a01c83-fdbc-70d3-bdbb-65890016f6e1` changed only the two declared selftest owners. The
+Lua static owner now proves 31/31 rows, including separate 12-clean, 13-warning, and 24-error cases; BOM location uses the
+warning boundary; mixed 24-error plus dynamic gap remains independent; and determinism spans all three severities. The
+project orchestration owner now proves 15/15 rows: the old height fixture is honestly named and checked as a nonblocking
+unverified gap, while separate package fixtures prove 13 warning/nonblocking and 24 error/blocking. Review preserved the
+pre-existing uncertainty row after rejecting an intermediate patch that had replaced it.
+
+Final candidate hashes are `src/lib/luaStaticAnalysis.ts`
+`04F5820CA77B429626E110EC561E34587207821B7A9F420139B70918990A496E` and
+`src/lib/projectOrchestration.ts` `3376624C5B55B3C9AE0F56ECA7DD06B967012D228B1A5B0134CA8E9698A303AB`.
+Worker and coordinator independently passed both focused selftests, typecheck, exact lint with zero errors, and diff
+hygiene. The ten `no-explicit-any` lint warnings are unchanged pre-existing lines. Worker and coordinator also each ran
+the isolated runtime-index sweep at `134/134` green. The two new tracked modifications make the expected full worktree
+authority 61 NUL entries / 2,454 bytes / SHA-256
+`A04DB7221CBF0B85E7AA36ADA33A53646BB12792B8289BA6D1C92E23874A771F`, zero staged; excluding those exact owners
+returns the prior 59-entry fingerprint. Fresh zero-write Luna `01a01c95-618e-74e3-9f1d-5cf339bf10f9` is auditing the
+candidate. Full E2E remains locked until `CLEAN`.
+
+Audit close: zero-write Luna `01a01c95-618e-74e3-9f1d-5cf339bf10f9` returned `CLEAN`, changed no files, independently
+passed Lua `31/31`, orchestration `15/15`, typecheck, identical-to-HEAD lint warnings, diff hygiene, and runtime-index
+`134/134`; it preserved both hashes, the exact 61-entry status fingerprint, zero staged paths, and released port 8972.
+The broad oracle gate is accepted. Source fallback discovers 133 while the running registry exposes 134; runtime index is
+the authoritative project gate. Full serial E2E is now unlocked; engine truth remains `Not verified in game`.
+
+### Full E2E fail-first — manifest readiness oracle — 2026-08-20
+
+Status: `FAILED REQUIRED METHOD / tests-only correction active`. Ken's machine gate remained valid. The coordinator
+captured full pre-run content receipts, then ran exactly `npm run test:e2e`: 103 tests, one worker. The structured verdict
+is `102 passed / 1 failed / 0 flaky / 1 bad-result`, child exit 1. The sole failure repeated on retry in
+`tests/e2e/project-browser.spec.ts:203`: expected the directory-config response manifest state `ready`, received
+`scanning`. Receipt `test-results/e2e-verdict.json` is SHA-256
+`D106E146E500EF65A869534B4DC7A3B44480E9F9A869D5EEE0CB87A78933C7A2`, generated
+`2026-08-20T00:53:55.862Z`; report inspection is complete, lifecycle is complete, `treeGone=true`, and no PID remains.
+
+The isolation contract remained exact despite the red. Before and after, `.studio-state` is 9 files / 4 directories /
+12,382,674 bytes / content-tree digest `244B8BD79EE7C8EEB93FBF1F374EF053FF1E91333088AF14D5AFB9EE60EE550E`;
+`data/` is 3,686 / 42 / 607,386,585 / `A279C2CA9FFB646885B8E433D44AD9EFE61803D44629CAA5DC037DA23C083B56`;
+and `config.json` is 463 bytes / `3EC65D540E6763D13D6F8F27D9005F80C3C855B00D3DCFDD5E7330726AE37779`
+with unchanged timestamp. Worktree status remained exact at 61/2,454/
+`A04DB7221CBF0B85E7AA36ADA33A53646BB12792B8289BA6D1C92E23874A771F`, zero staged; all validation ports and X4
+were absent after teardown.
+
+Cross-layer reconciliation classifies the red as a stale test oracle exposed by the accepted `X4_DATA_DIR` isolation,
+not a stuck production scan. A fresh per-run data root has no cached manifest. `scheduleReferenceManifest()` therefore
+starts the first background scan and returns the documented `scanning` state with metadata; `ready` exists only after no
+scan is active, while `stale` preserves a prior complete generation during replacement. The project-browser test changes
+only workspace/filesystem roles and must remain usable without waiting for a full unpacked-corpus scan. The former
+live-data leak could mask this by supplying a pre-existing ready generation.
+
+Exact native Luna `01a01cab-4297-77a0-af08-9028c642f2b4` owns only
+`tests/e2e/project-browser.spec.ts`. It must replace the ready-only assertion with strict state/shape coupling that accepts
+only ready, scanning, or stale; rejects error/unavailable/idle/absent; requires active-scan metadata for scanning/stale;
+and retains every visual decomposition, overlap, cue-filter, round-trip, restore, and cleanup assertion. It may not wait
+for the corpus, raise timeouts, quarantine, skip, or touch production. Focused verdict-parsed green, typecheck, exact lint,
+diff hygiene, cleanup, coordinator review, and a fresh zero-write audit are mandatory before rerunning the full suite.
+
+AAR delta: the earlier live-data contamination made a ready-only assertion look stable. Once isolation was fixed, the
+test revealed that it had coupled an unrelated project-browser behavior to background corpus completion. The durable
+lesson is to assert asynchronous status shape and downstream independence, not immediate completion, unless completion
+is the feature under test.
+
+Correction candidate: `tests/e2e/project-browser.spec.ts` is frozen at
+`3E8E8966164E30E0557A9E8F36FF4997F3C6D9FB2E8C2DECD22CE8344DF9E2BC`. It accepts only ready/scanning/stale,
+forbids an error field, requires ready to omit scan metadata, and requires scanning/stale metadata to contain nonempty
+generation/startedAt plus finite nonnegative files/bytes. It adds no poll, timeout, retry, quarantine, skip, or production
+hook and retains all downstream project-browser assertions.
+
+Worker `01a01cab-4297-77a0-af08-9028c642f2b4` passed the focused three-test spec and static gates. The coordinator's
+first reproduction was correctly rejected by the verdict parser when the Playwright child exited Windows
+`3221226505` before producing a structured report; lifecycle teardown still completed. The exact rerun produced 3/3
+structured green, receipt SHA-256 `C9ADC7DD7F96840BB1610CA7016B60FE9056FA3C9560769734553AEF212FA504`,
+generated `2026-08-20T01:04:08.226Z`, with complete lifecycle, `treeGone=true`, and no remaining PID. Typecheck, exact
+lint with zero errors/three unchanged warnings, and diff hygiene pass. Current status authority is 62/2,491/
+`F59E6635628F79E43B7F91BF4677C5C4385172CFF7B0BCBA0BCE9EC5995706E5`, zero staged. Fresh zero-write Luna
+`01a01cb3-5172-7812-b275-ed55c0bf38c0` is auditing before the full-suite rerun.
+
+Tool AAR: a successful worker run does not substitute for coordinator reproduction, and a child process exit with no
+structured report remains red even when lifecycle cleanup succeeds. The exact retry supplied evidence; the failed launch
+is retained as a non-clean validation event.
+
+### Fresh post-restart audit acceptance — 2026-08-20
+
+The pre-restart audit worker was no longer present after the Codex restart and therefore supplied no verdict. Fresh
+native `luna_executor` Pauli `01a01d16-ae78-7ec2-9247-4afa0e297116` repeated the required audit read-only and returned
+`CLEAN`: candidate hash exact at
+`3E8E8966164E30E0557A9E8F36FF4997F3C6D9FB2E8C2DECD22CE8344DF9E2BC`, `HEAD == origin/main`, 62 status entries,
+zero staged paths, `git diff --check` green, and no files changed. Its hostile public-contract review found no remaining
+false-green path in the ready/scanning/stale coupling and reported global spawned-thread cap `4` from the fresh runtime.
+The coordinator captured the terminal result and immediately closed the worker; `close_agent` returned terminal
+`completed` previous status.
+
+The tests-only correction is accepted at focused/audit scope. The next required method is the exact serial
+`npm run test:e2e` rerun with verdict parsing and complete ephemeral-stack/live-root containment readback. That run
+remains locked until a fresh machine-state answer confirms Antigravity state, X4 state, and a quiet machine. Product
+truth remains `PARTIAL / Not verified in game`.
+
+### Full E2E host-instability reconciliation and bounded Reload repair — 2026-08-20
+
+Status: `FAILED REQUIRED METHOD / BOUNDED REPAIR SPECIFIED`. Ken confirmed Antigravity running, X4 absent, and the
+machine quiet. The first exact `npm run test:e2e` rerun discovered 104 tests and passed tests 1-18 before the Playwright
+child exited with Windows status `3221226505`; no structured report was produced, so verdict receipt
+`7F1E29C5487B6CD53D4E6BA9FA3DE85CA1B5EA8E2E3F05DEC3A2011E2C0E1280` is correctly red. One bounded retry crossed
+that boundary, passed through test 22, then lost the isolated backend and cascaded connection-refused failures; the
+child exited `4294967295` without a structured report and receipt
+`B50DCB02061A9233C881C1FBEAA8CE2B101D519B5325269B7E6E7B14EE06DC86` is red. Both lifecycle wrappers reported
+complete teardown. No third full-suite retry is authorized: repeated no-report host deaths are retained as failed gate
+evidence, not converted into a product pass.
+
+The narrow diagnostic command
+`node scripts/run-e2e.mjs tests/e2e/continuous-polling.spec.ts --grep "large dense workspace"` passed both dense
+pointer-close and accessibility-traversal rows `2/2`, with structured receipt
+`6B9CB5D7C59CC0F80A8C0B05AC3B3AC4632111967267272731A9F3BFD6C9742A`, complete lifecycle, `treeGone=true`, and no
+remaining PID. This falsifies a deterministic failure in the exact dense block where the second broad run died, but it
+does not clear the full-suite gate. `npm run typecheck`, lint at zero errors/592 pre-existing warnings, the runtime-index
+oracle sweep `134/134`, and `npm run build` all pass. The production bundle is therefore buildable while overall B119
+remains `PARTIAL` because full E2E and game proof are still outstanding.
+
+An isolated production launch of `dist/server.cjs` on port 3200 used a disposable state/config/data root and the real
+configured unpacked corpus `F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00`; it did not touch live ports 3000/3001.
+Rendered in-app-browser inspection proved the permanent `Game verification / Not verified in game` state, generated-Lua
+status, linter findings, preview-only refusal without exact extension-root `ui.xml` passthrough, measured keep-outs
+(`wheel y=0.788`, `option stack y=0.74`, `video left edge x=0.664`), and explicit unmeasured ticker/top-strip status.
+After saving the configured corpus path, server status advanced from scan to canonical ready and a full page reload
+eventually rendered `Status: canonical` plus accepted canonical-default colour evidence.
+
+That run also reproduced one bounded editor defect: after the server became ready, SourceEditor's `Reload` action could
+retain the prior `idle` or `scanning` response while a full page reload obtained canonical state. The status response has
+an ETag and no explicit cache-control header. Browser-cache reuse is the leading hypothesis, not yet a proven diagnosis;
+loader/effect state staleness remains the alternative. The smallest causal repair unit owns only
+`src/components/X4UiSourceEditor.tsx` and `tests/e2e/x4-ui-source-editor.spec.ts`. The mounted test must first observe the
+effective native-fetch init for each exact core/colour reload cohort and fail because status requests do not specify
+`cache: 'no-store'`. Production may then add only that request cache mode at the existing bounded corpus transport. It
+must not change endpoint allowlisting, AbortSignal ownership/deadlines, corpus authority, polling, retries, server cache
+policy, linter policy, renderer semantics, or the permanent game-truth warning.
+
+Acceptance requires a recorded fail-first receipt; exact mounted structured `1/1` green with all existing 503,
+stale-generation, colour, abort, page-error, and game-truth checks retained; SourceEditor focused selftests; typecheck;
+exact ESLint and `git diff --check` for the two owned files; coordinator diff review; exact content hashes; post-run
+ports/process containment; and preservation of every non-owned worktree path. Current pre-repair authority is production
+SHA-256 `335AB14EA7EF2800E4E3B08E288E0E7EF4E031CD651FA8DD6F21B46D4F81CE57`, mounted-spec SHA-256
+`5ABE7E0235FC41EAD822AC07CF59B403761ADAB2573C764D3DF67B3B1D63AC3E`, 78 status entries, zero observed validation
+listeners, and no X4 process. Additional untracked Antigravity showcase evidence appeared during validation and is
+explicitly non-owned. Rollback is the exact two-file repair diff; no capability-map delta.
+
+The isolated production server and browser tab are stopped and port 3200 is free. Its exact disposable root
+`C:\Users\Moshi\AppData\Local\Temp\x4forge-b119-prod-3200` contains 10 files / 160,904,914 bytes. A verified native
+PowerShell cleanup command was rejected by host policy before execution, so the root is deliberately retained rather
+than deleted through another shell. This cleanup failure and the two broad-run deaths are triggered AAR inputs. Engine
+truth, AI Influence dogfood, deployment, and X4 execution remain pending.
+
+### Reload repair acceptance and durable-writer precommit blocker — 2026-08-20
+
+The Reload repair is accepted at focused scope. Native Luna `01a0225b-8c20-7be2-b798-b1c41e1ec0c3` changed only the
+declared SourceEditor production and mounted-spec owners, returned terminal `completed`, and was immediately closed. Its
+causal fail-first mounted run exited 1 with exact expected cache modes `["no-store","no-store"]` and observed
+`[null,null]`; the structured verdict was `0/1` red with `treeGone=true`. The final candidate is SourceEditor SHA-256
+`A05F47E6B117225D35EB69255C9EA215334B67C2C7FF31BB26D5C04D13059813` and mounted spec
+`D15C6F4295E93D1929615329AA219317DBB2AC0D27AFA983EE2BA9EEF1B277E3`.
+
+Coordinator review proved exact minimality without rewriting either file: deleting one production `cache: 'no-store'`
+option reconstructs frozen SourceEditor hash `335AB14E...CE57`; deleting the four cache-observation/assertion lines
+reconstructs frozen mounted-spec hash `5ABE7E02...AC3E`. SourceEditor focused matrices pass, including canonical colour
+`12/12`; typecheck, exact two-file ESLint with zero warnings/errors, and diff hygiene pass. The exact mounted command is
+structured `1/1` green at receipt SHA-256 `1EBC966BFD93FDCBAD550F1C8AB1B2B2DED32C6FE5EA8CB30DC5424A2E47266F`, generated
+`2026-08-21T03:35:42.647Z`, with complete report/lifecycle, `treeGone=true`, and no remaining PID. Exact pre/post
+`.studio-state`, `data`, and `config.json` content receipts match; all validation ports are free and X4 remains absent.
+The rebuilt production bundle passes. This fixes browser-cache staleness only; it does not change or claim engine frame
+acceptance, and every rendered surface remains `Not verified in game`.
+
+The next required method, `npm run precommit:check`, is red at the durable-writer inventory. All earlier precommit rows
+passed, then `npm run test:writers` reported exactly two coupled defects: source fingerprint declared
+`5c5a82d9c66897cc9df2fccb91387a005070b083a0d306f8d5c9cde84ad84305` versus current
+`92e3f28c114ab64992a327ab91afc8343551a4259e444d707d602f9b3e07ed28`, and unregistered
+`src/lib/x4UiScene.selftest.ts` calls `writeFileSync:2`, `mkdirSync:2`, `rmSync:1`, `mkdtempSync:1`, `symlinkSync:2`.
+This is pre-existing B119 fixture behavior exposed by the first broad precommit, not a Reload repair regression. The
+exact Scene test creates two files and two directory links beneath a unique `mkdtempSync(tmpdir())` root and removes that
+root in `finally`; it tests physical child-reparse escape refusal and does not write configured corpus, workspace, game,
+or mod paths.
+
+The bounded correction owns only `config/durable-writers.json`, starting SHA-256
+`286890776ED5509843B13E2D62B81AAA003B9B7082E654D32EB72F329A3663F8`. It must add one honest alphabetized
+`fixture-only` entry with the exact audited calls, test owner, temporary-root rationale, and cleanup/failure contract,
+then replace only the top-level fingerprint with the scanner-issued current value. Frozen Scene selftest SHA-256
+`34A4D496C968366A18DB6023D2F6BD91F50C2C1A066F6D75BC0944F49FF35C8F` must not change. Acceptance requires JSON
+parse, scanner-to-manifest exact fingerprint/call agreement, durable-writer selftest and audit green, focused Scene
+selftest green, diff hygiene, preservation of both Reload-repair hashes, and a coordinator `npm run precommit:check`
+rerun. No audit bypass, call deletion, fixture weakening, or production writer change is permitted. Rollback is the
+single manifest diff; no capability-map delta. The precommit red and earlier malformed read-only regex are AAR triggers.
+
+### Durable-writer acceptance and reviewed action-receipt coupling — 2026-08-20
+
+Native Luna `01a02268-3252-7413-8475-ef955ea9a722` changed only `config/durable-writers.json`, returned terminal
+`completed`, and was immediately closed. Final manifest SHA-256 is
+`AC0240CF553F505CC8F4C85A55792D16C2C39558B23546757CA954B4B8E4CF14`; deleting exactly the new fixture entry and
+restoring the prior fingerprint reconstructs exact starting hash `28689077...663F8`. Scene remains byte-frozen at
+`34A4D496...35C8F` and passes `139/139`; the scanner agrees on all five call counts. Worker and coordinator durable
+writer gates pass: audit selftest `14/14`, 42 registered filesystem sources, 11 host-store sources, 2 browser-output
+sources, and extension durable-write `8/8`.
+
+The full precommit rerun passed writer and capability gates, then failed at action-receipt coverage because that reviewed
+authority intentionally consumes `config/durable-writers.json` by indexed source reference. Exact in-memory candidate
+comparison proves zero route additions/removals/changes (`82` unchanged), one added surface
+`filesystem-writer:src/lib/x4UiScene.selftest.ts`, and 16 later filesystem-writer surfaces whose only change is the
+deterministic `#/writers/N` index shift. Reviewed surfaces move `55 -> 56`. The candidate reviewed-manifest SHA-256 is
+`dbf9366e62302d925bfd1a6bcd049b830b86dcc5aa7ce69e777c130a7c8548fa`; the current reviewed authority is
+`25d7b2a12b151fd8b1039f797dd5845a0779e2e1c9bd641a6c44325de12b33b4`.
+
+This necessary coupling supersedes the earlier classification of action-receipt drift as unrelated. The bounded unit
+owns only `config/action-receipt-coverage.json` and `src/lib/actionReceiptPolicyBundle.ts`; selftest
+`src/lib/actionReceiptPolicyBundle.selftest.ts` is frozen at SHA-256
+`BE0ACB817F82EBBEAFF1210BF779B0B55CF4FE3F973AC95CC38F4FEC9D5E5A4D`. Starting policy source is
+`51EADF9FB6B8B39D8669AB0AA24660B291F2EAB6A1DD06B3F01A1ACB9DB1007D`. The worker must use the repository's guarded
+`--write-candidate` and exact-SHA/current-SHA `--promote-candidate` workflow rather than manually generating the reviewed
+manifest, independently compare candidate routes/surfaces before promotion, then update only the pinned reviewed-manifest
+SHA constant to the promoted manifest hash. No route, capability, receipt policy, inventory scanner, selftest, or durable
+writer entry may change.
+
+Acceptance requires candidate and promotion selftests; exact candidate comparison (`82` routes unchanged, only the one
+new surface plus index-only shifts); atomic promotion/readback; policy-bundle selftest; action-receipt audit; capability
+contracts; typecheck; exact lint/diff hygiene; all frozen B119/writer hashes; candidate-temp cleanup; and the complete
+coordinator precommit rerun. Rollback restores the two exact pre-change hashes above. The first precommit audit red and
+the intermediate writer-manifest fingerprint red remain AAR triggers; no capability-map delta.
+
+Sequence correction: the first worker correctly stopped with zero writes because
+`npm run test:action-receipt-coverage:selftest` invokes `--candidate-selftest`, whose CLI wrapper additionally runs the
+currently stale imported policy-bundle selftest. Requiring that package command green before promotion is circular: the
+bundle cannot validate until the reviewed manifest and its pin are updated. This does not weaken the guard. The corrected
+order is standalone `--promotion-selftest`; guarded `--write-candidate` (which runs the candidate structural selftests
+before writing); exact candidate diff review; exact-SHA/current-SHA promotion; pin update; then the full package-level
+candidate/promotion/policy-bundle selftest, policy-bundle selftest, and audit. The initial package red is retained as
+fail-first evidence. No owned file changed during the stopped attempt; the same Luna owner is resumed with this targeted
+correction.
+
+Candidate-path correction: standalone promotion selftest passed `23/23`, but the resumed worker correctly stopped again
+with zero writes because the audit rejects every candidate outside the repository's `test-results` root. The prior
+OS-temp authority contradicted `resolveActionReceiptCoverageCandidatePath()` and is superseded. The exact permitted
+artifact is `test-results/b119-x4-ui-scene-writer.candidate.json`; its parent already exists and the candidate is absent.
+The same owner may create only that regular file through `--write-candidate`, use it for exact promotion, then remove only
+that file after successful readback. No directory creation or deletion is authorized. This second stop and a malformed
+read-only PowerShell conditional are additional AAR triggers, not product findings.
+
+Promotion close and selftest-oracle correction: exact candidate envelope SHA-256 is
+`ffab715c659db9b958d4f11987e6ac6a74d3d8405f111b3cc9bffaeffe15076c`; guarded promotion returned `REVIEWED` with
+82 routes, 56 surfaces, 95,062 canonical LF bytes, and reviewed SHA-256
+`DBF9366E62302D925BFD1A6BCD049B830B86DCC5AA7CE69E777C130A7C8548FA`. Policy source now pins that exact hash at
+SHA-256 `07BAA23E5E33B3C94E61FEA907DB8C940A64D45199FF2DC9F756A330276C6D27`. Independent candidate comparison passed:
+routes are byte-semantically unchanged; only the Scene fixture surface was added; exactly 16 later writer references
+shifted by one index with no semantic-field change. Coverage audit, capability contracts, MCP capability selftest,
+typecheck, exact lint, and diff hygiene pass. The candidate regular file was verified under `test-results`, removed by
+exact path, and is absent; no directory was removed.
+
+The only reds are frozen `actionReceiptPolicyBundle.selftest.ts` rows `bundled_policy_positive_counts` and
+`later_load_is_not_poisoned`, leaving that matrix `16/18`. Both literally encode the former surface count `55` in three
+comparisons while route count `82` remains correct. This is a stale test oracle caused by the reviewed one-surface
+promotion, not a production-policy defect. The next bounded unit owns only
+`src/lib/actionReceiptPolicyBundle.selftest.ts`, starting SHA-256
+`BE0ACB817F82EBBEAFF1210BF779B0B55CF4FE3F973AC95CC38F4FEC9D5E5A4D`, and may replace only those three expected
+surface counts `55 -> 56`. It must retain exact route counts, hash/source-ref checks, freeze/mutation/hostile-source
+coverage, and all other rows. Acceptance requires standalone `18/18`, package coverage selftests, coverage audit,
+typecheck, exact lint/diff hygiene, frozen manifest/policy/writer/Scene/Reload hashes, and coordinator precommit. Rollback
+is the exact one-selftest diff; no capability-map delta.
+
+### Reviewed-policy close and broad precommit acceptance — 2026-08-21
+
+The selftest-only correction is accepted at SHA-256
+`220B6DD6F5D4CF038EDB03C32CFDB2CB8EE761BFCBB265BA61ABA4AEA93DC417`. Exact native Luna changed only three literal
+surface expectations `55 -> 56`; reversing only those edits reconstructs frozen starting hash `BE0ACB81...E5A4D`.
+Worker and coordinator policy-bundle selftests pass `18/18`, including exact `82/56`, reviewed hash, source references,
+recursive freeze, mutation refusal, fresh reload, hostile-source refusal, and read-only bundle sources. Package coverage
+selftests pass candidate `57/57` and promotion `23/23`; all authority and B119 hashes remain exact.
+
+The complete coordinator `npm run precommit:check` now exits 0. Recorded gates are tripwire 0 hits, canonical instruction
+mirrors identical, verdict selftest `54/54`, E2E Vite lifecycle PASS, shipped product-copy PASS, durable-writer selftest
+`14/14`, 42/11/2 filesystem/host-store/browser-output sources, extension durable-write `8/8`, capability contract PASS
+(12 capabilities, 297 disposed literal routes, 1 reviewed dynamic registrar, 11 MCP aliases; contract SHA-256
+`bb467c4b70402b3dd31571dbe10d60ec05653dc6f6600f043037e993f292037c`), MCP capability PASS, action-receipt coverage
+PASS at manifest `dbf9366e...548fa` / `82` routes / `56` surfaces, typecheck PASS, and large-file guards PASS. Production
+build and focused mounted SourceEditor remain green. No subagent remains open; all validation ports are free and X4 is
+absent.
+
+Overall B119 remains `PARTIAL / Not verified in game`. The required exact full E2E gate is still red from the two retained
+104-test host deaths without complete structured reports; the exact dense boundary passes `2/2` in isolation, but that
+does not substitute for full-suite completion. The declared no-third-retry stop remains in force. AI Influence reference
+dogfood, exact deploy-byte identity, C++ frame acceptance, and player-visible X4 inspection are not run. No commit or push
+is authorized from this checkpoint while that required gate remains red; `HEAD == origin/main` is still the prior
+checkpoint.
+
+### AAR delta — rendered Reload through reviewed policy promotion
+
+- Sustain: causal mounted cache observation converted a rendered stale-state report into a one-option repair, while exact
+  hash reversal proved minimality and live-root receipts proved E2E isolation.
+- Improve work/approach: the first action-receipt worker order required a package selftest that could only pass after
+  promotion, and the first candidate path contradicted the CLI's repository `test-results` boundary. Read the complete
+  mode parser and wrapper composition before issuing future promotion work orders.
+- Improve tools: the coverage audit hid its validator error list behind one stable error; an in-memory candidate/manifest
+  comparator was required to prove the exact one-surface and index-only delta. Two read-only PowerShell probes also used
+  invalid inline `if` expression syntax, and one regex probe was malformed. Keep these as command-quality failures.
+- Highest-risk evidenced weakness: the monolithic full E2E host can die before writing a complete report even when the
+  nearby focused tests and lifecycle isolation are green. Until a separately planned harness-stability change supplies
+  complete structured evidence without weakening one-worker semantics, the gate remains red and game/deploy claims stay
+  blocked.
+- Project lesson banked in this plan: durable-writer insertion is coupled to reviewed action-receipt surface authority;
+  use guarded candidate generation/promotion and update the pinned hash plus exact count selftests in the same bounded
+  unit. External StarForge AAR/capability records are not modified in this workspace task; no capability-map delta.
+
+### Post-restart E2E stability contract — 2026-08-21
+
+Status: `SPECIFIED / ONE FULL-GATE RUN AUTHORIZED`; overall B119 remains
+`PARTIAL / Not verified in game` until the run produces complete structured truth.
+
+The prior no-third-retry stop applied to the degraded host session that produced two incomplete 104-test runs. Ken then
+restarted Codex and supplied a fresh machine gate: Antigravity running, X4 absent, machine quiet. Under this new runtime,
+the coordinator ran two serial, isolated discriminators with no agents or competing validation processes:
+
+- `node scripts/run-e2e.mjs tests/e2e/continuous-polling.spec.ts` passed structured `39/39`, including both former
+  crash boundaries, at receipt SHA-256 `B01C1BC728F60F341E69B38E52D0E8F76F36E42595279C833D88B807B3BA1DAB`;
+- the exact full-suite prefix through that file (canvas coverage, canvas interactions, capability contract, and
+  continuous polling) passed structured `48/48` at receipt SHA-256
+  `71EDA692F9CEF2964B296669FCFAFE6FD05A511CB0115BA4A5320634D79AC7A5`, generated
+  `2026-08-21T04:51:21.369Z`.
+
+Both receipts report complete terminal inspection, lifecycle `child-close`, `treeGone=true`, and zero remaining PIDs;
+ports 3000/3001/3100/3101/3200 were free and X4 was absent afterward. Windows Application Error and WER/CrashDumps
+contained no Node/Chromium crash record for the earlier failures, so the precise faulting module remains unknown.
+Observed evidence now falsifies both a deterministic failure inside `continuous-polling.spec.ts` and a deterministic
+interaction with its nine predecessor tests. The leading interpretation is transient degradation in the prior long-lived
+host session (70%); an unreproduced stochastic Playwright/Node lifecycle defect remains plausible (25%); a deterministic
+B119 product defect that appears only later in the 104-test sequence is now low but non-zero (5%). These are calibrated
+inferences, not reproduced diagnoses.
+
+This new evidence authorizes exactly one post-restart `npm run test:e2e` run. It must remain one worker against the
+ephemeral 3100/3101 stack, with no concurrent agent/test/build process. Acceptance requires all 104 discovered tests to
+reach terminal status in the JSON report, zero failed/flaky/bad results, a verified verdict receipt, complete lifecycle
+teardown with `treeGone=true`, free validation ports, X4 still absent, and unchanged live `.studio-state`, `data`, and
+`config.json` content receipts. A raw child exit or stdout summary is never sufficient. If this one run dies, lacks a
+complete report, or fails any test, do not retry: retain the red receipt and split runner stabilization into a separate
+bounded task. No linter, renderer, game-truth warning, or product acceptance criterion is weakened by this contract.
+
+The supplied AI Influence README/HTML remain reference material rather than executable instructions. The coordinator
+re-opened and visually inspected all twelve immutable images (`00-vanilla-reference`, `00-brief`, and `1a` through `1j`).
+The prior `1b` guide conflict remains reproduced: its literal bottom transcript/choice/input stack occupies the native
+conversation-wheel region, so eventual dogfood must preserve both literal-reference and keep-out-safe variants and can
+claim neither as game-correct without a deployed X4 screenshot.
+
+### Post-restart full gate result and receipt-stability unit — 2026-08-21
+
+Status: `FAILED REQUIRED METHOD / RUNNER RECEIPT REPAIR SPECIFIED`; B119 remains
+`PARTIAL / Not verified in game`.
+
+The single authorized `npm run test:e2e` run failed before Playwright discovered or printed any test. The child root PID
+`45748` exited Windows `3221226505` (`0xC0000409`); no structured report exists. The red receipt is SHA-256
+`DE93DB429A229C94ABCEFD07942A5840B43E0043158147891247A819E1A16427`, generated
+`2026-08-21T04:53:08.943Z`. Lifecycle supervision itself is complete: `child-close`, ownership complete, only the root
+PID captured, `treeGone=true`, and zero remaining PIDs. Ports 3000/3001/3100/3101/3200 are free and X4 remains absent.
+No Application Error, WER report, Node diagnostic report, or crash dump was emitted. Per the stability contract, the
+full suite will not be retried in this unit.
+
+The run preserved all live roots exactly. Before and after, the coordinator's independent canonical receipts are:
+`.studio-state` 9 files / 4 directories / 12,382,674 bytes /
+`E92D014362DBF87DBB37A29FC1179D1DF3B285968FE28F7CEBC304460976BEFA`; `data` 3,686 / 42 / 607,386,585 /
+`6D557EB5864F13F956D4C4728725F7203F7200064BF008F6CC7E841CA3F0F3E7`; and `config.json` 463 bytes /
+`3EC65D540E6763D13D6F8F27D9005F80C3C855B00D3DCFDD5E7330726AE37779`, timestamp
+`2026-08-16T20:53:12.4964911Z`. Worktree authority also remained exact at 82 NUL entries / 3,819 bytes /
+`947FD6195FE328FB22BA3FEFF6080FB2A0466CD6F7A2113E380E4B47450F95BB`, zero staged.
+
+Reconciliation found a second, deterministic runner defect in the failure path. Empty stdout makes
+`verdictFromStdout('')` return `totalTests: 0` but `noTests: false`; `boundedVerdict()` preserves that contradiction,
+while the receipt schema correctly requires `noTests === (totalTests === 0)`. The runner therefore wrote the red JSON
+above but rejected its own readback (`RECEIPT FAIL`). The host crash remains unresolved; this serializer defect did not
+cause the crash, but it prevents a durable verified red receipt precisely when the harness is most needed.
+
+The next bounded implementation owns only `scripts/run-e2e.mjs`, starting SHA-256
+`F3D11583810AB8D1DF908F8649174880BB4B04B3C2664908AF52B2DA00632758`. Tests must fail first by constructing the exact
+empty-stdout/no-structured-report receipt and requiring schema-valid canonical `noTests: true`, `totalTests: 0`,
+`structuredReportMissing: true`, and `green: false`. Production may then normalize only the persisted bounded verdict's
+`noTests` field from its canonical total count. It must not add a retry, reinterpret partial output as a pass, change
+Playwright arguments, lifecycle ownership, report authority, quarantine policy, or full-gate semantics.
+
+Acceptance requires the new causal red before production; final runner selftest all green with the added row;
+`node --check scripts/run-e2e.mjs`; exact diff review proving only the selftest and canonical persisted-field fix;
+immutable readback hash; and a fresh zero-write audit. The existing `npm run lint` command covers only `src` and
+`server.ts`; direct ESLint on this script has a pre-existing 33-error Node-environment/config mismatch and is explicitly
+not an applicable acceptance oracle. No full E2E rerun is authorized by this repair. Rollback restores the one file to
+the starting hash; no capability-map delta.
+
+AAR delta: the full launch failure repeated in a fresh runtime and invalidates the earlier 70% transient-host estimate;
+an unresolved stochastic Node/Playwright/Windows launch defect is now the leading interpretation (70%), broader host
+instability is secondary (25%), and a deterministic B119 product failure before discovery is very unlikely (5%). The
+malformed PowerShell `rg` glob and inapplicable direct-ESLint probe are additional tool-quality failures. The highest-risk
+weakness remains that a required release gate can fail before producing test truth; this unit repairs only durable red
+evidence, not that launch defect.
+
+### Node 24.15 Windows crash differential — 2026-08-21
+
+Status: `SPECIFIED / RUNTIME DIFFERENTIAL LOCKED BEHIND RECEIPT REPAIR`; no system installation or persistent
+configuration change is authorized.
+
+Current host evidence matches a published Node failure unusually closely: Windows 11 Home build `10.0.26200`, global
+Node `v24.15.0`, libuv `1.51.0`, V8 `13.6.233.17-node.48`, Playwright `1.61.0`, and loopback traffic on `127.0.0.1`.
+Node issue `nodejs/node#63620` documents silent Windows `0xC0000409` exits in Node 24.15.0 during high volumes of
+short-lived HTTP connects, with `127.0.0.1` reproducing in all four reported trials; its version bisect reports Node
+24.16.0 clean. Node's 24.16.0 release record confirms the libuv update to `1.52.1`. This repository's long Playwright
+gate performs sustained loopback API/readiness traffic, and the observed failures produce the same silent status with no
+WER entry. Source: https://github.com/nodejs/node/issues/63620 and
+https://nodejs.org/en/blog/release/v24.16.0.
+
+An already-installed, read-only Codex workspace runtime provides Node `v24.19.0` / libuv `1.52.1` at
+`C:\Users\Moshi\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe`. No download, package
+install, PATH persistence, registry write, or system Node replacement is required. The leading root-cause hypothesis is
+now the documented Node 24.15 Windows TCP-connect defect (90%); another native Node/Playwright/Windows defect is 8%; a
+B119 product failure before test discovery is 2%. Exact local faulting-stack proof remains unavailable, so this is still
+`[HYPOTHESIS]`, not `[REPRODUCED]` root cause.
+
+After the one-file receipt serializer repair is causally accepted and audited, exactly one controlled A/B completion run
+is authorized with a process-local PATH whose first entry is the existing Node 24.19 binary directory, invoking that
+exact binary on `scripts/run-e2e.mjs`. `process.execPath` will therefore spawn Playwright with 24.19, and the PATH-local
+override will also route the configured `node ... server.ts` web-server command to 24.19. The global Node installation
+must remain untouched. Capture and assert the effective Node/libuv versions immediately before the run.
+
+The differential is accepted only on the same strict 104-test JSON-report, zero-failure/flake/bad-result, verified
+receipt, lifecycle/tree teardown, free-port, X4-absent, live-root parity, and worktree-preservation contract. If it fails,
+do not try another flag/version or rerun. If it passes, classify the old-runtime failures as environment-specific with
+high confidence, keep their red receipts, and separately reconcile a durable minimum-Node/CI/preflight contract before
+calling the repository generally safe on Windows. A newer-runtime green does not verify X4 rendering or engine frame
+acceptance.
+
+### Receipt-stability acceptance and runtime differential unlock — 2026-08-21
+
+Status: `FOCUSED VERIFIED / CLEAN`; the Windows launch defect and overall B119 full gate remain open.
+
+Exact native Luna `01a022ac-be19-78c0-b35f-658704738b42` changed only `scripts/run-e2e.mjs`, returned terminal
+`completed`, and was immediately closed. Tests-first was causal: baseline `54/54`, then `54/55` with only
+`empty_stdout_receipt_canonical_no_tests` red while production remained frozen. The final one-file SHA-256 is
+`836D690243CB822ADC310BCE2FE16253100C8BAB3D96E4241D2569D1115747A2`; selftest is `55/55`, `node --check` passes,
+and diff hygiene passes. The production hunk computes the already bounded `totalTests` once and derives only persisted
+`noTests` from `totalTests === 0`; the second hunk is the exact empty-stdout/no-report receipt row. Retry count,
+Playwright arguments, stdout parsing, report authority, lifecycle, quarantine, completion, and product behavior are
+unchanged.
+
+Fresh zero-write native Luna audit `01a022b0-13a9-7a92-a4df-34472b6f1cc7` independently returned `CLEAN` with exact
+candidate hash, two-hunk scope, `55/55`, syntax and diff checks green, and no files changed; it was immediately closed.
+No subagent remains open. The controlled Node 24.19/libuv 1.52.1 differential described above is now unlocked. This
+acceptance repairs durable fail-closed evidence only and does not convert the prior full-suite launch failure into a
+pass.
+
+### Node 24.19 differential result — full E2E accepted — 2026-08-21
+
+Status: `FULL E2E VERIFIED ON SAFE RUNTIME / ENVIRONMENT DEFECT ISOLATED`; overall B119 remains
+`PARTIAL / Not verified in game` because dogfood, deploy-byte identity, C++ frame acceptance, and player-visible X4
+inspection remain open.
+
+With no subagent or competing validation process active, the coordinator prepended only the existing bundled Node
+directory to the child process PATH and invoked its exact `node.exe` on `scripts/run-e2e.mjs`. Root and a spawned child
+both reported Node `v24.19.0`, libuv `1.52.1`, and the same bundled executable. No persistent PATH, registry, package,
+global Node, or system setting changed.
+
+The exact one-worker 104-test suite completed in 8.5 minutes: `104 passed / 0 failed / 0 flaky / 0 bad-result` via the
+complete JSON report. Verified receipt `test-results/e2e-verdict.json` is SHA-256
+`48CDE7843D32C997AF8369D8F4B601A71D149966C3CC2F6B7172CDBB0511E5D0`, 4,835 bytes, generated
+`2026-08-21T05:14:50.747Z`. Report inspection discovered and terminally classified all 104 tests. Lifecycle is complete
+with `child-close`, `treeGone=true`, and zero remaining PIDs. All validation ports are free and X4 remains absent.
+
+Isolation and preservation are exact before/after: `.studio-state` 9 files / 4 directories / 12,382,674 bytes /
+`E92D014362DBF87DBB37A29FC1179D1DF3B285968FE28F7CEBC304460976BEFA`; `data` 3,686 / 42 / 607,386,585 /
+`6D557EB5864F13F956D4C4728725F7203F7200064BF008F6CC7E841CA3F0F3E7`; `config.json` 463 bytes /
+`3EC65D540E6763D13D6F8F27D9005F80C3C855B00D3DCFDD5E7330726AE37779`, timestamp
+`2026-08-16T20:53:12.4964911Z`; worktree 83 NUL entries / 3,842 bytes /
+`8066F4ED9EBFBE9B3FAD2422E0D9DA517B56990320B49F3699C06E63D87629D6`, zero staged. The marketing-showcase test
+updated its already untracked screenshot evidence as designed; no live workspace/config content moved.
+
+The controlled A/B result raises the Node 24.15 Windows TCP-connect defect to 98% confidence as the mechanism behind
+the silent `0xC0000409` failures: the same repository, corpus, Playwright version, tests, one-worker topology, and machine
+fail under Node 24.15.0/libuv 1.51.0 yet complete under Node 24.19.0/libuv 1.52.1, matching Node's published version
+bisect. Another native runtime interaction remains 2%; a B119 product-test failure is not supported by current evidence.
+This is strong environment isolation, not a symbolized local crash dump. The three historical red receipts remain part
+of the AAR and are not rewritten as passes.
+
+Next gates are complete precommit and production build under the safe process-local runtime, graph refresh, durable
+record readback, and a bounded B119-only commit/push with explicit staging. No in-game or deploy claim is unlocked by
+E2E alone; every UI surface remains permanently labelled `Not verified in game` until X4 evidence exists.
+
+### Host-gate close and executable checkpoint — 2026-08-21
+
+Status: `FOCUSED/HOST VERIFIED / COMMITTED`; overall B119 remains `PARTIAL / Not verified in game`.
+
+The complete precommit contract passed under Node `24.19.0`: e2e verdict `55/55`, Vite lifecycle, product-copy,
+durable-writer selftests `14/14`, writer inventory `42 filesystem / 11 host-store / 2 browser-output`, extension durable
+write `8/8`, capability contract `12 capabilities / 297 literal routes / 1 reviewed dynamic registrar / 11 MCP aliases`
+at contract SHA-256 `bb467c4b70402b3dd31571dbe10d60ec05653dc6f6600f043037e993f292037c`, MCP capability checks, action-receipt
+coverage `82 routes / 56 surfaces` at manifest SHA-256
+`dbf9366e62302d925bfd1a6bcd049b830b86dcc5aa7ce69e777c130a7c8548fa`, typecheck, and size guards. Production Vite
+and server bundles passed. The code graph refreshed to `9665` nodes / `24226` edges / `327` communities, and no
+graphify process remained.
+
+Explicit staging contained exactly 35 reconciled B119 implementation/config/test paths and no documentation,
+showcase evidence, generated result file, unrelated deletion, W3B1 record, onboarding file, issue template, or other
+untracked user path. Cached diff hygiene passed. Git's commit hook reran the full precommit contract successfully; the
+executable checkpoint is `505253ba4fa40c75fcb252945229841766685a05`, commit title
+`feat(ui): validate source-first X4 UI editor checkpoint`. Push readback proved
+`origin/main == 505253ba4fa40c75fcb252945229841766685a05` and zero staged paths.
+
+REVIEW against the request: source-backed X4 call/layout/corpus/paint projection, round-trip source editing, static
+rules, keep-outs, truthful incomplete states, isolated mounted editor behavior, and broad host gates are done and
+evidenced. AI Influence dogfood output, deploy-byte identity, C++ frame acceptance, and player-visible X4 comparison
+remain deliberately open. No preview or test result is represented as engine proof; `Not verified in game` remains
+binding. No capability-map delta.
+
+AAR delta: `graphify update . --max-workers 2` failed safely because `update` does not accept the worker option even
+though the global help displays it in another command's option block. The successful fallback ran the exact update at
+below-normal process priority and verified process cleanup. Sustain explicit-path staging, immutable receipts, and the
+process-local safe Node runtime. Improve the graphify CLI/help boundary and ensure future Git hooks inherit the safe
+runtime instead of global Node `24.15.0`. Highest-risk evidenced weakness remains the gap between a persuasive browser
+preview and C++ frame acceptance; the bounded reduction is real dogfood deployment plus exact in-game screenshots, not
+stronger preview claims.

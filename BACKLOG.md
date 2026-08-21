@@ -17,7 +17,524 @@ verification because official X4 9.00 contains 13-column tables. Dynamic shapes 
 output says only `No known rule violated` and `Not verified in game`.
 Plan: `docs/plans/2026-08-10-b119-x4-ui-editor-linter-first.md`. Source-first renderer design:
 `docs/plans/2026-08-10-b119-x4-ui-editor-source-first-design.md`. Owner: GitHub #41.
-**Checkpoint 2026-08-14 (current):** Batch 7D remains `FINDINGS / correction active`; broad and game gates are locked.
+The final dogfood fixture is the supplied `C:\Users\Moshi\Desktop\# AI Influence mod UI design\design_handoff_ai_influence`
+bundle. All twelve reference images (`00` plus `1a`-`1j`) must be visually inspected and the finished Forge must author
+the real X4 Lua rather than porting the HTML/CSS prototype. Build recommended screen `1b` first, then the remaining
+comm-link, confirmation-gate, and hub screens. Compare Forge output to the 2560x1440 references, preserve the measured
+conversation-wheel/NPC keep-outs, and require deployed X4 screenshots before any 1:1 claim.
+**AI Influence `1b` visual reconciliation 2026-08-19 — REPRODUCED GUIDE CONFLICT:** The source pixels were re-opened
+and immutable hashes/dimensions are frozen in the plan. Forge's existing cockpit preset projects the measured guides to
+`y=1134.72`, `y=1065.6`, and `x=1699.84` at `2560x1440`; the supplied `1b` choice/input geometry intersects all three.
+Because these are guides rather than complete native polygons, this proves a design risk, not exact occlusion. Dogfood
+must preserve a literal-mock render and a minimal clear variant with the preset enabled; deployed X4 decides which
+native regions exist in that exact state. Never silently move the mock or claim both pixel identity and clearance.
+**Full host-gate acceptance 2026-08-21 — `104/104`, commit checkpoint unlocked:** The retained global Node `24.15.0`
+full-suite deaths remain honest red host evidence (`0xC0000409`, incomplete/no report). An immediate no-output death
+also exposed a receipt serializer contradiction; exact native Luna repaired only `scripts/run-e2e.mjs`, moving the
+causal verdict selftest `54/55 -> 55/55`, final hash
+`836D690243CB822ADC310BCE2FE16253100C8BAB3D96E4241D2569D1115747A2`, with fresh zero-write audit `CLEAN`. The already
+installed Node `24.19.0` / libuv `1.52.1` was then selected only through process-local `PATH`; the exact serial suite
+passed `104/104` with verified receipt `48CDE7843...1E5D0`, complete discovery/terminal parity, child-close,
+`treeGone=true`, zero residue, free live/ephemeral ports, X4 absent, and exact `.studio-state` / `data` / `config.json`
+pre/post content parity. Complete precommit and production build pass under that runtime. Graphify is refreshed to
+`9665` nodes / `24226` edges / `327` communities. This clears the B119 code checkpoint for explicit-path commit/push
+and unlocks isolated AI Influence dogfood authoring. It does not prove engine frame acceptance: deployment and X4
+screenshots remain open, and overall B119 stays `PARTIAL / Not verified in game`.
+The exact 35-path executable checkpoint is committed and pushed at
+`505253ba4fa40c75fcb252945229841766685a05`; post-push readback proved `origin/main == HEAD` and zero staged paths.
+**P6 Canvas audit rejection 2026-08-19 — FINDINGS / correction active:** The first colour-bearing Canvas candidate is
+focused-green at `100/100`, Stage-B `25/25`, production/selftest
+`490F430673C51957751A3113C68046A10C811F355A349FDDBC2C064AB119DBB3` /
+`CB8D89BEE59294BE7E28BE9CD6171B160ADF8F9AA31784448A50A993AE69D4C2`, with Paint `165/165`, Preview `102/102`,
+Scene `139/139`, typecheck, exact lint, and diff hygiene green. Fresh zero-write Luna
+`01a019d2-fc1c-7223-b008-ee7a2403ab69` nevertheless reproduced three high producer/consumer mismatches: Canvas admits
+impossible string/full-location source pins, omits `sourcePath` from containment, and accepts same-ID mapping provenance
+that Scene refuses. Duplicate/reassigned tint facts are also not independently causal-tested. Production now stays
+frozen while the two Canvas files receive exact tests-first red coverage and the narrow three-validator repair. The
+historical implementation is permanently non-clean because the durable fail-first receipt does not cover all 25 final
+Stage-B rows. P7 editor wiring, broad/rendered Forge, mod writes, deploy, and X4 remain locked; overall B119 remains
+`PARTIAL / Not verified in game`.
+**P6 correction receipt 2026-08-19 — valid red / production repair authorized:** The first correction attempt is
+discarded as non-causal because four of six row markers were false and the worker edited production before coordinator
+review. The coordinator interrupted it and recovered exact frozen production `490F4306...19DBB3` from the retained
+patch preimage. Corrected tests-only selftest `F401AE90...E4351` now gives exact Canvas `107/113`, Stage-B `32/38`, with
+six real `mutationApplied=true` reds: string/full-location pins, declaration/channel/key `sourcePath` drift, and same-ID
+mapping provenance all incorrectly complete the full render under old production. The exact three-validator repair is
+authorized in the two Canvas files; final focused/coupled green plus a fresh zero-write audit remain mandatory. The
+premature edit and invalid first receipt are permanent AAR triggers, not erasable history.
+**P6 final acceptance 2026-08-19 — FOCUSED VERIFIED / CLEAN:** Replacement Luna
+`01a01a8e-7caf-7b61-b62b-0f3cd927616d` produced final Canvas production/selftest
+`C7B277D7A471C77A352A184881015E1F3C5C867CE1443108D84CE965D2278B94` /
+`FC493F3B263C9A1340A3E2BB264DAFBFDDBB9043CCB265C16343797CAC9CAE9C`. Worker and coordinator passed Canvas
+`113/113` (Stage-B `38/38`), Paint `165/165`, Preview `102/102`, Scene `139/139`, typecheck, exact lint, diff hygiene,
+and hashes. Fresh zero-write Luna `01a01a94-1779-7d80-965a-cae9d3278d53` returned `CLEAN`, changed no files, preserved
+the exact 56-entry / 2,279-byte status digest `A6449981...273A2`, and independently supported every corrected authority,
+structural-clone, quantization, withheld-tint, no-colour, and game-truth boundary. P6 is accepted only at focused scope;
+its historical receipt defects remain in the AAR. P7 configured colour loading through the existing SourceEditor and
+EditorSession owners is now active; browser/package/deploy/X4 remain open and overall B119 remains
+`PARTIAL / Not verified in game`.
+**P7 revised fail-first 2026-08-19 — `4/19`, implementation authorized:** Production remains exact at SourceEditor
+`B085A0A5...5C3C2` and EditorSession `20B74290...AF0`; tests-only are `6213F20B...11D05` /
+`09C75353...6D86B`. Existing matrices, typecheck, exact lint, and diff hygiene are green. SourceEditor is `1/12` with
+eleven reds across shared-signal dual loading, dual/core-only classification, independent color failure states, hostile
+envelopes, request lifecycle, and visible color status. EditorSession is `3/7` with four reds across selected/sampled
+owners, catalog/final outcomes, and one-descriptor TOCTOU capture; its facade proves catalog/sample readiness but old
+production reads color evidence zero times and emits zero final color owners. Invalid-color no-color degradation,
+color-without-core refusal, and game truth are already green. The original SourceEditor Proxy oracle is impossible as
+written: safe own-data reflection cannot distinguish a transparent Proxy without invoking traps. Correct that test only
+to require one detached descriptor snapshot, zero `get` reads, exact inner identities, transparent-facade admission, and
+safe refusal of accessor/inherited/decorated/clone/reassigned/throwing-reflection forms. Coordinator reproduction kept
+the same `4/19` census: current production performs eight direct `get` reads and never reaches the intended reflection
+boundary, so the revised row is genuinely causal. Implement only the two declared production owners, run every focused
+dependency, and require a fresh zero-write audit.
+**P7 audit-proof candidate 2026-08-19 — focused green, mounted gate pending:** Production hashes remain SourceEditor
+`F4CF7F87...9D662` / `3A90005C...8F5E4` and EditorSession `990B1338...E8213` / `A7FCAAE1...CAC29`. Worker and
+coordinator pass SourceEditor `12/12`, Session baseline/P7 `7/7` + `7/7`, CorpusAssets `39/39`, Preview `102/102`,
+Paint `165/165`, Canvas `113/113`, Scene `139/139`, typecheck, exact lint, and diff hygiene. Exact core survives an
+independently aborted colour branch; transparent/hostile/reflection and one-descriptor authority proofs are green. Two
+P7 fixture spans changed `2` -> `1` because the old rows overlapped the expected button cell; expected owners/counts were
+not weakened. Sample binding now tracks target plus sample catalog so colour resolution cannot falsely stale layout
+samples. Fresh zero-write Luna `01a01af6-6d38-7870-ab01-a4b64912ce08` preserved every hash and gate but rejected strict
+acceptance: the tests do not prove concurrent rejected-branch isolation, a revoked Proxy, exact projection/owner/tint
+counts, or mounted reload/abort/cleanup behavior. Production stays frozen. Strengthen the two selftests and add one
+focused existing-host Playwright lifecycle spec without a new dependency or production hook, then require coordinator
+green and another zero-write `CLEAN`. Broad build/install/deploy/X4 remain locked; overall B119 stays
+`PARTIAL / Not verified in game`.
+Those four test-proof gaps are now implemented in test hashes SourceEditor `59D66E77...F1812`, Session
+`71356DBE...C8FED`, and new Playwright `136F6136...D831`; both production hashes remain exact. SourceEditor is `12/12`,
+Session is `7/7 + 7/7`, typecheck/exact lint/diff hygiene pass. The loader test requires real overlap plus one rejected
+branch, the hostile matrix includes a revoked proxy, and selected/sampled fixtures separately lock exact
+`1/1/1/4/4/6/13/32` frame/table/row/cell/widget/text/fact/tint cardinalities and owner multiplicities with mutation
+sensitivity. Static review corrected two mounted-oracle false paths without changing production: colour status/detail
+are now mandatory exactly-once visible signals, and controlled HTTP 503 assertions use the loader's actual fixed
+non-success-response detail rather than an intentionally unparsed body marker. The real-app `ui-designer` Playwright
+lifecycle spec is authored but unexecuted pending the mandatory machine-state ask. P7 remains `PARTIAL / candidate`;
+no broad/build/install/deploy/X4 gate is unlocked yet.
+**P7 second audit 2026-08-19 — FINDINGS / three tests-first corrections active:** Zero-write Luna
+`01a01b37-d15d-7cf2-9a16-0be108ffb162` preserved all five hashes, `HEAD == origin/main`, 58 porcelain rows, zero staged
+paths, and every focused/type/lint/diff green. It rejected acceptance because the current transport throw is caught into
+a fulfilled CorpusAssets failure and cannot distinguish `Promise.all` from `Promise.allSettled`; Paint tint signatures
+do not bind exact command `ownerId`; and generation-three unmount does not directly observe cleanup abort before manual
+route settlement. Three disjoint exact native Luna owners now correct only SourceEditor production/selftest
+(`01a01b44-847d-7ec1-a810-4519dd068fe1`), EditorSession selftest
+(`01a01b44-8589-7f02-855f-b31449727aaf`), and the mounted Playwright spec
+(`01a01b44-86c4-7dd3-8784-af365ee125f2`). Playwright remains locked behind the machine-state answer. Require combined
+focused green and another zero-write audit before promotion; production, broad, installed, deploy, mod, and X4 truth
+remain unverified.
+**P7 post-correction audit 2026-08-19 — one owner-fallback FINDING remains:** SourceEditor `12/12`, Session `7/7`,
+typecheck, exact five-file lint, diff hygiene, the independent `Promise.all` mutant, reflection/game truth, and mounted
+signal-cleanup static review passed. Zero-write Luna `01a01b57-696b-7172-ba36-0f8a82c19204` still rejected Session
+acceptance because the exact test helper used `command.nodeId ?? command.id`; deleting the real `nodeId` and forging
+`id` to an expected owner could pass. The same Session selftest owner is now removing that fallback and adding selected
+and sampled delete-`nodeId` mutants that preserve `id`, tint data, cardinality, and the legacy colour-only oracle.
+Production is frozen. Require combined static green plus another zero-write audit; Playwright and every broader/live
+gate remain locked.
+**P7 second post-correction audit 2026-08-19 — preservation oracle still FINDINGS:** Fresh zero-write Luna
+`01a01b6a-4ba3-7291-9365-68ab44d3a2db` accepted strict `nodeId` extraction, static owner maps, all focused gates, and
+the prior loader/mounted/reflection/game-truth proofs. It rejected the delete-`nodeId` receipt because that mutant first
+overwrote `command.id`, then called the value preserved. The same Session test owner must snapshot and retain the real
+original own `id`, delete only `nodeId`, preserve tint data/cardinality/colour multiplicity, and prove the legacy fallback
+honestly. Production and every runtime/broad gate remain frozen.
+**P7 final static checkpoint 2026-08-19 — CLEAN / mounted gate pending:** The corrected Session selftest now preserves
+the real geometry-prefixed `id`, deletes only `nodeId`, and correctly observes that the real selected/sampled fixtures do
+not satisfy the legacy fallback. A separate honest fixture whose original `id === nodeId` proves the old fallback escape
+without manufacturing mutation evidence. Host-native SourceEditor `12/12`, EditorSession `7/7`, typecheck, exact
+five-file ESLint, and exact diff hygiene pass. Frozen hashes are SourceEditor
+`335AB14EA7EF2800E4E3B08E288E0E7EF4E031CD651FA8DD6F21B46D4F81CE57` /
+`3E8FD64C40DF6526401879228FBFD9678342D9D7F53F9D11255D0A046D714CCD`, EditorSession
+`990B1338BEF3F2CA14857EA236B517EF9DE23CC4884F60987A206C78BE4E8213` /
+`751E520F77EA28E1635A3CD87D63BF6ACFB721942FCA3B610E79A4D2F8DFC7AC`, and mounted spec
+`E9D745F18813DFFBFBBC604F67CF603F2B1A0E48BEA635F57DDA1A249BB52DB2`. Final zero-write Luna
+`01a01b8a-9132-7a61-92bd-d327e947700b` returned `CLEAN`, changed no files, preserved all hashes, 58 porcelain rows,
+zero staged paths, and found no authority or test-causality defect. This promotes only the static P7 candidate. The
+focused mounted Playwright spec, ephemeral-stack containment, rendered Forge, broad/package/install/deploy, AI
+Influence dogfood, and X4 remain open; product truth remains `Not verified in game`.
+**Mounted-harness isolation repair 2026-08-19 — FOCUSED VERIFIED / CLEAN:** Read-only reconciliation proved that the
+ephemeral API redirected state/config/discovery but left `X4_DATA_DIR` on this checkout's live `data/` root; the mounted
+spec's workspace seed would therefore write recovery/action-receipt/history records outside its sandbox. Luna
+`01a01c17-1ae3-7b43-9721-61dcc0a5054c` captured the causal missing-`X4_DATA_DIR` red and changed only
+`playwright.config.ts` plus new `scripts/e2e-ephemeral-environment.selftest.ts`. Final hashes are
+`E53CBC377066A77E30306A3E384598E2064B889F0B2F9A4B1150B5C8E0843A41` /
+`DDC899A834FB7E15B20C2FA9503E77D436AC76262D6624805EB8602762A662B5`; worker/coordinator focused gates pass, and
+zero-write Luna `01a01c1e-1cb0-7761-bf22-1dfe8b16c003` returned `CLEAN`. Ken supplied the machine gate. The corrected
+lifecycle-aware mounted oracle reached signal IDs `5` and `6` as separate live one-request groups. Cross-layer
+reconciliation found this is expected: `main.tsx` derives one `createAbortDeadline` signal per API request before calling
+the test observer, while frozen SourceEditor static coverage proves one shared upstream signal. The attempted
+owner-transport production repair was falsified by unchanged mounted behavior and fully `REVERTED`; SourceEditor
+production/selftest are restored to their exact accepted hashes and `12/12`. Test owner
+`01a01c5d-11e9-70c3-b5fa-cbad6bf2b1cc` is now replacing the false identity oracle with the causal contract: exactly two
+distinct live request-deadline signals, both aborted on unmount before manual settlement. Exact static/mounted rerun,
+containment readback, and a fresh zero-write audit are required before
+broad/package/install/dogfood/deploy/X4. `Not verified in game`. Readback:
+GitHub #41 comment `5348802753`, Notion reverse-sync property, Drive revision
+`AIroW34XpQzBJ5NRIzi9GCDV97S8idXzYqEdJo5jgBbhA6avhPuNrZnFDbj_NfKeK0pP4aXsfotYXFqGjp710FS--upL0orCwd8VErzIcOKS`.
+**P7 mounted acceptance 2026-08-19 — FOCUSED VERIFIED / CLEAN:** Final mounted spec
+`5ABE7E0235FC41EAD822AC07CF59B403761ADAB2573C764D3DF67B3B1D63AC3E` passed the isolated verdict-parsed run `1/1`.
+Receipt `95BD5006AD61E8E16CDDD3B7C66B090634A7DED00E0D2A684052B52ED37B9714` records complete lifecycle teardown,
+`treeGone=true`, and no remaining PIDs. It causally proves both distinct request-deadline signals abort on Blueprint
+unmount before manual settlement while static coverage owns the shared upstream signal. Coordinator focused gates pass;
+zero-write Luna `01a01c7a-34f9-78c1-ab77-61707af2ce94` returned `CLEAN` with exact 59-entry/2,387-byte worktree parity,
+zero staged paths, and no false-green blocker. P7 is accepted and broad runtime-oracle/full-E2E/precommit/build/rendered-host
+validation is active. Dogfood, deploy, and X4 remain pending; `Not verified in game`.
+**Broad oracle fail-first 2026-08-19 — `132/134`, correction active:** Runtime discovery found 134 current oracles; only
+`lua-static-selftest` and `project-orchestration-selftest` (`12/14`) were red. Both still encode `addTable(13)` as fatal,
+contradicting the accepted source-backed policy: 13-23 warning/unbisected, 24+ blocking. Luna
+`01a01c83-fdbc-70d3-bdbb-65890016f6e1` owns only those two selftest modules and must add separate 13-warning and
+24-error package/static rows without changing linter behavior. Require focused green and runtime `134/134`; full E2E is
+paused. Overall status remains `PARTIAL / Not verified in game`.
+The two-file correction candidate is focused-green at Lua `31/31`, orchestration `15/15`, typecheck, zero-error exact
+lint, diff hygiene, and worker/coordinator isolated runtime `134/134`. Final hashes are
+`04F5820CA77B429626E110EC561E34587207821B7A9F420139B70918990A496E` /
+`3376624C5B55B3C9AE0F56ECA7DD06B967012D228B1A5B0134CA8E9698A303AB`; expected worktree authority is now
+61/2,454/`A04DB722...A771F`, zero staged. Zero-write Luna `01a01c95-618e-74e3-9f1d-5cf339bf10f9` is auditing; full E2E
+remains locked pending `CLEAN`.
+Audit `01a01c95-618e-74e3-9f1d-5cf339bf10f9` returned `CLEAN`: no writes, exact hashes/status, focused gates, and
+runtime-index `134/134`. The oracle gate is accepted; full serial E2E is active. `Not verified in game`.
+**Full E2E fail-first 2026-08-20 — `102/103`, tests-only correction active:** The only red repeated on retry at
+`project-browser.spec.ts:203`: a fresh isolated data root correctly returned reference-manifest `scanning`, while the old
+test required immediate `ready`. Receipt `D106E146...C7A2`; lifecycle/teardown and complete live-root content parity are
+green. Production is not stuck. Luna `01a01cab-4297-77a0-af08-9028c642f2b4` owns only that spec and must prove strict
+ready/scanning/stale shape plus project-browser independence, without waiting, timeout changes, quarantine, or production
+edits. Full E2E remains failed and locked pending focused green, review, and zero-write audit.
+The one-spec candidate is focused 3/3 structured green at
+`3E8E8966164E30E0557A9E8F36FF4997F3C6D9FB2E8C2DECD22CE8344DF9E2BC`; typecheck, zero-error exact lint, diff
+hygiene, teardown, and 62-entry status containment pass. Coordinator first hit a rejected Windows 3221226505/no-report
+launch, then obtained receipt `C9ADC7DD...FA504`. Zero-write audit `01a01cb3-5172-7812-b275-ed55c0bf38c0` is active;
+full E2E remains locked pending `CLEAN`.
+**Post-restart audit replacement 2026-08-20 — CLEAN:** The pre-restart audit supplied no terminal verdict and was
+`not_found` after restart. Fresh native Luna `01a01d16-ae78-7ec2-9247-4afa0e297116` returned `CLEAN` with zero writes,
+exact candidate hash, 62 status entries, zero staged paths, `HEAD == origin/main`, hostile public-contract review green,
+and fresh-runtime cap `4`; the coordinator captured and immediately closed the terminal worker. The tests-only
+correction is focused/audit accepted. Serial full E2E is unlocked only after a fresh machine-state answer; broad
+precommit/build/rendered-host, dogfood, deploy, and X4 remain pending. `Not verified in game`.
+**Full-suite host failure and rendered-host reconciliation 2026-08-20 — PARTIAL:** Ken supplied the fresh machine gate.
+Two exact 104-test serial runs died without structured reports—first after test 18 with Windows `3221226505`, then after
+test 22 when the isolated backend disappeared and connection-refused failures cascaded. Receipts
+`7F1E29C5...C0E1280` / `B50DCB02...6DC86` remain red; no third broad retry is allowed. The exact dense block at the
+second boundary passes `2/2` in isolation with receipt `6B9CB5D...C9742A`; typecheck, zero-error lint, runtime oracles
+`134/134`, and production build pass. Isolated rendered production inspection proves the permanent game-truth state,
+linter/keep-out/canonical-source surfaces, and fail-closed preview behavior, but also reproduces a stale corpus `Reload`
+response after server readiness. Luna `01a0225b-8c20-7be2-b798-b1c41e1ec0c3` owns only SourceEditor production plus its
+mounted spec for a causal `cache: no-store` tests-first repair. Full E2E, precommit, AI Influence dogfood, deploy, and X4
+remain open; overall B119 is `PARTIAL / Not verified in game`.
+The Reload repair is focused-accepted at SourceEditor/mounted-spec hashes `A05F47E6...59813` / `D15C6F42...77E3`:
+causal `0/1` (`[null,null]`) became structured mounted `1/1`, receipt `1EBC966B...266F`, with exact live-root parity,
+typecheck/lint/diff/build green, and no process residue. First broad precommit then exposed one pre-existing registry gap:
+`x4UiScene.selftest.ts` has a unique-temp reparse containment fixture whose exact raw calls are not in
+`config/durable-writers.json`; scanner fingerprint is consequently stale. One-manifest-only fixture registration is
+active. Scene code, the Reload repair, audit policy, and all real roots are frozen. Full E2E remains red and game truth
+remains `Not verified in game`.
+The writer manifest is accepted at `AC0240CF...E4CF14`; Scene stays exact and `139/139`, writer selftest/audit is green,
+and extension durable-write is `8/8`. Precommit then exposed the required reviewed-authority coupling: routes remain
+exactly `82`, surfaces move `55 -> 56` for only `filesystem-writer:src/lib/x4UiScene.selftest.ts`, and 16 later
+filesystem surfaces change only their indexed writer `sourceRef`. Guarded candidate generation/promotion plus the single
+policy-bundle SHA pin is active in two exact owners; no route, capability, permission, production writer, or test change
+is authorized. Full E2E remains failed and X4 remains `Not verified in game`.
+Reviewed promotion is complete: manifest `DBF9366E...548FA`, policy pin `07BAA23E...6D27`, and exact three-count selftest
+`220B6DD6...C417`; policy bundle is `18/18`, package candidate/promotion is `57/57 + 23/23`, and the complete precommit
+gate is green. This does not clear the two retained full-E2E no-report host deaths; no third broad retry is authorized.
+No commit/push, AI Influence dogfood write, deploy, or X4 run follows while that required method is red. Overall B119
+remains `PARTIAL / Not verified in game`.
+**Checkpoint 2026-08-17 (current):** exact 52-path B119 checkpoint
+`77138741a9f470e2c6c37c2d6857688dd1e2b13e` remains committed and pushed with `origin/main == HEAD`; the accepted
+post-checkpoint source-first delta is still uncommitted inside an exact 45-entry dirty-worktree baseline. Layout passes
+`565/565`, Preview `94/94`, Paint `138/138`, and Scene default/strict `136/136` each. Fresh zero-write auditor
+`01a00ea1-1ceb-7ad0-9b37-0360caa26e31` returned `CLEAN`: every protected hash and status entry stayed exact, hostile
+owner/origin/Proxy/accessor matrices stayed closed, typecheck/lint/diff hygiene passed, and the configured file-backed
+MENU/HUB/COMM census executed `3/3` in both modes. All three exact editor sessions now reach non-refused Paint with
+zero preview gaps and `canRender=true`; every surface still says `Not verified in game` / `gameVerified=false`.
+Batch 8A call-statement/deletion provenance is also accepted at
+`E0842D11D156764917DC36740294D43FA7CBCC75089C4B4187E17190DBF4CD4C` /
+`7CDB2CA96D5E545E1DAB4CDF44FF874CA507066373C8DBE818E43EBB3977D432`. Fresh zero-write auditor
+`01a00eed-8a23-7080-93cd-4217a691df66` returned `CLEAN`: call model `57/57`, hostile boundary probes `10/10`,
+SourceEdits `34/34`, Layout `565/565`, lint `112/112`, Scene default/strict `136/136` with configured census `3/3`,
+Preview `94/94`, Paint `138/138`, workspace/session owners, typecheck, exact ESLint, diff hygiene, hashes, NUL/newline
+checks, and before/after 45-entry containment all passed with no audit writes.
+
+Batch 8B round one is now `FINDINGS / REJECTED / correction active` at SourceEdits production/selftest
+`4A2A3DE1E0DA89AF39799BBBC5DF248126B58013CC3750853F1E88FE8DA3EF6F` /
+`05C14B3B61E9FF673F1E80D2DBE39D097EA60B99099AA635D55FE7C3AC4BD37B`. Fresh zero-write auditor
+`01a00f3e-f4e6-76f0-a8fb-5dbbfe602da9` preserved exact hashes and 47-entry containment and passed the existing
+SourceEdits `62/62` plus every coupled focused gate, but reproduced six blockers: receiver spelling substituted for
+table/frame identity; foreign-owner payloads were accepted; nested unrelated `print()` / `foo()` calls escaped both
+insertion and deletion; successful authority remained caller-mutable; fallback-display could not transition to the
+first-row anchor; and fluent `addRow(...)[1]:createText(...)` insertion falsely refused on derived owner identities.
+The correction remains tests-first in the same two files and requires exact owner/ancestry binding, complete executable-
+call coverage, immutable success authority, causal anchor transition, and owner-relative row/cell/invocation remapping.
+The rejected hashes must not be promoted; a new zero-write `CLEAN` is mandatory.
+
+Batch 8B round two is also `FINDINGS / REJECTED / correction active` at SourceEdits production/selftest
+`E074705A76469F64E5833329B5A6DB7D8479C78F3B6D3839303AFEABB8C3347A` /
+`090A572AAAD5DDDC6629FCD207C8D0FE0B13CE61A77C903BAB739D427ECAD430`. The owner and coordinator reproduced
+SourceEdits `62/62` plus causal `16/16`, every coupled focused gate, typecheck, exact pair ESLint, diff hygiene, and
+47-entry containment. Fresh zero-write auditor `01a00fbb-2c42-7f61-beb9-cbaf727bd260` still returned `FINDINGS`:
+function-literal bodies can hide executable calls; identity remapping rewrites ordinary user strings such as
+`@row:999999`; successful results freeze caller-owned nested objects; changed source content retains stale `bytes`
+metadata; first-row owner matching omits `frameId`; and the F3-F6 tests do not independently prove their stated
+contracts. Reconciliation therefore extends the correction only to the existing SourceEdits and WorkspaceSource
+owners: the two SourceEdits files plus `x4UiWorkspaceSource.ts` / `.selftest.ts`. Current status is exactly 47; if both
+currently clean WorkspaceSource files are intentionally changed, the truthful final containment is exactly 49. The
+round-two hashes remain rejected until causal tests fail first, all findings close, coordinator review passes, and a
+new fresh zero-write audit returns `CLEAN`.
+
+Batch 8B round three is likewise `FINDINGS / REJECTED / correction active`. The rejected integrated hashes are
+SourceEdits production/selftest
+`F83C11B3E997F205C409CE889355A7785A3CBACB4CAEEDB0D77C363A0FDD6918` /
+`83C63057A2487C4ECE4941A9419F6CBD1E951790B66C62B6CB837F46B0862DBC` and WorkspaceSource production/selftest
+`B56B7A1ADD1AFD52EAFDBC077AF747DD93148CA9A62DAEDFC89CAD096D0F813E` /
+`358F0C7837C42B13097EB0D053C0100F8AFEBF1595C19FC855619E5E2D311CFE`. Coordinator reproduction passed prior
+SourceEdits `62/62`, causal `18/18`, aggregate `12/12`, WorkspaceSource `5/5`, all coupled focused suites, typecheck,
+exact four-file ESLint/diff hygiene, and exact 49-entry containment. Fresh zero-write auditor
+`01a0100d-17ef-7ab2-94b3-ce34ef9645c5` still returned `FINDINGS`: raw executable-shape matching falsely refuses inert
+table strings containing `foo()`-like text; a generic `{kind, origin, path}` heuristic can normalize arbitrary user
+records; deep freeze skips non-enumerable and symbol-owned nested data; and the F6 oracle omits operation metadata plus
+kernel `stateBefore` / `stateAfter` from retained-ledger equality. The auditor changed nothing and preserved every hash
+and status entry. WorkspaceSource's byte metadata, absent-metadata, Unicode, graph-detachment, and caller-mutation
+contracts passed independent probes and are now frozen. The next tests-first correction is restricted again to the two
+SourceEdits files; status must remain exactly 49 and another fresh zero-write `CLEAN` is mandatory.
+
+Batch 8B round eight is the current `FINDINGS / REJECTED / correction active` boundary after rounds four through seven
+closed narrower correspondence defects. SourceEdits production/selftest
+`8E37F18D2E4F0D2E79666CFC1F572DE598BD1BE50080CFC2529589C867139E79` /
+`E0F7A257A158E61D440EC49EC0CF185FEE566B9AD7BA8EA85F995161C1332BAE` passed all prior matrices, the new audit
+`10/10`, producer-kernel `63/63`, every coupled focused gate, typecheck, exact ESLint, diff/byte hygiene, frozen
+WorkspaceSource parity, and exact 49-entry containment. Fresh zero-write auditor
+`01a011f7-206a-70b3-ad17-0824cc581eb0` nevertheless reproduced a high false-acceptance seam: retained property,
+handler, and alias records can change producer-owned payload fields while the complete-record comparator still returns
+equal. Five independent mutations covered property value/path, handler path/context, and alias value. Exact native Luna
+`01a01212-e38e-7f12-93d7-9536a6bf2bf2` now owns only the two SourceEdits files for a tests-first, producer-schema-aware
+full-record comparison. Its tests-only receipt kept production exact and captured 16 causal reds across a separate
+28-row retained-payload matrix; every row proved baseline and mutation application with no throw, while all previous
+matrices remained green. The repair checkpoint now has the original matrix `28/28` and expanded permanent matrix
+`43/43` green (property 23, handler 12, alias 8), after correcting exact parent-path remapping exposed by 103 temporary
+round-seven regressions. Final production/selftest hashes are
+`CA4DFD33245A5EE04451E9038AE97A3A342CA5A8DB1C53E1F5215FFC1AF12BB0` /
+`D1DB935DFCB43C4DB4FF108950A00A69D043DC5CDEEFEE56479073BD1307FBD9`. Worker and coordinator reproduced every
+focused/coupled gate, typecheck, exact lint, diff/byte hygiene, frozen WorkspaceSource parity, and exact 49-entry
+containment. Fresh zero-write native Luna `01a01240-6c6c-72d0-9a00-ab9723d3f265` returned `CLEAN` with zero writes. It
+preserved exact HEAD/origin, status 49, all four accepted/frozen hashes, and the worktree digest; independently proved
+two real-producer public deletion positives with reparse, exact CAS, byte locality, provenance restoration, and `4/4/0`
+call/operation/gap counts; passed a separate `5→4` call, `5→4` operation, `22→19` complete-record stream; and passed
+hostile retained/boundary matrices `47/47` and `12/12` with one caught Proxy `getPrototypeOf` trap and no other trap or
+getter. Supplemental zero-write auditor `01a01254-6064-72c3-b0ca-05137b761e05` agreed on code review, hashes,
+containment, and focused selftests but could not run its independent apply harness because of transport/selector
+errors; this is a supplemental audit limitation, not a product finding. Batch 8B is `FOCUSED VERIFIED / ACCEPTED`.
+
+The exact real-source receipts are MENU Layout `16 samples (11/5), 66/27 operations, 1/4/9/88 geometry, 95 gaps`,
+Scene `1/4/2/16/3/5/7` with `137` diagnostics, Paint `203/165`; HUB Layout `11 (9/2), 18/11, 1/2/2/4, 16`, Scene
+`1/2/2/4/0/0/0` with `29`, Paint `44/35`; COMM Layout `5 (5/0), 14/12, 1/1/1/3, 11`, Scene
+`1/1/1/3/0/0/0` with `22`, Paint `34/28`. This is faithful layout-preview evidence, not C++ frame acceptance or game
+proof. The active tests-first unit is Batch 8C manual screenshot-calibrated keep-outs through the existing
+`x4UiKeepOuts` → EditorSession → Paint → Canvas chain—not a parallel overlay system. It must preserve exact screenshot
+bounds/hash/profile, normalized points, advisory-only behavior, and `Not verified in game`. Broad/rendered Forge,
+deploy, and game gates remain locked. Overall B119 remains
+`IN_PROGRESS / PARTIAL / Not verified in game`.
+
+**Checkpoint 2026-08-17 — Batch 8C.1 candidate PARTIAL:** Native Luna
+`01a0127c-145a-70a1-9d2c-7a4cc1fb214c` changed only the six documented KeepOuts/EditorSession/PaintPlan production and
+selftest owners. Causal matrix moved `6/6` red to `6/6` green; coordinator reproduction passed KeepOuts `17/17`,
+but those reds cover only the calibration seam; no Session/Paint end-to-end row was captured red before production
+changed. Coordinator reproduction passed EditorSession, Paint `143/143`, Preview `94/94`, typecheck, exact ESLint, and
+diff hygiene. The coupled Canvas selftest
+is `65/70`: all five failures cascade from one literal-trace mismatch at operation 365 (`expected setFillStyle
+#ef4444`, `actual save`) even though rendering succeeds with exact 73 commands and 403 operations. Batch 8C.1 is not
+accepted and React controls remain frozen while zero-write auditor `01a012fa-45f9-7371-a895-cd84d13ed486` classifies
+oracle versus product cause and audits issuance/context/duplicate authority. External Batch 8B readbacks are GitHub #41
+comment `5322307397`, Drive revision `AIroW37jpAOMfCUlSFwOXv_uXS1YYM94MujBar8ureU3U5V06iBJpgWyL2cVfNYsUaiQOAonke94ZCJD-LRJsAjmq6AOtu_0NPuAZQGa1F2m`,
+and the Notion B119 page. Overall truth remains `PARTIAL / Not verified in game`.
+**Audit rejection and plan delta 2026-08-18:** Zero-write Luna `01a012fa-45f9-7371-a895-cd84d13ed486` returned
+`FINDINGS`, with status count 52 and all six hashes unchanged. It reproduced group-wide duplicate failure, wrong
+built-in application context, valid manual Paint rejected by Canvas's built-in-only validator, and the legacy no-entry
+Paint bypass. It separately proved the five Canvas reds are one pre-existing stale literal-golden cascade at gap command
+order 58, not a production regression. Correction is sequential and tests-first: Session/Paint authority, then Canvas
+manual-command validation plus independent literal-golden maintenance, then all focused gates and a fresh zero-write
+CLEAN. React, broad, installed-host, deploy, and game work remains frozen.
+**Correction re-audit 2026-08-18 — FINDINGS:** The four prior findings and stale Canvas oracle are now causally closed:
+Session `1/1`, Paint `148/148`, Canvas `75/75`, KeepOuts `17/17`, Preview `94/94`, typecheck/lint/diff all pass. Fresh
+zero-write Luna `01a01333-16a3-7371-b5bf-3e53046749da` proved 12 safely-known duplicate cases / 26 occurrences all
+refuse with no authority, but observed transparent Proxy containers accepted by Session and Paint. Next is a bounded
+tests-first Session/Paint-only correction using browser-safe structured-clone admissibility after accessor guards;
+Canvas/KeepOuts/React/broad/game remain frozen pending a fresh CLEAN.
+**Proxy contradiction and reconciled correction 2026-08-18:** The strict attempt stopped before production with Session
+`3/6` and Paint `150/152`; production hashes remain exact. Portable browser JavaScript cannot simultaneously guarantee
+transparent-Proxy identification, zero getter reads, and nonblocking malformed peers. The documented replacement is
+detached one-boundary descriptor consumption, not a fake Proxy detector: Session snapshots each candidate before
+duplicate/calibration logic; Paint captures exact issued entry/projection identities once and materializes only those
+captured values; no caller or Proxy reference reaches downstream authority. New causal TOCTOU rows, facade detachment,
+post-call mutation, accessor/trap, and prior authority controls must all pass before a fresh zero-write CLEAN. Canvas,
+KeepOuts, React, broad, installed-host, deploy, and game remain frozen.
+**Batch 8C.1 final acceptance 2026-08-18 — CLEAN:** The detached-snapshot production repair is Session
+`20B7429079DA6C7297A505667C07C1FDD015827839BB468C4412402E7E7D5AF0` and Paint
+`4F1F783526D201EBAF1CE0156592CF27924EF40B47EE004446880FB62BF870B5`. A tests-only follow-up closed the first
+re-audit's sole remaining oracle gap: every accepted facade/TOCTOU row now enforces an exact zero-get five-field Proxy
+trap vector, and both tests reject five synthetic census perturbations while accepting the real vector. Final selftests
+are `49C10D546016338A2E482D26D0B48187B0CD53366A7F9D3EC2F0EF613DC6F518` and
+`E221AC858AE9FE47C75EC2844DFB0DBD113AD3A7E4D69F073164DA82CE4A7AC8`. Coordinator reproduction passed Session
+`7/7`, Paint `153/153` (`14/14` causal), CanvasRenderer `75/75`, KeepOuts `17/17`, Preview `94/94`, typecheck, exact
+lint, and diff hygiene. Final zero-write Luna `01a013a2-01a8-7f82-ae3e-66c9d2555399` returned `CLEAN`, changed no
+files, and preserved all hashes plus the exact 54-entry status digest. Batch 8C.2 is now active in only the existing
+`X4UiSourceEditor.tsx/.selftest.tsx` owner: add session-local manual polygon controls that feed the accepted Session API,
+show refusal/provenance, explicitly enable/remove entries, never alter Lua/workspace bytes, and retain `Not verified in
+game`. Broad, installed-host, deploy, and X4 gates remain open; overall B119 remains `PARTIAL / Not verified in game`.
+**Batch 8C.2 fresh-audit rejection 2026-08-18 — FINDINGS / correction active:** The focused-green React candidate at
+`8FF6C50835EE0C6DE1397AA1EDFF1CE480B25B407294BB07A2941DA2EFDC0AA8` / `2F15ED9B12797581B30E765DDBC474C7D8088ABF08D149349BF10EF14C74D79D`
+is rejected. Zero-write Luna `01a013de-066a-7172-8006-a450058ce543` preserved all ten supplied hashes,
+`HEAD=origin/main=77138741a9f470e2c6c37c2d6857688dd1e2b13e`, and the exact 56-entry status digest
+`9EC85F3E3CF4B1010D3CAA68FCE0E438A22FC035FDDDC0D3C1DDD47B363DF2BD`, but independently reproduced row aliasing:
+local enablement is keyed by stable ID, so enabling one duplicate checks both rows and toggling its sibling clears the
+first. The selftest's historical fail-first hashes are also ambiguously labelled as though current. Original Luna owner
+`01a013b5-007b-7da1-ba20-b03b260f5c5e` is correcting only the two React files tests-first: local state must be keyed by
+immutable row ID, Session IDs must be derived only after duplicate/parse validation, sibling toggles/removals must be
+independent, and historical receipts must be labelled without fabricating a self-referential current hash. Batch 8C.2
+remains unaccepted; widget paint is read-only reconciliation only; broad/deploy/X4 gates remain locked.
+**Batch 8C.2 final acceptance 2026-08-18 — CLEAN:** Tests-first correction changed only the React owner pair. Final
+production/selftest hashes are `B085A0A542D6B17E287DE52CB19452D2E75D67ACA15454274D61D20C3E85C3C2` and
+`9FF34E6471C045CB4FC7F3A2CEAF94391548967D8E5BFE2F20D8994F79EFE3ED`. Local enablement is now keyed by immutable
+row ID, while the Session boundary derives stable IDs only from parse-valid, unambiguous, enabled rows. Coordinator
+reproduction and fresh zero-write Luna `01a013ff-fca7-7c50-bb49-4aba524aee30` passed the component plus Session
+`7/7`, Paint `153/153`, CanvasRenderer `75/75`, KeepOuts `17/17`, Preview `94/94`, typecheck, exact lint/diff, and
+independent valid/duplicate/malformed/edit/toggle/removal probes. All supplied hashes, `HEAD=origin/main=77138741...`,
+and the exact 56-entry status digest remained unchanged. Batch 8C is focused-accepted; widget paint is now the active
+unit, and broad/deploy/X4 gates remain open with `Not verified in game` authoritative.
+**Widget-paint source reconciliation 2026-08-18 — SPECIFIED:** Read-only source audit corrected the earlier overly broad
+color boundary. X4 9.00 ships `libraries/colors.xml` SHA-256
+`6A57FE660D546F5144206581A40194CE13D0D11478B584A46467F0AAE715B883` (72,950 bytes) and `libraries/colors.xsd`
+SHA-256 `F0D31824E00227EFF6288B084E29346C5AA9D2694BFB0D62D6008EE3DBD879DF` (7,981 bytes): 224 base colors and
+804 one-hop mappings form a complete default-theme graph with zero invalid references. Default flat fills and source
+literal TOK colors are therefore statically derivable. The current effective C++ map, personal overrides, profiles,
+daltonization, glow/material rendering, and active/hover/selection state remain runtime truth. The sequential owner graph
+is tests-first CallModel color provenance, CorpusAssets default-map loading, LayoutProgram resolution, then Scene,
+Paint, Canvas, and preview/editor integration; no downstream owner starts from an unaccepted upstream candidate.
+Native Luna `01a01611-35b0-72c3-86ec-b1e730b5a118` now owns only the CallModel production/selftest pair. Baseline is
+`57/57`; it must capture permanent causal color-expression reds before production, then return exact focused/coupled
+tests, type/lint/diff containment, and final hashes for a fresh zero-write audit.
+**P1 first candidate 2026-08-18 — REJECTED / AUDIT ACTIVE:** Fail-first was `57/65`; final synthetic CallModel is
+`65/65`, with LayoutProgram `565/565`, SourceEdits `62/62`, Lint `112/112`, typecheck, exact ESLint, and diff check green.
+Actual hashes are production `D314F111E95385D57BF039A85C65360000551EB83C2BCA6B53FCA472FB4DB6B0` and selftest
+`C7ABAC0785184B533251EFCB3A0635A2B4C7302F994F324FA269404FF7F8E3FA`; the worker receipt accidentally omitted the
+production hash's final `0`. Coordinator real-source probing rejects the candidate: direct stable `TOK.member` colors
+remain unresolved in all three production menus (`15/50/27` TOK uses in menu/hub/comm). Fresh zero-write Luna
+`01a0162c-5b40-74b2-9ec9-b90b938ecbaf` is auditing that release-blocking mechanism plus hidden/non-enumerable public
+evidence, lexical shadowing/mutation, source exactness, freeze, and JSON closure before correction.
+**P1 independent audit 2026-08-18 — FINDINGS / correction active:** The auditor matched every candidate hash and green
+gate, changed no files, and reproduced three P1 blockers: all `11/35/20` direct TOK members in menu/hub/comm remain
+unresolved; hidden non-enumerable projection evidence can drift from the frozen serialized sidecar; and the selftest
+explicitly treats `validAlias` as negative while calling hidden omission serializable. Direct BOM-prefixed CallModel input
+is a separate P2 boundary already contained by the source-bundle parser sentinel and is not correction scope. Original
+Luna `01a01611-35b0-72c3-86ec-b1e730b5a118` is active again tests-first in the same two files: make the sidecar the sole
+closed authority and resolve stable inline/alias/TOK member/static-index literals with declaration/channel provenance.
+**P1 correction candidate 2026-08-18 — AUDIT ACTIVE:** Causal correction reds were `64/68`; the corrected candidate is
+CallModel `68/68`, LayoutProgram `565/565`, SourceEdits `62/62`, Lint `112/112`, typecheck, exact ESLint, and diff hygiene
+green at production/selftest SHA-256
+`35A75178A444232D0EB41F0D8A65CDEDFFCC15A224467C35AAB121A2BF19EC6C` /
+`6DD840BB51E381EB754AB0440C06DBB4BBC846E632CC20FE55FCEEC752323E4B`. Coordinator public-API census over the real
+menu/hub/comm sources is respectively `23/15/11`, `56/50/35`, and `29/27/20` for total/TOK-bearing/direct TOK color
+expressions. Hub resolves `35/35` and comm `20/20`. Menu resolves all nine declared direct values and correctly leaves
+exactly two `TOK.header` uses unresolved at lines 728 and 731 because the `TOK` declaration at lines 211-223 has no
+`header` member. The old menu `11/11` acceptance was impossible and is replaced by `9/9 declared + 2/2 exact
+undeclared fail-closed`. Independent authority probes find ordinary projections, one frozen/plain/serializable sidecar,
+exact use/declaration/channel ranges, and no runtime/default/effective color fields. Fresh zero-write Luna
+`01a01654-41a8-7db0-8b9f-8bee0a5d4b43` is the final P1 acceptance gate; P2 remains locked until `CLEAN`.
+**P1 final acceptance 2026-08-18 — FOCUSED VERIFIED / CLEAN:** Fresh zero-write Luna
+`01a01654-41a8-7db0-8b9f-8bee0a5d4b43` independently preserved both exact hashes, changed no files, and returned
+`CLEAN`. CallModel `68/68`, LayoutProgram `565/565`, SourceEdits `62/62`, Lint `112/112`, typecheck, exact ESLint,
+diff hygiene, real-source census, authority/freeze/JSON/provenance checks, and hostile alias/mutation/Color shadowing all
+pass. P1 is accepted at focused scope. It remains `Not verified in game`; P2 configured-corpus color evidence is now the
+active bounded owner.
+Native Luna `01a01665-4e66-7712-856a-c4fb35e37b74` owns only
+`src/lib/x4UiCorpusAssets.ts` and `src/lib/x4UiCorpusAssets.selftest.ts` for P2. Baseline hashes are
+`F08195B48B858F4721A50CA946FA73672F87FD87C923CE5DFBD9D18F32BEC4D2` /
+`33D12EF151CDB0163E9AB7CB61E20861C9041733763AF0F994CEB45EE0277F53`, baseline `28/28`. It must preserve the
+existing six-asset result shape and configured reference APIs while adding a distinct opt-in canonical-default color
+result; LayoutProgram remains frozen until causal red/green, real 224/804 corpus proof, coupled gates, hashes,
+containment, and fresh zero-write audit are complete.
+**P2 final acceptance 2026-08-18 — FOCUSED VERIFIED / CLEAN:** Production/selftest are
+`FFC90BE312FFC3ACA728C039A00F6FE410F291EFBC49C3DF6D9775E24606D818` /
+`AB57AE45BCBFB13D8B8A26D02425E4D25297E48874B74831C6F750D707326609`. Fresh audit found and the owner corrected
+three real defects tests-first: malformed XML declarations, unbound XSD schema roots, and legacy Lua UTF-8 error-contract
+drift (`36/39` red, then `39/39` green). Coupled CallModel `68/68`, EditorSession `7/7`, PreviewPipeline `94/94`, Scene
+`136/136`, PaintPlan `153/153`, CanvasRenderer `75/75`, typecheck, exact lint, and diff hygiene pass. The configured-
+corpus public loader independently returns the exact pinned 224 base colors / 804 mappings with issued authority and
+permanent `canonical-default-only` / `Not verified in game`. Final zero-write Luna
+`01a01787-dd5b-7301-ae6d-ed97a1ea72f1` returned `CLEAN`, preserved both hashes and all 56 status entries, and removed its
+unique Scene temp fixture. P2 is accepted; P3 LayoutProgram typed color resolution is now the active serial owner.
+**P3 first candidate 2026-08-19 — REJECTED / CORRECTION ACTIVE:** Tests-first old `565/565` plus new `4/18` green became
+LayoutProgram `583/583`, with every listed coupled/static gate green at production/selftest
+`1761BBE388C16FA80C49DE6A1F8D26EAA558221CEBE142B2EFC1C97904DB093A` /
+`E6FC8E440953DA665A7E9C748D4AAD8477AADDD4E8093A87C67064FC2D7CEFFA`. Coordinator real-source readback rejects it:
+Helper defaults are `row_background`, `text_normal`, and `icon_normal`, while production/tests invent
+`cell_background_default` / `icon_default` and use `text_inactive`; the invented IDs are absent from real colors.xml.
+The synthetic oracle checks only known status and therefore masks the source mismatch. Fresh zero-write Luna
+`01a01860-ac30-73a2-8aef-edfed9e884a5` returned `FINDINGS` with zero writes despite Layout `583/583`, CallModel `68/68`,
+CorpusAssets `39/39`, SourceEdits `62/62`, Lint `112/112`, typecheck, exact lint, and diff hygiene all passing. It also
+reproduced unrelated non-color gap suppression, semantic color forgeries passing the pure evidence-pair schema, a
+throwing `model.colorExpressions` container escaping typed refusal, and a mutation test that inspects the original
+program. Genuine 224/804 P2 evidence over the three real menus produced no selected-target color facts; local expansion
+self-refused on evidence-catalog reciprocity. The separate downstream audit found PreviewPipeline omits the sixth color-
+evidence input and Scene both accepts unissued no-color structural pairs and rejects known color facts; those remain
+separate locked owners. Original P3 Luna `01a0179d-1fe2-7962-a07a-d1632e0aebcc` is correcting only the LayoutProgram
+pair tests-first. The canonical raw `git status --porcelain=v1 -z` receipt remains exactly 56 entries / 2,279 bytes /
+`A644998111590D20DF8AED18DBC79C98F8D78946BED5CA1D8E691EAD861273A2`; the auditor's larger newline-normalized byte
+count was not worktree drift. Scene remains locked; overall B119 remains `PARTIAL / Not verified in game`.
+**P3 final acceptance 2026-08-19 — FOCUSED VERIFIED / CLEAN:** The tests-first correction retained the rejected
+production hash through `579/603` with exactly 24 causal reds, then added a second real-source reciprocity regression at
+`603/604` before reaching LayoutProgram `604/604`. Final production/selftest hashes are
+`F2E877693DAD16ACF59846E26FEC2BDE8FCE7C69AC1D86623A2F3109D5CD6D17` /
+`758C622CF0289F231AF710B9EC8EEB86AAC12773F4B2D1A79757F5B0A03353B8`. Exact shipped defaults/pins, separate Lua-
+percent/XML-byte alpha domains, loader-issued P2 admission, color-only gap suppression, hostile sidecar access,
+semantic schema closure, actual post-mutation reruns, and ledger-reciprocal expansion catalogs are now causal. The
+coordinator reproduced LayoutProgram `604/604`, CallModel `68/68`, CorpusAssets `39/39`, SourceEdits `62/62`, Lint
+`112/112`, typecheck, exact two-file ESLint, and diff hygiene. Fresh zero-write Luna
+`01a018bf-ac7d-77d1-aae8-0e85571516b0` returned `CLEAN`; its independent no-temp real-corpus probe loaded the genuine
+224/804 graph and reproduced MENU `7/35/76/1/25`, HUB `6/10/8/1/1`, COMM `5/14/7/1/2`, zero selected-target known
+colors, and valid reciprocal pairs. A coordinated cloned-pair forgery remains structurally valid but fails
+`isIssuedX4UiLayoutEvidencePair`, proving the intended semantic-versus-issuance boundary. The audit's first OS-temp
+probe was abandoned after the app hid a mandatory approval; zero matching artifacts remained and the no-temp probe
+succeeded. P3 is accepted. The active bounded unit is now existing-chain color-authority wiring through SourceEditor ->
+EditorSession -> PreviewPipeline plus a disjoint Scene issuance/color-fact consumer repair. Paint/Canvas/editor rendering,
+broad host gates, deploy, and game truth remain locked; overall B119 remains `PARTIAL / Not verified in game`.
+**P4 final acceptance 2026-08-19 — FOCUSED VERIFIED / CLEAN:** Scene now requires the genuine
+`isIssuedX4UiLayoutEvidencePair` boundary before structural traversal, so a coordinated semantic-valid cloned pair and a
+hostile descriptor getter both refuse before geometry. Issued P3 colours project as typed, detached facts to exact table,
+cell, button/editbox/icon, direct-text, and `setText`/`setText2` owners while retaining raw Lua-percent versus XML-byte
+alpha domains, provenance, expression, source/pin/sample identity, and permanent `Not verified in game`. Known base tint
+removes only its legacy unavailable-base-colour gap; material/texture/glow, runtime state, C++ map/profile/daltonization,
+font-raster, and game-frame uncertainty remain explicit. Mapped unavailable colours now receive exact owner-linked paint
+gaps without invented RGBA. Initial fail-first was `136/138`; the fresh-audit correction reproduced `137/139` before
+final `139/139`. Final production/selftest hashes are
+`FE85C52848C7643EA6B5195FCA4C4270E7036F763BE756CB48327D599050BF99` /
+`34A4D496C968366A18DB6023D2F6BD91F50C2C1A066F6D75BC0944F49FF35C8F`. Coordinator Scene, typecheck, exact ESLint,
+and diff gates passed; final fresh zero-write Luna `01a01938-d17c-76a2-9e17-d910b66e9e80` returned `CLEAN` with no
+findings or writes. Reconciliation proved P5 cannot be publicly tested yet: Paint accepts only Preview-issued Scenes,
+while Preview omits LayoutProgram's sixth colour-authority input. The active bounded prerequisite is P4.5 Preview colour
+ingress, followed serially by Paint, Canvas, configured SourceEditor/EditorSession loading, broad gates, deploy, and X4.
+Overall B119 remains `PARTIAL / Not verified in game`.
+**P4.5 final acceptance 2026-08-19 — FOCUSED VERIFIED / CLEAN:** Preview now safely captures the optional loader-issued
+colour authority as an own data value and forwards that exact identity only as LayoutProgram argument six. An issued
+synthetic authority with the pinned 224-base / 804-mapping shape reaches exact raw-domain LayoutProgram facts, every P4
+Scene owner, and Preview's existing private Paint authority; omitted evidence preserves no-colour behavior. Structural
+clones, forged/mutated/stale/unissued values, accessors, inherited/symbol fields, and a Proxy cannot become authority or
+execute hostile observation. Baseline `94/94` plus new tests against unchanged production produced exactly four reds at
+`98/102`; final Preview `102/102`, Scene `139/139`, LayoutProgram `604/604`, typecheck, exact ESLint, and diff hygiene
+passed. Final production/selftest hashes are `CF429EB982BED6C424DCB778AC7D184EBABDA4C9330364DAC12431BCA223CA82` /
+`5D85E9810C9776B87D24A8EFFF6AF57740534998E0D4AC8C7B3EEABEFA328324`. Fresh zero-write Luna
+`01a01955-12ed-73a2-9c8e-06b8a4130d8b` returned `CLEAN` with no findings or writes. P5 Paint base-tint projection is now
+the active serial owner; Canvas, configured loading, broad host gates, deploy, and X4 remain locked. Overall B119 remains
+`PARTIAL / Not verified in game`.
+**P5 final acceptance 2026-08-19 — FOCUSED VERIFIED / CLEAN:** Paint now consumes only the exact P4.5 Preview-issued
+colour Scene and projects all ten owner-linked facts as immutable `base-preview-tint` payloads. Geometry retains every
+table/cell/button/editbox/icon/text fact; each glyph carries its exact parent primary/secondary text tint. Raw Lua-
+percent and canonical-XML-byte alpha domains, full provenance, source identity, and residual runtime/material/state/
+glow/C++/font/game diagnostics remain separate. Colour-bearing plans stay `partial` and `Not verified in game`; omitted
+colour keeps the previous command shape. Baseline `153/153` plus tests-first expansion produced exactly six reds at
+`159/165`; final Paint `165/165`, Preview `102/102`, Scene `139/139`, typecheck, exact ESLint, and diff hygiene passed.
+Final production/selftest hashes are `9FDBE53D68F516DD36670ABC1DF75F65611F81C3EA34E99BEA546EE905005A85` /
+`A0680C4B1B748695EE59BB63858B11A7693D3721CE2F09BB8C101E46B46799BF`. Fresh zero-write Luna
+`01a0198b-0877-76e2-b229-988ca8ce9e7b` returned `CLEAN` with no findings or writes. P6 Canvas is now the active serial
+owner. Its current `70/75` is a stale trace-oracle cascade from two accepted P4 diagnostics, not tint-render proof; P6
+must first correct that oracle with production frozen, then capture genuine colour-path reds. Configured loading, broad
+host gates, deploy, and X4 remain locked. Overall B119 remains `PARTIAL / Not verified in game`.
+**Checkpoint 2026-08-14 (historical):** Batch 7D remains `FINDINGS / correction active`; broad and game gates are locked.
 Round four passed the focused editor families at `41/41 + 10/10 + 2/2 + 29/29 + 8/8 + 27/27`, source edits `34/34`,
 preview `89/89`, linter `112/112`, typecheck, and exact lint. Its hashes
 `E2B2D665...5D6392` / `74A48DA0...1B21DB` / unchanged UIBuilder `7132FBDC...32B0A` are rejected after fresh zero-write
@@ -107,6 +624,15 @@ Unsampled `partial` status is not render-readiness evidence.
 Even if the active exact layout audit and three-menu session census are clean, B119 does not close at the first game
 smoke: source-canonical visual manipulation/direct-call insertion, manual calibration UI, shipped-source button/edit-
 box/icon paint, exact deploy-confirm truth integration, and three screenshot parity comparisons remain required.
+**Checkpoint 2026-08-17 — Batch 8B round seven rejected:** SourceEdits candidate
+`509D8477...9B881F` / `06628B88...F7D4C` passes every declared focused suite through round seven `125/125`, Scene
+`136/136 + configured 3/3`, Preview `94/94`, Paint `138/138`, typecheck, lint, and diff hygiene, but fresh zero-write
+auditor `01a01160-a980-7b23-a1f6-64dd37839b1c` returned `FINDINGS`. A valid `createText` deletion falsely refuses
+`reparse-provenance-drift` because the comparator subtracts removed relevant calls while the producer's `call.order` is
+global across calls, properties, handlers, and aliases. Kernel `stateBefore/stateAfter` also lack complete closed
+producer-schema validation. The exact 49-entry worktree and frozen WorkspaceSource hashes were preserved. The next
+tests-first correction owns only the SourceEdits production/selftest pair; Batch 8C, keep-out calibration, broad gates,
+deploy, and game proof remain locked. Truth remains `Not verified in game`.
 **Checkpoint 2026-08-11:** Current continuation is `IN_PROGRESS / PARTIAL`. The source-correct linter now passes
 112/112: row-budget evidence uses Helper's actual maximum cell geometry, `affectRowHeight=false` contributes exactly
 one, unknown UI scale and auto-frame boundaries produce gaps instead of raw-unit warnings, and the measured 24+

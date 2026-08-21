@@ -207,3 +207,32 @@ preview that remains visibly unverified despite every focused test passing.
 Rollback is file-local: remove the new pure projection/metrics/renderer owners and UI wiring; imported source remains in
 its original passthrough bytes, package identity remains on the existing resolver, and the legacy editor continues to
 operate. No corpus, game, deployed mod, or installed configuration is ever mutated by preview work.
+
+## Current implementation checkpoint — 2026-08-16
+
+The exact 52-path source-first foundation is committed and pushed at
+`77138741a9f470e2c6c37c2d6857688dd1e2b13e`. The post-checkpoint real-menu layout repair is accepted locally at
+`565/565`: conditional non-executed rows now retain exact source-owner cells for downstream call identity without
+becoming drawable kernel rows. The exact `aic_menu.lua` consumes all 16 samples and produces a `partial` program with
+`1 frame / 4 tables / 9 rows / 88 cells / 66 operations / 95 gaps`.
+
+This is not yet a rendered checkpoint. Strict Scene currently rejects that authority-valid source-only structure as
+`malformed-structure`; preview therefore reports `canRender=false` and paint is not reached. The next bounded owner is
+Scene validation/projection only, tested against the exact menu, hub, and comm. The design contract remains unchanged:
+port shipped Lua semantics and emit real calls, while C++ frame acceptance and native presentation remain game-truth
+gates that no standalone preview can certify.
+
+## Current implementation checkpoint — 2026-08-21
+
+The source-first editor pipeline through call model, corpus assets, layout program, Scene, Preview, Paint, Canvas,
+keep-outs, SourceEditor, EditorSession, and direct source edits is committed and pushed at
+`505253ba4fa40c75fcb252945229841766685a05`. Exact full E2E is `104/104`, complete precommit and production build pass,
+and isolated rendered Forge inspection preserves canonical-source, linter, fail-closed preview, keep-out, and permanent
+`Not verified in game` surfaces. The earlier strict-Scene rejection described above is historical and has been resolved
+by the accepted source-authority pipeline; it is retained to document the implementation sequence rather than current
+state.
+
+The remaining design proof is intentionally outside browser authority: author the supplied AI Influence screens with
+real calls, retain literal-reference and keep-out-safe `1b` variants, deploy exact bytes only after the explicit write
+gate, and compare X4 screenshots. C++ frame acceptance and native presentation are still not reproducible by the Forge
+preview and remain game truth.
