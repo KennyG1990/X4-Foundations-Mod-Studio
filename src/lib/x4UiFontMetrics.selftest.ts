@@ -7,6 +7,7 @@ import {
   lookupZektonGlyph,
   measureZektonGlyphRun,
 } from './x4UiFontMetrics';
+import * as fontSemantics from './x4UiFontMetrics';
 
 interface SyntheticRecord {
   readonly u0: number;
@@ -86,6 +87,15 @@ function assertBytesEqual(actual: ArrayLike<number>, expected: ArrayLike<number>
   for (let index = 0; index < actual.length; index += 1) {
     assertEqual(actual[index], expected[index], `${message} byte ${index}`);
   }
+}
+
+function assertThrows(action: () => unknown, message: string): void {
+  try {
+    action();
+  } catch {
+    return;
+  }
+  throw new Error(`${message}: expected refusal`);
 }
 
 function assertDecodeResultShape(result: unknown): void {
@@ -245,6 +255,48 @@ const tests: readonly [string, () => void][] = [
         'A2BFCB11A4006E39BED99AF956C26F1DCE7C4092FFA63FC66CDA844D12019738',
         'bold atlas hash',
       );
+    },
+  ],
+  [
+    'shipped Zekton SDF shader vectors and immutable source identity are public',
+    () => {
+      const exports = fontSemantics as unknown as {
+        readonly applyZektonSdfAlpha?: unknown;
+        readonly ZEKTON_SDF_SHADER_SOURCE?: unknown;
+      };
+      assertCondition(typeof exports.applyZektonSdfAlpha === 'function', 'SDF alpha transfer must be exported');
+      const apply = exports.applyZektonSdfAlpha as (rawAlpha: number, callerAlpha?: number) => number;
+      assertEqual(apply(255), 0, 'raw 255 is transparent');
+      assertEqual(apply(102), 255, 'raw 102 is opaque');
+      assertEqual(apply(153), 0, 'lower transition edge is transparent');
+      assertEqual(apply(127.5), 128, 'shader midpoint uses positive half-up byte quantization');
+      assertEqual(apply(102.1), 255, 'upper transition interior is opaque');
+      assertCondition(apply(0) >= apply(102) && apply(102) >= apply(127.5) && apply(127.5) >= apply(153) && apply(153) >= apply(255), 'raw-alpha polarity is monotonic toward transparency');
+      assertEqual(apply(127.5, 0.5), 64, 'caller alpha multiplies coverage before byte quantization');
+      assertEqual(apply(127.5, 0.5), apply(127.5, 0.5), 'shader transfer replay is deterministic');
+      assertThrows(() => apply(Number.NaN), 'non-finite raw alpha');
+      assertThrows(() => apply(-1), 'negative raw alpha');
+      assertThrows(() => apply(256), 'out-of-range raw alpha');
+      assertThrows(() => apply(128, Number.NaN), 'non-finite caller alpha');
+      assertThrows(() => apply(128, -0.1), 'negative caller alpha');
+      assertThrows(() => apply(128, 1.1), 'caller alpha above one');
+
+      const source = exports.ZEKTON_SDF_SHADER_SOURCE as {
+        readonly material?: { readonly relativePath?: unknown; readonly sha256?: unknown; readonly shader?: unknown; readonly blendMode?: unknown };
+        readonly shaderBinding?: { readonly relativePath?: unknown; readonly sha256?: unknown; readonly diffuseFunc?: unknown };
+        readonly fragment?: { readonly relativePath?: unknown; readonly sha256?: unknown; readonly expression?: unknown };
+      } | undefined;
+      assertCondition(source !== undefined && Object.isFrozen(source) && Object.isFrozen(source.material) && Object.isFrozen(source.shaderBinding) && Object.isFrozen(source.fragment), 'SDF source identity must be deeply immutable');
+      assertEqual(source?.material?.relativePath, 'libraries/material_library.xml', 'material source path');
+      assertEqual(source?.material?.sha256, '4F211F83343FF5C19A4D8427AB25D195E2A124208B730976F9A411335271C047', 'material source hash');
+      assertEqual(source?.material?.shader, 'xu_ui_unlit_sdf', 'regular and bold material shader binding');
+      assertEqual(source?.material?.blendMode, 'ALPHA8_ANARK', 'regular and bold material blend mode');
+      assertEqual(source?.shaderBinding?.relativePath, 'shadergl/ogl/xu_ui_unlit_sdf.xml', 'shader binding path');
+      assertEqual(source?.shaderBinding?.sha256, '5E74955A40459D137C19CFCDAE35974FC0F2494E53E58C2CF4761597537E5768', 'shader binding hash');
+      assertEqual(source?.shaderBinding?.diffuseFunc, false, 'shader diffuse_func binding');
+      assertEqual(source?.fragment?.relativePath, 'shadergl/glsl/ui_unlit_sdf.frag.glsl', 'fragment source path');
+      assertEqual(source?.fragment?.sha256, '753923F5EDD97AEEF00177FD59B8A43CAA1EC6E2B64F5ADDED59E3E530498968', 'fragment source hash');
+      assertEqual(source?.fragment?.expression, 'smoothstep(0.4, 0.6, 1.0 - texture(S_diffuse_map, IO_uv0).r)', 'fragment transfer expression');
     },
   ],
   [

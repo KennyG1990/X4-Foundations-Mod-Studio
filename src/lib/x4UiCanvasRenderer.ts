@@ -5,6 +5,7 @@ import {
   type X4UiCorpusCanonicalSuccess,
 } from './x4UiCorpusAssets';
 import {
+  applyZektonSdfAlpha,
   ZEKTON_CORPUS_ASSETS,
   ZEKTON_EVIDENCE_STATE,
 } from './x4UiFontMetrics';
@@ -1638,6 +1639,11 @@ const allocateSurface = (
 
 const tintByte = (value: number): number => Math.round(value);
 
+/**
+ * Stage detached raw A8 bytes through the shipped Zekton SDF transfer before
+ * applying caller alpha. Canvas resampling is still browser-preview behavior,
+ * not X4 runtime parity.
+ */
 const stageAtlas = (
   factory: X4UiCanvasSurfaceFactory,
   binding: AtlasSnapshot,
@@ -1647,17 +1653,18 @@ const stageAtlas = (
   if (isValidationFailure(allocated)) return { ok: false, refusal: allocated.refusal };
   const api = allocated.value.api as AtlasApi;
   try {
+    const rawAlphaBytes = binding.alphaBytes.slice();
     const imageData = api.createImageData(binding.width, binding.height);
     if (!isObject(imageData)) return refusal('allocation-failure', `${binding.role} atlas image-data allocation failed`);
     const data = (imageData as UnknownRecord).data;
-    if (!(data instanceof Uint8ClampedArray) || data.length !== binding.alphaBytes.length * 4) return refusal('allocation-failure', `${binding.role} atlas image-data has unsafe dimensions`);
-    for (let index = 0; index < binding.alphaBytes.length; index += 1) {
+    if (!(data instanceof Uint8ClampedArray) || data.length !== rawAlphaBytes.length * 4) return refusal('allocation-failure', `${binding.role} atlas image-data has unsafe dimensions`);
+    for (let index = 0; index < rawAlphaBytes.length; index += 1) {
       const offset = index * 4;
       data[offset] = tint === undefined ? 229 : tintByte(tint.red);
       data[offset + 1] = tint === undefined ? 231 : tintByte(tint.green);
       data[offset + 2] = tint === undefined ? 235 : tintByte(tint.blue);
-      // Typed tint RGB and alpha use one deterministic positive-value half-up byte rule; CSS keeps raw tint values.
-      data[offset + 3] = tint === undefined ? binding.alphaBytes[index] as number : tintByte((binding.alphaBytes[index] as number) * tint.alphaScale);
+      // Typed tint RGB and SDF/caller alpha use one deterministic positive-value half-up byte rule; CSS keeps raw tint values.
+      data[offset + 3] = applyZektonSdfAlpha(rawAlphaBytes[index] as number, tint?.alphaScale ?? 1);
     }
     api.putImageData(imageData, 0, 0);
     return { ok: true, value: { surface: allocated.value.surface, api } };
@@ -1889,13 +1896,13 @@ export function renderX4UiPaintPlanToCanvas(
         role: 'regular',
         width: corpusValidation.value.regular.width,
         height: corpusValidation.value.regular.height,
-        alphaBytes: corpusValidation.value.regular.alphaBytes,
+        alphaBytes: corpusValidation.value.regular.alphaBytes.slice(),
       },
       bold: {
         role: 'bold',
         width: corpusValidation.value.bold.width,
         height: corpusValidation.value.bold.height,
-        alphaBytes: corpusValidation.value.bold.alphaBytes,
+        alphaBytes: corpusValidation.value.bold.alphaBytes.slice(),
       },
     };
     const optionsValidation = validatedOptions(options);

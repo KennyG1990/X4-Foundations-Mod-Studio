@@ -76,6 +76,60 @@ export const ZEKTON_CORPUS_ASSETS = Object.freeze({
   }),
 });
 
+/**
+ * Immutable identity for the shipped X4 9.00 material/shader chain. This is
+ * source provenance only; it is not a filesystem lookup or a game-runtime
+ * verification claim.
+ */
+export const ZEKTON_SDF_SHADER_SOURCE = Object.freeze({
+  material: Object.freeze({
+    relativePath: 'libraries/material_library.xml',
+    sha256: '4F211F83343FF5C19A4D8427AB25D195E2A124208B730976F9A411335271C047',
+    shader: 'xu_ui_unlit_sdf',
+    blendMode: 'ALPHA8_ANARK',
+    bindings: Object.freeze({
+      regular: 'zekton_32',
+      bold: 'zekton bold_32',
+    }),
+  }),
+  shaderBinding: Object.freeze({
+    relativePath: 'shadergl/ogl/xu_ui_unlit_sdf.xml',
+    sha256: '5E74955A40459D137C19CFCDAE35974FC0F2494E53E58C2CF4761597537E5768',
+    diffuseFunc: false,
+  }),
+  fragment: Object.freeze({
+    relativePath: 'shadergl/glsl/ui_unlit_sdf.frag.glsl',
+    sha256: '753923F5EDD97AEEF00177FD59B8A43CAA1EC6E2B64F5ADDED59E3E530498968',
+    expression: 'smoothstep(0.4, 0.6, 1.0 - texture(S_diffuse_map, IO_uv0).r)',
+  }),
+} as const);
+
+export const ZEKTON_SDF_EDGE_LOW = 0.4 as const;
+export const ZEKTON_SDF_EDGE_HIGH = 0.6 as const;
+export const ZEKTON_SDF_RAW_ALPHA_MAX = 255 as const;
+
+function assertZektonSdfInput(value: number, label: string, maximum: number): void {
+  if (!Number.isFinite(value) || value < 0 || value > maximum) {
+    throw new RangeError(`${label} must be finite and within [0, ${maximum}].`);
+  }
+}
+
+/**
+ * Apply the shipped fragment's smoothstep transfer and caller alpha to one
+ * raw A8 texel, returning the deterministic positive-value half-up byte.
+ * Browser Canvas resampling remains preview behavior and is not X4 runtime
+ * parity.
+ */
+export function applyZektonSdfAlpha(rawAlpha: number, callerAlpha = 1): number {
+  assertZektonSdfInput(rawAlpha, 'Zekton raw alpha', ZEKTON_SDF_RAW_ALPHA_MAX);
+  assertZektonSdfInput(callerAlpha, 'Zekton caller alpha', 1);
+  const x = 1 - rawAlpha / ZEKTON_SDF_RAW_ALPHA_MAX;
+  const unclampedT = (x - ZEKTON_SDF_EDGE_LOW) / (ZEKTON_SDF_EDGE_HIGH - ZEKTON_SDF_EDGE_LOW);
+  const t = Math.min(1, Math.max(0, unclampedT));
+  const coverage = t * t * (3 - 2 * t);
+  return Math.round(coverage * callerAlpha * ZEKTON_SDF_RAW_ALPHA_MAX);
+}
+
 export type ZektonByteInput = ArrayBuffer | ArrayBufferView | Uint8Array;
 
 export type ZektonDecodeErrorCode =

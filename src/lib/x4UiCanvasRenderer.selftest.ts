@@ -15,6 +15,7 @@ import {
   type X4UiCorpusFetchResponse,
 } from './x4UiCorpusAssets';
 import {
+  applyZektonSdfAlpha,
   ZEKTON_DDS_HEADER_SIZE,
   ZEKTON_DESCRIPTOR_HEADER_SIZE,
   ZEKTON_DESCRIPTOR_TRAILING_SIZE,
@@ -168,6 +169,10 @@ function makeCanonicalDds(): Uint8Array {
   view.setUint32(104, 0xff, true);
   view.setUint32(108, 0x1002, true);
   for (let index = ZEKTON_DDS_HEADER_SIZE; index < bytes.length; index += 1) bytes[index] = 255;
+  // A compact A8 glyph-shaped fixture: 255 is the shipped empty field and 91 is interior glyph coverage.
+  for (let y = 1; y < 9; y += 1) {
+    for (let x = 2; x < 6; x += 1) bytes[ZEKTON_DDS_HEADER_SIZE + y * 8 + x] = 91;
+  }
   return bytes;
 }
 
@@ -2246,8 +2251,13 @@ async function main(): Promise<void> {
         const value = tintValue(tint);
         const alpha = tintAlphaScale(tint);
         if (value === undefined || alpha === undefined || typeof value.r !== 'number' || typeof value.g !== 'number' || typeof value.b !== 'number') return false;
-        const expectedAlpha = Math.round(255 * alpha);
-        return colorAtlasRgba.some(bytes => bytes.length >= 4 && bytes[0] === value.r && bytes[1] === value.g && bytes[2] === value.b && bytes[3] === expectedAlpha);
+        const expectedAlpha = applyZektonSdfAlpha(91, alpha);
+        return colorAtlasRgba.some(bytes => {
+          for (let offset = 0; offset + 3 < bytes.length; offset += 4) {
+            if (bytes[offset] === value.r && bytes[offset + 1] === value.g && bytes[offset + 2] === value.b && bytes[offset + 3] === expectedAlpha) return true;
+          }
+          return false;
+        });
       };
       const canonicalTint = colorTints.find(tint => asRecord(tint)?.domain === 'canonical-xml-byte-alpha');
       const literalTint = colorTints.find(tint => asRecord(tint)?.domain === 'source-literal-percent-alpha');
@@ -2272,7 +2282,7 @@ async function main(): Promise<void> {
         canonicalStyle: tintCss(canonicalTint),
         canonicalStyleObserved: colorStyles.includes(tintCss(canonicalTint) ?? ''),
         literalDomain: asRecord(literalGlyphTint)?.domain,
-        literalExpectedAlpha: tintAlphaScale(literalGlyphTint) === undefined ? undefined : Math.round(255 * (tintAlphaScale(literalGlyphTint) as number)),
+        literalExpectedAlpha: tintAlphaScale(literalGlyphTint) === undefined ? undefined : applyZektonSdfAlpha(91, tintAlphaScale(literalGlyphTint) as number),
         literalPixelObserved: atlasPixelMatches(literalGlyphTint),
       });
       familyCheck('stage-b-causal', 'P6 staged tint pixels preserve raw RGB and typed alpha on glyph atlas bytes', colorRendered
@@ -3215,22 +3225,40 @@ async function main(): Promise<void> {
         : {},
   }));
   const atlasRgbaResult = completedResult(atlasRgbaAttempt);
+  const shapedCornerAlpha = regularStagedRgba[0]?.[3];
+  const shapedInteriorAlpha = regularStagedRgba[0]?.[(1 * 8 + 2) * 4 + 3];
+  familyCheck(
+    'batch-6d-causal',
+    'shipped-shaped glyph empty corners are transparent while interior coverage remains nonzero',
+    atlasRgbaResult?.status === 'rendered'
+      && shapedCornerAlpha === 0
+      && shapedInteriorAlpha !== undefined
+      && shapedInteriorAlpha > 0,
+    {
+      threw: atlasRgbaAttempt.threw,
+      result: receiptSummary(atlasRgbaResult?.receipt),
+      shapedCornerAlpha,
+      shapedInteriorAlpha,
+      expected: { corner: 0, interior: '>0' },
+    },
+  );
   const rgbaMatchesDetachedA8 = (rgba: Uint8ClampedArray[] | undefined, alpha: readonly number[]): boolean => {
     if (rgba?.length !== 1 || rgba[0] === undefined || rgba[0].length !== alpha.length * 4) return false;
     const pixels = rgba[0];
     for (let index = 0; index < alpha.length; index += 1) {
       const offset = index * 4;
-      if (pixels[offset] !== 229 || pixels[offset + 1] !== 231 || pixels[offset + 2] !== 235 || pixels[offset + 3] !== alpha[index]) return false;
+      if (pixels[offset] !== 229 || pixels[offset + 1] !== 231 || pixels[offset + 2] !== 235 || pixels[offset + 3] !== applyZektonSdfAlpha(alpha[index] as number)) return false;
     }
     return true;
   };
   const wrongRgb = regularStagedRgba[0]?.slice();
   if (wrongRgb !== undefined) wrongRgb[0] = wrongRgb[0] === 229 ? 228 : 229;
   const wrongAlpha = boldStagedRgba[0]?.slice();
-  if (wrongAlpha !== undefined) wrongAlpha[3] = wrongAlpha[3] === boldBytes[0] ? (wrongAlpha[3] + 1) % 256 : boldBytes[0]!;
+  const expectedBoldAlpha = applyZektonSdfAlpha(boldBytes[0] as number);
+  if (wrongAlpha !== undefined) wrongAlpha[3] = expectedBoldAlpha === 255 ? 254 : expectedBoldAlpha + 1;
   familyCheck(
     'batch-6d-causal',
-    'regular and bold atlas staging emits every literal RGBA byte from detached A8 data',
+    'regular and bold atlas staging emits literal diagnostic RGB with shipped SDF alpha from detached A8 data',
     atlasRgbaResult?.status === 'rendered'
       && !atlasRgbaAttempt.threw
       && rgbaMatchesDetachedA8(regularStagedRgba, regularBytes)
@@ -3536,6 +3564,8 @@ async function main(): Promise<void> {
   const alphaBytes = corpus.fonts.regular.atlas.alphaBytes as Uint8Array;
   const callbackAlphaOriginal = alphaBytes[0]!;
   const callbackAlphaMutated = callbackAlphaOriginal === 0 ? 1 : 0;
+  const expectedDetachedAlpha = applyZektonSdfAlpha(callbackAlphaOriginal);
+  const expectedMutatedAlpha = applyZektonSdfAlpha(callbackAlphaMutated);
   let alphaMutationReached = false;
   let stagedAlpha: number | undefined;
   let corpusWasMutated = false;
@@ -3559,14 +3589,16 @@ async function main(): Promise<void> {
     alphaBytes[0] = callbackAlphaOriginal;
   }
   const alphaMutationResult = completedResult(alphaMutationAttempt);
-  check('post-validation canonical alpha mutation uses detached A8 bytes then refuses with no surface', alphaMutationReached && corpusWasMutated && stagedAlpha === callbackAlphaOriginal && traceEquals(alphaMutationFactoryTrace, callbackBaselineFactoryTrace) && alphaMutationResult?.status === 'refused' && alphaMutationResult.receipt.refusal.code === 'post-validation-mutation' && refusalBoundaryIsComplete(alphaMutationResult) && isX4UiCorpusCanonicalSuccess(corpus), {
+  check('post-validation canonical alpha mutation uses detached A8 bytes then refuses with no surface', alphaMutationReached && corpusWasMutated && stagedAlpha === expectedDetachedAlpha && traceEquals(alphaMutationFactoryTrace, callbackBaselineFactoryTrace) && alphaMutationResult?.status === 'refused' && alphaMutationResult.receipt.refusal.code === 'post-validation-mutation' && refusalBoundaryIsComplete(alphaMutationResult) && isX4UiCorpusCanonicalSuccess(corpus), {
     threw: alphaMutationAttempt?.threw,
     alphaMutationReached,
     corpusWasMutated,
     callbackAlphaOriginal,
     callbackAlphaMutated,
+    expectedDetachedAlpha,
+    expectedMutatedAlpha,
     stagedAlpha,
-    preRepairUsedMutatedAlpha: stagedAlpha === callbackAlphaMutated,
+    preRepairUsedMutatedAlpha: stagedAlpha === expectedMutatedAlpha,
     alphaMutationReceipt: receiptSummary(alphaMutationResult?.receipt),
     hasSurface: alphaMutationResult === undefined ? undefined : Object.prototype.hasOwnProperty.call(alphaMutationResult, 'surface'),
     canonicalRestored: isX4UiCorpusCanonicalSuccess(corpus),
