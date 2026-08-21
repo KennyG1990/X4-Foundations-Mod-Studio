@@ -120,6 +120,244 @@ function deepCloneAndFreeze<T>(value: T): T {
   return deepFreeze(structuredClone(value) as T);
 }
 
+function utf8Bytes(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
+}
+
+function singleSourceFixture(
+  text: string,
+  extra: Partial<ModWorkspace> = {},
+  bytes: number | undefined = utf8Bytes(text)
+): {
+  workspace: ModWorkspace;
+  source: ReturnType<typeof buildX4UiWorkspaceSource>;
+} {
+  const root = '<addon><environment type="menus"><file name="ui/edit.lua"/></environment></addon>';
+  const files = [
+    passthrough('ui.xml', root, { reason: 'partial', bytes: utf8Bytes(root) }),
+    passthrough('ui/edit.lua', text, {
+      reason: 'partial',
+      ...(bytes === undefined ? {} : { bytes })
+    }),
+    passthrough('README.md', '# retained\n', { reason: 'unknown_domain' })
+  ];
+  const fixture = workspace(files, extra);
+  return { workspace: fixture, source: buildX4UiWorkspaceSource(fixture) };
+}
+
+function editText(text: string, expectedText: string, replacement: string) {
+  const startOffset = text.indexOf(expectedText);
+  assert.ok(startOffset >= 0, `expected test text should exist: ${expectedText}`);
+  return {
+    path: 'ui/edit.lua',
+    startOffset,
+    endOffset: startOffset + expectedText.length,
+    expectedText,
+    replacement
+  };
+}
+
+function detachmentExtra(): Partial<ModWorkspace> {
+  return {
+    nodes: [{
+      id: 'node',
+      type: 'action',
+      label: 'Action',
+      xmlTag: 'action',
+      x: 1,
+      y: 2,
+      properties: { nested: { value: 'original' } },
+      propertiesSchema: [],
+      inputs: [],
+      outputs: []
+    }],
+    links: [{
+      id: 'link',
+      sourceNodeId: 'node',
+      sourcePortId: 'out',
+      targetNodeId: 'node',
+      targetPortId: 'in',
+      waypoints: [{ x: 3, y: 4 }]
+    }],
+    uiWidgets: [{
+      id: 'widget',
+      type: 'button',
+      x: 5,
+      y: 6,
+      w: 100,
+      h: 24,
+      label: 'Widget',
+      properties: { nested: { value: 'original' } },
+      includeInBuild: false
+    }],
+    uiTheme: {
+      backgroundColor: '#000000',
+      borderColor: '#111111',
+      accentColor: '#00ffff',
+      opacity: 1,
+      showIcons: true
+    },
+    compileSettings: {
+      md: false,
+      ui: true,
+      ai: false,
+      library: false,
+      translations: false,
+      patches: false
+    }
+  };
+}
+
+function runCausalMatrix(): void {
+  const asciiText = [
+    '-- ascii',
+    'local frame = Menus.createFrameHandle()',
+    'frame:addTable(1)',
+    ''
+  ].join('\n');
+  const deletionText = [
+    '-- deletion',
+    'local frame = Menus.createFrameHandle()',
+    'frame:addTable(123)',
+    ''
+  ].join('\n');
+  const unicodeText = [
+    '-- cafe',
+    'local frame = Menus.createFrameHandle()',
+    'frame:addTable(1)',
+    ''
+  ].join('\n');
+
+  const rows: readonly { id: string; description: string; run: () => void }[] = [
+    {
+      id: 'A',
+      description: 'accepted ASCII insertion updates bytes',
+      run: () => {
+        const { workspace: input, source } = singleSourceFixture(asciiText);
+        const result = spliceX4UiWorkspaceSource(input, source, editText(asciiText, '1', '123'));
+        assert.equal(result.accepted, true);
+        const expected = asciiText.replace('1', '123');
+        const changed = result.workspace.passthroughFiles?.[1];
+        assert.equal(changed?.content, expected);
+        assert.equal(changed?.bytes, utf8Bytes(expected));
+      }
+    },
+    {
+      id: 'B',
+      description: 'accepted ranged deletion updates bytes',
+      run: () => {
+        const { workspace: input, source } = singleSourceFixture(deletionText);
+        const result = spliceX4UiWorkspaceSource(input, source, editText(deletionText, '23', ''));
+        assert.equal(result.accepted, true);
+        const expected = deletionText.replace('23', '');
+        const changed = result.workspace.passthroughFiles?.[1];
+        assert.equal(changed?.content, expected);
+        assert.equal(changed?.bytes, utf8Bytes(expected));
+      }
+    },
+    {
+      id: 'C',
+      description: 'astral and non-ASCII source uses actual UTF-8 bytes',
+      run: () => {
+        const { workspace: input, source } = singleSourceFixture(unicodeText);
+        const result = spliceX4UiWorkspaceSource(input, source, editText(unicodeText, 'e', 'é🚀'));
+        assert.equal(result.accepted, true);
+        const expected = unicodeText.replace('e', 'é🚀');
+        assert.notEqual(expected.length, utf8Bytes(expected));
+        const changed = result.workspace.passthroughFiles?.[1];
+        assert.equal(changed?.content, expected);
+        assert.equal(changed?.bytes, utf8Bytes(expected));
+      }
+    },
+    {
+      id: 'D',
+      description: 'accepted output detaches caller-owned workspace and source graph',
+      run: () => {
+        const { workspace: input, source } = singleSourceFixture(
+          asciiText,
+          detachmentExtra()
+        );
+        const result = spliceX4UiWorkspaceSource(input, source, editText(asciiText, '1', '2'));
+        assert.equal(result.accepted, true, 'D accepted');
+        assert.notEqual(result.workspace, input, 'D workspace');
+        assert.notEqual(result.workspace.nodes, input.nodes, 'D nodes array');
+        assert.notEqual(result.workspace.nodes[0], input.nodes[0], 'D node record');
+        assert.notEqual(result.workspace.links, input.links, 'D links array');
+        assert.notEqual(result.workspace.links[0], input.links[0], 'D link record');
+        assert.notEqual(result.workspace.uiWidgets, input.uiWidgets, 'D widgets array');
+        assert.notEqual(result.workspace.uiWidgets[0], input.uiWidgets[0], 'D widget record');
+        assert.notEqual(result.workspace.uiTheme, input.uiTheme, 'D theme');
+        assert.notEqual(result.workspace.compileSettings, input.compileSettings, 'D compile settings');
+        assert.notEqual(result.workspace.passthroughFiles, input.passthroughFiles, 'D passthrough array');
+        for (const [index, record] of (result.workspace.passthroughFiles || []).entries()) {
+          assert.notEqual(record, input.passthroughFiles?.[index], `passthrough record ${index} must detach`);
+        }
+        assert.notEqual(result.source, source, 'D source');
+        assert.notEqual(result.source.rootFile, source.rootFile, 'D root record');
+        assert.notEqual(result.source.rootCandidates, source.rootCandidates, 'D root candidates');
+        assert.notEqual(result.source.luaFiles, source.luaFiles, 'D lua records');
+        assert.notEqual(result.source.registeredLuaFiles, source.registeredLuaFiles, 'D registered lua records');
+        assert.notEqual(result.source.cas, source.cas, 'D CAS');
+        assert.notEqual(result.source.cas.passthroughFiles, source.cas.passthroughFiles, 'D CAS passthrough');
+        assert.notEqual(result.source.cas.luaBindings, source.cas.luaBindings, 'D CAS bindings');
+        assert.notEqual(result.source.bundle, source.bundle, 'D bundle');
+        assert.notEqual(result.source.bundle?.sourceFiles, source.bundle?.sourceFiles, 'D bundle sources');
+      }
+    },
+    {
+      id: 'E',
+      description: 'caller input remains identical, mutable, and unfrozen',
+      run: () => {
+        const { workspace: input, source } = singleSourceFixture(
+          asciiText,
+          detachmentExtra()
+        );
+        const originalJson = JSON.stringify(input);
+        const originalNodes = input.nodes;
+        const originalNode = input.nodes[0];
+        const originalNodeProperties = originalNode.properties;
+        const originalFiles = input.passthroughFiles;
+        const result = spliceX4UiWorkspaceSource(input, source, editText(asciiText, '1', '2'));
+        assert.equal(result.accepted, true, 'E accepted');
+        const returnedNode = result.workspace.nodes[0];
+        (returnedNode.properties as Record<string, unknown>).nested = { value: 'returned' };
+        (result.workspace.passthroughFiles![0] as PassthroughFile).path = 'mutated-in-return';
+        deepFreeze(result.workspace);
+        assert.equal(JSON.stringify(input), originalJson, 'E input JSON');
+        assert.equal(input.nodes, originalNodes, 'E nodes array identity');
+        assert.equal(input.nodes[0], originalNode, 'E node identity');
+        assert.equal(input.nodes[0].properties, originalNodeProperties, 'E properties identity');
+        assert.equal(input.passthroughFiles, originalFiles, 'E passthrough array identity');
+        assert.equal(Object.isFrozen(input), false, 'E workspace unfrozen');
+        assert.equal(Object.isFrozen(input.nodes), false, 'E nodes array unfrozen');
+        assert.equal(Object.isFrozen(input.nodes[0]), false, 'E node unfrozen');
+        assert.equal(Object.isFrozen(input.nodes[0].properties), false, 'E properties unfrozen');
+        assert.equal(Object.isFrozen(input.passthroughFiles), false, 'E passthrough array unfrozen');
+        assert.equal(Object.isFrozen(input.passthroughFiles![0]), false, 'E passthrough record unfrozen');
+      }
+    }
+  ];
+
+  const redRows: string[] = [];
+  for (const row of rows) {
+    try {
+      row.run();
+      console.log(`WorkspaceSource causal ${row.id} GREEN: ${row.description}`);
+    } catch (error) {
+      const detail = error instanceof Error
+        ? `${error.message} @ ${error.stack?.split('\n')[1]?.trim() || 'unknown'}`
+        : String(error);
+      redRows.push(row.id);
+      console.log(`WorkspaceSource causal ${row.id} RED: ${row.description} :: ${detail}`);
+    }
+  }
+  console.log(
+    `WorkspaceSource causal matrix: ${rows.length - redRows.length}/${rows.length} green; `
+      + `red=${redRows.length}; rows=${redRows.join(',') || 'none'}`
+  );
+  assert.deepEqual(redRows, [], 'all WorkspaceSource causal matrix rows must pass');
+}
+
 function run(): void {
   const original = fixtureWorkspace();
   const originalFiles = original.passthroughFiles!;
@@ -269,6 +507,7 @@ function run(): void {
   const first = sourceFile(source, 'ui/first.lua');
   const firstOffset = first.text.indexOf('2');
   assert.ok(firstOffset >= 0);
+  runCausalMatrix();
   const accepted = commitX4UiWorkspaceSourceSplice(original, source, {
     path: 'ui/first.lua',
     startOffset: firstOffset,
@@ -279,12 +518,12 @@ function run(): void {
   assert.equal(accepted.accepted, true);
   assert.equal(accepted.reason, null);
   assert.notEqual(accepted.workspace, original);
-  assert.equal(accepted.workspace.passthroughFiles![1], originalFiles[1], 'root record must retain identity');
+  assert.notEqual(accepted.workspace.passthroughFiles![1], originalFiles[1], 'root record must detach');
   assert.equal(accepted.workspace.passthroughFiles![2].path, 'ui/first.lua');
   assert.equal(accepted.workspace.passthroughFiles![2].content, firstLua.replace('addTable(2)', 'addTable(4)'));
   assert.notEqual(accepted.workspace.passthroughFiles![2], originalFiles[2], 'exactly one record must be replaced');
-  assert.equal(accepted.workspace.passthroughFiles![3], originalFiles[3], 'unrelated records must retain identity');
-  assert.equal(accepted.workspace.passthroughFiles![4], originalFiles[4], 'registered sibling must retain identity');
+  assert.notEqual(accepted.workspace.passthroughFiles![3], originalFiles[3], 'unrelated records must detach');
+  assert.notEqual(accepted.workspace.passthroughFiles![4], originalFiles[4], 'registered sibling must detach');
   assert.equal(originalFiles[2].content, firstLua, 'source workspace must remain unchanged');
   assert.equal(accepted.source.status, 'source-owned');
   assert.equal(
@@ -307,6 +546,7 @@ function run(): void {
   assert.equal(staleText.accepted, false);
   assert.equal(staleText.reason, 'concurrent-passthrough-change');
   assert.equal(staleText.workspace, staleTextWorkspace, 'stale target must return exact workspace identity');
+  assert.equal(staleText.source, source, 'stale target must return exact source identity');
 
   const unrelatedChangedWorkspace = workspace(originalFiles.map((file, index) => index === 3
     ? { ...file, content: '# concurrently changed\n' }
@@ -332,6 +572,7 @@ function run(): void {
   assert.equal(staleExpected.accepted, false);
   assert.equal(staleExpected.reason, 'expected-text-mismatch');
   assert.equal(staleExpected.workspace, original);
+  assert.equal(staleExpected.source, source);
 
   const activeWidgets = buildX4UiWorkspaceSource(
     workspace(originalFiles, { uiWidgets: [buttonWidget()] })

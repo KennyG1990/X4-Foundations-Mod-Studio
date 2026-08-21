@@ -194,6 +194,55 @@ function deepFreeze<T>(value: T, seen: WeakSet<object> = new WeakSet<object>()):
   return Object.freeze(value);
 }
 
+function cloneClosedData<T>(value: T, seen: WeakMap<object, object> = new WeakMap<object, object>()): T {
+  if (value === null || typeof value !== 'object') return value;
+  const objectValue = value as unknown as object;
+  if (seen.has(objectValue)) return seen.get(objectValue) as T;
+
+  if (Array.isArray(value)) {
+    const clonedArray = new Array(value.length) as unknown as T;
+    Object.setPrototypeOf(clonedArray, Object.getPrototypeOf(value));
+    seen.set(objectValue, clonedArray as unknown as object);
+    for (const key of Reflect.ownKeys(value)) {
+      if (key === 'length') continue;
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor) continue;
+      if ('value' in descriptor) descriptor.value = cloneClosedData(descriptor.value, seen);
+      Object.defineProperty(clonedArray, key, descriptor);
+    }
+    return clonedArray;
+  }
+
+  const clonedObject = Object.create(Object.getPrototypeOf(value)) as Record<PropertyKey, unknown>;
+  seen.set(objectValue, clonedObject);
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor) continue;
+    if ('value' in descriptor) descriptor.value = cloneClosedData(descriptor.value, seen);
+    Object.defineProperty(clonedObject, key, descriptor);
+  }
+  return clonedObject as T;
+}
+
+function utf8ByteLength(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
+}
+
+function splicePassthroughRecord(file: PassthroughFile, content: string): PassthroughFile {
+  return hasOwn(file, 'bytes')
+    ? { ...file, content, bytes: utf8ByteLength(content) }
+    : { ...file, content };
+}
+
+function cloneWorkspaceForSplice(
+  workspace: ModWorkspace,
+  passthroughFiles: readonly PassthroughFile[]
+): ModWorkspace {
+  const clonedWorkspace = cloneClosedData(workspace);
+  clonedWorkspace.passthroughFiles = cloneClosedData(passthroughFiles) as PassthroughFile[];
+  return clonedWorkspace;
+}
+
 function freezeArray<T>(items: readonly T[]): readonly T[] {
   return Object.freeze([...items]);
 }
@@ -703,14 +752,14 @@ export function spliceX4UiWorkspaceSource(
       return refusal(workspace, source, 'stale-passthrough-text', splice.bundle);
     }
     if (afterFile.text !== beforeFile.text) {
-      nextFiles[binding.workspaceIndex] = { ...current, content: afterFile.text };
+      nextFiles[binding.workspaceIndex] = splicePassthroughRecord(current, afterFile.text);
       changedIndexes.add(binding.workspaceIndex);
     }
   }
 
   const nextWorkspace = changedIndexes.size === 0
     ? workspace
-    : { ...workspace, passthroughFiles: nextFiles };
+    : cloneWorkspaceForSplice(workspace, nextFiles);
   const nextLuaRecords = source.luaFiles.map(file => {
     if (file.workspaceIndex === null) return file;
     return nextFiles[file.workspaceIndex] || file;

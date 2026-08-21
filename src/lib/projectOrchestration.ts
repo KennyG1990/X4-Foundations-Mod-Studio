@@ -216,17 +216,36 @@ export function runProjectOrchestrationSelftest() {
   });
   const warningPkg = packageAgentProject(warningProject);
   ok(
-    'package_x4_warning_is_nonblocking_and_counted',
-    warningPkg.ok && warningPkg.summary.x4UiWarnings >= 1 && warningPkg.summary.x4UiErrors === 0,
+    'package_x4_height_gap_is_nonblocking_and_unverified',
+    warningPkg.ok
+      && warningPkg.summary.x4UiWarnings === 0
+      && warningPkg.summary.x4UiErrors === 0
+      && warningPkg.summary.x4UiUnverified >= 1,
     warningPkg.summary,
   );
 
-  const fatalProject = createProjectFile(created, { path: 'ui/fatal.lua', content: 'frame:addTable(13)' });
-  const fatalPkg = packageAgentProject(fatalProject);
+  const warning13Project = createProjectFile(created, { path: 'ui/warning_13.lua', content: 'frame:addTable(13)' });
+  const warning13Pkg = packageAgentProject(warning13Project);
   ok(
-    'package_blocks_x4_column_error',
-    !fatalPkg.ok && fatalPkg.summary.x4UiErrors >= 1 && fatalPkg.summary.luaErrors >= 1,
-    fatalPkg.summary,
+    'package_x4_13_warning_is_nonblocking_and_counted',
+    warning13Pkg.ok
+      && warning13Pkg.summary.x4UiWarnings >= 1
+      && warning13Pkg.summary.x4UiErrors === 0
+      && warning13Pkg.summary.luaWarnings >= 1
+      && warning13Pkg.summary.luaErrors === 0,
+    warning13Pkg.summary,
+  );
+
+  const errorProject = createProjectFile(created, { path: 'ui/error.lua', content: 'frame:addTable(24)' });
+  const errorPkg = packageAgentProject(errorProject);
+  ok(
+    'package_blocks_x4_24_column_error',
+    !errorPkg.ok
+      && errorPkg.summary.x4UiErrors >= 1
+      && errorPkg.summary.x4UiWarnings === 0
+      && errorPkg.summary.luaErrors >= 1
+      && errorPkg.summary.luaWarnings === 0,
+    errorPkg.summary,
   );
 
   const badPkg = packageAgentProject(createProjectFile(created, { path: '../evil.lua', content: 'return true' }));

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "sourceFingerprint": "5c5a82d9c66897cc9df2fccb91387a005070b083a0d306f8d5c9cde84ad84305",
+  "sourceFingerprint": "92e3f28c114ab64992a327ab91afc8343551a4259e444d707d602f9b3e07ed28",
   "policy": "Every raw production filesystem mutation source is count-pinned here. Authoritative files use atomic sibling promotion; stronger tree, archive, append-log, SQLite, retention, ephemeral, and fixture contracts remain explicit exceptions.",
   "writers": [
     {
@@ -211,6 +211,14 @@
       "owners": ["writeCatDatCatalogs", "runCatDatSelftest"],
       "rationale": "Catalog volumes are streamed to exclusive temp files inside an isolated artifact stage, then renamed; remaining raw writes are parser fixtures.",
       "failureContract": "Partial CAT/DAT temps are removed; callers verify the complete staged catalogs before any tree promotion."
+    },
+    {
+      "file": "src/lib/x4UiScene.selftest.ts",
+      "calls": { "writeFileSync": 2, "mkdirSync": 2, "rmSync": 1, "mkdtempSync": 1, "symlinkSync": 2 },
+      "categories": ["fixture-only"],
+      "owners": ["B119 configured-census physical reparse containment test"],
+      "rationale": "All files and links are created beneath one unique OS temporary root to prove selected-root link admission and child-reparse escape refusal.",
+      "failureContract": "Finally cleanup is bounded to that unique OS temporary root and no configured workspace/corpus/game/mod path is mutated."
     },
     {
       "file": "src/lib/xsdParser.ts",

@@ -15,6 +15,7 @@ import {
 import {
   isX4UiCorpusCanonicalSuccess,
   type X4UiCorpusCanonicalSuccess,
+  type X4UiCorpusCanonicalColorSuccess,
 } from './x4UiCorpusAssets';
 import {
   X4_LAYOUT_PROVENANCE,
@@ -73,8 +74,9 @@ const WIDGET_SCROLLBAR_LINE_END = 868;
 type JsonRecord = Record<string, unknown>;
 
 interface X4UiPreviewPaintAuthorityRecord {
-  readonly issuedSceneStatus: string;
-  readonly sceneSnapshot: unknown;
+  readonly issuedSceneResult: X4UiSceneResult;
+  readonly issuedScene: X4UiScene;
+  readonly materializedScene: X4UiScene;
 }
 
 const issuedPreviewPaintAuthorities = new WeakMap<object, X4UiPreviewPaintAuthorityRecord>();
@@ -117,6 +119,8 @@ export interface X4UiPreviewPipelineInput {
   readonly source: X4UiWorkspaceSource;
   /** A loader-issued canonical result is required for Scene geometry. */
   readonly corpus: unknown;
+  /** Exact loader-issued P2 canonical-default color authority; never discovered here. */
+  readonly colorEvidence?: X4UiCorpusCanonicalColorSuccess;
   readonly profile: X4UiPreviewProfileInput;
   readonly selection?: X4UiPreviewSelection;
   readonly samples?: X4UiLayoutPreviewSampleInput;
@@ -282,6 +286,17 @@ export interface X4UiPreviewPipelineResult {
 const isRecord = (value: unknown): value is JsonRecord =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+const ownDataPropertyValue = (value: object, key: string): unknown => {
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return descriptor !== undefined && Object.prototype.hasOwnProperty.call(descriptor, 'value')
+      ? descriptor.value
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 const cloneJson = (value: unknown, active = new Set<object>()): unknown => {
   if (value === null || typeof value !== 'object') return value;
   if (active.has(value)) throw new Error('preview input contains a cycle');
@@ -315,7 +330,6 @@ const sameJson = (left: unknown, right: unknown): boolean => {
   }
 };
 
-const AUTHORITY_SCENE_NODE_ARRAYS = new Set(['frames', 'tables', 'rows', 'cells', 'widgets', 'texts', 'glyphs']);
 const AUTHORITY_SCENE_REQUIRED_ROOT_KEYS = [
   'format',
   'version',
@@ -337,15 +351,11 @@ const AUTHORITY_SCENE_REQUIRED_ROOT_KEYS = [
   'verification',
 ] as const;
 
-type AuthorityCloneContext = 'root' | 'scene-node' | 'normal';
-
 const hasOwn = (value: object, key: string): boolean => Object.prototype.hasOwnProperty.call(value, key);
 
 const strictAuthorityClone = (
   value: unknown,
   active = new Set<object>(),
-  context: AuthorityCloneContext = 'normal',
-  omitDirectNodeClipRect = true,
 ): unknown => {
   if (value === undefined) throw new TypeError('preview paint authority contains undefined');
   if (value === null) return null;
@@ -381,7 +391,7 @@ const strictAuthorityClone = (
           || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
           throw new TypeError('preview paint authority contains a sparse or accessor array member');
         }
-        result.push(strictAuthorityClone(descriptor.value, active, context === 'scene-node' ? 'scene-node' : 'normal', omitDirectNodeClipRect));
+        result.push(strictAuthorityClone(descriptor.value, active));
       }
       return result;
     }
@@ -403,14 +413,7 @@ const strictAuthorityClone = (
         throw new TypeError('preview paint authority contains an accessor object member');
       }
       if (descriptor.value === undefined) continue;
-      if (omitDirectNodeClipRect && context === 'scene-node' && key === 'clipRect') {
-        // The presentation allowlist ignores this direct node property only.
-        // Still validate its value so cycles and non-JSON values fail closed.
-        strictAuthorityClone(descriptor.value, active, 'normal', omitDirectNodeClipRect);
-        continue;
-      }
-      const childContext = context === 'root' && AUTHORITY_SCENE_NODE_ARRAYS.has(key) ? 'scene-node' : 'normal';
-      result[key] = strictAuthorityClone(descriptor.value, active, childContext, omitDirectNodeClipRect);
+      result[key] = strictAuthorityClone(descriptor.value, active);
     }
     return result;
   } finally {
@@ -418,12 +421,11 @@ const strictAuthorityClone = (
   }
 };
 
-const authoritySceneDataFor = (scene: unknown, canonicalStatus?: string): {
+const authoritySceneDataFor = (scene: unknown): {
   readonly status: string;
-  readonly snapshot: unknown;
   readonly materialized: X4UiScene;
 } => {
-  const materializedRecord = strictAuthorityClone(scene, new Set<object>(), 'root', false) as JsonRecord;
+  const materializedRecord = strictAuthorityClone(scene) as JsonRecord;
   if (!isRecord(materializedRecord)
     || !AUTHORITY_SCENE_REQUIRED_ROOT_KEYS.every(key => hasOwn(materializedRecord, key))
     || (materializedRecord.status !== 'projected' && materializedRecord.status !== 'partial')
@@ -444,69 +446,40 @@ const authoritySceneDataFor = (scene: unknown, canonicalStatus?: string): {
     throw new TypeError('preview paint authority Scene root is malformed');
   }
   const status = materializedRecord.status;
-  if (canonicalStatus !== undefined
-    && status !== canonicalStatus
-    && !(canonicalStatus === 'projected' && status === 'partial')) {
-    throw new TypeError('preview paint authority Scene status is not an allowed presentation variation');
-  }
-  const snapshot = strictAuthorityClone(materializedRecord, new Set<object>(), 'root', true) as JsonRecord;
-  if (canonicalStatus !== undefined) snapshot.status = canonicalStatus;
   return {
     status,
-    snapshot: freezeDeep(snapshot),
     materialized: freezeDeep(materializedRecord as unknown as X4UiScene),
   };
 };
 
-const sameJsonStructure = (left: unknown, right: unknown, active = new Set<object>()): boolean => {
-  if (Object.is(left, right)) return true;
-  if (typeof left !== typeof right || left === null || right === null) return false;
-  if (typeof left !== 'object' || typeof right !== 'object') return false;
-  if (active.has(left as object)) return false;
-  active.add(left as object);
-  try {
-    if (Array.isArray(left) || Array.isArray(right)) {
-      if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length || Object.keys(left).length !== left.length || Object.keys(right).length !== right.length) return false;
-      for (let index = 0; index < left.length; index += 1) if (!sameJsonStructure(left[index], right[index], active)) return false;
-      return true;
-    }
-    if (Array.isArray(left) || Array.isArray(right)) return false;
-    const leftRecord = left as JsonRecord;
-    const rightRecord = right as JsonRecord;
-    const leftKeys = Object.keys(leftRecord).sort();
-    const rightKeys = Object.keys(rightRecord).sort();
-    if (leftKeys.length !== rightKeys.length || leftKeys.some((key, index) => key !== rightKeys[index])) return false;
-    return leftKeys.every(key => sameJsonStructure(leftRecord[key], rightRecord[key], active));
-  } finally {
-    active.delete(left as object);
-  }
-};
-
 const issuePreviewPaintAuthority = (result: X4UiPreviewPipelineResult): void => {
   if ((result.status !== 'projected' && result.status !== 'partial') || result.scene === undefined || result.scene.status === 'refused') throw new Error('preview paint authority requires a successful Scene result');
-  const scene = authoritySceneDataFor(result.scene.scene);
+  const issuedSceneResult = result.scene;
+  const issuedScene = issuedSceneResult.scene;
+  const scene = authoritySceneDataFor(issuedScene);
   issuedPreviewPaintAuthorities.set(result as unknown as object, freezeDeep({
-    issuedSceneStatus: scene.status,
-    sceneSnapshot: scene.snapshot,
+    issuedSceneResult,
+    issuedScene,
+    materializedScene: scene.materialized,
   }));
 };
 
 /**
- * Proves that a candidate Scene is still the source-bound Scene issued by this
- * preview pipeline result. This is structural source evidence, not origin
- * authentication; a coherent replacement of both unsigned inputs remains out
- * of scope. Only the two presentation variations documented by the Scene
- * authority contract are normalized.
+ * Requires the exact Scene object privately bound to the exact issued preview
+ * result. Equal serialized bytes are evidence, not authority.
  */
 export function materializeX4UiPreviewPaintScene(issuedResult: unknown, candidateScene: unknown): X4UiScene | undefined {
   try {
-    if (!isRecord(issuedResult) || !isRecord(candidateScene)) return undefined;
+    if (typeof issuedResult !== 'object' || issuedResult === null) return undefined;
     const record = issuedPreviewPaintAuthorities.get(issuedResult as object);
-    if (record === undefined) return undefined;
+    if (record === undefined || candidateScene !== record.issuedScene && candidateScene !== record.issuedSceneResult) return undefined;
     const result = issuedResult as unknown as X4UiPreviewPipelineResult;
-    if (result.status !== 'projected' && result.status !== 'partial') return undefined;
-    const candidate = authoritySceneDataFor(candidateScene, record.issuedSceneStatus);
-    return sameJsonStructure(candidate.snapshot, record.sceneSnapshot) ? candidate.materialized : undefined;
+    if ((result.status !== 'projected' && result.status !== 'partial')
+      || result.scene !== record.issuedSceneResult
+      || record.issuedSceneResult.status === 'refused'
+      || record.issuedSceneResult.scene !== record.issuedScene
+      || record.issuedSceneResult.status !== record.issuedScene.status) return undefined;
+    return record.materializedScene;
   } catch {
     return undefined;
   }
@@ -984,6 +957,7 @@ export function projectX4UiPreviewPipeline(input: X4UiPreviewPipelineInput): X4U
     if (!isRecord(input) || !isRecord(input.source) || !isRecord(input.profile)) {
       return invalidInputResult('preview pipeline input is malformed');
     }
+    const colorEvidence = ownDataPropertyValue(input, 'colorEvidence') as X4UiCorpusCanonicalColorSuccess | undefined;
     const profileInput = input.profile;
     if (!finitePositive(profileInput.uiScale)) return invalidInputResult('preview profile uiScale must be positive and finite');
     const widgetPort = widgetPortFor(profileInput.uiScale);
@@ -1084,7 +1058,7 @@ export function projectX4UiPreviewPipeline(input: X4UiPreviewPipelineInput): X4U
     // view of that existing model; linting above still uses the original callModel directly and no
     // parser/model rebuild is performed here.
     const projectModel = cloneJson(sourceFile.callModel) as typeof sourceFile.callModel;
-    const program = projectX4UiLayoutProgram(projectModel, target, layoutProfile, input.samples, input.paths);
+    const program = projectX4UiLayoutProgram(projectModel, target, layoutProfile, input.samples, input.paths, colorEvidence);
     if (program.status === 'refused' && 'refusal' in program) {
       gaps.push({ stage: 'program', reason: program.refusal.message });
       return freezeDeep({

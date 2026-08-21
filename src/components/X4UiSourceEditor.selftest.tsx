@@ -10,24 +10,66 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ModuleKind, ScriptTarget, transpileModule } from 'typescript';
 import { buildX4UiCallModel, type X4UiLuaFileInput } from '../lib/x4UiCallModel';
+import {
+  X4_UI_CORPUS_9_00_COLOR_CONTRACT,
+  X4_UI_CORPUS_9_00_CONTRACT,
+  X4_UI_CORPUS_COLOR_CANONICAL_EVIDENCE,
+  X4_UI_CORPUS_COLORS_XML_PATH,
+  X4_UI_CORPUS_COLORS_XML_SHA256,
+  X4_UI_CORPUS_COLORS_XML_SIZE,
+  X4_UI_CORPUS_COLORS_XSD_PATH,
+  X4_UI_CORPUS_COLORS_XSD_SHA256,
+  X4_UI_CORPUS_COLORS_XSD_SIZE,
+  X4_UI_CORPUS_FILE_URL,
+  X4_UI_CORPUS_MANIFEST_URL,
+  X4_UI_CORPUS_STATUS_URL,
+  X4_UI_CORPUS_VERIFICATION,
+  isX4UiCorpusCanonicalColorSuccess,
+  isX4UiCorpusCanonicalSuccess,
+  loadConfiguredX4UiCorpusAssets,
+  loadConfiguredX4UiCorpusColorEvidence,
+  type X4UiCorpusCanonicalColorSuccess,
+  type X4UiCorpusCanonicalSuccess,
+  type X4UiCorpusFetchResponse,
+  type X4UiCorpusTransport,
+} from '../lib/x4UiCorpusAssets';
 import { projectX4UiEditorSession } from '../lib/x4UiEditorSession';
 import { lintX4UiCallModel } from '../lib/x4UiLint';
 import type { X4UiLayoutPreviewSampleCatalog } from '../lib/x4UiLayoutProgram';
 import { applyX4UiSourceEdit, type X4UiSourceEditCatalog } from '../lib/x4UiSourceEdits';
+import {
+  ZEKTON_DDS_HEADER_SIZE,
+  ZEKTON_DESCRIPTOR_HEADER_SIZE,
+  ZEKTON_DESCRIPTOR_TRAILING_SIZE,
+  ZEKTON_RECORD_SIZE,
+} from '../lib/x4UiFontMetrics';
 import UIBuilder, * as UIBuilderApiModule from './UIBuilder';
 import X4UiSourceEditor, {
   X4UiSourceEditorLinter,
   X4UiSourceEditorSamples,
+  addX4UiManualCalibrationPoint,
+  addX4UiManualCalibrationDraft,
+  buildX4UiManualCalibrationSessionInput,
   classifyX4UiCanvasCommit,
   classifyX4UiCanvasState,
   classifyX4UiCorpusLoadResult,
   classifyX4UiLintState,
+  createX4UiManualCalibrationDraft,
+  createX4UiManualCalibrationState,
   inspectX4UiLint,
   isBlockingX4UiAddTableFinding,
   isX4UiKeepOutEntryChecked,
+  parseX4UiManualCalibrationDraft,
   reconcileX4UiEditorSelections,
+  removeX4UiManualCalibrationPoint,
+  removeX4UiManualCalibrationRow,
+  setX4UiManualCalibrationRowEnabled,
   toggleX4UiKeepOutEntry,
+  toggleX4UiManualCalibrationRow,
   type X4UiEditorLintFinding,
+  type X4UiManualCalibrationDraft,
+  updateX4UiManualCalibrationDraft,
+  updateX4UiManualCalibrationPoint,
 } from './X4UiSourceEditor';
 import * as X4UiSourceEditorApiModule from './X4UiSourceEditor';
 
@@ -79,6 +121,25 @@ assert.match(sourceMarkup, /Profile controls/);
 assert.match(sourceMarkup, /Source and target selection/);
 assert.match(sourceMarkup, /Imported-source linter/);
 assert.match(sourceMarkup, /Context keep-outs/);
+assert.match(sourceMarkup, /x4-ui-manual-calibration-region/);
+assert.match(sourceMarkup, /x4-ui-manual-calibration-stable-id/);
+assert.match(sourceMarkup, /x4-ui-manual-calibration-context/);
+assert.match(sourceMarkup, /x4-ui-manual-calibration-source-note/);
+assert.match(sourceMarkup, /x4-ui-manual-calibration-screenshot-hash/);
+assert.match(sourceMarkup, /x4-ui-manual-calibration-profile/);
+assert.match(sourceMarkup, /x4-ui-manual-calibration-drawable-left/);
+assert.match(sourceMarkup, /x4-ui-manual-calibration-drawable-top/);
+assert.match(sourceMarkup, /x4-ui-manual-calibration-drawable-width/);
+assert.match(sourceMarkup, /x4-ui-manual-calibration-drawable-height/);
+assert.match(sourceMarkup, /x4-ui-manual-calibration-point-0-x/);
+assert.match(sourceMarkup, /x4-ui-manual-calibration-point-0-y/);
+assert.match(sourceMarkup, /x4-ui-manual-calibration-point-1-x/);
+assert.match(sourceMarkup, /x4-ui-manual-calibration-point-1-y/);
+assert.match(sourceMarkup, /x4-ui-manual-calibration-point-2-x/);
+assert.match(sourceMarkup, /x4-ui-manual-calibration-point-2-y/);
+assert.match(sourceMarkup, /x4-ui-manual-calibration-add-point/);
+assert.match(sourceMarkup, /x4-ui-manual-calibration-add/);
+assert.match(sourceMarkup, /Advisory only · Not verified in game/);
 assert.match(sourceMarkup, /Cockpit conversation/);
 assert.match(sourceMarkup, /Map open/);
 assert.match(sourceMarkup, /Fullscreen menu/);
@@ -567,7 +628,28 @@ assert.match(uiBuilderMarkup, /x4-ui-source-editor/);
 assert.match(uiBuilderMarkup, /Not verified in game/);
 
 const sourceText = readFileSync(new URL('./X4UiSourceEditor.tsx', import.meta.url), 'utf8');
+const selftestText = readFileSync(new URL('./X4UiSourceEditor.selftest.tsx', import.meta.url), 'utf8');
 const uiBuilderText = readFileSync(new URL('./UIBuilder.tsx', import.meta.url), 'utf8');
+const manualStateSourceStart = sourceText.indexOf('export interface X4UiManualCalibrationState');
+const manualStateSourceEnd = sourceText.indexOf('export interface X4UiCanvasStateDescription', manualStateSourceStart);
+const manualActionSourceStart = sourceText.indexOf('  const updateManualDraftField');
+const manualActionSourceEnd = sourceText.indexOf('  const updateSample', manualActionSourceStart);
+const manualRowSourceStart = sourceText.indexOf('            {manualCalibrationState.rows.map');
+const manualRowSourceEnd = sourceText.indexOf('            {manualCalibrationState.rows.length === 0', manualRowSourceStart);
+assert.equal(
+  [manualStateSourceStart, manualStateSourceEnd, manualActionSourceStart, manualActionSourceEnd, manualRowSourceStart, manualRowSourceEnd].every(offset => offset >= 0),
+  true,
+  'manual calibration source boundaries must remain available for ownership scans',
+);
+const manualCalibrationOwnedSource = [
+  sourceText.slice(manualStateSourceStart, manualStateSourceEnd),
+  sourceText.slice(manualActionSourceStart, manualActionSourceEnd),
+  sourceText.slice(manualRowSourceStart, manualRowSourceEnd),
+].join('\n');
+for (const forbiddenManualSource of ['onWorkspaceEdit', 'localStorage', 'sessionStorage', 'indexedDB', 'globalThis.fetch', 'fetch(', 'gameVerified: true', 'Verified in game']) {
+  assert.equal(manualCalibrationOwnedSource.includes(forbiddenManualSource), false, `manual calibration ownership leak present: ${forbiddenManualSource}`);
+}
+assert.doesNotMatch(manualCalibrationOwnedSource, /\bas any\b|:\s*any\b/);
 for (const forbidden of [
   'showDirectoryPicker',
   'showOpenFilePicker',
@@ -597,8 +679,418 @@ assert.match(sourceText, /whole frame disappears; UI reloads; conversation close
 assert.match(sourceText, /workspace,\n\s+corpus:/);
 assert.match(sourceText, /enabledEntryIds/);
 assert.match(sourceText, /AbortController/);
+assert.match(sourceText, /gameVerified: false/);
+assert.doesNotMatch(sourceText, /gameVerified:\s*true/);
+assert.doesNotMatch(sourceText, /Verified in game/);
+assert.match(sourceText, /const explicitEnabled = manualCalibrationState\.enabledManualRowIds\.includes\(row\.rowId\)/);
+assert.doesNotMatch(sourceText, /const explicitEnabled = manualCalibrationState\.[^;]*stableId/);
+assert.match(sourceText, /<article key=\{row\.rowId\} data-testid=\{`x4-ui-manual-calibration-row-\$\{row\.rowId\}`\}/);
+assert.match(sourceText, /x4-ui-manual-calibration-enable-\$\{row\.rowId\}/);
+assert.match(sourceText, /x4-ui-manual-calibration-remove-\$\{row\.rowId\}/);
+assert.match(selftestText, /Historical B119 8C\.2 duplicate-admission fail-first receipt from the pre-correction candidate/);
+assert.match(selftestText, /these hashes are evidence for that earlier red run, not current file-hash expectations/);
 assert.match(uiBuilderText, /useState<'source' \| 'canvas' \| 'lua'>\('source'\)/);
 assert.match(uiBuilderText, /<X4UiSourceEditor workspace=\{workspace\}/);
+
+const sourceEditorApiUnknown = X4UiSourceEditorApiModule as unknown as Record<string, unknown>;
+const batch8c2FailFirstMissing = [
+  [
+    'manual controls/fields/test IDs are absent from initial SSR',
+    /x4-ui-manual-calibration-region/.test(sourceMarkup)
+      && /x4-ui-manual-calibration-stable-id/.test(sourceMarkup)
+      && /x4-ui-manual-calibration-point-0-x/.test(sourceMarkup),
+  ],
+  [
+    'valid draft cannot be added or wired because the pure helper/API is absent',
+    typeof sourceEditorApiUnknown.createX4UiManualCalibrationDraft === 'function'
+      && typeof sourceEditorApiUnknown.addX4UiManualCalibrationDraft === 'function'
+      && typeof sourceEditorApiUnknown.buildX4UiManualCalibrationSessionInput === 'function',
+  ],
+  [
+    'enable/remove duplicate-ID reconciliation behavior is absent',
+    typeof sourceEditorApiUnknown.toggleX4UiManualCalibrationRow === 'function'
+      && typeof sourceEditorApiUnknown.removeX4UiManualCalibrationRow === 'function',
+  ],
+  [
+    'component session input cannot receive manualCalibrations/enabledManualEntryIds',
+    /manualCalibrations/.test(sourceText) && /enabledManualEntryIds/.test(sourceText),
+  ],
+  ['permanent Not verified truth is expected', /Not verified in game/.test(sourceMarkup) && /Not verified in game/.test(sourceText)],
+].filter(([, pass]) => !pass)
+  .map(([name]) => name);
+assert.deepEqual(
+  batch8c2FailFirstMissing,
+  [],
+  `B119 8C.2 fail-first red assertions: ${batch8c2FailFirstMissing.join(', ')}`,
+);
+
+const makeManualCalibrationDraft = (stableId: string): X4UiManualCalibrationDraft => {
+  let draft = createX4UiManualCalibrationDraft();
+  for (const [field, value] of [
+    ['stableId', stableId],
+    ['context', 'manual-context'],
+    ['sourceNote', 'operator screenshot calibration'],
+    ['screenshotHash', 'A'.repeat(64)],
+    ['profile', '2560x1440-ui-1.4'],
+    ['drawableLeft', '10'],
+    ['drawableTop', '20'],
+    ['drawableWidth', '100'],
+    ['drawableHeight', '80'],
+  ] as const) {
+    draft = updateX4UiManualCalibrationDraft(draft, field, value);
+  }
+  draft = updateX4UiManualCalibrationPoint(draft, 0, 'x', '20');
+  draft = updateX4UiManualCalibrationPoint(draft, 0, 'y', '30');
+  draft = updateX4UiManualCalibrationPoint(draft, 1, 'x', '100');
+  draft = updateX4UiManualCalibrationPoint(draft, 1, 'y', '30');
+  draft = updateX4UiManualCalibrationPoint(draft, 2, 'x', '20');
+  draft = updateX4UiManualCalibrationPoint(draft, 2, 'y', '80');
+  return draft;
+};
+
+const initialManualDraft = createX4UiManualCalibrationDraft();
+const updatedManualPointDraft = updateX4UiManualCalibrationPoint(initialManualDraft, 0, 'x', '12.5');
+assert.notEqual(updatedManualPointDraft, initialManualDraft, 'manual point update must create a new draft');
+assert.notEqual(updatedManualPointDraft.points, initialManualDraft.points, 'manual point update must create a new point array');
+assert.equal(initialManualDraft.points[0].x, '0', 'manual point update must not mutate the original point');
+assert.equal(updatedManualPointDraft.points[1], initialManualDraft.points[1], 'manual point update must preserve untouched point identity');
+const addedManualPointDraft = addX4UiManualCalibrationPoint(initialManualDraft);
+assert.equal(addedManualPointDraft.points.length, 4, 'manual add-point must append one draft point');
+assert.equal(initialManualDraft.points.length, 3, 'manual add-point must not mutate the original point array');
+const removedManualPointDraft = removeX4UiManualCalibrationPoint(addedManualPointDraft, 3);
+assert.equal(removedManualPointDraft.points.length, 3, 'manual remove-point must remove exactly one draft point');
+assert.equal(removedManualPointDraft.points[0], addedManualPointDraft.points[0], 'manual remove-point must preserve remaining point identity');
+assert.equal(removeX4UiManualCalibrationPoint(initialManualDraft, -1), initialManualDraft, 'unknown manual point removal must be a no-op');
+assert.equal(updateX4UiManualCalibrationPoint(initialManualDraft, 99, 'x', '1'), initialManualDraft, 'unknown manual point update must be a no-op');
+
+const validManualDraft = makeManualCalibrationDraft('manual-polygon-1');
+const parsedManualDraft = parseX4UiManualCalibrationDraft(validManualDraft);
+assert.equal(parsedManualDraft.accepted, true, 'valid manual draft must convert to a plain calibration input');
+if (!parsedManualDraft.accepted) throw new Error('valid manual draft unexpectedly refused');
+assert.deepEqual(Object.keys(parsedManualDraft.input).sort(), ['context', 'drawableBounds', 'points', 'profile', 'screenshotHash', 'sourceNote', 'stableId']);
+assert.deepEqual(parsedManualDraft.input.drawableBounds, { left: 10, top: 20, width: 100, height: 80 }, 'manual bounds must convert numeric text exactly');
+assert.deepEqual(parsedManualDraft.input.points, [{ x: 20, y: 30 }, { x: 100, y: 30 }, { x: 20, y: 80 }], 'manual points must convert numeric text exactly');
+const blankNumericDraft = updateX4UiManualCalibrationDraft(validManualDraft, 'drawableWidth', '');
+const nonFiniteNumericDraft = updateX4UiManualCalibrationDraft(validManualDraft, 'drawableWidth', 'Infinity');
+const blankPointDraft = updateX4UiManualCalibrationPoint(validManualDraft, 0, 'x', '');
+assert.deepEqual(parseX4UiManualCalibrationDraft(blankNumericDraft), { accepted: false, reason: 'invalid-number', message: 'drawable width must be a non-empty finite number.' });
+assert.deepEqual(parseX4UiManualCalibrationDraft(nonFiniteNumericDraft), { accepted: false, reason: 'invalid-number', message: 'drawable width must be a non-empty finite number.' });
+assert.deepEqual(parseX4UiManualCalibrationDraft(blankPointDraft), { accepted: false, reason: 'invalid-number', message: 'point 1 x must be a non-empty finite number.' });
+
+const manualEmptyState = createX4UiManualCalibrationState();
+const manualPreparedState = { ...manualEmptyState, draft: validManualDraft };
+const manualOneState = addX4UiManualCalibrationDraft(manualPreparedState);
+const manualTwoState = addX4UiManualCalibrationDraft(manualOneState, validManualDraft);
+assert.equal(manualOneState.rows.length, 1, 'manual Add must store one row');
+assert.equal(manualTwoState.rows.length, 2, 'manual Add must preserve duplicate rows');
+assert.notEqual(manualTwoState.rows[0].rowId, manualTwoState.rows[1].rowId, 'manual duplicate rows must have distinct local identities');
+assert.equal(manualOneState.draft.stableId, '', 'manual Add must reset only the draft deterministically');
+const manualRowOne = manualTwoState.rows[0];
+const manualRowTwo = manualTwoState.rows[1];
+const manualUnknownToggle = toggleX4UiManualCalibrationRow(manualTwoState, 'unknown-row');
+const manualUnknownRemove = removeX4UiManualCalibrationRow(manualTwoState, 'unknown-row');
+assert.equal(manualUnknownToggle, manualTwoState, 'unknown manual toggle must preserve state identity');
+assert.equal(manualUnknownRemove, manualTwoState, 'unknown manual remove must preserve state identity');
+const manualEnabledState = setX4UiManualCalibrationRowEnabled(manualTwoState, manualRowOne.rowId, true);
+assert.deepEqual(manualEnabledState.enabledManualRowIds, [manualRowOne.rowId], 'explicit manual enable must store only the immutable local row ID');
+assert.equal(manualEnabledState.enabledManualRowIds.includes(manualRowTwo.rowId), false, 'enabling duplicate row 1 must leave duplicate row 2 disabled');
+assert.equal(setX4UiManualCalibrationRowEnabled(manualEnabledState, manualRowOne.rowId, true), manualEnabledState, 'repeating explicit enable must be a no-op');
+const manualBothEnabledState = setX4UiManualCalibrationRowEnabled(manualEnabledState, manualRowTwo.rowId, true);
+assert.deepEqual(manualBothEnabledState.enabledManualRowIds, [manualRowOne.rowId, manualRowTwo.rowId], 'enabling both duplicates must retain both local row IDs');
+const manualSecondToggledOffState = toggleX4UiManualCalibrationRow(manualBothEnabledState, manualRowTwo.rowId);
+assert.deepEqual(manualSecondToggledOffState.enabledManualRowIds, [manualRowOne.rowId], 'toggling duplicate row 2 off must leave row 1 enabled');
+assert.deepEqual(manualBothEnabledState.enabledManualRowIds, [manualRowOne.rowId, manualRowTwo.rowId], 'toggling one duplicate must not mutate the prior enablement array');
+const manualRemovedDuplicateState = removeX4UiManualCalibrationRow(manualEnabledState, manualRowOne.rowId);
+assert.deepEqual(manualRemovedDuplicateState.enabledManualRowIds, [], 'removing enabled row 1 must not transfer enablement to disabled duplicate row 2');
+const manualRemovedFinalState = removeX4UiManualCalibrationRow(manualRemovedDuplicateState, manualRowTwo.rowId);
+assert.deepEqual(manualRemovedFinalState.enabledManualRowIds, [], 'removing the final duplicate must leave no local row enablement');
+const manualRemovedDisabledSiblingState = removeX4UiManualCalibrationRow(manualEnabledState, manualRowTwo.rowId);
+assert.equal(manualRemovedDisabledSiblingState.enabledManualRowIds, manualEnabledState.enabledManualRowIds, 'removing disabled row 2 must preserve row 1 enablement-array identity');
+const manualRemovedBothFirstState = removeX4UiManualCalibrationRow(manualBothEnabledState, manualRowOne.rowId);
+const manualRemovedBothSecondState = removeX4UiManualCalibrationRow(manualBothEnabledState, manualRowTwo.rowId);
+assert.deepEqual(manualRemovedBothFirstState.enabledManualRowIds, [manualRowTwo.rowId], 'removing enabled row 1 must retain enabled row 2 only');
+assert.deepEqual(manualRemovedBothSecondState.enabledManualRowIds, [manualRowOne.rowId], 'removing enabled row 2 must retain enabled row 1 only');
+const manualToggledOffState = toggleX4UiManualCalibrationRow(manualEnabledState, manualRowOne.rowId);
+assert.deepEqual(manualToggledOffState.enabledManualRowIds, [], 'manual toggle must explicitly disable only the addressed row ID');
+
+const rowLocalFailFirstState = setX4UiManualCalibrationRowEnabled(manualTwoState, manualRowOne.rowId, true);
+const rowLocalFailFirstEnabledRowIds = rowLocalFailFirstState.enabledManualRowIds;
+const rowLocalFailFirstRed = [
+  [
+    'enabling duplicate row 1 is row-local and leaves row 2 disabled',
+    rowLocalFailFirstEnabledRowIds?.length === 1
+      && rowLocalFailFirstEnabledRowIds[0] === manualRowOne.rowId
+      && !rowLocalFailFirstEnabledRowIds.includes(manualRowTwo.rowId),
+  ],
+] as const;
+const rowLocalFailFirstMissing = rowLocalFailFirstRed
+  .filter(([, passed]) => !passed)
+  .map(([name]) => name);
+assert.deepEqual(
+  rowLocalFailFirstMissing,
+  [],
+  `B119 8C.2 row-local enablement fail-first red assertions: ${rowLocalFailFirstMissing.join(', ')}`,
+);
+
+const projectManualState = (state: ReturnType<typeof createX4UiManualCalibrationState>, profile = { width: 100, height: 80, uiScale: 1 }) => {
+  const manualInput = buildX4UiManualCalibrationSessionInput(state);
+  return {
+    input: manualInput,
+    projection: projectX4UiEditorSession({
+      workspace,
+      corpus: undefined,
+      profile,
+      manualCalibrations: manualInput.manualCalibrations,
+      enabledManualEntryIds: manualInput.enabledManualEntryIds,
+    }),
+  };
+};
+
+const disabledManualSession = projectManualState(manualOneState);
+assert.equal(disabledManualSession.input.manualCalibrations.length, 1, 'component must send one exact plain manual calibration input');
+assert.deepEqual(disabledManualSession.input.enabledManualEntryIds, [], 'new manual rows must be disabled until explicitly enabled');
+assert.equal(disabledManualSession.projection.manualCalibrations[0]?.status, 'success', 'valid disabled manual row must still receive Session success provenance');
+assert.equal(disabledManualSession.projection.manualCalibrations[0]?.enabled, false, 'valid disabled manual row must not be enabled for Paint');
+assert.equal(disabledManualSession.projection.activeKeepOuts.length, 0, 'valid disabled manual row must emit no active Paint keep-out');
+
+const enabledManualSession = projectManualState(manualEnabledState);
+assert.equal(enabledManualSession.input.manualCalibrations.length, 2, 'duplicate manual inputs must both reach Session in index order');
+assert.equal(enabledManualSession.projection.manualCalibrations.length, 2, 'Session must preserve one refusal projection per duplicate occurrence');
+assert.equal(enabledManualSession.projection.manualCalibrations.every(value => value.status === 'refused' && value.reason === 'duplicate-stable-id'), true, 'duplicate stable IDs must remain visibly refused by Session');
+assert.equal(enabledManualSession.projection.activeKeepOuts.length, 0, 'duplicate refusal must issue no manual Paint keep-out');
+assert.deepEqual(enabledManualSession.input.enabledManualEntryIds, [], 'ambiguous stable IDs must be excluded from Session enablement while local enablement is retained');
+assert.deepEqual(
+  enabledManualSession.input.refusedRows.map(row => row.reason),
+  ['duplicate-stable-id', 'duplicate-stable-id'],
+  'both valid duplicate occurrences must be visibly refused at the component boundary',
+);
+const bothEnabledManualSession = projectManualState(manualBothEnabledState);
+assert.deepEqual(manualBothEnabledState.enabledManualRowIds, [manualRowOne.rowId, manualRowTwo.rowId], 'both duplicate checkboxes must remain independently checked in local state');
+assert.deepEqual(bothEnabledManualSession.input.enabledManualEntryIds, [], 'enabling both duplicate rows must not grant ambiguous stable-ID authority to Session');
+assert.equal(bothEnabledManualSession.projection.activeKeepOuts.length, 0, 'enabling both duplicate rows must still issue zero active keep-outs');
+const validDuplicateAfterRemovingFirst = projectManualState(removeX4UiManualCalibrationRow(manualEnabledState, manualRowOne.rowId));
+const validDuplicateAfterRemovingSecond = projectManualState(removeX4UiManualCalibrationRow(manualEnabledState, manualRowTwo.rowId));
+assert.equal(validDuplicateAfterRemovingFirst.projection.activeKeepOuts.length, 0, 'removing enabled row 1 must not enable surviving disabled row 2');
+assert.equal(validDuplicateAfterRemovingSecond.projection.activeKeepOuts.length, 1, 'removing disabled row 2 must restore surviving enabled row 1');
+assert.deepEqual(validDuplicateAfterRemovingFirst.input.enabledManualEntryIds, []);
+assert.deepEqual(validDuplicateAfterRemovingSecond.input.enabledManualEntryIds, ['manual-polygon-1']);
+const manualSecondOnlyEnabledState = setX4UiManualCalibrationRowEnabled(manualTwoState, manualRowTwo.rowId, true);
+const secondOnlyAfterRemovingFirst = projectManualState(removeX4UiManualCalibrationRow(manualSecondOnlyEnabledState, manualRowOne.rowId));
+const secondOnlyAfterRemovingSecond = projectManualState(removeX4UiManualCalibrationRow(manualSecondOnlyEnabledState, manualRowTwo.rowId));
+assert.equal(secondOnlyAfterRemovingFirst.projection.activeKeepOuts.length, 1, 'removing disabled row 1 must restore surviving enabled row 2');
+assert.equal(secondOnlyAfterRemovingSecond.projection.activeKeepOuts.length, 0, 'removing enabled row 2 must not enable surviving disabled row 1');
+const bothEnabledAfterRemovingFirst = projectManualState(removeX4UiManualCalibrationRow(manualBothEnabledState, manualRowOne.rowId));
+const bothEnabledAfterRemovingSecond = projectManualState(removeX4UiManualCalibrationRow(manualBothEnabledState, manualRowTwo.rowId));
+assert.equal(bothEnabledAfterRemovingFirst.projection.activeKeepOuts.length, 1, 'removing row 1 when both were enabled must restore surviving enabled row 2');
+assert.equal(bothEnabledAfterRemovingSecond.projection.activeKeepOuts.length, 1, 'removing row 2 when both were enabled must restore surviving enabled row 1');
+
+const enabledSingleManualState = addX4UiManualCalibrationDraft({ ...manualEmptyState, enabledManualRowIds: [] }, validManualDraft);
+const enabledSingleManual = projectManualState(setX4UiManualCalibrationRowEnabled(enabledSingleManualState, enabledSingleManualState.rows[0].rowId, true));
+const enabledManualProjection = enabledSingleManual.projection.manualCalibrations[0];
+assert.equal(enabledManualProjection?.status, 'success', 'valid enabled manual row must be accepted by Session');
+assert.equal(enabledManualProjection?.enabled, true, 'valid enabled manual row must be enabled by primitive ID');
+assert.deepEqual(enabledSingleManual.input.enabledManualEntryIds, ['manual-polygon-1'], 'one enabled valid row must derive exactly one primitive stable ID for Session');
+assert.equal(enabledSingleManual.input.enabledManualEntryIds.every(value => typeof value === 'string'), true, 'manual enablement input must contain primitive IDs only');
+assert.equal(enabledSingleManual.projection.activeKeepOuts.length, 1, 'valid enabled manual row must issue exactly one active manual keep-out to Paint');
+assert.equal(enabledSingleManual.projection.keepOuts.length, 1, 'Session must forward exactly one active manual keep-out to Paint');
+assert.equal(enabledSingleManual.projection.activeKeepOuts[0]?.entry.id, 'manual-polygon-1');
+assert.equal(enabledSingleManual.projection.activeKeepOuts[0]?.projection.advisoryOnly, true);
+assert.equal(enabledSingleManual.projection.activeKeepOuts[0]?.projection.gameVerification, 'Not verified in game');
+assert.match(sourceText, /manualCalibrations: manualSessionInput\.manualCalibrations/);
+assert.match(sourceText, /enabledManualEntryIds: manualSessionInput\.enabledManualEntryIds/);
+assert.match(sourceText, /projectionView\.paint/);
+assert.match(sourceText, /renderX4UiPaintPlanToCanvas\(/);
+const removedSingleManual = projectManualState(removeX4UiManualCalibrationRow(
+  setX4UiManualCalibrationRowEnabled(enabledSingleManualState, enabledSingleManualState.rows[0].rowId, true),
+  enabledSingleManualState.rows[0].rowId,
+));
+assert.equal(removedSingleManual.projection.manualCalibrations.length, 0, 'removing an enabled manual row must remove its Session projection');
+assert.equal(removedSingleManual.projection.activeKeepOuts.length, 0, 'removing an enabled manual row must remove its Paint keep-out');
+
+const invalidManualCases = [
+  ['invalid hash', updateX4UiManualCalibrationDraft(validManualDraft, 'screenshotHash', 'not-a-sha256'), 'malformed-screenshot-hash'],
+  ['invalid bounds', updateX4UiManualCalibrationDraft(validManualDraft, 'drawableWidth', '-1'), 'invalid-bounds'],
+  ['invalid points', updateX4UiManualCalibrationPoint(validManualDraft, 0, 'x', '1000'), 'out-of-bounds'],
+  ['too few points', removeX4UiManualCalibrationPoint(removeX4UiManualCalibrationPoint(validManualDraft, 2), 1), 'too-few-points'],
+  ['built-in ID', updateX4UiManualCalibrationDraft(validManualDraft, 'stableId', 'conversation-back-row'), 'built-in-id-collision'],
+] as const;
+
+// Historical B119 8C.2 duplicate-admission fail-first receipt from the pre-correction candidate;
+// these hashes are evidence for that earlier red run, not current file-hash expectations:
+// production SHA256 27266888BDB35415B128A4005FB5325C1DD60AA3D4EC780E6ACD3F3BDFA5CF5E;
+// selftest SHA256 9EB566E8BD437B907606B44F21F27E160008BE15446F193E1EA252673C87288D.
+const targetedDuplicateValidDraft = makeManualCalibrationDraft('shared-local-id');
+const targetedDuplicateSingleState = addX4UiManualCalibrationDraft({ ...manualEmptyState, draft: targetedDuplicateValidDraft });
+const targetedDuplicateEnabledState = setX4UiManualCalibrationRowEnabled(
+  targetedDuplicateSingleState,
+  targetedDuplicateSingleState.rows[0]?.rowId ?? 'missing-row',
+  true,
+);
+const targetedDuplicateMalformedState = addX4UiManualCalibrationDraft({
+  ...targetedDuplicateEnabledState,
+  draft: updateX4UiManualCalibrationDraft(targetedDuplicateValidDraft, 'drawableWidth', ''),
+});
+const targetedDuplicateValidRow = targetedDuplicateMalformedState.rows[0];
+const targetedDuplicateMalformedRow = targetedDuplicateMalformedState.rows[1];
+assert.deepEqual(targetedDuplicateMalformedState.enabledManualRowIds, [targetedDuplicateValidRow.rowId], 'adding a malformed duplicate must leave only the previously enabled valid row checked');
+assert.equal(targetedDuplicateMalformedState.enabledManualRowIds.includes(targetedDuplicateMalformedRow.rowId), false, 'malformed duplicate row must begin independently disabled');
+const targetedDuplicateBothEnabledState = setX4UiManualCalibrationRowEnabled(
+  targetedDuplicateMalformedState,
+  targetedDuplicateMalformedRow.rowId,
+  true,
+);
+assert.deepEqual(targetedDuplicateBothEnabledState.enabledManualRowIds, [targetedDuplicateValidRow.rowId, targetedDuplicateMalformedRow.rowId], 'valid and malformed duplicate rows must be independently enableable by row ID');
+const targetedDuplicateBothEnabledProjection = projectManualState(targetedDuplicateBothEnabledState);
+assert.deepEqual(targetedDuplicateBothEnabledProjection.input.enabledManualEntryIds, [], 'valid-malformed ambiguity must gate Session authority even when both local rows are enabled');
+assert.equal(targetedDuplicateBothEnabledProjection.projection.activeKeepOuts.length, 0, 'valid-malformed ambiguity must issue no active keep-out');
+const targetedMalformedToggledOffState = toggleX4UiManualCalibrationRow(targetedDuplicateBothEnabledState, targetedDuplicateMalformedRow.rowId);
+const targetedValidToggledOffState = toggleX4UiManualCalibrationRow(targetedDuplicateBothEnabledState, targetedDuplicateValidRow.rowId);
+assert.deepEqual(targetedMalformedToggledOffState.enabledManualRowIds, [targetedDuplicateValidRow.rowId], 'toggling malformed duplicate off must leave valid duplicate enabled');
+assert.deepEqual(targetedValidToggledOffState.enabledManualRowIds, [targetedDuplicateMalformedRow.rowId], 'toggling valid duplicate off must leave malformed duplicate enabled');
+const targetedDuplicateInput = buildX4UiManualCalibrationSessionInput(targetedDuplicateMalformedState);
+const targetedDuplicateProjection = projectManualState(targetedDuplicateMalformedState).projection;
+const targetedDuplicateRefusalReasons = targetedDuplicateMalformedState.rows.map(row =>
+  targetedDuplicateInput.refusedRows.find(refusal => refusal.rowId === row.rowId)?.reason,
+);
+const targetedDuplicateRemovedState = removeX4UiManualCalibrationRow(
+  targetedDuplicateMalformedState,
+  targetedDuplicateMalformedState.rows[1]?.rowId ?? 'missing-row',
+);
+const targetedDuplicateRestored = projectManualState(targetedDuplicateRemovedState);
+const targetedValidRemovedState = removeX4UiManualCalibrationRow(
+  targetedDuplicateMalformedState,
+  targetedDuplicateValidRow.rowId,
+);
+assert.deepEqual(targetedValidRemovedState.enabledManualRowIds, [], 'removing enabled valid duplicate must not transfer enablement to malformed sibling');
+assert.equal(projectManualState(targetedValidRemovedState).projection.activeKeepOuts.length, 0, 'surviving disabled malformed row must remain inactive');
+const targetedMalformedOnlyEnabledState = setX4UiManualCalibrationRowEnabled(
+  setX4UiManualCalibrationRowEnabled(targetedDuplicateMalformedState, targetedDuplicateValidRow.rowId, false),
+  targetedDuplicateMalformedRow.rowId,
+  true,
+);
+const targetedMalformedOnlyAfterRemoveMalformed = projectManualState(removeX4UiManualCalibrationRow(
+  targetedMalformedOnlyEnabledState,
+  targetedDuplicateMalformedRow.rowId,
+));
+assert.deepEqual(targetedMalformedOnlyAfterRemoveMalformed.input.enabledManualEntryIds, [], 'surviving valid row must not inherit removed malformed sibling enablement');
+assert.equal(targetedMalformedOnlyAfterRemoveMalformed.projection.activeKeepOuts.length, 0, 'surviving valid row must remain inactive when only removed malformed sibling was enabled');
+const targetedBothAfterRemoveMalformed = projectManualState(removeX4UiManualCalibrationRow(
+  targetedDuplicateBothEnabledState,
+  targetedDuplicateMalformedRow.rowId,
+));
+assert.deepEqual(targetedBothAfterRemoveMalformed.input.enabledManualEntryIds, ['shared-local-id'], 'removing malformed duplicate must restore surviving valid row when that row itself was enabled');
+assert.equal(targetedBothAfterRemoveMalformed.projection.activeKeepOuts.length, 1, 'enabled valid survivor must return exactly one active keep-out after ambiguity clears');
+
+const targetedDifferentInvalidState = addX4UiManualCalibrationDraft({
+  ...(() => {
+    const state = addX4UiManualCalibrationDraft({ ...manualEmptyState, draft: makeManualCalibrationDraft('independent-valid-id') });
+    return setX4UiManualCalibrationRowEnabled(state, state.rows[0]?.rowId ?? 'missing-row', true);
+  })(),
+  draft: updateX4UiManualCalibrationDraft(makeManualCalibrationDraft('independent-invalid-id'), 'drawableWidth', ''),
+});
+const targetedDifferentInvalid = projectManualState(targetedDifferentInvalidState);
+const targetedBuiltInAndInvalidRemainRefused = invalidManualCases.every(([, draft]) => {
+  const state = addX4UiManualCalibrationDraft({ ...manualEmptyState, draft });
+  const prepared = setX4UiManualCalibrationRowEnabled(state, state.rows[0]?.rowId ?? 'missing-row', true);
+  const projected = projectManualState(prepared).projection;
+  return projected.manualCalibrations[0]?.status === 'refused' && projected.activeKeepOuts.length === 0;
+});
+
+const targetedDuplicateFailFirstRows: readonly (readonly [string, boolean])[] = [
+  ['single valid enabled row remains one active keep-out', enabledSingleManual.projection.activeKeepOuts.length === 1],
+  [
+    'valid plus locally numeric-refused duplicate is refused at the component boundary',
+    targetedDuplicateInput.enabledManualEntryIds.length === 0 &&
+      targetedDuplicateProjection.activeKeepOuts.length === 0 &&
+      targetedDuplicateRefusalReasons.every(reason => reason === 'duplicate-stable-id'),
+  ],
+  [
+    'removing malformed duplicate restores prior explicit enablement and one active keep-out',
+    targetedDuplicateRestored.input.enabledManualEntryIds.includes('shared-local-id') &&
+      targetedDuplicateRestored.projection.activeKeepOuts.length === 1,
+  ],
+  [
+    'different-ID local numeric refusal does not block valid enabled row',
+    targetedDifferentInvalid.projection.activeKeepOuts.length === 1 &&
+      targetedDifferentInvalid.input.refusedRows.some(refusal => refusal.reason === 'invalid-number'),
+  ],
+  ['built-in collision and existing invalid cases remain refused with no paint', targetedBuiltInAndInvalidRemainRefused],
+  [
+    'duplicate rows preserve distinct local row identity and independent remove controls',
+    targetedDuplicateMalformedState.rows.length === 2 &&
+      targetedDuplicateMalformedState.rows[0]?.rowId !== targetedDuplicateMalformedState.rows[1]?.rowId &&
+      /x4-ui-manual-calibration-remove-\$\{row\.rowId\}/.test(sourceText),
+  ],
+];
+const targetedDuplicateFailFirstMissing = targetedDuplicateFailFirstRows
+  .filter(([, passed]) => !passed)
+  .map(([name]) => name);
+assert.deepEqual(
+  targetedDuplicateFailFirstMissing,
+  [],
+  `B119 8C.2 targeted duplicate-admission fail-first red assertions: ${targetedDuplicateFailFirstMissing.join(', ')}`,
+);
+
+for (const [label, draft, reason] of invalidManualCases) {
+  const state = addX4UiManualCalibrationDraft({ ...manualEmptyState, draft });
+  const prepared = setX4UiManualCalibrationRowEnabled(state, state.rows[0].rowId, true);
+  const result = projectManualState(prepared).projection.manualCalibrations[0];
+  assert.equal(result?.status, 'refused', `${label} must remain visible as a Session refusal`);
+  assert.equal(result?.reason, reason, `${label} must preserve the exact Session refusal reason`);
+  assert.equal(projectManualState(prepared).projection.activeKeepOuts.length, 0, `${label} must emit no manual Paint keep-out`);
+}
+
+const blankStableIdState = addX4UiManualCalibrationDraft(
+  manualEmptyState,
+  updateX4UiManualCalibrationDraft(validManualDraft, 'stableId', '   '),
+);
+const blankStableIdEnableAttempt = setX4UiManualCalibrationRowEnabled(blankStableIdState, blankStableIdState.rows[0].rowId, true);
+assert.equal(blankStableIdEnableAttempt, blankStableIdState, 'blank stable-ID row enable request must be an identity-preserving no-op');
+assert.deepEqual(projectManualState(blankStableIdEnableAttempt).input.enabledManualEntryIds, [], 'blank stable ID must never derive Session enablement authority');
+assert.equal(projectManualState(blankStableIdEnableAttempt).projection.activeKeepOuts.length, 0, 'blank stable ID must never reach an active keep-out');
+
+const editedIdentityFirstDraft = makeManualCalibrationDraft('edited-row-first');
+const editedIdentitySecondDraft = makeManualCalibrationDraft('edited-row-second');
+const editedIdentityFirstState = addX4UiManualCalibrationDraft(manualEmptyState, editedIdentityFirstDraft);
+const editedIdentityTwoState = addX4UiManualCalibrationDraft(editedIdentityFirstState, editedIdentitySecondDraft);
+const editedIdentityFirstRow = editedIdentityTwoState.rows[0];
+const editedIdentitySecondRow = editedIdentityTwoState.rows[1];
+const editedIdentityEnabledState = setX4UiManualCalibrationRowEnabled(editedIdentityTwoState, editedIdentityFirstRow.rowId, true);
+const editedIdentityCollisionState = {
+  ...editedIdentityEnabledState,
+  rows: editedIdentityEnabledState.rows.map(row => row.rowId === editedIdentityFirstRow.rowId
+    ? { ...row, draft: updateX4UiManualCalibrationDraft(row.draft, 'stableId', 'edited-row-second') }
+    : row),
+};
+assert.deepEqual(editedIdentityCollisionState.enabledManualRowIds, [editedIdentityFirstRow.rowId], 'editing an enabled row stable ID must retain that row identity only');
+assert.equal(editedIdentityCollisionState.enabledManualRowIds.includes(editedIdentitySecondRow.rowId), false, 'stable-ID collision edit must not merge enablement into sibling row');
+assert.equal(editedIdentityTwoState.rows[0].draft.stableId, 'edited-row-first', 'stored-row stable-ID fixture edit must not mutate the prior row');
+assert.deepEqual(projectManualState(editedIdentityCollisionState).input.enabledManualEntryIds, [], 'edited stable-ID collision must remain ambiguity-gated');
+assert.equal(projectManualState(editedIdentityCollisionState).projection.activeKeepOuts.length, 0, 'edited stable-ID collision must paint nothing');
+const editedIdentityRecoveredState = {
+  ...editedIdentityCollisionState,
+  rows: editedIdentityCollisionState.rows.map(row => row.rowId === editedIdentityFirstRow.rowId
+    ? { ...row, draft: updateX4UiManualCalibrationDraft(row.draft, 'stableId', 'edited-row-third') }
+    : row),
+};
+const editedIdentityRecovered = projectManualState(editedIdentityRecoveredState);
+assert.deepEqual(editedIdentityRecovered.input.enabledManualEntryIds, ['edited-row-third'], 'clearing edited ambiguity must derive the enabled row current stable ID only');
+assert.equal(editedIdentityRecovered.projection.activeKeepOuts.length, 1, 'enabled row must recover one active keep-out after its stable-ID ambiguity clears');
+
+const viewportAt100 = projectManualState(setX4UiManualCalibrationRowEnabled(enabledSingleManualState, enabledSingleManualState.rows[0].rowId, true), { width: 100, height: 80, uiScale: 1 }).projection.manualCalibrations[0];
+const viewportAt200 = projectManualState(setX4UiManualCalibrationRowEnabled(enabledSingleManualState, enabledSingleManualState.rows[0].rowId, true), { width: 200, height: 160, uiScale: 1 }).projection.manualCalibrations[0];
+if (viewportAt100?.status !== 'success' || viewportAt200?.status !== 'success' || viewportAt100.projection?.status !== 'projected' || viewportAt200.projection?.status !== 'projected') throw new Error('viewport reproject fixture was not accepted');
+assert.notDeepEqual(viewportAt100.projection.geometry, viewportAt200.projection.geometry, 'profile/viewport change must reproject the accepted polygon through Session');
+const expectedManualEvidence = {
+  source: 'manual-calibration',
+  evidenceGrade: 'calibrated',
+  sourceNote: 'operator screenshot calibration',
+  screenshot: { hash: 'A'.repeat(64), profile: '2560x1440-ui-1.4' },
+  drawableBounds: { left: 10, top: 20, width: 100, height: 80 },
+};
+assert.deepEqual(viewportAt100.evidence, expectedManualEvidence, 'viewport reproject must preserve exact screenshot and drawable-bound provenance');
+assert.deepEqual(viewportAt200.evidence, expectedManualEvidence, 'viewport reproject must preserve exact evidence identity at the second viewport');
+assert.deepEqual(viewportAt100.calibration.status === 'success' ? viewportAt100.calibration.entry.geometry.points : [], [{ x: 0.1, y: 0.125 }, { x: 0.9, y: 0.125 }, { x: 0.1, y: 0.75 }], 'Session must expose normalized polygon evidence');
 
 type SourceEditParseResult =
   | { readonly accepted: true; readonly value: string | number | boolean }
@@ -2527,4 +3019,817 @@ assert.notEqual(JSON.stringify(integrationApply.workspace), originalIntegrationW
 assert.equal(JSON.stringify(sourceEditIntegrationWorkspace), originalIntegrationWorkspace, 'source editor integration must not mutate the original workspace object');
 assert.equal(integrationProjection.gameTruth, 'Not verified in game');
 
-console.log('X4UiSourceEditor selftest: prior Batch 7D assertions 41/41; causal parent-CAS rows 10/10; pending SSR rows 2/2; causal no-op acknowledgement rows 29/29; passive-effect reconciliation rows 8/8; round-4 authority rows 27/27; round-5 stale-stage entry 24/24; round-5 stale-stage updater 24/24; round-5 stale-apply entry 24/24; round-5 stage positives 2/2; round-5 apply positives 2/2; round-5 stale-apply updater 8/8; round-6 reentrant parent 64/64; round-6 draft-only acknowledgement 16/16; round-6 exact settlement 2/2; all earlier SSR, authority, linter, canvas, and UIBuilder boundaries passed');
+console.log('X4UiSourceEditor selftest: B119 8C.2 row-local manual SSR/draft/state/session matrix passed; prior Batch 7D assertions 41/41; causal parent-CAS rows 10/10; pending SSR rows 2/2; causal no-op acknowledgement rows 29/29; passive-effect reconciliation rows 8/8; round-4 authority rows 27/27; round-5 stale-stage entry 24/24; round-5 stale-stage updater 24/24; round-5 stale-apply entry 24/24; round-5 stage positives 2/2; round-5 apply positives 2/2; round-5 stale-apply updater 8/8; round-6 reentrant parent 64/64; round-6 draft-only acknowledgement 16/16; round-6 exact settlement 2/2; all earlier SSR, authority, linter, canvas, and UIBuilder boundaries passed');
+
+type P7SourceAuthorityFixture = {
+  readonly core: X4UiCorpusCanonicalSuccess;
+  readonly color: X4UiCorpusCanonicalColorSuccess;
+};
+
+type P7SourceRow = {
+  readonly name: string;
+  readonly fixtureReady: boolean;
+  readonly threw: boolean;
+  readonly expected: string;
+  readonly observed: unknown;
+  readonly pass: boolean;
+};
+
+const p7SourceRows: P7SourceRow[] = [];
+
+function p7SourceResponseHeaders(contentType: string): { get(name: string): string | null } {
+  return { get: name => name.toLowerCase() === 'content-type' ? contentType : null };
+}
+
+function p7SourceJsonResponse(body: unknown, status = 200): X4UiCorpusFetchResponse {
+  return {
+    status,
+    headers: p7SourceResponseHeaders('application/json; charset=utf-8'),
+    json: async () => body,
+  };
+}
+
+function p7SourceBytesResponse(bytes: Uint8Array, status = 200, contentType = 'application/octet-stream'): X4UiCorpusFetchResponse {
+  const copied = bytes.slice();
+  return {
+    status,
+    headers: p7SourceResponseHeaders(contentType),
+    arrayBuffer: async () => copied.buffer,
+  };
+}
+
+function p7SourceHexDigest(hex: string): ArrayBuffer {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let index = 0; index < bytes.length; index += 1) bytes[index] = Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16);
+  return bytes.buffer;
+}
+
+function p7SourceDigestInputBytes(data: unknown): Uint8Array {
+  if (data instanceof ArrayBuffer) return new Uint8Array(data);
+  if (ArrayBuffer.isView(data)) return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+  throw new TypeError('SourceEditor P7 digest input was not a byte buffer');
+}
+
+async function p7SourceWithCanonicalPlatformHash<T>(expectedHashes: readonly string[], run: () => Promise<T>): Promise<T> {
+  const originalDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
+  let hashIndex = 0;
+  const fakeCrypto = {
+    subtle: {
+      digest: async (): Promise<ArrayBuffer> => {
+        const expected = expectedHashes[hashIndex++];
+        if (expected === undefined) throw new Error('SourceEditor P7 canonical hash count mismatch');
+        return p7SourceHexDigest(expected);
+      },
+    },
+  };
+  try {
+    Object.defineProperty(globalThis, 'crypto', {
+      configurable: true,
+      enumerable: originalDescriptor?.enumerable ?? true,
+      writable: true,
+      value: fakeCrypto,
+    });
+    return await run();
+  } finally {
+    if (originalDescriptor) Object.defineProperty(globalThis, 'crypto', originalDescriptor);
+    else Reflect.deleteProperty(globalThis, 'crypto');
+  }
+}
+
+function p7SourceMakeCanonicalAbc(advance: number): Uint8Array {
+  const maxCodepoint = 127;
+  const mapBytes = (maxCodepoint + 1) * 2;
+  const recordStart = (ZEKTON_DESCRIPTOR_HEADER_SIZE + mapBytes + 3) & ~3;
+  const bytes = new Uint8Array(recordStart + ZEKTON_RECORD_SIZE + ZEKTON_DESCRIPTOR_TRAILING_SIZE);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(0, 9, true);
+  view.setFloat32(4, 16, true);
+  view.setFloat32(8, 3, true);
+  view.setFloat32(12, 3, true);
+  view.setFloat32(16, 10, true);
+  view.setInt32(20, 4, true);
+  view.setInt32(24, 6, true);
+  view.setInt32(28, 0, true);
+  view.setUint32(32, 0, true);
+  view.setUint32(36, 8, true);
+  view.setUint32(40, 10, true);
+  view.setUint32(44, maxCodepoint, true);
+  for (let codepoint = 0; codepoint <= maxCodepoint; codepoint += 1) view.setUint16(ZEKTON_DESCRIPTOR_HEADER_SIZE + codepoint * 2, 1, true);
+  view.setFloat32(recordStart, 0, true);
+  view.setFloat32(recordStart + 4, 0, true);
+  view.setFloat32(recordStart + 8, 1, true);
+  view.setFloat32(recordStart + 12, 1, true);
+  view.setInt16(recordStart + 16, 0, true);
+  view.setUint16(recordStart + 18, 8, true);
+  view.setUint16(recordStart + 20, advance, true);
+  view.setUint16(recordStart + 22, 0, true);
+  return bytes;
+}
+
+function p7SourceMakeCanonicalDds(): Uint8Array {
+  const bytes = new Uint8Array(ZEKTON_DDS_HEADER_SIZE + 8 * 10);
+  bytes.set([0x44, 0x44, 0x53, 0x20]);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(4, 124, true);
+  view.setUint32(8, 0x1007, true);
+  view.setUint32(12, 10, true);
+  view.setUint32(16, 8, true);
+  view.setUint32(76, 32, true);
+  view.setUint32(80, 2, true);
+  view.setUint32(88, 8, true);
+  view.setUint32(104, 0xff, true);
+  view.setUint32(108, 0x1002, true);
+  for (let index = ZEKTON_DDS_HEADER_SIZE; index < bytes.length; index += 1) bytes[index] = 255;
+  return bytes;
+}
+
+function p7SourcePaddedUtf8(text: string, size: number): Uint8Array {
+  const bytes = new TextEncoder().encode(text);
+  if (bytes.byteLength > size) throw new Error(`SourceEditor P7 color fixture exceeds ${size} bytes`);
+  const padded = new Uint8Array(size);
+  padded.set(bytes);
+  padded.fill(0x20, bytes.byteLength);
+  return padded;
+}
+
+function p7SourceColorBuffers(): Map<string, Uint8Array> {
+  const baseIds = [
+    'white',
+    'black_alpha_0',
+    'white_weak_glow',
+    'azure_very_dark',
+    'azure_moderate_glow',
+    'azure_dark_alpha_160_glow',
+    'azure_very_dark_alpha_224',
+    'literal_base',
+  ];
+  while (baseIds.length < 224) baseIds.push(`source_p7_base_${baseIds.length.toString().padStart(3, '0')}`);
+  const specialValues: Record<string, readonly [number, number, number, number, number]> = {
+    white: [11, 22, 33, 44, 0.1],
+    black_alpha_0: [51, 52, 53, 54, 0.2],
+    white_weak_glow: [101, 102, 103, 104, 0.3],
+    azure_very_dark: [61, 62, 63, 64, 0.4],
+    azure_moderate_glow: [71, 72, 73, 74, 0.5],
+    azure_dark_alpha_160_glow: [81, 82, 83, 84, 0.6],
+    azure_very_dark_alpha_224: [91, 92, 93, 94, 0.7],
+    literal_base: [131, 132, 133, 134, 0.9],
+  };
+  const colors = baseIds.map((id, index) => {
+    const values = specialValues[id] || [index % 256, (index + 1) % 256, (index + 2) % 256, (index + 3) % 256, 0];
+    return `    <color id="${id}" r="${values[0]}" g="${values[1]}" b="${values[2]}" a="${values[3]}" glow="${values[4]}"/>`;
+  });
+  const mappingRefs: Record<string, string> = {
+    table_background_default: 'white',
+    row_background: 'black_alpha_0',
+    text_normal: 'white_weak_glow',
+    icon_normal: 'white_weak_glow',
+    button_background_default: 'azure_very_dark',
+    button_highlight_default: 'azure_moderate_glow',
+    button_border_default: 'azure_dark_alpha_160_glow',
+    editbox_background_default: 'azure_very_dark_alpha_224',
+  };
+  const mappings = Object.entries(mappingRefs).map(([id, ref]) => `    <mapping id="${id}" ref="${ref}"/>`);
+  for (let index = mappings.length; index < 804; index += 1) mappings.push(`    <mapping id="source_p7_map_${index.toString().padStart(3, '0')}" ref="${baseIds[index % baseIds.length]}"/>`);
+  return new Map([
+    [X4_UI_CORPUS_COLORS_XML_PATH, p7SourcePaddedUtf8([
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<colormap>',
+      '  <colors>',
+      ...colors,
+      '  </colors>',
+      '  <mappings>',
+      ...mappings,
+      '  </mappings>',
+      '</colormap>',
+    ].join('\n'), X4_UI_CORPUS_COLORS_XML_SIZE)],
+    [X4_UI_CORPUS_COLORS_XSD_PATH, p7SourcePaddedUtf8([
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">',
+      '  <xs:simpleType name="identifier"><xs:restriction base="xs:string"><xs:pattern value="[a-zA-Z_][a-zA-Z0-9_]*"/></xs:restriction></xs:simpleType>',
+      '</xs:schema>',
+    ].join('\n'), X4_UI_CORPUS_COLORS_XSD_SIZE)],
+  ]);
+}
+
+function p7SourcePathFromQuery(url: string, key: string): string {
+  const pair = url.slice(url.indexOf('?') + 1).split('&').find(part => part.startsWith(`${key}=`));
+  if (!pair) throw new Error(`SourceEditor P7 missing query ${key}`);
+  return decodeURIComponent(pair.slice(key.length + 1));
+}
+
+function p7SourceManifestStatus(root: string, generation: string): Record<string, unknown> {
+  return {
+    available: true,
+    state: 'ready',
+    root,
+    current: { generation, root, generatedAt: '2026-08-19T00:00:00.000Z' },
+  };
+}
+
+function p7SourceFixtureTransport(
+  calls: Array<{ readonly url: string; readonly signal: AbortSignal | undefined }>,
+): X4UiCorpusTransport {
+  const root = 'source-editor-p7-canonical-root';
+  const generation = 'source-editor-p7-canonical-generation';
+  const contract = X4_UI_CORPUS_9_00_CONTRACT;
+  const buffers = new Map<string, Uint8Array>([
+    [contract.helper.relativePath, new TextEncoder().encode('-- SourceEditor P7 canonical helper\n')],
+    [contract.widget.relativePath, new TextEncoder().encode('-- SourceEditor P7 canonical widget\n')],
+    [contract.regular.descriptor.relativePath, p7SourceMakeCanonicalAbc(8)],
+    [contract.regular.atlas.relativePath, p7SourceMakeCanonicalDds()],
+    [contract.bold.descriptor.relativePath, p7SourceMakeCanonicalAbc(8)],
+    [contract.bold.atlas.relativePath, p7SourceMakeCanonicalDds()],
+  ]);
+  for (const [path, bytes] of p7SourceColorBuffers()) buffers.set(path, bytes);
+  const status = {
+    available: true,
+    root,
+    generatedAt: '2026-08-19T00:00:00.000Z',
+    manifestGeneration: generation,
+    manifest: { available: true, state: 'ready', root, current: { generation, root, generatedAt: '2026-08-19T00:00:00.000Z' } },
+  };
+  return async (url, init) => {
+    calls.push({ url, signal: init?.signal });
+    if (url === X4_UI_CORPUS_STATUS_URL) return p7SourceJsonResponse(status);
+    if (url.startsWith(`${X4_UI_CORPUS_MANIFEST_URL}?`)) {
+      const path = p7SourcePathFromQuery(url, 'q');
+      const bytes = buffers.get(path);
+      if (!bytes) throw new Error(`SourceEditor P7 unknown manifest path ${path}`);
+      return p7SourceJsonResponse({
+        status: p7SourceManifestStatus(root, generation),
+        generation,
+        total: 1,
+        limit: 500,
+        offset: 0,
+        files: [{ path, bytes: bytes.byteLength }],
+      });
+    }
+    if (url.startsWith(`${X4_UI_CORPUS_FILE_URL}?`)) {
+      const path = p7SourcePathFromQuery(url, 'path');
+      const bytes = buffers.get(path);
+      if (!bytes) throw new Error(`SourceEditor P7 unknown file path ${path}`);
+      const contentType = path.endsWith('.lua') ? 'text/plain' : path.endsWith('.xml') || path.endsWith('.xsd') ? 'application/xml' : 'application/octet-stream';
+      return p7SourceBytesResponse(bytes, 200, contentType);
+    }
+    throw new Error(`SourceEditor P7 unexpected URL ${url}`);
+  };
+}
+
+async function loadP7SourceAuthorities(): Promise<P7SourceAuthorityFixture> {
+  const calls: Array<{ readonly url: string; readonly signal: AbortSignal | undefined }> = [];
+  const transport = p7SourceFixtureTransport(calls);
+  const contract = X4_UI_CORPUS_9_00_CONTRACT;
+  const coreHashes = [
+    contract.helper.sha256,
+    contract.widget.sha256,
+    contract.regular.descriptor.sha256,
+    contract.regular.atlas.sha256,
+    contract.bold.descriptor.sha256,
+    contract.bold.atlas.sha256,
+  ];
+  const coreResult = await p7SourceWithCanonicalPlatformHash(coreHashes, () => loadConfiguredX4UiCorpusAssets({ transport }));
+  if (!isX4UiCorpusCanonicalSuccess(coreResult)) throw new Error(`SourceEditor P7 core fixture failed: ${JSON.stringify(coreResult)}`);
+  const colorResult = await p7SourceWithCanonicalPlatformHash(
+    [X4_UI_CORPUS_COLORS_XML_SHA256, X4_UI_CORPUS_COLORS_XSD_SHA256],
+    () => loadConfiguredX4UiCorpusColorEvidence({ transport }),
+  );
+  if (!isX4UiCorpusCanonicalColorSuccess(colorResult)) throw new Error(`SourceEditor P7 color fixture failed: ${JSON.stringify(colorResult)}`);
+  if (colorResult.evidenceKind !== X4_UI_CORPUS_COLOR_CANONICAL_EVIDENCE || colorResult.verification !== X4_UI_CORPUS_VERIFICATION) throw new Error('SourceEditor P7 color fixture identity drifted');
+  if (colorResult.identities.xml.relativePath !== X4_UI_CORPUS_9_00_COLOR_CONTRACT.xml.relativePath || colorResult.identities.xsd.relativePath !== X4_UI_CORPUS_9_00_COLOR_CONTRACT.xsd.relativePath) throw new Error('SourceEditor P7 color contract path drifted');
+  return { core: coreResult, color: colorResult };
+}
+
+function p7SourceRecord(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+}
+
+function p7SourceClassify(
+  result: unknown,
+  overrides: Partial<{ readonly signalAborted: boolean; readonly requestActive: boolean; readonly requestGeneration: number; readonly currentGeneration: number }> = {},
+): Record<string, unknown> {
+  return classifyX4UiCorpusLoadResult({
+    result,
+    loaderIssued: true,
+    signalAborted: false,
+    requestActive: true,
+    requestGeneration: 1,
+    currentGeneration: 1,
+    ...overrides,
+  } as never) as unknown as Record<string, unknown>;
+}
+
+function p7SourceCoreCanonical(observed: unknown, core: X4UiCorpusCanonicalSuccess): boolean {
+  const record = p7SourceRecord(observed);
+  return record?.status === 'canonical'
+    && record.accepted === true
+    && record.result === core
+    && isX4UiCorpusCanonicalSuccess(record.result);
+}
+
+function p7SourceColorCanonical(observed: unknown, color: X4UiCorpusCanonicalColorSuccess): boolean {
+  const record = p7SourceRecord(observed);
+  return record?.colorStatus === 'canonical'
+    && record.colorEvidence === color
+    && isX4UiCorpusCanonicalColorSuccess(record.colorEvidence);
+}
+
+function p7SourceNoColorAuthority(observed: unknown): boolean {
+  const record = p7SourceRecord(observed);
+  return record?.colorEvidence === undefined && record?.colorStatus !== 'canonical';
+}
+
+function p7SourceNoAuthority(observed: unknown): boolean {
+  const record = p7SourceRecord(observed);
+  return record?.status !== 'canonical'
+    && record?.accepted !== true
+    && (record?.result === null || record?.result === undefined)
+    && record?.colorEvidence === undefined;
+}
+
+function p7SourceReceipt(value: unknown): unknown {
+  const record = p7SourceRecord(value);
+  if (record === undefined) return value;
+  if (typeof record.error === 'string') return { error: record.error };
+  const receipt: Record<string, unknown> = {};
+  for (const key of ['status', 'accepted', 'detail', 'colorStatus', 'colorDetail', 'getterReads', 'getTrapReads', 'threw', 'dualCanonical', 'detached', 'timeout', 'statusCallCount', 'overlapBeforeEitherSettled', 'callsUseSharedSignal', 'coreCanonical', 'colorCanonical', 'canonicalCount', 'failedBranchOrdinary', 'coreLoaderStarted', 'colorLoaderStarted', 'branchStartsBeforeSettlement', 'injectedBranchRejected', 'branchSignalsUseSharedSignal']) {
+    if (Object.hasOwn(record, key)) receipt[key] = record[key];
+  }
+  if (Object.hasOwn(record, 'result')) receipt.result = record.result === null ? null : record.result === undefined ? undefined : 'present';
+  if (Object.hasOwn(record, 'colorEvidence')) receipt.colorEvidence = record.colorEvidence === undefined ? undefined : 'present';
+  if (Array.isArray(record.calls)) receipt.calls = { count: record.calls.length, allowlisted: record.calls.every(call => {
+    const item = p7SourceRecord(call);
+    return item !== undefined && typeof item.url === 'string';
+  }) };
+  for (const key of ['results', 'negativeResults', 'reflectionResults']) {
+    if (!Array.isArray(record[key])) continue;
+    receipt[key] = record[key].map(item => {
+      const row = p7SourceRecord(item);
+      return row === undefined ? item : { name: row.name, getTrapReads: row.getTrapReads, trapReads: row.trapReads, threw: row.threw, rejected: row.rejected };
+    });
+  }
+  for (const key of ['transparent', 'active', 'late', 'aborted', 'reload', 'offlineColor', 'abortedColor']) {
+    if (Object.hasOwn(record, key)) receipt[key] = p7SourceReceipt(record[key]);
+  }
+  return receipt;
+}
+
+async function recordP7SourceRow(
+  name: string,
+  fixtureReady: boolean,
+  expected: string,
+  invoke: () => unknown | Promise<unknown>,
+  accepts: (observed: unknown) => boolean,
+): Promise<void> {
+  let threw = false;
+  let observed: unknown;
+  try {
+    observed = await invoke();
+  } catch (error) {
+    threw = true;
+    observed = { error: error instanceof Error ? error.message : String(error) };
+  }
+  p7SourceRows.push({ name, fixtureReady, threw, expected, observed, pass: fixtureReady && !threw && accepts(observed) });
+}
+
+async function runP7SourceEditorCanonicalColorMatrix(): Promise<void> {
+  let fixture: P7SourceAuthorityFixture | undefined;
+  let fixtureError: string | undefined;
+  try {
+    fixture = await loadP7SourceAuthorities();
+  } catch (error) {
+    fixtureError = error instanceof Error ? error.message : String(error);
+  }
+  const core = fixture?.core;
+  const color = fixture?.color;
+  const fixtureReady = fixture !== undefined;
+
+  await recordP7SourceRow(
+    'P7 SourceEditor default dual loader overlaps branches and preserves the fulfilled authority when the injected branch rejects',
+    fixtureReady,
+    'both injected loader branches start before either settles; one branch rejects outside transport normalization while the other reaches exact canonical authority and remains observable as an ordinary failure/canonical pair',
+    async () => {
+      const ownerLoader = sourceEditorApiUnknown.loadX4UiSourceEditorCorpusEnvelope;
+      if (typeof ownerLoader !== 'function') throw new Error('missing future test seam: loadX4UiSourceEditorCorpusEnvelope');
+      const controller = new AbortController();
+      const sharedSignal = controller.signal;
+      const calls: Array<{ readonly url: string; readonly signal: AbortSignal | undefined }> = [];
+      const contract = X4_UI_CORPUS_9_00_CONTRACT;
+      const buffers = new Map<string, Uint8Array>([
+        [contract.helper.relativePath, new TextEncoder().encode('-- SourceEditor P7 canonical helper\n')],
+        [contract.widget.relativePath, new TextEncoder().encode('-- SourceEditor P7 canonical widget\n')],
+        [contract.regular.descriptor.relativePath, p7SourceMakeCanonicalAbc(8)],
+        [contract.regular.atlas.relativePath, p7SourceMakeCanonicalDds()],
+        [contract.bold.descriptor.relativePath, p7SourceMakeCanonicalAbc(8)],
+        [contract.bold.atlas.relativePath, p7SourceMakeCanonicalDds()],
+      ]);
+      for (const [path, bytes] of p7SourceColorBuffers()) buffers.set(path, bytes);
+      const digestHashes = new Map<string, string>();
+      const digestCandidates: readonly { readonly bytes: Uint8Array; readonly hash: string }[] = [
+        { bytes: buffers.get(contract.helper.relativePath) as Uint8Array, hash: contract.helper.sha256 },
+        { bytes: buffers.get(contract.widget.relativePath) as Uint8Array, hash: contract.widget.sha256 },
+        { bytes: buffers.get(contract.regular.descriptor.relativePath) as Uint8Array, hash: contract.regular.descriptor.sha256 },
+        { bytes: buffers.get(contract.regular.atlas.relativePath) as Uint8Array, hash: contract.regular.atlas.sha256 },
+        { bytes: buffers.get(contract.bold.descriptor.relativePath) as Uint8Array, hash: contract.bold.descriptor.sha256 },
+        { bytes: buffers.get(contract.bold.atlas.relativePath) as Uint8Array, hash: contract.bold.atlas.sha256 },
+        { bytes: buffers.get(X4_UI_CORPUS_COLORS_XML_PATH) as Uint8Array, hash: X4_UI_CORPUS_COLORS_XML_SHA256 },
+        { bytes: buffers.get(X4_UI_CORPUS_COLORS_XSD_PATH) as Uint8Array, hash: X4_UI_CORPUS_COLORS_XSD_SHA256 },
+      ];
+      for (const candidate of digestCandidates) digestHashes.set(`${candidate.bytes.byteLength}:${Array.from(candidate.bytes.slice(0, 16)).join(',')}`, candidate.hash);
+      let coreLoaderStarted = false;
+      let colorLoaderStarted = false;
+      let branchStartsBeforeSettlement = false;
+      let injectedBranchRejected = false;
+      let firstBranchSettled = false;
+      let coreSignal: AbortSignal | undefined;
+      let colorSignal: AbortSignal | undefined;
+      let releaseBothBranches!: () => void;
+      const bothBranchesStarted = new Promise<void>(resolve => { releaseBothBranches = resolve; });
+      const noteBranchStart = (): void => {
+        if (coreLoaderStarted && colorLoaderStarted && !firstBranchSettled) branchStartsBeforeSettlement = true;
+      };
+      const rejectingCoreLoader = async ({ signal }: { readonly signal: AbortSignal }): Promise<never> => {
+        coreLoaderStarted = true;
+        coreSignal = signal;
+        noteBranchStart();
+        await bothBranchesStarted;
+        firstBranchSettled = true;
+        injectedBranchRejected = true;
+        throw new Error('P7 injected core branch rejection outside transport normalization');
+      };
+      const canonicalColorLoader = async ({ transport, signal }: { readonly transport: X4UiCorpusTransport; readonly signal: AbortSignal }): Promise<unknown> => {
+        colorLoaderStarted = true;
+        colorSignal = signal;
+        noteBranchStart();
+        releaseBothBranches();
+        return loadConfiguredX4UiCorpusColorEvidence({ transport, signal });
+      };
+      const boundedTransport = p7SourceFixtureTransport(calls);
+      const originalDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
+      try {
+        Object.defineProperty(globalThis, 'crypto', {
+          configurable: true,
+          enumerable: originalDescriptor?.enumerable ?? true,
+          writable: true,
+          value: {
+            subtle: {
+              digest: async (_algorithm: unknown, data: unknown): Promise<ArrayBuffer> => {
+                const bytes = p7SourceDigestInputBytes(data);
+                const hash = digestHashes.get(`${bytes.byteLength}:${Array.from(bytes.slice(0, 16)).join(',')}`);
+                if (hash === undefined) throw new Error(`P7 default-loader unknown digest input (${bytes.byteLength} bytes)`);
+                return p7SourceHexDigest(hash);
+              },
+            },
+          },
+        });
+        let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+        const timeout = new Promise<unknown>(resolve => {
+          timeoutHandle = setTimeout(() => resolve({ timeout: true }), 1_000);
+        });
+        const loaderPromise = (ownerLoader as (options: {
+          readonly transport: X4UiCorpusTransport;
+          readonly signal: AbortSignal;
+          readonly coreLoader: typeof rejectingCoreLoader;
+          readonly colorLoader: typeof canonicalColorLoader;
+        }) => Promise<unknown>)({
+          transport: boundedTransport,
+          signal: sharedSignal,
+          coreLoader: rejectingCoreLoader,
+          colorLoader: canonicalColorLoader,
+        });
+        const value = await Promise.race([loaderPromise, timeout]);
+        if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+        const record = p7SourceRecord(value);
+        const coreResult = record?.core;
+        const colorResult = record?.color;
+        const coreCanonical = isX4UiCorpusCanonicalSuccess(coreResult);
+        const colorCanonical = isX4UiCorpusCanonicalColorSuccess(colorResult);
+        const branchResults = [coreResult, colorResult];
+        const failed = branchResults.find(branch => p7SourceRecord(branch)?.ok === false || (p7SourceRecord(branch)?.error !== undefined));
+        const failureRecord = p7SourceRecord(failed);
+        const callsUseSharedSignal = calls.length >= 1 && calls.every(call => call.signal === sharedSignal);
+        const branchSignalsUseSharedSignal = coreSignal === sharedSignal && colorSignal === sharedSignal;
+        return {
+          value,
+          calls,
+          sharedSignal,
+          coreLoaderStarted,
+          colorLoaderStarted,
+          branchStartsBeforeSettlement,
+          injectedBranchRejected,
+          branchSignalsUseSharedSignal,
+          callsUseSharedSignal,
+          coreCanonical,
+          colorCanonical,
+          canonicalCount: Number(coreCanonical) + Number(colorCanonical),
+          failedBranchOrdinary: failureRecord?.ok === false && failureRecord.error !== undefined,
+        };
+      } finally {
+        if (originalDescriptor) Object.defineProperty(globalThis, 'crypto', originalDescriptor);
+        else Reflect.deleteProperty(globalThis, 'crypto');
+      }
+    },
+    observed => {
+      const record = p7SourceRecord(observed);
+      return record?.timeout !== true
+        && record.coreLoaderStarted === true
+        && record.colorLoaderStarted === true
+        && record.branchStartsBeforeSettlement === true
+        && record.injectedBranchRejected === true
+        && record.branchSignalsUseSharedSignal === true
+        && record.callsUseSharedSignal === true
+        && record.coreCanonical !== record.colorCanonical
+        && record.canonicalCount === 1
+        && record.failedBranchOrdinary === true;
+    },
+  );
+
+  await recordP7SourceRow(
+    'P7 SourceEditor exact dual-authority classification accepts core and color authorities',
+    fixtureReady,
+    'an exact own-data { core, color } envelope is canonical for both authorities and preserves both identities',
+    () => p7SourceClassify({ core, color }),
+    observed => core !== undefined && color !== undefined && p7SourceCoreCanonical(observed, core) && p7SourceColorCanonical(observed, color),
+  );
+
+  await recordP7SourceRow(
+    'P7 SourceEditor legacy core-only custom-loader compatibility',
+    fixtureReady,
+    'an exact core-only custom loader remains canonical while color is unavailable and no color authority is issued',
+    () => p7SourceClassify(core),
+    observed => core !== undefined && p7SourceCoreCanonical(observed, core) && p7SourceNoColorAuthority(observed) && p7SourceRecord(observed)?.colorStatus === 'unavailable',
+  );
+
+  await recordP7SourceRow(
+    'P7 SourceEditor core success with color absent preserves core usability',
+    fixtureReady,
+    'core remains canonical/usable; color status is unavailable with no false color authority',
+    () => p7SourceClassify({ core }),
+    observed => core !== undefined && p7SourceCoreCanonical(observed, core) && p7SourceNoColorAuthority(observed) && p7SourceRecord(observed)?.colorStatus === 'unavailable',
+  );
+
+  const colorFailure = { ok: false, error: { code: 'offline', stage: 'status', message: 'P7 color offline' } };
+  const colorAborted = { ok: false, error: { code: 'aborted', stage: 'consistency', message: 'P7 color independently aborted' } };
+  await recordP7SourceRow(
+    'P7 SourceEditor core success with independently offline/aborted color result',
+    fixtureReady,
+    'an active exact core remains canonical for both offline and independently aborted color results; each color result is unavailable with its own detail and no false color authority',
+    () => ({
+      offlineColor: p7SourceClassify({ core, color: colorFailure }),
+      abortedColor: p7SourceClassify({ core, color: colorAborted }),
+    }),
+    observed => {
+      const record = p7SourceRecord(observed);
+      const offlineColor = p7SourceRecord(record?.offlineColor);
+      const abortedColor = p7SourceRecord(record?.abortedColor);
+      return core !== undefined
+        && p7SourceCoreCanonical(offlineColor, core)
+        && p7SourceNoColorAuthority(offlineColor)
+        && offlineColor?.colorStatus === 'unavailable'
+        && String(offlineColor.colorDetail || '').includes('P7 color offline')
+        && p7SourceCoreCanonical(abortedColor, core)
+        && p7SourceNoColorAuthority(abortedColor)
+        && abortedColor?.colorStatus === 'unavailable'
+        && String(abortedColor.colorDetail || '').includes('P7 color independently aborted');
+    },
+  );
+
+  const colorThrown = { ok: false, error: { code: 'internal-error', stage: 'consistency', message: 'P7 color loader threw' } };
+  await recordP7SourceRow(
+    'P7 SourceEditor core success with color throw is all-settled and core-usable',
+    fixtureReady,
+    'a color throw becomes a separate unavailable detail and cannot erase the usable core result',
+    () => p7SourceClassify({ core, color: colorThrown }),
+    observed => core !== undefined && p7SourceCoreCanonical(observed, core)
+      && p7SourceNoColorAuthority(observed)
+      && p7SourceRecord(observed)?.colorStatus === 'unavailable'
+      && String(p7SourceRecord(observed)?.colorDetail || '').includes('P7 color loader threw'),
+  );
+
+  const colorMalformed = { ok: true, evidenceKind: X4_UI_CORPUS_COLOR_CANONICAL_EVIDENCE };
+  await recordP7SourceRow(
+    'P7 SourceEditor core success with malformed color refuses color only',
+    fixtureReady,
+    'malformed color is visibly malformed/refused while core remains canonical and usable',
+    () => p7SourceClassify({ core, color: colorMalformed }),
+    observed => core !== undefined && p7SourceCoreCanonical(observed, core)
+      && p7SourceNoColorAuthority(observed)
+      && (p7SourceRecord(observed)?.colorStatus === 'malformed' || p7SourceRecord(observed)?.colorStatus === 'refused'),
+  );
+
+  const staleColor = { ok: false, error: { code: 'generation-drift', stage: 'consistency', message: 'P7 color stale generation' } };
+  await recordP7SourceRow(
+    'P7 SourceEditor core success with stale/late color cannot replace current color state',
+    fixtureReady,
+    'stale color is separate stale state; core remains canonical and no stale color authority is accepted',
+    () => p7SourceClassify({ core, color: staleColor }),
+    observed => core !== undefined && p7SourceCoreCanonical(observed, core)
+      && p7SourceNoColorAuthority(observed)
+      && p7SourceRecord(observed)?.colorStatus === 'stale',
+  );
+
+  const coreFailure = { ok: false, error: { code: 'offline', stage: 'status', message: 'P7 core unavailable' } };
+  await recordP7SourceRow(
+    'P7 SourceEditor color success without exact core is never core-canonical/paintable',
+    fixtureReady,
+    'color may be reported separately, but core accepted/result authority remains absent',
+    () => p7SourceClassify({ core: coreFailure, color }),
+    observed => color !== undefined
+      && p7SourceRecord(observed)?.status !== 'canonical'
+      && p7SourceRecord(observed)?.accepted === false
+      && (p7SourceRecord(observed)?.result === null || p7SourceRecord(observed)?.result === undefined)
+      && p7SourceRecord(observed)?.colorEvidence === undefined,
+  );
+
+  await recordP7SourceRow(
+    'P7 SourceEditor transparent envelope facade detaches exact authorities and hostile reflection is contained',
+    fixtureReady,
+    'a transparent get-only facade is dual-canonical from exact own data descriptors with zero get reads and no retained wrapper; accessor/inherited/decorated/cloned/reassigned forms and throwing reflection facades expose no authority or outward throw',
+    () => {
+      if (core === undefined || color === undefined) return { fixtureReady: false };
+      const cloneCore = JSON.parse(JSON.stringify(core)) as Record<string, unknown>;
+      const cloneColor = JSON.parse(JSON.stringify(color)) as Record<string, unknown>;
+      const exactEnvelope = { core, color };
+      const transparentGetFacade = (target: object): { readonly candidate: object; readonly getTrapReads: () => number } => {
+        let reads = 0;
+        return {
+          candidate: new Proxy(target, {
+            get(current, key, receiver) {
+              reads += 1;
+              return Reflect.get(current, key, receiver);
+            },
+          }),
+          getTrapReads: () => reads,
+        };
+      };
+      const transparentFixture = transparentGetFacade(exactEnvelope);
+      const transparentFacade = transparentFixture.candidate;
+      let transparentResult: unknown;
+      let transparentThrew = false;
+      try { transparentResult = p7SourceClassify(transparentFacade); } catch { transparentThrew = true; }
+      const transparentRecord = p7SourceRecord(transparentResult);
+      const transparent = {
+        getTrapReads: transparentFixture.getTrapReads(),
+        threw: transparentThrew,
+        dualCanonical: p7SourceCoreCanonical(transparentResult, core) && p7SourceColorCanonical(transparentResult, color),
+        detached: transparentRecord?.result === core
+          && transparentRecord.colorEvidence === color
+          && !Object.hasOwn(transparentRecord, 'envelope')
+          && transparentRecord.result !== transparentFacade
+          && transparentRecord.colorEvidence !== transparentFacade,
+      };
+
+      let getterReads = 0;
+      const accessor = { core, color } as Record<string, unknown>;
+      Object.defineProperty(accessor, 'core', {
+        configurable: true,
+        enumerable: true,
+        get: () => {
+          getterReads += 1;
+          throw new Error('P7 SourceEditor envelope getter executed');
+        },
+      });
+      const inherited = Object.create({ core, color }) as Record<string, unknown>;
+      const decorated = { core, color, extra: true };
+      const reassigned = { core, color } as Record<string, unknown>;
+      reassigned.core = cloneCore;
+      reassigned.color = cloneColor;
+      const negativeCases = [
+        { name: 'structural-clone', ...transparentGetFacade({ core: cloneCore, color: cloneColor }) },
+        { name: 'inherited', ...transparentGetFacade(inherited) },
+        { name: 'accessor', ...transparentGetFacade(accessor) },
+        { name: 'decorated', ...transparentGetFacade(decorated) },
+        { name: 'reassigned', ...transparentGetFacade(reassigned) },
+        (() => {
+          const revoked = Proxy.revocable({ core, color }, {});
+          revoked.revoke();
+          return { name: 'revoked', candidate: revoked.proxy, getTrapReads: () => 0 };
+        })(),
+      ];
+      const negativeResults = negativeCases.map(({ name, candidate, getTrapReads: readCount }) => {
+        let result: unknown;
+        let threw = false;
+        try { result = p7SourceClassify(candidate); } catch { threw = true; }
+        return { name, getTrapReads: readCount(), threw, rejected: p7SourceNoAuthority(result) };
+      });
+
+      let descriptorGetReads = 0;
+      let descriptorTrapReads = 0;
+      const throwingDescriptor = new Proxy(exactEnvelope, {
+        get(target, key, receiver) {
+          descriptorGetReads += 1;
+          return Reflect.get(target, key, receiver);
+        },
+        getOwnPropertyDescriptor() {
+          descriptorTrapReads += 1;
+          throw new Error('P7 SourceEditor getOwnPropertyDescriptor trap');
+        },
+      });
+      let ownKeysGetReads = 0;
+      let ownKeysTrapReads = 0;
+      const throwingOwnKeys = new Proxy(exactEnvelope, {
+        get(target, key, receiver) {
+          ownKeysGetReads += 1;
+          return Reflect.get(target, key, receiver);
+        },
+        ownKeys() {
+          ownKeysTrapReads += 1;
+          throw new Error('P7 SourceEditor ownKeys trap');
+        },
+      });
+      let prototypeGetReads = 0;
+      let prototypeTrapReads = 0;
+      const throwingPrototype = new Proxy(exactEnvelope, {
+        get(target, key, receiver) {
+          prototypeGetReads += 1;
+          return Reflect.get(target, key, receiver);
+        },
+        getPrototypeOf() {
+          prototypeTrapReads += 1;
+          throw new Error('P7 SourceEditor getPrototypeOf trap');
+        },
+      });
+      const reflectionCases: readonly { readonly name: string; readonly candidate: unknown; readonly getTrapReads: () => number; readonly trapReads: () => number }[] = [
+        { name: 'throwing-getOwnPropertyDescriptor', candidate: throwingDescriptor, getTrapReads: () => descriptorGetReads, trapReads: () => descriptorTrapReads },
+        { name: 'throwing-ownKeys', candidate: throwingOwnKeys, getTrapReads: () => ownKeysGetReads, trapReads: () => ownKeysTrapReads },
+        { name: 'throwing-getPrototypeOf', candidate: throwingPrototype, getTrapReads: () => prototypeGetReads, trapReads: () => prototypeTrapReads },
+      ];
+      const reflectionResults = reflectionCases.map(({ name, candidate, getTrapReads: getReadCount, trapReads }) => {
+        let result: unknown;
+        let threw = false;
+        try { result = p7SourceClassify(candidate); } catch { threw = true; }
+        return { name, getTrapReads: getReadCount(), trapReads: trapReads(), threw, rejected: p7SourceNoAuthority(result) };
+      });
+      return { transparent, getterReads, negativeResults, reflectionResults };
+    },
+    observed => {
+      const record = p7SourceRecord(observed);
+      const transparent = p7SourceRecord(record?.transparent);
+      const negativeResults = record?.negativeResults;
+      const reflectionResults = record?.reflectionResults;
+      return transparent?.getTrapReads === 0
+        && transparent.threw === false
+        && transparent.dualCanonical === true
+        && transparent.detached === true
+        && record?.getterReads === 0
+        && Array.isArray(negativeResults)
+        && negativeResults.length === 6
+        && negativeResults.every(item => {
+          const value = p7SourceRecord(item);
+          return value?.getTrapReads === 0 && value.threw === false && value.rejected === true;
+        })
+        && Array.isArray(reflectionResults)
+        && reflectionResults.length === 3
+        && reflectionResults.every(item => {
+          const value = p7SourceRecord(item);
+          return value?.getTrapReads === 0 && value.trapReads === 1 && value.threw === false && value.rejected === true;
+        });
+    },
+  );
+
+  await recordP7SourceRow(
+    'P7 SourceEditor request-generation late/abort/reload stays one lifecycle',
+    fixtureReady,
+    'active generation accepts exact dual authorities; late and aborted completions are ignored; reload generation accepts the replacement once',
+    () => {
+      const envelope = { core, color };
+      const active = p7SourceClassify(envelope);
+      const late = p7SourceClassify(envelope, { requestActive: false, requestGeneration: 1, currentGeneration: 2 });
+      const aborted = p7SourceClassify(envelope, { signalAborted: true });
+      const reload = p7SourceClassify(envelope, { requestGeneration: 2, currentGeneration: 2 });
+      return { active, late, aborted, reload };
+    },
+    observed => {
+      const record = p7SourceRecord(observed);
+      const active = p7SourceRecord(record?.active);
+      const late = p7SourceRecord(record?.late);
+      const aborted = p7SourceRecord(record?.aborted);
+      const reload = p7SourceRecord(record?.reload);
+      return core !== undefined && color !== undefined
+        && p7SourceCoreCanonical(active, core) && p7SourceColorCanonical(active, color)
+        && late?.status === 'ignored' && late.accepted === false && late.result === null && late.colorEvidence === undefined
+        && aborted?.status === 'ignored' && aborted.accepted === false && aborted.result === null && aborted.colorEvidence === undefined
+        && p7SourceCoreCanonical(reload, core) && p7SourceColorCanonical(reload, color);
+    },
+  );
+
+  await recordP7SourceRow(
+    'P7 SourceEditor visible canonical-default-color detail retains permanent game truth',
+    fixtureReady,
+    'SSR visibly separates canonical-default color status/detail and always retains Not verified in game',
+    () => p7SourceClassify({ core, color: colorFailure }),
+    observed => /canonical.?default.?color/i.test(sourceMarkup)
+      && /Not verified in game/.test(sourceMarkup)
+      && typeof p7SourceRecord(observed)?.colorDetail === 'string'
+      && String(p7SourceRecord(observed)?.colorDetail).includes('P7 color offline'),
+  );
+
+  const failedRows = p7SourceRows.filter(row => !row.pass);
+  console.log(`P7_SOURCE_EDITOR_CANONICAL_COLOR_MATRIX ${JSON.stringify({ total: p7SourceRows.length, passed: p7SourceRows.length - failedRows.length, red: failedRows.map(row => ({ ...row, observed: p7SourceReceipt(row.observed) })), fixtureError })}`);
+  if (failedRows.length > 0) throw new Error(`${failedRows.length} SourceEditor P7 canonical-color checks failed`);
+}
+
+void runP7SourceEditorCanonicalColorMatrix().catch(error => {
+  console.error('X4UiSourceEditor P7 matrix: FAIL');
+  console.error(error);
+  process.exitCode = 1;
+});

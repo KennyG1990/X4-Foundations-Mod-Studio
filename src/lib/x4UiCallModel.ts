@@ -72,6 +72,15 @@ const V1_PROPERTY_NAMES_BY_CALL: Readonly<Record<string, readonly string[]>> = {
   createIcon: ['width', 'height', 'color', 'affectRowHeight', 'x', 'y', 'scaling']
 };
 
+const COLOR_PROPERTY_NAMES = new Set([
+  'color',
+  'bgcolor',
+  'highlightcolor',
+  'bordercolor',
+  'backgroundcolor',
+  'cellbgcolor'
+]);
+
 type LuaNode = {
   type?: string;
   [key: string]: unknown;
@@ -194,6 +203,34 @@ export interface X4UiLoopPathSegment {
   readonly multiplicity: X4UiLoopMultiplicity;
 }
 
+export type X4UiEnclosingStatementKind =
+  | 'local'
+  | 'assignment'
+  | 'function'
+  | 'call'
+  | 'return'
+  | 'if'
+  | 'while'
+  | 'repeat'
+  | 'numeric-for'
+  | 'generic-for'
+  | 'do'
+  | 'break'
+  | 'goto'
+  | 'label'
+  | 'unknown';
+
+export type X4UiCallStatementTerminator = 'none' | 'semicolon';
+
+/** Exact source-derived statement boundary associated with a relevant call. */
+export interface X4UiCallStatementProvenance {
+  readonly source: X4UiSourceLocation;
+  readonly deletionSource: X4UiSourceLocation;
+  readonly terminator: X4UiCallStatementTerminator;
+  readonly kind: X4UiEnclosingStatementKind;
+  readonly isStandaloneCallStatementRoot: boolean;
+}
+
 export interface X4UiFunctionContext {
   kind: 'top-level' | 'function' | 'handler';
   name?: string;
@@ -226,6 +263,115 @@ export type X4UiRelevantCallName =
 export interface X4UiEditBoxSemantics {
   defaultText?: X4UiValue;
   description?: X4UiValue;
+}
+
+/** Exact source range and numeric spelling of one source-literal color field. */
+export interface X4UiColorSourceField {
+  readonly value: number;
+  readonly expression: string;
+  readonly source: X4UiSourceLocation;
+  readonly keySource: X4UiSourceLocation;
+}
+
+/** Exact source range of a symbolic or dynamic Color[...] key. */
+export interface X4UiColorSourceKey {
+  readonly expression: string;
+  readonly source: X4UiSourceLocation;
+}
+
+export interface X4UiColorLiteralExpression {
+  readonly kind: 'literal-table';
+  readonly resolution: 'source-only';
+  readonly expression: string;
+  readonly source: X4UiSourceLocation;
+  /** Exact source-owned literal declaration used by the expression. */
+  readonly declarationExpression: string;
+  readonly declarationSource: X4UiSourceLocation;
+  readonly r: X4UiColorSourceField;
+  readonly g: X4UiColorSourceField;
+  readonly b: X4UiColorSourceField;
+  readonly a: X4UiColorSourceField;
+  readonly glow?: X4UiColorSourceField;
+}
+
+export interface X4UiColorSymbolicReferenceExpression {
+  readonly kind: 'symbolic-reference';
+  readonly resolution: 'symbolic-only';
+  readonly base: 'Color';
+  readonly id: string;
+  readonly key: X4UiColorSourceKey;
+  readonly expression: string;
+  readonly source: X4UiSourceLocation;
+}
+
+export interface X4UiColorDynamicReferenceExpression {
+  readonly kind: 'dynamic-reference';
+  readonly resolution: 'unresolved';
+  readonly base: 'Color';
+  readonly key: X4UiColorSourceKey;
+  readonly expression: string;
+  readonly source: X4UiSourceLocation;
+  readonly reason: string;
+}
+
+export interface X4UiColorConditionalExpression {
+  readonly kind: 'conditional';
+  readonly resolution: 'unresolved';
+  readonly operator: string;
+  readonly operands: readonly X4UiColorSourceKey[];
+  readonly expression: string;
+  readonly source: X4UiSourceLocation;
+}
+
+export interface X4UiColorFunctionExpression {
+  readonly kind: 'function-call';
+  readonly resolution: 'unresolved';
+  readonly calleeExpression: string;
+  readonly calleeSource: X4UiSourceLocation;
+  readonly argumentSources: readonly X4UiSourceLocation[];
+  readonly expression: string;
+  readonly source: X4UiSourceLocation;
+}
+
+export interface X4UiColorScalarExpression {
+  readonly kind: 'scalar';
+  readonly resolution: 'existing-value';
+  readonly status: X4UiValueStatus;
+  readonly type: X4UiValueType;
+  readonly expression: string;
+  readonly source: X4UiSourceLocation;
+  readonly value?: X4UiLiteral;
+  readonly reason?: string;
+}
+
+export interface X4UiColorUnresolvedExpression {
+  readonly kind: 'unresolved';
+  readonly resolution: 'unresolved';
+  readonly expression: string;
+  readonly source: X4UiSourceLocation;
+  readonly reason: string;
+}
+
+/**
+ * Source-only color evidence. This union deliberately has no resolved RGBA,
+ * default-map, or current-runtime fields.
+ */
+export type X4UiColorExpression =
+  | X4UiColorLiteralExpression
+  | X4UiColorSymbolicReferenceExpression
+  | X4UiColorDynamicReferenceExpression
+  | X4UiColorConditionalExpression
+  | X4UiColorFunctionExpression
+  | X4UiColorScalarExpression
+  | X4UiColorUnresolvedExpression;
+
+/** One color expression emitted for a specific source option projection. */
+export interface X4UiCallColorExpression {
+  readonly callName: X4UiRelevantCallName;
+  readonly callSource: X4UiSourceLocation;
+  readonly propertyName: string;
+  readonly source: X4UiSourceLocation;
+  readonly colorExpression: X4UiColorExpression;
 }
 
 /** One source-located property value projected from a known v1 option table. */
@@ -286,6 +432,8 @@ export interface X4UiCallRecord {
   callee: string;
   method: ':' | '.' | 'direct' | 'unknown';
   source: X4UiSourceLocation;
+  /** Exact immutable enclosing Lua statement and standalone-call-root fact. */
+  enclosingStatement: X4UiCallStatementProvenance;
   /** Source offset of the callee/member, useful for fluent-chain ordering. */
   sourceOrder: number;
   /** Global order in the model's ordered records array. */
@@ -449,6 +597,8 @@ export interface X4UiCallModel {
   localInvocations: readonly X4UiLocalFunctionInvocation[];
   /** Exact production Helper receiver aliases and their invalidation history. */
   helperReceiverAliases: readonly X4UiHelperReceiverAliasFact[];
+  /** Frozen, serializable source-only color evidence keyed by call/property provenance. */
+  colorExpressions: readonly X4UiCallColorExpression[];
   /** All relevant records, sorted by source order. */
   records: X4UiRelevantRecord[];
   verificationGaps: X4UiVerificationGap[];
@@ -462,11 +612,17 @@ interface TrackedObject {
   fields: Map<string, InternalValue>;
   indexed: Map<string, TrackedObject>;
   aliases: Set<string>;
+  mutated: boolean;
+  mutatedProperties: Set<string>;
+  /** Private AST declaration retained for source-owned literal resolution. */
+  declarationNode?: LuaNode;
   cellKind?: 'text' | 'button' | 'editbox' | 'icon';
 }
 
 interface InternalValue {
   publicValue: X4UiValue;
+  /** AST node at the exact value use; private source evidence only. */
+  sourceNode?: LuaNode;
   object?: TrackedObject;
   functionNode?: LuaNode;
   localFunction?: InternalLocalFunction;
@@ -513,6 +669,8 @@ interface TrackedObjectStateSnapshot {
   fields: Array<[string, InternalValue]>;
   indexed: Array<[string, TrackedObject]>;
   aliases: string[];
+  mutated: boolean;
+  mutatedProperties: string[];
 }
 
 interface Binding {
@@ -559,6 +717,26 @@ function nodeRange(node: LuaNode | undefined): [number, number] | undefined {
 
 function normalizePropertyName(name: string): string {
   return name.replace(/[-_\s]/g, '').toLowerCase();
+}
+
+function normalizeStatementKind(type: string | undefined): X4UiEnclosingStatementKind {
+  switch (type) {
+    case 'LocalStatement': return 'local';
+    case 'AssignmentStatement': return 'assignment';
+    case 'FunctionDeclaration': return 'function';
+    case 'CallStatement': return 'call';
+    case 'ReturnStatement': return 'return';
+    case 'IfStatement': return 'if';
+    case 'WhileStatement': return 'while';
+    case 'RepeatStatement': return 'repeat';
+    case 'ForNumericStatement': return 'numeric-for';
+    case 'ForGenericStatement': return 'generic-for';
+    case 'DoStatement': return 'do';
+    case 'BreakStatement': return 'break';
+    case 'GotoStatement': return 'goto';
+    case 'LabelStatement': return 'label';
+    default: return 'unknown';
+  }
 }
 
 function isOnClick(name: string): boolean {
@@ -695,11 +873,14 @@ class X4UiCallModelBuilder {
   private readonly localFunctionByNode = new Map<LuaNode, InternalLocalFunction>();
   private readonly localInvocations: X4UiLocalFunctionInvocation[] = [];
   private readonly helperReceiverAliases: X4UiHelperReceiverAliasFact[] = [];
+  private readonly colorExpressions: X4UiCallColorExpression[] = [];
   private readonly controlFlowMutationStates: ControlFlowMutationState[] = [];
   private nextObjectId = 1;
   private nextRecordTie = 1;
   private gapsTruncated = false;
   private functionAnalysisDepth = 0;
+  private currentStatement: LuaNode | undefined;
+  private currentStandaloneCallStatementRoot: LuaNode | undefined;
   private readonly fullLocation: X4UiSourceLocation;
   private readonly topContext: X4UiFunctionContext;
 
@@ -770,6 +951,10 @@ class X4UiCallModelBuilder {
       left.sourceOrder - right.sourceOrder || left.source.end.offset - right.source.end.offset);
     const helperReceiverAliases = [...this.helperReceiverAliases].sort((left, right) =>
       left.source.start.offset - right.source.start.offset || left.source.end.offset - right.source.end.offset);
+    const colorExpressions = [...this.colorExpressions].sort((left, right) =>
+      left.source.start.offset - right.source.start.offset
+      || left.callSource.start.offset - right.callSource.start.offset
+      || left.propertyName.localeCompare(right.propertyName));
 
     return {
       file: this.input,
@@ -781,6 +966,7 @@ class X4UiCallModelBuilder {
       localFunctions: freezeDeepFact(localFunctions),
       localInvocations: freezeDeepFact(localInvocations),
       helperReceiverAliases: freezeDeepFact(helperReceiverAliases),
+      colorExpressions: freezeDeepFact(colorExpressions),
       records,
       verificationGaps: this.gaps,
       verificationGapsTruncated: this.gapsTruncated
@@ -849,6 +1035,48 @@ class X4UiCallModelBuilder {
 
   private sourceOffset(node: LuaNode | undefined): number {
     return nodeRange(node)?.[0] ?? this.location(node).start.offset;
+  }
+
+  private enclosingStatementProvenance(node: LuaNode): X4UiCallStatementProvenance | undefined {
+    const statement = this.currentStatement;
+    const range = nodeRange(statement);
+    const loc = nodeField<LuaLocationLike>(statement, 'loc');
+    const start = loc?.start;
+    const end = loc?.end;
+    if (!statement || !range
+      || !Number.isInteger(range[0]) || !Number.isInteger(range[1])
+      || range[0] < 0 || range[1] < range[0] || range[1] > this.input.text.length
+      || typeof start?.line !== 'number' || typeof start.column !== 'number'
+      || typeof end?.line !== 'number' || typeof end.column !== 'number') {
+      return undefined;
+    }
+    const source = this.location(statement);
+    if (source.start.offset !== range[0] || source.end.offset !== range[1]) return undefined;
+    let suffixEnd = range[1];
+    while (suffixEnd < this.input.text.length
+      && (this.input.text[suffixEnd] === ' ' || this.input.text[suffixEnd] === '\t')) {
+      suffixEnd += 1;
+    }
+    const ownsSemicolon = suffixEnd < this.input.text.length && this.input.text[suffixEnd] === ';';
+    const deletionEnd = ownsSemicolon ? suffixEnd + 1 : range[1];
+    const deletionSource = ownsSemicolon
+      ? {
+        ...source,
+        end: {
+          ...source.end,
+          column: source.end.column + deletionEnd - range[1],
+          offset: deletionEnd
+        }
+      }
+      : source;
+    return freezeDeepFact({
+      source,
+      deletionSource,
+      terminator: ownsSemicolon ? 'semicolon' : 'none',
+      kind: normalizeStatementKind(statement.type),
+      isStandaloneCallStatementRoot: statement.type === 'CallStatement'
+        && this.currentStandaloneCallStatementRoot === node
+    });
   }
 
   private locationIdentity(source: X4UiSourceLocation): string {
@@ -1113,7 +1341,9 @@ class X4UiCallModelBuilder {
       known,
       fields: new Map(),
       indexed: new Map(),
-      aliases: new Set()
+      aliases: new Set(),
+      mutated: false,
+      mutatedProperties: new Set()
     };
   }
 
@@ -1137,6 +1367,17 @@ class X4UiCallModelBuilder {
     resultConsumed = true
   ): InternalValue {
     if (!node) return this.unknown(undefined, 'unknown', 'missing expression');
+
+    const result = this.evaluateNode(node, context, resultConsumed);
+    result.sourceNode = node;
+    return result;
+  }
+
+  private evaluateNode(
+    node: LuaNode,
+    context: X4UiFunctionContext,
+    resultConsumed: boolean
+  ): InternalValue {
 
     switch (node.type) {
       case 'Identifier': {
@@ -1216,6 +1457,7 @@ class X4UiCallModelBuilder {
 
   private evaluateTable(node: LuaNode, context: X4UiFunctionContext): InternalValue {
     const object = this.newObject('object', node, 'literal');
+    object.declarationNode = node;
     for (const field of nodeArray(node, 'fields')) {
       const fieldValueNode = nodeField<LuaNode>(field, 'value');
       const fieldValue = this.evaluate(fieldValueNode, context);
@@ -1530,6 +1772,16 @@ class X4UiCallModelBuilder {
     }
 
     const name = shape.name as X4UiRelevantCallName;
+    const enclosingStatement = this.enclosingStatementProvenance(node);
+    if (!enclosingStatement) {
+      this.addGap(
+        'parse',
+        'unsupported',
+        this.location(node),
+        'relevant call has no locatable enclosing Lua statement'
+      );
+      return this.dynamic(node, 'expression', `${name} result is not modeled`);
+    }
     const analyzed = this.analyzeRelevantCall(name, node, args, receiver, context);
     const record: X4UiCallRecord = {
       recordType: 'call',
@@ -1537,6 +1789,7 @@ class X4UiCallModelBuilder {
       callee: this.textOf(shape.calleeNode),
       method: shape.method,
       source: this.location(node),
+      enclosingStatement,
       sourceOrder: this.sourceOffset(shape.calleeNode),
       order: -1,
       arguments: args.map(argument => argument.publicValue),
@@ -1581,7 +1834,7 @@ class X4UiCallModelBuilder {
         const menuName = this.menuName(menu, node);
         semantics.menuName = menuName.publicValue;
         const options = args[1];
-        this.setOptionProjection(semantics, options, name);
+        this.setOptionProjection(semantics, options, name, node);
         this.setOptionalField(semantics, 'width', options, ['width', 'frameWidth'], 'width');
         this.setOptionalField(semantics, 'height', options, ['height', 'frameHeight'], 'height');
         this.setOptionalField(semantics, 'layer', options, ['layer'], 'layer');
@@ -1595,7 +1848,7 @@ class X4UiCallModelBuilder {
         const count = this.requiredArgument(args, 0, 'count', 'table column count', node);
         semantics.count = count.publicValue;
         const options = args[1];
-        this.setOptionProjection(semantics, options, name);
+        this.setOptionProjection(semantics, options, name, node);
         this.setOptionalField(semantics, 'width', options, ['width', 'tableWidth'], 'width');
         this.setOptionalField(semantics, 'height', options, ['height', 'tableHeight'], 'height');
         this.attachReceiver(semantics, receiver, 'frame', node, 'frame used for addTable');
@@ -1609,7 +1862,7 @@ class X4UiCallModelBuilder {
           semantics.rowData = args[0].publicValue;
           this.addValueGap('data-flow', args[0], 'rowdata selectability is dynamic or unknown');
         }
-        this.setOptionProjection(semantics, options, name);
+        this.setOptionProjection(semantics, options, name, node);
         const height = this.propertyField(options, ['height', 'rowHeight'], 'row height');
         if (height) {
           this.addValueGap('height', height, 'row height is dynamic or unknown');
@@ -1691,7 +1944,7 @@ class X4UiCallModelBuilder {
         const isTextSetter = name === 'setText' || name === 'setText2';
         const options = isEditBox || isButton ? args[0] : args[1];
         const text = isEditBox || isButton || isIcon ? undefined : args[0];
-        this.setOptionProjection(semantics, options, name);
+        this.setOptionProjection(semantics, options, name, node);
         if (isIcon) {
           const icon = this.requiredArgument(args, 0, 'data-flow', 'icon name', node);
           semantics.icon = icon.publicValue;
@@ -1790,10 +2043,295 @@ class X4UiCallModelBuilder {
     semantics[field] = value.publicValue;
   }
 
+  private isColorProperty(name: string): boolean {
+    return COLOR_PROPERTY_NAMES.has(normalizePropertyName(name));
+  }
+
+  private colorSourceLocation(node: LuaNode | undefined, value: InternalValue): X4UiSourceLocation {
+    return node ? this.location(node) : value.publicValue.location;
+  }
+
+  private colorSourceExpression(node: LuaNode | undefined, value: InternalValue): string {
+    return node ? this.textOf(node) : value.publicValue.expression;
+  }
+
+  private colorSourceKey(node: LuaNode | undefined, value: InternalValue): X4UiColorSourceKey {
+    return {
+      expression: this.colorSourceExpression(node, value),
+      source: this.colorSourceLocation(node, value)
+    };
+  }
+
+  private unresolvedColorExpression(
+    node: LuaNode | undefined,
+    value: InternalValue,
+    reason: string
+  ): X4UiColorUnresolvedExpression {
+    return freezeDeepFact({
+      kind: 'unresolved',
+      resolution: 'unresolved',
+      expression: this.colorSourceExpression(node, value),
+      source: this.colorSourceLocation(node, value),
+      reason
+    });
+  }
+
+  private scalarColorExpression(
+    node: LuaNode,
+    value: InternalValue
+  ): X4UiColorScalarExpression {
+    const publicValue = value.publicValue;
+    return freezeDeepFact({
+      kind: 'scalar',
+      resolution: 'existing-value',
+      status: publicValue.status,
+      type: publicValue.type,
+      expression: this.textOf(node),
+      source: this.location(node),
+      ...(publicValue.value !== undefined || publicValue.type === 'nil'
+        ? { value: publicValue.type === 'nil' ? null : publicValue.value }
+        : {}),
+      ...(publicValue.reason ? { reason: publicValue.reason } : {})
+    });
+  }
+
+  private colorTableField(field: LuaNode): {
+    name: string;
+    keyNode: LuaNode;
+    valueNode: LuaNode;
+  } | undefined {
+    const valueNode = nodeField<LuaNode>(field, 'value');
+    if (!valueNode) return undefined;
+    if (field.type === 'TableKeyString') {
+      const keyNode = nodeField<LuaNode>(field, 'key');
+      const name = nodeField<string>(keyNode, 'name');
+      return keyNode && name ? { name, keyNode, valueNode } : undefined;
+    }
+    if (field.type === 'TableKey') {
+      const keyNode = nodeField<LuaNode>(field, 'key');
+      const name = staticString(keyNode);
+      return keyNode && name !== undefined ? { name, keyNode, valueNode } : undefined;
+    }
+    return undefined;
+  }
+
+  private literalColorExpression(
+    sourceNode: LuaNode,
+    declarationNode: LuaNode,
+    value: InternalValue
+  ): X4UiColorExpression {
+    if (declarationNode.type !== 'TableConstructorExpression') {
+      return this.unresolvedColorExpression(sourceNode, value, 'source-literal color declaration is not a table literal');
+    }
+    if (!value.object?.known) {
+      return this.unresolvedColorExpression(sourceNode, value, 'source-literal color table object is unresolved');
+    }
+    if (value.object.mutated || value.object.mutatedProperties.size > 0) {
+      return this.unresolvedColorExpression(sourceNode, value, 'source-literal color table may have been mutated');
+    }
+
+    const fields = new Map<string, X4UiColorSourceField>();
+    for (const field of nodeArray(declarationNode, 'fields')) {
+      const descriptor = this.colorTableField(field);
+      if (!descriptor) {
+        return this.unresolvedColorExpression(
+          sourceNode,
+          value,
+          'source-literal color table contains an unsupported or non-static field key'
+        );
+      }
+      if (!['r', 'g', 'b', 'a', 'glow'].includes(descriptor.name)) {
+        return this.unresolvedColorExpression(
+          sourceNode,
+          value,
+          `source-literal color table contains unknown field "${descriptor.name}"`
+        );
+      }
+      if (fields.has(descriptor.name)) {
+        return this.unresolvedColorExpression(
+          sourceNode,
+          value,
+          `source-literal color table contains duplicate field "${descriptor.name}"`
+        );
+      }
+      const number = descriptor.valueNode.type === 'NumericLiteral'
+        ? staticNumber(descriptor.valueNode)
+        : undefined;
+      if (number === undefined) {
+        return this.unresolvedColorExpression(
+          sourceNode,
+          value,
+          `source-literal color field "${descriptor.name}" is not a static numeric literal`
+        );
+      }
+      fields.set(descriptor.name, {
+        value: number,
+        expression: this.textOf(descriptor.valueNode),
+        source: this.location(descriptor.valueNode),
+        keySource: this.location(descriptor.keyNode)
+      });
+    }
+
+    if (!['r', 'g', 'b', 'a'].every(name => fields.has(name))) {
+      return this.unresolvedColorExpression(
+        sourceNode,
+        value,
+        'source-literal color table must contain exactly numeric r, g, b, and a fields'
+      );
+    }
+
+    const result: X4UiColorLiteralExpression = {
+      kind: 'literal-table',
+      resolution: 'source-only',
+      expression: this.textOf(sourceNode),
+      source: this.location(sourceNode),
+      declarationExpression: this.textOf(declarationNode),
+      declarationSource: this.location(declarationNode),
+      r: fields.get('r') as X4UiColorSourceField,
+      g: fields.get('g') as X4UiColorSourceField,
+      b: fields.get('b') as X4UiColorSourceField,
+      a: fields.get('a') as X4UiColorSourceField,
+      ...(fields.has('glow') ? { glow: fields.get('glow') as X4UiColorSourceField } : {})
+    };
+    return freezeDeepFact(result);
+  }
+
+  private indexedColorExpression(
+    sourceNode: LuaNode,
+    indexNode: LuaNode,
+    value: InternalValue
+  ): X4UiColorExpression {
+    const base = nodeField<LuaNode>(indexNode, 'base');
+    const index = nodeField<LuaNode>(indexNode, 'index');
+    if (base?.type !== 'Identifier' || nodeField<string>(base, 'name') !== 'Color') {
+      return this.unresolvedColorExpression(sourceNode, value, 'color reference base is not the unshadowed Color global');
+    }
+    if (this.bindings.has('Color')) {
+      return this.unresolvedColorExpression(sourceNode, value, 'Color reference is shadowed by a local or assigned binding');
+    }
+    const key = this.colorSourceKey(index, value);
+    const id = index?.type === 'StringLiteral' ? staticString(index) : undefined;
+    if (id !== undefined) {
+      return freezeDeepFact({
+        kind: 'symbolic-reference',
+        resolution: 'symbolic-only',
+        base: 'Color',
+        id,
+        key,
+        expression: this.textOf(sourceNode),
+        source: this.location(sourceNode)
+      });
+    }
+    return freezeDeepFact({
+      kind: 'dynamic-reference',
+      resolution: 'unresolved',
+      base: 'Color',
+      key,
+      expression: this.textOf(sourceNode),
+      source: this.location(sourceNode),
+      reason: 'Color reference key is not a static string literal'
+    });
+  }
+
+  private conditionalColorExpression(
+    sourceNode: LuaNode,
+    conditionalNode: LuaNode,
+    value: InternalValue
+  ): X4UiColorExpression {
+    const left = nodeField<LuaNode>(conditionalNode, 'left');
+    const right = nodeField<LuaNode>(conditionalNode, 'right');
+    const operandValue = value;
+    const operands = [left, right]
+      .filter((operand): operand is LuaNode => Boolean(operand))
+      .map(operand => this.colorSourceKey(operand, operandValue));
+    return freezeDeepFact({
+      kind: 'conditional',
+      resolution: 'unresolved',
+      operator: nodeField<string>(conditionalNode, 'operator') || 'unknown',
+      operands,
+      expression: this.textOf(sourceNode),
+      source: this.location(sourceNode)
+    });
+  }
+
+  private functionColorExpression(
+    sourceNode: LuaNode,
+    callNode: LuaNode
+  ): X4UiColorExpression {
+    const shape = this.callShape(callNode);
+    const calleeNode = shape.calleeNode || callNode;
+    return freezeDeepFact({
+      kind: 'function-call',
+      resolution: 'unresolved',
+      calleeExpression: this.textOf(calleeNode),
+      calleeSource: this.location(calleeNode),
+      argumentSources: shape.args.map(argument => this.location(argument)),
+      expression: this.textOf(sourceNode),
+      source: this.location(sourceNode)
+    });
+  }
+
+  private colorExpression(value: InternalValue): X4UiColorExpression {
+    const node = value.sourceNode;
+    if (!node) return this.unresolvedColorExpression(undefined, value, 'color expression has no source AST node');
+
+    let shape = node;
+    while (shape.type === 'ParenthesizedExpression') {
+      const inner = nodeField<LuaNode>(shape, 'expression');
+      if (!inner) break;
+      shape = inner;
+    }
+
+    const declarationNode = value.object?.declarationNode;
+    const indexBase = shape.type === 'IndexExpression'
+      ? nodeField<LuaNode>(shape, 'base')
+      : undefined;
+    if (shape.type === 'IndexExpression'
+      && indexBase?.type === 'Identifier'
+      && nodeField<string>(indexBase, 'name') === 'Color') {
+      return this.indexedColorExpression(node, shape, value);
+    }
+    if (declarationNode
+      && ['TableConstructorExpression', 'Identifier', 'MemberExpression', 'IndexExpression'].includes(shape.type)) {
+      return this.literalColorExpression(node, declarationNode, value);
+    }
+
+    switch (shape.type) {
+      case 'TableConstructorExpression':
+        return this.literalColorExpression(node, shape, value);
+      case 'IndexExpression':
+        return this.indexedColorExpression(node, shape, value);
+      case 'LogicalExpression':
+      case 'BinaryExpression': {
+        const operator = nodeField<string>(shape, 'operator');
+        if (shape.type === 'LogicalExpression' || operator === 'and' || operator === 'or') {
+          return this.conditionalColorExpression(node, shape, value);
+        }
+        break;
+      }
+      case 'CallExpression':
+      case 'StringCallExpression':
+      case 'TableCallExpression':
+        return this.functionColorExpression(node, shape);
+      default:
+        break;
+    }
+
+    if (['string', 'number', 'boolean', 'nil'].includes(value.publicValue.type)) {
+      return this.scalarColorExpression(node, value);
+    }
+    return this.unresolvedColorExpression(
+      node,
+      value,
+      `color expression shape ${node.type || 'unknown'} is not source-resolvable`
+    );
+  }
+
   private setOptionProjection(
     semantics: X4UiCallSemantics,
     options: InternalValue | undefined,
-    callName: X4UiRelevantCallName
+    callName: X4UiRelevantCallName,
+    callNode: LuaNode
   ): void {
     if (!options) return;
     semantics.options = options.publicValue;
@@ -1802,13 +2340,26 @@ class X4UiCallModelBuilder {
     const propertyNames = V1_PROPERTY_NAMES_BY_CALL[callName];
     if (options.object?.known && propertyNames) {
       const wanted = new Set(propertyNames.map(normalizePropertyName));
-      const project = ([name, value]: [string, InternalValue]): X4UiCallPropertyProjection => ({
+      const project = ([name, value]: [string, InternalValue]): X4UiCallPropertyProjection => {
+        const colorExpression = this.isColorProperty(name) ? this.colorExpression(value) : undefined;
+        if (colorExpression) {
+          this.colorExpressions.push({
+            callName,
+            callSource: this.location(callNode),
+            propertyName: name,
+            source: colorExpression.source,
+            colorExpression
+          });
+        }
+        const projection: X4UiCallPropertyProjection = {
           name,
           normalizedName: normalizePropertyName(name),
           value: value.publicValue,
           source: value.publicValue.location,
           sourceOrder: value.publicValue.location.start.offset
-        });
+        };
+        return projection;
+      };
       const fields = [...options.object.fields.entries()];
       semantics.properties = fields.filter(([name]) => wanted.has(normalizePropertyName(name))).map(project);
       if (callName === 'setText' || callName === 'setText2') {
@@ -2286,6 +2837,11 @@ class X4UiCallModelBuilder {
     return object;
   }
 
+  private markObjectMutation(object: TrackedObject, name?: string): void {
+    object.mutated = true;
+    if (name) object.mutatedProperties.add(normalizePropertyName(name));
+  }
+
   private assignTarget(
     target: LuaNode,
     value: InternalValue,
@@ -2306,7 +2862,10 @@ class X4UiCallModelBuilder {
         this.addGap('unsupported', 'unsupported', this.location(target), 'member assignment has no static property name', this.textOf(target));
         return;
       }
-      if (object) object.fields.set(name, value);
+      if (object) {
+        object.fields.set(name, value);
+        this.markObjectMutation(object, name);
+      }
       if (object) this.recordControlFlowPropertyMutation(object, name);
       this.refreshObjectKind(object || this.newObject('unknown', target, 'unknown', undefined, undefined, false));
       this.addProperty(object, name, nodeField<LuaNode>(target, 'identifier') || target, value, assignment, target, context);
@@ -2318,11 +2877,15 @@ class X4UiCallModelBuilder {
       const object = this.ensureObjectForTarget(baseNode || target, baseValue, context);
       const index = this.evaluate(nodeField<LuaNode>(target, 'index'), context);
       if (index.publicValue.status !== 'static') this.addValueGap('index', index, 'indexed assignment position is dynamic or unknown');
-      if (object && index.publicValue.status !== 'static') this.recordControlFlowPropertyMutation(object);
+      if (object && index.publicValue.status !== 'static') {
+        this.markObjectMutation(object);
+        this.recordControlFlowPropertyMutation(object);
+      }
       if (object && index.publicValue.status === 'static' && (index.publicValue.type === 'string' || index.publicValue.type === 'number')) {
         const property = String(index.publicValue.value);
         if (index.publicValue.type === 'string') {
           object.fields.set(property, value);
+          this.markObjectMutation(object, property);
           this.recordControlFlowPropertyMutation(object, property);
           this.addProperty(object, property, nodeField<LuaNode>(target, 'index') || target, value, 'index-assignment', target, context);
         } else if (value.object) {
@@ -2351,7 +2914,9 @@ class X4UiCallModelBuilder {
         known: object.known,
         fields: [...object.fields.entries()],
         indexed: [...object.indexed.entries()],
-        aliases: [...object.aliases]
+        aliases: [...object.aliases],
+        mutated: object.mutated,
+        mutatedProperties: [...object.mutatedProperties]
       });
       for (const value of object.fields.values()) {
         if (value.object) visit(value.object);
@@ -2374,6 +2939,9 @@ class X4UiCallModelBuilder {
       for (const [index, child] of snapshot.indexed) object.indexed.set(index, child);
       object.aliases.clear();
       for (const alias of snapshot.aliases) object.aliases.add(alias);
+      object.mutated = snapshot.mutated;
+      object.mutatedProperties.clear();
+      for (const property of snapshot.mutatedProperties) object.mutatedProperties.add(property);
 
       const reference = object.reference as unknown as Record<string, unknown>;
       const savedReference = snapshot.reference as unknown as Record<string, unknown>;
@@ -2647,6 +3215,8 @@ class X4UiCallModelBuilder {
 
   private invalidateControlFlowProperty(object: TrackedObject, name: string, boundary: LuaNode): void {
     const normalized = normalizePropertyName(name);
+    object.mutated = true;
+    object.mutatedProperties.add(normalized);
     const fieldNames = [...object.fields.keys()].filter(field => normalizePropertyName(field) === normalized);
     if (fieldNames.length === 0) fieldNames.push(name);
 
@@ -2725,7 +3295,14 @@ class X4UiCallModelBuilder {
   }
 
   private processStatement(statement: LuaNode, bindings: Map<string, Binding>, context: X4UiFunctionContext): void {
-    switch (statement.type) {
+    const previousStatement = this.currentStatement;
+    const previousStandaloneCallStatementRoot = this.currentStandaloneCallStatementRoot;
+    this.currentStatement = statement;
+    this.currentStandaloneCallStatementRoot = statement.type === 'CallStatement'
+      ? nodeField<LuaNode>(statement, 'expression')
+      : undefined;
+    try {
+      switch (statement.type) {
       case 'LocalStatement': {
         const variables = nodeArray(statement, 'variables');
         const initializers = nodeArray(statement, 'init');
@@ -2793,9 +3370,11 @@ class X4UiCallModelBuilder {
         );
         break;
       case 'ForNumericStatement':
-        nodeArray(statement, 'start').forEach(value => this.evaluate(value, context));
-        nodeArray(statement, 'end').forEach(value => this.evaluate(value, context));
-        nodeArray(statement, 'step').forEach(value => this.evaluate(value, context));
+        [
+          nodeField<LuaNode>(statement, 'start'),
+          nodeField<LuaNode>(statement, 'end'),
+          nodeField<LuaNode>(statement, 'step')
+        ].filter((value): value is LuaNode => Boolean(value)).forEach(value => this.evaluate(value, context));
         this.processControlFlowBodies(
           [nodeArray(statement, 'body')],
           context,
@@ -2820,6 +3399,10 @@ class X4UiCallModelBuilder {
       default:
         this.processNestedCalls(statement, context);
         break;
+      }
+    } finally {
+      this.currentStatement = previousStatement;
+      this.currentStandaloneCallStatementRoot = previousStandaloneCallStatementRoot;
     }
   }
 

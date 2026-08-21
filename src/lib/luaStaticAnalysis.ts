@@ -687,7 +687,8 @@ export function runLuaStaticAnalysisSelftest(): { pass: boolean; checks: { name:
     "OpenMenu('M', nil, nil, true)",
     ''
   ].join('\n');
-  const fatalUiText = cleanUiText.replace('frame:addTable(12)', 'frame:addTable(13)');
+  const warningUiText = cleanUiText.replace('frame:addTable(12)', 'frame:addTable(13)');
+  const errorUiText = cleanUiText.replace('frame:addTable(12)', 'frame:addTable(24)');
   const dynamicUiText = [
     "local menu = { name = 'M', layer = 1 }",
     'local frame = Helper.createFrameHandle(menu, { layer = 1 })',
@@ -707,19 +708,20 @@ export function runLuaStaticAnalysisSelftest(): { pass: boolean; checks: { name:
     focusedFile('scripts/bom_invalid.lua', '\uFEFFfunction nope(\n', 'bom-invalid')
   ]);
   const bomUiAnalysis = analyzeLuaFiles([
-    focusedFile('ui/bom_too_many_columns.lua', `\uFEFF${fatalUiText}`, 'bom-ui')
+    focusedFile('ui/bom_too_many_columns.lua', `\uFEFF${warningUiText}`, 'bom-ui')
   ]);
   const nonBomUiAnalysis = analyzeLuaFiles([
-    focusedFile('ui/bom_too_many_columns.lua', fatalUiText, 'bom-ui')
+    focusedFile('ui/bom_too_many_columns.lua', warningUiText, 'bom-ui')
   ]);
 
   const cleanUiAnalysis = analyzeLuaFiles([focusedFile('ui/clean12.lua', cleanUiText, 'clean12')]);
-  const fatalUiAnalysis = analyzeLuaFiles([focusedFile('ui/too_many_columns.lua', fatalUiText, 'fatal13')]);
+  const warningUiAnalysis = analyzeLuaFiles([focusedFile('ui/warning_columns.lua', warningUiText, 'warning13')]);
+  const errorUiAnalysis = analyzeLuaFiles([focusedFile('ui/too_many_columns.lua', errorUiText, 'error24')]);
   const dynamicUiAnalysis = analyzeLuaFiles([focusedFile('ui/dynamic_count.lua', dynamicUiText, 'dynamic')]);
   const mixedUiAnalysis = analyzeLuaFiles([focusedFile('ui/error_and_gap.lua', [
     "local menu = { name = 'M', layer = 1 }",
     'local frame = Helper.createFrameHandle(menu, { layer = 1 })',
-    'local fatalTable = frame:addTable(13)',
+    'local fatalTable = frame:addTable(24)',
     'local count = getCount()',
     'local dynamicTable = frame:addTable(count)',
     "OpenMenu('M', nil, nil, true)",
@@ -735,8 +737,9 @@ export function runLuaStaticAnalysisSelftest(): { pass: boolean; checks: { name:
   ]);
 
   const cleanUiResult = cleanUiAnalysis.x4UiResults[0]?.result;
-  const fatalUiResult = fatalUiAnalysis.x4UiResults[0]?.result;
-  const fatalUiFinding = fatalUiAnalysis.findings.find(finding =>
+  const warningUiResult = warningUiAnalysis.x4UiResults[0]?.result;
+  const errorUiResult = errorUiAnalysis.x4UiResults[0]?.result;
+  const errorUiFinding = errorUiAnalysis.findings.find(finding =>
     finding.rel === 'ui/too_many_columns.lua' && finding.code === 'x4-ui.add-table-column-limit'
   );
   const dynamicUiResult = dynamicUiAnalysis.x4UiResults[0]?.result;
@@ -770,9 +773,10 @@ export function runLuaStaticAnalysisSelftest(): { pass: boolean; checks: { name:
         finding.code === 'lua.syntax_error' && finding.rel === 'scripts/bom_invalid.lua')
     },
     {
-      name: 'bom_prefixed_x4_ui_finding_matches_non_bom_line',
+      name: 'bom_prefixed_x4_ui_warning_matches_non_bom_line',
       pass: bomUiFinding?.code === nonBomUiFinding?.code
-        && bomUiFinding?.severity === nonBomUiFinding?.severity
+        && bomUiFinding?.severity === 'warning'
+        && nonBomUiFinding?.severity === 'warning'
         && bomUiFinding?.line === nonBomUiFinding?.line
         && bomUiFinding?.line === 3
         && bomUiFinding?.column === nonBomUiFinding?.column
@@ -791,19 +795,40 @@ export function runLuaStaticAnalysisSelftest(): { pass: boolean; checks: { name:
             && (finding.severity === 'error' || finding.severity === 'warning'))
     },
     {
-      name: 'x4_ui_add_table_13_projected_with_structured_cause',
-      pass: fatalUiResult?.hasErrors === true
-        && fatalUiResult.errorCount === 1
-        && fatalUiFinding?.severity === 'error'
-        && fatalUiFinding.line === 3
-        && fatalUiFinding.column !== undefined
-        && fatalUiFinding.message.includes('12 passed / 24 failed / 13-23 unbisected')
-        && fatalUiFinding.message.includes('ENTIRE frame')
-        && fatalUiFinding.message.includes('conversation-open')
-        && fatalUiFinding.failureMode?.includes('conversation-open') === true
-        && fatalUiFinding.cause?.includes('twelve-column boundary') === true
-        && fatalUiFinding.evidenceBoundary?.includes('13-23 unbisected') === true
-        && fatalUiFinding.nextAction?.includes('twelve or fewer') === true
+      name: 'x4_ui_add_table_13_is_warning_and_not_clean',
+      pass: warningUiResult?.status === 'warnings'
+        && warningUiResult.summary === 'Known X4 UI warning reported'
+        && warningUiResult.warningCount === 1
+        && warningUiResult.hasWarnings
+        && !warningUiResult.hasErrors
+        && warningUiResult.isStaticallyVerified
+        && warningUiAnalysis.x4UiSummary.warningCount === 1
+        && warningUiAnalysis.x4UiSummary.errorCount === 0
+        && warningUiAnalysis.findings.some(finding =>
+          finding.rel === 'ui/warning_columns.lua' && finding.code === 'x4-ui.add-table-column-limit'
+            && finding.severity === 'warning'
+            && finding.message.includes('13-23')
+            && finding.message.includes('valid 13-column tables')
+            && !finding.message.includes('ENTIRE frame'))
+    },
+    {
+      name: 'x4_ui_add_table_24_is_blocking_with_structured_cause',
+      pass: errorUiResult?.status === 'errors'
+        && errorUiResult.summary === 'Known X4 UI rule violated'
+        && errorUiResult.hasErrors === true
+        && errorUiResult.errorCount === 1
+        && !errorUiResult.hasWarnings
+        && errorUiResult.isStaticallyVerified
+        && errorUiFinding?.severity === 'error'
+        && errorUiFinding.line === 3
+        && errorUiFinding.column !== undefined
+        && errorUiFinding.message.includes('12 passed / 24 failed / 13-23 unbisected')
+        && errorUiFinding.failureMode?.includes('conversation-open') === true
+        && errorUiFinding.failureMode?.includes('ENTIRE frame') === true
+        && errorUiFinding.cause?.includes('measured mod refusal boundary') === true
+        && errorUiFinding.evidenceBoundary?.includes('13-23 unbisected') === true
+        && errorUiFinding.evidenceBoundary?.includes('valid 13-column tables') === true
+        && errorUiFinding.nextAction?.includes('twelve or fewer') === true
     },
     {
       name: 'x4_ui_dynamic_count_unverified_summary_only',
@@ -865,10 +890,12 @@ export function runLuaStaticAnalysisSelftest(): { pass: boolean; checks: { name:
       name: 'x4_ui_analysis_is_deterministic',
       pass: JSON.stringify(analyzeLuaFiles([
         focusedFile('ui/clean12.lua', cleanUiText, 'repeat'),
-        focusedFile('ui/too_many_columns.lua', fatalUiText, 'repeat')
+        focusedFile('ui/warning_columns.lua', warningUiText, 'repeat'),
+        focusedFile('ui/too_many_columns.lua', errorUiText, 'repeat')
       ])) === JSON.stringify(analyzeLuaFiles([
         focusedFile('ui/clean12.lua', cleanUiText, 'repeat'),
-        focusedFile('ui/too_many_columns.lua', fatalUiText, 'repeat')
+        focusedFile('ui/warning_columns.lua', warningUiText, 'repeat'),
+        focusedFile('ui/too_many_columns.lua', errorUiText, 'repeat')
       ]))
     }
   );

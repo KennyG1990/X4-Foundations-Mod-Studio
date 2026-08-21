@@ -1,3 +1,4 @@
+import { strict as assert } from 'node:assert';
 import type { ModWorkspace, PassthroughFile } from '../types';
 import {
   buildX4UiWorkspaceSource,
@@ -9,9 +10,13 @@ import {
   X4_UI_CORPUS_FILE_URL,
   X4_UI_CORPUS_MANIFEST_URL,
   X4_UI_CORPUS_STATUS_URL,
+  X4_UI_CORPUS_9_00_COLOR_CONTRACT,
   isX4UiCorpusCanonicalSuccess,
+  isX4UiCorpusCanonicalColorSuccess,
   loadCanonicalX4UiCorpusAssets,
+  loadCanonicalX4UiCorpusColorEvidence,
   type X4UiCorpusCanonicalSuccess,
+  type X4UiCorpusCanonicalColorSuccess,
   type X4UiCorpusFetchResponse,
 } from './x4UiCorpusAssets';
 import {
@@ -23,7 +28,12 @@ import {
 import {
   KEEP_OUT_IDS,
   KEEP_OUT_PRESET_IDS,
+  NOT_VERIFIED_IN_GAME,
+  calibrateKeepOutPolygon,
+  getBuiltInKeepOut,
   projectBuiltInKeepOut,
+  projectKeepOut,
+  type X4UiKeepOutEntry,
 } from './x4UiKeepOuts';
 import {
   buildX4UiPreviewProfile,
@@ -41,12 +51,139 @@ import type { X4UiScene } from './x4UiScene';
 type Check = { readonly name: string; readonly pass: boolean; readonly detail?: unknown };
 type JsonRecord = Record<string, unknown>;
 type PaintTestInput = Omit<X4UiPaintPlanInput, 'previewAuthority'> & { readonly previewAuthority?: unknown };
+
+type ProxyTrapCounts = {
+  total: number;
+  get: number;
+  getPrototypeOf: number;
+  ownKeys: number;
+  getOwnPropertyDescriptor: number;
+};
+
+type ProxyTrapField = Exclude<keyof ProxyTrapCounts, 'total'>;
+type ProxyTrapVector = Readonly<ProxyTrapCounts>;
+
+function armableTransparentProxy<T extends object>(
+  target: T,
+  counts: ProxyTrapCounts,
+  state: { armed: boolean },
+): T {
+  const mark = (name: keyof Omit<ProxyTrapCounts, 'total'>): void => {
+    if (state.armed) throw new Error('post-call proxy trap executed');
+    counts.total += 1;
+    counts[name] += 1;
+  };
+  return new Proxy(target, {
+    get: (current, property, receiver) => {
+      mark('get');
+      return Reflect.get(current, property, receiver);
+    },
+    getPrototypeOf: current => {
+      mark('getPrototypeOf');
+      return Reflect.getPrototypeOf(current);
+    },
+    ownKeys: current => {
+      mark('ownKeys');
+      return Reflect.ownKeys(current);
+    },
+    getOwnPropertyDescriptor: (current, property) => {
+      mark('getOwnPropertyDescriptor');
+      return Reflect.getOwnPropertyDescriptor(current, property);
+    },
+  });
+}
+
+function proxyTrapCensusMatches(actual: unknown, expected: ProxyTrapVector): boolean {
+  if (actual === null || typeof actual !== 'object' || Array.isArray(actual)) return false;
+  const observed = actual as Partial<Record<keyof ProxyTrapCounts, unknown>>;
+  return observed.total === expected.total
+    && observed.get === expected.get
+    && observed.getPrototypeOf === expected.getPrototypeOf
+    && observed.ownKeys === expected.ownKeys
+    && observed.getOwnPropertyDescriptor === expected.getOwnPropertyDescriptor;
+}
+
+function proxyTrapCountsWithDelta(expected: ProxyTrapVector, field: ProxyTrapField, delta: number): ProxyTrapCounts {
+  const perturbed: ProxyTrapCounts = { ...expected };
+  perturbed.total += delta;
+  perturbed[field] += delta;
+  return perturbed;
+}
+
+function assertProxyTrapCensusOracleSensitivity(expected: ProxyTrapVector): JsonRecord {
+  const result = {
+    accepted: proxyTrapCensusMatches(expected, expected),
+    getPlusOneRejected: !proxyTrapCensusMatches(proxyTrapCountsWithDelta(expected, 'get', 1), expected),
+    ownKeysPlusOneRejected: !proxyTrapCensusMatches(proxyTrapCountsWithDelta(expected, 'ownKeys', 1), expected),
+    getPrototypeOfPlusOneRejected: !proxyTrapCensusMatches(proxyTrapCountsWithDelta(expected, 'getPrototypeOf', 1), expected),
+    descriptorPlusOneRejected: !proxyTrapCensusMatches(proxyTrapCountsWithDelta(expected, 'getOwnPropertyDescriptor', 1), expected),
+    descriptorMinusOneRejected: !proxyTrapCensusMatches(proxyTrapCountsWithDelta(expected, 'getOwnPropertyDescriptor', -1), expected),
+  };
+  assert.deepEqual(result, {
+    accepted: true,
+    getPlusOneRejected: true,
+    ownKeysPlusOneRejected: true,
+    getPrototypeOfPlusOneRejected: true,
+    descriptorPlusOneRejected: true,
+    descriptorMinusOneRejected: true,
+  }, `Proxy trap census oracle sensitivity failed: ${JSON.stringify(result)}`);
+  return result;
+}
+
+const PAINT_FOUR_ITEM_CONTAINER_PROXY_TRAPS: ProxyTrapVector = {
+  total: 7,
+  get: 0,
+  getPrototypeOf: 1,
+  ownKeys: 1,
+  getOwnPropertyDescriptor: 5,
+};
+const PAINT_DIRECT_ITEM_PROXY_TRAPS: ProxyTrapVector = {
+  total: 5,
+  get: 0,
+  getPrototypeOf: 1,
+  ownKeys: 1,
+  getOwnPropertyDescriptor: 3,
+};
+const PAINT_MIXED_HOSTILE_CONTAINER_PROXY_TRAPS: ProxyTrapVector = {
+  total: 5,
+  get: 0,
+  getPrototypeOf: 1,
+  ownKeys: 1,
+  getOwnPropertyDescriptor: 3,
+};
+const PAINT_ONE_ITEM_TOCTOU_PROXY_TRAPS: ProxyTrapVector = {
+  total: 4,
+  get: 0,
+  getPrototypeOf: 1,
+  ownKeys: 1,
+  getOwnPropertyDescriptor: 2,
+};
+
 const checks: Check[] = [];
 
 let issuedPreviewAuthority: X4UiPreviewPipelineResult | undefined;
 
 function asRecord(value: unknown): JsonRecord | undefined {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : undefined;
+}
+
+const COLOR_FACT_FIELDS = ['field', 'slot', 'value', 'domain', 'provenance', 'expression', 'source', 'sourcePin', 'sampleId', 'gameVerification'] as const;
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(item => stableJson(item)).join(',')}]`;
+  const record = asRecord(value);
+  if (record !== undefined) return `{${Object.keys(record).sort().map(key => `${JSON.stringify(key)}:${stableJson(record[key])}`).join(',')}}`;
+  return JSON.stringify(value);
+}
+
+function colorFactSignature(value: unknown): string | undefined {
+  const record = asRecord(value);
+  if (record === undefined) return undefined;
+  const copy: JsonRecord = {};
+  for (const field of COLOR_FACT_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(record, field)) copy[field] = record[field];
+  }
+  return stableJson(copy);
 }
 
 function alternateCodePointFor(
@@ -238,6 +375,48 @@ async function loadCanonicalFixture(): Promise<X4UiCorpusCanonicalSuccess> {
   return result;
 }
 
+async function loadCanonicalColorFixture(): Promise<X4UiCorpusCanonicalColorSuccess> {
+  const root = 'paint-plan-color-canonical-root';
+  const generation = 'paint-plan-color-canonical-generation';
+  const contract = X4_UI_CORPUS_9_00_COLOR_CONTRACT;
+  const colorDefinitions = Array.from({ length: 224 }, (_unused, index) => `<color id="paint_color_${String(index)}" r="${String(index % 256)}" g="${String((index + 1) % 256)}" b="${String((index + 2) % 256)}" a="255" glow="0" />`).join('');
+  const colorMappings = Array.from({ length: 804 }, (_unused, index) => `<mapping id="paint_mapping_${String(index)}" ref="paint_color_${String(index % 224)}" />`).join('');
+  const xmlText = `<colormap><colors>${colorDefinitions}</colors><mappings>${colorMappings}</mappings></colormap>`;
+  const xsdText = '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:simpleType name="colorId"><xs:restriction base="xs:string"><xs:pattern value="[a-zA-Z_][a-zA-Z0-9_]*"/></xs:restriction></xs:simpleType><xs:simpleType name="colorid"><xs:restriction base="xs:string"><xs:pattern value="[a-zA-Z_][a-zA-Z0-9_]*"/></xs:restriction></xs:simpleType><xs:element name="colormap"><xs:complexType><xs:sequence><xs:choice minOccurs="0" maxOccurs="unbounded"><xs:element name="color"><xs:complexType><xs:attribute name="id" type="colorId" use="required"/><xs:attribute name="r" type="xs:unsignedByte"/><xs:attribute name="g" type="xs:unsignedByte"/><xs:attribute name="b" type="xs:unsignedByte"/><xs:attribute name="a" type="xs:unsignedByte"/><xs:attribute name="glow" type="xs:unsignedByte"/></xs:complexType></xs:element><xs:element name="mapping"><xs:complexType><xs:attribute name="id" type="colorId" use="required"/><xs:attribute name="ref" type="colorId" use="required"/></xs:complexType></xs:element></xs:choice></xs:sequence></xs:complexType></xs:element></xs:schema>';
+  const padToSize = (value: string, size: number): Uint8Array => new TextEncoder().encode(`${value}${' '.repeat(size - new TextEncoder().encode(value).byteLength)}`);
+  const buffers = new Map<string, Uint8Array>([
+    [contract.xml.relativePath, padToSize(xmlText, contract.xml.size)],
+    [contract.xsd.relativePath, padToSize(xsdText, contract.xsd.size)],
+  ]);
+  const expectedHashes = [contract.xml.sha256, contract.xsd.sha256];
+  const status = {
+    available: true,
+    root,
+    generatedAt: '2026-08-12T00:00:00.000Z',
+    manifestGeneration: generation,
+    manifest: { available: true, state: 'ready', root, current: { generation, root, generatedAt: '2026-08-12T00:00:00.000Z' } },
+  };
+  const transport = async (url: string): Promise<X4UiCorpusFetchResponse> => {
+    if (url === X4_UI_CORPUS_STATUS_URL) return jsonResponse(status);
+    if (url.startsWith(`${X4_UI_CORPUS_MANIFEST_URL}?`)) {
+      const path = pathFromQuery(url, 'q');
+      const bytes = buffers.get(path);
+      if (!bytes) throw new Error(`unknown color manifest path ${path}`);
+      return jsonResponse({ status: manifestStatus(root, generation), generation, total: 1, limit: 500, offset: 0, files: [{ path, bytes: bytes.byteLength }] });
+    }
+    if (url.startsWith(`${X4_UI_CORPUS_FILE_URL}?`)) {
+      const path = pathFromQuery(url, 'path');
+      const bytes = buffers.get(path);
+      if (!bytes) throw new Error(`unknown color file path ${path}`);
+      return bytesResponse(bytes, 200, 'application/xml');
+    }
+    throw new Error(`unexpected canonical color URL ${url}`);
+  };
+  const result = await withCanonicalPlatformHash(expectedHashes, () => loadCanonicalX4UiCorpusColorEvidence({ transport }));
+  if (!isX4UiCorpusCanonicalColorSuccess(result)) throw new Error(`canonical color loader did not issue canonical success: ${JSON.stringify(result)}`);
+  return result;
+}
+
 function passthrough(path: string, content: string, extra: Partial<PassthroughFile> = {}): PassthroughFile {
   return { path, content, ...extra };
 }
@@ -292,6 +471,102 @@ function sourceFixture(): X4UiWorkspaceSource {
       '',
     ].join('\n')),
     passthrough('ui/canonical.lua', lua, { reason: 'unparsed' }),
+  ]));
+}
+
+function colorSourceFixture(): X4UiWorkspaceSource {
+  const lua = [
+    'local menu = { name = "ColorCanonical", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80, layer = 1 })',
+    'local table = frame:addTable(4, { width = 100, reserveScrollBar = false, scaling = false, backgroundColor = Color["paint_color_0"] })',
+    'table:setColWidth(1, 20, false)',
+    'table:setColWidth(2, 20, false)',
+    'table:setColWidth(3, 20, false)',
+    'table:setColWidth(4, 20, false)',
+    'local row = table:addRow(false, { paddingTop = 1, paddingBottom = 1, borderBelow = false, fixed = false })',
+    'row[1]:setColSpan(2):createText("direct", { height = 12, minRowHeight = 10, color = { r = 11, g = 21, b = 31, a = 41 }, cellbgcolor = { r = 12, g = 22, b = 32, a = 42 } })',
+    'row[3]:createButton({ height = 0, affectRowHeight = false, bgcolor = { r = 13, g = 23, b = 33, a = 43 }, highlightcolor = { r = 14, g = 24, b = 34, a = 44 }, bordercolor = { r = 15, g = 25, b = 35, a = 45 } }):setText("button", { x = 0, y = 0, color = { r = 16, g = 26, b = 36, a = 46 } }):setText2("bold", { x = 0, y = 0, halign = "right", font = "Zekton Bold", fontsize = 16, color = { r = 17, g = 27, b = 37, a = 47 } })',
+    'row[4]:createIcon("solid", { height = 8, affectRowHeight = false, color = { r = 19, g = 29, b = 39, a = 49 } })',
+    'local editRow = table:addRow(false, { paddingTop = 1, paddingBottom = 1, borderBelow = false, fixed = false })',
+    'editRow[1]:createEditBox({ height = 8, affectRowHeight = false, bgcolor = { r = 18, g = 28, b = 38, a = 48 } })',
+    'local secondaryMenu = { name = "Secondary", layer = 0 }',
+    'local secondaryFrame = Helper.createFrameHandle(secondaryMenu, { width = 100, height = 80, layer = 0 })',
+    'local secondaryTable = secondaryFrame:addTable(1, { width = 40, reserveScrollBar = false, scaling = false })',
+    'secondaryTable:setColWidth(1, 40, false)',
+    'local secondaryRow = secondaryTable:addRow(false, {})',
+    'secondaryRow[1]:createText("secondary", { height = 8 })',
+    'secondaryFrame:display()',
+    'frame:display()',
+    '',
+  ].join('\n');
+  return buildX4UiWorkspaceSource(workspace([
+    passthrough('ui.xml', [
+      '<?xml version="1.0" encoding="utf-8"?>',
+      '<addon name="color-canonical-fixture">',
+      '  <environment type="menus">',
+      '    <file name="ui/color.lua" />',
+      '  </environment>',
+      '</addon>',
+      '',
+    ].join('\n')),
+    passthrough('ui/color.lua', lua, { reason: 'unparsed' }),
+  ]));
+}
+
+function reverseGapSourceFixture(): X4UiWorkspaceSource {
+  const lua = [
+    'local menu = { name = "ReverseGapOrder", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local first = frame:addTable(1, { width = 40 })',
+    'first:setColWidth(1, 40, false)',
+    'local firstRow = first:addRow(false, {})',
+    'firstRow[1]:createText("first", {})',
+    'local second = frame:addTable(1, { width = 40 })',
+    'second:setColWidth(1, 40, false)',
+    'local secondRow = second:addRow(false, {})',
+    'secondRow[1]:createText("second", {})',
+    'if getChoice() then',
+    '  local conditional = second:addRow(false, {})',
+    'end',
+    'frame:display()',
+    '',
+  ].join('\n');
+  return buildX4UiWorkspaceSource(workspace([
+    passthrough('ui.xml', [
+      '<?xml version="1.0" encoding="utf-8"?>',
+      '<addon name="reverse-gap-fixture">',
+      '  <environment type="menus">',
+      '    <file name="ui/reverse-gap.lua" />',
+      '  </environment>',
+      '</addon>',
+      '',
+    ].join('\n')),
+    passthrough('ui/reverse-gap.lua', lua, { reason: 'unparsed' }),
+  ]));
+}
+
+function dynamicGapSourceFixture(): X4UiWorkspaceSource {
+  const lua = [
+    'local menu = { name = "DynamicGapPaint", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 80, reserveScrollBar = false, scaling = false })',
+    'table:setColWidth(1, 80, false)',
+    'local row = table:addRow(false, {})',
+    'row[1]:createText(getRuntimeText(), { height = 10, minRowHeight = 10 })',
+    'frame:display()',
+    '',
+  ].join('\n');
+  return buildX4UiWorkspaceSource(workspace([
+    passthrough('ui.xml', [
+      '<?xml version="1.0" encoding="utf-8"?>',
+      '<addon name="dynamic-gap-fixture">',
+      '  <environment type="menus">',
+      '    <file name="ui/dynamic-gap.lua" />',
+      '  </environment>',
+      '</addon>',
+      '',
+    ].join('\n')),
+    passthrough('ui/dynamic-gap.lua', lua, { reason: 'unparsed' }),
   ]));
 }
 
@@ -810,11 +1085,16 @@ function phaseCSceneAttack(
 }
 
 async function main(): Promise<void> {
+  assertProxyTrapCensusOracleSensitivity(PAINT_ONE_ITEM_TOCTOU_PROXY_TRAPS);
   let canonical: X4UiCorpusCanonicalSuccess | undefined;
+  let colorEvidence: X4UiCorpusCanonicalColorSuccess | undefined;
   let scene: X4UiScene | undefined;
+  let colorAuthority: X4UiPreviewPipelineResult | undefined;
+  let colorScene: X4UiScene | undefined;
   let baseInput: PaintTestInput | undefined;
   try {
     canonical = await loadCanonicalFixture();
+    colorEvidence = await loadCanonicalColorFixture();
     const source = sourceFixture();
     const selection = selectionFor(source);
     const profile = buildX4UiPreviewProfile({
@@ -841,8 +1121,499 @@ async function main(): Promise<void> {
       : undefined;
     baseInput = scene === undefined ? undefined : { scene, corpus: canonical };
     check('loader-issued canonical corpus and source-backed Scene fixture', canonical !== undefined && scene !== undefined, { pipelineStatus: pipeline.status, sceneStatus: pipeline.scene?.status, sceneRefusal: pipeline.scene && pipeline.scene.status === 'refused' ? pipeline.scene.refusal : undefined, programStatus: pipeline.program?.status, operationCount: pipeline.program && 'program' in pipeline.program ? pipeline.program.program.operations.length : undefined, gaps: pipeline.gaps, selection: pipeline.selection, source: pipeline.source.status, corpus: pipeline.corpus.status });
+
+    const colorSource = colorSourceFixture();
+    const colorSelection = selectionFor(colorSource, 'ui/color.lua');
+    const colorPipeline = projectX4UiPreviewPipeline({
+      source: colorSource,
+      corpus: canonical,
+      colorEvidence,
+      profile: {
+        id: 'paint-color-profile',
+        provenance: 'B119 P5 public color-bearing Preview fixture',
+        truthGrade: 'supplied',
+        source: colorSelection.sourceIdentity,
+        drawable: { width: 100, height: 80 },
+        uiScale: 1,
+        minTextHeight: 10,
+      },
+      selection: colorSelection,
+    });
+    colorAuthority = colorPipeline;
+    colorScene = colorPipeline.scene !== undefined
+      && (colorPipeline.scene.status === 'projected' || colorPipeline.scene.status === 'partial')
+      ? colorPipeline.scene.scene
+      : undefined;
+    const colorFacts = colorScene === undefined
+      ? []
+      : paintSceneNodes(colorScene).flatMap(node => {
+        const facts = (node as unknown as JsonRecord).colorFacts;
+        return Array.isArray(facts) ? facts.map(fact => ({ nodeId: node.id, kind: node.kind, fact })) : [];
+      });
+    check('P5 public Preview issues complete color-bearing Scene facts', colorScene !== undefined && colorFacts.length > 0, {
+      pipelineStatus: colorPipeline.status,
+      sceneStatus: colorPipeline.scene?.status,
+      sceneRefusal: colorPipeline.scene?.status === 'refused' ? colorPipeline.scene.refusal : undefined,
+      programStatus: colorPipeline.program?.status,
+      programKeys: colorPipeline.program === undefined ? undefined : Object.keys(colorPipeline.program as unknown as JsonRecord),
+      gaps: colorPipeline.gaps,
+      factCount: colorFacts.length,
+      facts: colorFacts,
+      nodes: colorScene === undefined ? [] : paintSceneNodes(colorScene).map(node => ({ id: node.id, kind: node.kind, source: node.source, colorFacts: (node as unknown as JsonRecord).colorFacts })),
+    });
+    const colorPaint = colorScene === undefined || canonical === undefined || colorAuthority === undefined
+      ? undefined
+      : projectX4UiPaintPlanDirect({ scene: colorScene, corpus: canonical, previewAuthority: colorAuthority });
+    const colorPaintCommands = colorPaint !== undefined && colorPaint.status !== 'refused'
+      ? colorPaint.plan.layers.flatMap(layer => layer.commands)
+      : [];
+    const colorTints = colorPaintCommands.flatMap(command => {
+      const tints = (command as unknown as JsonRecord).basePreviewTints;
+      return Array.isArray(tints) ? tints : [];
+    });
+    const colorGeometryCommands = colorPaintCommands.filter(command => command.kind === 'node-geometry');
+    const colorGeometryTints = colorGeometryCommands.flatMap(command => {
+      const tints = (command as unknown as JsonRecord).basePreviewTints;
+      return Array.isArray(tints) ? tints : [];
+    });
+    check('P5 causal public color-bearing Preview -> Paint projection', colorPaint?.status === 'partial' || colorPaint?.status === 'projected', {
+      paintStatus: colorPaint?.status,
+      refusal: colorPaint?.status === 'refused' ? colorPaint.refusal : undefined,
+      commandCount: colorPaintCommands.length,
+      tintCount: colorTints.length,
+      factCount: colorFacts.length,
+      nodeSummary: colorScene === undefined ? [] : paintSceneNodes(colorScene).map(node => ({ kind: node.kind, id: node.id, keys: Object.keys(node as unknown as JsonRecord), colorFacts: (node as unknown as JsonRecord).colorFacts })),
+    });
+    check('P5 causal exact Scene color facts become owner-linked Paint tints', colorGeometryTints.length === colorFacts.length && colorGeometryTints.length > 0, {
+      paintStatus: colorPaint?.status,
+      factCount: colorFacts.length,
+      tintCount: colorGeometryTints.length,
+      factFields: colorFacts.map(item => ({ nodeId: item.nodeId, kind: item.kind, field: (item.fact as JsonRecord).field, slot: (item.fact as JsonRecord).slot })),
+      tintFields: colorGeometryTints.map(tint => ({ field: (tint as JsonRecord).field, slot: (tint as JsonRecord).slot, kind: (tint as JsonRecord).kind })),
+    });
+    const expectedColorOwners = [
+      'table:backgroundColor:table-background',
+      'cell:cellbgcolor:cell-background',
+      'button:bgcolor:widget-background',
+      'button:highlightcolor:widget-highlight',
+      'button:bordercolor:widget-border',
+      'editbox:bgcolor:widget-background',
+      'icon:color:widget-icon',
+      'text:color:primary-text',
+      'text:color:primary-text',
+      'text:color:secondary-text',
+    ].sort();
+    const actualColorOwners = colorFacts.map(item => {
+      const fact = item.fact as JsonRecord;
+      return `${item.kind}:${String(fact.field)}:${String(fact.slot)}`;
+    }).sort();
+    check('P5 causal exact owner-path coverage is retained', stableJson(actualColorOwners) === stableJson(expectedColorOwners), {
+      expected: expectedColorOwners,
+      actual: actualColorOwners,
+    });
+
+    const factsByNode = new Map<string, string[]>();
+    for (const item of colorFacts) {
+      const signature = colorFactSignature(item.fact);
+      if (signature === undefined) continue;
+      const existing = factsByNode.get(item.nodeId) || [];
+      existing.push(signature);
+      factsByNode.set(item.nodeId, existing);
+    }
+    const geometryOwnerCoverage = [...factsByNode.entries()].every(([nodeId, signatures]) => {
+      const command = colorGeometryCommands.find(candidate => candidate.nodeId === nodeId);
+      const tints = command === undefined ? [] : (command as unknown as JsonRecord).basePreviewTints;
+      const actual = Array.isArray(tints) ? tints.map(colorFactSignature).filter((value): value is string => value !== undefined).sort() : [];
+      return stableJson(actual) === stableJson([...signatures].sort());
+    });
+    check('P5 causal every geometry owner carries every exact fact without merge or reassignment', colorPaint?.status !== 'refused' && geometryOwnerCoverage, {
+      paintStatus: colorPaint?.status,
+      ownerCount: factsByNode.size,
+      owners: [...factsByNode.keys()],
+      geometryCommands: colorGeometryCommands.map(command => ({ nodeId: command.nodeId, tints: (command as unknown as JsonRecord).basePreviewTints })),
+    });
+
+    const colorTextNodes = colorScene === undefined ? [] : colorScene.texts.filter(text => Array.isArray((text as unknown as JsonRecord).colorFacts));
+    const glyphParentCoverage = colorTextNodes.every(text => {
+      const facts = (text as unknown as JsonRecord).colorFacts;
+      const glyphCommands = colorPaintCommands.filter(command => command.kind === 'glyph-alpha-blit' && command.textId === text.id);
+      const expected = Array.isArray(facts) ? facts.map(colorFactSignature).filter((value): value is string => value !== undefined) : [];
+      return expected.length === 1 && glyphCommands.length > 0 && glyphCommands.every(command => {
+        const tints = (command as unknown as JsonRecord).basePreviewTints;
+        return Array.isArray(tints) && tints.length === 1 && colorFactSignature(tints[0]) === expected[0];
+      });
+    });
+    const directText = colorScene?.texts.find(text => (text as unknown as JsonRecord).content === 'direct');
+    const primaryButtonText = colorScene?.texts.find(text => (text as unknown as JsonRecord).content === 'button');
+    const secondaryButtonText = colorScene?.texts.find(text => (text as unknown as JsonRecord).content === 'bold');
+    const distinctTextSlots = directText !== undefined && primaryButtonText !== undefined && secondaryButtonText !== undefined
+      && new Set([directText.id, primaryButtonText.id, secondaryButtonText.id]).size === 3
+      && (directText as unknown as JsonRecord).slot === 'primary'
+      && (primaryButtonText as unknown as JsonRecord).slot === 'primary'
+      && (secondaryButtonText as unknown as JsonRecord).slot === 'secondary';
+    check('P5 causal every glyph carries its one parent-text tint and text slots remain distinct', colorPaint?.status !== 'refused' && glyphParentCoverage && distinctTextSlots, {
+      paintStatus: colorPaint?.status,
+      textCount: colorTextNodes.length,
+      glyphCommandCount: colorPaintCommands.filter(command => command.kind === 'glyph-alpha-blit').length,
+      textIds: [directText?.id, primaryButtonText?.id, secondaryButtonText?.id],
+    });
+
+    const colorDiagnostics = colorPaint?.status === 'refused' ? [] : colorPaint.plan.diagnostics;
+    const runtimePaintDiagnostics = colorDiagnostics.filter(diagnostic => diagnostic.kind === 'unsupported-runtime-paint').map(diagnostic => diagnostic.nodeId);
+    check('P5 causal color plan remains partial with runtime paint gaps and game truth', colorPaint?.status === 'partial'
+      && colorPaint.plan.status === 'partial'
+      && colorPaint.plan.gameVerified === false
+      && colorPaint.plan.gameTruth === NOT_VERIFIED_IN_GAME
+      && runtimePaintDiagnostics.length >= 3, {
+      paintStatus: colorPaint?.status,
+      planStatus: colorPaint?.status === 'refused' ? undefined : colorPaint.plan.status,
+      runtimePaintDiagnostics,
+      verification: colorPaint?.verification,
+    });
+
+    const noColorPlan = baseInput === undefined ? undefined : projectX4UiPaintPlan(baseInput);
+    const noColorCommands = noColorPlan?.status === 'refused' ? [] : noColorPlan?.plan.layers.flatMap(layer => layer.commands) || [];
+    const noColorTintFieldsAbsent = noColorCommands.every(command => !Object.prototype.hasOwnProperty.call(command as unknown as JsonRecord, 'basePreviewTints'));
+    check('P5 causal no-color Paint retains existing command shapes with tint fields absent', noColorPlan?.status !== 'refused' && noColorTintFieldsAbsent, {
+      paintStatus: noColorPlan?.status,
+      commandCount: noColorCommands.length,
+    });
+
+    const colorFrozen = colorPaint !== undefined
+      && colorPaint.status !== 'refused'
+      && Object.isFrozen(colorPaint)
+      && Object.isFrozen(colorPaint.plan)
+      && Object.isFrozen(colorPaint.plan.layers)
+      && colorPaint.plan.layers.every(layer => Object.isFrozen(layer) && Object.isFrozen(layer.commands) && layer.commands.every(command => Object.isFrozen(command)));
+    const firstGeometryTint = colorGeometryTints[0] as JsonRecord | undefined;
+    const firstSceneFact = colorFacts[0]?.fact as JsonRecord | undefined;
+    const tintDetached = firstGeometryTint !== undefined && firstSceneFact !== undefined
+      && firstGeometryTint !== firstSceneFact
+      && firstGeometryTint.value !== firstSceneFact.value
+      && firstGeometryTint.source !== firstSceneFact.source;
+    check('P5 causal Paint tints are deeply frozen and detached from Scene facts', colorFrozen && tintDetached, {
+      paintStatus: colorPaint?.status,
+      colorFrozen,
+      tintDetached,
+    });
+
+    let hostileExtraResult: X4UiPaintPlanResult | undefined;
+    let hostileTruthResult: X4UiPaintPlanResult | undefined;
+    if (colorScene !== undefined && colorAuthority !== undefined && canonical !== undefined) {
+      const hostileExtra = clonedScene(colorScene);
+      const extraTableFacts = (hostileExtra.tables[0] as unknown as JsonRecord).colorFacts as JsonRecord[] | undefined;
+      if (extraTableFacts?.[0] !== undefined) extraTableFacts[0] = { ...extraTableFacts[0], hostileExtra: true };
+      hostileExtraResult = projectX4UiPaintPlanDirect({ scene: hostileExtra, corpus: canonical, previewAuthority: colorAuthority });
+      const hostileTruth = clonedScene(colorScene);
+      const truthTableFacts = (hostileTruth.tables[0] as unknown as JsonRecord).colorFacts as JsonRecord[] | undefined;
+      if (truthTableFacts?.[0] !== undefined) truthTableFacts[0] = { ...truthTableFacts[0], gameVerified: true };
+      hostileTruthResult = projectX4UiPaintPlanDirect({ scene: hostileTruth, corpus: canonical, previewAuthority: colorAuthority });
+    }
+    check('P5 causal malformed or extra Scene color facts remain rejected at the public boundary', hostileExtraResult?.status === 'refused' && hostileExtraResult.refusal.code === 'invalid-scene', {
+      status: hostileExtraResult?.status,
+      refusal: hostileExtraResult?.status === 'refused' ? hostileExtraResult.refusal : undefined,
+    });
+    check('P5 causal hostile Scene color game truth remains rejected', hostileTruthResult?.status === 'refused' && hostileTruthResult.refusal.code === 'invalid-scene', {
+      status: hostileTruthResult?.status,
+      refusal: hostileTruthResult?.status === 'refused' ? hostileTruthResult.refusal : undefined,
+    });
   } catch (error) {
     check('loader-issued canonical corpus and source-backed Scene fixture', false, { error: error instanceof Error ? error.message : String(error) });
+  }
+
+  if (canonical !== undefined) {
+    try {
+      const reverseSource = reverseGapSourceFixture();
+      const reverseSelection = selectionFor(reverseSource, 'ui/reverse-gap.lua');
+      const reversePipeline = projectX4UiPreviewPipeline({
+        source: reverseSource,
+        corpus: canonical,
+        profile: {
+          id: 'reverse-gap-paint-profile',
+          provenance: 'B119 reverse-gap Paint regression',
+          truthGrade: 'supplied',
+          source: reverseSelection.sourceIdentity,
+          drawable: { width: 100, height: 80 },
+          uiScale: 1,
+          minTextHeight: 10,
+        },
+        selection: reverseSelection,
+      });
+      const reverseScene = reversePipeline.scene !== undefined
+        && (reversePipeline.scene.status === 'projected' || reversePipeline.scene.status === 'partial')
+        ? reversePipeline.scene.scene
+        : undefined;
+      const reversePaint = reverseScene === undefined
+        ? undefined
+        : projectX4UiPaintPlanDirect({ scene: reverseScene, corpus: canonical, previewAuthority: reversePipeline });
+      check('B119 reverse-source-offset Scene gaps reach unchanged Paint', reverseScene !== undefined && reverseScene.gaps.length > 1 && reversePaint?.status !== 'refused', {
+        fixtureReady: reverseScene !== undefined && reverseScene.gaps.length > 1,
+        sceneStatus: reversePipeline.scene?.status,
+        sceneRefusal: reversePipeline.scene?.status === 'refused' ? reversePipeline.scene.refusal : undefined,
+        gapOffsets: reverseScene?.gaps.map(gap => gap.source.start.offset),
+        paintStatus: reversePaint?.status,
+        paintRefusal: reversePaint?.status === 'refused' ? reversePaint.refusal : undefined,
+      });
+    } catch (error) {
+      check('B119 reverse-source-offset Scene gaps reach unchanged Paint', false, { error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  if (canonical !== undefined) {
+    try {
+      const dynamicSource = dynamicGapSourceFixture();
+      const dynamicSelection = selectionFor(dynamicSource, 'ui/dynamic-gap.lua');
+      const dynamicPipeline = projectX4UiPreviewPipeline({
+        source: dynamicSource,
+        corpus: canonical,
+        profile: {
+          id: 'dynamic-gap-paint-profile',
+          provenance: 'B119 dynamic-gap Paint regression',
+          truthGrade: 'supplied',
+          source: dynamicSelection.sourceIdentity,
+          drawable: { width: 100, height: 80 },
+          uiScale: 1,
+          minTextHeight: 10,
+        },
+        selection: dynamicSelection,
+      });
+      const dynamicProgram = dynamicPipeline.program !== undefined && 'program' in dynamicPipeline.program
+        ? dynamicPipeline.program.program
+        : undefined;
+      const producerDynamicGaps = dynamicProgram?.gaps.filter(gap => gap.status === 'dynamic') ?? [];
+      const dynamicScene = dynamicPipeline.scene !== undefined
+        && (dynamicPipeline.scene.status === 'projected' || dynamicPipeline.scene.status === 'partial')
+        ? dynamicPipeline.scene.scene
+        : undefined;
+      const dynamicPaint = dynamicScene === undefined
+        ? undefined
+        : projectX4UiPaintPlanDirect({ scene: dynamicScene, corpus: canonical, previewAuthority: dynamicPipeline });
+      const exactWrapper = dynamicPipeline.scene !== undefined && 'scene' in dynamicPipeline.scene
+        ? dynamicPipeline.scene
+        : undefined;
+      const exactWrapperPaint = exactWrapper === undefined
+        ? undefined
+        : projectX4UiPaintPlanDirect({ scene: exactWrapper as unknown as X4UiPaintPlanInput['scene'], corpus: canonical, previewAuthority: dynamicPipeline });
+      const mismatchedWrapper = dynamicScene === undefined ? undefined : {
+        status: dynamicScene.status === 'partial' ? 'projected' as const : 'partial' as const,
+        scene: dynamicScene,
+        verification: { game: 'Not verified in game' as const, gameVerified: false as const },
+      };
+      const mismatchedWrapperPaint = mismatchedWrapper === undefined
+        ? undefined
+        : projectX4UiPaintPlanDirect({ scene: mismatchedWrapper as unknown as X4UiPaintPlanInput['scene'], corpus: canonical, previewAuthority: dynamicPipeline });
+      const copiedWrapper = exactWrapper === undefined
+        ? undefined
+        : {
+          status: exactWrapper.status,
+          scene: exactWrapper.scene,
+          verification: exactWrapper.verification,
+        };
+      const customPrototypeWrapper = exactWrapper === undefined
+        ? undefined
+        : Object.assign(Object.create({ inheritedBoundary: 'not-authority' }), {
+          status: exactWrapper.status,
+          scene: exactWrapper.scene,
+          verification: exactWrapper.verification,
+        }) as JsonRecord;
+      let accessorWrapperReads = 0;
+      const accessorWrapper = exactWrapper === undefined
+        ? undefined
+        : { status: exactWrapper.status, verification: exactWrapper.verification } as JsonRecord;
+      if (accessorWrapper !== undefined) Object.defineProperty(accessorWrapper, 'scene', {
+        configurable: true,
+        enumerable: true,
+        get: () => {
+          accessorWrapperReads += 1;
+          return dynamicScene;
+        },
+      });
+      const ingressProxyTraps = { get: 0, getOwnPropertyDescriptor: 0, ownKeys: 0, getPrototypeOf: 0, has: 0 };
+      const ingressProxyScene = dynamicScene === undefined
+        ? undefined
+        : new Proxy(dynamicScene as unknown as object, {
+          get: (target, property, receiver) => {
+            ingressProxyTraps.get += 1;
+            return Reflect.get(target, property, receiver);
+          },
+          getOwnPropertyDescriptor: (target, property) => {
+            ingressProxyTraps.getOwnPropertyDescriptor += 1;
+            return Reflect.getOwnPropertyDescriptor(target, property);
+          },
+          ownKeys: target => {
+            ingressProxyTraps.ownKeys += 1;
+            return Reflect.ownKeys(target);
+          },
+          getPrototypeOf: target => {
+            ingressProxyTraps.getPrototypeOf += 1;
+            return Reflect.getPrototypeOf(target);
+          },
+          has: (target, property) => {
+            ingressProxyTraps.has += 1;
+            return Reflect.has(target, property);
+          },
+        });
+      let ingressThrew = false;
+      let copiedWrapperPaint: X4UiPaintPlanResult | undefined;
+      let customPrototypeWrapperPaint: X4UiPaintPlanResult | undefined;
+      let accessorWrapperPaint: X4UiPaintPlanResult | undefined;
+      let ingressProxyPaint: X4UiPaintPlanResult | undefined;
+      try {
+        if (copiedWrapper !== undefined) copiedWrapperPaint = projectX4UiPaintPlanDirect({ scene: copiedWrapper as X4UiPaintPlanInput['scene'], corpus: canonical, previewAuthority: dynamicPipeline });
+        if (customPrototypeWrapper !== undefined) customPrototypeWrapperPaint = projectX4UiPaintPlanDirect({ scene: customPrototypeWrapper as X4UiPaintPlanInput['scene'], corpus: canonical, previewAuthority: dynamicPipeline });
+        if (accessorWrapper !== undefined) accessorWrapperPaint = projectX4UiPaintPlanDirect({ scene: accessorWrapper as X4UiPaintPlanInput['scene'], corpus: canonical, previewAuthority: dynamicPipeline });
+        if (ingressProxyScene !== undefined) ingressProxyPaint = projectX4UiPaintPlanDirect({ scene: ingressProxyScene as unknown as X4UiPaintPlanInput['scene'], corpus: canonical, previewAuthority: dynamicPipeline });
+      } catch {
+        ingressThrew = true;
+      }
+      let unchangedCopyPaint: X4UiPaintPlanResult | undefined;
+      let unchangedCopyThrew = false;
+      const unchangedCopy = dynamicScene === undefined ? undefined : clonedScene(dynamicScene);
+      try {
+        if (unchangedCopy !== undefined) unchangedCopyPaint = projectX4UiPaintPlanDirect({ scene: unchangedCopy, corpus: canonical, previewAuthority: dynamicPipeline });
+      } catch {
+        unchangedCopyThrew = true;
+      }
+      const normalizedGaps = dynamicScene?.gaps.filter(sceneGap => producerDynamicGaps.some(producerGap =>
+        sceneGap.category === producerGap.category
+        && sceneGap.reason === producerGap.reason
+        && JSON.stringify(sceneGap.source) === JSON.stringify(producerGap.source)
+        && sceneGap.expression === producerGap.expression
+        && sceneGap.operationId === producerGap.operationId
+        && sceneGap.nodeId === producerGap.nodeId,
+      )) ?? [];
+      let copiedScenePaint: X4UiPaintPlanResult | undefined;
+      let copiedAuthorityPaint: X4UiPaintPlanResult | undefined;
+      let controlsThrew = false;
+      if (dynamicScene !== undefined) {
+        try {
+          const copiedScene = clonedScene(dynamicScene);
+          const copiedGap = copiedScene.gaps[0] as { status: string } | undefined;
+          if (copiedGap !== undefined) copiedGap.status = 'bogus';
+          copiedScenePaint = projectX4UiPaintPlanDirect({ scene: copiedScene, corpus: canonical, previewAuthority: dynamicPipeline });
+          const copiedAuthority = JSON.parse(JSON.stringify(dynamicPipeline)) as X4UiPreviewPipelineResult;
+          copiedAuthorityPaint = projectX4UiPaintPlanDirect({ scene: dynamicScene, corpus: canonical, previewAuthority: copiedAuthority });
+        } catch {
+          controlsThrew = true;
+        }
+      }
+      check(
+        'B119 producer dynamic gaps normalize before unchanged Paint',
+        producerDynamicGaps.length > 0
+          && dynamicScene !== undefined
+          && normalizedGaps.length === producerDynamicGaps.length
+          && normalizedGaps.every(gap => gap.status === 'unknown')
+          && dynamicScene.gaps.every(gap => gap.status !== 'dynamic')
+          && dynamicPaint?.status !== 'refused',
+        {
+          producerDynamicGapCount: producerDynamicGaps.length,
+          producerDynamicGaps,
+          sceneStatus: dynamicPipeline.scene?.status,
+          sceneGaps: dynamicScene?.gaps,
+          normalizedGapCount: normalizedGaps.length,
+          paintStatus: dynamicPaint?.status,
+          paintRefusal: dynamicPaint?.status === 'refused' ? dynamicPaint.refusal : undefined,
+        },
+      );
+      check(
+        'B119 exact raw Scene and agreeing wrapper retain issued Paint authority',
+        dynamicScene !== undefined
+          && dynamicPaint?.status !== 'refused'
+          && exactWrapperPaint?.status !== 'refused'
+          && mismatchedWrapperPaint?.status === 'refused'
+          && mismatchedWrapperPaint.refusal.code === 'invalid-scene',
+        {
+          fixtureReady: dynamicScene !== undefined,
+          rawStatus: dynamicPaint?.status,
+          wrapperStatus: exactWrapperPaint?.status,
+          mismatchedWrapperStatus: mismatchedWrapperPaint?.status,
+          mismatchedWrapperRefusal: mismatchedWrapperPaint?.status === 'refused' ? mismatchedWrapperPaint.refusal : undefined,
+        },
+      );
+      check(
+        'B119 reconstructed and custom-prototype Scene-result wrappers refuse before Paint reflection',
+        dynamicScene !== undefined
+          && copiedWrapper !== undefined
+          && customPrototypeWrapper !== undefined
+          && !ingressThrew
+          && copiedWrapperPaint?.status === 'refused'
+          && copiedWrapperPaint.refusal.code === 'invalid-scene'
+          && customPrototypeWrapperPaint?.status === 'refused'
+          && customPrototypeWrapperPaint.refusal.code === 'invalid-scene',
+        {
+          fixtureReady: dynamicScene !== undefined && copiedWrapper !== undefined && customPrototypeWrapper !== undefined,
+          threw: ingressThrew,
+          copiedWrapperStatus: copiedWrapperPaint?.status,
+          copiedWrapperRefusal: copiedWrapperPaint?.status === 'refused' ? copiedWrapperPaint.refusal : undefined,
+          customPrototypeWrapperStatus: customPrototypeWrapperPaint?.status,
+          customPrototypeWrapperRefusal: customPrototypeWrapperPaint?.status === 'refused' ? customPrototypeWrapperPaint.refusal : undefined,
+        },
+      );
+      check(
+        'B119 Paint rejects Proxy and accessor Scene candidates without observation',
+        dynamicScene !== undefined
+          && !ingressThrew
+          && ingressProxyScene !== undefined
+          && ingressProxyPaint?.status === 'refused'
+          && ingressProxyPaint.refusal.code === 'invalid-scene'
+          && accessorWrapperPaint?.status === 'refused'
+          && accessorWrapperPaint.refusal.code === 'invalid-scene'
+          && accessorWrapperReads === 0
+          && Object.values(ingressProxyTraps).every(count => count === 0),
+        {
+          fixtureReady: dynamicScene !== undefined && ingressProxyScene !== undefined && accessorWrapper !== undefined,
+          threw: ingressThrew,
+          proxyStatus: ingressProxyPaint?.status,
+          proxyRefusal: ingressProxyPaint?.status === 'refused' ? ingressProxyPaint.refusal : undefined,
+          proxyTraps: ingressProxyTraps,
+          accessorStatus: accessorWrapperPaint?.status,
+          accessorRefusal: accessorWrapperPaint?.status === 'refused' ? accessorWrapperPaint.refusal : undefined,
+          accessorReads: accessorWrapperReads,
+        },
+      );
+      check(
+        'B119 unchanged JSON deep-copy of issued Scene refuses Paint with invalid-scene',
+        dynamicScene !== undefined
+          && unchangedCopy !== undefined
+          && unchangedCopy !== dynamicScene
+          && JSON.stringify(unchangedCopy) === JSON.stringify(dynamicScene)
+          && !unchangedCopyThrew
+          && unchangedCopyPaint?.status === 'refused'
+          && unchangedCopyPaint.refusal.code === 'invalid-scene',
+        {
+          fixtureReady: dynamicScene !== undefined && unchangedCopy !== undefined,
+          distinctIdentity: unchangedCopy !== dynamicScene,
+          jsonEqual: unchangedCopy !== undefined && dynamicScene !== undefined && JSON.stringify(unchangedCopy) === JSON.stringify(dynamicScene),
+          threw: unchangedCopyThrew,
+          paintStatus: unchangedCopyPaint?.status,
+          paintRefusal: unchangedCopyPaint?.status === 'refused' ? unchangedCopyPaint.refusal : undefined,
+        },
+      );
+      check(
+        'B119 dynamic-gap mutated copied Scene and copied authority still refuse without throw',
+        dynamicScene !== undefined
+          && !controlsThrew
+          && copiedScenePaint?.status === 'refused'
+          && copiedScenePaint.refusal.code === 'invalid-scene'
+          && copiedAuthorityPaint?.status === 'refused'
+          && copiedAuthorityPaint.refusal.code === 'invalid-scene',
+        {
+          fixtureReady: dynamicScene !== undefined,
+          controlsThrew,
+          copiedSceneStatus: copiedScenePaint?.status,
+          copiedSceneRefusal: copiedScenePaint?.status === 'refused' ? copiedScenePaint.refusal : undefined,
+          copiedAuthorityStatus: copiedAuthorityPaint?.status,
+          copiedAuthorityRefusal: copiedAuthorityPaint?.status === 'refused' ? copiedAuthorityPaint.refusal : undefined,
+        },
+      );
+    } catch (error) {
+      check('B119 producer dynamic gaps normalize before unchanged Paint', false, { error: error instanceof Error ? error.message : String(error) });
+      check('B119 exact raw Scene and agreeing wrapper retain issued Paint authority', false, { error: error instanceof Error ? error.message : String(error) });
+      check('B119 unchanged JSON deep-copy of issued Scene refuses Paint with invalid-scene', false, { error: error instanceof Error ? error.message : String(error) });
+      check('B119 dynamic-gap mutated copied Scene and copied authority still refuse without throw', false, { error: error instanceof Error ? error.message : String(error) });
+      check('B119 reconstructed and custom-prototype Scene-result wrappers refuse before Paint reflection', false, { error: error instanceof Error ? error.message : String(error) });
+      check('B119 Paint rejects Proxy and accessor Scene candidates without observation', false, { error: error instanceof Error ? error.message : String(error) });
+    }
   }
 
   if (baseInput === undefined || scene === undefined || canonical === undefined) {
@@ -1088,13 +1859,449 @@ async function main(): Promise<void> {
     });
 
     const keepOuts: X4UiPaintPlanInput['keepOuts'] = [
-      { context: KEEP_OUT_PRESET_IDS.cockpitConversation, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.conversationBackRow, viewport) },
-      { context: KEEP_OUT_PRESET_IDS.mapOpen, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.informationPanelLeftEdge, viewport) },
-      { context: KEEP_OUT_PRESET_IDS.fullscreenMenu, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.missionMessagesTicker, viewport) },
-      { context: KEEP_OUT_PRESET_IDS.firstPerson, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.topHudStrip, viewport) },
+      { context: KEEP_OUT_PRESET_IDS.cockpitConversation, entry: getBuiltInKeepOut(KEEP_OUT_IDS.conversationBackRow)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.conversationBackRow, viewport) },
+      { context: KEEP_OUT_PRESET_IDS.mapOpen, entry: getBuiltInKeepOut(KEEP_OUT_IDS.informationPanelLeftEdge)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.informationPanelLeftEdge, viewport) },
+      { context: KEEP_OUT_PRESET_IDS.fullscreenMenu, entry: getBuiltInKeepOut(KEEP_OUT_IDS.missionMessagesTicker)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.missionMessagesTicker, viewport) },
+      { context: KEEP_OUT_PRESET_IDS.firstPerson, entry: getBuiltInKeepOut(KEEP_OUT_IDS.topHudStrip)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.topHudStrip, viewport) },
     ];
     const selectedId = scene.widgets[0]?.id;
     const withContext: PaintTestInput = { ...baseInput, keepOuts, selection: selectedId === undefined ? undefined : { nodeIds: [selectedId] } };
+
+    const selectedPresetCases = [
+      [KEEP_OUT_PRESET_IDS.cockpitConversation, KEEP_OUT_IDS.conversationBackRow],
+      [KEEP_OUT_PRESET_IDS.mapOpen, KEEP_OUT_IDS.informationPanelLeftEdge],
+      [KEEP_OUT_PRESET_IDS.fullscreenMenu, KEEP_OUT_IDS.missionMessagesTicker],
+      [KEEP_OUT_PRESET_IDS.firstPerson, KEEP_OUT_IDS.topHudStrip],
+    ] as const;
+    for (const [selectedPreset, entryId] of selectedPresetCases) {
+      const entry = getBuiltInKeepOut(entryId);
+      const projection = entry === undefined ? undefined : projectKeepOut(entry, viewport);
+      let seamReached = false;
+      let threw = false;
+      let result: X4UiPaintPlanResult | undefined;
+      try {
+        seamReached = true;
+        result = entry === undefined || projection === undefined
+          ? undefined
+          : projectX4UiPaintPlan({
+            ...baseInput,
+            keepOuts: [{ context: selectedPreset, entry, projection }],
+          });
+      } catch {
+        threw = true;
+      }
+      const command = result?.status !== 'refused' ? result?.plan.keepOuts[0] : undefined;
+      check(
+        `causal-selected-preset-context-${selectedPreset}`,
+        entry !== undefined
+          && (projection?.status === 'projected' || projection?.status === 'unavailable')
+          && seamReached
+          && !threw
+          && result?.status !== 'refused'
+          && command?.context === selectedPreset
+          && command.entryId === entryId,
+        {
+          fixtureReady: entry !== undefined && projection !== undefined,
+          seamReached,
+          threw,
+          expected: { status: 'projected-or-partial', context: selectedPreset, entryId },
+          observed: {
+            status: result?.status,
+            refusal: result?.status === 'refused' ? result.refusal : undefined,
+            command: command === undefined ? undefined : { context: command.context, entryId: command.entryId },
+          },
+        },
+      );
+    }
+
+    let noEntrySeamReached = false;
+    let noEntryThrew = false;
+    let noEntryResult: X4UiPaintPlanResult | undefined;
+    try {
+      noEntrySeamReached = true;
+      noEntryResult = projectX4UiPaintPlan({
+        ...baseInput,
+        keepOuts: [{
+          context: KEEP_OUT_PRESET_IDS.cockpitConversation,
+          projection: projectBuiltInKeepOut(KEEP_OUT_IDS.conversationBackRow, viewport),
+        }] as unknown as X4UiPaintPlanInput['keepOuts'],
+      });
+    } catch {
+      noEntryThrew = true;
+    }
+    check(
+      'causal-no-entry-built-in-authority-refuses',
+      noEntrySeamReached
+        && !noEntryThrew
+        && noEntryResult?.status === 'refused'
+        && noEntryResult.refusal.code === 'invalid-keepout',
+      {
+        fixtureReady: true,
+        seamReached: noEntrySeamReached,
+        threw: noEntryThrew,
+        expected: { status: 'refused', code: 'invalid-keepout', commandCount: 0 },
+        observed: noEntryResult?.status === 'refused'
+          ? { status: noEntryResult.status, refusal: noEntryResult.refusal }
+          : { status: noEntryResult?.status, commandCount: noEntryResult?.plan.keepOuts.length },
+      },
+    );
+
+    const manualCalibration = calibrateKeepOutPolygon({
+      stableId: 'paint-manual-polygon-1',
+      context: 'paint-manual-context',
+      sourceNote: 'Paint-plan manual calibration authority selftest.',
+      screenshotHash: `sha256:${'c'.repeat(64)}`,
+      profile: 'paint-screenshot-profile',
+      drawableBounds: { left: 10, top: 20, width: 1000, height: 500 },
+      points: [{ x: 10, y: 20 }, { x: 510, y: 20 }, { x: 10, y: 270 }],
+    });
+    const manualEntry = manualCalibration.status === 'success' ? manualCalibration.entry : undefined;
+    const manualProjection = manualEntry === undefined ? undefined : projectKeepOut(manualEntry, viewport);
+    const manualKeepOuts: X4UiPaintPlanInput['keepOuts'] = manualEntry === undefined || manualProjection === undefined
+      ? undefined
+      : [{ context: manualEntry.context, entry: manualEntry, projection: manualProjection }];
+    const manualPaint = manualKeepOuts === undefined ? undefined : projectX4UiPaintPlan({ ...baseInput, keepOuts: manualKeepOuts });
+    const manualCommand = manualPaint?.status !== 'refused'
+      ? manualPaint?.plan.keepOuts.find(command => command.entryId === 'paint-manual-polygon-1')
+      : undefined;
+    check('batch8c1-manual-entry-and-projection-reach-paint',
+      manualCalibration.status === 'success'
+      && manualProjection?.status === 'projected'
+      && manualPaint !== undefined
+      && manualPaint.status !== 'refused'
+      && manualCommand?.status === 'projected'
+      && manualCommand.context === 'paint-manual-context'
+      && manualCommand.advisoryOnly === true
+      && manualCommand.gameVerification === NOT_VERIFIED_IN_GAME
+      && manualCommand.geometry?.kind === 'polygon'
+      && manualCommand.geometry.points[1]?.x === 50
+      && manualCommand.geometry.points[2]?.y === 40,
+      {
+        fixtureReady: manualEntry !== undefined && manualProjection !== undefined,
+        calibration: manualCalibration.status,
+        projection: manualProjection?.status,
+        paint: manualPaint?.status,
+        command: manualCommand,
+      });
+    const contextMismatch = manualEntry === undefined || manualProjection === undefined
+      ? undefined
+      : projectX4UiPaintPlan({
+        ...baseInput,
+        keepOuts: [{ context: 'different-context', entry: manualEntry, projection: manualProjection }],
+      });
+    check('batch8c1-context-mismatch-refuses-without-command',
+      contextMismatch?.status === 'refused' && contextMismatch.refusal.code === 'invalid-keepout', {
+        fixtureReady: manualEntry !== undefined && manualProjection !== undefined,
+        status: contextMismatch?.status,
+        refusal: contextMismatch?.status === 'refused' ? contextMismatch.refusal : undefined,
+      });
+    const staleViewportProjection = manualEntry === undefined
+      ? undefined
+      : projectKeepOut(manualEntry, { width: viewport.width * 2, height: viewport.height * 2 });
+    const staleViewportPaint = staleViewportProjection === undefined
+      ? undefined
+      : projectX4UiPaintPlan({ ...baseInput, keepOuts: [{ context: manualEntry.context, entry: manualEntry, projection: staleViewportProjection }] });
+    check('batch8c1-stale-viewport-projection-refuses',
+      staleViewportPaint?.status === 'refused' && staleViewportPaint.refusal.code === 'invalid-keepout', {
+        fixtureReady: manualEntry !== undefined && staleViewportProjection !== undefined,
+        status: staleViewportPaint?.status,
+        refusal: staleViewportPaint?.status === 'refused' ? staleViewportPaint.refusal : undefined,
+      });
+    const forgedManualEntry = manualEntry === undefined ? undefined : JSON.parse(JSON.stringify(manualEntry)) as X4UiKeepOutEntry;
+    const forgedManualPaint = forgedManualEntry === undefined || manualProjection === undefined
+      ? undefined
+      : projectX4UiPaintPlan({ ...baseInput, keepOuts: [{ context: manualEntry.context, entry: forgedManualEntry, projection: manualProjection }] });
+    check('batch8c1-forged-manual-evidence-refuses',
+      forgedManualPaint?.status === 'refused' && forgedManualPaint.refusal.code === 'invalid-keepout', {
+        fixtureReady: manualEntry !== undefined && manualProjection !== undefined,
+        status: forgedManualPaint?.status,
+        refusal: forgedManualPaint?.status === 'refused' ? forgedManualPaint.refusal : undefined,
+      });
+    let keepOutGetterReads = 0;
+    const accessorKeepOut = { context: manualEntry?.context, entry: manualEntry, projection: manualProjection } as Record<string, unknown>;
+    Object.defineProperty(accessorKeepOut, 'entry', {
+      enumerable: true,
+      configurable: true,
+      get: () => {
+        keepOutGetterReads += 1;
+        throw new Error('keep-out entry getter executed');
+      },
+    });
+    const accessorKeepOutPaint = projectX4UiPaintPlan({ ...baseInput, keepOuts: [accessorKeepOut] as unknown as X4UiPaintPlanInput['keepOuts'] });
+    check('batch8c1-accessor-entry-refuses-without-getter-execution',
+      keepOutGetterReads === 0 && accessorKeepOutPaint.status === 'refused' && accessorKeepOutPaint.refusal.code === 'invalid-keepout', {
+        fixtureReady: manualEntry !== undefined && manualProjection !== undefined,
+        getterReads: keepOutGetterReads,
+        status: accessorKeepOutPaint.status,
+        refusal: accessorKeepOutPaint.status === 'refused' ? accessorKeepOutPaint.refusal : undefined,
+      });
+
+    const proxyKeepOutCounts: ProxyTrapCounts = { total: 0, get: 0, getPrototypeOf: 0, ownKeys: 0, getOwnPropertyDescriptor: 0 };
+    const proxyKeepOutTarget = [...keepOuts];
+    const proxyKeepOutState = { armed: false };
+    const proxyKeepOutArray = armableTransparentProxy(proxyKeepOutTarget, proxyKeepOutCounts, proxyKeepOutState);
+    let proxyKeepOutResult: X4UiPaintPlanResult | undefined;
+    let proxyKeepOutThrew = false;
+    try {
+      proxyKeepOutResult = projectX4UiPaintPlan({ ...baseInput, keepOuts: proxyKeepOutArray as unknown as X4UiPaintPlanInput['keepOuts'] });
+    } catch {
+      proxyKeepOutThrew = true;
+    }
+    const proxyKeepOutCommandIds = proxyKeepOutResult?.status !== 'refused'
+      ? proxyKeepOutResult.plan.keepOuts.map(item => item.entryId)
+      : [];
+    let proxyKeepOutDeterministicReplay = false;
+    try {
+      const replayCounts: ProxyTrapCounts = { total: 0, get: 0, getPrototypeOf: 0, ownKeys: 0, getOwnPropertyDescriptor: 0 };
+      const replay = projectX4UiPaintPlan({
+        ...baseInput,
+        keepOuts: armableTransparentProxy([...keepOuts], replayCounts, { armed: false }) as unknown as X4UiPaintPlanInput['keepOuts'],
+      });
+      proxyKeepOutDeterministicReplay = proxyKeepOutResult !== undefined && JSON.stringify(replay) === JSON.stringify(proxyKeepOutResult);
+    } catch {
+      proxyKeepOutDeterministicReplay = false;
+    }
+    const proxyKeepOutBeforeMutation = proxyKeepOutResult === undefined ? undefined : JSON.stringify(proxyKeepOutResult);
+    let proxyKeepOutPostCallStable = false;
+    try {
+      proxyKeepOutTarget[0] = keepOuts[0] === undefined ? undefined : { ...keepOuts[0], context: 'post-call-paint-facade-mutation' };
+      proxyKeepOutState.armed = true;
+      proxyKeepOutPostCallStable = proxyKeepOutResult !== undefined
+        && JSON.stringify(proxyKeepOutResult) === proxyKeepOutBeforeMutation;
+    } catch {
+      proxyKeepOutPostCallStable = false;
+    }
+    check('causal-transparent-proxy-issued-keepout-container-is-detached-facade',
+      !proxyKeepOutThrew
+      && proxyKeepOutResult?.status === 'partial'
+      && JSON.stringify(proxyKeepOutCommandIds) === JSON.stringify(keepOuts.map(item => item.projection.entryId))
+      && Object.isFrozen(proxyKeepOutResult.plan.keepOuts)
+      && proxyKeepOutPostCallStable
+      && proxyKeepOutDeterministicReplay
+      && proxyTrapCensusMatches(proxyKeepOutCounts, PAINT_FOUR_ITEM_CONTAINER_PROXY_TRAPS), {
+        fixtureReady: keepOuts.length === 4,
+        seamReached: true,
+        threw: proxyKeepOutThrew,
+        traps: { ...proxyKeepOutCounts },
+        expectedTraps: { ...PAINT_FOUR_ITEM_CONTAINER_PROXY_TRAPS },
+        status: proxyKeepOutResult?.status,
+        immutable: proxyKeepOutResult?.status !== 'refused' && Object.isFrozen(proxyKeepOutResult.plan.keepOuts),
+        postCallStable: proxyKeepOutPostCallStable,
+        deterministicReplay: proxyKeepOutDeterministicReplay,
+        expectedCommandIds: keepOuts.map(item => item.projection.entryId),
+        authority: proxyKeepOutCommandIds,
+      });
+
+    const directKeepOutCounts: ProxyTrapCounts = { total: 0, get: 0, getPrototypeOf: 0, ownKeys: 0, getOwnPropertyDescriptor: 0 };
+    const directKeepOutTarget = keepOuts[0] === undefined ? undefined : { ...keepOuts[0] };
+    const directKeepOutState = { armed: false };
+    const directKeepOutItem = directKeepOutTarget === undefined ? undefined : armableTransparentProxy(directKeepOutTarget, directKeepOutCounts, directKeepOutState);
+    let directKeepOutResult: X4UiPaintPlanResult | undefined;
+    let directKeepOutThrew = false;
+    try {
+      directKeepOutResult = directKeepOutItem === undefined
+        ? undefined
+        : projectX4UiPaintPlan({ ...baseInput, keepOuts: [directKeepOutItem, ...keepOuts.slice(1)] as unknown as X4UiPaintPlanInput['keepOuts'] });
+    } catch {
+      directKeepOutThrew = true;
+    }
+    const directKeepOutCommandIds = directKeepOutResult?.status !== 'refused'
+      ? directKeepOutResult.plan.keepOuts.map(item => item.entryId)
+      : [];
+    const directKeepOutBeforeMutation = directKeepOutResult === undefined ? undefined : JSON.stringify(directKeepOutResult);
+    let directKeepOutPostCallStable = false;
+    try {
+      if (directKeepOutTarget !== undefined) directKeepOutTarget.context = 'post-call-direct-paint-facade-mutation';
+      directKeepOutState.armed = true;
+      directKeepOutPostCallStable = directKeepOutResult !== undefined
+        && JSON.stringify(directKeepOutResult) === directKeepOutBeforeMutation;
+    } catch {
+      directKeepOutPostCallStable = false;
+    }
+    check('causal-direct-proxy-issued-keepout-is-detached-facade',
+      !directKeepOutThrew
+      && directKeepOutResult?.status === 'partial'
+      && JSON.stringify(directKeepOutCommandIds) === JSON.stringify(keepOuts.map(item => item.projection.entryId))
+      && Object.isFrozen(directKeepOutResult.plan.keepOuts)
+      && directKeepOutPostCallStable
+      && proxyTrapCensusMatches(directKeepOutCounts, PAINT_DIRECT_ITEM_PROXY_TRAPS), {
+        fixtureReady: directKeepOutItem !== undefined,
+        seamReached: true,
+        threw: directKeepOutThrew,
+        traps: { ...directKeepOutCounts },
+        expectedTraps: { ...PAINT_DIRECT_ITEM_PROXY_TRAPS },
+        status: directKeepOutResult?.status,
+        immutable: directKeepOutResult?.status !== 'refused' && Object.isFrozen(directKeepOutResult.plan.keepOuts),
+        postCallStable: directKeepOutPostCallStable,
+        expectedCommandIds: keepOuts.map(item => item.projection.entryId),
+        authority: directKeepOutCommandIds,
+      });
+
+    const revokedKeepOut = Proxy.revocable(keepOuts, {});
+    revokedKeepOut.revoke();
+    let revokedKeepOutResult: X4UiPaintPlanResult | undefined;
+    let revokedKeepOutThrew = false;
+    try {
+      revokedKeepOutResult = projectX4UiPaintPlan({ ...baseInput, keepOuts: revokedKeepOut.proxy as unknown as X4UiPaintPlanInput['keepOuts'] });
+    } catch {
+      revokedKeepOutThrew = true;
+    }
+    check('causal-revoked-proxy-issued-keepout-container-is-contained',
+      !revokedKeepOutThrew
+      && revokedKeepOutResult?.status === 'refused'
+      && revokedKeepOutResult.refusal.code === 'invalid-keepout', {
+        fixtureReady: keepOuts.length === 4,
+        seamReached: true,
+        threw: revokedKeepOutThrew,
+        status: revokedKeepOutResult?.status,
+        refusal: revokedKeepOutResult?.status === 'refused' ? revokedKeepOutResult.refusal : undefined,
+      });
+
+    let mixedKeepOutAccessorReads = 0;
+    const mixedKeepOutAccessorPeer = keepOuts[0] === undefined ? undefined : { ...keepOuts[0] } as Record<string, unknown>;
+    if (mixedKeepOutAccessorPeer !== undefined) {
+      Object.defineProperty(mixedKeepOutAccessorPeer, 'entry', {
+        configurable: true,
+        enumerable: true,
+        get: () => {
+          mixedKeepOutAccessorReads += 1;
+          throw new Error('mixed keep-out entry getter executed');
+        },
+      });
+    }
+    const mixedKeepOutSymbolPeer = keepOuts[0] === undefined ? undefined : { ...keepOuts[0] } as Record<string, unknown>;
+    if (mixedKeepOutSymbolPeer !== undefined) Object.defineProperty(mixedKeepOutSymbolPeer, Symbol('keep-out-symbol'), { enumerable: true, value: 'symbol-peer' });
+    const mixedKeepOutCyclePeer = keepOuts[0] === undefined ? undefined : { ...keepOuts[0] } as Record<string, unknown>;
+    if (mixedKeepOutCyclePeer !== undefined) mixedKeepOutCyclePeer.cycle = mixedKeepOutCyclePeer;
+    const mixedKeepOutItems = [keepOuts[0], mixedKeepOutAccessorPeer, mixedKeepOutSymbolPeer, mixedKeepOutCyclePeer].filter((item): item is NonNullable<typeof item> => item !== undefined);
+    const mixedKeepOutCounts: ProxyTrapCounts = { total: 0, get: 0, getPrototypeOf: 0, ownKeys: 0, getOwnPropertyDescriptor: 0 };
+    const mixedKeepOutState = { armed: false };
+    const mixedKeepOutTarget = [...mixedKeepOutItems];
+    const mixedKeepOutProxy = armableTransparentProxy(mixedKeepOutTarget, mixedKeepOutCounts, mixedKeepOutState);
+    let mixedKeepOutResult: X4UiPaintPlanResult | undefined;
+    let mixedKeepOutThrew = false;
+    try {
+      mixedKeepOutResult = projectX4UiPaintPlan({ ...baseInput, keepOuts: mixedKeepOutProxy as unknown as X4UiPaintPlanInput['keepOuts'] });
+    } catch {
+      mixedKeepOutThrew = true;
+    }
+    const mixedKeepOutBeforeMutation = mixedKeepOutResult === undefined ? undefined : JSON.stringify(mixedKeepOutResult);
+    let mixedKeepOutPostCallStable = false;
+    try {
+      mixedKeepOutTarget[0] = mixedKeepOutItems[0];
+      mixedKeepOutState.armed = true;
+      mixedKeepOutPostCallStable = mixedKeepOutResult !== undefined
+        && JSON.stringify(mixedKeepOutResult) === mixedKeepOutBeforeMutation;
+    } catch {
+      mixedKeepOutPostCallStable = false;
+    }
+    check('causal-transparent-proxy-mixed-hostile-facade-refuses-before-command',
+      !mixedKeepOutThrew
+      && mixedKeepOutResult?.status === 'refused'
+      && mixedKeepOutResult.refusal.code === 'invalid-keepout'
+      && mixedKeepOutAccessorReads === 0
+      && mixedKeepOutPostCallStable
+      && proxyTrapCensusMatches(mixedKeepOutCounts, PAINT_MIXED_HOSTILE_CONTAINER_PROXY_TRAPS), {
+        fixtureReady: mixedKeepOutItems.length === 4,
+        seamReached: true,
+        threw: mixedKeepOutThrew,
+        getterReads: mixedKeepOutAccessorReads,
+        traps: { ...mixedKeepOutCounts },
+        expectedTraps: { ...PAINT_MIXED_HOSTILE_CONTAINER_PROXY_TRAPS },
+        status: mixedKeepOutResult?.status,
+        refusal: mixedKeepOutResult?.status === 'refused' ? mixedKeepOutResult.refusal : undefined,
+        postCallStable: mixedKeepOutPostCallStable,
+      });
+
+    const admittedToctouKeepOut = keepOuts[0];
+    const forgedManualProjection = manualProjection === undefined
+      ? undefined
+      : JSON.parse(JSON.stringify(manualProjection)) as NonNullable<typeof manualProjection>;
+    const forgedSecondKeepOut = manualEntry === undefined || forgedManualEntry === undefined || forgedManualProjection === undefined
+      ? undefined
+      : { context: manualEntry.context, entry: forgedManualEntry, projection: forgedManualProjection };
+    const paintToctouTarget = admittedToctouKeepOut === undefined ? [] : [admittedToctouKeepOut];
+    const paintToctouCounts: ProxyTrapCounts = { total: 0, get: 0, getPrototypeOf: 0, ownKeys: 0, getOwnPropertyDescriptor: 0 };
+    const paintToctouStories: string[] = [];
+    const paintToctouState = { armed: false };
+    const paintToctouProxy = new Proxy(paintToctouTarget, {
+      get: (current, property, receiver) => {
+        if (paintToctouState.armed) throw new Error('post-call paint TOCTOU trap executed');
+        paintToctouCounts.total += 1;
+        paintToctouCounts.get += 1;
+        if (property === '0' && paintToctouStories.length > 0 && forgedSecondKeepOut !== undefined) return forgedSecondKeepOut;
+        return Reflect.get(current, property, receiver);
+      },
+      getPrototypeOf: current => {
+        if (paintToctouState.armed) throw new Error('post-call paint TOCTOU prototype trap executed');
+        paintToctouCounts.total += 1;
+        paintToctouCounts.getPrototypeOf += 1;
+        return Reflect.getPrototypeOf(current);
+      },
+      ownKeys: current => {
+        if (paintToctouState.armed) throw new Error('post-call paint TOCTOU keys trap executed');
+        paintToctouCounts.total += 1;
+        paintToctouCounts.ownKeys += 1;
+        return Reflect.ownKeys(current);
+      },
+      getOwnPropertyDescriptor: (current, property) => {
+        if (paintToctouState.armed) throw new Error('post-call paint TOCTOU descriptor trap executed');
+        paintToctouCounts.total += 1;
+        paintToctouCounts.getOwnPropertyDescriptor += 1;
+        const descriptor = Reflect.getOwnPropertyDescriptor(current, property);
+        if (property === '0' && descriptor !== undefined && 'value' in descriptor && admittedToctouKeepOut !== undefined && forgedSecondKeepOut !== undefined) {
+          const story = paintToctouStories.length === 0 ? 'issued' : 'forged';
+          paintToctouStories.push(story);
+          return { ...descriptor, value: story === 'issued' ? admittedToctouKeepOut : forgedSecondKeepOut };
+        }
+        return descriptor;
+      },
+    });
+    let paintToctouResult: X4UiPaintPlanResult | undefined;
+    let paintToctouThrew = false;
+    try {
+      paintToctouResult = projectX4UiPaintPlan({
+        ...baseInput,
+        keepOuts: paintToctouProxy as unknown as X4UiPaintPlanInput['keepOuts'],
+      });
+    } catch {
+      paintToctouThrew = true;
+    }
+    const paintToctouBeforeMutation = paintToctouResult === undefined ? undefined : JSON.stringify(paintToctouResult);
+    const paintToctouCommandIds = paintToctouResult?.status !== 'refused'
+      ? paintToctouResult.plan.keepOuts.map(item => item.entryId)
+      : [];
+    let paintToctouPostCallStable = false;
+    try {
+      if (paintToctouTarget.length > 0 && forgedSecondKeepOut !== undefined) paintToctouTarget[0] = forgedSecondKeepOut;
+      paintToctouState.armed = true;
+      paintToctouPostCallStable = paintToctouResult !== undefined
+        && JSON.stringify(paintToctouResult) === paintToctouBeforeMutation;
+    } catch {
+      paintToctouPostCallStable = false;
+    }
+    check('causal-paint-toctou-snapshot-stops-forged-second-story',
+      admittedToctouKeepOut !== undefined
+      && forgedSecondKeepOut !== undefined
+      && !paintToctouThrew
+      && paintToctouResult?.status === 'partial'
+      && JSON.stringify(paintToctouStories) === JSON.stringify(['issued'])
+      && JSON.stringify(paintToctouCommandIds) === JSON.stringify([admittedToctouKeepOut.projection.entryId])
+      && !paintToctouCommandIds.includes(manualEntry?.id ?? '')
+      && Object.isFrozen(paintToctouResult.plan.keepOuts)
+      && paintToctouPostCallStable
+      && proxyTrapCensusMatches(paintToctouCounts, PAINT_ONE_ITEM_TOCTOU_PROXY_TRAPS), {
+        fixtureReady: admittedToctouKeepOut !== undefined && forgedSecondKeepOut !== undefined,
+        seamReached: true,
+        threw: paintToctouThrew,
+        traps: { ...paintToctouCounts },
+        expectedTraps: { ...PAINT_ONE_ITEM_TOCTOU_PROXY_TRAPS },
+        stories: [...paintToctouStories],
+        status: paintToctouResult?.status,
+        commandIds: paintToctouCommandIds,
+        expectedCommandIds: admittedToctouKeepOut === undefined ? [] : [admittedToctouKeepOut.projection.entryId],
+        postCallStable: paintToctouPostCallStable,
+      });
 
     const parentPrototypeTarget = scene.frames.find(frame => !Object.prototype.hasOwnProperty.call(frame, 'parentId'));
     closedDomainScenePollutionCase(
@@ -1487,14 +2694,13 @@ async function main(): Promise<void> {
       const partial = clonedScene(scene);
       const text = partial.texts.find(candidate => candidate.id === textId);
        if (text) (text as unknown as JsonRecord).clipRect = { x: glyph.quad.x + glyph.quad.width / 2, y: 0, width: glyph.quad.width, height: glyph.quad.height };
-      const clippedPlan = projectedPlan({ scene: partial, corpus: canonical });
-      const clippedGlyph = clippedPlan?.plan.layers[1].commands.find(command => command.kind === 'glyph-alpha-blit' && command.textId === textId);
-      check('partial hierarchical clip adjusts source and destination', clippedGlyph !== undefined && clippedGlyph.kind === 'glyph-alpha-blit' && clippedGlyph.destinationRect.width < glyph.quad.width && clippedGlyph.sourceRect.width < glyph.quad.bitmapBounds.right - glyph.quad.bitmapBounds.left);
+      const clippedResult = projectX4UiPaintPlan({ scene: partial, corpus: canonical });
+      check('copied Scene text clip variation refuses source authority', text !== undefined && clippedResult.status === 'refused' && clippedResult.refusal.code === 'invalid-scene');
       const zero = clonedScene(scene);
       const zeroText = zero.texts.find(candidate => candidate.id === textId);
        if (zeroText) (zeroText as unknown as JsonRecord).clipRect = { x: Math.max(0, glyph.quad.x), y: 0, width: 0, height: 0 };
-      const zeroPlan = projectedPlan({ scene: zero, corpus: canonical });
-      check('zero clip emits diagnostic and no raster command', zeroPlan !== undefined && zeroPlan.plan.layers[1].commands.filter(command => command.kind === 'glyph-alpha-blit' && command.textId === textId).length === 0 && zeroPlan.plan.diagnostics.some(diagnostic => diagnostic.kind === 'empty-clip' && diagnostic.nodeId === glyph.id));
+      const zeroResult = projectX4UiPaintPlan({ scene: zero, corpus: canonical });
+      check('copied Scene zero-clip variation refuses source authority', zeroText !== undefined && zeroResult.status === 'refused' && zeroResult.refusal.code === 'invalid-scene');
       const boldText = scene.texts.find(candidate => candidate.font === 'Zekton Bold');
       const boldPlan = projectedPlan({ scene, corpus: canonical });
       check('source-derived bold text retains exact layout and atlas identity', boldText !== undefined && boldText.layout !== undefined && boldPlan !== undefined && boldPlan.plan.layers[1].commands.some(command => command.kind === 'glyph-alpha-blit' && command.textId === boldText.id && command.descriptor.relativePath.includes('bold')), { boldText: boldText === undefined ? undefined : { id: boldText.id, font: boldText.font, hasLayout: boldText.layout !== undefined }, boldCommands: boldPlan?.plan.layers[1].commands.filter(command => command.kind === 'glyph-alpha-blit').map(command => ({ textId: command.textId, descriptor: command.descriptor.relativePath })) });
@@ -1502,24 +2708,21 @@ async function main(): Promise<void> {
       const partialCell = clonedScene(scene);
       const cell = partialCell.cells.find(candidate => candidate.rect !== undefined);
       if (cell?.rect) (cell as unknown as JsonRecord).clipRect = { x: cell.rect.x + cell.rect.width / 2, y: cell.rect.y, width: cell.rect.width, height: cell.rect.height };
-      const partialCellPlan = projectedPlan({ scene: partialCell, corpus: canonical });
-      const cellGeometry = partialCellPlan?.plan.layers[0].commands.find(command => command.id === `geometry:${cell?.id}`);
-      check('partial cell geometry is clipped before paint', cell !== undefined && partialCellPlan !== undefined && cellGeometry !== undefined && cellGeometry.kind === 'node-geometry' && cellGeometry.geometry !== undefined && cellGeometry.clipRect !== undefined && cellGeometry.geometry.width < (cell.rect?.width ?? 0));
+      const partialCellResult = projectX4UiPaintPlan({ scene: partialCell, corpus: canonical });
+      check('copied Scene cell clip variation refuses source authority', cell !== undefined && partialCellResult.status === 'refused' && partialCellResult.refusal.code === 'invalid-scene');
 
       const partialWidget = clonedScene(scene);
       const widget = partialWidget.widgets.find(candidate => candidate.kind === 'button' && candidate.outerRect !== undefined);
       if (widget?.outerRect) (widget as unknown as JsonRecord).clipRect = { x: widget.outerRect.x + widget.outerRect.width / 2, y: widget.outerRect.y, width: widget.outerRect.width, height: widget.outerRect.height };
-      const partialWidgetPlan = projectedPlan({ scene: partialWidget, corpus: canonical });
-      const widgetGeometry = partialWidgetPlan?.plan.layers[0].commands.find(command => command.id === `geometry:${widget?.id}`);
-      const widgetDiagnostic = partialWidgetPlan?.plan.diagnostics.find(command => command.id === `runtime-paint:${widget?.id}`);
-      check('partial widget geometry and unsupported paint diagnostics are clipped', widget !== undefined && partialWidgetPlan !== undefined && widgetGeometry !== undefined && widgetGeometry.kind === 'node-geometry' && widgetGeometry.geometry !== undefined && widgetGeometry.clipRect !== undefined && widgetGeometry.geometry.width < (widget.outerRect?.width ?? 0) && widgetDiagnostic !== undefined && widgetDiagnostic.geometry !== undefined && widgetDiagnostic.clipRect !== undefined && widgetDiagnostic.geometry.width < (widget.outerRect?.width ?? 0));
+      const partialWidgetResult = projectX4UiPaintPlan({ scene: partialWidget, corpus: canonical });
+      check('copied Scene widget clip variation refuses source authority', widget !== undefined && partialWidgetResult.status === 'refused' && partialWidgetResult.refusal.code === 'invalid-scene');
     }
 
     const partialScene = clonedScene(scene);
     (partialScene as unknown as JsonRecord).status = 'partial';
     (partialScene as unknown as JsonRecord).programStatus = 'projected';
-    const partialPlan = projectedPlan({ scene: partialScene, corpus: canonical });
-    check('projected program with conservative partial Scene remains valid', partialPlan !== undefined && partialPlan.plan.status === 'partial' && partialPlan.plan.sceneStatus === 'partial');
+    const partialResult = projectX4UiPaintPlan({ scene: partialScene, corpus: canonical });
+    check('copied conservative partial Scene status refuses source authority', partialResult.status === 'refused' && partialResult.refusal.code === 'invalid-scene');
 
     const badParent = clonedScene(scene);
     const badParentNode = badParent.widgets[0];
@@ -1565,8 +2768,8 @@ async function main(): Promise<void> {
     const duplicateResult = projectX4UiPaintPlan({ scene: duplicate, corpus: canonical });
     check('duplicate Scene node identity refuses without throw', duplicateResult.status === 'refused' && duplicateResult.refusal.code === 'invalid-scene');
     const partialInput = { scene: partialScene, corpus: canonical };
-    const partialAgain = projectedPlan(partialInput);
-    check('partial output remains immutable and truthful', partialAgain !== undefined && partialAgain.plan.status === 'partial' && partialAgain.plan.verification.gameVerified === false && JSON.stringify(partialAgain).includes('Not verified in game'));
+    const partialAgain = projectX4UiPaintPlan(partialInput);
+    check('copied partial Scene refusal is deterministic', partialAgain.status === 'refused' && partialAgain.refusal.code === 'invalid-scene' && JSON.stringify(partialAgain) === JSON.stringify(partialResult));
 
     const phase6FrameA = scene.frames[0]!;
     const phase6FrameB = scene.frames.find(candidate => candidate.id !== phase6FrameA.id)!;
@@ -1953,10 +3156,6 @@ void main().then(() => {
     'accepted Scene projects with all four keep-out contexts',
     'regular glyphs use canonical descriptor/atlas bounds and JSON-safe alpha commands',
     'source-derived bold text retains exact layout and atlas identity',
-    'partial hierarchical clip adjusts source and destination',
-    'zero clip emits diagnostic and no raster command',
-    'partial cell geometry is clipped before paint',
-    'partial widget geometry and unsupported paint diagnostics are clipped',
   ] as const;
   const phase6IntendedValidControls = phase6IntendedValidControlNames.map(name => ({ name, pass: checks.find(checkResult => checkResult.name === name)?.pass === true }));
   const phase6FamilyPrefixes = {

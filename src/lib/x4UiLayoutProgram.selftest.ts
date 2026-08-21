@@ -21,6 +21,22 @@ import {
   type X4UiLayoutTargetSelector,
 } from './x4UiLayoutProgram';
 import * as x4UiLayoutProgramExports from './x4UiLayoutProgram';
+import {
+  X4_UI_CORPUS_COLORS_XML_PATH,
+  X4_UI_CORPUS_COLORS_XML_SHA256,
+  X4_UI_CORPUS_COLORS_XML_SIZE,
+  X4_UI_CORPUS_COLORS_XSD_PATH,
+  X4_UI_CORPUS_COLORS_XSD_SHA256,
+  X4_UI_CORPUS_COLORS_XSD_SIZE,
+  X4_UI_CORPUS_FILE_URL,
+  X4_UI_CORPUS_MANIFEST_URL,
+  X4_UI_CORPUS_STATUS_URL,
+  isX4UiCorpusCanonicalColorSuccess,
+  loadCanonicalX4UiCorpusColorEvidence,
+  type X4UiCorpusCanonicalColorLoadOptions,
+  type X4UiCorpusCanonicalColorSuccess,
+  type X4UiCorpusFetchResponse,
+} from './x4UiCorpusAssets';
 
 interface Check {
   readonly name: string;
@@ -59,6 +75,15 @@ const input = (text: string, rel = 'selftest/b119-layout-program.lua') => ({
 });
 
 const detail = (value: unknown): string => JSON.stringify(value);
+
+const locationsSameForTest = (
+  left: { readonly file: string; readonly sourcePath?: string; readonly start: { readonly line: number; readonly column: number; readonly offset: number }; readonly end: { readonly line: number; readonly column: number; readonly offset: number } } | undefined,
+  right: { readonly file: string; readonly sourcePath?: string; readonly start: { readonly line: number; readonly column: number; readonly offset: number }; readonly end: { readonly line: number; readonly column: number; readonly offset: number } } | undefined,
+): boolean => Boolean(left && right)
+  && left!.file === right!.file
+  && (left!.sourcePath || undefined) === (right!.sourcePath || undefined)
+  && JSON.stringify(left!.start) === JSON.stringify(right!.start)
+  && JSON.stringify(left!.end) === JSON.stringify(right!.end);
 
 const pin = (value: number, lineStart: number, lineEnd = lineStart) => ({
   value,
@@ -223,6 +248,232 @@ const freezeCycleClone = <T>(value: T): T => {
   };
   visit(value);
   return value;
+};
+
+const P3_COLOR_BASE_IDS = [
+  'white',
+  'black_alpha_0',
+  'white_weak_glow',
+  'azure_very_dark',
+  'azure_moderate_glow',
+  'azure_dark_alpha_160_glow',
+  'azure_very_dark_alpha_224',
+  'literal_base',
+] as const;
+
+const P3_COLOR_MAPPING_IDS = [
+  'table_background_default',
+  'row_background',
+  'text_normal',
+  'icon_normal',
+  'button_background_default',
+  'button_highlight_default',
+  'button_border_default',
+  'editbox_background_default',
+] as const;
+
+const p3PaddedUtf8 = (text: string, size: number): Uint8Array => {
+  const bytes = new TextEncoder().encode(text);
+  if (bytes.byteLength > size) throw new Error(`P3 fixture exceeds pinned size ${size}`);
+  const padded = new Uint8Array(size);
+  padded.set(bytes);
+  padded.fill(0x20, bytes.byteLength);
+  return padded;
+};
+
+const p3HexDigest = (hex: string): ArrayBuffer => {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let index = 0; index < bytes.length; index += 1) bytes[index] = Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16);
+  return bytes.buffer;
+};
+
+const p3StatusBody = (root: string, generation: string): Record<string, unknown> => {
+  const current = { generation, root, generatedAt: '2026-08-18T00:00:00.000Z' };
+  return {
+    available: true,
+    root,
+    generatedAt: current.generatedAt,
+    manifestGeneration: generation,
+    manifest: { available: true, state: 'ready', root, current },
+  };
+};
+
+const p3ManifestStatus = (root: string, generation: string): Record<string, unknown> => ({
+  available: true,
+  state: 'ready',
+  root,
+  current: { generation, root, generatedAt: '2026-08-18T00:00:00.000Z' },
+});
+
+const p3PathFromQuery = (url: string, key: string): string => {
+  const query = url.slice(url.indexOf('?') + 1).split('&');
+  const pair = query.find(part => part.startsWith(`${key}=`));
+  if (!pair) throw new Error(`P3 fixture query is missing ${key}`);
+  return decodeURIComponent(pair.slice(key.length + 1));
+};
+
+interface P3ColorFixture {
+  readonly buffers: Map<string, Uint8Array>;
+  readonly records: Map<string, unknown[]>;
+  readonly calls: string[];
+  readonly statusBodies: unknown[];
+  readonly statusCodes: number[];
+  readonly root: string;
+  readonly generation: string;
+}
+
+const p3MakeColorFixture = (): P3ColorFixture => {
+  const root = 'p3-color-corpus-identity';
+  const generation = 'p3-color-generation-1';
+  const baseIds: string[] = [...P3_COLOR_BASE_IDS];
+  while (baseIds.length < 224) baseIds.push(`p3_base_${baseIds.length.toString().padStart(3, '0')}`);
+  const specialValues: Record<string, readonly [number, number, number, number, number]> = {
+    white: [11, 22, 33, 44, 0.1],
+    black_alpha_0: [51, 52, 53, 54, 0.2],
+    white_weak_glow: [101, 102, 103, 104, 0.3],
+    azure_very_dark: [61, 62, 63, 64, 0.4],
+    azure_moderate_glow: [71, 72, 73, 74, 0.5],
+    azure_dark_alpha_160_glow: [81, 82, 83, 84, 0.6],
+    azure_very_dark_alpha_224: [91, 92, 93, 94, 0.7],
+    literal_base: [131, 132, 133, 134, 0.9],
+  };
+  const colors = baseIds.map((id, index) => {
+    const values = specialValues[id] || [index % 256, (index + 1) % 256, (index + 2) % 256, (index + 3) % 256, 0];
+    return `    <color id="${id}" r="${values[0]}" g="${values[1]}" b="${values[2]}" a="${values[3]}" glow="${values[4]}"/>`;
+  });
+  const mappingRefs: Record<string, string> = {
+    table_background_default: 'white',
+    row_background: 'black_alpha_0',
+    text_normal: 'white_weak_glow',
+    icon_normal: 'white_weak_glow',
+    button_background_default: 'azure_very_dark',
+    button_highlight_default: 'azure_moderate_glow',
+    button_border_default: 'azure_dark_alpha_160_glow',
+    editbox_background_default: 'azure_very_dark_alpha_224',
+  };
+  const mappings = P3_COLOR_MAPPING_IDS.map(id => `    <mapping id="${id}" ref="${mappingRefs[id]}"/>`);
+  for (let index = mappings.length; index < 804; index += 1) {
+    mappings.push(`    <mapping id="p3_map_${index.toString().padStart(3, '0')}" ref="${baseIds[index % baseIds.length]}"/>`);
+  }
+  const xml = p3PaddedUtf8([
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<colormap>',
+    '  <colors>',
+    ...colors,
+    '  </colors>',
+    '  <mappings>',
+    ...mappings,
+    '  </mappings>',
+    '</colormap>',
+  ].join('\n'), X4_UI_CORPUS_COLORS_XML_SIZE);
+  const xsd = p3PaddedUtf8([
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">',
+    '  <xs:simpleType name="identifier"><xs:restriction base="xs:string"><xs:pattern value="[a-zA-Z_][a-zA-Z0-9_]*"/></xs:restriction></xs:simpleType>',
+    '</xs:schema>',
+  ].join('\n'), X4_UI_CORPUS_COLORS_XSD_SIZE);
+  const buffers = new Map<string, Uint8Array>([
+    [X4_UI_CORPUS_COLORS_XML_PATH, xml],
+    [X4_UI_CORPUS_COLORS_XSD_PATH, xsd],
+  ]);
+  const records = new Map<string, unknown[]>([
+    [X4_UI_CORPUS_COLORS_XML_PATH, [{ path: X4_UI_CORPUS_COLORS_XML_PATH, bytes: xml.byteLength }]],
+    [X4_UI_CORPUS_COLORS_XSD_PATH, [{ path: X4_UI_CORPUS_COLORS_XSD_PATH, bytes: xsd.byteLength }]],
+  ]);
+  return {
+    buffers,
+    records,
+    calls: [],
+    statusBodies: [p3StatusBody(root, generation), p3StatusBody(root, generation)],
+    statusCodes: [200, 200],
+    root,
+    generation,
+  };
+};
+
+const p3ColorTransport = (fixture: P3ColorFixture): ((url: string, init?: { readonly signal?: AbortSignal }) => Promise<X4UiCorpusFetchResponse>) =>
+  async url => {
+    fixture.calls.push(url);
+    if (url === X4_UI_CORPUS_STATUS_URL) {
+      const index = Math.min(
+        fixture.calls.filter(call => call === X4_UI_CORPUS_STATUS_URL).length - 1,
+        fixture.statusBodies.length - 1,
+      );
+      return {
+        status: fixture.statusCodes[index] ?? 200,
+        headers: { get: name => name.toLowerCase() === 'content-type' ? 'application/json' : null },
+        json: async () => fixture.statusBodies[index],
+      };
+    }
+    if (url.startsWith(`${X4_UI_CORPUS_MANIFEST_URL}?`)) {
+      const path = p3PathFromQuery(url, 'q');
+      const records = fixture.records.get(path) || [];
+      return {
+        status: 200,
+        headers: { get: name => name.toLowerCase() === 'content-type' ? 'application/json' : null },
+        json: async () => ({
+          status: p3ManifestStatus(fixture.root, fixture.generation),
+          generation: fixture.generation,
+          files: records,
+          total: records.length,
+          limit: 500,
+          offset: 0,
+        }),
+      };
+    }
+    if (url.startsWith(`${X4_UI_CORPUS_FILE_URL}?`)) {
+      const path = p3PathFromQuery(url, 'path');
+      const bytes = (fixture.buffers.get(path) || new Uint8Array()).slice();
+      return {
+        status: 200,
+        headers: { get: name => name.toLowerCase() === 'content-type' ? 'application/xml' : null },
+        arrayBuffer: async () => bytes.buffer,
+      };
+    }
+    throw new Error(`unexpected P3 color URL ${url}`);
+  };
+
+const p3WithCanonicalPlatformHash = async <T>(run: () => Promise<T>): Promise<T> => {
+  const originalDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
+  const originalValue = (globalThis as unknown as { crypto?: unknown }).crypto;
+  let hashIndex = 0;
+  const expectedHashes = [X4_UI_CORPUS_COLORS_XML_SHA256, X4_UI_CORPUS_COLORS_XSD_SHA256];
+  const fakeCrypto = {
+    subtle: {
+      digest: async (): Promise<ArrayBuffer> => {
+        const expected = expectedHashes[hashIndex++];
+        if (!expected) throw new Error('P3 canonical hash count mismatch');
+        return p3HexDigest(expected);
+      },
+    },
+  };
+  let result!: T;
+  let restoreError: Error | undefined;
+  try {
+    Object.defineProperty(globalThis, 'crypto', {
+      configurable: true,
+      enumerable: originalDescriptor?.enumerable ?? true,
+      writable: true,
+      value: fakeCrypto,
+    });
+    result = await run();
+  } finally {
+    if (originalDescriptor) Object.defineProperty(globalThis, 'crypto', originalDescriptor);
+    else Reflect.deleteProperty(globalThis, 'crypto');
+    if ((globalThis as unknown as { crypto?: unknown }).crypto !== originalValue) {
+      restoreError = new Error('P3 canonical selftest did not restore global Web Crypto');
+    }
+  }
+  if (restoreError) throw restoreError;
+  return result;
+};
+
+const p3LoadCanonicalColorAuthority = async (): Promise<X4UiCorpusCanonicalColorSuccess> => {
+  const fixture = p3MakeColorFixture();
+  const options: X4UiCorpusCanonicalColorLoadOptions = { transport: p3ColorTransport(fixture) };
+  const result = await p3WithCanonicalPlatformHash(() => loadCanonicalX4UiCorpusColorEvidence(options));
+  if ('error' in result) throw new Error(`P3 canonical color fixture failed: ${result.error.code}: ${result.error.message}`);
+  return result;
 };
 
 const mutateFactForAudit = (value: unknown): unknown => {
@@ -11091,7 +11342,9 @@ const run = (): { readonly allPassed: boolean; readonly passed: number; readonly
     && sameJson(sampledConditionalCellOwnerOperation.metadata.receiver?.reference, sampledConditionalCellOwnerOperation.metadata.semantics.cell?.reference)
     && sameJson(sampledConditionalCellOwnerOperation.metadata.receiver?.reference, sampledConditionalCellOwnerOperation.metadata.result)
     && sameJson(sampledConditionalCellOwnerOperation.metadata.receiver?.reference, sampledConditionalCellOwnerExpectedCell.identity)
-    && sampledConditionalCellOwnerExpectedTable.rowIds.filter(candidate => candidate === sampledConditionalCellOwnerExpectedRow.id).length === 1
+    && sampledConditionalCellOwnerExpectedRow.rowIndex === undefined
+    && sampledConditionalCellOwnerExpectedRow.kernelState === undefined
+    && sampledConditionalCellOwnerExpectedTable.rowIds.every(candidate => candidate !== sampledConditionalCellOwnerExpectedRow.id)
     && sampledConditionalCellOwnerExpectedRow.cellIds.filter(candidate => candidate === sampledConditionalCellOwnerExpectedCell.id).length === 1
     && sampledConditionalCellOwnerExpectedTable.operationIds.filter(candidate => candidate === sampledConditionalCellOwnerOperation.id).length === 1
     && sampledConditionalCellOwnerExpectedRow.operationIds.filter(candidate => candidate === sampledConditionalCellOwnerOperation.id).length === 1
@@ -11223,7 +11476,7 @@ const run = (): { readonly allPassed: boolean; readonly passed: number; readonly
   const sampledConditionalProductionValidation = sampledConditionalProductionProgram && sampledConditionalProductionAuthority
     ? safeSchemaPairValidation(sampledConditionalProductionProgram, sampledConditionalProductionAuthority)
     : { threw: false, valid: false, reason: 'sampled conditional production pair missing' };
-  check('B119 sampled conditional static setColSpan materializes and closes its exact cell owner',
+  check('B119 sampled conditional static setColSpan emits and closes its exact source cell owner',
     sampledConditionalCellOwnerUnsampledResult.status !== 'refused'
       && sampledConditionalCellOwnerUnsampledProgram !== undefined
       && sampledConditionalCellOwnerUnsampledProgram.operations.some(candidate =>
@@ -11391,7 +11644,9 @@ const run = (): { readonly allPassed: boolean; readonly passed: number; readonly
         && sameJson(receiver, operation.metadata.semantics.cell?.reference)
         && sameJson(receiver, operation.metadata.result)
         && sameJson(receiver, cell.identity)
-        && table.rowIds.filter(candidate => candidate === row.id).length === 1
+        && row.rowIndex === undefined
+        && row.kernelState === undefined
+        && table.rowIds.every(candidate => candidate !== row.id)
         && row.cellIds.filter(candidate => candidate === cell.id).length === 1
         && table.operationIds.filter(candidate => candidate === operation.id).length === 1
         && row.operationIds.filter(candidate => candidate === operation.id).length === 1
@@ -11446,6 +11701,7 @@ const run = (): { readonly allPassed: boolean; readonly passed: number; readonly
     source: string,
     rel: string,
     expandLocals = false,
+    sampleFactory: (candidate: X4UiLayoutProgram) => X4UiLayoutPreviewSampleInput = b119SamplesFor,
   ): B119Fixture => {
     const fixtureModel = buildX4UiCallModel(input(source, rel));
     const fixtureTarget = namedTarget(fixtureModel, 'menu.display');
@@ -11454,7 +11710,7 @@ const run = (): { readonly allPassed: boolean; readonly passed: number; readonly
       : {});
     const unsampled = projectX4UiLayoutProgram(fixtureModel, fixtureTarget, fixtureProfile);
     const unsampledProgram = resultProgram(unsampled);
-    const samples = unsampledProgram ? b119SamplesFor(unsampledProgram) : undefined;
+    const samples = unsampledProgram ? sampleFactory(unsampledProgram) : undefined;
     const sampled = samples
       ? projectX4UiLayoutProgram(fixtureModel, fixtureTarget, fixtureProfile, samples)
       : undefined;
@@ -11588,7 +11844,368 @@ const run = (): { readonly allPassed: boolean; readonly passed: number; readonly
       })),
       validation: b119MenuFixture.program && b119MenuFixture.authority
         ? safeSchemaPairValidation(b119MenuFixture.program, b119MenuFixture.authority)
+      : undefined,
+    }));
+
+  const b119MenuOwnerMismatchFixture = b119Fixture([
+    'local menu = { name = "B119MenuOwnerMismatch", layer = 1 }',
+    'function menu.display() ',
+    '  local frame = Helper.createFrameHandle(menu, { width = runtimeViewWidth, height = runtimeViewHeight })',
+    '  local ct = frame:addTable(runtimeColumns, { width = runtimeWidth, reserveScrollBar = runtimeReserveScrollBar, scaling = runtimeScaling })',
+    '  local row = ct:addRow(false, { paddingTop = runtimePaddingTop, paddingBottom = runtimePaddingBottom })',
+    '  local cell = row[1]',
+    '  row = ct:addRow(false, {})',
+    '  if pending then',
+    '    cell:setColSpan(runtimeSpan)',
+    '  end',
+    '  if active then',
+    '    row[1]:createButton({ x = runtimeX, y = runtimeY, width = runtimeButtonWidth, height = runtimeButtonHeight, scaling = runtimeButtonScaling, affectRowHeight = runtimeAffectRowHeight, active = runtimeActive })',
+    '  end',
+    'end',
+  ].join('\n'),
+  'selftest/b119-menu-owner-mismatch.lua',
+  false,
+  candidate => ({
+    ...b119SamplesFor(candidate),
+    values: candidate.sampleCatalog.entries.map(entry => ({
+      id: entry.id,
+      value: entry.expression === 'runtimeViewWidth'
+        ? 1920
+        : entry.expression === 'runtimeViewHeight'
+          ? 1080
+          : entry.expectedType === 'boolean'
+            ? false
+            : entry.expectedType === 'string'
+              ? 'sampled'
+              : entry.expression === 'runtimeColumns'
+                ? 12
+                : entry.expression === 'runtimeSpan'
+                  ? 7
+                  : entry.expression === 'runtimePaddingTop' || entry.expression === 'runtimePaddingBottom'
+                    ? 0
+                    : entry.expression === 'runtimeButtonHeight'
+                      ? 25
+                      : 80,
+    })),
+  }));
+  const b119MenuOwnerMismatchResult = b119MenuOwnerMismatchFixture.sampled;
+  const b119MenuOwnerMismatchRefusal = b119MenuOwnerMismatchResult && 'refusal' in b119MenuOwnerMismatchResult
+    ? b119MenuOwnerMismatchResult.refusal
+    : undefined;
+  check('B119 causal menu owner/reference mismatch closes after producer repair',
+    b119MenuOwnerMismatchFixture.fixtureReady
+      && b119MenuOwnerMismatchFixture.samples?.values.length === 16
+      && b119MenuOwnerMismatchResult?.status !== 'refused'
+      && b119MenuOwnerMismatchFixture.program !== undefined
+      && b119MenuOwnerMismatchFixture.authority !== undefined
+      && safeSchemaPairValidation(
+        b119MenuOwnerMismatchFixture.program,
+        b119MenuOwnerMismatchFixture.authority,
+      ).valid === true,
+    detail({
+      fixtureReady: b119MenuOwnerMismatchFixture.fixtureReady,
+      sampleCount: b119MenuOwnerMismatchFixture.samples?.values.length,
+      sampleExpressions: b119MenuOwnerMismatchFixture.unsampledProgram?.sampleCatalog.entries.map(entry => entry.expression),
+      sampledStatus: b119MenuOwnerMismatchResult?.status,
+      refusal: b119MenuOwnerMismatchRefusal,
+      operations: b119MenuOwnerMismatchFixture.program?.operations
+        .filter(operation => operation.kind === 'setColSpan' || operation.kind === 'createButton')
+        .map((operation, index) => ({
+          index: b119MenuOwnerMismatchFixture.program?.operations.indexOf(operation) ?? index,
+          id: operation.id,
+          kind: operation.kind,
+          sourceLine: operation.source.start.line,
+          modelOrder: operation.modelOrder,
+          tableId: operation.tableId,
+          rowId: operation.rowId,
+          cellId: operation.cellId,
+          receiver: operation.metadata.receiver?.reference,
+          result: operation.metadata.result,
+          semanticCell: operation.metadata.semantics.cell?.reference,
+          cellIdentity: operation.cellId
+            ? b119MenuOwnerMismatchFixture.program?.cells.find(cell => cell.id === operation.cellId)?.identity
+            : undefined,
+        })),
+      programStatus: b119MenuOwnerMismatchFixture.program?.status,
+      geometryCounts: b119MenuOwnerMismatchFixture.program
+        ? {
+          frames: b119MenuOwnerMismatchFixture.program.frames.length,
+          tables: b119MenuOwnerMismatchFixture.program.tables.length,
+          rows: b119MenuOwnerMismatchFixture.program.rows.length,
+          cells: b119MenuOwnerMismatchFixture.program.cells.length,
+          operations: b119MenuOwnerMismatchFixture.program.operations.length,
+          gaps: b119MenuOwnerMismatchFixture.program.gaps.length,
+        }
         : undefined,
+      validation: b119MenuOwnerMismatchFixture.program && b119MenuOwnerMismatchFixture.authority
+        ? safeSchemaPairValidation(
+          b119MenuOwnerMismatchFixture.program,
+          b119MenuOwnerMismatchFixture.authority,
+        )
+        : undefined,
+      downstream: { canRender: 'not part of layout-program contract', firstRefusal: undefined },
+      source: 'captured first-row cell:setColSpan(runtimeSpan) after row rebind, followed by second-row row[1]:createButton(...)',
+    }));
+
+  const b119ExactMenuOwnerShapeFixture = b119Fixture([
+    'local menu = { name = "B119ExactMenuOwnerShape", layer = 1 }',
+    'function menu.display()',
+    '  local frame = Helper.createFrameHandle(menu, { width = runtimeViewWidth, height = runtimeViewHeight })',
+    '  local ht = frame:addTable(3, { width = runtimeWidth, reserveScrollBar = runtimeReserveScrollBar, scaling = runtimeScaling })',
+    '  local tt = frame:addTable(4, { width = runtimeWidth, reserveScrollBar = runtimeReserveScrollBar, scaling = runtimeScaling })',
+    '  local row = tt:addRow(true, {})',
+    '  row[1]:createText(dynamicText, {})',
+    '  local ct = frame:addTable(12, { width = runtimeWidth, reserveScrollBar = runtimeReserveScrollBar, scaling = runtimeScaling })',
+    '  if menu.lastOdds or menu.lastCheck then',
+    '    local ck = menu.lastCheck',
+    '    row = ct:addRow(false, {})',
+    '    local _readSpan = ck and 6 or 12',
+    '    row[1]:setColSpan(_readSpan):createText(dynamicText, {})',
+    '    if ck then row[7]:setColSpan(6):createText(dynamicText, {}) end',
+    '  end',
+    'end',
+  ].join('\n'),
+  'selftest/b119-exact-menu-owner-shape.lua',
+  false,
+  candidate => ({
+    ...b119SamplesFor(candidate),
+    values: candidate.sampleCatalog.entries.map(entry => ({
+      id: entry.id,
+      value: entry.expression === 'runtimeViewWidth'
+        ? 1920
+        : entry.expression === 'runtimeViewHeight'
+          ? 1080
+          : entry.expectedType === 'boolean'
+            ? false
+            : entry.expectedType === 'string'
+              ? 'sampled'
+              : entry.expression === 'runtimeColumns'
+                ? 12
+                : entry.expression === 'runtimeWidth'
+                  ? 787
+                  : entry.expression === '_readSpan'
+                    ? 6
+                    : 80,
+    })),
+  }));
+  const b119ExactMenuOwnerShapeResult = b119ExactMenuOwnerShapeFixture.sampled;
+  check('B119 exact menu owner/source shape no longer refuses at layout owner gate',
+    b119ExactMenuOwnerShapeFixture.fixtureReady
+      && b119ExactMenuOwnerShapeFixture.samples?.values.length > 0
+      && b119ExactMenuOwnerShapeResult?.status !== 'refused'
+      && b119ExactMenuOwnerShapeFixture.program !== undefined
+      && b119ExactMenuOwnerShapeFixture.authority !== undefined
+      && safeSchemaPairValidation(
+        b119ExactMenuOwnerShapeFixture.program,
+        b119ExactMenuOwnerShapeFixture.authority,
+      ).valid === true,
+    detail({
+      fixtureReady: b119ExactMenuOwnerShapeFixture.fixtureReady,
+      sampleCount: b119ExactMenuOwnerShapeFixture.samples?.values.length,
+      sampleExpressions: b119ExactMenuOwnerShapeFixture.unsampledProgram?.sampleCatalog.entries.map(entry => entry.expression),
+      sampledStatus: b119ExactMenuOwnerShapeResult?.status,
+      refusal: b119ExactMenuOwnerShapeResult && 'refusal' in b119ExactMenuOwnerShapeResult
+        ? b119ExactMenuOwnerShapeResult.refusal
+        : undefined,
+      source: 'exact menu shape: prior tt row, ct conditional row rebind, then conditional _readSpan setColSpan and row[7] setColSpan',
+    }));
+
+  const b119ExactMenuMultipleRowsFixture = b119Fixture([
+    'local menu = { name = "B119ExactMenuOwnerMultipleRows", layer = 1 }',
+    'function menu.display()',
+    '  local frame = Helper.createFrameHandle(menu, { width = runtimeViewWidth, height = runtimeViewHeight })',
+    '  local ht = frame:addTable(3, { width = runtimeWidth, reserveScrollBar = runtimeReserveScrollBar, scaling = runtimeScaling })',
+    '  local tt = frame:addTable(4, { width = runtimeWidth, reserveScrollBar = runtimeReserveScrollBar, scaling = runtimeScaling })',
+    '  local row = tt:addRow(true, {})',
+    '  row[1]:createText(dynamicText, {})',
+    '  local ct = frame:addTable(12, { width = runtimeWidth, reserveScrollBar = runtimeReserveScrollBar, scaling = runtimeScaling })',
+    '  if pending then',
+    '    row = ct:addRow(false, {})',
+    '    row[1]:setColSpan(7):createText(dynamicText, {})',
+    '    row[8]:setColSpan(5):createText(dynamicText, {})',
+    '  end',
+    '  for _, item in ipairs(items or {}) do',
+    '    row = ct:addRow(false, {})',
+    '    row[1]:setColSpan(5):createText(dynamicText, {})',
+    '    row[6]:setColSpan(7):createText(dynamicText, {})',
+    '  end',
+    '  row = ct:addRow(true, {})',
+    '  row[1]:setColSpan(9):createText(dynamicText, {})',
+    '  if menu.lastOdds or menu.lastCheck then',
+    '    local ck = menu.lastCheck',
+    '    row = ct:addRow(false, {})',
+    '    local _readSpan = ck and 6 or 12',
+    '    row[1]:setColSpan(_readSpan):createText(dynamicText, {})',
+    '    if ck then row[7]:setColSpan(6):createText(dynamicText, {}) end',
+    '  end',
+    'end',
+  ].join('\n'),
+  'selftest/b119-exact-menu-owner-multiple-rows.lua',
+  false,
+  candidate => ({
+    ...b119SamplesFor(candidate),
+    values: candidate.sampleCatalog.entries.map(entry => ({
+      id: entry.id,
+      value: entry.expectedType === 'boolean'
+        ? false
+        : entry.expectedType === 'string'
+          ? 'sampled'
+          : entry.expression === 'runtimeViewWidth'
+            ? 1920
+            : entry.expression === 'runtimeViewHeight'
+              ? 1080
+              : entry.expression === 'runtimeWidth'
+                ? 787
+                : entry.expression === '_readSpan'
+                  ? 6
+                  : 80,
+    })),
+  }));
+  const b119ExactMenuMultipleRowsResult = b119ExactMenuMultipleRowsFixture.sampled;
+  const b119ExactMenuMultipleRowsRefusal = b119ExactMenuMultipleRowsResult && 'refusal' in b119ExactMenuMultipleRowsResult
+    ? b119ExactMenuMultipleRowsResult.refusal
+    : undefined;
+  check('B119 exact multi-row menu producer owner/reference branch closes after repair',
+    b119ExactMenuMultipleRowsFixture.fixtureReady
+      && b119ExactMenuMultipleRowsFixture.samples?.values.length > 0
+      && b119ExactMenuMultipleRowsResult?.status !== 'refused'
+      && b119ExactMenuMultipleRowsFixture.program !== undefined
+      && b119ExactMenuMultipleRowsFixture.authority !== undefined
+      && safeSchemaPairValidation(
+        b119ExactMenuMultipleRowsFixture.program,
+        b119ExactMenuMultipleRowsFixture.authority,
+      ).valid === true,
+    detail({
+      fixtureReady: b119ExactMenuMultipleRowsFixture.fixtureReady,
+      sampleCount: b119ExactMenuMultipleRowsFixture.samples?.values.length,
+      sampleExpressions: b119ExactMenuMultipleRowsFixture.unsampledProgram?.sampleCatalog.entries.map(entry => entry.expression),
+      sampledStatus: b119ExactMenuMultipleRowsResult?.status,
+      refusal: b119ExactMenuMultipleRowsRefusal,
+      source: 'exact menu producer shape: tt owner, pending/loop/footer ct rows, conditional read row, then row[1]/row[7] setColSpan',
+    }));
+
+  const b119MenuOwnerMismatchOperations = b119MenuOwnerMismatchFixture.program?.operations || [];
+  const b119MenuOwnerMismatchSetColSpanIndex = b119MenuOwnerMismatchOperations.findIndex(operation =>
+    operation.kind === 'setColSpan');
+  const b119MenuOwnerMismatchSetColSpan = b119MenuOwnerMismatchSetColSpanIndex >= 0
+    ? b119MenuOwnerMismatchOperations[b119MenuOwnerMismatchSetColSpanIndex]
+    : undefined;
+  const b119MenuOwnerMismatchCreateButton = b119MenuOwnerMismatchOperations.find(operation =>
+    operation.kind === 'createButton');
+  const b119MenuOwnerMismatchTargetIdentity: ValueRecord | undefined = b119MenuOwnerMismatchCreateButton?.cellId
+    ? b119MenuOwnerMismatchFixture.program?.cells.find(cell => cell.id === b119MenuOwnerMismatchCreateButton.cellId)?.identity as unknown as ValueRecord | undefined
+    : undefined;
+  const b119MenuOwnerMismatchMetadataControls: readonly {
+    readonly field: 'receiver' | 'result' | 'semanticCell';
+    readonly mutate: (metadata: ValueRecord, targetIdentity: ValueRecord) => void;
+  }[] = [
+    {
+      field: 'receiver',
+      mutate: (metadata, targetIdentity) => {
+        const receiver = metadata.receiver as ValueRecord | undefined;
+        if (receiver) receiver.reference = jsonClone(targetIdentity);
+      },
+    },
+    {
+      field: 'result',
+      mutate: (metadata, targetIdentity) => {
+        metadata.result = jsonClone(targetIdentity);
+      },
+    },
+    {
+      field: 'semanticCell',
+      mutate: (metadata, targetIdentity) => {
+        const semantics = metadata.semantics as ValueRecord | undefined;
+        const cell = semantics?.cell as ValueRecord | undefined;
+        if (cell) cell.reference = jsonClone(targetIdentity);
+      },
+    },
+  ];
+  for (const control of b119MenuOwnerMismatchMetadataControls) {
+    const candidateProgram = b119MenuOwnerMismatchFixture.program
+      ? jsonClone(b119MenuOwnerMismatchFixture.program) as unknown as ValueRecord
+      : undefined;
+    const candidateAuthority = b119MenuOwnerMismatchFixture.authority
+      ? jsonClone(b119MenuOwnerMismatchFixture.authority) as unknown as ValueRecord
+      : undefined;
+    const operation = candidateProgram && b119MenuOwnerMismatchSetColSpanIndex >= 0
+      ? (candidateProgram.operations as ValueRecord[])[b119MenuOwnerMismatchSetColSpanIndex]
+      : undefined;
+    const authorityOperation = candidateAuthority && b119MenuOwnerMismatchSetColSpanIndex >= 0
+      ? (candidateAuthority.operations as ValueRecord[])[b119MenuOwnerMismatchSetColSpanIndex]
+      : undefined;
+    const metadata = operation?.metadata as ValueRecord | undefined;
+    const authorityMetadata = (authorityOperation?.snapshot as ValueRecord | undefined)?.metadata as ValueRecord | undefined;
+    const beforeMetadata = metadata ? jsonClone(metadata) : undefined;
+    if (metadata && authorityMetadata && b119MenuOwnerMismatchTargetIdentity) {
+      control.mutate(metadata, b119MenuOwnerMismatchTargetIdentity);
+      control.mutate(authorityMetadata, b119MenuOwnerMismatchTargetIdentity);
+    }
+    const frozenProgram = candidateProgram
+      ? freezeClone(candidateProgram) as unknown as X4UiLayoutProgram
+      : undefined;
+    const frozenAuthority = candidateAuthority
+      ? freezeClone(candidateAuthority) as unknown as EvidenceAuthorityLike
+      : undefined;
+    const validation = frozenProgram && frozenAuthority
+      ? safeSchemaPairValidation(frozenProgram, frozenAuthority)
+      : { threw: false, valid: false, reason: 'causal metadata control fixture not ready' };
+    check(`B119 causal ${control.field} one-field mutation is refused without throws`,
+      b119MenuOwnerMismatchFixture.fixtureReady
+        && b119MenuOwnerMismatchSetColSpan !== undefined
+        && b119MenuOwnerMismatchTargetIdentity !== undefined
+        && beforeMetadata !== undefined
+        && metadata !== undefined
+        && !sameJson(beforeMetadata, metadata)
+        && validation.threw === false
+        && validation.valid === false,
+      detail({
+        field: control.field,
+        operationIndex: b119MenuOwnerMismatchSetColSpanIndex,
+        operationId: b119MenuOwnerMismatchSetColSpan?.id,
+        operationKind: b119MenuOwnerMismatchSetColSpan?.kind,
+        sourceLine: b119MenuOwnerMismatchSetColSpan?.source.start.line,
+        targetIdentity: b119MenuOwnerMismatchTargetIdentity,
+        validation,
+      }));
+  }
+  const b119MenuOwnerMismatchOwnerControl = b119MenuOwnerMismatchFixture.program
+    && b119MenuOwnerMismatchFixture.authority
+    && b119MenuOwnerMismatchSetColSpan
+    && b119MenuOwnerMismatchTargetIdentity
+    ? (() => {
+      const candidateProgram = jsonClone(b119MenuOwnerMismatchFixture.program) as unknown as ValueRecord;
+      const candidateAuthority = jsonClone(b119MenuOwnerMismatchFixture.authority) as unknown as ValueRecord;
+      const mutation = phase87SetOperationOwner(
+        candidateProgram,
+        candidateAuthority,
+        b119MenuOwnerMismatchSetColSpanIndex,
+        'cellId',
+        b119MenuOwnerMismatchCreateButton?.cellId,
+      );
+      const program = freezeClone(candidateProgram) as unknown as X4UiLayoutProgram;
+      const authority = freezeClone(candidateAuthority) as unknown as EvidenceAuthorityLike;
+      return { mutation, program, authority };
+    })()
+    : undefined;
+  const b119MenuOwnerMismatchOwnerValidation = b119MenuOwnerMismatchOwnerControl
+    ? safeSchemaPairValidation(b119MenuOwnerMismatchOwnerControl.program, b119MenuOwnerMismatchOwnerControl.authority)
+    : { threw: false, valid: false, reason: 'causal owner control fixture not ready' };
+  check('B119 causal cell-owner one-field mutation is refused without throws',
+    b119MenuOwnerMismatchOwnerControl !== undefined
+      && b119MenuOwnerMismatchOwnerControl.mutation.changed === true
+      && b119MenuOwnerMismatchOwnerValidation.threw === false
+      && b119MenuOwnerMismatchOwnerValidation.valid === false,
+    detail({
+      field: 'cellId',
+      operationIndex: b119MenuOwnerMismatchSetColSpanIndex,
+      operationId: b119MenuOwnerMismatchSetColSpan?.id,
+      operationKind: b119MenuOwnerMismatchSetColSpan?.kind,
+      sourceLine: b119MenuOwnerMismatchSetColSpan?.source.start.line,
+      targetCellId: b119MenuOwnerMismatchCreateButton?.cellId,
+      targetIdentity: b119MenuOwnerMismatchTargetIdentity,
+      mutation: b119MenuOwnerMismatchOwnerControl?.mutation,
+      validation: b119MenuOwnerMismatchOwnerValidation,
     }));
 
   const b119HubFixture = b119Fixture([
@@ -11851,7 +12468,750 @@ const run = (): { readonly allPassed: boolean; readonly passed: number; readonly
   return { allPassed: passed === checks.length, passed, total: checks.length, checks };
 };
 
-const result = run();
+const runP3ColorChecks = async (): Promise<Check[]> => {
+  const p3Checks: Check[] = [];
+  const p3Check = (name: string, pass: boolean, detailValue?: unknown): void => {
+    p3Checks.push({ name: `P3 color ${name}`, pass, detail: detailValue === undefined ? undefined : detail(detailValue) });
+  };
+  let authority: X4UiCorpusCanonicalColorSuccess;
+  try {
+    authority = await p3LoadCanonicalColorAuthority();
+  } catch (error) {
+    p3Check('in-memory transport produces genuine loader-issued P2 authority', false, String(error));
+    return p3Checks;
+  }
+  p3Check(
+    'in-memory transport produces genuine loader-issued P2 authority',
+    isX4UiCorpusCanonicalColorSuccess(authority)
+      && authority.graph.baseColors.length === 224
+      && authority.graph.mappings.length === 804,
+    {
+      guard: isX4UiCorpusCanonicalColorSuccess(authority),
+      baseColors: authority.graph.baseColors.length,
+      mappings: authority.graph.mappings.length,
+    },
+  );
+
+  const colorSource = [
+    'local menu = { name = "P3", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(9, { width = 100 })',
+    'local row = table:addRow(false, {})',
+    'row[1]:createText("literal", { color = { r = 12.5, g = 23.5, b = 34.5, a = 45.5, glow = 0.25 }, cellBGColor = Color["row_background"] })',
+    'row[2]:createButton({ bgColor = Color["button_background_default"], highlightColor = Color["button_highlight_default"], borderColor = Color["button_border_default"] }):setText("button", { color = Color["text_normal"] }):setText2("button2", { color = { r = 15, g = 25, b = 35, a = 55 } })',
+    'row[3]:createEditBox({ bgColor = Color["editbox_background_default"] })',
+    'row[4]:createIcon("icon", { color = Color["white"] })',
+    'row[5]:createText("default", {})',
+    'row[6]:createButton({}):setText("nestedDefault", {})',
+    'row[7]:createEditBox({})',
+    'row[8]:createIcon("defaultIcon", {})',
+    'row[9]:createButton({}):setText2("nestedDefault2", {})',
+    'local explicitTable = frame:addTable(1, { width = 20, backgroundColor = Color["table_background_default"] })',
+    'explicitTable:addRow(false, {})',
+  ].join('\n');
+  const model = buildX4UiCallModel(input(colorSource, 'selftest/p3-colors.lua'));
+  const target = topTarget(model);
+  const profile = profileFor(model);
+  const projectWithColorEvidence = projectX4UiLayoutProgram as unknown as (
+    modelValue: X4UiCallModel,
+    targetValue: X4UiLayoutTarget,
+    profileValue: X4UiLayoutProjectionProfile,
+    previewSampleValue?: X4UiLayoutPreviewSampleInput,
+    previewPathValue?: X4UiLayoutPreviewPathSelectionInput,
+    colorEvidenceValue?: unknown,
+  ) => ReturnType<typeof projectX4UiLayoutProgram>;
+  const legacy = projectX4UiLayoutProgram(model, target, profile);
+  const omitted = projectWithColorEvidence(model, target, profile, undefined, undefined, undefined);
+  const supplied = projectWithColorEvidence(model, target, profile, undefined, undefined, authority);
+  const program = resultProgram(supplied);
+  const evidenceAuthority = evidenceAuthorityOf(supplied);
+  const operationFor = (callName: string, sourceNeedle: string) => program?.operations.find(operationValue =>
+    operationValue.kind === callName
+      && colorSource.slice(operationValue.source.start.offset, operationValue.source.end.offset).includes(sourceNeedle));
+  const factFor = (callName: string, sourceNeedle: string, field: string): unknown =>
+    operationFor(callName, sourceNeedle)?.descriptorFacts[field];
+  const knownColor = (candidate: unknown): candidate is {
+    readonly status: 'known';
+    readonly expectedType: 'color-object';
+    readonly value: Record<string, unknown>;
+    readonly provenance: string;
+    readonly sourcePin?: Record<string, unknown>;
+  } => {
+    const record = candidate as Record<string, unknown> | undefined;
+    return Boolean(record)
+      && record.status === 'known'
+      && record.expectedType === 'color-object'
+      && typeof record.value === 'object'
+      && record.value !== null
+      && typeof record.provenance === 'string';
+  };
+  const unavailableColor = (candidate: unknown): candidate is { readonly status: 'unavailable'; readonly reason: string } => {
+    const record = candidate as Record<string, unknown> | undefined;
+    return Boolean(record) && record.status === 'unavailable' && typeof record.reason === 'string';
+  };
+
+  p3Check(
+    'omitted evidence preserves the exact old serialized result',
+    JSON.stringify(legacy) === JSON.stringify(omitted)
+      && JSON.stringify(legacy) === JSON.stringify(projectX4UiLayoutProgram(model, target, profile)),
+    { legacyStatus: legacy.status, omittedStatus: omitted.status },
+  );
+  const literalFact = factFor('createText', 'createText("literal"', 'color') as Record<string, unknown> | undefined;
+  const literalValue = literalFact?.value as Record<string, unknown> | undefined;
+  p3Check(
+    'source literal resolves as a typed raw-channel fact with percent alpha',
+    Boolean(program)
+      && knownColor(literalFact)
+      && literalValue?.r === 12.5
+      && literalValue.g === 23.5
+      && literalValue.a === 45.5
+      && literalValue.glow === 0.25
+      && literalValue.domain === 'source-literal-percent-alpha'
+      && literalValue.gameVerification === X4_UI_LAYOUT_GAME_TRUTH,
+    literalFact,
+  );
+  const symbolicTextFact = factFor('setText', 'setText("button"', 'color') as Record<string, unknown> | undefined;
+  const symbolicTextValue = symbolicTextFact?.value as Record<string, unknown> | undefined;
+  p3Check(
+    'one-hop mapping resolves with requested/base IDs, document indexes, identities, and canonical provenance',
+    knownColor(symbolicTextFact)
+      && symbolicTextFact.provenance === 'canonical-default-only'
+      && symbolicTextValue?.requestedId === 'text_normal'
+      && symbolicTextValue.resolvedBaseId === 'white_weak_glow'
+      && (symbolicTextValue.baseSource as Record<string, unknown> | undefined)?.index === 2
+      && (symbolicTextValue.mappingSource as Record<string, unknown> | undefined)?.index === 2
+      && (symbolicTextValue.sourceIdentities as Record<string, unknown> | undefined)?.xml !== undefined
+      && ((symbolicTextValue.sourceIdentities as Record<string, unknown>).xml as Record<string, unknown>).sha256 === X4_UI_CORPUS_COLORS_XML_SHA256
+      && ((symbolicTextValue.sourceIdentities as Record<string, unknown>).xsd as Record<string, unknown>).sha256 === X4_UI_CORPUS_COLORS_XSD_SHA256
+      && symbolicTextValue.domain === 'canonical-xml-byte-alpha'
+      && symbolicTextValue.canonicalIdentity === 'x4-9.00'
+      && symbolicTextValue.a === 104
+      && symbolicTextValue.glow === 0.3
+      && symbolicTextValue.gameVerification === X4_UI_LAYOUT_GAME_TRUTH,
+    symbolicTextFact,
+  );
+  const baseIconFact = factFor('createIcon', 'createIcon("icon"', 'color') as Record<string, unknown> | undefined;
+  const baseIconValue = baseIconFact?.value as Record<string, unknown> | undefined;
+  p3Check(
+    'base ID resolution preserves base-versus-mapping distinction',
+    knownColor(baseIconFact)
+      && baseIconValue?.requestedId === 'white'
+      && baseIconValue.resolvedBaseId === 'white'
+      && baseIconValue.mappingSource === undefined
+      && (baseIconValue.baseSource as Record<string, unknown> | undefined)?.id === 'white',
+    baseIconFact,
+  );
+  const tableDefaultFact = (
+    program?.tables.find(tableValue =>
+      colorSource.slice(tableValue.source.start.offset, tableValue.source.end.offset).includes('addTable(9'),
+    )?.descriptorFacts.backgroundColor
+    || factFor('addTable', 'addTable(9', 'backgroundColor')
+  ) as Record<string, unknown> | undefined;
+  const explicitTableFact = factFor('addTable', 'addTable(1', 'backgroundColor') as Record<string, unknown> | undefined;
+  p3Check(
+    'table explicit and Helper default color pins resolve without changing non-color gaps',
+    knownColor(tableDefaultFact)
+      && knownColor(explicitTableFact)
+      && (tableDefaultFact.value as Record<string, unknown>).requestedId === 'table_background_default'
+      && (explicitTableFact.value as Record<string, unknown>).requestedId === 'table_background_default'
+      && (tableDefaultFact.sourcePin as Record<string, unknown> | undefined)?.lineStart === 3175
+      && (explicitTableFact.sourcePin === undefined || (explicitTableFact.sourcePin as Record<string, unknown>).lineStart !== undefined)
+      && !program?.gaps.some(gap => gap.expression === 'Color["table_background_default"]'),
+    { tableDefaultFact, explicitTableFact, gaps: program?.gaps },
+  );
+  const defaultColorFacts = [
+    factFor('createText', 'createText("default"', 'color'),
+    factFor('createText', 'createText("default"', 'cellbgcolor'),
+    factFor('createButton', 'createButton({})', 'bgcolor'),
+    factFor('createButton', 'createButton({})', 'highlightcolor'),
+    factFor('createButton', 'createButton({})', 'bordercolor'),
+    factFor('createEditBox', 'createEditBox({})', 'bgcolor'),
+    factFor('createIcon', 'createIcon("defaultIcon"', 'color'),
+  ];
+  p3Check(
+    'exact Helper cell/text/icon/button/editbox default color pins are typed and source-pinned',
+    defaultColorFacts.every(candidate => knownColor(candidate))
+      && defaultColorFacts.every(candidate => candidate && (candidate as Record<string, unknown>).provenance === 'canonical-default-only')
+      && (defaultColorFacts[0] as Record<string, unknown> | undefined)?.value !== undefined
+      && ((defaultColorFacts[0] as Record<string, unknown> | undefined)?.sourcePin as Record<string, unknown> | undefined)?.lineStart === 3207
+      && ((defaultColorFacts[1] as Record<string, unknown> | undefined)?.sourcePin as Record<string, unknown> | undefined)?.lineStart === 3200
+      && ((defaultColorFacts[2] as Record<string, unknown> | undefined)?.sourcePin as Record<string, unknown> | undefined)?.lineStart === 3227
+      && ((defaultColorFacts[3] as Record<string, unknown> | undefined)?.sourcePin as Record<string, unknown> | undefined)?.lineStart === 3228
+      && ((defaultColorFacts[4] as Record<string, unknown> | undefined)?.sourcePin as Record<string, unknown> | undefined)?.lineStart === 3229
+      && ((defaultColorFacts[5] as Record<string, unknown> | undefined)?.sourcePin as Record<string, unknown> | undefined)?.lineStart === 3235
+      && ((defaultColorFacts[6] as Record<string, unknown> | undefined)?.sourcePin as Record<string, unknown> | undefined)?.lineStart === 3220,
+    defaultColorFacts,
+  );
+  const buttonTopLevelColor = factFor('createButton', 'createButton({})', 'color');
+  const editBoxTopLevelColor = factFor('createEditBox', 'createEditBox({})', 'color');
+  p3Check(
+    'button and editbox do not synthesize a top-level color default',
+    buttonTopLevelColor === undefined && editBoxTopLevelColor === undefined,
+    { buttonTopLevelColor, editBoxTopLevelColor },
+  );
+  const nestedDefaultTextFact = factFor('setText', 'setText("nestedDefault"', 'color') as Record<string, unknown> | undefined;
+  const nestedDefaultText2Fact = factFor('setText2', 'setText2("nestedDefault2"', 'color') as Record<string, unknown> | undefined;
+  p3Check(
+    'nested setText and setText2 defaults use text_normal at the distinct 3422 pin',
+    knownColor(nestedDefaultTextFact)
+      && knownColor(nestedDefaultText2Fact)
+      && (nestedDefaultTextFact.value as Record<string, unknown>).requestedId === 'text_normal'
+      && (nestedDefaultText2Fact.value as Record<string, unknown>).requestedId === 'text_normal'
+      && (nestedDefaultTextFact.sourcePin as Record<string, unknown> | undefined)?.lineStart === 3422
+      && (nestedDefaultText2Fact.sourcePin as Record<string, unknown> | undefined)?.lineStart === 3422,
+    { nestedDefaultTextFact, nestedDefaultText2Fact },
+  );
+  p3Check(
+    'nested setText and setText2 color facts are independently source-bound',
+    knownColor(factFor('setText', 'setText("button"', 'color'))
+      && knownColor(factFor('setText2', 'setText2("button2"', 'color'))
+      && program?.operations.filter(operationValue => operationValue.kind === 'setText' || operationValue.kind === 'setText2')
+        .every(operationValue => operationValue.descriptorFacts.color?.status === 'known'),
+    program?.operations.filter(operationValue => operationValue.kind === 'setText' || operationValue.kind === 'setText2'),
+  );
+  p3Check(
+    'known tint removes only its color gap while unrelated geometry/state gaps remain',
+    program !== undefined
+      && !program.gaps.some(gap => gap.expression?.includes('Color['))
+      && program.verification.game === X4_UI_LAYOUT_GAME_TRUTH
+      && program.verification.gameVerified === false,
+    program?.gaps,
+  );
+  p3Check(
+    'program and evidence authority retain reciprocal color snapshots and validate',
+    program !== undefined
+      && evidenceAuthority !== undefined
+      && validateX4UiLayoutEvidencePair(program, evidenceAuthority).valid
+      && evidenceAuthority.operations.every(authorityOperation => {
+        const operationValue = program.operations.find(candidate => candidate.id === authorityOperation.id);
+        return operationValue !== undefined
+          && JSON.stringify(authorityOperation.snapshot.descriptorFacts) === JSON.stringify(operationValue.descriptorFacts);
+      })
+      && evidenceAuthority.nodes.cells.every(node => {
+        const programCell = program.cells.find(candidate => candidate.id === node.id);
+        return programCell !== undefined && JSON.stringify(node.snapshot.descriptorFacts) === JSON.stringify(programCell.descriptorFacts);
+      }),
+    { validation: program && evidenceAuthority && validateX4UiLayoutEvidencePair(program, evidenceAuthority) },
+  );
+  const knownProgramFact = factFor('createText', 'createText("literal"', 'color') as Record<string, unknown> | undefined;
+  const knownProgramValue = knownProgramFact?.value as Record<string, unknown> | undefined;
+  const knownProgramValuePrototype = knownProgramValue ? Object.getPrototypeOf(knownProgramValue) : undefined;
+  const programClone = program ? jsonClone(program) : undefined;
+  const authorityClone = evidenceAuthority ? jsonClone(evidenceAuthority) : undefined;
+  const issuedPair = program && evidenceAuthority ? issuedPairForModel(program, evidenceAuthority, model) : { available: false, threw: false, value: false };
+  const clonedIssuedPair = programClone && authorityClone
+    ? issuedPairForModel(programClone, authorityClone, model)
+    : { available: false, threw: false, value: false };
+  p3Check(
+    'known-color output is frozen, plain, enumerable, JSON-closed, and clone issuance-resistant',
+    issuedPair.available
+      && issuedPair.value
+      && knownProgramValuePrototype === Object.prototype
+      && knownProgramFact !== undefined
+      && Object.isFrozen(knownProgramFact)
+      && knownProgramValue !== undefined
+      && Object.isFrozen(knownProgramValue)
+      && JSON.stringify(JSON.parse(JSON.stringify(knownProgramFact))) === JSON.stringify(knownProgramFact)
+      && clonedIssuedPair.available
+      && !clonedIssuedPair.value,
+    { issuedPair, clonedIssuedPair, fact: knownProgramFact },
+  );
+  const mutatedProgram = program ? jsonClone(program) as unknown as Record<string, unknown> : undefined;
+  if (mutatedProgram) {
+    const operations = mutatedProgram.operations as Record<string, unknown>[];
+    const colorOperation = operations.find(operationValue => (operationValue.descriptorFacts as Record<string, unknown> | undefined)?.color !== undefined);
+    const descriptorFacts = colorOperation?.descriptorFacts as Record<string, unknown> | undefined;
+    const colorFact = descriptorFacts?.color as Record<string, unknown> | undefined;
+    const colorValue = colorFact?.value as Record<string, unknown> | undefined;
+    if (colorValue && typeof colorValue.r === 'number') colorValue.r += 1;
+  }
+  const driftValidation = mutatedProgram && evidenceAuthority
+    ? validateX4UiLayoutEvidencePair(mutatedProgram as unknown as X4UiLayoutProgram, evidenceAuthority)
+    : { valid: false as const, reason: 'fixture missing' };
+  p3Check('evidence/program pair validation rejects descriptor drift', driftValidation.valid === false, driftValidation);
+
+  const hostileInputs: Array<{ readonly name: string; readonly value: unknown; readonly traps?: () => number }> = [];
+  hostileInputs.push({ name: 'structural clone', value: jsonClone(authority) });
+  const wrongPrototype = jsonClone(authority) as unknown as Record<string, unknown>;
+  Object.setPrototypeOf(wrongPrototype, { forged: true });
+  hostileInputs.push({ name: 'wrong prototype', value: wrongPrototype });
+  const cyclic = jsonClone(authority) as unknown as Record<string, unknown>;
+  cyclic.cycle = cyclic;
+  hostileInputs.push({ name: 'cycle', value: cyclic });
+  const nonEnumerable = jsonClone(authority) as unknown as Record<string, unknown>;
+  Object.defineProperty(nonEnumerable, 'hidden', { configurable: true, enumerable: false, value: true });
+  hostileInputs.push({ name: 'non-enumerable', value: nonEnumerable });
+  let accessorReads = 0;
+  const accessor = jsonClone(authority) as unknown as Record<string, unknown>;
+  Object.defineProperty(accessor, 'graph', {
+    configurable: true,
+    enumerable: true,
+    get: () => {
+      accessorReads += 1;
+      throw new Error('hostile P2 accessor');
+    },
+  });
+  hostileInputs.push({ name: 'throwing accessor', value: accessor });
+  let proxyTraps = 0;
+  const proxy = new Proxy(jsonClone(authority), {
+    get: () => {
+      proxyTraps += 1;
+      throw new Error('hostile P2 proxy');
+    },
+    getPrototypeOf: () => {
+      proxyTraps += 1;
+      throw new Error('hostile P2 prototype trap');
+    },
+  });
+  hostileInputs.push({ name: 'proxy', value: proxy });
+  const hostileResults = hostileInputs.map(candidate => ({
+    name: candidate.name,
+    result: projectWithColorEvidence(model, target, profile, undefined, undefined, candidate.value),
+  }));
+  p3Check(
+    'structural, prototype, cycle, accessor, and proxy color evidence fail closed with typed refusal without safe-admission getters',
+    hostileResults.every(candidate => candidate.result.status === 'refused'
+      && 'refusal' in candidate.result
+      && candidate.result.refusal.code === 'malformed-color-evidence')
+      && accessorReads === 0
+      && proxyTraps === 0,
+    { hostileResults: hostileResults.map(candidate => ({ name: candidate.name, status: candidate.result.status, refusal: 'refusal' in candidate.result ? candidate.result.refusal : undefined })), accessorReads, proxyTraps },
+  );
+  const hostileModel = jsonClone(model) as unknown as Record<string, unknown>;
+  let modelColorExpressionReads = 0;
+  Object.defineProperty(hostileModel, 'colorExpressions', {
+    configurable: true,
+    enumerable: true,
+    get: () => {
+      modelColorExpressionReads += 1;
+      throw new Error('hostile model colorExpressions accessor');
+    },
+  });
+  let hostileModelResult: ReturnType<typeof projectX4UiLayoutProgram> | undefined;
+  let hostileModelThrew = false;
+  try {
+    hostileModelResult = projectWithColorEvidence(
+      hostileModel as unknown as X4UiCallModel,
+      target,
+      profile,
+      undefined,
+      undefined,
+      authority,
+    );
+  } catch {
+    hostileModelThrew = true;
+  }
+  p3Check(
+    'throwing model.colorExpressions accessors receive typed refusal without getter execution',
+    hostileModelThrew === false
+      && hostileModelResult?.status === 'refused'
+      && 'refusal' in hostileModelResult
+      && hostileModelResult.refusal.code === 'malformed-model'
+      && modelColorExpressionReads === 0,
+    { hostileModelThrew, hostileModelResult, modelColorExpressionReads },
+  );
+  let mutationThrew = false;
+  try {
+    (authority.graph.baseColors[0] as unknown as { r: number }).r = 255;
+  } catch {
+    mutationThrew = true;
+  }
+  const afterAuthorityMutation = projectWithColorEvidence(model, target, profile, undefined, undefined, authority);
+  const afterMutationProgram = resultProgram(afterAuthorityMutation);
+  const afterMutationFact = afterMutationProgram?.operations.find(operationValue =>
+    operationValue.kind === 'createText'
+      && colorSource.slice(operationValue.source.start.offset, operationValue.source.end.offset).includes('createText("literal"'),
+  )?.descriptorFacts.color;
+  p3Check(
+    'post-issue mutation attempts cannot alter the loader-issued authority or projected channels',
+    mutationThrew
+      && isX4UiCorpusCanonicalColorSuccess(authority)
+      && afterAuthorityMutation.status !== 'refused'
+      && knownColor(afterMutationFact)
+      && ((afterMutationFact.value as Record<string, unknown>).r === 12.5),
+    { mutationThrew, authorityGuard: isX4UiCorpusCanonicalColorSuccess(authority), afterAuthorityMutation: afterAuthorityMutation.status, afterMutationFact },
+  );
+
+  const modelColorRecord = model.colorExpressions.find(candidate => candidate.callName === 'createText'
+    && candidate.propertyName === 'color'
+    && colorSource.slice(candidate.callSource.start.offset, candidate.callSource.end.offset).includes('createText("literal"'));
+  const invokeModel = (candidate: X4UiCallModel): ReturnType<typeof projectX4UiLayoutProgram> =>
+    projectWithColorEvidence(candidate, topTarget(candidate), profileFor(candidate), undefined, undefined, authority);
+  const modelAttack = (name: string, mutate: (candidate: Record<string, unknown>) => void) => {
+    const candidate = jsonClone(model) as unknown as Record<string, unknown>;
+    mutate(candidate);
+    freezeCycleClone(candidate);
+    const result = invokeModel(candidate as unknown as X4UiCallModel);
+    const fact = resultProgram(result)?.operations
+      .find(operationValue => operationValue.kind === 'createText'
+        && colorSource.slice(operationValue.source.start.offset, operationValue.source.end.offset).includes('createText("literal"'))
+      ?.descriptorFacts.color;
+    return { name, result, fact };
+  };
+  const duplicateModelRecord = modelColorRecord
+    ? modelAttack('duplicate color expression', candidate => {
+      const expressions = candidate.colorExpressions as unknown[];
+      expressions.push(jsonClone(modelColorRecord));
+    })
+    : undefined;
+  const missingModelRecord = modelColorRecord
+    ? modelAttack('missing color expression', candidate => {
+      const expressions = candidate.colorExpressions as Record<string, unknown>[];
+      const index = expressions.findIndex(value => value.callName === 'createText'
+        && value.propertyName === 'color'
+        && (() => {
+          const callSource = value.callSource as Record<string, unknown>;
+          const start = callSource.start as Record<string, unknown>;
+          const end = callSource.end as Record<string, unknown>;
+          return colorSource.slice(
+            start.offset as number,
+            end.offset as number,
+          ).includes('createText("literal"');
+        })());
+      if (index >= 0) expressions.splice(index, 1);
+    })
+    : undefined;
+  const driftedModelRecord = modelColorRecord
+    ? modelAttack('source/property/range drift', candidate => {
+      const expressions = candidate.colorExpressions as Record<string, unknown>[];
+      const index = expressions.findIndex(value => value.propertyName === 'color');
+      if (index >= 0) {
+        expressions[index] = {
+          ...expressions[index],
+          propertyName: 'cellBGColor',
+          source: {
+            ...(expressions[index].source as Record<string, unknown>),
+            start: { ...((expressions[index].source as Record<string, unknown>).start as Record<string, unknown>), offset: 0 },
+          },
+        };
+      }
+    })
+    : undefined;
+  const modelAttackResults = [duplicateModelRecord, missingModelRecord, driftedModelRecord].filter(
+    (candidate): candidate is NonNullable<typeof duplicateModelRecord> => candidate !== undefined,
+  );
+  p3Check(
+    'duplicate, missing, and source/property/range-drifted P1 color records never become first-match authority',
+    modelAttackResults.length === 3
+      && modelAttackResults.every(candidate => unavailableColor(candidate.fact)
+        && candidate.fact.reason.includes('P1 color expression')),
+    modelAttackResults,
+  );
+
+  const sameExpressionWidthModel = jsonClone(model) as unknown as Record<string, unknown>;
+  if (modelColorRecord) {
+    const verificationGaps = sameExpressionWidthModel.verificationGaps as unknown[];
+    verificationGaps.push({
+      category: 'width',
+      status: 'unknown',
+      reason: 'auditor width gap intentionally shares the color expression provenance',
+      expression: modelColorRecord.colorExpression.expression,
+      source: jsonClone(modelColorRecord.colorExpression.source),
+    });
+  }
+  freezeCycleClone(sameExpressionWidthModel);
+  const sameExpressionWidthResult = modelColorRecord
+    ? invokeModel(sameExpressionWidthModel as unknown as X4UiCallModel)
+    : undefined;
+  const sameExpressionWidthProgram = resultProgram(sameExpressionWidthResult);
+  const sameExpressionWidthGaps = sameExpressionWidthProgram?.gaps.filter(gap =>
+    gap.expression === modelColorRecord?.colorExpression.expression
+      && locationsSameForTest(gap.source, modelColorRecord?.colorExpression.source),
+  ) || [];
+  p3Check(
+    'same-source width gaps survive while only the exact color verification gap is suppressed',
+    sameExpressionWidthProgram !== undefined
+      && sameExpressionWidthGaps.some(gap => gap.category === 'width')
+      && !sameExpressionWidthGaps.some(gap => gap.category !== 'width'),
+    { sameExpressionWidthResult, sameExpressionWidthGaps },
+  );
+
+  type ColorFactMutator = (fact: Record<string, unknown>, value: Record<string, unknown>) => void;
+  const mutateEveryColorFact = (root: unknown, mutate: ColorFactMutator): void => {
+    const seen = new Set<object>();
+    const visit = (candidate: unknown): void => {
+      if (!candidate || typeof candidate !== 'object') return;
+      const objectValue = candidate as object;
+      if (seen.has(objectValue)) return;
+      seen.add(objectValue);
+      const record = candidate as Record<string, unknown>;
+      if (record.expectedType === 'color-object' && record.value && typeof record.value === 'object' && !Array.isArray(record.value)) {
+        mutate(record, record.value as Record<string, unknown>);
+      }
+      for (const child of Object.values(record)) visit(child);
+    };
+    visit(root);
+  };
+  const semanticColorPair = (mutate: ColorFactMutator) => {
+    if (!program || !evidenceAuthority) return { valid: false as const, reason: 'fixture missing' };
+    const mutatedProgram = mutateProgramJson(program, root => mutateEveryColorFact(root, mutate));
+    const mutatedAuthority = mutateAuthorityJson(evidenceAuthority, root => mutateEveryColorFact(root, mutate));
+    return validateX4UiLayoutEvidencePair(mutatedProgram, mutatedAuthority);
+  };
+  const semanticColorPairCases: ReadonlyArray<readonly [string, ColorFactMutator]> = [
+    ['source literal RGB domain', (_fact, value) => {
+      if (value.domain === 'source-literal-percent-alpha') value.r = 256;
+    }],
+    ['source literal alpha domain', (_fact, value) => {
+      if (value.domain === 'source-literal-percent-alpha') value.a = 101;
+    }],
+    ['source literal glow domain', (_fact, value) => {
+      if (value.domain === 'source-literal-percent-alpha' && value.glow !== undefined) value.glow = 1.1;
+    }],
+    ['canonical RGBA domain', (_fact, value) => {
+      if (value.domain === 'canonical-xml-byte-alpha') value.r = 256;
+    }],
+    ['canonical glow domain', (_fact, value) => {
+      if (value.domain === 'canonical-xml-byte-alpha') value.glow = 1.1;
+    }],
+    ['top-level/channel binding', (_fact, value) => {
+      if (value.domain === 'source-literal-percent-alpha' && value.channels && typeof value.channels === 'object') {
+        const channels = value.channels as Record<string, unknown>;
+        (value.channels as Record<string, unknown>).r = {
+          ...(channels.r as Record<string, unknown>),
+          value: (typeof value.r === 'number' ? value.r : 0) + 1,
+        };
+      }
+    }],
+    ['source/declaration/channel binding', (_fact, value) => {
+      if (value.domain === 'source-literal-percent-alpha' && value.channels && typeof value.channels === 'object') {
+        const channel = (value.channels as Record<string, unknown>).r as Record<string, unknown>;
+        channel.keySource = { ...(channel.keySource as Record<string, unknown>), file: 'forged-channel.lua' };
+      }
+    }],
+    ['canonical requested identity', (_fact, value) => {
+      if (value.domain === 'canonical-xml-byte-alpha') value.requestedId = 'forged_requested';
+    }],
+    ['canonical base identity', (_fact, value) => {
+      if (value.domain === 'canonical-xml-byte-alpha') value.resolvedBaseId = 'forged_base';
+    }],
+    ['canonical mapping identity', (_fact, value) => {
+      const mappingSource = value.mappingSource as Record<string, unknown> | undefined;
+      if (value.domain === 'canonical-xml-byte-alpha' && mappingSource) mappingSource.id = 'forged_mapping';
+    }],
+    ['canonical document pin path/index', (_fact, value) => {
+      if (value.domain === 'canonical-xml-byte-alpha') {
+        const baseSource = value.baseSource as Record<string, unknown>;
+        baseSource.path = 'forged-colors.xml';
+        baseSource.index = 999;
+      }
+    }],
+    ['canonical mapping/base consistency', (_fact, value) => {
+      if (value.domain === 'canonical-xml-byte-alpha' && value.mappingSource) delete value.mappingSource;
+    }],
+    ['provenance/domain binding', (fact, value) => {
+      if (value.domain === 'canonical-xml-byte-alpha') fact.provenance = 'source-literal';
+    }],
+    ['canonical identity binding', (_fact, value) => {
+      if (value.domain === 'canonical-xml-byte-alpha') value.canonicalIdentity = 'forged-canonical';
+    }],
+    ['canonical source identity/hash/size', (_fact, value) => {
+      if (value.domain === 'canonical-xml-byte-alpha') {
+        const identities = value.sourceIdentities as Record<string, unknown>;
+        const xml = identities.xml as Record<string, unknown>;
+        xml.sha256 = '0000000000000000000000000000000000000000000000000000000000000000';
+        xml.size = 1;
+      }
+    }],
+  ];
+  for (const [name, mutate] of semanticColorPairCases) {
+    const validation = semanticColorPair(mutate);
+    p3Check('semantic pair rejects ' + name, validation.valid === false, validation);
+  }
+
+  const malformedLiteralSources = [
+    ['RGB upper bound', '{ r = 256, g = 2, b = 3, a = 4 }'],
+    ['RGB negative bound', '{ r = -1, g = 2, b = 3, a = 4 }'],
+    ['alpha percent upper bound', '{ r = 1, g = 2, b = 3, a = 101 }'],
+    ['glow upper bound', '{ r = 1, g = 2, b = 3, a = 4, glow = 1.1 }'],
+  ] as const;
+  const malformedLiteralResults = malformedLiteralSources.map(([name, literal]) => {
+    const source = [
+      'local menu = { name = "Bounds", layer = 1 }',
+      'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+      'local table = frame:addTable(1, { width = 20 })',
+      'local row = table:addRow(false, {})',
+      `row[1]:createText("${name}", { color = ${literal} })`,
+    ].join('\n');
+    const candidate = buildX4UiCallModel(input(source, `selftest/p3-color-${name.replace(/[^a-z]+/giu, '-')}.lua`));
+    const result = projectWithColorEvidence(candidate, topTarget(candidate), profileFor(candidate), undefined, undefined, authority);
+    const fact = resultProgram(result)?.operations.find(operationValue => operationValue.kind === 'createText')?.descriptorFacts.color;
+    return { name, fact };
+  });
+  p3Check(
+    'literal channel and glow bounds fail closed without normalization',
+    malformedLiteralResults.every(candidate => unavailableColor(candidate.fact)
+      && (candidate.fact.reason.includes('out of range') || candidate.fact.reason.includes('not a source literal table'))),
+    malformedLiteralResults,
+  );
+
+  const unknownSource = [
+    'local menu = { name = "Unknown", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 20 })',
+    'local row = table:addRow(false, {})',
+    'row[1]:createText("unknown", { color = Color["missing.id"] })',
+  ].join('\n');
+  const unknownModel = buildX4UiCallModel(input(unknownSource, 'selftest/p3-color-unknown.lua'));
+  const unknownResult = projectWithColorEvidence(unknownModel, topTarget(unknownModel), profileFor(unknownModel), undefined, undefined, authority);
+  const unknownFact = resultProgram(unknownResult)?.operations.find(operationValue => operationValue.kind === 'createText')?.descriptorFacts.color;
+  p3Check(
+    'unknown symbolic IDs remain explicit gaps with no effective/runtime claim',
+    unavailableColor(unknownFact)
+      && unknownFact.reason.includes('canonical color ID')
+      && resultProgram(unknownResult)?.gaps.some(gap => gap.expression === 'Color["missing.id"]') === true,
+    { fact: unknownFact, gaps: resultProgram(unknownResult)?.gaps },
+  );
+
+  const dynamicSource = [
+    'local menu = { name = "Dynamic", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 20 })',
+    'local row = table:addRow(false, {})',
+    'row[1]:createText("dynamic", { width = getWidth(), color = Color["text_normal"] })',
+  ].join('\n');
+  const dynamicModel = buildX4UiCallModel(input(dynamicSource, 'selftest/p3-color-unrelated-gaps.lua'));
+  const dynamicResult = projectWithColorEvidence(dynamicModel, topTarget(dynamicModel), profileFor(dynamicModel), undefined, undefined, authority);
+  const dynamicTextOperation = resultProgram(dynamicResult)?.operations.find(operationValue => operationValue.kind === 'createText');
+  const dynamicTextFact = dynamicTextOperation?.descriptorFacts.color;
+  p3Check(
+    'known colors do not erase unrelated dynamic geometry gaps',
+    knownColor(dynamicTextFact)
+      && dynamicTextOperation?.status === 'unresolved'
+      && resultProgram(dynamicResult)?.gaps.some(gap => gap.category === 'count' || gap.category === 'width') === true,
+    { dynamicTextFact, dynamicTextOperation, gaps: resultProgram(dynamicResult)?.gaps },
+  );
+
+  const localExpansionColorSource = [
+    'local Helper = rawget(_G, "Helper")',
+    'local function nested(cell, label, height)',
+    '  cell:createText(label, { height = height, color = Color["text_normal"] })',
+    'end',
+    'local function panel(frame, count, width, label)',
+    '  local table = frame:addTable(count, { width = width })',
+    '  table:setColWidthPercent(1, 100)',
+    '  local row = table:addRow(false, {})',
+    '  nested(row[1], label, 12)',
+    'end',
+    'local panelAlias = panel',
+    'local function display()',
+    '  local menu = { name = "Expansion", layer = 1 }',
+    '  local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    '  panel(frame, 1, 60, "one")',
+    '  panelAlias(frame, 1, 70, "two")',
+    '  frame:display()',
+    'end',
+  ].join('\n');
+  const localExpansionColorModel = buildX4UiCallModel(input(localExpansionColorSource, 'selftest/p3-local-expansion-color.lua'));
+  const localExpansionColorTarget = namedTarget(localExpansionColorModel, 'display');
+  const localExpansionColorProfile = profileFor(localExpansionColorModel, {
+    minTextHeight: 12,
+    localExpansion: { maxDepth: 4, maxInvocations: 8 },
+  });
+  const localExpansionColorResult = projectWithColorEvidence(
+    localExpansionColorModel,
+    localExpansionColorTarget,
+    localExpansionColorProfile,
+    undefined,
+    undefined,
+    authority,
+  );
+  const localExpansionColorProgram = resultProgram(localExpansionColorResult);
+  const localExpansionColorAuthority = evidenceAuthorityOf(localExpansionColorResult);
+  const localExpansionColorFacts = localExpansionColorProgram?.operations
+    .filter(operationValue => operationValue.kind === 'createText')
+    .map(operationValue => operationValue.descriptorFacts.color) || [];
+  p3Check(
+    'genuine P2 authority remains reciprocal under local expansion with expanded color facts',
+    localExpansionColorResult.status !== 'refused'
+      && localExpansionColorProgram !== undefined
+      && localExpansionColorAuthority !== undefined
+      && localExpansionColorProgram.localExpansion?.invocations.filter(candidate => candidate.status === 'expanded').length === 4
+      && localExpansionColorFacts.length === 2
+      && localExpansionColorFacts.every(candidate => knownColor(candidate))
+      && validateX4UiLayoutEvidencePair(localExpansionColorProgram, localExpansionColorAuthority).valid,
+    {
+      status: localExpansionColorResult.status,
+      colorFacts: localExpansionColorFacts,
+      validation: localExpansionColorProgram && localExpansionColorAuthority
+        ? validateX4UiLayoutEvidencePair(localExpansionColorProgram, localExpansionColorAuthority)
+        : undefined,
+      expansion: localExpansionColorProgram?.localExpansion,
+    },
+  );
+
+  const localExpansionCatalogReciprocitySource = [
+    'local Helper = rawget(_G, "Helper")',
+    'local function leaf(frame)',
+    '  if frame then',
+    '    local table = frame:addTable(1, { width = 30 })',
+    '    table:addRow(false, {})',
+    '  end',
+    'end',
+    'local function branch(frame)',
+    '  if frame then leaf(frame) end',
+    'end',
+    'local function display()',
+    '  local menu = { name = "CatalogReciprocity", layer = 1 }',
+    '  local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    '  if false then branch(frame) end',
+    '  frame:display()',
+    'end',
+  ].join('\n');
+  const localExpansionCatalogReciprocityModel = buildX4UiCallModel(input(
+    localExpansionCatalogReciprocitySource,
+    'selftest/p3-local-expansion-catalog-reciprocity.lua',
+  ));
+  const localExpansionCatalogReciprocityTarget = namedTarget(localExpansionCatalogReciprocityModel, 'display');
+  const localExpansionCatalogReciprocityProfile = profileFor(localExpansionCatalogReciprocityModel, {
+    localExpansion: { maxDepth: 4, maxInvocations: 8 },
+  });
+  const localExpansionCatalogReciprocityResult = projectX4UiLayoutProgram(
+    localExpansionCatalogReciprocityModel,
+    localExpansionCatalogReciprocityTarget,
+    localExpansionCatalogReciprocityProfile,
+    undefined,
+    undefined,
+    authority,
+  );
+  const localExpansionCatalogReciprocityProgram = resultProgram(localExpansionCatalogReciprocityResult);
+  const localExpansionCatalogReciprocityAuthority = evidenceAuthorityOf(localExpansionCatalogReciprocityResult);
+  p3Check(
+    'genuine P2 local expansion catalog only retains ledger-reciprocal branch entries',
+    localExpansionCatalogReciprocityResult.status !== 'refused'
+      && localExpansionCatalogReciprocityProgram !== undefined
+      && localExpansionCatalogReciprocityAuthority !== undefined
+      && validateX4UiLayoutEvidencePair(
+        localExpansionCatalogReciprocityProgram,
+        localExpansionCatalogReciprocityAuthority,
+      ).valid,
+    {
+      status: localExpansionCatalogReciprocityResult.status,
+      refusal: 'refusal' in localExpansionCatalogReciprocityResult
+        ? localExpansionCatalogReciprocityResult.refusal
+        : undefined,
+      validation: localExpansionCatalogReciprocityProgram && localExpansionCatalogReciprocityAuthority
+        ? validateX4UiLayoutEvidencePair(
+          localExpansionCatalogReciprocityProgram,
+          localExpansionCatalogReciprocityAuthority,
+        )
+        : undefined,
+      catalog: localExpansionCatalogReciprocityProgram?.localExpansion?.previewPathCatalog,
+      invocations: localExpansionCatalogReciprocityProgram?.localExpansion?.invocations,
+    },
+  );
+  return p3Checks;
+};
+
+const baseResult = run();
+const p3Result = await runP3ColorChecks();
+const result = {
+  ...baseResult,
+  allPassed: baseResult.allPassed && p3Result.every(candidate => candidate.pass),
+  passed: baseResult.passed + p3Result.filter(candidate => candidate.pass).length,
+  total: baseResult.total + p3Result.length,
+  checks: [...baseResult.checks, ...p3Result],
+};
 const phase3DChecks = result.checks.filter(candidate => candidate.name.includes('Phase 3D'));
 const phase3DDetails = phase3DChecks.map(candidate => {
   try {

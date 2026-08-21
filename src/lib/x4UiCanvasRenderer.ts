@@ -1,5 +1,6 @@
 import {
   isX4UiCorpusCanonicalSuccess,
+  X4_UI_CORPUS_9_00_COLOR_CONTRACT,
   X4_UI_CORPUS_9_00_CONTRACT,
   type X4UiCorpusCanonicalSuccess,
 } from './x4UiCorpusAssets';
@@ -188,6 +189,22 @@ interface AtlasSnapshot {
   readonly height: number;
 }
 
+type TintDomain = 'source-literal-percent-alpha' | 'canonical-xml-byte-alpha';
+type TintSlot = 'table-background' | 'cell-background' | 'widget-background' | 'widget-border' | 'widget-highlight' | 'widget-icon' | 'primary-text' | 'secondary-text';
+
+interface ValidatedTint {
+  readonly field: 'backgroundColor' | 'cellbgcolor' | 'bgcolor' | 'bordercolor' | 'highlightcolor' | 'color';
+  readonly slot: TintSlot;
+  readonly domain: TintDomain;
+  readonly red: number;
+  readonly green: number;
+  readonly blue: number;
+  readonly alpha: number;
+  readonly alphaScale: number;
+  readonly drawableKey: string;
+  readonly factKey: string;
+}
+
 interface FontIdentity {
   readonly descriptor: { readonly relativePath: string; readonly sha256: string };
   readonly atlas: { readonly relativePath: string; readonly sha256: string };
@@ -203,6 +220,7 @@ interface DetachedGeometryCommand extends DetachedCommandBase {
   readonly kind: 'node-geometry';
   readonly geometry?: Rect;
   readonly color: string;
+  readonly tints?: readonly ValidatedTint[];
 }
 
 interface DetachedGlyphCommand extends DetachedCommandBase {
@@ -210,6 +228,7 @@ interface DetachedGlyphCommand extends DetachedCommandBase {
   readonly role: 'regular' | 'bold';
   readonly source: Rect;
   readonly destination: Rect;
+  readonly tint?: ValidatedTint;
 }
 
 interface DetachedDiagnosticCommand extends DetachedCommandBase {
@@ -286,12 +305,16 @@ const KEEP_OUT_CONTEXTS = new Set([
   'first-person',
 ]);
 
-const KEEP_OUT_IDS = new Set([
-  'conversation-back-row',
-  'conversation-option-stack-start',
-  'information-panel-left-edge',
-  'mission-messages-ticker',
-  'top-hud-strip',
+const KEEP_OUT_PRODUCTION_RULES = new Map<string, {
+  readonly status: 'projected' | 'unavailable';
+  readonly evidenceGrade: 'measured-guide' | 'reference-unmeasured';
+  readonly geometry: 'horizontal-guide' | 'vertical-guide' | 'unavailable';
+}>([
+  ['conversation-back-row', { status: 'projected', evidenceGrade: 'measured-guide', geometry: 'horizontal-guide' }],
+  ['conversation-option-stack-start', { status: 'projected', evidenceGrade: 'measured-guide', geometry: 'horizontal-guide' }],
+  ['information-panel-left-edge', { status: 'projected', evidenceGrade: 'measured-guide', geometry: 'vertical-guide' }],
+  ['mission-messages-ticker', { status: 'unavailable', evidenceGrade: 'reference-unmeasured', geometry: 'unavailable' }],
+  ['top-hud-strip', { status: 'unavailable', evidenceGrade: 'reference-unmeasured', geometry: 'unavailable' }],
 ]);
 
 const EVIDENCE_GRADES = new Set(['measured-guide', 'calibrated', 'reference-unmeasured']);
@@ -560,6 +583,202 @@ const validSource = (value: unknown): boolean => {
     && safeInteger(fieldValue(end, 'column'))
     && safeInteger(fieldValue(end, 'offset'), fieldValue(start, 'offset') as number)
     && (fieldValue(end, 'offset') as number) >= (fieldValue(start, 'offset') as number);
+};
+
+const validSourcePin = (value: unknown): boolean => {
+  return exactRecord(value, ['sourcePath', 'lineStart', 'lineEnd'])
+    && nonEmptyString(fieldValue(value, 'sourcePath'))
+    && safeInteger(fieldValue(value, 'lineStart'), 1)
+    && safeInteger(fieldValue(value, 'lineEnd'), fieldValue(value, 'lineStart') as number);
+};
+
+const sourceContains = (outer: unknown, inner: unknown): boolean => {
+  if (!validSource(outer) || !validSource(inner)) return false;
+  const outerRecord = outer as object;
+  const innerRecord = inner as object;
+  const outerStart = fieldValue(fieldValue(outerRecord, 'start') as object, 'offset');
+  const outerEnd = fieldValue(fieldValue(outerRecord, 'end') as object, 'offset');
+  const innerStart = fieldValue(fieldValue(innerRecord, 'start') as object, 'offset');
+  const innerEnd = fieldValue(fieldValue(innerRecord, 'end') as object, 'offset');
+  return fieldValue(outerRecord, 'file') === fieldValue(innerRecord, 'file')
+    && fieldValue(outerRecord, 'sourcePath') === fieldValue(innerRecord, 'sourcePath')
+    && typeof outerStart === 'number'
+    && typeof outerEnd === 'number'
+    && typeof innerStart === 'number'
+    && typeof innerEnd === 'number'
+    && outerStart <= innerStart
+    && innerEnd <= outerEnd;
+};
+
+const COLOR_TINT_FIELD_SLOTS: ReadonlyMap<string, TintSlot> = new Map([
+  ['backgroundColor', 'table-background'],
+  ['cellbgcolor', 'cell-background'],
+  ['bgcolor', 'widget-background'],
+  ['bordercolor', 'widget-border'],
+  ['highlightcolor', 'widget-highlight'],
+  ['color', 'widget-icon'],
+]);
+
+const validColorFileIdentity = (
+  value: unknown,
+  expected: { readonly relativePath: string; readonly sha256: string; readonly size: number },
+): boolean => exactRecord(value, ['path', 'relativePath', 'sha256', 'size'])
+  && fieldValue(value, 'path') === expected.relativePath
+  && fieldValue(value, 'relativePath') === expected.relativePath
+  && fieldValue(value, 'sha256') === expected.sha256
+  && fieldValue(value, 'size') === expected.size;
+
+const validColorChannelEvidence = (value: unknown, expected: unknown, maximum: number): boolean => {
+  if (!exactRecord(value, ['expression', 'keySource', 'source', 'value'])) return false;
+  const channelValue = fieldValue(value, 'value');
+  return nonEmptyString(fieldValue(value, 'expression'))
+    && validSource(fieldValue(value, 'keySource'))
+    && validSource(fieldValue(value, 'source'))
+    && safeNumber(channelValue)
+    && (channelValue as number) >= 0
+    && (channelValue as number) <= maximum
+    && channelValue === expected;
+};
+
+const validateBasePreviewTint = (value: unknown): Validation<ValidatedTint> => {
+  if (!exactRecord(value, ['kind', 'completeness', 'field', 'slot', 'value', 'domain', 'provenance', 'expression', 'source', 'gameVerification'], ['sourcePin', 'sampleId'])) {
+    return refusal('invalid-command', 'basePreviewTints contains an unexpected, inherited, sparse, or accessor tint record');
+  }
+  if (fieldValue(value, 'kind') !== 'base-preview-tint' || fieldValue(value, 'completeness') !== 'partial') {
+    return refusal('invalid-command', 'basePreviewTints tint completeness or kind is invalid');
+  }
+  const field = fieldValue(value, 'field');
+  const slot = fieldValue(value, 'slot');
+  const expectedSlot = typeof field === 'string' ? COLOR_TINT_FIELD_SLOTS.get(field) : undefined;
+  const fieldSlotMatches = expectedSlot !== undefined && (slot === expectedSlot || field === 'color' && (slot === 'primary-text' || slot === 'secondary-text'));
+  if (!fieldSlotMatches) return refusal('invalid-command', 'basePreviewTints field and slot relationship is invalid');
+  const domain = fieldValue(value, 'domain');
+  if (domain !== 'source-literal-percent-alpha' && domain !== 'canonical-xml-byte-alpha') return refusal('invalid-command', 'basePreviewTints alpha domain is unsupported');
+  const provenance = fieldValue(value, 'provenance');
+  if (domain === 'source-literal-percent-alpha' && provenance !== 'source-literal' || domain === 'canonical-xml-byte-alpha' && provenance !== 'canonical-default-only') {
+    return refusal('invalid-command', 'basePreviewTints provenance does not match its alpha domain');
+  }
+  if (!nonEmptyString(fieldValue(value, 'expression')) || !validSource(fieldValue(value, 'source'))) return refusal('invalid-command', 'basePreviewTints source expression or location is malformed');
+  if (hasField(value, 'sourcePin') && !validSourcePin(fieldValue(value, 'sourcePin')) || hasField(value, 'sampleId') && !nonEmptyString(fieldValue(value, 'sampleId'))) return refusal('invalid-command', 'basePreviewTints source pin or sample identity is malformed');
+  if (fieldValue(value, 'gameVerification') !== X4_UI_CANVAS_GAME_TRUTH || !noForbiddenTruth(value)) return refusal('game-truth', 'basePreviewTints carries escalated game truth');
+  const color = fieldValue(value, 'value');
+  const colorMaximum = domain === 'source-literal-percent-alpha' ? 100 : 255;
+  if (domain === 'source-literal-percent-alpha') {
+    if (!exactRecord(color, ['a', 'b', 'channels', 'declarationExpression', 'declarationSource', 'domain', 'g', 'gameVerification', 'kind', 'r'], ['glow'])) return refusal('invalid-command', 'source-literal basePreviewTints color evidence has an unexpected shape');
+    const channels = fieldValue(color, 'channels') as object;
+    const hasGlow = hasField(color as object, 'glow');
+    if (!exactRecord(channels, ['a', 'b', 'g', 'r'], hasGlow ? ['glow'] : [])
+      || !validColorChannelEvidence(fieldValue(channels, 'r'), fieldValue(color, 'r'), 255)
+      || !validColorChannelEvidence(fieldValue(channels, 'g'), fieldValue(color, 'g'), 255)
+      || !validColorChannelEvidence(fieldValue(channels, 'b'), fieldValue(color, 'b'), 255)
+      || !validColorChannelEvidence(fieldValue(channels, 'a'), fieldValue(color, 'a'), colorMaximum)
+      || !nonEmptyString(fieldValue(color, 'declarationExpression'))
+      || fieldValue(value, 'expression') !== fieldValue(color, 'declarationExpression')
+      || !validSource(fieldValue(color, 'declarationSource'))
+      || !sourceContains(fieldValue(value, 'source'), fieldValue(color, 'declarationSource'))
+      || !sourceContains(fieldValue(color, 'declarationSource'), fieldValue(fieldValue(channels, 'r') as object, 'keySource'))
+      || !sourceContains(fieldValue(color, 'declarationSource'), fieldValue(fieldValue(channels, 'g') as object, 'keySource'))
+      || !sourceContains(fieldValue(color, 'declarationSource'), fieldValue(fieldValue(channels, 'b') as object, 'keySource'))
+      || !sourceContains(fieldValue(color, 'declarationSource'), fieldValue(fieldValue(channels, 'a') as object, 'keySource'))
+      || !sourceContains(fieldValue(color, 'declarationSource'), fieldValue(fieldValue(channels, 'r') as object, 'source'))
+      || !sourceContains(fieldValue(color, 'declarationSource'), fieldValue(fieldValue(channels, 'g') as object, 'source'))
+      || !sourceContains(fieldValue(color, 'declarationSource'), fieldValue(fieldValue(channels, 'b') as object, 'source'))
+      || !sourceContains(fieldValue(color, 'declarationSource'), fieldValue(fieldValue(channels, 'a') as object, 'source'))) {
+      return refusal('invalid-command', 'source-literal basePreviewTints channels or declaration evidence is malformed');
+    }
+    if (hasGlow) {
+      if (!safeNumber(fieldValue(color as object, 'glow')) || (fieldValue(color as object, 'glow') as number) < 0 || (fieldValue(color as object, 'glow') as number) > 1 || !validColorChannelEvidence(fieldValue(channels, 'glow'), fieldValue(color, 'glow'), 1) || !sourceContains(fieldValue(color, 'declarationSource'), fieldValue(fieldValue(channels, 'glow') as object, 'keySource')) || !sourceContains(fieldValue(color, 'declarationSource'), fieldValue(fieldValue(channels, 'glow') as object, 'source'))) {
+        return refusal('invalid-command', 'source-literal basePreviewTints glow evidence is malformed or not contained by its declaration');
+      }
+    }
+  } else {
+    if (!exactRecord(color, ['a', 'b', 'baseSource', 'canonicalIdentity', 'domain', 'g', 'gameVerification', 'glow', 'kind', 'r', 'requestedId', 'resolvedBaseId', 'sourceIdentities'], ['mappingSource'])) return refusal('invalid-command', 'canonical basePreviewTints color evidence has an unexpected shape');
+    const baseSource = fieldValue(color, 'baseSource');
+    const sourceIdentities = fieldValue(color, 'sourceIdentities');
+    if (!exactRecord(baseSource, ['id', 'index', 'path'])
+      || !nonEmptyString(fieldValue(baseSource, 'id'))
+      || !safeInteger(fieldValue(baseSource, 'index'))
+      || (fieldValue(baseSource, 'index') as number) > 223
+      || fieldValue(baseSource, 'path') !== X4_UI_CORPUS_9_00_COLOR_CONTRACT.xml.relativePath
+      || fieldValue(color, 'canonicalIdentity') !== 'x4-9.00'
+      || !nonEmptyString(fieldValue(color, 'requestedId'))
+      || !nonEmptyString(fieldValue(color, 'resolvedBaseId'))
+      || fieldValue(baseSource, 'id') !== fieldValue(color, 'resolvedBaseId')
+      || !exactRecord(sourceIdentities, ['xml', 'xsd'])
+      || !validColorFileIdentity(fieldValue(sourceIdentities, 'xml'), X4_UI_CORPUS_9_00_COLOR_CONTRACT.xml)
+      || !validColorFileIdentity(fieldValue(sourceIdentities, 'xsd'), X4_UI_CORPUS_9_00_COLOR_CONTRACT.xsd)) {
+      return refusal('invalid-command', 'canonical basePreviewTints pinned corpus identity is malformed');
+    }
+    const glow = fieldValue(color, 'glow');
+    if (!safeNumber(glow) || (glow as number) < 0 || (glow as number) > 1) return refusal('invalid-command', 'canonical basePreviewTints glow evidence is malformed');
+    if (hasField(color as object, 'mappingSource')) {
+      const mappingSource = fieldValue(color as object, 'mappingSource');
+      if (!exactRecord(mappingSource, ['id', 'index', 'path'])
+        || !nonEmptyString(fieldValue(mappingSource as object, 'id'))
+        || !safeInteger(fieldValue(mappingSource as object, 'index'))
+        || (fieldValue(mappingSource as object, 'index') as number) > 803
+        || fieldValue(mappingSource as object, 'path') !== X4_UI_CORPUS_9_00_COLOR_CONTRACT.xml.relativePath
+        || fieldValue(mappingSource as object, 'id') !== fieldValue(color, 'requestedId')
+        || fieldValue(color, 'requestedId') === fieldValue(color, 'resolvedBaseId')
+        ) {
+        return refusal('invalid-command', 'canonical basePreviewTints mapping source or requested/resolved identity is inconsistent');
+      }
+    } else if (fieldValue(color, 'requestedId') !== fieldValue(color, 'resolvedBaseId')) {
+      return refusal('invalid-command', 'canonical basePreviewTints requested and resolved identities are inconsistent');
+    }
+  }
+  if (fieldValue(color, 'kind') !== 'color'
+    || fieldValue(color, 'domain') !== domain
+    || fieldValue(color, 'gameVerification') !== X4_UI_CANVAS_GAME_TRUTH) {
+    return refusal('invalid-command', 'basePreviewTints nested color domain or truth is malformed');
+  }
+  const red = fieldValue(color, 'r');
+  const green = fieldValue(color, 'g');
+  const blue = fieldValue(color, 'b');
+  const alpha = fieldValue(color, 'a');
+  const canonicalChannelsAreIntegers = domain === 'canonical-xml-byte-alpha';
+  if (!safeNumber(red) || canonicalChannelsAreIntegers && !Number.isInteger(red) || (red as number) < 0 || (red as number) > 255
+    || !safeNumber(green) || canonicalChannelsAreIntegers && !Number.isInteger(green) || (green as number) < 0 || (green as number) > 255
+    || !safeNumber(blue) || canonicalChannelsAreIntegers && !Number.isInteger(blue) || (blue as number) < 0 || (blue as number) > 255
+    || !safeNumber(alpha) || canonicalChannelsAreIntegers && !Number.isInteger(alpha) || (alpha as number) < 0 || (alpha as number) > colorMaximum) {
+    return refusal('invalid-command', 'basePreviewTints RGB or alpha channel is outside its typed range');
+  }
+  const alphaScale = domain === 'source-literal-percent-alpha' ? (alpha as number) / 100 : (alpha as number) / 255;
+  const source = fieldValue(value, 'source') as object;
+  const sourceStart = fieldValue(source, 'start') as object;
+  const sourceEnd = fieldValue(source, 'end') as object;
+  const factKey = `${String(fieldValue(source, 'file'))}|${String(fieldValue(sourceStart, 'offset'))}|${String(fieldValue(sourceEnd, 'offset'))}|${String(field)}|${String(slot)}`;
+  return {
+    ok: true,
+    value: {
+      field: field as ValidatedTint['field'],
+      slot: slot as TintSlot,
+      domain: domain as TintDomain,
+      red: red as number,
+      green: green as number,
+      blue: blue as number,
+      alpha: alpha as number,
+      alphaScale,
+      drawableKey: `${String(red)}|${String(green)}|${String(blue)}|${String(alphaScale)}`,
+      factKey,
+    },
+  };
+};
+
+const validateBasePreviewTints = (value: unknown): Validation<readonly ValidatedTint[]> => {
+  if (!isDenseArray(value, 16) || value.length === 0) return refusal('invalid-command', 'basePreviewTints must be a non-empty dense own-data array');
+  const tints: ValidatedTint[] = [];
+  const factKeys = new Set<string>();
+  const slots = new Set<TintSlot>();
+  for (const tintValue of value) {
+    const tint = validateBasePreviewTint(tintValue);
+    if (isValidationFailure(tint)) return tint;
+    if (factKeys.has(tint.value.factKey) || slots.has(tint.value.slot)) return refusal('invalid-command', 'basePreviewTints contains duplicate or reassigned facts');
+    factKeys.add(tint.value.factKey);
+    slots.add(tint.value.slot);
+    tints.push(tint.value);
+  }
+  return { ok: true, value: tints };
 };
 
 const validRect = (value: unknown, bounds?: Rect, positive = false): value is Rect => {
@@ -994,12 +1213,20 @@ const validateCommand = (
   };
   if (expectedLayer === 'diagnostic-background') {
     if (kind !== 'node-geometry') return refusal('unsupported-command', 'diagnostic background contains a non-geometry command');
-    const valid = baseResult(['completeness', 'style'], ['geometry']);
+    const valid = baseResult(['completeness', 'style'], ['geometry', 'basePreviewTints']);
     if (isValidationFailure(valid)) return { ok: false, refusal: valid.refusal };
     const geometry = fieldValue(value, 'geometry');
     if (geometry !== undefined && !validRect(geometry, drawable, true)) return refusal('invalid-geometry', 'node geometry is unsafe or outside the drawable');
     if (!['complete', 'partial', 'unavailable'].includes(String(fieldValue(value, 'completeness'))) || !['source-derived', 'unavailable'].includes(String(fieldValue(value, 'style')))) {
       return refusal('invalid-command', 'node geometry completeness or style is invalid');
+    }
+    let tints: readonly ValidatedTint[] | undefined;
+    if (hasField(value, 'basePreviewTints')) {
+      const tintResult = validateBasePreviewTints(fieldValue(value, 'basePreviewTints'));
+      if (isValidationFailure(tintResult)) return { ok: false, refusal: tintResult.refusal };
+      tints = tintResult.value;
+      const activeFillCount = tints.filter(tint => tint.slot === 'table-background' || tint.slot === 'cell-background' || tint.slot === 'widget-background').length;
+      if (activeFillCount > 1) return refusal('invalid-command', 'node geometry carries multiple reassigned base fill tints');
     }
     const base = detachedCommandBase(value);
     return {
@@ -1011,12 +1238,13 @@ const validateCommand = (
         color: fieldValue(value, 'style') === 'unavailable' || fieldValue(value, 'completeness') !== 'complete'
           ? X4_UI_CANVAS_DIAGNOSTIC_PALETTE.unavailable
           : X4_UI_CANVAS_DIAGNOSTIC_PALETTE.geometry,
+        ...(tints === undefined ? {} : { tints }),
       },
     };
   }
   if (expectedLayer === 'glyph-alpha-blits') {
     if (kind !== 'glyph-alpha-blit') return refusal('unsupported-command', 'glyph layer contains a non-glyph command');
-    const valid = baseResult(['textId', 'lineIndex', 'codePoint', 'glyphIndex', 'descriptor', 'atlas', 'sourceRect', 'destinationRect', 'sourceRange', 'sourceCodePointRange', 'isEllipsis']);
+    const valid = baseResult(['textId', 'lineIndex', 'codePoint', 'glyphIndex', 'descriptor', 'atlas', 'sourceRect', 'destinationRect', 'sourceRange', 'sourceCodePointRange', 'isEllipsis'], ['basePreviewTints']);
     if (isValidationFailure(valid)) return { ok: false, refusal: valid.refusal };
     const descriptor = fieldValue(value, 'descriptor');
     const atlas = fieldValue(value, 'atlas');
@@ -1048,6 +1276,15 @@ const validateCommand = (
     };
     if (!validRect(recordRect, { x: 0, y: 0, width: font.width, height: font.height }, true)
       || !validRect(sourceRect, recordRect, true)) return refusal('atlas-bounds', 'glyph source rectangle is not within its canonical glyph bounds');
+    let tint: ValidatedTint | undefined;
+    if (hasField(value, 'basePreviewTints')) {
+      const tintResult = validateBasePreviewTints(fieldValue(value, 'basePreviewTints'));
+      if (isValidationFailure(tintResult)) return { ok: false, refusal: tintResult.refusal };
+      if (tintResult.value.length !== 1 || (tintResult.value[0]?.slot !== 'primary-text' && tintResult.value[0]?.slot !== 'secondary-text') || tintResult.value[0]?.field !== 'color') {
+        return refusal('invalid-command', 'glyph basePreviewTints must carry exactly its parent primary or secondary text tint');
+      }
+      tint = tintResult.value[0];
+    }
     return {
       ok: true,
       value: {
@@ -1056,6 +1293,7 @@ const validateCommand = (
         role: font.role,
         source: copyValidatedRect(sourceRect),
         destination: copyValidatedRect(destinationRect),
+        ...(tint === undefined ? {} : { tint }),
       },
     };
   }
@@ -1085,18 +1323,38 @@ const validateCommand = (
   const context = fieldValue(value, 'context');
   const entryId = fieldValue(value, 'entryId');
   const status = fieldValue(value, 'status');
+  const evidenceGrade = fieldValue(value, 'evidenceGrade');
   const geometry = fieldValue(value, 'geometry');
-  if (typeof context !== 'string' || !KEEP_OUT_CONTEXTS.has(context)
-    || typeof entryId !== 'string' || !KEEP_OUT_IDS.has(entryId)
+  const reasonPresent = hasField(value, 'reason');
+  const reason = fieldValue(value, 'reason');
+  if (typeof context !== 'string' || context.trim().length === 0
+    || typeof entryId !== 'string' || entryId.trim().length === 0
     || (status !== 'projected' && status !== 'unavailable')
-    || typeof fieldValue(value, 'evidenceGrade') !== 'string' || !EVIDENCE_GRADES.has(fieldValue(value, 'evidenceGrade') as string)
+    || typeof evidenceGrade !== 'string' || !EVIDENCE_GRADES.has(evidenceGrade)
     || fieldValue(value, 'advisoryOnly') !== true
     || fieldValue(value, 'gameVerification') !== X4_UI_CANVAS_GAME_TRUTH
     || !validKeepOutGeometry(geometry, drawable)
-    || status === 'projected' && geometry === null
-    || status === 'unavailable' && geometry !== null
     || hasField(value, 'reason') && !nonEmptyString(fieldValue(value, 'reason'))) {
     return refusal('invalid-keepout', 'keep-out overlay geometry, identity, or truth is malformed');
+  }
+  const productionRule = KEEP_OUT_PRODUCTION_RULES.get(entryId);
+  if (productionRule !== undefined) {
+    const geometryKind = isPlainDataRecord(geometry) ? fieldValue(geometry, 'kind') : undefined;
+    if (!KEEP_OUT_CONTEXTS.has(context)
+      || status !== productionRule.status
+      || evidenceGrade !== productionRule.evidenceGrade
+      || productionRule.geometry === 'unavailable' && geometry !== null
+      || productionRule.geometry !== 'unavailable' && geometryKind !== productionRule.geometry) {
+      return refusal('invalid-keepout', 'production keep-out identity, selected preset context, grade, status, or geometry is malformed');
+    }
+    if (productionRule.status === 'unavailable'
+      ? !reasonPresent || reason !== 'reference-unmeasured'
+      : reasonPresent) {
+      return refusal('invalid-keepout', 'production keep-out reason is inconsistent with its issued status');
+    }
+  } else if (status !== 'projected' || evidenceGrade !== 'calibrated' || geometry === null
+    || !isPlainDataRecord(geometry) || fieldValue(geometry, 'kind') !== 'polygon' || reasonPresent) {
+    return refusal('invalid-keepout', 'manual calibrated keep-out requires a projected polygon and calibrated evidence');
   }
   let detachedGeometry: DetachedKeepOutGeometry = null;
   if (isPlainDataRecord(geometry)) {
@@ -1153,6 +1411,8 @@ const validatePlan = (
   const keepOutEntries = new Set<string>();
   const issuedOrders = new Set<number>();
   const previousLayerOrders = [-1, -1, -1, -1];
+  const tintOwners = new Map<string, string>();
+  const glyphTintOwners = new Map<string, string>();
   for (let layerIndex = 0; layerIndex < 4; layerIndex += 1) {
     const layer = layers[layerIndex];
     if (!exactRecord(layer, ['kind', 'commands']) || fieldValue(layer as object, 'kind') !== LAYER_KINDS[layerIndex] || !isDenseArray(fieldValue(layer as object, 'commands'), MAX_COMMANDS)) return refusal('invalid-layer', 'paint layer tuple or command array is malformed');
@@ -1174,6 +1434,28 @@ const validatePlan = (
         const entryId = fieldValue(commandValue as object, 'entryId');
         if (typeof entryId === 'string' && keepOutEntries.has(entryId)) return refusal('duplicate-command', `keep-out entry ${entryId} is duplicated`);
         if (typeof entryId === 'string') keepOutEntries.add(entryId);
+      }
+      if (command.value.kind === 'node-geometry' && command.value.tints !== undefined) {
+        const owner = nonEmptyString(fieldValue(commandValue, 'nodeId')) ? fieldValue(commandValue, 'nodeId') as string : id;
+        for (const tint of command.value.tints) {
+          const priorOwner = tintOwners.get(tint.factKey);
+          if (priorOwner !== undefined && priorOwner !== owner) return refusal('invalid-command', 'basePreviewTints fact is reassigned across geometry owners');
+          tintOwners.set(tint.factKey, owner);
+        }
+      }
+      if (command.value.kind === 'glyph-alpha-blit') {
+        const textId = fieldValue(commandValue, 'textId');
+        if (!nonEmptyString(textId)) return refusal('invalid-command', 'glyph text owner is malformed');
+        const owner = textId as string;
+        const tintKey = command.value.tint?.factKey ?? 'diagnostic';
+        const priorTextTint = glyphTintOwners.get(owner);
+        if (priorTextTint !== undefined && priorTextTint !== tintKey) return refusal('invalid-command', 'glyph basePreviewTints are reassigned within one text owner');
+        glyphTintOwners.set(owner, tintKey);
+        if (command.value.tint !== undefined) {
+          const priorOwner = tintOwners.get(command.value.tint.factKey);
+          if (priorOwner !== undefined && priorOwner !== owner) return refusal('invalid-command', 'basePreviewTints fact is reassigned across geometry and glyph owners');
+          tintOwners.set(command.value.tint.factKey, owner);
+        }
       }
       validatedLayers[layerIndex].push(command.value);
       flattened.push(command.value);
@@ -1333,9 +1615,12 @@ const allocateSurface = (
   }
 };
 
+const tintByte = (value: number): number => Math.round(value);
+
 const stageAtlas = (
   factory: X4UiCanvasSurfaceFactory,
   binding: AtlasSnapshot,
+  tint?: ValidatedTint,
 ): Validation<{ readonly surface: X4UiCanvasSurface; readonly api: PaintApi }> => {
   const allocated = allocateSurface(factory, binding.width, binding.height, `${binding.role}-atlas`, true);
   if (isValidationFailure(allocated)) return { ok: false, refusal: allocated.refusal };
@@ -1347,10 +1632,11 @@ const stageAtlas = (
     if (!(data instanceof Uint8ClampedArray) || data.length !== binding.alphaBytes.length * 4) return refusal('allocation-failure', `${binding.role} atlas image-data has unsafe dimensions`);
     for (let index = 0; index < binding.alphaBytes.length; index += 1) {
       const offset = index * 4;
-      data[offset] = 229;
-      data[offset + 1] = 231;
-      data[offset + 2] = 235;
-      data[offset + 3] = binding.alphaBytes[index] as number;
+      data[offset] = tint === undefined ? 229 : tintByte(tint.red);
+      data[offset + 1] = tint === undefined ? 231 : tintByte(tint.green);
+      data[offset + 2] = tint === undefined ? 235 : tintByte(tint.blue);
+      // Typed tint RGB and alpha use one deterministic positive-value half-up byte rule; CSS keeps raw tint values.
+      data[offset + 3] = tint === undefined ? binding.alphaBytes[index] as number : tintByte((binding.alphaBytes[index] as number) * tint.alphaScale);
     }
     api.putImageData(imageData, 0, 0);
     return { ok: true, value: { surface: allocated.value.surface, api } };
@@ -1358,6 +1644,10 @@ const stageAtlas = (
     return refusal('allocation-failure', `${binding.role} atlas image-data staging failed`);
   }
 };
+
+const tintStyle = (tint: ValidatedTint): string => `rgba(${String(tint.red)}, ${String(tint.green)}, ${String(tint.blue)}, ${String(tint.alphaScale)})`;
+
+const atlasSurfaceKey = (role: 'regular' | 'bold', tint?: ValidatedTint): string => `${role}|${tint?.drawableKey ?? 'diagnostic'}`;
 
 const withClip = (api: PaintApi, clip: Rect | undefined, draw: () => void): void => {
   if (clip === undefined) {
@@ -1379,7 +1669,7 @@ type PaintOperation = (api: PaintApi) => void;
 
 const buildOperations = (
   validated: ValidatedPlan,
-  atlasSurfaces: ReadonlyMap<'regular' | 'bold', X4UiCanvasSurface>,
+  atlasSurfaces: ReadonlyMap<string, X4UiCanvasSurface>,
 ): Validation<readonly PaintOperation[]> => {
   try {
     const operations: PaintOperation[] = [];
@@ -1389,20 +1679,32 @@ const buildOperations = (
           const geometry = item.geometry;
           const clip = item.clip;
           const color = item.color;
+          const tints = item.tints ?? [];
+          const fillTint = tints.find(tint => tint.slot === 'table-background' || tint.slot === 'cell-background' || tint.slot === 'widget-background');
+          const borderTint = tints.find(tint => tint.slot === 'widget-border');
+          const sourceGeometry = fillTint !== undefined;
           operations.push(api => {
-            api.setFillStyle(color);
-            if (geometry !== undefined) withClip(api, clip, () => { api.fillRect(geometry.x, geometry.y, geometry.width, geometry.height); });
+            api.setFillStyle(sourceGeometry ? tintStyle(fillTint as ValidatedTint) : color);
+            if (geometry !== undefined) withClip(api, clip, () => {
+              api.fillRect(geometry.x, geometry.y, geometry.width, geometry.height);
+              if (borderTint !== undefined) {
+                api.setStrokeStyle(tintStyle(borderTint));
+                api.beginPath();
+                api.rect(geometry.x, geometry.y, geometry.width, geometry.height);
+                api.stroke();
+              }
+            });
           });
           continue;
         }
         if (item.kind === 'glyph-alpha-blit') {
-          const surface = atlasSurfaces.get(item.role);
+          const surface = atlasSurfaces.get(atlasSurfaceKey(item.role, item.tint));
           const source = item.source;
           const destination = item.destination;
           const clip = item.clip;
           if (surface === undefined) return refusal('invalid-atlas', 'validated glyph command lost its canonical atlas staging surface');
           operations.push(api => withClip(api, clip, () => {
-            api.setFillStyle(X4_UI_CANVAS_DIAGNOSTIC_PALETTE.glyph);
+            api.setFillStyle(item.tint === undefined ? X4_UI_CANVAS_DIAGNOSTIC_PALETTE.glyph : tintStyle(item.tint));
             api.drawImage(surface, source.x, source.y, source.width, source.height, destination.x, destination.y, destination.width, destination.height);
           }));
           continue;
@@ -1488,12 +1790,15 @@ export function renderX4UiPaintPlanToCanvas(
     const factoryValidation = validatedFactory(options);
     if (isValidationFailure(factoryValidation)) return makeRefusalResult({ ok: false, refusal: factoryValidation.refusal });
 
-    const atlasSurfaces = new Map<'regular' | 'bold', X4UiCanvasSurface>();
-    for (const role of planValidation.value.atlasRoles) {
-      const binding = atlasSnapshots[role];
-      const staged = stageAtlas(factoryValidation.value, binding);
+    const atlasSurfaces = new Map<string, X4UiCanvasSurface>();
+    for (const item of planValidation.value.flattened) {
+      if (item.kind !== 'glyph-alpha-blit') continue;
+      const key = atlasSurfaceKey(item.role, item.tint);
+      if (atlasSurfaces.has(key)) continue;
+      const binding = atlasSnapshots[item.role];
+      const staged = stageAtlas(factoryValidation.value, binding, item.tint);
       if (isValidationFailure(staged)) return makeRefusalResult({ ok: false, refusal: staged.refusal });
-      atlasSurfaces.set(role, staged.value.surface);
+      atlasSurfaces.set(key, staged.value.surface);
     }
 
     const composite = allocateSurface(

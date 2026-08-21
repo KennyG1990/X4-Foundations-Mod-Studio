@@ -529,13 +529,14 @@ function boundedVerdict(value) {
     const candidate = field(key);
     return Number.isSafeInteger(candidate) && !Object.is(candidate, -0) && candidate >= 0 ? candidate : 0;
   };
+  const totalTests = count('totalTests');
   return {
     passed: count('passed'),
     failed: count('failed'),
     flaky: count('flaky'),
     badResults: count('badResults'),
-    noTests: field('noTests') === true,
-    totalTests: count('totalTests'),
+    noTests: totalTests === 0,
+    totalTests,
     issues,
     quarantinedIssues: count('quarantinedIssues'),
     green: field('green') === true,
@@ -1472,6 +1473,20 @@ function runPureSelftest() {
     runnerInteractionFailed: false,
   });
   ok('preflight_receipt_schema_v2_valid', validateE2eVerdictReceipt(preflightReceipt));
+  const emptyStdoutReceipt = policyReceipt({ entries: [], errors: [] }, {
+    source: 'stdout-fallback',
+    reportCode: 'structured-report-unavailable',
+    childExit: 3221226505,
+    verdict: verdictWithoutStructuredReport(''),
+    reportInspection: unavailableReportInspection(),
+    lifecycle: completeLifecycle,
+    runnerInteractionFailed: false,
+  });
+  ok('empty_stdout_receipt_canonical_no_tests', validateE2eVerdictReceipt(emptyStdoutReceipt)
+    && emptyStdoutReceipt.verdict.noTests === true
+    && emptyStdoutReceipt.verdict.totalTests === 0
+    && emptyStdoutReceipt.verdict.structuredReportMissing === true
+    && emptyStdoutReceipt.verdict.green === false);
   const receiptWithExtraKey = JSON.parse(JSON.stringify(validReceipt));
   receiptWithExtraKey.extra = true;
   ok('receipt_extra_key_red', !validateE2eVerdictReceipt(receiptWithExtraKey));

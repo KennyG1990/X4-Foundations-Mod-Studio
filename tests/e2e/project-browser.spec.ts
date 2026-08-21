@@ -199,9 +199,34 @@ test('Load Mod Project visibly decomposes a complex multi-script project without
       data: { modWorkspacePath: staging, filesystemPath: deployment },
     });
     expect(configured.ok(), await configured.text()).toBeTruthy();
-    const configuredBody = await configured.json() as { manifest?: { state?: string; scanning?: unknown } };
-    expect(configuredBody.manifest?.state).toBe('ready');
-    expect(configuredBody.manifest?.scanning).toBeUndefined();
+    const configuredBody = await configured.json() as {
+      manifest?: { state?: unknown; scanning?: unknown; error?: unknown };
+    };
+    // Fresh per-run data has no cached manifest, so a directory save may report a nonblocking initial scan.
+    const manifest = configuredBody.manifest;
+    if (!manifest) throw new Error('Directory config response omitted manifest status.');
+    expect(manifest).not.toHaveProperty('error');
+    expect(['ready', 'scanning', 'stale']).toContain(manifest.state);
+    if (manifest.state === 'ready') {
+      expect(manifest).not.toHaveProperty('scanning');
+    } else {
+      const scanning = manifest.scanning;
+      const isRecord = (value: unknown): value is Record<string, unknown> => (
+        typeof value === 'object' && value !== null && !Array.isArray(value)
+      );
+      const isNonemptyString = (value: unknown): value is string => (
+        typeof value === 'string' && value.length > 0
+      );
+      const isFiniteNonnegativeNumber = (value: unknown): value is number => (
+        typeof value === 'number' && Number.isFinite(value) && value >= 0
+      );
+      expect(isRecord(scanning)).toBeTruthy();
+      if (!isRecord(scanning)) throw new Error('Manifest scanning status is not an object.');
+      expect(isNonemptyString(scanning.generation)).toBeTruthy();
+      expect(isNonemptyString(scanning.startedAt)).toBeTruthy();
+      expect(isFiniteNonnegativeNumber(scanning.files)).toBeTruthy();
+      expect(isFiniteNonnegativeNumber(scanning.bytes)).toBeTruthy();
+    }
 
     await page.goto('/');
     const startupWalkaround = page.getByTestId('health-card');

@@ -90,6 +90,143 @@ function expectCalibrationRefused(
   }
 }
 
+type CausalMatrixReceipt = {
+  readonly name: string;
+  readonly expected: string;
+  readonly pass: boolean;
+  readonly observed: unknown;
+};
+
+/**
+ * Batch 8C.1 tests-first seam matrix.  Keep this separate from the historical
+ * Batch 3D checks so the pre-change receipt identifies causal red rows rather
+ * than treating incidental old behavior as coverage.
+ */
+const BATCH_8C1_CAUSAL_MATRIX: readonly {
+  readonly name: string;
+  readonly expected: string;
+  readonly run: () => unknown;
+}[] = [
+  {
+    name: "calibration-issues-canonical-drawable-bounds",
+    expected: "success with provenance.drawableBounds left/top/width/height",
+    run: () => {
+      const result = calibrateKeepOutPolygon(validCalibrationInput());
+      checkEqual(result.status, "success", "calibration status");
+      if (result.status !== "success") return result;
+      checkJsonEqual(
+        result.entry.provenance.drawableBounds,
+        { left: 100, top: 50, width: 1000, height: 500 },
+        "canonical drawable bounds",
+      );
+      return result;
+    },
+  },
+  {
+    name: "calibration-canonicalizes-x-y-origin-aliases",
+    expected: "success with canonical left/top bounds",
+    run: () => {
+      const result = calibrateKeepOutPolygon(validCalibrationInput({
+        drawableBounds: { x: 100, y: 50, width: 1000, height: 500 },
+      }));
+      checkEqual(result.status, "success", "alias calibration status");
+      if (result.status !== "success") return result;
+      checkJsonEqual(
+        result.entry.provenance.drawableBounds,
+        { left: 100, top: 50, width: 1000, height: 500 },
+        "alias canonical drawable bounds",
+      );
+      return result;
+    },
+  },
+  {
+    name: "calibration-rejects-built-in-id-collision",
+    expected: "refused with built-in-id-collision",
+    run: () => {
+      const result = calibrateKeepOutPolygon(validCalibrationInput({
+        stableId: KEEP_OUT_IDS.conversationBackRow,
+      }));
+      checkEqual(result.status, "refused", "built-in collision status");
+      if (result.status === "refused") checkEqual(result.reason, "built-in-id-collision", "built-in collision reason");
+      return result;
+    },
+  },
+  {
+    name: "calibration-rejects-extra-input-key",
+    expected: "refused without accepting extra key",
+    run: () => {
+      const input = { ...validCalibrationInput(), unexpected: true } as unknown as KeepOutCalibrationInput;
+      const result = calibrateKeepOutPolygon(input);
+      checkEqual(result.status, "refused", "extra input status");
+      return result;
+    },
+  },
+  {
+    name: "calibration-rejects-accessor-without-getter-execution",
+    expected: "refused and getterReads=0",
+    run: () => {
+      let getterReads = 0;
+      const input = { ...validCalibrationInput() } as Record<string, unknown>;
+      Object.defineProperty(input, "profile", {
+        enumerable: true,
+        configurable: true,
+        get: () => {
+          getterReads += 1;
+          return "hostile-profile";
+        },
+      });
+      const result = calibrateKeepOutPolygon(input as unknown as KeepOutCalibrationInput);
+      checkEqual(result.status, "refused", "accessor input status");
+      checkEqual(getterReads, 0, "accessor getter reads");
+      return { result, getterReads };
+    },
+  },
+  {
+    name: "calibration-rejects-extra-point-key",
+    expected: "refused without accepting decorated point",
+    run: () => {
+      const input = validCalibrationInput({
+        points: [
+          { x: 100, y: 50, unexpected: true },
+          { x: 600, y: 50 },
+          { x: 100, y: 300 },
+        ] as unknown as KeepOutCalibrationInput["points"],
+      });
+      const result = calibrateKeepOutPolygon(input);
+      checkEqual(result.status, "refused", "extra point status");
+      return result;
+    },
+  },
+];
+
+function runBatch8C1CausalMatrix(): readonly CausalMatrixReceipt[] {
+  const receipt = BATCH_8C1_CAUSAL_MATRIX.map(row => {
+    try {
+      return {
+        name: row.name,
+        expected: row.expected,
+        pass: true,
+        observed: row.run(),
+      };
+    } catch (error) {
+      return {
+        name: row.name,
+        expected: row.expected,
+        pass: false,
+        observed: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
+  console.log(`BATCH_8C1_CAUSAL_MATRIX_FAIL_FIRST ${JSON.stringify({
+    total: receipt.length,
+    passed: receipt.filter(row => row.pass).length,
+    red: receipt.filter(row => !row.pass),
+  })}`);
+  return receipt;
+}
+
+const causalMatrixReceipt = runBatch8C1CausalMatrix();
+
 const tests: readonly TestCase[] = [
   {
     name: "exact measured guide facts and provenance",
@@ -573,6 +710,71 @@ const tests: readonly TestCase[] = [
     },
   },
   {
+    name: "calibration rejects closed-data attacks and hostile accessors",
+    run: () => {
+      const base = validCalibrationInput();
+      const inherited = Object.assign(Object.create({ inherited: true }), base) as KeepOutCalibrationInput;
+      expectCalibrationRefused(inherited, "malformed-input");
+
+      const symbolInput = { ...base } as Record<PropertyKey, unknown>;
+      symbolInput[Symbol("unexpected")] = true;
+      expectCalibrationRefused(symbolInput as unknown as KeepOutCalibrationInput, "malformed-input");
+
+      const nonEnumerableInput = { ...base } as Record<string, unknown>;
+      Object.defineProperty(nonEnumerableInput, "profile", {
+        value: base.profile,
+        enumerable: false,
+        configurable: true,
+      });
+      expectCalibrationRefused(nonEnumerableInput as unknown as KeepOutCalibrationInput, "malformed-input");
+
+      const cyclicInput = { ...base } as Record<string, unknown>;
+      cyclicInput.self = cyclicInput;
+      expectCalibrationRefused(cyclicInput as unknown as KeepOutCalibrationInput, "malformed-input");
+
+      expectCalibrationRefused(
+        validCalibrationInput({ drawableBounds: { left: 100, x: 101, top: 50, width: 1000, height: 500 } }),
+        "invalid-bounds",
+      );
+
+      const inheritedPoint = Object.create({ y: 50 }) as Record<string, unknown>;
+      inheritedPoint.x = 100;
+      expectCalibrationRefused(
+        validCalibrationInput({
+          points: [inheritedPoint, { x: 600, y: 50 }, { x: 100, y: 300 }] as unknown as KeepOutCalibrationInput["points"],
+        }),
+        "invalid-point",
+      );
+
+      let getterReads = 0;
+      const accessorInput = { ...base } as Record<string, unknown>;
+      Object.defineProperty(accessorInput, "sourceNote", {
+        enumerable: true,
+        configurable: true,
+        get: () => {
+          getterReads += 1;
+          throw new Error("calibration accessor executed");
+        },
+      });
+      expectCalibrationRefused(accessorInput as unknown as KeepOutCalibrationInput, "malformed-input");
+      checkEqual(getterReads, 0, "Calibration accessor getter reads");
+
+      let proxyGetterReads = 0;
+      const hostileProxy = new Proxy(base, {
+        get: () => {
+          proxyGetterReads += 1;
+          throw new Error("calibration proxy getter executed");
+        },
+        ownKeys: () => {
+          throw new Error("calibration proxy ownKeys executed");
+        },
+      });
+      const proxyResult = calibrateKeepOutPolygon(hostileProxy);
+      checkEqual(proxyGetterReads, 0, "Hostile calibration proxy getter reads");
+      checkEqual(proxyResult.status, "refused", "Hostile calibration proxy refusal");
+    },
+  },
+  {
     name: "inputs and built-ins remain unchanged and results are deterministic",
     run: () => {
       const input = validCalibrationInput();
@@ -607,7 +809,7 @@ const tests: readonly TestCase[] = [
 ];
 
 let passed = 0;
-let failed = 0;
+let failed = causalMatrixReceipt.filter(row => !row.pass).length;
 for (const test of tests) {
   try {
     test.run();

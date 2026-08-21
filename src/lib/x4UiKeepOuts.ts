@@ -46,6 +46,7 @@ export interface KeepOutProvenance {
   readonly evidenceGrade: EvidenceGrade;
   readonly sourceNote: string;
   readonly screenshot?: KeepOutScreenshotIdentity;
+  readonly drawableBounds?: KeepOutDrawableBounds;
 }
 
 export interface NormalizedPoint {
@@ -110,6 +111,17 @@ export type X4UiKeepOutEntry =
   | PolygonKeepOut
   | UnmeasuredKeepOut;
 
+/*
+ * Paint receives the issued entry alongside its projection.  This private
+ * identity ledger lets the downstream owner distinguish a session-issued
+ * value from a caller-authored look-alike before it materializes closed data.
+ */
+const ISSUED_KEEP_OUT_ENTRIES = new WeakSet<object>();
+
+export function isIssuedKeepOutEntry(value: unknown): value is X4UiKeepOutEntry {
+  return value !== null && typeof value === "object" && ISSUED_KEEP_OUT_ENTRIES.has(value);
+}
+
 export type PresetApplicability =
   | "applicable"
   | "not-applicable"
@@ -151,6 +163,14 @@ export interface PixelDrawableBounds {
   readonly top?: number;
   readonly x?: number;
   readonly y?: number;
+}
+
+/** Canonical, immutable drawable bounds issued with manual calibration evidence. */
+export interface KeepOutDrawableBounds {
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly height: number;
 }
 
 export interface DrawableViewport {
@@ -214,6 +234,12 @@ export type KeepOutProjectionResult =
   | KeepOutProjectionUnavailable
   | KeepOutProjectionRefused;
 
+const ISSUED_KEEP_OUT_PROJECTIONS = new WeakSet<object>();
+
+export function isIssuedKeepOutProjection(value: unknown): value is KeepOutProjectionResult {
+  return value !== null && typeof value === "object" && ISSUED_KEEP_OUT_PROJECTIONS.has(value);
+}
+
 export interface KeepOutCalibrationInput {
   readonly stableId: string;
   readonly context: string;
@@ -225,6 +251,7 @@ export interface KeepOutCalibrationInput {
 }
 
 export type CalibrationRefusalReason =
+  | "malformed-input"
   | "empty-stable-id"
   | "empty-context"
   | "empty-source-note"
@@ -237,7 +264,9 @@ export type CalibrationRefusalReason =
   | "invalid-point"
   | "out-of-bounds"
   | "duplicate-points"
-  | "collinear-points";
+  | "collinear-points"
+  | "built-in-id-collision"
+  | "duplicate-stable-id";
 
 export interface KeepOutCalibrationSuccess {
   readonly status: "success";
@@ -271,6 +300,78 @@ function isRecord(value: unknown): value is AnyRecord {
   return value !== null && typeof value === "object";
 }
 
+function ownDataField(
+  value: object,
+  key: string,
+): { readonly present: boolean; readonly valid: boolean; readonly value?: unknown } {
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined) return { present: false, valid: true };
+    if (!descriptor.enumerable || !("value" in descriptor)) {
+      return { present: true, valid: false };
+    }
+    return { present: true, valid: true, value: descriptor.value };
+  } catch {
+    return { present: true, valid: false };
+  }
+}
+
+function hasExactOwnDataFields(
+  value: unknown,
+  required: readonly string[],
+  optional: readonly string[] = [],
+): value is AnyRecord {
+  if (!isRecord(value) || Array.isArray(value)) return false;
+  try {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return false;
+    const keys = Reflect.ownKeys(value);
+    if (keys.some(key => typeof key !== "string")) return false;
+    const names = keys as readonly string[];
+    const allowed = new Set([...required, ...optional]);
+    if (!required.every(key => names.includes(key)) || !names.every(key => allowed.has(key))) {
+      return false;
+    }
+    return names.every(key => ownDataField(value, key).valid);
+  } catch {
+    return false;
+  }
+}
+
+function denseDataArray(value: unknown): readonly unknown[] | null {
+  if (!Array.isArray(value)) return null;
+  try {
+    if (Object.getPrototypeOf(value) !== Array.prototype) return null;
+    const keys = Reflect.ownKeys(value);
+    if (keys.some(key => key !== "length" && (typeof key !== "string" || !/^(0|[1-9][0-9]*)$/.test(key)))) {
+      return null;
+    }
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
+    if (lengthDescriptor === undefined || !("value" in lengthDescriptor) || lengthDescriptor.enumerable
+      || typeof lengthDescriptor.value !== "number" || !Number.isSafeInteger(lengthDescriptor.value) || lengthDescriptor.value < 0) {
+      return null;
+    }
+    const length = lengthDescriptor.value;
+    const indexKeys = keys.filter(key => key !== "length") as readonly string[];
+    if (indexKeys.length !== length) return null;
+    const values: unknown[] = [];
+    for (let index = 0; index < length; index += 1) {
+      const key = String(index);
+      if (!indexKeys.includes(key)) return null;
+      const field = ownDataField(value, key);
+      if (!field.valid) return null;
+      values.push(field.value);
+    }
+    return values;
+  } catch {
+    return null;
+  }
+}
+
+function dataField(value: AnyRecord, key: string): unknown {
+  return ownDataField(value, key).value;
+}
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
@@ -301,11 +402,21 @@ function isValidScreenshotIdentity(
   value: unknown,
 ): value is KeepOutScreenshotIdentity {
   return (
-    isRecord(value) &&
-    isNonEmptyString(value.hash) &&
-    SCREENSHOT_HASH_PATTERN.test(value.hash) &&
-    isNonEmptyString(value.profile)
+    hasExactOwnDataFields(value, ["hash", "profile"]) &&
+    isNonEmptyString(dataField(value, "hash")) &&
+    SCREENSHOT_HASH_PATTERN.test(dataField(value, "hash") as string) &&
+    isNonEmptyString(dataField(value, "profile"))
   );
+}
+
+function isValidDrawableBounds(value: unknown): value is KeepOutDrawableBounds {
+  return hasExactOwnDataFields(value, ["left", "top", "width", "height"])
+    && isFiniteNumber(dataField(value, "left"))
+    && isFiniteNumber(dataField(value, "top"))
+    && isFinitePositiveNumber(dataField(value, "width"))
+    && isFinitePositiveNumber(dataField(value, "height"))
+    && isFiniteNumber((dataField(value, "left") as number) + (dataField(value, "width") as number))
+    && isFiniteNumber((dataField(value, "top") as number) + (dataField(value, "height") as number));
 }
 
 function isNormalizedCoordinate(value: unknown): value is number {
@@ -314,9 +425,9 @@ function isNormalizedCoordinate(value: unknown): value is number {
 
 function isNormalizedPoint(value: unknown): value is NormalizedPoint {
   return (
-    isRecord(value) &&
-    isNormalizedCoordinate(value.x) &&
-    isNormalizedCoordinate(value.y)
+    hasExactOwnDataFields(value, ["x", "y"]) &&
+    isNormalizedCoordinate(dataField(value, "x")) &&
+    isNormalizedCoordinate(dataField(value, "y"))
   );
 }
 
@@ -325,12 +436,14 @@ function provenance(
   evidenceGrade: EvidenceGrade,
   sourceNote: string,
   screenshot?: KeepOutScreenshotIdentity,
+  drawableBounds?: KeepOutDrawableBounds,
 ): KeepOutProvenance {
   return deepFreeze({
     source,
     evidenceGrade,
     sourceNote,
     ...(screenshot === undefined ? {} : { screenshot }),
+    ...(drawableBounds === undefined ? {} : { drawableBounds }),
   });
 }
 
@@ -448,6 +561,8 @@ export const BUILT_IN_KEEP_OUTS = deepFreeze([
   BUILTIN_MISSION_MESSAGES_TICKER,
   BUILTIN_TOP_HUD_STRIP,
 ] as readonly X4UiKeepOutEntry[]);
+
+for (const entry of BUILT_IN_KEEP_OUTS) ISSUED_KEEP_OUT_ENTRIES.add(entry);
 
 /** Alias with the spelling used by some callers. */
 export const BUILTIN_KEEP_OUTS = BUILT_IN_KEEP_OUTS;
@@ -664,6 +779,13 @@ function invalidProjection(
   });
 }
 
+function issueProjection<T extends KeepOutProjectionResult>(result: T): T {
+  if (result.status !== "refused" && result !== null && typeof result === "object") {
+    ISSUED_KEEP_OUT_PROJECTIONS.add(result);
+  }
+  return result;
+}
+
 function invalidCalibration(
   reason: CalibrationRefusalReason,
   message: string,
@@ -680,16 +802,19 @@ function readOrigin(
   canonicalName: "left" | "top",
   aliasName: "x" | "y",
 ): number | null {
-  const canonical = bounds[canonicalName];
-  const alias = bounds[aliasName];
+  const canonicalField = ownDataField(bounds, canonicalName);
+  const aliasField = ownDataField(bounds, aliasName);
+  if (!canonicalField.valid || !aliasField.valid) return null;
+  const canonical = canonicalField.value;
+  const alias = aliasField.value;
   const canonicalNumber =
-    canonical === undefined
+    !canonicalField.present
       ? undefined
       : isFiniteNumber(canonical)
         ? canonical
         : null;
   const aliasNumber =
-    alias === undefined
+    !aliasField.present
       ? undefined
       : isFiniteNumber(alias)
         ? alias
@@ -723,102 +848,84 @@ interface ResolvedDrawableBounds {
 function resolveDrawableBounds(
   value: unknown,
 ): ResolvedDrawableBounds | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-  const width = value.width;
-  const height = value.height;
-  if (!isFinitePositiveNumber(width) || !isFinitePositiveNumber(height)) {
-    return null;
-  }
+  if (!hasExactOwnDataFields(value, ["width", "height"], ["left", "top", "x", "y"])) return null;
+  const width = dataField(value, "width");
+  const height = dataField(value, "height");
+  if (!isFinitePositiveNumber(width) || !isFinitePositiveNumber(height)) return null;
   const left = readOrigin(value, "left", "x");
   const top = readOrigin(value, "top", "y");
-  if (left === null || top === null) {
-    return null;
-  }
-  if (!isFiniteNumber(left + width) || !isFiniteNumber(top + height)) {
-    return null;
-  }
-  return { left, top, width, height };
+  if (left === null || top === null) return null;
+  if (!isFiniteNumber(left + (width as number)) || !isFiniteNumber(top + (height as number))) return null;
+  return { left, top, width: width as number, height: height as number };
 }
 
 function resolveViewport(value: unknown): DrawableViewport | null {
-  if (!isRecord(value)) {
-    return null;
+  if (!hasExactOwnDataFields(value, ["width", "height"])) return null;
+  const width = dataField(value, "width");
+  const height = dataField(value, "height");
+  if (!isFinitePositiveNumber(width) || !isFinitePositiveNumber(height)) return null;
+  return deepFreeze({ width, height });
+}
+
+function isValidProvenance(value: unknown): value is KeepOutProvenance {
+  if (!hasExactOwnDataFields(value, ["source", "evidenceGrade", "sourceNote"], ["screenshot", "drawableBounds"])) return false;
+  const source = dataField(value, "source");
+  const evidenceGrade = dataField(value, "evidenceGrade");
+  if (!isKeepOutSource(source) || !isEvidenceGrade(evidenceGrade) || !isNonEmptyString(dataField(value, "sourceNote"))) return false;
+  if (source === "manual-calibration") {
+    if (evidenceGrade !== "calibrated"
+      || !hasExactOwnDataFields(value, ["source", "evidenceGrade", "sourceNote", "screenshot", "drawableBounds"])
+      || !isValidScreenshotIdentity(dataField(value, "screenshot"))
+      || !isValidDrawableBounds(dataField(value, "drawableBounds"))) return false;
+    return true;
   }
-  if (
-    !isFinitePositiveNumber(value.width) ||
-    !isFinitePositiveNumber(value.height)
-  ) {
-    return null;
-  }
-  return deepFreeze({ width: value.width, height: value.height });
+  return (evidenceGrade === "measured-guide" || evidenceGrade === "reference-unmeasured")
+    && hasExactOwnDataFields(value, ["source", "evidenceGrade", "sourceNote"]);
 }
 
 function isValidKeepOutEntry(value: unknown): value is X4UiKeepOutEntry {
-  if (!isRecord(value)) {
-    return false;
-  }
-  if (
-    !isNonEmptyString(value.id) ||
-    !isNonEmptyString(value.label) ||
-    !isNonEmptyString(value.context) ||
-    value.coordinateSpace !== KEEP_OUT_COORDINATE_SPACE ||
-    !isRecord(value.provenance) ||
-    !isKeepOutSource(value.provenance.source) ||
-    !isEvidenceGrade(value.provenance.evidenceGrade) ||
-    !isNonEmptyString(value.provenance.sourceNote) ||
-    !Array.isArray(value.notes) ||
-    value.notes.length === 0 ||
-    !value.notes.every((note) => isNonEmptyString(note))
-  ) {
-    return false;
-  }
-
-  const geometry = value.geometry;
-  switch (value.kind) {
-    case "horizontal-guide":
-      return (
-        value.provenance.source === "production-evidence" &&
-        value.provenance.evidenceGrade === "measured-guide" &&
-        isRecord(geometry) &&
-        geometry.kind === "horizontal-guide" &&
-        geometry.axis === "y" &&
-        isNormalizedCoordinate(geometry.y)
-      );
-    case "vertical-guide":
-      return (
-        value.provenance.source === "production-evidence" &&
-        value.provenance.evidenceGrade === "measured-guide" &&
-        isRecord(geometry) &&
-        geometry.kind === "vertical-guide" &&
-        geometry.axis === "x" &&
-        isNormalizedCoordinate(geometry.x)
-      );
-    case "polygon": {
-      if (
-        value.provenance.source !== "manual-calibration" ||
-        value.provenance.evidenceGrade !== "calibrated" ||
-        !isValidScreenshotIdentity(value.provenance.screenshot) ||
-        !isRecord(geometry) ||
-        geometry.kind !== "polygon" ||
-        !Array.isArray(geometry.points) ||
-        geometry.points.length < 3 ||
-        !geometry.points.every((point) => isNormalizedPoint(point))
-      ) {
-        return false;
-      }
-      const points = geometry.points as readonly NormalizedPoint[];
-      return hasUniqueNormalizedPoints(points) && hasNonCollinearPoints(points);
+  try {
+    if (!hasExactOwnDataFields(value, ["id", "label", "context", "coordinateSpace", "provenance", "notes", "kind", "geometry"])) return false;
+    const id = dataField(value, "id");
+    const label = dataField(value, "label");
+    const context = dataField(value, "context");
+    const provenanceValue = dataField(value, "provenance");
+    const notes = denseDataArray(dataField(value, "notes"));
+    if (!isNonEmptyString(id) || !isNonEmptyString(label) || !isNonEmptyString(context)
+      || dataField(value, "coordinateSpace") !== KEEP_OUT_COORDINATE_SPACE
+      || !isValidProvenance(provenanceValue)
+      || notes === null || notes.length === 0 || !notes.every(note => isNonEmptyString(note))) return false;
+    const source = dataField(provenanceValue as unknown as AnyRecord, "source");
+    const evidenceGrade = dataField(provenanceValue as unknown as AnyRecord, "evidenceGrade");
+    const geometry = dataField(value, "geometry");
+    const kind = dataField(value, "kind");
+    if (kind === "horizontal-guide") {
+      return source === "production-evidence" && evidenceGrade === "measured-guide"
+        && hasExactOwnDataFields(geometry, ["kind", "axis", "y"])
+        && dataField(geometry as AnyRecord, "kind") === "horizontal-guide"
+        && dataField(geometry as AnyRecord, "axis") === "y"
+        && isNormalizedCoordinate(dataField(geometry as AnyRecord, "y"));
     }
-    case "unmeasured":
-      return (
-        value.provenance.source === "production-evidence" &&
-        geometry === null &&
-        value.provenance.evidenceGrade === "reference-unmeasured"
-      );
-    default:
-      return false;
+    if (kind === "vertical-guide") {
+      return source === "production-evidence" && evidenceGrade === "measured-guide"
+        && hasExactOwnDataFields(geometry, ["kind", "axis", "x"])
+        && dataField(geometry as AnyRecord, "kind") === "vertical-guide"
+        && dataField(geometry as AnyRecord, "axis") === "x"
+        && isNormalizedCoordinate(dataField(geometry as AnyRecord, "x"));
+    }
+    if (kind === "polygon") {
+      if (source !== "manual-calibration" || evidenceGrade !== "calibrated" || Object.values(KEEP_OUT_IDS).some(builtInId => builtInId === id)) return false;
+      if (!hasExactOwnDataFields(geometry, ["kind", "points"]) || dataField(geometry as AnyRecord, "kind") !== "polygon") return false;
+      const points = denseDataArray(dataField(geometry as AnyRecord, "points"));
+      if (points === null || points.length < 3 || !points.every(point => isNormalizedPoint(point))) return false;
+      return hasUniqueNormalizedPoints(points as readonly NormalizedPoint[]) && hasNonCollinearPoints(points as readonly NormalizedPoint[]);
+    }
+    return kind === "unmeasured"
+      && source === "production-evidence"
+      && evidenceGrade === "reference-unmeasured"
+      && geometry === null;
+  } catch {
+    return false;
   }
 }
 
@@ -838,67 +945,76 @@ export function projectKeepOut(
   entry: X4UiKeepOutEntry,
   viewport: DrawableViewport,
 ): KeepOutProjectionResult {
-  const resolvedViewport = resolveViewport(viewport);
-  if (resolvedViewport === null) {
-    return invalidProjection(
-      "invalid-viewport",
-      "Projection requires finite positive drawable width and height.",
-  );
-  }
-  if (!isValidKeepOutEntry(entry)) {
-    return invalidProjection(
-      "invalid-entry",
-      "Projection requires a normalized keep-out entry with valid geometry and provenance.",
-    );
-  }
+  try {
+    const resolvedViewport = resolveViewport(viewport);
+    if (resolvedViewport === null) {
+      return invalidProjection(
+        "invalid-viewport",
+        "Projection requires finite positive drawable width and height.",
+      );
+    }
+    if (!isValidKeepOutEntry(entry)) {
+      return invalidProjection(
+        "invalid-entry",
+        "Projection requires a normalized keep-out entry with valid geometry and provenance.",
+      );
+    }
 
-  const evidenceGrade = entry.provenance.evidenceGrade;
-  if (entry.kind === "unmeasured") {
-    return deepFreeze({
-      status: "unavailable",
-      reason: "reference-unmeasured",
-      entryId: entry.id,
+    const entryRecord = entry as unknown as AnyRecord;
+    const entryId = dataField(entryRecord, "id") as string;
+    const kind = dataField(entryRecord, "kind");
+    const provenanceValue = dataField(entryRecord, "provenance") as AnyRecord;
+    const evidenceGrade = dataField(provenanceValue, "evidenceGrade") as EvidenceGrade;
+    if (kind === "unmeasured") {
+      return issueProjection(deepFreeze({
+        status: "unavailable",
+        reason: "reference-unmeasured",
+        entryId,
+        evidenceGrade,
+        advisoryOnly: true,
+        gameVerification: NOT_VERIFIED_IN_GAME,
+        geometry: null,
+      }));
+    }
+
+    const entryGeometry = dataField(entryRecord, "geometry") as AnyRecord;
+    let geometry: ProjectedKeepOutGeometry;
+    if (kind === "horizontal-guide") {
+      geometry = {
+        kind: "horizontal-guide",
+        y: (dataField(entryGeometry, "y") as number) * resolvedViewport.height,
+      };
+    } else if (kind === "vertical-guide") {
+      geometry = {
+        kind: "vertical-guide",
+        x: (dataField(entryGeometry, "x") as number) * resolvedViewport.width,
+      };
+    } else {
+      const points = denseDataArray(dataField(entryGeometry, "points")) as readonly AnyRecord[];
+      geometry = {
+        kind: "polygon",
+        points: points.map(point => ({
+          x: (dataField(point, "x") as number) * resolvedViewport.width,
+          y: (dataField(point, "y") as number) * resolvedViewport.height,
+        })),
+      };
+    }
+
+    return issueProjection(deepFreeze({
+      status: "projected",
+      entryId,
       evidenceGrade,
       advisoryOnly: true,
       gameVerification: NOT_VERIFIED_IN_GAME,
-      geometry: null,
-    });
+      geometry,
+      viewport: resolvedViewport,
+    }));
+  } catch {
+    return invalidProjection(
+      "invalid-entry",
+      "Projection rejected malformed keep-out evidence without producing geometry.",
+    );
   }
-
-  let geometry: ProjectedKeepOutGeometry;
-  switch (entry.kind) {
-    case "horizontal-guide":
-      geometry = {
-        kind: "horizontal-guide",
-        y: entry.geometry.y * resolvedViewport.height,
-      };
-      break;
-    case "vertical-guide":
-      geometry = {
-        kind: "vertical-guide",
-        x: entry.geometry.x * resolvedViewport.width,
-      };
-      break;
-    case "polygon":
-      geometry = {
-        kind: "polygon",
-        points: entry.geometry.points.map((point) => ({
-          x: point.x * resolvedViewport.width,
-          y: point.y * resolvedViewport.height,
-        })),
-      };
-      break;
-  }
-
-  return deepFreeze({
-    status: "projected",
-    entryId: entry.id,
-    evidenceGrade,
-    advisoryOnly: true,
-    gameVerification: NOT_VERIFIED_IN_GAME,
-    geometry,
-    viewport: resolvedViewport,
-  });
 }
 
 export function projectBuiltInKeepOut(
@@ -954,155 +1070,183 @@ function hasNonCollinearPoints(points: readonly NormalizedPoint[]): boolean {
 export function calibrateKeepOutPolygon(
   input: KeepOutCalibrationInput,
 ): KeepOutCalibrationResult {
-  if (!isRecord(input) || !isNonEmptyString(input.stableId)) {
-    return invalidCalibration(
-      "empty-stable-id",
-      "Manual calibration requires a non-empty stable id.",
-    );
-  }
-  if (!isNonEmptyString(input.context)) {
-    return invalidCalibration(
-      "empty-context",
-      "Manual calibration requires a non-empty context.",
-    );
-  }
-  if (!isNonEmptyString(input.sourceNote)) {
-    return invalidCalibration(
-      "empty-source-note",
-      "Manual calibration requires an explicit non-empty source note.",
-    );
-  }
-  if (!isNonEmptyString(input.screenshotHash)) {
-    return invalidCalibration(
-      "empty-screenshot-hash",
-      "Manual calibration requires a non-empty screenshot hash.",
-    );
-  }
-  if (!SCREENSHOT_HASH_PATTERN.test(input.screenshotHash)) {
-    return invalidCalibration(
-      "malformed-screenshot-hash",
-      "Screenshot hash must be 64 hexadecimal characters, optionally prefixed with sha256:.",
-    );
-  }
-  if (!isNonEmptyString(input.profile)) {
-    return invalidCalibration(
-      "empty-profile",
-      "Manual calibration requires a non-empty screenshot profile.",
-    );
-  }
-
-  const bounds = resolveDrawableBounds(input.drawableBounds);
-  if (bounds === null) {
-    return invalidCalibration(
-      "invalid-bounds",
-      "Drawable bounds require finite positive width and height and finite origins.",
-    );
-  }
-  if (!Array.isArray(input.points)) {
-    return invalidCalibration(
-      "invalid-points",
-      "Manual calibration requires an array of screenshot pixel points.",
-    );
-  }
-  if (input.points.length < 3) {
-    return invalidCalibration(
-      "too-few-points",
-      "Manual calibration requires at least three points.",
-    );
-  }
-
-  const right = bounds.left + bounds.width;
-  const bottom = bounds.top + bounds.height;
-  const normalizedPoints: NormalizedPoint[] = [];
-  for (const point of input.points) {
-    if (
-      !isRecord(point) ||
-      !isFiniteNumber(point.x) ||
-      !isFiniteNumber(point.y)
-    ) {
+  try {
+    if (!hasExactOwnDataFields(input, ["stableId", "context", "sourceNote", "screenshotHash", "profile", "drawableBounds", "points"])) {
       return invalidCalibration(
-        "invalid-point",
-        "Every calibration point must have finite x and y coordinates.",
+        "malformed-input",
+        "Manual calibration input must be closed plain data with exactly the declared fields.",
       );
     }
-    if (
-      point.x < bounds.left ||
-      point.x > right ||
-      point.y < bounds.top ||
-      point.y > bottom
-    ) {
+    const inputRecord = input as unknown as AnyRecord;
+    const stableId = dataField(inputRecord, "stableId");
+    const context = dataField(inputRecord, "context");
+    const sourceNote = dataField(inputRecord, "sourceNote");
+    const screenshotHash = dataField(inputRecord, "screenshotHash");
+    const profile = dataField(inputRecord, "profile");
+    if (!isNonEmptyString(stableId)) {
       return invalidCalibration(
-        "out-of-bounds",
-        "Every calibration point must be inside the exact drawable bounds.",
+        "empty-stable-id",
+        "Manual calibration requires a non-empty stable id.",
       );
     }
-    const normalizedPoint = {
-      x: (point.x - bounds.left) / bounds.width,
-      y: (point.y - bounds.top) / bounds.height,
-    };
-    if (
-      !isNormalizedCoordinate(normalizedPoint.x) ||
-      !isNormalizedCoordinate(normalizedPoint.y)
-    ) {
+    if (Object.values(KEEP_OUT_IDS).some(id => id === stableId)) {
       return invalidCalibration(
-        "invalid-point",
-        "Point normalization must produce finite coordinates in [0, 1].",
+        "built-in-id-collision",
+        "Manual calibration stable ids must not collide with built-in keep-out ids.",
       );
     }
-    normalizedPoints.push(normalizedPoint);
-  }
+    if (!isNonEmptyString(context)) {
+      return invalidCalibration(
+        "empty-context",
+        "Manual calibration requires a non-empty context.",
+      );
+    }
+    if (!isNonEmptyString(sourceNote)) {
+      return invalidCalibration(
+        "empty-source-note",
+        "Manual calibration requires an explicit non-empty source note.",
+      );
+    }
+    if (!isNonEmptyString(screenshotHash)) {
+      return invalidCalibration(
+        "empty-screenshot-hash",
+        "Manual calibration requires a non-empty screenshot hash.",
+      );
+    }
+    if (!SCREENSHOT_HASH_PATTERN.test(screenshotHash)) {
+      return invalidCalibration(
+        "malformed-screenshot-hash",
+        "Screenshot hash must be 64 hexadecimal characters, optionally prefixed with sha256:.",
+      );
+    }
+    if (!isNonEmptyString(profile)) {
+      return invalidCalibration(
+        "empty-profile",
+        "Manual calibration requires a non-empty screenshot profile.",
+      );
+    }
 
-  for (let first = 0; first < input.points.length - 1; first += 1) {
-    for (let second = first + 1; second < input.points.length; second += 1) {
-      const firstPoint = input.points[first];
-      const secondPoint = input.points[second];
-      if (
-        firstPoint.x === secondPoint.x &&
-        firstPoint.y === secondPoint.y
-      ) {
+    const bounds = resolveDrawableBounds(dataField(inputRecord, "drawableBounds"));
+    if (bounds === null) {
+      return invalidCalibration(
+        "invalid-bounds",
+        "Drawable bounds require finite positive width and height and finite origins.",
+      );
+    }
+    const pointValues = denseDataArray(dataField(inputRecord, "points"));
+    if (pointValues === null) {
+      return invalidCalibration(
+        "invalid-points",
+        "Manual calibration requires a dense array of screenshot pixel points.",
+      );
+    }
+    if (pointValues.length < 3) {
+      return invalidCalibration(
+        "too-few-points",
+        "Manual calibration requires at least three points.",
+      );
+    }
+
+    const right = bounds.left + bounds.width;
+    const bottom = bounds.top + bounds.height;
+    const normalizedPoints: NormalizedPoint[] = [];
+    const pixelPoints: { readonly x: number; readonly y: number }[] = [];
+    for (const pointValue of pointValues) {
+      if (!hasExactOwnDataFields(pointValue, ["x", "y"])) {
         return invalidCalibration(
-          "duplicate-points",
-          "Calibration polygon points must be unique.",
+          "invalid-point",
+          "Every calibration point must be a closed data point with finite x and y coordinates.",
         );
       }
+      const pointRecord = pointValue as AnyRecord;
+      const pointX = dataField(pointRecord, "x");
+      const pointY = dataField(pointRecord, "y");
+      if (!isFiniteNumber(pointX) || !isFiniteNumber(pointY)) {
+        return invalidCalibration(
+          "invalid-point",
+          "Every calibration point must have finite x and y coordinates.",
+        );
+      }
+      if (pointX < bounds.left || pointX > right || pointY < bounds.top || pointY > bottom) {
+        return invalidCalibration(
+          "out-of-bounds",
+          "Every calibration point must be inside the exact drawable bounds.",
+        );
+      }
+      const normalizedPoint = {
+        x: (pointX - bounds.left) / bounds.width,
+        y: (pointY - bounds.top) / bounds.height,
+      };
+      if (!isNormalizedCoordinate(normalizedPoint.x) || !isNormalizedCoordinate(normalizedPoint.y)) {
+        return invalidCalibration(
+          "invalid-point",
+          "Point normalization must produce finite coordinates in [0, 1].",
+        );
+      }
+      pixelPoints.push({ x: pointX, y: pointY });
+      normalizedPoints.push(normalizedPoint);
     }
-  }
 
-  if (!hasNonCollinearPoints(normalizedPoints)) {
+    for (let first = 0; first < pixelPoints.length - 1; first += 1) {
+      for (let second = first + 1; second < pixelPoints.length; second += 1) {
+        if (pixelPoints[first].x === pixelPoints[second].x && pixelPoints[first].y === pixelPoints[second].y) {
+          return invalidCalibration(
+            "duplicate-points",
+            "Calibration polygon points must be unique.",
+          );
+        }
+      }
+    }
+
+    if (!hasNonCollinearPoints(normalizedPoints)) {
+      return invalidCalibration(
+        "collinear-points",
+        "Calibration polygon points must contain a non-collinear triple.",
+      );
+    }
+
+    const frozenPoints = deepFreeze(
+      normalizedPoints.map(point => ({ x: point.x, y: point.y })),
+    ) as readonly NormalizedPoint[];
+    const screenshot = deepFreeze({
+      hash: screenshotHash,
+      profile,
+    });
+    const canonicalBounds = deepFreeze({
+      left: bounds.left,
+      top: bounds.top,
+      width: bounds.width,
+      height: bounds.height,
+    });
+    const sourceProvenance = provenance(
+      "manual-calibration",
+      "calibrated",
+      sourceNote,
+      screenshot,
+      canonicalBounds,
+    );
+    const entry = deepFreeze({
+      id: stableId,
+      label: `Manual calibration ${stableId}`,
+      context,
+      coordinateSpace: KEEP_OUT_COORDINATE_SPACE,
+      provenance: sourceProvenance,
+      notes: [sourceNote],
+      kind: "polygon",
+      geometry: {
+        kind: "polygon",
+        points: frozenPoints,
+      },
+    }) as PolygonKeepOut;
+    ISSUED_KEEP_OUT_ENTRIES.add(entry);
+
+    return deepFreeze({ status: "success", entry });
+  } catch {
     return invalidCalibration(
-      "collinear-points",
-      "Calibration polygon points must contain a non-collinear triple.",
+      "malformed-input",
+      "Manual calibration rejected malformed evidence without executing accessors or producing geometry.",
     );
   }
-
-  const frozenPoints = deepFreeze(
-    normalizedPoints.map((point) => ({ x: point.x, y: point.y })),
-  ) as readonly NormalizedPoint[];
-  const screenshot = deepFreeze({
-    hash: input.screenshotHash,
-    profile: input.profile,
-  });
-  const sourceProvenance = provenance(
-    "manual-calibration",
-    "calibrated",
-    input.sourceNote,
-    screenshot,
-  );
-  const entry = deepFreeze({
-    id: input.stableId,
-    label: `Manual calibration ${input.stableId}`,
-    context: input.context,
-    coordinateSpace: KEEP_OUT_COORDINATE_SPACE,
-    provenance: sourceProvenance,
-    notes: [input.sourceNote],
-    kind: "polygon",
-    geometry: {
-      kind: "polygon",
-      points: frozenPoints,
-    },
-  }) as PolygonKeepOut;
-
-  return deepFreeze({ status: "success", entry });
 }
 
 /** Alias emphasizing that calibration is a new immutable keep-out value. */

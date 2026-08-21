@@ -5,9 +5,13 @@ import {
   X4_UI_CORPUS_FILE_URL,
   X4_UI_CORPUS_MANIFEST_URL,
   X4_UI_CORPUS_STATUS_URL,
+  X4_UI_CORPUS_9_00_COLOR_CONTRACT,
   isX4UiCorpusCanonicalSuccess,
+  isX4UiCorpusCanonicalColorSuccess,
   loadCanonicalX4UiCorpusAssets,
+  loadCanonicalX4UiCorpusColorEvidence,
   type X4UiCorpusCanonicalSuccess,
+  type X4UiCorpusCanonicalColorSuccess,
   type X4UiCorpusFetchResponse,
 } from './x4UiCorpusAssets';
 import {
@@ -19,7 +23,11 @@ import {
 import {
   KEEP_OUT_IDS,
   KEEP_OUT_PRESET_IDS,
+  NOT_VERIFIED_IN_GAME,
+  calibrateKeepOutPolygon,
+  getBuiltInKeepOut,
   projectBuiltInKeepOut,
+  projectKeepOut,
 } from './x4UiKeepOuts';
 import {
   buildX4UiPreviewProfile,
@@ -32,6 +40,7 @@ import {
   type X4UiPaintPlanResult,
 } from './x4UiPaintPlan';
 import { buildX4UiWorkspaceSource, type X4UiWorkspaceSource } from './x4UiWorkspaceSource';
+import type { X4UiScene } from './x4UiScene';
 import {
   X4_UI_CANVAS_DIAGNOSTIC_PALETTE,
   renderX4UiPaintPlanToCanvas,
@@ -43,9 +52,50 @@ import {
 } from './x4UiCanvasRenderer';
 
 type JsonRecord = Record<string, unknown>;
-type CheckFamily = 'prior-44' | 'callback-isolation' | 'pre-allocation' | 'emitted-trace' | 'freeze-truth' | 'oracle-sensitivity' | 'batch-6d-causal';
+type CheckFamily = 'prior-44' | 'callback-isolation' | 'pre-allocation' | 'emitted-trace' | 'freeze-truth' | 'oracle-sensitivity' | 'batch-6d-causal' | 'stage-b-causal';
 type Check = { readonly family: CheckFamily; readonly name: string; readonly pass: boolean; readonly detail?: unknown };
 const checks: Check[] = [];
+
+function asRecord(value: unknown): JsonRecord | undefined {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : undefined;
+}
+
+const COLOR_FACT_FIELDS = ['field', 'slot', 'value', 'domain', 'provenance', 'expression', 'source', 'sourcePin', 'sampleId', 'gameVerification'] as const;
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(item => stableJson(item)).join(',')}]`;
+  const record = asRecord(value);
+  if (record !== undefined) return `{${Object.keys(record).sort().map(key => `${JSON.stringify(key)}:${stableJson(record[key])}`).join(',')}}`;
+  return JSON.stringify(value);
+}
+
+function colorFactSignature(value: unknown): string | undefined {
+  const record = asRecord(value);
+  if (record === undefined) return undefined;
+  const copy: JsonRecord = {};
+  for (const field of COLOR_FACT_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(record, field)) copy[field] = record[field];
+  }
+  return stableJson(copy);
+}
+
+type PaintSceneNode = X4UiScene['frames'][number]
+  | X4UiScene['tables'][number]
+  | X4UiScene['rows'][number]
+  | X4UiScene['cells'][number]
+  | X4UiScene['widgets'][number]
+  | X4UiScene['texts'][number]
+  | X4UiScene['glyphs'][number];
+
+const paintSceneNodes = (scene: X4UiScene): readonly PaintSceneNode[] => [
+  ...scene.frames,
+  ...scene.tables,
+  ...scene.rows,
+  ...scene.cells,
+  ...scene.widgets,
+  ...scene.texts,
+  ...scene.glyphs,
+];
 
 function check(name: string, pass: boolean, detail?: unknown): void {
   checks.push({ family: 'prior-44', name, pass, ...(detail === undefined ? {} : { detail }) });
@@ -121,7 +171,7 @@ function makeCanonicalDds(): Uint8Array {
   return bytes;
 }
 
-async function withCanonicalPlatformHash<T>(expectedHashes: readonly string[], run: () => Promise<T>): Promise<T> {
+async function withCanonicalPlatformHash<T>(expectedHashes: readonly string[], run: () => Promise<T>, recordRestoreCheck = true): Promise<T> {
   const originalDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
   const originalValue = (globalThis as unknown as { crypto?: unknown }).crypto;
   let hashIndex = 0;
@@ -136,7 +186,7 @@ async function withCanonicalPlatformHash<T>(expectedHashes: readonly string[], r
   } finally {
     if (originalDescriptor) Object.defineProperty(globalThis, 'crypto', originalDescriptor);
     else Reflect.deleteProperty(globalThis, 'crypto');
-    check('canonical loader restores platform crypto', (globalThis as unknown as { crypto?: unknown }).crypto === originalValue);
+    if (recordRestoreCheck) check('canonical loader restores platform crypto', (globalThis as unknown as { crypto?: unknown }).crypto === originalValue);
   }
 }
 
@@ -194,6 +244,48 @@ async function loadCanonicalFixture(): Promise<X4UiCorpusCanonicalSuccess> {
   return result;
 }
 
+async function loadCanonicalColorFixture(): Promise<X4UiCorpusCanonicalColorSuccess> {
+  const root = 'canvas-renderer-color-canonical-root';
+  const generation = 'canvas-renderer-color-canonical-generation';
+  const contract = X4_UI_CORPUS_9_00_COLOR_CONTRACT;
+  const colorDefinitions = Array.from({ length: 224 }, (_unused, index) => `<color id="paint_color_${String(index)}" r="${String(index % 256)}" g="${String((index + 1) % 256)}" b="${String((index + 2) % 256)}" a="255" glow="0" />`).join('');
+  const colorMappings = Array.from({ length: 804 }, (_unused, index) => `<mapping id="paint_mapping_${String(index)}" ref="paint_color_${String(index % 224)}" />`).join('');
+  const xmlText = `<colormap><colors>${colorDefinitions}</colors><mappings>${colorMappings}</mappings></colormap>`;
+  const xsdText = '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:simpleType name="colorId"><xs:restriction base="xs:string"><xs:pattern value="[a-zA-Z_][a-zA-Z0-9_]*"/></xs:restriction></xs:simpleType><xs:simpleType name="colorid"><xs:restriction base="xs:string"><xs:pattern value="[a-zA-Z_][a-zA-Z0-9_]*"/></xs:restriction></xs:simpleType><xs:element name="colormap"><xs:complexType><xs:sequence><xs:choice minOccurs="0" maxOccurs="unbounded"><xs:element name="color"><xs:complexType><xs:attribute name="id" type="colorId" use="required"/><xs:attribute name="r" type="xs:unsignedByte"/><xs:attribute name="g" type="xs:unsignedByte"/><xs:attribute name="b" type="xs:unsignedByte"/><xs:attribute name="a" type="xs:unsignedByte"/><xs:attribute name="glow" type="xs:unsignedByte"/></xs:complexType></xs:element><xs:element name="mapping"><xs:complexType><xs:attribute name="id" type="colorId" use="required"/><xs:attribute name="ref" type="colorId" use="required"/></xs:complexType></xs:element></xs:choice></xs:sequence></xs:complexType></xs:element></xs:schema>';
+  const padToSize = (value: string, size: number): Uint8Array => new TextEncoder().encode(`${value}${' '.repeat(size - new TextEncoder().encode(value).byteLength)}`);
+  const buffers = new Map<string, Uint8Array>([
+    [contract.xml.relativePath, padToSize(xmlText, contract.xml.size)],
+    [contract.xsd.relativePath, padToSize(xsdText, contract.xsd.size)],
+  ]);
+  const expectedHashes = [contract.xml.sha256, contract.xsd.sha256];
+  const status = {
+    available: true,
+    root,
+    generatedAt: '2026-08-13T00:00:00.000Z',
+    manifestGeneration: generation,
+    manifest: { available: true, state: 'ready', root, current: { generation, root, generatedAt: '2026-08-13T00:00:00.000Z' } },
+  };
+  const transport = async (url: string): Promise<X4UiCorpusFetchResponse> => {
+    if (url === X4_UI_CORPUS_STATUS_URL) return jsonResponse(status);
+    if (url.startsWith(`${X4_UI_CORPUS_MANIFEST_URL}?`)) {
+      const path = pathFromQuery(url, 'q');
+      const bytes = buffers.get(path);
+      if (bytes === undefined) throw new Error(`unknown color manifest path ${path}`);
+      return jsonResponse({ status: { available: true, state: 'ready', root, current: { generation, root, generatedAt: status.generatedAt } }, generation, total: 1, limit: 500, offset: 0, files: [{ path, bytes: bytes.byteLength }] });
+    }
+    if (url.startsWith(`${X4_UI_CORPUS_FILE_URL}?`)) {
+      const path = pathFromQuery(url, 'path');
+      const bytes = buffers.get(path);
+      if (bytes === undefined) throw new Error(`unknown color file path ${path}`);
+      return bytesResponse(bytes, 'application/xml');
+    }
+    throw new Error(`unexpected canonical color URL ${url}`);
+  };
+  const result = await withCanonicalPlatformHash(expectedHashes, () => loadCanonicalX4UiCorpusColorEvidence({ transport }), false);
+  if (!isX4UiCorpusCanonicalColorSuccess(result)) throw new Error(`canonical color loader did not issue canonical success: ${JSON.stringify(result)}`);
+  return result;
+}
+
 function passthrough(path: string, content: string, extra: Partial<PassthroughFile> = {}): PassthroughFile {
   return { path, content, ...extra };
 }
@@ -243,6 +335,44 @@ function sourceFixture(): X4UiWorkspaceSource {
   ]));
 }
 
+function colorSourceFixture(): X4UiWorkspaceSource {
+  const lua = [
+    'local menu = { name = "ColorCanonical", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80, layer = 1 })',
+    'local table = frame:addTable(4, { width = 100, reserveScrollBar = false, scaling = false, backgroundColor = Color["paint_color_0"] })',
+    'table:setColWidth(1, 20, false)',
+    'table:setColWidth(2, 20, false)',
+    'table:setColWidth(3, 20, false)',
+    'table:setColWidth(4, 20, false)',
+    'local row = table:addRow(false, { paddingTop = 1, paddingBottom = 1, borderBelow = false, fixed = false })',
+    'row[1]:setColSpan(2):createText("direct", { height = 12, minRowHeight = 10, color = { r = 11, g = 21, b = 31, a = 41 }, cellbgcolor = { r = 12, g = 22, b = 32, a = 42 } })',
+    'row[3]:createButton({ height = 0, affectRowHeight = false, bgcolor = { r = 13, g = 23, b = 33, a = 43 }, highlightcolor = { r = 14, g = 24, b = 34, a = 44 }, bordercolor = { r = 15, g = 25, b = 35, a = 45 } }):setText("button", { x = 0, y = 0, color = { r = 16, g = 26, b = 36, a = 46 } }):setText2("bold", { x = 0, y = 0, halign = "right", font = "Zekton Bold", fontsize = 16, color = { r = 17, g = 27, b = 37, a = 47 } })',
+    'row[4]:createIcon("solid", { height = 8, affectRowHeight = false, color = { r = 19, g = 29, b = 39, a = 49 } })',
+    'local editRow = table:addRow(false, { paddingTop = 1, paddingBottom = 1, borderBelow = false, fixed = false })',
+    'editRow[1]:createEditBox({ height = 8, affectRowHeight = false, bgcolor = { r = 18, g = 28, b = 38, a = 48 } })',
+    'local secondaryMenu = { name = "Secondary", layer = 0 }',
+    'local secondaryFrame = Helper.createFrameHandle(secondaryMenu, { width = 100, height = 80, layer = 0 })',
+    'local secondaryTable = secondaryFrame:addTable(1, { width = 40, reserveScrollBar = false, scaling = false })',
+    'secondaryTable:setColWidth(1, 40, false)',
+    'local secondaryRow = secondaryTable:addRow(false, {})',
+    'secondaryRow[1]:createText("secondary", { height = 8 })',
+    'secondaryFrame:display()',
+    'frame:display()',
+    '',
+  ].join('\n');
+  return buildX4UiWorkspaceSource(workspace([
+    passthrough('ui.xml', [
+      '<?xml version="1.0" encoding="utf-8"?>',
+      '<addon name="color-canonical-fixture">',
+      '  <environment type="menus">',
+      '    <file name="ui/color.lua" />',
+      '  </environment>',
+      '',
+    ].join('\n')),
+    passthrough('ui/color.lua', lua, { reason: 'unparsed' }),
+  ]));
+}
+
 function acceptedPlan(corpus: X4UiCorpusCanonicalSuccess): { readonly corpus: X4UiCorpusCanonicalSuccess; readonly preview: X4UiPreviewPipelineResult; readonly paint: Extract<X4UiPaintPlanResult, { readonly status: 'projected' | 'partial' }> } {
   const source = sourceFixture();
   const sourceFile = source.bundle?.sourceFiles.find(file => file.path === 'ui/canvas.lua');
@@ -261,11 +391,11 @@ function acceptedPlan(corpus: X4UiCorpusCanonicalSuccess): { readonly corpus: X4
   if (preview.scene === undefined || (preview.scene.status !== 'projected' && preview.scene.status !== 'partial')) throw new Error(`preview fixture refused: ${JSON.stringify(preview.scene)}`);
   const viewport = { width: 100, height: 80 };
   const keepOuts = [
-    { context: KEEP_OUT_PRESET_IDS.cockpitConversation, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.conversationBackRow, viewport) },
-    { context: KEEP_OUT_PRESET_IDS.cockpitConversation, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.conversationOptionStackStart, viewport) },
-    { context: KEEP_OUT_PRESET_IDS.mapOpen, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.informationPanelLeftEdge, viewport) },
-    { context: KEEP_OUT_PRESET_IDS.fullscreenMenu, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.missionMessagesTicker, viewport) },
-    { context: KEEP_OUT_PRESET_IDS.firstPerson, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.topHudStrip, viewport) },
+    { context: KEEP_OUT_PRESET_IDS.cockpitConversation, entry: getBuiltInKeepOut(KEEP_OUT_IDS.conversationBackRow)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.conversationBackRow, viewport) },
+    { context: KEEP_OUT_PRESET_IDS.cockpitConversation, entry: getBuiltInKeepOut(KEEP_OUT_IDS.conversationOptionStackStart)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.conversationOptionStackStart, viewport) },
+    { context: KEEP_OUT_PRESET_IDS.mapOpen, entry: getBuiltInKeepOut(KEEP_OUT_IDS.informationPanelLeftEdge)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.informationPanelLeftEdge, viewport) },
+    { context: KEEP_OUT_PRESET_IDS.fullscreenMenu, entry: getBuiltInKeepOut(KEEP_OUT_IDS.missionMessagesTicker)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.missionMessagesTicker, viewport) },
+    { context: KEEP_OUT_PRESET_IDS.firstPerson, entry: getBuiltInKeepOut(KEEP_OUT_IDS.topHudStrip)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.topHudStrip, viewport) },
   ] as const;
   const selectedNode = preview.scene.scene.widgets[0]?.id;
   const paintResult = projectX4UiPaintPlan({ scene: preview.scene.scene, corpus, previewAuthority: preview, keepOuts, selection: selectedNode === undefined ? undefined : { nodeIds: [selectedNode] } });
@@ -909,12 +1039,26 @@ const CANONICAL_COMPOSITE_TRACE: readonly TraceEntry[] = [
   traceEntry('composite', "fillRect", 66, 3, 20, 8),
   traceEntry('composite', "restore"),
   traceEntry('composite', "setFillStyle", "#ef4444"),
+  traceEntry('composite', "save"),
+  traceEntry('composite', "beginPath"),
+  traceEntry('composite', "rect", 0, 0, 86, 14),
+  traceEntry('composite', "clip"),
+  traceEntry('composite', "fillRect", 0, 0, 86, 14),
+  traceEntry('composite', "restore"),
+  traceEntry('composite', "setFillStyle", "#ef4444"),
   traceEntry('composite', "setFillStyle", "#ef4444"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
   traceEntry('composite', "rect", 44, 1, 20, 12),
   traceEntry('composite', "clip"),
   traceEntry('composite', "fillRect", 44, 1, 20, 12),
+  traceEntry('composite', "restore"),
+  traceEntry('composite', "setFillStyle", "#ef4444"),
+  traceEntry('composite', "save"),
+  traceEntry('composite', "beginPath"),
+  traceEntry('composite', "rect", 66, 3, 20, 8),
+  traceEntry('composite', "clip"),
+  traceEntry('composite', "fillRect", 66, 3, 20, 8),
   traceEntry('composite', "restore"),
   traceEntry('composite', "setFillStyle", "#ef4444"),
   traceEntry('composite', "setFillStyle", "#ef4444"),
@@ -926,9 +1070,9 @@ const CANONICAL_COMPOSITE_TRACE: readonly TraceEntry[] = [
   traceEntry('composite', "setFillStyle", "#ef4444"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 66, 3, 20, 8),
+  traceEntry('composite', "rect", 0, 0, 40, 8),
   traceEntry('composite', "clip"),
-  traceEntry('composite', "fillRect", 66, 3, 20, 8),
+  traceEntry('composite', "fillRect", 0, 0, 40, 8),
   traceEntry('composite', "restore"),
   traceEntry('composite', "setFillStyle", "#ef4444"),
   traceEntry('composite', "setFillStyle", "#f59e0b"),
@@ -1315,6 +1459,13 @@ const CANONICAL_POLYGON_COMPOSITE_TRACE: readonly TraceEntry[] = [
   traceEntry('composite', "fillRect", 66, 3, 20, 8),
   traceEntry('composite', "restore"),
   traceEntry('composite', "setFillStyle", "#ef4444"),
+  traceEntry('composite', "save"),
+  traceEntry('composite', "beginPath"),
+  traceEntry('composite', "rect", 0, 0, 86, 14),
+  traceEntry('composite', "clip"),
+  traceEntry('composite', "fillRect", 0, 0, 86, 14),
+  traceEntry('composite', "restore"),
+  traceEntry('composite', "setFillStyle", "#ef4444"),
   traceEntry('composite', "setFillStyle", "#ef4444"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
@@ -1323,13 +1474,6 @@ const CANONICAL_POLYGON_COMPOSITE_TRACE: readonly TraceEntry[] = [
   traceEntry('composite', "fillRect", 44, 1, 20, 12),
   traceEntry('composite', "restore"),
   traceEntry('composite', "setFillStyle", "#ef4444"),
-  traceEntry('composite', "setFillStyle", "#ef4444"),
-  traceEntry('composite', "setFillStyle", "#ef4444"),
-  traceEntry('composite', "setFillStyle", "#ef4444"),
-  traceEntry('composite', "setFillStyle", "#ef4444"),
-  traceEntry('composite', "setFillStyle", "#ef4444"),
-  traceEntry('composite', "setFillStyle", "#ef4444"),
-  traceEntry('composite', "setFillStyle", "#ef4444"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
   traceEntry('composite', "rect", 66, 3, 20, 8),
@@ -1337,13 +1481,20 @@ const CANONICAL_POLYGON_COMPOSITE_TRACE: readonly TraceEntry[] = [
   traceEntry('composite', "fillRect", 66, 3, 20, 8),
   traceEntry('composite', "restore"),
   traceEntry('composite', "setFillStyle", "#ef4444"),
-  traceEntry('composite', "setFillStyle", "#f59e0b"),
+  traceEntry('composite', "setFillStyle", "#ef4444"),
+  traceEntry('composite', "setFillStyle", "#ef4444"),
+  traceEntry('composite', "setFillStyle", "#ef4444"),
+  traceEntry('composite', "setFillStyle", "#ef4444"),
+  traceEntry('composite', "setFillStyle", "#ef4444"),
+  traceEntry('composite', "setFillStyle", "#ef4444"),
+  traceEntry('composite', "setFillStyle", "#ef4444"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 5, 1, 37, 12),
+  traceEntry('composite', "rect", 0, 0, 40, 8),
   traceEntry('composite', "clip"),
-  traceEntry('composite', "fillRect", 5, 1, 37, 12),
+  traceEntry('composite', "fillRect", 0, 0, 40, 8),
   traceEntry('composite', "restore"),
+  traceEntry('composite', "setFillStyle", "#ef4444"),
   traceEntry('composite', "setStrokeStyle", "#22d3ee"),
   traceEntry('composite', "beginPath"),
   traceEntry('composite', "moveTo", 0, 63.040000000000006),
@@ -1549,6 +1700,733 @@ async function main(): Promise<void> {
   if (fixture === undefined) throw new Error('fixture setup failed');
 
   const { corpus, paint } = fixture;
+  try {
+    const colorEvidence = await loadCanonicalColorFixture();
+    const colorSource = colorSourceFixture();
+    const colorSourceFile = colorSource.bundle?.sourceFiles.find(file => file.path === 'ui/color.lua');
+    if (colorSourceFile === undefined) throw new Error('color source fixture did not produce ui/color.lua');
+    const colorCatalog = createX4UiLayoutTargetCatalog(colorSourceFile.callModel);
+    const colorTarget = colorCatalog.targets.find(candidate => candidate.kind === 'top-level');
+    if (colorTarget === undefined) throw new Error('color source fixture has no top-level layout target');
+    const colorSelection = {
+      sourceIndex: colorSourceFile.index,
+      path: colorSourceFile.path,
+      sourceIdentity: colorCatalog.sourceIdentity,
+      target: { ...colorTarget, id: colorTarget.id },
+    };
+    const colorPipeline = projectX4UiPreviewPipeline({
+      source: colorSource,
+      corpus,
+      colorEvidence,
+      profile: {
+        id: 'canvas-color-profile',
+        provenance: 'B119 P5 public color-bearing Preview fixture',
+        truthGrade: 'supplied',
+        source: colorSelection.sourceIdentity,
+        drawable: { width: 100, height: 80 },
+        uiScale: 1,
+        minTextHeight: 10,
+      },
+      selection: colorSelection,
+    });
+    const colorScene = colorPipeline.scene !== undefined
+      && (colorPipeline.scene.status === 'projected' || colorPipeline.scene.status === 'partial')
+      ? colorPipeline.scene.scene
+      : undefined;
+    const colorFacts = colorScene === undefined
+      ? []
+      : paintSceneNodes(colorScene).flatMap(node => {
+        const facts = (node as unknown as JsonRecord).colorFacts;
+        return Array.isArray(facts) ? facts.map(fact => ({ nodeId: node.id, kind: node.kind, fact })) : [];
+      });
+    const colorPaint = colorScene === undefined
+      ? undefined
+      : projectX4UiPaintPlan({ scene: colorScene, corpus, previewAuthority: colorPipeline });
+    const colorPaintCommands = colorPaint !== undefined && colorPaint.status !== 'refused'
+      ? commandList(colorPaint.plan)
+      : [];
+    const colorGeometryCommands = colorPaintCommands.filter(command => command.kind === 'node-geometry');
+    const colorGeometryTints = colorGeometryCommands.flatMap(command => {
+      const tints = command.basePreviewTints;
+      return Array.isArray(tints) ? tints : [];
+    });
+    const expectedColorOwners = [
+      'table:backgroundColor:table-background',
+      'cell:cellbgcolor:cell-background',
+      'button:bgcolor:widget-background',
+      'button:highlightcolor:widget-highlight',
+      'button:bordercolor:widget-border',
+      'editbox:bgcolor:widget-background',
+      'icon:color:widget-icon',
+      'text:color:primary-text',
+      'text:color:primary-text',
+      'text:color:secondary-text',
+    ].sort();
+    const actualColorOwners = colorFacts.map(item => {
+      const fact = item.fact as JsonRecord;
+      return `${item.kind}:${String(fact.field)}:${String(fact.slot)}`;
+    }).sort();
+    const colorTints = colorPaintCommands.flatMap(command => {
+      const tints = command.basePreviewTints;
+      return Array.isArray(tints) ? tints : [];
+    });
+    const publicColorReady = isX4UiCorpusCanonicalColorSuccess(colorEvidence)
+      && colorScene !== undefined
+      && (colorPaint?.status === 'projected' || colorPaint?.status === 'partial')
+      && stableJson(actualColorOwners) === stableJson(expectedColorOwners)
+      && colorFacts.length === 10
+      && colorGeometryTints.length === 10
+      && colorTints.length >= 10;
+    familyCheck('stage-b-causal', 'loader-issued color evidence reaches top-level Preview and exact public Paint owner census', publicColorReady, {
+      colorEvidence: {
+        status: asRecord(colorEvidence)?.status,
+        canonicalIdentity: colorEvidence.canonicalIdentity,
+        manifestGeneration: asRecord(colorEvidence)?.manifestGeneration,
+        gameVerification: colorEvidence.verification,
+      },
+      previewStatus: colorPipeline.status,
+      sceneStatus: colorPipeline.scene?.status,
+      paintStatus: colorPaint?.status,
+      factCount: colorFacts.length,
+      tintCount: colorTints.length,
+      geometryTintCount: colorGeometryTints.length,
+      expectedOwners: expectedColorOwners,
+      actualOwners: actualColorOwners,
+    });
+    if (publicColorReady && colorPaint !== undefined) {
+      const acceptedColorPaint = colorPaint as Extract<X4UiPaintPlanResult, { readonly status: 'projected' | 'partial' }>;
+      const tintValue = (tint: unknown): JsonRecord | undefined => {
+        const record = asRecord(tint);
+        return record === undefined ? undefined : asRecord(record.value);
+      };
+      const tintAlphaScale = (tint: unknown): number | undefined => {
+        const record = asRecord(tint);
+        const value = tintValue(tint);
+        if (record === undefined || value === undefined || typeof value.a !== 'number') return undefined;
+        if (record.domain === 'source-literal-percent-alpha') return value.a / 100;
+        if (record.domain === 'canonical-xml-byte-alpha') return value.a / 255;
+        return undefined;
+      };
+      const tintCss = (tint: unknown): string | undefined => {
+        const value = tintValue(tint);
+        const alpha = tintAlphaScale(tint);
+        if (value === undefined || alpha === undefined || typeof value.r !== 'number' || typeof value.g !== 'number' || typeof value.b !== 'number') return undefined;
+        return `rgba(${String(value.r)}, ${String(value.g)}, ${String(value.b)}, ${String(alpha)})`;
+      };
+      const glyphCommands = colorPaintCommands.filter(command => command.kind === 'glyph-alpha-blit');
+      const glyphTintKey = (command: JsonRecord): string => {
+        const tints = command.basePreviewTints;
+        const descriptor = command.descriptor ?? command.atlas;
+        return `${stableJson(descriptor)}|${Array.isArray(tints) && tints.length === 1 ? colorFactSignature(tints[0]) : 'diagnostic'}`;
+      };
+      const expectedGlyphSurfaceKeys = new Set(glyphCommands.map(glyphTintKey));
+      const glyphKeyCounts = new Map<string, number>();
+      for (const command of glyphCommands) glyphKeyCounts.set(glyphTintKey(command), (glyphKeyCounts.get(glyphTintKey(command)) ?? 0) + 1);
+      const repeatedGlyphTint = [...glyphKeyCounts.values()].some(count => count > 1);
+      const colorActivity = emptyActivityLedger();
+      const colorAtlasRgba: Uint8ClampedArray[] = [];
+      const colorAttempt = attemptRender(acceptedColorPaint, corpus, makeObservedFactory(colorActivity, {
+        contextHooks: role => role.endsWith('-atlas') ? { captureImageData: data => colorAtlasRgba.push(data.slice()) } : {},
+      }));
+      const colorResult = completedResult(colorAttempt);
+      const colorRendered = colorResult?.status === 'rendered';
+      const colorStyles = colorActivity.paint.filter(entry => entry.name === 'setFillStyle' || entry.name === 'setStrokeStyle').map(entry => String(entry.args[0]));
+      const atlasPixelMatches = (tint: unknown): boolean => {
+        const value = tintValue(tint);
+        const alpha = tintAlphaScale(tint);
+        if (value === undefined || alpha === undefined || typeof value.r !== 'number' || typeof value.g !== 'number' || typeof value.b !== 'number') return false;
+        const expectedAlpha = Math.round(255 * alpha);
+        return colorAtlasRgba.some(bytes => bytes.length >= 4 && bytes[0] === value.r && bytes[1] === value.g && bytes[2] === value.b && bytes[3] === expectedAlpha);
+      };
+      const canonicalTint = colorTints.find(tint => asRecord(tint)?.domain === 'canonical-xml-byte-alpha');
+      const literalTint = colorTints.find(tint => asRecord(tint)?.domain === 'source-literal-percent-alpha');
+      const primaryTint = colorTints.find(tint => asRecord(tint)?.slot === 'primary-text');
+      const secondaryTint = colorTints.find(tint => asRecord(tint)?.slot === 'secondary-text');
+      const literalGlyphTint = primaryTint ?? literalTint;
+      familyCheck('stage-b-causal', 'P6 owner-linked public color plan is consumed by Canvas instead of structurally refused', colorRendered, {
+        threw: colorAttempt.threw,
+        result: colorResult === undefined ? undefined : receiptSummary(colorResult.receipt),
+        activity: activitySignature(colorActivity),
+        colorCommandCount: colorPaintCommands.length,
+        tintCount: colorTints.length,
+        geometryTintCount: colorGeometryTints.length,
+      });
+      familyCheck('stage-b-causal', 'P6 typed alpha consumes source-literal percent and canonical XML byte domains', colorRendered
+        && canonicalTint !== undefined
+        && literalGlyphTint !== undefined
+        && colorStyles.includes(tintCss(canonicalTint) ?? '')
+        && atlasPixelMatches(literalGlyphTint), {
+        result: colorResult === undefined ? undefined : receiptSummary(colorResult.receipt),
+        canonicalDomain: asRecord(canonicalTint)?.domain,
+        canonicalStyle: tintCss(canonicalTint),
+        canonicalStyleObserved: colorStyles.includes(tintCss(canonicalTint) ?? ''),
+        literalDomain: asRecord(literalGlyphTint)?.domain,
+        literalExpectedAlpha: tintAlphaScale(literalGlyphTint) === undefined ? undefined : Math.round(255 * (tintAlphaScale(literalGlyphTint) as number)),
+        literalPixelObserved: atlasPixelMatches(literalGlyphTint),
+      });
+      familyCheck('stage-b-causal', 'P6 staged tint pixels preserve raw RGB and typed alpha on glyph atlas bytes', colorRendered
+        && primaryTint !== undefined
+        && secondaryTint !== undefined
+        && atlasPixelMatches(primaryTint)
+        && atlasPixelMatches(secondaryTint)
+        && tintValue(primaryTint)?.r !== tintValue(secondaryTint)?.r, {
+        result: colorResult === undefined ? undefined : receiptSummary(colorResult.receipt),
+        primaryPixelObserved: atlasPixelMatches(primaryTint),
+        secondaryPixelObserved: atlasPixelMatches(secondaryTint),
+        primaryRgb: tintValue(primaryTint) === undefined ? undefined : [tintValue(primaryTint)?.r, tintValue(primaryTint)?.g, tintValue(primaryTint)?.b],
+        secondaryRgb: tintValue(secondaryTint) === undefined ? undefined : [tintValue(secondaryTint)?.r, tintValue(secondaryTint)?.g, tintValue(secondaryTint)?.b],
+        atlasCaptures: colorAtlasRgba.length,
+      });
+      familyCheck('stage-b-causal', 'P6 distinct drawable tints do not alias and identical glyph tints reuse renderer-owned atlas surfaces', colorRendered
+        && expectedGlyphSurfaceKeys.size > 1
+        && repeatedGlyphTint
+        && colorActivity.factory.filter(entry => String(entry.role).endsWith('-atlas')).length === expectedGlyphSurfaceKeys.size, {
+        result: colorResult === undefined ? undefined : receiptSummary(colorResult.receipt),
+        expectedDistinctSurfaces: expectedGlyphSurfaceKeys.size,
+        actualAtlasAllocations: colorActivity.factory.filter(entry => String(entry.role).endsWith('-atlas')).length,
+        repeatedGlyphTint,
+        glyphCommandCount: glyphCommands.length,
+      });
+      const withheldTints = colorTints.filter(tint => {
+        const slot = asRecord(tint)?.slot;
+        return slot === 'widget-highlight' || slot === 'widget-icon';
+      });
+      const withheldStylesAbsent = withheldTints.every(tint => {
+        const style = tintCss(tint);
+        return style === undefined || !colorStyles.includes(style);
+      });
+      const withheldPixelsAbsent = withheldTints.every(tint => !atlasPixelMatches(tint));
+      familyCheck('stage-b-causal', 'P6 highlight and icon tint facts remain retained diagnostics without active/base source paint', colorRendered
+        && withheldTints.length === 2
+        && withheldStylesAbsent
+        && withheldPixelsAbsent, {
+        result: colorResult === undefined ? undefined : receiptSummary(colorResult.receipt),
+        withheldSlots: withheldTints.map(tint => asRecord(tint)?.slot),
+        withheldStylesAbsent,
+        withheldPixelsAbsent,
+      });
+      const firstTintCommand = (layers: MutableLayer[]): JsonRecord | undefined => layers.flatMap(layer => layer.commands).find(command => Array.isArray(command.basePreviewTints));
+      const hostileRender = (mutate: (plan: X4UiPaintPlan, layers: MutableLayer[]) => void): { readonly attempt: RenderAttempt; readonly activity: ActivityLedger } => {
+        const candidate = forgedResult(acceptedColorPaint, mutate);
+        const activity = emptyActivityLedger();
+        return { attempt: attemptRender(candidate, corpus, makeObservedFactory(activity)), activity };
+      };
+      const hostileExtra = hostileRender((_plan, layers) => {
+        const command = firstTintCommand(layers);
+        const tints = command?.basePreviewTints as JsonRecord[] | undefined;
+        const tint = tints?.[0];
+        if (tint !== undefined) tint.hostileExtra = true;
+      });
+      const hostileAccessor = hostileRender((_plan, layers) => {
+        const command = firstTintCommand(layers);
+        if (command !== undefined) Object.defineProperty(command, 'basePreviewTints', { configurable: true, enumerable: true, get: () => [] });
+      });
+      const hostilePrototype = hostileRender((_plan, layers) => {
+        const command = firstTintCommand(layers);
+        const tints = command?.basePreviewTints as JsonRecord[] | undefined;
+        if (tints?.[0] !== undefined) Object.setPrototypeOf(tints[0], { hostilePrototype: true });
+      });
+      const hostileSparse = hostileRender((_plan, layers) => {
+        const command = firstTintCommand(layers);
+        const tints = command?.basePreviewTints as JsonRecord[] | undefined;
+        if (tints !== undefined) delete tints[0];
+      });
+      const hostileSymbol = hostileRender((_plan, layers) => {
+        const command = firstTintCommand(layers);
+        const tints = command?.basePreviewTints as JsonRecord[] | undefined;
+        if (tints?.[0] !== undefined) Reflect.defineProperty(tints[0], Symbol('stage-b-hostile'), { configurable: true, enumerable: true, value: true });
+      });
+      const hostileProxy = hostileRender((_plan, layers) => {
+        const command = firstTintCommand(layers);
+        const tints = command?.basePreviewTints as JsonRecord[] | undefined;
+        if (command !== undefined && tints !== undefined) command.basePreviewTints = new Proxy(tints, { getPrototypeOf: () => ({ hostileProxy: true }) });
+      });
+      const allTintRecords = (layers: MutableLayer[]): JsonRecord[] => layers.flatMap(layer => layer.commands).flatMap(command => {
+        const tints = command.basePreviewTints;
+        if (!Array.isArray(tints)) return [];
+        return tints.flatMap(tint => {
+          const record = asRecord(tint);
+          return record === undefined ? [] : [record];
+        });
+      });
+      const renderForgedCandidate = (mutate: (plan: X4UiPaintPlan, layers: MutableLayer[]) => void, atlasRgba?: Uint8ClampedArray[]): { readonly attempt: RenderAttempt; readonly activity: ActivityLedger } => {
+        const candidate = forgedResult(acceptedColorPaint, mutate);
+        const activity = emptyActivityLedger();
+        const factory = atlasRgba === undefined
+          ? makeObservedFactory(activity)
+          : makeObservedFactory(activity, {
+            contextHooks: role => role.endsWith('-atlas') ? { captureImageData: data => atlasRgba.push(data.slice()) } : {},
+          });
+        return { attempt: attemptRender(candidate, corpus, factory), activity };
+      };
+      const fractionalAtlasRgba: Uint8ClampedArray[] = [];
+      let fractionalGeometryDrawableSeen = false;
+      let literalExactPinCount = 0;
+      let literalSampleIdCount = 0;
+      const acceptedLiteralSchema = renderForgedCandidate((_plan, layers) => {
+        let literalCount = 0;
+        for (const layer of layers) {
+          for (const command of layer.commands) {
+            const commandTints = command.basePreviewTints;
+            if (!Array.isArray(commandTints)) continue;
+            for (const tintValue of commandTints) {
+              const tint = asRecord(tintValue);
+              if (tint === undefined || tint.domain !== 'source-literal-percent-alpha') continue;
+              const color = asRecord(tint.value);
+              const channels = color === undefined ? undefined : asRecord(color.channels);
+              const source = asRecord(tint.source);
+              if (color === undefined || channels === undefined || source === undefined) continue;
+              const sourceStart = asRecord(source.start);
+              const sourceEnd = asRecord(source.end);
+              const sourcePath = typeof source.sourcePath === 'string' ? source.sourcePath : source.file;
+              if (typeof sourcePath !== 'string' || typeof sourceStart?.line !== 'number' || typeof sourceEnd?.line !== 'number') continue;
+              tint.sourcePin = { sourcePath, lineStart: sourceStart.line, lineEnd: sourceEnd.line };
+              tint.sampleId = 'stage-b-public-color-sample';
+              const sourcePin = asRecord(tint.sourcePin);
+              if (sourcePin !== undefined
+                && stableJson(Object.keys(sourcePin).sort()) === stableJson(['lineEnd', 'lineStart', 'sourcePath'])
+                && sourcePin.sourcePath === sourcePath
+                && sourcePin.lineStart === sourceStart.line
+                && sourcePin.lineEnd === sourceEnd.line) literalExactPinCount += 1;
+              if (tint.sampleId === 'stage-b-public-color-sample') literalSampleIdCount += 1;
+              const fractionalChannels: Record<string, number> = { r: 12.25, g: 22.5, b: 32.75, a: 42.5 };
+              for (const [channelName, channelValue] of Object.entries(fractionalChannels)) {
+                color[channelName] = channelValue;
+                const evidence = asRecord(channels[channelName]);
+                if (evidence !== undefined) evidence.value = channelValue;
+              }
+              const redEvidence = asRecord(channels.r);
+              if (redEvidence !== undefined) channels.glow = { ...redEvidence, expression: '0.5', value: 0.5 };
+              color.glow = 0.5;
+              if (command.kind === 'node-geometry' && (tint.slot === 'table-background' || tint.slot === 'cell-background' || tint.slot === 'widget-background' || tint.slot === 'widget-border')) fractionalGeometryDrawableSeen = true;
+              literalCount += 1;
+            }
+          }
+        }
+        if (literalCount === 0) throw new Error('accepted source-literal schema fixture had no literal tint');
+      }, fractionalAtlasRgba);
+      let canonicalMappingCount = 0;
+      const acceptedCanonicalMapping = renderForgedCandidate((_plan, layers) => {
+        for (const tint of allTintRecords(layers)) {
+          if (tint.domain !== 'canonical-xml-byte-alpha') continue;
+          const color = asRecord(tint.value);
+          if (color === undefined || typeof color.resolvedBaseId !== 'string') continue;
+          const requestedId = 'paint_mapping_0';
+          color.requestedId = requestedId;
+          color.mappingSource = {
+            id: requestedId,
+            index: 0,
+            path: X4_UI_CORPUS_9_00_COLOR_CONTRACT.xml.relativePath,
+          };
+          if (requestedId !== color.resolvedBaseId) canonicalMappingCount += 1;
+        }
+        if (canonicalMappingCount === 0) throw new Error('accepted canonical mapping schema fixture had no canonical tint');
+      });
+      const canonicalGlowRgba: Uint8ClampedArray[] = [];
+      let canonicalGlowCount = 0;
+      const acceptedCanonicalGlow = renderForgedCandidate((_plan, layers) => {
+        for (const tint of allTintRecords(layers)) {
+          if (tint.domain !== 'canonical-xml-byte-alpha') continue;
+          const color = asRecord(tint.value);
+          if (color === undefined) continue;
+          color.glow = 0.5;
+          canonicalGlowCount += 1;
+        }
+      }, canonicalGlowRgba);
+      const literalTintParts = (layers: MutableLayer[]): { readonly tint: JsonRecord; readonly color: JsonRecord; readonly channels: JsonRecord } | undefined => {
+        const tint = allTintRecords(layers).find(candidate => candidate.domain === 'source-literal-percent-alpha');
+        const color = tint === undefined ? undefined : asRecord(tint.value);
+        const channels = color === undefined ? undefined : asRecord(color.channels);
+        return tint === undefined || color === undefined || channels === undefined ? undefined : { tint, color, channels };
+      };
+      const literalProvenanceSources = (parts: { readonly tint: JsonRecord; readonly color: JsonRecord; readonly channels: JsonRecord }): {
+        readonly outer: JsonRecord;
+        readonly declaration: JsonRecord;
+        readonly channelPairs: readonly { readonly source: JsonRecord; readonly keySource: JsonRecord }[];
+      } | undefined => {
+        const outer = asRecord(parts.tint.source);
+        const declaration = asRecord(parts.color.declarationSource);
+        const channelPairs: { readonly source: JsonRecord; readonly keySource: JsonRecord }[] = [];
+        if (outer === undefined || declaration === undefined) return undefined;
+        for (const channelValue of Object.values(parts.channels)) {
+          const channel = asRecord(channelValue);
+          const source = channel === undefined ? undefined : asRecord(channel.source);
+          const keySource = channel === undefined ? undefined : asRecord(channel.keySource);
+          if (source === undefined || keySource === undefined) return undefined;
+          channelPairs.push({ source, keySource });
+        }
+        return { outer, declaration, channelPairs };
+      };
+      const sourceCoordinates = (sources: readonly JsonRecord[]): string => stableJson(sources.map(source => ({
+        file: source.file,
+        start: source.start,
+        end: source.end,
+      })));
+      const setSourcePaths = (sources: readonly JsonRecord[], sourcePath: string): void => {
+        for (const source of sources) source.sourcePath = sourcePath;
+      };
+      let stringSourcePinApplied = false;
+      const hostileStringSourcePin = hostileRender((_plan, layers) => {
+        const parts = literalTintParts(layers);
+        if (parts === undefined) return;
+        parts.tint.sourcePin = 'ui/color.lua';
+        stringSourcePinApplied = parts.tint.sourcePin === 'ui/color.lua';
+      });
+      let fullSourcePinApplied = false;
+      const hostileFullSourcePin = hostileRender((_plan, layers) => {
+        const parts = literalTintParts(layers);
+        const source = parts === undefined ? undefined : asRecord(parts.tint.source);
+        if (parts === undefined || source === undefined) return;
+        const fullSource = JSON.parse(JSON.stringify(source)) as JsonRecord;
+        parts.tint.sourcePin = fullSource;
+        fullSourcePinApplied = Object.prototype.hasOwnProperty.call(fullSource, 'file')
+          && Object.prototype.hasOwnProperty.call(fullSource, 'start')
+          && Object.prototype.hasOwnProperty.call(fullSource, 'end')
+          && !Object.prototype.hasOwnProperty.call(fullSource, 'lineStart')
+          && !Object.prototype.hasOwnProperty.call(fullSource, 'lineEnd');
+      });
+      let declarationSourcePathDriftApplied = false;
+      const hostileDeclarationSourcePath = hostileRender((_plan, layers) => {
+        const parts = literalTintParts(layers);
+        const sources = parts === undefined ? undefined : literalProvenanceSources(parts);
+        if (sources === undefined || typeof sources.outer.file !== 'string') return;
+        const basePath = sources.outer.file;
+        const driftPath = `${basePath}:drift`;
+        const descendants = [sources.declaration, ...sources.channelPairs.flatMap(pair => [pair.source, pair.keySource])];
+        const allSources = [sources.outer, ...descendants];
+        const coordinatesBefore = sourceCoordinates(allSources);
+        sources.outer.sourcePath = basePath;
+        setSourcePaths(descendants, driftPath);
+        declarationSourcePathDriftApplied = sources.outer.sourcePath === basePath
+          && descendants.every(source => source.sourcePath === driftPath)
+          && coordinatesBefore === sourceCoordinates(allSources);
+      });
+      let channelSourcePathDriftApplied = false;
+      const hostileChannelSourcePath = hostileRender((_plan, layers) => {
+        const parts = literalTintParts(layers);
+        const sources = parts === undefined ? undefined : literalProvenanceSources(parts);
+        const target = sources?.channelPairs[0]?.source;
+        if (sources === undefined || target === undefined || typeof sources.outer.file !== 'string') return;
+        const basePath = sources.outer.file;
+        const allSources = [sources.outer, sources.declaration, ...sources.channelPairs.flatMap(pair => [pair.source, pair.keySource])];
+        const coordinatesBefore = sourceCoordinates(allSources);
+        setSourcePaths(allSources, basePath);
+        target.sourcePath = `${basePath}:drift`;
+        channelSourcePathDriftApplied = target.sourcePath === `${basePath}:drift`
+          && allSources.filter(source => source !== target).every(source => source.sourcePath === basePath)
+          && coordinatesBefore === sourceCoordinates(allSources);
+      });
+      let channelKeySourcePathDriftApplied = false;
+      const hostileChannelKeySourcePath = hostileRender((_plan, layers) => {
+        const parts = literalTintParts(layers);
+        const sources = parts === undefined ? undefined : literalProvenanceSources(parts);
+        const target = sources?.channelPairs[0]?.keySource;
+        if (sources === undefined || target === undefined || typeof sources.outer.file !== 'string') return;
+        const basePath = sources.outer.file;
+        const allSources = [sources.outer, sources.declaration, ...sources.channelPairs.flatMap(pair => [pair.source, pair.keySource])];
+        const coordinatesBefore = sourceCoordinates(allSources);
+        setSourcePaths(allSources, basePath);
+        target.sourcePath = `${basePath}:drift`;
+        channelKeySourcePathDriftApplied = target.sourcePath === `${basePath}:drift`
+          && allSources.filter(source => source !== target).every(source => source.sourcePath === basePath)
+          && coordinatesBefore === sourceCoordinates(allSources);
+      });
+      let directMappingApplied = false;
+      const hostileDirectCanonicalMapping = hostileRender((_plan, layers) => {
+        const tint = allTintRecords(layers).find(candidate => candidate.domain === 'canonical-xml-byte-alpha');
+        const color = tint === undefined ? undefined : asRecord(tint.value);
+        if (color === undefined || typeof color.resolvedBaseId !== 'string') return;
+        color.requestedId = color.resolvedBaseId;
+        color.mappingSource = {
+          id: color.resolvedBaseId,
+          index: 0,
+          path: X4_UI_CORPUS_9_00_COLOR_CONTRACT.xml.relativePath,
+        };
+        directMappingApplied = color.requestedId === color.resolvedBaseId && asRecord(color.mappingSource)?.id === color.requestedId;
+      });
+      let declarationOffsetEscapeApplied = false;
+      const hostileDeclarationOffsetEscape = hostileRender((_plan, layers) => {
+        const parts = literalTintParts(layers);
+        const tintSource = parts === undefined ? undefined : asRecord(parts.tint.source);
+        const declarationSource = parts === undefined ? undefined : asRecord(parts.color.declarationSource);
+        const outerEnd = tintSource === undefined ? undefined : asRecord(tintSource.end);
+        const declarationEnd = declarationSource === undefined ? undefined : asRecord(declarationSource.end);
+        if (outerEnd === undefined || declarationEnd === undefined || typeof outerEnd.offset !== 'number' || typeof outerEnd.column !== 'number') return;
+        declarationEnd.offset = outerEnd.offset + 1;
+        declarationEnd.column = outerEnd.column + 1;
+        declarationEnd.line = outerEnd.line;
+        const updatedOffset = declarationEnd.offset;
+        declarationOffsetEscapeApplied = typeof updatedOffset === 'number' && updatedOffset > outerEnd.offset;
+      });
+      let channelOffsetEscapeApplied = false;
+      const hostileChannelOffsetEscape = hostileRender((_plan, layers) => {
+        const parts = literalTintParts(layers);
+        const declarationSource = parts === undefined ? undefined : asRecord(parts.color.declarationSource);
+        const declarationEnd = declarationSource === undefined ? undefined : asRecord(declarationSource.end);
+        const channel = parts === undefined ? undefined : asRecord(parts.channels.r);
+        const channelSource = channel === undefined ? undefined : asRecord(channel.source);
+        const channelEnd = channelSource === undefined ? undefined : asRecord(channelSource.end);
+        if (declarationEnd === undefined || channelEnd === undefined || typeof declarationEnd.offset !== 'number' || typeof declarationEnd.column !== 'number') return;
+        channelEnd.offset = declarationEnd.offset + 1;
+        channelEnd.column = declarationEnd.column + 1;
+        channelEnd.line = declarationEnd.line;
+        const updatedOffset = channelEnd.offset;
+        channelOffsetEscapeApplied = typeof updatedOffset === 'number' && updatedOffset > declarationEnd.offset;
+      });
+      let keySourceOffsetEscapeApplied = false;
+      const hostileKeySourceOffsetEscape = hostileRender((_plan, layers) => {
+        const parts = literalTintParts(layers);
+        const declarationSource = parts === undefined ? undefined : asRecord(parts.color.declarationSource);
+        const declarationEnd = declarationSource === undefined ? undefined : asRecord(declarationSource.end);
+        const channel = parts === undefined ? undefined : asRecord(parts.channels.r);
+        const keySource = channel === undefined ? undefined : asRecord(channel.keySource);
+        const keyEnd = keySource === undefined ? undefined : asRecord(keySource.end);
+        if (declarationEnd === undefined || keyEnd === undefined || typeof declarationEnd.offset !== 'number' || typeof declarationEnd.column !== 'number') return;
+        keyEnd.offset = declarationEnd.offset + 1;
+        keyEnd.column = declarationEnd.column + 1;
+        keyEnd.line = declarationEnd.line;
+        const updatedOffset = keyEnd.offset;
+        keySourceOffsetEscapeApplied = typeof updatedOffset === 'number' && updatedOffset > declarationEnd.offset;
+      });
+      let duplicateTintFactApplied = false;
+      const hostileDuplicateTintFact = hostileRender((_plan, layers) => {
+        const command = firstTintCommand(layers);
+        const tints = command?.basePreviewTints as JsonRecord[] | undefined;
+        const original = tints?.[0];
+        if (tints === undefined || original === undefined) return;
+        const duplicate = JSON.parse(JSON.stringify(original)) as JsonRecord;
+        tints.push(duplicate);
+        duplicateTintFactApplied = colorFactSignature(original) === colorFactSignature(duplicate) && tints.length >= 2;
+      });
+      let reassignedTintOwnerApplied = false;
+      const hostileReassignedTintOwner = hostileRender((_plan, layers) => {
+        const geometryCommands = layers.flatMap(layer => layer.commands).filter(command => command.kind === 'node-geometry');
+        const sourceCommand = geometryCommands.find(command => Array.isArray(command.basePreviewTints) && command.basePreviewTints.length > 0);
+        const sourceTints = sourceCommand?.basePreviewTints as JsonRecord[] | undefined;
+        const sourceTint = sourceTints?.[0];
+        const sourceOwner = sourceCommand?.nodeId ?? sourceCommand?.id;
+        const targetCommand = geometryCommands.find(command => (command.nodeId ?? command.id) !== sourceOwner);
+        const targetOwner = targetCommand?.nodeId ?? targetCommand?.id;
+        if (sourceTint === undefined || targetCommand === undefined || typeof sourceOwner !== 'string' || typeof targetOwner !== 'string') return;
+        const reassigned = JSON.parse(JSON.stringify(sourceTint)) as JsonRecord;
+        targetCommand.basePreviewTints = [reassigned];
+        reassignedTintOwnerApplied = sourceOwner !== targetOwner && colorFactSignature(sourceTint) === colorFactSignature(reassigned);
+      });
+      let duplicateTintSlotApplied = false;
+      const hostileDuplicateTintSlot = hostileRender((_plan, layers) => {
+        const command = firstTintCommand(layers);
+        const tints = command?.basePreviewTints as JsonRecord[] | undefined;
+        const original = tints?.[0];
+        if (tints === undefined || original === undefined) return;
+        const duplicate = JSON.parse(JSON.stringify(original)) as JsonRecord;
+        const duplicateSource = asRecord(duplicate.source);
+        const duplicateEnd = duplicateSource === undefined ? undefined : asRecord(duplicateSource.end);
+        if (duplicateEnd === undefined || typeof duplicateEnd.offset !== 'number' || typeof duplicateEnd.column !== 'number') return;
+        duplicateEnd.offset += 1;
+        duplicateEnd.column += 1;
+        tints.push(duplicate);
+        duplicateTintSlotApplied = original.slot === duplicate.slot
+          && colorFactSignature(original) !== colorFactSignature(duplicate)
+          && tints.length >= 2;
+      });
+      const hostileAccepted = (attempt: RenderAttempt, activity: ActivityLedger): boolean => {
+        const result = completedResult(attempt);
+        return colorRendered
+          && result?.status === 'refused'
+          && result.receipt.refusal.code === 'invalid-command'
+          && refusalBoundaryIsComplete(result)
+          && activityIsZero(activity);
+      };
+      const acceptedLiteralResult = completedResult(acceptedLiteralSchema.attempt);
+      const acceptedCanonicalMappingResult = completedResult(acceptedCanonicalMapping.attempt);
+      const acceptedCanonicalGlowResult = completedResult(acceptedCanonicalGlow.attempt);
+      const canonicalGlowPixelsUnchanged = canonicalGlowRgba.length === colorAtlasRgba.length
+        && canonicalGlowRgba.every((bytes, captureIndex) => {
+          const baselineBytes = colorAtlasRgba[captureIndex];
+          return baselineBytes !== undefined
+            && bytes.length === baselineBytes.length
+            && bytes.every((byte, byteIndex) => byte === baselineBytes[byteIndex]);
+        });
+      const canonicalGlowTraceUnchanged = activitySignature(acceptedCanonicalGlow.activity) === activitySignature(colorActivity);
+      const fractionalCssExpected = 'rgba(12.25, 22.5, 32.75, 0.425)';
+      const fractionalCssObserved = acceptedLiteralSchema.activity.paint.some(entry => (entry.name === 'setFillStyle' || entry.name === 'setStrokeStyle') && entry.args[0] === fractionalCssExpected);
+      const fractionalAtlasPixelObserved = fractionalAtlasRgba.some(bytes => {
+        for (let offset = 0; offset + 3 < bytes.length; offset += 4) {
+          if (bytes[offset] === 12 && bytes[offset + 1] === 23 && bytes[offset + 2] === 33 && bytes[offset + 3] === 108) return true;
+        }
+        return false;
+      });
+      familyCheck('stage-b-causal', 'P6 accepted source-literal fractional channels, optional glow channels, and sourcePin/sampleId render', colorRendered
+        && acceptedLiteralResult?.status === 'rendered'
+        && !acceptedLiteralSchema.attempt.threw
+        && literalExactPinCount > 0
+        && literalSampleIdCount === literalExactPinCount
+        && activityIsZero(acceptedLiteralSchema.activity) === false, {
+        result: acceptedLiteralResult === undefined ? undefined : receiptSummary(acceptedLiteralResult.receipt),
+        literalExactPinCount,
+        literalSampleIdCount,
+        activity: activitySignature(acceptedLiteralSchema.activity),
+      });
+      familyCheck('stage-b-causal', 'P6 fractional source RGB uses explicit half-up atlas bytes while geometry CSS retains raw values', colorRendered
+        && acceptedLiteralResult?.status === 'rendered'
+        && fractionalGeometryDrawableSeen
+        && fractionalCssObserved
+        && fractionalAtlasPixelObserved, {
+        expectedCss: fractionalCssExpected,
+        fractionalGeometryDrawableSeen,
+        fractionalCssObserved,
+        fractionalAtlasPixelObserved,
+        expectedAtlasPixel: [12, 23, 33, 108],
+      });
+      familyCheck('stage-b-causal', 'P6 accepted canonical mappingSource id/index/path and resolved identity render', colorRendered
+        && acceptedCanonicalMappingResult?.status === 'rendered'
+        && !acceptedCanonicalMapping.attempt.threw
+        && canonicalMappingCount > 0
+        && activityIsZero(acceptedCanonicalMapping.activity) === false, {
+        result: acceptedCanonicalMappingResult === undefined ? undefined : receiptSummary(acceptedCanonicalMappingResult.receipt),
+        canonicalMappingCount,
+        activity: activitySignature(acceptedCanonicalMapping.activity),
+      });
+      familyCheck('stage-b-causal', 'P6 accepted canonical glow 0.5 remains non-drawable and leaves trace and pixels unchanged', colorRendered
+        && acceptedCanonicalGlowResult?.status === 'rendered'
+        && canonicalGlowCount > 0
+        && canonicalGlowTraceUnchanged
+        && canonicalGlowPixelsUnchanged, {
+        result: acceptedCanonicalGlowResult === undefined ? undefined : receiptSummary(acceptedCanonicalGlowResult.receipt),
+        canonicalGlowCount,
+        canonicalGlowTraceUnchanged,
+        canonicalGlowPixelsUnchanged,
+      });
+      familyCheck('stage-b-causal', 'P6 hostile extra-key tint payload refuses before allocation after valid baseline acceptance', hostileAccepted(hostileExtra.attempt, hostileExtra.activity), { baseline: colorResult === undefined ? undefined : receiptSummary(colorResult.receipt), hostile: receiptSummary(completedResult(hostileExtra.attempt)?.receipt), activity: activitySignature(hostileExtra.activity) });
+      familyCheck('stage-b-causal', 'P6 hostile accessor tint payload refuses before allocation after valid baseline acceptance', hostileAccepted(hostileAccessor.attempt, hostileAccessor.activity), { baseline: colorResult === undefined ? undefined : receiptSummary(colorResult.receipt), hostile: receiptSummary(completedResult(hostileAccessor.attempt)?.receipt), activity: activitySignature(hostileAccessor.activity) });
+      familyCheck('stage-b-causal', 'P6 hostile prototype tint payload refuses before allocation after valid baseline acceptance', hostileAccepted(hostilePrototype.attempt, hostilePrototype.activity), { baseline: colorResult === undefined ? undefined : receiptSummary(colorResult.receipt), hostile: receiptSummary(completedResult(hostilePrototype.attempt)?.receipt), activity: activitySignature(hostilePrototype.activity) });
+      familyCheck('stage-b-causal', 'P6 hostile sparse tint payload refuses before allocation after valid baseline acceptance', hostileAccepted(hostileSparse.attempt, hostileSparse.activity), { baseline: colorResult === undefined ? undefined : receiptSummary(colorResult.receipt), hostile: receiptSummary(completedResult(hostileSparse.attempt)?.receipt), activity: activitySignature(hostileSparse.activity) });
+      familyCheck('stage-b-causal', 'P6 hostile symbol tint payload refuses before allocation after valid baseline acceptance', hostileAccepted(hostileSymbol.attempt, hostileSymbol.activity), { baseline: colorResult === undefined ? undefined : receiptSummary(colorResult.receipt), hostile: receiptSummary(completedResult(hostileSymbol.attempt)?.receipt), activity: activitySignature(hostileSymbol.activity) });
+      familyCheck('stage-b-causal', 'P6 hostile proxy tint payload refuses before allocation after valid baseline acceptance', hostileAccepted(hostileProxy.attempt, hostileProxy.activity), { baseline: colorResult === undefined ? undefined : receiptSummary(colorResult.receipt), hostile: receiptSummary(completedResult(hostileProxy.attempt)?.receipt), activity: activitySignature(hostileProxy.activity) });
+      familyCheck('stage-b-causal', 'P6 hostile string sourcePin refuses before allocation', stringSourcePinApplied && hostileAccepted(hostileStringSourcePin.attempt, hostileStringSourcePin.activity), { mutationApplied: stringSourcePinApplied, hostile: receiptSummary(completedResult(hostileStringSourcePin.attempt)?.receipt), activity: activitySignature(hostileStringSourcePin.activity) });
+      familyCheck('stage-b-causal', 'P6 hostile full source-location sourcePin refuses before allocation', fullSourcePinApplied && hostileAccepted(hostileFullSourcePin.attempt, hostileFullSourcePin.activity), { mutationApplied: fullSourcePinApplied, hostile: receiptSummary(completedResult(hostileFullSourcePin.attempt)?.receipt), activity: activitySignature(hostileFullSourcePin.activity) });
+      familyCheck('stage-b-causal', 'P6 declarationSource sourcePath drift with identical file and offsets refuses before allocation', declarationSourcePathDriftApplied && hostileAccepted(hostileDeclarationSourcePath.attempt, hostileDeclarationSourcePath.activity), { mutationApplied: declarationSourcePathDriftApplied, hostile: receiptSummary(completedResult(hostileDeclarationSourcePath.attempt)?.receipt), activity: activitySignature(hostileDeclarationSourcePath.activity) });
+      familyCheck('stage-b-causal', 'P6 channel source sourcePath drift with identical file and offsets refuses before allocation', channelSourcePathDriftApplied && hostileAccepted(hostileChannelSourcePath.attempt, hostileChannelSourcePath.activity), { mutationApplied: channelSourcePathDriftApplied, hostile: receiptSummary(completedResult(hostileChannelSourcePath.attempt)?.receipt), activity: activitySignature(hostileChannelSourcePath.activity) });
+      familyCheck('stage-b-causal', 'P6 channel keySource sourcePath drift with identical file and offsets refuses before allocation', channelKeySourcePathDriftApplied && hostileAccepted(hostileChannelKeySourcePath.attempt, hostileChannelKeySourcePath.activity), { mutationApplied: channelKeySourcePathDriftApplied, hostile: receiptSummary(completedResult(hostileChannelKeySourcePath.attempt)?.receipt), activity: activitySignature(hostileChannelKeySourcePath.activity) });
+      familyCheck('stage-b-causal', 'P6 mappingSource present for direct requested/resolved identity refuses before allocation', directMappingApplied && hostileAccepted(hostileDirectCanonicalMapping.attempt, hostileDirectCanonicalMapping.activity), { mutationApplied: directMappingApplied, hostile: receiptSummary(completedResult(hostileDirectCanonicalMapping.attempt)?.receipt), activity: activitySignature(hostileDirectCanonicalMapping.activity) });
+      familyCheck('stage-b-causal', 'P6 out-of-parent declarationSource offsets refuse before allocation strengthening', declarationOffsetEscapeApplied && hostileAccepted(hostileDeclarationOffsetEscape.attempt, hostileDeclarationOffsetEscape.activity), { mutationApplied: declarationOffsetEscapeApplied, hostile: receiptSummary(completedResult(hostileDeclarationOffsetEscape.attempt)?.receipt), activity: activitySignature(hostileDeclarationOffsetEscape.activity) });
+      familyCheck('stage-b-causal', 'P6 out-of-declaration channel source offsets refuse before allocation strengthening', channelOffsetEscapeApplied && hostileAccepted(hostileChannelOffsetEscape.attempt, hostileChannelOffsetEscape.activity), { mutationApplied: channelOffsetEscapeApplied, hostile: receiptSummary(completedResult(hostileChannelOffsetEscape.attempt)?.receipt), activity: activitySignature(hostileChannelOffsetEscape.activity) });
+      familyCheck('stage-b-causal', 'P6 out-of-declaration channel keySource offsets refuse before allocation strengthening', keySourceOffsetEscapeApplied && hostileAccepted(hostileKeySourceOffsetEscape.attempt, hostileKeySourceOffsetEscape.activity), { mutationApplied: keySourceOffsetEscapeApplied, hostile: receiptSummary(completedResult(hostileKeySourceOffsetEscape.attempt)?.receipt), activity: activitySignature(hostileKeySourceOffsetEscape.activity) });
+      familyCheck('stage-b-causal', 'P6 duplicate exact tint fact refuses before allocation strengthening', duplicateTintFactApplied && hostileAccepted(hostileDuplicateTintFact.attempt, hostileDuplicateTintFact.activity), { mutationApplied: duplicateTintFactApplied, hostile: receiptSummary(completedResult(hostileDuplicateTintFact.attempt)?.receipt), activity: activitySignature(hostileDuplicateTintFact.activity) });
+      familyCheck('stage-b-causal', 'P6 tint fact reassigned across distinct geometry owners refuses before allocation strengthening', reassignedTintOwnerApplied && hostileAccepted(hostileReassignedTintOwner.attempt, hostileReassignedTintOwner.activity), { mutationApplied: reassignedTintOwnerApplied, hostile: receiptSummary(completedResult(hostileReassignedTintOwner.attempt)?.receipt), activity: activitySignature(hostileReassignedTintOwner.activity) });
+      familyCheck('stage-b-causal', 'P6 duplicate slot with distinct tint fact refuses before allocation strengthening', duplicateTintSlotApplied && hostileAccepted(hostileDuplicateTintSlot.attempt, hostileDuplicateTintSlot.activity), { mutationApplied: duplicateTintSlotApplied, hostile: receiptSummary(completedResult(hostileDuplicateTintSlot.attempt)?.receipt), activity: activitySignature(hostileDuplicateTintSlot.activity) });
+      const hostileSourceFractionalBoundary = hostileRender((_plan, layers) => {
+        const tint = allTintRecords(layers).find(candidate => candidate.domain === 'source-literal-percent-alpha');
+        const color = tint === undefined ? undefined : asRecord(tint.value);
+        const channels = color === undefined ? undefined : asRecord(color.channels);
+        if (color !== undefined && channels !== undefined) {
+          color.r = 255.0001;
+          const redEvidence = asRecord(channels.r);
+          if (redEvidence !== undefined) redEvidence.value = 255.0001;
+        }
+      });
+      const hostileSourceGlowBoundary = hostileRender((_plan, layers) => {
+        const tint = allTintRecords(layers).find(candidate => candidate.domain === 'source-literal-percent-alpha');
+        const color = tint === undefined ? undefined : asRecord(tint.value);
+        const channels = color === undefined ? undefined : asRecord(color.channels);
+        const redEvidence = channels === undefined ? undefined : asRecord(channels.r);
+        if (color !== undefined && channels !== undefined && redEvidence !== undefined) {
+          color.glow = 1.0001;
+          channels.glow = { ...redEvidence, expression: '1.0001', value: 1.0001 };
+        }
+      });
+      const hostileCanonicalBaseBoundary = hostileRender((_plan, layers) => {
+        const tint = allTintRecords(layers).find(candidate => candidate.domain === 'canonical-xml-byte-alpha');
+        const color = tint === undefined ? undefined : asRecord(tint.value);
+        const baseSource = color === undefined ? undefined : asRecord(color.baseSource);
+        if (baseSource !== undefined) baseSource.index = 224;
+      });
+      const hostileCanonicalFractionalChannel = hostileRender((_plan, layers) => {
+        const tint = allTintRecords(layers).find(candidate => candidate.domain === 'canonical-xml-byte-alpha');
+        const color = tint === undefined ? undefined : asRecord(tint.value);
+        if (color !== undefined) color.r = 10.5;
+      });
+      const hostileCanonicalGlowBoundary = hostileRender((_plan, layers) => {
+        const tint = allTintRecords(layers).find(candidate => candidate.domain === 'canonical-xml-byte-alpha');
+        const color = tint === undefined ? undefined : asRecord(tint.value);
+        if (color !== undefined) color.glow = 1.0001;
+      });
+      const hostileCanonicalMappingBoundary = hostileRender((_plan, layers) => {
+        const tint = allTintRecords(layers).find(candidate => candidate.domain === 'canonical-xml-byte-alpha');
+        const color = tint === undefined ? undefined : asRecord(tint.value);
+        if (color !== undefined) {
+          color.requestedId = 'paint_mapping_0';
+          color.mappingSource = { id: 'paint_mapping_0', index: 804, path: X4_UI_CORPUS_9_00_COLOR_CONTRACT.xml.relativePath };
+        }
+      });
+      const hostileCanonicalMappingExtra = hostileRender((_plan, layers) => {
+        const tint = allTintRecords(layers).find(candidate => candidate.domain === 'canonical-xml-byte-alpha');
+        const color = tint === undefined ? undefined : asRecord(tint.value);
+        if (color !== undefined) {
+          color.requestedId = 'paint_mapping_0';
+          color.mappingSource = { id: 'paint_mapping_0', index: 0, path: X4_UI_CORPUS_9_00_COLOR_CONTRACT.xml.relativePath, ref: 'paint_color_0' };
+        }
+      });
+      const hostileCanonicalIdentityMismatch = hostileRender((_plan, layers) => {
+        const tint = allTintRecords(layers).find(candidate => candidate.domain === 'canonical-xml-byte-alpha');
+        const color = tint === undefined ? undefined : asRecord(tint.value);
+        if (color !== undefined && typeof color.resolvedBaseId === 'string') {
+          color.requestedId = `${color.resolvedBaseId}-mismatch`;
+          delete color.mappingSource;
+        }
+      });
+      const hostileSourceGlowMissing = hostileRender((_plan, layers) => {
+        const tint = allTintRecords(layers).find(candidate => candidate.domain === 'source-literal-percent-alpha');
+        const color = tint === undefined ? undefined : asRecord(tint.value);
+        const channels = color === undefined ? undefined : asRecord(color.channels);
+        if (color !== undefined && channels !== undefined) {
+          color.glow = 0.5;
+          delete channels.glow;
+        }
+      });
+      familyCheck('stage-b-causal', 'P6 hostile source fractional channel boundary refuses before allocation', hostileAccepted(hostileSourceFractionalBoundary.attempt, hostileSourceFractionalBoundary.activity), { hostile: receiptSummary(completedResult(hostileSourceFractionalBoundary.attempt)?.receipt), activity: activitySignature(hostileSourceFractionalBoundary.activity) });
+      familyCheck('stage-b-causal', 'P6 hostile source optional glow boundary refuses before allocation', hostileAccepted(hostileSourceGlowBoundary.attempt, hostileSourceGlowBoundary.activity), { hostile: receiptSummary(completedResult(hostileSourceGlowBoundary.attempt)?.receipt), activity: activitySignature(hostileSourceGlowBoundary.activity) });
+      familyCheck('stage-b-causal', 'P6 hostile canonical baseSource index 224 refuses before allocation', hostileAccepted(hostileCanonicalBaseBoundary.attempt, hostileCanonicalBaseBoundary.activity), { hostile: receiptSummary(completedResult(hostileCanonicalBaseBoundary.attempt)?.receipt), activity: activitySignature(hostileCanonicalBaseBoundary.activity) });
+      familyCheck('stage-b-causal', 'P6 hostile canonical fractional RGB channel refuses before allocation', hostileAccepted(hostileCanonicalFractionalChannel.attempt, hostileCanonicalFractionalChannel.activity), { hostile: receiptSummary(completedResult(hostileCanonicalFractionalChannel.attempt)?.receipt), activity: activitySignature(hostileCanonicalFractionalChannel.activity) });
+      familyCheck('stage-b-causal', 'P6 hostile canonical glow boundary refuses before allocation', hostileAccepted(hostileCanonicalGlowBoundary.attempt, hostileCanonicalGlowBoundary.activity), { hostile: receiptSummary(completedResult(hostileCanonicalGlowBoundary.attempt)?.receipt), activity: activitySignature(hostileCanonicalGlowBoundary.activity) });
+      familyCheck('stage-b-causal', 'P6 hostile canonical mappingSource index 804 refuses before allocation', hostileAccepted(hostileCanonicalMappingBoundary.attempt, hostileCanonicalMappingBoundary.activity), { hostile: receiptSummary(completedResult(hostileCanonicalMappingBoundary.attempt)?.receipt), activity: activitySignature(hostileCanonicalMappingBoundary.activity) });
+      familyCheck('stage-b-causal', 'P6 hostile canonical mappingSource ref extra key refuses before allocation', hostileAccepted(hostileCanonicalMappingExtra.attempt, hostileCanonicalMappingExtra.activity), { hostile: receiptSummary(completedResult(hostileCanonicalMappingExtra.attempt)?.receipt), activity: activitySignature(hostileCanonicalMappingExtra.activity) });
+      familyCheck('stage-b-causal', 'P6 hostile canonical requested/resolved identity mismatch refuses before allocation', hostileAccepted(hostileCanonicalIdentityMismatch.attempt, hostileCanonicalIdentityMismatch.activity), { hostile: receiptSummary(completedResult(hostileCanonicalIdentityMismatch.attempt)?.receipt), activity: activitySignature(hostileCanonicalIdentityMismatch.activity) });
+      familyCheck('stage-b-causal', 'P6 hostile source glow without matching channels.glow refuses before allocation', hostileAccepted(hostileSourceGlowMissing.attempt, hostileSourceGlowMissing.activity), { hostile: receiptSummary(completedResult(hostileSourceGlowMissing.attempt)?.receipt), activity: activitySignature(hostileSourceGlowMissing.activity) });
+      const callbackPlan = forgedResult(acceptedColorPaint, () => undefined);
+      const callbackCommand = commandList(callbackPlan.plan).find(command => Array.isArray(command.basePreviewTints));
+      const callbackTints = callbackCommand?.basePreviewTints as JsonRecord[] | undefined;
+      const callbackValue = callbackTints?.[0] === undefined ? undefined : asRecord(callbackTints[0].value);
+      const callbackOriginalRed = callbackValue?.r;
+      let callbackReached = false;
+      let callbackChanged = false;
+      const callbackActivity = emptyActivityLedger();
+      const callbackAttempt = attemptRender(callbackPlan, corpus, makeObservedFactory(callbackActivity, {
+        afterFactory: () => {
+          if (callbackReached || callbackValue === undefined || typeof callbackOriginalRed !== 'number') return;
+          callbackReached = true;
+          callbackValue.r = callbackOriginalRed === 0 ? 1 : callbackOriginalRed - 1;
+          callbackChanged = callbackValue.r !== callbackOriginalRed;
+        },
+      }));
+      const callbackResult = completedResult(callbackAttempt);
+      familyCheck('stage-b-causal', 'P6 callback mutation still refuses after detached color validation with no returned surface', colorRendered
+        && callbackReached
+        && callbackChanged
+        && callbackResult?.status === 'refused'
+        && callbackResult.receipt.refusal.code === 'post-validation-mutation'
+        && refusalBoundaryIsComplete(callbackResult), {
+        baseline: colorResult === undefined ? undefined : receiptSummary(colorResult.receipt),
+        callback: receiptSummary(callbackResult?.receipt),
+        callbackReached,
+        callbackChanged,
+        activity: activitySignature(callbackActivity),
+      });
+    }
+  } catch (error) {
+    familyCheck('stage-b-causal', 'loader-issued color evidence reaches top-level Preview and exact public Paint owner census', false, { error: error instanceof Error ? error.message : String(error) });
+  }
+  const viewport = { width: 100, height: 80 };
   const baselinePlanJson = JSON.stringify(paint.plan);
   const regularBytes = Array.from(corpus.fonts.regular.atlas.alphaBytes);
   const boldBytes = Array.from(corpus.fonts.bold.atlas.alphaBytes);
@@ -1592,6 +2470,190 @@ async function main(): Promise<void> {
         factory: rawFactoryTrace.filter(entry => entry.name === 'factory').length,
         operations: rawFactoryTrace.length,
       },
+    },
+  );
+  const manualCalibration = calibrateKeepOutPolygon({
+    stableId: 'canvas-manual-polygon-1',
+    context: 'canvas-manual-context',
+    sourceNote: 'Canvas renderer manual calibration authority selftest.',
+    screenshotHash: `sha256:${'d'.repeat(64)}`,
+    profile: 'canvas-screenshot-profile',
+    drawableBounds: { left: 10, top: 20, width: 1000, height: 500 },
+    points: [{ x: 10, y: 20 }, { x: 510, y: 20 }, { x: 10, y: 270 }],
+  });
+  const manualEntry = manualCalibration.status === 'success' ? manualCalibration.entry : undefined;
+  const manualProjection = manualEntry === undefined ? undefined : projectKeepOut(manualEntry, { width: 100, height: 80 });
+  let manualPaintSeamReached = false;
+  let manualPaintThrew = false;
+  let manualPaint: X4UiPaintPlanResult | undefined;
+  try {
+    manualPaintSeamReached = true;
+    manualPaint = fixture.preview.scene === undefined || manualEntry === undefined || manualProjection === undefined
+      ? undefined
+      : projectX4UiPaintPlan({
+        scene: fixture.preview.scene,
+        corpus,
+        previewAuthority: fixture.preview,
+        keepOuts: [{ context: manualEntry.context, entry: manualEntry, projection: manualProjection }],
+      });
+  } catch {
+    manualPaintThrew = true;
+  }
+  const manualTrace: TraceEntry[] = [];
+  let manualCanvasSeamReached = false;
+  let manualCanvasAttempt: RenderAttempt | undefined;
+  if (manualPaint !== undefined) {
+    manualCanvasSeamReached = true;
+    manualCanvasAttempt = attemptRender(manualPaint, corpus, makeFactory(manualTrace));
+  }
+  const manualCanvasResult = completedResult(manualCanvasAttempt);
+  const manualCommand = manualPaint?.status !== 'refused' ? manualPaint?.plan.keepOuts[0] : undefined;
+  const manualExpectedTrace = manualPaint?.status !== 'refused' ? expectedCompositeTrace(manualPaint.plan, corpus) : [];
+  const manualPolygonTrace = [
+    traceEntry('composite', 'setStrokeStyle', X4_UI_CANVAS_DIAGNOSTIC_PALETTE.keepOut),
+    traceEntry('composite', 'beginPath'),
+    traceEntry('composite', 'moveTo', 0, 0),
+    traceEntry('composite', 'lineTo', 50, 0),
+    traceEntry('composite', 'lineTo', 0, 40),
+    traceEntry('composite', 'closePath'),
+    traceEntry('composite', 'stroke'),
+  ];
+  familyCheck(
+    'batch-6d-causal',
+    'causal valid manual calibration reaches Canvas with the exact polygon trace',
+    manualCalibration.status === 'success'
+      && manualEntry !== undefined
+      && manualProjection?.status === 'projected'
+      && manualPaintSeamReached
+      && !manualPaintThrew
+      && manualPaint?.status !== 'refused'
+      && manualCanvasSeamReached
+      && manualCanvasAttempt?.threw === false
+      && manualCanvasResult?.status === 'rendered'
+      && manualCommand?.entryId === 'canvas-manual-polygon-1'
+      && manualCommand.context === 'canvas-manual-context'
+      && manualCommand.status === 'projected'
+      && manualCommand.evidenceGrade === 'calibrated'
+      && manualCommand.advisoryOnly === true
+      && manualCommand.gameVerification === NOT_VERIFIED_IN_GAME
+      && manualCommand.geometry?.kind === 'polygon'
+      && traceEquals(manualTrace.filter(entry => entry.role === 'composite'), manualExpectedTrace)
+      && traceContainsSequence(manualTrace.filter(entry => entry.role === 'composite'), manualPolygonTrace),
+    {
+      fixtureReady: fixture.paint.plan.logicalDrawable.width === 100 && fixture.paint.plan.logicalDrawable.height === 80,
+      paintSeamReached: manualPaintSeamReached,
+      canvasSeamReached: manualCanvasSeamReached,
+      threw: manualPaintThrew || manualCanvasAttempt?.threw === true,
+      expected: { paint: 'projected-or-partial', canvas: 'rendered', polygonTrace: manualPolygonTrace },
+      observed: {
+        calibration: manualCalibration.status,
+        projection: manualProjection?.status,
+        paint: manualPaint?.status,
+        paintRefusal: manualPaint?.status === 'refused' ? manualPaint.refusal : undefined,
+        canvas: manualCanvasResult?.status,
+        canvasRefusal: manualCanvasResult?.status === 'refused' ? manualCanvasResult.receipt.refusal : undefined,
+        command: manualCommand,
+        traceOperations: manualTrace.filter(entry => entry.role === 'composite').length,
+        expectedTraceOperations: manualExpectedTrace.length,
+        firstTraceDifference: firstTraceDifference(manualExpectedTrace, manualTrace.filter(entry => entry.role === 'composite')),
+      },
+    },
+  );
+  const manualProjectedWithReason = manualPaint !== undefined && manualPaint.status !== 'refused'
+    ? forgedResult(manualPaint, (_plan, layers) => {
+      const command = layers[3]?.commands.find(candidate => candidate.entryId === 'canvas-manual-polygon-1');
+      if (command !== undefined) command.reason = 'injected-reason';
+    })
+    : undefined;
+  const manualProjectedWithReasonAttempt = manualProjectedWithReason === undefined
+    ? undefined
+    : attemptRender(manualProjectedWithReason, corpus, makeFactory([]));
+  const manualProjectedWithReasonResult = completedResult(manualProjectedWithReasonAttempt);
+  familyCheck(
+    'batch-6d-causal',
+    'causal projected manual keep-out reason injection refuses before Canvas paint',
+    manualProjectedWithReason !== undefined
+      && manualProjectedWithReasonAttempt?.threw === false
+      && manualProjectedWithReasonResult?.status === 'refused'
+      && manualProjectedWithReasonResult.receipt.refusal.code === 'invalid-keepout'
+      && refusalBoundaryIsComplete(manualProjectedWithReasonResult),
+    {
+      fixtureReady: manualProjectedWithReason !== undefined,
+      seamReached: manualProjectedWithReasonAttempt !== undefined,
+      threw: manualProjectedWithReasonAttempt?.threw === true,
+      expected: { status: 'refused', code: 'invalid-keepout', reason: 'projected commands must omit reason' },
+      observed: manualProjectedWithReasonResult?.status === 'refused'
+        ? { status: manualProjectedWithReasonResult.status, refusal: manualProjectedWithReasonResult.receipt.refusal }
+      : { status: manualProjectedWithReasonResult?.status },
+    },
+  );
+  const productionProjectedWithReason = forgedResult(paint, (_plan, layers) => {
+    const command = layers[3]?.commands.find(candidate => candidate.entryId === KEEP_OUT_IDS.conversationBackRow);
+    if (command !== undefined) command.reason = 'injected-reason';
+  });
+  const productionProjectedWithReasonAttempt = attemptRender(productionProjectedWithReason, corpus, makeFactory([]));
+  const productionProjectedWithReasonResult = completedResult(productionProjectedWithReasonAttempt);
+  familyCheck(
+    'batch-6d-causal',
+    'causal projected production keep-out reason injection refuses before Canvas paint',
+    productionProjectedWithReasonAttempt.threw === false
+      && productionProjectedWithReasonResult?.status === 'refused'
+      && productionProjectedWithReasonResult.receipt.refusal.code === 'invalid-keepout'
+      && refusalBoundaryIsComplete(productionProjectedWithReasonResult),
+    {
+      fixtureReady: paint.plan.keepOuts.some(command => command.entryId === KEEP_OUT_IDS.conversationBackRow && command.status === 'projected'),
+      seamReached: true,
+      threw: productionProjectedWithReasonAttempt.threw,
+      expected: { status: 'refused', code: 'invalid-keepout', reason: 'projected commands must omit reason' },
+      observed: productionProjectedWithReasonResult?.status === 'refused'
+        ? { status: productionProjectedWithReasonResult.status, refusal: productionProjectedWithReasonResult.receipt.refusal }
+        : { status: productionProjectedWithReasonResult?.status },
+    },
+  );
+  const unavailableReasonOmitted = forgedResult(paint, (_plan, layers) => {
+    const command = layers[3]?.commands.find(candidate => candidate.entryId === KEEP_OUT_IDS.missionMessagesTicker);
+    if (command !== undefined) Reflect.deleteProperty(command, 'reason');
+  });
+  const unavailableReasonOmittedAttempt = attemptRender(unavailableReasonOmitted, corpus, makeFactory([]));
+  const unavailableReasonOmittedResult = completedResult(unavailableReasonOmittedAttempt);
+  familyCheck(
+    'batch-6d-causal',
+    'causal unavailable production keep-out reason omission refuses before Canvas paint',
+    unavailableReasonOmittedAttempt.threw === false
+      && unavailableReasonOmittedResult?.status === 'refused'
+      && unavailableReasonOmittedResult.receipt.refusal.code === 'invalid-keepout'
+      && refusalBoundaryIsComplete(unavailableReasonOmittedResult),
+    {
+      fixtureReady: paint.plan.keepOuts.some(command => command.entryId === KEEP_OUT_IDS.missionMessagesTicker && command.status === 'unavailable'),
+      seamReached: true,
+      threw: unavailableReasonOmittedAttempt.threw,
+      expected: { status: 'refused', code: 'invalid-keepout', reason: 'unavailable commands require reference-unmeasured' },
+      observed: unavailableReasonOmittedResult?.status === 'refused'
+        ? { status: unavailableReasonOmittedResult.status, refusal: unavailableReasonOmittedResult.receipt.refusal }
+        : { status: unavailableReasonOmittedResult?.status },
+    },
+  );
+  const unavailableWrongReason = forgedResult(paint, (_plan, layers) => {
+    const command = layers[3]?.commands.find(candidate => candidate.entryId === KEEP_OUT_IDS.missionMessagesTicker);
+    if (command !== undefined) command.reason = 'wrong-reason';
+  });
+  const unavailableWrongReasonAttempt = attemptRender(unavailableWrongReason, corpus, makeFactory([]));
+  const unavailableWrongReasonResult = completedResult(unavailableWrongReasonAttempt);
+  familyCheck(
+    'batch-6d-causal',
+    'causal unavailable production keep-out wrong reason refuses before Canvas paint',
+    unavailableWrongReasonAttempt.threw === false
+      && unavailableWrongReasonResult?.status === 'refused'
+      && unavailableWrongReasonResult.receipt.refusal.code === 'invalid-keepout'
+      && refusalBoundaryIsComplete(unavailableWrongReasonResult),
+    {
+      fixtureReady: paint.plan.keepOuts.some(command => command.entryId === KEEP_OUT_IDS.missionMessagesTicker && command.status === 'unavailable'),
+      seamReached: true,
+      threw: unavailableWrongReasonAttempt.threw,
+      expected: { status: 'refused', code: 'invalid-keepout', reason: 'unavailable commands require exact reference-unmeasured' },
+      observed: unavailableWrongReasonResult?.status === 'refused'
+        ? { status: unavailableWrongReasonResult.status, refusal: unavailableWrongReasonResult.receipt.refusal }
+        : { status: unavailableWrongReasonResult?.status },
     },
   );
   const regularStagedRgba: Uint8ClampedArray[] = [];
@@ -1687,10 +2749,32 @@ async function main(): Promise<void> {
     traceEntry('composite', 'stroke'),
   ];
   check('wheel and video keep-out guides preserve exact normalized projections', paint.plan.keepOuts.some(command => command.geometry?.kind === 'horizontal-guide' && command.geometry.y === 80 * 0.788) && paint.plan.keepOuts.some(command => command.geometry?.kind === 'vertical-guide' && command.geometry.x === 100 * 0.664) && traceContainsSequence(firstCompositeTrace, horizontalGuideTrace) && traceContainsSequence(firstCompositeTrace, verticalGuideTrace), { keepOuts: paint.plan.keepOuts, horizontalGuideTrace, verticalGuideTrace });
-  const polygonPlan = forgedResult(paint, (_plan, layers) => {
-    const polygon = layers[3]?.commands.find(command => command.entryId === KEEP_OUT_IDS.conversationOptionStackStart);
-    if (polygon !== undefined) polygon.geometry = { kind: 'polygon', points: [{ x: 10, y: 10 }, { x: 20, y: 10 }, { x: 15, y: 20 }] };
+  const polygonCalibration = calibrateKeepOutPolygon({
+    stableId: 'canvas-manual-golden-polygon',
+    context: 'canvas-manual-golden-context',
+    sourceNote: 'Canvas renderer exact manual polygon golden selftest.',
+    screenshotHash: `sha256:${'e'.repeat(64)}`,
+    profile: 'canvas-manual-golden-profile',
+    drawableBounds: { left: 0, top: 0, width: 1000, height: 800 },
+    points: [{ x: 100, y: 100 }, { x: 200, y: 100 }, { x: 150, y: 200 }],
   });
+  const polygonEntry = polygonCalibration.status === 'success' ? polygonCalibration.entry : undefined;
+  const polygonProjection = polygonEntry === undefined ? undefined : projectKeepOut(polygonEntry, viewport);
+  const polygonPaintResult = polygonEntry === undefined || polygonProjection === undefined || fixture.preview.scene === undefined
+    ? undefined
+    : projectX4UiPaintPlan({
+      scene: fixture.preview.scene,
+      corpus,
+      previewAuthority: fixture.preview,
+      keepOuts: [
+        { context: KEEP_OUT_PRESET_IDS.cockpitConversation, entry: getBuiltInKeepOut(KEEP_OUT_IDS.conversationBackRow)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.conversationBackRow, viewport) },
+        { context: polygonEntry.context, entry: polygonEntry, projection: polygonProjection },
+        { context: KEEP_OUT_PRESET_IDS.mapOpen, entry: getBuiltInKeepOut(KEEP_OUT_IDS.informationPanelLeftEdge)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.informationPanelLeftEdge, viewport) },
+        { context: KEEP_OUT_PRESET_IDS.fullscreenMenu, entry: getBuiltInKeepOut(KEEP_OUT_IDS.missionMessagesTicker)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.missionMessagesTicker, viewport) },
+        { context: KEEP_OUT_PRESET_IDS.firstPerson, entry: getBuiltInKeepOut(KEEP_OUT_IDS.topHudStrip)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.topHudStrip, viewport) },
+      ],
+    });
+  const polygonPlan = polygonPaintResult !== undefined && polygonPaintResult.status !== 'refused' ? polygonPaintResult : paint;
   const polygonTrace: TraceEntry[] = [];
   const polygonResult = renderX4UiPaintPlanToCanvas(polygonPlan, corpus, { surfaceFactory: makeFactory(polygonTrace) });
   const polygonCompositeTrace = polygonTrace.filter(entry => entry.role === 'composite');
@@ -1705,7 +2789,7 @@ async function main(): Promise<void> {
     traceEntry('composite', 'stroke'),
   ];
   const unavailableTrace = [traceEntry('composite', 'setStrokeStyle', X4_UI_CANVAS_DIAGNOSTIC_PALETTE.unavailableKeepOut)];
-  check('polygon and unavailable keep-out overlays are retained', polygonResult.status === 'rendered' && polygonPlan.plan.keepOuts.some(command => command.geometry?.kind === 'polygon') && polygonPlan.plan.keepOuts.some(command => command.status === 'unavailable' && command.geometry === null) && traceEquals(polygonCompositeTrace, expectedPolygonTrace) && traceContainsSequence(polygonCompositeTrace, exactPolygonPath) && traceContainsSequence(polygonCompositeTrace, unavailableTrace), { keepOuts: polygonPlan.plan.keepOuts, exactPolygonPath, unavailableTrace, firstTraceDifference: firstTraceDifference(expectedPolygonTrace, polygonCompositeTrace) });
+  check('polygon and unavailable keep-out overlays are retained from real manual calibration', polygonCalibration.status === 'success' && polygonEntry !== undefined && polygonProjection?.status === 'projected' && polygonPaintResult?.status !== 'refused' && polygonPaintResult !== undefined && polygonResult.status === 'rendered' && polygonPlan.plan.keepOuts.some(command => command.entryId === polygonEntry.id && command.geometry?.kind === 'polygon') && polygonPlan.plan.keepOuts.some(command => command.status === 'unavailable' && command.geometry === null) && traceEquals(polygonCompositeTrace, expectedPolygonTrace) && traceContainsSequence(polygonCompositeTrace, exactPolygonPath) && traceContainsSequence(polygonCompositeTrace, unavailableTrace), { calibration: polygonCalibration.status, projection: polygonProjection?.status, paint: polygonPaintResult?.status, keepOuts: polygonPlan.plan.keepOuts, exactPolygonPath, unavailableTrace, firstTraceDifference: firstTraceDifference(expectedPolygonTrace, polygonCompositeTrace) });
   familyCheck(
     'emitted-trace',
     'composite trace exactly follows fixed layers and every command terminal operation',
@@ -2334,7 +3418,7 @@ async function main(): Promise<void> {
 
   const failed = checks.filter(item => !item.pass);
   const passed = checks.length - failed.length;
-  const familyCounts = (['prior-44', 'callback-isolation', 'pre-allocation', 'emitted-trace', 'freeze-truth', 'oracle-sensitivity', 'batch-6d-causal'] as const).map(family => {
+  const familyCounts = (['prior-44', 'callback-isolation', 'pre-allocation', 'emitted-trace', 'freeze-truth', 'oracle-sensitivity', 'batch-6d-causal', 'stage-b-causal'] as const).map(family => {
     const familyChecks = checks.filter(item => item.family === family);
     return { family, passed: familyChecks.filter(item => item.pass).length, total: familyChecks.length };
   });

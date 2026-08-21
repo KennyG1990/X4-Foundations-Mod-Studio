@@ -27,16 +27,23 @@ import type {
   X4UiLayoutScalarType,
 } from './x4UiLayoutProgram';
 import {
+  isX4UiCorpusCanonicalColorSuccess,
   isX4UiCorpusCanonicalSuccess,
+  type X4UiCorpusCanonicalColorSuccess,
   type X4UiCorpusCanonicalSuccess,
 } from './x4UiCorpusAssets';
 import {
   BUILT_IN_KEEP_OUTS,
   KEEP_OUT_PRESETS,
+  calibrateKeepOutPolygon,
   getKeepOutPreset,
   projectBuiltInKeepOut,
+  projectKeepOut,
   type KeepOutContextPresetId,
+  type KeepOutCalibrationInput,
+  type KeepOutCalibrationResult,
   type KeepOutPresetMember,
+  type KeepOutProvenance,
   type KeepOutProjectionResult,
   type X4UiKeepOutEntry,
 } from './x4UiKeepOuts';
@@ -180,6 +187,7 @@ export type X4UiEditorProfileControls = {
 export interface X4UiEditorSessionInput {
   readonly workspace: EditorWorkspace;
   readonly corpus: unknown;
+  readonly colorEvidence?: X4UiCorpusCanonicalColorSuccess;
   readonly profile?: X4UiEditorProfileInput;
   readonly selection?: X4UiPreviewSelection;
   readonly samples?: X4UiLayoutPreviewSampleInput;
@@ -189,6 +197,10 @@ export interface X4UiEditorSessionInput {
   readonly sampleCatalogAuthority?: X4UiEditorSampleCatalogAuthority;
   readonly activePresetId?: KeepOutContextPresetId | string;
   readonly enabledEntryIds?: readonly string[];
+  /** Session-local screenshot evidence; never persisted or forwarded as an entry. */
+  readonly manualCalibrations?: readonly KeepOutCalibrationInput[];
+  /** Manual calibration IDs must be explicitly enabled before reaching Paint. */
+  readonly enabledManualEntryIds?: readonly string[];
   readonly [key: string]: unknown;
 }
 
@@ -198,6 +210,20 @@ export interface X4UiEditorKeepOutMemberProjection extends KeepOutPresetMember {
   readonly entry: X4UiKeepOutEntry | null;
   readonly projection: KeepOutProjectionResult;
   readonly enabled: boolean;
+}
+
+export interface X4UiEditorManualCalibrationProjection {
+  readonly stableId: string | null;
+  readonly context: string | null;
+  readonly enabled: boolean;
+  readonly status: KeepOutCalibrationResult['status'];
+  readonly reason?: string;
+  readonly message?: string;
+  readonly calibration: KeepOutCalibrationResult;
+  readonly result: KeepOutCalibrationResult;
+  readonly entry: X4UiKeepOutEntry | null;
+  readonly projection: KeepOutProjectionResult | null;
+  readonly evidence: KeepOutProvenance | null;
 }
 
 export interface X4UiEditorKeepOutPresetProjection {
@@ -228,14 +254,17 @@ export interface X4UiEditorSessionProjection {
   readonly activePresetId: KeepOutContextPresetId | null;
   readonly activePreset: X4UiEditorKeepOutPresetProjection | null;
   readonly activeKeepOuts: readonly {
-    readonly context: KeepOutContextPresetId;
+    readonly context: string;
+    readonly entry: X4UiKeepOutEntry;
     readonly projection: KeepOutProjectionResult;
   }[];
   /** Exact input shape accepted by the paint-plan owner. */
   readonly keepOuts: readonly {
-    readonly context: KeepOutContextPresetId;
+    readonly context: string;
+    readonly entry: X4UiKeepOutEntry;
     readonly projection: KeepOutProjectionResult;
   }[];
+  readonly manualCalibrations: readonly X4UiEditorManualCalibrationProjection[];
   readonly paint: X4UiPaintPlanResult | null;
   readonly canRender: boolean;
   readonly reason: string;
@@ -258,9 +287,13 @@ export interface X4UiEditorCanvasState {
 
 type NormalizedInput = {
   readonly raw: JsonRecord;
+  readonly colorEvidence?: X4UiCorpusCanonicalColorSuccess;
   readonly selection?: X4UiPreviewSelection;
   readonly profile: X4UiEditorNormalizedProfile;
   readonly issues: readonly string[];
+  readonly manualCalibrations: readonly unknown[] | undefined;
+  readonly manualCalibrationsMalformed: boolean;
+  readonly enabledManualEntryIds: readonly string[];
 };
 
 const EMPTY_WORKSPACE = Object.freeze({ passthroughFiles: [] }) as unknown as EditorWorkspace;
@@ -270,7 +303,25 @@ function isRecord(value: unknown): value is JsonRecord {
 }
 
 function hasOwn(value: object, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(value, key);
+  try {
+    return Object.getOwnPropertyDescriptor(value, key) !== undefined;
+  } catch {
+    return false;
+  }
+}
+
+function ownInputField(
+  value: object,
+  key: string,
+): { readonly present: boolean; readonly valid: boolean; readonly value?: unknown } {
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined) return { present: false, valid: true };
+    if (!descriptor.enumerable || !('value' in descriptor)) return { present: true, valid: false };
+    return { present: true, valid: true, value: descriptor.value };
+  } catch {
+    return { present: true, valid: false };
+  }
 }
 
 function isFinitePositive(value: unknown): value is number {
@@ -499,7 +550,7 @@ function sampleBindingFor(
   const target = isRecord(dataField(program, 'target')) ? dataField(program, 'target') : undefined;
   return freezeDeep({
     catalogId: catalog.id,
-    programKey: stableDataKey(program),
+    programKey: stableDataKey({ target, sampleCatalog: catalog }),
     profileKey: stableDataKey(profile),
     selectionKey: stableDataKey({
       sourceIndex: selection?.sourceIndex,
@@ -941,6 +992,38 @@ function normalizeInput(input: unknown): NormalizedInput {
   const raw = isRecord(input) ? input : {};
   if (!isRecord(input)) issues.push('session input is malformed');
 
+  const colorField = ownInputField(raw, 'colorEvidence');
+  const colorCandidate = colorField.present && colorField.valid ? colorField.value : undefined;
+  const colorEvidence = isX4UiCorpusCanonicalColorSuccess(colorCandidate) ? colorCandidate : undefined;
+
+  const manualField = ownInputField(raw, 'manualCalibrations');
+  let manualCalibrations: readonly unknown[] | undefined;
+  let manualCalibrationsMalformed = false;
+  if (manualField.present) {
+    if (!manualField.valid) {
+      manualCalibrationsMalformed = true;
+    } else {
+      try {
+        const values = detachedManualCalibrationCandidates(manualField.value);
+        if (values === null) manualCalibrationsMalformed = true;
+        else manualCalibrations = values;
+      } catch {
+        manualCalibrationsMalformed = true;
+      }
+    }
+  }
+
+  const enabledManualField = ownInputField(raw, 'enabledManualEntryIds');
+  let enabledManualEntryIds: readonly string[] = [];
+  if (enabledManualField.present && enabledManualField.valid) {
+    try {
+      const values = denseStringArray(enabledManualField.value, true);
+      if (values !== null) enabledManualEntryIds = values;
+    } catch {
+      enabledManualEntryIds = [];
+    }
+  }
+
   const rawSelection = hasOwn(raw, 'selection') ? raw.selection : undefined;
   const usableSelection = rawSelection === undefined ? undefined : selectionIsUsable(rawSelection) ? rawSelection : undefined;
   if (rawSelection !== undefined && usableSelection === undefined) issues.push('selection is malformed');
@@ -1000,9 +1083,13 @@ function normalizeInput(input: unknown): NormalizedInput {
 
   return {
     raw,
+    ...(colorEvidence === undefined ? {} : { colorEvidence }),
     ...(usableSelection === undefined ? {} : { selection: usableSelection }),
     profile,
     issues,
+    manualCalibrations,
+    manualCalibrationsMalformed,
+    enabledManualEntryIds,
   };
 }
 
@@ -1021,6 +1108,7 @@ function previewFor(
   profile: X4UiEditorNormalizedProfile,
   selection: X4UiPreviewSelection | undefined,
   samples: X4UiLayoutPreviewSampleInput | undefined,
+  colorEvidence: X4UiCorpusCanonicalColorSuccess | undefined,
 ): X4UiPreviewPipelineResult {
   const previewInput: X4UiPreviewPipelineInput = {
     source,
@@ -1034,6 +1122,7 @@ function previewFor(
       uiScale: profile.uiScale,
       ...(profile.minTextHeight === undefined ? {} : { minTextHeight: profile.minTextHeight }),
     },
+    ...(colorEvidence === undefined ? {} : { colorEvidence }),
     ...(selection === undefined ? {} : { selection }),
     ...(samples === undefined ? {} : { samples }),
   };
@@ -1099,6 +1188,86 @@ function keepOutPresetsFor(
   })));
 }
 
+function manualCalibrationMetadata(
+  value: unknown,
+): { readonly stableId: string | null; readonly context: string | null } {
+  if (!isRecord(value)) return { stableId: null, context: null };
+  const stableIdField = ownInputField(value, 'stableId');
+  const contextField = ownInputField(value, 'context');
+  return {
+    stableId: stableIdField.valid && typeof stableIdField.value === 'string' ? stableIdField.value : null,
+    context: contextField.valid && typeof contextField.value === 'string' ? contextField.value : null,
+  };
+}
+
+function malformedManualCalibration(): KeepOutCalibrationResult {
+  return calibrateKeepOutPolygon(undefined as unknown as KeepOutCalibrationInput);
+}
+
+function manualCalibrationProjections(
+  inputs: readonly unknown[] | undefined,
+  malformed: boolean,
+  viewport: { readonly width: number; readonly height: number },
+  enabledIds: readonly string[],
+): readonly X4UiEditorManualCalibrationProjection[] {
+  const candidates = malformed ? [undefined] : inputs ?? [];
+  const enabled = new Set(enabledIds);
+  const stableIdCounts = new Map<string, number>();
+  for (const candidate of candidates) {
+    const metadata = manualCalibrationMetadata(candidate);
+    if (metadata.stableId !== null && metadata.stableId.trim().length > 0) {
+      stableIdCounts.set(metadata.stableId, (stableIdCounts.get(metadata.stableId) ?? 0) + 1);
+    }
+  }
+  return freezeDeep(candidates.map(candidate => {
+    const metadata = manualCalibrationMetadata(candidate);
+    const duplicateStableId = metadata.stableId !== null
+      && metadata.stableId.trim().length > 0
+      && (stableIdCounts.get(metadata.stableId) ?? 0) > 1;
+    let calibration: KeepOutCalibrationResult;
+    try {
+      calibration = malformedManualCalibration();
+      if (!malformed) calibration = calibrateKeepOutPolygon(candidate as KeepOutCalibrationInput);
+    } catch {
+      calibration = malformedManualCalibration();
+    }
+    if (duplicateStableId) {
+      const duplicateId = metadata.stableId as string;
+      calibration = freezeDeep({
+        status: 'refused' as const,
+        reason: 'duplicate-stable-id' as const,
+        message: `Manual calibration stable id is duplicated: ${duplicateId}`,
+      });
+    }
+    const entry = calibration.status === 'success' ? calibration.entry : null;
+    let projection: KeepOutProjectionResult | null = null;
+    if (entry !== null) {
+      try {
+        projection = projectKeepOut(entry, viewport);
+      } catch {
+        projection = null;
+      }
+    }
+    const stableId = entry?.id ?? metadata.stableId;
+    const context = entry?.context ?? metadata.context;
+    const enabledForPaint = entry !== null
+      && enabled.has(entry.id)
+      && projection?.status === 'projected';
+    return {
+      stableId,
+      context,
+      enabled: enabledForPaint,
+      status: calibration.status,
+      ...(calibration.status === 'refused' ? { reason: calibration.reason, message: calibration.message } : {}),
+      calibration,
+      result: calibration,
+      entry,
+      projection,
+      evidence: entry?.provenance ?? null,
+    };
+  }));
+}
+
 function safeCanonical(value: unknown): value is X4UiCorpusCanonicalSuccess {
   try {
     return isX4UiCorpusCanonicalSuccess(value);
@@ -1115,14 +1284,25 @@ function sceneIssued(preview: X4UiPreviewPipelineResult): boolean {
 function activePaintKeepOuts(
   presets: readonly X4UiEditorKeepOutPresetProjection[],
   activePresetId: KeepOutContextPresetId | null,
-): readonly { readonly context: KeepOutContextPresetId; readonly projection: KeepOutProjectionResult }[] {
-  if (activePresetId === null) return [];
-  const preset = presets.find(candidate => candidate.id === activePresetId);
-  if (!preset) return [];
-  return preset.members.filter(member => member.enabled).map(member => ({
-    context: activePresetId,
-    projection: member.projection,
-  }));
+  manualCalibrations: readonly X4UiEditorManualCalibrationProjection[],
+): readonly { readonly context: string; readonly entry: X4UiKeepOutEntry; readonly projection: KeepOutProjectionResult }[] {
+  const builtIns: readonly { readonly context: string; readonly entry: X4UiKeepOutEntry; readonly projection: KeepOutProjectionResult }[] = activePresetId === null
+    ? []
+    : (presets.find(candidate => candidate.id === activePresetId)?.members ?? [])
+      .filter((member): member is X4UiEditorKeepOutMemberProjection & { readonly entry: X4UiKeepOutEntry } => member.enabled && member.entry !== null)
+      .map(member => ({
+        context: activePresetId,
+        entry: member.entry,
+        projection: member.projection,
+      }));
+  const manual = manualCalibrations
+    .filter((calibration): calibration is X4UiEditorManualCalibrationProjection & { readonly entry: X4UiKeepOutEntry; readonly projection: KeepOutProjectionResult } => calibration.enabled && calibration.entry !== null && calibration.projection !== null)
+    .map(calibration => ({
+      context: calibration.entry.context,
+      entry: calibration.entry,
+      projection: calibration.projection,
+    }));
+  return [...builtIns, ...manual];
 }
 
 function makeSessionReason(
@@ -1152,7 +1332,7 @@ export function projectX4UiEditorSession(input: X4UiEditorSessionInput): X4UiEdi
       && normalized.raw.enabledEntryIds.every(value => typeof value === 'string')
       ? Array.from(new Set(normalized.raw.enabledEntryIds))
       : undefined;
-    const catalogPreview = previewFor(source, corpus, normalized.profile, normalized.selection, undefined);
+    const catalogPreview = previewFor(source, corpus, normalized.profile, normalized.selection, undefined, normalized.colorEvidence);
     const sampleCatalog = sampleCatalogFor(catalogPreview);
     const sampleBinding = sampleBindingFor(catalogPreview, normalized.profile, normalized.selection, sampleCatalog);
     const issuedSampleCatalogAuthority = sampleCatalog !== null && sampleBinding !== undefined
@@ -1194,12 +1374,18 @@ export function projectX4UiEditorSession(input: X4UiEditorSessionInput): X4UiEdi
     const samples = sampleReconciliation.status === 'accepted'
       ? sampleReconciliation.samples
       : undefined;
-    const preview = previewFor(source, corpus, normalized.profile, normalized.selection, samples);
+    const preview = previewFor(source, corpus, normalized.profile, normalized.selection, samples, normalized.colorEvidence);
     const sessionIssues = sampleReconciliation.status === 'refused'
       ? [...normalized.issues, sampleReconciliation.message]
       : normalized.issues;
     const keepOutPresets = keepOutPresetsFor(normalized.profile.drawable, activePresetId, enabledEntryIds);
-    const activeKeepOuts = activePaintKeepOuts(keepOutPresets, activePresetId);
+    const manualCalibrations = manualCalibrationProjections(
+      normalized.manualCalibrations,
+      normalized.manualCalibrationsMalformed,
+      normalized.profile.drawable,
+      normalized.enabledManualEntryIds,
+    );
+    const activeKeepOuts = activePaintKeepOuts(keepOutPresets, activePresetId, manualCalibrations);
     let paint: X4UiPaintPlanResult | null = null;
     if (sessionIssues.length === 0 && safeCanonical(corpus) && sceneIssued(preview)) {
       try {
@@ -1241,6 +1427,7 @@ export function projectX4UiEditorSession(input: X4UiEditorSessionInput): X4UiEdi
       activePreset,
       activeKeepOuts,
       keepOuts: activeKeepOuts,
+      manualCalibrations,
       paint,
       canRender,
       reason: makeSessionReason(sessionIssues, preview, paint, canRender),
@@ -1248,8 +1435,9 @@ export function projectX4UiEditorSession(input: X4UiEditorSessionInput): X4UiEdi
   } catch (error) {
     const fallback = normalizeInput(undefined);
     const source = buildSource(fallback);
-    const preview = previewFor(source, undefined, fallback.profile, undefined, undefined);
+    const preview = previewFor(source, undefined, fallback.profile, undefined, undefined, undefined);
     const keepOutPresets = keepOutPresetsFor(fallback.profile.drawable, null, undefined);
+    const manualCalibrations: readonly X4UiEditorManualCalibrationProjection[] = [];
     return freezeDeep({
       status: 'refused' as const,
       gameTruth: X4_UI_EDITOR_SESSION_GAME_TRUTH,
@@ -1269,6 +1457,7 @@ export function projectX4UiEditorSession(input: X4UiEditorSessionInput): X4UiEdi
       activePreset: null,
       activeKeepOuts: [],
       keepOuts: [],
+      manualCalibrations,
       paint: null,
       canRender: false,
       reason: error instanceof Error ? error.message : 'editor session refused malformed input',
@@ -1373,6 +1562,88 @@ function denseArrayValues(value: unknown): readonly unknown[] | null {
     values.push(descriptor.value);
   }
   return values;
+}
+
+type DetachedSnapshot =
+  | { readonly ok: true; readonly value: unknown }
+  | { readonly ok: false };
+
+function detachedCalibrationValue(value: unknown, active = new WeakSet<object>()): DetachedSnapshot {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return { ok: true, value };
+  if (typeof value === 'number') return Number.isFinite(value) ? { ok: true, value } : { ok: false };
+  if (value === undefined || typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint') return { ok: false };
+  if (typeof value !== 'object') return { ok: false };
+  const objectValue = value as object;
+  if (active.has(objectValue)) return { ok: false };
+  active.add(objectValue);
+  try {
+    const array = Array.isArray(value);
+    const prototype = Object.getPrototypeOf(objectValue);
+    const keys = Reflect.ownKeys(objectValue);
+    const stringKeys = keys.filter((key): key is string => typeof key === 'string');
+    if (array) {
+      if (prototype !== Array.prototype || stringKeys.length !== keys.length) return { ok: false };
+      const lengthDescriptor = Object.getOwnPropertyDescriptor(objectValue, 'length');
+      if (lengthDescriptor === undefined || !('value' in lengthDescriptor) || lengthDescriptor.enumerable
+        || !Number.isSafeInteger(lengthDescriptor.value) || lengthDescriptor.value < 0) return { ok: false };
+      const length = lengthDescriptor.value;
+      if (stringKeys.length !== length + 1 || stringKeys.some(key => key !== 'length'
+        && (!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= length))) return { ok: false };
+      const result: unknown[] = [];
+      for (let index = 0; index < length; index += 1) {
+        const descriptor = Object.getOwnPropertyDescriptor(objectValue, String(index));
+        if (descriptor === undefined || descriptor.enumerable !== true || !('value' in descriptor)) return { ok: false };
+        const child = detachedCalibrationValue(descriptor.value, active);
+        if (!child.ok) return { ok: false };
+        result.push(child.value);
+      }
+      return { ok: true, value: result };
+    }
+    if (prototype !== Object.prototype && prototype !== null || stringKeys.length !== keys.length) return { ok: false };
+    const result = prototype === null ? Object.create(null) as JsonRecord : {} as JsonRecord;
+    for (const key of stringKeys) {
+      const descriptor = Object.getOwnPropertyDescriptor(objectValue, key);
+      if (descriptor === undefined || descriptor.enumerable !== true || !('value' in descriptor)) return { ok: false };
+      const child = detachedCalibrationValue(descriptor.value, active);
+      if (!child.ok) return { ok: false };
+      Object.defineProperty(result, key, {
+        configurable: true,
+        enumerable: true,
+        value: child.value,
+        writable: true,
+      });
+    }
+    return { ok: true, value: result };
+  } catch {
+    return { ok: false };
+  } finally {
+    active.delete(objectValue);
+  }
+}
+
+function detachedManualCalibrationCandidates(value: unknown): readonly unknown[] | null {
+  try {
+    if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) return null;
+    const keys = Reflect.ownKeys(value);
+    const stringKeys = keys.filter((key): key is string => typeof key === 'string');
+    if (stringKeys.length !== keys.length) return null;
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
+    if (lengthDescriptor === undefined || !('value' in lengthDescriptor) || lengthDescriptor.enumerable
+      || !Number.isSafeInteger(lengthDescriptor.value) || lengthDescriptor.value < 0) return null;
+    const length = lengthDescriptor.value;
+    if (stringKeys.length !== length + 1 || stringKeys.some(key => key !== 'length'
+      && (!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= length))) return null;
+    const candidates: unknown[] = [];
+    for (let index = 0; index < length; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (descriptor === undefined || descriptor.enumerable !== true || !('value' in descriptor)) return null;
+      const snapshot = detachedCalibrationValue(descriptor.value);
+      candidates.push(snapshot.ok ? snapshot.value : undefined);
+    }
+    return candidates;
+  } catch {
+    return null;
+  }
 }
 
 function denseStringArray(value: unknown, unique: boolean): readonly string[] | null {

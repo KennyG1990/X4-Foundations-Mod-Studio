@@ -9,6 +9,7 @@
 
 import type {
   X4UiCallModel,
+  X4UiCallColorExpression,
   X4UiCallPropertyProjection,
   X4UiCallRecord,
   X4UiBranchPathSegment,
@@ -22,7 +23,18 @@ import type {
   X4UiValue,
   X4UiValueReference,
   X4UiVerificationGap,
+  X4UiColorExpression,
 } from './x4UiCallModel';
+import {
+  X4_UI_CORPUS_COLORS_XML_PATH,
+  X4_UI_CORPUS_COLORS_XML_SHA256,
+  X4_UI_CORPUS_COLORS_XML_SIZE,
+  X4_UI_CORPUS_COLORS_XSD_PATH,
+  X4_UI_CORPUS_COLORS_XSD_SHA256,
+  X4_UI_CORPUS_COLORS_XSD_SIZE,
+  isX4UiCorpusCanonicalColorSuccess,
+  type X4UiCorpusCanonicalColorSuccess,
+} from './x4UiCorpusAssets';
 import {
   addRow,
   createHelperTable,
@@ -85,12 +97,90 @@ export type X4UiLayoutFactProvenance =
   | 'direct-helper-scale'
   | 'preview-sample';
 
+export type X4UiLayoutColorDomain =
+  | 'source-literal-percent-alpha'
+  | 'canonical-xml-byte-alpha';
+
+export type X4UiLayoutColorFactProvenance = 'source-literal' | 'canonical-default-only';
+
+export interface X4UiLayoutColorSourceIdentity {
+  readonly path: string;
+  readonly relativePath: string;
+  readonly sha256: string;
+  readonly size: number;
+}
+
+export interface X4UiLayoutColorDocumentSource {
+  readonly path: string;
+  readonly index: number;
+  readonly id: string;
+}
+
+export interface X4UiLayoutColorLiteralField {
+  readonly value: number;
+  readonly expression: string;
+  readonly source: X4UiSourceLocation;
+  readonly keySource: X4UiSourceLocation;
+}
+
+export interface X4UiLayoutSourceLiteralColorValue {
+  readonly kind: 'color';
+  readonly domain: 'source-literal-percent-alpha';
+  readonly r: number;
+  readonly g: number;
+  readonly b: number;
+  readonly a: number;
+  readonly glow?: number;
+  readonly declarationExpression: string;
+  readonly declarationSource: X4UiSourceLocation;
+  readonly channels: {
+    readonly r: X4UiLayoutColorLiteralField;
+    readonly g: X4UiLayoutColorLiteralField;
+    readonly b: X4UiLayoutColorLiteralField;
+    readonly a: X4UiLayoutColorLiteralField;
+    readonly glow?: X4UiLayoutColorLiteralField;
+  };
+  readonly gameVerification: typeof X4_UI_LAYOUT_GAME_TRUTH;
+}
+
+export interface X4UiLayoutCanonicalColorValue {
+  readonly kind: 'color';
+  readonly domain: 'canonical-xml-byte-alpha';
+  readonly canonicalIdentity: 'x4-9.00';
+  readonly requestedId: string;
+  readonly resolvedBaseId: string;
+  readonly r: number;
+  readonly g: number;
+  readonly b: number;
+  readonly a: number;
+  readonly glow: number;
+  readonly baseSource: X4UiLayoutColorDocumentSource;
+  readonly mappingSource?: X4UiLayoutColorDocumentSource;
+  readonly sourceIdentities: {
+    readonly xml: X4UiLayoutColorSourceIdentity;
+    readonly xsd: X4UiLayoutColorSourceIdentity;
+  };
+  readonly gameVerification: typeof X4_UI_LAYOUT_GAME_TRUTH;
+}
+
+export type X4UiLayoutColorValue = X4UiLayoutSourceLiteralColorValue | X4UiLayoutCanonicalColorValue;
+
 export type X4UiLayoutDescriptorFact =
   | {
     readonly status: 'known';
     readonly expectedType: X4UiLayoutScalarType;
     readonly value: X4UiLayoutScalar;
     readonly provenance: X4UiLayoutFactProvenance;
+    readonly expression: string;
+    readonly source: X4UiSourceLocation;
+    readonly sourcePin?: X4UiLayoutSourcePin;
+    readonly sampleId?: string;
+  }
+  | {
+    readonly status: 'known';
+    readonly expectedType: 'color-object';
+    readonly value: X4UiLayoutColorValue;
+    readonly provenance: X4UiLayoutColorFactProvenance;
     readonly expression: string;
     readonly source: X4UiSourceLocation;
     readonly sourcePin?: X4UiLayoutSourcePin;
@@ -668,7 +758,8 @@ export type X4UiLayoutProgramResult =
         | 'invalid-samples'
         | 'malformed-preview-path'
         | 'preview-path-source-mismatch'
-        | 'invalid-preview-path';
+        | 'invalid-preview-path'
+        | 'malformed-color-evidence';
       readonly message: string;
       readonly source?: X4UiSourceLocation;
     };
@@ -738,6 +829,7 @@ const HELPER_DEFAULT_PINS = Object.freeze({
   textContent: helperPin(3205),
   textHalign: helperPin(3206),
   textColor: helperPin(3207),
+  textPropertyColor: helperPin(3422),
   textFont: helperPin(3210),
   textFontSize: helperPin(3211),
   textWordwrap: helperPin(3212),
@@ -1162,7 +1254,8 @@ const refusalResult = (
     | 'invalid-samples'
     | 'malformed-preview-path'
     | 'preview-path-source-mismatch'
-    | 'invalid-preview-path',
+    | 'invalid-preview-path'
+    | 'malformed-color-evidence',
   message: string,
   model?: X4UiCallModel,
   source?: X4UiSourceLocation,
@@ -1675,10 +1768,412 @@ const unavailableFact = (
   ...(sourcePin ? { sourcePin: cloneDeep(sourcePin) as X4UiLayoutSourcePin } : {}),
 });
 
+interface ColorFactResolution {
+  readonly fact: X4UiLayoutDescriptorFact;
+  readonly gap?: {
+    readonly category: X4UiLayoutGapCategory;
+    readonly status: X4UiLayoutGapStatus;
+    readonly reason: string;
+    readonly expression?: string;
+    readonly source: X4UiSourceLocation;
+  };
+}
+
+const normalizeColorPropertyName = (name: string): string => name.replace(/[-_\s]/g, '').toLowerCase();
+
+const knownColorFact = (
+  value: X4UiLayoutColorValue,
+  provenance: X4UiLayoutColorFactProvenance,
+  expression: string,
+  source: X4UiSourceLocation,
+  sourcePin?: X4UiLayoutSourcePin,
+): X4UiLayoutDescriptorFact => ({
+  status: 'known',
+  expectedType: 'color-object',
+  value: cloneDeep(value) as X4UiLayoutColorValue,
+  provenance,
+  expression,
+  source: cloneLocation(source),
+  ...(sourcePin ? { sourcePin: cloneDeep(sourcePin) as X4UiLayoutSourcePin } : {}),
+});
+
+const colorFactGap = (
+  fact: X4UiLayoutDescriptorFact,
+  reason: string,
+  source: X4UiSourceLocation,
+  expression: string | undefined,
+  category: X4UiLayoutGapCategory,
+  status: X4UiLayoutGapStatus = 'unsupported',
+): ColorFactResolution => ({
+  fact,
+  gap: {
+    category,
+    status,
+    reason,
+    ...(expression ? { expression } : {}),
+    source: cloneLocation(source),
+  },
+});
+
+const unavailableColorFact = (
+  reason: string,
+  source: X4UiSourceLocation,
+  expression: string | undefined,
+  category: X4UiLayoutGapCategory,
+  sourcePin?: X4UiLayoutSourcePin,
+): ColorFactResolution => colorFactGap(
+  unavailableFact('color-object', reason, source, expression, sourcePin),
+  reason,
+  source,
+  expression,
+  category,
+);
+
+const colorFieldValueIsValid = (
+  field: { readonly value: number },
+  minimum: number,
+  maximum: number,
+): boolean => isFiniteNumber(field.value) && field.value >= minimum && field.value <= maximum;
+
+const colorSourceField = (field: {
+  readonly value: number;
+  readonly expression: string;
+  readonly source: X4UiSourceLocation;
+  readonly keySource: X4UiSourceLocation;
+}): X4UiLayoutColorLiteralField => ({
+  value: field.value,
+  expression: field.expression,
+  source: cloneLocation(field.source),
+  keySource: cloneLocation(field.keySource),
+});
+
+const sourceLiteralColorValueSemanticError = (
+  value: X4UiLayoutSourceLiteralColorValue,
+): string | undefined => {
+  if (value.kind !== 'color' || value.domain !== 'source-literal-percent-alpha'
+    || value.gameVerification !== X4_UI_LAYOUT_GAME_TRUTH
+    || typeof value.declarationExpression !== 'string' || value.declarationExpression.length === 0
+    || !isSourceLocationShape(value.declarationSource)) {
+    return 'source literal color identity or declaration provenance is malformed';
+  }
+  const fields: ReadonlyArray<readonly [
+    'r' | 'g' | 'b' | 'a' | 'glow',
+    number,
+    number,
+    number | undefined,
+  ]> = [
+    ['r', value.r, 0, 255],
+    ['g', value.g, 0, 255],
+    ['b', value.b, 0, 255],
+    ['a', value.a, 0, 100],
+    ['glow', value.glow === undefined ? 0 : value.glow, 0, 1],
+  ];
+  for (const [name, channelValue, minimum, maximum] of fields) {
+    if (name === 'glow' && value.glow === undefined) {
+      if (value.channels.glow !== undefined) return 'source literal glow channel presence is inconsistent';
+      continue;
+    }
+    if (!colorFieldValueIsValid({ value: channelValue }, minimum, maximum)) {
+      return 'source literal ' + name + ' channel is outside its declared domain';
+    }
+    const field = value.channels[name];
+    if (!field
+      || !isSourceLocationShape(field.source)
+      || !isSourceLocationShape(field.keySource)
+      || typeof field.expression !== 'string'
+      || field.expression.length === 0
+      || !Object.is(field.value, channelValue)
+      || !locationContains(value.declarationSource, field.source)
+      || !locationContains(value.declarationSource, field.keySource)) {
+      return 'source literal ' + name + ' channel provenance is inconsistent';
+    }
+  }
+  if (value.glow !== undefined && value.channels.glow === undefined) {
+    return 'source literal glow value is missing its channel provenance';
+  }
+  return undefined;
+};
+
+const canonicalColorValueSemanticError = (
+  value: X4UiLayoutCanonicalColorValue,
+): string | undefined => {
+  if (value.kind !== 'color'
+    || value.domain !== 'canonical-xml-byte-alpha'
+    || value.canonicalIdentity !== 'x4-9.00'
+    || value.gameVerification !== X4_UI_LAYOUT_GAME_TRUTH
+    || typeof value.requestedId !== 'string' || value.requestedId.length === 0
+    || typeof value.resolvedBaseId !== 'string' || value.resolvedBaseId.length === 0
+    || !isFiniteNumber(value.r) || !Number.isInteger(value.r) || value.r < 0 || value.r > 255
+    || !isFiniteNumber(value.g) || !Number.isInteger(value.g) || value.g < 0 || value.g > 255
+    || !isFiniteNumber(value.b) || !Number.isInteger(value.b) || value.b < 0 || value.b > 255
+    || !isFiniteNumber(value.a) || !Number.isInteger(value.a) || value.a < 0 || value.a > 255
+    || !isFiniteNumber(value.glow) || value.glow < 0 || value.glow > 1
+    || !isObject(value.baseSource)
+    || value.baseSource.path !== X4_UI_CORPUS_COLORS_XML_PATH
+    || !Number.isInteger(value.baseSource.index)
+    || value.baseSource.index < 0 || value.baseSource.index >= 224
+    || value.baseSource.id !== value.resolvedBaseId
+    || (value.mappingSource !== undefined
+      && (!isObject(value.mappingSource)
+        || value.mappingSource.path !== X4_UI_CORPUS_COLORS_XML_PATH
+        || !Number.isInteger(value.mappingSource.index)
+        || value.mappingSource.index < 0 || value.mappingSource.index >= 804
+        || value.mappingSource.id !== value.requestedId
+        || value.mappingSource.id === value.resolvedBaseId))
+    || (value.mappingSource === undefined && value.requestedId !== value.resolvedBaseId)
+    || !isObject(value.sourceIdentities)
+    || !isObject(value.sourceIdentities.xml)
+    || !isObject(value.sourceIdentities.xsd)
+    || value.sourceIdentities.xml.path !== X4_UI_CORPUS_COLORS_XML_PATH
+    || value.sourceIdentities.xml.relativePath !== X4_UI_CORPUS_COLORS_XML_PATH
+    || value.sourceIdentities.xml.sha256 !== X4_UI_CORPUS_COLORS_XML_SHA256
+    || value.sourceIdentities.xml.size !== X4_UI_CORPUS_COLORS_XML_SIZE
+    || value.sourceIdentities.xsd.path !== X4_UI_CORPUS_COLORS_XSD_PATH
+    || value.sourceIdentities.xsd.relativePath !== X4_UI_CORPUS_COLORS_XSD_PATH
+    || value.sourceIdentities.xsd.sha256 !== X4_UI_CORPUS_COLORS_XSD_SHA256
+    || value.sourceIdentities.xsd.size !== X4_UI_CORPUS_COLORS_XSD_SIZE) {
+    return 'canonical color identity, domain, document pin, or source identity is inconsistent';
+  }
+  return undefined;
+};
+
+const exactColorExpressionRecord = (
+  colorExpressions: readonly X4UiCallColorExpression[],
+  call: X4UiCallRecord,
+  propertyProjection: X4UiCallPropertyProjection,
+): X4UiCallColorExpression | undefined => {
+  const records = colorExpressions.filter(record => {
+    try {
+      return record.callName === call.name
+        && locationsEqual(record.callSource, call.source)
+        && normalizeColorPropertyName(record.propertyName) === normalizeColorPropertyName(propertyProjection.name);
+    } catch {
+      return false;
+    }
+  });
+  if (records.length !== 1) return undefined;
+  const record = records[0];
+  try {
+    return locationsEqual(record.source, propertyProjection.source)
+      && record.colorExpression.expression === propertyProjection.value.expression
+      && locationsEqual(record.colorExpression.source, propertyProjection.value.location)
+      ? record
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const resolveSourceLiteralColor = (
+  expression: X4UiColorExpression,
+  sourcePin: X4UiLayoutSourcePin | undefined,
+  category: X4UiLayoutGapCategory,
+): ColorFactResolution => {
+  if (expression.kind !== 'literal-table') {
+    const reason = `P1 color expression ${expression.expression} is not a source literal table (${expression.kind})`;
+    return unavailableColorFact(reason, expression.source, expression.expression, category, sourcePin);
+  }
+  const validChannels = colorFieldValueIsValid(expression.r, 0, 255)
+    && colorFieldValueIsValid(expression.g, 0, 255)
+    && colorFieldValueIsValid(expression.b, 0, 255)
+    && colorFieldValueIsValid(expression.a, 0, 100)
+    && (expression.glow === undefined || colorFieldValueIsValid(expression.glow, 0, 1));
+  if (!validChannels) {
+    const reason = `P1 source literal color ${expression.expression} has an out of range or non-finite channel`;
+    return unavailableColorFact(reason, expression.source, expression.expression, category, sourcePin);
+  }
+  const value: X4UiLayoutSourceLiteralColorValue = {
+    kind: 'color',
+    domain: 'source-literal-percent-alpha',
+    r: expression.r.value,
+    g: expression.g.value,
+    b: expression.b.value,
+    a: expression.a.value,
+    ...(expression.glow ? { glow: expression.glow.value } : {}),
+    declarationExpression: expression.declarationExpression,
+    declarationSource: cloneLocation(expression.declarationSource),
+    channels: {
+      r: colorSourceField(expression.r),
+      g: colorSourceField(expression.g),
+      b: colorSourceField(expression.b),
+      a: colorSourceField(expression.a),
+      ...(expression.glow ? { glow: colorSourceField(expression.glow) } : {}),
+    },
+    gameVerification: X4_UI_LAYOUT_GAME_TRUTH,
+  };
+  const semanticError = sourceLiteralColorValueSemanticError(value);
+  if (semanticError) {
+    return unavailableColorFact(semanticError, expression.source, expression.expression, category, sourcePin);
+  }
+  return {
+    fact: knownColorFact(value, 'source-literal', expression.expression, expression.source, sourcePin),
+  };
+};
+
+const colorDocumentSource = (source: { readonly path: string; readonly index: number; readonly id: string }): X4UiLayoutColorDocumentSource => ({
+  path: source.path,
+  index: source.index,
+  id: source.id,
+});
+
+const canonicalColorValueMatchesEvidence = (
+  value: X4UiLayoutCanonicalColorValue,
+  evidence: X4UiCorpusCanonicalColorSuccess,
+): boolean => {
+  if (canonicalColorValueSemanticError(value)) return false;
+  const bases = evidence.graph.baseColors.filter(candidate => candidate.id === value.resolvedBaseId);
+  const mappings = evidence.graph.mappings.filter(candidate => candidate.id === value.requestedId);
+  if (bases.length !== 1 || (value.mappingSource ? mappings.length !== 1 : mappings.length !== 0)) return false;
+  const base = bases[0];
+  if (value.mappingSource) {
+    const mapping = mappings[0];
+    if (mapping.ref !== base.id
+      || value.mappingSource.path !== mapping.source.path
+      || value.mappingSource.index !== mapping.source.index
+      || value.mappingSource.id !== mapping.source.id) return false;
+  } else if (value.requestedId !== base.id) {
+    return false;
+  }
+  return value.baseSource.path === base.source.path
+    && value.baseSource.index === base.source.index
+    && value.baseSource.id === base.source.id
+    && value.r === base.r
+    && value.g === base.g
+    && value.b === base.b
+    && value.a === base.a
+    && value.glow === base.glow
+    && value.sourceIdentities.xml.path === evidence.identities.xml.path
+    && value.sourceIdentities.xml.relativePath === evidence.identities.xml.relativePath
+    && value.sourceIdentities.xml.sha256 === evidence.identities.xml.sha256
+    && value.sourceIdentities.xml.size === evidence.identities.xml.size
+    && value.sourceIdentities.xsd.path === evidence.identities.xsd.path
+    && value.sourceIdentities.xsd.relativePath === evidence.identities.xsd.relativePath
+    && value.sourceIdentities.xsd.sha256 === evidence.identities.xsd.sha256
+    && value.sourceIdentities.xsd.size === evidence.identities.xsd.size;
+};
+
+const resolveCanonicalColorById = (
+  evidence: X4UiCorpusCanonicalColorSuccess,
+  requestedId: string,
+  expression: string,
+  source: X4UiSourceLocation,
+  sourcePin: X4UiLayoutSourcePin | undefined,
+  category: X4UiLayoutGapCategory,
+): ColorFactResolution => {
+  const bases = evidence.graph.baseColors.filter(candidate => candidate.id === requestedId);
+  const mappings = evidence.graph.mappings.filter(candidate => candidate.id === requestedId);
+  if (bases.length + mappings.length !== 1) {
+    const reason = `canonical color ID ${requestedId} is unknown or ambiguous in the accepted P2 graph`;
+    return unavailableColorFact(reason, source, expression, category, sourcePin);
+  }
+  const mapping = mappings[0];
+  const base = mapping
+    ? evidence.graph.baseColors.filter(candidate => candidate.id === mapping.ref)
+    : bases;
+  if (base.length !== 1) {
+    const reason = `canonical color ID ${requestedId} has no unique one-hop base mapping in the accepted P2 graph`;
+    return unavailableColorFact(reason, source, expression, category, sourcePin);
+  }
+  const baseColor = base[0];
+  const validBase = isFiniteNumber(baseColor.r) && baseColor.r >= 0 && baseColor.r <= 255
+    && isFiniteNumber(baseColor.g) && baseColor.g >= 0 && baseColor.g <= 255
+    && isFiniteNumber(baseColor.b) && baseColor.b >= 0 && baseColor.b <= 255
+    && isFiniteNumber(baseColor.a) && baseColor.a >= 0 && baseColor.a <= 255
+    && isFiniteNumber(baseColor.glow) && baseColor.glow >= 0 && baseColor.glow <= 1
+    && Number.isInteger(baseColor.r)
+    && Number.isInteger(baseColor.g)
+    && Number.isInteger(baseColor.b)
+    && Number.isInteger(baseColor.a)
+    && Number.isInteger(baseColor.source.index) && baseColor.source.index >= 0 && baseColor.source.index < 224
+    && baseColor.source.path === X4_UI_CORPUS_COLORS_XML_PATH
+    && baseColor.source.id === baseColor.id
+    && (!mapping || (Number.isInteger(mapping.source.index)
+      && mapping.source.index >= 0 && mapping.source.index < 804
+      && mapping.source.id === mapping.id
+      && mapping.source.path === X4_UI_CORPUS_COLORS_XML_PATH));
+  if (!validBase) {
+    const reason = `canonical color ID ${requestedId} has malformed or out of range P2 graph facts`;
+    return unavailableColorFact(reason, source, expression, category, sourcePin);
+  }
+  const value: X4UiLayoutCanonicalColorValue = {
+    kind: 'color',
+    domain: 'canonical-xml-byte-alpha',
+    canonicalIdentity: evidence.canonicalIdentity,
+    requestedId,
+    resolvedBaseId: baseColor.id,
+    r: baseColor.r,
+    g: baseColor.g,
+    b: baseColor.b,
+    a: baseColor.a,
+    glow: baseColor.glow,
+    baseSource: colorDocumentSource(baseColor.source),
+    ...(mapping ? { mappingSource: colorDocumentSource(mapping.source) } : {}),
+    sourceIdentities: {
+      xml: cloneDeep(evidence.identities.xml) as X4UiLayoutColorSourceIdentity,
+      xsd: cloneDeep(evidence.identities.xsd) as X4UiLayoutColorSourceIdentity,
+    },
+    gameVerification: X4_UI_LAYOUT_GAME_TRUTH,
+  };
+  if (!canonicalColorValueMatchesEvidence(value, evidence)) {
+    const reason = 'canonical color ID ' + requestedId + ' has inconsistent P2 identity, mapping, base, or pinned source facts';
+    return unavailableColorFact(reason, source, expression, category, sourcePin);
+  }
+  return {
+    fact: knownColorFact(value, 'canonical-default-only', expression, source, sourcePin),
+  };
+};
+
+const resolveColorFact = (
+  colorExpressions: readonly X4UiCallColorExpression[] | undefined,
+  call: X4UiCallRecord,
+  propertyName: string,
+  propertyProjection: X4UiCallPropertyProjection | undefined,
+  evidence: X4UiCorpusCanonicalColorSuccess | undefined,
+  defaultId: string | undefined,
+  source: X4UiSourceLocation,
+  sourcePin: X4UiLayoutSourcePin | undefined,
+  category: X4UiLayoutGapCategory,
+  absentReason: string,
+  absentExpression: string,
+  absentGapReason = absentReason,
+): ColorFactResolution => {
+  if (!evidence) {
+    return {
+      fact: unavailableFact(
+        'color-object',
+        absentReason,
+        propertyProjection?.source || source,
+        propertyProjection?.value.expression || (defaultId ? absentExpression : undefined),
+        propertyProjection ? undefined : sourcePin,
+      ),
+      ...(propertyProjection ? {
+        gap: {
+          category,
+          status: 'unsupported' as const,
+          reason: absentGapReason,
+          expression: propertyProjection.value.expression,
+          source: cloneLocation(propertyProjection.source),
+        },
+      } : {}),
+    };
+  }
+  if (!propertyProjection) {
+    return resolveCanonicalColorById(evidence, defaultId || absentExpression, absentExpression, source, sourcePin, category);
+  }
+  const record = colorExpressions ? exactColorExpressionRecord(colorExpressions, call, propertyProjection) : undefined;
+  if (!record) {
+    const reason = `P1 color expression for ${propertyName} was missing, duplicated, conflicting, or not exactly source-bound`;
+    return unavailableColorFact(reason, propertyProjection.source, propertyProjection.value.expression, category, sourcePin);
+  }
+  return record.colorExpression.kind === 'symbolic-reference'
+    ? resolveCanonicalColorById(evidence, record.colorExpression.id, record.colorExpression.expression, record.colorExpression.source, sourcePin, category)
+    : resolveSourceLiteralColor(record.colorExpression, sourcePin, category);
+};
+
 const withKnownFactValue = (
   fact: X4UiLayoutDescriptorFact,
   value: X4UiLayoutScalar,
-): X4UiLayoutDescriptorFact => fact.status === 'known' ? { ...fact, value } : fact;
+): X4UiLayoutDescriptorFact => fact.status === 'known' && fact.expectedType !== 'color-object' ? { ...fact, value } : fact;
 
 const recordDescriptorFact = (
   operation: MutableOperation,
@@ -3541,6 +4036,100 @@ const schemaScalarMatchesType = (
 const schemaScalarType = (value: unknown, path: string): ClosedSchemaError =>
   schemaEnum(value, path, ['number', 'string', 'boolean']);
 
+const schemaColorLiteralField = (value: unknown, path: string): ClosedSchemaError => {
+  const objectError = schemaObject(value, path, ['value', 'expression', 'source', 'keySource']);
+  if (objectError) return objectError;
+  const field = value as Record<string, unknown>;
+  return schemaNumber(field.value, `${path}.value`)
+    || schemaString(field.expression, `${path}.expression`)
+    || schemaSource(field.source, `${path}.source`)
+    || schemaSource(field.keySource, `${path}.keySource`);
+};
+
+const schemaColorSourceIdentity = (value: unknown, path: string): ClosedSchemaError => {
+  const objectError = schemaObject(value, path, ['path', 'relativePath', 'sha256', 'size']);
+  if (objectError) return objectError;
+  const identity = value as Record<string, unknown>;
+  return schemaString(identity.path, `${path}.path`, true)
+    || schemaString(identity.relativePath, `${path}.relativePath`, true)
+    || (typeof identity.sha256 === 'string' && isHexSha256(identity.sha256)
+      ? undefined
+      : `${path}.sha256 must be a SHA-256 string`)
+    || schemaNumber(identity.size, `${path}.size`)
+    || (typeof identity.size === 'number' && Number.isSafeInteger(identity.size) && identity.size >= 0
+      ? undefined
+      : `${path}.size must be a safe non-negative integer`);
+};
+
+const schemaColorDocumentSource = (value: unknown, path: string): ClosedSchemaError => {
+  const objectError = schemaObject(value, path, ['path', 'index', 'id']);
+  if (objectError) return objectError;
+  const source = value as Record<string, unknown>;
+  return schemaString(source.path, `${path}.path`, true)
+    || schemaIndex(source.index, `${path}.index`)
+    || schemaString(source.id, `${path}.id`, true);
+};
+
+const schemaColorValue = (value: unknown, path: string): ClosedSchemaError => {
+  if (!isObject(value)) return `${path} must be a color value record`;
+  const kind = value.kind;
+  const domain = value.domain;
+  if (kind !== 'color') return `${path}.kind must be color`;
+  if (domain === 'source-literal-percent-alpha') {
+    const objectError = schemaObject(value, path, [
+      'kind', 'domain', 'r', 'g', 'b', 'a', 'declarationExpression', 'declarationSource', 'channels', 'gameVerification',
+    ], ['glow']);
+    if (objectError) return objectError;
+    const color = value as Record<string, unknown>;
+    const channelsError = schemaObject(color.channels, `${path}.channels`, ['r', 'g', 'b', 'a'], ['glow']);
+    if (channelsError) return channelsError;
+    const channels = color.channels as Record<string, unknown>;
+    const errors = schemaEnum(color.domain, `${path}.domain`, ['source-literal-percent-alpha'])
+      || schemaNumber(color.r, `${path}.r`)
+      || schemaNumber(color.g, `${path}.g`)
+      || schemaNumber(color.b, `${path}.b`)
+      || schemaNumber(color.a, `${path}.a`)
+      || schemaOptional(color, 'glow', child => schemaNumber(child, `${path}.glow`), path)
+      || schemaString(color.declarationExpression, `${path}.declarationExpression`)
+      || schemaSource(color.declarationSource, `${path}.declarationSource`)
+      || schemaColorLiteralField(channels.r, `${path}.channels.r`)
+      || schemaColorLiteralField(channels.g, `${path}.channels.g`)
+      || schemaColorLiteralField(channels.b, `${path}.channels.b`)
+      || schemaColorLiteralField(channels.a, `${path}.channels.a`)
+      || schemaOptional(channels, 'glow', (child, childPath) => schemaColorLiteralField(child, childPath), `${path}.channels`)
+      || schemaEnum(color.gameVerification, `${path}.gameVerification`, [X4_UI_LAYOUT_GAME_TRUTH]);
+    if (errors) return errors;
+    return sourceLiteralColorValueSemanticError(color as unknown as X4UiLayoutSourceLiteralColorValue);
+  }
+  if (domain === 'canonical-xml-byte-alpha') {
+    const objectError = schemaObject(value, path, [
+      'kind', 'domain', 'canonicalIdentity', 'requestedId', 'resolvedBaseId', 'r', 'g', 'b', 'a', 'glow', 'baseSource', 'sourceIdentities', 'gameVerification',
+    ], ['mappingSource']);
+    if (objectError) return objectError;
+    const color = value as Record<string, unknown>;
+    const identityError = schemaObject(color.sourceIdentities, `${path}.sourceIdentities`, ['xml', 'xsd']);
+    if (identityError) return identityError;
+    const identities = color.sourceIdentities as Record<string, unknown>;
+    const errors = schemaEnum(color.domain, `${path}.domain`, ['canonical-xml-byte-alpha'])
+      || schemaEnum(color.canonicalIdentity, `${path}.canonicalIdentity`, ['x4-9.00'])
+      || schemaString(color.requestedId, `${path}.requestedId`, true)
+      || schemaString(color.resolvedBaseId, `${path}.resolvedBaseId`, true)
+      || schemaNumber(color.r, `${path}.r`)
+      || schemaNumber(color.g, `${path}.g`)
+      || schemaNumber(color.b, `${path}.b`)
+      || schemaNumber(color.a, `${path}.a`)
+      || schemaNumber(color.glow, `${path}.glow`)
+      || schemaColorDocumentSource(color.baseSource, `${path}.baseSource`)
+      || schemaOptional(color, 'mappingSource', schemaColorDocumentSource, path)
+      || schemaColorSourceIdentity(identities.xml, `${path}.sourceIdentities.xml`)
+      || schemaColorSourceIdentity(identities.xsd, `${path}.sourceIdentities.xsd`)
+      || schemaEnum(color.gameVerification, `${path}.gameVerification`, [X4_UI_LAYOUT_GAME_TRUTH]);
+    if (errors) return errors;
+    return canonicalColorValueSemanticError(color as unknown as X4UiLayoutCanonicalColorValue);
+  }
+  return `${path}.domain is invalid`;
+};
+
 const schemaDescriptorFact = (value: unknown, path: string): ClosedSchemaError => {
   if (!isObject(value)) return `${path} must be a descriptor fact record`;
   const status = value.status;
@@ -3548,6 +4137,28 @@ const schemaDescriptorFact = (value: unknown, path: string): ClosedSchemaError =
     const objectError = schemaObject(value, path, ['status', 'expectedType', 'value', 'provenance', 'expression', 'source'], ['sourcePin', 'sampleId']);
     if (objectError) return objectError;
     const fact = value as Record<string, unknown>;
+    if (fact.expectedType === 'color-object') {
+      const colorObjectError = schemaObject(value, path, ['status', 'expectedType', 'value', 'provenance', 'expression', 'source'], ['sourcePin', 'sampleId']);
+      if (colorObjectError) return colorObjectError;
+      const errors = schemaEnum(fact.status, `${path}.status`, ['known'])
+        || schemaEnum(fact.expectedType, `${path}.expectedType`, ['color-object'])
+        || schemaColorValue(fact.value, `${path}.value`)
+        || schemaEnum(fact.provenance, `${path}.provenance`, ['source-literal', 'canonical-default-only'])
+        || schemaString(fact.expression, `${path}.expression`)
+        || schemaSource(fact.source, `${path}.source`)
+        || schemaOptional(fact, 'sourcePin', schemaSourcePin, path)
+        || schemaOptional(fact, 'sampleId', (child, childPath) => schemaString(child, childPath, true), path);
+      if (errors) return errors;
+      const colorValue = fact.value as Record<string, unknown>;
+      const expectedProvenance = colorValue.domain === 'source-literal-percent-alpha'
+        ? 'source-literal'
+        : colorValue.domain === 'canonical-xml-byte-alpha'
+          ? 'canonical-default-only'
+          : undefined;
+      return expectedProvenance === fact.provenance
+        ? undefined
+        : `${path}.provenance does not match its color domain`;
+    }
     return schemaEnum(fact.status, `${path}.status`, ['known'])
       || schemaScalarType(fact.expectedType, `${path}.expectedType`)
       || schemaScalarMatchesType(fact.value, fact.expectedType, `${path}.value`)
@@ -6290,7 +6901,9 @@ export const validateX4UiLayoutEvidencePair = (
  * The first three parameters preserve the accepted Batch 4A input boundary.
  * The optional fourth parameter binds preview-only scalar samples by exact
  * source hash and range. The optional fifth parameter selects exact
- * conditional invocation arms for preview only. No ambient state is consulted.
+ * conditional invocation arms for preview only. The optional sixth parameter
+ * is loader-issued P2 canonical-default color evidence. No ambient state is
+ * consulted.
  */
 export function projectX4UiLayoutProgram(
   model: X4UiCallModel,
@@ -6298,9 +6911,27 @@ export function projectX4UiLayoutProgram(
   profile: X4UiLayoutProjectionProfile,
   previewSampleInput?: X4UiLayoutPreviewSampleInput,
   previewPathInput?: X4UiLayoutPreviewPathSelectionInput,
+  colorEvidenceInput?: X4UiCorpusCanonicalColorSuccess,
 ): X4UiLayoutProgramResult {
+  if (colorEvidenceInput !== undefined && !isX4UiCorpusCanonicalColorSuccess(colorEvidenceInput)) {
+    return refusalResult('malformed-color-evidence', 'color evidence is not the exact loader-issued P2 canonical authority');
+  }
   if (!isObject(model) || !isObject(model.file) || typeof model.file.text !== 'string' || typeof model.file.rel !== 'string') {
     return refusalResult('malformed-model', 'call-model input is malformed');
+  }
+  let modelColorExpressions: readonly X4UiCallColorExpression[] | undefined;
+  if (colorEvidenceInput !== undefined) {
+    try {
+      const descriptor = Object.getOwnPropertyDescriptor(model, 'colorExpressions');
+      const candidate = descriptor && 'value' in descriptor ? descriptor.value : undefined;
+      if (!descriptor || !descriptor.enumerable || !Array.isArray(candidate)
+        || Object.getPrototypeOf(candidate) !== Array.prototype) {
+        return refusalResult('malformed-model', 'call-model colorExpressions container is malformed', model);
+      }
+      modelColorExpressions = candidate as readonly X4UiCallColorExpression[];
+    } catch {
+      return refusalResult('malformed-model', 'call-model colorExpressions container is not safely readable', model);
+    }
   }
   if (!model.parsed) return refusalResult('malformed-model', 'call-model parse did not succeed', model);
   const normalizedProfile = normalizeProfile(profile, model);
@@ -6394,9 +7025,49 @@ export function projectX4UiLayoutProgram(
   const gapEvents: X4UiLayoutGap[] = [];
   const addGap = (gapsValue: X4UiLayoutGap[], gap: X4UiLayoutGap): void =>
     addGapToProgram(gapsValue, gap, gapEvents);
+  const isColorExpressionProperty = (propertyName: string): boolean =>
+    ['color', 'cellbgcolor', 'bgcolor', 'highlightcolor', 'bordercolor', 'backgroundcolor']
+      .includes(normalizeColorPropertyName(propertyName));
+  const isColorVerificationGapCategory = (category: X4UiVerificationGap['category']): boolean =>
+    category === 'property' || category === 'text';
+  const isResolvedModelColorGap = (gap: X4UiVerificationGap): boolean => {
+    if (!colorEvidenceInput || !modelColorExpressions || !gap.expression || !isColorVerificationGapCategory(gap.category)) return false;
+    const records = modelColorExpressions.filter(record => {
+      try {
+        return record.colorExpression.expression === gap.expression
+          && locationsEqual(record.colorExpression.source, gap.source);
+      } catch {
+        return false;
+      }
+    });
+    if (records.length !== 1) return false;
+    const record = records[0];
+    const call = targetCalls.find(candidate => candidate.name === record.callName
+      && locationsEqual(candidate.source, record.callSource));
+    if (!call) return false;
+    if (!isColorExpressionProperty(record.propertyName)) return false;
+    const projection = call.semantics.properties?.find(candidate => normalizeColorPropertyName(candidate.name) === normalizeColorPropertyName(record.propertyName));
+    if (!projection) return false;
+    if (exactColorExpressionRecord(modelColorExpressions, call, projection) !== record) return false;
+    const resolution = resolveColorFact(
+      modelColorExpressions,
+      call,
+      record.propertyName,
+      projection,
+      colorEvidenceInput,
+      undefined,
+      call.source,
+      undefined,
+      'property',
+      'model color expression remains unavailable',
+      record.colorExpression.expression,
+    );
+    return resolution.fact.status === 'known' && resolution.gap === undefined;
+  };
   let gaps: X4UiLayoutGap[] = model.verificationGaps
     .filter(gap => projectedContextSources.some(source => locationContains(source, gap.source))
-      && !resolvedDirectScaleLocations.has(locationKey(gap.source)))
+      && !resolvedDirectScaleLocations.has(locationKey(gap.source))
+      && !isResolvedModelColorGap(gap))
     .map(gapFromModel);
   gapEvents.push(...gaps.map(gap => cloneDeep(gap) as X4UiLayoutGap));
   const modelGapCount = gaps.length;
@@ -6565,7 +7236,11 @@ export function projectX4UiLayoutProgram(
       return { cell: existing, row, table };
     }
     const callAncestry = call.expansionInstance?.ancestry || [];
-    const sourceOffset = call.expansionInstance ? Number.MAX_SAFE_INTEGER : call.source.start.offset;
+    // The emitted cell reference identifies the row that owns the cell. The
+    // operation can be emitted later than that reference after a lexical row
+    // variable is rebound, so its own source offset is not the ownership
+    // boundary.
+    const sourceOffset = reference.source.start.offset;
     const sameAncestry = (row: MutableRow): boolean => row.invocationAncestry.length <= callAncestry.length
       && row.invocationAncestry.every((ancestor, index) => callAncestry[index] === ancestor);
     const receiverParentPath = call.receiver?.reference?.parentPath || reference.parentPath;
@@ -6604,8 +7279,8 @@ export function projectX4UiLayoutProgram(
     };
     // Expanded calls retain their canonical callee source ranges, which may
     // precede the caller-side addRow range. Complete ancestry-scoped identity
-    // is the ordering boundary there; direct targets keep the source-offset
-    // guard used to disambiguate reused lexical paths.
+    // remains the boundary there; the emitted reference offset disambiguates
+    // reused lexical paths for both direct and expanded targets.
     const materializedRows = rows
       .filter(row => row.tableId === candidateTable!.id
         && row.identity?.path === receiverParentPath
@@ -6924,11 +7599,25 @@ export function projectX4UiLayoutProgram(
       recordDescriptorFact(operation, table.descriptorFacts, 'backgroundID', backgroundIdValue
         ? factFromResolution(backgroundIdValue, backgroundId, 'string', call.source, 'table backgroundID')
         : knownDefaultFact('', 'string', call.source, HELPER_DEFAULT_PINS.tableBackgroundId, '""'));
-      recordDescriptorFact(operation, table.descriptorFacts, 'backgroundColor', backgroundColorValue
-        ? unavailableFact('color-object', 'color-table values remain source evidence and cannot be sampled as RGBA', backgroundColorValue.location, backgroundColorValue.expression)
-        : unavailableFact('color-object', 'runtime Color table is not projected as RGBA', call.source, 'Color["table_background_default"]', HELPER_DEFAULT_PINS.tableBackgroundColor));
-      if (backgroundColorValue) {
-        addOperationGap(gaps, operation, 'table', 'unsupported', 'table backgroundColor is a color-table expression and remains unavailable', backgroundColorValue.location, backgroundColorValue.expression, table.id);
+      const tableColor = resolveColorFact(
+        modelColorExpressions,
+        call,
+        'backgroundColor',
+        backgroundColorValue ? property(call, 'backgroundcolor') : undefined,
+        colorEvidenceInput,
+        'table_background_default',
+        call.source,
+        backgroundColorValue ? undefined : HELPER_DEFAULT_PINS.tableBackgroundColor,
+        'table',
+        backgroundColorValue
+          ? 'color-table values remain source evidence and cannot be sampled as RGBA'
+          : 'runtime Color table is not projected as RGBA',
+        'Color["table_background_default"]',
+        'table backgroundColor is a color-table expression and remains unavailable',
+      );
+      recordDescriptorFact(operation, table.descriptorFacts, 'backgroundColor', tableColor.fact);
+      if (tableColor.gap) {
+        addOperationGap(gaps, operation, tableColor.gap.category, tableColor.gap.status, tableColor.gap.reason, tableColor.gap.source, tableColor.gap.expression, table.id);
         table.hadGap = true;
       }
       if (count.value === undefined || count.gap || width.gap || x.gap || scaling.gap || reserve.gap) {
@@ -6960,7 +7649,7 @@ export function projectX4UiLayoutProgram(
       table.kernelState = created.value;
       table.numColumns = count.value;
       table.requestedWidth = created.value.requestedWidth;
-      const descriptorGap = Boolean(y.gap || maxVisibleHeight.gap || tabOrder.gap || highlightMode.gap || backgroundId.gap || backgroundColorValue);
+      const descriptorGap = Boolean(y.gap || maxVisibleHeight.gap || tabOrder.gap || highlightMode.gap || backgroundId.gap || tableColor.gap);
       operation.status = descriptorGap ? 'unresolved' : 'applied';
       if (descriptorGap) {
         operation.reason = 'table kernel state is deterministic but one or more descriptor facts remain unavailable';
@@ -7085,6 +7774,15 @@ export function projectX4UiLayoutProgram(
         operation.reason = blocked === 'unreachable' ? 'unreachable source operation was recorded but not applied' : 'conditional or looped source operation was recorded but not applied';
         row.hadGap = true;
         markTableGap(table);
+        if (blocked === 'conditional' && table?.kernelState && table.numColumns !== undefined) {
+          const sourceCells = makeBaseCells(table, row, table.numColumns);
+          for (const cell of sourceCells) {
+            row.cellIds.push(cell.id);
+            cells.push(cell);
+            recordNode('cell', cell.id);
+          }
+          cellsByRow.set(row.id, sourceCells);
+        }
         continue;
       }
       if (!table || !table.kernelState) {
@@ -7101,6 +7799,7 @@ export function projectX4UiLayoutProgram(
         : finalizeHelperTable(tableState);
       const inheritedScaling: Resolution<boolean> = finalizedForRow.status === 'ok'
         && tableScalingFact?.status === 'known'
+        && tableScalingFact.expectedType === 'boolean'
         && typeof tableScalingFact.value === 'boolean'
         && finalizedForRow.value.properties.scaling === tableScalingFact.value
         ? {
@@ -7688,13 +8387,56 @@ export function projectX4UiLayoutProgram(
       };
       for (const [field, fact] of Object.entries(pendingFacts)) operation.descriptorFacts[field] = fact;
       const colorProperties = ['color', 'cellbgcolor', 'bgcolor', 'highlightcolor', 'bordercolor'] as const;
+      const helperColorDefault = (colorName: typeof colorProperties[number]): { readonly id: string; readonly pin: X4UiLayoutSourcePin } | undefined => {
+        if (colorName === 'cellbgcolor') return { id: 'row_background', pin: HELPER_DEFAULT_PINS.cellBackgroundColor };
+        if (colorName === 'color') {
+          return type === 'icon'
+            ? { id: 'icon_normal', pin: HELPER_DEFAULT_PINS.iconColor }
+            : type === 'text'
+              ? { id: 'text_normal', pin: HELPER_DEFAULT_PINS.textColor }
+              : undefined;
+        }
+        if (colorName === 'bgcolor') {
+          return type === 'button'
+            ? { id: 'button_background_default', pin: HELPER_DEFAULT_PINS.buttonBackgroundColor }
+            : type === 'editbox'
+              ? { id: 'editbox_background_default', pin: HELPER_DEFAULT_PINS.editBoxBackgroundColor }
+              : undefined;
+        }
+        if (colorName === 'highlightcolor' && type === 'button') {
+          return { id: 'button_highlight_default', pin: HELPER_DEFAULT_PINS.buttonHighlightColor };
+        }
+        if (colorName === 'bordercolor' && type === 'button') {
+          return { id: 'button_border_default', pin: HELPER_DEFAULT_PINS.buttonBorderColor };
+        }
+        return undefined;
+      };
+      let colorDescriptorGap = false;
       for (const colorName of colorProperties) {
         const colorValue = propertyValue(call, colorName);
-        if (!colorValue) continue;
-        const colorFact = unavailableFact('color-object', `${colorName} is retained as a source expression; RGBA is not inferred`, colorValue.location, colorValue.expression);
-        operation.descriptorFacts[colorName] = colorFact;
-        pendingFacts[colorName] = colorFact;
-        addOperationGap(gaps, operation, 'cell', 'unsupported', `${colorName} is a color-table expression and remains unavailable`, colorValue.location, colorValue.expression, found.cell.id);
+        const defaultColor = helperColorDefault(colorName);
+        if (!colorValue && !colorEvidenceInput) continue;
+        if (!colorValue && !defaultColor) continue;
+        const colorResolution = resolveColorFact(
+          modelColorExpressions,
+          call,
+          colorName,
+          colorValue ? property(call, colorName) : undefined,
+          colorEvidenceInput,
+          defaultColor?.id,
+          call.source,
+          colorValue ? undefined : defaultColor?.pin,
+          'cell',
+          `${colorName} is retained as a source expression; RGBA is not inferred`,
+          defaultColor?.id ? `Color["${defaultColor.id}"]` : colorValue?.expression || `Color["${colorName}"]`,
+          `${colorName} is a color-table expression and remains unavailable`,
+        );
+        operation.descriptorFacts[colorName] = colorResolution.fact;
+        pendingFacts[colorName] = colorResolution.fact;
+        if (colorResolution.gap) {
+          colorDescriptorGap = true;
+          addOperationGap(gaps, operation, colorResolution.gap.category, colorResolution.gap.status, colorResolution.gap.reason, colorResolution.gap.source, colorResolution.gap.expression, found.cell.id);
+        }
       }
       const input: HelperCellSpecializationInput = {
         type,
@@ -7723,7 +8465,7 @@ export function projectX4UiLayoutProgram(
             || (type === 'text' && minRowHeight.gap)
             || (type === 'editbox' && (defaultText.gap || description.gap || maxChars.gap || selectText.gap || active.gap))
             || (type === 'button' && active.gap)
-            || colorProperties.some(name => Boolean(propertyValue(call, name))),
+            || colorDescriptorGap,
         );
         operation.status = descriptorGap ? 'unresolved' : 'applied';
         if (descriptorGap) operation.reason = 'cell kernel state is deterministic but one or more descriptor facts remain unavailable';
@@ -7905,11 +8647,28 @@ export function projectX4UiLayoutProgram(
         found.cell.descriptorFacts.halign = facts.textHalign;
       }
       const colorValue = propertyValue(call, 'color');
-      if (colorValue) {
-        const fact = unavailableFact('color-object', 'nested text color remains a source color-table expression', colorValue.location, colorValue.expression);
-        operation.descriptorFacts.color = fact;
-        found.cell.descriptorFacts.color = fact;
-        addOperationGap(gaps, operation, 'text', 'unsupported', 'nested text color cannot be projected as RGBA', colorValue.location, colorValue.expression, found.cell.id);
+      const colorResolution = colorValue || colorEvidenceInput
+        ? resolveColorFact(
+          modelColorExpressions,
+          call,
+          'color',
+          colorValue ? property(call, 'color') : undefined,
+          colorEvidenceInput,
+          'text_normal',
+          call.source,
+          colorValue ? undefined : HELPER_DEFAULT_PINS.textPropertyColor,
+          'text',
+          'nested text color remains a source color-table expression',
+          'Color["text_normal"]',
+          'nested text color cannot be projected as RGBA',
+        )
+        : undefined;
+      if (colorResolution) {
+        operation.descriptorFacts.color = colorResolution.fact;
+        found.cell.descriptorFacts.color = colorResolution.fact;
+        if (colorResolution.gap) {
+          addOperationGap(gaps, operation, colorResolution.gap.category, colorResolution.gap.status, colorResolution.gap.reason, colorResolution.gap.source, colorResolution.gap.expression, found.cell.id);
+        }
       }
       for (const unsupported of call.semantics.unsupportedProperties || []) {
         addOperationGap(
@@ -7925,7 +8684,7 @@ export function projectX4UiLayoutProgram(
       }
       const hasGap = Boolean(
         content.gap || font.gap || fontSize.gap || halign.gap || textX.gap || textY.gap || textScaling.gap
-          || colorValue || (call.semantics.unsupportedProperties?.length || 0) > 0,
+          || colorResolution?.gap || (call.semantics.unsupportedProperties?.length || 0) > 0,
       );
       operation.status = hasGap ? 'unresolved' : 'applied';
       if (hasGap) {
@@ -8111,15 +8870,15 @@ export function projectX4UiLayoutProgram(
       if (!cellState) continue;
       cell.kernelState = cellState;
       const priorKind = cell.descriptorFacts.contentKind;
-      cell.descriptorFacts.contentKind = priorKind.status === 'known'
+      cell.descriptorFacts.contentKind = priorKind.status === 'known' && priorKind.expectedType === 'string'
         ? { ...priorKind, value: cellState.type }
         : knownSourceFact(cellState.type, 'string', cell.source, cellState.type, 'source-pinned-default');
       const priorSpan = cell.descriptorFacts.span;
-      cell.descriptorFacts.span = priorSpan.status === 'known'
+      cell.descriptorFacts.span = priorSpan.status === 'known' && priorSpan.expectedType === 'number'
         ? { ...priorSpan, value: cellState.colspan }
         : knownSourceFact(cellState.colspan, 'number', cell.source, String(cellState.colspan), 'source-pinned-default');
       const priorScaling = cell.descriptorFacts.scaling;
-      cell.descriptorFacts.scaling = priorScaling.status === 'known'
+      cell.descriptorFacts.scaling = priorScaling.status === 'known' && priorScaling.expectedType === 'boolean'
         ? { ...priorScaling, value: cellState.scaling }
         : knownDefaultFact(cellState.scaling, 'boolean', cell.source, HELPER_DEFAULT_PINS.cellSpecialization, 'row.properties.scaling');
       if (cell.descriptorFacts.affectRowHeight.status === 'unavailable') {
@@ -8150,6 +8909,7 @@ export function projectX4UiLayoutProgram(
         const priorHeight = cell.descriptorFacts.outerHeight;
         cell.descriptorFacts.outerHeight = descriptorHeight.status === 'ok'
           ? priorHeight.status === 'known'
+            && priorHeight.expectedType === 'number'
             ? { ...priorHeight, value: descriptorHeight.value }
             : knownSourceFact(descriptorHeight.value, 'number', cell.source, 'Helper cell:getHeight(true)', 'source-pinned-default')
           : unavailableFact('number', descriptorHeight.message, cell.source);
@@ -8166,6 +8926,7 @@ export function projectX4UiLayoutProgram(
           const explicitWidth = scaleX(cell.explicitWidth, table.kernelState.metrics.uiScale, cell.effectiveScaling ?? cellState.scaling);
           cell.descriptorFacts.outerWidth = explicitWidth.status === 'ok'
             ? cell.explicitWidthFact?.status === 'known'
+              && cell.explicitWidthFact.expectedType === 'number'
               ? { ...cell.explicitWidthFact, value: explicitWidth.value }
               : knownSourceFact(explicitWidth.value, 'number', cell.source, 'Helper cell:getWidth()', 'source-pinned-default')
             : unavailableFact('number', explicitWidth.message, cell.source);
@@ -8213,10 +8974,26 @@ export function projectX4UiLayoutProgram(
         .filter(event => event.operation.localExpansion?.invocationId === invocation.id)
         .map(event => event.operation.id);
     }
+    const expansionSourceInvocationIds = new Set(
+      localExpansionPlan.invocations.map(invocation => invocation.sourceInvocationId),
+    );
+    const reciprocalPreviewPathCatalog: X4UiLayoutPreviewPathCatalog = {
+      ...previewPathCatalog,
+      // The pre-expansion catalog describes every statically discoverable branch
+      // below a declaration.  The emitted ledger is deliberately narrower when
+      // a branch, rejection, or expansion limit prevents descending into that
+      // declaration.  Emit only the catalog edges proven by this exact ledger.
+      entries: previewPathCatalog.entries
+        .map(entry => ({
+          ...entry,
+          invocationIds: entry.invocationIds.filter(id => expansionSourceInvocationIds.has(id)),
+        }))
+        .filter(entry => entry.invocationIds.length > 0),
+    };
     localExpansionState = {
       limits: cloneDeep(profileValue.localExpansion) as NonNullable<X4UiLayoutProjectionProfile['localExpansion']>,
       invocations: localExpansionPlan.invocations.map(invocation => cloneDeep(invocation) as X4UiLayoutLocalInvocation),
-      previewPathCatalog: cloneDeep(previewPathCatalog) as X4UiLayoutPreviewPathCatalog,
+      previewPathCatalog: cloneDeep(reciprocalPreviewPathCatalog) as X4UiLayoutPreviewPathCatalog,
       previewPathSelections: normalizedPaths.value.ordered.map(selection =>
         cloneDeep(selection) as X4UiLayoutPreviewPathSelectionBinding)
     };

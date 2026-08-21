@@ -23,6 +23,21 @@ export const X4_UI_CORPUS_STATUS_URL = '/api/reference/status' as const;
 export const X4_UI_CORPUS_MANIFEST_URL = '/api/reference/manifest' as const;
 export const X4_UI_CORPUS_FILE_URL = '/api/reference/file' as const;
 
+export const X4_UI_CORPUS_COLOR_CANONICAL_EVIDENCE = 'canonical-default-only' as const;
+export const X4_UI_CORPUS_CANONICAL_COLOR_EVIDENCE = X4_UI_CORPUS_COLOR_CANONICAL_EVIDENCE;
+export const X4_UI_CORPUS_COLORS_XML_PATH = 'libraries/colors.xml' as const;
+export const X4_UI_CORPUS_COLORS_XML_SHA256 = '6A57FE660D546F5144206581A40194CE13D0D11478B584A46467F0AAE715B883' as const;
+export const X4_UI_CORPUS_COLORS_XML_SIZE = 72950 as const;
+export const X4_UI_CORPUS_COLORS_XSD_PATH = 'libraries/colors.xsd' as const;
+export const X4_UI_CORPUS_COLORS_XSD_SHA256 = 'F0D31824E00227EFF6288B084E29346C5AA9D2694BFB0D62D6008EE3DBD879DF' as const;
+export const X4_UI_CORPUS_COLORS_XSD_SIZE = 7981 as const;
+export const X4_UI_CORPUS_COLOR_XML_PATH = X4_UI_CORPUS_COLORS_XML_PATH;
+export const X4_UI_CORPUS_COLOR_XML_SHA256 = X4_UI_CORPUS_COLORS_XML_SHA256;
+export const X4_UI_CORPUS_COLOR_XML_SIZE = X4_UI_CORPUS_COLORS_XML_SIZE;
+export const X4_UI_CORPUS_COLOR_XSD_PATH = X4_UI_CORPUS_COLORS_XSD_PATH;
+export const X4_UI_CORPUS_COLOR_XSD_SHA256 = X4_UI_CORPUS_COLORS_XSD_SHA256;
+export const X4_UI_CORPUS_COLOR_XSD_SIZE = X4_UI_CORPUS_COLORS_XSD_SIZE;
+
 export const HELPER_SOURCE_PATH = 'ui/addons/ego_detailmonitorhelper/helper.lua' as const;
 export const HELPER_SOURCE_SHA256 = 'D24A08B8DA9F2C972794B60ACB48AE36F38CB026C991249DAB9F1164272D4DF2' as const;
 export const WIDGET_SOURCE_PATH = 'ui/widget/lua/widget_fullscreen.lua' as const;
@@ -40,7 +55,12 @@ export interface X4UiCorpusByteCaps {
   readonly lua: number;
   readonly abc: number;
   readonly dds: number;
+  readonly xml?: number;
+  readonly xsd?: number;
 }
+
+export const MAX_SAFE_XML_BYTES = 4 * 1024 * 1024;
+export const MAX_SAFE_XSD_BYTES = 1 * 1024 * 1024;
 
 export interface X4UiCorpusFetchHeaders {
   readonly get?: (name: string) => string | null;
@@ -81,6 +101,14 @@ export interface X4UiCorpusCanonicalLoadOptions {
   readonly fetch?: X4UiCorpusTransport;
   readonly signal?: AbortSignal;
   readonly byteCaps?: Partial<X4UiCorpusByteCaps>;
+  readonly hashProvider?: never;
+}
+
+export interface X4UiCorpusCanonicalColorLoadOptions {
+  readonly transport?: X4UiCorpusTransport;
+  readonly fetch?: X4UiCorpusTransport;
+  readonly signal?: AbortSignal;
+  readonly byteCaps?: Pick<X4UiCorpusByteCaps, 'xml' | 'xsd'>;
   readonly hashProvider?: never;
 }
 
@@ -135,6 +163,16 @@ export type X4UiCorpusFailureCode =
   | 'hash-mismatch'
   | 'utf8-invalid'
   | 'font-decode'
+  | 'color-xml-malformed'
+  | 'color-xsd-malformed'
+  | 'color-structure'
+  | 'color-missing-id'
+  | 'color-missing-ref'
+  | 'color-invalid-id'
+  | 'color-duplicate-id'
+  | 'color-invalid-value'
+  | 'color-invalid-ref'
+  | 'color-graph-invalid'
   | 'contract-invalid'
   | 'internal-error';
 
@@ -146,6 +184,7 @@ export type X4UiCorpusEvidenceStage =
   | 'hash'
   | 'text'
   | 'font'
+  | 'color'
   | 'consistency';
 
 export interface X4UiCorpusFailure {
@@ -171,11 +210,16 @@ export type X4UiCorpusAssetKind =
   | 'regular-descriptor'
   | 'regular-atlas'
   | 'bold-descriptor'
-  | 'bold-atlas';
+  | 'bold-atlas'
+  | 'colors-xml'
+  | 'colors-xsd';
+
+type X4UiCorpusAssetEncoding = 'lua' | 'abc' | 'dds' | 'xml' | 'xsd';
 
 interface X4UiCorpusInternalAsset extends X4UiCorpusExpectedAsset {
   readonly kind: X4UiCorpusAssetKind;
-  readonly encoding: 'lua' | 'abc' | 'dds';
+  readonly encoding: X4UiCorpusAssetEncoding;
+  readonly expectedBytes?: number;
 }
 
 interface X4UiCorpusFetchedAsset {
@@ -257,6 +301,12 @@ interface X4UiCorpusAuthorityRecord {
  */
 const CANONICAL_AUTHORITY = new WeakMap<object, X4UiCorpusAuthorityRecord>();
 
+interface X4UiCorpusColorAuthorityRecord extends X4UiCorpusAuthorityRecord {
+  readonly graphSnapshot: string;
+}
+
+const CANONICAL_COLOR_AUTHORITY = new WeakMap<object, X4UiCorpusColorAuthorityRecord>();
+
 export interface X4UiCorpusSyntheticSuccess extends X4UiCorpusSuccessBase {
   readonly evidenceKind: typeof X4_UI_CORPUS_SYNTHETIC_EVIDENCE;
   readonly canonical: false;
@@ -265,6 +315,72 @@ export interface X4UiCorpusSyntheticSuccess extends X4UiCorpusSuccessBase {
 
 export type X4UiCorpusCanonicalResult = X4UiCorpusCanonicalSuccess | X4UiCorpusFailureResult;
 export type X4UiCorpusSyntheticResult = X4UiCorpusSyntheticSuccess | X4UiCorpusFailureResult;
+
+export interface X4UiCorpusColorSourceContract extends X4UiCorpusExpectedAsset {
+  readonly size: number;
+}
+
+export interface X4UiCorpusColorAssetContract {
+  readonly xml: X4UiCorpusColorSourceContract;
+  readonly xsd: X4UiCorpusColorSourceContract;
+}
+
+export interface X4UiCorpusColorSourceIdentity {
+  readonly path: string;
+  readonly relativePath: string;
+  readonly sha256: string;
+  readonly size: number;
+}
+
+export interface X4UiCorpusColorBaseDefinition {
+  readonly id: string;
+  readonly r: number;
+  readonly g: number;
+  readonly b: number;
+  readonly a: number;
+  readonly glow: number;
+  readonly source: {
+    readonly path: typeof X4_UI_CORPUS_COLORS_XML_PATH;
+    readonly index: number;
+    readonly id: string;
+  };
+}
+
+export interface X4UiCorpusColorMappingDefinition {
+  readonly id: string;
+  readonly ref: string;
+  readonly source: {
+    readonly path: typeof X4_UI_CORPUS_COLORS_XML_PATH;
+    readonly index: number;
+    readonly id: string;
+  };
+}
+
+export interface X4UiCorpusColorGraph {
+  readonly baseColors: readonly X4UiCorpusColorBaseDefinition[];
+  readonly mappings: readonly X4UiCorpusColorMappingDefinition[];
+}
+
+export interface X4UiCorpusCanonicalColorSuccess {
+  readonly ok: true;
+  readonly evidenceKind: typeof X4_UI_CORPUS_COLOR_CANONICAL_EVIDENCE;
+  readonly canonical: true;
+  readonly canonicalIdentity: 'x4-9.00';
+  readonly verification: typeof X4_UI_CORPUS_VERIFICATION;
+  readonly source: {
+    readonly xml: X4UiCorpusTextEvidence;
+    readonly xsd: X4UiCorpusTextEvidence;
+  };
+  readonly identities: {
+    readonly xml: X4UiCorpusColorSourceIdentity;
+    readonly xsd: X4UiCorpusColorSourceIdentity;
+  };
+  readonly graph: X4UiCorpusColorGraph;
+}
+
+export type X4UiCorpusCanonicalColorResult = X4UiCorpusCanonicalColorSuccess | X4UiCorpusFailureResult;
+export type X4UiCorpusCanonicalColorsSuccess = X4UiCorpusCanonicalColorSuccess;
+export type X4UiCorpusCanonicalColorsResult = X4UiCorpusCanonicalColorResult;
 
 const CANONICAL_CONTRACT: X4UiCorpusAssetContract = deepFreeze({
   helper: { relativePath: HELPER_SOURCE_PATH, sha256: HELPER_SOURCE_SHA256 },
@@ -294,6 +410,38 @@ const CANONICAL_CONTRACT: X4UiCorpusAssetContract = deepFreeze({
 /** Read-only view of the identities used by the canonical wrapper. */
 export const X4_UI_CORPUS_9_00_CONTRACT = CANONICAL_CONTRACT;
 
+const CANONICAL_COLOR_ASSETS: Readonly<Record<'colors-xml' | 'colors-xsd', X4UiCorpusInternalAsset>> = deepFreeze({
+  'colors-xml': {
+    kind: 'colors-xml',
+    encoding: 'xml',
+    relativePath: X4_UI_CORPUS_COLORS_XML_PATH,
+    sha256: X4_UI_CORPUS_COLORS_XML_SHA256,
+    expectedBytes: X4_UI_CORPUS_COLORS_XML_SIZE,
+  },
+  'colors-xsd': {
+    kind: 'colors-xsd',
+    encoding: 'xsd',
+    relativePath: X4_UI_CORPUS_COLORS_XSD_PATH,
+    sha256: X4_UI_CORPUS_COLORS_XSD_SHA256,
+    expectedBytes: X4_UI_CORPUS_COLORS_XSD_SIZE,
+  },
+});
+
+export const X4_UI_CORPUS_9_00_COLOR_CONTRACT: X4UiCorpusColorAssetContract = deepFreeze({
+  xml: {
+    relativePath: X4_UI_CORPUS_COLORS_XML_PATH,
+    sha256: X4_UI_CORPUS_COLORS_XML_SHA256,
+    size: X4_UI_CORPUS_COLORS_XML_SIZE,
+  },
+  xsd: {
+    relativePath: X4_UI_CORPUS_COLORS_XSD_PATH,
+    sha256: X4_UI_CORPUS_COLORS_XSD_SHA256,
+    size: X4_UI_CORPUS_COLORS_XSD_SIZE,
+  },
+});
+
+export const X4_UI_CORPUS_9_00_COLORS_CONTRACT = X4_UI_CORPUS_9_00_COLOR_CONTRACT;
+
 const ASSET_ORDER: readonly X4UiCorpusAssetKind[] = Object.freeze([
   'helper',
   'widget',
@@ -302,6 +450,8 @@ const ASSET_ORDER: readonly X4UiCorpusAssetKind[] = Object.freeze([
   'bold-descriptor',
   'bold-atlas',
 ]);
+
+const COLOR_ASSET_ORDER = Object.freeze(['colors-xml', 'colors-xsd'] as const);
 
 const PENDING_MANIFEST_STATES = new Set(['idle', 'indexing', 'scanning', 'stale', 'error']);
 
@@ -375,6 +525,31 @@ export function isX4UiCorpusCanonicalSuccess(value: unknown): value is X4UiCorpu
     && candidate.canonical === true
     && candidate.canonicalIdentity === 'x4-9.00'
     && candidate.verification === X4_UI_CORPUS_VERIFICATION;
+}
+
+function registerCanonicalColorAuthority(value: X4UiCorpusCanonicalColorSuccess): void {
+  CANONICAL_COLOR_AUTHORITY.set(value, {
+    payloads: collectAuthorityPayloads(value).slice(),
+    graphSnapshot: JSON.stringify(value.graph),
+  });
+}
+
+/** Accept only a loader-issued canonical-default color graph. */
+export function isX4UiCorpusCanonicalColorSuccess(value: unknown): value is X4UiCorpusCanonicalColorSuccess {
+  if (value === null || typeof value !== 'object') return false;
+  try {
+    const record = CANONICAL_COLOR_AUTHORITY.get(value);
+    if (!record || !frozenAuthorityGraph(value) || !authorityPayloadsUnchanged(record)) return false;
+    const candidate = value as Partial<X4UiCorpusCanonicalColorSuccess>;
+    return candidate.ok === true
+      && candidate.evidenceKind === X4_UI_CORPUS_COLOR_CANONICAL_EVIDENCE
+      && candidate.canonical === true
+      && candidate.canonicalIdentity === 'x4-9.00'
+      && candidate.verification === X4_UI_CORPUS_VERIFICATION
+      && JSON.stringify(candidate.graph) === record.graphSnapshot;
+  } catch {
+    return false;
+  }
 }
 
 function failure(
@@ -493,26 +668,41 @@ function bindPlatformSha256(): X4UiCorpusSha256Provider | null {
   return bytes => digest('SHA-256', bytes);
 }
 
+type X4UiCorpusLoaderEvidenceKind =
+  | typeof X4_UI_CORPUS_CANONICAL_EVIDENCE
+  | typeof X4_UI_CORPUS_SYNTHETIC_EVIDENCE
+  | typeof X4_UI_CORPUS_COLOR_CANONICAL_EVIDENCE;
+
+function isCanonicalLoaderEvidenceKind(value: X4UiCorpusLoaderEvidenceKind): boolean {
+  return value === X4_UI_CORPUS_CANONICAL_EVIDENCE || value === X4_UI_CORPUS_COLOR_CANONICAL_EVIDENCE;
+}
+
 function snapshotLoadOptions(
   input: unknown,
-  evidenceKind: typeof X4_UI_CORPUS_CANONICAL_EVIDENCE | typeof X4_UI_CORPUS_SYNTHETIC_EVIDENCE,
+  evidenceKind: X4UiCorpusLoaderEvidenceKind,
   canonicalHashProvider?: X4UiCorpusSha256Provider | null,
 ): X4UiCorpusInternalLoadOptions | X4UiCorpusFailureResult {
   if (input === null || typeof input !== 'object') return failure('contract-invalid', 'contract', 'Loader options are malformed.');
   const source = input as Record<string, unknown>;
-  if (evidenceKind === X4_UI_CORPUS_CANONICAL_EVIDENCE && hasPropertyInPrototypeChain(input, 'hashProvider')) {
+  if (isCanonicalLoaderEvidenceKind(evidenceKind) && hasPropertyInPrototypeChain(input, 'hashProvider')) {
     return failure('contract-invalid', 'contract', 'Canonical corpus loading does not accept a caller-supplied hash provider.');
   }
   const rawCaps = source.byteCaps;
   const byteCaps: Partial<X4UiCorpusByteCaps> | undefined = isRecord(rawCaps)
-    ? { lua: rawCaps.lua as number, abc: rawCaps.abc as number, dds: rawCaps.dds as number }
+    ? {
+      lua: rawCaps.lua as number,
+      abc: rawCaps.abc as number,
+      dds: rawCaps.dds as number,
+      xml: rawCaps.xml as number,
+      xsd: rawCaps.xsd as number,
+    }
     : rawCaps as Partial<X4UiCorpusByteCaps> | undefined;
   return {
     transport: typeof source.transport === 'function' ? source.transport as X4UiCorpusTransport : undefined,
     fetch: typeof source.fetch === 'function' ? source.fetch as X4UiCorpusTransport : undefined,
     signal: source.signal as AbortSignal | undefined,
     byteCaps,
-    hashProvider: evidenceKind === X4_UI_CORPUS_CANONICAL_EVIDENCE
+    hashProvider: isCanonicalLoaderEvidenceKind(evidenceKind)
       ? canonicalHashProvider
       : source.hashProvider === undefined
         ? bindPlatformSha256()
@@ -520,19 +710,31 @@ function snapshotLoadOptions(
   };
 }
 
-function resolveCaps(options: X4UiCorpusInternalLoadOptions): X4UiCorpusByteCaps | X4UiCorpusFailureResult {
+interface X4UiCorpusResolvedByteCaps {
+  readonly lua: number;
+  readonly abc: number;
+  readonly dds: number;
+  readonly xml: number;
+  readonly xsd: number;
+}
+
+function resolveCaps(options: X4UiCorpusInternalLoadOptions): X4UiCorpusResolvedByteCaps | X4UiCorpusFailureResult {
   const supplied = options.byteCaps;
-  const values: X4UiCorpusByteCaps = {
+  const values: X4UiCorpusResolvedByteCaps = {
     lua: supplied?.lua ?? DEFAULT_X4_UI_CORPUS_BYTE_CAPS.lua,
     abc: supplied?.abc ?? DEFAULT_X4_UI_CORPUS_BYTE_CAPS.abc,
     dds: supplied?.dds ?? DEFAULT_X4_UI_CORPUS_BYTE_CAPS.dds,
+    xml: supplied?.xml ?? MAX_SAFE_XML_BYTES,
+    xsd: supplied?.xsd ?? MAX_SAFE_XSD_BYTES,
   };
-  const safeMax: X4UiCorpusByteCaps = {
+  const safeMax: X4UiCorpusResolvedByteCaps = {
     lua: MAX_SAFE_LUA_BYTES,
     abc: MAX_SAFE_DESCRIPTOR_BYTES,
     dds: MAX_SAFE_DDS_BYTES,
+    xml: MAX_SAFE_XML_BYTES,
+    xsd: MAX_SAFE_XSD_BYTES,
   };
-  for (const key of ['lua', 'abc', 'dds'] as const) {
+  for (const key of ['lua', 'abc', 'dds', 'xml', 'xsd'] as const) {
     if (!Number.isSafeInteger(values[key]) || values[key] <= 0 || values[key] > safeMax[key]) {
       return failure('contract-invalid', 'contract', `${key} byte cap is outside the safe bounded range.`);
     }
@@ -862,6 +1064,14 @@ async function readManifest(
       path: expected.relativePath,
     });
   }
+  if (expected.expectedBytes !== undefined && matches[0].bytes !== expected.expectedBytes) {
+    return failure('size-mismatch', 'manifest', 'The configured-corpus manifest size differs from the pinned canonical size.', {
+      assetKind: expected.kind,
+      path: expected.relativePath,
+      expected: expected.expectedBytes,
+      actual: matches[0].bytes,
+    });
+  }
   return { generation: manifestStatus.generation, status: manifestStatus, record: matches[0] };
 }
 
@@ -890,7 +1100,11 @@ async function readFile(
       httpStatus: status,
     });
   }
-  const expectedContentType = expected.encoding === 'lua' ? ['text/plain'] : ['application/octet-stream'];
+  const expectedContentType = expected.encoding === 'lua'
+    ? ['text/plain']
+    : expected.encoding === 'xml' || expected.encoding === 'xsd'
+      ? ['application/xml', 'text/xml', 'application/xsd+xml', 'text/plain']
+      : ['application/octet-stream'];
   const contentType = contentTypeFailure(response, expectedContentType, 'file', expected.kind);
   if (contentType) return contentType;
   if (typeof response.arrayBuffer !== 'function') {
@@ -994,7 +1208,9 @@ function decodeUtf8(bytes: Uint8Array, expected: X4UiCorpusInternalAsset): strin
     // ignoreBOM=true is intentional: source evidence must retain U+FEFF.
     return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes.slice());
   } catch {
-    return failure('utf8-invalid', 'text', 'The configured-corpus Lua source is not valid UTF-8.', {
+    return failure('utf8-invalid', 'text', expected.encoding === 'lua'
+      ? 'The configured-corpus Lua source is not valid UTF-8.'
+      : 'The configured-corpus text source is not valid UTF-8.', {
       assetKind: expected.kind,
       path: expected.relativePath,
     });
@@ -1117,6 +1333,53 @@ function buildSuccess(
   });
 }
 
+interface X4UiCorpusFetchedBatch<K extends X4UiCorpusAssetKind> {
+  readonly fetched: Readonly<Record<K, X4UiCorpusFetchedAsset>>;
+  readonly statusIdentity: X4UiCorpusStatusIdentity;
+}
+
+async function loadFetchedAssets<K extends X4UiCorpusAssetKind>(
+  assets: Readonly<Record<K, X4UiCorpusInternalAsset>>,
+  order: readonly K[],
+  transport: X4UiCorpusTransport,
+  signal: AbortSignal | undefined,
+  caps: X4UiCorpusResolvedByteCaps,
+  hashProvider: X4UiCorpusSha256Provider | null | undefined,
+): Promise<X4UiCorpusFetchedBatch<K> | X4UiCorpusFailureResult> {
+  const initial = await readStatus(transport, signal, 'status');
+  if (isFailureResult(initial)) return initial;
+  const manifests = {} as Record<K, ManifestQueryResult>;
+  for (const kind of order) {
+    const manifest = await readManifest(transport, signal, assets[kind], initial);
+    if (isFailureResult(manifest)) return manifest;
+    manifests[kind] = manifest;
+  }
+  const fetched = {} as Record<K, X4UiCorpusFetchedAsset>;
+  for (const kind of order) {
+    const expected = assets[kind];
+    const bytes = await readFile(transport, signal, expected, manifests[kind].record, caps);
+    if (isFailureResult(bytes)) return bytes;
+    const digest = await sha256(bytes, hashProvider, expected);
+    if (isFailureResult(digest)) return digest;
+    let text: string | undefined;
+    if (expected.encoding === 'lua' || expected.encoding === 'xml' || expected.encoding === 'xsd') {
+      const decoded = decodeUtf8(bytes, expected);
+      if (isFailureResult(decoded)) return decoded;
+      text = decoded;
+    }
+    fetched[kind] = { expected, bytes, sha256: digest, ...(text === undefined ? {} : { text }) };
+  }
+  const finalStatus = await readStatus(transport, signal, 'consistency');
+  if (isFailureResult(finalStatus)) return finalStatus;
+  if (!sameStatusIdentity(initial.identity, finalStatus.identity)) {
+    return failure('generation-drift', 'consistency', 'The configured-corpus status identity changed during loading.', {
+      expected: initial.identity.manifestGeneration,
+      actual: finalStatus.identity.manifestGeneration,
+    });
+  }
+  return { fetched, statusIdentity: initial.identity };
+}
+
 async function runLoader(
   contractInput: unknown,
   optionsInput: X4UiCorpusLoadOptions | X4UiCorpusCanonicalLoadOptions,
@@ -1135,44 +1398,417 @@ async function runLoader(
     const transport = transportFor(options);
     if (!transport) return failure('network', 'status', 'A bounded fetch-compatible transport is required.');
 
-    const initial = await readStatus(transport, options.signal, 'status');
-    if (isFailureResult(initial)) return initial;
-    const manifests: Record<X4UiCorpusAssetKind, ManifestQueryResult> = {} as Record<X4UiCorpusAssetKind, ManifestQueryResult>;
-    for (const kind of ASSET_ORDER) {
-      const expected = contract.assets[kind];
-      const manifest = await readManifest(transport, options.signal, expected, initial);
-      if (isFailureResult(manifest)) return manifest;
-      manifests[kind] = manifest;
-    }
-    const fetched: Record<X4UiCorpusAssetKind, X4UiCorpusFetchedAsset> = {} as Record<X4UiCorpusAssetKind, X4UiCorpusFetchedAsset>;
-    for (const kind of ASSET_ORDER) {
-      const expected = contract.assets[kind];
-      const bytes = await readFile(transport, options.signal, expected, manifests[kind].record, caps);
-      if (isFailureResult(bytes)) return bytes;
-      const digest = await sha256(bytes, options.hashProvider, expected);
-      if (isFailureResult(digest)) return digest;
-      let text: string | undefined;
-      if (expected.encoding === 'lua') {
-        const decoded = decodeUtf8(bytes, expected);
-        if (isFailureResult(decoded)) return decoded;
-        text = decoded;
-      }
-      fetched[kind] = { expected, bytes, sha256: digest, ...(text === undefined ? {} : { text }) };
-    }
-    const finalStatus = await readStatus(transport, options.signal, 'consistency');
-    if (isFailureResult(finalStatus)) return finalStatus;
-    if (!sameStatusIdentity(initial.identity, finalStatus.identity)) {
-      return failure('generation-drift', 'consistency', 'The configured-corpus status identity changed during loading.', {
-        expected: initial.identity.manifestGeneration,
-        actual: finalStatus.identity.manifestGeneration,
-      });
-    }
-    const success = buildSuccess(fetched, initial.identity, evidenceKind);
+    const loaded = await loadFetchedAssets(contract.assets, ASSET_ORDER, transport, options.signal, caps, options.hashProvider);
+    if (isFailureResult(loaded)) return loaded;
+    const success = buildSuccess(loaded.fetched, loaded.statusIdentity, evidenceKind);
     if (success.ok && evidenceKind === X4_UI_CORPUS_CANONICAL_EVIDENCE && success.evidenceKind === X4_UI_CORPUS_CANONICAL_EVIDENCE) registerCanonicalAuthority(success);
     return success;
   } catch (error) {
     if (isAbortError(error, options?.signal)) return failure('aborted', 'consistency', 'The configured-corpus request was aborted.');
     return failure('internal-error', 'consistency', 'The configured-corpus evidence loader encountered an unexpected failure.');
+  }
+}
+
+interface X4UiCorpusXmlNode {
+  readonly name: string;
+  readonly attributes: Map<string, string>;
+  readonly children: X4UiCorpusXmlNode[];
+  text: string;
+}
+
+interface X4UiCorpusXmlParseResult {
+  readonly root: X4UiCorpusXmlNode;
+}
+
+const XML_NAME_START = /[A-Za-z_]/;
+const XML_NAME_CHAR = /[A-Za-z0-9_.:-]/;
+
+function xmlWhitespace(value: string): boolean {
+  return /^[\t\n\r ]*$/.test(value);
+}
+
+function xmlWhitespaceCharacter(value: string | undefined): boolean {
+  return value !== undefined && /^[\t\n\r ]$/.test(value);
+}
+
+function isBoundedXmlDeclaration(value: string): boolean {
+  if (!value.startsWith('xml') || !xmlWhitespaceCharacter(value[3])) return false;
+  let cursor = 3;
+  const members = new Set<'version' | 'encoding'>();
+  let lastOrder = 0;
+  while (cursor < value.length) {
+    while (cursor < value.length && xmlWhitespaceCharacter(value[cursor])) cursor += 1;
+    if (cursor >= value.length) break;
+    const name = xmlName(value, cursor);
+    if (!name || (name.name !== 'version' && name.name !== 'encoding') || members.has(name.name)) return false;
+    const order = name.name === 'version' ? 1 : 2;
+    if (order < lastOrder) return false;
+    lastOrder = order;
+    cursor = name.next;
+    while (cursor < value.length && xmlWhitespaceCharacter(value[cursor])) cursor += 1;
+    if (value[cursor] !== '=') return false;
+    cursor += 1;
+    while (cursor < value.length && xmlWhitespaceCharacter(value[cursor])) cursor += 1;
+    const quote = value[cursor];
+    if (quote !== '"' && quote !== "'") return false;
+    cursor += 1;
+    const valueStart = cursor;
+    while (cursor < value.length && value[cursor] !== quote) cursor += 1;
+    if (cursor >= value.length) return false;
+    const memberValue = value.slice(valueStart, cursor);
+    if (name.name === 'version' && memberValue !== '1.0') return false;
+    if (name.name === 'encoding' && memberValue.toLowerCase() !== 'utf-8') return false;
+    members.add(name.name);
+    cursor += 1;
+    if (cursor < value.length && !xmlWhitespaceCharacter(value[cursor])) return false;
+  }
+  return members.has('version');
+}
+
+function xmlName(source: string, index: number): { readonly name: string; readonly next: number } | undefined {
+  if (index >= source.length || !XML_NAME_START.test(source[index])) return undefined;
+  let next = index + 1;
+  while (next < source.length && XML_NAME_CHAR.test(source[next])) next += 1;
+  return { name: source.slice(index, next), next };
+}
+
+function decodeXmlEntities(value: string): string | undefined {
+  let invalid = false;
+  const decoded = value.replace(/&(#x[0-9A-Fa-f]+|#\d+|amp|lt|gt|quot|apos);/g, (_match, entity: string) => {
+    if (entity === 'amp') return '&';
+    if (entity === 'lt') return '<';
+    if (entity === 'gt') return '>';
+    if (entity === 'quot') return '"';
+    if (entity === 'apos') return "'";
+    const codePoint = entity.startsWith('#x')
+      ? Number.parseInt(entity.slice(2), 16)
+      : Number.parseInt(entity.slice(1), 10);
+    if (!Number.isSafeInteger(codePoint) || codePoint <= 0 || codePoint > 0x10ffff) {
+      invalid = true;
+      return '';
+    }
+    try {
+      return String.fromCodePoint(codePoint);
+    } catch {
+      invalid = true;
+      return '';
+    }
+  });
+  if (invalid || decoded.includes('&')) {
+    if (/&[^;\s]*;?/.test(decoded)) return undefined;
+  }
+  return decoded;
+}
+
+function parseXmlDocument(sourceInput: string, code: 'color-xml-malformed' | 'color-xsd-malformed'): X4UiCorpusXmlParseResult | X4UiCorpusFailureResult {
+  if (typeof sourceInput !== 'string' || sourceInput.length === 0) return failure(code, 'color', 'The configured color XML source is empty.');
+  const source = sourceInput.charCodeAt(0) === 0xfeff ? sourceInput.slice(1) : sourceInput;
+  const stack: X4UiCorpusXmlNode[] = [];
+  let root: X4UiCorpusXmlNode | undefined;
+  let index = 0;
+  let declarationSeen = false;
+  const malformed = (message: string): X4UiCorpusFailureResult => failure(code, 'color', message, {
+    assetKind: code === 'color-xml-malformed' ? 'colors-xml' : 'colors-xsd',
+  });
+  const appendText = (raw: string): X4UiCorpusFailureResult | undefined => {
+    const decoded = decodeXmlEntities(raw);
+    if (decoded === undefined) return malformed('The configured color XML contains an unknown or invalid entity.');
+    if (stack.length === 0) {
+      return xmlWhitespace(decoded) ? undefined : malformed('The configured color XML contains text outside its root element.');
+    }
+    stack[stack.length - 1].text += decoded;
+    return undefined;
+  };
+
+  while (index < source.length) {
+    if (source[index] !== '<') {
+      const next = source.indexOf('<', index);
+      const end = next < 0 ? source.length : next;
+      const error = appendText(source.slice(index, end));
+      if (error) return error;
+      index = end;
+      continue;
+    }
+    if (source.startsWith('<!--', index)) {
+      const end = source.indexOf('-->', index + 4);
+      if (end < 0 || source.slice(index + 4, end).includes('--')) return malformed('The configured color XML contains an invalid comment.');
+      index = end + 3;
+      continue;
+    }
+    if (source.startsWith('<?', index)) {
+      const end = source.indexOf('?>', index + 2);
+      if (end < 0 || declarationSeen || root || stack.length > 0 || !isBoundedXmlDeclaration(source.slice(index + 2, end))) {
+        return malformed('The configured color XML contains an unexpected processing instruction.');
+      }
+      declarationSeen = true;
+      index = end + 2;
+      continue;
+    }
+    if (source.startsWith('</', index)) {
+      const closing = xmlName(source, index + 2);
+      if (!closing) return malformed('The configured color XML has a malformed closing tag.');
+      let end = closing.next;
+      while (end < source.length && /[\t\n\r ]/.test(source[end])) end += 1;
+      if (source[end] !== '>' || stack.length === 0 || stack[stack.length - 1].name !== closing.name) {
+        return malformed('The configured color XML has mismatched closing tags.');
+      }
+      const closed = stack.pop()!;
+      if (stack.length > 0) stack[stack.length - 1].children.push(closed);
+      else if (root) return malformed('The configured color XML contains more than one root element.');
+      else root = closed;
+      index = end + 1;
+      continue;
+    }
+    if (source.startsWith('<!', index)) return malformed('DOCTYPE, ENTITY, CDATA, and other declarations are not accepted.');
+
+    const opening = xmlName(source, index + 1);
+    if (!opening) return malformed('The configured color XML has a malformed opening tag.');
+    const attributes = new Map<string, string>();
+    let cursor = opening.next;
+    let selfClosing = false;
+    while (cursor < source.length) {
+      while (cursor < source.length && /[\t\n\r ]/.test(source[cursor])) cursor += 1;
+      if (source.startsWith('/>', cursor)) {
+        selfClosing = true;
+        cursor += 2;
+        break;
+      }
+      if (source[cursor] === '>') {
+        cursor += 1;
+        break;
+      }
+      const attribute = xmlName(source, cursor);
+      if (!attribute) return malformed('The configured color XML has a malformed attribute name.');
+      cursor = attribute.next;
+      while (cursor < source.length && /[\t\n\r ]/.test(source[cursor])) cursor += 1;
+      if (source[cursor] !== '=') return malformed('The configured color XML has an unbound attribute.');
+      cursor += 1;
+      while (cursor < source.length && /[\t\n\r ]/.test(source[cursor])) cursor += 1;
+      const quote = source[cursor];
+      if (quote !== '"' && quote !== "'") return malformed('The configured color XML has an unquoted attribute.');
+      cursor += 1;
+      const valueStart = cursor;
+      while (cursor < source.length && source[cursor] !== quote) cursor += 1;
+      if (cursor >= source.length) return malformed('The configured color XML has an unterminated attribute.');
+      const value = decodeXmlEntities(source.slice(valueStart, cursor));
+      if (value === undefined || attributes.has(attribute.name)) return malformed('The configured color XML has an invalid or duplicate attribute.');
+      attributes.set(attribute.name, value);
+      cursor += 1;
+    }
+    if (cursor > source.length || (!selfClosing && source[cursor - 1] !== '>')) return malformed('The configured color XML has an unterminated opening tag.');
+    if (root && stack.length === 0) return malformed('The configured color XML contains more than one root element.');
+    const node: X4UiCorpusXmlNode = { name: opening.name, attributes, children: [], text: '' };
+    if (selfClosing) {
+      if (stack.length > 0) stack[stack.length - 1].children.push(node);
+      else if (root) return malformed('The configured color XML contains more than one root element.');
+      else root = node;
+    } else {
+      stack.push(node);
+    }
+    index = cursor;
+  }
+  if (stack.length > 0 || !root) return malformed('The configured color XML is truncated or has no root element.');
+  return { root };
+}
+
+function colorFailure(
+  code: Extract<X4UiCorpusFailureCode, `color-${string}`>,
+  message: string,
+  assetKind: X4UiCorpusAssetKind = 'colors-xml',
+): X4UiCorpusFailureResult {
+  return failure(code, 'color', message, { assetKind });
+}
+
+function colorNodeName(value: string): string {
+  const separator = value.indexOf(':');
+  return separator < 0 ? value : value.slice(separator + 1);
+}
+
+function validateColorXsd(source: string): X4UiCorpusFailureResult | true {
+  const parsed = parseXmlDocument(source, 'color-xsd-malformed');
+  if (isFailureResult(parsed)) return parsed;
+  const rootSeparator = parsed.root.name.indexOf(':');
+  const rootPrefix = rootSeparator > 0 ? parsed.root.name.slice(0, rootSeparator) : undefined;
+  if (
+    colorNodeName(parsed.root.name) !== 'schema'
+    || rootPrefix === undefined
+    || parsed.root.attributes.get(`xmlns:${rootPrefix}`) !== 'http://www.w3.org/2001/XMLSchema'
+  ) {
+    return colorFailure('color-xsd-malformed', 'The canonical color XSD root is not bound to the XML Schema namespace.', 'colors-xsd');
+  }
+  let hasIdPattern = false;
+  const visit = (node: X4UiCorpusXmlNode): void => {
+    if (node.attributes.get('value') === '[a-zA-Z_][a-zA-Z0-9_]*' || node.text.trim() === '[a-zA-Z_][a-zA-Z0-9_]*') hasIdPattern = true;
+    for (const child of node.children) visit(child);
+  };
+  visit(parsed.root);
+  return hasIdPattern
+    ? true
+    : colorFailure('color-xsd-malformed', 'The canonical color XSD does not declare the pinned identifier pattern.', 'colors-xsd');
+}
+
+function parseColorInteger(
+  attributes: Map<string, string>,
+  name: 'r' | 'g' | 'b' | 'a',
+  fallback: number,
+): number | X4UiCorpusFailureResult {
+  const raw = attributes.get(name);
+  if (raw === undefined) return fallback;
+  if (!/^\d+$/.test(raw)) return colorFailure('color-invalid-value', `Color ${name} must be a decimal integer.`);
+  const value = Number(raw);
+  return Number.isSafeInteger(value) && value >= 0 && value <= 255
+    ? value
+    : colorFailure('color-invalid-value', `Color ${name} is outside the 0..255 range.`);
+}
+
+function parseColorGlow(attributes: Map<string, string>): number | X4UiCorpusFailureResult {
+  const raw = attributes.get('glow');
+  if (raw === undefined) return 0;
+  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(raw)) return colorFailure('color-invalid-value', 'Color glow must be a finite decimal.');
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0 && value <= 1
+    ? value
+    : colorFailure('color-invalid-value', 'Color glow is outside the 0..1 range.');
+}
+
+function parseColorId(
+  attributes: Map<string, string>,
+  name: 'color' | 'mapping',
+): string | X4UiCorpusFailureResult {
+  const id = attributes.get('id');
+  if (id === undefined) return colorFailure(name === 'color' ? 'color-missing-id' : 'color-missing-id', `${name} id is required.`);
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(id)) return colorFailure('color-invalid-id', `${name} id does not match the XSD identifier pattern.`);
+  return id;
+}
+
+function ensureColorNodeAttributes(
+  node: X4UiCorpusXmlNode,
+  allowed: readonly string[],
+): X4UiCorpusFailureResult | undefined {
+  if (node.children.length > 0 || !xmlWhitespace(node.text)) return colorFailure('color-structure', `${node.name} contains unexpected nested content.`);
+  for (const name of node.attributes.keys()) {
+    if (!allowed.includes(name)) return colorFailure('color-structure', `${node.name} contains unexpected attribute ${name}.`);
+  }
+  return undefined;
+}
+
+function parseCanonicalColorGraph(xmlSource: string, xsdSource: string): X4UiCorpusColorGraph | X4UiCorpusFailureResult {
+  const xsd = validateColorXsd(xsdSource);
+  if (isFailureResult(xsd)) return xsd;
+  const parsed = parseXmlDocument(xmlSource, 'color-xml-malformed');
+  if (isFailureResult(parsed)) return parsed;
+  if (parsed.root.name !== 'colormap' || !xmlWhitespace(parsed.root.text)) return colorFailure('color-structure', 'The canonical color XML root must be colormap.');
+  const containers = parsed.root.children.filter(child => child.name === 'colors' || child.name === 'mappings');
+  const colors = containers.filter(child => child.name === 'colors');
+  const mappings = containers.filter(child => child.name === 'mappings');
+  const daltonization = parsed.root.children.filter(child => child.name === 'daltonization');
+  if (parsed.root.children.some(child => !['colors', 'mappings', 'daltonization'].includes(child.name))
+    || colors.length !== 1 || mappings.length !== 1 || daltonization.length > 1
+    || parsed.root.children.some(child => !xmlWhitespace(child.text))) {
+    return colorFailure('color-structure', 'The canonical color XML must contain one colors and one mappings container.');
+  }
+  const ids = new Set<string>();
+  const baseColors: X4UiCorpusColorBaseDefinition[] = [];
+  for (const [index, node] of colors[0].children.entries()) {
+    if (node.name !== 'color') return colorFailure('color-structure', 'The colors container contains an unexpected record.');
+    const nested = ensureColorNodeAttributes(node, ['id', 'r', 'g', 'b', 'a', 'glow']);
+    if (nested) return nested;
+    const id = parseColorId(node.attributes, 'color');
+    if (isFailureResult(id)) return id;
+    if (ids.has(id)) return colorFailure('color-duplicate-id', `Duplicate color or mapping id ${id}.`);
+    ids.add(id);
+    const r = parseColorInteger(node.attributes, 'r', 0);
+    const g = parseColorInteger(node.attributes, 'g', 0);
+    const b = parseColorInteger(node.attributes, 'b', 0);
+    const a = parseColorInteger(node.attributes, 'a', 255);
+    const glow = parseColorGlow(node.attributes);
+    if (isFailureResult(r)) return r;
+    if (isFailureResult(g)) return g;
+    if (isFailureResult(b)) return b;
+    if (isFailureResult(a)) return a;
+    if (isFailureResult(glow)) return glow;
+    baseColors.push({
+      id,
+      r,
+      g,
+      b,
+      a,
+      glow,
+      source: { path: X4_UI_CORPUS_COLORS_XML_PATH, index, id },
+    });
+  }
+  const baseIds = new Set(baseColors.map(color => color.id));
+  const mappingDefinitions: X4UiCorpusColorMappingDefinition[] = [];
+  for (const [index, node] of mappings[0].children.entries()) {
+    if (node.name !== 'mapping') return colorFailure('color-structure', 'The mappings container contains an unexpected record.');
+    const nested = ensureColorNodeAttributes(node, ['id', 'ref']);
+    if (nested) return nested;
+    const id = parseColorId(node.attributes, 'mapping');
+    if (isFailureResult(id)) return id;
+    const ref = node.attributes.get('ref');
+    if (ref === undefined) return colorFailure('color-missing-ref', 'Mapping ref is required.');
+    if (ids.has(id)) return colorFailure('color-duplicate-id', `Duplicate color or mapping id ${id}.`);
+    ids.add(id);
+    if (!baseIds.has(ref)) return colorFailure('color-invalid-ref', `Mapping ${id} does not target a base color id.`);
+    mappingDefinitions.push({
+      id,
+      ref,
+      source: { path: X4_UI_CORPUS_COLORS_XML_PATH, index, id },
+    });
+  }
+  if (baseColors.length !== 224 || mappingDefinitions.length !== 804) {
+    return colorFailure('color-graph-invalid', `Canonical color graph must contain 224 base colors and 804 mappings; received ${baseColors.length}/${mappingDefinitions.length}.`);
+  }
+  return deepFreeze({ baseColors, mappings: mappingDefinitions });
+}
+
+async function runCanonicalColorLoader(
+  optionsInput: X4UiCorpusCanonicalColorLoadOptions,
+  canonicalHashProvider?: X4UiCorpusSha256Provider | null,
+): Promise<X4UiCorpusCanonicalColorResult> {
+  let options: X4UiCorpusInternalLoadOptions | undefined;
+  try {
+    const snapshot = snapshotLoadOptions(optionsInput, X4_UI_CORPUS_COLOR_CANONICAL_EVIDENCE, canonicalHashProvider);
+    if (isFailureResult(snapshot)) return snapshot;
+    options = snapshot;
+    const caps = resolveCaps(options);
+    if (isFailureResult(caps)) return caps;
+    const transport = transportFor(options);
+    if (!transport) return failure('network', 'status', 'A bounded fetch-compatible transport is required.');
+    const loaded = await loadFetchedAssets(CANONICAL_COLOR_ASSETS, COLOR_ASSET_ORDER, transport, options.signal, caps, options.hashProvider);
+    if (isFailureResult(loaded)) return loaded;
+    const xml = textEvidence(loaded.fetched['colors-xml']);
+    const xsd = textEvidence(loaded.fetched['colors-xsd']);
+    const graph = parseCanonicalColorGraph(xml.text, xsd.text);
+    if (isFailureResult(graph)) return graph;
+    const success: X4UiCorpusCanonicalColorSuccess = deepFreeze({
+      ok: true as const,
+      evidenceKind: X4_UI_CORPUS_COLOR_CANONICAL_EVIDENCE,
+      canonical: true as const,
+      canonicalIdentity: 'x4-9.00' as const,
+      verification: X4_UI_CORPUS_VERIFICATION,
+      source: { xml, xsd },
+      identities: {
+        xml: {
+          path: xml.path,
+          relativePath: xml.relativePath,
+          sha256: xml.sha256,
+          size: xml.size,
+        },
+        xsd: {
+          path: xsd.path,
+          relativePath: xsd.relativePath,
+          sha256: xsd.sha256,
+          size: xsd.size,
+        },
+      },
+      graph,
+    });
+    registerCanonicalColorAuthority(success);
+    return success;
+  } catch (error) {
+    if (isAbortError(error, options?.signal)) return failure('aborted', 'consistency', 'The configured-corpus request was aborted.');
+    return failure('internal-error', 'consistency', 'The configured color evidence loader encountered an unexpected failure.');
   }
 }
 
@@ -1195,3 +1831,16 @@ export function loadSyntheticX4UiCorpusAssets(
 
 /** Alias for callers that want the configured-corpus wording. */
 export const loadConfiguredX4UiCorpusAssets = loadCanonicalX4UiCorpusAssets;
+
+/** Load only the pinned canonical-default color XML/XSD evidence and graph. */
+export function loadCanonicalX4UiCorpusColorEvidence(
+  options: X4UiCorpusCanonicalColorLoadOptions,
+): Promise<X4UiCorpusCanonicalColorResult> {
+  const platformHashProvider = bindPlatformSha256();
+  return runCanonicalColorLoader(options, platformHashProvider);
+}
+
+export const loadCanonicalX4UiCorpusColors = loadCanonicalX4UiCorpusColorEvidence;
+export const loadConfiguredX4UiCorpusColorEvidence = loadCanonicalX4UiCorpusColorEvidence;
+export const loadCanonicalX4UiCorpusColorAssets = loadCanonicalX4UiCorpusColorEvidence;
+export const loadConfiguredX4UiCorpusColorAssets = loadCanonicalX4UiCorpusColorEvidence;

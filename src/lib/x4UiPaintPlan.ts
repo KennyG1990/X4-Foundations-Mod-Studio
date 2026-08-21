@@ -10,9 +10,13 @@
 import {
   KEEP_OUT_PRESET_IDS,
   NOT_VERIFIED_IN_GAME,
+  getBuiltInKeepOut,
   getKeepOutPreset,
-  projectBuiltInKeepOut,
+  isIssuedKeepOutEntry,
+  isIssuedKeepOutProjection,
+  projectKeepOut,
   type KeepOutContextPresetId,
+  type X4UiKeepOutEntry,
   type KeepOutProjectionResult,
 } from './x4UiKeepOuts';
 import {
@@ -34,6 +38,7 @@ import {
   type X4UiSceneNodeBase,
   type X4UiSceneRect,
   type X4UiSceneResult,
+  type X4UiSceneColorFact,
   type X4UiSceneSourceLocation,
   type X4UiSceneTextNode,
 } from './x4UiScene';
@@ -41,6 +46,26 @@ import {
 export const X4_UI_PAINT_PLAN_FORMAT = 'x4-ui-paint-plan' as const;
 export const X4_UI_PAINT_PLAN_VERSION = 1 as const;
 export const X4_UI_PAINT_GAME_TRUTH = NOT_VERIFIED_IN_GAME;
+
+/**
+ * A source-backed color fact is only a partial preview tint.  It deliberately
+ * carries the Scene fact fields without deriving engine material, texture,
+ * runtime state, glow, font, or game-effective color behavior.
+ */
+export interface X4UiPaintBasePreviewTint {
+  readonly kind: 'base-preview-tint';
+  readonly completeness: 'partial';
+  readonly field: X4UiSceneColorFact['field'];
+  readonly slot: X4UiSceneColorFact['slot'];
+  readonly value: X4UiSceneColorFact['value'];
+  readonly domain: X4UiSceneColorFact['domain'];
+  readonly provenance: X4UiSceneColorFact['provenance'];
+  readonly expression: X4UiSceneColorFact['expression'];
+  readonly source: X4UiSceneColorFact['source'];
+  readonly sourcePin?: X4UiSceneColorFact['sourcePin'];
+  readonly sampleId?: X4UiSceneColorFact['sampleId'];
+  readonly gameVerification: typeof NOT_VERIFIED_IN_GAME;
+}
 
 export type X4UiPaintLayerKind =
   | 'diagnostic-background'
@@ -63,7 +88,9 @@ export interface X4UiPaintPlanSelection {
 }
 
 export interface X4UiPaintKeepOutInput {
-  readonly context: KeepOutContextPresetId;
+  readonly context: string;
+  /** Issued normalized entry for Batch 8C.1; structural legacy inputs are refused. */
+  readonly entry: X4UiKeepOutEntry;
   readonly projection: KeepOutProjectionResult;
 }
 
@@ -92,6 +119,7 @@ export interface X4UiPaintGeometryCommand extends PaintCommandBase {
   readonly geometry?: X4UiSceneRect;
   readonly completeness: 'complete' | 'partial' | 'unavailable';
   readonly style: 'source-derived' | 'unavailable';
+  readonly basePreviewTints?: readonly X4UiPaintBasePreviewTint[];
 }
 
 export interface X4UiPaintGlyphCommand extends PaintCommandBase {
@@ -112,6 +140,7 @@ export interface X4UiPaintGlyphCommand extends PaintCommandBase {
   readonly sourceRange: { readonly start: number; readonly end: number };
   readonly sourceCodePointRange: { readonly start: number; readonly end: number };
   readonly isEllipsis: boolean;
+  readonly basePreviewTints?: readonly X4UiPaintBasePreviewTint[];
 }
 
 export interface X4UiPaintDiagnosticCommand extends PaintCommandBase {
@@ -125,7 +154,7 @@ export interface X4UiPaintDiagnosticCommand extends PaintCommandBase {
 
 export interface X4UiPaintKeepOutCommand extends PaintCommandBase {
   readonly kind: 'keep-out';
-  readonly context: KeepOutContextPresetId;
+  readonly context: string;
   readonly entryId: string;
   readonly status: 'projected' | 'unavailable';
   readonly evidenceGrade: string;
@@ -268,6 +297,69 @@ const exactKeys = (value: JsonRecord, required: readonly string[], optional: rea
     && keys.every(key => allowed.has(key));
 };
 
+type CapturedKeepOutAuthority = {
+  readonly context: string;
+  readonly entry: X4UiKeepOutEntry;
+  readonly projection: KeepOutProjectionResult;
+};
+
+const captureKeepOutItem = (value: unknown): CapturedKeepOutAuthority | null => {
+  try {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return null;
+    const keys = Reflect.ownKeys(value);
+    const stringKeys = keys.filter((key): key is string => typeof key === 'string');
+    if (stringKeys.length !== keys.length || stringKeys.length !== 3
+      || !stringKeys.includes('context') || !stringKeys.includes('entry') || !stringKeys.includes('projection')) return null;
+    const fields = new Map<string, unknown>();
+    for (const key of stringKeys) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor === undefined || !descriptor.enumerable || !('value' in descriptor)) return null;
+      fields.set(key, descriptor.value);
+    }
+    const context = fields.get('context');
+    const entry = fields.get('entry');
+    const projection = fields.get('projection');
+    if (typeof context !== 'string' || context.trim().length === 0
+      || !isIssuedKeepOutEntry(entry) || !isIssuedKeepOutProjection(projection)) return null;
+    return { context, entry, projection };
+  } catch {
+    return null;
+  }
+};
+
+const captureKeepOutAuthority = (value: unknown): readonly CapturedKeepOutAuthority[] | null => {
+  try {
+    if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) return null;
+    const keys = Reflect.ownKeys(value);
+    const stringKeys = keys.filter((key): key is string => typeof key === 'string');
+    if (stringKeys.length !== keys.length) return null;
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
+    if (lengthDescriptor === undefined || !('value' in lengthDescriptor) || lengthDescriptor.enumerable
+      || typeof lengthDescriptor.value !== 'number' || !Number.isSafeInteger(lengthDescriptor.value)
+      || lengthDescriptor.value < 0 || stringKeys.length !== lengthDescriptor.value + 1
+      || stringKeys.some(key => key !== 'length' && (!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= lengthDescriptor.value))) return null;
+    const captured: CapturedKeepOutAuthority[] = [];
+    for (let index = 0; index < lengthDescriptor.value; index += 1) {
+      const itemDescriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (itemDescriptor === undefined || !itemDescriptor.enumerable || !('value' in itemDescriptor)) return null;
+      const item = captureKeepOutItem(itemDescriptor.value);
+      if (item === null) return null;
+      captured.push(item);
+    }
+    return captured;
+  } catch {
+    return null;
+  }
+};
+
+const materializeCapturedKeepOuts = (captured: readonly CapturedKeepOutAuthority[]): readonly unknown[] => captured.map(item => ({
+  context: item.context,
+  entry: materializePaintJsonDomain(item.entry),
+  projection: materializePaintJsonDomain(item.projection),
+}));
+
 const jsonDomain = (
   value: unknown,
   active = new WeakSet<object>(),
@@ -313,14 +405,14 @@ const materializePaintJsonDomain = (value: unknown, active = new Set<object>()):
       const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
       if (lengthDescriptor === undefined
         || !Object.prototype.hasOwnProperty.call(lengthDescriptor, 'value')
-        || lengthDescriptor.value !== value.length
+        || typeof lengthDescriptor.value !== 'number'
         || lengthDescriptor.enumerable
-        || names.length !== value.length + 1
-        || !names.every(name => name === 'length' || /^(0|[1-9][0-9]*)$/.test(name) && Number(name) < value.length)) {
+        || names.length !== lengthDescriptor.value + 1
+        || !names.every(name => name === 'length' || /^(0|[1-9][0-9]*)$/.test(name) && Number(name) < lengthDescriptor.value)) {
         throw new TypeError('paint input contains a sparse or decorated array');
       }
       const result: unknown[] = [];
-      for (let index = 0; index < value.length; index += 1) {
+      for (let index = 0; index < lengthDescriptor.value; index += 1) {
         const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
         if (descriptor === undefined || !descriptor.enumerable || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
           throw new TypeError('paint input contains a sparse or accessor array member');
@@ -384,6 +476,24 @@ const cloneSource = (source: X4UiSceneSourceLocation): X4UiSceneSourceLocation =
   start: { line: source.start.line, column: source.start.column, offset: source.start.offset },
   end: { line: source.end.line, column: source.end.column, offset: source.end.offset },
 });
+
+const colorFactsForNode = (node: Node): readonly X4UiSceneColorFact[] => {
+  const facts = (node as unknown as JsonRecord).colorFacts;
+  return Array.isArray(facts) ? facts as readonly X4UiSceneColorFact[] : [];
+};
+
+const copyBasePreviewTint = (fact: X4UiSceneColorFact): X4UiPaintBasePreviewTint => {
+  const copiedFact = materializePaintJsonDomain(fact) as JsonRecord;
+  return {
+    kind: 'base-preview-tint',
+    completeness: 'partial',
+    ...copiedFact,
+    gameVerification: NOT_VERIFIED_IN_GAME,
+  } as X4UiPaintBasePreviewTint;
+};
+
+const basePreviewTintsForNode = (node: Node): readonly X4UiPaintBasePreviewTint[] =>
+  colorFactsForNode(node).map(copyBasePreviewTint);
 
 const sourceValid = (value: unknown): value is X4UiSceneSourceLocation => {
   if (!isRecord(value) || !exactKeys(value, ['file', 'start', 'end'], ['sourcePath']) || typeof value.file !== 'string' || value.file.length === 0) return false;
@@ -483,6 +593,101 @@ const provenanceLinkValid = (value: unknown): boolean => {
   return true;
 };
 
+const SCENE_COLOR_SLOTS = new Set([
+  'table-background',
+  'cell-background',
+  'widget-background',
+  'widget-highlight',
+  'widget-border',
+  'widget-icon',
+  'primary-text',
+  'secondary-text',
+]);
+
+const SCENE_COLOR_DOMAINS = new Set(['source-literal-percent-alpha', 'canonical-xml-byte-alpha']);
+const SCENE_COLOR_PROVENANCE = new Set(['source-literal', 'canonical-default-only']);
+const SCENE_COLOR_FIELD_SLOTS = new Set([
+  'backgroundColor:table-background',
+  'cellbgcolor:cell-background',
+  'bgcolor:widget-background',
+  'highlightcolor:widget-highlight',
+  'bordercolor:widget-border',
+  'color:widget-icon',
+  'color:primary-text',
+  'color:secondary-text',
+]);
+
+const colorSourceIdentityValid = (value: unknown): boolean =>
+  isRecord(value)
+  && exactKeys(value, ['path', 'relativePath', 'sha256', 'size'])
+  && typeof value.path === 'string' && value.path.length > 0
+  && typeof value.relativePath === 'string' && value.relativePath.length > 0
+  && typeof value.sha256 === 'string' && /^[0-9A-Fa-f]{64}$/.test(value.sha256) && !/^0+$/.test(value.sha256)
+  && isSafeInteger(value.size, 0);
+
+const colorDocumentSourceValid = (value: unknown): boolean =>
+  isRecord(value)
+  && exactKeys(value, ['id', 'index', 'path'])
+  && typeof value.id === 'string' && value.id.length > 0
+  && isSafeInteger(value.index, 0)
+  && typeof value.path === 'string' && value.path.length > 0;
+
+const colorLiteralFieldValid = (value: unknown): boolean =>
+  isRecord(value)
+  && exactKeys(value, ['expression', 'keySource', 'source', 'value'])
+  && typeof value.expression === 'string' && value.expression.length > 0
+  && sourceValid(value.keySource)
+  && sourceValid(value.source)
+  && isFiniteSafe(value.value);
+
+const colorValueValid = (value: unknown): boolean => {
+  if (!isRecord(value) || value.kind !== 'color' || value.gameVerification !== NOT_VERIFIED_IN_GAME) return false;
+  if (value.domain === 'source-literal-percent-alpha') {
+    if (!exactKeys(value, ['kind', 'domain', 'r', 'g', 'b', 'a', 'declarationExpression', 'declarationSource', 'channels', 'gameVerification'], ['glow'])
+      || typeof value.declarationExpression !== 'string' || value.declarationExpression.length === 0
+      || !sourceValid(value.declarationSource)
+      || !isRecord(value.channels)
+      || !exactKeys(value.channels, ['r', 'g', 'b', 'a'], ['glow'])
+      || !['r', 'g', 'b', 'a'].every(channel => colorLiteralFieldValid(value.channels?.[channel]))
+      || value.glow !== undefined && (!isFiniteSafe(value.glow) || !colorLiteralFieldValid(value.channels.glow))) return false;
+    return ['r', 'g', 'b', 'a'].every(channel => isFiniteSafe(value[channel]) && Object.is((value.channels as JsonRecord)[channel] && ((value.channels as JsonRecord)[channel] as JsonRecord).value, value[channel]))
+      && (value.glow === undefined || Object.is(((value.channels as JsonRecord).glow as JsonRecord).value, value.glow));
+  }
+  if (value.domain === 'canonical-xml-byte-alpha') {
+    return exactKeys(value, ['kind', 'domain', 'canonicalIdentity', 'requestedId', 'resolvedBaseId', 'r', 'g', 'b', 'a', 'glow', 'baseSource', 'sourceIdentities', 'gameVerification'], ['mappingSource'])
+      && value.canonicalIdentity === 'x4-9.00'
+      && typeof value.requestedId === 'string' && value.requestedId.length > 0
+      && typeof value.resolvedBaseId === 'string' && value.resolvedBaseId.length > 0
+      && ['r', 'g', 'b', 'a', 'glow'].every(channel => isFiniteSafe(value[channel]))
+      && colorDocumentSourceValid(value.baseSource)
+      && (value.mappingSource === undefined || colorDocumentSourceValid(value.mappingSource))
+      && isRecord(value.sourceIdentities)
+      && exactKeys(value.sourceIdentities, ['xml', 'xsd'])
+      && colorSourceIdentityValid(value.sourceIdentities.xml)
+      && colorSourceIdentityValid(value.sourceIdentities.xsd);
+  }
+  return false;
+};
+
+const sceneColorFactValid = (value: unknown): value is X4UiSceneColorFact => {
+  if (!isRecord(value)
+    || !exactKeys(value, ['field', 'slot', 'value', 'domain', 'provenance', 'expression', 'source', 'gameVerification'], ['sourcePin', 'sampleId'])
+    || typeof value.field !== 'string' || value.field.length === 0
+    || !SCENE_COLOR_SLOTS.has(String(value.slot))
+    || !SCENE_COLOR_FIELD_SLOTS.has(`${value.field}:${value.slot}`)
+    || !SCENE_COLOR_DOMAINS.has(String(value.domain))
+    || !SCENE_COLOR_PROVENANCE.has(String(value.provenance))
+    || !colorValueValid(value.value)
+    || value.domain !== (value.value as JsonRecord).domain
+    || value.provenance !== (value.domain === 'source-literal-percent-alpha' ? 'source-literal' : 'canonical-default-only')
+    || typeof value.expression !== 'string' || value.expression.length === 0
+    || !sourceValid(value.source)
+    || value.sourcePin !== undefined && !sourcePinValid(value.sourcePin)
+    || value.sampleId !== undefined && (typeof value.sampleId !== 'string' || value.sampleId.length === 0)
+    || value.gameVerification !== NOT_VERIFIED_IN_GAME) return false;
+  return true;
+};
+
 const intersect = (left: X4UiSceneRect, right: X4UiSceneRect): X4UiSceneRect => {
   const x = Math.max(left.x, right.x);
   const y = Math.max(left.y, right.y);
@@ -507,41 +712,6 @@ const copyFontPin = (pin: X4UiSceneFontIdentityPins): X4UiSceneFontIdentityPins 
   descriptor: { relativePath: pin.descriptor.relativePath, sha256: pin.descriptor.sha256 },
   atlas: { relativePath: pin.atlas.relativePath, sha256: pin.atlas.sha256 },
 });
-
-type SceneCandidateInput = {
-  readonly scene: unknown;
-  readonly wrapperStatus?: 'projected' | 'partial';
-};
-
-const sceneCandidateFromInput = (value: unknown): SceneCandidateInput | undefined => {
-  if (!isRecord(value)) return undefined;
-  const format = ownDataField(value, 'format');
-  if (format.present && format.valid && format.value === X4_UI_SCENE_FORMAT) return { scene: value };
-  if (!exactOwnDataKeys(value, ['status', 'scene', 'verification'])) return undefined;
-  const status = ownDataField(value, 'status');
-  const scene = ownDataField(value, 'scene');
-  const verification = ownDataField(value, 'verification');
-  if (!status.valid || !scene.valid || !verification.valid
-    || (status.value !== 'projected' && status.value !== 'partial')
-    || !isRecord(scene.value)) return undefined;
-  let verificationValue: unknown;
-  try {
-    verificationValue = materializePaintJsonDomain(verification.value);
-  } catch {
-    return undefined;
-  }
-  if (!isRecord(verificationValue)
-    || !exactKeys(verificationValue, ['game', 'gameVerified'])
-    || verificationValue.game !== X4_UI_PAINT_GAME_TRUTH
-    || verificationValue.gameVerified !== false) return undefined;
-  return { scene: scene.value, wrapperStatus: status.value };
-};
-
-const sceneContainerClaimed = (value: unknown): boolean => {
-  if (!isRecord(value)) return false;
-  const status = ownDataField(value, 'status');
-  return status.present && status.valid && (status.value === 'projected' || status.value === 'partial' || status.value === 'refused');
-};
 
 const fontAssetsValid = (font: unknown, expected: { readonly descriptor: { readonly relativePath: string; readonly sha256: string }; readonly atlas: { readonly relativePath: string; readonly sha256: string } }): font is ZektonFontAssets => {
   if (!isRecord(font) || font.format !== 'x4-zekton-font-assets' || font.evidenceState !== 'provisional-until-game-parity' || !isRecord(font.descriptor) || !isRecord(font.atlas)) return false;
@@ -692,14 +862,16 @@ const sceneProfileValid = (profile: unknown): boolean => {
 const sceneNodeShapeValid = (node: unknown): node is Node => {
   if (!isRecord(node) || typeof node.kind !== 'string') return false;
   const baseRequired = ['id', 'kind', 'source', 'sourceOrder', 'completeness', 'provenance', 'provenanceLinks', 'diagnosticLinks', 'diagnosticStyle'];
-  const baseOptional = ['parentId', 'zOrder', 'rect', 'clipRect'];
+  const baseOptional = ['parentId', 'zOrder', 'rect', 'clipRect', 'colorFacts'];
   const baseShapeValid = typeof node.id === 'string' && node.id.length > 0 && sourceValid(node.source) && node.sourceOrder === node.source.start.offset
     && ['complete', 'partial', 'unavailable'].includes(String(node.completeness)) && ['source-derived', 'font-metrics', 'preview-only', 'unavailable'].includes(String(node.provenance))
     && Array.isArray(node.provenanceLinks) && node.provenanceLinks.every(provenanceLinkValid) && stringArrayValid(node.diagnosticLinks) && diagnosticStyleValid(node.diagnosticStyle)
     && (node.parentId === undefined || (typeof node.parentId === 'string' && node.parentId.length > 0))
     && (node.zOrder === undefined || isFiniteSafe(node.zOrder))
-    && (node.rect === undefined || rectValid(node.rect)) && (node.clipRect === undefined || rectValid(node.clipRect));
+    && (node.rect === undefined || rectValid(node.rect)) && (node.clipRect === undefined || rectValid(node.clipRect))
+    && (node.colorFacts === undefined || Array.isArray(node.colorFacts) && (node.kind !== 'text' || node.colorFacts.length <= 1) && node.colorFacts.every(sceneColorFactValid));
   if (!baseShapeValid) return false;
+  if (node.colorFacts !== undefined && !['table', 'cell', 'button', 'editbox', 'icon', 'text'].includes(node.kind)) return false;
   const sourceOrderValue = (node.source as X4UiSceneSourceLocation).start.offset;
   const widgetShapeValid = (): boolean => exactKeys(node, [...baseRequired, 'cellId', 'textIds'], [...baseOptional, 'primaryContent', 'iconIdentity', 'configuredActive', 'outerRect'])
     && typeof node.cellId === 'string' && stringArrayValid(node.textIds) && (node.primaryContent === undefined || typeof node.primaryContent === 'string') && (node.iconIdentity === undefined || typeof node.iconIdentity === 'string')
@@ -1042,29 +1214,85 @@ const clippedSource = (glyph: X4UiSceneGlyphNode, clip: X4UiSceneRect, source: X
 
 const keepOutCommand = (input: X4UiPaintKeepOutInput, order: number, drawable: X4UiSceneRect): X4UiPaintKeepOutCommand | undefined => {
   const projection = input.projection;
-  if (!PRESET_IDS.has(input.context) || !isRecord(projection) || !exactKeys(projection, ['entryId', 'evidenceGrade', 'advisoryOnly', 'gameVerification', 'status', 'geometry'], ['viewport', 'reason', 'message'])
-    || projection.advisoryOnly !== true || projection.gameVerification !== NOT_VERIFIED_IN_GAME || typeof projection.entryId !== 'string' || typeof projection.evidenceGrade !== 'string') return undefined;
-  const preset = getKeepOutPreset(input.context);
-  const member = preset?.members.find(candidate => candidate.entryId === projection.entryId);
-  const expected = typeof projection.entryId === 'string'
-    ? projectBuiltInKeepOut(projection.entryId, { width: drawable.width, height: drawable.height })
-    : undefined;
-  if (!member || expected === undefined || !sameStructuralValue(projection, expected) || projection.evidenceGrade !== member.evidenceGrade) return undefined;
-  if (projection.status === 'projected') {
-    if (!isRecord(projection.viewport) || projection.viewport.width !== drawable.width || projection.viewport.height !== drawable.height || !isRecord(projection.geometry)) return undefined;
-    if (projection.geometry.kind === 'horizontal-guide' && isFiniteSafe(projection.geometry.y)) {
-      return { ...diagnosticBase(`keepout:${input.context}:${projection.entryId}`, 'keep-out-overlays', order, undefined, undefined), kind: 'keep-out', context: input.context, entryId: projection.entryId, status: 'projected', evidenceGrade: projection.evidenceGrade, advisoryOnly: true, gameVerification: NOT_VERIFIED_IN_GAME, geometry: { kind: 'horizontal-guide', y: projection.geometry.y } };
-    }
-    if (projection.geometry.kind === 'vertical-guide' && isFiniteSafe(projection.geometry.x)) {
-      return { ...diagnosticBase(`keepout:${input.context}:${projection.entryId}`, 'keep-out-overlays', order, undefined, undefined), kind: 'keep-out', context: input.context, entryId: projection.entryId, status: 'projected', evidenceGrade: projection.evidenceGrade, advisoryOnly: true, gameVerification: NOT_VERIFIED_IN_GAME, geometry: { kind: 'vertical-guide', x: projection.geometry.x } };
-    }
-    if (projection.geometry.kind === 'polygon' && Array.isArray(projection.geometry.points) && projection.geometry.points.length >= 3 && projection.geometry.points.every(point => isRecord(point) && isFiniteSafe(point.x) && isFiniteSafe(point.y))) {
-      return { ...diagnosticBase(`keepout:${input.context}:${projection.entryId}`, 'keep-out-overlays', order, undefined, undefined), kind: 'keep-out', context: input.context, entryId: projection.entryId, status: 'projected', evidenceGrade: projection.evidenceGrade, advisoryOnly: true, gameVerification: NOT_VERIFIED_IN_GAME, geometry: { kind: 'polygon', points: projection.geometry.points.map(point => ({ x: point.x as number, y: point.y as number })) } };
-    }
+  if (typeof input.context !== 'string' || input.context.trim().length === 0 || !isRecord(projection)) return undefined;
+  const entry = input.entry;
+  if (!isRecord(entry)) return undefined;
+  const entryContext = entry.context;
+  if (typeof entryContext !== 'string' || entryContext.trim().length === 0) return undefined;
+
+  const source = isRecord(entry.provenance) ? entry.provenance.source : undefined;
+  const entryId = entry.id;
+  if (typeof entryId !== 'string' || entryId.trim().length === 0 || typeof source !== 'string') return undefined;
+  if (source === 'production-evidence') {
+    const builtIn = getBuiltInKeepOut(entryId as Parameters<typeof getBuiltInKeepOut>[0]);
+    if (builtIn === undefined || !sameStructuralValue(entry, builtIn) || !PRESET_IDS.has(input.context)) return undefined;
+    const preset = getKeepOutPreset(input.context as KeepOutContextPresetId);
+    if (preset?.members.some(candidate => candidate.entryId === entryId) !== true) return undefined;
+  } else if (source === 'manual-calibration') {
+    if (input.context !== entryContext) return undefined;
+  } else if (source !== 'manual-calibration') {
     return undefined;
   }
-  if (projection.status === 'unavailable' && projection.geometry === null && projection.reason === 'reference-unmeasured') {
-    return { ...diagnosticBase(`keepout:${input.context}:${projection.entryId}`, 'keep-out-overlays', order, undefined, undefined), kind: 'keep-out', context: input.context, entryId: projection.entryId, status: 'unavailable', evidenceGrade: projection.evidenceGrade, advisoryOnly: true, gameVerification: NOT_VERIFIED_IN_GAME, geometry: null, reason: projection.reason };
+
+  const expected = projectKeepOut(entry, { width: drawable.width, height: drawable.height });
+  if (expected.status === 'refused' || !sameStructuralValue(projection, expected)) return undefined;
+  if (expected.status === 'unavailable') {
+    if (expected.reason !== 'reference-unmeasured') return undefined;
+    return {
+      ...diagnosticBase(`keepout:${input.context}:${expected.entryId}`, 'keep-out-overlays', order, undefined, undefined),
+      kind: 'keep-out',
+      context: input.context,
+      entryId: expected.entryId,
+      status: 'unavailable',
+      evidenceGrade: expected.evidenceGrade,
+      advisoryOnly: true,
+      gameVerification: NOT_VERIFIED_IN_GAME,
+      geometry: null,
+      reason: expected.reason,
+    };
+  }
+  if (!isRecord(expected.geometry)) return undefined;
+  if (expected.geometry.kind === 'horizontal-guide' && isFiniteSafe(expected.geometry.y)) {
+    return {
+      ...diagnosticBase(`keepout:${input.context}:${expected.entryId}`, 'keep-out-overlays', order, undefined, undefined),
+      kind: 'keep-out',
+      context: input.context,
+      entryId: expected.entryId,
+      status: 'projected',
+      evidenceGrade: expected.evidenceGrade,
+      advisoryOnly: true,
+      gameVerification: NOT_VERIFIED_IN_GAME,
+      geometry: { kind: 'horizontal-guide', y: expected.geometry.y },
+    };
+  }
+  if (expected.geometry.kind === 'vertical-guide' && isFiniteSafe(expected.geometry.x)) {
+    return {
+      ...diagnosticBase(`keepout:${input.context}:${expected.entryId}`, 'keep-out-overlays', order, undefined, undefined),
+      kind: 'keep-out',
+      context: input.context,
+      entryId: expected.entryId,
+      status: 'projected',
+      evidenceGrade: expected.evidenceGrade,
+      advisoryOnly: true,
+      gameVerification: NOT_VERIFIED_IN_GAME,
+      geometry: { kind: 'vertical-guide', x: expected.geometry.x },
+    };
+  }
+  if (expected.geometry.kind === 'polygon'
+    && Array.isArray(expected.geometry.points)
+    && expected.geometry.points.length >= 3
+    && expected.geometry.points.every(point => isRecord(point) && isFiniteSafe(point.x) && isFiniteSafe(point.y))) {
+    return {
+      ...diagnosticBase(`keepout:${input.context}:${expected.entryId}`, 'keep-out-overlays', order, undefined, undefined),
+      kind: 'keep-out',
+      context: input.context,
+      entryId: expected.entryId,
+      status: 'projected',
+      evidenceGrade: expected.evidenceGrade,
+      advisoryOnly: true,
+      gameVerification: NOT_VERIFIED_IN_GAME,
+      geometry: { kind: 'polygon', points: expected.geometry.points.map(point => ({ x: point.x, y: point.y })) },
+    };
   }
   return undefined;
 };
@@ -1088,24 +1316,28 @@ export function projectX4UiPaintPlan(input: X4UiPaintPlanInput): X4UiPaintPlanRe
     if (!sceneField.valid || !corpusField.valid || !authorityField.valid || sceneField.value === undefined || authorityField.value === undefined) return refuse('invalid-input', 'paint plan requires scene, loader-issued canonical corpus evidence, and preview source authority');
     if (!isX4UiCorpusCanonicalSuccess(corpusField.value)) return refuse('invalid-corpus', 'paint plan requires the loader-issued canonical corpus result');
     const corpus = corpusField.value;
-    const candidateInput = sceneCandidateFromInput(sceneField.value);
-    if (candidateInput === undefined) return refuse(sceneContainerClaimed(sceneField.value) ? 'invalid-scene' : 'invalid-input', 'paint plan requires a projected or partial Scene');
-    const scene = materializeX4UiPreviewPaintScene(authorityField.value, candidateInput.scene);
+    const scene = materializeX4UiPreviewPaintScene(authorityField.value, sceneField.value);
     if (scene === undefined) return refuse('invalid-scene', 'paint plan requires the issued preview source authority for this Scene');
-    if (candidateInput.wrapperStatus !== undefined && candidateInput.wrapperStatus !== scene.status) return refuse('invalid-scene', 'Scene wrapper carries malformed or engine/game verification state');
     if (!sceneValid(scene, corpus)) return refuse('invalid-scene', 'Scene evidence is malformed, stale, cyclic, or carries engine/game paint truth');
 
     let keepOutInputs: readonly X4UiPaintKeepOutInput[] = [];
     if (keepOutField.present && keepOutField.value !== undefined) {
+      const capturedKeepOuts = captureKeepOutAuthority(keepOutField.value);
+      if (capturedKeepOuts === null) return refuse('invalid-keepout', 'keep-out entries require issued entry and projection authority');
       let materializedKeepOuts: unknown;
       try {
-        materializedKeepOuts = freezeDeep(materializePaintJsonDomain(keepOutField.value));
+        materializedKeepOuts = freezeDeep(materializeCapturedKeepOuts(capturedKeepOuts));
       } catch {
         return refuse('invalid-keepout', 'keep-out inputs are malformed');
       }
       if (!jsonDomain(materializedKeepOuts)
         || !Array.isArray(materializedKeepOuts)
-        || !materializedKeepOuts.every(value => isRecord(value) && exactKeys(value, ['context', 'projection']) && PRESET_IDS.has(String(value.context)) && isRecord(value.projection))) return refuse('invalid-keepout', 'keep-out inputs are malformed');
+        || !materializedKeepOuts.every(value => isRecord(value)
+          && exactKeys(value, ['context', 'entry', 'projection'])
+          && typeof value.context === 'string'
+          && value.context.trim().length > 0
+          && isRecord(value.entry)
+          && isRecord(value.projection))) return refuse('invalid-keepout', 'keep-out inputs are malformed');
       keepOutInputs = materializedKeepOuts as unknown as readonly X4UiPaintKeepOutInput[];
     }
 
@@ -1142,7 +1374,8 @@ export function projectX4UiPaintPlan(input: X4UiPaintPlanInput): X4UiPaintPlanRe
       const clippedGeometry = geometry === undefined ? undefined : intersect(geometry, clip);
       const drawableGeometry = clippedGeometry !== undefined && hasArea(clippedGeometry) ? clippedGeometry : undefined;
       const base = diagnosticBase(`geometry:${node.id}`, 'diagnostic-background', order++, node, frameId);
-      background.push({ ...base, ...(drawableGeometry === undefined ? {} : { clipRect: rectCopy(clip), geometry: rectCopy(drawableGeometry) }), kind: 'node-geometry', completeness: node.completeness, style: geometry === undefined ? 'unavailable' : 'source-derived' });
+      const basePreviewTints = basePreviewTintsForNode(node);
+      background.push({ ...base, ...(drawableGeometry === undefined ? {} : { clipRect: rectCopy(clip), geometry: rectCopy(drawableGeometry) }), ...(basePreviewTints.length === 0 ? {} : { basePreviewTints }), kind: 'node-geometry', completeness: node.completeness, style: geometry === undefined ? 'unavailable' : 'source-derived' });
       if (geometry !== undefined && drawableGeometry === undefined) {
         diagnostics.push({ ...diagnosticBase(`empty-clip:geometry:${node.id}`, 'diagnostics', order++, node, frameId), clipRect: rectCopy(clip), kind: 'empty-clip', reason: 'node geometry has no drawable intersection with its accepted clip hierarchy' });
       }
@@ -1175,7 +1408,8 @@ export function projectX4UiPaintPlan(input: X4UiPaintPlanInput): X4UiPaintPlanRe
       const frameId = frameIdFor(node, byId);
       const commandBase = { ...diagnosticBase(`glyph:${glyph.id}`, 'glyph-alpha-blits', order++, node, frameId), clipRect: rectCopy(clip) };
       const identity = fontName === 'Zekton' ? ZEKTON_CORPUS_ASSETS.regular : ZEKTON_CORPUS_ASSETS.bold;
-      glyphs.push({ ...commandBase, kind: 'glyph-alpha-blit', textId: glyph.textId, lineIndex: glyph.lineIndex, codePoint: glyph.codePoint, glyphIndex: glyph.glyphIndex, descriptor: copyFontPin({ descriptor: identity.descriptor, atlas: identity.atlas }).descriptor, atlas: { ...copyFontPin({ descriptor: identity.descriptor, atlas: identity.atlas }).atlas, width: font.atlas.width, height: font.atlas.height }, sourceRect: clipped.source, destinationRect: clipped.destination, sourceRange: { start: glyph.sourceRange.start, end: glyph.sourceRange.end }, sourceCodePointRange: { start: glyph.sourceCodePointRange.start, end: glyph.sourceCodePointRange.end }, isEllipsis: glyph.quad.isEllipsis });
+      const basePreviewTints = basePreviewTintsForNode(text as unknown as Node);
+      glyphs.push({ ...commandBase, kind: 'glyph-alpha-blit', textId: glyph.textId, lineIndex: glyph.lineIndex, codePoint: glyph.codePoint, glyphIndex: glyph.glyphIndex, descriptor: copyFontPin({ descriptor: identity.descriptor, atlas: identity.atlas }).descriptor, atlas: { ...copyFontPin({ descriptor: identity.descriptor, atlas: identity.atlas }).atlas, width: font.atlas.width, height: font.atlas.height }, sourceRect: clipped.source, destinationRect: clipped.destination, sourceRange: { start: glyph.sourceRange.start, end: glyph.sourceRange.end }, sourceCodePointRange: { start: glyph.sourceCodePointRange.start, end: glyph.sourceCodePointRange.end }, isEllipsis: glyph.quad.isEllipsis, ...(basePreviewTints.length === 0 ? {} : { basePreviewTints }) });
     }
     for (const gap of scene.gaps) {
       const node = gap.nodeId === undefined ? undefined : byId.get(gap.nodeId);
@@ -1218,10 +1452,14 @@ export function projectX4UiPaintPlan(input: X4UiPaintPlanInput): X4UiPaintPlanRe
     const issuedKeepOuts = issuedLayers[3].commands as readonly X4UiPaintKeepOutCommand[];
     const commandIds = issuedLayers.flatMap(layer => layer.commands.map(command => command.id));
     if (new Set(commandIds).size !== commandIds.length) return refuse('duplicate-id', 'paint plan command ids are not unique');
+    const hasBasePreviewTints = [...background, ...glyphs].some(command => {
+      const tints = (command as unknown as JsonRecord).basePreviewTints;
+      return Array.isArray(tints) && tints.length > 0;
+    });
     const plan: X4UiPaintPlan = {
       format: X4_UI_PAINT_PLAN_FORMAT,
       version: X4_UI_PAINT_PLAN_VERSION,
-      status: scene.status === 'partial' || issuedKeepOuts.some(overlay => overlay.status === 'unavailable') ? 'partial' : 'projected',
+      status: scene.status === 'partial' || hasBasePreviewTints || issuedKeepOuts.some(overlay => overlay.status === 'unavailable') ? 'partial' : 'projected',
       gameTruth: X4_UI_PAINT_GAME_TRUTH,
       gameVerified: false,
       source: {

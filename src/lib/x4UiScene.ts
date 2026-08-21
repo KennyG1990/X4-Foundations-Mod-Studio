@@ -8,8 +8,12 @@
 
 import {
   X4_UI_LAYOUT_GAME_TRUTH,
+  isIssuedX4UiLayoutEvidencePair,
   validateX4UiLayoutEvidencePair,
   type X4UiLayoutCellNode,
+  type X4UiLayoutColorDomain,
+  type X4UiLayoutColorFactProvenance,
+  type X4UiLayoutColorValue,
   type X4UiLayoutDescriptorFact,
   type X4UiLayoutDescriptorFacts,
   type X4UiLayoutFrameNode,
@@ -76,6 +80,12 @@ import {
 import {
   X4_UI_CORPUS_CANONICAL_EVIDENCE,
   X4_UI_CORPUS_VERIFICATION,
+  X4_UI_CORPUS_COLORS_XML_PATH,
+  X4_UI_CORPUS_COLORS_XML_SHA256,
+  X4_UI_CORPUS_COLORS_XML_SIZE,
+  X4_UI_CORPUS_COLORS_XSD_PATH,
+  X4_UI_CORPUS_COLORS_XSD_SHA256,
+  X4_UI_CORPUS_COLORS_XSD_SIZE,
   isX4UiCorpusCanonicalSuccess,
   type X4UiCorpusAssetKind,
   type X4UiCorpusCanonicalSuccess,
@@ -92,6 +102,28 @@ export type X4UiSceneStatus = 'projected' | 'partial' | 'refused';
 export type X4UiSceneCompleteness = 'complete' | 'partial' | 'unavailable';
 export type X4UiSceneNodeKind = 'frame' | 'table' | 'row' | 'cell' | 'text' | 'button' | 'editbox' | 'icon' | 'glyph';
 export type X4UiSceneTextSlot = 'primary' | 'secondary';
+export type X4UiSceneColorSlot =
+  | 'table-background'
+  | 'cell-background'
+  | 'widget-background'
+  | 'widget-highlight'
+  | 'widget-border'
+  | 'widget-icon'
+  | 'primary-text'
+  | 'secondary-text';
+
+export interface X4UiSceneColorFact {
+  readonly field: string;
+  readonly slot: X4UiSceneColorSlot;
+  readonly value: X4UiLayoutColorValue;
+  readonly domain: X4UiLayoutColorDomain;
+  readonly provenance: X4UiLayoutColorFactProvenance;
+  readonly expression: string;
+  readonly source: X4UiSceneSourceLocation;
+  readonly sourcePin?: X4UiLayoutSourcePin;
+  readonly sampleId?: string;
+  readonly gameVerification: typeof X4_UI_SCENE_GAME_TRUTH;
+}
 
 /** The source location shape is intentionally inherited from the accepted program owner. */
 export type X4UiSceneSourceLocation = X4UiLayoutFrameNode['source'];
@@ -203,6 +235,7 @@ export interface X4UiSceneNodeBase {
   readonly completeness: X4UiSceneCompleteness;
   readonly provenance: 'source-derived' | 'font-metrics' | 'preview-only' | 'unavailable';
   readonly provenanceLinks: readonly X4UiSceneProvenanceLink[];
+  readonly colorFacts?: readonly X4UiSceneColorFact[];
   readonly diagnosticLinks: readonly string[];
   readonly diagnosticStyle: X4UiSceneDiagnosticStyle;
 }
@@ -657,6 +690,70 @@ const factProvenanceLink = (
   ...(fact.sampleId ? { sampleId: fact.sampleId } : {}),
 });
 
+const sceneColorFact = (
+  field: string,
+  slot: X4UiSceneColorSlot,
+  fact: X4UiLayoutDescriptorFact | undefined,
+): X4UiSceneColorFact | undefined => {
+  if (!fact || fact.status !== 'known' || fact.expectedType !== 'color-object' || !validateKnownColorFact(fact as unknown as Record<string, unknown>)) return undefined;
+  return {
+    field,
+    slot,
+    value: cloneData(fact.value) as X4UiLayoutColorValue,
+    domain: fact.value.domain,
+    provenance: fact.provenance,
+    expression: fact.expression,
+    source: sourceCopy(fact.source),
+    ...(fact.sourcePin ? { sourcePin: sourcePinCopy(fact.sourcePin) } : {}),
+    ...(fact.sampleId ? { sampleId: fact.sampleId } : {}),
+    gameVerification: X4_UI_SCENE_GAME_TRUTH,
+  };
+};
+
+const sceneColorFacts = (
+  facts: X4UiLayoutDescriptorFacts,
+  entries: readonly (readonly [string, X4UiSceneColorSlot])[],
+): readonly X4UiSceneColorFact[] => entries
+  .map(([field, slot]) => sceneColorFact(field, slot, facts[field]))
+  .filter((fact): fact is X4UiSceneColorFact => fact !== undefined);
+
+const addKnownColorUncertaintyGap = (
+  context: BuildContext,
+  nodeId: string,
+  source: X4UiSceneSourceLocation,
+  links: string[],
+  subject: string,
+): void => {
+  gapForChild(
+    context,
+    'paint',
+    nodeId,
+    source,
+    `known base color tint for ${subject} does not establish engine-effective material/texture/glow, active/inactive/hover/selection state, C++ effective color map/profile/daltonization, font raster color behavior, or game-frame acceptance`,
+    links,
+    'unsupported',
+  );
+};
+
+const addUnavailableColorGap = (
+  context: BuildContext,
+  nodeId: string,
+  field: string,
+  fact: X4UiLayoutDescriptorFact | undefined,
+  links: string[],
+): void => {
+  if (fact?.status !== 'unavailable' || fact.expectedType !== 'color-object') return;
+  gapForChild(
+    context,
+    'paint',
+    nodeId,
+    fact.source,
+    `color descriptor fact ${field} remains unavailable to the scene projection`,
+    links,
+    'unsupported',
+  );
+};
+
 interface BuildContext {
   readonly program: X4UiLayoutProgram;
   readonly assets: X4UiSceneFontAssetMap;
@@ -676,6 +773,107 @@ const addGap = (
   context.gaps.push({ id, ...input });
   context.partial = true;
   return id;
+};
+
+const compareText = (left: string, right: string): number => left === right ? 0 : left < right ? -1 : 1;
+
+const compareOptionalNumber = (left: number | undefined, right: number | undefined): number => {
+  if (left === right) return 0;
+  if (left === undefined) return -1;
+  if (right === undefined) return 1;
+  return left < right ? -1 : 1;
+};
+
+const compareSceneGap = (left: X4UiSceneGap, right: X4UiSceneGap): number =>
+  compareText(left.source.file, right.source.file)
+  || compareText(left.source.sourcePath || '', right.source.sourcePath || '')
+  || compareOptionalNumber(left.source.start.offset, right.source.start.offset)
+  || compareOptionalNumber(left.source.end.offset, right.source.end.offset)
+  || compareOptionalNumber(left.source.start.line, right.source.start.line)
+  || compareOptionalNumber(left.source.start.column, right.source.start.column)
+  || compareOptionalNumber(left.source.end.line, right.source.end.line)
+  || compareOptionalNumber(left.source.end.column, right.source.end.column)
+  || compareText(left.category, right.category)
+  || compareText(left.status, right.status)
+  || compareText(left.reason, right.reason)
+  || compareText(left.expression || '', right.expression || '')
+  || compareText(left.sourcePin?.sourcePath || '', right.sourcePin?.sourcePath || '')
+  || compareOptionalNumber(left.sourcePin?.lineStart, right.sourcePin?.lineStart)
+  || compareOptionalNumber(left.sourcePin?.lineEnd, right.sourcePin?.lineEnd)
+  || compareText(left.operationId || '', right.operationId || '')
+  || compareText(left.nodeId || '', right.nodeId || '')
+  || compareOptionalNumber(left.textRange?.start, right.textRange?.start)
+  || compareOptionalNumber(left.textRange?.end, right.textRange?.end)
+  || compareOptionalNumber(left.lineIndex, right.lineIndex)
+  || compareText(left.previewOnly === undefined ? '' : String(left.previewOnly), right.previewOnly === undefined ? '' : String(right.previewOnly))
+  || compareText(left.id, right.id);
+
+const remapGapLinks = (
+  links: readonly string[],
+  ids: ReadonlyMap<string, string>,
+): readonly string[] => {
+  const remapped: string[] = [];
+  const seen = new Set<string>();
+  for (const link of links) {
+    const next = ids.get(link);
+    if (next === undefined) throw new Error(`scene gap link ${link} has no canonical target`);
+    if (!seen.has(next)) {
+      seen.add(next);
+      remapped.push(next);
+    }
+  }
+  remapped.sort(compareText);
+  return remapped;
+};
+
+const canonicalizeSceneGapGraph = (
+  gaps: readonly X4UiSceneGap[],
+  frames: readonly X4UiSceneFrameNode[],
+  tables: readonly X4UiSceneTableNode[],
+  rows: readonly X4UiSceneRowNode[],
+  cells: readonly X4UiSceneCellNode[],
+  widgets: readonly X4UiSceneWidgetNode[],
+  texts: readonly X4UiSceneTextNode[],
+  glyphs: readonly X4UiSceneGlyphNode[],
+): {
+  readonly gaps: readonly X4UiSceneGap[];
+  readonly frames: readonly X4UiSceneFrameNode[];
+  readonly tables: readonly X4UiSceneTableNode[];
+  readonly rows: readonly X4UiSceneRowNode[];
+  readonly cells: readonly X4UiSceneCellNode[];
+  readonly widgets: readonly X4UiSceneWidgetNode[];
+  readonly texts: readonly X4UiSceneTextNode[];
+  readonly glyphs: readonly X4UiSceneGlyphNode[];
+} => {
+  const ordered = [...gaps].sort(compareSceneGap);
+  const ids = new Map<string, string>();
+  ordered.forEach((gap, index) => {
+    if (ids.has(gap.id)) throw new Error(`duplicate scene gap id ${gap.id}`);
+    ids.set(gap.id, `scene-gap:${String(index).padStart(6, '0')}`);
+  });
+  const canonicalGaps = ordered.map(gap => ({ ...gap, id: ids.get(gap.id)! }));
+  const remapNode = <T extends X4UiSceneNodeBase>(node: T): T => ({
+    ...node,
+    diagnosticLinks: remapGapLinks(node.diagnosticLinks, ids),
+  } as T);
+  const canonicalTexts = texts.map(text => ({
+    ...remapNode(text),
+    textGaps: remapGapLinks(text.textGaps, ids),
+    lines: text.lines.map(line => ({
+      ...line,
+      diagnosticLinks: remapGapLinks(line.diagnosticLinks, ids),
+    })),
+  }));
+  return {
+    gaps: canonicalGaps,
+    frames: frames.map(remapNode),
+    tables: tables.map(remapNode),
+    rows: rows.map(remapNode),
+    cells: cells.map(remapNode),
+    widgets: widgets.map(remapNode),
+    texts: canonicalTexts,
+    glyphs: glyphs.map(remapNode),
+  };
 };
 
 const linkProgramGaps = (context: BuildContext, nodeId: string | undefined): string[] => {
@@ -1660,6 +1858,11 @@ const buildTableProjection = (
     const visible = Boolean(viewportRect && intersection(displayed, viewportRect));
     rowVisible.set(row.id, visible);
   }
+  const tableColorFacts = sceneColorFacts(table.descriptorFacts, [['backgroundColor', 'table-background']]);
+  addUnavailableColorGap(context, `scene:${table.id}`, 'backgroundColor', table.descriptorFacts.backgroundColor, links);
+  for (const colorFact of tableColorFacts) {
+    addKnownColorUncertaintyGap(context, `scene:${table.id}`, colorFact.source, links, 'the table surface');
+  }
   const tableCompleteness: X4UiSceneCompleteness = tableRect
     ? (links.length === 0 ? 'complete' : 'partial')
     : 'unavailable';
@@ -1683,6 +1886,7 @@ const buildTableProjection = (
     ...(viewportRect ? { clipRect: fixedViewportRect || viewportRect, viewportRect } : {}),
     completeness: tableCompleteness,
     provenance: 'source-derived',
+    ...(tableColorFacts.length > 0 ? { colorFacts: tableColorFacts } : {}),
     provenanceLinks: [
       ...factLinks(table.descriptorFacts, ['x', 'y', 'maxVisibleHeight', 'reserveScrollBar', 'finalWidth']),
       ...(state ? [makeSourceLink('kernel-state', table.source)] : []),
@@ -1907,6 +2111,12 @@ const buildTextNode = (
   const textNodeId = `scene:text:${cell.id}:${slot}`;
   const links = [...new Set([...widgetLinks, ...linkProgramGaps(context, cell.id)])];
   const source = contentFact?.source || cell.source;
+  const textColorDescriptorFact = widgetType === 'text' && slot === 'primary'
+    ? cell.descriptorFacts.color
+    : operationForCell(operations, cell, [slot === 'primary' ? 'setText' : 'setText2'])?.descriptorFacts.color;
+  const textColorFact = sceneColorFact('color', slot === 'primary' ? 'primary-text' : 'secondary-text', textColorDescriptorFact);
+  addUnavailableColorGap(context, textNodeId, 'color', textColorDescriptorFact, links);
+  if (textColorFact) addKnownColorUncertaintyGap(context, textNodeId, textColorFact.source, links, 'font raster color');
   const wordwrapFact = widgetType === 'text' ? cell.descriptorFacts.wordwrap : undefined;
   const nestedNoWrapLinks = widgetType === 'text' ? [] : nestedTextNoWrapLinks(source);
   let wrapMode: ZektonWrapMode = 'no-wrap';
@@ -2138,6 +2348,7 @@ const buildTextNode = (
       clipRect: textClip,
       completeness,
       provenance: 'font-metrics',
+      ...(textColorFact ? { colorFacts: [textColorFact] } : {}),
       provenanceLinks: [
         ...(wordwrapFact?.status === 'known' ? [factProvenanceLink('wordwrap', wordwrapFact)] : []),
         ...nestedNoWrapLinks,
@@ -2195,6 +2406,7 @@ const buildTextNode = (
     clipRect: textClip,
     completeness: 'unavailable',
     provenance: 'unavailable',
+    ...(textColorFact ? { colorFacts: [textColorFact] } : {}),
     provenanceLinks: [
       ...(wordwrapFact?.status === 'known' ? [factProvenanceLink('wordwrap', wordwrapFact)] : []),
       ...nestedNoWrapLinks,
@@ -2223,7 +2435,6 @@ const buildTextNode = (
     },
   };
   textIds.push(textNodeId);
-  void operations;
   return { node: fallbackNode, glyphs };
 };
 
@@ -2325,6 +2536,11 @@ const buildRowAndCellNodes = (
       } else if (hidden !== true) {
         gapForChild(context, 'cell', cell.id, cell.source, 'cell parent row/table geometry is unavailable', cellLinks);
       }
+      const cellColorFacts = sceneColorFacts(cell.descriptorFacts, [['cellbgcolor', 'cell-background']]);
+      addUnavailableColorGap(context, cellNodeId, 'cellbgcolor', cell.descriptorFacts.cellbgcolor, cellLinks);
+      for (const colorFact of cellColorFacts) {
+        addKnownColorUncertaintyGap(context, cellNodeId, colorFact.source, cellLinks, 'the cell surface');
+      }
       const widgetIds: string[] = [];
       const contentKind = cell.descriptorFacts.contentKind?.status === 'known' && typeof cell.descriptorFacts.contentKind.value === 'string'
         ? cell.descriptorFacts.contentKind.value
@@ -2379,6 +2595,21 @@ const buildRowAndCellNodes = (
             if (widgetType === 'button' || widgetType === 'editbox') {
               if (height === 0) height = parentHeight;
             }
+            const widgetColorEntries: readonly (readonly [string, X4UiSceneColorSlot])[] = widgetType === 'button'
+              ? [['bgcolor', 'widget-background'], ['highlightcolor', 'widget-highlight'], ['bordercolor', 'widget-border']]
+              : widgetType === 'editbox'
+                ? [['bgcolor', 'widget-background']]
+                : widgetType === 'icon'
+                  ? [['color', 'widget-icon']]
+                  : [];
+            const widgetDescriptorFacts = operation?.descriptorFacts || {};
+            const widgetColorFacts = sceneColorFacts(widgetDescriptorFacts, widgetColorEntries);
+            for (const [field] of widgetColorEntries) {
+              addUnavailableColorGap(context, widgetNodeId, field, widgetDescriptorFacts[field], baseWidgetLinks);
+            }
+            for (const colorFact of widgetColorFacts) {
+              addKnownColorUncertaintyGap(context, widgetNodeId, colorFact.source, baseWidgetLinks, `widget ${colorFact.slot}`);
+            }
             const unavailableWidgetLinks = [...new Set([...baseWidgetLinks, ...cellLinks])];
             if (sourceWidthValid) {
               const widgetRect = widgetOuterRect(cellRect, widgetType, outerX, outerY, width, height);
@@ -2403,11 +2634,6 @@ const buildRowAndCellNodes = (
                 textDiagnosticLinks.push(...result.node.diagnosticLinks);
               }
               const widgetLinks = [...new Set([...baseWidgetLinks, ...textDiagnosticLinks])];
-              for (const [paintFactName, paintFact] of Object.entries(cell.descriptorFacts)) {
-                if (paintFact.expectedType === 'color-object') {
-                  gapForChild(context, 'paint', widgetNodeId, cell.source, `engine color fact ${paintFactName} remains unavailable to the scene projection`, widgetLinks, 'unsupported');
-                }
-              }
               if (widgetType === 'icon') gapForChild(context, 'texture', widgetNodeId, cell.source, 'icon material/texture is not projected as engine truth', widgetLinks, 'unsupported');
               if (widgetType === 'button' || widgetType === 'editbox') gapForChild(context, 'state', widgetNodeId, cell.source, 'runtime widget interaction state is not projected as engine truth', widgetLinks, 'unsupported');
               const widgetCompleteness: X4UiSceneCompleteness = widgetLinks.length === 0 ? 'complete' : 'partial';
@@ -2427,6 +2653,7 @@ const buildRowAndCellNodes = (
                 ...(widgetClip ? { clipRect: widgetClip } : {}),
                 completeness: widgetCompleteness,
                 provenance: 'source-derived',
+                ...(widgetColorFacts.length > 0 ? { colorFacts: widgetColorFacts } : {}),
                 provenanceLinks: [
                   ...factLinks(cell.descriptorFacts, ['contentKind', 'outerX', 'outerY', 'outerWidth', 'outerHeight', 'text', 'text2', 'icon', 'active']),
                   makeSourceLink('source-pin', operation?.source || cell.source),
@@ -2452,6 +2679,7 @@ const buildRowAndCellNodes = (
                 sourceOrder: sourceOrder(operation?.source || cell.source),
                 completeness: 'unavailable',
                 provenance: 'unavailable',
+                ...(widgetColorFacts.length > 0 ? { colorFacts: widgetColorFacts } : {}),
                 provenanceLinks: [
                   ...factLinks(cell.descriptorFacts, ['contentKind', 'outerX', 'outerY', 'outerWidth', 'outerHeight']),
                   makeSourceLink('source-pin', operation?.source || cell.source),
@@ -2484,6 +2712,7 @@ const buildRowAndCellNodes = (
         ...(naturalCellRect ? { naturalRect: naturalCellRect } : {}),
         completeness: cellCompleteness,
         provenance: 'source-derived',
+        ...(cellColorFacts.length > 0 ? { colorFacts: cellColorFacts } : {}),
         provenanceLinks: [
           ...factLinks(cell.descriptorFacts, ['contentKind', 'span', 'outerX', 'outerY', 'outerWidth', 'outerHeight']),
           ...(state ? [makeSourceLink('kernel-state', cell.source)] : []),
@@ -2503,21 +2732,177 @@ const buildRowAndCellNodes = (
   return { rows, cells, widgets, texts, glyphs };
 };
 
+const closedDataRecord = (
+  value: unknown,
+  required: readonly string[],
+  optional: readonly string[] = [],
+): value is Record<string, unknown> => {
+  if (!isRecord(value) || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return false;
+  const ownKeys = Reflect.ownKeys(value);
+  if (ownKeys.some(key => typeof key !== 'string')) return false;
+  const keys = ownKeys as string[];
+  if (!required.every(key => keys.includes(key)) || !keys.every(key => required.includes(key) || optional.includes(key))) return false;
+  return keys.every(key => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return descriptor !== undefined && 'value' in descriptor && descriptor.enumerable === true;
+  });
+};
+
+const closedSourceIsValid = (value: unknown): value is X4UiSceneSourceLocation => {
+  if (!closedDataRecord(value, ['file', 'start', 'end'], ['sourcePath'])) return false;
+  const source = value as Record<string, unknown>;
+  if (!closedDataRecord(source.start, ['line', 'column', 'offset']) || !closedDataRecord(source.end, ['line', 'column', 'offset'])) return false;
+  return sourceIsValid(value);
+};
+
+const closedSourcePinIsValid = (value: unknown): value is X4UiLayoutSourcePin =>
+  closedDataRecord(value, ['sourcePath', 'lineStart', 'lineEnd']) && sourcePinIsValid(value);
+
+const finiteColorChannel = (value: unknown, minimum: number, maximum: number, integer = false): value is number =>
+  typeof value === 'number'
+  && Number.isFinite(value)
+  && (!integer || Number.isInteger(value))
+  && value >= minimum
+  && value <= maximum;
+
+const validateColorLiteralField = (
+  value: unknown,
+  declarationSource: X4UiSceneSourceLocation,
+  minimum: number,
+  maximum: number,
+): boolean => {
+  if (!closedDataRecord(value, ['value', 'expression', 'source', 'keySource'])) return false;
+  const field = value as Record<string, unknown>;
+  return finiteColorChannel(field.value, minimum, maximum)
+    && typeof field.expression === 'string'
+    && field.expression.length > 0
+    && closedSourceIsValid(field.source)
+    && closedSourceIsValid(field.keySource)
+    && sourceLocationContains(declarationSource, field.source)
+    && sourceLocationContains(declarationSource, field.keySource);
+};
+
+const validateColorSourceIdentity = (
+  value: unknown,
+  path: string,
+  sha256: string,
+  size: number,
+): boolean => closedDataRecord(value, ['path', 'relativePath', 'sha256', 'size'])
+  && value.path === path
+  && value.relativePath === path
+  && value.sha256 === sha256
+  && value.size === size;
+
+const validateColorDocumentSource = (
+  value: unknown,
+  expectedId: string,
+  maximumIndex: number,
+): boolean => closedDataRecord(value, ['path', 'index', 'id'])
+  && value.path === X4_UI_CORPUS_COLORS_XML_PATH
+  && Number.isSafeInteger(value.index)
+  && (value.index as number) >= 0
+  && (value.index as number) < maximumIndex
+  && value.id === expectedId;
+
+const validateColorValue = (value: unknown): value is X4UiLayoutColorValue => {
+  if (!closedDataRecord(value, ['kind', 'domain', 'r', 'g', 'b', 'a', 'gameVerification'], ['glow', 'declarationExpression', 'declarationSource', 'channels', 'canonicalIdentity', 'requestedId', 'resolvedBaseId', 'baseSource', 'mappingSource', 'sourceIdentities'])) return false;
+  const candidate = value as Record<string, unknown>;
+  if (candidate.kind !== 'color' || candidate.gameVerification !== X4_UI_SCENE_GAME_TRUTH) return false;
+  if (candidate.domain === 'source-literal-percent-alpha') {
+    if (!closedDataRecord(value, ['kind', 'domain', 'r', 'g', 'b', 'a', 'declarationExpression', 'declarationSource', 'channels', 'gameVerification'], ['glow'])
+      || typeof candidate.declarationExpression !== 'string'
+      || candidate.declarationExpression.length === 0
+      || !closedSourceIsValid(candidate.declarationSource)) return false;
+    if (!finiteColorChannel(candidate.r, 0, 255) || !finiteColorChannel(candidate.g, 0, 255) || !finiteColorChannel(candidate.b, 0, 255) || !finiteColorChannel(candidate.a, 0, 100)) return false;
+    const channels = candidate.channels;
+    if (!closedDataRecord(channels, ['r', 'g', 'b', 'a'], ['glow'])) return false;
+    const declarationSource = candidate.declarationSource as X4UiSceneSourceLocation;
+    const channelValues: Readonly<Record<'r' | 'g' | 'b' | 'a', readonly [number, number]>> = {
+      r: [candidate.r as number, 255],
+      g: [candidate.g as number, 255],
+      b: [candidate.b as number, 255],
+      a: [candidate.a as number, 100],
+    };
+    for (const name of ['r', 'g', 'b', 'a'] as const) {
+      const field = channels[name] as Record<string, unknown>;
+      if (!validateColorLiteralField(field, declarationSource, 0, channelValues[name][1]) || !Object.is(field.value, channelValues[name][0])) return false;
+    }
+    if (candidate.glow === undefined) {
+      if (Object.prototype.hasOwnProperty.call(candidate, 'glow') || Object.prototype.hasOwnProperty.call(channels, 'glow')) return false;
+    } else {
+      if (!finiteColorChannel(candidate.glow, 0, 1) || !Object.prototype.hasOwnProperty.call(channels, 'glow') || !validateColorLiteralField(channels.glow, declarationSource, 0, 1) || !Object.is((channels.glow as Record<string, unknown>).value, candidate.glow)) return false;
+    }
+    return true;
+  }
+  if (candidate.domain !== 'canonical-xml-byte-alpha'
+    || candidate.canonicalIdentity !== 'x4-9.00'
+    || !closedDataRecord(value, ['kind', 'domain', 'canonicalIdentity', 'requestedId', 'resolvedBaseId', 'r', 'g', 'b', 'a', 'glow', 'baseSource', 'sourceIdentities', 'gameVerification'], ['mappingSource'])
+    || typeof candidate.requestedId !== 'string'
+    || candidate.requestedId.length === 0
+    || typeof candidate.resolvedBaseId !== 'string'
+    || candidate.resolvedBaseId.length === 0
+    || !finiteColorChannel(candidate.r, 0, 255, true)
+    || !finiteColorChannel(candidate.g, 0, 255, true)
+    || !finiteColorChannel(candidate.b, 0, 255, true)
+    || !finiteColorChannel(candidate.a, 0, 255, true)
+    || !finiteColorChannel(candidate.glow, 0, 1)
+    || !validateColorDocumentSource(candidate.baseSource, candidate.resolvedBaseId, 224)
+    || !closedDataRecord(candidate.sourceIdentities, ['xml', 'xsd'])
+    || !validateColorSourceIdentity(candidate.sourceIdentities.xml, X4_UI_CORPUS_COLORS_XML_PATH, X4_UI_CORPUS_COLORS_XML_SHA256, X4_UI_CORPUS_COLORS_XML_SIZE)
+    || !validateColorSourceIdentity(candidate.sourceIdentities.xsd, X4_UI_CORPUS_COLORS_XSD_PATH, X4_UI_CORPUS_COLORS_XSD_SHA256, X4_UI_CORPUS_COLORS_XSD_SIZE)) return false;
+  if (candidate.mappingSource === undefined) return candidate.requestedId === candidate.resolvedBaseId;
+  return candidate.requestedId !== candidate.resolvedBaseId
+    && validateColorDocumentSource(candidate.mappingSource, candidate.requestedId, 804);
+};
+
+const validateKnownColorFact = (fact: Record<string, unknown>): boolean => {
+  if (!closedDataRecord(fact, ['status', 'expectedType', 'value', 'provenance', 'expression', 'source'], ['sourcePin', 'sampleId'])
+    || fact.status !== 'known'
+    || fact.expectedType !== 'color-object'
+    || !validateColorValue(fact.value)
+    || (fact.value.domain === 'source-literal-percent-alpha' ? fact.provenance !== 'source-literal' : fact.provenance !== 'canonical-default-only')
+    || typeof fact.expression !== 'string'
+    || fact.expression.length === 0
+    || !closedSourceIsValid(fact.source)) return false;
+  return (fact.sourcePin === undefined || closedSourcePinIsValid(fact.sourcePin))
+    && (fact.sampleId === undefined || (typeof fact.sampleId === 'string' && fact.sampleId.length > 0));
+};
+
+const ownDataValue = (value: Record<string, unknown>, key: string): unknown => {
+  const descriptor = Object.getOwnPropertyDescriptor(value, key);
+  return descriptor !== undefined && 'value' in descriptor ? descriptor.value : undefined;
+};
+
 const validateFact = (fact: unknown): boolean => {
-  if (!isRecord(fact) || (fact.status !== 'known' && fact.status !== 'unavailable') || !sourceIsValid(fact.source)) return false;
-  if (fact.sourcePin !== undefined && !sourcePinIsValid(fact.sourcePin)) return false;
-  if (fact.status === 'known') {
-    if (fact.expectedType !== 'number' && fact.expectedType !== 'string' && fact.expectedType !== 'boolean') return false;
-    if (typeof fact.value !== fact.expectedType) return false;
-    if (typeof fact.value === 'number' && !isFiniteSafe(fact.value)) return false;
-    if (!['source-literal', 'source-pinned-default', 'direct-helper-scale', 'preview-sample'].includes(String(fact.provenance)) || typeof fact.expression !== 'string' || (fact.sampleId !== undefined && typeof fact.sampleId !== 'string')) return false;
-  } else if ((fact.expectedType !== 'number' && fact.expectedType !== 'string' && fact.expectedType !== 'boolean' && fact.expectedType !== 'color-object') || typeof fact.reason !== 'string' || (fact.expression !== undefined && typeof fact.expression !== 'string')) return false;
+  if (!isRecord(fact) || Array.isArray(fact)) return false;
+  const status = ownDataValue(fact, 'status');
+  const expectedType = ownDataValue(fact, 'expectedType');
+  if (status === 'known' && expectedType === 'color-object') return validateKnownColorFact(fact);
+  const source = ownDataValue(fact, 'source');
+  if ((status !== 'known' && status !== 'unavailable') || !sourceIsValid(source)) return false;
+  const sourcePin = ownDataValue(fact, 'sourcePin');
+  if (sourcePin !== undefined && !sourcePinIsValid(sourcePin)) return false;
+  const value = ownDataValue(fact, 'value');
+  const expression = ownDataValue(fact, 'expression');
+  if (status === 'known') {
+    if (expectedType !== 'number' && expectedType !== 'string' && expectedType !== 'boolean') return false;
+    if (typeof value !== expectedType) return false;
+    if (typeof value === 'number' && !isFiniteSafe(value)) return false;
+    if (!['source-literal', 'source-pinned-default', 'direct-helper-scale', 'preview-sample'].includes(String(ownDataValue(fact, 'provenance'))) || typeof expression !== 'string' || (ownDataValue(fact, 'sampleId') !== undefined && typeof ownDataValue(fact, 'sampleId') !== 'string')) return false;
+  } else if ((expectedType !== 'number' && expectedType !== 'string' && expectedType !== 'boolean' && expectedType !== 'color-object') || typeof ownDataValue(fact, 'reason') !== 'string' || (expression !== undefined && typeof expression !== 'string')) return false;
   return true;
 };
 
 const validateFacts = (facts: unknown): boolean => {
-  if (!isRecord(facts)) return false;
-  return Object.values(facts).every(validateFact);
+  if (!isRecord(facts) || Array.isArray(facts)) return false;
+  const keys = Reflect.ownKeys(facts);
+  if (keys.some(key => typeof key !== 'string')) return false;
+  return keys.every(key => {
+    const descriptor = Object.getOwnPropertyDescriptor(facts, key);
+    return descriptor !== undefined && 'value' in descriptor && descriptor.enumerable === true && validateFact(descriptor.value);
+  });
 };
 
 const validateFactDomain = (
@@ -2704,6 +3089,16 @@ const exactKeys = (value: Record<string, unknown>, required: readonly string[], 
     && keys.every(key => allowed.has(key));
 };
 
+const isExactUnavailableCellHeight = (value: unknown): boolean => {
+  if (value === null || typeof value !== 'object' || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) return false;
+  const keys = Reflect.ownKeys(value);
+  if (keys.length !== 1 || keys[0] !== 'status') return false;
+  const status = Object.getOwnPropertyDescriptor(value, 'status');
+  return status?.enumerable === true
+    && Object.prototype.hasOwnProperty.call(status, 'value')
+    && status.value === 'unavailable';
+};
+
 const SUPPORTED_OPERATION_KINDS = new Set([
   'createFrameHandle',
   'addTable',
@@ -2734,6 +3129,12 @@ const KERNEL_PRODUCER_KINDS = new Set([
   'createEditBox',
   'createButton',
   'createIcon',
+]);
+
+const SOURCE_OWNER_DOWNSTREAM_KINDS = new Set([
+  ...KERNEL_PRODUCER_KINDS,
+  'setText',
+  'setText2',
 ]);
 
 const SERIALIZABLE_MAX_DEPTH = 64;
@@ -2946,9 +3347,9 @@ const validateCreatorProducerTransition = (
   // creator into a different kernel state (notably the raw descriptor-partial
   // createText branches with dynamic x/width).
   const height = explicitHeight ?? (
-    derivedOuterHeight === undefined
-      ? undefined
-      : type === 'text' ? 0 : derivedOuterHeight
+    type === 'text'
+      ? 0
+      : derivedOuterHeight
   );
   const scaling = staticOperationProperty(operation, 'scaling', 'boolean') ?? knownOperationFactValue(operation, 'scaling', 'boolean');
   const affect = staticOperationProperty(operation, 'affectrowheight', 'boolean') ?? knownOperationFactValue(operation, 'affectRowHeight', 'boolean');
@@ -3113,7 +3514,79 @@ const latestProducerFact = (
   return undefined;
 };
 
-const validateProducerNodeFacts = (program: X4UiLayoutProgram): boolean => {
+const sourceLocationContains = (
+  outer: X4UiSceneSourceLocation,
+  inner: X4UiSceneSourceLocation,
+): boolean => outer.file === inner.file
+  && outer.sourcePath === inner.sourcePath
+  && outer.start.offset <= inner.start.offset
+  && inner.end.offset <= outer.end.offset;
+
+const tableReserveFinalizationReconciled = (
+  program: X4UiLayoutProgram,
+  table: X4UiLayoutTableNode,
+  operation: X4UiLayoutOperation,
+  producerFact: X4UiLayoutDescriptorFact | undefined,
+): boolean => {
+  const nodeFact = table.descriptorFacts.reserveScrollBar;
+  if (nodeFact?.status !== 'known'
+    || nodeFact.expectedType !== 'boolean'
+    || nodeFact.provenance !== 'source-pinned-default'
+    || nodeFact.value !== false
+    || nodeFact.expression !== 'Helper.finalizeTableColumnWidths(self).properties.reserveScrollBar'
+    || !sameStructuralValue(nodeFact.source, table.source)
+    || nodeFact.sourcePin?.sourcePath !== X4_LAYOUT_PROVENANCE.helperSourcePath
+    || nodeFact.sourcePin.lineStart !== 3170
+    || nodeFact.sourcePin.lineEnd !== 3170
+    || producerFact?.status !== 'known'
+    || producerFact.expectedType !== 'boolean'
+    || producerFact.value === nodeFact.value
+    || operation.kind !== 'addTable'
+    || operation.tableId !== table.id
+    || operation.frameId !== undefined
+    || operation.rowId !== undefined
+    || operation.cellId !== undefined
+    || !table.operationIds.includes(operation.id)
+    || !sameStructuralValue(operation.source, table.source)
+    || program.operations.filter(candidate => candidate.kind === 'addTable' && candidate.tableId === table.id).length !== 1
+    || table.kernelState?.final !== true
+    || table.kernelState.properties.reserveScrollBar !== nodeFact.value) return false;
+  const semantics = operation.metadata.semantics as unknown as Record<string, unknown>;
+  if (!isRecord(semantics) || !Array.isArray(semantics.properties)) return false;
+  const property = semantics.properties.find(candidate => isRecord(candidate) && candidate.normalizedName === 'reservescrollbar');
+  if (producerFact.provenance === 'source-pinned-default') {
+    return property === undefined
+      && producerFact.expression === String(producerFact.value)
+      && sameStructuralValue(producerFact.source, operation.source)
+      && producerFact.sourcePin?.sourcePath === X4_LAYOUT_PROVENANCE.helperSourcePath
+      && producerFact.sourcePin.lineStart === 3170
+      && producerFact.sourcePin.lineEnd === 3170;
+  }
+  if (producerFact.provenance !== 'source-literal' || producerFact.sourcePin !== undefined || !isRecord(property) || !isRecord(property.value)) return false;
+  const value = property.value;
+  if (value.status !== 'static'
+    || value.type !== 'boolean'
+    || value.value !== producerFact.value
+    || typeof value.expression !== 'string'
+    || !isRecord(value.location)
+    || !sourceIsValid(value.location)
+    || !sourceLocationContains(operation.source, value.location)
+    || producerFact.expression !== value.expression
+    || !sameStructuralValue(producerFact.source, value.location)) return false;
+  if (value.sourceLiteral !== undefined
+    && (!isRecord(value.sourceLiteral)
+      || !sourceIsValid(value.sourceLiteral)
+      || !sameStructuralValue(value.sourceLiteral, value.location)
+      || !sameStructuralValue(producerFact.source, value.sourceLiteral))) return false;
+  if (value.sourceOrder !== undefined
+    && (!isSafeIntegerAtLeast(value.sourceOrder, 0) || value.sourceOrder !== value.location.start.offset)) return false;
+  return true;
+};
+
+const validateProducerNodeFacts = (
+  program: X4UiLayoutProgram,
+  unmaterializedRows: ReadonlySet<string> = new Set<string>(),
+): boolean => {
   const fail = (_stage: string): false => false;
   const operationFor = (ids: readonly string[], kind: X4UiLayoutOperation['kind']): X4UiLayoutOperation | undefined => {
     const matches = program.operations
@@ -3142,12 +3615,18 @@ const validateProducerNodeFacts = (program: X4UiLayoutProgram): boolean => {
   for (const table of program.tables) {
     if (table.status === 'refused' && table.kernelState === undefined) continue;
     const operation = operationFor(table.operationIds, 'addTable');
+    const reserveFact = operation === undefined ? undefined : latestProducerFact([operation], 'reserveScrollBar');
+    const tableFactsMatch = operation !== undefined
+      && factsMatch(table, operation, ['x', 'y', 'requestedWidth', 'maxVisibleHeight', 'scaling', 'tabOrder', 'highlightMode', 'backgroundID', 'backgroundColor'])
+      && (producerFactMatchesNodeFact(table.descriptorFacts.reserveScrollBar, reserveFact)
+        || tableReserveFinalizationReconciled(program, table, operation, reserveFact));
     if (!operation || operation.tableId !== table.id || !sameStructuralValue(operation.source, table.source)
-      || !factsMatch(table, operation, ['x', 'y', 'requestedWidth', 'maxVisibleHeight', 'scaling', 'tabOrder', 'reserveScrollBar', 'highlightMode', 'backgroundID', 'backgroundColor'])
+      || !tableFactsMatch
       || !knownFactMatches(table.descriptorFacts, 'requestedWidth', table.requestedWidth, 'number')) return fail(`table:${table.id}`);
   }
   for (const row of program.rows) {
-    if (row.status === 'refused' && row.kernelState === undefined && row.rowIndex === undefined && row.cellIds.length === 0) continue;
+    if (unmaterializedRows.has(row.id)
+      || (row.status === 'refused' && row.kernelState === undefined && row.rowIndex === undefined && row.cellIds.length === 0)) continue;
     const operation = operationFor(row.operationIds, 'addRow');
     if (!operation || operation.rowId !== row.id || !sameStructuralValue(operation.source, row.source)
       || !factsMatch(row, operation, ['paddingTop', 'paddingBottom', 'borderBelow', 'fixed', 'scaling'])) return fail(`row:${row.id}`);
@@ -3575,8 +4054,12 @@ const validateGeneratedSceneIds = (program: X4UiLayoutProgram): boolean => {
 const validateProgramStructure = (
   program: unknown,
   evidenceAuthority: X4UiLayoutEvidenceAuthority,
+  diagnostic?: { stage?: string },
 ): program is X4UiLayoutProgram => {
-  const refuseStructure = (_stage: string): false => false;
+  const refuseStructure = (stage: string): false => {
+    if (diagnostic !== undefined && diagnostic.stage === undefined) diagnostic.stage = stage;
+    return false;
+  };
   if (!isRecord(program)) return false;
   if (program.status !== 'projected' && program.status !== 'partial') return refuseStructure('status');
   if (!isRecord(program.target) || typeof program.target.id !== 'string' || !sourceIsValid(program.target.source) || !validateModelIdentity(program.target.sourceIdentity)) return refuseStructure('target');
@@ -3747,7 +4230,7 @@ const validateProgramStructure = (
     const downstreamOperations = operations.filter(candidate => candidate.id !== operation?.id);
     const downstreamShape = downstreamOperations.length > 0
       && downstreamOperations.every(candidate => candidate.kind !== 'addTable'
-        && KERNEL_PRODUCER_KINDS.has(candidate.kind)
+        && SOURCE_OWNER_DOWNSTREAM_KINDS.has(candidate.kind)
         && operationBelongsToTable(program as unknown as X4UiLayoutProgram, candidate, table)
         && operationHasOwnerShape(program as unknown as X4UiLayoutProgram, candidate, candidate.kind)
         && isIssuedIncompleteOperation(candidate, table.id, table.id));
@@ -3768,8 +4251,14 @@ const validateProgramStructure = (
   }
   for (const table of program.tables) {
     if (!uniqueStringArray(table.rowIds) || !uniqueStringArray(table.operationIds)) return refuseStructure(`table-arrays:${table.id}`);
-    if (table.kernelState && (!validateKernelState(table.kernelState) || !sameLayoutMetrics(table.kernelState.metrics, program.profile.metrics) || table.kernelState.frameWidth !== program.profile.frame.width)) {
-      return refuseStructure(`table-kernel:${table.id}`);
+    if (table.kernelState) {
+      if (!validateKernelState(table.kernelState)) return refuseStructure(`table-kernel-state:${table.id}`);
+      if (!sameLayoutMetrics(table.kernelState.metrics, program.profile.metrics)) return refuseStructure(`table-kernel-metrics:${table.id}`);
+      const ownerFrame = table.frameId === undefined
+        ? program.frames.find(frame => frame.tableIds.includes(table.id))
+        : program.frames.find(frame => frame.id === table.frameId);
+      const expectedFrameWidth = ownerFrame?.width ?? program.profile.frame.width;
+      if (table.kernelState.frameWidth !== expectedFrameWidth) return refuseStructure(`table-kernel-frame-width:${table.id}`);
     }
     if (table.numColumns !== undefined && !isSafeIntegerAtLeast(table.numColumns, 1)) return refuseStructure(`table-columns:${table.id}`);
     if (table.kernelState && table.numColumns !== undefined && table.kernelState.columns.length !== table.numColumns) return refuseStructure(`table-column-count:${table.id}`);
@@ -3815,10 +4304,35 @@ const validateProgramStructure = (
   const cellOwner = new Map<string, string>();
   const unmaterializedRows = new Set<string>();
   const isUnmaterializedRow = (row: X4UiLayoutRowNode): boolean => {
-    if (row.status !== 'refused' || row.kernelState !== undefined || row.rowIndex !== undefined || row.cellIds.length !== 0) return false;
-    if (row.tableId !== undefined && !tableIds.has(row.tableId)) return false;
+    if (row.status !== 'refused' || row.kernelState !== undefined || row.rowIndex !== undefined) return false;
+    const table = row.tableId === undefined
+      ? undefined
+      : typedProgram.tables.find(candidate => candidate.id === row.tableId);
+    if (row.tableId !== undefined && table === undefined) return false;
     const rowOperations = (program.operations as unknown as readonly X4UiLayoutOperation[]).filter(operation => operation.kind === 'addRow' && operation.rowId === row.id);
     const rowOperation = rowOperations[0];
+    if (rowOperations.length !== 1 || rowOperation === undefined) return false;
+    const operations = row.operationIds
+      .map(operationId => typedProgram.operations.find(operation => operation.id === operationId))
+      .filter((operation): operation is X4UiLayoutOperation => operation !== undefined);
+    if (operations.length !== row.operationIds.length
+      || !operationIdsAreIssuedOrder(row.operationIds)
+      || !operations.some(operation => operation.id === rowOperation.id)) return false;
+    const authorityOperationMatches = (operation: X4UiLayoutOperation): boolean => {
+      const authorityOperation = authorityOperationFor(evidenceAuthority, operation.id);
+      return authorityOperation !== undefined
+        && authorityOperation.kind === operation.kind
+        && authorityOperation.status === operation.status
+        && authorityOperation.frameId === operation.frameId
+        && authorityOperation.tableId === operation.tableId
+        && authorityOperation.rowId === operation.rowId
+        && authorityOperation.cellId === operation.cellId
+        && sameStructuralValue(authorityOperation.source, operation.source)
+        && sameStructuralValue(authorityOperation.snapshot, operation);
+    };
+    const gapHasExactOwner = (operation: X4UiLayoutOperation, cellId?: string): boolean => authorityGapsFor(evidenceAuthority, operation.id).every(gap =>
+      gap.operationId === operation.id
+      && (gap.nodeId === undefined || gap.nodeId === row.id || gap.nodeId === table?.id || gap.nodeId === cellId));
     const rejected = rowOperation?.status === 'rejected'
       && validKernelRefusalShape(rowOperation)
       && rowOperation.reason === rowOperation.kernel?.refusal?.message;
@@ -3833,25 +4347,73 @@ const validateProgramStructure = (
       || rowOperation?.status === 'unreachable';
     const primaryIssued = rowOperation !== undefined
       && (rejected ? authorityGapShape : unmaterializedStatus && isIssuedIncompleteOperation(rowOperation, row.id, row.tableId));
-    const operations = row.operationIds
-      .map(operationId => typedProgram.operations.find(operation => operation.id === operationId))
-      .filter((operation): operation is X4UiLayoutOperation => operation !== undefined);
     const downstreamOperations = operations.filter(operation => operation.id !== rowOperation?.id);
     const downstreamShape = downstreamOperations.length > 0
       && downstreamOperations.every(operation => operation.kind !== 'addRow'
-        && KERNEL_PRODUCER_KINDS.has(operation.kind)
+        && SOURCE_OWNER_DOWNSTREAM_KINDS.has(operation.kind)
         && operationHasOwnerShape(program as unknown as X4UiLayoutProgram, operation, operation.kind)
         && isIssuedIncompleteOperation(operation, row.id, row.tableId));
-    return rowOperations.length === 1
-      && operations.length === row.operationIds.length
-      && operationIdsAreIssuedOrder(row.operationIds)
-      && rowOperation !== undefined
-      && operations.some(operation => operation.id === rowOperation.id)
+    const legacyEmptyRowShape = row.cellIds.length === 0
       && primaryIssued
-       && operationHasOwnerShape(program as unknown as X4UiLayoutProgram, rowOperation, 'addRow')
+      && operationHasOwnerShape(program as unknown as X4UiLayoutProgram, rowOperation, 'addRow')
       && (downstreamOperations.length === 0 || downstreamShape);
+    if (legacyEmptyRowShape) return true;
+    if (table?.kernelState === undefined
+      || table.rowIds.includes(row.id)
+      || table.kernelState.rows.length !== table.rowIds.length
+      || rowOperation.status !== 'conditional'
+      || rowOperation.kernel !== undefined
+      || rowOperation.tableId !== table.id
+      || rowOperation.frameId !== undefined
+      || rowOperation.cellId !== undefined
+      || !sameStructuralValue(rowOperation.source, row.source)
+      || !authorityOperationMatches(rowOperation)
+      || !gapHasExactOwner(rowOperation)) return false;
+    const cells = row.cellIds
+      .map(cellId => typedProgram.cells.find(cell => cell.id === cellId))
+      .filter((cell): cell is X4UiLayoutCellNode => cell !== undefined);
+    if (cells.length !== row.cellIds.length
+      || cells.length !== table.kernelState.columns.length
+      || cells.some((cell, index) => cell.column !== index + 1
+        || cell.status !== 'refused'
+        || cell.tableId !== table.id
+        || cell.rowId !== row.id
+        || cell.rowIndex !== undefined
+        || cell.kernelState !== undefined
+        || !sameStructuralValue(cell.source, cell.identity === undefined ? row.source : cell.identity.source))) return false;
+    const allCellLedgersEmpty = cells.every(cell => cell.operationIds.length === 0 && cell.metadataOperationIds.length === 0);
+    const cellOperationIds = new Set(cells.flatMap(cell => [...cell.operationIds, ...cell.metadataOperationIds]));
+    const legacyEmptyCellShape = cells.length === 1
+      && table.kernelState.columns.length === 1
+      && cells[0]?.descriptorFacts.contentKind?.status === 'known'
+      && cells[0].descriptorFacts.contentKind.expectedType === 'string'
+      && cells[0].descriptorFacts.contentKind.value === 'cell';
+    if (downstreamOperations.length === 0) {
+      return allCellLedgersEmpty && legacyEmptyCellShape;
+    }
+    if (!downstreamShape
+      || downstreamOperations.some(operation => operation.status !== 'conditional'
+        || operation.rowId !== row.id
+        || !authorityOperationMatches(operation)
+        || !gapHasExactOwner(operation, operation.cellId)
+        || (allCellLedgersEmpty
+          ? operation.cellId !== undefined
+          : operation.cellId === undefined || !cellOperationIds.has(operation.id)))) return false;
+    if (allCellLedgersEmpty) return true;
+    return cells.every(cell => [...cell.operationIds, ...cell.metadataOperationIds].every(operationId => {
+      const operation = typedProgram.operations.find(candidate => candidate.id === operationId);
+      return operation !== undefined
+        && operations.some(candidate => candidate.id === operation.id)
+        && operation.status === 'conditional'
+        && operation.rowId === row.id
+        && operation.cellId === cell.id
+        && authorityOperationMatches(operation)
+        && gapHasExactOwner(operation, cell.id);
+    }));
   };
-  for (const row of program.rows) if (isUnmaterializedRow(row)) unmaterializedRows.add(row.id);
+  for (const row of program.rows) {
+    if (isUnmaterializedRow(row)) unmaterializedRows.add(row.id);
+  }
   for (const frame of program.frames) {
     for (const tableId of frame.tableIds) {
       if (!tableIds.has(tableId) || (tableOwner.has(tableId) && tableOwner.get(tableId) !== frame.id)) return refuseStructure(`table-owner:${frame.id}:${tableId}`);
@@ -4057,6 +4619,7 @@ const validateProgramStructure = (
     if (!cell.tableId) continue;
     const table = program.tables.find(candidate => candidate.id === cell.tableId);
     if (!table?.kernelState) continue;
+    if (cell.rowId !== undefined && unmaterializedRows.has(cell.rowId)) continue;
     if (cell.column > table.kernelState.columns.length || cell.rowIndex === undefined || cell.rowIndex > table.kernelState.rows.length) return refuseStructure(`cell-kernel-slot:${cell.id}`);
   }
   for (const table of program.tables) {
@@ -4105,6 +4668,10 @@ const validateProgramStructure = (
         const cell = matching[0]!;
         const stateCell = stateRow.cells[column - 1];
         if (cell.rowIndex !== rowIndex || cell.tableId !== table.id || !cell.kernelState || !sameStructuralValue(cell.kernelState, stateCell)) return refuseStructure(`cell-state-value:${cell.id}`);
+        const creatorOperations = program.operations
+          .filter(operation => operation.cellId === cell.id && isCreatorKind(operation.kind))
+          .sort((left, right) => left.modelOrder - right.modelOrder);
+        const creator = creatorOperations[creatorOperations.length - 1];
         const expectedOuterY = scaleY(stateCell.y, state.metrics.uiScale, stateCell.scaling);
         const expectedOuterHeight = stateCell.type === 'icon' || stateCell.type === 'button'
           ? scaleY(stateCell.height, state.metrics.uiScale, stateCell.scaling)
@@ -4114,14 +4681,50 @@ const validateProgramStructure = (
         if (!knownFactMatches(cell.descriptorFacts, 'affectRowHeight', stateCell.affectRowHeight, 'boolean')) return refuseStructure(`cell-affect-row-height:${cell.id}`);
         if (!knownFactMatches(cell.descriptorFacts, 'minTextHeight', stateCell.minTextHeight, 'number')) return refuseStructure(`cell-min-text-height:${cell.id}`);
         if (expectedOuterY.status !== 'ok' || !knownFactMatches(cell.descriptorFacts, 'outerY', expectedOuterY.status === 'ok' ? expectedOuterY.value : undefined, 'number')) return refuseStructure(`cell-outer-y:${cell.id}`);
-         if (expectedOuterHeight.status !== 'ok' || !knownFactMatches(cell.descriptorFacts, 'outerHeight', expectedOuterHeight.status === 'ok' ? expectedOuterHeight.value : undefined, 'number')) return refuseStructure(`cell-outer-height:${cell.id}`);
+         const outerHeightFact = cell.descriptorFacts.outerHeight;
+         const creatorOuterHeightFact = creator?.descriptorFacts.outerHeight;
+         const explicitHeight = creator === undefined ? undefined : staticOperationProperty(creator, 'height', 'number');
+         let outerHeightMatches = expectedOuterHeight.status === 'ok'
+           && knownFactMatches(cell.descriptorFacts, 'outerHeight', expectedOuterHeight.value, 'number');
+         if (stateCell.type === 'text' && stateCell.height === 0 && expectedOuterHeight.status === 'ok') {
+           outerHeightMatches = outerHeightFact?.status === 'known'
+             && outerHeightFact.expectedType === 'number'
+             && outerHeightFact.value === expectedOuterHeight.value
+             && (explicitHeight !== undefined
+               || creatorOuterHeightFact?.status === 'known'
+                 && sameStructuralValue(outerHeightFact, creatorOuterHeightFact));
+         } else if (stateCell.type === 'text'
+           && stateCell.height === 0
+           && stateCell.minTextHeight === undefined
+           && expectedOuterHeight.status === 'unsupported'
+           && expectedOuterHeight.code === 'missing-min-text-height') {
+           const cellUnavailableExact = outerHeightFact?.status === 'unavailable'
+             && exactKeys(outerHeightFact as unknown as Record<string, unknown>, ['status', 'expectedType', 'reason', 'source'])
+             && outerHeightFact.expectedType === 'number'
+             && outerHeightFact.reason === 'zero-height text final height requires both a supplied/proven C++ text-height candidate and the exact Helper minRowHeight floor'
+             && sameStructuralValue(outerHeightFact.source, cell.source);
+           const creatorUnavailableExact = creator?.kind === 'createText'
+             && creator.status === 'unresolved'
+             && creator.kernel !== undefined
+             && explicitHeight === undefined
+             && creator.descriptorFacts.height === undefined
+             && creatorOuterHeightFact?.status === 'unavailable'
+             && exactKeys(creatorOuterHeightFact as unknown as Record<string, unknown>, ['status', 'expectedType', 'reason', 'expression', 'source', 'sourcePin'])
+             && creatorOuterHeightFact.expectedType === 'number'
+             && creatorOuterHeightFact.reason === 'final text height requires both a supplied/proven C++ text-height candidate and the exact Helper minRowHeight floor'
+             && creatorOuterHeightFact.expression === 'Helper.scaleY(Helper.standardTextHeight) - Helper.scaleY(Helper.standardTextOffsety)'
+             && sameStructuralValue(creatorOuterHeightFact.source, creator.source)
+             && creatorOuterHeightFact.sourcePin?.sourcePath === X4_LAYOUT_PROVENANCE.helperSourcePath
+             && creatorOuterHeightFact.sourcePin.lineStart === 5482
+             && creatorOuterHeightFact.sourcePin.lineEnd === 5497;
+           outerHeightMatches = isExactUnavailableCellHeight(cell.height)
+             && cellUnavailableExact
+             && creatorUnavailableExact;
+         }
+         if (!outerHeightMatches) return refuseStructure(`cell-outer-height:${cell.id}`);
          const spanFact = cell.descriptorFacts.span;
          if (spanFact?.status === 'known' && spanFact.expectedType === 'number' && spanFact.value !== stateCell.colspan) return refuseStructure(`cell-span:${cell.id}`);
          const outerWidthFact = cell.descriptorFacts.outerWidth;
-         const creatorOperations = program.operations
-           .filter(operation => operation.cellId === cell.id && isCreatorKind(operation.kind))
-           .sort((left, right) => left.modelOrder - right.modelOrder);
-         const creator = creatorOperations[creatorOperations.length - 1];
          const explicitWidth = creator === undefined ? undefined : staticOperationProperty(creator, 'width', 'number');
          if (explicitWidth !== undefined && explicitWidth !== 0) {
            const expectedOuterWidth = scaleX(explicitWidth, state.metrics.uiScale, stateCell.scaling);
@@ -4159,9 +4762,19 @@ const validateProgramStructure = (
   for (const operation of program.operations) {
     if (operation.kind === 'setColSpan' && (operation.status === 'applied' || operation.status === 'unresolved') && operation.kernel !== undefined && !validateSetColSpanProducerTransition(program as unknown as X4UiLayoutProgram, operation)) return refuseStructure(`set-col-span:${operation.id}`);
   }
-  if (!validateProducerNodeFacts(program as unknown as X4UiLayoutProgram)) return refuseStructure('producer-node-facts');
+  if (!validateProducerNodeFacts(program as unknown as X4UiLayoutProgram, unmaterializedRows)) return refuseStructure('producer-node-facts');
   const generatedValid = validateGeneratedSceneIds(program as unknown as X4UiLayoutProgram);
   return generatedValid;
+};
+
+/** Test-only first-failure probe; public Scene refusals remain intentionally generic. */
+export const diagnoseX4UiSceneStructureForTest = (
+  program: unknown,
+  evidenceAuthority: X4UiLayoutEvidenceAuthority,
+): string | undefined => {
+  const diagnostic: { stage?: string } = {};
+  if (validateProgramStructure(program, evidenceAuthority, diagnostic)) return undefined;
+  return diagnostic.stage ?? 'unknown';
 };
 
 const validateSceneProfile = (profile: unknown): profile is X4UiSceneProfile => {
@@ -4210,16 +4823,29 @@ const extractProgram = (input: X4UiLayoutProgramResult): ExtractedProducerResult
     readonly program: X4UiLayoutProgram;
     readonly evidenceAuthority: X4UiLayoutEvidenceAuthority;
   };
-  if (!exactKeys(successful, ['status', 'program', 'evidenceAuthority', 'verification']) || !isRecord(successful.program) || !isRecord(successful.evidenceAuthority) || !isRecord(successful.verification) || !exactKeys(successful.verification, ['game', 'gameVerified']) || successful.verification.game !== X4_UI_LAYOUT_GAME_TRUTH || successful.verification.gameVerified !== false || successful.program.status !== successful.status) {
+  if (!exactKeys(successful, ['status', 'program', 'evidenceAuthority', 'verification'])) {
+    return refusal('invalid-program', 'successful layout program result wrapper is malformed or mismatched');
+  }
+  const programProperty = Object.getOwnPropertyDescriptor(successful, 'program');
+  const authorityProperty = Object.getOwnPropertyDescriptor(successful, 'evidenceAuthority');
+  if (!programProperty || !('value' in programProperty) || !authorityProperty || !('value' in authorityProperty)) {
+    return refusal('invalid-program', 'successful layout program result wrapper must expose data-valued program and evidence authority fields');
+  }
+  const program = programProperty.value as X4UiLayoutProgram;
+  const evidenceAuthority = authorityProperty.value as X4UiLayoutEvidenceAuthority;
+  if (!isIssuedX4UiLayoutEvidencePair(program, evidenceAuthority)) {
+    return refusal('invalid-program', 'layout program/evidence authority pair was not issued by the layout producer');
+  }
+  if (!isRecord(program) || !isRecord(evidenceAuthority) || !isRecord(successful.verification) || !exactKeys(successful.verification, ['game', 'gameVerified']) || successful.verification.game !== X4_UI_LAYOUT_GAME_TRUTH || successful.verification.gameVerified !== false || program.status !== successful.status) {
     return refusal('invalid-program', 'successful layout program result wrapper is malformed or mismatched');
   }
   try {
-    const evidence = validateX4UiLayoutEvidencePair(successful.program, successful.evidenceAuthority);
+    const evidence = validateX4UiLayoutEvidencePair(program, evidenceAuthority);
     if (!evidence.valid) return refusal('invalid-program', `layout program evidence authority is invalid: ${'reason' in evidence ? evidence.reason : 'unknown validation failure'}`);
   } catch {
     return refusal('invalid-program', 'layout program evidence authority validation failed');
   }
-  return { program: successful.program, evidenceAuthority: successful.evidenceAuthority };
+  return { program, evidenceAuthority };
 };
 
 const isSceneRefusal = (value: unknown): value is X4UiSceneRefusal =>
@@ -4286,7 +4912,7 @@ export function projectX4UiScene(
   program.gaps.forEach((gap, index) => {
     const id = addGap(context, {
       category: gap.category,
-      status: gap.status,
+      status: gap.status === 'dynamic' ? 'unknown' : gap.status,
       reason: gap.reason,
       source: sourceCopy(gap.source),
       ...(gap.expression ? { expression: gap.expression } : {}),
@@ -4328,6 +4954,16 @@ export function projectX4UiScene(
       });
     }
   }
+  const canonicalGraph = canonicalizeSceneGapGraph(
+    context.gaps,
+    frameResult.frames,
+    tables,
+    rows,
+    cells,
+    widgets,
+    texts,
+    glyphs,
+  );
   const drawableRect = rect(0, 0, profile.drawable.width, profile.drawable.height);
   const sceneStatus: 'projected' | 'partial' = context.partial ? 'partial' : 'projected';
   const scene: X4UiScene = {
@@ -4338,14 +4974,14 @@ export function projectX4UiScene(
     profile: sceneProfileCopy(profile),
     programStatus: program.status,
     drawableRect,
-    frames: frameResult.frames,
-    tables,
-    rows,
-    cells,
-    widgets,
-    texts,
-    glyphs,
-    gaps: context.gaps,
+    frames: canonicalGraph.frames,
+    tables: canonicalGraph.tables,
+    rows: canonicalGraph.rows,
+    cells: canonicalGraph.cells,
+    widgets: canonicalGraph.widgets,
+    texts: canonicalGraph.texts,
+    glyphs: canonicalGraph.glyphs,
+    gaps: canonicalGraph.gaps,
     preview: {
       provenance: 'preview-only',
       sampleBindings: program.previewSampleBindings.map(binding => ({

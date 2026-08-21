@@ -1,6 +1,14 @@
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { isDeepStrictEqual } from 'node:util';
+import path from 'node:path';
+
 import {
+  X4_UI_SCENE_GAME_TRUTH,
   buildX4UiScene,
+  diagnoseX4UiSceneStructureForTest,
   type X4UiSceneFontAssetMap,
+  type X4UiSceneColorFact,
   type X4UiSceneProfile,
   type X4UiSceneResult,
   type X4UiScene,
@@ -47,6 +55,10 @@ import {
   projectX4UiLayoutProgram,
 } from './x4UiLayoutProgram';
 import {
+  projectX4UiEditorSession,
+} from './x4UiEditorSession';
+import { resolveXsdConfig } from './xsdParser';
+import {
   ZEKTON_ABC_FORMAT_VERSION,
   ZEKTON_CORPUS_ASSETS,
   ZEKTON_EVIDENCE_STATE,
@@ -64,9 +76,17 @@ import {
   X4_UI_CORPUS_FILE_URL,
   X4_UI_CORPUS_MANIFEST_URL,
   X4_UI_CORPUS_STATUS_URL,
+  X4_UI_CORPUS_COLORS_XML_PATH,
+  X4_UI_CORPUS_COLORS_XML_SHA256,
+  X4_UI_CORPUS_COLORS_XML_SIZE,
+  X4_UI_CORPUS_COLORS_XSD_PATH,
+  X4_UI_CORPUS_COLORS_XSD_SHA256,
+  X4_UI_CORPUS_COLORS_XSD_SIZE,
   X4_UI_CORPUS_9_00_CONTRACT,
   loadCanonicalX4UiCorpusAssets,
+  loadCanonicalX4UiCorpusColorEvidence,
   type X4UiCorpusCanonicalSuccess,
+  type X4UiCorpusCanonicalColorSuccess,
   type X4UiCorpusFetchResponse,
 } from './x4UiCorpusAssets';
 
@@ -389,6 +409,176 @@ const canonicalCorpus = async (): Promise<X4UiCorpusCanonicalSuccess> => {
 
 const corpus = await canonicalCorpus();
 
+const P3_COLOR_BASE_IDS = [
+  'white',
+  'black_alpha_0',
+  'white_weak_glow',
+  'azure_very_dark',
+  'azure_moderate_glow',
+  'azure_dark_alpha_160_glow',
+  'azure_very_dark_alpha_224',
+  'literal_base',
+] as const;
+
+const P3_COLOR_MAPPING_IDS = [
+  'table_background_default',
+  'row_background',
+  'text_normal',
+  'icon_normal',
+  'button_background_default',
+  'button_highlight_default',
+  'button_border_default',
+  'editbox_background_default',
+] as const;
+
+const p3PaddedUtf8 = (text: string, size: number): Uint8Array => {
+  const bytes = new TextEncoder().encode(text);
+  if (bytes.byteLength > size) throw new Error(`Scene P3 fixture exceeds pinned size ${size}`);
+  const padded = new Uint8Array(size);
+  padded.set(bytes);
+  padded.fill(0x20, bytes.byteLength);
+  return padded;
+};
+
+const p3HexDigest = (hex: string): ArrayBuffer => {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let index = 0; index < bytes.length; index += 1) bytes[index] = Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16);
+  return bytes.buffer;
+};
+
+const p3ColorAuthority = await (async (): Promise<X4UiCorpusCanonicalColorSuccess> => {
+  const baseIds: string[] = [...P3_COLOR_BASE_IDS];
+  while (baseIds.length < 224) baseIds.push(`scene_p3_base_${baseIds.length.toString().padStart(3, '0')}`);
+  const specialValues: Record<string, readonly [number, number, number, number, number]> = {
+    white: [11, 22, 33, 44, 0.1],
+    black_alpha_0: [51, 52, 53, 54, 0.2],
+    white_weak_glow: [101, 102, 103, 104, 0.3],
+    azure_very_dark: [61, 62, 63, 64, 0.4],
+    azure_moderate_glow: [71, 72, 73, 74, 0.5],
+    azure_dark_alpha_160_glow: [81, 82, 83, 84, 0.6],
+    azure_very_dark_alpha_224: [91, 92, 93, 94, 0.7],
+    literal_base: [131, 132, 133, 134, 0.9],
+  };
+  const colors = baseIds.map((id, index) => {
+    const values = specialValues[id] || [index % 256, (index + 1) % 256, (index + 2) % 256, (index + 3) % 256, 0];
+    return `    <color id="${id}" r="${values[0]}" g="${values[1]}" b="${values[2]}" a="${values[3]}" glow="${values[4]}"/>`;
+  });
+  const mappingRefs: Record<string, string> = {
+    table_background_default: 'white',
+    row_background: 'black_alpha_0',
+    text_normal: 'white_weak_glow',
+    icon_normal: 'white_weak_glow',
+    button_background_default: 'azure_very_dark',
+    button_highlight_default: 'azure_moderate_glow',
+    button_border_default: 'azure_dark_alpha_160_glow',
+    editbox_background_default: 'azure_very_dark_alpha_224',
+  };
+  const mappings = P3_COLOR_MAPPING_IDS.map(id => `    <mapping id="${id}" ref="${mappingRefs[id]}"/>`);
+  for (let index = mappings.length; index < 804; index += 1) mappings.push(`    <mapping id="scene_p3_map_${index.toString().padStart(3, '0')}" ref="${baseIds[index % baseIds.length]}"/>`);
+  const xml = p3PaddedUtf8([
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<colormap>',
+    '  <colors>',
+    ...colors,
+    '  </colors>',
+    '  <mappings>',
+    ...mappings,
+    '  </mappings>',
+    '</colormap>',
+  ].join('\n'), X4_UI_CORPUS_COLORS_XML_SIZE);
+  const xsd = p3PaddedUtf8([
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">',
+    '  <xs:simpleType name="identifier"><xs:restriction base="xs:string"><xs:pattern value="[a-zA-Z_][a-zA-Z0-9_]*"/></xs:restriction></xs:simpleType>',
+    '</xs:schema>',
+  ].join('\n'), X4_UI_CORPUS_COLORS_XSD_SIZE);
+  const buffers = new Map<string, Uint8Array>([
+    [X4_UI_CORPUS_COLORS_XML_PATH, xml],
+    [X4_UI_CORPUS_COLORS_XSD_PATH, xsd],
+  ]);
+  const queryValue = (url: string, key: string): string => {
+    const marker = `${key}=`;
+    const start = url.indexOf(marker);
+    if (start < 0) throw new Error(`Scene P3 fixture query is missing ${key}`);
+    return decodeURIComponent(url.slice(start + marker.length).split('&')[0]);
+  };
+  const transport = async (url: string): Promise<X4UiCorpusFetchResponse> => {
+    if (url === X4_UI_CORPUS_STATUS_URL) {
+      return {
+        status: 200,
+        headers: { get: name => name.toLowerCase() === 'content-type' ? 'application/json' : null },
+        json: async () => ({
+          available: true,
+          root: 'scene-p3-root',
+          generatedAt: '2026-08-19T00:00:00.000Z',
+          manifestGeneration: 'scene-p3-generation',
+          manifest: {
+            available: true,
+            state: 'ready',
+            root: 'scene-p3-root',
+            current: { generation: 'scene-p3-generation', root: 'scene-p3-root', generatedAt: '2026-08-19T00:00:00.000Z' },
+          },
+        }),
+      };
+    }
+    if (url.startsWith(`${X4_UI_CORPUS_MANIFEST_URL}?`)) {
+      const requested = queryValue(url, 'q');
+      const value = buffers.get(requested);
+      if (!value) throw new Error(`Scene P3 fixture does not contain ${requested}`);
+      return {
+        status: 200,
+        headers: { get: name => name.toLowerCase() === 'content-type' ? 'application/json' : null },
+        json: async () => ({
+          status: {
+            available: true,
+            state: 'ready',
+            root: 'scene-p3-root',
+            current: { generation: 'scene-p3-generation', root: 'scene-p3-root', generatedAt: '2026-08-19T00:00:00.000Z' },
+          },
+          generation: 'scene-p3-generation',
+          total: 1,
+          limit: 500,
+          offset: 0,
+          files: [{ path: requested, bytes: value.byteLength }],
+        }),
+      };
+    }
+    if (url.startsWith(`${X4_UI_CORPUS_FILE_URL}?`)) {
+      const requested = queryValue(url, 'path');
+      const value = buffers.get(requested);
+      if (!value) throw new Error(`Scene P3 fixture does not contain ${requested}`);
+      return {
+        status: 200,
+        headers: { get: name => name.toLowerCase() === 'content-type' ? 'application/xml' : null },
+        arrayBuffer: async () => value.slice().buffer,
+      };
+    }
+    throw new Error(`unexpected Scene P3 fixture URL ${url}`);
+  };
+  const originalDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
+  const originalValue = (globalThis as unknown as { crypto?: unknown }).crypto;
+  let hashIndex = 0;
+  try {
+    Object.defineProperty(globalThis, 'crypto', {
+      configurable: true,
+      enumerable: originalDescriptor?.enumerable ?? true,
+      writable: true,
+      value: { subtle: { digest: async (): Promise<ArrayBuffer> => {
+        const expected = [X4_UI_CORPUS_COLORS_XML_SHA256, X4_UI_CORPUS_COLORS_XSD_SHA256][hashIndex++];
+        if (!expected) throw new Error('Scene P3 canonical hash count mismatch');
+        return p3HexDigest(expected);
+      } } },
+    });
+    const result = await loadCanonicalX4UiCorpusColorEvidence({ transport });
+    if ('error' in result) throw new Error(`Scene P3 color fixture failed: ${result.error.code}: ${result.error.message}`);
+    return result;
+  } finally {
+    if (originalDescriptor) Object.defineProperty(globalThis, 'crypto', originalDescriptor);
+    else Reflect.deleteProperty(globalThis, 'crypto');
+    assert((globalThis as unknown as { crypto?: unknown }).crypto === originalValue, 'Scene P3 fixture must restore global Web Crypto');
+  }
+})();
+
 const sourceIdentity: X4UiLayoutModelIdentity = {
   file: 'fixture.lua',
   sourcePath: 'fixture.lua',
@@ -536,6 +726,43 @@ const rawProjectionFor = (
   });
   return { model, target, result, program: result.program, profile: branchProfile };
 };
+
+const colorProjection = (() => {
+  const sourceText = [
+    'local menu = { name = "SceneColors", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(4, { width = 100, reserveScrollBar = false, backgroundColor = Color["table_background_default"] })',
+    'table:setColWidth(1, 20, false)',
+    'table:setColWidth(2, 20, false)',
+    'table:setColWidth(3, 20, false)',
+    'table:setColWidth(4, 20, false)',
+    'local row = table:addRow(false, { paddingTop = 1, paddingBottom = 1, borderBelow = false, fixed = false, scaling = false })',
+    'row[1]:createText("literal", { height = 12, minRowHeight = 10, color = { r = 12.5, g = 23.5, b = 34.5, a = 45.5, glow = 0.25 }, cellBGColor = Color["row_background"] })',
+    'row[2]:createButton({ height = 12, bgcolor = Color["button_background_default"], highlightColor = Color["button_highlight_default"], borderColor = Color["button_border_default"] }):setText("primary", { color = Color["text_normal"] }):setText2("secondary", { color = { r = 15, g = 25, b = 35, a = 55 } })',
+    'row[3]:createEditBox({ height = 12, bgColor = Color["editbox_background_default"] })',
+    'row[4]:createIcon("icon", { height = 8, affectRowHeight = false, color = Color["white"] })',
+    'frame:display()',
+  ].join('\n');
+  const model = buildX4UiCallModel({ rel: 'selftest/scene-colors.lua', text: sourceText, sourcePath: 'selftest/scene-colors.lua' });
+  const catalog = createX4UiLayoutTargetCatalog(model);
+  const target = catalog.targets.find(candidate => candidate.kind === 'top-level');
+  const baseProfile = rawProducerProjection.program?.profile;
+  if (!target || !baseProfile) return { sourceText, result: undefined, program: undefined, profile: undefined };
+  const producerProfile = { ...baseProfile, source: catalog.sourceIdentity };
+  const result = projectX4UiLayoutProgram(model, target, producerProfile, undefined, undefined, p3ColorAuthority);
+  if (!('program' in result) || !result.program) return { sourceText, result, program: undefined, profile: undefined };
+  const profile: X4UiSceneProfile = Object.freeze({
+    id: 'scene-colors-profile',
+    provenance: 'B119 P4 Scene color selftest',
+    source: result.program.profile.source,
+    helper: { sourcePath: HELPER_PATH, sha256: X4_LAYOUT_PROVENANCE.helperSha256 },
+    widget: { sourcePath: WIDGET_PATH, sha256: X4_LAYOUT_PROVENANCE.widgetSha256 },
+    fonts: sceneProfile.fonts,
+    drawable: { width: result.program.profile.frame.width, height: result.program.profile.frame.height },
+    textPolicy: sceneProfile.textPolicy,
+  });
+  return { sourceText, result, program: result.program, profile };
+})();
 
 const realGeometryProjection = rawProjectionFor([
   'local menu = { name = "SceneGeometry", layer = 1 }',
@@ -1374,6 +1601,56 @@ const producerAuthority = (result: X4UiLayoutProgramResult): X4UiLayoutEvidenceA
   return result.evidenceAuthority;
 };
 
+const synchronizedAuthority = (
+  authority: X4UiLayoutEvidenceAuthority,
+  program: X4UiLayoutProgram,
+): X4UiLayoutEvidenceAuthority => {
+  const copy = cloneJsonValue(authority) as unknown as Record<string, unknown>;
+  const operations = copy.operations;
+  if (!Array.isArray(operations)) return copy as unknown as X4UiLayoutEvidenceAuthority;
+  const programById = new Map(program.operations.map(operation => [operation.id, operation]));
+  for (const candidate of operations) {
+    if (candidate === null || typeof candidate !== 'object' || Array.isArray(candidate)) continue;
+    const record = candidate as Record<string, unknown>;
+    const operation = typeof record.id === 'string' ? programById.get(record.id) : undefined;
+    if (operation === undefined) continue;
+    if (Object.prototype.hasOwnProperty.call(record, 'snapshot')) record.snapshot = cloneJsonValue(operation);
+    for (const key of ['kind', 'status', 'frameId', 'tableId', 'rowId', 'cellId', 'source', 'sourceOrder', 'modelOrder'] as const) {
+      if (Object.prototype.hasOwnProperty.call(record, key)) record[key] = cloneJsonValue((operation as unknown as Record<string, unknown>)[key]);
+    }
+  }
+  const nodes = copy.nodes;
+  if (nodes !== null && typeof nodes === 'object' && !Array.isArray(nodes)) {
+    const nodeRecord = nodes as Record<string, unknown>;
+    type AuthorityCandidateNode = {
+      readonly id: string;
+      readonly operationIds: readonly string[];
+      readonly metadataOperationIds?: readonly string[];
+    };
+    const programNodes: ReadonlyArray<readonly [string, readonly AuthorityCandidateNode[]]> = [
+      ['frames', program.frames],
+      ['tables', program.tables],
+      ['rows', program.rows],
+      ['cells', program.cells],
+    ];
+    for (const [collection, candidates] of programNodes) {
+      const ledgers = nodeRecord[collection];
+      if (!Array.isArray(ledgers)) continue;
+      const candidatesById = new Map(candidates.map(candidate => [candidate.id, candidate] as const));
+      for (const ledger of ledgers) {
+        if (ledger === null || typeof ledger !== 'object' || Array.isArray(ledger)) continue;
+        const ledgerRecord = ledger as Record<string, unknown>;
+        const candidate = typeof ledgerRecord.id === 'string' ? candidatesById.get(ledgerRecord.id) : undefined;
+        if (candidate === undefined) continue;
+        ledgerRecord.snapshot = cloneJsonValue(candidate);
+        ledgerRecord.operationIds = cloneJsonValue(candidate.operationIds);
+        if (candidate.metadataOperationIds !== undefined) ledgerRecord.metadataOperationIds = cloneJsonValue(candidate.metadataOperationIds);
+      }
+    }
+  }
+  return copy as unknown as X4UiLayoutEvidenceAuthority;
+};
+
 const pairInvalidProgram = (
   program: X4UiLayoutProgram,
   sourceResult: X4UiLayoutProgramResult,
@@ -1716,6 +1993,125 @@ void sceneWithFinalizedColumns;
 void makeFixedOverflowContinuationProgram;
 void makeGroupedFixedBoundaryProgram;
 void makeSourceAcceptanceLedgerProgram;
+
+test('fail-first: an unissued coordinated LayoutProgram/evidence clone must refuse before geometry', () => {
+  const issued = rawProducerProjection.result;
+  assert(issued !== undefined && 'program' in issued && issued.program !== undefined && 'evidenceAuthority' in issued && issued.evidenceAuthority !== undefined, 'issued control result is required');
+  const clonedProgram = cloneProgram(issued.program);
+  const clonedAuthority = synchronizedAuthority(issued.evidenceAuthority, clonedProgram);
+  freezeFixtureGraph(clonedProgram);
+  freezeFixtureGraph(clonedAuthority);
+  const pair = validateX4UiLayoutEvidencePair(clonedProgram, clonedAuthority);
+  assert(pair.valid, `coordinated clone must remain semantically pair-valid for the issuance gate receipt: ${JSON.stringify(pair)}`);
+  const result = buildX4UiScene(
+    { ...issued, program: clonedProgram, evidenceAuthority: clonedAuthority } as X4UiLayoutProgramResult,
+    corpus,
+    rawProducerProjection.profile!,
+  );
+  assert(result.status === 'refused', `unissued coordinated pair escaped Scene: ${JSON.stringify(result)}`);
+});
+
+test('rejects an unissued hostile color descriptor without executing its getter', () => {
+  const issued = rawProducerProjection.result;
+  assert(issued !== undefined && 'program' in issued && issued.program !== undefined && 'evidenceAuthority' in issued && issued.evidenceAuthority !== undefined, 'issued control result is required');
+  const hostileProgram = cloneProgram(issued.program);
+  const hostileAuthority = synchronizedAuthority(issued.evidenceAuthority, hostileProgram);
+  const facts = hostileProgram.cells[0]!.descriptorFacts as Record<string, unknown>;
+  let getterExecutions = 0;
+  Object.defineProperty(facts, 'color', {
+    configurable: true,
+    enumerable: true,
+    get: () => {
+      getterExecutions += 1;
+      throw new Error('hostile color getter executed');
+    },
+  });
+  const result = buildX4UiScene(
+    { ...issued, program: hostileProgram, evidenceAuthority: hostileAuthority } as X4UiLayoutProgramResult,
+    corpus,
+    rawProducerProjection.profile!,
+  );
+  assert(result.status === 'refused' && getterExecutions === 0, `hostile color descriptor must refuse before getter execution: ${JSON.stringify({ result, getterExecutions })}`);
+});
+
+test('projects issued P3 color facts to exact Scene owners while retaining residual uncertainty', () => {
+  const colorResult = colorProjection.result;
+  const colorProgram = colorProjection.program;
+  const colorProfile = colorProjection.profile;
+  assert(colorResult !== undefined && 'program' in colorResult && colorResult.program !== undefined && 'evidenceAuthority' in colorResult && colorResult.evidenceAuthority !== undefined && colorProgram !== undefined && colorProfile !== undefined, 'issued P3 color projection is required');
+  const pair = validateX4UiLayoutEvidencePair(colorProgram, colorResult.evidenceAuthority);
+  assert(pair.valid, `P3 color producer pair must be semantically valid before Scene: ${JSON.stringify(pair)}`);
+  const result = buildX4UiScene(colorResult, corpus, colorProfile);
+  assert(result.status !== 'refused', `issued known color facts must reach Scene: ${JSON.stringify(result)}`);
+  const scene = result.scene;
+  const table = scene.tables.find(candidate => candidate.source.start.offset === colorProgram.tables[0].source.start.offset);
+  const literalCell = scene.cells.find(candidate => candidate.source.start.offset === colorProgram.cells.find(cell => cell.column === 1)!.source.start.offset);
+  const literalText = scene.texts.find(candidate => candidate.content === 'literal');
+  const button = scene.widgets.find(candidate => candidate.kind === 'button');
+  const buttonPrimary = scene.texts.find(candidate => candidate.content === 'primary');
+  const buttonSecondary = scene.texts.find(candidate => candidate.content === 'secondary');
+  const editbox = scene.widgets.find(candidate => candidate.kind === 'editbox');
+  const icon = scene.widgets.find(candidate => candidate.kind === 'icon');
+  assert(table !== undefined && literalCell !== undefined && literalText !== undefined && button !== undefined && buttonPrimary !== undefined && buttonSecondary !== undefined && editbox !== undefined && icon !== undefined, 'P3 color owners must be projected');
+  const sourceColor = (fact: X4UiLayoutDescriptorFact | undefined, label: string) => {
+    if (!fact || fact.status !== 'known' || fact.expectedType !== 'color-object') throw new Error(`${label} producer color fact must be known`);
+    return fact;
+  };
+  const operationColor = (kind: string, field: string) => {
+    const operationNode = colorProgram.operations.find(candidate => candidate.kind === kind);
+    assert(operationNode !== undefined, `${kind} operation must be present for ${field}`);
+    return sourceColor(operationNode.descriptorFacts[field], `${kind}.${field}`);
+  };
+  const expectColorFact = (
+    node: { readonly colorFacts?: readonly X4UiSceneColorFact[] },
+    field: string,
+    slot: X4UiSceneColorFact['slot'],
+    producerFact: X4UiLayoutDescriptorFact,
+    label: string,
+  ): X4UiSceneColorFact => {
+    const expected = sourceColor(producerFact, label);
+    const actual = node.colorFacts?.find(fact => fact.field === field);
+    assert(actual !== undefined, `${label} must be attached to its exact Scene owner`);
+    assert(actual.field === field && actual.slot === slot, `${label} field/slot must remain exact`);
+    assert(actual.domain === expected.value.domain && actual.provenance === expected.provenance, `${label} domain/provenance must remain exact`);
+    assert(actual.expression === expected.expression && isDeepStrictEqual(actual.value, expected.value), `${label} expression/full value must remain exact: ${JSON.stringify({ actualExpression: actual.expression, expectedExpression: expected.expression, actualValue: actual.value, expectedValue: expected.value })}`);
+    assert(isDeepStrictEqual(actual.source, expected.source), `${label} source must remain exact`);
+    assert((actual.sourcePin === undefined) === (expected.sourcePin === undefined) && isDeepStrictEqual(actual.sourcePin, expected.sourcePin), `${label} optional sourcePin presence/value must remain exact`);
+    assert((actual.sampleId === undefined) === (expected.sampleId === undefined) && actual.sampleId === expected.sampleId, `${label} optional sampleId presence/value must remain exact`);
+    assert(actual.gameVerification === X4_UI_SCENE_GAME_TRUTH, `${label} must retain Not verified in game`);
+    assert(Object.isFrozen(actual) && Object.isFrozen(actual.value) && Object.isFrozen(actual.source), `${label} must be immutable`);
+    assert(actual.value !== expected.value && actual.source !== expected.source && actual.source.start !== expected.source.start && actual.source.end !== expected.source.end, `${label} source/value data must be detached from producer evidence`);
+    const actualValue = actual.value as unknown as Record<string, unknown>;
+    const expectedValue = expected.value as unknown as Record<string, unknown>;
+    for (const nestedKey of ['declarationSource', 'channels', 'baseSource', 'mappingSource', 'sourceIdentities']) {
+      if (expectedValue[nestedKey] !== undefined) assert(actualValue[nestedKey] !== expectedValue[nestedKey], `${label} nested ${nestedKey} must be detached`);
+    }
+    return actual;
+  };
+  const tableSource = colorProgram.tables[0];
+  const literalCellSource = colorProgram.cells.find(cell => cell.column === 1);
+  assert(tableSource !== undefined && literalCellSource !== undefined, 'P3 producer table/cell owners are required');
+  expectColorFact(table, 'backgroundColor', 'table-background', sourceColor(tableSource.descriptorFacts.backgroundColor, 'table.backgroundColor'), 'table.backgroundColor');
+  expectColorFact(literalCell, 'cellbgcolor', 'cell-background', sourceColor(literalCellSource.descriptorFacts.cellbgcolor, 'cell.cellbgcolor'), 'cell.cellbgcolor');
+  expectColorFact(literalText, 'color', 'primary-text', sourceColor(literalCellSource.descriptorFacts.color, 'text.color'), 'direct text color');
+  expectColorFact(button, 'bgcolor', 'widget-background', operationColor('createButton', 'bgcolor'), 'button.bgcolor');
+  expectColorFact(button, 'highlightcolor', 'widget-highlight', operationColor('createButton', 'highlightcolor'), 'button.highlightcolor');
+  expectColorFact(button, 'bordercolor', 'widget-border', operationColor('createButton', 'bordercolor'), 'button.bordercolor');
+  expectColorFact(buttonPrimary, 'color', 'primary-text', operationColor('setText', 'color'), 'button setText color');
+  expectColorFact(buttonSecondary, 'color', 'secondary-text', operationColor('setText2', 'color'), 'button setText2 color');
+  expectColorFact(editbox, 'bgcolor', 'widget-background', operationColor('createEditBox', 'bgcolor'), 'editbox.bgcolor');
+  expectColorFact(icon, 'color', 'widget-icon', operationColor('createIcon', 'color'), 'icon.color');
+  assert(table.colorFacts?.length === 1 && literalCell.colorFacts?.length === 1 && literalText.colorFacts?.length === 1, 'single-owner table/cell/direct-text facts must not be duplicated');
+  assert(button.colorFacts?.length === 3 && buttonPrimary.colorFacts?.length === 1 && buttonSecondary.colorFacts?.length === 1 && editbox.colorFacts?.length === 1 && icon.colorFacts?.length === 1, 'widget/text owners must retain only their mapped facts');
+  assert(literalText.colorFacts?.[0]?.domain === 'source-literal-percent-alpha' && (literalText.colorFacts[0].value as { readonly a: number }).a === 45.5, 'source literal alpha domain must remain percent-alpha');
+  assert(table.colorFacts?.[0]?.domain === 'canonical-xml-byte-alpha' && (table.colorFacts[0].value as { readonly a: number }).a === 44, 'canonical default alpha domain must remain byte-alpha');
+  const knownColorGap = (node: { readonly diagnosticLinks: readonly string[] } | undefined): boolean => node?.diagnosticLinks.some(id => scene.gaps.find(gap => gap.id === id)?.reason.startsWith('known base color tint') === true) === true;
+  assert(scene.status === 'partial' && knownColorGap(table) && knownColorGap(literalCell) && knownColorGap(literalText) && knownColorGap(button) && knownColorGap(buttonPrimary) && knownColorGap(buttonSecondary) && knownColorGap(editbox) && knownColorGap(icon), 'known tint facts must retain separate residual uncertainty and prevent false node completeness');
+  const residualReason = scene.gaps.find(gap => gap.reason.startsWith('known base color tint'))?.reason || '';
+  assert(['material/texture/glow', 'active/inactive/hover/selection', 'C++ effective color map/profile/daltonization', 'font raster color behavior', 'game-frame acceptance'].every(fragment => residualReason.includes(fragment)), 'known tint must not imply material, state, glow, font, C++, or game truth');
+  assert(!scene.gaps.some(gap => gap.reason.includes('engine color fact')), 'known color facts must remove the legacy blanket unavailable-color gap');
+  assert(scene.gameTruth === X4_UI_SCENE_GAME_TRUTH && scene.verification.gameVerified === false, 'color evidence must retain game truth');
+});
 
 test('projects frame/table offsets, scrollbar, border-separated columns, rows, and hidden colspan', () => {
   const fixture = makeFixture();
@@ -3765,19 +4161,49 @@ test('fail-first: scrollbar diagnostics carry bounded clips and paint remains un
   assert(!serialized.includes('rgba') && !serialized.includes('textureId'), 'scene must not serialize invented engine paint data');
 });
 
-test('keeps direct color facts as unavailable paint without inventing RGBA', () => {
+test('fail-first: mapped unavailable color facts require exact owner-linked paint gaps', () => {
   const scene = sceneFromRaw([
     'local menu = { name = "ColorPaint", layer = 1 }',
     'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
-    'local table = frame:addTable(1, { width = 40, reserveScrollBar = false })',
-    'table:setColWidth(1, 40, false)',
-    'local row = table:addRow(false, {})',
-    'row[1]:createButton({ height = 10, color = runtimeColor })',
+    'local table = frame:addTable(4, { width = 100, reserveScrollBar = false, backgroundColor = runtimeTableColor })',
+    'table:setColWidth(1, 20, false)',
+    'table:setColWidth(2, 20, false)',
+    'table:setColWidth(3, 20, false)',
+    'table:setColWidth(4, 20, false)',
+    'local row = table:addRow(false, { paddingTop = 1, paddingBottom = 1, borderBelow = false, fixed = false, scaling = false })',
+    'row[1]:createText("direct", { height = 12, minRowHeight = 10, color = runtimeTextColor, cellBGColor = runtimeCellColor })',
+    'row[2]:createButton({ height = 12, bgcolor = runtimeButtonBackground, highlightColor = runtimeButtonHighlight, borderColor = runtimeButtonBorder }):setText("primary", { color = runtimePrimaryText }):setText2("secondary", { color = runtimeSecondaryText })',
+    'row[3]:createEditBox({ height = 12, bgColor = runtimeEditboxBackground })',
+    'row[4]:createIcon("icon", { height = 8, affectRowHeight = false, color = runtimeIconColor })',
     'frame:display()',
   ].join('\n'), 'selftest/raw-color-paint.lua');
-  const widget = scene.widgets.find(candidate => candidate.kind === 'button');
-  assert(scene.status === 'partial' || widget?.diagnosticStyle.paint === 'unknown-runtime-color', 'unavailable color must remain diagnostic-only');
-  if (widget) assert(widget.diagnosticStyle.geometry === 'source-derived', 'unavailable paint must preserve source-derived widget geometry');
+  const table = scene.tables[0];
+  const directText = scene.texts.find(candidate => candidate.content === 'direct');
+  const directWidget = directText === undefined ? undefined : scene.widgets.find(candidate => candidate.textIds.includes(directText.id));
+  const directCell = directWidget === undefined ? undefined : scene.cells.find(candidate => candidate.widgetIds.includes(directWidget.id));
+  const button = scene.widgets.find(candidate => candidate.kind === 'button');
+  const primaryText = scene.texts.find(candidate => candidate.content === 'primary');
+  const secondaryText = scene.texts.find(candidate => candidate.content === 'secondary');
+  const editbox = scene.widgets.find(candidate => candidate.kind === 'editbox');
+  const icon = scene.widgets.find(candidate => candidate.kind === 'icon');
+  assert(table !== undefined && directCell !== undefined && directText !== undefined && button !== undefined && primaryText !== undefined && secondaryText !== undefined && editbox !== undefined && icon !== undefined, 'all mapped unavailable color owners must be projected');
+  const exactUnavailableGap = (node: { readonly id: string; readonly diagnosticLinks: readonly string[] }, field: string, label: string): void => {
+    const expectedReason = `color descriptor fact ${field} remains unavailable to the scene projection`;
+    const matches = scene.gaps.filter(gap => gap.category === 'paint' && gap.nodeId === node.id && gap.reason === expectedReason && node.diagnosticLinks.includes(gap.id));
+    assert(matches.length === 1, `${label} must have exactly one owner-linked unavailable paint gap: ${JSON.stringify({ nodeId: node.id, field, matches, linked: node.diagnosticLinks.map(id => scene.gaps.find(gap => gap.id === id)?.reason) })}`);
+  };
+  exactUnavailableGap(table, 'backgroundColor', 'table backgroundColor');
+  exactUnavailableGap(directCell, 'cellbgcolor', 'cell cellbgcolor');
+  exactUnavailableGap(directText, 'color', 'direct createText color');
+  exactUnavailableGap(button, 'bgcolor', 'button bgcolor');
+  exactUnavailableGap(button, 'highlightcolor', 'button highlightcolor');
+  exactUnavailableGap(button, 'bordercolor', 'button bordercolor');
+  exactUnavailableGap(primaryText, 'color', 'button setText color');
+  exactUnavailableGap(secondaryText, 'color', 'button setText2 color');
+  exactUnavailableGap(editbox, 'bgcolor', 'editbox bgcolor');
+  exactUnavailableGap(icon, 'color', 'icon color');
+  assert(scene.status === 'partial' && scene.gaps.some(gap => gap.category === 'paint'), 'unavailable color must remain diagnostic-only');
+  assert(directWidget.diagnosticStyle.geometry === 'source-derived' && button.diagnosticStyle.geometry === 'source-derived', 'unavailable paint must preserve source-derived widget geometry');
   assert(!JSON.stringify(scene).includes('rgba'), 'unavailable color must never serialize engine RGBA data');
 });
 
@@ -5069,6 +5495,259 @@ test('B119 control: simple issued acceptance shapes remain accepted', () => {
   assert(refusals.length === 0, `issued B119 pairs refused at Scene boundary: ${JSON.stringify(refusals)}`);
 });
 
+test('B119 fail-first: conditional source-owner cells remain non-drawable Scene evidence', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "B119ConditionalOwner", layer = 4 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(2, { width = 80 })',
+    'local base = table:addRow(false, {})',
+    'base[1]:createText("base", {})',
+    'if getChoice() then',
+    '  local conditional = table:addRow(false, {})',
+    '  conditional[1]:createText(getText(), {})',
+    'end',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-conditional-scene-owner.lua');
+  assert(projected.program !== undefined && projected.profile !== undefined && 'program' in projected.result && projected.result.program !== undefined && 'evidenceAuthority' in projected.result && projected.result.evidenceAuthority !== undefined, 'conditional source-owner fixture must issue a producer evidence pair');
+  assert(validateX4UiLayoutEvidencePair(projected.program, projected.result.evidenceAuthority).valid, 'conditional source-owner fixture must validate before Scene mapping');
+  const table = projected.program.tables[0];
+  const row = projected.program.rows.find(candidate => candidate.status === 'refused');
+  assert(table?.kernelState !== undefined && row !== undefined && row.tableId === table.id && row.rowIndex === undefined && row.kernelState === undefined && row.cellIds.length === 2, `conditional source-owner fixture must retain exact refused owner shape: ${JSON.stringify({ table, row })}`);
+  const cells = projected.program.cells.filter(cell => cell.rowId === row.id);
+  const sourceOwnerOperationIds = new Set(projected.program.operations.filter(operation => operation.rowId === row.id).map(operation => operation.id));
+  assert(cells.length === 2 && cells.every((cell, index) => cell.status === 'refused' && cell.tableId === table.id && cell.column === index + 1 && cell.rowIndex === undefined && cell.kernelState === undefined && [...cell.operationIds, ...cell.metadataOperationIds].every(operationId => sourceOwnerOperationIds.has(operationId))), `conditional source-owner fixture must retain exact non-kernel source-owner cells: ${JSON.stringify({ cells, sourceOwnerOperationIds: [...sourceOwnerOperationIds] })}`);
+  const ownerOperation = projected.program.operations.find(operation => operation.kind === 'addRow' && operation.rowId === row.id);
+  assert(ownerOperation?.status === 'conditional' && ownerOperation.tableId === table.id && ownerOperation.cellId === undefined, `conditional source-owner fixture must have one conditional addRow owner: ${JSON.stringify(ownerOperation)}`);
+  const sceneResult = buildX4UiScene(projected.result as X4UiLayoutProgramResult, corpus, projected.profile);
+  assert(sceneResult.status !== 'refused', `conditional source-owner Scene evidence was refused: ${JSON.stringify({ result: sceneResult, table, row, cells, ownerOperation, operations: projected.program.operations.filter(operation => operation.rowId === row.id), gaps: projected.program.gaps.filter(gap => gap.nodeId === row.id || gap.operationId === ownerOperation?.id) })}`);
+  const scene = sceneResult.scene;
+  assert(scene.rows.every(candidate => candidate.id !== `scene:${row.id}`)
+    && scene.cells.every(candidate => candidate.id !== `scene:${cells[0]?.id}` && candidate.id !== `scene:${cells[1]?.id}`)
+    && scene.widgets.every(candidate => candidate.cellId !== `scene:${cells[0]?.id}` && candidate.cellId !== `scene:${cells[1]?.id}`), 'conditional source-owner nodes must not become drawable Scene rows, cells, or widgets');
+  type HostileMutation = (program: X4UiLayoutProgram, hostileTable: X4UiLayoutTableNode, hostileRow: X4UiLayoutRowNode, hostileCells: X4UiLayoutCellNode[]) => void;
+  const runHostile = (label: string, mutate: HostileMutation): void => {
+    const hostileProgram = cloneProgram(projected.program!);
+    const hostileTable = hostileProgram.tables.find(candidate => candidate.id === table.id)!;
+    const hostileRow = hostileProgram.rows.find(candidate => candidate.id === row.id)!;
+    const hostileCells = hostileProgram.cells.filter(candidate => candidate.rowId === hostileRow.id);
+    let hostileResult: X4UiSceneResult | undefined;
+    let thrown: unknown;
+    try {
+      mutate(hostileProgram, hostileTable, hostileRow, hostileCells);
+      hostileResult = buildX4UiScene({ ...projected.result, program: hostileProgram } as X4UiLayoutProgramResult, corpus, projected.profile);
+    } catch (error) {
+      thrown = error;
+    }
+    assert(thrown === undefined, `${label} hostile source-owner mutation threw: ${thrown instanceof Error ? thrown.message : String(thrown)}`);
+    assert(hostileResult?.status === 'refused', `${label} hostile source-owner mutation escaped refusal: ${JSON.stringify(hostileResult)}`);
+  };
+  runHostile('status', (_program, _table, hostileRow) => { (hostileRow as unknown as { status: string }).status = 'projected'; });
+  runHostile('row membership', (_program, _table, hostileRow) => { delete (hostileRow as unknown as { tableId?: string }).tableId; });
+  runHostile('table operation membership', (_program, hostileTable, hostileRow) => {
+    (hostileTable.operationIds as string[]).splice(0, hostileTable.operationIds.length, ...hostileTable.operationIds.filter(operationId => operationId !== hostileRow.operationIds[0]));
+  });
+  runHostile('rowIndex', (_program, _table, hostileRow) => { (hostileRow as unknown as { rowIndex: number }).rowIndex = 1; });
+  runHostile('row kernelState', (_program, hostileTable, hostileRow) => { (hostileRow as unknown as { kernelState: unknown }).kernelState = cloneJsonValue(hostileTable.kernelState!.rows[0]); });
+  runHostile('cell count', (_program, _table, hostileRow) => { (hostileRow.cellIds as string[]).pop(); });
+  runHostile('cell column', (_program, _table, _hostileRow, hostileCells) => { (hostileCells[0] as unknown as { column: number }).column = 2; });
+  runHostile('cell table owner', (_program, _table, _hostileRow, hostileCells) => { delete (hostileCells[0] as unknown as { tableId?: string }).tableId; });
+  runHostile('cell row owner', (_program, _table, hostileRow, hostileCells) => { (hostileCells[0] as unknown as { rowId: string }).rowId = hostileRow.id + ':forged'; });
+  runHostile('source identity', (_program, _table, _hostileRow, hostileCells) => {
+    const cell = hostileCells[0] as unknown as { source: X4UiSceneSourceLocation };
+    cell.source = { ...cell.source, start: { ...cell.source.start, offset: cell.source.start.offset + 1 } };
+  });
+  runHostile('operation linkage', (_program, _table, hostileRow) => { (hostileRow.operationIds as string[]).splice(1, 1); });
+  runHostile('drawable leakage', (_program, hostileTable) => { (hostileTable.rowIds as string[]).push(row.id); });
+});
+
+test('B119 fail-first: reserve provenance and owning-operation binding are causal', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "B119ReserveProvenance", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(2, { width = 80, reserveScrollBar = true, maxVisibleHeight = 20 })',
+    'table:setColWidth(1, 40, false)',
+    'table:setColWidth(2, 40, false)',
+    'local row = table:addRow(false, {})',
+    'row[1]:createText("reserve", {})',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-reserve-provenance.lua');
+  assert(projected.program !== undefined && projected.profile !== undefined && 'program' in projected.result && projected.result.program !== undefined && 'evidenceAuthority' in projected.result && projected.result.evidenceAuthority !== undefined, 'reserve provenance fixture must issue a producer evidence pair');
+  const table = projected.program.tables[0];
+  const tableOperation = table === undefined ? undefined : projected.program.operations.find(operation => operation.id === table.operationIds.find(operationId => projected.program.operations.find(candidate => candidate.id === operationId)?.kind === 'addTable'));
+  const reserveFact = table?.descriptorFacts.reserveScrollBar;
+  assert(table !== undefined && tableOperation !== undefined && reserveFact?.status === 'known', 'reserve provenance fixture must expose the owning addTable fact');
+  const mutationCases: readonly { readonly label: string; readonly mutate: (fact: Record<string, unknown>) => void }[] = [
+    { label: 'provenance', mutate: fact => { fact.provenance = 'preview-sample'; } },
+    { label: 'expression', mutate: fact => { fact.expression = `${String(fact.expression)}:forged`; } },
+    { label: 'source', mutate: fact => {
+      const current = fact.source as Record<string, unknown>;
+      const start = current.start as Record<string, unknown>;
+      fact.source = { ...current, start: { ...start, offset: Number(start.offset) + 1 } };
+    } },
+    { label: 'sourcePin', mutate: fact => {
+      const current = fact.sourcePin as Record<string, unknown> | undefined;
+      fact.sourcePin = current === undefined
+        ? { sourcePath: HELPER_PATH, lineStart: 3171, lineEnd: 3171 }
+        : { ...current, lineStart: Number(current.lineStart) + 1 };
+    } },
+  ];
+  for (const mutationCase of mutationCases) {
+    const hostileProgram = cloneProgram(projected.program);
+    const hostileTable = hostileProgram.tables.find(candidate => candidate.id === table.id)!;
+    const hostileOperation = hostileProgram.operations.find(candidate => candidate.id === tableOperation.id)!;
+    const hostileFact = (hostileOperation.descriptorFacts.reserveScrollBar as unknown as Record<string, unknown>);
+    mutationCase.mutate(hostileFact);
+    const authority = synchronizedAuthority(projected.result.evidenceAuthority, hostileProgram);
+    freezeFixtureGraph(hostileProgram);
+    freezeFixtureGraph(authority);
+    const pair = validateX4UiLayoutEvidencePair(hostileProgram, authority);
+    assert(pair.valid, `${mutationCase.label} forged reserve fact must remain pair-valid after the authority snapshot is updated: ${JSON.stringify(pair)}`);
+    const result = buildX4UiScene({ ...projected.result, program: hostileProgram, evidenceAuthority: authority } as X4UiLayoutProgramResult, corpus, projected.profile);
+    assert(result.status === 'refused', `${mutationCase.label} forged reserve fact escaped Scene refusal: ${JSON.stringify({ status: result.status, nodeFact: hostileTable.descriptorFacts.reserveScrollBar, producerFact: hostileOperation.descriptorFacts.reserveScrollBar, owningSource: hostileOperation.source, metadata: hostileOperation.metadata })}`);
+  }
+});
+
+test('B119 fail-first: empty conditional ledgers and legacy empty-cell shape are exact branches', () => {
+  const allEmptyProjected = rawProjectionFor([
+    'local menu = { name = "B119AllCellLedgersEmpty", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 80 })',
+    'local base = table:addRow(false, {})',
+    'base[1]:createText("base", {})',
+    'if getChoice() then',
+    '  local conditional = table:addRow(false, {})',
+    '  conditional[getColumn()]:setColSpan(getSpan())',
+    'end',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-all-cell-ledgers-empty.lua');
+  const legacyProjected = rawProjectionFor([
+    'local menu = { name = "B119LegacyEmptyCellShape", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 80 })',
+    'local base = table:addRow(false, {})',
+    'base[1]:createText("base", {})',
+    'if getChoice() then',
+    '  local conditional = table:addRow(false, {})',
+    'end',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-legacy-empty-cell.lua');
+  const assertSourceOwner = (
+    label: string,
+    projected: ReturnType<typeof rawProjectionFor>,
+  ): { readonly program: X4UiLayoutProgram; readonly result: X4UiLayoutProgramResult; readonly row: X4UiLayoutRowNode; readonly table: X4UiLayoutTableNode; readonly cells: readonly X4UiLayoutCellNode[] } => {
+    assert(projected.program !== undefined && projected.profile !== undefined && 'program' in projected.result && projected.result.program !== undefined && 'evidenceAuthority' in projected.result && projected.result.evidenceAuthority !== undefined, `${label} fixture must issue a producer evidence pair`);
+    assert(validateX4UiLayoutEvidencePair(projected.program, projected.result.evidenceAuthority).valid, `${label} fixture must validate before Scene mapping`);
+    const row = projected.program.rows.find(candidate => candidate.status === 'refused');
+    assert(row !== undefined, `${label} fixture must retain a refused conditional row`);
+    const table = projected.program.tables.find(candidate => candidate.id === row.tableId);
+    assert(table !== undefined, `${label} fixture must retain the owning table`);
+    const cells = row.cellIds.map(cellId => projected.program.cells.find(candidate => candidate.id === cellId)).filter((cell): cell is X4UiLayoutCellNode => cell !== undefined);
+    assert(cells.length === row.cellIds.length, `${label} fixture must retain every source-owner cell`);
+    const result = buildX4UiScene(projected.result as X4UiLayoutProgramResult, corpus, projected.profile);
+    assert(result.status !== 'refused', `${label} positive source-owner shape was refused: ${JSON.stringify(result)}`);
+    assert(result.scene.rows.every(candidate => candidate.id !== `scene:${row.id}`)
+      && result.scene.cells.every(candidate => !cells.some(cell => candidate.id === `scene:${cell.id}`))
+      && result.scene.widgets.every(candidate => !cells.some(cell => candidate.cellId === `scene:${cell.id}`)), `${label} source-only nodes must not become drawable geometry`);
+    return { program: projected.program, result: projected.result as X4UiLayoutProgramResult, row, table, cells };
+  };
+  const allEmpty = assertSourceOwner('allCellLedgersEmpty', allEmptyProjected);
+  const legacy = assertSourceOwner('legacyEmptyCellShape', legacyProjected);
+  const allEmptyOperations = allEmpty.program.operations.filter(operation => operation.rowId === allEmpty.row.id && operation.kind !== 'addRow');
+  assert(allEmptyOperations.length > 0, 'allCellLedgersEmpty fixture must retain conditional downstream operations');
+  assert(allEmpty.cells.every(cell => cell.operationIds.length === 0 && cell.metadataOperationIds.length === 0), `allCellLedgersEmpty positive must have empty cell ledgers: ${JSON.stringify({ cells: allEmpty.cells, operations: allEmptyOperations })}`);
+  assert(allEmptyOperations.every(operation => operation.status === 'conditional' && operation.cellId === undefined), 'allCellLedgersEmpty positive must have unbound conditional downstream operations');
+  assert(legacy.cells.length === 1 && legacy.table.kernelState?.columns.length === 1 && legacy.cells[0]?.descriptorFacts.contentKind?.status === 'known' && legacy.cells[0].descriptorFacts.contentKind.value === 'cell', 'legacyEmptyCellShape positive must be one exact empty cell');
+  assert(legacy.program.operations.filter(operation => operation.rowId === legacy.row.id && operation.kind !== 'addRow').length === 0, 'legacyEmptyCellShape positive must have no downstream operations');
+
+  type BranchMutation = (program: X4UiLayoutProgram, table: X4UiLayoutTableNode, row: X4UiLayoutRowNode, cells: X4UiLayoutCellNode[]) => void;
+  const runBranchHostile = (
+    label: string,
+    base: { readonly program: X4UiLayoutProgram; readonly result: X4UiLayoutProgramResult; readonly row: X4UiLayoutRowNode; readonly table: X4UiLayoutTableNode; readonly cells: readonly X4UiLayoutCellNode[] },
+    mutate: BranchMutation,
+  ): void => {
+    const hostileProgram = cloneProgram(base.program);
+    const hostileTable = hostileProgram.tables.find(candidate => candidate.id === base.table.id)!;
+    const hostileRow = hostileProgram.rows.find(candidate => candidate.id === base.row.id)!;
+    const hostileCells = hostileProgram.cells.filter(candidate => candidate.rowId === hostileRow.id);
+    let hostileResult: X4UiSceneResult | undefined;
+    let thrown: unknown;
+    try {
+      mutate(hostileProgram, hostileTable, hostileRow, hostileCells);
+      hostileResult = buildX4UiScene({ ...base.result, program: hostileProgram } as X4UiLayoutProgramResult, corpus, sceneProfile);
+    } catch (error) {
+      thrown = error;
+    }
+    assert(thrown === undefined, `${label} branch hostile mutation threw: ${thrown instanceof Error ? thrown.message : String(thrown)}`);
+    assert(hostileResult?.status === 'refused', `${label} branch hostile mutation escaped refusal: ${JSON.stringify(hostileResult)}`);
+  };
+  runBranchHostile('allCellLedgersEmpty nonempty ledger', allEmpty, (_program, _table, _row, cells) => { (cells[0]!.operationIds as string[]).push('forged-operation'); });
+  runBranchHostile('allCellLedgersEmpty mismatched ledger', allEmpty, (_program, _table, _row, cells) => { (cells[0]!.metadataOperationIds as string[]).push('forged-metadata-operation'); });
+  runBranchHostile('allCellLedgersEmpty drawable state', allEmpty, (_program, table, row) => { (table.rowIds as string[]).push(row.id); });
+  runBranchHostile('allCellLedgersEmpty missing downstream ownership', allEmpty, (_program, _table, row) => { (row.operationIds as string[]).splice(1, 1); });
+  runBranchHostile('allCellLedgersEmpty extra downstream ownership', allEmpty, (program, _table, row) => { (row.operationIds as string[]).push(program.operations.find(operation => operation.rowId !== row.id && operation.kind === 'createText')?.id || 'forged-operation'); });
+  runBranchHostile('allCellLedgersEmpty wrong source', allEmpty, (_program, _table, row) => { (row as unknown as { source: X4UiSceneSourceLocation }).source = { ...row.source, start: { ...row.source.start, offset: row.source.start.offset + 1 } }; });
+  runBranchHostile('legacyEmptyCellShape forged contentKind', legacy, (_program, _table, _row, cells) => { (cells[0]!.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>).contentKind = known('text', 'string', cells[0]!.source); });
+  runBranchHostile('legacyEmptyCellShape extra cell shape', legacy, (program, _table, row, cells) => {
+    const extra = cloneJsonValue(cells[0]!);
+    (extra as unknown as { id: string; column: number }).id = `${cells[0]!.id}:extra`;
+    (extra as unknown as { column: number }).column = 2;
+    (program.cells as X4UiLayoutCellNode[]).push(extra);
+    (row.cellIds as string[]).push(extra.id);
+  });
+  runBranchHostile('legacyEmptyCellShape downstream ownership drift', legacy, (program, _table, row) => { (row.operationIds as string[]).push(program.operations.find(operation => operation.kind === 'createText')?.id || 'forged-operation'); });
+  runBranchHostile('legacyEmptyCellShape wrong source', legacy, (_program, _table, row) => { (row as unknown as { source: X4UiSceneSourceLocation }).source = { ...row.source, start: { ...row.source.start, offset: row.source.start.offset + 1 } }; });
+});
+
+test('B119 fail-first: Scene gap finalization canonicalizes reverse source offsets and every link', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "B119ReverseGapOrder", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local first = frame:addTable(1, { width = 40 })',
+    'first:setColWidth(1, 40, false)',
+    'local firstRow = first:addRow(false, {})',
+    'firstRow[1]:createText("first", {})',
+    'local second = frame:addTable(1, { width = getWidth() })',
+    'second:setColWidth(1, 40, false)',
+    'local secondRow = second:addRow(false, {})',
+    'secondRow[1]:createText("second", {})',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-reverse-gap-order.lua');
+  assert(projected.program !== undefined && projected.profile !== undefined && 'program' in projected.result && projected.result.program !== undefined && 'evidenceAuthority' in projected.result && projected.result.evidenceAuthority !== undefined, 'reverse-gap fixture must issue a producer evidence pair');
+  const result = buildX4UiScene(projected.result as X4UiLayoutProgramResult, corpus, projected.profile);
+  assert(result.status !== 'refused', `reverse-gap fixture refused before Paint: ${JSON.stringify({ status: result.status, refusal: result.status === 'refused' ? result.refusal : undefined, tables: projected.program.tables.map(table => ({ id: table.id, reserve: table.descriptorFacts.reserveScrollBar, state: table.kernelState && { final: table.kernelState.final, reserve: table.kernelState.properties.reserveScrollBar, diagnostics: table.kernelState.diagnostics }, operations: table.operationIds.map(id => projected.program.operations.find(operation => operation.id === id)?.descriptorFacts.reserveScrollBar) })) })}`);
+  const scene = result.scene;
+  assert(scene.gaps.length > 1, `reverse-gap fixture must produce multiple gaps: ${JSON.stringify(scene.gaps)}`);
+  const compareCanonicalGap = (left: (typeof scene.gaps)[number], right: (typeof scene.gaps)[number]): number =>
+    left.source.file.localeCompare(right.source.file)
+    || left.source.start.offset - right.source.start.offset
+    || left.source.end.offset - right.source.end.offset
+    || left.category.localeCompare(right.category)
+    || left.status.localeCompare(right.status)
+    || left.reason.localeCompare(right.reason)
+    || (left.expression || '').localeCompare(right.expression || '')
+    || (left.operationId || '').localeCompare(right.operationId || '')
+    || (left.nodeId || '').localeCompare(right.nodeId || '');
+  assert(scene.gaps.every((gap, index) => index === 0 || compareCanonicalGap(scene.gaps[index - 1]!, gap) <= 0), `Scene gaps must be in canonical source order: ${JSON.stringify(scene.gaps.map(gap => ({ id: gap.id, file: gap.source.file, start: gap.source.start.offset, end: gap.source.end.offset, category: gap.category, status: gap.status, operationId: gap.operationId, nodeId: gap.nodeId })))}`);
+  assert(scene.gaps.every((gap, index) => gap.id === `scene-gap:${String(index).padStart(6, '0')}`), `Scene gap IDs must be sequential after canonicalization: ${JSON.stringify(scene.gaps.map(gap => gap.id))}`);
+  const gapIds = new Set(scene.gaps.map(gap => gap.id));
+  const references = [
+    ...scene.frames.flatMap(node => node.diagnosticLinks),
+    ...scene.tables.flatMap(node => node.diagnosticLinks),
+    ...scene.rows.flatMap(node => node.diagnosticLinks),
+    ...scene.cells.flatMap(node => node.diagnosticLinks),
+    ...scene.widgets.flatMap(node => node.diagnosticLinks),
+    ...scene.texts.flatMap(node => [...node.diagnosticLinks, ...node.textGaps, ...node.lines.flatMap(line => line.diagnosticLinks)]),
+  ];
+  assert(references.every(id => gapIds.has(id)), `Scene gap links must resolve after canonicalization: ${JSON.stringify(references)}`);
+  assert(scene.frames.every(node => new Set(node.diagnosticLinks).size === node.diagnosticLinks.length)
+    && scene.tables.every(node => new Set(node.diagnosticLinks).size === node.diagnosticLinks.length)
+    && scene.rows.every(node => new Set(node.diagnosticLinks).size === node.diagnosticLinks.length)
+    && scene.cells.every(node => new Set(node.diagnosticLinks).size === node.diagnosticLinks.length)
+    && scene.widgets.every(node => new Set(node.diagnosticLinks).size === node.diagnosticLinks.length)
+    && scene.texts.every(node => new Set([...node.diagnosticLinks, ...node.textGaps, ...node.lines.flatMap(line => line.diagnosticLinks)]).size === [...node.diagnosticLinks, ...node.textGaps, ...node.lines.flatMap(line => line.diagnosticLinks)].length), 'Scene gap links must not duplicate');
+  assert(isDeepFrozen(scene), 'canonical Scene gap output must remain deeply frozen');
+});
+
 test('B119 fail-first: sampled hub and comm shapes cross the Scene structural boundary', () => {
   const makeSampledIssued = (sourceText: string, sourcePath: string) => {
     const model = buildX4UiCallModel({ rel: sourcePath, text: sourceText, sourcePath });
@@ -5343,6 +6022,76 @@ test('8B fail-first: exact gap and no-op operation authority remain scene inputs
   const noOpMutation = { ...noOp.result, program: cloneProgram(noOp.program) } as X4UiLayoutProgramResult;
   (noOpMutation.program!.operations as X4UiLayoutOperation[]).splice(0, 1, ...noOpMutation.program!.operations.slice(1, 2));
   assert(refusalHasNoScene(buildX4UiScene(noOpMutation, corpus, noOp.profile)), 'reordered no-op operation must refuse even when state is unchanged');
+});
+
+test('B119 fail-first: producer dynamic gaps become exact frozen Scene unknown gaps', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "DynamicSceneGap", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 80, reserveScrollBar = false, scaling = false })',
+    'table:setColWidth(1, 80, false)',
+    'local row = table:addRow(false, {})',
+    'row[1]:createText(getRuntimeText(), { height = 10, minRowHeight = 10 })',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-dynamic-scene-gap.lua');
+  assert(projected.program !== undefined && projected.profile !== undefined && projected.result !== undefined && 'program' in projected.result, 'dynamic Scene-gap source must issue a producer authority pair');
+  const producerResult = projected.result as X4UiLayoutProgramResult;
+  const producerProgram = projected.program;
+  const producerDynamicGaps = producerProgram.gaps.filter(gap => gap.status === 'dynamic');
+  assert(producerDynamicGaps.length > 0, `dynamic Scene-gap source must expose producer dynamic gaps: ${JSON.stringify(producerProgram.gaps)}`);
+  const beforeProgram = JSON.stringify(producerProgram);
+  const result = buildX4UiScene(producerResult, corpus, projected.profile);
+  assert(!refusalHasNoScene(result), `intact producer dynamic-gap result must cross Scene: ${JSON.stringify(result)}`);
+  const scene = sceneOf(result);
+  const errors: string[] = [];
+  for (const producerGap of producerProgram.gaps) {
+    const matches = scene.gaps.filter(sceneGap =>
+      sceneGap.category === producerGap.category
+      && sceneGap.reason === producerGap.reason
+      && jsonEqual(sceneGap.source, producerGap.source)
+      && sceneGap.expression === producerGap.expression
+      && sceneGap.operationId === producerGap.operationId
+      && sceneGap.nodeId === producerGap.nodeId
+      && sceneGap.sourcePin === undefined
+      && sceneGap.previewOnly === undefined
+      && sceneGap.textRange === undefined
+      && sceneGap.lineIndex === undefined,
+    );
+    if (matches.length !== 1) {
+      errors.push(`producer gap must map once: ${JSON.stringify({ producerGap, matches })}`);
+      continue;
+    }
+    const sceneGap = matches[0];
+    const expectedStatus = producerGap.status === 'dynamic' ? 'unknown' : producerGap.status;
+    if (sceneGap.status !== expectedStatus) errors.push(`status ${producerGap.status} mapped to ${sceneGap.status}, expected ${expectedStatus}`);
+    const expectedKeys = ['category', 'id', 'reason', 'source', 'status'];
+    if (producerGap.expression !== undefined) expectedKeys.push('expression');
+    if (producerGap.operationId !== undefined) expectedKeys.push('operationId');
+    if (producerGap.nodeId !== undefined) expectedKeys.push('nodeId');
+    if (!jsonEqual(Object.keys(sceneGap).sort(), expectedKeys.sort())) errors.push(`producer gap Scene shape drifted: ${JSON.stringify(sceneGap)}`);
+  }
+  if (scene.gaps.some(gap => gap.status === 'dynamic')) errors.push('Scene output retained producer-only dynamic status');
+  if (!scene.gaps.some(gap => gap.status === 'unknown')) errors.push('Scene output omitted normalized unknown status');
+  if (JSON.stringify(producerProgram) !== beforeProgram) errors.push('Scene normalization mutated producer evidence');
+  if (!isDeepFrozen(scene)) errors.push('normalized Scene output is not deeply frozen');
+
+  const malformedProgram = cloneProgram(producerProgram);
+  const malformedGap = malformedProgram.gaps.find(gap => gap.status === 'dynamic') as unknown as Record<string, unknown> | undefined;
+  assert(malformedGap !== undefined, 'malformed-status control must find a producer dynamic gap');
+  malformedGap.status = 'bogus';
+  let malformedThrew = false;
+  let malformedResult: X4UiSceneResult | undefined;
+  try {
+    malformedResult = buildX4UiScene({ ...producerResult, program: malformedProgram } as X4UiLayoutProgramResult, corpus, projected.profile);
+  } catch {
+    malformedThrew = true;
+  }
+  if (validateX4UiLayoutEvidencePair(malformedProgram, producerAuthority(producerResult)).valid) errors.push('bogus producer gap status remained authority-valid');
+  if (malformedThrew
+    || malformedResult === undefined
+    || malformedResult.status !== 'refused'
+    || malformedResult.refusal.code !== 'invalid-program') errors.push('bogus producer gap status did not fail closed at the producer authority boundary without throw');
+  assert(errors.length === 0, errors.join('; '));
 });
 
 test('8B exact raw producer differential census retains the audited field inventory', () => {
@@ -5660,6 +6409,834 @@ test('is deterministic, JSON serializable, deeply frozen, and non-mutating', () 
     assert(text.lines.every(line => line.glyphIds.every(id => byId.get(id)?.parentId === text.id)), `${text.id} glyph children must point back to the text node`);
   }
 });
+
+test('B119 repaired: portable consumer-aware MENU/HUB/COMM owner shapes cross Scene', () => {
+  const configuredSourceHashes = Object.freeze({
+    MENU: '4253D9BD9DE4113D4DE0B881DBF5A1E90CAA7B30F735BA925403EBEF7EC47DD7',
+    HUB: '657476EAD08229977E1F2A69079FFDCAB56D908B72AF5C87BD4F4734DCCB8C4F',
+    COMM: '88FAB05A79EF33CB28E098081EA6A5E29E8F3B7C4150C39BF38913C51C063511',
+  });
+  const configuredSessionReceiptConstants = Object.freeze([
+    { label: 'MENU', sourceSha256: configuredSourceHashes.MENU, samples: 16, consumed: 11, notConsumed: 5, operations: 66, appliedOperations: 27, cells: 88, gaps: 95 },
+    { label: 'HUB', sourceSha256: configuredSourceHashes.HUB, samples: 11, consumed: 9, notConsumed: 2, operations: 18, appliedOperations: 11, cells: 4, gaps: 16 },
+    { label: 'COMM', sourceSha256: configuredSourceHashes.COMM, samples: 5, consumed: 5, notConsumed: 0, operations: 14, appliedOperations: 12, cells: 3, gaps: 11 },
+  ] as const);
+  assert(configuredSessionReceiptConstants.length === 3 && configuredSessionReceiptConstants.every(entry => /^[A-F0-9]{64}$/.test(entry.sourceSha256)), 'B119 configured source receipt constants must retain all three source hashes');
+  console.log(`B119 configured-session receipt constants only: ${JSON.stringify(configuredSessionReceiptConstants)}`);
+  const baseProfile = rawProducerProjection.program?.profile;
+  assert(baseProfile !== undefined, 'B119 real-shape fixtures require the producer profile');
+  const sampleFor = (program: X4UiLayoutProgram) => ({
+    catalogId: program.sampleCatalog.id,
+    source: program.sampleCatalog.sourceIdentity,
+    values: program.sampleCatalog.entries.map(entry => ({
+      id: entry.id,
+      value: entry.expectedType === 'boolean'
+        ? false
+        : entry.expectedType === 'string'
+          ? 'sampled'
+          : entry.expression === 'runtimeViewWidth'
+            ? 1920
+            : entry.expression === 'runtimeViewHeight'
+              ? 1080
+              : entry.expression === 'runtimeColumns'
+                ? 12
+                : entry.expression === 'runtimeHeight'
+                  ? 10
+                : entry.expression === 'runtimeSpan' || entry.expression === '_readSpan'
+                  ? 6
+                  : 80,
+    })),
+  });
+  const issue = (label: string, sourceText: string, targetName: string, dimensions = { width: 100, height: 80 }) => {
+    const model = buildX4UiCallModel({ rel: `selftest/b119-${label.toLowerCase()}.lua`, text: sourceText, sourcePath: `selftest/b119-${label.toLowerCase()}.lua` });
+    const target = createX4UiLayoutTargetCatalog(model).targets.find(candidate => candidate.name === targetName);
+    assert(target !== undefined, `${label} source must expose ${targetName}`);
+    const profile = {
+      ...baseProfile,
+      frame: dimensions,
+      helper: {
+        ...baseProfile.helper,
+        constants: {
+          ...baseProfile.helper.constants,
+          viewWidth: { value: dimensions.width, source: pin(707) },
+          viewHeight: { value: dimensions.height, source: pin(708) },
+        },
+      },
+      source: target.sourceIdentity,
+      localExpansion: { maxDepth: 3, maxInvocations: 4 },
+    } as Parameters<typeof projectX4UiLayoutProgram>[2];
+    const unsampled = projectX4UiLayoutProgram(model, target, profile);
+    assert('program' in unsampled && unsampled.program !== undefined, `${label} unsampled producer must issue a program: ${JSON.stringify(unsampled)}`);
+    const sampled = projectX4UiLayoutProgram(model, target, profile, sampleFor(unsampled.program));
+    assert('program' in sampled && sampled.program !== undefined && 'evidenceAuthority' in sampled && sampled.evidenceAuthority !== undefined, `${label} sampled producer must issue an authority pair`);
+    assert(validateX4UiLayoutEvidencePair(sampled.program, sampled.evidenceAuthority).valid, `${label} sampled producer pair must validate before Scene`);
+    const profileForScene: X4UiSceneProfile = Object.freeze({
+      id: `b119-${label.toLowerCase()}`,
+      provenance: 'B119 consumer-aware source-shaped Scene fail-first fixture',
+      source: sampled.program.profile.source,
+      helper: { sourcePath: HELPER_PATH, sha256: X4_LAYOUT_PROVENANCE.helperSha256 },
+      widget: { sourcePath: WIDGET_PATH, sha256: X4_LAYOUT_PROVENANCE.widgetSha256 },
+      fonts: sceneProfile.fonts,
+      drawable: { width: sampled.program.profile.frame.width, height: sampled.program.profile.frame.height },
+      textPolicy: sceneProfile.textPolicy,
+    });
+    return { sampled: sampled as X4UiLayoutProgramResult, authority: sampled.evidenceAuthority, program: sampled.program, profile: profileForScene };
+  };
+  const menu = issue('MENU', [
+    'local menu = { name = "B119MenuOwner", layer = 1 }',
+    'function menu.display(tableWidth, margin, dynamicText)',
+    '  local frame = Helper.createFrameHandle(menu, { width = runtimeViewWidth, height = runtimeViewHeight })',
+    '  local tt = frame:addTable(4, { width = 80, reserveScrollBar = false, scaling = true })',
+    '  local row = tt:addRow(true, {})',
+    '  local function turnRow(frameHandle, text)',
+    '    local ht = frameHandle:addTable(4, { width = 80, reserveScrollBar = false, scaling = true })',
+    '    row = ht:addRow(false, {})',
+    '  end',
+    '  turnRow(frame, dynamicText)',
+    '  local ct = frame:addTable(runtimeColumns, { width = tableWidth - margin * 2, reserveScrollBar = runtimeReserve, scaling = runtimeScaling })',
+    '  if pend then',
+    '    row = ct:addRow(false, {})',
+    '    row[1]:setColSpan(7):createText(dynamicText, { height = runtimeHeight })',
+    '    row[8]:setColSpan(5):createText(dynamicText, { height = runtimeHeight })',
+    '  end',
+    '  row = ct:addRow(false, {})',
+    'end',
+  ].join('\n'), 'menu.display');
+  const hub = issue('HUB', [
+    'local menu = { name = "B119HubOwner", layer = 1 }',
+    'local TABS = { "one", "two", "three" }',
+    'function menu.display()',
+    '  local frame = Helper.createFrameHandle(menu, { width = runtimeViewWidth, height = runtimeViewHeight })',
+    '  local st = frame:addTable(runtimeColumns, { width = runtimeWidth, reserveScrollBar = false, scaling = true })',
+    '  local sr = st:addRow(false, {})',
+    '  sr[1]:createButton({ active = true })',
+    '  sr[2]:createButton({ active = true })',
+    '  sr[3]:createButton({ active = true })',
+    '  for i, tab in ipairs(TABS) do',
+    '    sr[i]:createButton({ active = true })',
+    '  end',
+    'end',
+  ].join('\n'), 'menu.display');
+  const comm = issue('COMM', [
+    'local menu = { name = "B119CommOwner", layer = 1 }',
+    'function menu.display()',
+    '  local frame = Helper.createFrameHandle(menu, { width = runtimeViewWidth, height = runtimeViewHeight })',
+    '  local ct = frame:addTable(12, { width = runtimeWidth, reserveScrollBar = false, scaling = true })',
+    '  local row = ct:addRow(true, {})',
+    '  row[1]:setColSpan(_readSpan):createEditBox({ height = 25, defaultText = dynamicText, maxChars = 2000 })',
+    '  row[11]:setColSpan(2):createButton({ active = true }):setText(dynamicText, {})',
+    'end',
+  ].join('\n'), 'menu.display');
+  const candidates = [menu, hub, comm];
+  const expectedShape = {
+    MENU: { operations: 12, applied: 7, frames: 1, tables: 3, rows: 4, cells: 32, gaps: 10 },
+    HUB: { operations: 7, applied: 6, frames: 1, tables: 1, rows: 1, cells: 12, gaps: 3 },
+    COMM: { operations: 8, applied: 8, frames: 1, tables: 1, rows: 1, cells: 12, gaps: 0 },
+  } as const;
+  const positive = candidates.map(candidate => buildX4UiScene(candidate.sampled, corpus, candidate.profile));
+  const cases: ReadonlyArray<readonly [keyof typeof expectedShape, typeof menu, X4UiSceneResult]> = [
+    ['MENU', menu, positive[0]],
+    ['HUB', hub, positive[1]],
+    ['COMM', comm, positive[2]],
+  ];
+  for (const [label, candidate, result] of cases) {
+    assert(candidate.program.cells.length > 0, `${label} fixture must retain materialized cells`);
+    assert(candidate.program.operations.some(operation => operation.kernel !== undefined), `${label} fixture must retain kernel transitions`);
+    const shape = expectedShape[label];
+    const observedShape = {
+      operations: candidate.program.operations.length,
+      applied: candidate.program.operations.filter(operation => operation.status === 'applied').length,
+      frames: candidate.program.frames.length,
+      tables: candidate.program.tables.length,
+      rows: candidate.program.rows.length,
+      cells: candidate.program.cells.length,
+      gaps: candidate.program.gaps.length,
+    };
+    assert(JSON.stringify(observedShape) === JSON.stringify(shape), `${label} consumer-aware fixture shape changed: ${JSON.stringify({ expected: shape, observed: observedShape })}`);
+    assert(result.status !== 'refused', `${label} consumer-aware owner shape still refused: ${JSON.stringify(result)}`);
+    assert(result.scene.gameTruth === 'Not verified in game' && result.scene.verification.gameVerified === false && result.verification.gameVerified === false, `${label} Scene must remain preview-only and not game-verified`);
+    assert(diagnoseX4UiSceneStructureForTest(candidate.program, candidate.authority) === undefined, `${label} repaired structure must have no diagnostic stage`);
+    console.log(`B119 portable owner fixture ${label}: ${JSON.stringify({ layoutShape: observedShape, sceneStatus: result.status, sceneGeometry: { frames: result.scene.frames.length, tables: result.scene.tables.length, rows: result.scene.rows.length, cells: result.scene.cells.length, widgets: result.scene.widgets.length, texts: result.scene.texts.length, glyphs: result.scene.glyphs.length, gaps: result.scene.gaps.length, drawable: result.scene.drawableRect }, gameVerified: result.verification.gameVerified })}`);
+  }
+  const runHostile = (
+    label: string,
+    candidate: typeof menu,
+    mutate: (program: X4UiLayoutProgram) => void,
+    expectedDiagnostic?: string,
+  ): void => {
+    const hostileProgram = cloneProgram(candidate.program);
+    mutate(hostileProgram);
+    const authority = synchronizedAuthority(candidate.authority, hostileProgram);
+    let pairValid = false;
+    try {
+      pairValid = validateX4UiLayoutEvidencePair(hostileProgram, authority).valid;
+    } catch {
+      pairValid = false;
+    }
+    freezeFixtureGraph(hostileProgram);
+    freezeFixtureGraph(authority);
+    const result = buildX4UiScene({ ...candidate.sampled, program: hostileProgram, evidenceAuthority: authority } as X4UiLayoutProgramResult, corpus, candidate.profile);
+    assert(result.status === 'refused', `${label} one-field hostile mutation escaped Scene refusal: ${JSON.stringify({ pairValid, result })}`);
+    if (expectedDiagnostic !== undefined) assert(diagnoseX4UiSceneStructureForTest(hostileProgram, authority) === expectedDiagnostic, `${label} hostile diagnostic changed: ${diagnoseX4UiSceneStructureForTest(hostileProgram, authority)}`);
+  };
+  runHostile('kernel frame width', menu, program => {
+    const table = program.tables.find(candidate => candidate.kernelState !== undefined);
+    assert(table?.kernelState !== undefined, 'MENU hostile kernel mutation requires a materialized table');
+    (table.kernelState as unknown as { frameWidth: number }).frameWidth += 1;
+  }, `table-kernel-frame-width:${menu.program.tables.find(candidate => candidate.kernelState !== undefined)?.id}`);
+  runHostile('reciprocal table owner', hub, program => {
+    const table = program.tables.find(candidate => candidate.kernelState !== undefined);
+    assert(table !== undefined, 'HUB hostile owner mutation requires a materialized table');
+    (table as unknown as { frameId: string }).frameId = `${table.frameId ?? table.id}:forged`;
+  });
+  runHostile('operation ledger', comm, program => {
+    const table = program.tables.find(candidate => candidate.kernelState !== undefined);
+    assert(table !== undefined && table.operationIds.length > 0, 'COMM hostile ledger mutation requires an operation ledger');
+    (table.operationIds as string[]).pop();
+  });
+  runHostile('source owner', menu, program => {
+    const table = program.tables.find(candidate => candidate.kernelState !== undefined);
+    assert(table !== undefined, 'MENU hostile source mutation requires a materialized table');
+    const source = table.source;
+    (table as unknown as { source: X4UiSceneSourceLocation }).source = { ...source, start: { ...source.start, offset: source.start.offset + 1 } };
+  });
+});
+
+const b119OuterHeightPortableSources = Object.freeze({
+  MENU: [
+    'local menu = { name = "B119PortableMenu", layer = 4 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 1920, height = 1080 })',
+    'local tt = frame:addTable(4, { width = 787, reserveScrollBar = false, scaling = true })',
+    'tt:setColWidthPercent(1, 60)',
+    'tt:setColWidthPercent(2, 15)',
+    'tt:setColWidthPercent(3, 14)',
+    'tt:setColWidthPercent(4, 11)',
+    'local row = tt:addRow(true, {})',
+    'row[1]:createText(dynamicText, { color = dynamicColor })',
+    'row[2]:createButton({ active = true }):setText("EXPAND", { halign = "center" })',
+    'row[3]:createButton({ active = true }):setText("DOSSIER", { halign = "center" })',
+    'row[4]:createButton({ active = true }):setText("END", { halign = "center" })',
+    'frame:display()',
+  ].join('\n'),
+  HUB: [
+    'local menu = { name = "B119PortableHub", layer = 4 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 1920, height = 1080 })',
+    'local tt = frame:addTable(2, { width = 1866, reserveScrollBar = false, scaling = true })',
+    'tt:setColWidthPercent(1, 84)',
+    'tt:setColWidthPercent(2, 16)',
+    'local row = tt:addRow(true, {})',
+    'row[1]:createText("AI INFLUENCE", { color = dynamicColor, fontsize = dynamicFont })',
+    'row[2]:createButton({ active = true }):setText("CLOSE", { halign = "center" })',
+    'local st = frame:addTable(2, { width = 1866, reserveScrollBar = false, scaling = true })',
+    'local sr = st:addRow(true, {})',
+    'sr[1]:createButton({ active = true }):setText("DOSSIER", { halign = "center" })',
+    'sr[2]:createButton({ active = true }):setText("SYSTEMS", { halign = "center" })',
+    'frame:display()',
+  ].join('\n'),
+  COMM: [
+    'local menu = { name = "B119PortableComm", layer = 4 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 1920, height = 1080 })',
+    'local tt = frame:addTable(3, { width = 1866, reserveScrollBar = false, scaling = true })',
+    'tt:setColWidthPercent(1, 70)',
+    'tt:setColWidthPercent(2, 15)',
+    'tt:setColWidthPercent(3, 15)',
+    'local row = tt:addRow(true, {})',
+    'row[1]:createText(dynamicText, { color = dynamicColor, fontsize = dynamicFont })',
+    'row[2]:createButton({ active = true }):setText("DOSSIER", { halign = "center" })',
+    'row[3]:createButton({ active = true }):setText("END", { halign = "center" })',
+    'frame:display()',
+  ].join('\n'),
+});
+
+const b119OuterHeightPortableProjection = (label: string, sourceText: string) => rawProjectionFor(
+  sourceText,
+  `selftest/b119-outer-height-${label.toLowerCase()}.lua`,
+  profile => ({
+    ...profile,
+    defaults: {
+      standardButtonHeight: profile.defaults.standardButtonHeight,
+    },
+  } as Parameters<typeof projectX4UiLayoutProgram>[2]),
+);
+
+for (const [label, sourceText] of Object.entries(b119OuterHeightPortableSources)) {
+  test(`B119 fail-first: ${label} portable unavailable text height crosses Scene structure`, () => {
+    const projected = b119OuterHeightPortableProjection(label, sourceText);
+    assert(projected.program !== undefined && projected.profile !== undefined && 'program' in projected.result && projected.result.program !== undefined && 'evidenceAuthority' in projected.result && projected.result.evidenceAuthority !== undefined, `${label} portable fixture must issue a producer authority pair`);
+    const authority = projected.result.evidenceAuthority;
+    assert(validateX4UiLayoutEvidencePair(projected.program, authority).valid, `${label} portable producer authority pair must validate before Scene`);
+    const table = projected.program.tables.find(candidate => candidate.kernelState?.rows.some(row => row.cells.some(cell => cell.type === 'text' && cell.height === 0 && cell.minTextHeight === undefined)));
+    const row = table === undefined ? undefined : projected.program.rows.find(candidate => candidate.tableId === table.id && candidate.rowIndex !== undefined);
+    const cell = row === undefined ? undefined : projected.program.cells.find(candidate => candidate.rowId === row.id && candidate.column === 1);
+    assert(table?.kernelState !== undefined && row?.rowIndex !== undefined && cell?.kernelState !== undefined, `${label} portable fixture must materialize the failing owner slot`);
+    const kernelCell = table.kernelState.rows[row.rowIndex - 1].cells[cell.column - 1];
+    const expected = getCellHeight(table.kernelState, row.rowIndex, cell.column);
+    const creator = projected.program.operations
+      .filter(operation => operation.cellId === cell.id && operation.kind === 'createText')
+      .sort((left, right) => left.modelOrder - right.modelOrder)
+      .at(-1);
+    const outerHeight = cell.descriptorFacts.outerHeight;
+    const stage = diagnoseX4UiSceneStructureForTest(projected.program, authority);
+    const currentKnownMatch = outerHeight === undefined || outerHeight.status !== 'known'
+      ? true
+      : expected.status === 'ok' && outerHeight.expectedType === 'number' && outerHeight.value === expected.value;
+    const receipt = {
+      cellId: cell.id,
+      source: cell.source,
+      contentKind: cell.descriptorFacts.contentKind,
+      status: cell.status,
+      tableId: cell.tableId,
+      rowId: cell.rowId,
+      rowIndex: cell.rowIndex,
+      column: cell.column,
+      cellHeight: cell.height,
+      outerHeight: {
+        status: outerHeight?.status ?? null,
+        value: outerHeight?.status === 'known' ? outerHeight.value : null,
+        provenance: outerHeight?.status === 'known' ? outerHeight.provenance : null,
+        expression: outerHeight?.expression ?? null,
+        source: outerHeight?.source ?? null,
+        sourcePin: outerHeight?.sourcePin ?? null,
+        reason: outerHeight?.status === 'unavailable' ? outerHeight.reason : null,
+      },
+      kernel: {
+        type: kernelCell.type,
+        height: kernelCell.height,
+        scaling: kernelCell.scaling,
+        affectRowHeight: kernelCell.affectRowHeight,
+        y: kernelCell.y,
+        minTextHeight: kernelCell.minTextHeight ?? null,
+        colspan: kernelCell.colspan,
+      },
+      expected,
+      creator: creator === undefined ? null : {
+        kind: creator.kind,
+        status: creator.status,
+        source: creator.source,
+        explicitHeightFact: creator.descriptorFacts.height ?? null,
+        outerHeightFact: creator.descriptorFacts.outerHeight ?? null,
+      },
+      currentKnownMatch,
+      currentFailureReason: expected.status !== 'ok' && currentKnownMatch
+        ? 'expected Helper getCellHeight is unavailable and validateProgramStructure rejects it before accepting the matching unavailable descriptor fact'
+        : 'known descriptor fact differs from the Helper result',
+    };
+    console.log(`B119 cell-outer-height portable fixture ${label}: ${JSON.stringify({ stage, receipt })}`);
+    assert(expected.status === 'unsupported' && expected.code === 'missing-min-text-height', `${label} portable fixture must reproduce Helper missing-min-text-height`);
+    assert(outerHeight?.status === 'unavailable', `${label} portable fixture must preserve unavailable outerHeight evidence`);
+    assert(stage === undefined, `${label} authority-valid portable fixture refused at ${stage}: ${JSON.stringify(receipt)}`);
+  });
+}
+
+test('B119 missing-min-text-height requires the exact producer-emitted cell height shape', () => {
+  const projected = b119OuterHeightPortableProjection('height-shape', b119OuterHeightPortableSources.COMM);
+  assert(projected.program !== undefined && projected.profile !== undefined && 'program' in projected.result && projected.result.program !== undefined && 'evidenceAuthority' in projected.result && projected.result.evidenceAuthority !== undefined, 'cell-height shape fixture must issue a producer authority pair');
+  const sourceCell = projected.program.cells.find(candidate => candidate.kernelState?.type === 'text'
+    && candidate.kernelState.height === 0
+    && candidate.kernelState.minTextHeight === undefined
+    && candidate.height?.status === 'unavailable');
+  assert(sourceCell?.rowIndex !== undefined && sourceCell.tableId !== undefined, 'cell-height shape fixture must retain the unavailable text owner slot');
+  const sourceTable = projected.program.tables.find(candidate => candidate.id === sourceCell.tableId);
+  assert(sourceTable?.kernelState !== undefined, 'cell-height shape fixture must retain its owning kernel table');
+  const expectedFailure = getCellHeight(sourceTable.kernelState, sourceCell.rowIndex, sourceCell.column);
+  assert(expectedFailure.status === 'unsupported' && expectedFailure.code === 'missing-min-text-height', 'cell-height shape fixture must retain the exact Helper failure');
+  assert(JSON.stringify(sourceCell.height) === JSON.stringify({ status: 'unavailable' }), 'producer control must emit the exact unavailable cell-height record');
+  assert(validateX4UiLayoutEvidencePair(projected.program, projected.result.evidenceAuthority).valid, 'exact unavailable cell-height control must remain authority-valid');
+  assert(diagnoseX4UiSceneStructureForTest(projected.program, projected.result.evidenceAuthority) === undefined, 'exact unavailable cell-height control must cross Scene structure');
+  assert(!refusalHasNoScene(buildX4UiScene(projected.result, corpus, projected.profile)), 'exact unavailable cell-height control must retain a Scene');
+
+  const refusalProgram = cloneProgram(projected.program);
+  const refusalCell = refusalProgram.cells.find(candidate => candidate.id === sourceCell.id)!;
+  (refusalCell as unknown as { height: unknown }).height = { status: 'unavailable', refusal: cloneJsonValue(expectedFailure) };
+  const refusalAuthority = synchronizedAuthority(projected.result.evidenceAuthority, refusalProgram);
+  freezeFixtureGraph(refusalProgram);
+  freezeFixtureGraph(refusalAuthority);
+  const refusalPair = validateX4UiLayoutEvidencePair(refusalProgram, refusalAuthority);
+  assert(refusalPair.valid, `synchronized unavailable/refusal cell-height hostile must remain producer-pair valid: ${JSON.stringify(refusalPair)}`);
+  const expectedStage = `cell-outer-height:${sourceCell.id}`;
+  const refusalStage = diagnoseX4UiSceneStructureForTest(refusalProgram, refusalAuthority);
+  const refusalResult = buildX4UiScene({ ...projected.result, program: refusalProgram, evidenceAuthority: refusalAuthority } as X4UiLayoutProgramResult, corpus, projected.profile);
+  assert(refusalStage === expectedStage && refusalHasNoScene(refusalResult), `synchronized unavailable/refusal cell-height hostile escaped Scene: ${JSON.stringify({ expectedStage, refusalStage, refusalResult })}`);
+
+  const valueProgram = cloneProgram(projected.program);
+  const valueCell = valueProgram.cells.find(candidate => candidate.id === sourceCell.id)!;
+  (valueCell as unknown as { height: unknown }).height = { status: 'unavailable', value: 0 };
+  const valueAuthority = synchronizedAuthority(projected.result.evidenceAuthority, valueProgram);
+  const valuePair = validateX4UiLayoutEvidencePair(valueProgram, valueAuthority);
+  assert(!valuePair.valid, `unavailable cell-height with an extra value must fail producer schema: ${JSON.stringify(valuePair)}`);
+
+  const knownProgram = cloneProgram(projected.program);
+  const knownCell = knownProgram.cells.find(candidate => candidate.id === sourceCell.id)!;
+  (knownCell as unknown as { height: unknown }).height = { status: 'known', value: 0 };
+  const knownAuthority = synchronizedAuthority(projected.result.evidenceAuthority, knownProgram);
+  freezeFixtureGraph(knownProgram);
+  freezeFixtureGraph(knownAuthority);
+  const knownPair = validateX4UiLayoutEvidencePair(knownProgram, knownAuthority);
+  assert(knownPair.valid, `known/value cell-height drift must remain producer-pair valid: ${JSON.stringify(knownPair)}`);
+  const knownResult = buildX4UiScene({ ...projected.result, program: knownProgram, evidenceAuthority: knownAuthority } as X4UiLayoutProgramResult, corpus, projected.profile);
+  assert(diagnoseX4UiSceneStructureForTest(knownProgram, knownAuthority) === expectedStage && refusalHasNoScene(knownResult), 'known/value cell-height drift must refuse at the independent Scene relation');
+});
+
+test('B119 cell outer-height relation rejects synchronized one-field semantic drift', () => {
+  const unavailableProjection = b119OuterHeightPortableProjection('COMM-hostile', b119OuterHeightPortableSources.COMM);
+  const knownProjection = rawProjectionFor([
+    'local menu = { name = "B119KnownOuterHeight", layer = 4 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 1920, height = 1080 })',
+    'local table = frame:addTable(1, { width = 320, reserveScrollBar = false, scaling = true })',
+    'local row = table:addRow(true, {})',
+    'row[1]:createText("known", {})',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-known-outer-height-hostile.lua');
+  const projections = [unavailableProjection, knownProjection];
+  for (const projected of projections) {
+    assert(projected.program !== undefined && projected.profile !== undefined && projected.result !== undefined && 'program' in projected.result && 'evidenceAuthority' in projected.result && projected.result.evidenceAuthority !== undefined, 'outer-height hostile fixtures must issue authority pairs');
+    assert(validateX4UiLayoutEvidencePair(projected.program, projected.result.evidenceAuthority).valid, 'outer-height hostile fixture authority must start valid');
+  }
+  const unavailableCell = unavailableProjection.program!.cells.find(cell => cell.kernelState?.type === 'text');
+  const knownCell = knownProjection.program!.cells.find(cell => cell.kernelState?.type === 'text');
+  assert(unavailableCell !== undefined && knownCell !== undefined, 'outer-height hostile fixtures must expose text cells');
+  const unavailableFact = unavailableCell.descriptorFacts.outerHeight;
+  const knownFact = knownCell.descriptorFacts.outerHeight;
+  assert(unavailableFact?.status === 'unavailable' && knownFact?.status === 'known', 'outer-height hostile fixtures must cover unavailable and known descriptor states');
+
+  const shiftSource = (at: X4UiSceneSourceLocation): X4UiSceneSourceLocation => ({
+    ...at,
+    start: { ...at.start, column: at.start.column + 1, offset: at.start.offset + 1 },
+  });
+  const mutations: ReadonlyArray<readonly [
+    string,
+    typeof unavailableProjection,
+    (program: X4UiLayoutProgram) => void,
+    string,
+    boolean,
+  ]> = [
+    ['known descriptor value', knownProjection, program => {
+      const cell = program.cells.find(candidate => candidate.id === knownCell.id)!;
+      const fact = cell.descriptorFacts.outerHeight!;
+      assert(fact.status === 'known' && fact.expectedType === 'number' && typeof fact.value === 'number', 'known value hostile requires a known numeric fact');
+      (cell.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>).outerHeight = { ...fact, value: fact.value + 1 };
+    }, `cell-outer-height:${knownCell.id}`, true],
+    ['known descriptor status to unavailable', knownProjection, program => {
+      const cell = program.cells.find(candidate => candidate.id === knownCell.id)!;
+      (cell.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>).outerHeight = unavailable('number', 'forged unavailable known height', cell.source);
+    }, `cell-outer-height:${knownCell.id}`, true],
+    ['known descriptor provenance', knownProjection, program => {
+      const cell = program.cells.find(candidate => candidate.id === knownCell.id)!;
+      const fact = cell.descriptorFacts.outerHeight!;
+      assert(fact.status === 'known', 'known provenance hostile requires a known fact');
+      (cell.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>).outerHeight = { ...fact, provenance: 'source-literal' };
+    }, `cell-outer-height:${knownCell.id}`, true],
+    ['known descriptor source', knownProjection, program => {
+      const cell = program.cells.find(candidate => candidate.id === knownCell.id)!;
+      const fact = cell.descriptorFacts.outerHeight!;
+      (cell.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>).outerHeight = { ...fact, source: shiftSource(fact.source) };
+    }, `cell-outer-height:${knownCell.id}`, true],
+    ['known descriptor source pin', knownProjection, program => {
+      const cell = program.cells.find(candidate => candidate.id === knownCell.id)!;
+      const fact = cell.descriptorFacts.outerHeight!;
+      assert(fact.sourcePin !== undefined, 'known source-pin hostile requires a pinned fact');
+      (cell.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>).outerHeight = {
+        ...fact,
+        sourcePin: { ...fact.sourcePin, lineStart: fact.sourcePin.lineStart + 1 },
+      };
+    }, `cell-outer-height:${knownCell.id}`, true],
+    ['unavailable descriptor status to known', unavailableProjection, program => {
+      const cell = program.cells.find(candidate => candidate.id === unavailableCell.id)!;
+      const fact = cell.descriptorFacts.outerHeight!;
+      (cell.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>).outerHeight = known(0, 'number', fact.source, '0');
+    }, `cell-outer-height:${unavailableCell.id}`, true],
+    ['unavailable descriptor reason', unavailableProjection, program => {
+      const cell = program.cells.find(candidate => candidate.id === unavailableCell.id)!;
+      const fact = cell.descriptorFacts.outerHeight!;
+      assert(fact.status === 'unavailable', 'unavailable reason hostile requires an unavailable fact');
+      (cell.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>).outerHeight = { ...fact, reason: `${fact.reason}:forged` };
+    }, `cell-outer-height:${unavailableCell.id}`, true],
+    ['unavailable descriptor provenance', unavailableProjection, program => {
+      const cell = program.cells.find(candidate => candidate.id === unavailableCell.id)!;
+      const fact = cell.descriptorFacts.outerHeight! as unknown as Record<string, unknown>;
+      fact.provenance = 'source-literal';
+    }, `cell-outer-height:${unavailableCell.id}`, false],
+    ['unavailable descriptor source', unavailableProjection, program => {
+      const cell = program.cells.find(candidate => candidate.id === unavailableCell.id)!;
+      const fact = cell.descriptorFacts.outerHeight!;
+      (cell.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>).outerHeight = { ...fact, source: shiftSource(fact.source) };
+    }, `cell-outer-height:${unavailableCell.id}`, true],
+    ['unavailable descriptor source pin', unavailableProjection, program => {
+      const cell = program.cells.find(candidate => candidate.id === unavailableCell.id)!;
+      const fact = cell.descriptorFacts.outerHeight!;
+      (cell.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>).outerHeight = {
+        ...fact,
+        sourcePin: pin(5483, 5497),
+      };
+    }, `cell-outer-height:${unavailableCell.id}`, true],
+    ['creator source pin', unavailableProjection, program => {
+      const creator = program.operations.find(operation => operation.cellId === unavailableCell.id && operation.kind === 'createText')!;
+      const fact = creator.descriptorFacts.outerHeight!;
+      assert(fact.sourcePin !== undefined, 'creator source-pin hostile requires a pinned fact');
+      (creator.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>).outerHeight = {
+        ...fact,
+        sourcePin: { ...fact.sourcePin, lineEnd: fact.sourcePin.lineEnd + 1 },
+      };
+    }, `cell-outer-height:${unavailableCell.id}`, true],
+    ['creator status', unavailableProjection, program => {
+      const creator = program.operations.find(operation => operation.cellId === unavailableCell.id && operation.kind === 'createText')!;
+      (creator as unknown as { status: string }).status = 'applied';
+    }, `cell-outer-height:${unavailableCell.id}`, false],
+    ['creator source', unavailableProjection, program => {
+      const creator = program.operations.find(operation => operation.cellId === unavailableCell.id && operation.kind === 'createText')!;
+      (creator as unknown as { source: X4UiSceneSourceLocation }).source = shiftSource(creator.source);
+    }, `cell-outer-height:${unavailableCell.id}`, false],
+    ['creator explicit height fact', unavailableProjection, program => {
+      const creator = program.operations.find(operation => operation.cellId === unavailableCell.id && operation.kind === 'createText')!;
+      (creator.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>).height = known(1, 'number', creator.source, '1');
+    }, `cell-outer-height:${unavailableCell.id}`, true],
+    ['kernel type', unavailableProjection, program => {
+      const table = program.tables.find(candidate => candidate.id === unavailableCell.tableId)!;
+      (table.kernelState!.rows[unavailableCell.rowIndex! - 1].cells[unavailableCell.column - 1] as unknown as { type: string }).type = 'boxtext';
+    }, `cell-state-value:${unavailableCell.id}`, false],
+    ['kernel height', unavailableProjection, program => {
+      const table = program.tables.find(candidate => candidate.id === unavailableCell.tableId)!;
+      (table.kernelState!.rows[unavailableCell.rowIndex! - 1].cells[unavailableCell.column - 1] as unknown as { height: number }).height = 1;
+    }, `cell-state-value:${unavailableCell.id}`, false],
+    ['kernel scaling', unavailableProjection, program => {
+      const table = program.tables.find(candidate => candidate.id === unavailableCell.tableId)!;
+      const cell = table.kernelState!.rows[unavailableCell.rowIndex! - 1].cells[unavailableCell.column - 1];
+      (cell as unknown as { scaling: boolean }).scaling = !cell.scaling;
+    }, `cell-state-value:${unavailableCell.id}`, false],
+    ['kernel affectRowHeight', unavailableProjection, program => {
+      const table = program.tables.find(candidate => candidate.id === unavailableCell.tableId)!;
+      const cell = table.kernelState!.rows[unavailableCell.rowIndex! - 1].cells[unavailableCell.column - 1];
+      (cell as unknown as { affectRowHeight: boolean }).affectRowHeight = !cell.affectRowHeight;
+    }, `cell-state-value:${unavailableCell.id}`, false],
+    ['owner column slot', unavailableProjection, program => {
+      const cell = program.cells.find(candidate => candidate.id === unavailableCell.id)!;
+      (cell as unknown as { column: number }).column += 1;
+    }, `row-cell-slot:${unavailableCell.rowId}:1`, false],
+    ['owner row slot', unavailableProjection, program => {
+      const cell = program.cells.find(candidate => candidate.id === unavailableCell.id)!;
+      (cell as unknown as { rowIndex: number }).rowIndex += 1;
+    }, `cell-kernel-slot:${unavailableCell.id}`, false],
+  ];
+
+  for (const [label, projected, mutate, expectedStage, sceneIndependent] of mutations) {
+    const program = cloneProgram(projected.program!);
+    mutate(program);
+    const sourceAuthority = producerAuthority(projected.result as X4UiLayoutProgramResult);
+    const authority = sceneIndependent ? synchronizedAuthority(sourceAuthority, program) : sourceAuthority;
+    freezeFixtureGraph(program);
+    freezeFixtureGraph(authority);
+    const pair = validateX4UiLayoutEvidencePair(program, authority);
+    assert(pair.valid === sceneIndependent, `${label} hostile authority boundary changed: ${JSON.stringify({ sceneIndependent, pair })}`);
+    const stage = diagnoseX4UiSceneStructureForTest(program, authority);
+    const result = buildX4UiScene({ ...projected.result, program, evidenceAuthority: authority } as X4UiLayoutProgramResult, corpus, projected.profile!);
+    assert((!sceneIndependent || stage === expectedStage) && refusalHasNoScene(result), `${label} hostile escaped its Scene relation: ${JSON.stringify({ sceneIndependent, expectedStage, stage, result })}`);
+  }
+});
+
+const B119_STRICT_CONFIGURED_CENSUS_ENV = 'X4_UI_SCENE_SELFTEST_STRICT_CONFIGURED_CENSUS';
+const b119ConfiguredSourceSpecs = [
+  {
+    label: 'MENU',
+    workspaceRelativePath: path.join('x4_ai_influence', 'ui', 'addons', 'ai_influence_chat', 'aic_menu.lua'),
+    relativePath: 'ui/addons/ai_influence_chat/aic_menu.lua',
+    targetName: 'menu.display',
+    sourceSha256: '4253D9BD9DE4113D4DE0B881DBF5A1E90CAA7B30F735BA925403EBEF7EC47DD7',
+    consumerNumbers: {
+      vw: 1920,
+      vh: 1080,
+      'railX + col * (chipW + chipGap)': 30,
+      ry: 165,
+      chipW: 109,
+      px: 450,
+      ty: 654,
+      tw: 787,
+      _useH: 80,
+      _choiceY: 734,
+      _readSpan: 6,
+    },
+    expectedLayout: { samples: 16, consumed: 11, notConsumed: 5, operations: 66, applied: 27, frames: 1, tables: 4, rows: 9, cells: 88, gaps: 95 },
+    expectedScene: { frames: 1, tables: 4, rows: 2, cells: 16, widgets: 3, texts: 5, glyphs: 7, gaps: 141, drawable: { x: 0, y: 0, width: 1920, height: 1080 } },
+    expectedPaint: { commands: 207, diagnostics: 169 },
+  },
+  {
+    label: 'HUB',
+    workspaceRelativePath: path.join('x4_ai_influence', 'ui', 'addons', 'ai_influence_chat', 'aic_hub.lua'),
+    relativePath: 'ui/addons/ai_influence_chat/aic_hub.lua',
+    targetName: 'hub.display',
+    sourceSha256: '657476EAD08229977E1F2A69079FFDCAB56D908B72AF5C87BD4F4734DCCB8C4F',
+    consumerNumbers: { vw: 1920, vh: 1080, x: 27, my: 27, w: 1866, '#TABS': 2, y: 62, i: 1 },
+    expectedLayout: { samples: 11, consumed: 9, notConsumed: 2, operations: 18, applied: 11, frames: 1, tables: 2, rows: 2, cells: 4, gaps: 16 },
+    expectedScene: { frames: 1, tables: 2, rows: 2, cells: 4, widgets: 0, texts: 0, glyphs: 0, gaps: 31, drawable: { x: 0, y: 0, width: 1920, height: 1080 } },
+    expectedPaint: { commands: 46, diagnostics: 37 },
+  },
+  {
+    label: 'COMM',
+    workspaceRelativePath: path.join('x4_ai_influence', 'ui', 'addons', 'ai_influence_chat', 'aic_comm.lua'),
+    relativePath: 'ui/addons/ai_influence_chat/aic_comm.lua',
+    targetName: 'comm.display',
+    sourceSha256: '88FAB05A79EF33CB28E098081EA6A5E29E8F3B7C4150C39BF38913C51C063511',
+    consumerNumbers: { vw: 1920, vh: 1080, mx: 27, my: 27, 'vw - mx * 2': 1866 },
+    expectedLayout: { samples: 5, consumed: 5, notConsumed: 0, operations: 14, applied: 12, frames: 1, tables: 1, rows: 1, cells: 3, gaps: 11 },
+    expectedScene: { frames: 1, tables: 1, rows: 1, cells: 3, widgets: 0, texts: 0, glyphs: 0, gaps: 23, drawable: { x: 0, y: 0, width: 1920, height: 1080 } },
+    expectedPaint: { commands: 35, diagnostics: 29 },
+  },
+] as const;
+
+type B119ConfiguredSourceLabel = typeof b119ConfiguredSourceSpecs[number]['label'];
+type B119ConfiguredCensusAvailability = {
+  readonly status: 'available';
+  readonly root: string;
+  readonly sourcePaths: Readonly<Record<B119ConfiguredSourceLabel, string>>;
+} | {
+  readonly status: 'unavailable';
+  readonly reason: string;
+};
+
+const b119LexicallyContainedSourcePath = (root: string, workspaceRelativePath: string): string | undefined => {
+  if (path.isAbsolute(workspaceRelativePath)) return undefined;
+  const resolvedRoot = path.resolve(root);
+  const candidate = path.resolve(resolvedRoot, workspaceRelativePath);
+  const relative = path.relative(resolvedRoot, candidate);
+  if (relative.length === 0 || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) return undefined;
+  return candidate;
+};
+
+const b119ContainedSourcePath = (root: string, workspaceRelativePath: string): string | undefined => {
+  const candidate = b119LexicallyContainedSourcePath(root, workspaceRelativePath);
+  if (candidate === undefined) return undefined;
+  try {
+    const physicalRoot = realpathSync(root);
+    const physicalCandidate = realpathSync(candidate);
+    const physicalRelative = path.relative(physicalRoot, physicalCandidate);
+    if (physicalRelative.length === 0
+      || physicalRelative === '..'
+      || physicalRelative.startsWith(`..${path.sep}`)
+      || path.isAbsolute(physicalRelative)) return undefined;
+    return physicalCandidate;
+  } catch {
+    return undefined;
+  }
+};
+
+const resolveB119ConfiguredCensus = (): B119ConfiguredCensusAvailability => {
+  let configuredRoot: string | undefined;
+  try {
+    configuredRoot = resolveXsdConfig().modWorkspacePath?.trim();
+  } catch (error) {
+    return { status: 'unavailable', reason: `resolveXsdConfig failed: ${error instanceof Error ? error.message : String(error)}` };
+  }
+  if (!configuredRoot) return { status: 'unavailable', reason: 'resolveXsdConfig().modWorkspacePath is not configured' };
+  const root = path.resolve(configuredRoot);
+  try {
+    if (!statSync(root).isDirectory()) return { status: 'unavailable', reason: 'configured modWorkspacePath is not a directory' };
+  } catch (error) {
+    return { status: 'unavailable', reason: `configured modWorkspacePath is unavailable: ${error instanceof Error ? error.message : String(error)}` };
+  }
+  const sourcePaths: Partial<Record<B119ConfiguredSourceLabel, string>> = {};
+  for (const source of b119ConfiguredSourceSpecs) {
+    const candidate = b119ContainedSourcePath(root, source.workspaceRelativePath);
+    if (candidate === undefined) return { status: 'unavailable', reason: `${source.label} source path is outside configured modWorkspacePath` };
+    try {
+      if (!statSync(candidate).isFile()) return { status: 'unavailable', reason: `${source.label} configured source is not a file` };
+    } catch (error) {
+      return { status: 'unavailable', reason: `${source.label} configured source is unavailable: ${error instanceof Error ? error.message : String(error)}` };
+    }
+    sourcePaths[source.label] = candidate;
+  }
+  return {
+    status: 'available',
+    root,
+    sourcePaths: sourcePaths as Readonly<Record<B119ConfiguredSourceLabel, string>>,
+  };
+};
+
+test('B119 configured census routing is containment-safe and workspace-relative', () => {
+  const root = path.resolve('selftest', 'b119-configured-census-root');
+  for (const source of b119ConfiguredSourceSpecs) {
+    assert(!path.isAbsolute(source.workspaceRelativePath), `${source.label} configured route must remain workspace-relative`);
+    const candidate = b119LexicallyContainedSourcePath(root, source.workspaceRelativePath);
+    assert(candidate !== undefined && path.relative(root, candidate).split(path.sep)[0] === 'x4_ai_influence', `${source.label} configured route escaped its synthetic workspace root`);
+  }
+  assert(b119LexicallyContainedSourcePath(root, path.join('..', 'escaped.lua')) === undefined, 'configured source routing must reject parent traversal');
+});
+
+test('B119 configured census rejects a physical child reparse escape before source read', () => {
+  const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'x4-ui-scene-b119-containment-'));
+  try {
+    const physicalWorkspace = path.join(temporaryRoot, 'workspace-physical');
+    const selectedWorkspace = path.join(temporaryRoot, 'workspace-selected');
+    const insideDirectory = path.join(physicalWorkspace, 'inside');
+    const outsideDirectory = path.join(temporaryRoot, 'outside');
+    mkdirSync(insideDirectory, { recursive: true });
+    mkdirSync(outsideDirectory, { recursive: true });
+    writeFileSync(path.join(insideDirectory, 'source.lua'), 'return "inside"\n', 'utf8');
+    writeFileSync(path.join(outsideDirectory, 'source.lua'), 'return "outside"\n', 'utf8');
+    const directoryLinkType = process.platform === 'win32' ? 'junction' : 'dir';
+    try {
+      symlinkSync(physicalWorkspace, selectedWorkspace, directoryLinkType);
+      symlinkSync(outsideDirectory, path.join(physicalWorkspace, 'escape'), directoryLinkType);
+    } catch (error) {
+      throw new Error(`B119 configured reparse hostile unavailable: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    const containedSource = b119ContainedSourcePath(selectedWorkspace, path.join('inside', 'source.lua'));
+    assert(
+      containedSource === realpathSync(path.join(insideDirectory, 'source.lua')),
+      'configured routing must allow an in-root source when the selected workspace root is itself a link',
+    );
+    assert(
+      b119ContainedSourcePath(selectedWorkspace, path.join('escape', 'source.lua')) === undefined,
+      'configured routing must reject a child reparse source whose physical target escapes the selected workspace',
+    );
+  } finally {
+    rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+const b119ConfiguredCensus = resolveB119ConfiguredCensus();
+const b119StrictConfiguredCensus = process.env[B119_STRICT_CONFIGURED_CENSUS_ENV] === '1';
+
+if (b119ConfiguredCensus.status === 'unavailable') {
+  const message = `B119 configured-census-unavailable: ${b119ConfiguredCensus.reason}`;
+  if (b119StrictConfiguredCensus) {
+    test('B119 strict configured public-session census requires all real sources', () => {
+      throw new Error(message);
+    });
+  } else {
+    console.log(`B119 configured public-session census NOT RUN: ${message}`);
+  }
+} else {
+  test('B119 exact configured public-session census is separate from portable fixtures', () => {
+    const executed: B119ConfiguredSourceLabel[] = [];
+    for (const source of b119ConfiguredSourceSpecs) {
+      const sourcePath = b119ConfiguredCensus.sourcePaths[source.label];
+      const sourceText = readFileSync(sourcePath, 'utf8');
+    const workspace = {
+      id: 'b119-exact-' + source.label.toLowerCase(),
+      name: 'B119 exact ' + source.label + ' session census',
+      version: '1.0.0',
+      author: 'Forge',
+      description: 'read-only exact configured source census',
+      nodes: [],
+      links: [],
+      uiWidgets: [],
+      uiTheme: { backgroundColor: '#000000', borderColor: '#111111', accentColor: '#00ffff', opacity: 1, showIcons: true },
+      compileSettings: { md: false, ui: true, ai: false, library: false, translations: false, patches: false },
+      passthroughFiles: [
+        {
+          path: 'ui.xml',
+          content: '<?xml version="1.0" encoding="utf-8"?>\n<addon name="b119-exact-' + source.label.toLowerCase() + '"><environment type="menus"><file name="' + source.relativePath + '" /></environment></addon>\n',
+        },
+        { path: source.relativePath, content: sourceText, reason: 'unparsed' },
+      ],
+    } as Parameters<typeof projectX4UiEditorSession>[0]['workspace'];
+    const profile = { width: 1920, height: 1080, uiScale: 1 } as const;
+    const baseline = projectX4UiEditorSession({ workspace, corpus: undefined, profile });
+    const file = baseline.source.bundle?.sourceFiles.find(candidate => candidate.path === source.relativePath);
+    assert(file !== undefined, source.label + ' exact public session must materialize ' + source.relativePath);
+    const targetCatalog = createX4UiLayoutTargetCatalog(file.callModel);
+    assert(targetCatalog.sourceIdentity.sha256 === source.sourceSha256, source.label + ' configured source hash changed: ' + targetCatalog.sourceIdentity.sha256);
+    const target = targetCatalog.targets.find(candidate => candidate.name === source.targetName);
+    assert(target !== undefined, source.label + ' exact public session source must expose ' + source.targetName);
+    const selection = {
+      sourceIndex: file.index,
+      path: file.path,
+      sourceIdentity: targetCatalog.sourceIdentity,
+      target: { ...target, id: target.id },
+    };
+    const unsampled = projectX4UiEditorSession({ workspace, corpus, profile, selection });
+    const sampleCatalog = unsampled.sampleCatalog;
+    assert(sampleCatalog !== null && unsampled.sampleBinding !== undefined && unsampled.sampleCatalogAuthority !== undefined, source.label + ' exact public session must issue catalog, binding, and authority');
+    const selectedEntries = sampleCatalog.entries.filter(entry => source.label === 'HUB'
+      ? entry.expression !== 'font(18)'
+      : source.label === 'COMM'
+        ? entry.expression !== 'font(13)'
+        : true);
+    const values = selectedEntries.map(entry => ({
+      id: entry.id,
+      value: entry.expectedType === 'boolean'
+        ? false
+        : entry.expectedType === 'string'
+          ? 'sampled'
+          : source.consumerNumbers[entry.expression as keyof typeof source.consumerNumbers] ?? 80,
+    }));
+    const sampled = projectX4UiEditorSession({
+      workspace,
+      corpus,
+      profile,
+      selection,
+      samples: {
+        catalogId: sampleCatalog.id,
+        source: sampleCatalog.sourceIdentity,
+        values,
+      },
+      sampleBinding: unsampled.sampleBinding,
+      sampleCatalogAuthority: unsampled.sampleCatalogAuthority,
+    });
+    const programResult = sampled.preview.program;
+    assert(programResult !== null && programResult.status !== 'refused', source.label + ' exact sampled session must retain its Layout program: ' + JSON.stringify(sampled.preview));
+    const program = programResult.program;
+    const authority = programResult.evidenceAuthority;
+    const pair = validateX4UiLayoutEvidencePair(program, authority);
+    const stage = diagnoseX4UiSceneStructureForTest(program, authority);
+    const layoutCounts = {
+      samples: values.length,
+      consumed: program.previewSampleBindings.filter(binding => binding.status === 'consumed').length,
+      notConsumed: program.previewSampleBindings.filter(binding => binding.status !== 'consumed').length,
+      operations: program.operations.length,
+      applied: program.operations.filter(operation => operation.status === 'applied').length,
+      frames: program.frames.length,
+      tables: program.tables.length,
+      rows: program.rows.length,
+      cells: program.cells.length,
+      gaps: program.gaps.length,
+    };
+    assert(pair.valid, source.label + ' exact sampled producer authority pair must validate: ' + JSON.stringify(pair));
+    assert(stage === undefined, source.label + ' exact sampled program still refuses at Scene structure stage ' + String(stage));
+    assert(JSON.stringify(layoutCounts) === JSON.stringify(source.expectedLayout), source.label + ' exact Layout census changed: ' + JSON.stringify({ expected: source.expectedLayout, actual: layoutCounts }));
+
+    const sceneResult = sampled.preview.scene;
+    assert(sceneResult !== null && sceneResult.status !== 'refused', source.label + ' exact sampled session must reach non-refused Scene: ' + JSON.stringify(sceneResult));
+    const scene = sceneResult.scene;
+    const sceneGeometry = {
+      frames: scene.frames.length,
+      tables: scene.tables.length,
+      rows: scene.rows.length,
+      cells: scene.cells.length,
+      widgets: scene.widgets.length,
+      texts: scene.texts.length,
+      glyphs: scene.glyphs.length,
+      gaps: scene.gaps.length,
+      drawable: scene.drawableRect,
+    };
+    assert(JSON.stringify(sceneGeometry) === JSON.stringify(source.expectedScene), source.label + ' exact Scene geometry changed: ' + JSON.stringify({ expected: source.expectedScene, actual: sceneGeometry }));
+    assert(sampled.paint !== null && sampled.paint.status !== 'refused', source.label + ' exact sampled session must reach non-refused Paint: ' + JSON.stringify(sampled.paint));
+    const paint = {
+      commands: sampled.paint.plan.layers.reduce((count, layer) => count + layer.commands.length, 0),
+      diagnostics: sampled.paint.plan.diagnostics.length,
+    };
+    assert(JSON.stringify(paint) === JSON.stringify(source.expectedPaint), source.label + ' exact Paint census changed: ' + JSON.stringify({ expected: source.expectedPaint, actual: paint }));
+    assert(sampled.status === 'partial' && sampled.preview.status === 'partial' && sceneResult.status === 'partial' && sampled.paint.status === 'partial' && sampled.canRender, source.label + ' exact public session status chain changed');
+    assert(sampled.preview.gaps.length === 0, source.label + ' exact public session must not carry a downstream preview refusal gap');
+    assert(sampled.gameTruth === 'Not verified in game' && sampled.gameVerified === false && scene.verification.gameVerified === false && sampled.paint.verification.gameVerified === false, source.label + ' exact public session must remain Not verified in game');
+
+    console.log('B119 exact configured public-session census ' + source.label + ': ' + JSON.stringify({
+      sourceSha256: source.sourceSha256,
+      sampleValues: selectedEntries.map((entry, index) => ({ expression: entry.expression, value: values[index]?.value })),
+      layout: layoutCounts,
+      sceneStatus: sceneResult.status,
+      sceneGeometry,
+      paintStatus: sampled.paint.status,
+      paint,
+      canRender: sampled.canRender,
+      gameTruth: sampled.gameTruth,
+      gameVerified: sampled.gameVerified,
+    }));
+      executed.push(source.label);
+    }
+    assert(JSON.stringify(executed) === JSON.stringify(['MENU', 'HUB', 'COMM']), `configured census did not execute every real source: ${JSON.stringify(executed)}`);
+    console.log(`B119 configured public-session census EXECUTED 3/3: ${executed.join(',')}`);
+  });
+}
 
 console.log(`x4UiScene selftest: ${passed}/${total} passed`);
 if (failures.length > 0) {

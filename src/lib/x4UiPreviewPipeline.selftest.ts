@@ -16,8 +16,17 @@ import {
   X4_UI_CORPUS_MANIFEST_URL,
   X4_UI_CORPUS_STATUS_URL,
   X4_UI_CORPUS_9_00_CONTRACT,
+  X4_UI_CORPUS_COLORS_XML_PATH,
+  X4_UI_CORPUS_COLORS_XML_SHA256,
+  X4_UI_CORPUS_COLORS_XML_SIZE,
+  X4_UI_CORPUS_COLORS_XSD_PATH,
+  X4_UI_CORPUS_COLORS_XSD_SHA256,
+  X4_UI_CORPUS_COLORS_XSD_SIZE,
+  isX4UiCorpusCanonicalColorSuccess,
   isX4UiCorpusCanonicalSuccess,
+  loadCanonicalX4UiCorpusColorEvidence,
   loadCanonicalX4UiCorpusAssets,
+  type X4UiCorpusCanonicalColorSuccess,
   type X4UiCorpusCanonicalSuccess,
   type X4UiCorpusFetchResponse,
 } from './x4UiCorpusAssets';
@@ -529,6 +538,32 @@ function hasNotVerifiedVerification(value: unknown): boolean {
   return verification?.game === 'Not verified in game' && verification.gameVerified === false;
 }
 
+function knownColorFactRecords(result: unknown): readonly JsonRecord[] {
+  const records: JsonRecord[] = [];
+  const add = (value: unknown): void => {
+    const candidate = asRecord(value);
+    if (candidate?.status === 'known' && candidate.expectedType === 'color-object') records.push(candidate);
+  };
+  const resultRecord = asRecord(result);
+  const programResult = asRecord(resultRecord?.program);
+  const program = asRecord(programResult?.program);
+  const operations = Array.isArray(program?.operations) ? program.operations : [];
+  for (const operation of operations) {
+    const facts = asRecord(asRecord(operation)?.descriptorFacts);
+    if (facts) Object.values(facts).forEach(add);
+  }
+  const sceneResult = asRecord(resultRecord?.scene);
+  const scene = asRecord(sceneResult?.scene);
+  for (const collection of ['tables', 'cells', 'widgets', 'texts'] as const) {
+    const nodes = Array.isArray(scene?.[collection]) ? scene[collection] : [];
+    for (const node of nodes) {
+      const facts = asRecord(node)?.colorFacts;
+      if (Array.isArray(facts)) facts.forEach(add);
+    }
+  }
+  return records;
+}
+
 type CanonicalAcceptanceFacts = {
   readonly accepted: boolean;
   readonly loaderIssued: boolean;
@@ -858,6 +893,128 @@ async function loadCanonicalSelftestResult(): Promise<X4UiCorpusCanonicalSuccess
   return result;
 }
 
+const previewColorBaseIds = [
+  'white',
+  'black_alpha_0',
+  'white_weak_glow',
+  'azure_very_dark',
+  'azure_moderate_glow',
+  'azure_dark_alpha_160_glow',
+  'azure_very_dark_alpha_224',
+  'literal_base',
+] as const;
+
+const previewColorMappingIds = [
+  'table_background_default',
+  'row_background',
+  'text_normal',
+  'icon_normal',
+  'button_background_default',
+  'button_highlight_default',
+  'button_border_default',
+  'editbox_background_default',
+] as const;
+
+function paddedUtf8(text: string, size: number): Uint8Array {
+  const bytes = new TextEncoder().encode(text);
+  if (bytes.byteLength > size) throw new Error(`Preview color fixture exceeds pinned size ${size}`);
+  const padded = new Uint8Array(size);
+  padded.set(bytes);
+  padded.fill(0x20, bytes.byteLength);
+  return padded;
+}
+
+async function loadCanonicalColorSelftestResult(): Promise<X4UiCorpusCanonicalColorSuccess> {
+  const root = 'preview-color-corpus-identity';
+  const generation = 'preview-color-generation-1';
+  const baseIds: string[] = [...previewColorBaseIds];
+  while (baseIds.length < 224) baseIds.push(`preview_base_${baseIds.length.toString().padStart(3, '0')}`);
+  const specialValues: Record<string, readonly [number, number, number, number, number]> = {
+    white: [11, 22, 33, 44, 0.1],
+    black_alpha_0: [51, 52, 53, 54, 0.2],
+    white_weak_glow: [101, 102, 103, 104, 0.3],
+    azure_very_dark: [61, 62, 63, 64, 0.4],
+    azure_moderate_glow: [71, 72, 73, 74, 0.5],
+    azure_dark_alpha_160_glow: [81, 82, 83, 84, 0.6],
+    azure_very_dark_alpha_224: [91, 92, 93, 94, 0.7],
+    literal_base: [131, 132, 133, 134, 0.9],
+  };
+  const colors = baseIds.map((id, index) => {
+    const values = specialValues[id] || [index % 256, (index + 1) % 256, (index + 2) % 256, (index + 3) % 256, 0];
+    return `    <color id="${id}" r="${values[0]}" g="${values[1]}" b="${values[2]}" a="${values[3]}" glow="${values[4]}"/>`;
+  });
+  const mappingRefs: Record<string, string> = {
+    table_background_default: 'white',
+    row_background: 'black_alpha_0',
+    text_normal: 'white_weak_glow',
+    icon_normal: 'white_weak_glow',
+    button_background_default: 'azure_very_dark',
+    button_highlight_default: 'azure_moderate_glow',
+    button_border_default: 'azure_dark_alpha_160_glow',
+    editbox_background_default: 'azure_very_dark_alpha_224',
+  };
+  const mappings = previewColorMappingIds.map(id => `    <mapping id="${id}" ref="${mappingRefs[id]}"/>`);
+  for (let index = mappings.length; index < 804; index += 1) {
+    mappings.push(`    <mapping id="preview_map_${index.toString().padStart(3, '0')}" ref="${baseIds[index % baseIds.length]}"/>`);
+  }
+  const buffers = new Map<string, Uint8Array>([
+    [X4_UI_CORPUS_COLORS_XML_PATH, paddedUtf8([
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<colormap>',
+      '  <colors>',
+      ...colors,
+      '  </colors>',
+      '  <mappings>',
+      ...mappings,
+      '  </mappings>',
+      '</colormap>',
+    ].join('\n'), X4_UI_CORPUS_COLORS_XML_SIZE)],
+    [X4_UI_CORPUS_COLORS_XSD_PATH, paddedUtf8([
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">',
+      '  <xs:simpleType name="identifier"><xs:restriction base="xs:string"><xs:pattern value="[a-zA-Z_][a-zA-Z0-9_]*"/></xs:restriction></xs:simpleType>',
+      '</xs:schema>',
+    ].join('\n'), X4_UI_CORPUS_COLORS_XSD_SIZE)],
+  ]);
+  const status = {
+    available: true,
+    root,
+    generatedAt: '2026-08-19T00:00:00.000Z',
+    manifestGeneration: generation,
+    manifest: { available: true, state: 'ready', root, current: { generation, root, generatedAt: '2026-08-19T00:00:00.000Z' } },
+  };
+  const transport = async (url: string): Promise<X4UiCorpusFetchResponse> => {
+    if (url === X4_UI_CORPUS_STATUS_URL) return jsonResponse(status);
+    if (url.startsWith(`${X4_UI_CORPUS_MANIFEST_URL}?`)) {
+      const path = pathFromQuery(url, 'q');
+      const bytes = buffers.get(path);
+      if (!bytes) throw new Error(`unknown Preview color manifest path ${path}`);
+      return jsonResponse({
+        status: manifestStatus(root, generation),
+        generation,
+        total: 1,
+        limit: 500,
+        offset: 0,
+        files: [{ path, bytes: bytes.byteLength }],
+      });
+    }
+    if (url.startsWith(`${X4_UI_CORPUS_FILE_URL}?`)) {
+      const path = pathFromQuery(url, 'path');
+      const bytes = buffers.get(path);
+      if (!bytes) throw new Error(`unknown Preview color file path ${path}`);
+      return bytesResponse(bytes, 200, 'application/xml');
+    }
+    throw new Error(`unexpected Preview color selftest URL ${url}`);
+  };
+  const result = await withCanonicalPlatformHash(
+    [X4_UI_CORPUS_COLORS_XML_SHA256, X4_UI_CORPUS_COLORS_XSD_SHA256],
+    () => loadCanonicalX4UiCorpusColorEvidence({ transport }),
+  );
+  if (result.ok === false) throw new Error(`Preview color loader failed: ${result.error.message}`);
+  if (!isX4UiCorpusCanonicalColorSuccess(result)) throw new Error('Preview color loader did not issue canonical authority');
+  return result;
+}
+
 const uiXml = [
   '<?xml version="1.0" encoding="utf-8"?>',
   '<addon name="fixture">',
@@ -930,6 +1087,33 @@ const canonicalLua = [
   'row[3]:createButton({ height = 0, affectRowHeight = false })',
   'row[4]:createIcon("solid", { height = 8, affectRowHeight = false })',
   'frame:display()',
+  '',
+].join('\n');
+
+const previewColorLua = [
+  'local menu = { name = "PreviewColors", layer = 1 }',
+  'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+  'local table = frame:addTable(4, { width = 100, reserveScrollBar = false, backgroundColor = Color["table_background_default"] })',
+  'table:setColWidth(1, 20, false)',
+  'table:setColWidth(2, 20, false)',
+  'table:setColWidth(3, 20, false)',
+  'table:setColWidth(4, 20, false)',
+  'local row = table:addRow(false, { paddingTop = 1, paddingBottom = 1, borderBelow = false, fixed = false, scaling = false })',
+  'row[1]:createText("literal", { height = 12, minRowHeight = 10, color = { r = 12.5, g = 23.5, b = 34.5, a = 45.5, glow = 0.25 }, cellBGColor = Color["row_background"] })',
+  'row[2]:createButton({ height = 12, bgcolor = Color["button_background_default"], highlightColor = Color["button_highlight_default"], borderColor = Color["button_border_default"] }):setText("primary", { color = Color["text_normal"] }):setText2("secondary", { color = { r = 15, g = 25, b = 35, a = 55 } })',
+  'row[3]:createEditBox({ height = 12, bgColor = Color["editbox_background_default"] })',
+  'row[4]:createIcon("icon", { height = 8, affectRowHeight = false, color = Color["white"] })',
+  'frame:display()',
+  '',
+].join('\n');
+
+const previewColorXml = [
+  '<?xml version="1.0" encoding="utf-8"?>',
+  '<addon name="preview-color-fixture">',
+  '  <environment type="menus">',
+  '    <file name="ui/preview-colors.lua" />',
+  '  </environment>',
+  '</addon>',
   '',
 ].join('\n');
 
@@ -1027,14 +1211,15 @@ function selectionFor(
   };
 }
 
-function pipeline(
+function pipelineInput(
   source: X4UiWorkspaceSource,
   selection?: X4UiPreviewSelection,
   corpus: unknown = null,
   options: Pick<X4UiPreviewPipelineInput, 'samples' | 'paths' | 'tableView' | 'textPolicy'> = {},
   profileOverrides: Partial<Pick<X4UiPreviewProfileInput, 'truthGrade' | 'minTextHeight' | 'localExpansion' | 'drawable' | 'uiScale'>> = {},
-) {
-  return projectX4UiPreviewPipeline({
+  colorEvidence?: unknown,
+): X4UiPreviewPipelineInput {
+  const input = {
     source,
     corpus,
     profile: {
@@ -1052,7 +1237,27 @@ function pipeline(
     },
     ...(selection === undefined ? {} : { selection }),
     ...options,
-  });
+  } as unknown as X4UiPreviewPipelineInput;
+  if (colorEvidence !== undefined) {
+    Object.defineProperty(input, 'colorEvidence', {
+      configurable: true,
+      enumerable: true,
+      value: colorEvidence,
+      writable: true,
+    });
+  }
+  return input;
+}
+
+function pipeline(
+  source: X4UiWorkspaceSource,
+  selection?: X4UiPreviewSelection,
+  corpus: unknown = null,
+  options: Pick<X4UiPreviewPipelineInput, 'samples' | 'paths' | 'tableView' | 'textPolicy'> = {},
+  profileOverrides: Partial<Pick<X4UiPreviewProfileInput, 'truthGrade' | 'minTextHeight' | 'localExpansion' | 'drawable' | 'uiScale'>> = {},
+  colorEvidence?: unknown,
+) {
+  return projectX4UiPreviewPipeline(pipelineInput(source, selection, corpus, options, profileOverrides, colorEvidence));
 }
 
 const source = sourceFor([
@@ -1568,6 +1773,347 @@ async function runIndependentReviewCorrections(): Promise<{
       sceneGameTruth: canonicalScene?.gameTruth,
     });
 
+  const previewColorSource = sourceFor([
+    passthrough('ui.xml', previewColorXml),
+    passthrough('ui/preview-colors.lua', previewColorLua, { reason: 'unparsed' }),
+  ]);
+  const previewColorSelection = selectionFor(previewColorSource, 'ui/preview-colors.lua', 'top-level');
+  let colorAuthority: X4UiCorpusCanonicalColorSuccess | undefined;
+  try {
+    colorAuthority = await loadCanonicalColorSelftestResult();
+  } catch (error) {
+    check('P4.5 loader-issued canonical color fixture is ready', false, {
+      fixtureReady: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  const colorAuthorityReady = colorAuthority !== undefined
+    && isX4UiCorpusCanonicalColorSuccess(colorAuthority)
+    && colorAuthority.graph.baseColors.length === 224
+    && colorAuthority.graph.mappings.length === 804;
+  check('P4.5 loader-issued canonical color fixture has exact 224 base colors and 804 mappings', colorAuthorityReady, {
+    fixtureReady: colorAuthority !== undefined,
+    guard: colorAuthority === undefined ? false : isX4UiCorpusCanonicalColorSuccess(colorAuthority),
+    baseColors: colorAuthority?.graph.baseColors.length,
+    mappings: colorAuthority?.graph.mappings.length,
+  });
+  const colorPipeline = (evidence?: unknown) => canonical === undefined
+    ? undefined
+    : pipeline(previewColorSource, previewColorSelection, canonical, {}, {
+      truthGrade: 'supplied',
+      minTextHeight: 10,
+      drawable: { width: 100, height: 80 },
+      uiScale: 1,
+    }, evidence);
+  const omittedColorResult = colorPipeline();
+  const omittedColorFacts = knownColorFactRecords(omittedColorResult);
+  check('P4.5 omitted color evidence preserves no-color Preview behavior',
+    omittedColorResult !== undefined
+    && omittedColorFacts.length === 0
+    && omittedColorResult.gameTruth === 'Not verified in game'
+    && omittedColorResult.verification.gameVerified === false,
+    {
+      fixtureReady: omittedColorResult !== undefined,
+      status: omittedColorResult?.status,
+      programStatus: omittedColorResult?.program?.status,
+      sceneStatus: omittedColorResult?.scene?.status,
+      knownColorFacts: omittedColorFacts.length,
+    });
+  const colorResult = colorAuthority === undefined ? undefined : colorPipeline(colorAuthority);
+  const colorResultRecord = asRecord(colorResult);
+  const colorProgram = asRecord(asRecord(colorResultRecord?.program)?.program);
+  const colorScene = asRecord(asRecord(colorResultRecord?.scene)?.scene);
+  const colorOperations = Array.isArray(colorProgram?.operations) ? colorProgram.operations : [];
+  const operationFor = (kind: string, needle: string): JsonRecord | undefined => colorOperations.find(operation => {
+    const record = asRecord(operation);
+    const sourceRange = asRecord(asRecord(record?.source)?.start);
+    const endRange = asRecord(asRecord(record?.source)?.end);
+    return record?.kind === kind
+      && typeof sourceRange?.offset === 'number'
+      && typeof endRange?.offset === 'number'
+      && previewColorLua.slice(sourceRange.offset, endRange.offset).includes(needle);
+  }) as JsonRecord | undefined;
+  const operationFact = (kind: string, needle: string, field: string): JsonRecord | undefined => {
+    const facts = asRecord(asRecord(operationFor(kind, needle))?.descriptorFacts);
+    return asRecord(facts?.[field]);
+  };
+  const colorTables = Array.isArray(colorProgram?.tables) ? colorProgram.tables : [];
+  const colorCells = Array.isArray(colorProgram?.cells) ? colorProgram.cells : [];
+  const firstColorTable = asRecord(colorTables[0]);
+  const firstColorCell = colorCells.map(asRecord).find(cell => cell?.column === 1);
+  const sceneNodeFor = (collection: string, offset: unknown): JsonRecord | undefined => {
+    const nodes = Array.isArray(colorScene?.[collection]) ? colorScene[collection] : [];
+    return nodes.map(asRecord).find(node => asRecord(asRecord(node)?.source)?.start
+      && asRecord(asRecord(asRecord(node)?.source)?.start)?.offset === offset);
+  };
+  const sceneFact = (node: JsonRecord | undefined, field: string): JsonRecord | undefined => {
+    const facts = asRecord(node?.colorFacts);
+    if (facts) return asRecord(facts[field]);
+    const factList = node?.colorFacts;
+    if (!Array.isArray(factList)) return undefined;
+    return factList.map(asRecord).find(fact => fact?.field === field);
+  };
+  const colorFactValueMatches = (
+    fact: unknown,
+    domain: string,
+    values: readonly [number, number, number, number, number | undefined],
+  ): boolean => {
+    const factRecord = asRecord(fact);
+    const value = asRecord(factRecord?.value);
+    return (factRecord?.status === undefined || factRecord.status === 'known')
+      && (factRecord?.expectedType === undefined || factRecord.expectedType === 'color-object')
+      && (factRecord?.domain === undefined || factRecord.domain === domain)
+      && value?.domain === domain
+      && value.r === values[0]
+      && value.g === values[1]
+      && value.b === values[2]
+      && value.a === values[3]
+      && value.glow === values[4];
+  };
+  const colorProgramFacts = {
+    table: asRecord(asRecord(firstColorTable)?.descriptorFacts)?.backgroundColor,
+    cell: asRecord(asRecord(firstColorCell)?.descriptorFacts)?.cellbgcolor,
+    literal: operationFact('createText', 'createText("literal"', 'color'),
+    buttonBackground: operationFact('createButton', 'createButton({ height = 12', 'bgcolor'),
+    buttonHighlight: operationFact('createButton', 'createButton({ height = 12', 'highlightcolor'),
+    buttonBorder: operationFact('createButton', 'createButton({ height = 12', 'bordercolor'),
+    primary: operationFact('setText', 'setText("primary"', 'color'),
+    secondary: operationFact('setText2', 'setText2("secondary"', 'color'),
+    editbox: operationFact('createEditBox', 'createEditBox({ height = 12', 'bgcolor'),
+    icon: operationFact('createIcon', 'createIcon("icon"', 'color'),
+  };
+  const colorSceneOwners = {
+    table: sceneNodeFor('tables', asRecord(asRecord(firstColorTable)?.source)?.start && asRecord(asRecord(asRecord(firstColorTable)?.source)?.start)?.offset),
+    cell: sceneNodeFor('cells', asRecord(asRecord(firstColorCell)?.source)?.start && asRecord(asRecord(asRecord(firstColorCell)?.source)?.start)?.offset),
+    literal: (Array.isArray(colorScene?.texts) ? colorScene.texts : []).map(asRecord).find(node => node?.content === 'literal'),
+    button: (Array.isArray(colorScene?.widgets) ? colorScene.widgets : []).map(asRecord).find(node => node?.kind === 'button'),
+    primary: (Array.isArray(colorScene?.texts) ? colorScene.texts : []).map(asRecord).find(node => node?.content === 'primary'),
+    secondary: (Array.isArray(colorScene?.texts) ? colorScene.texts : []).map(asRecord).find(node => node?.content === 'secondary'),
+    editbox: (Array.isArray(colorScene?.widgets) ? colorScene.widgets : []).map(asRecord).find(node => node?.kind === 'editbox'),
+    icon: (Array.isArray(colorScene?.widgets) ? colorScene.widgets : []).map(asRecord).find(node => node?.kind === 'icon'),
+  };
+  const programColorValues = colorResult !== undefined
+    && colorProgramFacts.table !== undefined
+    && colorProgramFacts.cell !== undefined
+    && colorProgramFacts.literal !== undefined
+    && colorProgramFacts.buttonBackground !== undefined
+    && colorProgramFacts.buttonHighlight !== undefined
+    && colorProgramFacts.buttonBorder !== undefined
+    && colorProgramFacts.primary !== undefined
+    && colorProgramFacts.secondary !== undefined
+    && colorProgramFacts.editbox !== undefined
+    && colorProgramFacts.icon !== undefined
+    && colorFactValueMatches(colorProgramFacts.table, 'canonical-xml-byte-alpha', [11, 22, 33, 44, 0.1])
+    && colorFactValueMatches(colorProgramFacts.cell, 'canonical-xml-byte-alpha', [51, 52, 53, 54, 0.2])
+    && colorFactValueMatches(colorProgramFacts.literal, 'source-literal-percent-alpha', [12.5, 23.5, 34.5, 45.5, 0.25])
+    && colorFactValueMatches(colorProgramFacts.buttonBackground, 'canonical-xml-byte-alpha', [61, 62, 63, 64, 0.4])
+    && colorFactValueMatches(colorProgramFacts.buttonHighlight, 'canonical-xml-byte-alpha', [71, 72, 73, 74, 0.5])
+    && colorFactValueMatches(colorProgramFacts.buttonBorder, 'canonical-xml-byte-alpha', [81, 82, 83, 84, 0.6])
+    && colorFactValueMatches(colorProgramFacts.primary, 'canonical-xml-byte-alpha', [101, 102, 103, 104, 0.3])
+    && colorFactValueMatches(colorProgramFacts.secondary, 'source-literal-percent-alpha', [15, 25, 35, 55, undefined])
+    && colorFactValueMatches(colorProgramFacts.editbox, 'canonical-xml-byte-alpha', [91, 92, 93, 94, 0.7])
+    && colorFactValueMatches(colorProgramFacts.icon, 'canonical-xml-byte-alpha', [11, 22, 33, 44, 0.1]);
+  check('P4.5 Preview forwards exact color authority into LayoutProgram raw domains and values',
+    colorAuthorityReady
+    && colorResult !== undefined
+    && colorResult.status !== 'refused'
+    && programColorValues,
+    {
+      fixtureReady: colorAuthorityReady && colorResult !== undefined,
+      status: colorResult?.status,
+      programStatus: colorResult?.program?.status,
+      knownColorFacts: knownColorFactRecords(colorResult).length,
+      programFacts: colorProgramFacts,
+    });
+  const sceneColorBreakdown = {
+    table: colorSceneOwners.table !== undefined
+      && colorFactValueMatches(sceneFact(colorSceneOwners.table, 'backgroundColor'), 'canonical-xml-byte-alpha', [11, 22, 33, 44, 0.1]),
+    cell: colorSceneOwners.cell !== undefined
+      && colorFactValueMatches(sceneFact(colorSceneOwners.cell, 'cellbgcolor'), 'canonical-xml-byte-alpha', [51, 52, 53, 54, 0.2]),
+    literal: colorSceneOwners.literal !== undefined
+      && colorFactValueMatches(sceneFact(colorSceneOwners.literal, 'color'), 'source-literal-percent-alpha', [12.5, 23.5, 34.5, 45.5, 0.25]),
+    buttonBackground: colorSceneOwners.button !== undefined
+      && colorFactValueMatches(sceneFact(colorSceneOwners.button, 'bgcolor'), 'canonical-xml-byte-alpha', [61, 62, 63, 64, 0.4]),
+    buttonHighlight: colorSceneOwners.button !== undefined
+      && colorFactValueMatches(sceneFact(colorSceneOwners.button, 'highlightcolor'), 'canonical-xml-byte-alpha', [71, 72, 73, 74, 0.5]),
+    buttonBorder: colorSceneOwners.button !== undefined
+      && colorFactValueMatches(sceneFact(colorSceneOwners.button, 'bordercolor'), 'canonical-xml-byte-alpha', [81, 82, 83, 84, 0.6]),
+    primary: colorSceneOwners.primary !== undefined
+      && colorFactValueMatches(sceneFact(colorSceneOwners.primary, 'color'), 'canonical-xml-byte-alpha', [101, 102, 103, 104, 0.3]),
+    secondary: colorSceneOwners.secondary !== undefined
+      && colorFactValueMatches(sceneFact(colorSceneOwners.secondary, 'color'), 'source-literal-percent-alpha', [15, 25, 35, 55, undefined]),
+    editbox: colorSceneOwners.editbox !== undefined
+      && colorFactValueMatches(sceneFact(colorSceneOwners.editbox, 'bgcolor'), 'canonical-xml-byte-alpha', [91, 92, 93, 94, 0.7]),
+    icon: colorSceneOwners.icon !== undefined
+      && colorFactValueMatches(sceneFact(colorSceneOwners.icon, 'color'), 'canonical-xml-byte-alpha', [11, 22, 33, 44, 0.1]),
+  };
+  const sceneColorValues = colorResult !== undefined && Object.values(sceneColorBreakdown).every(Boolean);
+  const colorSceneValue = colorResult?.scene !== undefined && 'scene' in colorResult.scene ? colorResult.scene.scene : undefined;
+  check('P4.5 Preview forwards exact color authority into accepted Scene owners',
+    colorAuthorityReady
+    && colorResult !== undefined
+    && colorResult.status !== 'refused'
+    && colorResult.scene?.status !== 'refused'
+    && sceneColorValues
+    && colorResult.gameTruth === 'Not verified in game'
+    && colorResult.verification.gameVerified === false
+    && colorResult.scene?.verification.gameVerified === false,
+    {
+      fixtureReady: colorAuthorityReady && colorResult !== undefined,
+      status: colorResult?.status,
+      sceneStatus: colorResult?.scene?.status,
+      sceneColorValues,
+      sceneColorBreakdown,
+      sceneOwners: colorSceneOwners,
+      knownColorFacts: knownColorFactRecords(colorResult).length,
+    });
+  const exactColorAuthority = colorResult !== undefined
+    && colorSceneValue !== undefined
+    && issuedPaintSourceAuthority(colorResult, colorSceneValue)
+    && materializeIssuedPaintScene(colorResult, colorSceneValue).value !== undefined;
+  const copiedColorScene = colorSceneValue === undefined ? undefined : JSON.parse(JSON.stringify(colorSceneValue));
+  check('P4.5 exact issued color result and Scene retain private Paint authority identity',
+    exactColorAuthority
+    && copiedColorScene !== undefined
+    && !issuedPaintSourceAuthority(colorResult, copiedColorScene)
+    && materializeIssuedPaintScene(colorResult, copiedColorScene).value === undefined,
+    {
+      fixtureReady: colorResult !== undefined && colorSceneValue !== undefined,
+      exact: exactColorAuthority,
+      copiedAccepted: copiedColorScene === undefined ? undefined : issuedPaintSourceAuthority(colorResult, copiedColorScene),
+    });
+  const structuralColorClone = colorAuthority === undefined ? undefined : JSON.parse(JSON.stringify(colorAuthority));
+  const forgedColorEvidence = structuralColorClone === undefined ? undefined : { ...structuralColorClone, canonicalIdentity: 'forged-x4' };
+  const mutatedColorEvidence = structuralColorClone === undefined
+    ? undefined
+    : { ...structuralColorClone, graph: { ...asRecord(structuralColorClone.graph), baseColors: [] } };
+  const staleColorEvidence = structuralColorClone === undefined
+    ? undefined
+    : { ...structuralColorClone, verification: 'stale' };
+  const invalidColorEvidenceCases = [
+    ['structural clone', structuralColorClone],
+    ['forged', forgedColorEvidence],
+    ['mutated', mutatedColorEvidence],
+    ['stale', staleColorEvidence],
+    ['unissued', { ok: true, evidenceKind: 'canonical-default-only', canonical: true }],
+  ] as const;
+  const invalidColorResults = invalidColorEvidenceCases.map(([name, evidence]) => ({
+    name,
+    result: colorPipeline(evidence),
+  }));
+  const invalidInputDescriptors = invalidColorEvidenceCases.map(([name, evidence]) => {
+    const candidate = pipelineInput(previewColorSource, previewColorSelection, canonical, {}, {
+      truthGrade: 'supplied',
+      minTextHeight: 10,
+      drawable: { width: 100, height: 80 },
+      uiScale: 1,
+    }, evidence);
+    const descriptor = Object.getOwnPropertyDescriptor(candidate, 'colorEvidence');
+    return { name, present: descriptor !== undefined, same: descriptor?.value === evidence, valueType: typeof descriptor?.value };
+  });
+  check('P4.5 forged, mutated, stale, structural-clone, and unissued color evidence fails closed',
+    colorAuthorityReady
+    && invalidColorResults.every(candidate => candidate.result !== undefined
+      && candidate.result.status === 'refused'
+      && knownColorFactRecords(candidate.result).length === 0),
+    {
+      fixtureReady: colorAuthorityReady,
+      results: invalidColorResults.map(candidate => ({
+        name: candidate.name,
+        status: candidate.result?.status,
+        programStatus: candidate.result?.program?.status,
+        knownColorFacts: knownColorFactRecords(candidate.result).length,
+      })),
+      invalidInputDescriptors,
+    });
+  const accessorInput = pipelineInput(previewColorSource, previewColorSelection, canonical, {}, {
+    truthGrade: 'supplied',
+    minTextHeight: 10,
+    drawable: { width: 100, height: 80 },
+    uiScale: 1,
+  });
+  let colorAccessorReads = 0;
+  Object.defineProperty(accessorInput, 'colorEvidence', {
+    configurable: true,
+    enumerable: true,
+    get: () => {
+      colorAccessorReads += 1;
+      throw new Error('Preview color evidence accessor executed');
+    },
+  });
+  const accessorResult = projectX4UiPreviewPipeline(accessorInput);
+  const inheritedInput = pipelineInput(previewColorSource, previewColorSelection, canonical, {}, {
+    truthGrade: 'supplied',
+    minTextHeight: 10,
+    drawable: { width: 100, height: 80 },
+    uiScale: 1,
+  });
+  let colorInheritedReads = 0;
+  const inheritedPrototype = {};
+  Object.defineProperty(inheritedPrototype, 'colorEvidence', {
+    configurable: true,
+    enumerable: true,
+    get: () => {
+      colorInheritedReads += 1;
+      throw new Error('Preview inherited color evidence accessor executed');
+    },
+  });
+  Object.setPrototypeOf(inheritedInput, inheritedPrototype);
+  const inheritedResult = projectX4UiPreviewPipeline(inheritedInput);
+  const symbolInput = pipelineInput(previewColorSource, previewColorSelection, canonical, {}, {
+    truthGrade: 'supplied',
+    minTextHeight: 10,
+    drawable: { width: 100, height: 80 },
+    uiScale: 1,
+  });
+  Object.defineProperty(symbolInput, Symbol('colorEvidence'), { configurable: true, enumerable: true, value: colorAuthority });
+  const symbolResult = projectX4UiPreviewPipeline(symbolInput);
+  const colorProxyTrapCounts = { get: 0, getOwnPropertyDescriptor: 0, ownKeys: 0, getPrototypeOf: 0, has: 0 };
+  const proxyColorEvidence = colorAuthority === undefined ? undefined : new Proxy(colorAuthority, {
+    get: (target, property, receiver) => {
+      colorProxyTrapCounts.get += 1;
+      return Reflect.get(target, property, receiver);
+    },
+    getOwnPropertyDescriptor: (target, property) => {
+      colorProxyTrapCounts.getOwnPropertyDescriptor += 1;
+      return Reflect.getOwnPropertyDescriptor(target, property);
+    },
+    ownKeys: target => {
+      colorProxyTrapCounts.ownKeys += 1;
+      return Reflect.ownKeys(target);
+    },
+    getPrototypeOf: target => {
+      colorProxyTrapCounts.getPrototypeOf += 1;
+      return Reflect.getPrototypeOf(target);
+    },
+    has: (target, property) => {
+      colorProxyTrapCounts.has += 1;
+      return Reflect.has(target, property);
+    },
+  });
+  const proxyResult = colorPipeline(proxyColorEvidence);
+  check('P4.5 inherited, accessor, symbol, and proxy evidence never becomes authority or invokes hostile observation',
+    omittedColorResult !== undefined
+    && colorAccessorReads === 0
+    && colorInheritedReads === 0
+    && sameJson(accessorResult, omittedColorResult)
+    && sameJson(inheritedResult, omittedColorResult)
+    && sameJson(symbolResult, omittedColorResult)
+    && proxyResult !== undefined
+    && proxyResult.status === 'refused'
+    && knownColorFactRecords(proxyResult).length === 0
+    && Object.values(colorProxyTrapCounts).every(count => count === 0),
+    {
+      fixtureReady: omittedColorResult !== undefined && colorAuthority !== undefined,
+      accessorReads: colorAccessorReads,
+      inheritedReads: colorInheritedReads,
+      proxyTrapCounts: colorProxyTrapCounts,
+      accessorStatus: accessorResult.status,
+      inheritedStatus: inheritedResult.status,
+      symbolStatus: symbolResult.status,
+      proxyStatus: proxyResult?.status,
+    });
+
   const cloneCanonicalResult = (): JsonRecord | undefined => canonicalProjectedResult === undefined
     ? undefined
     : asRecord(JSON.parse(JSON.stringify(canonicalProjectedResult)));
@@ -1725,16 +2271,81 @@ async function runIndependentReviewCorrections(): Promise<{
     predicatePresent: typeof (PreviewPipelineExports as unknown as Record<string, unknown>).isX4UiPreviewPaintSourceAuthority === 'function',
   });
 
+  const canonicalSceneResult = canonicalProjectedResult?.scene !== undefined && 'scene' in canonicalProjectedResult.scene
+    ? canonicalProjectedResult.scene
+    : undefined;
+  const exactSceneResultMaterialization = materializeIssuedPaintScene(canonicalProjectedResult, canonicalSceneResult);
+  check('B119 exact Preview-issued Scene-result wrapper retains authority',
+    intactPaintAuthority
+    && canonicalSceneResult !== undefined
+    && exactSceneResultMaterialization.present
+    && !exactSceneResultMaterialization.threw
+    && exactSceneResultMaterialization.value !== undefined, {
+      fixtureReady: intactPaintAuthority && canonicalSceneResult !== undefined,
+      materialization: exactSceneResultMaterialization,
+    });
+  const copiedSceneResult = canonicalSceneResult === undefined
+    ? undefined
+    : asRecord(JSON.parse(JSON.stringify(canonicalSceneResult)));
+  const customPrototypeSceneResult = canonicalSceneResult === undefined
+    ? undefined
+    : Object.assign(Object.create({ boundary: 'not-authority' }), JSON.parse(JSON.stringify(canonicalSceneResult))) as JsonRecord;
+  const copiedSceneResultMaterialization = materializeIssuedPaintScene(canonicalProjectedResult, copiedSceneResult);
+  const customPrototypeSceneResultMaterialization = materializeIssuedPaintScene(canonicalProjectedResult, customPrototypeSceneResult);
+  check('B119 copied and custom-prototype Scene-result wrappers refuse',
+    intactPaintAuthority
+    && copiedSceneResult !== undefined
+    && customPrototypeSceneResult !== undefined
+    && copiedSceneResult !== canonicalSceneResult
+    && customPrototypeSceneResult !== canonicalSceneResult
+    && copiedSceneResultMaterialization.present
+    && !copiedSceneResultMaterialization.threw
+    && copiedSceneResultMaterialization.value === undefined
+    && customPrototypeSceneResultMaterialization.present
+    && !customPrototypeSceneResultMaterialization.threw
+    && customPrototypeSceneResultMaterialization.value === undefined, {
+      fixtureReady: intactPaintAuthority && canonicalSceneResult !== undefined,
+      copied: copiedSceneResultMaterialization,
+      customPrototype: customPrototypeSceneResultMaterialization,
+    });
+
+  const unchangedCloneCandidate = cloneCanonicalScene();
+  const unchangedCloneMaterialization = materializeIssuedPaintScene(canonicalProjectedResult, unchangedCloneCandidate);
+  const unchangedCloneAuthority = issuedPaintSourceAuthority(canonicalProjectedResult, unchangedCloneCandidate);
+  check('Phase P rejects an unchanged JSON deep-copy of the issued Scene',
+    intactPaintAuthority
+    && unchangedCloneCandidate !== undefined
+    && canonicalScene !== undefined
+    && !Object.is(unchangedCloneCandidate, canonicalScene)
+    && sameJson(unchangedCloneCandidate, canonicalScene)
+    && !unchangedCloneAuthority
+    && unchangedCloneMaterialization.present
+    && !unchangedCloneMaterialization.threw
+    && unchangedCloneMaterialization.value === undefined, {
+      fixtureReady: intactPaintAuthority && unchangedCloneCandidate !== undefined && canonicalScene !== undefined,
+      distinctIdentity: !Object.is(unchangedCloneCandidate, canonicalScene),
+      jsonEqual: sameJson(unchangedCloneCandidate, canonicalScene),
+      accepted: unchangedCloneAuthority,
+      materialization: unchangedCloneMaterialization,
+    });
+
   const clipCandidate = cloneCanonicalScene();
   const clipCell = Array.isArray(clipCandidate?.cells) ? asRecord(clipCandidate.cells[0]) : undefined;
   if (clipCell !== undefined) clipCell.clipRect = { x: 0, y: 0, width: 1, height: 1 };
   const clipAuthority = canonicalProjectedResult !== undefined
     && clipCandidate !== undefined
     && issuedPaintSourceAuthority(canonicalProjectedResult, clipCandidate);
-  check('Phase P allows candidate-only clipRect changes with source evidence unchanged', intactPaintAuthority && clipAuthority, {
+  const clipMaterialization = materializeIssuedPaintScene(canonicalProjectedResult, clipCandidate);
+  check('Phase P rejects copied Scene clipRect variation despite equal source bytes', intactPaintAuthority
+    && clipCell !== undefined
+    && !clipAuthority
+    && clipMaterialization.present
+    && !clipMaterialization.threw
+    && clipMaterialization.value === undefined, {
     fixtureReady: intactPaintAuthority && clipCell !== undefined,
     clipChanged: clipCell?.clipRect !== undefined,
     accepted: clipAuthority,
+    materialization: clipMaterialization,
   });
 
   const statusCandidate = cloneCanonicalScene();
@@ -1745,11 +2356,18 @@ async function runIndependentReviewCorrections(): Promise<{
   const statusAuthority = canonicalProjectedResult !== undefined
     && statusCandidate !== undefined
     && issuedPaintSourceAuthority(canonicalProjectedResult, statusCandidate);
-  check('Phase P allows projected-program and conservative partial-Scene status control', intactPaintAuthority && statusAuthority, {
+  const statusMaterialization = materializeIssuedPaintScene(canonicalProjectedResult, statusCandidate);
+  check('Phase P rejects copied Scene status variation despite equal program status', intactPaintAuthority
+    && statusCandidate !== undefined
+    && !statusAuthority
+    && statusMaterialization.present
+    && !statusMaterialization.threw
+    && statusMaterialization.value === undefined, {
     fixtureReady: intactPaintAuthority && statusCandidate !== undefined,
     programStatus: statusCandidate?.programStatus,
     sceneStatus: statusCandidate?.status,
     accepted: statusAuthority,
+    materialization: statusMaterialization,
   });
 
   const cloneAuthorityResult = canonicalProjectedResult === undefined
@@ -1758,6 +2376,7 @@ async function runIndependentReviewCorrections(): Promise<{
   const cloneAuthorityScene = cloneCanonicalScene();
   const exactMaterialization = materializeIssuedPaintScene(canonicalProjectedResult, canonicalScene);
   const clonedMaterialization = materializeIssuedPaintScene(cloneAuthorityResult, cloneAuthorityScene);
+  const clonedAuthorityExactSceneMaterialization = materializeIssuedPaintScene(cloneAuthorityResult, canonicalScene);
   const materializedRecord = asRecord(exactMaterialization.value);
   const materializedFacts = closedDomainFacts(exactMaterialization.value);
   check('closed-domain-materializer-requires-exact-issued-result-identity',
@@ -1767,10 +2386,14 @@ async function runIndependentReviewCorrections(): Promise<{
     && exactMaterialization.value !== undefined
     && clonedMaterialization.present
     && !clonedMaterialization.threw
-    && clonedMaterialization.value === undefined, {
+    && clonedMaterialization.value === undefined
+    && clonedAuthorityExactSceneMaterialization.present
+    && !clonedAuthorityExactSceneMaterialization.threw
+    && clonedAuthorityExactSceneMaterialization.value === undefined, {
       fixtureReady: intactPaintAuthority && cloneAuthorityResult !== undefined && cloneAuthorityScene !== undefined,
       exact: exactMaterialization,
       clone: clonedMaterialization,
+      clonedAuthorityExactScene: clonedAuthorityExactSceneMaterialization,
     });
   check('closed-domain-materializer-preserves-deterministic-issued-json-without-aliasing',
     exactMaterialization.value !== undefined
@@ -1811,36 +2434,86 @@ async function runIndependentReviewCorrections(): Promise<{
   if (allowedPresentationCandidate !== undefined) allowedPresentationCandidate.status = 'partial';
   if (allowedPresentationCell !== undefined) allowedPresentationCell.clipRect = allowedClip;
   const allowedPresentationMaterialization = materializeIssuedPaintScene(canonicalProjectedResult, allowedPresentationCandidate);
-  const allowedPresentationRecord = asRecord(allowedPresentationMaterialization.value);
-  const allowedMaterializedCell = Array.isArray(allowedPresentationRecord?.cells)
-    ? asRecord(allowedPresentationRecord.cells[0])
-    : undefined;
-  check('closed-domain-materializer-preserves-own-status-and-direct-node-clip-allowance',
+  check('closed-domain-materializer-refuses-copied-status-and-direct-node-clip-variation',
     allowedPresentationMaterialization.present
     && !allowedPresentationMaterialization.threw
-    && allowedPresentationRecord?.status === 'partial'
-    && Object.prototype.hasOwnProperty.call(allowedMaterializedCell ?? {}, 'clipRect')
-    && sameJson(allowedMaterializedCell?.clipRect, allowedClip), {
+    && allowedPresentationMaterialization.value === undefined, {
       fixtureReady: intactPaintAuthority && allowedPresentationCandidate !== undefined && allowedPresentationCell !== undefined,
       attempt: allowedPresentationMaterialization,
-      status: allowedPresentationRecord?.status,
-      clipRect: allowedMaterializedCell?.clipRect,
+      status: allowedPresentationCandidate?.status,
+      clipRect: allowedPresentationCell?.clipRect,
     });
 
   const undefinedMemberCandidate = cloneCanonicalScene();
   const undefinedMemberProfile = asRecord(undefinedMemberCandidate?.profile);
   if (undefinedMemberProfile !== undefined) undefinedMemberProfile.closedDomainUndefined = undefined;
   const undefinedMemberMaterialization = materializeIssuedPaintScene(canonicalProjectedResult, undefinedMemberCandidate);
-  const undefinedMaterializedProfile = asRecord(asRecord(undefinedMemberMaterialization.value)?.profile);
-  check('closed-domain-materializer-omits-own-enumerable-undefined-object-members',
+  check('closed-domain-materializer-refuses-a-copied-Scene-with-an-enumerable-undefined-member',
     undefinedMemberMaterialization.present
     && !undefinedMemberMaterialization.threw
-    && undefinedMemberMaterialization.value !== undefined
-    && undefinedMaterializedProfile !== undefined
-    && !Object.prototype.hasOwnProperty.call(undefinedMaterializedProfile, 'closedDomainUndefined'), {
+    && undefinedMemberMaterialization.value === undefined, {
       fixtureReady: intactPaintAuthority && undefinedMemberProfile !== undefined,
       attempt: undefinedMemberMaterialization,
-      materializedOwnKeys: undefinedMaterializedProfile === undefined ? undefined : Object.keys(undefinedMaterializedProfile),
+      candidateOwnKeys: undefinedMemberProfile === undefined ? undefined : Object.keys(undefinedMemberProfile),
+    });
+
+  const proxyTrapCounts = { get: 0, getOwnPropertyDescriptor: 0, ownKeys: 0, getPrototypeOf: 0, has: 0 };
+  const proxyCandidate = canonicalScene === undefined
+    ? undefined
+    : new Proxy(canonicalScene as unknown as object, {
+      get: (target, property, receiver) => {
+        proxyTrapCounts.get += 1;
+        return Reflect.get(target, property, receiver);
+      },
+      getOwnPropertyDescriptor: (target, property) => {
+        proxyTrapCounts.getOwnPropertyDescriptor += 1;
+        return Reflect.getOwnPropertyDescriptor(target, property);
+      },
+      ownKeys: target => {
+        proxyTrapCounts.ownKeys += 1;
+        return Reflect.ownKeys(target);
+      },
+      getPrototypeOf: target => {
+        proxyTrapCounts.getPrototypeOf += 1;
+        return Reflect.getPrototypeOf(target);
+      },
+      has: (target, property) => {
+        proxyTrapCounts.has += 1;
+        return Reflect.has(target, property);
+      },
+    });
+  const proxyMaterialization = materializeIssuedPaintScene(canonicalProjectedResult, proxyCandidate);
+  let wrapperAccessorReads = 0;
+  const accessorWrapper: JsonRecord = {};
+  Object.defineProperty(accessorWrapper, 'scene', {
+    configurable: true,
+    enumerable: true,
+    get: () => {
+      wrapperAccessorReads += 1;
+      return canonicalScene;
+    },
+  });
+  const accessorWrapperMaterialization = materializeIssuedPaintScene(canonicalProjectedResult, accessorWrapper);
+  const customPrototypeWrapper = Object.create({ scene: canonicalScene }) as JsonRecord;
+  const customPrototypeMaterialization = materializeIssuedPaintScene(canonicalProjectedResult, customPrototypeWrapper);
+  check('closed-domain-materializer-refuses proxy, accessor, and custom-prototype wrappers without observation',
+    intactPaintAuthority
+    && proxyCandidate !== undefined
+    && proxyMaterialization.present
+    && !proxyMaterialization.threw
+    && proxyMaterialization.value === undefined
+    && Object.values(proxyTrapCounts).every(count => count === 0)
+    && accessorWrapperMaterialization.present
+    && !accessorWrapperMaterialization.threw
+    && accessorWrapperMaterialization.value === undefined
+    && wrapperAccessorReads === 0
+    && customPrototypeMaterialization.present
+    && !customPrototypeMaterialization.threw
+    && customPrototypeMaterialization.value === undefined, {
+      fixtureReady: intactPaintAuthority && proxyCandidate !== undefined,
+      proxy: { attempt: proxyMaterialization, traps: proxyTrapCounts },
+      accessor: { attempt: accessorWrapperMaterialization, reads: wrapperAccessorReads },
+      customPrototype: customPrototypeMaterialization,
     });
 
   const originalSourcePathPrototype = Object.getOwnPropertyDescriptor(Object.prototype, 'sourcePath');
@@ -2147,6 +2820,23 @@ async function runIndependentReviewCorrections(): Promise<{
   const topologyScene = topologyResult !== undefined && topologyResult.scene !== undefined && 'scene' in topologyResult.scene
     ? topologyResult.scene.scene
     : undefined;
+  const canonicalResultTopologyScene = materializeIssuedPaintScene(canonicalProjectedResult, topologyScene);
+  const topologyResultCanonicalScene = materializeIssuedPaintScene(topologyResult, canonicalScene);
+  check('Phase P rejects cross-result exact Scene identities without throwing',
+    intactPaintAuthority
+    && topologyResult !== undefined
+    && topologyScene !== undefined
+    && issuedPaintSourceAuthority(topologyResult, topologyScene)
+    && canonicalResultTopologyScene.present
+    && !canonicalResultTopologyScene.threw
+    && canonicalResultTopologyScene.value === undefined
+    && topologyResultCanonicalScene.present
+    && !topologyResultCanonicalScene.threw
+    && topologyResultCanonicalScene.value === undefined, {
+      fixtureReady: intactPaintAuthority && topologyResult !== undefined && topologyScene !== undefined,
+      canonicalResultTopologyScene,
+      topologyResultCanonicalScene,
+    });
   phaseTAuthorityAttack('Phase T rejects reciprocal table/frame reassignment', topologyResult, topologyScene, candidate => {
     const frames = Array.isArray(candidate.frames) ? candidate.frames.map(asRecord).filter((value): value is JsonRecord => value !== undefined) : [];
     const tables = Array.isArray(candidate.tables) ? candidate.tables.map(asRecord).filter((value): value is JsonRecord => value !== undefined) : [];

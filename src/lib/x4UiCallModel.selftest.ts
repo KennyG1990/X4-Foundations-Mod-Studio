@@ -1,5 +1,7 @@
 import {
   buildX4UiCallModel,
+  type X4UiCallColorExpression,
+  type X4UiColorExpression,
   type X4UiCallRecord,
   type X4UiCallPropertyProjection,
   type X4UiValue
@@ -25,12 +27,171 @@ function call(model: ReturnType<typeof buildX4UiCallModel>, name: X4UiCallRecord
   return model.calls.find(candidate => candidate.name === name);
 }
 
+interface EnclosingStatementProbe {
+  source: X4UiCallRecord['source'];
+  deletionSource: X4UiCallRecord['source'];
+  terminator: 'none' | 'semicolon';
+  kind: string;
+  isStandaloneCallStatementRoot: boolean;
+}
+
+function sameSourceRange(
+  left: X4UiCallRecord['source'] | undefined,
+  right: X4UiCallRecord['source'] | undefined
+): boolean {
+  return Boolean(left && right
+    && left.file === right.file
+    && left.sourcePath === right.sourcePath
+    && left.start.line === right.start.line
+    && left.start.column === right.start.column
+    && left.start.offset === right.start.offset
+    && left.end.line === right.end.line
+    && left.end.column === right.end.column
+    && left.end.offset === right.end.offset);
+}
+
+function frozenSourceLocation(source: X4UiCallRecord['source'] | undefined): boolean {
+  return Boolean(source
+    && Object.isFrozen(source)
+    && Object.isFrozen(source.start)
+    && Object.isFrozen(source.end));
+}
+
+function enclosingStatement(callRecord: X4UiCallRecord | undefined): EnclosingStatementProbe | undefined {
+  return (callRecord as (X4UiCallRecord & { enclosingStatement?: EnclosingStatementProbe }) | undefined)?.enclosingStatement;
+}
+
+function callAt(
+  model: ReturnType<typeof buildX4UiCallModel>,
+  source: string,
+  expression: string,
+  from = 0
+): X4UiCallRecord | undefined {
+  const start = source.indexOf(expression, from);
+  if (start < 0) return undefined;
+  return model.calls.find(candidate => candidate.source.start.offset === start
+    && candidate.source.end.offset === start + expression.length);
+}
+
+function callContaining(
+  model: ReturnType<typeof buildX4UiCallModel>,
+  source: string,
+  name: X4UiCallRecord['name'],
+  fragment: string,
+  from = 0
+): X4UiCallRecord | undefined {
+  return model.calls.find(candidate => candidate.name === name
+    && candidate.source.start.offset >= from
+    && source.slice(candidate.source.start.offset, candidate.source.end.offset).includes(fragment));
+}
+
 function property(callRecord: X4UiCallRecord | undefined, name: string): X4UiCallPropertyProjection | undefined {
   return callRecord?.semantics.properties?.find(candidate => candidate.name === name);
 }
 
 function propertyNames(callRecord: X4UiCallRecord | undefined): string[] {
   return callRecord?.semantics.properties?.map(candidate => candidate.name) || [];
+}
+
+interface ColorSourceFieldProbe {
+  value: number;
+  expression: string;
+  source: X4UiCallRecord['source'];
+  keySource: X4UiCallRecord['source'];
+}
+
+function colorEntry(
+  model: ReturnType<typeof buildX4UiCallModel>,
+  callRecord: X4UiCallRecord | undefined,
+  propertyName: string
+): X4UiCallColorExpression | undefined {
+  return model.colorExpressions.find(candidate => candidate.callName === callRecord?.name
+    && candidate.propertyName === propertyName
+    && sameSourceRange(candidate.callSource, callRecord?.source));
+}
+
+function colorExpression(
+  model: ReturnType<typeof buildX4UiCallModel>,
+  callRecord: X4UiCallRecord | undefined,
+  propertyName: string
+): X4UiColorExpression | undefined {
+  return colorEntry(model, callRecord, propertyName)?.colorExpression;
+}
+
+function colorSourceField(
+  expression: X4UiColorExpression | undefined,
+  name: 'r' | 'g' | 'b' | 'a' | 'glow'
+): ColorSourceFieldProbe | undefined {
+  return expression
+    ? (expression as unknown as Record<string, ColorSourceFieldProbe | undefined>)[name]
+    : undefined;
+}
+
+function exactProbeSource(
+  source: string,
+  expression: X4UiColorExpression | undefined,
+  expected: string
+): boolean {
+  return Boolean(expression
+    && expression.source.start.offset >= 0
+    && expression.expression === expected
+    && expression.source.end.offset === expression.source.start.offset + expected.length
+    && source.slice(expression.source.start.offset, expression.source.end.offset) === expected);
+}
+
+function exactLocatedText(
+  source: string,
+  located: { expression?: string; source?: X4UiCallRecord['source'] } | undefined,
+  expected: string
+): boolean {
+  return Boolean(located?.expression === expected
+    && located.source
+    && located.source.end.offset === located.source.start.offset + expected.length
+    && source.slice(located.source.start.offset, located.source.end.offset) === expected);
+}
+
+function literalEvidence(
+  source: string,
+  expression: X4UiColorExpression | undefined,
+  useExpression: string,
+  declarationExpression: string,
+  channels: [number, number, number, number]
+): boolean {
+  const declaration = expression as (X4UiColorExpression & {
+    declarationExpression?: string;
+    declarationSource?: X4UiCallRecord['source'];
+  }) | undefined;
+  const channelNames: Array<'r' | 'g' | 'b' | 'a'> = ['r', 'g', 'b', 'a'];
+  return expression?.kind === 'literal-table'
+    && exactProbeSource(source, expression, useExpression)
+    && declaration?.declarationExpression === declarationExpression
+    && exactLocatedText(source, declaration?.declarationSource && {
+      expression: declaration.declarationExpression,
+      source: declaration.declarationSource
+    }, declarationExpression)
+    && channelNames.every((name, index) => {
+      const field = colorSourceField(expression, name);
+      return field?.value === channels[index]
+        && field.expression === String(channels[index])
+        && exactLocatedText(source, field, field.expression)
+        && source.slice(field.keySource.start.offset, field.keySource.end.offset) === name;
+    });
+}
+
+function closedFrozenData(value: unknown, seen = new WeakSet<object>()): boolean {
+  if (value === null || typeof value !== 'object') return true;
+  if (seen.has(value)) return true;
+  seen.add(value);
+  const keys = Reflect.ownKeys(value);
+  const enumerableKeys = Object.keys(value);
+  const comparableKeys = Array.isArray(value) ? keys.filter(key => key !== 'length') : keys;
+  const plain = Array.isArray(value) || Object.getPrototypeOf(value) === Object.prototype;
+  const ownKeysClosed = JSON.stringify(comparableKeys) === JSON.stringify(enumerableKeys);
+  const record = value as Record<string, unknown>;
+  return Object.isFrozen(value)
+    && plain
+    && ownKeysClosed
+    && enumerableKeys.every(key => closedFrozenData(record[key], seen));
 }
 
 function staticString(value: X4UiValue | undefined): string | undefined {
@@ -161,6 +322,300 @@ function run(): { allPassed: boolean; pass: boolean; passed: number; total: numb
   check('projected property values retain static status',
     projectedValues.every(projected => projected.value.status === 'static'),
     detail(projectedValues.filter(projected => projected.value.status !== 'static')));
+
+  const colorSource = [
+    'local key = "dynamic-id"',
+    'local flag = true',
+    'local function makeColor() return { r = 0.7, g = 0.8, b = 0.9, a = 0.25 } end',
+    'local colorMenu = { name = "Colors", layer = 1 }',
+    'local colorFrame = Helper.createFrameHandle(colorMenu, { backgroundColor = { r = 0.1, g = 0.2, b = 0.3, a = 0.4 } })',
+    'local colorTable = colorFrame:addTable(1, { backgroundColor = Color["known.id"] })',
+    'local colorRow = colorTable:addRow(true, {})',
+    'colorRow[1]:createText("dynamic", { color = Color[key], cellBGColor = (flag and Color["branch.id"]) or makeColor() })',
+    'colorRow[2]:createButton({ bgColor = makeColor(), highlightColor = "white", borderColor = { r = 1, g = 2, b = 3, a = 0.5, glow = 0.6 } })',
+    'colorRow[3]:createEditBox({ bgColor = Color["unknown.id"] })',
+    'colorRow[4]:createIcon("icon", { color = makeColor() })'
+  ].join('\n');
+  const colorSourceBefore = colorSource;
+  const colorModel = buildX4UiCallModel(input(colorSource, 'selftest/color-expressions.lua'));
+  const literalColor = colorExpression(colorModel, call(colorModel, 'createFrameHandle'), 'backgroundColor');
+  const symbolicColor = colorExpression(colorModel, call(colorModel, 'addTable'), 'backgroundColor');
+  const textColorCall = call(colorModel, 'createText');
+  const dynamicColor = colorExpression(colorModel, textColorCall, 'color');
+  const conditionalColor = colorExpression(colorModel, textColorCall, 'cellBGColor');
+  const buttonColorCall = call(colorModel, 'createButton');
+  const functionColor = colorExpression(colorModel, buttonColorCall, 'bgColor');
+  const scalarColor = colorExpression(colorModel, buttonColorCall, 'highlightColor');
+  const explicitGlowColor = colorExpression(colorModel, buttonColorCall, 'borderColor');
+  const editColor = colorExpression(colorModel, call(colorModel, 'createEditBox'), 'bgColor');
+  const iconColor = colorExpression(colorModel, call(colorModel, 'createIcon'), 'color');
+  const literalExpression = '{ r = 0.1, g = 0.2, b = 0.3, a = 0.4 }';
+  const literalStart = colorSource.indexOf(literalExpression);
+  const literalFields = ['r', 'g', 'b', 'a'].map(name => colorSourceField(literalColor, name as 'r' | 'g' | 'b' | 'a'));
+  check('color literal tables preserve exact channels, UTF-16 ranges, and omitted glow',
+    literalColor?.kind === 'literal-table'
+      && exactProbeSource(colorSource, literalColor, literalExpression)
+      && literalColor.source.start.offset === literalStart
+      && literalFields.every((field, index) => field?.value === [0.1, 0.2, 0.3, 0.4][index]
+        && field.expression === String([0.1, 0.2, 0.3, 0.4][index])
+        && field.source.start.offset < field.source.end.offset
+        && field.keySource.start.offset < field.source.start.offset
+        && colorSource.slice(field.source.start.offset, field.source.end.offset) === field.expression)
+      && explicitGlowColor?.kind === 'literal-table'
+      && colorSourceField(explicitGlowColor, 'glow')?.value === 0.6
+      && colorSourceField(explicitGlowColor, 'glow')?.expression === '0.6'
+      && colorSource.slice(
+        colorSourceField(explicitGlowColor, 'glow')?.keySource.start.offset || -1,
+        colorSourceField(explicitGlowColor, 'glow')?.keySource.end.offset || -1,
+      ) === 'glow'
+      && !('glow' in (literalColor || {})),
+    detail({ literalColor, literalFields, explicitGlowColor }));
+  check('known and unknown Color IDs remain symbolic-only with exact ID provenance',
+    symbolicColor?.kind === 'symbolic-reference'
+      && symbolicColor.resolution === 'symbolic-only'
+      && symbolicColor.id === 'known.id'
+      && symbolicColor.base === 'Color'
+      && exactProbeSource(colorSource, symbolicColor, 'Color["known.id"]')
+      && editColor?.kind === 'symbolic-reference'
+      && editColor.resolution === 'symbolic-only'
+      && editColor.id === 'unknown.id'
+      && exactProbeSource(colorSource, editColor, 'Color["unknown.id"]'),
+    detail({ symbolicColor, editColor }));
+  check('dynamic Color keys remain unresolved with exact key and expression provenance',
+    dynamicColor?.kind === 'dynamic-reference'
+      && dynamicColor.resolution === 'unresolved'
+      && dynamicColor.base === 'Color'
+      && (dynamicColor.key as { expression?: string } | undefined)?.expression === 'key'
+      && exactProbeSource(colorSource, dynamicColor, 'Color[key]'),
+    detail(dynamicColor));
+  check('conditional or logical color expressions remain unresolved as whole expressions',
+    conditionalColor?.kind === 'conditional'
+      && conditionalColor.resolution === 'unresolved'
+      && conditionalColor.operator === 'or'
+      && exactProbeSource(colorSource, conditionalColor, '(flag and Color["branch.id"]) or makeColor()'),
+    detail(conditionalColor));
+  check('function-produced colors remain unresolved with exact call provenance',
+    functionColor?.kind === 'function-call'
+      && functionColor.resolution === 'unresolved'
+      && functionColor.calleeExpression === 'makeColor'
+      && exactProbeSource(colorSource, functionColor, 'makeColor()')
+      && iconColor?.kind === 'function-call'
+      && iconColor.calleeExpression === 'makeColor',
+    detail({ functionColor, iconColor }));
+  check('ordinary scalar color spelling remains backward-compatible and source-located',
+    scalarColor?.kind === 'scalar'
+      && scalarColor.status === 'static'
+      && scalarColor.type === 'string'
+      && scalarColor.value === 'white'
+      && exactProbeSource(colorSource, scalarColor, '"white"')
+      && property(buttonColorCall, 'highlightColor')?.value.value === 'white',
+    detail({ scalarColor, value: property(buttonColorCall, 'highlightColor')?.value }));
+
+  const malformedColorSource = [
+    'local malformedMenu = { name = "Malformed", layer = 1 }',
+    'local malformedFrame = Helper.createFrameHandle(malformedMenu, {})',
+    'local malformedTable = malformedFrame:addTable(1, {})',
+    'local malformedRow = malformedTable:addRow(true, {})',
+    'local partial = { r = 1, g = 2, b = 3 }',
+    'local mutated = { r = 1, g = 2, b = 3, a = 4 }',
+    'local validAlias = { r = 1, g = 2, b = 3, a = 4 }',
+    'local inlineOptions = { color = { r = 1, g = 2, b = 3, a = 4 } }',
+    'mutated.r = 9',
+    'inlineOptions.color.r = 9',
+    'malformedRow[1]:createText("partial", { color = partial, cellBGColor = { r = 1, g = 2, b = 3, a = 4, extra = 5 } })',
+    'malformedRow[2]:createButton({ bgColor = { r = 1, g = 2, b = 3, a = 4, r = 8 } })',
+    'malformedRow[3]:createIcon("mutated", { color = mutated })',
+    'malformedRow[4]:createIcon("alias", { color = validAlias })',
+    'malformedRow[5]:createText("inline", inlineOptions)',
+    'malformedRow[6]:createEditBox({ bgColor = { r = 1, g = dynamicValue, b = 3, a = 4 } })'
+  ].join('\n');
+  const malformedColorModel = buildX4UiCallModel(input(malformedColorSource, 'selftest/color-expression-negatives.lua'));
+  const malformedText = call(malformedColorModel, 'createText');
+  const malformedTextCalls = malformedColorModel.calls.filter(candidate => candidate.name === 'createText');
+  const malformedButton = call(malformedColorModel, 'createButton');
+  const malformedIconCalls = malformedColorModel.calls.filter(candidate => candidate.name === 'createIcon');
+  const malformedEdit = call(malformedColorModel, 'createEditBox');
+  const negativeColors = [
+    colorExpression(malformedColorModel, malformedText, 'color'),
+    colorExpression(malformedColorModel, malformedText, 'cellBGColor'),
+    colorExpression(malformedColorModel, malformedButton, 'bgColor'),
+    colorExpression(malformedColorModel, malformedIconCalls[0], 'color'),
+    colorExpression(malformedColorModel, malformedTextCalls[1], 'color'),
+    colorExpression(malformedColorModel, malformedEdit, 'bgColor')
+  ];
+  check('partial, duplicate, unknown-key, non-static, and mutated literal tables fail closed',
+    negativeColors.every(candidate => candidate?.kind === 'unresolved'
+      && candidate.resolution === 'unresolved'
+      && typeof candidate.reason === 'string'
+      && candidate.source.start.offset < candidate.source.end.offset),
+    detail(negativeColors));
+
+  const validAliasColor = colorExpression(malformedColorModel, malformedIconCalls[1], 'color');
+  const validAliasExpression = 'validAlias';
+  check('unmutated local literal aliases preserve source-owned color evidence',
+    validAliasColor?.kind === 'literal-table'
+      && exactProbeSource(malformedColorSource, validAliasColor, validAliasExpression)
+      && validAliasColor.expression === validAliasExpression,
+    detail(validAliasColor));
+
+  const tokSource = [
+    'local key = runtimeKey',
+    'local flag = true',
+    'local TOK = {',
+    '  frame = { r = 0.11, g = 0.12, b = 0.13, a = 0.14 },',
+    '  table = { r = 0.21, g = 0.22, b = 0.23, a = 0.24 },',
+    '  nested = { text = { r = 0.31, g = 0.32, b = 0.33, a = 0.34 } },',
+    '  cell = { r = 0.41, g = 0.42, b = 0.43, a = 0.44 },',
+    '  button = { r = 0.51, g = 0.52, b = 0.53, a = 0.54 },',
+    '  highlight = { r = 0.61, g = 0.62, b = 0.63, a = 0.64 },',
+    '  border = { r = 0.71, g = 0.72, b = 0.73, a = 0.74 },',
+    '  edit = { r = 0.81, g = 0.82, b = 0.83, a = 0.84 },',
+    '  icon = { r = 0.91, g = 0.92, b = 0.93, a = 0.94 }',
+    '}',
+    'local stableAlias = TOK.button',
+    'local tokMenu = { name = "AIC-shaped", layer = 1 }',
+    'local tokFrame = Helper.createFrameHandle(tokMenu, { backgroundColor = TOK.frame })',
+    'local tokTable = tokFrame:addTable(1, { backgroundColor = TOK["table"] })',
+    'local tokRow = tokTable:addRow(true, {})',
+    'tokRow[1]:createText("member", { color = TOK.nested.text, cellBGColor = TOK["cell"] })',
+    'tokRow[2]:createButton({ bgColor = stableAlias, highlightColor = TOK["highlight"], borderColor = TOK.border })',
+    'tokRow[3]:createEditBox({ bgColor = TOK.edit })',
+    'tokRow[4]:createIcon("icon", { color = TOK.icon })',
+    'local beforeMutation = { r = 1.01, g = 1.02, b = 1.03, a = 1.04 }',
+    'tokRow[5]:createIcon("before", { color = beforeMutation })',
+    'beforeMutation.r = 1.99',
+    'tokRow[6]:createIcon("after", { color = beforeMutation })',
+    'local aliasMutation = TOK.button',
+    'aliasMutation.g = 1.98',
+    'tokRow[7]:createIcon("alias-mutation", { color = aliasMutation })',
+    'local branchMutation = { r = 2.01, g = 2.02, b = 2.03, a = 2.04 }',
+    'if flag then branchMutation.r = 2.99 end',
+    'tokRow[8]:createIcon("branch", { color = branchMutation })',
+    'local dynamicMutation = { r = 3.01, g = 3.02, b = 3.03, a = 3.04 }',
+    'dynamicMutation[key] = 3.99',
+    'tokRow[9]:createIcon("dynamic", { color = dynamicMutation })',
+    'local partialTOK = { r = 4.01, g = 4.02, b = 4.03 }',
+    'tokRow[10]:createText("partial", { color = partialTOK })',
+    'local duplicateTOK = { r = 5.01, g = 5.02, b = 5.03, a = 5.04, r = 5.99 }',
+    'tokRow[11]:createText("duplicate", { color = duplicateTOK })',
+    'local unknownTOK = { r = 6.01, g = 6.02, b = 6.03, a = 6.04, extra = 6.99 }',
+    'tokRow[12]:createText("unknown", { color = unknownTOK })',
+    'local nonStaticTOK = { r = key, g = 7.02, b = 7.03, a = 7.04 }',
+    'tokRow[13]:createText("non-static", { color = nonStaticTOK })',
+    'local dynamicIndex = runtimeKey',
+    'tokRow[14]:createIcon("dynamic-index", { color = TOK[dynamicIndex] })',
+    'local Color = { ["local.id"] = TOK.frame }',
+    'tokRow[15]:createIcon("shadowed-color", { color = Color["local.id"] })',
+    'Color = TOK',
+    'tokRow[16]:createIcon("reassigned-color", { color = Color["frame"] })'
+  ].join('\n');
+  const tokModel = buildX4UiCallModel(input(tokSource, 'selftest/aic-shaped-tok.lua'));
+  const tokFrameCall = callContaining(tokModel, tokSource, 'createFrameHandle', 'backgroundColor = TOK.frame');
+  const tokTableCall = callContaining(tokModel, tokSource, 'addTable', 'backgroundColor = TOK["table"]');
+  const tokTextCall = callContaining(tokModel, tokSource, 'createText', 'color = TOK.nested.text');
+  const tokButtonCall = callContaining(tokModel, tokSource, 'createButton', 'bgColor = stableAlias');
+  const tokEditCall = callContaining(tokModel, tokSource, 'createEditBox', 'bgColor = TOK.edit');
+  const tokIconCall = callContaining(tokModel, tokSource, 'createIcon', 'color = TOK.icon');
+  const tokLiteralSpecs = [
+    { callRecord: tokFrameCall, propertyName: 'backgroundColor', use: 'TOK.frame', declaration: '{ r = 0.11, g = 0.12, b = 0.13, a = 0.14 }', channels: [0.11, 0.12, 0.13, 0.14] as [number, number, number, number] },
+    { callRecord: tokTableCall, propertyName: 'backgroundColor', use: 'TOK["table"]', declaration: '{ r = 0.21, g = 0.22, b = 0.23, a = 0.24 }', channels: [0.21, 0.22, 0.23, 0.24] as [number, number, number, number] },
+    { callRecord: tokTextCall, propertyName: 'color', use: 'TOK.nested.text', declaration: '{ r = 0.31, g = 0.32, b = 0.33, a = 0.34 }', channels: [0.31, 0.32, 0.33, 0.34] as [number, number, number, number] },
+    { callRecord: tokTextCall, propertyName: 'cellBGColor', use: 'TOK["cell"]', declaration: '{ r = 0.41, g = 0.42, b = 0.43, a = 0.44 }', channels: [0.41, 0.42, 0.43, 0.44] as [number, number, number, number] },
+    { callRecord: tokButtonCall, propertyName: 'bgColor', use: 'stableAlias', declaration: '{ r = 0.51, g = 0.52, b = 0.53, a = 0.54 }', channels: [0.51, 0.52, 0.53, 0.54] as [number, number, number, number] },
+    { callRecord: tokButtonCall, propertyName: 'highlightColor', use: 'TOK["highlight"]', declaration: '{ r = 0.61, g = 0.62, b = 0.63, a = 0.64 }', channels: [0.61, 0.62, 0.63, 0.64] as [number, number, number, number] },
+    { callRecord: tokButtonCall, propertyName: 'borderColor', use: 'TOK.border', declaration: '{ r = 0.71, g = 0.72, b = 0.73, a = 0.74 }', channels: [0.71, 0.72, 0.73, 0.74] as [number, number, number, number] },
+    { callRecord: tokEditCall, propertyName: 'bgColor', use: 'TOK.edit', declaration: '{ r = 0.81, g = 0.82, b = 0.83, a = 0.84 }', channels: [0.81, 0.82, 0.83, 0.84] as [number, number, number, number] },
+    { callRecord: tokIconCall, propertyName: 'color', use: 'TOK.icon', declaration: '{ r = 0.91, g = 0.92, b = 0.93, a = 0.94 }', channels: [0.91, 0.92, 0.93, 0.94] as [number, number, number, number] }
+  ];
+  const tokLiteralEntries = tokLiteralSpecs.map(spec => ({
+    ...spec,
+    entry: colorEntry(tokModel, spec.callRecord, spec.propertyName),
+    expression: colorExpression(tokModel, spec.callRecord, spec.propertyName)
+  }));
+  check('AIC-shaped TOK member/index uses cover all six color-bearing properties with declaration-owned evidence',
+    new Set(tokLiteralSpecs.map(spec => spec.propertyName)).size === 6
+      && tokLiteralEntries.every(spec => literalEvidence(
+        tokSource,
+        spec.expression,
+        spec.use,
+        spec.declaration,
+        spec.channels,
+      ))
+      && tokLiteralEntries.every(spec => spec.entry?.source.start.offset === spec.expression?.source.start.offset
+        && spec.entry?.source.end.offset === spec.expression?.source.end.offset),
+    detail(tokLiteralEntries));
+
+  const beforeMutationCall = callContaining(tokModel, tokSource, 'createIcon', 'color = beforeMutation');
+  const afterMutationCall = callContaining(tokModel, tokSource, 'createIcon', 'color = beforeMutation', (beforeMutationCall?.source.end.offset || 0) + 1);
+  const aliasMutationCall = callContaining(tokModel, tokSource, 'createIcon', 'color = aliasMutation');
+  const branchMutationCall = callContaining(tokModel, tokSource, 'createIcon', 'color = branchMutation');
+  const dynamicMutationCall = callContaining(tokModel, tokSource, 'createIcon', 'color = dynamicMutation');
+  const partialTOKCall = callContaining(tokModel, tokSource, 'createText', 'color = partialTOK');
+  const duplicateTOKCall = callContaining(tokModel, tokSource, 'createText', 'color = duplicateTOK');
+  const unknownTOKCall = callContaining(tokModel, tokSource, 'createText', 'color = unknownTOK');
+  const nonStaticTOKCall = callContaining(tokModel, tokSource, 'createText', 'color = nonStaticTOK');
+  const dynamicIndexCall = callContaining(tokModel, tokSource, 'createIcon', 'color = TOK[dynamicIndex]');
+  const shadowedColorCall = callContaining(tokModel, tokSource, 'createIcon', 'color = Color["local.id"]');
+  const reassignedColorCall = callContaining(tokModel, tokSource, 'createIcon', 'color = Color["frame"]');
+  const mutationNegativeExpressions = [
+    colorExpression(tokModel, afterMutationCall, 'color'),
+    colorExpression(tokModel, aliasMutationCall, 'color'),
+    colorExpression(tokModel, branchMutationCall, 'color'),
+    colorExpression(tokModel, dynamicMutationCall, 'color'),
+    colorExpression(tokModel, partialTOKCall, 'color'),
+    colorExpression(tokModel, duplicateTOKCall, 'color'),
+    colorExpression(tokModel, unknownTOKCall, 'color'),
+    colorExpression(tokModel, nonStaticTOKCall, 'color'),
+    colorExpression(tokModel, dynamicIndexCall, 'color'),
+    colorExpression(tokModel, shadowedColorCall, 'color'),
+    colorExpression(tokModel, reassignedColorCall, 'color')
+  ];
+  check('use-before-mutation stays exact while pre-use mutation and unsupported TOK/Color shapes remain unresolved',
+    literalEvidence(tokSource, colorExpression(tokModel, beforeMutationCall, 'color'), 'beforeMutation', '{ r = 1.01, g = 1.02, b = 1.03, a = 1.04 }', [1.01, 1.02, 1.03, 1.04])
+      && mutationNegativeExpressions.every(candidate => candidate?.kind === 'unresolved'
+        && candidate.resolution === 'unresolved'
+        && typeof candidate.reason === 'string'
+        && candidate.source.start.offset < candidate.source.end.offset)
+      && exactProbeSource(tokSource, colorExpression(tokModel, dynamicIndexCall, 'color'), 'TOK[dynamicIndex]')
+      && exactProbeSource(tokSource, colorExpression(tokModel, shadowedColorCall, 'color'), 'Color["local.id"]')
+      && exactProbeSource(tokSource, colorExpression(tokModel, reassignedColorCall, 'color'), 'Color["frame"]'),
+    detail({ before: colorExpression(tokModel, beforeMutationCall, 'color'), negatives: mutationNegativeExpressions }));
+
+  const colorEvidence = [literalColor, symbolicColor, dynamicColor, conditionalColor, functionColor, scalarColor, explicitGlowColor, editColor, iconColor];
+  const colorSidecar = colorModel.colorExpressions;
+  const repeatedColorModel = buildX4UiCallModel(input(colorSource, 'selftest/color-expressions.lua'));
+  const repeatedLiteralColor = colorExpression(repeatedColorModel, call(repeatedColorModel, 'createFrameHandle'), 'backgroundColor');
+  const colorProjections = colorModel.calls.flatMap(candidate => candidate.semantics.properties || []);
+  const ownershipKeys = colorSidecar.map(entry => [
+    entry.callName,
+    entry.propertyName,
+    entry.callSource.start.offset,
+    entry.callSource.end.offset,
+    entry.source.start.offset,
+    entry.source.end.offset,
+  ].join(':'));
+  check('color sidecar is the sole enumerable closed authority with frozen serializable deterministic evidence',
+    colorEvidence.every(candidate => closedFrozenData(candidate))
+      && JSON.stringify(colorModel) === JSON.stringify(repeatedColorModel)
+      && JSON.stringify(literalColor) === JSON.stringify(repeatedLiteralColor)
+      && colorSidecar.length === 9
+      && closedFrozenData(colorSidecar)
+      && colorSidecar.every(entry => closedFrozenData(entry)
+        && entry.source.start.offset === entry.colorExpression.source.start.offset
+        && entry.source.end.offset === entry.colorExpression.source.end.offset)
+      && new Set(ownershipKeys).size === ownershipKeys.length
+      && colorProjections.every(projection => {
+        const reflected = Reflect.ownKeys(projection);
+        return JSON.stringify(reflected) === JSON.stringify(Object.keys(projection))
+          && !reflected.includes('colorExpression');
+      })
+      && JSON.stringify(colorSidecar) === JSON.stringify(JSON.parse(JSON.stringify(colorSidecar)))
+      && colorSidecar.some(entry => entry.propertyName === 'backgroundColor'
+        && entry.callName === 'createFrameHandle'
+        && entry.colorExpression.kind === 'literal-table')
+      && colorSource === colorSourceBefore
+      && colorModel.file.text === colorSource,
+    detail({ colorEvidence, literalColor, repeatedLiteralColor, colorSidecar, ownershipKeys }));
 
   const spanCell = setSpan?.semantics.cell?.reference?.path;
   const buttonCell = button?.semantics.cell?.reference?.path;
@@ -447,6 +902,314 @@ function run(): { allPassed: boolean; pass: boolean; passed: number; total: numb
       && emptyLoopPaths.every(path => path.length === 0 && Object.isFrozen(path))
       && new Set(emptyLoopPaths).size === 1,
     detail(emptyLoopPaths));
+
+  const provenanceSource = [
+    'table:addRow(false, {}):createText("chain", {});',
+    'local localRow = table:addRow(false, {})',
+    'assigned = table:addRow(false, {})',
+    'consume(table:addRow(false, {}))'
+  ].join('\n');
+  const provenanceModel = buildX4UiCallModel(input(provenanceSource, 'selftest/statement-provenance.lua'));
+  const chainLine = 'table:addRow(false, {}):createText("chain", {});';
+  const chainStart = provenanceSource.indexOf(chainLine);
+  const chainExpression = chainLine.slice(0, -1);
+  const chainEnd = chainStart + chainExpression.length;
+  const chainCalls = provenanceModel.calls.filter(candidate => {
+    const statement = enclosingStatement(candidate);
+    return statement?.source.start.offset === chainStart && statement.source.end.offset === chainEnd;
+  });
+  const chainStatement = enclosingStatement(chainCalls.find(candidate => candidate.name === 'createText'));
+  check('direct and fluent calls share exact immutable standalone-call provenance',
+    JSON.stringify(chainCalls.map(candidate => candidate.name)) === JSON.stringify(['addRow', 'createText'])
+      && chainStatement?.source.file === 'selftest/statement-provenance.lua'
+      && chainStatement.source.sourcePath === 'fixture://selftest/statement-provenance.lua'
+      && chainStatement.kind === 'call'
+      && chainStatement.source.start.offset === chainStart
+      && chainStatement.source.end.offset === chainEnd
+      && chainStatement.source.start.line === 1
+      && chainStatement.source.start.column === 0
+      && chainStatement.source.end.line === 1
+      && chainStatement.source.end.column === chainExpression.length
+      && provenanceSource.slice(chainStatement.source.start.offset, chainStatement.source.end.offset) === chainExpression
+      && provenanceSource[chainStatement.source.end.offset] === ';'
+      && chainCalls.every(candidate => {
+        const statement = enclosingStatement(candidate);
+        return statement
+          && statement.source.start.offset <= candidate.source.start.offset
+          && statement.source.end.offset >= candidate.source.end.offset
+          && Object.isFrozen(statement)
+          && Object.isFrozen(statement.source)
+          && Object.isFrozen(statement.source.start)
+          && Object.isFrozen(statement.source.end);
+      })
+      && enclosingStatement(chainCalls.find(candidate => candidate.name === 'addRow'))?.isStandaloneCallStatementRoot === false
+      && chainStatement.isStandaloneCallStatementRoot === true,
+    detail({ chainCalls, chainStatement }));
+
+  const localLine = 'local localRow = table:addRow(false, {})';
+  const assignmentLine = 'assigned = table:addRow(false, {})';
+  const argumentLine = 'consume(table:addRow(false, {}))';
+  const localCall = callAt(provenanceModel, provenanceSource, 'table:addRow(false, {})', provenanceSource.indexOf(localLine));
+  const assignmentCall = callAt(provenanceModel, provenanceSource, 'table:addRow(false, {})', provenanceSource.indexOf(assignmentLine));
+  const argumentCall = callAt(provenanceModel, provenanceSource, 'table:addRow(false, {})', provenanceSource.indexOf(argumentLine));
+  const localStatement = enclosingStatement(localCall);
+  const assignmentStatement = enclosingStatement(assignmentCall);
+  const argumentStatement = enclosingStatement(argumentCall);
+  check('initializers and nested call arguments are never classified as standalone',
+    localStatement?.kind === 'local'
+      && assignmentStatement?.kind === 'assignment'
+      && argumentStatement?.kind === 'call'
+      && localStatement.isStandaloneCallStatementRoot === false
+      && assignmentStatement.isStandaloneCallStatementRoot === false
+      && argumentStatement.isStandaloneCallStatementRoot === false
+      && provenanceSource.slice(localStatement.source.start.offset, localStatement.source.end.offset) === localLine
+      && provenanceSource.slice(assignmentStatement.source.start.offset, assignmentStatement.source.end.offset) === assignmentLine
+      && provenanceSource.slice(argumentStatement.source.start.offset, argumentStatement.source.end.offset) === argumentLine
+      && new Set([chainStart, localStatement.source.start.offset, assignmentStatement.source.start.offset, argumentStatement.source.start.offset]).size === 4,
+    detail({ localStatement, assignmentStatement, argumentStatement }));
+
+  const contextSource = [
+    'local table = {}',
+    'local function returns()',
+    '  return table:addRow(false, {})',
+    'end',
+    'if table:addRow(false, {}) then',
+    '  table:createText("branch", {})',
+    'end',
+    'while table:addRow(false, {}) do',
+    '  table:createText("loop", {})',
+    'end',
+    'for index = table:scaleX(1, true), table:scaleX(2, true) do',
+    '  table:createText("numeric", {})',
+    'end',
+    'for key, item in pairs(table:addRow(false, {})) do',
+    '  table:createText("generic", {})',
+    'end',
+    'consume(table:addRow(false, {}))',
+    'row[1].handlers.onClick = function()',
+    '  table:setText("handler", {})',
+    'end'
+  ].join('\n');
+  const contextModel = buildX4UiCallModel(input(contextSource, 'selftest/statement-contexts.lua'));
+  const contextExpectations = [
+    { line: '  return table:addRow(false, {})', expression: 'table:addRow(false, {})', kind: 'return', standalone: false },
+    { line: 'if table:addRow(false, {}) then', expression: 'table:addRow(false, {})', kind: 'if', standalone: false },
+    { line: '  table:createText("branch", {})', expression: 'table:createText("branch", {})', kind: 'call', standalone: true },
+    { line: 'while table:addRow(false, {}) do', expression: 'table:addRow(false, {})', kind: 'while', standalone: false },
+    { line: '  table:createText("loop", {})', expression: 'table:createText("loop", {})', kind: 'call', standalone: true },
+    { line: 'for index = table:scaleX(1, true), table:scaleX(2, true) do', expression: 'table:scaleX(1, true)', kind: 'numeric-for', standalone: false },
+    { line: 'for index = table:scaleX(1, true), table:scaleX(2, true) do', expression: 'table:scaleX(2, true)', kind: 'numeric-for', standalone: false },
+    { line: 'for key, item in pairs(table:addRow(false, {})) do', expression: 'table:addRow(false, {})', kind: 'generic-for', standalone: false },
+    { line: '  table:createText("generic", {})', expression: 'table:createText("generic", {})', kind: 'call', standalone: true },
+    { line: 'consume(table:addRow(false, {}))', expression: 'table:addRow(false, {})', kind: 'call', standalone: false },
+    { line: '  table:setText("handler", {})', expression: 'table:setText("handler", {})', kind: 'call', standalone: true }
+  ];
+  const contextResults = contextExpectations.map(expectation => {
+    const lineStart = contextSource.indexOf(expectation.line);
+    const candidate = callAt(contextModel, contextSource, expectation.expression, lineStart);
+    const statement = enclosingStatement(candidate);
+    return {
+      expectation,
+      candidate,
+      statement,
+      statementText: statement ? contextSource.slice(statement.source.start.offset, statement.source.end.offset) : undefined
+    };
+  });
+  check('return conditions loop bounds iterators arguments and handlers retain local statement provenance',
+    contextResults.every(result => result.candidate && result.statement
+      && result.statement.kind === result.expectation.kind
+      && result.statement.isStandaloneCallStatementRoot === result.expectation.standalone
+      && result.statementText?.includes(result.expectation.expression)
+      && result.statement.source.start.offset <= result.candidate.source.start.offset
+      && result.statement.source.end.offset >= result.candidate.source.end.offset)
+      && contextResults[0].candidate?.context.kind === 'function'
+      && contextResults[2].candidate?.context.branchPath.length === 1
+      && contextResults[4].candidate?.context.loopPath.length === 1
+      && contextResults[7].statementText?.startsWith('for key, item in pairs(')
+      && contextResults[10].candidate?.context.kind === 'handler',
+    detail(contextResults));
+
+  const crlfExpression = 'table:addRow(false, {})';
+  const crlfSource = ['-- 😀', `${crlfExpression};`, 'table:createText("crlf", {})'].join('\r\n');
+  const crlfModel = buildX4UiCallModel(input(crlfSource, 'selftest/crlf-provenance.lua'));
+  const crlfCall = callAt(crlfModel, crlfSource, crlfExpression);
+  const crlfStatement = enclosingStatement(crlfCall);
+  const crlfStart = crlfSource.indexOf(crlfExpression);
+  const crlfEnd = crlfStart + crlfExpression.length;
+  check('LF and CRLF locations remain UTF-16 exact and semicolon-bounded',
+    crlfCall?.source.start.offset === crlfStart
+      && crlfCall.source.end.offset === crlfEnd
+      && crlfStatement?.source.start.offset === crlfStart
+      && crlfStatement.source.end.offset === crlfEnd
+      && crlfStatement.source.start.line === 2
+      && crlfStatement.source.start.column === 0
+      && crlfStatement.source.end.line === 2
+      && crlfStatement.source.end.column === crlfExpression.length
+      && crlfSource.slice(crlfStatement.source.start.offset, crlfStatement.source.end.offset) === crlfExpression
+      && crlfSource[crlfEnd] === ';'
+      && crlfStart === '-- 😀'.length + 2
+      && '😀'.length === 2,
+    detail({ crlfCall, crlfStatement, crlfStart, crlfEnd }));
+
+  const deletionExpression = 'table:addRow(false, {})';
+  const followingExpression = 'table:createText("next", {})';
+  const deletionCases = [
+    { name: 'immediate semicolon', source: `${deletionExpression};`, suffix: ';', terminator: 'semicolon', hasFollowing: false },
+    { name: 'spaced semicolon', source: `${deletionExpression} \t;`, suffix: ' \t;', terminator: 'semicolon', hasFollowing: false },
+    { name: 'no semicolon', source: `${deletionExpression}\n${followingExpression}`, suffix: '', terminator: 'none', hasFollowing: true },
+    { name: 'same-line next statement', source: `${deletionExpression}; ${followingExpression}`, suffix: ';', terminator: 'semicolon', hasFollowing: true },
+    { name: 'doubled semicolon', source: `${deletionExpression};;`, suffix: ';', terminator: 'semicolon', hasFollowing: false },
+    { name: 'semicolon then trailing comment', source: `${deletionExpression}; -- keep;\n${followingExpression}`, suffix: ';', terminator: 'semicolon', hasFollowing: true },
+    { name: 'comment before semicolon', source: `${deletionExpression} -- keep;\n${followingExpression}`, suffix: '', terminator: 'none', hasFollowing: true },
+    { name: 'LF', source: `-- prefix\n${deletionExpression};\n${followingExpression}`, suffix: ';', terminator: 'semicolon', hasFollowing: true },
+    { name: 'CRLF', source: `-- prefix\r\n${deletionExpression} \t;\r\n${followingExpression}`, suffix: ' \t;', terminator: 'semicolon', hasFollowing: true },
+    { name: 'astral prefix', source: `-- 😀\n${deletionExpression};\n${followingExpression}`, suffix: ';', terminator: 'semicolon', hasFollowing: true }
+  ] as const;
+  const deletionAnalyses = deletionCases.map(testCase => {
+    const model = buildX4UiCallModel(input(testCase.source, `selftest/deletion-${testCase.name}.lua`));
+    const candidate = callAt(model, testCase.source, deletionExpression);
+    const statement = enclosingStatement(candidate);
+    const astStart = testCase.source.indexOf(deletionExpression);
+    return { testCase, model, candidate, statement, astStart, astEnd: astStart + deletionExpression.length };
+  });
+  const deletionBoundaryResults = deletionAnalyses.map(({ testCase, candidate, statement, astStart, astEnd }) => {
+    const deletion = statement?.deletionSource;
+    const astText = statement ? testCase.source.slice(statement.source.start.offset, statement.source.end.offset) : '';
+    const deletionText = deletion ? testCase.source.slice(deletion.start.offset, deletion.end.offset) : '';
+    return {
+      name: testCase.name,
+      pass: Boolean(candidate
+        && statement
+        && statement.source.start.offset === astStart
+        && statement.source.end.offset === astEnd
+        && astText === deletionExpression
+        && deletion
+        && deletion.start.offset === astStart
+        && deletion.start.line === statement.source.start.line
+        && deletion.start.column === statement.source.start.column
+        && deletion.end.offset === astEnd + testCase.suffix.length
+        && deletion.end.line === statement.source.end.line
+        && deletion.end.column === statement.source.end.column + testCase.suffix.length
+        && statement.terminator === testCase.terminator
+        && deletionText === `${deletionExpression}${testCase.suffix}`
+        && (testCase.terminator === 'none' ? sameSourceRange(statement.source, deletion) : deletion.end.offset > statement.source.end.offset))
+    };
+  });
+  check('statement deletion provenance owns only bounded horizontal trivia plus the first semicolon',
+    deletionBoundaryResults.every(result => result.pass),
+    detail(deletionBoundaryResults));
+
+  const deletionReparseResults = deletionAnalyses.map(({ testCase, statement, astStart }) => {
+    const deletion = statement?.deletionSource;
+    if (!statement || !deletion) {
+      return { name: testCase.name, pass: false, reason: 'missing deletion provenance' };
+    }
+    const removed = testCase.source.slice(0, deletion.start.offset) + testCase.source.slice(deletion.end.offset);
+    let reparsed: ReturnType<typeof buildX4UiCallModel> | undefined;
+    let threw = false;
+    try {
+      reparsed = buildX4UiCallModel(input(removed, `selftest/reparsed-${testCase.name}.lua`));
+    } catch {
+      threw = true;
+    }
+    const selectedRootGone = !reparsed?.calls.some(callRecord =>
+      callRecord.name === 'addRow'
+        && removed.slice(callRecord.source.start.offset, callRecord.source.end.offset) === deletionExpression);
+    const followingCallPreserved = !testCase.hasFollowing || Boolean(reparsed?.calls.some(callRecord =>
+      callRecord.name === 'createText'
+        && removed.slice(callRecord.source.start.offset, callRecord.source.end.offset) === followingExpression));
+    const outsideRangeExact = removed.slice(0, astStart) === testCase.source.slice(0, astStart)
+      && removed.slice(astStart) === testCase.source.slice(deletion.end.offset);
+    const specifiedTriviaPreserved = testCase.name === 'doubled semicolon'
+      ? removed.startsWith(';')
+      : testCase.name === 'semicolon then trailing comment' || testCase.name === 'comment before semicolon'
+        ? removed.includes('-- keep;')
+        : testCase.name === 'no semicolon'
+          ? removed.startsWith('\n')
+          : testCase.name === 'LF'
+            ? removed.includes('\n')
+            : testCase.name === 'CRLF'
+              ? removed.includes('\r\n')
+              : true;
+    return {
+      name: testCase.name,
+      pass: statement.isStandaloneCallStatementRoot
+        && !threw
+        && reparsed?.parsed === true
+        && selectedRootGone
+        && followingCallPreserved
+        && outsideRangeExact
+        && specifiedTriviaPreserved,
+      removed
+    };
+  });
+  check('standalone deletion ranges reparse after removing exactly the selected root and preserve outside bytes',
+    deletionReparseResults.every(result => result.pass),
+    detail(deletionReparseResults));
+
+  const fluentSource = `${deletionExpression}:createText("chain", {});`;
+  const fluentModel = buildX4UiCallModel(input(fluentSource, 'selftest/fluent-deletion.lua'));
+  const fluentInner = callAt(fluentModel, fluentSource, deletionExpression);
+  const fluentOuter = fluentModel.calls.find(candidate => candidate.name === 'createText');
+  const fluentInnerStatement = enclosingStatement(fluentInner);
+  const fluentOuterStatement = enclosingStatement(fluentOuter);
+  check('fluent inner and outer calls share AST/deletion ranges while only the outer root is standalone',
+    fluentInnerStatement !== undefined
+      && fluentOuterStatement !== undefined
+      && sameSourceRange(fluentInnerStatement.source, fluentOuterStatement.source)
+      && sameSourceRange(fluentInnerStatement.deletionSource, fluentOuterStatement.deletionSource)
+      && fluentInnerStatement.isStandaloneCallStatementRoot === false
+      && fluentOuterStatement.isStandaloneCallStatementRoot === true
+      && fluentOuterStatement.terminator === 'semicolon'
+      && fluentSource.slice(fluentOuterStatement.source.start.offset, fluentOuterStatement.source.end.offset) === fluentSource.slice(0, -1)
+      && fluentSource.slice(fluentOuterStatement.deletionSource.start.offset, fluentOuterStatement.deletionSource.end.offset) === fluentSource,
+    detail({ fluentInnerStatement, fluentOuterStatement }));
+
+  const nonStandaloneContextStatements = contextResults
+    .map(result => result.statement)
+    .filter((statement): statement is EnclosingStatementProbe => Boolean(statement && !statement.isStandaloneCallStatementRoot));
+  check('all non-standalone contexts retain exact AST/deletion ranges and do not fabricate terminators',
+    nonStandaloneContextStatements.length > 0
+      && nonStandaloneContextStatements.every(statement =>
+        statement.terminator === 'none' && sameSourceRange(statement.source, statement.deletionSource))
+      && [localStatement, assignmentStatement, argumentStatement].every(statement =>
+        Boolean(statement
+          && !statement.isStandaloneCallStatementRoot
+          && statement.terminator === 'none'
+          && sameSourceRange(statement.source, statement.deletionSource))),
+    detail({ nonStandaloneContextStatements, localStatement, assignmentStatement, argumentStatement }));
+
+  const deletionProvenanceFrozen = deletionAnalyses.every(({ statement }) => Boolean(statement
+    && Object.isFrozen(statement)
+    && frozenSourceLocation(statement.source)
+    && frozenSourceLocation(statement.deletionSource)));
+  const repeatedDeletionModel = buildX4UiCallModel(input(deletionCases[8].source, 'selftest/deletion-CRLF.lua'));
+  check('deletion provenance locations are deeply frozen and deterministic',
+    deletionProvenanceFrozen
+      && JSON.stringify(deletionAnalyses[8].model) === JSON.stringify(repeatedDeletionModel),
+    detail({ deletionProvenanceFrozen, first: deletionAnalyses[8].model, repeated: repeatedDeletionModel }));
+
+  const nulSource = `${deletionExpression}\u0000`;
+  let nulModel: ReturnType<typeof buildX4UiCallModel> | undefined;
+  let nulThrew = false;
+  try {
+    nulModel = buildX4UiCallModel(input(nulSource, 'selftest/nul-provenance.lua'));
+  } catch {
+    nulThrew = true;
+  }
+  check('malformed and NUL source fail closed without throwing or fabricating a deletion range',
+    !nulThrew
+      && nulModel?.parsed === false
+      && nulModel.calls.length === 0
+      && nulModel.verificationGaps.some(gap => gap.category === 'parse'),
+    detail({ nulThrew, nulModel }));
+
+  const malformedProvenance = buildX4UiCallModel(input('function broken(', 'selftest/malformed-provenance.lua'));
+  check('malformed or unlocatable source fails closed without a fabricated call range',
+    !malformedProvenance.parsed
+      && malformedProvenance.calls.length === 0
+      && malformedProvenance.verificationGaps.some(gap => gap.category === 'parse'),
+    detail(malformedProvenance));
 
   const repeatedLoops = buildX4UiCallModel(input(loopSource, 'selftest/loops.lua'));
   const loopPathsFrozen = loops.records.every(record => Object.isFrozen(record.context.loopPath)

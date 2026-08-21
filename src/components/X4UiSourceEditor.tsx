@@ -30,8 +30,11 @@ import {
   X4_UI_CORPUS_FILE_URL,
   X4_UI_CORPUS_MANIFEST_URL,
   X4_UI_CORPUS_STATUS_URL,
+  isX4UiCorpusCanonicalColorSuccess,
   isX4UiCorpusCanonicalSuccess,
   loadConfiguredX4UiCorpusAssets,
+  loadConfiguredX4UiCorpusColorEvidence,
+  type X4UiCorpusCanonicalColorSuccess,
   type X4UiCorpusCanonicalSuccess,
   type X4UiCorpusTransport,
 } from '../lib/x4UiCorpusAssets';
@@ -51,6 +54,7 @@ import {
   type X4UiCanvasSurfaceFactory,
 } from '../lib/x4UiCanvasRenderer';
 import { KEEP_OUT_PRESETS } from '../lib/x4UiKeepOuts';
+import type { KeepOutCalibrationInput } from '../lib/x4UiKeepOuts';
 
 /** The editor deliberately receives the workspace as an opaque session input. */
 export interface X4UiSourceEditorProps {
@@ -120,6 +124,9 @@ interface CorpusLoadState {
   readonly status: CorpusLoadStatus;
   readonly result: unknown;
   readonly detail: string;
+  readonly colorStatus: CorpusLoadStatus;
+  readonly colorEvidence?: X4UiCorpusCanonicalColorSuccess;
+  readonly colorDetail: string;
 }
 
 interface SourceCandidateView {
@@ -214,6 +221,8 @@ const EMPTY_CORPUS_STATE: CorpusLoadState = Object.freeze({
   status: 'idle',
   result: null,
   detail: 'Configured corpus has not loaded yet.',
+  colorStatus: 'idle',
+  colorDetail: 'Configured canonical-default color evidence has not loaded yet.',
 });
 
 const asRecord = (value: unknown): ValueRecord | null => (
@@ -313,14 +322,56 @@ const boundedCorpusTransport: X4UiCorpusTransport = async (input, init) => {
   if (typeof globalThis.fetch !== 'function') {
     throw new Error('Configured corpus transport is unavailable in this browser.');
   }
-  return globalThis.fetch(input, { signal: init?.signal });
+  return globalThis.fetch(input, { signal: init?.signal, cache: 'no-store' });
+};
+
+export interface X4UiSourceEditorCorpusEnvelope {
+  readonly core: unknown;
+  readonly color: unknown;
+}
+
+export type X4UiSourceEditorCorpusBranchLoader = (input: {
+  readonly transport: X4UiCorpusTransport;
+  readonly signal: AbortSignal;
+}) => Promise<unknown>;
+
+export interface X4UiSourceEditorCorpusEnvelopeOptions {
+  readonly transport: X4UiCorpusTransport;
+  readonly signal: AbortSignal;
+  readonly coreLoader?: X4UiSourceEditorCorpusBranchLoader;
+  readonly colorLoader?: X4UiSourceEditorCorpusBranchLoader;
+}
+
+const rejectedCorpusLoaderResult = (authority: 'core' | 'color', signal: AbortSignal): unknown => ({
+  ok: false,
+  error: {
+    code: signal.aborted ? 'aborted' : 'internal-error',
+    stage: 'consistency',
+    message: signal.aborted
+      ? `Configured canonical ${authority} loader was aborted.`
+      : `Configured canonical ${authority} loader rejected before producing evidence.`,
+  },
+});
+
+export const loadX4UiSourceEditorCorpusEnvelope = async ({
+  transport,
+  signal,
+  coreLoader,
+  colorLoader,
+}: X4UiSourceEditorCorpusEnvelopeOptions): Promise<X4UiSourceEditorCorpusEnvelope> => {
+  const resolvedCoreLoader = coreLoader ?? ((input: { readonly transport: X4UiCorpusTransport; readonly signal: AbortSignal }) => loadConfiguredX4UiCorpusAssets(input));
+  const resolvedColorLoader = colorLoader ?? ((input: { readonly transport: X4UiCorpusTransport; readonly signal: AbortSignal }) => loadConfiguredX4UiCorpusColorEvidence(input));
+  const corePromise = Promise.resolve().then(() => resolvedCoreLoader({ transport, signal }));
+  const colorPromise = Promise.resolve().then(() => resolvedColorLoader({ transport, signal }));
+  const [core, color] = await Promise.allSettled([corePromise, colorPromise]);
+  return {
+    core: core.status === 'fulfilled' ? core.value : rejectedCorpusLoaderResult('core', signal),
+    color: color.status === 'fulfilled' ? color.value : rejectedCorpusLoaderResult('color', signal),
+  };
 };
 
 const defaultCorpusLoader: X4UiSourceEditorCorpusLoader = ({ signal }) => (
-  loadConfiguredX4UiCorpusAssets({
-    transport: boundedCorpusTransport,
-    signal,
-  })
+  loadX4UiSourceEditorCorpusEnvelope({ transport: boundedCorpusTransport, signal })
 );
 
 const defaultSurfaceFactory: X4UiCanvasSurfaceFactory = (width, height) => {
@@ -331,28 +382,120 @@ const defaultSurfaceFactory: X4UiCanvasSurfaceFactory = (width, height) => {
   return canvas;
 };
 
-const corpusFailure = (value: unknown): { status: Exclude<CorpusLoadStatus, 'idle' | 'loading' | 'canonical'>; detail: string } => {
-  const record = asRecord(value);
-  const failure = asRecord(record?.failure) ?? asRecord(record?.refusal) ?? asRecord(record?.error) ?? {};
-  const code = stringValue(failure.code, stringValue(record?.code, 'refused')).toLowerCase();
-  const detail = stringValue(failure.message, stringValue(record?.message, 'Configured corpus evidence was not accepted.'));
-  if (code === 'offline' || code === 'network' || code === 'file-http' || code === 'manifest-http' || code === 'status-http'
-    || code === 'status-unavailable' || code === 'manifest-unavailable' || code === 'manifest-pending') {
-    return { status: 'unavailable', detail };
+type CorpusFailureStatus = Exclude<CorpusLoadStatus, 'idle' | 'loading' | 'canonical'>;
+
+interface CorpusFailureClassification {
+  readonly status: CorpusFailureStatus;
+  readonly detail: string;
+  readonly aborted: boolean;
+}
+
+interface OwnDataField {
+  readonly present: boolean;
+  readonly valid: boolean;
+  readonly value?: unknown;
+}
+
+const ownEnumerableDataField = (value: unknown, key: string): OwnDataField => {
+  if (value === null || typeof value !== 'object') return { present: false, valid: false };
+  try {
+    const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined) return { present: false, valid: true };
+    if (!descriptor.enumerable || !('value' in descriptor)) return { present: true, valid: false };
+    return { present: true, valid: true, value: descriptor.value };
+  } catch {
+    return { present: true, valid: false };
   }
-  if (code === 'stale' || code === 'generation-drift' || code === 'status-stale') {
-    return { status: 'stale', detail };
-  }
-  if (code.includes('malformed') || code === 'content-type' || code === 'unexpected-content-type') {
-    return { status: 'malformed', detail };
-  }
-  return { status: 'refused', detail };
 };
 
-const isCorpusAbortResult = (value: unknown): boolean => {
-  const record = asRecord(value);
-  const failure = asRecord(record?.failure) ?? asRecord(record?.error);
-  return stringValue(failure?.code, stringValue(record?.code, '')).toLowerCase() === 'aborted';
+const ownDataString = (value: unknown, key: string): string | undefined => {
+  const field = ownEnumerableDataField(value, key);
+  return field.present && field.valid && typeof field.value === 'string' && field.value.length > 0
+    ? field.value
+    : undefined;
+};
+
+const corpusFailure = (value: unknown, fallbackDetail = 'Configured corpus evidence was not accepted.'): CorpusFailureClassification => {
+  let failure: unknown;
+  for (const key of ['failure', 'refusal', 'error']) {
+    const field = ownEnumerableDataField(value, key);
+    if (field.present && field.valid) {
+      failure = field.value;
+      break;
+    }
+    if (field.present && !field.valid) {
+      return { status: 'refused', detail: fallbackDetail, aborted: false };
+    }
+  }
+  const code = (ownDataString(failure, 'code') ?? ownDataString(value, 'code') ?? 'refused').toLowerCase();
+  const detail = ownDataString(failure, 'message') ?? ownDataString(value, 'message') ?? fallbackDetail;
+  if (code === 'aborted') return { status: 'unavailable', detail, aborted: true };
+  if (code === 'offline' || code === 'network' || code === 'file-http' || code === 'manifest-http' || code === 'status-http'
+    || code === 'status-unavailable' || code === 'manifest-unavailable' || code === 'manifest-pending'
+    || code === 'internal-error') {
+    return { status: 'unavailable', detail, aborted: false };
+  }
+  if (code === 'stale' || code === 'generation-drift' || code === 'status-stale') {
+    return { status: 'stale', detail, aborted: false };
+  }
+  if (code.includes('malformed') || code === 'content-type' || code === 'unexpected-content-type') {
+    return { status: 'malformed', detail, aborted: false };
+  }
+  return { status: 'refused', detail, aborted: false };
+};
+
+type CorpusEnvelopeSnapshot =
+  | { readonly kind: 'direct' }
+  | { readonly kind: 'envelope'; readonly core: unknown; readonly colorPresent: boolean; readonly color?: unknown }
+  | { readonly kind: 'refused'; readonly detail: string };
+
+const snapshotCorpusEnvelope = (value: unknown): CorpusEnvelopeSnapshot => {
+  if (value === null || typeof value !== 'object') return { kind: 'direct' };
+  try {
+    if (Reflect.getPrototypeOf(value) !== Object.prototype) {
+      return { kind: 'refused', detail: 'Configured corpus envelope must have the plain object prototype.' };
+    }
+    const keys = Reflect.ownKeys(value);
+    const envelopeShaped = keys.some(key => key === 'core' || key === 'color');
+    if (!envelopeShaped) return { kind: 'direct' };
+    if (!keys.includes('core') || keys.some(key => key !== 'core' && key !== 'color')) {
+      return { kind: 'refused', detail: 'Configured corpus envelope has inherited, missing, or decorated authority fields.' };
+    }
+    const coreDescriptor = Reflect.getOwnPropertyDescriptor(value, 'core');
+    if (coreDescriptor === undefined || !coreDescriptor.enumerable || !('value' in coreDescriptor)) {
+      return { kind: 'refused', detail: 'Configured corpus core authority must be an own enumerable data field.' };
+    }
+    const colorPresent = keys.includes('color');
+    if (!colorPresent) return { kind: 'envelope', core: coreDescriptor.value, colorPresent: false };
+    const colorDescriptor = Reflect.getOwnPropertyDescriptor(value, 'color');
+    if (colorDescriptor === undefined || !colorDescriptor.enumerable || !('value' in colorDescriptor)) {
+      return { kind: 'refused', detail: 'Configured corpus color authority must be an own enumerable data field.' };
+    }
+    return {
+      kind: 'envelope',
+      core: coreDescriptor.value,
+      colorPresent: true,
+      color: colorDescriptor.value,
+    };
+  } catch {
+    return { kind: 'refused', detail: 'Configured corpus envelope reflection was refused.' };
+  }
+};
+
+const canonicalCoreSuccess = (value: unknown): value is X4UiCorpusCanonicalSuccess => {
+  try {
+    return isX4UiCorpusCanonicalSuccess(value);
+  } catch {
+    return false;
+  }
+};
+
+const canonicalColorSuccess = (value: unknown): value is X4UiCorpusCanonicalColorSuccess => {
+  try {
+    return isX4UiCorpusCanonicalColorSuccess(value);
+  } catch {
+    return false;
+  }
 };
 
 export interface X4UiCorpusLoadResultClassification {
@@ -360,6 +503,9 @@ export interface X4UiCorpusLoadResultClassification {
   readonly accepted: boolean;
   readonly result: X4UiCorpusCanonicalSuccess | null;
   readonly detail: string;
+  readonly colorStatus: CorpusLoadStatus;
+  readonly colorEvidence?: X4UiCorpusCanonicalColorSuccess;
+  readonly colorDetail: string;
 }
 
 export const classifyX4UiCorpusLoadResult = (input: {
@@ -370,28 +516,95 @@ export const classifyX4UiCorpusLoadResult = (input: {
   readonly requestGeneration: number;
   readonly currentGeneration: number;
 }): X4UiCorpusLoadResultClassification => {
-  if (!input.loaderIssued || input.signalAborted || isCorpusAbortResult(input.result) || !input.requestActive || input.requestGeneration !== input.currentGeneration) {
+  const ignored = (): X4UiCorpusLoadResultClassification => ({
+    status: 'ignored',
+    accepted: false,
+    result: null,
+    detail: 'Ignored aborted, late, or non-loader corpus evidence.',
+    colorStatus: 'unavailable',
+    colorDetail: 'Ignored aborted, late, or non-loader canonical-default color evidence.',
+  });
+  if (!input.loaderIssued || input.signalAborted || !input.requestActive || input.requestGeneration !== input.currentGeneration) {
+    return ignored();
+  }
+
+  const snapshot = snapshotCorpusEnvelope(input.result);
+  if (snapshot.kind === 'refused') {
     return {
-      status: 'ignored',
+      status: 'refused',
       accepted: false,
       result: null,
-      detail: 'Ignored aborted, late, or non-loader corpus evidence.',
+      detail: snapshot.detail,
+      colorStatus: 'refused',
+      colorDetail: snapshot.detail,
     };
   }
-  if (isX4UiCorpusCanonicalSuccess(input.result)) {
+
+  if (snapshot.kind === 'direct') {
+    if (canonicalCoreSuccess(input.result)) {
+      return {
+        status: 'canonical',
+        accepted: true,
+        result: input.result,
+        detail: 'Loader-issued canonical X4 corpus accepted.',
+        colorStatus: 'unavailable',
+        colorDetail: 'Configured canonical-default color evidence was not supplied.',
+      };
+    }
+    const failure = corpusFailure(input.result);
+    if (failure.aborted) return ignored();
+    return {
+      status: failure.status,
+      accepted: false,
+      result: null,
+      detail: failure.detail,
+      colorStatus: 'unavailable',
+      colorDetail: 'Configured canonical-default color evidence was not supplied.',
+    };
+  }
+
+  const coreAccepted = canonicalCoreSuccess(snapshot.core);
+  const coreFailure = coreAccepted
+    ? undefined
+    : corpusFailure(snapshot.core, 'Configured canonical core evidence was not accepted.');
+  const colorAccepted = snapshot.colorPresent && canonicalColorSuccess(snapshot.color);
+  const colorFailure = snapshot.colorPresent && !colorAccepted
+    ? corpusFailure(snapshot.color, 'Configured canonical-default color evidence was not accepted.')
+    : undefined;
+  if (coreFailure?.aborted) return ignored();
+
+  if (!coreAccepted) {
+    return {
+      status: coreFailure?.status ?? 'refused',
+      accepted: false,
+      result: null,
+      detail: coreFailure?.detail ?? 'Configured canonical core evidence was not accepted.',
+      colorStatus: colorAccepted ? 'canonical' : colorFailure?.status ?? 'unavailable',
+      colorDetail: colorAccepted
+        ? 'Loader-issued canonical-default color evidence was accepted but withheld because canonical core evidence is unavailable.'
+        : colorFailure?.detail ?? 'Configured canonical-default color evidence was not supplied.',
+    };
+  }
+
+  if (colorAccepted) {
     return {
       status: 'canonical',
       accepted: true,
-      result: input.result,
+      result: snapshot.core,
       detail: 'Loader-issued canonical X4 corpus accepted.',
+      colorStatus: 'canonical',
+      colorEvidence: snapshot.color,
+      colorDetail: 'Loader-issued canonical-default color evidence accepted.',
     };
   }
-  const failure = corpusFailure(input.result);
+
   return {
-    status: failure.status,
-    accepted: false,
-    result: null,
-    detail: failure.detail,
+    status: 'canonical',
+    accepted: true,
+    result: snapshot.core,
+    detail: 'Loader-issued canonical X4 corpus accepted.',
+    colorStatus: colorFailure?.status ?? 'unavailable',
+    colorDetail: colorFailure?.detail ?? 'Configured canonical-default color evidence was not supplied.',
   };
 };
 
@@ -587,6 +800,329 @@ export const isX4UiKeepOutEntryChecked = (
   enabledEntryIds: readonly string[],
   entryId: string,
 ): boolean => activePresetId === presetId && enabledEntryIds.includes(entryId);
+
+export interface X4UiManualCalibrationPointDraft {
+  readonly x: string;
+  readonly y: string;
+}
+
+export interface X4UiManualCalibrationDraft {
+  readonly stableId: string;
+  readonly context: string;
+  readonly sourceNote: string;
+  readonly screenshotHash: string;
+  readonly profile: string;
+  readonly drawableLeft: string;
+  readonly drawableTop: string;
+  readonly drawableWidth: string;
+  readonly drawableHeight: string;
+  readonly points: readonly X4UiManualCalibrationPointDraft[];
+}
+
+export interface X4UiManualCalibrationRow {
+  readonly rowId: string;
+  readonly draft: X4UiManualCalibrationDraft;
+}
+
+export interface X4UiManualCalibrationState {
+  readonly draft: X4UiManualCalibrationDraft;
+  readonly rows: readonly X4UiManualCalibrationRow[];
+  readonly enabledManualRowIds: readonly string[];
+}
+
+export type X4UiManualCalibrationDraftField = Exclude<keyof X4UiManualCalibrationDraft, 'points'>;
+
+export type X4UiManualCalibrationDraftRefusal = {
+  readonly accepted: false;
+  readonly reason: 'malformed-draft' | 'invalid-number';
+  readonly message: string;
+};
+
+export type X4UiManualCalibrationDraftResult =
+  | { readonly accepted: true; readonly input: KeepOutCalibrationInput }
+  | X4UiManualCalibrationDraftRefusal;
+
+export type X4UiManualCalibrationSessionRefusalReason =
+  | X4UiManualCalibrationDraftRefusal['reason']
+  | 'duplicate-stable-id';
+
+export interface X4UiManualCalibrationSessionInput {
+  readonly manualCalibrations: readonly KeepOutCalibrationInput[];
+  readonly enabledManualEntryIds: readonly string[];
+  readonly acceptedRowIds: readonly string[];
+  readonly refusedRows: readonly {
+    readonly rowId: string;
+    readonly reason: X4UiManualCalibrationSessionRefusalReason;
+    readonly message: string;
+  }[];
+}
+
+const manualCalibrationInitialPoints = (): readonly X4UiManualCalibrationPointDraft[] => [
+  { x: '0', y: '0' },
+  { x: '100', y: '0' },
+  { x: '0', y: '100' },
+];
+
+export const createX4UiManualCalibrationDraft = (): X4UiManualCalibrationDraft => ({
+  stableId: '',
+  context: '',
+  sourceNote: '',
+  screenshotHash: '',
+  profile: '',
+  drawableLeft: '0',
+  drawableTop: '0',
+  drawableWidth: String(X4_UI_EDITOR_DEFAULT_PROFILE.drawable.width),
+  drawableHeight: String(X4_UI_EDITOR_DEFAULT_PROFILE.drawable.height),
+  points: manualCalibrationInitialPoints(),
+});
+
+export const createX4UiManualCalibrationState = (): X4UiManualCalibrationState => ({
+  draft: createX4UiManualCalibrationDraft(),
+  rows: [],
+  enabledManualRowIds: [],
+});
+
+const copyManualCalibrationDraft = (draft: X4UiManualCalibrationDraft): X4UiManualCalibrationDraft => ({
+  ...draft,
+  points: draft.points.map(point => ({ x: point.x, y: point.y })),
+});
+
+export const updateX4UiManualCalibrationDraft = (
+  draft: X4UiManualCalibrationDraft,
+  field: X4UiManualCalibrationDraftField,
+  value: string,
+): X4UiManualCalibrationDraft => draft[field] === value
+  ? draft
+  : { ...draft, [field]: value } as X4UiManualCalibrationDraft;
+
+export const updateX4UiManualCalibrationPoint = (
+  draft: X4UiManualCalibrationDraft,
+  index: number,
+  axis: 'x' | 'y',
+  value: string,
+): X4UiManualCalibrationDraft => {
+  if (!Number.isSafeInteger(index) || index < 0 || index >= draft.points.length) return draft;
+  const point = draft.points[index];
+  if (point[axis] === value) return draft;
+  const points = draft.points.map((candidate, candidateIndex) => candidateIndex === index
+    ? { ...candidate, [axis]: value }
+    : candidate);
+  return { ...draft, points };
+};
+
+export const addX4UiManualCalibrationPoint = (
+  draft: X4UiManualCalibrationDraft,
+): X4UiManualCalibrationDraft => ({
+  ...draft,
+  points: [...draft.points, { x: '', y: '' }],
+});
+
+export const removeX4UiManualCalibrationPoint = (
+  draft: X4UiManualCalibrationDraft,
+  index: number,
+): X4UiManualCalibrationDraft => {
+  if (!Number.isSafeInteger(index) || index < 0 || index >= draft.points.length) return draft;
+  return {
+    ...draft,
+    points: [...draft.points.slice(0, index), ...draft.points.slice(index + 1)],
+  };
+};
+
+const manualCalibrationNumber = (
+  raw: unknown,
+  label: string,
+): { readonly accepted: true; readonly value: number } | { readonly accepted: false; readonly message: string } => {
+  if (typeof raw !== 'string' || raw.trim().length === 0) {
+    return { accepted: false, message: `${label} must be a non-empty finite number.` };
+  }
+  const value = Number(raw);
+  return Number.isFinite(value)
+    ? { accepted: true, value }
+    : { accepted: false, message: `${label} must be a non-empty finite number.` };
+};
+
+export const parseX4UiManualCalibrationDraft = (
+  draft: X4UiManualCalibrationDraft,
+): X4UiManualCalibrationDraftResult => {
+  try {
+    const numericFields = [
+      ['drawable left', draft.drawableLeft],
+      ['drawable top', draft.drawableTop],
+      ['drawable width', draft.drawableWidth],
+      ['drawable height', draft.drawableHeight],
+    ] as const;
+    const numericValues: number[] = [];
+    for (const [label, raw] of numericFields) {
+      const result = manualCalibrationNumber(raw, label);
+      if ('message' in result) return { accepted: false, reason: 'invalid-number', message: result.message };
+      numericValues.push(result.value);
+    }
+    if (!Array.isArray(draft.points)) {
+      return { accepted: false, reason: 'malformed-draft', message: 'Manual calibration points must be a dense draft array.' };
+    }
+    const points: { readonly x: number; readonly y: number }[] = [];
+    for (let index = 0; index < draft.points.length; index += 1) {
+      const point = draft.points[index];
+      if (point === undefined || point === null || typeof point !== 'object') {
+        return { accepted: false, reason: 'malformed-draft', message: `Manual calibration point ${index + 1} is malformed.` };
+      }
+      const x = manualCalibrationNumber(point.x, `point ${index + 1} x`);
+      if ('message' in x) return { accepted: false, reason: 'invalid-number', message: x.message };
+      const y = manualCalibrationNumber(point.y, `point ${index + 1} y`);
+      if ('message' in y) return { accepted: false, reason: 'invalid-number', message: y.message };
+      points.push({ x: x.value, y: y.value });
+    }
+    if (typeof draft.stableId !== 'string'
+      || typeof draft.context !== 'string'
+      || typeof draft.sourceNote !== 'string'
+      || typeof draft.screenshotHash !== 'string'
+      || typeof draft.profile !== 'string') {
+      return { accepted: false, reason: 'malformed-draft', message: 'Manual calibration text fields must be strings.' };
+    }
+    return {
+      accepted: true,
+      input: {
+        stableId: draft.stableId,
+        context: draft.context,
+        sourceNote: draft.sourceNote,
+        screenshotHash: draft.screenshotHash,
+        profile: draft.profile,
+        drawableBounds: {
+          left: numericValues[0],
+          top: numericValues[1],
+          width: numericValues[2],
+          height: numericValues[3],
+        },
+        points,
+      },
+    };
+  } catch {
+    return { accepted: false, reason: 'malformed-draft', message: 'Manual calibration draft was malformed.' };
+  }
+};
+
+const nextManualCalibrationRowId = (rows: readonly X4UiManualCalibrationRow[]): string => {
+  const used = new Set(rows.map(row => row.rowId));
+  let ordinal = rows.length + 1;
+  let rowId = `manual-calibration-row-${ordinal}`;
+  while (used.has(rowId)) {
+    ordinal += 1;
+    rowId = `manual-calibration-row-${ordinal}`;
+  }
+  return rowId;
+};
+
+export const addX4UiManualCalibrationDraft = (
+  state: X4UiManualCalibrationState,
+  draft = state.draft,
+): X4UiManualCalibrationState => ({
+  draft: createX4UiManualCalibrationDraft(),
+  rows: [
+    ...state.rows,
+    { rowId: nextManualCalibrationRowId(state.rows), draft: copyManualCalibrationDraft(draft) },
+  ],
+  enabledManualRowIds: state.enabledManualRowIds,
+});
+
+const manualCalibrationRowStableId = (row: X4UiManualCalibrationRow): string => row.draft.stableId;
+
+export const setX4UiManualCalibrationRowEnabled = (
+  state: X4UiManualCalibrationState,
+  rowId: string,
+  enabled: boolean,
+): X4UiManualCalibrationState => {
+  const row = state.rows.find(candidate => candidate.rowId === rowId);
+  if (row === undefined || row.draft.stableId.trim().length === 0) return state;
+  const alreadyEnabled = state.enabledManualRowIds.includes(rowId);
+  if (alreadyEnabled === enabled) return state;
+  return {
+    ...state,
+    enabledManualRowIds: enabled
+      ? [...state.enabledManualRowIds, rowId]
+      : state.enabledManualRowIds.filter(value => value !== rowId),
+  };
+};
+
+export const toggleX4UiManualCalibrationRow = (
+  state: X4UiManualCalibrationState,
+  rowId: string,
+): X4UiManualCalibrationState => {
+  const row = state.rows.find(candidate => candidate.rowId === rowId);
+  if (row === undefined || row.draft.stableId.trim().length === 0) return state;
+  return setX4UiManualCalibrationRowEnabled(
+    state,
+    rowId,
+    !state.enabledManualRowIds.includes(rowId),
+  );
+};
+
+export const removeX4UiManualCalibrationRow = (
+  state: X4UiManualCalibrationState,
+  rowId: string,
+): X4UiManualCalibrationState => {
+  const rowIndex = state.rows.findIndex(candidate => candidate.rowId === rowId);
+  if (rowIndex < 0) return state;
+  const rows = [...state.rows.slice(0, rowIndex), ...state.rows.slice(rowIndex + 1)];
+  const removedRowWasEnabled = state.enabledManualRowIds.includes(rowId);
+  return {
+    ...state,
+    rows,
+    enabledManualRowIds: removedRowWasEnabled
+      ? state.enabledManualRowIds.filter(value => value !== rowId)
+      : state.enabledManualRowIds,
+  };
+};
+
+export const buildX4UiManualCalibrationSessionInput = (
+  state: X4UiManualCalibrationState,
+): X4UiManualCalibrationSessionInput => {
+  const stableIdCounts = new Map<string, number>();
+  for (const row of state.rows) {
+    const stableId = manualCalibrationRowStableId(row);
+    if (stableId.trim().length === 0) continue;
+    stableIdCounts.set(stableId, (stableIdCounts.get(stableId) ?? 0) + 1);
+  }
+  const ambiguousStableIds = new Set(
+    [...stableIdCounts.entries()]
+      .filter(([, count]) => count > 1)
+      .map(([stableId]) => stableId),
+  );
+  const manualCalibrations: KeepOutCalibrationInput[] = [];
+  const enabledManualEntryIds: string[] = [];
+  const acceptedRowIds: string[] = [];
+  const refusedRows: X4UiManualCalibrationSessionInput['refusedRows'][number][] = [];
+  for (const row of state.rows) {
+    const stableId = manualCalibrationRowStableId(row);
+    const ambiguous = ambiguousStableIds.has(stableId);
+    const parsed = parseX4UiManualCalibrationDraft(row.draft);
+    if (ambiguous) {
+      refusedRows.push({
+        rowId: row.rowId,
+        reason: 'duplicate-stable-id',
+        message: `Manual calibration stable ID is duplicated locally: ${stableId}.`,
+      });
+    }
+    if ('input' in parsed) {
+      manualCalibrations.push(parsed.input);
+      acceptedRowIds.push(row.rowId);
+      if (
+        !ambiguous
+        && parsed.input.stableId.trim().length > 0
+        && state.enabledManualRowIds.includes(row.rowId)
+      ) {
+        enabledManualEntryIds.push(parsed.input.stableId);
+      }
+    } else if (!ambiguous) {
+      refusedRows.push({ rowId: row.rowId, reason: parsed.reason, message: parsed.message });
+    }
+  }
+  return {
+    manualCalibrations,
+    enabledManualEntryIds,
+    acceptedRowIds,
+    refusedRows,
+  };
+};
 
 export interface X4UiCanvasStateDescription {
   readonly status: 'empty' | 'current' | 'stale' | 'refused';
@@ -1288,6 +1824,7 @@ export default function X4UiSourceEditor({
   const [sampleError, setSampleError] = useState<string | undefined>(undefined);
   const [activePresetId, setActivePresetId] = useState<string | null>(null);
   const [enabledEntryIds, setEnabledEntryIds] = useState<readonly string[]>([]);
+  const [manualCalibrationState, setManualCalibrationState] = useState<X4UiManualCalibrationState>(() => createX4UiManualCalibrationState());
   const [corpusState, setCorpusState] = useState<CorpusLoadState>(EMPTY_CORPUS_STATE);
   const [corpusGeneration, setCorpusGeneration] = useState(0);
   const [canvasState, setCanvasState] = useState<X4UiEditorCanvasState>(() => X4_UI_EDITOR_EMPTY_CANVAS_STATE);
@@ -1303,12 +1840,22 @@ export default function X4UiSourceEditor({
   const resolvedCorpusLoader = useMemo(() => corpusLoader ?? defaultCorpusLoader, [corpusLoader]);
   const resolvedSurfaceFactory = useMemo(() => surfaceFactory ?? defaultSurfaceFactory, [surfaceFactory]);
   const profileValue = useMemo(() => profile, [profile]);
+  const manualSessionInput = useMemo(
+    () => buildX4UiManualCalibrationSessionInput(manualCalibrationState),
+    [manualCalibrationState],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
     const requestGeneration = corpusGeneration;
-    setCorpusState({ status: 'loading', result: null, detail: 'Loading configured canonical X4 corpus evidence.' });
+    setCorpusState({
+      status: 'loading',
+      result: null,
+      detail: 'Loading configured canonical X4 corpus evidence.',
+      colorStatus: 'loading',
+      colorDetail: 'Loading configured canonical-default color evidence.',
+    });
     void resolvedCorpusLoader({ signal: controller.signal }).then(result => {
       const classification = classifyX4UiCorpusLoadResult({
         result,
@@ -1319,7 +1866,14 @@ export default function X4UiSourceEditor({
         currentGeneration: corpusGeneration,
       });
       if (classification.status === 'ignored') return;
-      setCorpusState({ status: classification.status, result: classification.result, detail: classification.detail });
+      setCorpusState({
+        status: classification.status,
+        result: classification.result,
+        detail: classification.detail,
+        colorStatus: classification.colorStatus,
+        colorDetail: classification.colorDetail,
+        ...(classification.colorEvidence === undefined ? {} : { colorEvidence: classification.colorEvidence }),
+      });
     }).catch(error => {
       const classification = classifyX4UiCorpusLoadResult({
         result: error,
@@ -1330,7 +1884,13 @@ export default function X4UiSourceEditor({
         currentGeneration: corpusGeneration,
       });
       if (classification.status === 'ignored') return;
-      setCorpusState({ status: classification.status, result: null, detail: classification.detail });
+      setCorpusState({
+        status: classification.status,
+        result: null,
+        detail: classification.detail,
+        colorStatus: classification.colorStatus,
+        colorDetail: classification.colorDetail,
+      });
     });
     return () => {
       active = false;
@@ -1341,6 +1901,9 @@ export default function X4UiSourceEditor({
   const canonicalCorpus = isX4UiCorpusCanonicalSuccess(corpusState.result)
     ? corpusState.result as X4UiCorpusCanonicalSuccess
     : null;
+  const canonicalColorEvidence = canonicalCorpus !== null && canonicalColorSuccess(corpusState.colorEvidence)
+    ? corpusState.colorEvidence
+    : undefined;
 
   const selection = useMemo(() => {
     const provisionalInput = {
@@ -1348,6 +1911,9 @@ export default function X4UiSourceEditor({
       corpus: canonicalCorpus,
       profile: profileValue,
       enabledEntryIds,
+      manualCalibrations: manualSessionInput.manualCalibrations,
+      enabledManualEntryIds: manualSessionInput.enabledManualEntryIds,
+      ...(canonicalColorEvidence === undefined ? {} : { colorEvidence: canonicalColorEvidence }),
       ...(activePresetId === null ? {} : { activePresetId }),
     } as unknown as X4UiEditorSessionInput;
     const provisionalProjection = projectX4UiEditorSession(provisionalInput);
@@ -1381,13 +1947,27 @@ export default function X4UiSourceEditor({
         target: target.raw,
       },
     };
-  }, [activePresetId, canonicalCorpus, enabledEntryIds, profileValue, sourceSelector, targetSelector, workspace]);
+  }, [
+    activePresetId,
+    canonicalColorEvidence,
+    canonicalCorpus,
+    enabledEntryIds,
+    manualSessionInput.enabledManualEntryIds,
+    manualSessionInput.manualCalibrations,
+    profileValue,
+    sourceSelector,
+    targetSelector,
+    workspace,
+  ]);
 
   const sessionInput = useMemo(() => ({
     workspace,
     corpus: canonicalCorpus,
     profile: profileValue,
     enabledEntryIds,
+    manualCalibrations: manualSessionInput.manualCalibrations,
+    enabledManualEntryIds: manualSessionInput.enabledManualEntryIds,
+    ...(canonicalColorEvidence === undefined ? {} : { colorEvidence: canonicalColorEvidence }),
     ...(sampleBinding === undefined ? {} : { sampleBinding }),
     ...(sampleCatalogAuthority === undefined ? {} : { sampleCatalogAuthority }),
     ...(sampleInput === undefined ? {} : { samples: sampleInput }),
@@ -1395,8 +1975,11 @@ export default function X4UiSourceEditor({
     ...(selection.selection === undefined ? {} : { selection: selection.selection }),
   }) as unknown as X4UiEditorSessionInput, [
     activePresetId,
+    canonicalColorEvidence,
     canonicalCorpus,
     enabledEntryIds,
+    manualSessionInput.enabledManualEntryIds,
+    manualSessionInput.manualCalibrations,
     profileValue,
     sampleBinding,
     sampleCatalogAuthority,
@@ -1548,6 +2131,46 @@ export default function X4UiSourceEditor({
 
   const toggleEntry = (originatingPresetId: string, entryId: string): void => {
     setEnabledEntryIds(previous => toggleX4UiKeepOutEntry(activePresetId, originatingPresetId, previous, entryId, KEEP_OUT_PRESETS));
+  };
+
+  const updateManualDraftField = (field: X4UiManualCalibrationDraftField, value: string): void => {
+    setManualCalibrationState(previous => ({
+      ...previous,
+      draft: updateX4UiManualCalibrationDraft(previous.draft, field, value),
+    }));
+  };
+
+  const updateManualDraftPoint = (index: number, axis: 'x' | 'y', value: string): void => {
+    setManualCalibrationState(previous => ({
+      ...previous,
+      draft: updateX4UiManualCalibrationPoint(previous.draft, index, axis, value),
+    }));
+  };
+
+  const addManualDraftPoint = (): void => {
+    setManualCalibrationState(previous => ({
+      ...previous,
+      draft: addX4UiManualCalibrationPoint(previous.draft),
+    }));
+  };
+
+  const removeManualDraftPoint = (index: number): void => {
+    setManualCalibrationState(previous => ({
+      ...previous,
+      draft: removeX4UiManualCalibrationPoint(previous.draft, index),
+    }));
+  };
+
+  const addManualCalibration = (): void => {
+    setManualCalibrationState(previous => addX4UiManualCalibrationDraft(previous));
+  };
+
+  const toggleManualCalibration = (rowId: string): void => {
+    setManualCalibrationState(previous => toggleX4UiManualCalibrationRow(previous, rowId));
+  };
+
+  const removeManualCalibration = (rowId: string): void => {
+    setManualCalibrationState(previous => removeX4UiManualCalibrationRow(previous, rowId));
   };
 
   const updateSample = (entryId: string, raw: string): void => {
@@ -1754,6 +2377,8 @@ export default function X4UiSourceEditor({
           </div>
           <div className="mt-2 text-slate-400">Status: <span data-testid="x4-ui-corpus-status" className="font-bold text-slate-200">{statusLabel(corpusState.status)}</span></div>
           <div data-testid="x4-ui-corpus-detail" className="mt-1 break-words text-slate-500">{corpusState.detail}</div>
+          <div className="mt-2 text-slate-400">Canonical-default color: <span data-testid="x4-ui-corpus-color-status" className="font-bold text-slate-200">{statusLabel(corpusState.colorStatus)}</span></div>
+          <div data-testid="x4-ui-corpus-color-detail" className="mt-1 break-words text-slate-500">{corpusState.colorDetail}</div>
           <div className="mt-1 text-slate-600">Canonical status is accepted only from the configured loader.</div>
         </section>
       </div>
@@ -1854,6 +2479,106 @@ export default function X4UiSourceEditor({
               </article>
             );
           })}
+        </div>
+        <div data-testid="x4-ui-manual-calibration-region" className="mt-3 rounded border border-violet-500/30 bg-violet-950/10 p-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h3 className="text-[10px] font-bold uppercase tracking-wider text-violet-300">Manual screenshot-polygon calibration</h3>
+              <div className="mt-1 text-slate-500">Session-local draft only. Add stores the plain calibration input; the accepted Session, Paint, and Canvas owners remain authoritative.</div>
+            </div>
+            <span data-testid="x4-ui-manual-calibration-truth" className="font-bold text-amber-300">Advisory only · {X4_UI_EDITOR_SESSION_GAME_TRUTH}</span>
+          </div>
+          <div className="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-2">
+            <label className="flex flex-col gap-1 text-slate-500">
+              Stable ID
+              <input data-testid="x4-ui-manual-calibration-stable-id" type="text" value={manualCalibrationState.draft.stableId} onChange={event => updateManualDraftField('stableId', event.target.value)} className="rounded border border-white/10 bg-black/40 px-2 py-1 text-slate-200" />
+            </label>
+            <label className="flex flex-col gap-1 text-slate-500">
+              Context
+              <input data-testid="x4-ui-manual-calibration-context" type="text" value={manualCalibrationState.draft.context} onChange={event => updateManualDraftField('context', event.target.value)} className="rounded border border-white/10 bg-black/40 px-2 py-1 text-slate-200" />
+            </label>
+            <label className="flex flex-col gap-1 text-slate-500 lg:col-span-2">
+              Source note
+              <input data-testid="x4-ui-manual-calibration-source-note" type="text" value={manualCalibrationState.draft.sourceNote} onChange={event => updateManualDraftField('sourceNote', event.target.value)} className="rounded border border-white/10 bg-black/40 px-2 py-1 text-slate-200" />
+            </label>
+            <label className="flex flex-col gap-1 text-slate-500">
+              Screenshot SHA-256/hash
+              <input data-testid="x4-ui-manual-calibration-screenshot-hash" type="text" value={manualCalibrationState.draft.screenshotHash} onChange={event => updateManualDraftField('screenshotHash', event.target.value)} className="rounded border border-white/10 bg-black/40 px-2 py-1 text-slate-200" />
+            </label>
+            <label className="flex flex-col gap-1 text-slate-500">
+              Screenshot profile
+              <input data-testid="x4-ui-manual-calibration-profile" type="text" value={manualCalibrationState.draft.profile} onChange={event => updateManualDraftField('profile', event.target.value)} className="rounded border border-white/10 bg-black/40 px-2 py-1 text-slate-200" />
+            </label>
+          </div>
+          <div className="mt-2 rounded border border-white/10 bg-black/20 p-2">
+            <div className="font-bold text-slate-300">Drawable bounds (screenshot pixels)</div>
+            <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
+              <label className="flex flex-col gap-1 text-slate-500">Left<input data-testid="x4-ui-manual-calibration-drawable-left" type="number" step="any" value={manualCalibrationState.draft.drawableLeft} onChange={event => updateManualDraftField('drawableLeft', event.target.value)} className="rounded border border-white/10 bg-black/40 px-2 py-1 text-slate-200" /></label>
+              <label className="flex flex-col gap-1 text-slate-500">Top<input data-testid="x4-ui-manual-calibration-drawable-top" type="number" step="any" value={manualCalibrationState.draft.drawableTop} onChange={event => updateManualDraftField('drawableTop', event.target.value)} className="rounded border border-white/10 bg-black/40 px-2 py-1 text-slate-200" /></label>
+              <label className="flex flex-col gap-1 text-slate-500">Width<input data-testid="x4-ui-manual-calibration-drawable-width" type="number" step="any" value={manualCalibrationState.draft.drawableWidth} onChange={event => updateManualDraftField('drawableWidth', event.target.value)} className="rounded border border-white/10 bg-black/40 px-2 py-1 text-slate-200" /></label>
+              <label className="flex flex-col gap-1 text-slate-500">Height<input data-testid="x4-ui-manual-calibration-drawable-height" type="number" step="any" value={manualCalibrationState.draft.drawableHeight} onChange={event => updateManualDraftField('drawableHeight', event.target.value)} className="rounded border border-white/10 bg-black/40 px-2 py-1 text-slate-200" /></label>
+            </div>
+          </div>
+          <div className="mt-2 rounded border border-white/10 bg-black/20 p-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="font-bold text-slate-300">Polygon points (screenshot pixels)</div>
+              <button type="button" data-testid="x4-ui-manual-calibration-add-point" onClick={addManualDraftPoint} className="rounded border border-violet-500/30 px-2 py-1 text-[9px] font-bold uppercase text-violet-300">Add point</button>
+            </div>
+            <div className="mt-2 space-y-1">
+              {manualCalibrationState.draft.points.map((point, index) => (
+                <div key={index} data-testid={`x4-ui-manual-calibration-point-${index}`} className="flex flex-wrap items-end gap-2">
+                  <label className="flex min-w-28 flex-1 flex-col gap-1 text-slate-500">Point {index + 1} x<input data-testid={`x4-ui-manual-calibration-point-${index}-x`} type="number" step="any" value={point.x} onChange={event => updateManualDraftPoint(index, 'x', event.target.value)} className="rounded border border-white/10 bg-black/40 px-2 py-1 text-slate-200" /></label>
+                  <label className="flex min-w-28 flex-1 flex-col gap-1 text-slate-500">Point {index + 1} y<input data-testid={`x4-ui-manual-calibration-point-${index}-y`} type="number" step="any" value={point.y} onChange={event => updateManualDraftPoint(index, 'y', event.target.value)} className="rounded border border-white/10 bg-black/40 px-2 py-1 text-slate-200" /></label>
+                  <button type="button" data-testid={`x4-ui-manual-calibration-remove-point-${index}`} onClick={() => removeManualDraftPoint(index)} className="rounded border border-white/10 px-2 py-1 text-[9px] uppercase text-slate-400">Remove point</button>
+                </div>
+              ))}
+            </div>
+          </div>
+          <button type="button" data-testid="x4-ui-manual-calibration-add" onClick={addManualCalibration} className="mt-2 rounded border border-violet-500/30 px-2 py-1 text-[9px] font-bold uppercase text-violet-300">Add calibration · reset draft</button>
+          <div className="mt-2 space-y-2">
+            {manualCalibrationState.rows.map(row => {
+              const acceptedIndex = manualSessionInput.acceptedRowIds.indexOf(row.rowId);
+              const localRefusal = manualSessionInput.refusedRows.find(candidate => candidate.rowId === row.rowId);
+              const sessionProjection = acceptedIndex < 0 ? undefined : projection.manualCalibrations[acceptedIndex];
+              const sessionProjectionRecord = asRecord(sessionProjection);
+              const entry = asRecord(sessionProjectionRecord?.entry);
+              const provenance = asRecord(sessionProjectionRecord?.evidence) ?? asRecord(entry?.provenance);
+              const screenshot = asRecord(provenance?.screenshot);
+              const drawableBounds = asRecord(provenance?.drawableBounds);
+              const geometry = asRecord(entry?.geometry);
+              const normalizedPoints = asArray(geometry?.points);
+              const explicitEnabled = manualCalibrationState.enabledManualRowIds.includes(row.rowId);
+              const refusedReason = localRefusal?.reason ?? stringValue(sessionProjectionRecord?.reason, 'session-projection-unavailable');
+              const refusedMessage = localRefusal?.message ?? stringValue(sessionProjectionRecord?.message, 'Session did not accept this calibration.');
+              const calibrated = localRefusal === undefined && sessionProjectionRecord?.status === 'success';
+              return (
+                <article key={row.rowId} data-testid={`x4-ui-manual-calibration-row-${row.rowId}`} className="rounded border border-white/10 bg-black/30 p-2">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-bold text-slate-200">{row.draft.stableId || '(empty stable ID)'} · {row.draft.context || '(empty context)'}</div>
+                      <div data-testid={`x4-ui-manual-calibration-status-${row.rowId}`} className={calibrated ? 'mt-1 text-emerald-300' : 'mt-1 text-red-300'}>{calibrated ? `Calibrated · ${explicitEnabled ? 'enabled' : 'disabled'}` : `Refused: ${refusedReason} · ${refusedMessage}`}</div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="flex items-center gap-1 text-[9px] uppercase text-slate-400">
+                        <input type="checkbox" data-testid={`x4-ui-manual-calibration-enable-${row.rowId}`} checked={explicitEnabled} disabled={row.draft.stableId.trim().length === 0} onChange={() => toggleManualCalibration(row.rowId)} />
+                        Enabled
+                      </label>
+                      <button type="button" data-testid={`x4-ui-manual-calibration-remove-${row.rowId}`} onClick={() => removeManualCalibration(row.rowId)} className="rounded border border-red-500/30 px-2 py-1 text-[9px] font-bold uppercase text-red-300">Remove</button>
+                    </div>
+                  </div>
+                  {calibrated && (
+                    <>
+                      <div className="mt-1 break-all text-slate-400">Screenshot hash: <span className="text-slate-200">{stringValue(screenshot?.hash, 'unavailable')}</span> · profile: <span className="text-slate-200">{stringValue(screenshot?.profile, 'unavailable')}</span></div>
+                      <div className="mt-1 break-words text-slate-400">Drawable bounds: <span className="text-slate-200">left={String(drawableBounds?.left ?? 'unavailable')}, top={String(drawableBounds?.top ?? 'unavailable')}, width={String(drawableBounds?.width ?? 'unavailable')}, height={String(drawableBounds?.height ?? 'unavailable')}</span></div>
+                      <div data-testid={`x4-ui-manual-calibration-evidence-${row.rowId}`} className="mt-1 break-all text-slate-400">Normalized polygon evidence: <span className="text-slate-200">{JSON.stringify(normalizedPoints)}</span></div>
+                    </>
+                  )}
+                  <div className="mt-1 text-amber-300">Advisory only · {X4_UI_EDITOR_SESSION_GAME_TRUTH}</div>
+                </article>
+              );
+            })}
+            {manualCalibrationState.rows.length === 0 && <div data-testid="x4-ui-manual-calibration-empty" className="text-slate-500">No session-local manual calibrations have been added.</div>}
+          </div>
         </div>
         <div className="mt-2 text-slate-600">Measured guides remain advisory: y=0.788, y=0.74, x=0.664. Mission/MESSAGES ticker and Top HUD strip remain unavailable/unmeasured; no rectangle is inferred.</div>
       </section>

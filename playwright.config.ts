@@ -67,6 +67,7 @@ const ephemeralEnv = {
   // per-run sandbox so a failed test can never strand the installed Forge on a
   // deleted temporary workspace.
   X4_CONFIG_DIR: E2E_STATE_DIR,
+  X4_DATA_DIR: path.join(E2E_STATE_DIR, 'data'),
   ...(E2E_REFERENCE_ROOT ? { X4_REFERENCE_ROOT: E2E_REFERENCE_ROOT } : {}),
   // Deterministic pages: no HMR socket, no watcher-triggered reloads mid-spec.
   DISABLE_HMR: 'true',

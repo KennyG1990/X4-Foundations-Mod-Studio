@@ -3,18 +3,31 @@ import { readFileSync } from 'node:fs';
 import {
   HELPER_SOURCE_PATH,
   WIDGET_SOURCE_PATH,
+  X4_UI_CORPUS_COLOR_CANONICAL_EVIDENCE,
+  X4_UI_CORPUS_COLORS_XML_PATH,
+  X4_UI_CORPUS_COLORS_XML_SHA256,
+  X4_UI_CORPUS_COLORS_XML_SIZE,
+  X4_UI_CORPUS_COLORS_XSD_PATH,
+  X4_UI_CORPUS_COLORS_XSD_SHA256,
+  X4_UI_CORPUS_COLORS_XSD_SIZE,
   X4_UI_CORPUS_CANONICAL_EVIDENCE,
   X4_UI_CORPUS_FILE_URL,
   X4_UI_CORPUS_MANIFEST_URL,
   X4_UI_CORPUS_STATUS_URL,
   X4_UI_CORPUS_VERIFICATION,
   X4_UI_CORPUS_9_00_CONTRACT,
+  X4_UI_CORPUS_9_00_COLOR_CONTRACT,
+  isX4UiCorpusCanonicalColorSuccess,
   isX4UiCorpusCanonicalSuccess,
+  loadCanonicalX4UiCorpusColorEvidence,
   loadCanonicalX4UiCorpusAssets,
   loadSyntheticX4UiCorpusAssets,
   type X4UiCorpusAssetContract,
   type X4UiCorpusAssetKind,
+  type X4UiCorpusCanonicalColorLoadOptions,
+  type X4UiCorpusCanonicalColorSuccess,
   type X4UiCorpusCanonicalSuccess,
+  type X4UiCorpusFailureResult,
   type X4UiCorpusLoadOptions,
   type X4UiCorpusFetchResponse,
 } from './x4UiCorpusAssets';
@@ -50,6 +63,23 @@ interface Fixture {
   readonly generation: string;
 }
 
+interface ColorFixture {
+  readonly buffers: Map<string, Uint8Array>;
+  readonly records: Map<string, unknown[]>;
+  readonly calls: string[];
+  readonly statusBodies: unknown[];
+  readonly statusCodes: number[];
+  readonly manifestBodies: Map<string, unknown>;
+  readonly manifestCodes: Map<string, number>;
+  readonly manifestGenerations: Map<string, string>;
+  readonly fileCodes: Map<string, number>;
+  readonly fileContentTypes: Map<string, string>;
+  readonly fileErrors: Set<string>;
+  readonly fileNoArrayBuffer: Set<string>;
+  readonly root: string;
+  readonly generation: string;
+}
+
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
@@ -61,6 +91,54 @@ function equal<T>(actual: T, expected: T, message: string): void {
 function bytesEqual(actual: ArrayLike<number>, expected: ArrayLike<number>, message: string): void {
   equal(actual.length, expected.length, `${message} length`);
   for (let index = 0; index < actual.length; index += 1) equal(actual[index], expected[index], `${message} byte ${index}`);
+}
+
+function paddedUtf8(text: string, size: number): Uint8Array {
+  const bytes = new TextEncoder().encode(text);
+  assert(bytes.byteLength <= size, `fixture text exceeds pinned size ${size}`);
+  const padded = new Uint8Array(size);
+  padded.set(bytes);
+  padded.fill(0x20, bytes.byteLength);
+  return padded;
+}
+
+function makeCanonicalColorXml(): Uint8Array {
+  const colors: string[] = [];
+  for (let index = 0; index < 224; index += 1) {
+    const id = `base_${index.toString().padStart(3, '0')}`;
+    if (index === 0) {
+      colors.push(`    <color id="${id}"/>`);
+    } else {
+      colors.push(`    <color id="${id}" r="${index % 256}" g="${(index + 1) % 256}" b="${(index + 2) % 256}" a="${(index + 3) % 256}" glow="${(index % 5) / 10}"/>`);
+    }
+  }
+  const mappings: string[] = [];
+  for (let index = 0; index < 804; index += 1) {
+    mappings.push(`    <mapping id="map_${index.toString().padStart(3, '0')}" ref="base_${(index % 224).toString().padStart(3, '0')}"/>`);
+  }
+  const xml = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<colormap>',
+    '  <colors>',
+    ...colors,
+    '  </colors>',
+    '  <mappings>',
+    ...mappings,
+    '  </mappings>',
+    '  <daltonization><color id="out_of_scope"/></daltonization>',
+    '</colormap>',
+  ].join('\n');
+  return paddedUtf8(xml, X4_UI_CORPUS_COLORS_XML_SIZE);
+}
+
+function makeCanonicalColorXsd(): Uint8Array {
+  const xsd = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">',
+    '  <xs:simpleType name="identifier"><xs:restriction base="xs:string"><xs:pattern value="[a-zA-Z_][a-zA-Z0-9_]*"/></xs:restriction></xs:simpleType>',
+    '</xs:schema>',
+  ].join('\n');
+  return paddedUtf8(xsd, X4_UI_CORPUS_COLORS_XSD_SIZE);
 }
 
 function responseHeaders(contentType: string): { get(name: string): string | null } {
@@ -434,6 +512,120 @@ async function makeFixture(): Promise<Fixture> {
     root,
     generation,
   };
+}
+
+function makeColorFixture(): ColorFixture {
+  const root = 'configured-color-corpus-identity';
+  const generation = 'color-generation-1';
+  const xml = makeCanonicalColorXml();
+  const xsd = makeCanonicalColorXsd();
+  const buffers = new Map<string, Uint8Array>([
+    [X4_UI_CORPUS_COLORS_XML_PATH, xml],
+    [X4_UI_CORPUS_COLORS_XSD_PATH, xsd],
+  ]);
+  const records = new Map<string, unknown[]>([
+    [X4_UI_CORPUS_COLORS_XML_PATH, [{ path: X4_UI_CORPUS_COLORS_XML_PATH, bytes: xml.byteLength }]],
+    [X4_UI_CORPUS_COLORS_XSD_PATH, [{ path: X4_UI_CORPUS_COLORS_XSD_PATH, bytes: xsd.byteLength }]],
+  ]);
+  return {
+    buffers,
+    records,
+    calls: [],
+    statusBodies: [statusBody(root, generation), statusBody(root, generation)],
+    statusCodes: [200, 200],
+    manifestBodies: new Map(),
+    manifestCodes: new Map(),
+    manifestGenerations: new Map(),
+    fileCodes: new Map(),
+    fileContentTypes: new Map(),
+    fileErrors: new Set(),
+    fileNoArrayBuffer: new Set(),
+    root,
+    generation,
+  };
+}
+
+function replaceColorXml(fixture: ColorFixture, text: string): void {
+  const bytes = paddedUtf8(text.replace(/ +$/u, ''), X4_UI_CORPUS_COLORS_XML_SIZE);
+  fixture.buffers.set(X4_UI_CORPUS_COLORS_XML_PATH, bytes);
+  fixture.records.set(X4_UI_CORPUS_COLORS_XML_PATH, [{ path: X4_UI_CORPUS_COLORS_XML_PATH, bytes: bytes.byteLength }]);
+}
+
+function replaceColorXsd(fixture: ColorFixture, text: string): void {
+  const bytes = paddedUtf8(text.replace(/ +$/u, ''), X4_UI_CORPUS_COLORS_XSD_SIZE);
+  fixture.buffers.set(X4_UI_CORPUS_COLORS_XSD_PATH, bytes);
+  fixture.records.set(X4_UI_CORPUS_COLORS_XSD_PATH, [{ path: X4_UI_CORPUS_COLORS_XSD_PATH, bytes: bytes.byteLength }]);
+}
+
+function colorXmlText(fixture: ColorFixture): string {
+  return new TextDecoder().decode(fixture.buffers.get(X4_UI_CORPUS_COLORS_XML_PATH)!);
+}
+
+function recursivelyFrozen(value: unknown, seen = new WeakSet<object>()): boolean {
+  if (value === null || typeof value !== 'object') return true;
+  if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) return true;
+  const object = value as object;
+  if (seen.has(object)) return true;
+  seen.add(object);
+  return Object.isFrozen(object)
+    && Object.keys(value as Record<string, unknown>).every(key => recursivelyFrozen((value as Record<string, unknown>)[key], seen));
+}
+
+function makeColorTransport(fixture: ColorFixture): (url: string, init?: { readonly signal?: AbortSignal }) => Promise<X4UiCorpusFetchResponse> {
+  return async url => {
+    fixture.calls.push(url);
+    if (url === X4_UI_CORPUS_STATUS_URL) {
+      const index = Math.min(fixture.calls.filter(call => call === X4_UI_CORPUS_STATUS_URL).length - 1, fixture.statusBodies.length - 1);
+      return jsonResponse(fixture.statusBodies[index], fixture.statusCodes[index] ?? 200);
+    }
+    if (url.startsWith(`${X4_UI_CORPUS_MANIFEST_URL}?`)) {
+      const path = pathFromQuery(url, 'q');
+      if (fixture.fileErrors.has(`manifest:${path}`)) throw new Error('network');
+      const code = fixture.manifestCodes.get(path) ?? 200;
+      const body = fixture.manifestBodies.get(path) ?? {
+        status: manifestStatus(fixture.root, fixture.manifestGenerations.get(path) ?? fixture.generation),
+        generation: fixture.manifestGenerations.get(path) ?? fixture.generation,
+        total: fixture.records.get(path)?.length ?? 0,
+        limit: 500,
+        offset: 0,
+        files: fixture.records.get(path) ?? [],
+      };
+      return jsonResponse(body, code);
+    }
+    if (url.startsWith(`${X4_UI_CORPUS_FILE_URL}?`)) {
+      const path = pathFromQuery(url, 'path');
+      if (fixture.fileErrors.has(path)) throw new Error('network');
+      const code = fixture.fileCodes.get(path) ?? 200;
+      const contentType = fixture.fileContentTypes.get(path) ?? 'application/xml';
+      if (fixture.fileNoArrayBuffer.has(path)) return { status: code, headers: responseHeaders(contentType) };
+      return bytesResponse(fixture.buffers.get(path) ?? new Uint8Array(), code, contentType);
+    }
+    throw new Error(`unexpected color URL ${url}`);
+  };
+}
+
+function colorOptions(fixture: ColorFixture, extra: Partial<X4UiCorpusCanonicalColorLoadOptions> = {}): X4UiCorpusCanonicalColorLoadOptions {
+  return { transport: makeColorTransport(fixture), ...extra };
+}
+
+async function loadColorSelftestResult(
+  fixture = makeColorFixture(),
+  expectedHashes: readonly string[] = [X4_UI_CORPUS_COLORS_XML_SHA256, X4_UI_CORPUS_COLORS_XSD_SHA256],
+): Promise<X4UiCorpusCanonicalColorSuccess> {
+  const result = await withCanonicalPlatformHash(expectedHashes, () => loadCanonicalX4UiCorpusColorEvidence(colorOptions(fixture)));
+  if (result.ok === false) throw new Error(`canonical color selftest loader failed: ${result.error.code}: ${result.error.message}`);
+  return result;
+}
+
+async function expectColorFailure(
+  fixture: ColorFixture,
+  code: string,
+  expectedHashes: readonly string[] = [X4_UI_CORPUS_COLORS_XML_SHA256, X4_UI_CORPUS_COLORS_XSD_SHA256],
+  extra: Partial<X4UiCorpusCanonicalColorLoadOptions> = {},
+): Promise<void> {
+  const result = await withCanonicalPlatformHash(expectedHashes, () => loadCanonicalX4UiCorpusColorEvidence(colorOptions(fixture, extra)));
+  if (result.ok) throw new Error(`expected canonical color failure ${code}`);
+  equal((result as X4UiCorpusFailureResult).error.code, code, 'canonical color failure code');
 }
 
 function makeTransport(fixture: Fixture): (url: string, init?: { readonly signal?: AbortSignal }) => Promise<X4UiCorpusFetchResponse> {
@@ -938,6 +1130,314 @@ const tests: readonly [string, () => Promise<void>][] = [
       await mutateAndReject('bold atlas evidence', value => { (value.assets.bold.atlas.bytes as Uint8Array)[0] ^= 1; });
       await mutateAndReject('regular decoded alpha', value => { (value.fonts.regular.atlas.alphaBytes as Uint8Array)[0] ^= 1; });
       await mutateAndReject('bold decoded alpha', value => { (value.fonts.bold.atlas.alphaBytes as Uint8Array)[0] ^= 1; });
+    },
+  ],
+  [
+    'canonical colors load fixed evidence, defaults, order, and a closed 224/804 graph',
+    async () => {
+      const fixture = makeColorFixture();
+      const result = await loadColorSelftestResult(fixture);
+      assert(isX4UiCorpusCanonicalColorSuccess(result), 'owner-issued canonical color result should be accepted');
+      equal(result.evidenceKind, X4_UI_CORPUS_COLOR_CANONICAL_EVIDENCE, 'canonical color evidence label');
+      equal(result.canonicalIdentity, 'x4-9.00', 'canonical color identity');
+      equal(result.verification, X4_UI_CORPUS_VERIFICATION, 'color verification boundary');
+      equal(result.identities.xml.relativePath, X4_UI_CORPUS_COLORS_XML_PATH, 'XML path pin');
+      equal(result.identities.xml.sha256, X4_UI_CORPUS_COLORS_XML_SHA256, 'XML hash pin');
+      equal(result.identities.xml.size, X4_UI_CORPUS_COLORS_XML_SIZE, 'XML size pin');
+      equal(X4_UI_CORPUS_9_00_COLOR_CONTRACT.xml.relativePath, X4_UI_CORPUS_COLORS_XML_PATH, 'public XML contract path');
+      equal(X4_UI_CORPUS_9_00_COLOR_CONTRACT.xsd.relativePath, X4_UI_CORPUS_COLORS_XSD_PATH, 'public XSD contract path');
+      equal(result.identities.xsd.relativePath, X4_UI_CORPUS_COLORS_XSD_PATH, 'XSD path pin');
+      equal(result.identities.xsd.sha256, X4_UI_CORPUS_COLORS_XSD_SHA256, 'XSD hash pin');
+      equal(result.identities.xsd.size, X4_UI_CORPUS_COLORS_XSD_SIZE, 'XSD size pin');
+      equal(result.source.xml.sha256, X4_UI_CORPUS_COLORS_XML_SHA256, 'XML evidence hash');
+      equal(result.source.xml.bytes.byteLength, X4_UI_CORPUS_COLORS_XML_SIZE, 'XML evidence bytes');
+      equal(result.source.xsd.bytes.byteLength, X4_UI_CORPUS_COLORS_XSD_SIZE, 'XSD evidence bytes');
+      equal(result.graph.baseColors.length, 224, 'base color count');
+      equal(result.graph.mappings.length, 804, 'mapping count');
+      equal(result.graph.baseColors[0].id, 'base_000', 'base document order');
+      equal(result.graph.baseColors[0].r, 0, 'omitted r default');
+      equal(result.graph.baseColors[0].g, 0, 'omitted g default');
+      equal(result.graph.baseColors[0].b, 0, 'omitted b default');
+      equal(result.graph.baseColors[0].a, 255, 'omitted a default');
+      equal(result.graph.baseColors[0].glow, 0, 'omitted glow default');
+      equal(result.graph.baseColors[1].r, 1, 'explicit r');
+      equal(result.graph.baseColors[1].glow, 0.1, 'explicit glow');
+      equal(result.graph.baseColors[0].source.index, 0, 'base source index');
+      equal(result.graph.mappings[0].id, 'map_000', 'mapping document order');
+      equal(result.graph.mappings[0].ref, 'base_000', 'mapping base reference');
+      equal(result.graph.mappings[0].source.index, 0, 'mapping source index');
+      assert(result.graph.mappings.every(mapping => result.graph.baseColors.some(color => color.id === mapping.ref)), 'every mapping resolves to a base color');
+      assert(!JSON.stringify(result.graph).match(/runtime|effective|profile|daltonization/i), 'graph has no out-of-scope authority fields');
+      equal(Object.keys(result.graph).join(','), 'baseColors,mappings', 'graph is a minimal enumerable plain graph');
+      assert(Object.getPrototypeOf(result.graph) === Object.prototype, 'graph is plain');
+      assert(Object.getPrototypeOf(result.graph.baseColors[0]) === Object.prototype, 'base records are plain');
+      assert(recursivelyFrozen(result.graph), 'graph is recursively frozen');
+      equal(JSON.stringify(JSON.parse(JSON.stringify(result.graph))), JSON.stringify(result.graph), 'graph round trips through JSON');
+      const originalFixtureByte = fixture.buffers.get(X4_UI_CORPUS_COLORS_XML_PATH)![0];
+      fixture.buffers.get(X4_UI_CORPUS_COLORS_XML_PATH)![0] ^= 1;
+      equal(result.source.xml.bytes[0], originalFixtureByte, 'source evidence is detached from transport bytes');
+      assert(fixture.calls.includes(`${X4_UI_CORPUS_FILE_URL}?path=${encodeURIComponent(X4_UI_CORPUS_COLORS_XML_PATH)}`), 'fixed XML file request');
+      assert(fixture.calls.includes(`${X4_UI_CORPUS_FILE_URL}?path=${encodeURIComponent(X4_UI_CORPUS_COLORS_XSD_PATH)}`), 'fixed XSD file request');
+    },
+  ],
+  [
+    'color pins cannot be overridden and the six-asset loader public shape remains exact',
+    async () => {
+      const fixture = makeColorFixture();
+      const attemptedOverride = { ...colorOptions(fixture), contract: { xml: { relativePath: 'attacker.xml', sha256: '0'.repeat(64) } } };
+      const result = await withCanonicalPlatformHash([X4_UI_CORPUS_COLORS_XML_SHA256, X4_UI_CORPUS_COLORS_XSD_SHA256], () =>
+        loadCanonicalX4UiCorpusColorEvidence(attemptedOverride as never));
+      assert(result.ok, 'caller contract data must be ignored');
+      assert(fixture.calls.every(call => !call.includes('attacker.xml')), 'caller path cannot replace canonical path');
+
+      let providerCalled = false;
+      const providerResult = await withCanonicalPlatformHash([X4_UI_CORPUS_COLORS_XML_SHA256, X4_UI_CORPUS_COLORS_XSD_SHA256], () =>
+        loadCanonicalX4UiCorpusColorEvidence({
+          ...colorOptions(makeColorFixture()),
+          hashProvider: async () => { providerCalled = true; return new Uint8Array(32); },
+        } as never));
+      if (providerResult.ok || (providerResult as X4UiCorpusFailureResult).error.code !== 'contract-invalid') throw new Error('caller color hash provider must be refused');
+      assert(!providerCalled, 'caller color hash provider was not called');
+
+      const existing = await loadCanonicalSelftestResult();
+      equal(Object.keys(existing).join(','), 'ok,statusIdentity,manifestGeneration,assets,fonts,helperSourceHash,widgetSourceHash,fontEvidence,verification,evidenceKind,canonical,canonicalIdentity', 'existing canonical result keys');
+    },
+  ],
+  [
+    'color XML/XSD hash, cap, UTF-8, and content-type failures are causal',
+    async () => {
+      await expectColorFailure(makeColorFixture(), 'hash-mismatch', ['0'.repeat(64), X4_UI_CORPUS_COLORS_XSD_SHA256]);
+      await expectColorFailure(makeColorFixture(), 'hash-mismatch', [X4_UI_CORPUS_COLORS_XML_SHA256, '0'.repeat(64)]);
+      await expectColorFailure(makeColorFixture(), 'size-limit', undefined, { byteCaps: { xml: 1 } });
+      const invalidUtf8 = makeColorFixture();
+      const invalidBytes = new Uint8Array(X4_UI_CORPUS_COLORS_XML_SIZE);
+      invalidBytes.fill(0x20);
+      invalidBytes.set([0xff, 0xfe]);
+      invalidUtf8.buffers.set(X4_UI_CORPUS_COLORS_XML_PATH, invalidBytes);
+      invalidUtf8.records.set(X4_UI_CORPUS_COLORS_XML_PATH, [{ path: X4_UI_CORPUS_COLORS_XML_PATH, bytes: invalidBytes.byteLength }]);
+      const invalidResult = await withCanonicalPlatformHash([X4_UI_CORPUS_COLORS_XML_SHA256, X4_UI_CORPUS_COLORS_XSD_SHA256], () =>
+        loadCanonicalX4UiCorpusColorEvidence(colorOptions(invalidUtf8)));
+      if (invalidResult.ok) throw new Error('invalid color XML UTF-8 must fail');
+      equal((invalidResult as X4UiCorpusFailureResult).error.code, 'utf8-invalid', 'color UTF-8 failure code');
+      equal((invalidResult as X4UiCorpusFailureResult).error.message, 'The configured-corpus text source is not valid UTF-8.', 'color UTF-8 failure message');
+      const wrongContentType = makeColorFixture();
+      wrongContentType.fileContentTypes.set(X4_UI_CORPUS_COLORS_XSD_PATH, 'application/octet-stream');
+      await expectColorFailure(wrongContentType, 'content-type');
+    },
+  ],
+  [
+    'color reuses status, manifest, file, abort, network, and generation refusal paths',
+    async () => {
+      const missing = makeColorFixture();
+      missing.records.set(X4_UI_CORPUS_COLORS_XML_PATH, []);
+      await expectColorFailure(missing, 'asset-missing');
+      const duplicate = makeColorFixture();
+      duplicate.records.set(X4_UI_CORPUS_COLORS_XML_PATH, [
+        { path: X4_UI_CORPUS_COLORS_XML_PATH, bytes: X4_UI_CORPUS_COLORS_XML_SIZE },
+        { path: X4_UI_CORPUS_COLORS_XML_PATH, bytes: X4_UI_CORPUS_COLORS_XML_SIZE },
+      ]);
+      await expectColorFailure(duplicate, 'manifest-duplicate');
+      const manifestHttp = makeColorFixture();
+      manifestHttp.manifestCodes.set(X4_UI_CORPUS_COLORS_XML_PATH, 500);
+      await expectColorFailure(manifestHttp, 'manifest-http');
+      const fileHttp = makeColorFixture();
+      fileHttp.fileCodes.set(X4_UI_CORPUS_COLORS_XML_PATH, 404);
+      await expectColorFailure(fileHttp, 'file-http');
+      const network = makeColorFixture();
+      network.fileErrors.add(X4_UI_CORPUS_COLORS_XML_PATH);
+      await expectColorFailure(network, 'network');
+      const statusHttp = makeColorFixture();
+      statusHttp.statusCodes[0] = 503;
+      await expectColorFailure(statusHttp, 'status-http');
+      const malformedStatus = makeColorFixture();
+      malformedStatus.statusBodies[0] = { available: true };
+      await expectColorFailure(malformedStatus, 'status-malformed');
+      const drift = makeColorFixture();
+      drift.statusBodies[1] = statusBody(drift.root, 'color-generation-2');
+      await expectColorFailure(drift, 'generation-drift');
+      const controller = new AbortController();
+      controller.abort();
+      const aborted = makeColorFixture();
+      await expectColorFailure(aborted, 'aborted', undefined, { signal: controller.signal });
+      equal(aborted.calls.length, 0, 'pre-aborted color transport is not invoked');
+    },
+  ],
+  [
+    'color parser rejects malformed XML/XSD roots, containers, declarations, and records',
+    async () => {
+      const malformedCases: readonly [string, string, string][] = [
+        ['truncated XML', '<colormap>', 'color-xml-malformed'],
+        ['wrong root', '<wrong><colors/><mappings/></wrong>', 'color-structure'],
+        ['DOCTYPE/entity', '<!DOCTYPE colormap [<!ENTITY x "y">]><colormap><colors/><mappings/></colormap>', 'color-xml-malformed'],
+        ['missing colors', '<colormap><mappings/></colormap>', 'color-structure'],
+        ['duplicate colors', '<colormap><colors/><colors/><mappings/></colormap>', 'color-structure'],
+        ['missing mappings', '<colormap><colors/></colormap>', 'color-structure'],
+        ['duplicate mappings', '<colormap><colors/><mappings/><mappings/></colormap>', 'color-structure'],
+        ['unexpected root record', '<colormap><colors/><mappings/><unexpected/></colormap>', 'color-structure'],
+      ];
+      for (const [label, xml, code] of malformedCases) {
+        const fixture = makeColorFixture();
+        replaceColorXml(fixture, xml);
+        await expectColorFailure(fixture, code);
+        assert(label.length > 0, 'named malformed case');
+      }
+      const unexpectedNested = makeColorFixture();
+      replaceColorXml(unexpectedNested, colorXmlText(unexpectedNested).replace('  <colors>\n', '  <colors>\n    <unexpected/>\n'));
+      await expectColorFailure(unexpectedNested, 'color-structure');
+      const malformedXsd = makeColorFixture();
+      replaceColorXsd(malformedXsd, '<xs:schema>');
+      await expectColorFailure(malformedXsd, 'color-xsd-malformed');
+    },
+  ],
+  [
+    'XML declaration target and grammar are exact and bounded',
+    async () => {
+      const body = '<colormap><colors/><mappings/></colormap>';
+      const malformedDeclarations: readonly [string, string][] = [
+        ['xmlx target', '<?xmlxversion="1.0"?>'],
+        ['missing version', '<?xml encoding="UTF-8"?>'],
+        ['unsupported version', '<?xml version="1.1"?>'],
+        ['duplicate version', '<?xml version="1.0" version="1.0"?>'],
+        ['unsupported member', '<?xml version="1.0" standalone="yes"?>'],
+        ['arbitrary processing instruction', '<?pi value?>'],
+      ];
+      for (const [label, declaration] of malformedDeclarations) {
+        const fixture = makeColorFixture();
+        replaceColorXml(fixture, `${declaration}${body}`);
+        await expectColorFailure(fixture, 'color-xml-malformed');
+        assert(label.length > 0, 'named XML declaration case');
+      }
+      const afterContent = makeColorFixture();
+      replaceColorXml(afterContent, `${body}<?xml version="1.0"?>`);
+      await expectColorFailure(afterContent, 'color-xml-malformed');
+
+      for (const declaration of [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<?xml version="1.0" encoding="utf-8" ?>',
+      ]) {
+        const fixture = makeColorFixture();
+        replaceColorXml(fixture, colorXmlText(fixture).replace('<?xml version="1.0" encoding="UTF-8"?>', declaration));
+        const result = await loadColorSelftestResult(fixture);
+        equal(result.graph.baseColors.length, 224, 'valid XML declaration base color count');
+        equal(result.graph.mappings.length, 804, 'valid XML declaration mapping count');
+        assert(isX4UiCorpusCanonicalColorSuccess(result), 'valid XML declaration authority');
+      }
+    },
+  ],
+  [
+    'XSD schema local name requires an exact root prefix binding',
+    async () => {
+      const pattern = '  <xs:simpleType name="identifier"><xs:restriction base="xs:string"><xs:pattern value="[a-zA-Z_][a-zA-Z0-9_]*"/></xs:restriction></xs:simpleType>';
+      const declarations: readonly [string, string, string][] = [
+        ['unnamespaced schema', '<schema>', '</schema>'],
+        ['wrong namespace URI', '<xs:schema xmlns:xs="urn:not-xml-schema">', '</xs:schema>'],
+        ['missing namespace binding', '<xs:schema>', '</xs:schema>'],
+        ['wrong local name', '<xs:notSchema xmlns:xs="http://www.w3.org/2001/XMLSchema">', '</xs:notSchema>'],
+      ];
+      for (const [label, start, end] of declarations) {
+        const fixture = makeColorFixture();
+        replaceColorXsd(fixture, `<?xml version="1.0" encoding="UTF-8"?>\n${start}\n${pattern}\n${end}`);
+        await expectColorFailure(fixture, 'color-xsd-malformed');
+        assert(label.length > 0, 'named XSD namespace case');
+      }
+      const genericPrefix = makeColorFixture();
+      replaceColorXsd(genericPrefix, `<?xml version="1.0" encoding="UTF-8"?>\n<generic:schema xmlns:generic="http://www.w3.org/2001/XMLSchema">\n${pattern}\n</generic:schema>`);
+      const result = await loadColorSelftestResult(genericPrefix);
+      equal(result.graph.baseColors.length, 224, 'generic XSD prefix base color count');
+      equal(result.graph.mappings.length, 804, 'generic XSD prefix mapping count');
+      assert(isX4UiCorpusCanonicalColorSuccess(result), 'generic XSD prefix authority');
+    },
+  ],
+  [
+    'legacy Lua UTF-8 failure message remains exact',
+    async () => {
+      const fixture = await makeFixture();
+      await replaceBytes(fixture, 'helper', new Uint8Array([0xef, 0xbf, 0xbd, 0xff]));
+      const result = await loadSyntheticX4UiCorpusAssets(fixture.contract, options(fixture));
+      if (result.ok) throw new Error('invalid Lua UTF-8 must fail');
+      equal((result as X4UiCorpusFailureResult).error.code, 'utf8-invalid', 'Lua UTF-8 failure code');
+      equal((result as X4UiCorpusFailureResult).error.message, 'The configured-corpus Lua source is not valid UTF-8.', 'Lua UTF-8 failure message');
+    },
+  ],
+  [
+    'color parser rejects duplicate/invalid IDs, values, and non-base mapping references',
+    async () => {
+      const cases: readonly [string, string, string, string][] = [
+        ['duplicate base ID', 'id="base_001"', 'id="base_000"', 'color-duplicate-id'],
+        ['duplicate mapping ID', 'id="map_001"', 'id="map_000"', 'color-duplicate-id'],
+        ['invalid ID', 'id="base_000"', 'id="bad-id"', 'color-invalid-id'],
+        ['missing color ID', '<color id="base_000"', '<color', 'color-missing-id'],
+        ['missing mapping ref', ' ref="base_000"', '', 'color-missing-ref'],
+        ['unknown color attribute', '<color id="base_000"', '<color id="base_000" nope="1"', 'color-structure'],
+        ['decimal channel', 'r="1"', 'r="1.5"', 'color-invalid-value'],
+        ['NaN channel', 'g="2"', 'g="NaN"', 'color-invalid-value'],
+        ['infinite channel', 'b="3"', 'b="Infinity"', 'color-invalid-value'],
+        ['negative alpha', 'a="4"', 'a="-1"', 'color-invalid-value'],
+        ['large alpha', 'a="4"', 'a="256"', 'color-invalid-value'],
+        ['infinite glow', 'glow="0.1"', 'glow="Infinity"', 'color-invalid-value'],
+        ['out-of-range glow', 'glow="0.1"', 'glow="2"', 'color-invalid-value'],
+        ['missing base reference', 'ref="base_000"', 'ref="missing_base"', 'color-invalid-ref'],
+        ['mapping-to-mapping reference', 'ref="base_000"', 'ref="map_000"', 'color-invalid-ref'],
+      ];
+      for (const [label, from, to, code] of cases) {
+        const fixture = makeColorFixture();
+        replaceColorXml(fixture, colorXmlText(fixture).replace(from, to));
+        await expectColorFailure(fixture, code);
+        assert(label.length > 0, 'named color parser case');
+      }
+      const childValue = makeColorFixture();
+      replaceColorXml(childValue, colorXmlText(childValue).replace('<color id="base_000"/>', '<color id="base_000"><r>1</r></color>'));
+      await expectColorFailure(childValue, 'color-structure');
+    },
+  ],
+  [
+    'color authority rejects clones and tampering without effective-profile overclaim',
+    async () => {
+      const canonical = await loadColorSelftestResult();
+      assert(isX4UiCorpusCanonicalColorSuccess(canonical), 'canonical color authority accepts loader result');
+      const structuralClone = Object.freeze({ ...canonical });
+      assert(!isX4UiCorpusCanonicalColorSuccess(structuralClone), 'structural color clone rejected');
+      const forgedGraph = Object.freeze({
+        ...canonical,
+        graph: Object.freeze({
+          ...canonical.graph,
+          baseColors: Object.freeze(canonical.graph.baseColors.slice(1)),
+        }),
+      });
+      assert(!isX4UiCorpusCanonicalColorSuccess(forgedGraph), 'forged graph rejected');
+      const sourceByte = canonical.source.xml.bytes[0];
+      (canonical.source.xml.bytes as Uint8Array)[0] ^= 1;
+      equal(isX4UiCorpusCanonicalColorSuccess(canonical), false, 'exposed source-byte mutation invalidates authority');
+      (canonical.source.xml.bytes as Uint8Array)[0] = sourceByte;
+      const fresh = await loadColorSelftestResult();
+      let tamperThrew = false;
+      try {
+        Object.defineProperty(fresh.graph.baseColors[0], 'r', { value: 99 });
+      } catch {
+        tamperThrew = true;
+      }
+      const freshAccepted = isX4UiCorpusCanonicalColorSuccess(fresh);
+      if (tamperThrew) assert(freshAccepted, 'frozen graph remains authoritative after rejected tamper');
+      else assert(!freshAccepted, 'graph tamper invalidates authority');
+      assert(tamperThrew || fresh.graph.baseColors[0].r === 0, 'graph remains frozen where supported');
+      assert(!JSON.stringify(fresh.graph).match(/active|effective|default.?profile|engine|runtime/i), 'color graph does not claim engine authority');
+    },
+  ],
+  [
+    'hostile color option getters and proxies fail closed through the option boundary',
+    async () => {
+      const hostile = new Proxy({}, {
+        get: () => { throw new Error('hostile getter'); },
+        getPrototypeOf: () => { throw new Error('hostile prototype'); },
+      });
+      let result: Awaited<ReturnType<typeof loadCanonicalX4UiCorpusColorEvidence>>;
+      try {
+        result = await withCanonicalPlatformHash([X4_UI_CORPUS_COLORS_XML_SHA256, X4_UI_CORPUS_COLORS_XSD_SHA256], () =>
+          loadCanonicalX4UiCorpusColorEvidence(hostile as never));
+      } catch (error) {
+        throw new Error(`hostile option escaped loader boundary: ${String(error)}`);
+      }
+      assert(!result.ok, 'hostile option must not be accepted');
     },
   ],
 ];
