@@ -9197,3 +9197,171 @@ Status: `HOST VERIFIED / VISUAL DOMINANCE FIXED / RECONSTRUCTION PARTIAL`; overa
 - Highest-risk evidenced weakness: the preview is now substantially more persuasive while exact X4 composition and
   C++ frame acceptance remain unproved. Preserve `Not verified in game`, reject any 1:1 claim from this screenshot, and
   require the bounded source reconstruction plus subsequent real-game gate.
+
+### AI Influence `1b` Zekton SDF shader port — 2026-08-21
+
+Status: `HOST VERIFIED / GLYPH RECTANGLES FIXED / RECONSTRUCTION PARTIAL`; overall B119 remains
+`PARTIAL / Not verified in game`.
+
+#### PLAN / BASELINE / RECONCILE
+
+- Bounded unit: correct only the existing canonical Zekton atlas-to-Canvas alpha transfer. Preserve raw DDS evidence,
+  glyph metrics/placement, source tint ownership, geometry, diagnostics, keep-outs, routes, state, and all game-truth
+  boundaries. No second renderer, WebGL path, browser-font substitute, dependency, source fixture edit, or X4 claim.
+- Baseline is committed/pushed `622d4b2660cc9e24b4ae706c3bb18edc24fdfb60` with local/origin/remote parity and an
+  empty index. `x4UiFontMetrics` production/selftest SHA-256 are
+  `EF898F640D6285A908343962D86F69B95BD609272F3A2636A984BA029ED4B695` /
+  `5C1E9AFC5ECB0755AFA8EAD7FADDA9593D663C86AACB4D9C746A11676D85EDB1`; Canvas production/selftest are
+  `5FAB04F896067917C178011612DEFE375BEB73B4B9ED0A2BA2915CD067E3645F` /
+  `6AD73BBF94A42220411F3A9C21B998BE83438C6439CC6F23827890F7B96A9E92`. Baseline focused receipts are FontMetrics
+  `10/10` and Canvas `120/120`.
+- Reproduced mounted defect: every Zekton glyph in
+  `reference-flat-source-composition-boundary.png` is a tinted rectangular atlas cell with the glyph cut darker inside.
+  The exact regular A8 atlas is `1024x2048`, SHA-256
+  `19483C78A2BDE509A5D118C556AF465C03ADB6CA9126276673A9C924269CA2DA`, contains `972,157` bytes at `255`, and no
+  zero bytes. Glyph `A` has a `27x52` descriptor rectangle whose empty field is `255` and whose shape falls toward `91`.
+  Canvas currently copies each raw A8 byte directly into output alpha, so the empty `255` field is necessarily opaque.
+- Shipped-source authority proves the opposite transfer. `libraries/material_library.xml` SHA-256
+  `4F211F83343FF5C19A4D8427AB25D195E2A124208B730976F9A411335271C047` binds both `zekton_32` and
+  `zekton bold_32` to `xu_ui_unlit_sdf`, `ALPHA8_ANARK`. `shadergl/ogl/xu_ui_unlit_sdf.xml` SHA-256
+  `5E74955A40459D137C19CFCDAE35974FC0F2494E53E58C2CF4761597537E5768` selects
+  `ui_unlit_sdf.frag.glsl` with `diffuse_func=false`. That readable fragment shader, SHA-256
+  `753923F5EDD97AEEF00177FD59B8A43CAA1EC6E2B64F5ADDED59E3E530498968`, defines
+  `alpha = smoothstep(0.4, 0.6, 1.0 - texture(S_diffuse_map, IO_uv0).r)`, then multiplies by the caller color/alpha.
+  The current raw-alpha staging contradicts the game's shipped algorithm; this is `[REPRODUCED]`, not a visual guess.
+- Existing infrastructure reused: the configured-corpus manifest/file loader and canonical ABC/A8 bytes, decoded raw
+  atlas snapshots, current source tint evidence, detached post-validation staging, and existing Canvas allocation/blit
+  path. The selected corpus already supplies the exact pinned DDS bytes; this unit ports the shader's deterministic
+  texel transfer against those bytes and keeps its result provisional until game parity. It does not invent an opacity
+  curve or require a parallel corpus provider.
+- Intended implementation scope is limited to
+  `src/lib/x4UiFontMetrics.ts`, `src/lib/x4UiFontMetrics.selftest.ts`,
+  `src/lib/x4UiCanvasRenderer.ts`, and `src/lib/x4UiCanvasRenderer.selftest.ts`. Put the pure shipped SDF transfer and
+  immutable source identity with the font semantics owner; Canvas applies it to detached regular/bold atlas bytes before
+  tint alpha. Preserve exact input bytes and callback/post-validation mutation defenses.
+- Frozen non-owned production SHA-256: corpus assets
+  `FFC90BE312FFC3ACA728C039A00F6FE410F291EFBC49C3DF6D9775E24606D818`, Paint
+  `9FDBE53D68F516DD36670ABC1DF75F65611F81C3EA34E99BEA546EE905005A85`, Scene
+  `FE85C52848C7643EA6B5195FCA4C4270E7036F763BE756CB48327D599050BF99`, Preview
+  `CF429EB982BED6C424DCB778AC7D184EBABDA4C9330364DAC12431BCA223CA82`, and SourceEditor
+  `FB660DCF3DA8C1A9DF06F1CAD1B59A68C2F1AF00A7AE0ED50C83377886BB26B2`.
+- Causal fail-first: add shader-vector assertions proving raw `255` must stage transparent and raw `102` opaque, with
+  the exact smoothstep midpoint family and caller-alpha multiplication. The current implementation must fail while all
+  prior FontMetrics/Canvas assertions remain green. Add a raster assertion that a shipped-shaped glyph cell no longer
+  paints its empty corners while retaining nonzero interior glyph pixels; raw DDS arrays must remain byte-identical.
+- Acceptance: FontMetrics and Canvas focused suites including all prior families; typecheck; exact-file ESLint; diff
+  hygiene; frozen non-owned hashes; mounted exact `aic_menu.lua -> menu.display`, canonical/canonical, `2560x1440`, scale
+  `1`, source-composition, overlays off; permanent `Not verified in game`; zero console errors; direct visual comparison
+  showing rectangular glyph cells removed and readable tinted glyph silhouettes retained. Record clean/cockpit pixel
+  census and screenshots. Then run the applicable adjacent UI suites, production build, serial isolated E2E, complete
+  precommit, graph refresh, process/port cleanup, exact-path commit/push, and GitHub #41 readback before promotion.
+- Negative paths: malformed corpus/plan/options, regular/bold separation, source tint identity, fractional alpha byte
+  rounding, callback mutation, post-validation corpus mutation, allocation/paint failure, raw DDS immutability, default
+  diagnostic-map presentation, non-dominating source diagnostics, keep-out finality, and permanent game-truth refusal
+  remain unchanged. The texel transfer is still a browser preview; Canvas resampling and X4 frame acceptance remain
+  explicitly unverified. Rollback is a targeted revert of the four-file shader-port diff plus ignored visual evidence.
+  No real mod, live extension, unpacked corpus, standing config, game directory, deploy, or X4 launch is authorized while
+  the user is asleep.
+
+#### IMPLEMENT
+
+- Exact native Luna worker `01a0244f-575b-7491-8564-99e0652b1507` owned only the four declared FontMetrics/Canvas
+  source and selftest files. It reached terminal `completed`, reported the exact changed files and gates, and was closed
+  immediately with terminal-status readback. No other implementation writer remained open.
+- Causal fail-first was FontMetrics `10/11` because no public shipped SDF transfer/provenance existed and Canvas
+  `120/121` because a shipped-shaped empty atlas corner staged alpha `255` instead of `0`. All prior assertions stayed
+  green and production hashes remained at their frozen baseline values before repair.
+- `x4UiFontMetrics` now owns an immutable shipped-source identity for `material_library.xml`,
+  `xu_ui_unlit_sdf.xml`, and `ui_unlit_sdf.frag.glsl`, including `xu_ui_unlit_sdf`,
+  `ALPHA8_ANARK`, `diffuse_func=false`, exact hashes, and the literal fragment expression. Its pure transfer validates
+  raw/caller domains, applies the shipped smoothstep, multiplies caller alpha, and uses deterministic positive half-up
+  byte quantization.
+- Canvas now detaches regular/bold A8 arrays and applies that transfer before tint alpha while preserving raw corpus
+  bytes, source RGB ownership, regular/bold separation, allocation/refusal behavior, and post-validation mutation
+  checks. It does not add a renderer, WebGL path, route, source fixture, dependency, or game-acceptance claim.
+- Final SHA-256:
+  - FontMetrics production `B43859BA6F8480C1459C15220863C9C0AC4843A99B527203AB8656EE313A0E30`;
+  - FontMetrics selftest `2C7D38DAACF6217C038F060E5187E1BB22FB997920E9E2B4B4F3A85360078D7A`;
+  - Canvas production `9298FCC50AA24949CBF5A7976FA12ED1794961088F04F7043DBE478A45316AB3`;
+  - Canvas selftest `5EB81EFC1A87D08DF846D849AF1B43A420972F2020D99FD1A7470989CABEC96F`.
+
+#### VALIDATE
+
+- Worker and independent coordinator runs passed FontMetrics `11/11` and Canvas `121/121`. Canvas retained prior
+  diagnostic `44/44`, callback `7/7`, pre-allocation `6/6`, trace `3/3`, freeze `2/2`, sensitivity `3/3`,
+  Batch-6D `11/11`, and Stage-B `45/45` families. Typecheck, exact four-file zero-warning ESLint, and diff hygiene
+  passed.
+- Adjacent authority matrix passed unchanged: SourceEditor canonical color `12/12`, EditorSession `7/7`, Paint
+  `165/165`, Preview `102/102`, and Scene `139/139`. Frozen non-owned hashes remained exact for CorpusAssets
+  `FFC90BE3...D818`, Paint `9FDBE53D...A85`, Scene `FE85C528...F99`, Preview
+  `CF429EB9...A82`, and SourceEditor `FB660DCF...26B2`.
+- Mounted production selected exact source `ui/addons/ai_influence_chat/aic_menu.lua` SHA-256
+  `1D7A3D67D94894FB3A90BBE4E6BD7A3C5FA32A2EAB1DD2BC5E43F714EC7E35E2`, target `menu.display` range
+  `295:0:15913|594:3:27748`, canonical/canonical corpus, `2560x1440`, scale `1`, source-composition, and overlays
+  off. It reached `rendered/current` with permanent `Not verified in game`, zero console errors, and one expected
+  isolated-server directory-settings warning.
+- Clean pixel SHA-256 is `5D2435F8A259E3D8A0E1DFDE2B4D9F0FE65A259DF7E460F742FD8EC5DCAD1B05`:
+  `3,094,646` transparent and `591,754` nontransparent/nonblack pixels, with exact opaque unavailable-gray and red
+  diagnostics both `0`. Screenshot `reference-flat-source-composition-sdf-clean.png` is SHA-256
+  `8217B3A560191043A67C2DF4B006839140F3CAE4D735B2F462CC147315FC930E`.
+- Cockpit keep-outs changed the pixel hash to
+  `1961FD6D3EE276F761415D5117787ACA083784A46C0907CE95EDBF184FAED3DF`. Samples on measured `x=0.664`,
+  `y=0.740`, and `y=0.788` were cyan; screenshot `reference-flat-source-composition-sdf-cockpit.png` is SHA-256
+  `A49F876523A2AD5A86AC292EFEBC658D561D7BB58BD400A2F07E5C802F5F3B50`. Restoring overlays off reproduced
+  the exact clean hash.
+- Durable ignored census
+  `dev-docs/b119-ai-influence-dogfood/evidence/reference-flat-source-composition-sdf-census.json` is SHA-256
+  `37D2889C1A235C792A6F1813D8D26A047CC48CD3CCE53F8E80D537AE45120CC0`. Direct visual comparison of the new
+  screenshot, the prior rectangular-glyph screenshot, and supplied `1b` confirms the tinted atlas rectangles are gone
+  and readable tinted glyph silhouettes remain. It also confirms the overall geometry is still fragmented and does not
+  match `1b`.
+- Production build passed under Node `24.19.0` with 1,847 Vite modules and only the existing chunk-size warning.
+  Full serial isolated E2E passed `104/104` in `8.6m` with zero failed/flaky/bad/quarantined-blocking rows,
+  `child-close`, `ownershipComplete=true`, `treeGone=true`, and no remaining harness PIDs. Receipt SHA-256 is
+  `E58DA839C768A965BDEB0F119AE1CC8159172EC21786BCF8AF5E0B6EEFCFFBB4`.
+- Complete precommit passed directly and again in the commit hook under Node `24.19.0`: verdict `55/55`, Vite
+  lifecycle, product-copy, writer `14/14` plus extension `8/8`, capability `12 / 297 / 1 / 11`, MCP, action-receipt
+  `882 / 56`, typecheck, and size guards. Graphify refreshed to `9,697` nodes / `24,296` edges / `309` communities;
+  the commit hook reported no subsequent topology delta.
+- Ports `3100`, `3101`, and `3300` were free, X4 was absent, and no B119 Forge/browser/E2E/precommit/Graphify or
+  native-worker process remained. After E2E, an exact ancestry audit found and removed only a 33-process Codex-owned
+  external MCP helper wave while retaining the app server. A later 16-Node/16-CMD wave was proven to belong to the
+  running Antigravity/Claude MCP extension host and was deliberately left untouched. No real mod, live extension,
+  unpacked corpus, standing config, or game directory was written.
+
+#### REVIEW / DOCUMENT CLOSE
+
+- Done and evidenced: the preview now applies the exact readable X4 SDF texel transfer and material/shader provenance;
+  empty atlas fields no longer become opaque tinted rectangles; readable source-tinted glyph silhouettes, diagnostics,
+  keep-outs, and the permanent game-truth warning survive.
+- Partial: Canvas precomputes SDF coverage before browser `drawImage` resampling, whereas the GPU samples the raw field
+  before its fragment smoothstep. The deterministic texel transfer is source-faithful, but raster sampling parity,
+  complete `1b` geometry, package/deploy identity, C++ frame acceptance, and player-visible appearance remain unproved.
+- Deferred and still required: reconstruct `1b` hierarchy/spacing/transcript/choices/input/native-wheel composition
+  through the existing source -> Layout -> Scene -> Paint -> Canvas chain; then, only after the separate awake-user
+  write gate, deploy exact bytes and capture X4 frame/player-visible evidence.
+- No capability-map delta: this strengthens the existing canonical font/Canvas owner and adds no route, provider, or
+  user capability surface. Rollback is targeted revert of implementation commit
+  `479e21cb07451ae8d0f43e874d20fc10059ce9c9`; ignored mounted evidence can be discarded independently.
+- Exact four-file implementation commit `479e21cb07451ae8d0f43e874d20fc10059ce9c9`
+  (`fix(ui): port shipped Zekton SDF alpha transfer`) is pushed. Readback proved local `HEAD`, `origin/main`, and
+  remote `refs/heads/main` equal with an empty index; every unrelated dirty path remains preserved. GitHub owner issue
+  #41 remains open pending this checkpoint's repository/issue close synchronization.
+
+#### AAR
+
+- Sustain: shipped-source reconciliation before implementation, exact Luna ownership, causal fail-first vectors and
+  raster evidence, frozen upstream hashes, independent coordinator reruns, mounted pixel census, direct photo
+  comparison, serial isolated broad gates, exact-path staging, immediate worker closure, and three-way Git parity.
+- Improve work/approach: a source-exact texel transfer is not a source-exact sampling pipeline. The browser currently
+  thresholds before resampling while X4's GPU thresholds after texture sampling. Keep this distinction explicit and use
+  X4 screenshots as the only acceptance authority for final glyph edge parity.
+- Improve tools: the first frozen-hash probe guessed stale Paint/Preview filenames; the first mounted-server probe ran
+  before corpus indexing reached ready; and the first exact-stage assertion miscompared tab-delimited Git output after
+  the correct four files were staged. All failed safely and were corrected by `rg --files`, readiness evidence, and
+  path-set index readback. External MCP helpers can also survive worker/E2E cleanup and inflate machine process counts;
+  exact command/ancestry ownership is required before termination, and Antigravity-owned helpers must not be mistaken
+  for Codex residue.
+- Highest-risk evidenced weakness: this correction makes the preview more legible and therefore more persuasive while
+  `1b` geometry, GPU sampling parity, and engine frame acceptance remain open. Preserve `Not verified in game` and do
+  not promote screenshot similarity into an X4 acceptance claim.

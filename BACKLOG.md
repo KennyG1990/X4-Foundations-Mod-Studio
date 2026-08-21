@@ -87,6 +87,19 @@ precommit passed, graphify is `9690/24284/305`, and process/port/X4 containment 
 `5a1b922f5344421927e4033522b2b217257788d3` is pushed with local/origin/remote parity. Next work is exact
 source/sample reconstruction, followed by the separately gated deploy/X4 proof. Overall B119 remains
 `PARTIAL / Not verified in game`; GitHub #41 stays open and exact checkpoint comment `5369666471` was read back.
+**AI Influence `1b` Zekton SDF checkpoint 2026-08-21 — HOST VERIFIED / RECONSTRUCTION PARTIAL:** Shipped
+`material_library.xml`, `xu_ui_unlit_sdf.xml`, and `ui_unlit_sdf.frag.glsl` prove that Zekton uses
+`smoothstep(0.4, 0.6, 1.0 - raw)` with `ALPHA8_ANARK`, while Forge incorrectly staged raw A8 bytes as final alpha.
+Causal reds were FontMetrics `10/11` and Canvas `120/121`; the bounded four-file port now passes `11/11` and
+`121/121` plus SourceEditor `12/12`, EditorSession `7/7`, Paint `165/165`, Preview `102/102`, and Scene `139/139`.
+Mounted exact `aic_menu.lua -> menu.display` is canonical/canonical, `2560x1440`, `rendered/current`, and permanently
+`Not verified in game`: tinted atlas rectangles are gone, readable tinted glyph silhouettes remain, exact opaque
+unavailable-gray/red are zero, and measured keep-outs still project. Full serial E2E passed `104/104`; build,
+precommit twice, graph `9697/24296/309`, process/port/X4 containment, and frozen hashes pass. Implementation commit
+`479e21cb07451ae8d0f43e874d20fc10059ce9c9` is pushed with three-way parity. This is not GPU sampling, complete `1b`
+composition, deploy-byte, C++ frame, or player-visible proof. Next work remains exact source/sample reconstruction,
+then the separately gated real deploy/X4 comparison. Overall B119 remains `PARTIAL / Not verified in game`; GitHub #41
+stays open pending checkpoint readback.
 **P6 Canvas audit rejection 2026-08-19 — FINDINGS / correction active:** The first colour-bearing Canvas candidate is
 focused-green at `100/100`, Stage-B `25/25`, production/selftest
 `490F430673C51957751A3113C68046A10C811F355A349FDDBC2C064AB119DBB3` /

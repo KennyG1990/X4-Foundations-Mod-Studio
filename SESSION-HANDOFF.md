@@ -6,187 +6,154 @@ Status: `IN_PROGRESS / PARTIAL — Not verified in game`
 
 ## Session-start brief
 
-- Project: X4 Forge B119, the linter-first faithful 2D X4 UI editor. Port shipped `helper.lua` and
-  `widget_fullscreen.lua`; preserve real Lua calls, configured unpacked-corpus authority, measured keep-outs, and the
-  distinction between preview evidence and X4 truth.
-- Current boundary: the non-dominating source-diagnostic correction is host-verified, committed, and pushed. Opaque
-  unavailable-gray no longer replaces most of the source composition; all supplied reference images were inspected.
-  Exact `1b` hierarchy/composition and X4 acceptance remain open.
-- Commit question: local `HEAD`, `origin/main`, and remote `refs/heads/main` equal
-  `5a1b922f5344421927e4033522b2b217257788d3` with an empty index after the implementation push. This handoff,
-  `BACKLOG.md`, and the B119 plan are the pending documentation-close checkpoint; stage only those exact paths and
-  preserve every unrelated dirty path.
-- GitHub owner: issue #41 remains open. Non-dominating checkpoint comment `5369666471`, source-composition comment
-  `5369110625`, and prior Canvas comment `5367932527` are written and read back.
+- Project: X4 Forge B119, the linter-first faithful 2D X4 UI editor. Port shipped `helper.lua`,
+  `widget_fullscreen.lua`, font/material/shader sources, and real Lua calls; do not invent an approximate renderer.
+- Current boundary: the shipped Zekton SDF texel transfer is host-verified, visually removes the opaque tinted glyph
+  rectangles, and is committed/pushed. Exact AI Influence `1b` hierarchy/composition, browser-vs-GPU sampling parity,
+  package/deploy identity, C++ frame acceptance, and player-visible X4 proof remain open.
+- Commit question: implementation commit `479e21cb07451ae8d0f43e874d20fc10059ce9c9` is pushed with local,
+  `origin/main`, and remote `refs/heads/main` parity and an empty index. This handoff, `BACKLOG.md`, and the B119 plan
+  are the exact pending documentation-close paths; suggested title:
+  `docs(ui): record B119 Zekton SDF checkpoint`.
+- GitHub owner: issue #41 remains open. Add and read back one exact checkpoint comment only after the documentation
+  commit/push is complete.
 
 ## Machine and process state
 
 - Ken's latest gate: Antigravity running, X4 not running, machine quiet; Ken is asleep.
-- No native Luna worker remains open. All implementation and audit workers returned terminal and were closed.
-- The isolated Forge server and browser page were stopped/closed. Ports `3100`, `3101`, and `3300` were free after
-  validation; X4 was absent. Recheck current state before any new runtime work.
 - Do not deploy, launch X4, write the real mod/live extension/unpacked corpus, or mutate standing config while Ken is
   asleep. Those remain a separate explicit write gate.
+- No native Luna worker remains open. The implementation worker returned terminal and was closed.
+- Ports `3100`, `3101`, and `3300` were free; X4 was absent; no B119 Forge/browser/E2E/precommit/Graphify process
+  remained after validation.
+- A 33-process external MCP helper wave rooted in the Codex app server survived the E2E lifecycle despite zero
+  harness-owned PIDs. Exact command/ancestry checks were performed and only that leaf tree was stopped; the app server
+  remained alive.
+- A later 16-Node/16-CMD helper wave was proven to belong to the running Antigravity/Claude MCP extension host, not
+  B119 or Codex. It was deliberately left untouched. Do not use total Node/CMD count alone as Forge residue evidence.
 
-## Current non-dominating diagnostic checkpoint
+## Zekton SDF checkpoint
 
-- Reproduced cause: even after source tints/glyphs survived, source-composition filled every uncovered diagnostic
-  interior opaquely. The mounted reference contained `3,209,776 / 3,686,400` exact unavailable-gray pixels.
-- Causal fail-first was Canvas `119/120`: public Paint gap `scene-gap:000011` produced an opaque red interior at `(1,1)`
-  in both source-composition and diagnostic-map, and source-composition emitted no boundary stroke.
-- Bounded implementation: only source-composition now intersects the issued diagnostic geometry/clip, subtracts source
-  coverage, and strokes remaining fragment boundaries. Diagnostic-map retains opaque fill and remains the default. No
-  renderer, route, state owner, dependency, material claim, source edit, or game-truth change was added.
-- Final hashes:
-  - Canvas production `5FAB04F896067917C178011612DEFE375BEB73B4B9ED0A2BA2915CD067E3645F`;
-  - Canvas selftest `6AD73BBF94A42220411F3A9C21B998BE83438C6439CC6F23827890F7B96A9E92`.
-- Focused/adjacent receipts: Canvas `120/120`, SourceEditor color `12/12`, EditorSession `7/7`, Paint `165/165`, Preview
-  `102/102`, Scene `139/139`, plus typecheck, exact lint, diff hygiene, and production build.
-- Implementation commit `5a1b922f5344421927e4033522b2b217257788d3`
-  (`fix(ui): keep source diagnostics non-dominating`) is pushed with local/origin/remote parity and empty index.
-- Mounted exact source is `aic_menu.lua` SHA-256
-  `1D7A3D67D94894FB3A90BBE4E6BD7A3C5FA32A2EAB1DD2BC5E43F714EC7E35E2`, target `menu.display`, canonical core/color,
-  `2560x1440`, scale `1`, overlays off, `rendered/current`, permanent `Not verified in game`, and zero console errors.
-- Clean buffer SHA-256 `06F3E3FD0A82B1B722B3C77FBBD42F7B0B1FE7EB96DC1FC58C0841FCC734420A` has
-  `3,094,646` transparent and `591,754` nontransparent/nonblack pixels; exact opaque unavailable-gray and exact opaque
-  red diagnostics are both zero. Cyan/green/amber/white source/content classes remain nonzero.
-- Cockpit buffer SHA-256 `4DD0134E64C87CB4E9EA9E2D8551EB825283FD03FF42D227B9C862B9BF7880A2` visibly projects measured
-  `x=0.664`, `y=0.74`, and `y=0.788`; returning overlays off restored the exact clean hash.
-- Evidence census is
-  `dev-docs/b119-ai-influence-dogfood/evidence/reference-flat-source-composition-boundary-census.json`. Clean/cockpit
-  screenshots are `reference-flat-source-composition-boundary.png` SHA-256
-  `7488612898B17FFA5C85218AFB6D935BD11E69C9CB885160FBDD5A0A09DA1B01` and
-  `reference-flat-source-composition-boundary-cockpit.png` SHA-256
-  `D208266289CCBB72284E85C4358E6ACDDD75DEB39388161BA01DA8F570188083`.
-- Manual visual inspection covered the vanilla image and all supplied `00-brief`, `1a`-`1j` images. Gray dominance is
-  fixed, but source geometry remains fragmented and does not match `1b`'s exact left rail, bottom-anchored transcript,
-  three-choice plate, input dock, spacing, or protected native-wheel composition.
+- Reproduced cause: the shipped regular A8 atlas uses `255` for empty fields and values falling toward `91` for glyph
+  shape. Forge copied raw A8 directly to Canvas alpha, making each atlas cell an opaque tinted rectangle.
+- Shipped authority:
+  - `libraries/material_library.xml` SHA-256
+    `4F211F83343FF5C19A4D8427AB25D195E2A124208B730976F9A411335271C047` binds regular/bold Zekton to
+    `xu_ui_unlit_sdf` and `ALPHA8_ANARK`;
+  - `shadergl/ogl/xu_ui_unlit_sdf.xml` SHA-256
+    `5E74955A40459D137C19CFCDAE35974FC0F2494E53E58C2CF4761597537E5768` selects the fragment with
+    `diffuse_func=false`;
+  - `shadergl/glsl/ui_unlit_sdf.frag.glsl` SHA-256
+    `753923F5EDD97AEEF00177FD59B8A43CAA1EC6E2B64F5ADDED59E3E530498968` applies
+    `smoothstep(0.4, 0.6, 1.0 - texture(...).r)` before caller color/alpha.
+- Causal fail-first:
+  - FontMetrics `10/11` because the public transfer/provenance was absent;
+  - Canvas `120/121` because a shipped-shaped empty corner staged `255` instead of `0`.
+- Bounded implementation: FontMetrics owns the immutable source identity and pure validated transfer; Canvas applies
+  it to detached regular/bold A8 bytes before tint alpha. No new renderer, route, dependency, source fixture, or
+  game-truth claim was added.
+- Final SHA-256:
+  - FontMetrics `B43859BA6F8480C1459C15220863C9C0AC4843A99B527203AB8656EE313A0E30`;
+  - FontMetrics selftest `2C7D38DAACF6217C038F060E5187E1BB22FB997920E9E2B4B4F3A85360078D7A`;
+  - Canvas `9298FCC50AA24949CBF5A7976FA12ED1794961088F04F7043DBE478A45316AB3`;
+  - Canvas selftest `5EB81EFC1A87D08DF846D849AF1B43A420972F2020D99FD1A7470989CABEC96F`.
+- Implementation commit: `479e21cb07451ae8d0f43e874d20fc10059ce9c9`,
+  `fix(ui): port shipped Zekton SDF alpha transfer`.
 
-## Latest accepted checkpoint
+## Validation evidence
 
-- Canvas source-literal repair:
-  - production `src/lib/x4UiCanvasRenderer.ts` SHA-256
-    `5318E9B40D28ACB73452591F0896D5CC8972E24B5F3D4DD24125ECDF85A56E3D`;
-  - selftest `src/lib/x4UiCanvasRenderer.selftest.ts` SHA-256
-    `334472456F1D4E418706DD518E30D023150F09533F74D374F26DAC231A6C3DC9`;
-  - focused Canvas `117/117` under worker and coordinator;
-  - implementation commit `4c480418e0bb4095d0bd5935a3767b29cdd0e0f8`, pushed with remote parity.
-- Exact semantic change: use-site and declaration evidence now agree by exact file/optional sourcePath identity rather
-  than impossible range containment, and alias-use expression text no longer has to equal its literal declaration
-  expression. Same-source identity, declaration-to-channel/key containment, exact closed records,
-  cross-file/sourcePath refusal, duplicates/reassignment, numeric/alpha domains, and pre-allocation refusal remain.
-- Causal receipts:
-  - first red `115/116`: valid use-site was incorrectly required to contain its separate declaration;
-  - second red `116/117`: valid `TOK.plate` use expression was incorrectly required to equal table-literal declaration
-    text;
-  - second fail-first receipt
-    `dev-docs/b119-ai-influence-dogfood/evidence/source-literal-canvas-second-fail-first.json`, SHA-256
-    `E84629ABB3C567DA32E6DC36B6DF6BA766D2F0F74AF01F28D246F5667C276FAA`;
-  - final receipt `source-literal-canvas-second-final.json`, SHA-256
-    `F35E9D28DE1C4C9E4128192DE5D497AEE83C7E46230B764C823C7A194EB69F79`.
-- Isolated dogfood root: `F:\DEV_ENV\X4_Forge\dev-docs\b119-ai-influence-dogfood` is gitignored. The real source,
-  live extension, corpus, X4 state, and observed ports were byte/state-identical before and after.
-- Exact sampled safe source: `aic_menu.lua` SHA-256
-  `37FAE9C83E1FEF6319378B9B8F60711D4E44ADE54FD6B5B26A44E4FC672E7A4F`, target `menu.display`.
-- Driver acceptance:
-  - literal variant: `12/12` samples consumed, `39` UI primitive commands, `0` not applied;
-  - keep-out-safe variant: `9/9` consumed, `38` commands, `0` not applied.
-- Mounted production at `2560x1440`, scale `1`, canonical core/color, nine samples, keep-outs off:
-  - `rendered/current`;
-  - `3,686,400` non-transparent/non-black pixels;
-  - zero new console errors;
-  - permanent `Not verified in game`.
-- Mounted evidence:
-  - census `browser-evidence/b119-final-mounted-census.json`, SHA-256
-    `FFEA43F0A609F42234BBB98D3EA9FB8A55DA5AEDA046909EAA17CFCD30235073`;
-  - clean screenshot `browser-evidence/b119-final-rendered-current-clean.png`, SHA-256
-    `190B3758EA69E96114DB699E92A4E7F7D402B300B0CEFA94F2C461BE26159BAA`;
-  - keep-out census `browser-evidence/b119-final-keepout-census.json`, SHA-256
-    `062B6A8C2374335F3A83F4655A67DD3C363E06E13E4BFBD34040C13688D465BF`.
-- Keep-outs remain advisory at measured `y=0.788`, `y=0.740`, and `x=0.664`.
+- Focused/adjacent:
+  - FontMetrics `11/11`;
+  - Canvas `121/121`;
+  - SourceEditor canonical color `12/12`;
+  - EditorSession `7/7`;
+  - Paint `165/165`;
+  - Preview `102/102`;
+  - Scene `139/139`;
+  - typecheck, exact four-file zero-warning ESLint, diff hygiene, and frozen non-owned hashes passed.
+- Production build passed under bundled Node `24.19.0`; Vite transformed 1,847 modules with only the existing chunk
+  warning.
+- Serial isolated E2E passed `104/104` in `8.6m` with zero failed/flaky/bad/quarantined-blocking rows,
+  `child-close`, `ownershipComplete=true`, `treeGone=true`, and no remaining harness PIDs. Receipt:
+  `test-results/e2e-verdict.json` SHA-256
+  `E58DA839C768A965BDEB0F119AE1CC8159172EC21786BCF8AF5E0B6EEFCFFBB4`.
+- Complete precommit passed directly and again in the commit hook: verdict `55/55`, lifecycle, product-copy, writer
+  `14/14` plus extension `8/8`, capability `12 / 297 / 1 / 11`, MCP, action-receipt `882 / 56`, typecheck, and size
+  guards.
+- Graphify refreshed to `9,697` nodes / `24,296` edges / `309` communities; the commit hook found no later topology
+  delta.
 
-## Broad validation
+## Mounted visual evidence
 
-- Typecheck, exact-file ESLint, diff hygiene, production build, and all focused/adjacent X4 UI authority suites passed
-  for the non-dominating correction.
-- Full serial E2E passed `104/104` in `8.4m`; receipt `test-results/e2e-verdict.json` SHA-256
-  `201E044179D245F68A2647DEDAABF64DAFA424D02366982AC89CE42D7FDC7A4C`; zero failed/flaky/bad/quarantined-blocking,
-  `child-close`, `treeGone=true`, and no owned PID remained.
-- Complete precommit passed twice under process-local Node `24.19.0` / libuv `1.52.1` (direct promotion gate plus commit
-  hook): verdict `55/55`, Vite lifecycle, product-copy, writer `14/14` plus extension `8/8`, capability
-  `12 / 297 / 1 / 11`, MCP, action-receipt `82/56`, typecheck, and size limits.
-- Graph refreshed to `9690` nodes / `24284` edges / `305` communities; the post-commit hook reported no additional
-  topology delta and no Graphify process remained.
-- Final containment: ports `3100`, `3101`, and `3300` free; X4 absent; zero owned worker, Forge, browser, E2E,
-  precommit, or Graphify process; Node returned to baseline `50`. No real mod, live extension, unpacked corpus, standing
-  config, or game directory was written.
-- No capability-map delta.
+- Exact source: `ui/addons/ai_influence_chat/aic_menu.lua` SHA-256
+  `1D7A3D67D94894FB3A90BBE4E6BD7A3C5FA32A2EAB1DD2BC5E43F714EC7E35E2`, target `menu.display`.
+- Profile: canonical/canonical, `2560x1440`, scale `1`, source-composition, overlays off, `rendered/current`,
+  permanent `Not verified in game`, zero console errors.
+- Clean pixel hash `5D2435F8A259E3D8A0E1DFDE2B4D9F0FE65A259DF7E460F742FD8EC5DCAD1B05`:
+  `3,094,646` transparent and `591,754` nontransparent/nonblack; exact opaque unavailable-gray/red both `0`.
+- Clean screenshot `dev-docs/b119-ai-influence-dogfood/evidence/reference-flat-source-composition-sdf-clean.png`
+  SHA-256 `8217B3A560191043A67C2DF4B006839140F3CAE4D735B2F462CC147315FC930E`.
+- Cockpit screenshot `reference-flat-source-composition-sdf-cockpit.png` SHA-256
+  `A49F876523A2AD5A86AC292EFEBC658D561D7BB58BD400A2F07E5C802F5F3B50`; measured `x=0.664`,
+  `y=0.740`, and `y=0.788` samples are cyan. Restoring overlays off reproduced the clean hash.
+- Census `reference-flat-source-composition-sdf-census.json` SHA-256
+  `37D2889C1A235C792A6F1813D8D26A047CC48CD3CCE53F8E80D537AE45120CC0`.
+- Visual verdict: opaque tinted atlas rectangles are gone and readable tinted glyph silhouettes remain. Overall
+  source geometry is still fragmented and does not reproduce supplied `1b` hierarchy, spacing, transcript plate,
+  choice row, input dock, or protected native-wheel composition.
 
-## Honest visual state
+## Honest boundary
 
-The mounted Canvas now preserves accepted source text/colors while using thin diagnostic boundaries over transparent
-unavailable interiors. That closes both reproduced opaque-diagnostic defects. It does not close design fidelity: the
-source geometry is still fragmented relative to `C:\Users\Moshi\Desktop\# AI Influence mod UI design`, and exact
-spatial hierarchy/composition remains open. A better pixel-producing preview is still not proof of C++ frame acceptance
-or game appearance.
+The scalar texel transfer is copied from shipped X4 source. The browser currently applies smoothstep before Canvas
+resampling, while the GPU samples the raw field before fragment smoothstep. Therefore this checkpoint is faithful at
+the source-texel transfer but not proof of identical edge sampling. A clearer preview is still not C++ frame acceptance
+or player-visible proof.
 
 ## Eyeball queue
 
-1. **Forge reference-parity check — pending reconstruction, not merely approval.**
-   1. Open the supplied design folder and the clean mounted screenshot side by side.
-   2. Confirm the gray dominance is gone but the current screenshot remains fragmented and is not the intended `1b`.
-   3. Do not approve deployment from this image; first reconstruct the missing source samples/text/composition through
-      the Forge source-first path and rerun mounted comparison.
+1. **Forge `1b` reconstruction check — not ready for approval yet.**
+   1. Open the supplied `1b` image beside the clean SDF screenshot.
+   2. Confirm glyph rectangles are gone.
+   3. Confirm the current source geometry remains fragmented; do not approve deploy from this image.
+   4. First reconstruct the missing source samples/text/layout through the existing Forge pipeline.
 2. **X4 frame and experience proof — Ken-gated.**
    1. Reconfirm Antigravity state, X4 stopped, and machine quiet.
-   2. Present the write gate below and wait for Ken's explicit `go`.
-   3. Snapshot the exact real-mod and live-extension hashes, deploy only the approved Forge output, and read back byte
-      identity.
-   4. Launch X4, open the target conversation UI, capture the player-visible frame, and compare it to both the Forge
-      preview and supplied references.
-   5. Record C++ frame acceptance/failure and preserve `Not verified in game` unless the real frame is observed.
+   2. Present the write gate below and wait for explicit `go`.
+   3. Snapshot exact real-mod/live-extension hashes, deploy only the approved Forge output, and read back byte identity.
+   4. Launch X4, open the target conversation UI, capture the player-visible frame, and compare it with Forge and `1b`.
+   5. Record engine acceptance/failure; retain `Not verified in game` unless that real frame is observed.
 
 ## Next bounded unit
 
-Reconstruct the AI Influence `1b` design inside the ignored isolated workspace using the already-inspected photos/spec
-and exact real Lua/corpus authority. Extend the existing source/sample/Scene/Paint/Canvas chain, not a parallel
-renderer. Acceptance is mounted Forge output that materially matches the reference at `2560x1440`, with linter and
-keep-outs visible and all host gates retained. It still cannot claim X4 acceptance.
+Reconstruct AI Influence `1b` inside the ignored isolated dogfood workspace using the already-inspected photos/spec and
+exact real Lua/corpus authority. Extend the existing source/sample -> Layout -> Scene -> Paint -> Canvas chain. Do not
+introduce a parallel renderer. Acceptance is mounted Forge output that materially matches `1b` at `2560x1440` while
+retaining linter diagnostics, measured keep-outs, and permanent game-truth status.
 
 Before any real-mod/game write, present this exact gate in one paragraph: the operation will deploy the approved Forge
 candidate into the real mod/live extension so X4 can test it; a bad frame may disappear, close the conversation, or
 trigger UI reload; rollback is restoration/redeployment of the pre-write hash snapshot. Wait for explicit `go`.
 
-## Resume commands and runtime hazard
+## Resume and dirty-worktree preservation
 
 1. Read `BACKLOG.md`, this handoff, and the tail of
    `docs/plans/2026-08-10-b119-x4-ui-editor-linter-first.md`.
-2. Run `git status --short`, `git rev-parse HEAD`, `git rev-parse origin/main`, and inspect matching long-running process
-   ancestry before retrying any interrupted command.
-3. Use only the bundled process-local Node `24.19.0` for E2E/precommit. Global Node `24.15.0` reproduced Windows
-   `0xC0000409` no-report deaths.
-4. Keep E2E serial and isolated on `3100/3101`; never touch the live `3000/3001` workspace.
-
-An interrupted commit in this close remained alive after its tool output was lost. Retrying from Git state alone briefly
-created two precommit trees. Exact PID/ancestry inspection identified them; only the newer duplicate was stopped and the
-original safe-Node process completed the promoted commit. Ctrl-C ended the retry wrapper but left child processes, so
-their ancestry was revalidated before exact termination. This is an AAR/tooling hazard: unchanged HEAD plus a populated
-index does not prove an interrupted commit is dead.
-
-## Dirty-worktree preservation
+2. Verify whether `docs(ui): record B119 Zekton SDF checkpoint` completed. If `HEAD` is still
+   `479e21cb07451ae8d0f43e874d20fc10059ce9c9`, stage only `BACKLOG.md`, `SESSION-HANDOFF.md`, and the B119 plan,
+   commit/push, then update/read back GitHub #41.
+3. Before retrying any interrupted Git or validation command, inspect exact Git state and process ancestry. An
+   unchanged HEAD or populated index does not prove an earlier hook is dead.
+4. Use bundled Node `24.19.0`. Keep E2E serial/isolated on `3100/3101` and never touch live `3000/3001`.
 
 Preserve all unrelated changes. Known exclusions include `CODEX-ONBOARDING.md`, `KNOWN-BUGS.md`, deleted
-`data/known_fixes.json`, deleted `data/trivia_questions.json`, deleted `docs/DISCORD_BOTS_AND_GAMES.md`, the W3B1 plan,
-deleted legacy Discord/bot scripts, `test-results/.last-run.json`, VS Code extension evidence images, issue templates,
-`Note for Kimi.md`, `REFACTOR-PLAN.md`, `mermaid-diagram.png`, `target.name`, marketing-showcase spec/evidence, and the
-untracked `({` path. Never stage or clean them as part of B119.
+`data/known_fixes.json`, `data/trivia_questions.json`, `docs/DISCORD_BOTS_AND_GAMES.md`, the W3B1 plans, deleted
+legacy bot scripts, `test-results/.last-run.json`, VS Code extension files/evidence, issue templates, `Note for Kimi.md`,
+`REFACTOR-PLAN.md`, `mermaid-diagram.png`, `target.name`, marketing-showcase spec/evidence, and untracked `({`.
+Never stage or clean them as part of B119.
 
 ## Durable records
 
 - Authoritative plan: `docs/plans/2026-08-10-b119-x4-ui-editor-linter-first.md`.
 - Source-first design: `docs/plans/2026-08-10-b119-x4-ui-editor-source-first-design.md`.
-- Open owner issue: GitHub #41; non-dominating checkpoint comment `5369666471` and source-composition checkpoint
-  comment `5369110625` are read back.
-- Suggested documentation commit: `docs(ui): record B119 non-dominating diagnostics checkpoint`.
-- Overall status remains `PARTIAL / Not verified in game`; source/sample reconstruction, deploy-byte identity, C++
-  frame acceptance, and player-visible X4 comparison remain open.
+- Open owner issue: GitHub #41.
+- Overall B119 status: `PARTIAL / Not verified in game`.
