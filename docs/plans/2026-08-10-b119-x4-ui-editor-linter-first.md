@@ -9346,7 +9346,8 @@ Status: `HOST VERIFIED / GLYPH RECTANGLES FIXED / RECONSTRUCTION PARTIAL`; overa
 - Exact four-file implementation commit `479e21cb07451ae8d0f43e874d20fc10059ce9c9`
   (`fix(ui): port shipped Zekton SDF alpha transfer`) is pushed. Readback proved local `HEAD`, `origin/main`, and
   remote `refs/heads/main` equal with an empty index; every unrelated dirty path remains preserved. GitHub owner issue
-  #41 remains open pending this checkpoint's repository/issue close synchronization.
+  #41 remains open; exact checkpoint comment `5370579401` was written and read back with the same commits, causal
+  receipts, mounted result, broad gates, limitations, and next-unit boundary.
 
 #### AAR
 

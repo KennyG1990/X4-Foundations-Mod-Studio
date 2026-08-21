@@ -11,12 +11,11 @@ Status: `IN_PROGRESS / PARTIAL — Not verified in game`
 - Current boundary: the shipped Zekton SDF texel transfer is host-verified, visually removes the opaque tinted glyph
   rectangles, and is committed/pushed. Exact AI Influence `1b` hierarchy/composition, browser-vs-GPU sampling parity,
   package/deploy identity, C++ frame acceptance, and player-visible X4 proof remain open.
-- Commit question: implementation commit `479e21cb07451ae8d0f43e874d20fc10059ce9c9` is pushed with local,
-  `origin/main`, and remote `refs/heads/main` parity and an empty index. This handoff, `BACKLOG.md`, and the B119 plan
-  are the exact pending documentation-close paths; suggested title:
-  `docs(ui): record B119 Zekton SDF checkpoint`.
-- GitHub owner: issue #41 remains open. Add and read back one exact checkpoint comment only after the documentation
-  commit/push is complete.
+- Commit question: implementation commit `479e21cb07451ae8d0f43e874d20fc10059ce9c9` and durable close commit
+  `8289c9093128b722c0060ac233a14368b99931df` are pushed with local, `origin/main`, and remote parity and an empty
+  index before this issue-readback synchronization. Recheck exact parity/index before starting the next bounded unit.
+- GitHub owner: issue #41 remains open. Exact checkpoint comment `5370579401` was written and read back with the same
+  commits, evidence, limitations, and next boundary.
 
 ## Machine and process state
 
@@ -138,9 +137,9 @@ trigger UI reload; rollback is restoration/redeployment of the pre-write hash sn
 
 1. Read `BACKLOG.md`, this handoff, and the tail of
    `docs/plans/2026-08-10-b119-x4-ui-editor-linter-first.md`.
-2. Verify whether `docs(ui): record B119 Zekton SDF checkpoint` completed. If `HEAD` is still
-   `479e21cb07451ae8d0f43e874d20fc10059ce9c9`, stage only `BACKLOG.md`, `SESSION-HANDOFF.md`, and the B119 plan,
-   commit/push, then update/read back GitHub #41.
+2. Verify the final issue-readback documentation synchronization completed and local `HEAD`, `origin/main`, and remote
+   `refs/heads/main` agree. If these three documentation files are dirty or staged, inspect process/Git state before
+   finishing only those exact paths.
 3. Before retrying any interrupted Git or validation command, inspect exact Git state and process ancestry. An
    unchanged HEAD or populated index does not prove an earlier hook is dead.
 4. Use bundled Node `24.19.0`. Keep E2E serial/isolated on `3100/3101` and never touch live `3000/3001`.
@@ -155,5 +154,5 @@ Never stage or clean them as part of B119.
 
 - Authoritative plan: `docs/plans/2026-08-10-b119-x4-ui-editor-linter-first.md`.
 - Source-first design: `docs/plans/2026-08-10-b119-x4-ui-editor-source-first-design.md`.
-- Open owner issue: GitHub #41.
+- Open owner issue: GitHub #41; checkpoint comment `5370579401` is written and read back.
 - Overall B119 status: `PARTIAL / Not verified in game`.

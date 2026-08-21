@@ -99,7 +99,7 @@ precommit twice, graph `9697/24296/309`, process/port/X4 containment, and frozen
 `479e21cb07451ae8d0f43e874d20fc10059ce9c9` is pushed with three-way parity. This is not GPU sampling, complete `1b`
 composition, deploy-byte, C++ frame, or player-visible proof. Next work remains exact source/sample reconstruction,
 then the separately gated real deploy/X4 comparison. Overall B119 remains `PARTIAL / Not verified in game`; GitHub #41
-stays open pending checkpoint readback.
+stays open and exact checkpoint comment `5370579401` was written and read back.
 **P6 Canvas audit rejection 2026-08-19 — FINDINGS / correction active:** The first colour-bearing Canvas candidate is
 focused-green at `100/100`, Stage-B `25/25`, production/selftest
 `490F430673C51957751A3113C68046A10C811F355A349FDDBC2C064AB119DBB3` /
