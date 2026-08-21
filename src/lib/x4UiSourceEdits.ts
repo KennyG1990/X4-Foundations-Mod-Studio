@@ -9,9 +9,10 @@
 import type { ModWorkspace } from '../types';
 import {
   createX4UiLayoutTargetCatalog,
+  isExactX4UiLayoutColorValue,
   isIssuedX4UiLayoutEvidencePair,
   isIssuedX4UiLayoutEvidencePairForModel,
-  projectX4UiLayoutProgram,
+  reprojectX4UiLayoutProgramWithIssuedColorAuthority,
   validateX4UiLayoutEvidencePair,
   type X4UiLayoutEvidenceAuthority,
   type X4UiLayoutEvidenceCall,
@@ -655,6 +656,102 @@ const parserOwnedOptionalUndefined = (parent: object, key: string): boolean => {
   const type = ownData(parent, 'type');
   const expression = ownData(parent, 'expression');
   const location = ownData(parent, 'location');
+  if (key === 'handler') {
+    const name = ownData(parent, 'name');
+    const source = ownData(parent, 'source');
+    const start = isRecord(source) ? ownData(source, 'start') : undefined;
+    const end = isRecord(source) ? ownData(source, 'end') : undefined;
+    const sourcePath = isRecord(source) ? ownData(source, 'sourcePath') : undefined;
+    const reachability = ownData(parent, 'reachability');
+    const finiteOwnNumber = (record: Record<string, unknown>, field: string): boolean => {
+      const value = ownData(record, field);
+      return typeof value === 'number' && Number.isFinite(value);
+    };
+    return ownData(parent, 'kind') === 'function'
+      && typeof name === 'string'
+      && name.length > 0
+      && isRecord(source)
+      && typeof ownData(source, 'file') === 'string'
+      && (sourcePath === undefined || typeof sourcePath === 'string')
+      && isRecord(start)
+      && finiteOwnNumber(start, 'line')
+      && finiteOwnNumber(start, 'column')
+      && finiteOwnNumber(start, 'offset')
+      && isRecord(end)
+      && finiteOwnNumber(end, 'line')
+      && finiteOwnNumber(end, 'column')
+      && finiteOwnNumber(end, 'offset')
+      && Array.isArray(ownData(parent, 'branchPath'))
+      && Array.isArray(ownData(parent, 'loopPath'))
+      && (reachability === 'reachable' || reachability === 'conditional' || reachability === 'unreachable');
+  }
+  const dynamicHandlerOptionalKeys = ['functionSource', 'bodySource', 'parameters'] as const;
+  if (dynamicHandlerOptionalKeys.includes(key as typeof dynamicHandlerOptionalKeys[number])) {
+    const ownLocationShape = (candidate: unknown): boolean => {
+      if (!isRecord(candidate)) return false;
+      const start = ownData(candidate, 'start');
+      const end = ownData(candidate, 'end');
+      const sourcePathDescriptor = Object.getOwnPropertyDescriptor(candidate, 'sourcePath');
+      const optionalSourcePath = sourcePathDescriptor === undefined
+        || ('value' in sourcePathDescriptor
+          && (sourcePathDescriptor.value === undefined || typeof sourcePathDescriptor.value === 'string'));
+      const finiteOwnNumber = (record: Record<string, unknown>, field: string): boolean => {
+        const value = ownData(record, field);
+        return typeof value === 'number' && Number.isFinite(value);
+      };
+      return typeof ownData(candidate, 'file') === 'string'
+        && optionalSourcePath
+        && isRecord(start)
+        && finiteOwnNumber(start, 'line')
+        && finiteOwnNumber(start, 'column')
+        && finiteOwnNumber(start, 'offset')
+        && isRecord(end)
+        && finiteOwnNumber(end, 'line')
+        && finiteOwnNumber(end, 'column')
+        && finiteOwnNumber(end, 'offset');
+    };
+    const optionalDescriptorsAreCanonical = dynamicHandlerOptionalKeys.every(optionalKey => {
+      const descriptor = Object.getOwnPropertyDescriptor(parent, optionalKey);
+      return descriptor !== undefined
+        && descriptor.enumerable
+        && 'value' in descriptor
+        && descriptor.value === undefined;
+    });
+    const path = ownData(parent, 'path');
+    const sourceOrder = ownData(parent, 'sourceOrder');
+    const order = ownData(parent, 'order');
+    const value = ownData(parent, 'value');
+    const valueStatus = isRecord(value) ? ownData(value, 'status') : undefined;
+    const context = ownData(parent, 'context');
+    const contextName = isRecord(context) ? ownData(context, 'name') : undefined;
+    const contextReachability = isRecord(context) ? ownData(context, 'reachability') : undefined;
+    return optionalDescriptorsAreCanonical
+      && recordType === 'handler'
+      && ownData(parent, 'name') === 'onClick'
+      && typeof path === 'string'
+      && path.length > 0
+      && ownLocationShape(ownData(parent, 'source'))
+      && typeof sourceOrder === 'number'
+      && Number.isFinite(sourceOrder)
+      && typeof order === 'number'
+      && Number.isFinite(order)
+      && isRecord(value)
+      && (valueStatus === 'static' || valueStatus === 'dynamic' || valueStatus === 'unknown')
+      && typeof ownData(value, 'type') === 'string'
+      && typeof ownData(value, 'expression') === 'string'
+      && ownLocationShape(ownData(value, 'location'))
+      && isRecord(context)
+      && ownData(context, 'kind') === 'handler'
+      && typeof contextName === 'string'
+      && contextName.length > 0
+      && ownData(context, 'handler') === 'onClick'
+      && ownLocationShape(ownData(context, 'source'))
+      && Array.isArray(ownData(context, 'branchPath'))
+      && Array.isArray(ownData(context, 'loopPath'))
+      && (contextReachability === 'reachable'
+        || contextReachability === 'conditional'
+        || contextReachability === 'unreachable');
+  }
   if (key === 'sourcePath') {
     return (typeof ownData(parent, 'file') === 'string'
         && isRecord(ownData(parent, 'start'))
@@ -1338,6 +1435,11 @@ const validateIssuedEvidencePair = (
   }
 };
 
+const scalarProgramIsActionable = (program: X4UiLayoutProgram): boolean =>
+  (program.status === 'projected' || program.status === 'partial')
+  && program.operations.length > 0
+  && program.operations.every(operation => operation.status === 'applied');
+
 const lockedBoundaryCatalog = (
   detail: string,
   reason: X4UiSourceEditLockReason = 'unsupported-provenance',
@@ -1954,6 +2056,9 @@ type StructuralRecordSchema =
   | 'descriptor-facts'
   | 'descriptor-fact'
   | 'scale-resolution'
+  | 'color-value'
+  | 'color-channels'
+  | 'color-literal-field'
   | 'source-locations'
   | 'source-location'
   | StructuralCompleteRecordSchema;
@@ -2041,6 +2146,8 @@ const structuralChildSchema = (
     if (key === 'context') return 'call-context';
   }
   if (schema === 'scale-resolution' && key === 'sourceArguments') return 'source-locations';
+  if (schema === 'color-value' && key === 'channels') return 'color-channels';
+  if (schema === 'color-channels' && ['r', 'g', 'b', 'a', 'glow'].includes(key)) return 'color-literal-field';
   return 'exact';
 };
 
@@ -2069,6 +2176,8 @@ const structuralSchemaOwnsLocation = (
   if (schema === 'call-context' && key === 'source') return true;
   if (schema === 'branch-path' && key === 'boundary') return true;
   if (schema === 'loop-path' && key === 'source') return true;
+  if (schema === 'color-value' && key === 'declarationSource') return true;
+  if (schema === 'color-literal-field' && (key === 'source' || key === 'keySource')) return true;
   return schema === 'descriptor-fact' && key === 'source';
 };
 
@@ -2147,7 +2256,9 @@ const structuralInvariant = (
   if (schema !== 'exact'
     && !(structuralSchemaOwnsField(schema, key)
       && (typeof value === 'string' || typeof value === 'number'))
-    && !structuralProducerSchemaNodeIsValid(value, schema, splice)) state.valid = false;
+    && !structuralProducerSchemaNodeIsValid(value, schema, splice)) {
+    state.valid = false;
+  }
   if (value === null || typeof value !== 'object') return value;
   if (Array.isArray(value)) {
     const elementSchema = structuralArrayElementSchema(schema);
@@ -2156,7 +2267,9 @@ const structuralInvariant = (
   if (!isRecord(value)) return value;
   if (schema === 'source-location' || structuralSchemaOwnsLocation(schema, key)) {
     const location = structuralLocationInvariant(value, splice);
-    if (location === undefined) state.valid = false;
+    if (location === undefined) {
+      state.valid = false;
+    }
     return location;
   }
   if ((schema === 'parser-reference' && !isParserOwnedReferenceRecord(value))
@@ -2182,7 +2295,11 @@ const structuralInvariant = (
     }
     const childSchema = schema === 'descriptor-facts'
       ? 'descriptor-fact'
-      : structuralChildSchema(schema, childKey);
+      : schema === 'descriptor-fact'
+        && childKey === 'value'
+        && ownData(value, 'expectedType') === 'color-object'
+        ? 'color-value'
+        : structuralChildSchema(schema, childKey);
     result[childKey] = structuralInvariant(
       child,
       childKey,
@@ -2434,6 +2551,32 @@ const structuralSourcePinIsValid = (value: unknown): boolean => {
     && lineEnd >= lineStart;
 };
 
+const structuralColorLiteralFieldIsValid = (
+  value: unknown,
+  text: string | undefined,
+): boolean => structuralRecordKeys(value, ['value', 'expression', 'source', 'keySource'])
+  && structuralFiniteNumber(ownData(value, 'value'))
+  && structuralString(ownData(value, 'expression'))
+  && structuralLocationForText(ownData(value, 'source'), text)
+  && structuralLocationForText(ownData(value, 'keySource'), text);
+
+const structuralColorChannelsIsValid = (
+  value: unknown,
+  text: string | undefined,
+): boolean => {
+  if (!structuralRecordKeys(value, ['r', 'g', 'b', 'a'], ['glow'])) return false;
+  const channels = value as Record<string, unknown>;
+  return structuralColorLiteralFieldIsValid(ownData(channels, 'r'), text)
+    && structuralColorLiteralFieldIsValid(ownData(channels, 'g'), text)
+    && structuralColorLiteralFieldIsValid(ownData(channels, 'b'), text)
+    && structuralColorLiteralFieldIsValid(ownData(channels, 'a'), text)
+    && (!Object.prototype.hasOwnProperty.call(channels, 'glow')
+      || structuralColorLiteralFieldIsValid(ownData(channels, 'glow'), text));
+};
+
+const structuralColorValueIsValid = (value: unknown): boolean =>
+  isExactX4UiLayoutColorValue(value);
+
 const structuralDescriptorFactIsValid = (
   value: unknown,
   text: string | undefined,
@@ -2448,13 +2591,21 @@ const structuralDescriptorFactIsValid = (
     )) return false;
     const expectedType = ownData(value, 'expectedType');
     const literal = ownData(value, 'value');
-    return structuralEnum(expectedType, ['number', 'string', 'boolean'])
-      && ((expectedType === 'number' && structuralFiniteNumber(literal))
+    const literalValid = expectedType === 'color-object'
+      ? structuralColorValueIsValid(literal)
+      : ((expectedType === 'number' && structuralFiniteNumber(literal))
         || (expectedType === 'string' && typeof literal === 'string')
-        || (expectedType === 'boolean' && typeof literal === 'boolean'))
-      && structuralEnum(ownData(value, 'provenance'), [
-        'source-literal', 'source-pinned-default', 'direct-helper-scale', 'preview-sample',
+        || (expectedType === 'boolean' && typeof literal === 'boolean'));
+    const provenanceValid = expectedType === 'color-object'
+      ? structuralEnum(ownData(value, 'provenance'), [
+        'source-literal', 'canonical-default-only', 'direct-helper-scale', 'preview-sample',
       ])
+      : structuralEnum(ownData(value, 'provenance'), [
+        'source-literal', 'source-pinned-default', 'direct-helper-scale', 'preview-sample',
+      ]);
+    return (expectedType === 'color-object' || structuralEnum(expectedType, ['number', 'string', 'boolean']))
+      && literalValid
+      && provenanceValid
       && structuralString(ownData(value, 'expression'))
       && structuralLocationForText(ownData(value, 'source'), text)
       && structuralOptionalData(value, 'sourcePin', structuralSourcePinIsValid)
@@ -2930,6 +3081,9 @@ const structuralProducerSchemaNodeIsValid = (
     return Object.keys(value).every(key => key.length > 0);
   }
   if (schema === 'descriptor-fact') return structuralDescriptorFactIsValid(value, text);
+  if (schema === 'color-value') return structuralColorValueIsValid(value);
+  if (schema === 'color-channels') return structuralColorChannelsIsValid(value, text);
+  if (schema === 'color-literal-field') return structuralColorLiteralFieldIsValid(value, text);
   if (schema === 'scale-resolution') {
     return structuralRecordKeys(value, ['status', 'value', 'sourceArguments'])
       && ownData(value, 'status') === 'resolved'
@@ -3932,14 +4086,14 @@ export const compareX4UiSourceStructuralLedgerCorrespondence = (
       const afterSource = ownData(afterCall, 'source');
       if (!isLocationRecord(beforeSource) || !isLocationRecord(afterSource)) return false;
       if (!sameShiftedLocation(
-          beforeSource,
-          afterSource,
-          beforeText,
-          afterText,
-          startOffset,
-          endOffset,
-          replacementLength,
-        )) return false;
+        beforeSource,
+        afterSource,
+        beforeText,
+        afterText,
+        startOffset,
+        endOffset,
+        replacementLength,
+      )) return false;
     }
     const beforeTypedOperations = beforeOperations as readonly X4UiLayoutOperation[];
     const afterTypedOperations = afterOperations as readonly X4UiLayoutOperation[];
@@ -4146,10 +4300,10 @@ const discoverX4UiSourceEditsUnsafe = (context: X4UiSourceEditTrustedContext): X
         detail: 'layout evidence pair was not issued for the canonical complete source call model',
       }));
     }
-    if (context.program.status !== 'projected') {
+    if (!scalarProgramIsActionable(context.program)) {
       return issueCatalog(context, prerequisiteCatalog(context, {
         reason: 'operation-not-applied',
-        detail: `layout program status ${context.program.status} is non-actionable; projected status is required`,
+        detail: `layout program status ${context.program.status} or operation stream is non-actionable; scalar action requires a nonempty projected/partial stream with every operation applied`,
       }));
     }
     const evidenceFailure = validateIssuedEvidencePair(context.program, context.evidenceAuthority);
@@ -4198,7 +4352,9 @@ const discoverX4UiSourceEditsUnsafe = (context: X4UiSourceEditTrustedContext): X
         ? 'direct source literals are available for bounded CAS editing'
         : 'selected source is valid but no direct editable scalar literal was proven',
     );
-    const structuralEntries = structuralEntriesFor(file, target, context.program, context.evidenceAuthority);
+    const structuralEntries = context.program.status === 'projected'
+      ? structuralEntriesFor(file, target, context.program, context.evidenceAuthority)
+      : [];
     const deleteEntries = structuralEntries.filter((entry): entry is X4UiSourceEditDeleteEntry => entry.kind === 'delete-statement');
     const insertEntries = structuralEntries.filter((entry): entry is X4UiSourceEditInsertEntry => entry.kind === 'insert-call');
     return issueCatalog(context, freezeDeep({
@@ -4486,7 +4642,9 @@ const reparseAndProveUnsafe = (
     return { reason: 'reparse-provenance-drift', detail: 'selected target provenance was not re-established after the edit' };
   }
   const nextProfile = { ...input.program.profile, source: nextIdentity };
-  const nextProgramResult = projectX4UiLayoutProgram(
+  const nextProgramResult = reprojectX4UiLayoutProgramWithIssuedColorAuthority(
+    input.program,
+    input.evidenceAuthority,
     nextModel,
     targetSelector(nextTarget),
     nextProfile,
@@ -4597,7 +4755,13 @@ const reparseStructuralAndProveUnsafe = (
     return { reason: 'reparse-provenance-drift', detail: 'selected target provenance was not re-established after the structural edit' };
   }
   const nextProfile = { ...input.program.profile, source: nextIdentity };
-  const nextProgramResult = projectX4UiLayoutProgram(nextModel, targetSelector(nextTarget), nextProfile);
+  const nextProgramResult = reprojectX4UiLayoutProgramWithIssuedColorAuthority(
+    input.program,
+    input.evidenceAuthority,
+    nextModel,
+    targetSelector(nextTarget),
+    nextProfile,
+  );
   if (nextProgramResult.status === 'refused' || !nextProgramResult.program) {
     return { reason: 'reparse-provenance-drift', detail: 'layout program refused the structurally reparsed source' };
   }
@@ -4945,8 +5109,8 @@ export function applyX4UiSourceEdit(
     return refusal(workspace, source, catalog, 'unsupported-provenance', 'source edit catalog belongs to a different issued workspace/source pair');
   }
   if (!isIssuedX4UiLayoutEvidencePair(catalogAuthority.program, catalogAuthority.evidenceAuthority)
-    || catalogAuthority.program.status !== 'projected') {
-    return refusal(workspace, source, catalog, 'unsupported-provenance', 'catalog layout authority is no longer an issued projected pair');
+    || !scalarProgramIsActionable(catalogAuthority.program)) {
+    return refusal(workspace, source, catalog, 'unsupported-provenance', 'catalog layout authority is no longer an issued scalar-actionable projected/partial pair');
   }
   if (typeof entryIdValue !== 'string'
     || !scalarPrimitive(value)

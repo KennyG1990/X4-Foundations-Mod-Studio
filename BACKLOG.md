@@ -100,6 +100,19 @@ precommit twice, graph `9697/24296/309`, process/port/X4 containment, and frozen
 composition, deploy-byte, C++ frame, or player-visible proof. Next work remains exact source/sample reconstruction,
 then the separately gated real deploy/X4 comparison. Overall B119 remains `PARTIAL / Not verified in game`; GitHub #41
 stays open and exact checkpoint comment `5370579401` was written and read back.
+**Source-canonical partial edit checkpoint 2026-08-21 — HOST VERIFIED / GAME TRUTH OPEN:** The existing source-edit
+owner now privately replays the exact loader-issued canonical color authority across scalar and structural reparses.
+Scalar `partial` programs are actionable only with a nonempty all-applied operation stream; partial catalogs still
+issue no structural entries. Exact structural colors use the layout owner's closed schema and remap eleven nested
+source-literal locations. Real AI Influence in-memory public CAS applied `addTable.x 330 -> 600`, reissued ready source
+authority at SHA-256 `9F9E8681...BF1B`, and left the real mod byte-identical. Final focused tests are Layout `622/622`
+and Source Edits `74/74`; six adjacent UI suites, typecheck, exact lint, build, oracle integration `134/134`, and
+precommit pass. The first tracked full E2E attempt died fail-closed with Windows `0xC0000409`; one targeted `1/1`
+boundary check and one controlled retry passed `103/103`, complete receipt `5CE76552...41391`, with clean teardown and
+unchanged live-state hashes. Fresh review found no P0-P2 production defect; both P3 proof findings were corrected.
+No mod/game/corpus/config write occurred. Commit/push and record projections are the next checkpoint; exact `1b`
+reconstruction, deploy-byte identity, C++ frame acceptance, and player-visible X4 proof remain open. Overall B119 is
+`PARTIAL / Not verified in game`; GitHub #41 remains open.
 **P6 Canvas audit rejection 2026-08-19 — FINDINGS / correction active:** The first colour-bearing Canvas candidate is
 focused-green at `100/100`, Stage-B `25/25`, production/selftest
 `490F430673C51957751A3113C68046A10C811F355A349FDDBC2C064AB119DBB3` /

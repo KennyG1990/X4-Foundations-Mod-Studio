@@ -1,3 +1,4 @@
+import type { ModWorkspace, PassthroughFile } from '../types';
 import {
   buildX4UiCallModel,
   type X4UiCallModel,
@@ -21,6 +22,17 @@ import {
   type X4UiLayoutTargetSelector,
 } from './x4UiLayoutProgram';
 import * as x4UiLayoutProgramExports from './x4UiLayoutProgram';
+import {
+  buildX4UiWorkspaceSource,
+} from './x4UiWorkspaceSource';
+import {
+  applyX4UiSourceEdit,
+  applyX4UiSourceStructuralEdit,
+  compareX4UiSourceStructuralLedgerCorrespondence,
+  discoverX4UiSourceEdits,
+  normalizeX4UiSourceEditLayoutModel,
+  type X4UiSourceStructuralLedgerCorrespondenceInput,
+} from './x4UiSourceEdits';
 import {
   X4_UI_CORPUS_COLORS_XML_PATH,
   X4_UI_CORPUS_COLORS_XML_SHA256,
@@ -179,6 +191,31 @@ const resultWithAuthority = (
 } as ReturnType<typeof projectX4UiLayoutProgram>);
 
 const jsonClone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+
+const ownDataDescriptorCensus = (root: unknown): ReadonlySet<object> => {
+  const seen = new Set<object>();
+  const visit = (candidate: unknown): void => {
+    if (candidate === null || typeof candidate !== 'object') return;
+    const objectValue = candidate as object;
+    if (seen.has(objectValue)) return;
+    seen.add(objectValue);
+    for (const descriptor of Object.values(Object.getOwnPropertyDescriptors(objectValue))) {
+      if ('value' in descriptor) visit(descriptor.value);
+    }
+  };
+  visit(root);
+  return seen;
+};
+
+const censusShares = (
+  roots: readonly unknown[],
+  retained: ReadonlySet<object>,
+): boolean => roots.some(root => {
+  for (const objectValue of ownDataDescriptorCensus(root)) {
+    if (retained.has(objectValue)) return true;
+  }
+  return false;
+});
 
 const freezeClone = <T>(value: T): T => {
   const visit = (candidate: unknown): void => {
@@ -12525,6 +12562,1052 @@ const runP3ColorChecks = async (): Promise<Check[]> => {
   const supplied = projectWithColorEvidence(model, target, profile, undefined, undefined, authority);
   const program = resultProgram(supplied);
   const evidenceAuthority = evidenceAuthorityOf(supplied);
+  const ownerReproject = (x4UiLayoutProgramExports as unknown as {
+    reprojectX4UiLayoutProgramWithIssuedColorAuthority?: (
+      issuedProgram: unknown,
+      issuedEvidenceAuthority: unknown,
+      nextModel: unknown,
+      nextTarget: unknown,
+      nextProfile: unknown,
+    ) => ReturnType<typeof projectX4UiLayoutProgram>;
+  }).reprojectX4UiLayoutProgramWithIssuedColorAuthority;
+  const causalChangedSource = colorSource.replace('addTable(9,', 'addTable(10,');
+  const causalChangedModel = buildX4UiCallModel(input(causalChangedSource, 'selftest/p3-colors-reparsed.lua'));
+  const causalChangedTarget = topTarget(causalChangedModel);
+  const causalChangedProfile = profileFor(causalChangedModel);
+  const colorReplaySourceNeedle = 'row[2]:createButton({ bgColor = Color["button_background_default"]';
+  const operationForSourceNeedle = (
+    candidateResult: ReturnType<typeof projectX4UiLayoutProgram>,
+    sourceText: string,
+  ): X4UiLayoutProgram['operations'][number] | undefined => {
+    const candidateProgram = resultProgram(candidateResult);
+    return candidateProgram?.operations.find(operationValue =>
+      operationValue.kind === 'createButton'
+        && sourceText.slice(operationValue.source.start.offset, operationValue.source.end.offset).includes(colorReplaySourceNeedle));
+  };
+  const omittedColorReplayOperation = operationForSourceNeedle(omitted, colorSource);
+  const suppliedColorReplayOperation = operationForSourceNeedle(supplied, colorSource);
+  const statusCensus = (
+    candidateResult: ReturnType<typeof projectX4UiLayoutProgram>,
+    sourceText: string,
+  ): { readonly applied: number; readonly unresolved: number; readonly selectedStatus: string | undefined } => {
+    const candidateProgram = resultProgram(candidateResult);
+    const selectedOperation = operationForSourceNeedle(candidateResult, sourceText);
+    return {
+      applied: candidateProgram?.operations.filter(operationValue => operationValue.status === 'applied').length || 0,
+      unresolved: candidateProgram?.operations.filter(operationValue => operationValue.status === 'unresolved').length || 0,
+      selectedStatus: selectedOperation?.status,
+    };
+  };
+  const omittedStatusCensus = statusCensus(omitted, colorSource);
+  const suppliedStatusCensus = statusCensus(supplied, colorSource);
+  const ownerReprojected = ownerReproject && program && evidenceAuthority && causalChangedTarget
+    ? ownerReproject(program, evidenceAuthority, causalChangedModel, causalChangedTarget, causalChangedProfile)
+    : undefined;
+  const ownerReprojectedProgram = ownerReprojected && ownerReprojected.status !== 'refused'
+    ? ownerReprojected.program
+    : undefined;
+  p3Check(
+    'B119 owner-controlled color replay closes the omitted-evidence fail-first receipt without relaxing applied status',
+    omittedStatusCensus.applied === 10
+      && omittedStatusCensus.unresolved === 8
+      && omittedStatusCensus.selectedStatus === 'unresolved'
+      && suppliedStatusCensus.applied === 16
+      && suppliedStatusCensus.unresolved === 2
+      && suppliedStatusCensus.selectedStatus === 'applied'
+      && omittedColorReplayOperation?.descriptorFacts.bgcolor?.status === 'unavailable'
+      && suppliedColorReplayOperation?.descriptorFacts.bgcolor?.status === 'known'
+      && suppliedColorReplayOperation?.descriptorFacts.bgcolor?.provenance === 'canonical-default-only'
+      && ownerReprojected !== undefined
+      && ownerReprojected.status !== 'refused'
+      && statusCensus(ownerReprojected!, causalChangedSource).selectedStatus === 'applied',
+    {
+      omitted: omittedStatusCensus,
+      supplied: suppliedStatusCensus,
+      selectedSourceNeedle: colorReplaySourceNeedle,
+      selectedOperation: {
+        id: suppliedColorReplayOperation?.id,
+        kind: suppliedColorReplayOperation?.kind,
+        source: suppliedColorReplayOperation
+          ? colorSource.slice(suppliedColorReplayOperation.source.start.offset, suppliedColorReplayOperation.source.end.offset)
+          : undefined,
+        omittedStatus: omittedColorReplayOperation?.status,
+        suppliedStatus: suppliedColorReplayOperation?.status,
+        omittedColorFactStatus: omittedColorReplayOperation?.descriptorFacts.bgcolor?.status,
+        suppliedColorFactStatus: suppliedColorReplayOperation?.descriptorFacts.bgcolor?.status,
+      },
+      ownerApi: typeof ownerReproject,
+      ownerStatus: ownerReprojected?.status,
+      ownerOperationStatuses: ownerReprojectedProgram?.operations.map(operationValue => operationValue.status),
+    },
+  );
+
+  const publicCasUiXml = '<addon><environment type="menus"><file name="ui/p3-edit.lua"/></environment></addon>';
+  const publicCasLua = [
+    'local menu = { name = "P3 CAS", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 80, backgroundColor = Color["table_background_default"] })',
+    'local row = table:addRow(false, {})',
+    'frame:display()',
+  ].join('\n');
+  const publicCasPassthrough = (
+    path: string,
+    content: string,
+    reason: PassthroughFile['reason'],
+  ): PassthroughFile => ({ path, content, reason, bytes: content.length });
+  const publicCasWorkspace: ModWorkspace = {
+    id: 'layout-program-p3-public-cas',
+    name: 'Layout program P3 public CAS selftest',
+    version: '1.0.0',
+    author: 'Forge',
+    description: 'B119 public source-edit CAS regression fixture',
+    nodes: [],
+    links: [],
+    uiWidgets: [],
+    uiTheme: {
+      backgroundColor: '#000000',
+      borderColor: '#111111',
+      accentColor: '#00ffff',
+      opacity: 1,
+      showIcons: true,
+    },
+    compileSettings: {
+      md: false,
+      ui: true,
+      ai: false,
+      library: false,
+      translations: false,
+      patches: false,
+    },
+    passthroughFiles: [
+      publicCasPassthrough('ui.xml', publicCasUiXml, 'partial'),
+      publicCasPassthrough('ui/p3-edit.lua', publicCasLua, 'partial'),
+    ],
+  };
+  const publicCasSource = buildX4UiWorkspaceSource(publicCasWorkspace);
+  const publicCasFile = publicCasSource.bundle?.sourceFiles.find(file => file.path === 'ui/p3-edit.lua');
+  const publicCasModel = publicCasFile ? normalizeX4UiSourceEditLayoutModel(publicCasFile.callModel) : undefined;
+  const publicCasTarget = publicCasModel ? topTarget(publicCasModel) : undefined;
+  const publicCasProfile = publicCasModel ? profileFor(publicCasModel) : undefined;
+  const publicCasInitial = publicCasModel && publicCasTarget && publicCasProfile
+    ? projectWithColorEvidence(publicCasModel, publicCasTarget, publicCasProfile, undefined, undefined, authority)
+    : undefined;
+  const publicCasProgram = publicCasInitial ? resultProgram(publicCasInitial) : undefined;
+  const publicCasEvidence = publicCasInitial ? evidenceAuthorityOf(publicCasInitial) : undefined;
+  const publicCasCatalog = publicCasProgram && publicCasEvidence
+    ? discoverX4UiSourceEdits(publicCasWorkspace, publicCasSource, publicCasProgram, publicCasEvidence)
+    : undefined;
+  const publicCasText = (candidate: typeof publicCasSource): string | undefined =>
+    candidate.bundle?.sourceFiles.find(file => file.path === 'ui/p3-edit.lua')?.text;
+  const publicCasBefore = publicCasText(publicCasSource);
+  const publicCasEntry = publicCasCatalog?.editableEntries.find(entry =>
+    entry.provenance.callName === 'addTable'
+      && entry.provenance.fields.includes('semantics.properties.width')
+      && entry.expectedText === '80'
+      && publicCasBefore?.slice(entry.startOffset, entry.endOffset) === entry.expectedText);
+  const publicCasApply = publicCasProgram
+    && publicCasEvidence
+    && publicCasCatalog
+    && publicCasEntry
+    && publicCasBefore !== undefined
+    ? applyX4UiSourceEdit(
+      publicCasWorkspace,
+      publicCasSource,
+      publicCasCatalog,
+      publicCasEntry.id,
+      81,
+      publicCasEntry.path,
+      publicCasEntry.startOffset,
+      publicCasEntry.endOffset,
+      publicCasEntry.expectedText,
+    )
+    : undefined;
+  const publicCasAfter = publicCasApply?.accepted === true ? publicCasText(publicCasApply.source) : undefined;
+  const publicCasExpectedAfter = publicCasBefore !== undefined && publicCasEntry
+    ? publicCasBefore.slice(0, publicCasEntry.startOffset)
+      + '81'
+      + publicCasBefore.slice(publicCasEntry.endOffset)
+    : undefined;
+  const publicCasReplacementEntry = publicCasApply?.accepted === true
+    ? publicCasApply.catalog.editableEntries.find(entry =>
+      entry.provenance.callName === 'addTable'
+        && entry.provenance.fields.includes('semantics.properties.width')
+        && entry.expectedText === '81')
+    : undefined;
+  const publicCasStaleBefore = publicCasApply?.accepted === true ? publicCasText(publicCasApply.source) : undefined;
+  const publicCasStaleResult = publicCasApply?.accepted === true && publicCasReplacementEntry
+    ? applyX4UiSourceEdit(
+      publicCasApply.workspace,
+      publicCasApply.source,
+      publicCasApply.catalog,
+      publicCasReplacementEntry.id,
+      82,
+      publicCasReplacementEntry.path,
+      publicCasReplacementEntry.startOffset,
+      publicCasReplacementEntry.endOffset,
+      publicCasEntry?.expectedText,
+    )
+    : undefined;
+  const publicCasStaleAfter = publicCasApply?.accepted === true
+    && publicCasStaleResult?.accepted === false
+    ? publicCasText(publicCasStaleResult.source)
+    : undefined;
+  p3Check(
+    'B119 public color-backed scalar CAS is byte-local, reissued, and stale-safe',
+    publicCasSource.status === 'source-owned'
+      && publicCasSource.editable
+      && publicCasFile !== undefined
+      && publicCasCatalog?.status === 'ready'
+      && publicCasCatalog.editable
+      && publicCasEntry !== undefined
+      && publicCasApply?.accepted === true
+      && publicCasApply.changed
+      && publicCasApply.byteLocal
+      && publicCasApply.reparsed
+      && publicCasApply.provenanceReestablished
+      && publicCasApply.replacement === '81'
+      && publicCasBefore !== undefined
+      && publicCasAfter === publicCasExpectedAfter
+      && publicCasAfter?.slice(0, publicCasApply.startOffset) === publicCasBefore.slice(0, publicCasEntry.startOffset)
+      && publicCasAfter.slice(publicCasApply.startOffset, publicCasApply.startOffset + publicCasApply.replacement.length) === '81'
+      && publicCasAfter.slice(publicCasApply.startOffset + publicCasApply.replacement.length)
+        === publicCasBefore.slice(publicCasEntry.endOffset)
+      && publicCasApply.catalog.status === 'ready'
+      && publicCasApply.catalog.verification === 'Not verified in game'
+      && publicCasApply.catalog.sourceIdentity.sha256 !== publicCasCatalog.sourceIdentity.sha256
+      && publicCasReplacementEntry !== undefined
+      && publicCasReplacementEntry.provenance.sourceIdentity.sha256 === publicCasApply.catalog.sourceIdentity.sha256
+      && publicCasStaleResult?.accepted === false
+      && publicCasStaleResult.reason === 'stale-expected-text'
+      && publicCasStaleResult.changed === false
+      && publicCasStaleResult.source === publicCasApply.source
+      && publicCasStaleResult.workspace === publicCasApply.workspace
+      && publicCasStaleBefore === publicCasStaleAfter,
+    {
+      source: { status: publicCasSource.status, editable: publicCasSource.editable },
+      initialCatalog: publicCasCatalog && {
+        status: publicCasCatalog.status,
+        editable: publicCasCatalog.editable,
+        entries: publicCasCatalog.entries.length,
+      },
+      entry: publicCasEntry && {
+        id: publicCasEntry.id,
+        path: publicCasEntry.path,
+        expectedText: publicCasEntry.expectedText,
+        startOffset: publicCasEntry.startOffset,
+        endOffset: publicCasEntry.endOffset,
+      },
+      apply: publicCasApply && {
+        accepted: publicCasApply.accepted,
+        changed: publicCasApply.accepted ? publicCasApply.changed : undefined,
+        byteLocal: publicCasApply.accepted ? publicCasApply.byteLocal : undefined,
+        reparsed: publicCasApply.accepted ? publicCasApply.reparsed : undefined,
+        provenanceReestablished: publicCasApply.accepted ? publicCasApply.provenanceReestablished : undefined,
+        replacement: publicCasApply.accepted ? publicCasApply.replacement : undefined,
+      },
+      sourceBytes: { before: publicCasBefore, after: publicCasAfter, expected: publicCasExpectedAfter },
+      reissued: publicCasApply?.accepted === true ? {
+        status: publicCasApply.catalog.status,
+        identityChanged: publicCasApply.catalog.sourceIdentity.sha256 !== publicCasCatalog?.sourceIdentity.sha256,
+        replacementExpectedText: publicCasReplacementEntry?.expectedText,
+      } : undefined,
+      stale: publicCasStaleResult && {
+        accepted: publicCasStaleResult.accepted,
+        changed: publicCasStaleResult.changed,
+        reason: publicCasStaleResult.accepted === false ? publicCasStaleResult.reason : undefined,
+        bytesUnchanged: publicCasStaleBefore === publicCasStaleAfter,
+        sourceIdentityPreserved: publicCasApply?.accepted === true
+          && publicCasStaleResult.source === publicCasApply.source,
+        workspaceIdentityPreserved: publicCasApply?.accepted === true
+          && publicCasStaleResult.workspace === publicCasApply.workspace,
+      },
+    },
+  );
+  const publicStructuralLua = publicCasLua.replace(
+    'local row = table:addRow(false, {})',
+    'table:addRow(false, {})[1]:createIcon("literal", { color = { r = 12.5, g = 23.5, b = 34.5, a = 45.5, glow = 0.25 } })',
+  );
+  const publicStructuralWorkspace: ModWorkspace = {
+    ...publicCasWorkspace,
+    id: 'layout-program-p3-public-structural',
+    name: 'Layout program P3 public structural selftest',
+    passthroughFiles: (publicCasWorkspace.passthroughFiles || []).map(file => file.path === 'ui/p3-edit.lua'
+      ? publicCasPassthrough(file.path, publicStructuralLua, file.reason)
+      : file),
+  };
+  const publicStructuralSource = buildX4UiWorkspaceSource(publicStructuralWorkspace);
+  const publicStructuralFile = publicStructuralSource.bundle?.sourceFiles.find(file => file.path === 'ui/p3-edit.lua');
+  const publicStructuralModel = publicStructuralFile
+    ? normalizeX4UiSourceEditLayoutModel(publicStructuralFile.callModel)
+    : undefined;
+  const publicStructuralTarget = publicStructuralModel ? topTarget(publicStructuralModel) : undefined;
+  const publicStructuralProfile = publicStructuralModel ? profileFor(publicStructuralModel) : undefined;
+  const publicStructuralInitial = publicStructuralModel && publicStructuralTarget && publicStructuralProfile
+    ? projectWithColorEvidence(
+      publicStructuralModel,
+      publicStructuralTarget,
+      publicStructuralProfile,
+      undefined,
+      undefined,
+      authority,
+    )
+    : undefined;
+  const publicStructuralProgram = publicStructuralInitial ? resultProgram(publicStructuralInitial) : undefined;
+  const publicStructuralEvidence = publicStructuralInitial ? evidenceAuthorityOf(publicStructuralInitial) : undefined;
+  const publicStructuralCatalog = publicStructuralProgram && publicStructuralEvidence
+    ? discoverX4UiSourceEdits(
+      publicStructuralWorkspace,
+      publicStructuralSource,
+      publicStructuralProgram,
+      publicStructuralEvidence,
+    )
+    : undefined;
+  const publicStructuralText = (candidate: typeof publicStructuralSource): string | undefined =>
+    candidate.bundle?.sourceFiles.find(file => file.path === 'ui/p3-edit.lua')?.text;
+  const publicStructuralBefore = publicStructuralText(publicStructuralSource);
+  const publicStructuralEntry = publicStructuralCatalog?.insertEntries?.find(entry => entry.anchor === 'first-row');
+  const publicStructuralPayload = 'table:addRow(false, {})';
+  const publicStructuralBeforeWorkspace = JSON.stringify((publicStructuralWorkspace.passthroughFiles || []).map(file => ({
+    path: file.path,
+    content: file.content,
+    bytes: file.bytes,
+  })));
+  const publicStructuralApply = publicStructuralEntry && publicStructuralCatalog && publicStructuralBefore !== undefined
+    ? applyX4UiSourceStructuralEdit(
+      publicStructuralWorkspace,
+      publicStructuralSource,
+      publicStructuralCatalog,
+      publicStructuralEntry.id,
+      publicStructuralPayload,
+      publicStructuralEntry.path,
+      publicStructuralEntry.startOffset,
+      publicStructuralEntry.endOffset,
+      publicStructuralEntry.expectedText,
+    )
+    : undefined;
+  const publicStructuralResult = publicStructuralApply as (ReturnType<typeof applyX4UiSourceStructuralEdit> & {
+    readonly program?: X4UiLayoutProgram;
+    readonly evidenceAuthority?: EvidenceAuthorityLike;
+  }) | undefined;
+  const publicStructuralAfter = publicStructuralResult?.accepted === true
+    ? publicStructuralText(publicStructuralResult.source)
+    : undefined;
+  const publicStructuralExpectedAfter = publicStructuralBefore !== undefined && publicStructuralEntry
+    ? publicStructuralBefore.slice(0, publicStructuralEntry.startOffset)
+      + `${publicStructuralEntry.indentation}${publicStructuralPayload}${publicStructuralEntry.lineEnding}`
+      + publicStructuralBefore.slice(publicStructuralEntry.endOffset)
+    : undefined;
+  const publicStructuralPostProjection = publicStructuralResult?.accepted === true
+    ? (() => {
+      const file = publicStructuralResult.source.bundle?.sourceFiles.find(candidate => candidate.path === 'ui/p3-edit.lua');
+      if (!file) return undefined;
+      const model = normalizeX4UiSourceEditLayoutModel(file.callModel);
+      const target = topTarget(model);
+      return { model, target, profile: profileFor(model) };
+    })()
+    : undefined;
+  const publicStructuralOwnerReproject = ownerReproject
+    && publicStructuralProgram
+    && publicStructuralEvidence
+    && publicStructuralPostProjection
+    ? ownerReproject(
+      publicStructuralProgram,
+      publicStructuralEvidence,
+      publicStructuralPostProjection.model,
+      publicStructuralPostProjection.target,
+      publicStructuralPostProjection.profile,
+    )
+    : undefined;
+  const publicStructuralReissuedProgram = publicStructuralOwnerReproject && publicStructuralOwnerReproject.status !== 'refused'
+    ? publicStructuralOwnerReproject.program
+    : undefined;
+  const publicStructuralReissuedEvidence = publicStructuralOwnerReproject && publicStructuralOwnerReproject.status !== 'refused'
+    ? evidenceAuthorityOf(publicStructuralOwnerReproject)
+    : undefined;
+  const publicStructuralReissuedCatalog = publicStructuralResult?.accepted === true
+    && publicStructuralReissuedProgram
+    && publicStructuralReissuedEvidence
+    ? discoverX4UiSourceEdits(
+      publicStructuralResult.workspace,
+      publicStructuralResult.source,
+      publicStructuralReissuedProgram,
+      publicStructuralReissuedEvidence,
+    )
+    : undefined;
+  const publicStructuralCanonicalOperation = publicStructuralReissuedProgram?.operations.find(operationValue =>
+    operationValue.kind === 'addTable'
+      && publicStructuralAfter?.slice(operationValue.source.start.offset, operationValue.source.end.offset)
+        .includes('backgroundColor = Color["table_background_default"]'));
+  const publicStructuralCanonicalFact = publicStructuralCanonicalOperation?.descriptorFacts.backgroundColor;
+  const publicStructuralCanonicalValue = publicStructuralCanonicalFact?.status === 'known'
+    ? publicStructuralCanonicalFact.value as unknown as Record<string, unknown>
+    : undefined;
+  const publicStructuralLiteralOperation = publicStructuralProgram?.operations.find(operationValue =>
+    operationValue.kind === 'createIcon'
+      && publicStructuralBefore?.slice(operationValue.source.start.offset, operationValue.source.end.offset)
+        .includes('createIcon("literal"'));
+  const publicStructuralLiteralFact = publicStructuralLiteralOperation?.descriptorFacts.color;
+  const publicStructuralLiteralValue = publicStructuralLiteralFact?.status === 'known'
+    && publicStructuralLiteralFact.expectedType === 'color-object'
+    ? publicStructuralLiteralFact.value as unknown as Record<string, unknown>
+    : undefined;
+  const publicStructuralReissuedLiteralOperation = publicStructuralReissuedProgram?.operations.find(operationValue =>
+    operationValue.kind === 'createIcon'
+      && publicStructuralAfter?.slice(operationValue.source.start.offset, operationValue.source.end.offset)
+        .includes('createIcon("literal"'));
+  const publicStructuralReissuedLiteralFact = publicStructuralReissuedLiteralOperation?.descriptorFacts.color;
+  const publicStructuralReissuedLiteralValue = publicStructuralReissuedLiteralFact?.status === 'known'
+    && publicStructuralReissuedLiteralFact.expectedType === 'color-object'
+    ? publicStructuralReissuedLiteralFact.value as unknown as Record<string, unknown>
+    : undefined;
+  const publicStructuralLineColumnAt = (text: string, offset: number): { readonly line: number; readonly column: number } => {
+    let line = 1;
+    let lineStart = 0;
+    for (let index = 0; index < offset; index += 1) {
+      if (text[index] === '\n') {
+        line += 1;
+        lineStart = index + 1;
+      }
+    }
+    return { line, column: offset - lineStart };
+  };
+  const publicStructuralLocationMapsThroughInsertion = (
+    beforeLocation: unknown,
+    afterLocation: unknown,
+  ): boolean => {
+    const beforeRecord = beforeLocation as Record<string, unknown> | undefined;
+    const afterRecord = afterLocation as Record<string, unknown> | undefined;
+    const beforeStart = beforeRecord?.start as Record<string, unknown> | undefined;
+    const beforeEnd = beforeRecord?.end as Record<string, unknown> | undefined;
+    const afterStart = afterRecord?.start as Record<string, unknown> | undefined;
+    const afterEnd = afterRecord?.end as Record<string, unknown> | undefined;
+    const insertionStart = publicStructuralEntry?.startOffset;
+    const insertionEnd = publicStructuralEntry?.endOffset;
+    const replacementLength = publicStructuralResult?.accepted === true
+      ? publicStructuralResult.replacement.length
+      : undefined;
+    if (!beforeRecord || !afterRecord || !beforeStart || !beforeEnd || !afterStart || !afterEnd
+      || insertionStart === undefined || insertionEnd === undefined || replacementLength === undefined
+      || publicStructuralAfter === undefined
+      || typeof beforeStart.offset !== 'number' || typeof beforeEnd.offset !== 'number'
+      || typeof afterStart.offset !== 'number' || typeof afterEnd.offset !== 'number'
+      || beforeStart.offset < insertionEnd || beforeEnd.offset < insertionEnd) return false;
+    const map = (offset: number): number => offset + replacementLength - (insertionEnd - insertionStart);
+    const mappedStart = map(beforeStart.offset);
+    const mappedEnd = map(beforeEnd.offset);
+    const mappedStartPosition = publicStructuralLineColumnAt(publicStructuralAfter, mappedStart);
+    const mappedEndPosition = publicStructuralLineColumnAt(publicStructuralAfter, mappedEnd);
+    return beforeRecord.file === afterRecord.file
+      && beforeRecord.sourcePath === afterRecord.sourcePath
+      && afterStart.offset === mappedStart
+      && afterEnd.offset === mappedEnd
+      && afterStart.line === mappedStartPosition.line
+      && afterStart.column === mappedStartPosition.column
+      && afterEnd.line === mappedEndPosition.line
+      && afterEnd.column === mappedEndPosition.column;
+  };
+  const publicStructuralNestedColorLocations = publicStructuralLiteralValue && publicStructuralReissuedLiteralValue
+    ? [
+      {
+        name: 'declarationSource',
+        before: publicStructuralLiteralValue.declarationSource,
+        after: publicStructuralReissuedLiteralValue.declarationSource,
+      },
+      ...(['r', 'g', 'b', 'a', 'glow'] as const).flatMap(channel => {
+        const beforeChannels = publicStructuralLiteralValue.channels as Record<string, unknown>;
+        const afterChannels = publicStructuralReissuedLiteralValue.channels as Record<string, unknown>;
+        const beforeField = beforeChannels[channel] as Record<string, unknown> | undefined;
+        const afterField = afterChannels[channel] as Record<string, unknown> | undefined;
+        return beforeField && afterField
+          ? [
+            { name: `channels.${channel}.source`, before: beforeField.source, after: afterField.source },
+            { name: `channels.${channel}.keySource`, before: beforeField.keySource, after: afterField.keySource },
+          ]
+          : [];
+      }),
+    ]
+    : [];
+  const publicStructuralNestedColorLocationsMapped = publicStructuralNestedColorLocations.length === 11
+    && publicStructuralNestedColorLocations.every(location =>
+      publicStructuralLocationMapsThroughInsertion(location.before, location.after));
+  const publicStructuralStaleResult = publicStructuralEntry && publicStructuralBefore !== undefined
+    ? applyX4UiSourceStructuralEdit(
+      publicStructuralWorkspace,
+      publicStructuralSource,
+      publicStructuralCatalog!,
+      publicStructuralEntry.id,
+      publicStructuralPayload,
+      publicStructuralEntry.path,
+      publicStructuralEntry.startOffset,
+      publicStructuralEntry.endOffset,
+      'stale',
+    )
+    : undefined;
+  const publicStructuralForeignPathResult = publicStructuralEntry && publicStructuralBefore !== undefined
+    ? applyX4UiSourceStructuralEdit(
+      publicStructuralWorkspace,
+      publicStructuralSource,
+      publicStructuralCatalog!,
+      publicStructuralEntry.id,
+      publicStructuralPayload,
+      'ui/foreign.lua',
+      publicStructuralEntry.startOffset,
+      publicStructuralEntry.endOffset,
+      publicStructuralEntry.expectedText,
+    )
+    : undefined;
+  const publicStructuralRefusalPreservesInput = (
+    candidate: ReturnType<typeof applyX4UiSourceStructuralEdit> | undefined,
+  ): boolean => candidate?.accepted === false
+    && candidate.changed === false
+    && candidate.workspace === publicStructuralWorkspace
+    && candidate.source === publicStructuralSource
+    && candidate.catalog === publicStructuralCatalog
+    && publicStructuralText(publicStructuralSource) === publicStructuralBefore
+    && JSON.stringify((publicStructuralWorkspace.passthroughFiles || []).map(file => ({
+      path: file.path,
+      content: file.content,
+      bytes: file.bytes,
+    }))) === publicStructuralBeforeWorkspace;
+  p3Check(
+    'B119 structural source CAS remaps nested source-literal color provenance and preserves source/provenance invariants',
+    publicStructuralEntry !== undefined
+      && publicStructuralBefore !== undefined
+      && publicStructuralResult?.accepted === true
+      && publicStructuralResult.changed
+      && publicStructuralResult.byteLocal
+      && publicStructuralResult.reparsed
+      && publicStructuralResult.provenanceReestablished
+      && publicStructuralAfter === publicStructuralExpectedAfter
+      && publicStructuralText(publicStructuralSource) === publicStructuralBefore
+      && JSON.stringify((publicStructuralWorkspace.passthroughFiles || []).map(file => ({
+        path: file.path,
+        content: file.content,
+        bytes: file.bytes,
+      }))) === publicStructuralBeforeWorkspace
+      && publicStructuralResult.source !== publicStructuralSource
+      && publicStructuralResult.catalog !== publicStructuralCatalog
+      && publicStructuralResult.catalog.status === 'ready'
+      && publicStructuralResult.catalog.verification === 'Not verified in game'
+      && publicStructuralResult.catalog.sourceIdentity.sha256 !== publicStructuralCatalog?.sourceIdentity.sha256
+      && publicStructuralOwnerReproject?.status !== 'refused'
+      && publicStructuralReissuedProgram !== undefined
+      && publicStructuralReissuedEvidence !== undefined
+      && publicStructuralLiteralFact?.status === 'known'
+      && publicStructuralLiteralFact.provenance === 'source-literal'
+      && publicStructuralLiteralValue?.domain === 'source-literal-percent-alpha'
+      && publicStructuralReissuedLiteralFact?.status === 'known'
+      && publicStructuralReissuedLiteralFact.provenance === 'source-literal'
+      && publicStructuralReissuedLiteralValue?.domain === 'source-literal-percent-alpha'
+      && publicStructuralNestedColorLocationsMapped
+      && validateX4UiLayoutEvidencePair(publicStructuralReissuedProgram, publicStructuralReissuedEvidence).valid
+      && publicStructuralReissuedCatalog !== undefined
+      && publicStructuralReissuedCatalog.sourceIdentity.sha256 === publicStructuralResult.catalog.sourceIdentity.sha256
+      && JSON.stringify(publicStructuralReissuedCatalog.entries) === JSON.stringify(publicStructuralResult.catalog.entries)
+      && publicStructuralCanonicalFact?.status === 'known'
+      && publicStructuralCanonicalFact.provenance === 'canonical-default-only'
+      && publicStructuralCanonicalValue?.requestedId === 'table_background_default'
+      && publicStructuralCanonicalValue.canonicalIdentity === 'x4-9.00'
+      && (publicStructuralCanonicalValue.sourceIdentities as Record<string, unknown> | undefined)?.xml !== undefined
+      && ((publicStructuralCanonicalValue.sourceIdentities as Record<string, unknown>).xml as Record<string, unknown>).sha256 === X4_UI_CORPUS_COLORS_XML_SHA256
+      && ((publicStructuralCanonicalValue.sourceIdentities as Record<string, unknown>).xsd as Record<string, unknown>).sha256 === X4_UI_CORPUS_COLORS_XSD_SHA256,
+    {
+      entry: publicStructuralEntry,
+      accepted: publicStructuralResult?.accepted,
+      reason: publicStructuralResult?.accepted === false ? publicStructuralResult.reason : undefined,
+      refusalDetail: publicStructuralResult?.accepted === false ? publicStructuralResult.detail : undefined,
+      changed: publicStructuralResult?.accepted === true ? publicStructuralResult.changed : undefined,
+      byteLocal: publicStructuralResult?.accepted === true ? publicStructuralResult.byteLocal : undefined,
+      reparsed: publicStructuralResult?.accepted === true ? publicStructuralResult.reparsed : undefined,
+      provenanceReestablished: publicStructuralResult?.accepted === true ? publicStructuralResult.provenanceReestablished : undefined,
+      source: { before: publicStructuralBefore, after: publicStructuralAfter, expected: publicStructuralExpectedAfter },
+      returnedKeys: publicStructuralResult ? Object.keys(publicStructuralResult) : [],
+      catalog: publicStructuralResult?.catalog && {
+        status: publicStructuralResult.catalog.status,
+        verification: publicStructuralResult.catalog.verification,
+        sourceIdentity: publicStructuralResult.catalog.sourceIdentity,
+      },
+      ownerReplay: publicStructuralOwnerReproject && {
+        status: publicStructuralOwnerReproject.status,
+        validation: publicStructuralReissuedProgram && publicStructuralReissuedEvidence
+          ? validateX4UiLayoutEvidencePair(publicStructuralReissuedProgram, publicStructuralReissuedEvidence)
+          : undefined,
+        catalogMatches: publicStructuralReissuedCatalog !== undefined
+          && publicStructuralResult?.accepted === true
+          && JSON.stringify(publicStructuralReissuedCatalog.entries) === JSON.stringify(publicStructuralResult.catalog.entries),
+      },
+      canonicalFact: publicStructuralCanonicalFact,
+      literalFact: publicStructuralLiteralFact,
+      reissuedLiteralFact: publicStructuralReissuedLiteralFact,
+      nestedColorLocations: {
+        count: publicStructuralNestedColorLocations.length,
+        mapped: publicStructuralNestedColorLocationsMapped,
+        names: publicStructuralNestedColorLocations.map(location => location.name),
+      },
+    },
+  );
+  const publicStructuralLedgerInput: X4UiSourceStructuralLedgerCorrespondenceInput | undefined =
+    publicStructuralResult?.accepted === true
+      && publicStructuralBefore !== undefined
+      && publicStructuralAfter !== undefined
+      && publicStructuralEntry !== undefined
+      && publicStructuralReissuedProgram !== undefined
+      ? (() => {
+        const beforeFile = publicStructuralSource.bundle?.sourceFiles.find(file => file.path === publicStructuralEntry!.path);
+        const afterFile = publicStructuralResult.source.bundle?.sourceFiles.find(file => file.path === publicStructuralEntry!.path);
+        if (!beforeFile || !afterFile) return undefined;
+        const insertedStart = publicStructuralEntry.startOffset + publicStructuralEntry.indentation.length;
+        const insertedEnd = publicStructuralEntry.startOffset + publicStructuralResult.replacement.length;
+        const insertedCallIndex = afterFile.callModel.calls.findIndex(call =>
+          call.name === 'addRow'
+          && call.source.start.offset >= insertedStart
+          && call.source.end.offset <= insertedEnd
+          && afterFile.text.slice(call.source.start.offset, call.source.end.offset) === publicStructuralPayload,
+        );
+        const insertedOperationIndex = publicStructuralReissuedProgram.operations.findIndex(operationValue =>
+          operationValue.kind === 'addRow'
+            && operationValue.status === 'applied'
+            && !operationValue.localExpansion
+            && operationValue.source.start.offset >= insertedStart
+            && operationValue.source.end.offset <= insertedEnd
+            && afterFile.text.slice(operationValue.source.start.offset, operationValue.source.end.offset) === publicStructuralPayload,
+        );
+        if (insertedCallIndex < 0 || insertedOperationIndex < 0) return undefined;
+        return {
+          beforeCalls: beforeFile.callModel.calls,
+          afterCalls: afterFile.callModel.calls,
+          beforeRecords: beforeFile.callModel.records,
+          afterRecords: afterFile.callModel.records,
+          beforeOperations: publicStructuralProgram?.operations || [],
+          afterOperations: publicStructuralReissuedProgram.operations,
+          entry: publicStructuralEntry,
+          beforeText: publicStructuralBefore,
+          afterText: publicStructuralAfter,
+          replacementLength: publicStructuralResult.replacement.length,
+          insertedCallIndex,
+          insertedOperationIndex,
+        };
+      })()
+      : undefined;
+  const publicStructuralLedgerBaseline = publicStructuralLedgerInput !== undefined
+    && compareX4UiSourceStructuralLedgerCorrespondence(publicStructuralLedgerInput);
+  p3Check(
+    'structural ledger comparator accepts the repaired canonical-color replay baseline',
+    publicStructuralLedgerBaseline,
+    {
+      inputReady: publicStructuralLedgerInput !== undefined,
+      baseline: publicStructuralLedgerBaseline,
+      insertedCallIndex: publicStructuralLedgerInput?.insertedCallIndex,
+      insertedOperationIndex: publicStructuralLedgerInput?.insertedOperationIndex,
+    },
+  );
+  type MutableStructuralLedgerInput = X4UiSourceStructuralLedgerCorrespondenceInput & {
+    readonly afterOperations: unknown[];
+    readonly afterRecords: unknown[];
+  };
+  const publicStructuralLedgerControl = (
+    name: string,
+    mutate: (candidate: MutableStructuralLedgerInput) => boolean,
+  ): { readonly name: string; readonly mutationApplied: boolean; readonly comparator: boolean } => {
+    if (!publicStructuralLedgerInput) return { name, mutationApplied: false, comparator: false };
+    const candidate = jsonClone(publicStructuralLedgerInput) as unknown as MutableStructuralLedgerInput;
+    const mutationApplied = mutate(candidate);
+    return {
+      name,
+      mutationApplied,
+      comparator: mutationApplied && compareX4UiSourceStructuralLedgerCorrespondence(candidate),
+    };
+  };
+  const publicStructuralLedgerControls = [
+    publicStructuralLedgerControl('malformed canonical color fact', candidate => {
+      const operation = candidate.afterOperations.find(value => {
+        const record = value as Record<string, unknown>;
+        const facts = record.descriptorFacts as Record<string, unknown> | undefined;
+        return record.kind === 'addTable' && facts?.backgroundColor !== undefined;
+      }) as Record<string, unknown> | undefined;
+      const facts = operation?.descriptorFacts as Record<string, unknown> | undefined;
+      const fact = facts?.backgroundColor as Record<string, unknown> | undefined;
+      const color = fact?.value as Record<string, unknown> | undefined;
+      if (!color || color.domain !== 'canonical-xml-byte-alpha') return false;
+      delete color.sourceIdentities;
+      return true;
+    }),
+    publicStructuralLedgerControl('drifted canonical color requested identity', candidate => {
+      const operation = candidate.afterOperations.find(value => {
+        const record = value as Record<string, unknown>;
+        const facts = record.descriptorFacts as Record<string, unknown> | undefined;
+        return record.kind === 'addTable' && facts?.backgroundColor !== undefined;
+      }) as Record<string, unknown> | undefined;
+      const facts = operation?.descriptorFacts as Record<string, unknown> | undefined;
+      const fact = facts?.backgroundColor as Record<string, unknown> | undefined;
+      const color = fact?.value as Record<string, unknown> | undefined;
+      if (!color || color.domain !== 'canonical-xml-byte-alpha') return false;
+      color.requestedId = 'forged_color_id';
+      return true;
+    }),
+    publicStructuralLedgerControl('malformed complete ledger record order', candidate => {
+      const record = candidate.afterRecords.find(value => (value as Record<string, unknown>).recordType === 'call') as Record<string, unknown> | undefined;
+      if (!record || typeof record.order !== 'number') return false;
+      record.order += 1;
+      return true;
+    }),
+    publicStructuralLedgerControl('operation model order drift', candidate => {
+      const operation = candidate.afterOperations.find(value => (value as Record<string, unknown>).kind === 'addTable') as Record<string, unknown> | undefined;
+      if (!operation || typeof operation.modelOrder !== 'number') return false;
+      operation.modelOrder += 1;
+      return true;
+    }),
+    publicStructuralLedgerControl('operation kernel state drift', candidate => {
+      const operation = candidate.afterOperations.find(value => {
+        const record = value as Record<string, unknown>;
+        const kernel = record.kernel as Record<string, unknown> | undefined;
+        const stateAfter = kernel?.stateAfter as Record<string, unknown> | undefined;
+        return typeof stateAfter?.frameWidth === 'number';
+      }) as Record<string, unknown> | undefined;
+      const kernel = operation?.kernel as Record<string, unknown> | undefined;
+      const stateAfter = kernel?.stateAfter as Record<string, unknown> | undefined;
+      if (!stateAfter || typeof stateAfter.frameWidth !== 'number') return false;
+      stateAfter.frameWidth += 1;
+      return true;
+    }),
+    publicStructuralLedgerControl('unrelated addTable descriptor drift', candidate => {
+      const operation = candidate.afterOperations.find(value => (value as Record<string, unknown>).kind === 'addTable') as Record<string, unknown> | undefined;
+      const facts = operation?.descriptorFacts as Record<string, unknown> | undefined;
+      const requestedWidth = facts?.requestedWidth as Record<string, unknown> | undefined;
+      if (!requestedWidth || typeof requestedWidth.value !== 'number') return false;
+      requestedWidth.value += 1;
+      return true;
+    }),
+  ];
+  type StructuralColorDomain = 'canonical-xml-byte-alpha' | 'source-literal-percent-alpha';
+  const structuralColorValueInOperations = (
+    operations: readonly unknown[],
+    domain: StructuralColorDomain,
+  ): Record<string, unknown> | undefined => {
+    for (const value of operations) {
+      const record = value as Record<string, unknown>;
+      const facts = record.descriptorFacts as Record<string, unknown> | undefined;
+      if (!facts) continue;
+      for (const factValue of Object.values(facts)) {
+        const fact = factValue as Record<string, unknown>;
+        const color = fact.value as Record<string, unknown> | undefined;
+        if (fact.expectedType === 'color-object' && color?.domain === domain) return color;
+      }
+    }
+    return undefined;
+  };
+  type PairedStructuralColorControl = {
+    readonly name: string;
+    readonly domain: StructuralColorDomain;
+    readonly mutate: (color: Record<string, unknown>) => void;
+    readonly sameMalformedPath: (before: Record<string, unknown>, after: Record<string, unknown>) => boolean;
+  };
+  const sharedMalformedChannelPrototype = { intentional: true };
+  const genericClosedDataCustomPrototypeControl: PairedStructuralColorControl = {
+    name: 'paired source literal custom channel prototype',
+    domain: 'source-literal-percent-alpha',
+    mutate: color => {
+      Object.setPrototypeOf(
+        (color.channels as Record<string, unknown>).r,
+        sharedMalformedChannelPrototype,
+      );
+    },
+    sameMalformedPath: (before, after) =>
+      Object.getPrototypeOf((before.channels as Record<string, unknown>).r)
+        === Object.getPrototypeOf((after.channels as Record<string, unknown>).r)
+      && Object.getPrototypeOf((before.channels as Record<string, unknown>).r) === sharedMalformedChannelPrototype,
+  };
+  const pairedStructuralColorControls: readonly PairedStructuralColorControl[] = [
+    {
+      name: 'paired canonical extra root key',
+      domain: 'canonical-xml-byte-alpha',
+      mutate: color => { color.extraRoot = true; },
+      sameMalformedPath: (before, after) => Object.prototype.hasOwnProperty.call(before, 'extraRoot')
+        && Object.prototype.hasOwnProperty.call(after, 'extraRoot'),
+    },
+    {
+      name: 'paired canonical identity constant',
+      domain: 'canonical-xml-byte-alpha',
+      mutate: color => { color.canonicalIdentity = 'x4-8.00'; },
+      sameMalformedPath: (before, after) => before.canonicalIdentity === after.canonicalIdentity
+        && before.canonicalIdentity === 'x4-8.00',
+    },
+    {
+      name: 'paired canonical source hash',
+      domain: 'canonical-xml-byte-alpha',
+      mutate: color => {
+        const identities = color.sourceIdentities as Record<string, unknown>;
+        const xml = identities.xml as Record<string, unknown>;
+        xml.sha256 = '0'.repeat(64);
+      },
+      sameMalformedPath: (before, after) =>
+        ((before.sourceIdentities as Record<string, unknown>).xml as Record<string, unknown>).sha256
+          === ((after.sourceIdentities as Record<string, unknown>).xml as Record<string, unknown>).sha256,
+    },
+    {
+      name: 'paired canonical channel range',
+      domain: 'canonical-xml-byte-alpha',
+      mutate: color => { color.r = 256; },
+      sameMalformedPath: (before, after) => before.r === 256 && after.r === 256,
+    },
+    {
+      name: 'paired source literal extra root key',
+      domain: 'source-literal-percent-alpha',
+      mutate: color => { color.extraRoot = true; },
+      sameMalformedPath: (before, after) => Object.prototype.hasOwnProperty.call(before, 'extraRoot')
+        && Object.prototype.hasOwnProperty.call(after, 'extraRoot'),
+    },
+    {
+      name: 'paired source literal channel shape',
+      domain: 'source-literal-percent-alpha',
+      mutate: color => {
+        const channels = color.channels as Record<string, unknown>;
+        delete (channels.r as Record<string, unknown>).keySource;
+      },
+      sameMalformedPath: (before, after) => {
+        const beforeField = (before.channels as Record<string, unknown>).r as Record<string, unknown>;
+        const afterField = (after.channels as Record<string, unknown>).r as Record<string, unknown>;
+        return !Object.prototype.hasOwnProperty.call(beforeField, 'keySource')
+          && !Object.prototype.hasOwnProperty.call(afterField, 'keySource');
+      },
+    },
+  ];
+  const pairedStructuralColorRows = pairedStructuralColorControls.map(control => {
+    if (!publicStructuralLedgerInput) {
+      return {
+        name: control.name,
+        mutationApplied: false,
+        pairwiseAcceptedBeforeStrict: false,
+        comparator: false,
+      };
+    }
+    const candidate = jsonClone(publicStructuralLedgerInput) as unknown as MutableStructuralLedgerInput;
+    const beforeColor = structuralColorValueInOperations(candidate.beforeOperations, control.domain);
+    const afterColor = structuralColorValueInOperations(candidate.afterOperations, control.domain);
+    if (!beforeColor || !afterColor) {
+      return {
+        name: control.name,
+        mutationApplied: false,
+        pairwiseAcceptedBeforeStrict: false,
+        comparator: false,
+      };
+    }
+    control.mutate(beforeColor);
+    control.mutate(afterColor);
+    const pairwiseAcceptedBeforeStrict = control.sameMalformedPath(beforeColor, afterColor);
+    return {
+      name: control.name,
+      mutationApplied: true,
+      pairwiseAcceptedBeforeStrict,
+      comparator: compareX4UiSourceStructuralLedgerCorrespondence(candidate),
+    };
+  });
+  p3Check(
+    'structural ledger comparator rejects non-vacuous color, record, order, state, and descriptor drift controls',
+    publicStructuralLedgerBaseline
+      && publicStructuralLedgerControls.length === 6
+      && publicStructuralLedgerControls.every(control => control.mutationApplied && !control.comparator),
+    {
+      baseline: publicStructuralLedgerBaseline,
+      controls: publicStructuralLedgerControls,
+    },
+  );
+  p3Check(
+    'six paired malformed canonical/source color facts are pairwise accepted before strict validation and rejected by the strict schema',
+    publicStructuralLedgerBaseline
+      && pairedStructuralColorRows.length === 6
+      && pairedStructuralColorRows.every(row => row.mutationApplied
+        && row.pairwiseAcceptedBeforeStrict
+        && !row.comparator),
+    {
+      baseline: publicStructuralLedgerBaseline,
+      rows: pairedStructuralColorRows,
+      causalRule: 'six paired malformed-path equalities are true; strict structural schema rejection is the failing gate',
+    },
+  );
+  const genericCustomPrototypeColorRow = (() => {
+    if (!publicStructuralLedgerInput) {
+      return {
+        name: genericClosedDataCustomPrototypeControl.name,
+        mutationApplied: false,
+        pairwiseAcceptedBeforeStrict: false,
+        nonDefaultChannelPrototype: false,
+        comparator: false,
+      };
+    }
+    const candidate = jsonClone(publicStructuralLedgerInput) as unknown as MutableStructuralLedgerInput;
+    const beforeColor = structuralColorValueInOperations(candidate.beforeOperations,
+      genericClosedDataCustomPrototypeControl.domain);
+    const afterColor = structuralColorValueInOperations(candidate.afterOperations,
+      genericClosedDataCustomPrototypeControl.domain);
+    if (!beforeColor || !afterColor) {
+      return {
+        name: genericClosedDataCustomPrototypeControl.name,
+        mutationApplied: false,
+        pairwiseAcceptedBeforeStrict: false,
+        nonDefaultChannelPrototype: false,
+        comparator: false,
+      };
+    }
+    genericClosedDataCustomPrototypeControl.mutate(beforeColor);
+    genericClosedDataCustomPrototypeControl.mutate(afterColor);
+    const beforeChannel = (beforeColor.channels as Record<string, unknown>).r;
+    const afterChannel = (afterColor.channels as Record<string, unknown>).r;
+    const nonDefaultChannelPrototype = typeof beforeChannel === 'object'
+      && beforeChannel !== null
+      && typeof afterChannel === 'object'
+      && afterChannel !== null
+      && Object.getPrototypeOf(beforeChannel) === sharedMalformedChannelPrototype
+      && Object.getPrototypeOf(afterChannel) === sharedMalformedChannelPrototype;
+    return {
+      name: genericClosedDataCustomPrototypeControl.name,
+      mutationApplied: true,
+      pairwiseAcceptedBeforeStrict: genericClosedDataCustomPrototypeControl.sameMalformedPath(beforeColor, afterColor),
+      nonDefaultChannelPrototype,
+      comparator: compareX4UiSourceStructuralLedgerCorrespondence(candidate),
+    };
+  })();
+  p3Check(
+    'generic closed-data rejects the paired source-literal custom channel prototype before strict color validation',
+    publicStructuralLedgerBaseline
+      && genericCustomPrototypeColorRow.mutationApplied
+      && genericCustomPrototypeColorRow.pairwiseAcceptedBeforeStrict
+      && genericCustomPrototypeColorRow.nonDefaultChannelPrototype
+      && !genericCustomPrototypeColorRow.comparator,
+    {
+      baseline: publicStructuralLedgerBaseline,
+      row: genericCustomPrototypeColorRow,
+      causalRule: 'the same non-default channel prototype is present on both sides; this control is explicitly generic closed-data coverage and is excluded from the six strict-validator controls',
+    },
+  );
+  const publicStructuralNestedColorControls = [
+    publicStructuralLedgerControl('malformed source literal declaration location', candidate => {
+      const color = structuralColorValueInOperations(candidate.afterOperations, 'source-literal-percent-alpha');
+      const declarationSource = color?.declarationSource as Record<string, unknown> | undefined;
+      const start = declarationSource?.start as Record<string, unknown> | undefined;
+      if (!start || typeof start.offset !== 'number') return false;
+      start.offset += 1;
+      return true;
+    }),
+    publicStructuralLedgerControl('malformed source literal channel key location', candidate => {
+      const color = structuralColorValueInOperations(candidate.afterOperations, 'source-literal-percent-alpha');
+      const channels = color?.channels as Record<string, unknown> | undefined;
+      const red = channels?.r as Record<string, unknown> | undefined;
+      const keySource = red?.keySource as Record<string, unknown> | undefined;
+      const start = keySource?.start as Record<string, unknown> | undefined;
+      if (!start || typeof start.offset !== 'number') return false;
+      start.offset += 1;
+      return true;
+    }),
+  ];
+  p3Check(
+    'strict structural traversal rejects malformed nested source-literal declaration and channel locations',
+    publicStructuralLedgerBaseline
+      && publicStructuralNestedColorControls.length === 2
+      && publicStructuralNestedColorControls.every(control => control.mutationApplied && !control.comparator),
+    { baseline: publicStructuralLedgerBaseline, controls: publicStructuralNestedColorControls },
+  );
+  const retainedColorAuthorityObjects = authority
+    ? ownDataDescriptorCensus(authority)
+    : new Set<object>();
+  const returnedReplayRoots = publicStructuralReissuedProgram && publicStructuralReissuedEvidence
+    ? [publicStructuralReissuedProgram, publicStructuralReissuedEvidence]
+    : [];
+  const replaySharesRetainedColorAuthority = censusShares(returnedReplayRoots, retainedColorAuthorityObjects);
+  const sharedReferenceControlValue: Record<string, unknown> = {};
+  const sharedReferenceControlArray = [sharedReferenceControlValue];
+  const sharedReferenceControlTypedArray = new Uint8Array([1, 2, 3]);
+  const sharedReferenceControlBuffer = new ArrayBuffer(3);
+  const sharedReferenceControlAuthority = {
+    retained: sharedReferenceControlValue,
+    array: sharedReferenceControlArray,
+    typedArray: sharedReferenceControlTypedArray,
+    buffer: sharedReferenceControlBuffer,
+  };
+  const sharedReferenceControlReplay = {
+    replayed: sharedReferenceControlValue,
+    array: sharedReferenceControlArray,
+    typedArray: sharedReferenceControlTypedArray,
+    buffer: sharedReferenceControlBuffer,
+  };
+  const sharedReferenceDetected = censusShares(
+    [sharedReferenceControlReplay],
+    ownDataDescriptorCensus(sharedReferenceControlAuthority),
+  );
+  const independentObjectAlias = {};
+  const independentArrayAlias = [1, 2, 3];
+  const independentTypedArrayAlias = new Uint8Array([4, 5, 6]);
+  const independentArrayBufferAlias = new ArrayBuffer(3);
+  const independentObjectAliasDetected = censusShares(
+    [{ replayed: independentObjectAlias }],
+    ownDataDescriptorCensus({ retained: independentObjectAlias }),
+  );
+  const independentArrayAliasDetected = censusShares(
+    [{ replayed: independentArrayAlias }],
+    ownDataDescriptorCensus({ retained: independentArrayAlias }),
+  );
+  const independentTypedArrayAliasDetected = censusShares(
+    [{ replayed: independentTypedArrayAlias }],
+    ownDataDescriptorCensus({ retained: independentTypedArrayAlias }),
+  );
+  const independentArrayBufferAliasDetected = censusShares(
+    [{ replayed: independentArrayBufferAlias }],
+    ownDataDescriptorCensus({ retained: independentArrayBufferAlias }),
+  );
+  p3Check(
+    'alias census independently detects a plain object alias',
+    independentObjectAliasDetected,
+    { aliasClass: 'object', detected: independentObjectAliasDetected },
+  );
+  p3Check(
+    'alias census independently detects an array alias',
+    independentArrayAliasDetected,
+    { aliasClass: 'array', detected: independentArrayAliasDetected },
+  );
+  p3Check(
+    'alias census independently detects a typed-array alias',
+    independentTypedArrayAliasDetected,
+    { aliasClass: 'typed-array', detected: independentTypedArrayAliasDetected },
+  );
+  p3Check(
+    'alias census independently detects an ArrayBuffer alias',
+    independentArrayBufferAliasDetected,
+    { aliasClass: 'ArrayBuffer', detected: independentArrayBufferAliasDetected },
+  );
+  p3Check(
+    'successful owner color replay returns a no-reference-alias program/evidence graph and the census detects intentional sharing',
+    publicStructuralReissuedProgram !== undefined
+      && publicStructuralReissuedEvidence !== undefined
+      && retainedColorAuthorityObjects.size > 0
+      && !replaySharesRetainedColorAuthority
+      && sharedReferenceDetected,
+    {
+      retainedObjects: retainedColorAuthorityObjects.size,
+      returnedRoots: returnedReplayRoots.length,
+      replaySharesRetainedColorAuthority,
+      sharedReferenceDetected,
+      sharedReferenceKinds: ['object', 'array', 'typed-array', 'ArrayBuffer'],
+      census: 'own data descriptors only; accessor values and proxy/property invocation are not used',
+    },
+  );
+  p3Check(
+    'B119 structural CAS rejects stale and foreign expected-source facts without mutation',
+    publicStructuralRefusalPreservesInput(publicStructuralStaleResult)
+      && publicStructuralRefusalPreservesInput(publicStructuralForeignPathResult),
+    {
+      stale: publicStructuralStaleResult && {
+        accepted: publicStructuralStaleResult.accepted,
+        changed: publicStructuralStaleResult.changed,
+        reason: publicStructuralStaleResult.accepted === false ? publicStructuralStaleResult.reason : undefined,
+      },
+      foreignPath: publicStructuralForeignPathResult && {
+        accepted: publicStructuralForeignPathResult.accepted,
+        changed: publicStructuralForeignPathResult.changed,
+        reason: publicStructuralForeignPathResult.accepted === false ? publicStructuralForeignPathResult.reason : undefined,
+      },
+      inputUnchanged: publicStructuralText(publicStructuralSource) === publicStructuralBefore,
+    },
+  );
   const operationFor = (callName: string, sourceNeedle: string) => program?.operations.find(operationValue =>
     operationValue.kind === callName
       && colorSource.slice(operationValue.source.start.offset, operationValue.source.end.offset).includes(sourceNeedle));
@@ -12589,6 +13672,54 @@ const runP3ColorChecks = async (): Promise<Check[]> => {
       && symbolicTextValue.glow === 0.3
       && symbolicTextValue.gameVerification === X4_UI_LAYOUT_GAME_TRUTH,
     symbolicTextFact,
+  );
+  const exactColorOwner = (x4UiLayoutProgramExports as unknown as {
+    isExactX4UiLayoutColorValue?: (value: unknown) => boolean;
+  }).isExactX4UiLayoutColorValue;
+  const exactColorOwnerControls = symbolicTextValue && literalValue
+    ? (() => {
+      const canonicalExtra = jsonClone(symbolicTextValue) as Record<string, unknown>;
+      canonicalExtra.extraRoot = true;
+      const canonicalIdentity = jsonClone(symbolicTextValue) as Record<string, unknown>;
+      canonicalIdentity.canonicalIdentity = 'x4-8.00';
+      const canonicalHash = jsonClone(symbolicTextValue) as Record<string, unknown>;
+      (((canonicalHash.sourceIdentities as Record<string, unknown>).xml) as Record<string, unknown>).sha256 = '0'.repeat(64);
+      const canonicalRange = jsonClone(symbolicTextValue) as Record<string, unknown>;
+      canonicalRange.r = 256;
+      const sourceExtra = jsonClone(literalValue) as Record<string, unknown>;
+      sourceExtra.extraRoot = true;
+      const sourceShape = jsonClone(literalValue) as Record<string, unknown>;
+      delete (((sourceShape.channels as Record<string, unknown>).r) as Record<string, unknown>).keySource;
+      const sourcePrototype = jsonClone(literalValue) as Record<string, unknown>;
+      Object.setPrototypeOf((sourcePrototype.channels as Record<string, unknown>).r, { forged: true });
+      const sourceRange = jsonClone(literalValue) as Record<string, unknown>;
+      sourceRange.r = 256;
+      ((sourceRange.channels as Record<string, unknown>).r as Record<string, unknown>).value = 256;
+      return [
+        { name: 'canonical valid', candidate: symbolicTextValue, expected: true },
+        { name: 'source literal valid', candidate: literalValue, expected: true },
+        { name: 'canonical extra root key', candidate: canonicalExtra, expected: false },
+        { name: 'canonical identity constant', candidate: canonicalIdentity, expected: false },
+        { name: 'canonical source hash', candidate: canonicalHash, expected: false },
+        { name: 'canonical range', candidate: canonicalRange, expected: false },
+        { name: 'source literal extra root key', candidate: sourceExtra, expected: false },
+        { name: 'source literal channel shape', candidate: sourceShape, expected: false },
+        { name: 'source literal custom prototype', candidate: sourcePrototype, expected: false },
+        { name: 'source literal range', candidate: sourceRange, expected: false },
+      ];
+    })()
+    : [];
+  const exactColorOwnerResults = exactColorOwnerControls.map(control => ({
+    name: control.name,
+    expected: control.expected,
+    actual: exactColorOwner?.(control.candidate) === true,
+  }));
+  p3Check(
+    'B119 exact color schema owner is reused for canonical and source-literal values with fail-closed controls',
+    typeof exactColorOwner === 'function'
+      && exactColorOwnerResults.length === 10
+      && exactColorOwnerResults.every(row => row.actual === row.expected),
+    { owner: typeof exactColorOwner, rows: exactColorOwnerResults },
   );
   const baseIconFact = factFor('createIcon', 'createIcon("icon"', 'color') as Record<string, unknown> | undefined;
   const baseIconValue = baseIconFact?.value as Record<string, unknown> | undefined;
@@ -12830,6 +13961,165 @@ const runP3ColorChecks = async (): Promise<Check[]> => {
       && knownColor(afterMutationFact)
       && ((afterMutationFact.value as Record<string, unknown>).r === 12.5),
     { mutationThrew, authorityGuard: isX4UiCorpusCanonicalColorSuccess(authority), afterAuthorityMutation: afterAuthorityMutation.status, afterMutationFact },
+  );
+
+  const ownerReplayAttempt = (candidateProgram: unknown, candidateEvidence: unknown): {
+    readonly threw: boolean;
+    readonly result?: ReturnType<typeof projectX4UiLayoutProgram>;
+  } => {
+    if (!ownerReproject) return { threw: false };
+    try {
+      return {
+        threw: false,
+        result: ownerReproject(candidateProgram, candidateEvidence, causalChangedModel, causalChangedTarget, causalChangedProfile),
+      };
+    } catch {
+      return { threw: true };
+    }
+  };
+  const ownerRefusalIsContained = (attempt: ReturnType<typeof ownerReplayAttempt>): boolean => {
+    const result = attempt.result;
+    return attempt.threw === false
+      && result?.status === 'refused'
+      && 'refusal' in result
+      && result.refusal.code === 'malformed-color-evidence'
+      && !JSON.stringify(result).includes('baseColors')
+      && !JSON.stringify(result).includes('colorEvidence');
+  };
+  const legacyProgram = resultProgram(legacy);
+  const legacyEvidenceAuthority = evidenceAuthorityOf(legacy);
+  const foreignEvidenceAuthority = ownerReprojected ? evidenceAuthorityOf(ownerReprojected) : undefined;
+  const forgedProgram = programClone
+    ? freezeClone({
+      ...(programClone as unknown as Record<string, unknown>),
+      status: 'projected',
+    })
+    : undefined;
+  const ownerNegativeCases = [
+    { name: 'exact program plus wrong legacy evidence', program, evidence: legacyEvidenceAuthority },
+    { name: 'exact program plus foreign reprojected evidence', program, evidence: foreignEvidenceAuthority },
+    { name: 'cloned program and evidence pair', program: programClone, evidence: authorityClone },
+    { name: 'forged cloned program and evidence pair', program: forgedProgram, evidence: authorityClone },
+    { name: 'exact program plus malformed evidence', program, evidence: null },
+  ].map(candidate => ({ ...candidate, attempt: ownerReplayAttempt(candidate.program, candidate.evidence) }));
+  const ownerTrap = (): never => {
+    ownerHostileTraps += 1;
+    throw new Error('owner replay hostile input trap executed');
+  };
+  let ownerHostileTraps = 0;
+  const ownerProxyProgram = new Proxy(program, {
+    get: ownerTrap,
+    getOwnPropertyDescriptor: ownerTrap,
+    getPrototypeOf: ownerTrap,
+    has: ownerTrap,
+    isExtensible: ownerTrap,
+    ownKeys: ownerTrap,
+  });
+  const ownerProxyEvidence = new Proxy(evidenceAuthority, {
+    get: ownerTrap,
+    getOwnPropertyDescriptor: ownerTrap,
+    getPrototypeOf: ownerTrap,
+    has: ownerTrap,
+    isExtensible: ownerTrap,
+    ownKeys: ownerTrap,
+  });
+  const ownerAccessorProgram = Object.create(null) as Record<string, unknown>;
+  Object.defineProperty(ownerAccessorProgram, 'status', { get: ownerTrap });
+  const ownerAccessorEvidence = Object.create(null) as Record<string, unknown>;
+  Object.defineProperty(ownerAccessorEvidence, 'version', { get: ownerTrap });
+  const ownerHostileCases = [
+    { name: 'proxy program', program: ownerProxyProgram, evidence: evidenceAuthority },
+    { name: 'proxy evidence', program, evidence: ownerProxyEvidence },
+    { name: 'proxy program and evidence', program: ownerProxyProgram, evidence: ownerProxyEvidence },
+    { name: 'accessor program', program: ownerAccessorProgram, evidence: evidenceAuthority },
+    { name: 'accessor evidence', program, evidence: ownerAccessorEvidence },
+  ].map(candidate => ({ ...candidate, attempt: ownerReplayAttempt(candidate.program, candidate.evidence) }));
+  p3Check(
+    'B119 owner replay rejects wrong, foreign, cloned, malformed, proxy, and accessor pairs without authority leakage',
+    ownerNegativeCases.every(candidate => ownerRefusalIsContained(candidate.attempt))
+      && ownerHostileCases.every(candidate => ownerRefusalIsContained(candidate.attempt))
+      && ownerHostileTraps === 0,
+    {
+      ownerApi: typeof ownerReproject,
+      negative: ownerNegativeCases.map(candidate => ({
+        name: candidate.name,
+        threw: candidate.attempt.threw,
+        status: candidate.attempt.result?.status,
+        refusal: candidate.attempt.result && 'refusal' in candidate.attempt.result ? candidate.attempt.result.refusal.code : undefined,
+      })),
+      hostile: ownerHostileCases.map(candidate => ({
+        name: candidate.name,
+        threw: candidate.attempt.threw,
+        status: candidate.attempt.result?.status,
+        refusal: candidate.attempt.result && 'refusal' in candidate.attempt.result ? candidate.attempt.result.refusal.code : undefined,
+      })),
+      ownerHostileTraps,
+    },
+  );
+  const legacyDirectReproject = projectX4UiLayoutProgram(
+    causalChangedModel,
+    causalChangedTarget,
+    causalChangedProfile,
+  );
+  const legacyOwnerReproject = legacyProgram && legacyEvidenceAuthority
+    ? ownerReplayAttempt(legacyProgram, legacyEvidenceAuthority)
+    : { threw: false as const };
+  p3Check(
+    'B119 owner replay preserves legacy three-argument behavior for no-color issuances',
+    legacyDirectReproject.status !== 'refused'
+      && legacyOwnerReproject.threw === false
+      && legacyOwnerReproject.result?.status === legacyDirectReproject.status
+      && JSON.stringify(resultProgram(legacyOwnerReproject.result)) === JSON.stringify(resultProgram(legacyDirectReproject))
+      && JSON.stringify(evidenceAuthorityOf(legacyOwnerReproject.result)) === JSON.stringify(evidenceAuthorityOf(legacyDirectReproject)),
+    {
+      directStatus: legacyDirectReproject.status,
+      ownerStatus: legacyOwnerReproject.result?.status,
+      directProgram: resultProgram(legacyDirectReproject)?.operations.length,
+      ownerProgram: resultProgram(legacyOwnerReproject.result || legacyDirectReproject)?.operations.length,
+    },
+  );
+  const mutableAuthority = await p3LoadCanonicalColorAuthority();
+  const mutableAuthorityProjection = projectWithColorEvidence(
+    model,
+    target,
+    profile,
+    undefined,
+    undefined,
+    mutableAuthority,
+  );
+  const mutableAuthorityProgram = resultProgram(mutableAuthorityProjection);
+  const mutableAuthorityEvidence = evidenceAuthorityOf(mutableAuthorityProjection);
+  const mutableXmlBytes = mutableAuthority.source.xml.bytes as unknown as Uint8Array;
+  const mutableXmlByteIndex = 0;
+  const originalMutableXmlByte = mutableXmlBytes[mutableXmlByteIndex];
+  mutableXmlBytes[mutableXmlByteIndex] = originalMutableXmlByte ^ 0xff;
+  const invalidatedAuthorityGuard = isX4UiCorpusCanonicalColorSuccess(mutableAuthority);
+  const invalidatedOwnerReplay = mutableAuthorityProgram && mutableAuthorityEvidence
+    ? ownerReplayAttempt(mutableAuthorityProgram, mutableAuthorityEvidence)
+    : { threw: false as const };
+  mutableXmlBytes[mutableXmlByteIndex] = originalMutableXmlByte;
+  const recoveredAuthorityGuard = isX4UiCorpusCanonicalColorSuccess(mutableAuthority);
+  const recoveredOwnerReplay = mutableAuthorityProgram && mutableAuthorityEvidence
+    ? ownerReplayAttempt(mutableAuthorityProgram, mutableAuthorityEvidence)
+    : { threw: false as const };
+  p3Check(
+    'B119 retained loader authority guard rejects a later-invalid byte and recovers after restoration',
+    invalidatedAuthorityGuard === false
+      && ownerRefusalIsContained(invalidatedOwnerReplay)
+      && recoveredAuthorityGuard
+      && recoveredOwnerReplay.threw === false
+      && recoveredOwnerReplay.result?.status !== 'refused',
+    {
+      laterInvalidation: 'second fresh P2 authority only; main authority was not mutated',
+      mutableXmlByteIndex,
+      invalidatedAuthorityGuard,
+      invalidatedOwnerStatus: invalidatedOwnerReplay.result?.status,
+      invalidatedOwnerRefusal: invalidatedOwnerReplay.result && 'refusal' in invalidatedOwnerReplay.result
+        ? invalidatedOwnerReplay.result.refusal.code
+        : undefined,
+      recoveredAuthorityGuard,
+      recoveredOwnerStatus: recoveredOwnerReplay.result?.status,
+    },
   );
 
   const modelColorRecord = model.colorExpressions.find(candidate => candidate.callName === 'createText'

@@ -700,6 +700,7 @@ export interface X4UiLayoutProgram {
 interface X4UiLayoutEvidenceIssuanceRecord {
   readonly evidenceAuthority: X4UiLayoutEvidenceAuthority;
   readonly modelSnapshot: X4UiCallModel | undefined;
+  readonly colorEvidence?: X4UiCorpusCanonicalColorSuccess;
 }
 
 const issuedX4UiLayoutEvidenceAuthorities = new WeakMap<
@@ -1266,6 +1267,57 @@ const refusalResult = (
   analysis: invalidAnalysis('refused', model?.parsed ?? false, model?.verificationGaps.length || 0, model?.verificationGapsTruncated || false),
   verification: { game: X4_UI_LAYOUT_GAME_TRUTH, gameVerified: false as const },
 });
+
+/**
+ * Reproject an exact issued layout pair after a source identity change.
+ *
+ * This owner-only path replays only the exact loader-issued canonical color
+ * authority retained for the original program. It deliberately omits preview
+ * samples and preview paths; it is not a general optional-input replay API.
+ * Programs issued without color evidence retain the original three-argument
+ * projection behavior.
+ */
+export const reprojectX4UiLayoutProgramWithIssuedColorAuthority = (
+  issuedProgram: unknown,
+  issuedEvidenceAuthority: unknown,
+  model: X4UiCallModel,
+  targetSelector: X4UiLayoutTargetSelector,
+  profile: X4UiLayoutProjectionProfile,
+): X4UiLayoutProgramResult => {
+  let issuance: X4UiLayoutEvidenceIssuanceRecord | undefined;
+  try {
+    if (!isIssuedX4UiLayoutEvidencePair(issuedProgram, issuedEvidenceAuthority)) {
+      return refusalResult(
+        'malformed-color-evidence',
+        'layout program/evidence pair was not issued by the layout program owner',
+      );
+    }
+    issuance = issuedX4UiLayoutEvidenceAuthorities.get(issuedProgram as X4UiLayoutProgram);
+    if (!issuance) {
+      return refusalResult(
+        'malformed-color-evidence',
+        'layout program/evidence issuance record is unavailable',
+      );
+    }
+    if (issuance.colorEvidence !== undefined
+      && !isX4UiCorpusCanonicalColorSuccess(issuance.colorEvidence)) {
+      return refusalResult(
+        'malformed-color-evidence',
+        'retained loader-issued canonical color authority no longer passes its loader guard',
+      );
+    }
+    return issuance.colorEvidence === undefined
+      ? projectX4UiLayoutProgram(model, targetSelector, profile)
+      : projectX4UiLayoutProgram(model, targetSelector, profile, undefined, undefined, issuance.colorEvidence);
+  } catch {
+    return refusalResult(
+      'malformed-color-evidence',
+      issuance?.colorEvidence === undefined
+        ? 'layout program/evidence reprojection was not safely readable'
+        : 'retained loader-issued canonical color authority was not safely readable',
+    );
+  }
+};
 
 const valueStatus = (value: X4UiValue | undefined): X4UiLayoutGapStatus => {
   if (!value) return 'unknown';
@@ -3644,6 +3696,7 @@ const finishProgram = (
   nodeLedgerEvents: readonly EvidenceNodeLedgerEvent[],
   gapEvents: readonly X4UiLayoutGap[],
   localExpansion?: X4UiLayoutLocalExpansionState,
+  colorEvidence?: X4UiCorpusCanonicalColorSuccess,
 ): X4UiLayoutProgramResult => {
   for (const frame of frames) {
     frame.status = applyNodeStatus(frame.hadGap, frame.hadRefusal, true);
@@ -3778,6 +3831,7 @@ const finishProgram = (
     issuedX4UiLayoutEvidenceAuthorities.set(result.program, Object.freeze({
       evidenceAuthority: result.evidenceAuthority,
       modelSnapshot: snapshotCompleteX4UiCallModel(model),
+      ...(colorEvidence !== undefined ? { colorEvidence } : {}),
     }));
   }
   return result;
@@ -4128,6 +4182,22 @@ const schemaColorValue = (value: unknown, path: string): ClosedSchemaError => {
     return canonicalColorValueSemanticError(color as unknown as X4UiLayoutCanonicalColorValue);
   }
   return `${path}.domain is invalid`;
+};
+
+/**
+ * Validate one exact X4 layout color value without exposing the loader
+ * authority or any mutation capability.
+ */
+export const isExactX4UiLayoutColorValue = (
+  value: unknown,
+): value is X4UiLayoutColorValue => {
+  try {
+    return hasOnlyJsonDataProperties(value)
+      && closedJsonDomain(value, 'color value') === undefined
+      && schemaColorValue(value, 'color value') === undefined;
+  } catch {
+    return false;
+  }
 };
 
 const schemaDescriptorFact = (value: unknown, path: string): ClosedSchemaError => {
@@ -9020,7 +9090,7 @@ export function projectX4UiLayoutProgram(
     incomplete: analysis.incomplete || gaps.length > 0,
     staticSource: analysis.incomplete || gaps.length > 0 ? 'incomplete' : 'complete',
   }, frames, tables, rows, cells, operations, gaps, sampleCatalog, previewSamples, consumedSamples, model,
-  targetCalls, operationEvents, nodeLedgerEvents, gapEvents, localExpansionState);
+  targetCalls, operationEvents, nodeLedgerEvents, gapEvents, localExpansionState, colorEvidenceInput);
 }
 
 /** Alias matching the construction language used by the surrounding modules. */

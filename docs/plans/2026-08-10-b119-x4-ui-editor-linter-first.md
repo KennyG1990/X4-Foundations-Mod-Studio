@@ -9366,3 +9366,534 @@ Status: `HOST VERIFIED / GLYPH RECTANGLES FIXED / RECONSTRUCTION PARTIAL`; overa
 - Highest-risk evidenced weakness: this correction makes the preview more legible and therefore more persuasive while
   `1b` geometry, GPU sampling parity, and engine frame acceptance remain open. Preserve `Not verified in game` and do
   not promote screenshot similarity into an X4 acceptance claim.
+
+### AI Influence `1b` applied-partial scalar source authority — 2026-08-21
+
+Status: `SPECIFIED / ISOLATED`; overall B119 remains `PARTIAL / Not verified in game`.
+
+#### PLAN / BASELINE / RECONCILE
+
+- Bounded unit: extend the existing scalar source-edit catalog and exact CAS apply path so an owner-issued `partial`
+  layout program is actionable only when every operation in its selected target stream is `applied`. This unlocks the
+  direct scalar literals already proven for the isolated `reference-flat` `menu.display` target without adding a
+  second editor, renderer, overlay-authoring path, parser, or translation layer. Structural insert/delete authority,
+  dynamic expressions, aliases, conditionals, unresolved/rejected/unreachable operations, real-mod writes, deploy,
+  and X4 are explicitly out of scope.
+- Baseline is committed/pushed `abec685089a54748798ef3bea54a8e4be24191d5` with local/origin/remote parity and an
+  empty index. The previously catalogued unrelated dirty paths remain user-owned and excluded. The isolated dogfood
+  report records all three variants as source-edit `locked`, `editableCount=0`, `geometryCandidates=[]`, and
+  `bytesProducedByForgeSourceEditAuthority=[]`.
+- Reproduced cause: `discoverX4UiSourceEdits` rejects every program whose top-level status is not `projected`, and the
+  public scalar apply boundary repeats the same requirement. The `reference-flat` target is `partial` solely because
+  the parsed `rawget(_G, "Helper")` alias cannot prove runtime non-nil availability; its exact issued evidence contains
+  one `data-flow/incomplete` caveat while all 108 serialized target operations are `applied`. The catalog therefore
+  suppresses source-literal `x`, `y`, `width`, and `height` entries that the call model and layout owner already prove.
+- Existing infrastructure reused: issued workspace/source and program/evidence pairs, canonical complete call-model
+  matching, per-operation `applied` checks, direct-literal/alias/type checks, exact source ranges, byte-local workspace
+  CAS, full-document reparse, target/operation provenance re-establishment, and owner-issued catalog identities.
+  Graphify confirms the affected path is bounded to the source editor, source-edit selftest, and scalar/structural
+  reparse callers. No capability-map delta is expected because this strengthens the existing source-edit owner.
+- Design alternatives reconciled: manually editing the ignored fixture would not prove Forge authors the bytes;
+  adding a sample/overlay override would create a drifting translation layer; weakening all partial programs would
+  expose ambiguous control-flow. The selected rule admits only a complete applied operation stream while retaining
+  every existing provenance and CAS gate. Structural edits stay projected-only in this unit.
+- Intended implementation scope is limited to `src/lib/x4UiSourceEdits.ts` and
+  `src/lib/x4UiSourceEdits.selftest.ts`. Introduce one closed predicate for scalar actionability and use it consistently
+  at discovery and scalar apply. Do not weaken evidence issuance, model equality, per-entry operation status, catalog
+  identity, reparse proof, source ownership, structural edit boundaries, or permanent game-truth copy.
+- Causal fail-first: add an owner-issued partial fixture whose full operation stream is applied but which retains a
+  non-blocking analysis/data-flow caveat. The current production code must return a locked catalog and refuse scalar
+  apply. After repair, direct `addTable` geometry literals must be editable and one exact replacement must round-trip
+  through workspace CAS and reparse with all unrelated bytes unchanged. The existing dynamic partial fixture must
+  remain wholly locked.
+- Acceptance: source-edit selftest including all prior families; explicit negative matrix for conditional,
+  unresolved, rejected, unreachable, and mixed streams; typecheck; exact two-file ESLint; diff hygiene; independent
+  coordinator rerun; isolated `reference-flat` dogfood discovery showing nonzero exact geometry entries while literal
+  and keep-out-safe ambiguous programs remain locked; no source fixture bytes changed in this unit; adjacent Source
+  Editor/Editor Session tests; frozen upstream hashes; and no B119 process/port residue. Broad build/E2E/precommit and
+  commit/push follow only after focused proof is green and the next Forge-authored reconstruction unit is separately
+  documented.
+- Rollback is a targeted revert of the two-file authority/test diff. No real mod, live extension, unpacked corpus,
+  standing config, game directory, deploy, or X4 launch is authorized while the user is asleep.
+
+#### RECONCILE UPDATE — first real-fixture dogfood
+
+- Worker and independent focused gates passed, but the unchanged `reference-flat` fixture remained source-edit
+  `locked` after the first real public-catalog run. Its summarized 108 relevant operations are all `applied`, while the
+  complete program/evidence pair contains 115 operations and one Helper runtime-availability gap. The current ignored
+  dogfood driver omits the catalog lock reason/detail and filters seven operation kinds, so the remaining gate cannot
+  be classified honestly from its report.
+- The first driver invocation failed safely before work because the fresh shell lacked its three containment variables;
+  the rerun used the user-confirmed real mod, unpacked 9.00 corpus, and installed extensions roots and exited zero.
+  All three isolated fixture hashes, the real mod source hash, the installed extension inventory, and shipped
+  `helper.lua`/`widget_fullscreen.lua` hashes remained exact. This failed command is an AAR trigger.
+- Plan change: before any production correction, add only ignored dogfood observability for catalog reason/detail and
+  complete operation-status counts, rerun the unchanged fixture, and classify the causal gate. This diagnostic worker
+  may own only `dev-docs/b119-ai-influence-dogfood/driver/run-b119-dogfood.ts` plus its ignored generated reports. The
+  two production/source-edit files are frozen pending that receipt; fixture Lua, real mod, game extension, corpus,
+  standing config, deploy, and X4 remain forbidden.
+
+#### RECONCILE UPDATE — parser-owned function-context optional field
+
+- The production-parity ignored diagnostic disproved an operation-stream failure. `reference-flat` contains 115 total
+  operations and all 115 are `applied`; its catalog instead refuses with `unsupported-provenance` and detail
+  `source edit layout model must be closed plain own data`. The first exact closed-data failure is visited node 269 at
+  `$.calls[0].context.handler`: `buildX4UiCallModel` emits the optional `handler` field as an own `undefined` value for
+  an ordinary named function, while the source-edit normalizer's existing parser-owned optional-field policy does not
+  recognize that canonical function-context case. Literal and keep-out-safe reproduce the same first failure. This is
+  a producer/consumer shape mismatch, not an unsafe prototype, symbol, accessor, cycle, sparse array, traversal-budget
+  exhaustion, or non-applied reference-flat layout operation.
+- Ownership decision: preserve the shared call-model producer and the closed-data guard. Extend only
+  `parserOwnedOptionalUndefined` in `x4UiSourceEdits.ts` to recognize `handler: undefined` when its parent is a
+  canonical source-derived non-handler function context with a string name, source record, branch/loop arrays, and
+  valid reachability. The existing `removeUndefined` normalization then removes that known optional producer field
+  before evidence projection. Do not admit arbitrary `undefined`, top-level lookalikes, handler contexts, malformed
+  context shapes, custom prototypes, accessors, symbols, cycles, or duplicated evidence.
+- Rejected alternatives: increasing the traversal budget cannot repair a failure at node 269; stripping every
+  `undefined` before the closed-data guard would weaken malformed-boundary evidence; changing the shared call-model
+  producer expands blast radius across lint, layout, preview, and editor-session consumers when the existing
+  source-edit normalization boundary already owns explicit parser-field compatibility.
+- Revised causal test: build a named `menu.display` applied-partial fixture and prove its raw first call context owns an
+  `undefined` `handler`. Before repair, normalization/discovery must reproduce the closed-data refusal. After repair,
+  the exact owner-issued catalog must become ready with nonzero direct geometry entries, scalar CAS must remain
+  byte-local and reparse/reissue authority, and structural actions must remain absent for partial programs. Add
+  malformed context lookalikes proving the exception stays closed. Retain the complete conditional/rejected/
+  unresolved/unreachable/empty negative matrix and every prior source-edit test.
+- Implementation scope remains the same two tracked files, `src/lib/x4UiSourceEdits.ts` and
+  `src/lib/x4UiSourceEdits.selftest.ts`; the diagnostic driver/report remain ignored evidence. Focused source-edit,
+  typecheck, exact-file ESLint, diff hygiene, and independent reruns precede another unchanged-fixture dogfood pass.
+  Acceptance still requires `reference-flat` to expose nonzero exact geometry entries while ambiguous literal and
+  keep-out-safe variants remain locked, with all fixture/external hashes unchanged. No real-mod/game/corpus write,
+  deploy, X4 launch, or game-acceptance claim is authorized.
+
+#### RECONCILE UPDATE — exact-runtime second dogfood remains locked
+
+- Independent focused validation under the required bundled Node `v24.19.0` passed: source-edit selftest `70/70`,
+  TypeScript, exact-file ESLint, and diff hygiene. The isolated dogfood driver also exited zero under Node `v24.19.0`
+  with all three package validators green and exact before/after containment for fixture sources, the real mod, installed
+  extensions, unpacked `helper.lua`/`widget_fullscreen.lua`, X4 absence, and observed ports.
+- Product acceptance did not pass: `reference-flat` remains catalog `locked`, `editableCount=0`, and
+  `geometryCandidates=[]` even though its complete program remains `partial` with 115/115 operations `applied`.
+  The production refusal still reports the generic closed-model detail. The ignored diagnostic traversal still mirrors
+  the pre-correction optional-field policy and therefore stops at `$.calls[0].context.handler`; that receipt is now
+  stale for production and cannot identify the next failing field. This dogfood pass is `FAILED` for the bounded
+  acceptance criterion, not a source-edit success.
+- Plan change: freeze the two production files again. Update only the ignored diagnostic traversal so it mirrors the
+  newly accepted canonical function-context `handler: undefined` rule exactly, rerun the unchanged fixture under the
+  bundled Node, and identify the next first closed-data failure or prove that the generic refusal comes from a later
+  boundary. Do not add another production exception until that exact receipt is documented. Fixture Lua, real mod,
+  installed extensions, corpus, deploy, X4, and standing config remain forbidden.
+
+#### RECONCILE UPDATE — dynamic handler-record optional trio
+
+- The current-policy exact diagnostic advanced past every canonical function-context `handler: undefined` and found the
+  next shared failure in all three variants. `reference-flat` first fails closed-data traversal at visited node 87,716,
+  path `$.handlers[0].functionSource`, with `unapproved-undefined`; its 115 operations remain all `applied`. Exact Node
+  `v24.19.0`, validators, fixture hashes, external inventories/hashes, X4 absence, and observed ports all stayed green.
+- Authoritative producer reconciliation: `X4UiHandlerRecord` declares optional `functionSource`, `bodySource`, and
+  `parameters`. `buildX4UiCallModel.addHandler` writes all three as own `undefined` data values when an `onClick` value
+  has no statically available function node, then records a data-flow gap. These fields are one producer contract, not
+  three unrelated discoveries. A traversal-budget change is irrelevant, and globally deleting unknown undefined data
+  before validation remains forbidden.
+- Ownership decision: extend the existing source-edit `parserOwnedOptionalUndefined` compatibility boundary for the
+  exact three-field dynamic-handler record only. Require an own plain handler record with `recordType='handler'`,
+  `name='onClick'`, nonempty path, source location, finite source/order values, parser-shaped value, canonical handler
+  context, and own enumerable data descriptors for all three optional fields whose values are all `undefined`.
+  Accessors, missing/mixed optional descriptors, wrong record/name/path/source/order/value/context, custom prototypes,
+  symbols, cycles, sparse data, and unrelated undefined fields remain refused without reads.
+- Causal test: build a real call model containing a dynamic `onClick` assignment, prove the raw handler record owns the
+  exact undefined trio, and capture the current closed-model fail-first. After repair, normalization removes only those
+  producer-owned optional values while preserving the handler record and its data-flow gap. Combine this fixture with
+  the named applied-partial function target to prove nonzero scalar geometry discovery and byte-local CAS still work,
+  with zero structural actions and `Not verified in game`. Retain all prior 70 source-edit checks and add a malformed
+  dynamic-handler matrix.
+- Production scope remains only `src/lib/x4UiSourceEdits.ts` and `src/lib/x4UiSourceEdits.selftest.ts`. After focused
+  exact-runtime gates, advance the ignored production-parity diagnostic to the handler-record policy and rerun the
+  unchanged real fixture. Any further generic refusal triggers another evidence-only reconcile; it does not authorize
+  broad undefined stripping or real-mod/game/corpus writes.
+
+### AI Influence `1b` derived-workspace public scalar CAS proof — 2026-08-21
+
+Status: `SPECIFIED / ISOLATED`; overall B119 remains `PARTIAL / Not verified in game`.
+
+#### Final ready dogfood receipt and stale diagnostic wording
+
+- The already-modified production owner now issues a real `reference-flat` ready catalog for the applied-partial
+  `menu.display` program: `367` editable entries, `234` locked entries, `0` structural entries; the selected program is
+  `partial` with `115/115` operations `applied`; closed-data traversal visited `216,694` values and
+  `firstFailure=null`.
+- The literal and keep-out-safe variants remain locked by `provenance-drift`. The two exact `x=330` candidates in the
+  ready `reference-flat` authority are operation `351`, range `23297:23300`, and operation `414`, range `25672:25675`.
+- The previous diagnostic recommendation is stale and must be preserved only as historical evidence, not emitted as the
+  current conclusion: `No production/source-edit code change is recommended by this diagnostic; preserve the
+  applied-partial scalar authority gate and classify the observed catalog lock from its reason/detail and gap receipts.`
+  The current report must state that a ready owner-issued catalog exists and that this unit produces derived bytes only in
+  memory.
+
+#### SPECIFIED derived-workspace CAS subunit
+
+- Scope: use only the public positional `discoverX4UiSourceEdits` and `applyX4UiSourceEdit` authority against the
+  isolated `reference-flat` workspace/source/program/evidence pair. Select the owner-issued operation `351` `x`
+  entry by its issued provenance, field, exact range, and `expectedText`, then apply replacement `600` with every
+  expected CAS value (`path`, `start`, `end`, and `text`) supplied. Keep the accepted derived workspace/source/catalog
+  in memory and record only a compact receipt.
+- Exclusions: no production source/test edit, fixture or filesystem source edit, structural edit, second patch path,
+  caller-fabricated catalog/entry/id, real-mod or installed-extension write, corpus/game/config mutation, deploy, X4
+  launch, or claim of final reconstruction. The permanent `Not verified in game` truth remains mandatory. One x shift
+  cannot make the supplied `1b` image match, complete its geometry/content, establish C++ frame acceptance, or prove X4.
+- Acceptance: ready catalog before apply; exact operation `351` `x=330` entry; accepted `changed=true`,
+  `replacement="600"`, `byteLocal=true`, `reparsed=true`, and `provenanceReestablished=true`; exact prefix/`600`/suffix
+  text and all other passthrough bytes unchanged; original in-memory workspace/source unchanged; frozen fixture
+  `aic_menu.lua` hash unchanged at
+  `1D7A3D67D94894FB3A90BBE4E6BD7A3C5FA32A2EAB1DD2BC5E43F714EC7E35E2`; derived source hash and source identity
+  recorded; reissued catalog ready with `0` structural entries and operation `351` expected/value `600` plus
+  reestablished identity; existing `3/3` package validators, external containment, X4 absence, and observed-port
+  invariance remain green.
+- Negative path: submit at least one stale original CAS expectation/entry against the derived issued authority and
+  require refusal with its exact owner reason and no workspace/source mutation; do not forge catalog inputs.
+- Rollback: discard the in-memory derived workspace/source/result and the compact ignored receipts; restore no fixture or
+  production bytes because the unit authorizes no persistent source mutation.
+- Evidence locations: `dev-docs/b119-ai-influence-dogfood/report.json`,
+  `dev-docs/b119-ai-influence-dogfood/REPORT.md`,
+  `dev-docs/b119-ai-influence-dogfood/snapshots/**`, and
+  `dev-docs/b119-ai-influence-dogfood/runtime/**`; this plan is the durable specification and close record.
+
+#### CLOSE — public scalar CAS refusal, safe partial receipt — 2026-08-21
+
+- Status: `PARTIAL` overall; the derived-workspace acceptance gate is `FAILED` safely, with no production or fixture
+  mutation. `[REPRODUCED]` The ready owner catalog was present before apply (`367` editable, `234` locked, `0`
+  structural; `115/115` operations applied; closed traversal `216,694`, `firstFailure=null`). The exact owner-issued
+  operation `351` `addTable` `semantics.properties.x` entry was selected from the catalog with path
+  `ui/addons/ai_influence_chat/aic_menu.lua`, range `23297:23300`, `expectedText="330"`, and `value=330`; its issued
+  source identity was the frozen fixture SHA-256
+  `1D7A3D67D94894FB3A90BBE4E6BD7A3C5FA32A2EAB1DD2BC5E43F714EC7E35E2`.
+- `[REPRODUCED]` The direct public positional `applyX4UiSourceEdit` result refused replacement `600` with
+  `accepted=false`, `changed=false`, and exact reason `reparse-provenance-drift` / detail `selected call/value
+  provenance did not survive complete reparse`. Result keys were the direct shape
+  `accepted,catalog,changed,detail,entry,reason,source,workspace`; no result wrapper was assumed. No derived
+  workspace/source/catalog was issued, so no derived source hash or reissued catalog exists. Original in-memory
+  workspace/source value and source-byte receipts remained unchanged. The equal-length CAS end offset stayed
+  `23300` in the selected receipt.
+- The stale-original-CAS negative path was not attempted because the owner refused before issuing a derived authority;
+  the driver records this as unavailable rather than forging a derived catalog or pretending a refusal. The exact next
+  refusal therefore remains an evidence gap, not a weakened acceptance.
+- Containment passed: the frozen reference-flat fixture remained exactly
+  `1D7A3D67D94894FB3A90BBE4E6BD7A3C5FA32A2EAB1DD2BC5E43F714EC7E35E2` before/after; the real mod, installed extension
+  inventory, unpacked `helper.lua`/`widget_fullscreen.lua`, X4 absence, and observed ports were unchanged. Existing
+  isolated package validators remained `3/3` green. The final driver parent was bundled Node `v24.19.0`; each validator
+  was launched through the bundled Node directly with the local npm CLI and records that validator process as bundled
+  Node `v24.19.0`, with the inherited PATH probe retained as supporting evidence.
+- This proves Forge public in-memory scalar authoring was attempted and safely refused; it does not write the fixture,
+  complete `1b`, deploy, establish C++ frame acceptance, or verify in game. Preserve `Not verified in game`.
+
+#### Next evidence-only diagnostic boundary
+
+- The next bounded unit may inspect the existing public-owner reparse/provenance boundary only: capture, through public
+  receipts or a read-only diagnostic, the post-reparse operation/value/source identity for the issued operation `351`
+  and compare it to the owner-issued `targetId`, `operationId`, call order, source range, and source SHA-256. It may
+  record the first precise divergence and a refusal receipt, but must not add a production exception, normalize away
+  provenance, fabricate catalog inputs, retry against a caller-built entry, or mutate any fixture/filesystem source.
+- If the public authority exposes no post-reparse detail beyond `reparse-provenance-drift`, retain this `PARTIAL`
+  boundary as the blocker. No derived CAS acceptance, stale-CAS negative proof, deploy, X4 launch, C++ frame claim,
+  geometry completion, or in-game verification may be inferred from this refusal.
+
+#### CLOSE — evidence-only post-reparse provenance diagnostic — 2026-08-21
+
+- Status: `PARTIAL` overall; the product CAS refusal remains preserved exactly as
+  `accepted=false`, `changed=false`, reason `reparse-provenance-drift`, detail `selected call/value provenance did
+  not survive complete reparse`. No production or test file was changed, and no fixture/filesystem source was written.
+- `[REPRODUCED]` The public `spliceX4UiWorkspaceSource` owner accepted the exact issued CAS
+  `ui/addons/ai_influence_chat/aic_menu.lua`, range `23297:23300`, `expectedText="330"`, replacement `"600"`.
+  The in-memory source pair was one equal-length range splice, original length `99064`, derived length `99064`,
+  exact derived text, and derived SHA-256
+  `9F9E868118B97F93FF9845017DC5582ED91F917925B03E9A286DD138D7A1BF1B`; the original fixture/source identity
+  remained `1D7A3D67D94894FB3A90BBE4E6BD7A3C5FA32A2EAB1DD2BC5E43F714EC7E35E2`. The derived pair was in memory only.
+- `[REPRODUCED]` Complete public reparse succeeded: all source files were parsed; the stable `function`/
+  `menu.display` target was re-established with the new source identity; the new projected program was `partial`
+  with `115` operations; and the new profile was bound to the derived identity. Operation `351` retained the same
+  ID, `addTable` kind, source range `493:23:23250` through `499:6:23500`, and model/call order `351`.
+- `[REPRODUCED]` The first false production conjunct is `nextOperationFor.status.applied`: old operation `351`
+  status=`applied`, new operation `351` status=`unresolved`. The downstream unique-match result is `0` because
+  the applied-status predicate fails. Every preceding `nextOperationFor` conjunct passed: kind, file, sourcePath,
+  source line/column/offset, and model order. Every `hasExactReparsedValue` conjunct passed: file path, call
+  presence/order/context source, operation range containment, fields `semantics.properties.x`, static status,
+  scalar `330 -> 600`, expression `330 -> 600`, source-literal presence/ranges, value/literal location equality,
+  and source slice `600`.
+- `[REPRODUCED]` The new public source-edit catalog was not ready: status=`locked`, reason=`operation-not-applied`,
+  detail=`layout program status partial or operation stream is non-actionable; scalar action requires a nonempty
+  projected/partial stream with every operation applied`; exact operation `351` x=`600` entry was absent. This
+  separately records catalog readiness and does not infer that the value or source provenance was lost.
+- `[HYPOTHESIS]` The receipt does not expose the inner layout-kernel reason for the `applied -> unresolved` status
+  transition. No production exception, status relaxation, provenance normalization, fabricated entry, or narrow
+  repair is authorized by this evidence. The only narrow next production unit is a read-only/focused diagnostic of
+  why this exact reparsed operation becomes `unresolved` while all source/call/value conjuncts remain exact; retain
+  the applied-status and catalog gates until that reason is proven.
+- Exact runtime driver result: exit `0`, report `dev-docs/b119-ai-influence-dogfood/report.json`, markdown
+  `dev-docs/b119-ai-influence-dogfood/REPORT.md`; isolated package validators `3/3` passed under Node `v24.19.0`.
+  Real-mod, game-extension, and corpus containment remained unchanged; X4 was absent; observed ports were
+  unchanged. `Not verified in game` remains permanent.
+
+#### AAR
+
+- Triggered by the required public apply refusal and by the validator runtime launcher correction. Sustain: use the
+  owner-issued catalog and direct positional public API, snapshot originals independently, and keep external containment
+  green. Improve: add only evidence that isolates the owner reparse identity divergence before any future production
+  change. Tool note: Windows `npm.cmd` pins its `%~dp0\\node.exe`; the driver now invokes the local npm CLI through the
+  required bundled Node and records both parent and validator runtime evidence. Highest-risk weakness: the owner can
+  issue a ready pre-apply catalog whose selected call/value provenance still fails the complete reparse boundary; this
+  remains an explicit red gate rather than an acceptance relaxation.
+
+#### CLOSE — exact color-authority reparse replay probe — 2026-08-21
+
+- Status: `PARTIAL` overall; the original product refusal remains preserved exactly as `accepted=false`, `changed=false`,
+  reason `reparse-provenance-drift`, detail `selected call/value provenance did not survive complete reparse`. No
+  production or test file was changed, and the derived source remained in memory only.
+- `[REPRODUCED]` The diagnostic received the exact `runVariant` loader-issued `colors` object unchanged. It is the same
+  `canonical-default-only`, `canonical=true`, `canonicalIdentity=x4-9.00` object passed to
+  `projectX4UiEditorSession`; no color clone, reconstruction, sample, or path input was supplied. Its enumerable authority
+  keys were `canonical,canonicalIdentity,evidenceKind,graph,identities,ok,source,verification`; XML and XSD identities
+  were recorded in `report.json`.
+- `[REPRODUCED]` On the identical derived model, target, and copied profile, the current three-argument projection shape
+  (`model,target,profile`, with no sample/path/color inputs) returned `partial` with `115` operations and the full status
+  census `applied=77`, `unresolved=38`. By kind: `addRow 24 applied`; `addTable 5 applied/11 unresolved`;
+  `createButton 5 applied`; `createEditBox 1 applied`; `createFrameHandle 1 applied`; `createText 27 unresolved`;
+  `display 1 applied`; `setColSpan 7 applied`; `setColWidthPercent 28 applied`; `setText 5 applied`. Operation `351`
+  was `unresolved` with reason `table kernel state is deterministic but one or more descriptor facts remain unavailable`.
+  Its catalog was `locked`, reason `operation-not-applied`, with the exact existing detail that every operation must be
+  applied; the exact x=600 entry was absent.
+- `[REPRODUCED]` The same public projection with the sixth `colorEvidence` argument, while the fourth and fifth
+  sample/path arguments remained omitted, returned `partial` with the full status census `applied=115`, `unresolved=0`:
+  `addRow 24`, `addTable 16`, `createButton 5`, `createEditBox 1`, `createFrameHandle 1`, `createText 27`, `display 1`,
+  `setColSpan 7`, `setColWidthPercent 28`, and `setText 5`, all applied. Operation `351` became `applied` with no
+  reason field. The public catalog became `ready`, detail `direct source literals are available for bounded CAS editing`,
+  and issued the exact x=600 entry at `23297:23300`, `expectedText="600"`, `value=600`, operation `351`, with derived
+  source identity SHA-256
+  `9F9E868118B97F93FF9845017DC5582ED91F917925B03E9A286DD138D7A1BF1B`.
+- `[REPRODUCED]` The precise upstream divergence is the missing replay color authority, not the scalar call/value or
+  profile. In the three-argument program, the exact operation-351 program/evidence gap is category `table`, status
+  `unsupported`, reason `table backgroundColor is a color-table expression and remains unavailable`, expression
+  `{ r = 3, g = 6, b = 11, a = 85 }`, source range `497:26:23429` through `497:58:23461`, and operation ID `351`.
+  The old program had `1` program gap with `0` tied to operation 351; the three-argument new program had `40` gaps with
+  exactly `1` tied gap; old/new normalized call-model verification gaps were `98` with `0` tied. The evidence-authority
+  gap receipt carries the same exact operation/range reason. The color-evidence projection removes that tied gap and
+  applies all `115` operations.
+- `[REPRODUCED]` The fresh-profile public-owner probe used `projectX4UiLayoutProgram` with a newly reconstructed
+  enumerable clone of the old profile and only the new source identity; no runtime samples were supplied. A standalone
+  profile constructor was not available, but the public projection owner was available. Old-to-copied profile diff was
+  only `source.sha256` (`1D7A...35E2 -> 9F9E...BF1B`); copied-to-fresh-input and copied-to-projected profile diffs were
+  empty. The fresh three-argument projection remained `partial`, operation `351` remained `unresolved` with the same
+  unavailable-descriptor reason, and its catalog remained locked. This rejects profile-copy retention as the causal
+  mismatch for this boundary.
+- The first production gate receipt remains `nextOperationFor.status.applied` (`applied -> unresolved`); no applied-status
+  weakening, gap omission, fabricated entry, or production repair was made. The narrow next production unit is now
+  precise but intentionally unimplemented: replay the same validated loader-issued canonical color evidence through the
+  reparse projection owner while retaining the applied-status/catalog gates, then rerun this focused CAS proof.
+- Exact bundled-runtime driver exit was `0`; all isolated package validators remained `3/3` green, real-mod/game-extension/
+  corpus containment remained unchanged, X4 remained absent, and observed ports were unchanged. `Not verified in game`
+  remains permanent.
+
+#### AAR — color-authority replay boundary
+
+- Triggered by the required exact sixth-argument causal probe. Sustain: compare identical public projections with one replay
+  input changed, retain complete operation/gap/profile receipts, and keep the refusal gate intact. Improve: production
+  integration must carry loader-issued color authority across reparse without inventing or relaxing evidence. Tool note:
+  the exact driver continued to require the bundled Node plus the baseline-write suppression shim. Highest-risk evidenced
+  weakness: a public pre-edit ready authority can become non-actionable after reparse when a loader-issued optional
+  authority is omitted; this is now a reproduced integration gap, not a reason to weaken operation status.
+
+#### SPECIFIED — B119 owner-controlled color-authority reparse repair — 2026-08-21
+
+- Scope: extend the existing private layout-program issuance record with only the exact validated loader-issued canonical
+  color authority reference used for that program; add a narrowly named owner-controlled color-only reprojection API that
+  accepts the exact issued program/evidence pair plus a new model/target/profile, validates ownership and the retained
+  loader guard, omits preview samples and preview paths, and delegates to `projectX4UiLayoutProgram` with that authority
+  in its sixth slot. Route both scalar and structural source reparses through this owner API.
+- Non-goals: no applied-status, model/evidence, source identity, operation, catalog, CAS, provenance, structural-ledger,
+  or `Not verified in game` gate changes; no optional-input replay, ambient state, authority serialization/cloning/
+  reconstruction/exposure, caller-supplied replacement authority, fixture or real-mod write, deployment, game launch,
+  corpus/config/index mutation, E2E, global lint, build, precommit, or Git mutation.
+- Baseline: the exact bundled Node v24.19.0 layout selftest passed `604/604`; source-edits selftest passed `73/73`.
+  Existing layout issuance stores `evidenceAuthority` and `modelSnapshot` only. Both `reparseAndProveUnsafe` and
+  `reparseStructuralAndProveUnsafe` call the three-argument projection, reproducing `applied=77/unresolved=38` and
+  operation `351` unresolved when loader-issued canonical color evidence is omitted.
+- Reconcile: reuse `issuedX4UiLayoutEvidenceAuthorities`, `isIssuedX4UiLayoutEvidencePair`, the existing canonical color
+  loader guard, `projectX4UiLayoutProgram`, and both existing reparse owners. No capability-map delta; no duplicate
+  source-edit authority or public arity change.
+- Acceptance: (1) exact issued color evidence remains privately retained and replayed only by the owner API; (2) the
+  exact color-dependent operation remains `applied` after source identity/value reparse; (3) public scalar CAS accepts
+  the exact finite replacement with `changed`, `byteLocal`, `reparsed`, and `provenanceReestablished` true, exact bytes,
+  ready reissued catalog, new source identity, and replacement entry; (4) stale original CAS refuses without mutation;
+  (5) cloned, forged, foreign, unissued, mismatched, malformed, accessor/proxy, and later-invalid authority boundaries
+  refuse safely without raw-authority leakage; (6) no-color three-argument behavior and structural/scalar existing
+  tests remain green; (7) public discover/apply arities and `Not verified in game` remain unchanged.
+- Fail-first: add a focused owned selftest assertion against the current owner-controlled source-edit path, run it before
+  production edits, and record the exact refusal/status census here. The fail-first must isolate the omitted authority,
+  not relax an oracle.
+- Fail-first receipt, before production repair: bundled Node command
+  `& 'C:\\Users\\Moshi\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe' node_modules/tsx/dist/cli.mjs src/lib/x4UiLayoutProgram.selftest.ts`
+  exited `1` only at the new B119 replay assertion because the owner API was absent (`ownerApi="undefined"`). On this
+  synthetic P3 fixture, identical model/target/profile projections differed only by omitted versus exact loader-issued
+  color evidence: omitted census `applied=10, unresolved=8`, selected exact source needle
+  `row[2]:createButton({ bgColor = Color["button_background_default"]` / operation
+  `operation:15|createButton|selftest/p3-colors.lua|fixture://selftest/p3-colors.lua|6:0:337|6:167:504` was
+  `unresolved` with `bgcolor` fact `unavailable`; supplied census `applied=16, unresolved=2`, the same operation was
+  `applied` with `bgcolor` fact `known` and `canonical-default-only`. This is the fixture-specific causal receipt;
+  the separate dogfood `77/38`, operation `351` diagnostic remains historical evidence only.
+- Rollback: discard only the in-memory derived workspace/source/program/catalog; revert only the five owned-file patch
+  hunks if needed. No persistent source, fixture, game, mod, extension, or Git state is authorized to change.
+- Evidence: this plan records the fail-first receipt and close; focused layout/source selftest output, bundled-Node
+  typecheck, four-file ESLint output with errors/warnings separated, and five-path `git diff --check` are the required
+  task evidence. Verification remains `Not verified in game`.
+- Negative paths: owner-pair mismatch and cloned/forged/unissued/malformed/accessor/proxy evidence/program inputs;
+  retained authority later failing the loader guard; stale original CAS; no-color issue; and structural reparse all must
+  refuse or preserve their existing behavior without mutation or status/provenance relaxation.
+
+#### CLOSE — B119 owner-controlled color-authority reparse repair — 2026-08-21
+
+- Status: `PARTIAL` for the bounded worker unit. The production repair is implemented and all permitted focused gates are
+  green; the parent-owned real dogfood scalar/structural color-backed CAS receipt remains unrun by this worker because
+  its paths and driver are forbidden.
+- Implemented: `X4UiLayoutEvidenceIssuanceRecord` privately retains only the exact validated color authority reference;
+  `reprojectX4UiLayoutProgramWithIssuedColorAuthority` validates the exact issued pair, rechecks the retained loader
+  guard, reprojects with samples/paths omitted and the authority in slot six, uses legacy three-argument projection for
+  no-color issuances, and returns typed refusal without exposing the retained object. Scalar and structural reparses now
+  both use this API. No applied-status, CAS, evidence, provenance, structural, arity, or game-truth gate was weakened.
+- Validation: the corrected causal layout selftest passed `609/609`, including fixture-specific omitted `10 applied / 8
+  unresolved` versus supplied `16 applied / 2 unresolved` and the exact `createButton` source-needle transition. The same
+  P3 run now exercises the public source-owned workspace/discover/apply scalar CAS: exact `80` to `81` bytes, accepted
+  `changed`/`byteLocal`/`reparsed`/`provenanceReestablished`, ready reissued catalog/new identity/replacement entry, and
+  stale original expected text refused with the derived source/workspace and bytes unchanged. It also covers owner wrong,
+  foreign, cloned, forged, malformed, proxy, accessor, and no-color legacy pairs. A second fresh P2 authority is issued only for
+  the retained-authority negative: one `source.xml.bytes` byte makes the genuine retained guard false and owner replay
+  returns contained `malformed-color-evidence` without leakage; restoration recovers the guard and replay. The main
+  authority remains untouched, and the existing projection mutation guard remains green. Source-edits selftest passed
+  `73/73`; bundled Node `v24.19.0` typecheck exited `0`; ESLint on the four owned source/test files exited
+  `0` with `0` errors and `0` warnings; `git diff --check --` all five owned paths exited `0` with only the existing
+  LF-to-CRLF advisory. Public arity assertions remained green. Verification remains `Not verified in game`.
+- Authority observability: no retained color authority object became publicly observable; it is reachable only from the
+  private layout-program `WeakMap`, and the reprojection result returns only the newly projected program/evidence result.
+- Reconciliation: no capability-map delta. Unrelated/user changes in the owned WIP files were preserved; no forbidden path,
+  fixture, mod, game, extension, corpus, config, graph, Git index/ref, stage, commit, push, deploy, or E2E mutation occurred.
+- Remaining concern: parent must still run the exact real dogfood color-backed scalar and structural reparse receipt before
+  promoting the overall B119 unit to `VERIFIED`; the assigned focused owner-negative gates and public scalar CAS are no
+  longer deferred, while game verification remains `Not verified in game`.
+
+#### AAR — owner-controlled color-authority replay
+
+- Triggered by the required fail-first, one initial PowerShell invocation error (the quoted bundled Node command needed the
+  PowerShell call operator), and the corrected false assumption that a deeply frozen authority cannot later fail its guard
+  because its `Uint8Array` payload remains mutable. Sustain: use a loader-issued sixth-argument causal comparison and a
+  stable exact source needle, route both reparse owners through one private API, and test invalid retained payloads with a
+  separate fresh authority. Improve: keep fixture-specific census evidence separate from dogfood counts and retain a real
+  public scalar/structural receipt at the coordinator boundary. Tool note: bundled Node plus the installed npm CLI was
+  required because the repository has no local `node_modules/npm/bin/npm-cli.js`.
+- Highest-risk evidenced weakness: the pre-edit owner path silently dropped valid loader-issued color authority during
+  reparse, making applied operations non-actionable without any source/value/provenance drift; the repair preserves every
+  existing refusal gate and only replays the exact private authority.
+
+#### RECONCILIATION UPDATE — public scalar CAS regression placement — 2026-08-21
+
+- Scope update: add the required public `buildX4UiWorkspaceSource` / `discoverX4UiSourceEdits` / `applyX4UiSourceEdit`
+  scalar CAS regression inside the existing async P3 layout selftest, reusing its in-process loader-issued canonical
+  color authority. The fixture will assert its own census and select an exact `addTable` width source needle; it will not
+  copy the separate dogfood `77/38` or operation `351` receipt.
+- Acceptance/evidence update: the regression must issue a ready color-backed catalog, apply one exact finite numeric CAS,
+  prove the literal prefix/replacement/suffix byte splice, prove `changed`, `byteLocal`, `reparsed`, and
+  `provenanceReestablished`, prove a ready reissued catalog with a new source identity and replacement entry, then submit
+  the original expected text against the derived catalog and prove stale-CAS refusal with unchanged derived source bytes.
+- Reuse and non-goals: no duplicate canonical-loader fixture, no conversion of the source-edits selftest, no production API
+  or public-arity change, no authority exposure, and no status/provenance/CAS gate relaxation. Existing structural source
+  edit coverage remains unchanged; the structural owner path is covered by the production routing and existing tests.
+- Rollback/evidence: remove only the new owned selftest imports/check and this update if the fixture cannot satisfy the
+  public contract; retain the prior causal replay receipt and focused production validation.
+
+#### RECONCILIATION UPDATE — owner-negative matrix and mutable-byte guard — 2026-08-21
+
+- Correction: the earlier close wording incorrectly treated the loader-issued authority as wholly immutable and left owner
+  negative paths deferred. The accepted focused unit now covers exact/wrong/foreign, cloned/forged/unissued, malformed,
+  proxy/accessor, and no-color legacy pairs through the owner API, with typed refusal and no raw-authority leakage.
+- Later-invalid evidence: a second fresh P2 load issues a separate program/evidence pair; one copied `source.xml.bytes`
+  byte is mutated through a narrow test cast, the genuine loader guard becomes false, owner replay refuses with
+  `malformed-color-evidence`, and restoration recovers both guard and replay. The main authority used by subsequent P3
+  checks is not mutated. This uses the existing loader/guard mechanism and does not invent a replacement authority.
+- Validation update: final focused layout selftest is `609/609`; source-edits is `73/73`; no owner-negative gate remains
+  deferred to parent dogfood. Real dogfood scalar/structural receipt and game verification remain parent-owned and
+  `Not verified in game`.
+
+#### CLOSE — source-canonical partial scalar and structural edit authority — 2026-08-21
+
+- Status: `PARTIAL / Not verified in game` overall. The bounded source-authoring repair is host-verified; it does not
+  complete AI Influence `1b`, deploy a mod, establish C++ frame acceptance, or provide player-visible X4 proof.
+- Implemented: the layout owner privately retains only the exact loader-issued canonical color authority associated
+  with an issued program/evidence pair and replays it through one owner-controlled reprojection path after a source
+  identity change. Scalar and structural reparses use that owner. Programs without color evidence preserve the legacy
+  three-argument projection. The retained authority is revalidated before replay and is never serialized, cloned,
+  reconstructed, caller-replaced, or returned.
+- Applied-partial boundary: scalar catalogs accept `projected` or `partial` programs only when the operation stream is
+  nonempty and every operation is `applied`. Partial programs issue no structural insert/delete entries. Apply repeats
+  the exact issued-pair and scalar-actionability checks; no operation-status, CAS, provenance, or game-truth gate was
+  weakened.
+- Parser-owned optional `undefined` normalization is restricted to exact closed handler/context shapes. Structural
+  color correspondence delegates to the layout owner's exact color schema, traverses source-literal channels through
+  closed `color-value` / `color-channels` / `color-literal-field` schemas, and remaps declaration, value, key, and
+  channel locations through the exact source splice.
+- `[REPRODUCED]` Real AI Influence public in-memory dogfood selected the owner-issued `addTable` x entry at
+  `ui/addons/ai_influence_chat/aic_menu.lua` `23297:23300`, applied `330 -> 600`, and reissued a ready catalog against
+  derived SHA-256 `9F9E868118B97F93FF9845017DC5582ED91F917925B03E9A286DD138D7A1BF1B`. The original real-mod source remained
+  byte-identical at `4253D9BD9DE4113D4DE0B881DBF5A1E90CAA7B30F735BA925403EBEF7EC47DD7`; no filesystem source was written.
+- Structural proof uses the public source-owned CAS path, exact source-literal color facts, and eleven independently
+  asserted nested location remaps. Six same-on-both-sides malformed color records pass the pairwise precondition and
+  are rejected by the strict schema; the custom-prototype case is separately and accurately attributed to generic
+  closed-data rejection. Two malformed nested-location controls refuse. The retained loader-issued authority root has
+  zero reference intersection with the replayed program/evidence graph, while independent object, array, typed-array,
+  and `ArrayBuffer` aliases are each positively detected by the census.
+- Fresh zero-write review found no P0-P2 production defect. Its two P3 proof-precision findings were corrected in tests
+  only and parent-revalidated. Final focused results are Layout `622/622` and Source Edits `74/74`; all six adjacent
+  SourceEditor, EditorSession, Preview, Scene, Paint, and Canvas selftests exited `0`; TypeScript, exact four-file
+  zero-warning ESLint, five-path diff hygiene, and the production build (`1,847` Vite modules) passed.
+- Isolated oracle integration passed `134/134` and released port `8972`. Graphify refreshed deterministically to
+  `9,705` nodes / `24,364` edges / `315` communities with no tracked graph-output delta.
+- Full tracked E2E intentionally excluded the unrelated untracked `marketing-showcase.spec.ts`. The first serial
+  103-test attempt passed through test 22 and then died with Windows child exit `3221226505` / `0xC0000409`; the
+  structured report was unavailable, so the wrapper correctly recorded red. Lifecycle cleanup was nevertheless
+  complete with `ownershipComplete=true` and `treeGone=true`. The next unstarted spec passed `1/1` in isolation. One
+  controlled full retry then passed `103/103` in `7.6m`, with complete JSON discovery/terminal parity, zero
+  failed/flaky/bad rows, child exit `0`, and receipt SHA-256
+  `5CE76552ED1F51118C2A02B66C492915E3F0F4CAAAEA4552A6B3DEF305641391`.
+- Complete precommit passed: verdict selftests `55/55`, Vite lifecycle, product-copy, durable writer `14/14` plus
+  extension `8/8`, capability contract `12 / 297 / 1 / 11`, MCP capability, action-receipt coverage `82 routes / 56
+  surfaces`, typecheck, and size guards. Ports `3100`, `3101`, and `8972` were free afterward; X4 remained absent.
+- Containment: `.studio-state` stayed
+  `EDA252532D725E27C56C9AFBC7B79C06F930F6D935751BD6033AF5BED3ECA7F8`, `config.json` stayed
+  `3EC65D540E6763D13D6F8F27D9005F80C3C855B00D3DCFDD5E7330726AE37779`, and `.studio-api-token` stayed
+  `D20602CE9A8AFA430CF6E1730F3793F45F1BEFF535A7C7004DA7CE2B53027F3B`. No mod, game, extension, unpacked corpus,
+  standing config, or installed-product surface changed.
+- Reconciliation: the existing layout-program issuance owner, evidence-pair validator, canonical color loader guard,
+  source-edit catalog, structural ledger comparator, and public CAS path were extended; no parallel renderer/editor or
+  duplicate authority was introduced. `No capability-map delta`.
+- Review classification: exact authority replay, actionable scalar partials, strict structural colors, nested remapping,
+  safe refusals, real in-memory dogfood, and host validation are done and evidenced. Exact `1b` reconstruction,
+  deploy-byte identity, C++ frame acceptance, and player-visible X4 comparison remain open. GitHub #41 stays open.
+- Rollback: revert only the four source/test paths plus this plan/backlog close before the checkpoint commit. Original
+  source bytes and all live roots already remain unchanged. Suggested commit title:
+  `fix(ui): preserve canonical color authority across source edits`.
+
+#### AAR — source-canonical partial edit authority
+
+- Triggers: the initial public dogfood refusal exposed omitted replay authority; a tests-only structural probe found a
+  real supported-color rejection; two fresh reviews forced stricter schema, nested-location, and proof-causality
+  corrections; one compile-only TS2554 mismatch was fixed; the first final E2E attempt died without a structured
+  report; and two read-only PowerShell diagnostics required corrected no-result handling.
+- Sustain: derive every edit from an owner-issued catalog, retain canonical authority privately by identity, use paired
+  malformed controls to isolate the exact rejecting layer, run real in-memory source dogfood, and keep preview/game
+  truth separate.
+- Improve work/approach: require structural producer/consumer schema and nested-location coverage at the first color
+  edit boundary, and distinguish generic closed-data rejection from strict domain-schema rejection in assertion names.
+- Improve tools: the Windows Playwright child can still terminate with `0xC0000409` after green assertions and before
+  writing a report. Keep verdict parsing fail-closed, verify lifecycle/live-state containment, run only one targeted
+  boundary check, and allow at most one controlled full retry.
+- Highest-risk evidenced weakness: a browser preview and even a complete source-authoring gate still cannot prove X4's
+  C++ frame acceptance. The bounded risk reduction remains an awake, hash-snapshotted deploy followed by a real X4
+  screenshot/readback; until then every surface must retain `Not verified in game`.
+- Project AAR banking: recorded here. The external StarForge wiki AAR is intentionally not mutated while the operator
+  is asleep; synchronize this repository-backed outcome in a later explicitly gated records pass.

@@ -6,6 +6,7 @@ import {
 } from './x4UiCallModel';
 import {
   createX4UiLayoutTargetCatalog,
+  isExactX4UiLayoutColorValue,
   isIssuedX4UiLayoutEvidencePairForModel,
   projectX4UiLayoutProgram,
   type X4UiLayoutEvidenceAuthority,
@@ -18,6 +19,14 @@ import {
   WIDGET_SOURCE_SHA256,
   X4_LAYOUT_PROVENANCE,
 } from './x4UiLayoutKernel';
+import {
+  X4_UI_CORPUS_COLORS_XML_PATH,
+  X4_UI_CORPUS_COLORS_XML_SHA256,
+  X4_UI_CORPUS_COLORS_XML_SIZE,
+  X4_UI_CORPUS_COLORS_XSD_PATH,
+  X4_UI_CORPUS_COLORS_XSD_SHA256,
+  X4_UI_CORPUS_COLORS_XSD_SIZE,
+} from './x4UiCorpusAssets';
 import {
   buildX4UiWorkspaceSource,
   type X4UiWorkspaceSource,
@@ -1169,6 +1178,796 @@ const run = (): void => {
       && dynamicCatalog.lockedEntries.every(entry => entry.reason === 'operation-not-applied'),
     JSON.stringify(dynamicCatalog.lockedEntries));
 
+  const appliedPartialContext = contextFor([
+    'local menu = { name = getWidth(), layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 80, scaling = false })',
+    'local row = table:addRow(false, {})',
+    'row[1]:createText("partial", {})',
+    'frame:display()',
+    '',
+  ].join('\n'));
+  const appliedPartialCatalog = catalogFor(appliedPartialContext);
+  const appliedPartialWidth = appliedPartialCatalog.editableEntries.find(entry => entry.provenance.callName === 'addTable'
+    && entry.provenance.fields.includes('semantics.properties.width'));
+  const appliedPartialBeforeSource = sourceText(appliedPartialContext);
+  const appliedPartialApplyOutcome = invokePublic(() => applyX4UiSourceEdit(
+    appliedPartialContext.workspace,
+    appliedPartialContext.source,
+    appliedPartialCatalog,
+    appliedPartialWidth?.id || 'missing-applied-partial-width',
+    81,
+    appliedPartialWidth?.path,
+    appliedPartialWidth?.startOffset,
+    appliedPartialWidth?.endOffset,
+    appliedPartialWidth?.expectedText,
+  ));
+  const appliedPartialFailFirstReceipt = {
+    programStatus: appliedPartialContext.program.status,
+    operationStatuses: appliedPartialContext.program.operations.map(operation => operation.status),
+    catalogStatus: appliedPartialCatalog.status,
+    catalogReason: appliedPartialCatalog.reason,
+    editableEntries: appliedPartialCatalog.editableEntries.length,
+    widthEntry: appliedPartialWidth ? {
+      id: appliedPartialWidth.id,
+      expectedText: appliedPartialWidth.expectedText,
+      fields: appliedPartialWidth.provenance.fields,
+    } : undefined,
+    structuralEntries: appliedPartialCatalog.structuralEntries?.length || 0,
+    apply: {
+      threw: appliedPartialApplyOutcome.threw,
+      accepted: appliedPartialApplyOutcome.value?.accepted,
+      changed: appliedPartialApplyOutcome.value?.changed,
+      reason: appliedPartialApplyOutcome.value?.accepted === false ? appliedPartialApplyOutcome.value.reason : undefined,
+      detail: appliedPartialApplyOutcome.value?.accepted === false ? appliedPartialApplyOutcome.value.detail : undefined,
+    },
+  };
+  check('B119 applied-partial scalar source authority is causal and geometry-editable',
+    appliedPartialContext.program.status === 'partial'
+      && appliedPartialContext.program.operations.length > 0
+      && appliedPartialContext.program.operations.every(operation => operation.status === 'applied')
+      && appliedPartialCatalog.status === 'ready'
+      && appliedPartialCatalog.editable
+      && appliedPartialWidth !== undefined
+      && appliedPartialWidth.provenance.callName === 'addTable'
+      && appliedPartialWidth.provenance.fields.includes('semantics.properties.width')
+      && (appliedPartialCatalog.structuralEntries || []).length === 0
+      && appliedPartialApplyOutcome.threw === false
+      && appliedPartialApplyOutcome.value?.accepted === true
+      && appliedPartialApplyOutcome.value.changed === true,
+    JSON.stringify(appliedPartialFailFirstReceipt));
+
+  const appliedPartialResult = accepted(appliedPartialApplyOutcome.value as X4UiSourceEditResult);
+  const appliedPartialAfterSource = sourceText(appliedPartialResult);
+  const appliedPartialAfterProjection = projectedProgramFor(appliedPartialResult.source);
+  check('B119 applied-partial scalar replacement is byte-local, reparsed, and reissues partial authority',
+    appliedPartialResult.changed
+      && appliedPartialResult.reparsed
+      && appliedPartialResult.provenanceReestablished
+      && appliedPartialResult.catalog.verification === 'Not verified in game'
+      && appliedPartialResult.catalog.status === 'ready'
+      && appliedPartialResult.catalog.editable
+      && (appliedPartialResult.catalog.structuralEntries || []).length === 0
+      && appliedPartialAfterProjection !== undefined
+      && appliedPartialAfterProjection.program.status === 'partial'
+      && appliedPartialAfterProjection.program.operations.length > 0
+      && appliedPartialAfterProjection.program.operations.every(operation => operation.status === 'applied')
+      && appliedPartialAfterSource === appliedPartialBeforeSource.slice(0, appliedPartialWidth!.startOffset)
+        + '81'
+        + appliedPartialBeforeSource.slice(appliedPartialWidth!.endOffset)
+      && appliedPartialResult.catalog.editableEntries.some(entry => entry.provenance.callName === 'addTable'
+        && entry.provenance.fields.includes('semantics.properties.width')
+        && entry.expectedText === '81'),
+    JSON.stringify({
+      before: appliedPartialBeforeSource,
+      after: appliedPartialAfterSource,
+      result: appliedPartialResult,
+      afterProjection: appliedPartialAfterProjection
+        ? {
+          status: appliedPartialAfterProjection.program.status,
+          operationStatuses: appliedPartialAfterProjection.program.operations.map(operation => operation.status),
+        }
+        : undefined,
+    }));
+
+  const appliedPartialStructuralRefusal = applyX4UiSourceStructuralEdit(
+    appliedPartialContext.workspace,
+    appliedPartialContext.source,
+    appliedPartialCatalog,
+    'missing-applied-partial-structural-action',
+  );
+  check('B119 applied-partial authority exposes no structural action and structural apply refuses',
+    (appliedPartialCatalog.structuralEntries || []).length === 0
+      && appliedPartialStructuralRefusal.accepted === false
+      && appliedPartialStructuralRefusal.reason === 'unsupported-provenance'
+      && appliedPartialStructuralRefusal.changed === false
+      && appliedPartialStructuralRefusal.workspace === appliedPartialContext.workspace
+      && appliedPartialStructuralRefusal.source === appliedPartialContext.source,
+    JSON.stringify({
+      structuralEntries: appliedPartialCatalog.structuralEntries,
+      accepted: appliedPartialStructuralRefusal.accepted,
+      reason: appliedPartialStructuralRefusal.accepted === false ? appliedPartialStructuralRefusal.reason : undefined,
+      detail: appliedPartialStructuralRefusal.accepted === false ? appliedPartialStructuralRefusal.detail : undefined,
+    }));
+
+  const conditionalContext = contextFor([
+    'local menu = { name = "Conditional", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'if runtimeCondition then',
+    '  local table = frame:addTable(1, { width = 80, scaling = false })',
+    '  local row = table:addRow(false, {})',
+    '  row[1]:createText("conditional", {})',
+    'end',
+    'frame:display()',
+    '',
+  ].join('\n'));
+  const rejectedContext = contextFor([
+    'local menu = { name = "Rejected", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(0, { width = 80, scaling = false })',
+    'local row = table:addRow(false, {})',
+    'row[1]:createText("rejected", {})',
+    'frame:display()',
+    '',
+  ].join('\n'));
+  const mixedContext = contextFor([
+    'local menu = { name = "Mixed", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 80, scaling = false })',
+    'local row = table:addRow(false, {})',
+    'row[1]:createText("mixed", {})',
+    'if runtimeCondition then frame:display() end',
+    '',
+  ].join('\n'));
+  const unreachableContext = contextFor([
+    'local menu = { name = "Unreachable", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'if false then',
+    '  local table = frame:addTable(1, { width = 80, scaling = false })',
+    '  local row = table:addRow(false, {})',
+    '  row[1]:createText("unreachable", {})',
+    'end',
+    'frame:display()',
+    '',
+  ].join('\n'));
+  const unreachableCatalog = catalogFor(unreachableContext);
+  const emptyWorkspace = workspace('local menu = { name = "Empty", layer = 1 }\n');
+  const emptySource = buildX4UiWorkspaceSource(emptyWorkspace);
+  if (!emptySource.bundle) throw new Error('empty source fixture did not build a bundle');
+  const emptyFile = emptySource.bundle.sourceFiles.find(file => file.path === 'ui/edit.lua');
+  if (!emptyFile) throw new Error('empty source fixture Lua file missing');
+  const emptyModel = normalizeX4UiSourceEditLayoutModel(emptyFile.callModel);
+  const emptyTarget = createX4UiLayoutTargetCatalog(emptyModel).targets.find(candidate => candidate.kind === 'top-level');
+  if (!emptyTarget) throw new Error('empty source fixture top-level target missing');
+  const emptyProjection = projectX4UiLayoutProgram(emptyModel, emptyTarget, profileFor(emptyModel));
+  const emptyDiscoveryOutcome = invokeDiscoveryBoundary(
+    emptyWorkspace,
+    emptySource,
+    emptyProjection.program,
+    undefined,
+  );
+  const emptyApplyOutcome = emptyDiscoveryOutcome.value
+    ? invokeApplyBoundary(emptyWorkspace, emptySource, emptyDiscoveryOutcome.value, 'missing-empty-entry', 81)
+    : { threw: false };
+  const partialStatusCases = [
+    { name: 'conditional', context: conditionalContext, catalog: catalogFor(conditionalContext), status: 'conditional' },
+    { name: 'rejected', context: rejectedContext, catalog: catalogFor(rejectedContext), status: 'rejected' },
+    { name: 'unresolved', context: dynamicContext, catalog: dynamicCatalog, status: 'unresolved' },
+    { name: 'mixed', context: mixedContext, catalog: catalogFor(mixedContext), status: 'conditional' },
+    { name: 'unreachable', context: unreachableContext, catalog: unreachableCatalog, status: 'unreachable' },
+  ] as const;
+  const partialStatusReceipts = partialStatusCases.map(item => {
+    const applyOutcome = invokePublic(() => applyX4UiSourceEdit(
+      item.context.workspace,
+      item.context.source,
+      item.catalog,
+      item.catalog.entries[0]?.id || `missing-${item.name}-entry`,
+      81,
+    ));
+    return {
+      name: item.name,
+      programStatus: item.context.program.status,
+      operationStatuses: item.context.program.operations.map(operation => operation.status),
+      catalogStatus: item.catalog.status,
+      catalogReason: item.catalog.reason,
+      apply: {
+        threw: applyOutcome.threw,
+        accepted: applyOutcome.value?.accepted,
+        changed: applyOutcome.value?.changed,
+        reason: applyOutcome.value?.accepted === false ? applyOutcome.value.reason : undefined,
+      },
+      expectedStatusPresent: item.context.program.operations.some(operation => operation.status === item.status),
+    };
+  });
+  check('B119 conditional, rejected, unresolved, and mixed streams stay non-actionable',
+    partialStatusCases.every(item => item.context.program.status === 'partial'
+      && item.context.program.operations.length > 0
+      && item.context.program.operations.some(operation => operation.status === item.status)
+      && !item.context.program.operations.every(operation => operation.status === 'applied')
+      && item.catalog.status === 'locked'
+      && item.catalog.reason === 'operation-not-applied')
+    && partialStatusReceipts.every(receipt => receipt.apply.threw === false
+        && receipt.apply.accepted === false
+        && receipt.apply.changed === false
+        && receipt.apply.reason === 'unsupported-provenance'),
+    JSON.stringify(partialStatusReceipts));
+  check('B119 unreachable and empty operation streams stay non-actionable',
+    unreachableContext.program.status === 'partial'
+      && unreachableContext.program.operations.length > 0
+      && unreachableContext.program.operations.some(operation => operation.status === 'unreachable')
+      && unreachableContext.program.operations.some(operation => operation.status === 'applied')
+      && unreachableCatalog.status === 'locked'
+      && emptyProjection.status === 'refused'
+      && emptyProjection.program?.operations.length === 0
+      && emptyDiscoveryOutcome.threw === false
+      && emptyDiscoveryOutcome.value?.status === 'locked'
+      && emptyDiscoveryOutcome.value.editable === false
+      && emptyApplyOutcome.threw === false
+      && emptyApplyOutcome.value?.accepted === false
+      && emptyApplyOutcome.value.changed === false,
+    JSON.stringify({
+      unreachable: {
+        programStatus: unreachableContext.program.status,
+        operationStatuses: unreachableContext.program.operations.map(operation => operation.status),
+      },
+      empty: {
+        projectionStatus: emptyProjection.status,
+        operationCount: emptyProjection.program?.operations.length,
+        discoveryStatus: emptyDiscoveryOutcome.value?.status,
+        applyAccepted: emptyApplyOutcome.value?.accepted,
+        applyChanged: emptyApplyOutcome.value?.changed,
+        applyReason: emptyApplyOutcome.value?.accepted === false ? emptyApplyOutcome.value.reason : undefined,
+      },
+    }));
+
+  const namedFunctionLua = [
+    'local menu = {}',
+    'function menu.display()',
+    '  local descriptor = { name = getWidth(), layer = 1 }',
+    '  local frame = Helper.createFrameHandle(descriptor, { width = 100, height = 80 })',
+    '  local table = frame:addTable(1, { x = 10, y = 20, width = 80, scaling = false })',
+    '  local row = table:addRow(false, {})',
+    '  row[1]:createText("named partial", {})',
+    '  frame:display()',
+    'end',
+    '',
+  ].join('\n');
+  const namedFunctionWorkspace = workspace(namedFunctionLua);
+  const namedFunctionSource = buildX4UiWorkspaceSource(namedFunctionWorkspace);
+  const namedFunctionFile = namedFunctionSource.bundle?.sourceFiles.find(file => file.path === 'ui/edit.lua');
+  if (!namedFunctionFile) throw new Error('named-function source fixture Lua file missing');
+  const namedFunctionRawModel = namedFunctionFile.callModel;
+  const namedFunctionFirstCall = namedFunctionRawModel.calls[0];
+  const namedFunctionHandlerDescriptor = namedFunctionFirstCall
+    ? Object.getOwnPropertyDescriptor(namedFunctionFirstCall.context, 'handler')
+    : undefined;
+  const namedFunctionNormalization = invokePublic(() => normalizeX4UiSourceEditLayoutModel(namedFunctionRawModel));
+  const namedFunctionFallbackModel = structuredClone(namedFunctionRawModel);
+  for (const call of namedFunctionFallbackModel.calls) {
+    const descriptor = Object.getOwnPropertyDescriptor(call.context, 'handler');
+    if (descriptor && 'value' in descriptor && descriptor.value === undefined) delete call.context.handler;
+  }
+  const namedFunctionIssuanceModel = namedFunctionNormalization.value
+    || normalizeX4UiSourceEditLayoutModel(namedFunctionFallbackModel);
+  const namedFunctionTarget = createX4UiLayoutTargetCatalog(namedFunctionIssuanceModel).targets
+    .find(candidate => candidate.kind === 'function');
+  const namedFunctionProjection = namedFunctionTarget
+    ? projectX4UiLayoutProgram(namedFunctionIssuanceModel, namedFunctionTarget, profileFor(namedFunctionIssuanceModel))
+    : undefined;
+  const namedFunctionContext = namedFunctionProjection
+    && namedFunctionProjection.status !== 'refused'
+    && namedFunctionProjection.program
+    ? {
+      workspace: namedFunctionWorkspace,
+      source: namedFunctionSource,
+      program: namedFunctionProjection.program,
+      evidenceAuthority: namedFunctionProjection.evidenceAuthority,
+    } satisfies SourceEditFixtureContext
+    : undefined;
+  const namedFunctionCatalogOutcome = namedFunctionContext
+    ? invokePublic(() => catalogFor(namedFunctionContext))
+    : { threw: false };
+  const namedFunctionCatalog = namedFunctionCatalogOutcome.value;
+  const namedFunctionReceipt = {
+    firstCallName: namedFunctionFirstCall?.name,
+    firstCallContext: namedFunctionFirstCall ? {
+      ownKeys: Object.getOwnPropertyNames(namedFunctionFirstCall.context),
+      kind: namedFunctionFirstCall.context.kind,
+      name: namedFunctionFirstCall.context.name,
+      source: namedFunctionFirstCall.context.source,
+      branchPathIsArray: Array.isArray(namedFunctionFirstCall.context.branchPath),
+      loopPathIsArray: Array.isArray(namedFunctionFirstCall.context.loopPath),
+      reachability: namedFunctionFirstCall.context.reachability,
+    } : undefined,
+    handlerDescriptor: namedFunctionHandlerDescriptor ? {
+      own: Object.prototype.hasOwnProperty.call(namedFunctionFirstCall?.context, 'handler'),
+      data: 'value' in namedFunctionHandlerDescriptor,
+      enumerable: namedFunctionHandlerDescriptor.enumerable,
+      valueIsUndefined: 'value' in namedFunctionHandlerDescriptor && namedFunctionHandlerDescriptor.value === undefined,
+    } : undefined,
+    normalization: {
+      threw: namedFunctionNormalization.threw,
+      error: namedFunctionNormalization.error,
+    },
+    projection: namedFunctionProjection ? {
+      status: namedFunctionProjection.status,
+      programStatus: namedFunctionProjection.program?.status,
+      operationStatuses: namedFunctionProjection.program?.operations.map(operation => operation.status),
+    } : undefined,
+    discovery: {
+      threw: namedFunctionCatalogOutcome.threw,
+      error: namedFunctionCatalogOutcome.error,
+      status: namedFunctionCatalog?.status,
+      reason: namedFunctionCatalog?.reason,
+      detail: namedFunctionCatalog?.detail,
+      editableEntries: namedFunctionCatalog?.editableEntries.length,
+      structuralEntries: namedFunctionCatalog?.structuralEntries?.length,
+    },
+  };
+  check('B119 named-function parser-owned handler undefined normalizes into applied-partial scalar authority',
+    namedFunctionFirstCall?.context.kind === 'function'
+      && namedFunctionFirstCall.context.name === 'menu.display'
+      && namedFunctionHandlerDescriptor !== undefined
+      && 'value' in namedFunctionHandlerDescriptor
+      && namedFunctionHandlerDescriptor.value === undefined
+      && namedFunctionNormalization.threw === false
+      && namedFunctionProjection?.status === 'partial'
+      && namedFunctionProjection.program !== undefined
+      && namedFunctionProjection.program.operations.length > 0
+      && namedFunctionProjection.program.operations.every(operation => operation.status === 'applied')
+      && namedFunctionCatalogOutcome.threw === false
+      && namedFunctionCatalog?.status === 'ready'
+      && namedFunctionCatalog.editableEntries.some(entry => entry.provenance.callName === 'addTable'
+        && entry.provenance.fields.includes('semantics.properties.width'))
+      && (namedFunctionCatalog.structuralEntries || []).length === 0,
+    JSON.stringify(namedFunctionReceipt));
+
+  const namedFunctionWidth = namedFunctionCatalog?.editableEntries.find(entry => entry.provenance.callName === 'addTable'
+    && entry.provenance.fields.includes('semantics.properties.width'));
+  const namedFunctionBeforeSource = namedFunctionContext ? sourceText(namedFunctionContext) : undefined;
+  const namedFunctionApplyOutcome = namedFunctionContext && namedFunctionCatalog && namedFunctionWidth
+    ? invokePublic(() => applyX4UiSourceEdit(
+      namedFunctionContext.workspace,
+      namedFunctionContext.source,
+      namedFunctionCatalog,
+      namedFunctionWidth.id,
+      81,
+      namedFunctionWidth.path,
+      namedFunctionWidth.startOffset,
+      namedFunctionWidth.endOffset,
+      namedFunctionWidth.expectedText,
+    ))
+    : { threw: false };
+  const namedFunctionResult = namedFunctionApplyOutcome.value?.accepted === true
+    ? namedFunctionApplyOutcome.value
+    : undefined;
+  const namedFunctionAfterSource = namedFunctionResult ? sourceText(namedFunctionResult) : undefined;
+  const namedFunctionAfterFile = namedFunctionResult?.source.bundle?.sourceFiles.find(file => file.path === 'ui/edit.lua');
+  const namedFunctionAfterHandlerDescriptor = namedFunctionAfterFile?.callModel.calls[0]
+    ? Object.getOwnPropertyDescriptor(namedFunctionAfterFile.callModel.calls[0].context, 'handler')
+    : undefined;
+  const namedFunctionAfterModel = namedFunctionAfterFile
+    ? normalizeX4UiSourceEditLayoutModel(namedFunctionAfterFile.callModel)
+    : undefined;
+  const namedFunctionAfterTarget = namedFunctionAfterModel
+    ? createX4UiLayoutTargetCatalog(namedFunctionAfterModel).targets.find(candidate => candidate.kind === 'function')
+    : undefined;
+  const namedFunctionAfterProjection = namedFunctionAfterModel && namedFunctionAfterTarget
+    ? projectX4UiLayoutProgram(namedFunctionAfterModel, namedFunctionAfterTarget, profileFor(namedFunctionAfterModel))
+    : undefined;
+  check('B119 named-function geometry CAS is byte-local and reissues applied-partial scalar authority',
+    namedFunctionNormalization.value === namedFunctionIssuanceModel
+      && namedFunctionWidth !== undefined
+      && namedFunctionBeforeSource !== undefined
+      && namedFunctionApplyOutcome.threw === false
+      && namedFunctionResult !== undefined
+      && namedFunctionResult.changed
+      && namedFunctionResult.reparsed
+      && namedFunctionResult.provenanceReestablished
+      && namedFunctionResult.catalog.status === 'ready'
+      && namedFunctionResult.catalog.editable
+      && namedFunctionResult.catalog.verification === 'Not verified in game'
+      && (namedFunctionResult.catalog.structuralEntries || []).length === 0
+      && namedFunctionAfterSource === namedFunctionBeforeSource.slice(0, namedFunctionWidth.startOffset)
+        + '81'
+        + namedFunctionBeforeSource.slice(namedFunctionWidth.endOffset)
+      && namedFunctionAfterHandlerDescriptor !== undefined
+      && 'value' in namedFunctionAfterHandlerDescriptor
+      && namedFunctionAfterHandlerDescriptor.value === undefined
+      && namedFunctionAfterProjection?.status === 'partial'
+      && namedFunctionAfterProjection.program !== undefined
+      && namedFunctionAfterProjection.program.operations.length > 0
+      && namedFunctionAfterProjection.program.operations.every(operation => operation.status === 'applied')
+      && namedFunctionResult.catalog.editableEntries.some(entry => entry.provenance.callName === 'addTable'
+        && entry.provenance.fields.includes('semantics.properties.width')
+        && entry.expectedText === '81'),
+    JSON.stringify({
+      apply: {
+        threw: namedFunctionApplyOutcome.threw,
+        error: namedFunctionApplyOutcome.error,
+        accepted: namedFunctionApplyOutcome.value?.accepted,
+        changed: namedFunctionApplyOutcome.value?.changed,
+      },
+      after: {
+        source: namedFunctionAfterSource,
+        reparsed: namedFunctionResult?.reparsed,
+        provenanceReestablished: namedFunctionResult?.provenanceReestablished,
+        programStatus: namedFunctionAfterProjection?.program?.status,
+        operationStatuses: namedFunctionAfterProjection?.program?.operations.map(operation => operation.status),
+        structuralEntries: namedFunctionResult?.catalog.structuralEntries?.length,
+      },
+    }));
+
+  const malformedFunctionContextCases = [
+    { name: 'top-level kind', mutate: (context: Record<string, unknown>) => { context.kind = 'top-level'; } },
+    { name: 'handler kind', mutate: (context: Record<string, unknown>) => { context.kind = 'handler'; } },
+    { name: 'missing name', mutate: (context: Record<string, unknown>) => { delete context.name; } },
+    { name: 'empty name', mutate: (context: Record<string, unknown>) => { context.name = ''; } },
+    { name: 'non-string name', mutate: (context: Record<string, unknown>) => { context.name = 7; } },
+    { name: 'missing source', mutate: (context: Record<string, unknown>) => { delete context.source; } },
+    { name: 'invalid source', mutate: (context: Record<string, unknown>) => { context.source = { file: 'ui/edit.lua', start: {} }; } },
+    { name: 'invalid source path', mutate: (context: Record<string, unknown>) => {
+      const source = context.source as Record<string, unknown>;
+      source.sourcePath = 7;
+    } },
+    { name: 'missing branch path', mutate: (context: Record<string, unknown>) => { delete context.branchPath; } },
+    { name: 'non-array branch path', mutate: (context: Record<string, unknown>) => { context.branchPath = {}; } },
+    { name: 'missing loop path', mutate: (context: Record<string, unknown>) => { delete context.loopPath; } },
+    { name: 'non-array loop path', mutate: (context: Record<string, unknown>) => { context.loopPath = {}; } },
+    { name: 'missing reachability', mutate: (context: Record<string, unknown>) => { delete context.reachability; } },
+    { name: 'invalid reachability', mutate: (context: Record<string, unknown>) => { context.reachability = 'unknown'; } },
+    { name: 'unrelated undefined', mutate: (context: Record<string, unknown>) => { context.auditUndefined = undefined; } },
+    { name: 'custom prototype', mutate: (context: Record<string, unknown>) => { Object.setPrototypeOf(context, { inherited: true }); } },
+    { name: 'symbol field', mutate: (context: Record<string, unknown>) => { Object.defineProperty(context, Symbol('named-function'), { enumerable: true, value: true }); } },
+    { name: 'cycle', mutate: (context: Record<string, unknown>) => { context.self = context; } },
+    { name: 'sparse branch path', mutate: (context: Record<string, unknown>) => { context.branchPath = new Array(1); } },
+  ] as const;
+  const malformedFunctionContextRows: Array<{ name: string; message: string }> = malformedFunctionContextCases.map(item => {
+    const model = structuredClone(namedFunctionRawModel);
+    const context = model.calls[0]?.context as unknown as Record<string, unknown> | undefined;
+    if (!context) throw new Error(`named-function malformed fixture missing context for ${item.name}`);
+    item.mutate(context);
+    return {
+      name: item.name,
+      message: normalizationMessage(model),
+    };
+  });
+  let namedFunctionAccessorReads = 0;
+  const namedFunctionAccessorModel = structuredClone(namedFunctionRawModel);
+  Object.defineProperty(namedFunctionAccessorModel.calls[0].context, 'name', {
+    configurable: true,
+    enumerable: true,
+    get: () => {
+      namedFunctionAccessorReads += 1;
+      return 'menu.display';
+    },
+  });
+  malformedFunctionContextRows.push({
+    name: 'name accessor',
+    message: normalizationMessage(namedFunctionAccessorModel),
+  });
+  check('B119 parser-owned function-context exception rejects malformed lookalikes without accessor reads',
+    malformedFunctionContextRows.every(row => row.message === 'source edit layout model must be closed plain own data')
+      && namedFunctionAccessorReads === 0,
+    JSON.stringify({ rows: malformedFunctionContextRows, accessorReads: namedFunctionAccessorReads }));
+
+  const dynamicHandlerLua = [
+    'local menu = {}',
+    'function menu.display()',
+    '  local descriptor = { name = getWidth(), layer = 1 }',
+    '  local frame = Helper.createFrameHandle(descriptor, { width = 100, height = 80 })',
+    '  local table = frame:addTable(1, { x = 10, y = 20, width = 80, scaling = false })',
+    '  local row = table:addRow(false, {})',
+    '  row[1]:createText("dynamic handler", {})',
+    '  frame.onClick = runtimeHandler',
+    '  frame:display()',
+    'end',
+    '',
+  ].join('\n');
+  const dynamicHandlerWorkspace = workspace(dynamicHandlerLua);
+  const dynamicHandlerSource = buildX4UiWorkspaceSource(dynamicHandlerWorkspace);
+  const dynamicHandlerFile = dynamicHandlerSource.bundle?.sourceFiles.find(file => file.path === 'ui/edit.lua');
+  if (!dynamicHandlerFile) throw new Error('dynamic-handler source fixture Lua file missing');
+  const dynamicHandlerRawModel = dynamicHandlerFile.callModel;
+  const dynamicHandlerRawRecord = dynamicHandlerRawModel.handlers[0];
+  if (!dynamicHandlerRawRecord) throw new Error('dynamic-handler fixture emitted no handler record');
+  const dynamicHandlerOptionalKeys = ['functionSource', 'bodySource', 'parameters'] as const;
+  const dynamicHandlerOptionalDescriptors = Object.fromEntries(dynamicHandlerOptionalKeys.map(key => {
+    const descriptor = Object.getOwnPropertyDescriptor(dynamicHandlerRawRecord, key);
+    return [key, descriptor ? {
+      own: Object.prototype.hasOwnProperty.call(dynamicHandlerRawRecord, key),
+      enumerable: descriptor.enumerable,
+      data: 'value' in descriptor,
+      valueIsUndefined: 'value' in descriptor && descriptor.value === undefined,
+    } : undefined];
+  }));
+  const dynamicHandlerNormalization = invokePublic(() => normalizeX4UiSourceEditLayoutModel(dynamicHandlerRawModel));
+  const dynamicHandlerNormalizedRecord = dynamicHandlerNormalization.value?.handlers[0];
+  const dynamicHandlerGap = dynamicHandlerRawModel.verificationGaps.find(gap =>
+    gap.category === 'data-flow'
+      && gap.reason === 'onClick handler function body is dynamic or unknown');
+  const dynamicHandlerDefinedEvidence = Object.fromEntries(
+    Object.entries(dynamicHandlerRawRecord).filter(([, value]) => value !== undefined),
+  );
+  const dynamicHandlerReceipt = {
+    raw: {
+      recordType: dynamicHandlerRawRecord.recordType,
+      name: dynamicHandlerRawRecord.name,
+      path: dynamicHandlerRawRecord.path,
+      sourceOrder: dynamicHandlerRawRecord.sourceOrder,
+      order: dynamicHandlerRawRecord.order,
+      value: dynamicHandlerRawRecord.value,
+      context: dynamicHandlerRawRecord.context,
+      optionalDescriptors: dynamicHandlerOptionalDescriptors,
+      gap: dynamicHandlerGap,
+      gaps: dynamicHandlerRawModel.verificationGaps,
+    },
+    normalization: {
+      threw: dynamicHandlerNormalization.threw,
+      error: dynamicHandlerNormalization.error,
+      normalizedHandlerCount: dynamicHandlerNormalization.value?.handlers.length,
+      normalizedOwnKeys: dynamicHandlerNormalizedRecord
+        ? Object.getOwnPropertyNames(dynamicHandlerNormalizedRecord)
+        : undefined,
+    },
+  };
+  check('B119 dynamic onClick parser-owned optional trio normalizes without losing handler evidence',
+    dynamicHandlerRawRecord.recordType === 'handler'
+      && dynamicHandlerRawRecord.name === 'onClick'
+      && dynamicHandlerOptionalKeys.every(key => {
+        const descriptor = Object.getOwnPropertyDescriptor(dynamicHandlerRawRecord, key);
+        return descriptor !== undefined
+          && descriptor.enumerable
+          && 'value' in descriptor
+          && descriptor.value === undefined;
+      })
+      && dynamicHandlerGap !== undefined
+      && dynamicHandlerNormalization.threw === false
+      && dynamicHandlerNormalizedRecord !== undefined
+      && dynamicHandlerOptionalKeys.every(key => !Object.prototype.hasOwnProperty.call(dynamicHandlerNormalizedRecord, key))
+      && JSON.stringify(dynamicHandlerNormalizedRecord) === JSON.stringify(dynamicHandlerDefinedEvidence)
+      && JSON.stringify(dynamicHandlerNormalization.value?.verificationGaps)
+        === JSON.stringify(dynamicHandlerRawModel.verificationGaps),
+    JSON.stringify(dynamicHandlerReceipt));
+
+  const dynamicHandlerTarget = dynamicHandlerNormalization.value
+    ? createX4UiLayoutTargetCatalog(dynamicHandlerNormalization.value).targets.find(candidate => candidate.kind === 'function')
+    : undefined;
+  const dynamicHandlerProjection = dynamicHandlerNormalization.value && dynamicHandlerTarget
+    ? projectX4UiLayoutProgram(
+      dynamicHandlerNormalization.value,
+      dynamicHandlerTarget,
+      profileFor(dynamicHandlerNormalization.value),
+    )
+    : undefined;
+  const dynamicHandlerContext = dynamicHandlerProjection
+    && dynamicHandlerProjection.status !== 'refused'
+    && dynamicHandlerProjection.program
+    ? {
+      workspace: dynamicHandlerWorkspace,
+      source: dynamicHandlerSource,
+      program: dynamicHandlerProjection.program,
+      evidenceAuthority: dynamicHandlerProjection.evidenceAuthority,
+    } satisfies SourceEditFixtureContext
+    : undefined;
+  const dynamicHandlerCatalogOutcome = dynamicHandlerContext
+    ? invokePublic(() => catalogFor(dynamicHandlerContext))
+    : { threw: false };
+  const dynamicHandlerCatalog = dynamicHandlerCatalogOutcome.value;
+  const dynamicHandlerWidth = dynamicHandlerCatalog?.editableEntries.find(entry => entry.provenance.callName === 'addTable'
+    && entry.provenance.fields.includes('semantics.properties.width'));
+  const dynamicHandlerBeforeSource = dynamicHandlerContext ? sourceText(dynamicHandlerContext) : undefined;
+  const dynamicHandlerApplyOutcome: PublicCallOutcome<X4UiSourceEditResult> = dynamicHandlerContext
+    && dynamicHandlerCatalog
+    && dynamicHandlerWidth
+    ? invokePublic(() => applyX4UiSourceEdit(
+      dynamicHandlerContext.workspace,
+      dynamicHandlerContext.source,
+      dynamicHandlerCatalog,
+      dynamicHandlerWidth.id,
+      81,
+      dynamicHandlerWidth.path,
+      dynamicHandlerWidth.startOffset,
+      dynamicHandlerWidth.endOffset,
+      dynamicHandlerWidth.expectedText,
+    ))
+    : { threw: false };
+  const dynamicHandlerResult = dynamicHandlerApplyOutcome.value?.accepted === true
+    ? dynamicHandlerApplyOutcome.value
+    : undefined;
+  const dynamicHandlerAfterSource = dynamicHandlerResult ? sourceText(dynamicHandlerResult) : undefined;
+  const dynamicHandlerAfterFile = dynamicHandlerResult?.source.bundle?.sourceFiles.find(file => file.path === 'ui/edit.lua');
+  const dynamicHandlerAfterRawRecord = dynamicHandlerAfterFile?.callModel.handlers[0];
+  const dynamicHandlerAfterModel = dynamicHandlerAfterFile
+    ? normalizeX4UiSourceEditLayoutModel(dynamicHandlerAfterFile.callModel)
+    : undefined;
+  const dynamicHandlerAfterTarget = dynamicHandlerAfterModel
+    ? createX4UiLayoutTargetCatalog(dynamicHandlerAfterModel).targets.find(candidate => candidate.kind === 'function')
+    : undefined;
+  const dynamicHandlerAfterProjection = dynamicHandlerAfterModel && dynamicHandlerAfterTarget
+    ? projectX4UiLayoutProgram(dynamicHandlerAfterModel, dynamicHandlerAfterTarget, profileFor(dynamicHandlerAfterModel))
+    : undefined;
+  check('B119 dynamic-handler named applied-partial geometry remains scalar-actionable through CAS and reparse',
+    dynamicHandlerProjection?.status === 'partial'
+      && dynamicHandlerProjection.program !== undefined
+      && dynamicHandlerProjection.program.operations.length > 0
+      && dynamicHandlerProjection.program.operations.every(operation => operation.status === 'applied')
+      && dynamicHandlerCatalogOutcome.threw === false
+      && dynamicHandlerCatalog?.status === 'ready'
+      && dynamicHandlerCatalog.editable
+      && dynamicHandlerWidth !== undefined
+      && dynamicHandlerBeforeSource !== undefined
+      && (dynamicHandlerCatalog.structuralEntries || []).length === 0
+      && dynamicHandlerApplyOutcome.threw === false
+      && dynamicHandlerResult !== undefined
+      && dynamicHandlerResult.changed
+      && dynamicHandlerResult.reparsed
+      && dynamicHandlerResult.provenanceReestablished
+      && dynamicHandlerResult.catalog.status === 'ready'
+      && dynamicHandlerResult.catalog.editable
+      && dynamicHandlerResult.catalog.verification === 'Not verified in game'
+      && (dynamicHandlerResult.catalog.structuralEntries || []).length === 0
+      && dynamicHandlerAfterSource === dynamicHandlerBeforeSource.slice(0, dynamicHandlerWidth.startOffset)
+        + '81'
+        + dynamicHandlerBeforeSource.slice(dynamicHandlerWidth.endOffset)
+      && dynamicHandlerAfterRawRecord !== undefined
+      && dynamicHandlerOptionalKeys.every(key => {
+        const descriptor = Object.getOwnPropertyDescriptor(dynamicHandlerAfterRawRecord, key);
+        return descriptor !== undefined
+          && descriptor.enumerable
+          && 'value' in descriptor
+          && descriptor.value === undefined;
+      })
+      && dynamicHandlerAfterProjection?.status === 'partial'
+      && dynamicHandlerAfterProjection.program !== undefined
+      && dynamicHandlerAfterProjection.program.operations.length > 0
+      && dynamicHandlerAfterProjection.program.operations.every(operation => operation.status === 'applied')
+      && dynamicHandlerResult.catalog.editableEntries.some(entry => entry.provenance.callName === 'addTable'
+        && entry.provenance.fields.includes('semantics.properties.width')
+        && entry.expectedText === '81'),
+    JSON.stringify({
+      projection: dynamicHandlerProjection ? {
+        status: dynamicHandlerProjection.status,
+        programStatus: dynamicHandlerProjection.program?.status,
+        operationStatuses: dynamicHandlerProjection.program?.operations.map(operation => operation.status),
+      } : undefined,
+      catalog: dynamicHandlerCatalog ? {
+        status: dynamicHandlerCatalog.status,
+        editableEntries: dynamicHandlerCatalog.editableEntries.length,
+        structuralEntries: dynamicHandlerCatalog.structuralEntries?.length,
+      } : undefined,
+      apply: {
+        threw: dynamicHandlerApplyOutcome.threw,
+        error: dynamicHandlerApplyOutcome.error,
+        accepted: dynamicHandlerApplyOutcome.value?.accepted,
+        changed: dynamicHandlerApplyOutcome.value?.changed,
+      },
+      after: {
+        source: dynamicHandlerAfterSource,
+        programStatus: dynamicHandlerAfterProjection?.program?.status,
+        operationStatuses: dynamicHandlerAfterProjection?.program?.operations.map(operation => operation.status),
+        catalogStatus: dynamicHandlerResult?.catalog.status,
+        structuralEntries: dynamicHandlerResult?.catalog.structuralEntries?.length,
+      },
+    }));
+
+  const malformedDynamicHandlerCases: readonly {
+    readonly name: string;
+    readonly mutate: (handler: Record<string, unknown>, observe: () => void) => void;
+  }[] = [
+    { name: 'missing record type', mutate: handler => { delete handler.recordType; } },
+    { name: 'wrong record type', mutate: handler => { handler.recordType = 'property'; } },
+    { name: 'missing name', mutate: handler => { delete handler.name; } },
+    { name: 'wrong name', mutate: handler => { handler.name = 'onChange'; } },
+    { name: 'missing path', mutate: handler => { delete handler.path; } },
+    { name: 'empty path', mutate: handler => { handler.path = ''; } },
+    { name: 'missing source', mutate: handler => { delete handler.source; } },
+    { name: 'malformed source', mutate: handler => {
+      const source = handler.source as Record<string, unknown>;
+      const start = source.start as Record<string, unknown>;
+      start.line = '3';
+    } },
+    { name: 'missing source order', mutate: handler => { delete handler.sourceOrder; } },
+    { name: 'nonfinite source order', mutate: handler => { handler.sourceOrder = Number.NaN; } },
+    { name: 'missing order', mutate: handler => { delete handler.order; } },
+    { name: 'nonfinite order', mutate: handler => { handler.order = Number.POSITIVE_INFINITY; } },
+    { name: 'missing value', mutate: handler => { delete handler.value; } },
+    { name: 'malformed value', mutate: handler => { handler.value = 'runtimeHandler'; } },
+    { name: 'invalid value status', mutate: handler => {
+      const value = handler.value as Record<string, unknown>;
+      value.status = 'refused';
+    } },
+    { name: 'missing context', mutate: handler => { delete handler.context; } },
+    { name: 'wrong context kind', mutate: handler => {
+      const context = handler.context as Record<string, unknown>;
+      context.kind = 'function';
+    } },
+    { name: 'wrong context handler', mutate: handler => {
+      const context = handler.context as Record<string, unknown>;
+      context.handler = 'onChange';
+    } },
+    { name: 'missing trio descriptor', mutate: handler => { delete handler.parameters; } },
+    { name: 'mixed trio values', mutate: handler => { handler.functionSource = structuredClone(handler.source); } },
+    { name: 'non-enumerable trio descriptor', mutate: handler => {
+      Object.defineProperty(handler, 'bodySource', {
+        configurable: true,
+        enumerable: false,
+        writable: true,
+        value: undefined,
+      });
+    } },
+    { name: 'trio accessor', mutate: (handler, observe) => {
+      Object.defineProperty(handler, 'functionSource', {
+        configurable: true,
+        enumerable: true,
+        get: () => {
+          observe();
+          return undefined;
+        },
+      });
+    } },
+    { name: 'name accessor', mutate: (handler, observe) => {
+      Object.defineProperty(handler, 'name', {
+        configurable: true,
+        enumerable: true,
+        get: () => {
+          observe();
+          return 'onClick';
+        },
+      });
+    } },
+    { name: 'value accessor', mutate: (handler, observe) => {
+      const value = handler.value;
+      Object.defineProperty(handler, 'value', {
+        configurable: true,
+        enumerable: true,
+        get: () => {
+          observe();
+          return value;
+        },
+      });
+    } },
+    { name: 'context accessor', mutate: (handler, observe) => {
+      const context = handler.context;
+      Object.defineProperty(handler, 'context', {
+        configurable: true,
+        enumerable: true,
+        get: () => {
+          observe();
+          return context;
+        },
+      });
+    } },
+    { name: 'custom prototype', mutate: handler => { Object.setPrototypeOf(handler, { inherited: true }); } },
+    { name: 'symbol field', mutate: handler => {
+      Object.defineProperty(handler, Symbol('dynamic-handler'), { enumerable: true, value: true });
+    } },
+    { name: 'cycle', mutate: handler => { handler.self = handler; } },
+    { name: 'sparse branch path', mutate: handler => {
+      const context = handler.context as Record<string, unknown>;
+      context.branchPath = new Array(1);
+    } },
+    { name: 'unrelated undefined', mutate: handler => { handler.auditUndefined = undefined; } },
+  ];
+  const malformedDynamicHandlerRows = malformedDynamicHandlerCases.map(item => {
+    const model = structuredClone(dynamicHandlerRawModel);
+    const handler = model.handlers[0] as unknown as Record<string, unknown> | undefined;
+    if (!handler) throw new Error(`dynamic-handler malformed fixture missing handler for ${item.name}`);
+    let accessorReads = 0;
+    item.mutate(handler, () => { accessorReads += 1; });
+    return {
+      name: item.name,
+      message: normalizationMessage(model),
+      accessorReads,
+    };
+  });
+  check('B119 dynamic-handler optional trio rejects malformed and hostile lookalikes without reads',
+    malformedDynamicHandlerRows.length === 30
+      && malformedDynamicHandlerRows.every(row =>
+        row.message === 'source edit layout model must be closed plain own data'
+          && row.accessorReads === 0),
+    JSON.stringify(malformedDynamicHandlerRows));
+
   const aliasLua = [
     'local menu = { name = "Alias", layer = 1 }',
     'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
@@ -1898,6 +2697,100 @@ const run = (): void => {
   const modelTarget = createX4UiLayoutTargetCatalog(model).targets[0];
   check('selftest fixture uses the existing parser/model owners only',
     modelTarget !== undefined && model.file.text === 'local value = 1\n' && typeof projectX4UiLayoutProgram === 'function');
+
+  const schemaColorLocation = (startOffset: number, endOffset: number) => ({
+    file: 'ui/edit.lua',
+    sourcePath: 'fixture://ui/edit.lua',
+    start: { line: 1, column: startOffset, offset: startOffset },
+    end: { line: 1, column: endOffset, offset: endOffset },
+  });
+  const schemaSourceLiteralColor = {
+    kind: 'color' as const,
+    domain: 'source-literal-percent-alpha' as const,
+    r: 1,
+    g: 2,
+    b: 3,
+    a: 4,
+    declarationExpression: '{ r = 1, g = 2, b = 3, a = 4 }',
+    declarationSource: schemaColorLocation(0, 40),
+    channels: {
+      r: { value: 1, expression: '1', source: schemaColorLocation(10, 11), keySource: schemaColorLocation(4, 5) },
+      g: { value: 2, expression: '2', source: schemaColorLocation(18, 19), keySource: schemaColorLocation(12, 13) },
+      b: { value: 3, expression: '3', source: schemaColorLocation(26, 27), keySource: schemaColorLocation(20, 21) },
+      a: { value: 4, expression: '4', source: schemaColorLocation(34, 35), keySource: schemaColorLocation(28, 29) },
+    },
+    gameVerification: 'Not verified in game' as const,
+  };
+  const schemaCanonicalColor = {
+    kind: 'color' as const,
+    domain: 'canonical-xml-byte-alpha' as const,
+    canonicalIdentity: 'x4-9.00' as const,
+    requestedId: 'white',
+    resolvedBaseId: 'white',
+    r: 255,
+    g: 255,
+    b: 255,
+    a: 255,
+    glow: 0,
+    baseSource: { path: X4_UI_CORPUS_COLORS_XML_PATH, index: 0, id: 'white' },
+    sourceIdentities: {
+      xml: {
+        path: X4_UI_CORPUS_COLORS_XML_PATH,
+        relativePath: X4_UI_CORPUS_COLORS_XML_PATH,
+        sha256: X4_UI_CORPUS_COLORS_XML_SHA256,
+        size: X4_UI_CORPUS_COLORS_XML_SIZE,
+      },
+      xsd: {
+        path: X4_UI_CORPUS_COLORS_XSD_PATH,
+        relativePath: X4_UI_CORPUS_COLORS_XSD_PATH,
+        sha256: X4_UI_CORPUS_COLORS_XSD_SHA256,
+        size: X4_UI_CORPUS_COLORS_XSD_SIZE,
+      },
+    },
+    gameVerification: 'Not verified in game' as const,
+  };
+  const cloneSchemaColor = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+  const sourceColorExtra = cloneSchemaColor(schemaSourceLiteralColor) as Record<string, unknown>;
+  sourceColorExtra.extraRoot = true;
+  const sourceColorMissingChannelKey = cloneSchemaColor(schemaSourceLiteralColor) as Record<string, unknown>;
+  delete ((sourceColorMissingChannelKey.channels as Record<string, unknown>).r as Record<string, unknown>).keySource;
+  const sourceColorCustomPrototype = cloneSchemaColor(schemaSourceLiteralColor) as Record<string, unknown>;
+  Object.setPrototypeOf(
+    (sourceColorCustomPrototype.channels as Record<string, unknown>).r,
+    { inherited: true },
+  );
+  const sourceColorOutOfRange = cloneSchemaColor(schemaSourceLiteralColor) as Record<string, unknown>;
+  sourceColorOutOfRange.r = 256;
+  ((sourceColorOutOfRange.channels as Record<string, unknown>).r as Record<string, unknown>).value = 256;
+  const canonicalColorExtra = cloneSchemaColor(schemaCanonicalColor) as Record<string, unknown>;
+  canonicalColorExtra.extraRoot = true;
+  const canonicalColorIdentity = cloneSchemaColor(schemaCanonicalColor) as Record<string, unknown>;
+  canonicalColorIdentity.canonicalIdentity = 'x4-8.00';
+  const canonicalColorHash = cloneSchemaColor(schemaCanonicalColor) as Record<string, unknown>;
+  ((canonicalColorHash.sourceIdentities as Record<string, unknown>).xml as Record<string, unknown>).sha256 = '0'.repeat(64);
+  const canonicalColorOutOfRange = cloneSchemaColor(schemaCanonicalColor) as Record<string, unknown>;
+  canonicalColorOutOfRange.r = 256;
+  const exactColorOwnerRows = [
+    { name: 'source literal valid', candidate: schemaSourceLiteralColor, expected: true },
+    { name: 'canonical valid', candidate: schemaCanonicalColor, expected: true },
+    { name: 'source literal extra root key', candidate: sourceColorExtra, expected: false },
+    { name: 'source literal missing channel keySource', candidate: sourceColorMissingChannelKey, expected: false },
+    { name: 'source literal custom channel prototype', candidate: sourceColorCustomPrototype, expected: false },
+    { name: 'source literal channel range', candidate: sourceColorOutOfRange, expected: false },
+    { name: 'canonical extra root key', candidate: canonicalColorExtra, expected: false },
+    { name: 'canonical identity constant', candidate: canonicalColorIdentity, expected: false },
+    { name: 'canonical source hash', candidate: canonicalColorHash, expected: false },
+    { name: 'canonical channel range', candidate: canonicalColorOutOfRange, expected: false },
+  ];
+  const exactColorOwnerResults = exactColorOwnerRows.map(row => ({
+    name: row.name,
+    expected: row.expected,
+    actual: isExactX4UiLayoutColorValue(row.candidate),
+  }));
+  check('B119 exact color owner validates both domains and rejects malformed schema/semantic controls',
+    exactColorOwnerResults.length === 10
+      && exactColorOwnerResults.every(row => row.actual === row.expected),
+    JSON.stringify(exactColorOwnerResults));
 
   const scalarChecksBeforeBatch8B = checks.length;
   const structuralChecks: Check[] = [
