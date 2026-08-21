@@ -8676,3 +8676,218 @@ process-local safe Node runtime. Improve the graphify CLI/help boundary and ensu
 runtime instead of global Node `24.15.0`. Highest-risk evidenced weakness remains the gap between a persuasive browser
 preview and C++ frame acceptance; the bounded reduction is real dogfood deployment plus exact in-game screenshots, not
 stronger preview claims.
+
+### AI Influence `1b` isolated dogfood execution contract — 2026-08-21
+
+Status: `IN_PROGRESS / ISOLATED`; overall B119 remains `PARTIAL / Not verified in game`.
+
+The first dogfood unit is bounded to the gitignored Forge-owned root
+`F:\DEV_ENV\X4_Forge\dev-docs\b119-ai-influence-dogfood`. The real workspace mod
+`F:\DEV_ENV\projects\Mods\X4Mods\x4_ai_influence`, live extension under
+`G:\SteamLibrary\steamapps\common\X4 Foundations\extensions`, unpacked corpus, supplied design bundle, repository
+implementation/config/state, and Git index are read-only. Baseline `aic_menu.lua` SHA-256 is
+`4253D9BD9DE4113D4DE0B881DBF5A1E90CAA7B30F735BA925403EBEF7EC47DD7`. No deploy, game launch, standing-config
+mutation, package install, or persistent service is authorized while Ken is asleep.
+
+Exact native Luna `01a022df-8997-7492-b797-4cf40683f215` owns only the isolated root. It must preserve a byte-identical
+baseline, create literal-reference and minimally keep-out-safe real-Lua variants, and produce seedable sanitized Forge
+`ModWorkspace` JSON snapshots. The literal variant retains the supplied 2560x1440 rail/plate/dock geometry and records
+its known collision with `y=0.788`, `y=0.740`, and `x=0.664`; the safe variant changes only source-level geometry needed
+to clear measured guides and cannot claim pixel identity or game correctness. Both remain `Not verified in game`.
+
+The reproducible owned driver must call existing Forge source/call/lint/layout/session/Scene/Preview/Paint/keep-out
+owners using shipped corpus assets. It must distinguish bytes actually issued through Forge source-edit authority from
+manual isolated source drafting; a missing authoring capability is a dogfood product gap, not permission to mislabel an
+external patch. Acceptance requires bounded JSON/Markdown evidence, immutable variant hashes, exact linter axes and
+projection statuses, configured-corpus provenance, selected target/sample facts, keep-out intersection truth or an exact
+projection limitation, isolated mod validation, rendered Forge inspection at 2560x1440, and before/after proof that real
+mod/game bytes and processes did not change. Browser parity remains preview evidence only. Deployment and X4 screenshots
+remain separately write-gated.
+
+### AI Influence `1b` mounted-sample fail-first — 2026-08-21
+
+Status: `FAILED REQUIRED METHOD / REPRODUCED`; the isolated dogfood unit and overall B119 remain
+`PARTIAL / Not verified in game`.
+
+The corrected keep-out-safe snapshot was reseeded through the existing Studio workspace replacement API only after
+the mounted browser exposed a stale isolated workspace (`F07B3E68...C069` rather than the accepted
+`37FAE9C8...7A4F`). The committed isolated receipt operation is
+`b119-mounted-safe-reseed-9489c57021d149c88581a7258ae688f1`; readback proved the selected
+`ui/addons/ai_influence_chat/aic_menu.lua` SHA-256 is
+`37FAE9C83E1FEF6319378B9B8F60711D4E44ADE54FD6B5B26A44E4FC672E7A4F`. The real mod, live extension, unpacked
+corpus, Git index, and standing configuration remained read-only.
+
+Mounted production selected `menu.display`, configured canonical core and color evidence, drawable `2560x1440`, and
+UI scale `1`. With samples and keep-outs off, the canvas was honestly `rendered/current` but empty (`0`
+non-transparent pixels). The public sample controls then accepted exactly nine source-ranged values: `vw=2560`,
+`vh=1440`, `px@513=330`, `tw@513=1360`, `px@536=330`, `tw@537=1360`, `px@692=330`, `_choiceY=985`, and
+`tw@692=1360`. All nine remained visible with no sample error, but the mounted Canvas changed to `stale`, painted
+`0` pixels, and refused the resulting Paint command with
+`source-literal basePreviewTints channels or declaration evidence is malformed`. Reloading both configured canonical
+branches returned `canonical/canonical` and reproduced the same refusal. Screenshot
+`dev-docs/b119-ai-influence-dogfood/browser-evidence/b119-sampled-stale-preview.png` is SHA-256
+`197B8896E3BBC3FA38AEC2F5BC10DCDB238846EA2D3336407301EB2131238F53`.
+
+Reconciliation changes the acceptance contract: a headless session reaching Scene/Paint and reporting real primitive
+counts does not prove the mounted Canvas accepts those commands. The next production unit is tests-first and bounded to
+the existing color-fact producer/consumer path. It must reproduce the exact sampled keep-out-safe source through public
+Layout -> Scene -> Paint -> Canvas owners, identify whether the producer emits invalid containment/channel evidence or
+the Canvas rejects valid source evidence, and repair the responsible existing owner without weakening hostile-shape,
+source-containment, duplicate/reassignment, alpha-domain, or game-truth refusals. Acceptance requires a durable causal
+red, focused producer/consumer selftests, exact sample-binding consumption, mounted `rendered/current` with non-zero
+actual UI pixels while keep-outs are off, `Not verified in game`, typecheck, exact lint, production build, immutable
+real-mod/game/corpus receipts, and clean process/port teardown. Full E2E/precommit remain required before promotion if
+production changes. No deploy or X4 launch is authorized in this unattended unit. Rollback is the exact bounded Git
+diff plus restoration of the isolated snapshot.
+
+### AI Influence `1b` mounted-sample second red — 2026-08-21
+
+Status: `FAILED REQUIRED METHOD / REPRODUCED`; the first bounded Canvas repair is necessary but not sufficient and is
+not authorized for promotion.
+
+Exact native Luna `01a02342-33e5-7d62-8071-69e4fdb87198` produced a causal focused receipt: the pre-repair Canvas
+incorrectly required the `TOK.plate` use-site range to contain its separate declaration range (`115/116`), while the
+same-file/sourcePath identity repair reached `116/116`. Coordinator readback under Node `24.19.0` / libuv `1.52.1`
+independently confirmed `116/116`, typecheck, exact-file ESLint, diff hygiene, and production SHA-256
+`565C29228899ECAA5E952D20EFB225179256EA640A26B154FAD368260FF2DCEA`. The worker returned terminal `completed`
+and was immediately closed.
+
+The required mounted method remained red after rebuilding the production bundle and restarting only the isolated
+Forge server on port `3300`. Exact source SHA-256 `37FAE9C8...7A4F`, target `menu.display`, profile `2560x1440` at
+scale `1`, canonical core/color corpus, keep-outs off, and the same nine values produced `stale`, the same malformed
+source-literal refusal, and exactly `0` non-transparent/non-black pixels. This is stronger evidence than the focused
+fixture and therefore blocks promotion.
+
+The isolated driver was then rerun under Node `24.19.0` with read-only access to the real mod, live extension, and
+unpacked corpus. Both variants consumed every accepted sample binding (`12/12` literal; `9/9` safe), reached partial
+Scene/Paint, and still produced Canvas `refused` before allocation. Its safe paint contains `26` tint facts, including
+three `source-literal-percent-alpha` `TOK.plate` facts whose use-site and declaration have the same file/source identity
+but separate ranges. Real source, live extension, selected corpus assets, X4 absence, and observed ports matched
+before/after exactly. No deployment or game mutation occurred.
+
+Reconciled follow-up contract: preserve the first fail-first row and identity repair while deriving the next red from
+the actual isolated sampled Paint facts, not a hand-built surrogate. Diagnose every predicate in the broad
+`channels or declaration evidence is malformed` branch and repair only the predicate proven incompatible with valid
+producer evidence. Cross-file/sourcePath refusal, declaration-to-channel/key containment, exact closed shapes,
+duplicate/reassignment checks, numeric/alpha domains, pre-allocation refusal, and `Not verified in game` remain
+mandatory. Acceptance remains mounted `rendered/current` plus non-zero UI pixels with overlays off; headless acceptance
+alone cannot close the unit. The promotion gates and unattended no-X4 boundary are unchanged.
+
+### AI Influence `1b` bounded Canvas acceptance — 2026-08-21
+
+Status: `FOCUSED VERIFIED / MOUNTED RENDERED / VISUAL PARITY PARTIAL`; overall B119 remains
+`PARTIAL / Not verified in game`.
+
+Exact native Luna `01a02361-db58-7b13-99c0-9b338d40f93c` derived the second red from the sampled alias topology.
+Before the second production change the focused suite was `116/117`: `TOK.plate` and its literal declaration had valid
+same-source identity and declaration/channel containment but Canvas refused before any allocation solely because the
+use expression text differed from the declaration expression text. Fail-first receipt
+`dev-docs/b119-ai-influence-dogfood/evidence/source-literal-canvas-second-fail-first.json` is SHA-256
+`E84629ABB3C567DA32E6DC36B6DF6BA766D2F0F74AF01F28D246F5667C276FAA`.
+
+The bounded repair removes only that false expression-equality predicate. It preserves non-empty use and declaration
+expressions, exact same `file`/optional `sourcePath` identity, declaration-to-every-channel/key containment, closed
+records, cross-file/sourcePath refusal, duplicate/reassignment rejection, numeric/alpha domains, pre-allocation
+failure, and game-truth refusal. Production SHA-256 is
+`5318E9B40D28ACB73452591F0896D5CC8972E24B5F3D4DD24125ECDF85A56E3D`; selftest SHA-256 is
+`334472456F1D4E418706DD518E30D023150F09533F74D374F26DAC231A6C3DC9`. Worker and coordinator focused runs both
+passed `117/117`; typecheck, exact-file ESLint, diff hygiene, and production build passed. Final focused receipt
+`dev-docs/b119-ai-influence-dogfood/evidence/source-literal-canvas-second-final.json` is SHA-256
+`F35E9D28DE1C4C9E4128192DE5D497AEE83C7E46230B764C823C7A194EB69F79`. The worker returned terminal `completed`
+and was immediately closed.
+
+The read-only driver then accepted both sampled Canvas plans: literal consumed `12/12` bindings and rendered `39` UI
+primitive commands; safe consumed `9/9` and rendered `38`; both had `0` not-applied bindings. Real source, live
+extension, selected corpus assets, X4 absence, and observed ports matched before/after exactly.
+
+Mounted production was rebuilt and rerun against exact safe source SHA-256 `37FAE9C8...7A4F`, `menu.display`, canonical
+core/color evidence, `2560x1440`, scale `1`, exactly nine non-empty values, and keep-outs off. It reached
+`rendered/current` with `3,686,400` non-transparent/non-black pixels and zero new browser console errors while retaining
+`Not verified in game`. Census
+`dev-docs/b119-ai-influence-dogfood/browser-evidence/b119-final-mounted-census.json` is SHA-256
+`FFEA43F0A609F42234BBB98D3EA9FB8A55DA5AEDA046909EAA17CFCD30235073`; clean screenshot
+`b119-final-rendered-current-clean.png` is SHA-256
+`190B3758EA69E96114DB699E92A4E7F7D402B300B0CEFA94F2C461BE26159BAA`.
+
+Cockpit-conversation keep-outs remained advisory and separately added cyan guide colors for measured `y=0.788`,
+`y=0.740`, and `x=0.664`; overlay census SHA-256 is
+`062B6A8C2374335F3A83F4655A67DD3C363E06E13E4BFBD34040C13688D465BF`. Visual review does not claim parity: the
+nine-sample fixture currently appears mainly as a gray full-frame plate with a red lower strip. The Canvas refusal is
+fixed and real primitives are mounted, but reconstructing the supplied AI Influence composition, exact text, and
+in-game appearance remains separate dogfood work. Full E2E/precommit, fresh review, durable close, and Git projection
+remain before promotion. X4 frame acceptance and player-visible comparison remain unavailable while unattended.
+
+### AI Influence `1b` Canvas promotion close — 2026-08-21
+
+Status: `HOST VERIFIED / COMMITTED / VISUAL PARITY PARTIAL`; overall B119 remains
+`PARTIAL / Not verified in game`.
+
+#### VALIDATE
+
+- Focused authority: worker and coordinator Canvas `117/117`; exact production/selftest SHA-256 remain
+  `5318E9B40D28ACB73452591F0896D5CC8972E24B5F3D4DD24125ECDF85A56E3D` /
+  `334472456F1D4E418706DD518E30D023150F09533F74D374F26DAC231A6C3DC9`.
+- Dogfood integration: literal/safe variants rendered `39/38` UI primitive commands, consumed `12/12` and `9/9`
+  accepted bindings, and left `0` not-applied bindings. Real mod, live extension, selected corpus assets, X4 absence,
+  and observed ports matched before/after.
+- Mounted native browser: exact safe source `37FAE9C8...7A4F`, target `menu.display`, canonical core/color evidence,
+  `2560x1440`, scale `1`, nine samples, and overlays off reached `rendered/current` with `3,686,400` non-black pixels
+  and zero new console errors. The permanent product state remained `Not verified in game`.
+- Static/build: typecheck, exact-file ESLint, diff hygiene, and production build passed.
+- Full serial E2E: `104/104`, zero failed/flaky/bad result, complete discovery/terminal parity, `child-close`,
+  `treeGone=true`, and no remaining owned PID. Receipt `test-results/e2e-verdict.json` SHA-256 is
+  `553B20B3E323F675568B4E0171233F2F86A0DAA11E61E16168326834A7882D44`.
+- Complete precommit under process-local Node `24.19.0` / libuv `1.52.1`: verdict `55/55`, Vite lifecycle,
+  product-copy, writer `14/14` plus extension `8/8`, capability/MCP, action-receipt `82/56`, typecheck, and size guards
+  passed. The graph refreshed to `9666` nodes / `24230` edges / `319` communities.
+- Negative path: cross-file/sourcePath mismatch, declaration/channel non-containment, hostile/extra records,
+  duplicates/reassignment, numeric/alpha-domain errors, and pre-allocation refusal remain covered. The two authorized
+  valid-alias rows alone changed from red to green.
+- Containment: `.studio-state`, live `data`, and `config.json` content receipts remained exact; ports `3100`, `3101`,
+  and `3300` were free after teardown; X4 remained absent. No real mod, extension, corpus, or standing config was
+  written.
+
+#### REVIEW
+
+- Done and evidenced: valid source-literal aliases now survive the exact Layout -> Scene -> Paint -> Canvas consumer;
+  the isolated AI Influence sample paints real mounted pixels; measured keep-outs remain advisory and visible; all
+  output remains explicit preview evidence.
+- Partial: the current nine-sample fixture is predominantly a gray full-frame plate with a red lower strip. It does not
+  yet reconstruct the supplied AI Influence mockup's exact composition, text, or visual hierarchy.
+- Open and deliberately deferred: exact source/sample reconstruction, real-mod deploy-byte identity, X4 C++ frame
+  acceptance, and player-visible screenshot comparison. No preview or headless gate can close these methods.
+- No capability-map delta: the change repairs an existing Canvas consumer contract and adds no new capability owner.
+
+#### DOCUMENT CLOSE AND PROMOTION
+
+Explicit staging contained only `src/lib/x4UiCanvasRenderer.ts` and
+`src/lib/x4UiCanvasRenderer.selftest.ts`; cached diff hygiene passed. Commit
+`4c480418e0bb4095d0bd5935a3767b29cdd0e0f8` (`fix(ui): accept valid source-literal color aliases`) is pushed, and
+readback proved `origin/main == HEAD` with an empty index. Every unrelated dirty path remains preserved. GitHub owner
+issue #41 remains open because visual parity, deploy, and in-game acceptance are not complete. The same partial
+checkpoint was projected and read back exactly at comment `5367932527`.
+
+Rollback is a targeted revert of `4c480418e0bb4095d0bd5935a3767b29cdd0e0f8`; the ignored isolated dogfood root can
+be discarded independently. No live-game rollback is required because no deploy or X4 write occurred.
+
+#### AAR
+
+- Sustain: causal fail-first receipts, mounted-pixel validation after headless acceptance, exact-file staging,
+  process-local safe Node, one-worker E2E, immutable containment receipts, and immediate terminal-worker closure.
+- Improve work/approach: the first Canvas repair addressed range identity but mounted retest exposed a second false
+  equality between alias-use and declaration expressions. Treat producer/consumer topology as a paired mounted
+  contract before promotion, not as two independent focused greens.
+- Improve tools: after context interruption, unchanged HEAD and a populated index did not reveal that the original
+  `git commit` hook was still running. A retry briefly created two precommit trees. Read-only PID/ancestry inspection
+  reproduced the duplicate; only the newer verified tree was stopped, while the original safe-Node tree completed and
+  produced the promoted commit. The first Ctrl-C ended the wrapper but left descendants alive, so exact ancestry was
+  revalidated before stopping those descendants. One initial read-only PowerShell ancestry query also failed on an
+  empty pipeline and was corrected before any mutation. A later pre-commit guard matched its own broad PowerShell
+  command line and failed safely; executable-specific `git.exe`/`node.exe`/`cmd.exe` filtering then proved the real
+  process census empty. Future resumes must inspect both Git state and matching process ancestry before retrying an
+  interrupted long-running command.
+- Highest-risk evidenced weakness: a pixel-producing browser preview is still a persuasive liar about X4's C++ frame
+  acceptance and final player composition. The bounded reduction is an exact Forge deploy followed by X4 screenshots
+  and comparison, while preserving `Not verified in game` until that evidence exists.
+- Project lesson is banked in this authoritative B119 record. No external AAR-ledger or capability-map write is needed
+  for this bounded consumer repair.

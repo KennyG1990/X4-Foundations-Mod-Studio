@@ -42,6 +42,23 @@ and unlocks isolated AI Influence dogfood authoring. It does not prove engine fr
 screenshots remain open, and overall B119 stays `PARTIAL / Not verified in game`.
 The exact 35-path executable checkpoint is committed and pushed at
 `505253ba4fa40c75fcb252945229841766685a05`; post-push readback proved `origin/main == HEAD` and zero staged paths.
+**AI Influence `1b` Canvas dogfood checkpoint 2026-08-21 — FOCUSED/MOUNTED VERIFIED, VISUAL PARITY PARTIAL:** The
+isolated source-first dogfood consumed exact real-source samples but exposed two Canvas-only false refusals that
+headless Scene/Paint checks missed: the use-site range was incorrectly required to contain its separate literal
+declaration, and alias text `TOK.plate` was incorrectly required to equal the declaration's table-literal text. Two
+causal fail-first receipts (`115/116`, then `116/117`) authorize only the bounded Canvas repair. Final production and
+selftest SHA-256 are `5318E9B4...A56E3D` / `33447245...C3DC9`; worker/coordinator Canvas is `117/117`, driver variants
+render `39/38` UI primitives with exact `12/12` and `9/9` sample consumption, and fresh zero-write Luna audit is
+`CLEAN`. Rebuilt mounted production selects exact safe source `37FAE9C8...7A4F` / `menu.display`, canonical core/color,
+`2560x1440` scale `1`, and nine samples; keep-outs off is `rendered/current` with `3,686,400` non-transparent/non-black
+pixels and permanent `Not verified in game`. Full serial E2E is `104/104` at receipt SHA-256
+`553B20B3...82D44`; precommit/build and live-root/port/X4 containment pass; graphify is `9666/24230/319`. Visual review
+remains explicitly partial: this fixture appears mainly as a gray full-frame plate and red lower strip, not the supplied
+AI Influence composition. Remaining B119 work is source/sample reconstruction for mockup fidelity, real mod deploy-byte
+identity, C++ frame acceptance, and player-visible X4 screenshots. Overall status stays `PARTIAL / Not verified in game`.
+The bounded Canvas repair is committed and pushed at `4c480418e0bb4095d0bd5935a3767b29cdd0e0f8`; readback proved
+`origin/main == HEAD` and an empty index while preserving every unrelated dirty path. The partial checkpoint was read
+back at GitHub #41 comment `5367932527`; the owner issue remains open.
 **P6 Canvas audit rejection 2026-08-19 — FINDINGS / correction active:** The first colour-bearing Canvas candidate is
 focused-green at `100/100`, Stage-B `25/25`, production/selftest
 `490F430673C51957751A3113C68046A10C811F355A349FDDBC2C064AB119DBB3` /
