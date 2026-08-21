@@ -2094,7 +2094,7 @@ export default function X4UiSourceEditor({
     const result = renderX4UiPaintPlanToCanvas(
       projectionView.paint as Parameters<typeof renderX4UiPaintPlanToCanvas>[0],
       canonicalCorpus,
-      { surfaceFactory: resolvedSurfaceFactory },
+      { surfaceFactory: resolvedSurfaceFactory, presentation: 'source-composition' },
     );
     if (active) adopt(result);
     return () => {

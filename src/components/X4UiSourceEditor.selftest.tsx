@@ -667,6 +667,8 @@ for (const forbidden of [
 assert.match(sourceText, /loadConfiguredX4UiCorpusAssets/);
 assert.match(sourceText, /isX4UiCorpusCanonicalSuccess/);
 assert.match(sourceText, /renderX4UiPaintPlanToCanvas\(/);
+// Fail-first B119 presentation contract: Source Preview must select source composition explicitly.
+assert.match(sourceText, /presentation:\s*['"]source-composition['"]/);
 assert.match(sourceText, /adoptX4UiEditorCanvasResult/);
 assert.match(sourceText, /sampleBinding/);
 assert.match(sourceText, /projection\.sampleBinding/);

@@ -37,6 +37,7 @@ export const X4_UI_CANVAS_DIAGNOSTIC_PALETTE = Object.freeze({
 } as const);
 
 export type X4UiCanvasSurfaceRole = 'regular-atlas' | 'bold-atlas' | 'composite';
+export type X4UiCanvasPresentation = 'diagnostic-map' | 'source-composition';
 
 export interface X4UiCanvasSurface {
   width: number;
@@ -55,9 +56,10 @@ export type X4UiCanvasSurfaceFactory = (
   role: X4UiCanvasSurfaceRole,
 ) => X4UiCanvasSurface | null | undefined;
 
-/** Renderer options select an allocator only; there is no caller-target surface option. */
+/** Renderer options select the owned allocator and the explicit presentation contract. */
 export interface X4UiCanvasRenderOptions {
   readonly surfaceFactory?: X4UiCanvasSurfaceFactory;
+  readonly presentation?: X4UiCanvasPresentation;
 }
 
 export type X4UiCanvasRenderRefusalCode =
@@ -1589,13 +1591,25 @@ const surfaceFactoryDefault: X4UiCanvasSurfaceFactory = (_width, _height): X4UiC
   }
 };
 
-const validatedFactory = (options: unknown): Validation<X4UiCanvasSurfaceFactory> => {
-  if (options === undefined) return { ok: true, value: surfaceFactoryDefault };
-  if (!exactRecord(options, [], ['surfaceFactory'])) return refusal('invalid-input', 'renderer options are malformed');
+interface ValidatedRenderOptions {
+  readonly factory: X4UiCanvasSurfaceFactory;
+  readonly presentation: X4UiCanvasPresentation;
+}
+
+const validatedOptions = (options: unknown): Validation<ValidatedRenderOptions> => {
+  if (options === undefined) return { ok: true, value: { factory: surfaceFactoryDefault, presentation: 'diagnostic-map' } };
+  if (!exactRecord(options, [], ['surfaceFactory', 'presentation'])) return refusal('invalid-input', 'renderer options are malformed');
   const candidate = fieldValue(options, 'surfaceFactory');
-  if (candidate === undefined) return { ok: true, value: surfaceFactoryDefault };
-  if (typeof candidate !== 'function') return refusal('invalid-input', 'surfaceFactory must be callable');
-  return { ok: true, value: candidate as X4UiCanvasSurfaceFactory };
+  const presentation = fieldValue(options, 'presentation');
+  if (candidate !== undefined && typeof candidate !== 'function') return refusal('invalid-input', 'surfaceFactory must be callable');
+  if (presentation !== undefined && presentation !== 'diagnostic-map' && presentation !== 'source-composition') return refusal('invalid-input', 'presentation must be diagnostic-map or source-composition');
+  return {
+    ok: true,
+    value: {
+      factory: candidate === undefined ? surfaceFactoryDefault : candidate as X4UiCanvasSurfaceFactory,
+      presentation: presentation === 'source-composition' ? 'source-composition' : 'diagnostic-map',
+    },
+  };
 };
 
 const allocateSurface = (
@@ -1674,28 +1688,103 @@ const withClip = (api: PaintApi, clip: Rect | undefined, draw: () => void): void
 
 type PaintOperation = (api: PaintApi) => void;
 
+const activeFillTint = (tints: readonly ValidatedTint[] | undefined): ValidatedTint | undefined => tints?.find(tint => tint.slot === 'table-background' || tint.slot === 'cell-background' || tint.slot === 'widget-background');
+
+const borderTint = (tints: readonly ValidatedTint[] | undefined): ValidatedTint | undefined => tints?.find(tint => tint.slot === 'widget-border');
+
+const positiveRect = (x: number, y: number, width: number, height: number): Rect | undefined => width <= 0 || height <= 0 ? undefined : { x, y, width, height };
+
+const subtractRectangles = (base: Rect, exclusions: readonly Rect[]): readonly Rect[] => {
+  let remaining: Rect[] = [base];
+  for (const exclusion of exclusions) {
+    const next: Rect[] = [];
+    for (const candidate of remaining) {
+      const overlap = intersectRectangles(candidate, exclusion);
+      if (overlap === undefined) {
+        next.push(candidate);
+        continue;
+      }
+      const candidateRight = candidate.x + candidate.width;
+      const candidateBottom = candidate.y + candidate.height;
+      const overlapRight = overlap.x + overlap.width;
+      const overlapBottom = overlap.y + overlap.height;
+      const top = positiveRect(candidate.x, candidate.y, candidate.width, overlap.y - candidate.y);
+      const bottom = positiveRect(candidate.x, overlapBottom, candidate.width, candidateBottom - overlapBottom);
+      const left = positiveRect(candidate.x, overlap.y, overlap.x - candidate.x, overlap.height);
+      const right = positiveRect(overlapRight, overlap.y, candidateRight - overlapRight, overlap.height);
+      if (top !== undefined) next.push(top);
+      if (bottom !== undefined) next.push(bottom);
+      if (left !== undefined) next.push(left);
+      if (right !== undefined) next.push(right);
+    }
+    remaining = next;
+    if (remaining.length === 0) break;
+  }
+  return remaining;
+};
+
+const intersectRectangles = (left: Rect | undefined, right: Rect | undefined): Rect | undefined => {
+  if (left === undefined) return right;
+  if (right === undefined) return left;
+  const x = Math.max(left.x, right.x);
+  const y = Math.max(left.y, right.y);
+  const rightEdge = Math.min(left.x + left.width, right.x + right.width);
+  const bottomEdge = Math.min(left.y + left.height, right.y + right.height);
+  return positiveRect(x, y, rightEdge - x, bottomEdge - y);
+};
+
+const sourceCompositionCoverage = (validated: ValidatedPlan): readonly Rect[] => {
+  const coverage: Rect[] = [];
+  for (const command of validated.layers[0]) {
+    if (command.kind !== 'node-geometry' || command.geometry === undefined) continue;
+    if (activeFillTint(command.tints) === undefined && borderTint(command.tints) === undefined) continue;
+    const visible = intersectRectangles(command.geometry, command.clip);
+    if (visible !== undefined) coverage.push(visible);
+  }
+  for (const command of validated.layers[1]) {
+    if (command.kind !== 'glyph-alpha-blit') continue;
+    const visible = intersectRectangles(command.destination, command.clip);
+    if (visible !== undefined) coverage.push(visible);
+  }
+  return coverage;
+};
+
 const buildOperations = (
   validated: ValidatedPlan,
   atlasSurfaces: ReadonlyMap<string, X4UiCanvasSurface>,
+  presentation: X4UiCanvasPresentation,
 ): Validation<readonly PaintOperation[]> => {
   try {
     const operations: PaintOperation[] = [];
+    const preserveCoverage = presentation === 'source-composition' ? sourceCompositionCoverage(validated) : [];
     for (const layer of validated.layers) {
       for (const item of layer) {
         if (item.kind === 'node-geometry') {
           const geometry = item.geometry;
           const clip = item.clip;
           const color = item.color;
-          const tints = item.tints ?? [];
-          const fillTint = tints.find(tint => tint.slot === 'table-background' || tint.slot === 'cell-background' || tint.slot === 'widget-background');
-          const borderTint = tints.find(tint => tint.slot === 'widget-border');
-          const sourceGeometry = fillTint !== undefined;
+          const fillTint = activeFillTint(item.tints);
+          const outlineTint = borderTint(item.tints);
           operations.push(api => {
-            api.setFillStyle(sourceGeometry ? tintStyle(fillTint as ValidatedTint) : color);
+            if (presentation === 'source-composition') {
+              if (geometry === undefined || (fillTint === undefined && outlineTint === undefined)) return;
+              if (fillTint !== undefined) api.setFillStyle(tintStyle(fillTint));
+              withClip(api, clip, () => {
+                if (fillTint !== undefined) api.fillRect(geometry.x, geometry.y, geometry.width, geometry.height);
+                if (outlineTint !== undefined) {
+                  api.setStrokeStyle(tintStyle(outlineTint));
+                  api.beginPath();
+                  api.rect(geometry.x, geometry.y, geometry.width, geometry.height);
+                  api.stroke();
+                }
+              });
+              return;
+            }
+            api.setFillStyle(fillTint === undefined ? color : tintStyle(fillTint));
             if (geometry !== undefined) withClip(api, clip, () => {
               api.fillRect(geometry.x, geometry.y, geometry.width, geometry.height);
-              if (borderTint !== undefined) {
-                api.setStrokeStyle(tintStyle(borderTint));
+              if (outlineTint !== undefined) {
+                api.setStrokeStyle(tintStyle(outlineTint));
                 api.beginPath();
                 api.rect(geometry.x, geometry.y, geometry.width, geometry.height);
                 api.stroke();
@@ -1752,7 +1841,16 @@ const buildOperations = (
           const color = item.color;
           operations.push(api => {
             api.setFillStyle(color);
-            if (geometry !== undefined) withClip(api, clip, () => { api.fillRect(geometry.x, geometry.y, geometry.width, geometry.height); });
+            if (geometry === undefined) return;
+            if (presentation === 'diagnostic-map') {
+              withClip(api, clip, () => { api.fillRect(geometry.x, geometry.y, geometry.width, geometry.height); });
+              return;
+            }
+            const visibleGeometry = intersectRectangles(geometry, clip);
+            if (visibleGeometry === undefined) return;
+            for (const fragment of subtractRectangles(visibleGeometry, preserveCoverage)) {
+              withClip(api, clip, () => { api.fillRect(fragment.x, fragment.y, fragment.width, fragment.height); });
+            }
           });
           continue;
         }
@@ -1794,8 +1892,9 @@ export function renderX4UiPaintPlanToCanvas(
         alphaBytes: corpusValidation.value.bold.alphaBytes,
       },
     };
-    const factoryValidation = validatedFactory(options);
-    if (isValidationFailure(factoryValidation)) return makeRefusalResult({ ok: false, refusal: factoryValidation.refusal });
+    const optionsValidation = validatedOptions(options);
+    if (isValidationFailure(optionsValidation)) return makeRefusalResult({ ok: false, refusal: optionsValidation.refusal });
+    const { factory, presentation } = optionsValidation.value;
 
     const atlasSurfaces = new Map<string, X4UiCanvasSurface>();
     for (const item of planValidation.value.flattened) {
@@ -1803,13 +1902,13 @@ export function renderX4UiPaintPlanToCanvas(
       const key = atlasSurfaceKey(item.role, item.tint);
       if (atlasSurfaces.has(key)) continue;
       const binding = atlasSnapshots[item.role];
-      const staged = stageAtlas(factoryValidation.value, binding, item.tint);
+      const staged = stageAtlas(factory, binding, item.tint);
       if (isValidationFailure(staged)) return makeRefusalResult({ ok: false, refusal: staged.refusal });
       atlasSurfaces.set(key, staged.value.surface);
     }
 
     const composite = allocateSurface(
-      factoryValidation.value,
+      factory,
       planValidation.value.width,
       planValidation.value.height,
       'composite',
@@ -1817,7 +1916,7 @@ export function renderX4UiPaintPlanToCanvas(
     );
     if (isValidationFailure(composite)) return makeRefusalResult({ ok: false, refusal: composite.refusal });
     const compositeApi = composite.value.api as PaintApi;
-    const operations = buildOperations(planValidation.value, atlasSurfaces);
+    const operations = buildOperations(planValidation.value, atlasSurfaces, presentation);
     if (isValidationFailure(operations)) return makeRefusalResult({ ok: false, refusal: operations.refusal });
     try {
       for (const operation of operations.value) operation(compositeApi);

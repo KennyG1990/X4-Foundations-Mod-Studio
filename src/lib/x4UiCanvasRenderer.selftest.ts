@@ -488,6 +488,150 @@ function makeFactory(traces: TraceEntry[], allowImageData = true, failRole?: str
   };
 }
 
+type RasterRect = { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+type RasterRgba = readonly [number, number, number, number];
+
+interface RasterSurfaceState {
+  readonly role: string;
+  readonly width: number;
+  readonly height: number;
+  readonly pixels: Uint8ClampedArray;
+}
+
+interface RasterOutput {
+  surface?: X4UiCanvasSurface;
+  state?: RasterSurfaceState;
+}
+
+const rasterSurfaceStates = new WeakMap<object, RasterSurfaceState>();
+
+function rasterIntersection(left: RasterRect | undefined, right: RasterRect | undefined): RasterRect | undefined {
+  if (left === undefined) return right;
+  if (right === undefined) return left;
+  const x = Math.max(left.x, right.x);
+  const y = Math.max(left.y, right.y);
+  const rightEdge = Math.min(left.x + left.width, right.x + right.width);
+  const bottomEdge = Math.min(left.y + left.height, right.y + right.height);
+  return rightEdge <= x || bottomEdge <= y ? undefined : { x, y, width: rightEdge - x, height: bottomEdge - y };
+}
+
+function rasterContains(rect: RasterRect | undefined, x: number, y: number): boolean {
+  return rect !== undefined && x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
+}
+
+function rasterStyle(value: unknown): RasterRgba | undefined {
+  if (typeof value !== 'string') return undefined;
+  if (/^#[0-9a-f]{6}$/i.test(value)) {
+    return [Number.parseInt(value.slice(1, 3), 16), Number.parseInt(value.slice(3, 5), 16), Number.parseInt(value.slice(5, 7), 16), 255];
+  }
+  const match = /^rgba\(([^)]+)\)$/.exec(value);
+  if (match === null) return undefined;
+  const values = match[1]?.split(',').map(part => Number(part.trim())) ?? [];
+  if (values.length !== 4 || values.some(part => !Number.isFinite(part))) return undefined;
+  return [values[0] ?? 0, values[1] ?? 0, values[2] ?? 0, Math.max(0, Math.min(255, (values[3] ?? 0) * 255))];
+}
+
+function rasterBlend(pixels: Uint8ClampedArray, width: number, x: number, y: number, source: RasterRgba): void {
+  if (x < 0 || y < 0 || x >= width) return;
+  const offset = (y * width + x) * 4;
+  const sourceAlpha = source[3] / 255;
+  const destinationAlpha = pixels[offset + 3]! / 255;
+  const outputAlpha = sourceAlpha + destinationAlpha * (1 - sourceAlpha);
+  if (outputAlpha <= 0) return;
+  pixels[offset] = Math.round((source[0] * sourceAlpha + pixels[offset]! * destinationAlpha * (1 - sourceAlpha)) / outputAlpha);
+  pixels[offset + 1] = Math.round((source[1] * sourceAlpha + pixels[offset + 1]! * destinationAlpha * (1 - sourceAlpha)) / outputAlpha);
+  pixels[offset + 2] = Math.round((source[2] * sourceAlpha + pixels[offset + 2]! * destinationAlpha * (1 - sourceAlpha)) / outputAlpha);
+  pixels[offset + 3] = Math.round(outputAlpha * 255);
+}
+
+function rasterFill(state: RasterSurfaceState, clip: RasterRect | undefined, rect: RasterRect, style: RasterRgba | undefined): void {
+  const visible = rasterIntersection(clip, rect);
+  if (visible === undefined || style === undefined) return;
+  const left = Math.max(0, Math.floor(visible.x));
+  const top = Math.max(0, Math.floor(visible.y));
+  const right = Math.min(state.width, Math.ceil(visible.x + visible.width));
+  const bottom = Math.min(state.height, Math.ceil(visible.y + visible.height));
+  for (let y = top; y < bottom; y += 1) {
+    for (let x = left; x < right; x += 1) rasterBlend(state.pixels, state.width, x, y, style);
+  }
+}
+
+function rasterDrawImage(
+  destinationState: RasterSurfaceState,
+  clip: RasterRect | undefined,
+  sourceSurface: unknown,
+  sourceX: number,
+  sourceY: number,
+  sourceWidth: number,
+  sourceHeight: number,
+  destinationX: number,
+  destinationY: number,
+  destinationWidth: number,
+  destinationHeight: number,
+): void {
+  if (sourceSurface === null || typeof sourceSurface !== 'object') return;
+  const sourceState = rasterSurfaceStates.get(sourceSurface);
+  if (sourceState === undefined) return;
+  const destination = rasterIntersection(clip, { x: destinationX, y: destinationY, width: destinationWidth, height: destinationHeight });
+  if (destination === undefined) return;
+  const left = Math.max(0, Math.floor(destination.x));
+  const top = Math.max(0, Math.floor(destination.y));
+  const right = Math.min(destinationState.width, Math.ceil(destination.x + destination.width));
+  const bottom = Math.min(destinationState.height, Math.ceil(destination.y + destination.height));
+  for (let y = top; y < bottom; y += 1) {
+    for (let x = left; x < right; x += 1) {
+      const sourceSampleX = Math.min(sourceState.width - 1, Math.max(0, Math.floor(sourceX + ((x + 0.5 - destinationX) * sourceWidth) / destinationWidth)));
+      const sourceSampleY = Math.min(sourceState.height - 1, Math.max(0, Math.floor(sourceY + ((y + 0.5 - destinationY) * sourceHeight) / destinationHeight)));
+      const sourceOffset = (sourceSampleY * sourceState.width + sourceSampleX) * 4;
+      rasterBlend(destinationState.pixels, destinationState.width, x, y, [
+        sourceState.pixels[sourceOffset]!,
+        sourceState.pixels[sourceOffset + 1]!,
+        sourceState.pixels[sourceOffset + 2]!,
+        sourceState.pixels[sourceOffset + 3]!,
+      ]);
+    }
+  }
+}
+
+function makeRasterFactory(traces: TraceEntry[], output: RasterOutput): X4UiCanvasSurfaceFactory {
+  return (width, height, role) => {
+    const state: RasterSurfaceState = { role, width, height, pixels: new Uint8ClampedArray(width * height * 4) };
+    let currentClip: RasterRect | undefined;
+    let pendingRect: RasterRect | undefined;
+    let currentStyle: RasterRgba | undefined;
+    const savedClips: (RasterRect | undefined)[] = [];
+    const context = makeTraceContext(traces, role, true, false, {
+      afterOperation: (_operationRole, name, args) => {
+        if (name === 'save') savedClips.push(currentClip);
+        else if (name === 'restore') currentClip = savedClips.pop();
+        else if (name === 'setFillStyle') currentStyle = rasterStyle(args[0]);
+        else if (name === 'rect') {
+          const values = args.map(value => Number(value));
+          if (values.length === 4 && values.every(value => Number.isFinite(value))) pendingRect = { x: values[0]!, y: values[1]!, width: values[2]!, height: values[3]! };
+        } else if (name === 'clip') currentClip = rasterIntersection(currentClip, pendingRect);
+        else if (name === 'fillRect') {
+          const values = args.map(value => Number(value));
+          if (values.length === 4 && values.every(value => Number.isFinite(value))) rasterFill(state, currentClip, { x: values[0]!, y: values[1]!, width: values[2]!, height: values[3]! }, currentStyle);
+        } else if (name === 'drawImage') {
+          const source = args[0];
+          const values = args.slice(1).map(value => Number(value));
+          if (values.length === 8 && values.every(value => Number.isFinite(value))) rasterDrawImage(state, currentClip, source, values[0]!, values[1]!, values[2]!, values[3]!, values[4]!, values[5]!, values[6]!, values[7]!);
+        } else if (name === 'putImageData') {
+          const imageData = args[0] as JsonRecord | undefined;
+          if (imageData?.data instanceof Uint8ClampedArray && imageData.data.length === state.pixels.length) state.pixels.set(imageData.data);
+        }
+      },
+    });
+    const surface = { role, width, height, getContext: (_kind: '2d') => context } as JsonRecord & X4UiCanvasSurface;
+    rasterSurfaceStates.set(surface, state);
+    if (role === 'composite') {
+      output.surface = surface;
+      output.state = state;
+    }
+    return surface;
+  };
+}
+
 interface ActivityLedger {
   readonly factory: TraceEntry[];
   readonly dimensions: TraceEntry[];
@@ -602,6 +746,36 @@ function rectangleArguments(value: unknown): readonly number[] | undefined {
   if (rectangle === undefined) return undefined;
   const values = [rectangle.x, rectangle.y, rectangle.width, rectangle.height];
   return values.every(item => typeof item === 'number') ? values as number[] : undefined;
+}
+
+function rasterRect(value: unknown): RasterRect | undefined {
+  const values = rectangleArguments(value);
+  return values === undefined ? undefined : { x: values[0]!, y: values[1]!, width: values[2]!, height: values[3]! };
+}
+
+function effectiveCommandRect(command: JsonRecord, field: 'geometry' | 'destinationRect'): RasterRect | undefined {
+  const base = rasterRect(command[field]);
+  const clip = rasterRect(command.clipRect);
+  return rasterIntersection(base, clip);
+}
+
+function rasterPixel(output: RasterOutput, x: number, y: number): RasterRgba | undefined {
+  const state = output.state;
+  if (state === undefined || x < 0 || y < 0 || x >= state.width || y >= state.height) return undefined;
+  const offset = (Math.floor(y) * state.width + Math.floor(x)) * 4;
+  return [state.pixels[offset]!, state.pixels[offset + 1]!, state.pixels[offset + 2]!, state.pixels[offset + 3]!];
+}
+
+function traceHasOpaqueFill(trace: readonly TraceEntry[], color: string, rect: RasterRect): boolean {
+  let activeColor: unknown;
+  return trace.some(entry => {
+    if (entry.name === 'setFillStyle') {
+      activeColor = entry.args[0];
+      return false;
+    }
+    if (entry.name !== 'fillRect' || activeColor !== color || entry.args.length !== 4) return false;
+    return entry.args.every((value, index) => value === [rect.x, rect.y, rect.width, rect.height][index]);
+  });
 }
 
 function expectedClippedTrace(clipValue: unknown, terminal: readonly TraceEntry[]): TraceEntry[] {
@@ -1830,6 +2004,140 @@ async function main(): Promise<void> {
       }));
       const colorResult = completedResult(colorAttempt);
       const colorRendered = colorResult?.status === 'rendered';
+      const sourceFillCommands = colorPaintCommands.filter(command => {
+        if (command.kind !== 'node-geometry' || effectiveCommandRect(command, 'geometry') === undefined) return false;
+        const tints = command.basePreviewTints;
+        return Array.isArray(tints) && tints.some(tint => {
+          const slot = asRecord(tint)?.slot;
+          return slot === 'table-background' || slot === 'cell-background' || slot === 'widget-background';
+        });
+      });
+      const sourceGlyphCommands = colorPaintCommands.filter(command => command.kind === 'glyph-alpha-blit' && effectiveCommandRect(command, 'destinationRect') !== undefined && Array.isArray(command.basePreviewTints) && command.basePreviewTints.length === 1);
+      const sourceDiagnosticCommands = colorPaintCommands.filter(command => {
+        if (!['gap', 'unsupported-runtime-paint', 'unavailable-node'].includes(String(command.kind))) return false;
+        return (effectiveCommandRect(command, 'geometry') ?? rasterRect(command.clipRect)) !== undefined;
+      });
+      const sourceTintCss = (tint: unknown): string | undefined => {
+        const tintRecord = asRecord(tint);
+        const value = tintRecord === undefined ? undefined : asRecord(tintRecord.value);
+        const alphaValue = value?.a;
+        const alpha = typeof alphaValue === 'number'
+          ? tintRecord?.domain === 'source-literal-percent-alpha' ? alphaValue / 100 : tintRecord?.domain === 'canonical-xml-byte-alpha' ? alphaValue / 255 : undefined
+          : undefined;
+        if (value === undefined || alpha === undefined || typeof value.r !== 'number' || typeof value.g !== 'number' || typeof value.b !== 'number') return undefined;
+        return `rgba(${String(value.r)}, ${String(value.g)}, ${String(value.b)}, ${String(alpha)})`;
+      };
+      const sourceFillTarget = (() => {
+        for (const geometry of sourceFillCommands) {
+          const geometryRect = effectiveCommandRect(geometry, 'geometry');
+          if (geometryRect === undefined) continue;
+          for (const diagnostic of sourceDiagnosticCommands) {
+            const diagnosticRect = effectiveCommandRect(diagnostic, 'geometry') ?? rasterRect(diagnostic.clipRect);
+            const overlap = rasterIntersection(geometryRect, diagnosticRect);
+            if (overlap === undefined) continue;
+            const x = Math.floor(overlap.x + overlap.width / 2);
+            const y = Math.floor(overlap.y + overlap.height / 2);
+            if (rasterContains(geometryRect, x, y) && rasterContains(diagnosticRect, x, y)) return { geometry, diagnostic, x, y };
+          }
+        }
+        return undefined;
+      })();
+      const sourceGlyphTarget = (() => {
+        for (const glyph of sourceGlyphCommands) {
+          const glyphRect = effectiveCommandRect(glyph, 'destinationRect');
+          if (glyphRect === undefined) continue;
+          for (const diagnostic of sourceDiagnosticCommands) {
+            const diagnosticRect = effectiveCommandRect(diagnostic, 'geometry') ?? rasterRect(diagnostic.clipRect);
+            const overlap = rasterIntersection(glyphRect, diagnosticRect);
+            if (overlap === undefined) continue;
+            const x = Math.floor(overlap.x + overlap.width / 2);
+            const y = Math.floor(overlap.y + overlap.height / 2);
+            if (rasterContains(glyphRect, x, y) && rasterContains(diagnosticRect, x, y)) return { glyph, diagnostic, x, y };
+          }
+        }
+        return undefined;
+      })();
+      const diagnosticRasterOutput: RasterOutput = {};
+      const diagnosticRasterTrace: TraceEntry[] = [];
+      const diagnosticRasterAttempt = attemptRenderWithOptions(acceptedColorPaint, corpus, { surfaceFactory: makeRasterFactory(diagnosticRasterTrace, diagnosticRasterOutput) });
+      const sourceRasterOutput: RasterOutput = {};
+      const sourceRasterTrace: TraceEntry[] = [];
+      const sourceRasterAttempt = attemptRenderWithOptions(acceptedColorPaint, corpus, {
+        surfaceFactory: makeRasterFactory(sourceRasterTrace, sourceRasterOutput),
+        // Fail-first literal: the frozen renderer has no source-composition presentation path yet.
+        presentation: 'source-composition',
+      } as unknown as X4UiCanvasRenderOptions);
+      const diagnosticRasterResult = completedResult(diagnosticRasterAttempt);
+      const sourceRasterResult = completedResult(sourceRasterAttempt);
+      const sourceFillTint = sourceFillTarget === undefined || !Array.isArray(sourceFillTarget.geometry.basePreviewTints)
+        ? undefined
+        : sourceFillTarget.geometry.basePreviewTints.find(tint => {
+          const slot = asRecord(tint)?.slot;
+          return slot === 'table-background' || slot === 'cell-background' || slot === 'widget-background';
+        });
+      const sourceFillStyle = sourceFillTint === undefined ? undefined : sourceTintCss(sourceFillTint);
+      const sourceFillRgba = rasterStyle(sourceFillStyle);
+      const finalDiagnosticForPoint = (x: number, y: number): JsonRecord | undefined => sourceDiagnosticCommands
+        .filter(command => rasterContains(effectiveCommandRect(command, 'geometry') ?? rasterRect(command.clipRect), x, y))
+        .sort((left, right) => Number(left.order) - Number(right.order))
+        .at(-1);
+      const sourceFillFinalDiagnostic = sourceFillTarget === undefined ? undefined : finalDiagnosticForPoint(sourceFillTarget.x, sourceFillTarget.y);
+      const sourceFillDiagnosticRgba = rasterStyle(sourceFillFinalDiagnostic === undefined ? undefined : diagnosticColor(String(sourceFillFinalDiagnostic.kind)));
+      const sourceFillPixel = sourceFillTarget === undefined ? undefined : rasterPixel(sourceRasterOutput, sourceFillTarget.x, sourceFillTarget.y);
+      const diagnosticFillPixel = sourceFillTarget === undefined ? undefined : rasterPixel(diagnosticRasterOutput, sourceFillTarget.x, sourceFillTarget.y);
+      const sourceGlyphTint = sourceGlyphTarget === undefined || !Array.isArray(sourceGlyphTarget.glyph.basePreviewTints) ? undefined : sourceGlyphTarget.glyph.basePreviewTints[0];
+      const sourceGlyphStyle = sourceGlyphTint === undefined ? undefined : sourceTintCss(sourceGlyphTint);
+      const sourceGlyphRgba = rasterStyle(sourceGlyphStyle);
+      const sourceGlyphFinalDiagnostic = sourceGlyphTarget === undefined ? undefined : finalDiagnosticForPoint(sourceGlyphTarget.x, sourceGlyphTarget.y);
+      const sourceGlyphDiagnosticRgba = rasterStyle(sourceGlyphFinalDiagnostic === undefined ? undefined : diagnosticColor(String(sourceGlyphFinalDiagnostic.kind)));
+      const sourceGlyphPixel = sourceGlyphTarget === undefined ? undefined : rasterPixel(sourceRasterOutput, sourceGlyphTarget.x, sourceGlyphTarget.y);
+      const diagnosticGlyphPixel = sourceGlyphTarget === undefined ? undefined : rasterPixel(diagnosticRasterOutput, sourceGlyphTarget.x, sourceGlyphTarget.y);
+      const sourceFillCommandRect = sourceFillTarget === undefined ? undefined : rasterRect(sourceFillTarget.geometry.geometry);
+      const sourceFillTraceHasTint = sourceFillStyle !== undefined && sourceRasterTrace.some(entry => entry.name === 'setFillStyle' && entry.args[0] === sourceFillStyle)
+        && sourceFillCommandRect !== undefined
+        && sourceRasterTrace.some(entry => entry.name === 'fillRect' && JSON.stringify(entry.args) === JSON.stringify([sourceFillCommandRect.x, sourceFillCommandRect.y, sourceFillCommandRect.width, sourceFillCommandRect.height]));
+      const sourceGlyphTraceHasTint = sourceGlyphStyle !== undefined && sourceRasterTrace.some(entry => entry.name === 'setFillStyle' && entry.args[0] === sourceGlyphStyle)
+        && sourceRasterTrace.some(entry => entry.name === 'drawImage');
+      const sourceFillSurvives = sourceFillPixel !== undefined && sourceFillRgba !== undefined && sourceFillDiagnosticRgba !== undefined
+        && sourceFillPixel[3] > 0
+        && JSON.stringify(sourceFillPixel) !== JSON.stringify(sourceFillDiagnosticRgba)
+        && diagnosticFillPixel !== undefined
+        && JSON.stringify(diagnosticFillPixel) === JSON.stringify(sourceFillDiagnosticRgba);
+      const sourceGlyphSurvives = sourceGlyphPixel !== undefined && sourceGlyphRgba !== undefined && sourceGlyphDiagnosticRgba !== undefined
+        && sourceGlyphPixel[3] > 0
+        && JSON.stringify(sourceGlyphPixel) !== JSON.stringify(sourceGlyphDiagnosticRgba)
+        && diagnosticGlyphPixel !== undefined
+        && JSON.stringify(diagnosticGlyphPixel) === JSON.stringify(sourceGlyphDiagnosticRgba);
+      const sourceCompositionTraceDeterministic = sourceRasterResult?.status === 'rendered'
+        && diagnosticRasterResult?.status === 'rendered'
+        && sourceRasterAttempt.threw === false
+        && diagnosticRasterAttempt.threw === false;
+      familyCheck('stage-b-causal', 'B119 source-composition preserves a real source-tinted rectangle and glyph after later opaque diagnostics', sourceCompositionTraceDeterministic && sourceFillTarget !== undefined && sourceGlyphTarget !== undefined && sourceFillTraceHasTint && sourceGlyphTraceHasTint && sourceFillSurvives && sourceGlyphSurvives, {
+        sourceFillTarget: sourceFillTarget === undefined ? undefined : { id: sourceFillTarget.geometry.id, diagnostic: sourceFillTarget.diagnostic.kind, point: [sourceFillTarget.x, sourceFillTarget.y] },
+        sourceFillStyle,
+        sourceFillPixel,
+        diagnosticFillPixel,
+        sourceFillFinalDiagnostic: sourceFillFinalDiagnostic?.kind,
+        sourceGlyphTarget: sourceGlyphTarget === undefined ? undefined : { id: sourceGlyphTarget.glyph.id, diagnostic: sourceGlyphTarget.diagnostic.kind, point: [sourceGlyphTarget.x, sourceGlyphTarget.y] },
+        sourceGlyphStyle,
+        sourceGlyphPixel,
+        diagnosticGlyphPixel,
+        sourceGlyphFinalDiagnostic: sourceGlyphFinalDiagnostic?.kind,
+        sourceFillTraceHasTint,
+        sourceGlyphTraceHasTint,
+        sourceRasterReceipt: receiptSummary(sourceRasterResult?.receipt),
+        sourceRasterTraceLength: sourceRasterTrace.length,
+      });
+      const structuralGeometry = colorPaintCommands.find(command => command.kind === 'node-geometry' && !Array.isArray(command.basePreviewTints) && effectiveCommandRect(command, 'geometry') !== undefined);
+      const structuralRect = structuralGeometry === undefined ? undefined : effectiveCommandRect(structuralGeometry, 'geometry');
+      const structuralDiagnosticMapFill = structuralRect === undefined ? false : traceHasOpaqueFill(diagnosticRasterTrace, X4_UI_CANVAS_DIAGNOSTIC_PALETTE.geometry, structuralRect)
+        || traceHasOpaqueFill(diagnosticRasterTrace, X4_UI_CANVAS_DIAGNOSTIC_PALETTE.unavailable, structuralRect);
+      const sourceStructuralFillAbsent = structuralRect === undefined || !traceHasOpaqueFill(sourceRasterTrace, X4_UI_CANVAS_DIAGNOSTIC_PALETTE.geometry, structuralRect) && !traceHasOpaqueFill(sourceRasterTrace, X4_UI_CANVAS_DIAGNOSTIC_PALETTE.unavailable, structuralRect);
+      familyCheck('stage-b-causal', 'B119 source-composition leaves untinted structural containers non-opaque while diagnostic-map retains them', structuralGeometry !== undefined && structuralDiagnosticMapFill && sourceStructuralFillAbsent, {
+        structuralGeometry: structuralGeometry === undefined ? undefined : { id: structuralGeometry.id, rect: structuralRect },
+        diagnosticMapFill: structuralDiagnosticMapFill,
+        sourceStructuralFillAbsent,
+      });
       const colorStyles = colorActivity.paint.filter(entry => entry.name === 'setFillStyle' || entry.name === 'setStrokeStyle').map(entry => String(entry.args[0]));
       const atlasPixelMatches = (tint: unknown): boolean => {
         const value = tintValue(tint);
