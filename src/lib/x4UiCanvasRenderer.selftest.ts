@@ -1911,6 +1911,75 @@ async function main(): Promise<void> {
         const activity = emptyActivityLedger();
         return { attempt: attemptRender(candidate, corpus, makeObservedFactory(activity)), activity };
       };
+      const sourceLiteralTopology = (layers: MutableLayer[]): {
+        readonly tint: JsonRecord;
+        readonly useSite: JsonRecord;
+        readonly declaration: JsonRecord;
+      } | undefined => {
+        for (const layer of layers) {
+          for (const command of layer.commands) {
+            const commandSource = asRecord(command.source);
+            const tints = command.basePreviewTints;
+            if (commandSource === undefined || !Array.isArray(tints)) continue;
+            for (const tintValue of tints) {
+              const tint = asRecord(tintValue);
+              const color = tint === undefined ? undefined : asRecord(tint.value);
+              const declaration = color === undefined ? undefined : asRecord(color.declarationSource);
+              if (tint?.domain !== 'source-literal-percent-alpha' || declaration === undefined) continue;
+              return { tint, useSite: commandSource, declaration };
+            }
+          }
+        }
+        return undefined;
+      };
+      const sourceIdentityMatches = (left: JsonRecord, right: JsonRecord): boolean => left.file === right.file && left.sourcePath === right.sourcePath;
+      const sourceRangeContains = (outer: JsonRecord, inner: JsonRecord): boolean => {
+        const outerStart = asRecord(outer.start);
+        const outerEnd = asRecord(outer.end);
+        const innerStart = asRecord(inner.start);
+        const innerEnd = asRecord(inner.end);
+        return typeof outerStart?.offset === 'number'
+          && typeof outerEnd?.offset === 'number'
+          && typeof innerStart?.offset === 'number'
+          && typeof innerEnd?.offset === 'number'
+          && outerStart.offset <= innerStart.offset
+          && innerEnd.offset <= outerEnd.offset;
+      };
+      let separatedDeclarationTopologyApplied = false;
+      let separatedDeclarationEvidence: unknown;
+      const separatedDeclarationTopology = hostileRender((_plan, layers) => {
+        const topology = sourceLiteralTopology(layers);
+        if (topology === undefined) return;
+        const useSite = JSON.parse(JSON.stringify(topology.useSite)) as JsonRecord;
+        topology.tint.source = useSite;
+        const sameIdentity = sourceIdentityMatches(useSite, topology.declaration);
+        const declarationContained = sourceRangeContains(useSite, topology.declaration);
+        separatedDeclarationEvidence = { field: topology.tint.field, slot: topology.tint.slot, useSite, declaration: topology.declaration, sameIdentity, declarationContained };
+        separatedDeclarationTopologyApplied = sameIdentity
+          && !declarationContained
+          && topology.tint.source !== topology.declaration;
+      });
+      let crossFileTopologyApplied = false;
+      const hostileCrossFileTopology = hostileRender((_plan, layers) => {
+        const topology = sourceLiteralTopology(layers);
+        if (topology === undefined) return;
+        const crossFileUseSite = JSON.parse(JSON.stringify(topology.useSite)) as JsonRecord;
+        crossFileUseSite.file = 'ui/other-color.lua';
+        crossFileUseSite.sourcePath = 'ui/other-color.lua';
+        topology.tint.source = crossFileUseSite;
+        crossFileTopologyApplied = crossFileUseSite.file !== topology.declaration.file
+          && crossFileUseSite.sourcePath !== topology.declaration.sourcePath;
+      });
+      let sourcePathTopologyApplied = false;
+      const hostileSourcePathTopology = hostileRender((_plan, layers) => {
+        const topology = sourceLiteralTopology(layers);
+        if (topology === undefined) return;
+        const mismatchedSourcePath = JSON.parse(JSON.stringify(topology.useSite)) as JsonRecord;
+        mismatchedSourcePath.sourcePath = 'ui/other-color.lua';
+        topology.tint.source = mismatchedSourcePath;
+        sourcePathTopologyApplied = mismatchedSourcePath.file === topology.declaration.file
+          && mismatchedSourcePath.sourcePath !== topology.declaration.sourcePath;
+      });
       const hostileExtra = hostileRender((_plan, layers) => {
         const command = firstTintCommand(layers);
         const tints = command?.basePreviewTints as JsonRecord[] | undefined;
@@ -2147,16 +2216,22 @@ async function main(): Promise<void> {
       let declarationOffsetEscapeApplied = false;
       const hostileDeclarationOffsetEscape = hostileRender((_plan, layers) => {
         const parts = literalTintParts(layers);
-        const tintSource = parts === undefined ? undefined : asRecord(parts.tint.source);
         const declarationSource = parts === undefined ? undefined : asRecord(parts.color.declarationSource);
-        const outerEnd = tintSource === undefined ? undefined : asRecord(tintSource.end);
+        const channel = parts === undefined ? undefined : asRecord(parts.channels.r);
+        const channelSource = channel === undefined ? undefined : asRecord(channel.source);
+        const channelEnd = channelSource === undefined ? undefined : asRecord(channelSource.end);
+        const declarationStart = declarationSource === undefined ? undefined : asRecord(declarationSource.start);
         const declarationEnd = declarationSource === undefined ? undefined : asRecord(declarationSource.end);
-        if (outerEnd === undefined || declarationEnd === undefined || typeof outerEnd.offset !== 'number' || typeof outerEnd.column !== 'number') return;
-        declarationEnd.offset = outerEnd.offset + 1;
-        declarationEnd.column = outerEnd.column + 1;
-        declarationEnd.line = outerEnd.line;
-        const updatedOffset = declarationEnd.offset;
-        declarationOffsetEscapeApplied = typeof updatedOffset === 'number' && updatedOffset > outerEnd.offset;
+        if (channelEnd === undefined || declarationStart === undefined || declarationEnd === undefined
+          || typeof channelEnd.offset !== 'number' || typeof channelEnd.column !== 'number' || typeof channelEnd.line !== 'number') return;
+        const channelEndOffset = channelEnd.offset as number;
+        declarationStart.offset = channelEndOffset + 1;
+        declarationStart.column = channelEnd.column + 1;
+        declarationStart.line = channelEnd.line;
+        declarationEnd.offset = declarationStart.offset;
+        declarationEnd.column = declarationStart.column;
+        declarationEnd.line = declarationStart.line;
+        declarationOffsetEscapeApplied = declarationStart.offset === channelEndOffset + 1;
       });
       let channelOffsetEscapeApplied = false;
       const hostileChannelOffsetEscape = hostileRender((_plan, layers) => {
@@ -2240,6 +2315,68 @@ async function main(): Promise<void> {
       const acceptedLiteralResult = completedResult(acceptedLiteralSchema.attempt);
       const acceptedCanonicalMappingResult = completedResult(acceptedCanonicalMapping.attempt);
       const acceptedCanonicalGlowResult = completedResult(acceptedCanonicalGlow.attempt);
+      const separatedDeclarationResult = completedResult(separatedDeclarationTopology.attempt);
+      const hostileCrossFileResult = completedResult(hostileCrossFileTopology.attempt);
+      const hostileSourcePathResult = completedResult(hostileSourcePathTopology.attempt);
+      const sampledLiteralDeclarationExpression = '{ r =   3, g =   6, b =  11, a =  85 }';
+      let sampledLiteralDeclarationApplied = 0;
+      const sampledLiteralDeclaration = hostileRender((_plan, layers) => {
+        const sampledChannelValues: Record<'r' | 'g' | 'b' | 'a', number> = { r: 3, g: 6, b: 11, a: 85 };
+        for (const layer of layers) {
+          for (const command of layer.commands) {
+            const tints = command.basePreviewTints;
+            if (!Array.isArray(tints)) continue;
+            for (const tintValue of tints) {
+              const tint = asRecord(tintValue);
+              const color = tint === undefined ? undefined : asRecord(tint.value);
+              const channels = color === undefined ? undefined : asRecord(color.channels);
+              if (tint?.domain !== 'source-literal-percent-alpha' || color === undefined || channels === undefined) continue;
+              tint.expression = 'TOK.plate';
+              color.declarationExpression = sampledLiteralDeclarationExpression;
+              for (const [channel, value] of Object.entries(sampledChannelValues)) {
+                color[channel] = value;
+                const evidence = asRecord(channels[channel]);
+                if (evidence !== undefined) evidence.value = value;
+              }
+              sampledLiteralDeclarationApplied += 1;
+            }
+          }
+        }
+      });
+      const sampledLiteralDeclarationResult = completedResult(sampledLiteralDeclaration.attempt);
+      familyCheck('stage-b-causal', 'P6 source-literal use-site may be separate from same-file declaration evidence', publicColorReady
+        && separatedDeclarationTopologyApplied
+        && separatedDeclarationResult?.status === 'rendered'
+        && !separatedDeclarationTopology.attempt.threw
+        && activityIsZero(separatedDeclarationTopology.activity) === false, {
+        upstream: { preview: colorPipeline.status, scene: colorPipeline.scene?.status, paint: colorPaint?.status, colorFacts: colorFacts.length, tints: colorTints.length },
+        applied: separatedDeclarationTopologyApplied,
+        topology: separatedDeclarationEvidence,
+        result: receiptSummary(separatedDeclarationResult?.receipt),
+        activity: activitySignature(separatedDeclarationTopology.activity),
+      });
+      familyCheck('stage-b-causal', 'P6 sampled source-literal use-site may reference a same-source literal declaration expression', colorRendered
+        && sampledLiteralDeclarationApplied > 0
+        && sampledLiteralDeclarationResult?.status === 'rendered'
+        && !sampledLiteralDeclaration.attempt.threw
+        && activityIsZero(sampledLiteralDeclaration.activity) === false, {
+        sampledUseExpression: 'TOK.plate',
+        sampledDeclarationExpression: sampledLiteralDeclarationExpression,
+        sampledChannelValues: { r: 3, g: 6, b: 11, a: 85 },
+        appliedCount: sampledLiteralDeclarationApplied,
+        result: receiptSummary(sampledLiteralDeclarationResult?.receipt),
+        activity: activitySignature(sampledLiteralDeclaration.activity),
+      });
+      familyCheck('stage-b-causal', 'P6 source-literal use-site cross-file identity refuses before allocation', crossFileTopologyApplied && hostileAccepted(hostileCrossFileTopology.attempt, hostileCrossFileTopology.activity), {
+        mutationApplied: crossFileTopologyApplied,
+        result: receiptSummary(hostileCrossFileResult?.receipt),
+        activity: activitySignature(hostileCrossFileTopology.activity),
+      });
+      familyCheck('stage-b-causal', 'P6 source-literal use-site mismatched sourcePath refuses before allocation', sourcePathTopologyApplied && hostileAccepted(hostileSourcePathTopology.attempt, hostileSourcePathTopology.activity), {
+        mutationApplied: sourcePathTopologyApplied,
+        result: receiptSummary(hostileSourcePathResult?.receipt),
+        activity: activitySignature(hostileSourcePathTopology.activity),
+      });
       const canonicalGlowPixelsUnchanged = canonicalGlowRgba.length === colorAtlasRgba.length
         && canonicalGlowRgba.every((bytes, captureIndex) => {
           const baselineBytes = colorAtlasRgba[captureIndex];
@@ -2309,7 +2446,7 @@ async function main(): Promise<void> {
       familyCheck('stage-b-causal', 'P6 channel source sourcePath drift with identical file and offsets refuses before allocation', channelSourcePathDriftApplied && hostileAccepted(hostileChannelSourcePath.attempt, hostileChannelSourcePath.activity), { mutationApplied: channelSourcePathDriftApplied, hostile: receiptSummary(completedResult(hostileChannelSourcePath.attempt)?.receipt), activity: activitySignature(hostileChannelSourcePath.activity) });
       familyCheck('stage-b-causal', 'P6 channel keySource sourcePath drift with identical file and offsets refuses before allocation', channelKeySourcePathDriftApplied && hostileAccepted(hostileChannelKeySourcePath.attempt, hostileChannelKeySourcePath.activity), { mutationApplied: channelKeySourcePathDriftApplied, hostile: receiptSummary(completedResult(hostileChannelKeySourcePath.attempt)?.receipt), activity: activitySignature(hostileChannelKeySourcePath.activity) });
       familyCheck('stage-b-causal', 'P6 mappingSource present for direct requested/resolved identity refuses before allocation', directMappingApplied && hostileAccepted(hostileDirectCanonicalMapping.attempt, hostileDirectCanonicalMapping.activity), { mutationApplied: directMappingApplied, hostile: receiptSummary(completedResult(hostileDirectCanonicalMapping.attempt)?.receipt), activity: activitySignature(hostileDirectCanonicalMapping.activity) });
-      familyCheck('stage-b-causal', 'P6 out-of-parent declarationSource offsets refuse before allocation strengthening', declarationOffsetEscapeApplied && hostileAccepted(hostileDeclarationOffsetEscape.attempt, hostileDeclarationOffsetEscape.activity), { mutationApplied: declarationOffsetEscapeApplied, hostile: receiptSummary(completedResult(hostileDeclarationOffsetEscape.attempt)?.receipt), activity: activitySignature(hostileDeclarationOffsetEscape.activity) });
+      familyCheck('stage-b-causal', 'P6 declarationSource that does not contain channel ranges refuses before allocation strengthening', declarationOffsetEscapeApplied && hostileAccepted(hostileDeclarationOffsetEscape.attempt, hostileDeclarationOffsetEscape.activity), { mutationApplied: declarationOffsetEscapeApplied, hostile: receiptSummary(completedResult(hostileDeclarationOffsetEscape.attempt)?.receipt), activity: activitySignature(hostileDeclarationOffsetEscape.activity) });
       familyCheck('stage-b-causal', 'P6 out-of-declaration channel source offsets refuse before allocation strengthening', channelOffsetEscapeApplied && hostileAccepted(hostileChannelOffsetEscape.attempt, hostileChannelOffsetEscape.activity), { mutationApplied: channelOffsetEscapeApplied, hostile: receiptSummary(completedResult(hostileChannelOffsetEscape.attempt)?.receipt), activity: activitySignature(hostileChannelOffsetEscape.activity) });
       familyCheck('stage-b-causal', 'P6 out-of-declaration channel keySource offsets refuse before allocation strengthening', keySourceOffsetEscapeApplied && hostileAccepted(hostileKeySourceOffsetEscape.attempt, hostileKeySourceOffsetEscape.activity), { mutationApplied: keySourceOffsetEscapeApplied, hostile: receiptSummary(completedResult(hostileKeySourceOffsetEscape.attempt)?.receipt), activity: activitySignature(hostileKeySourceOffsetEscape.activity) });
       familyCheck('stage-b-causal', 'P6 duplicate exact tint fact refuses before allocation strengthening', duplicateTintFactApplied && hostileAccepted(hostileDuplicateTintFact.attempt, hostileDuplicateTintFact.activity), { mutationApplied: duplicateTintFactApplied, hostile: receiptSummary(completedResult(hostileDuplicateTintFact.attempt)?.receipt), activity: activitySignature(hostileDuplicateTintFact.activity) });

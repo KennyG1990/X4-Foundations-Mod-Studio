@@ -610,6 +610,14 @@ const sourceContains = (outer: unknown, inner: unknown): boolean => {
     && innerEnd <= outerEnd;
 };
 
+const sourceIdentityMatches = (left: unknown, right: unknown): boolean => {
+  if (!validSource(left) || !validSource(right)) return false;
+  const leftRecord = left as object;
+  const rightRecord = right as object;
+  return fieldValue(leftRecord, 'file') === fieldValue(rightRecord, 'file')
+    && fieldValue(leftRecord, 'sourcePath') === fieldValue(rightRecord, 'sourcePath');
+};
+
 const COLOR_TINT_FIELD_SLOTS: ReadonlyMap<string, TintSlot> = new Map([
   ['backgroundColor', 'table-background'],
   ['cellbgcolor', 'cell-background'],
@@ -673,9 +681,8 @@ const validateBasePreviewTint = (value: unknown): Validation<ValidatedTint> => {
       || !validColorChannelEvidence(fieldValue(channels, 'b'), fieldValue(color, 'b'), 255)
       || !validColorChannelEvidence(fieldValue(channels, 'a'), fieldValue(color, 'a'), colorMaximum)
       || !nonEmptyString(fieldValue(color, 'declarationExpression'))
-      || fieldValue(value, 'expression') !== fieldValue(color, 'declarationExpression')
       || !validSource(fieldValue(color, 'declarationSource'))
-      || !sourceContains(fieldValue(value, 'source'), fieldValue(color, 'declarationSource'))
+      || !sourceIdentityMatches(fieldValue(value, 'source'), fieldValue(color, 'declarationSource'))
       || !sourceContains(fieldValue(color, 'declarationSource'), fieldValue(fieldValue(channels, 'r') as object, 'keySource'))
       || !sourceContains(fieldValue(color, 'declarationSource'), fieldValue(fieldValue(channels, 'g') as object, 'keySource'))
       || !sourceContains(fieldValue(color, 'declarationSource'), fieldValue(fieldValue(channels, 'b') as object, 'keySource'))
