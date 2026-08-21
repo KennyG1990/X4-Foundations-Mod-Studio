@@ -59,6 +59,20 @@ identity, C++ frame acceptance, and player-visible X4 screenshots. Overall statu
 The bounded Canvas repair is committed and pushed at `4c480418e0bb4095d0bd5935a3767b29cdd0e0f8`; readback proved
 `origin/main == HEAD` and an empty index while preserving every unrelated dirty path. The partial checkpoint was read
 back at GitHub #41 comment `5367932527`; the owner issue remains open.
+**AI Influence `1b` source-composition checkpoint 2026-08-21 — HOST VERIFIED / VISUAL RECONSTRUCTION PARTIAL:** The
+mounted `Source preview canvas` was the existing diagnostic-map presentation: later opaque gap/unavailable rectangles
+erased source-proven tints and exact Zekton glyphs. A causal real-paint fail-first was `118/119`; the existing Canvas now
+supports explicit `diagnostic-map | source-composition`, keeps diagnostic-map as the default, and SourceEditor alone
+selects source composition. Final Canvas is `119/119`, SourceEditor color `12/12`, EditorSession `7/7`, Paint `165/165`,
+Preview `102/102`, Scene `139/139`, with typecheck/lint/build green. Mounted exact `aic_menu.lua -> menu.display` at
+`2560x1440` scale `1` is canonical/canonical and `rendered/current`: source text and cyan/green/amber colors survive,
+red diagnostics are zero, keep-outs remain advisory, and `Not verified in game` remains permanent. Visual parity is
+still red: `3,209,776 / 3,686,400` pixels remain unavailable-gray and the composition does not match supplied `1b`.
+Full serial E2E passed `104/104`; precommit passed twice under Node `24.19.0`; graphify refreshed to
+`9689/24281/301`; process/port/X4 containment is clean. Implementation commit
+`ace6d46f286593443f4fa2dc6fe0b5f6938d4d88` is pushed with remote parity. Next work is truthful diagnostic
+presentation plus exact reference reconstruction, then real deploy/X4 acceptance when Ken is awake. Overall B119 stays
+`PARTIAL / Not verified in game`; GitHub #41 remains open and exact comment `5369110625` was read back.
 **P6 Canvas audit rejection 2026-08-19 — FINDINGS / correction active:** The first colour-bearing Canvas candidate is
 focused-green at `100/100`, Stage-B `25/25`, production/selftest
 `490F430673C51957751A3113C68046A10C811F355A349FDDBC2C064AB119DBB3` /

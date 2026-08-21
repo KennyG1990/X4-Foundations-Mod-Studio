@@ -8891,3 +8891,168 @@ be discarded independently. No live-game rollback is required because no deploy 
   and comparison, while preserving `Not verified in game` until that evidence exists.
 - Project lesson is banked in this authoritative B119 record. No external AAR-ledger or capability-map write is needed
   for this bounded consumer repair.
+
+### AI Influence `1b` reference-flat mounted visual fail-first — 2026-08-21
+
+Status: `FAILED REQUIRED METHOD / REPRODUCED`; the API/static fixture is accepted, but visual parity and overall B119
+remain `PARTIAL / Not verified in game`.
+
+#### BASELINE AND RECONCILE
+
+The isolated `reference-flat` fixture rebuilt the supplied `1b` composition as one static source-owned
+`menu.display`: one frame, 16 tables, 24 rows, 61 cells, 33 widgets, 37 texts, and 757 exact Zekton glyphs. Source
+SHA-256 is `1D7A3D67D94894FB3A90BBE4E6BD7A3C5FA32A2EAB1DD2BC5E43F714EC7E35E2`. Folder validation is green with zero
+structural/schema/lint/project errors. The first public project-API attempt sent only the nine `ModWorkspace`
+passthrough files and correctly failed cross-file validation because 17 modeled MD files were absent; the corrected
+public `project/create -> project/file/create -> project/validate -> project/package` round trip sent all 26 package
+files, preserved every content hash, and passed with zero cross-file or X4-UI errors. The isolated Studio workspace
+readback preserved all nine mounted-source hashes and the exact selected Lua hash. No validation baseline was advanced.
+
+The disposable Forge host used process-local state/config/data/discovery roots under the gitignored dogfood directory.
+Its first configured-corpus load reproduced a loader usability edge: `/api/reference/status` returned `idle`, so the UI
+refused before issuing the manifest request that schedules indexing. One public `/api/reference/manifest` GET scheduled
+the scan; after it reached `ready`, the mounted Reload path accepted canonical core and color evidence. This is a
+separate product gap, not the cause of the visual failure below.
+
+Mounted production selected exact source/target `aic_menu.lua` / `menu.display`, profile `2560x1440`, scale `1`, and
+keep-outs off. It reported `rendered/current`, canonical corpus/color evidence, and the permanent
+`Not verified in game` truth. The accepted bitmap nevertheless contains only an opaque `#6b7280` field and
+red diagnostic blocks: pixel-buffer SHA-256
+`8DA55D3338364071A537631670962CDC4D42229E7816F18855CDDC17AC0B95D1`, 3,686,400 non-transparent/non-black pixels,
+476,624 red-class pixels, and zero cyan/green/amber-class pixels. Screenshot
+`dev-docs/b119-ai-influence-dogfood/evidence/reference-flat-mounted-off.png` is 2175x876, SHA-256
+`F5420C03F5212E7D4A90A6F9DBF132F1762D9173CDEBAFE708540A8B2C7175E2`. Direct visual inspection against supplied
+`1b-commlink-subtitle-plate.png` (2562x1442, SHA-256
+`C22D77069445514B52D0258D9AF98907AFAA2B4B2438D08EFE73FD9E67554CF2`) found no readable text, source palette,
+transcript hierarchy, choice labels, or input composition in the mounted result. Cockpit keep-outs remained separate
+and advisory: enabling them added 6,560 cyan-class pixels and produced pixel-buffer SHA-256
+`413EA96E0076CBA9DD05DAA5FB0442E5551D6A239EA500783B909E3155E6A11F`; screenshot
+`evidence/reference-flat-mounted-cockpit-keepouts.png` is SHA-256
+`8222CD67F11FE2859B72CA016C48DBAC2081402F402C91ECB5DE0B917F47ED59`.
+
+The cause is source-proven in the existing owner chain. `x4UiPaintPlan` emits known source tints and exact glyph alpha
+blits, then emits every incomplete/unsupported Scene gap as a diagnostic command carrying its whole owning-node
+rectangle. `x4UiCanvasRenderer` first fills every untinted structural node with diagnostic gray and later fills every
+gap rectangle opaquely red. The later diagnostics therefore erase the already accepted source-colored geometry and
+glyphs. This is the designed diagnostic-map behavior, but the product mounts it under `Source preview canvas`; it is
+not a useful composition preview and cannot satisfy the supplied renderer request. No parallel renderer is authorized.
+
+Frozen preimages for the bounded correction are Canvas production
+`5318E9B40D28ACB73452591F0896D5CC8972E24B5F3D4DD24125ECDF85A56E3D`, Canvas selftest
+`334472456F1D4E418706DD518E30D023150F09533F74D374F26DAC231A6C3DC9`, SourceEditor production
+`A05F47E6B117225D35EB69255C9EA215334B67C2C7FF31BB26D5C04D13059813`, and SourceEditor selftest
+`3E8FD64C40DF6526401879228FBFD9678342D9D7F53F9D11255D0A046D714CCD`. All unrelated dirty paths remain outside
+this task. The server/browser were closed; ports `3300/3100/3101` are free and X4 is absent.
+
+#### RECONCILED TESTS-FIRST CORRECTION CONTRACT
+
+Extend the existing Canvas owner; do not add a renderer. The bounded candidate may edit only the four frozen files
+above unless a causal red proves a narrower upstream owner is required. Add an explicit source-composition presentation
+path for the mounted SourceEditor while retaining the current diagnostic-map path for debugging and prior contracts.
+In source-composition presentation, accepted source-tinted geometry and exact Zekton alpha blits remain the visible
+authority; untinted structural containers do not become opaque invented X4 surfaces; gap/unavailable/unsupported
+diagnostics remain visible but may not cover the interior of accepted source-colored geometry or glyphs. Keep-outs
+remain the final independent advisory layer. This does not invent X4 materials, button textures, hover/active state, or
+C++ acceptance; unavailable engine paint remains explicitly unavailable and the product remains
+`Not verified in game`.
+
+Required fail-first evidence must use the real public reference-flat Preview -> Scene -> Paint result or a mechanically
+extracted exact command family, not a hand-waved color sample. Before production changes it must prove that a known
+source-tinted rectangle and glyph are absent from final pixels because later opaque diagnostics overwrite them. It must
+also prove that the existing diagnostic-map path retains its current deterministic trace and receipt behavior.
+
+Acceptance requires: exact Canvas and SourceEditor focused suites; the full existing producer/consumer matrix; typecheck
+and exact-file zero-warning lint; hostile-shape, order, callback-mutation, corpus/font identity, alpha-domain,
+pre-allocation, keep-out, stale-adoption, and permanent game-truth negatives; mounted canonical
+`rendered/current` at `2560x1440` scale `1`; visual inspection showing readable Zekton text plus nonzero
+cyan/green/amber source colors with diagnostics no longer opaque over the composition; advisory guide verification;
+zero browser console errors; full serial E2E, precommit/build, graph refresh, exact containment receipts, and clean
+process/port teardown before promotion. Visual improvement is still preview evidence, not proof of X4 parity. No real
+mod deploy or X4 launch is authorized while unattended. Rollback is the exact four-file bounded diff plus deletion of
+the ignored dogfood/runtime evidence.
+
+### AI Influence `1b` source-composition correction close — 2026-08-21
+
+Status: `HOST VERIFIED / COMMITTED / VISUAL RECONSTRUCTION PARTIAL`; overall B119 remains
+`PARTIAL / Not verified in game`.
+
+#### IMPLEMENT
+
+- Extended the existing `x4UiCanvasRenderer` with an explicit `diagnostic-map | source-composition` presentation
+  contract. The default remains `diagnostic-map`, preserving the existing deterministic diagnostic receipt and callers.
+- `X4UiSourceEditor` now explicitly requests `source-composition`; no second renderer, route, state owner, dependency,
+  caller-owned target surface, or X4 material claim was added.
+- Source composition paints only source-proven background/border tints for node geometry, leaves untinted structural
+  containers unfilled, preserves exact Zekton alpha blits, and subtracts accepted source geometry/glyph coverage from
+  later gap/unavailable diagnostics. Keep-outs remain the final independent advisory layer.
+
+#### VALIDATE
+
+- Causal fail-first: Canvas was `118/119`; the real source-tinted rectangle and glyph ended as opaque
+  `[239,68,68,255]` diagnostics and frozen production refused `source-composition`. SourceEditor separately failed its
+  explicit presentation assertion. Final Canvas is `119/119`, including unchanged prior diagnostic `44/44` and final
+  Stage-B `44/44`; SourceEditor's canonical color matrix is `12/12`.
+- Adjacent authority matrix: EditorSession `7/7`, Paint `165/165`, Preview `102/102`, and Scene `139/139`. Typecheck,
+  exact four-file zero-warning ESLint, `git diff --check`, production build, alternate-renderer/forbidden scans, and
+  coordinator reruns passed. Final hashes are Canvas production
+  `0AFD884CC75B9D4E7785481D473B11F346EAD5A30F3FD9F6FCE59F173B3635AA`, Canvas selftest
+  `1D0D5F15CCABBBDC1F6DF65DAE55095FF4B3147C9FDABE38F909CD5B7024F8F4`, SourceEditor production
+  `FB660DCF3DA8C1A9DF06F1CAD1B59A68C2F1AF00A7AE0ED50C83377886BB26B2`, and SourceEditor selftest
+  `3A0B08B90AED0AA72C9E90F78D76AE714C6EFBC987EDF88F271FFC5070B13376`.
+- Mounted production used exact source SHA-256
+  `1D7A3D67D94894FB3A90BBE4E6BD7A3C5FA32A2EAB1DD2BC5E43F714EC7E35E2`, target `menu.display`, configured
+  canonical core/color evidence, `2560x1440`, scale `1`, and keep-outs off. It reached `rendered/current`, retained
+  `Not verified in game`, and had zero console errors. Pixel-buffer SHA-256 is
+  `7E2702C76D73B10EF7F6889BEDEB57DD9716BB9B7145798EA28F793CC25FE300`; all `3,686,400` pixels are nontransparent/
+  nonblack, with `0` exact red diagnostics and nonzero cyan (`29,281`), green (`12,023`), amber (`34,381`), and white
+  (`48,991`) classification counts. Exact unavailable-gray still occupies `3,209,776` pixels.
+- Clean screenshot `dev-docs/b119-ai-influence-dogfood/evidence/reference-flat-source-composition-off.png` is SHA-256
+  `F30597C4E5173BC0D0AD5DFAA0A5C00BA0A449D8FCC5F91901DE1BC65A95E39C`. Direct inspection against supplied
+  `1b-commlink-subtitle-plate.png` proves source text/palette are now visible, but the spatial composition, dark field,
+  hierarchy, and exact reference appearance do not match.
+- Cockpit keep-outs changed the pixel-buffer SHA-256 to
+  `26FD9B20C8675A5860C7224246634704CF1608B5E82C901458F822D1E768269F` and visibly projected the measured
+  `x=0.664` guide. Screenshot `reference-flat-source-composition-cockpit.png` is SHA-256
+  `F469C127497855F61C7B7398D8AEF620E2EC361CAE44C0204FB8F7FACEEA79B8`; overlays were returned to off.
+- Full serial isolated E2E passed `104/104`, zero failed/flaky/bad, `child-close`, `treeGone=true`; verdict SHA-256 is
+  `9010B4821ADCB8AD16082AA0EE6006FCC68BBC99325322CE61C274F415086080`. Complete precommit passed twice under
+  process-local Node `24.19.0` / libuv `1.52.1`: verdict `55/55`, Vite lifecycle, product-copy, writer `14/14` plus
+  extension `8/8`, capability/MCP, action-receipt `82/56`, typecheck, and size guards. Graphify refreshed to `9689`
+  nodes / `24281` edges / `301` communities before commit; the post-commit hook reported no further topology delta.
+- Teardown returned Node to the pre-worker baseline `50`; ports `3100`, `3101`, and `3300` are free, X4 is absent,
+  no Graphify/Forge/browser/test worker remains, and no real mod, live extension, unpacked corpus, standing config, or
+  game directory was written.
+
+#### REVIEW AND CLOSE
+
+- Done and evidenced: diagnostics no longer erase accepted source geometry/glyphs in the mounted SourceEditor; the
+  legacy diagnostic-map behavior remains available and default; exact source colors/text and advisory keep-outs render;
+  the linter and permanent game-truth warning remain intact.
+- Partial: `3,209,776 / 3,686,400` pixels remain unavailable-gray, layout is visibly fragmented, and the mounted image
+  does not match the supplied `1b` reference. This is a useful source-composition preview, not a finished AI Influence
+  screen or a pixel-parity claim.
+- Deferred and still required: reduce/represent unavailable diagnostics without inventing X4 paint; reconstruct exact
+  source/sample geometry for all supplied references; prove real package/deploy byte identity; obtain X4 C++ frame
+  acceptance; capture and compare player-visible screenshots. No capability-map delta.
+- Implementation commit `ace6d46f286593443f4fa2dc6fe0b5f6938d4d88`
+  (`fix(ui): preserve source composition under diagnostics`) is pushed with `origin/main == HEAD` and an empty index.
+  GitHub owner issue #41 remains open; exact checkpoint comment `5369110625` was read back after write. Rollback is a
+  targeted revert of that commit; ignored dogfood evidence can be discarded independently.
+
+#### AAR
+
+- Sustain: one exact native Luna worker, causal fail-first raster assertions, default-contract preservation, direct
+  reference-image inspection, mounted pixel census, serial safe-Node gates, immediate worker closure, process/port
+  teardown, and exact-path staging.
+- Improve work/approach: the first accepted bitmap criterion proved pixels existed but did not distinguish an opaque
+  diagnostic map from a usable composition. Future renderer slices must include source-color/text survival and visual
+  reference comparison before promotion.
+- Improve tools: one coordinator batch used stale `x4UiPreview.selftest.ts` instead of
+  `x4UiPreviewPipeline.selftest.ts`; one stale Playwright ref and one guessed keep-out test ID failed safely before fresh
+  semantic lookup; one read-only PowerShell receipt had an empty-pipe syntax error; and a broad process guard matched its
+  own command line. Each was corrected without product mutation. Prefer `rg --files`, fresh snapshots/stable test IDs,
+  collected PowerShell rows, and executable-specific process filters.
+- Highest-risk evidenced weakness: unavailable diagnostics can still dominate a persuasive source preview while X4
+  acceptance remains unknown. The next bounded experiment is a source-composition diagnostic presentation that keeps
+  incompleteness visible without replacing most of the intended dark composition, followed by the exact same mounted
+  reference comparison; only subsequent real-game evidence can establish frame acceptance.

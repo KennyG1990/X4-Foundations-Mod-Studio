@@ -9,13 +9,14 @@ Status: `IN_PROGRESS / PARTIAL — Not verified in game`
 - Project: X4 Forge B119, the linter-first faithful 2D X4 UI editor. Port shipped `helper.lua` and
   `widget_fullscreen.lua`; preserve real Lua calls, configured unpacked-corpus authority, measured keep-outs, and the
   distinction between preview evidence and X4 truth.
-- Current boundary: the source-literal Canvas consumer repair is host-verified, committed, and pushed. The isolated AI
-  Influence source now paints mounted browser pixels, but the sampled composition is not visually faithful to the
-  supplied references and X4 has not accepted or rendered it.
-- Commit question: `HEAD == origin/main == 4c480418e0bb4095d0bd5935a3767b29cdd0e0f8` was proved after push with an
+- Current boundary: the source-composition Canvas correction is host-verified, committed, and pushed. Exact source
+  text/colors now survive mounted diagnostics, but unavailable-gray still dominates the image; the supplied `1b`
+  composition is not visually faithful and X4 has not accepted or rendered it.
+- Commit question: `HEAD == origin/main == ace6d46f286593443f4fa2dc6fe0b5f6938d4d88` was proved after push with an
   empty index. This handoff, `BACKLOG.md`, and the B119 plan are the pending documentation-close checkpoint; stage only
   those exact paths and preserve every unrelated dirty path.
-- GitHub owner: issue #41 remains open. The final Canvas checkpoint was read back exactly at comment `5367932527`.
+- GitHub owner: issue #41 remains open. Source-composition checkpoint comment `5369110625` was written and read back;
+  comment `5367932527` is the prior Canvas checkpoint.
 
 ## Machine and process state
 
@@ -25,6 +26,41 @@ Status: `IN_PROGRESS / PARTIAL — Not verified in game`
   validation; X4 was absent. Recheck current state before any new runtime work.
 - Do not deploy, launch X4, write the real mod/live extension/unpacked corpus, or mutate standing config while Ken is
   asleep. Those remain a separate explicit write gate.
+
+## Current source-composition checkpoint
+
+- Reproduced cause: `x4UiPaintPlan` emitted source tints/glyphs before whole-owner diagnostic rectangles; the existing
+  Canvas mounted the designed diagnostic map as `Source preview canvas`, so opaque diagnostics erased accepted source
+  composition.
+- Bounded implementation: existing `x4UiCanvasRenderer` now accepts explicit `diagnostic-map | source-composition`.
+  Diagnostic-map remains default. `X4UiSourceEditor` explicitly requests source composition. No second renderer,
+  endpoint, dependency, state owner, caller target, X4 material claim, or game-verification claim was added.
+- Causal fail-first was Canvas `118/119` plus the SourceEditor presentation assertion. Final receipts are Canvas
+  `119/119` (prior diagnostic `44/44`, Stage-B `44/44`), SourceEditor color `12/12`, EditorSession `7/7`, Paint
+  `165/165`, Preview `102/102`, and Scene `139/139`.
+- Final hashes:
+  - Canvas production `0AFD884CC75B9D4E7785481D473B11F346EAD5A30F3FD9F6FCE59F173B3635AA`;
+  - Canvas selftest `1D0D5F15CCABBBDC1F6DF65DAE55095FF4B3147C9FDABE38F909CD5B7024F8F4`;
+  - SourceEditor production `FB660DCF3DA8C1A9DF06F1CAD1B59A68C2F1AF00A7AE0ED50C83377886BB26B2`;
+  - SourceEditor selftest `3A0B08B90AED0AA72C9E90F78D76AE714C6EFBC987EDF88F271FFC5070B13376`.
+- Implementation commit `ace6d46f286593443f4fa2dc6fe0b5f6938d4d88`
+  (`fix(ui): preserve source composition under diagnostics`) is pushed with remote parity and empty index.
+- Exact mounted source is ignored fixture `aic_menu.lua` SHA-256
+  `1D7A3D67D94894FB3A90BBE4E6BD7A3C5FA32A2EAB1DD2BC5E43F714EC7E35E2`, target `menu.display`, configured
+  canonical core/color, `2560x1440`, scale `1`, overlays off.
+- Mounted result is `rendered/current`, permanent `Not verified in game`, zero console errors, buffer SHA-256
+  `7E2702C76D73B10EF7F6889BEDEB57DD9716BB9B7145798EA28F793CC25FE300`, all `3,686,400` pixels nontransparent/
+  nonblack, exact red diagnostic count `0`, and nonzero cyan/green/amber/white counts. Exact unavailable-gray remains
+  `3,209,776` pixels.
+- Visual evidence:
+  - overlays-off screenshot `evidence/reference-flat-source-composition-off.png`, SHA-256
+    `F30597C4E5173BC0D0AD5DFAA0A5C00BA0A449D8FCC5F91901DE1BC65A95E39C`;
+  - cockpit screenshot `evidence/reference-flat-source-composition-cockpit.png`, SHA-256
+    `F469C127497855F61C7B7398D8AEF620E2EC361CAE44C0204FB8F7FACEEA79B8`;
+  - cockpit buffer SHA-256 `26FD9B20C8675A5860C7224246634704CF1608B5E82C901458F822D1E768269F` and visible measured
+    `x=0.664` guide; overlays were returned off.
+- Direct inspection against supplied `1b-commlink-subtitle-plate.png` proves source content survival but rejects visual
+  parity: gray diagnostic field, fragmented layout, dark-field mismatch, hierarchy, and exact composition remain open.
 
 ## Latest accepted checkpoint
 
@@ -71,13 +107,15 @@ Status: `IN_PROGRESS / PARTIAL — Not verified in game`
 
 ## Broad validation
 
-- Typecheck, exact-file ESLint, diff hygiene, and production build passed.
+- Typecheck, exact-file ESLint, diff hygiene, production build, alternate-renderer scan, and forbidden-pattern scan
+  passed for the source-composition correction.
 - Full serial E2E passed `104/104`; receipt `test-results/e2e-verdict.json` SHA-256
-  `553B20B3E323F675568B4E0171233F2F86A0DAA11E61E16168326834A7882D44`; zero failed/flaky/bad, complete
+  `9010B4821ADCB8AD16082AA0EE6006FCC68BBC99325322CE61C274F415086080`; zero failed/flaky/bad, complete
   discovery/terminal parity, `child-close`, `treeGone=true`, and no owned PID remained.
-- Complete precommit passed under process-local Node `24.19.0` / libuv `1.52.1`: verdict `55/55`, Vite lifecycle,
+- Complete precommit passed twice under process-local Node `24.19.0` / libuv `1.52.1`: verdict `55/55`, Vite lifecycle,
   product-copy, writer `14/14` plus extension `8/8`, capability/MCP, action-receipt `82/56`, typecheck, and size limits.
-- Graph refreshed to `9666` nodes / `24230` edges / `319` communities; no graphify process remained.
+- Graph refreshed to `9689` nodes / `24281` edges / `301` communities; the post-commit hook reported no additional
+  topology delta and no Graphify process remained.
 - Live-state containment remained exact: `.studio-state` 9 files / 4 dirs / 12,382,674 bytes; `data` 3,686 files /
   42 dirs / 607,386,585 bytes; `config.json` 463 bytes at SHA-256
   `3EC65D540E6763D13D6F8F27D9005F80C3C855B00D3DCFDD5E7330726AE37779` with unchanged timestamp.
@@ -86,10 +124,11 @@ Status: `IN_PROGRESS / PARTIAL — Not verified in game`
 
 ## Honest visual state
 
-The mounted Canvas now consumes the accepted production Paint plan and emits real pixels. That closes the reproduced
-Canvas refusal only. The nine-sample fixture currently looks mainly like a gray full-frame plate with a red lower strip;
-it does not yet visually match `C:\Users\Moshi\Desktop\# AI Influence mod UI design`. Exact text, hierarchy, imagery,
-and composition remain open. A pixel-producing preview is not proof of C++ frame acceptance or game appearance.
+The mounted Canvas now preserves accepted source text and cyan/green/amber composition beneath diagnostics. That closes
+the reproduced diagnostic-occlusion defect. It does not close design fidelity: `3,209,776 / 3,686,400` pixels remain
+unavailable-gray and the source geometry is fragmented relative to
+`C:\Users\Moshi\Desktop\# AI Influence mod UI design`. Exact spatial hierarchy, dark field, imagery, and composition
+remain open. A better pixel-producing preview is still not proof of C++ frame acceptance or game appearance.
 
 ## Eyeball queue
 
@@ -109,11 +148,11 @@ and composition remain open. A pixel-producing preview is not proof of C++ frame
 
 ## Next bounded unit
 
-Reconstruct the AI Influence `1b` design inside the ignored isolated workspace using the supplied photos/spec and exact
-real Lua/corpus authority. Inspect every reference image visually; extend the existing source/sample/Scene/Paint/Canvas
-chain, not a parallel renderer. Acceptance for this next unit is mounted Forge output that materially matches the
-reference composition at `2560x1440`, with linter/keep-outs visible and all host gates retained. It still cannot claim
-X4 acceptance.
+Make unavailable diagnostics truthful but non-dominating in source composition, then continue reconstructing the AI
+Influence `1b` design inside the ignored isolated workspace using the supplied photos/spec and exact real Lua/corpus
+authority. Inspect every reference image visually; extend the existing source/sample/Scene/Paint/Canvas chain, not a
+parallel renderer. Acceptance is mounted Forge output that materially matches the reference at `2560x1440`, with
+linter/keep-outs visible and all host gates retained. It still cannot claim X4 acceptance.
 
 Before any real-mod/game write, present this exact gate in one paragraph: the operation will deploy the approved Forge
 candidate into the real mod/live extension so X4 can test it; a bad frame may disappear, close the conversation, or
@@ -147,7 +186,7 @@ untracked `({` path. Never stage or clean them as part of B119.
 
 - Authoritative plan: `docs/plans/2026-08-10-b119-x4-ui-editor-linter-first.md`.
 - Source-first design: `docs/plans/2026-08-10-b119-x4-ui-editor-source-first-design.md`.
-- Open owner issue: GitHub #41; latest readback comment `5367932527`.
-- Suggested documentation commit: `docs(ui): record B119 Canvas dogfood promotion`.
+- Open owner issue: GitHub #41; source-composition checkpoint comment `5369110625` is read back.
+- Suggested documentation commit: `docs(ui): record B119 source-composition checkpoint`.
 - Overall status remains `PARTIAL / Not verified in game`; source/sample reconstruction, deploy-byte identity, C++
   frame acceptance, and player-visible X4 comparison remain open.
