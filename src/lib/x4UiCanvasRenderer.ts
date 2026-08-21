@@ -1840,16 +1840,22 @@ const buildOperations = (
           const clip = item.clip;
           const color = item.color;
           operations.push(api => {
-            api.setFillStyle(color);
-            if (geometry === undefined) return;
             if (presentation === 'diagnostic-map') {
+              api.setFillStyle(color);
+              if (geometry === undefined) return;
               withClip(api, clip, () => { api.fillRect(geometry.x, geometry.y, geometry.width, geometry.height); });
               return;
             }
+            api.setStrokeStyle(color);
+            if (geometry === undefined) return;
             const visibleGeometry = intersectRectangles(geometry, clip);
             if (visibleGeometry === undefined) return;
             for (const fragment of subtractRectangles(visibleGeometry, preserveCoverage)) {
-              withClip(api, clip, () => { api.fillRect(fragment.x, fragment.y, fragment.width, fragment.height); });
+              withClip(api, clip, () => {
+                api.beginPath();
+                api.rect(fragment.x, fragment.y, fragment.width, fragment.height);
+                api.stroke();
+              });
             }
           });
           continue;

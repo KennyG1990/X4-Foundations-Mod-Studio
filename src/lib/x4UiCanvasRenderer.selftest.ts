@@ -778,6 +778,27 @@ function traceHasOpaqueFill(trace: readonly TraceEntry[], color: string, rect: R
   });
 }
 
+function traceHasDiagnosticBoundary(trace: readonly TraceEntry[], color: string, region: RasterRect): boolean {
+  let activeStrokeStyle: unknown;
+  let pathRect: RasterRect | undefined;
+  for (const entry of trace) {
+    if (entry.name === 'setStrokeStyle') {
+      activeStrokeStyle = entry.args[0];
+      continue;
+    }
+    if (entry.name === 'beginPath') {
+      pathRect = undefined;
+      continue;
+    }
+    if (entry.name === 'rect' && entry.args.length === 4 && entry.args.every(value => typeof value === 'number')) {
+      pathRect = { x: Number(entry.args[0]), y: Number(entry.args[1]), width: Number(entry.args[2]), height: Number(entry.args[3]) };
+      continue;
+    }
+    if (entry.name === 'stroke' && activeStrokeStyle === color && rasterIntersection(pathRect, region) !== undefined) return true;
+  }
+  return false;
+}
+
 function expectedClippedTrace(clipValue: unknown, terminal: readonly TraceEntry[]): TraceEntry[] {
   const clip = rectangleArguments(clipValue);
   if (clip === undefined) return [...terminal];
@@ -2017,6 +2038,43 @@ async function main(): Promise<void> {
         if (!['gap', 'unsupported-runtime-paint', 'unavailable-node'].includes(String(command.kind))) return false;
         return (effectiveCommandRect(command, 'geometry') ?? rasterRect(command.clipRect)) !== undefined;
       });
+      const paintDiagnosticCommands = commandList(paint.plan).filter(command => {
+        if (!['gap', 'unsupported-runtime-paint', 'unavailable-node'].includes(String(command.kind))) return false;
+        return (effectiveCommandRect(command, 'geometry') ?? rasterRect(command.clipRect)) !== undefined;
+      });
+      const paintCoverageCommands = commandList(paint.plan).filter(command => {
+        if (command.kind === 'glyph-alpha-blit') return effectiveCommandRect(command, 'destinationRect') !== undefined;
+        if (command.kind !== 'node-geometry') return false;
+        const tints = command.basePreviewTints;
+        return Array.isArray(tints) && tints.some(tint => {
+          const slot = asRecord(tint)?.slot;
+          return slot === 'table-background' || slot === 'cell-background' || slot === 'widget-background' || slot === 'widget-border';
+        });
+      });
+      const paintCoverageRect = (command: JsonRecord): RasterRect | undefined => effectiveCommandRect(command, command.kind === 'glyph-alpha-blit' ? 'destinationRect' : 'geometry');
+      const paintCoverageContains = (x: number, y: number): boolean => paintCoverageCommands.some(command => rasterContains(paintCoverageRect(command), x, y));
+      const paintDiagnosticInteriorTarget = (() => {
+        for (const diagnostic of paintDiagnosticCommands) {
+          const visible = effectiveCommandRect(diagnostic, 'geometry') ?? rasterRect(diagnostic.clipRect);
+          if (visible === undefined) continue;
+          const left = Math.ceil(visible.x + 1);
+          const top = Math.ceil(visible.y + 1);
+          const right = Math.floor(visible.x + visible.width - 1);
+          const bottom = Math.floor(visible.y + visible.height - 1);
+          for (let y = top; y < bottom; y += 1) {
+            for (let x = left; x < right; x += 1) {
+              if (rasterContains(visible, x, y) && !paintCoverageContains(x, y)) {
+                const finalDiagnostic = paintDiagnosticCommands
+                  .filter(candidate => rasterContains(effectiveCommandRect(candidate, 'geometry') ?? rasterRect(candidate.clipRect), x, y))
+                  .sort((leftCommand, rightCommand) => Number(leftCommand.order) - Number(rightCommand.order))
+                  .at(-1);
+                return { diagnostic: finalDiagnostic ?? diagnostic, visible, x, y };
+              }
+            }
+          }
+        }
+        return undefined;
+      })();
       const sourceTintCss = (tint: unknown): string | undefined => {
         const tintRecord = asRecord(tint);
         const value = tintRecord === undefined ? undefined : asRecord(tintRecord.value);
@@ -2064,11 +2122,18 @@ async function main(): Promise<void> {
       const sourceRasterTrace: TraceEntry[] = [];
       const sourceRasterAttempt = attemptRenderWithOptions(acceptedColorPaint, corpus, {
         surfaceFactory: makeRasterFactory(sourceRasterTrace, sourceRasterOutput),
-        // Fail-first literal: the frozen renderer has no source-composition presentation path yet.
         presentation: 'source-composition',
       } as unknown as X4UiCanvasRenderOptions);
+      const paintDiagnosticMapRasterOutput: RasterOutput = {};
+      const paintDiagnosticMapRasterTrace: TraceEntry[] = [];
+      const paintDiagnosticMapRasterAttempt = attemptRenderWithOptions(paint, corpus, { surfaceFactory: makeRasterFactory(paintDiagnosticMapRasterTrace, paintDiagnosticMapRasterOutput) });
+      const paintSourceRasterOutput: RasterOutput = {};
+      const paintSourceRasterTrace: TraceEntry[] = [];
+      const paintSourceRasterAttempt = attemptRenderWithOptions(paint, corpus, { surfaceFactory: makeRasterFactory(paintSourceRasterTrace, paintSourceRasterOutput), presentation: 'source-composition' });
       const diagnosticRasterResult = completedResult(diagnosticRasterAttempt);
       const sourceRasterResult = completedResult(sourceRasterAttempt);
+      const paintDiagnosticMapRasterResult = completedResult(paintDiagnosticMapRasterAttempt);
+      const paintSourceRasterResult = completedResult(paintSourceRasterAttempt);
       const sourceFillTint = sourceFillTarget === undefined || !Array.isArray(sourceFillTarget.geometry.basePreviewTints)
         ? undefined
         : sourceFillTarget.geometry.basePreviewTints.find(tint => {
@@ -2108,6 +2173,21 @@ async function main(): Promise<void> {
         && JSON.stringify(sourceGlyphPixel) !== JSON.stringify(sourceGlyphDiagnosticRgba)
         && diagnosticGlyphPixel !== undefined
         && JSON.stringify(diagnosticGlyphPixel) === JSON.stringify(sourceGlyphDiagnosticRgba);
+      const paintDiagnosticInteriorPixel = paintDiagnosticInteriorTarget === undefined ? undefined : rasterPixel(paintSourceRasterOutput, paintDiagnosticInteriorTarget.x, paintDiagnosticInteriorTarget.y);
+      const paintDiagnosticMapInteriorPixel = paintDiagnosticInteriorTarget === undefined ? undefined : rasterPixel(paintDiagnosticMapRasterOutput, paintDiagnosticInteriorTarget.x, paintDiagnosticInteriorTarget.y);
+      const paintDiagnosticInteriorRgba = paintDiagnosticInteriorTarget === undefined ? undefined : rasterStyle(diagnosticColor(String(paintDiagnosticInteriorTarget.diagnostic.kind)));
+      const sourceCompositionInteriorOpaque = paintDiagnosticInteriorPixel !== undefined
+        && paintDiagnosticInteriorRgba !== undefined
+        && JSON.stringify(paintDiagnosticInteriorPixel) === JSON.stringify(paintDiagnosticInteriorRgba);
+      const diagnosticMapInteriorOpaque = paintDiagnosticMapInteriorPixel !== undefined
+        && paintDiagnosticInteriorRgba !== undefined
+        && JSON.stringify(paintDiagnosticMapInteriorPixel) === JSON.stringify(paintDiagnosticInteriorRgba);
+      const sourceBoundaryIndicator = paintDiagnosticInteriorTarget !== undefined
+        && traceHasDiagnosticBoundary(paintSourceRasterTrace, diagnosticColor(String(paintDiagnosticInteriorTarget.diagnostic.kind)), paintDiagnosticInteriorTarget.visible);
+      const diagnosticTraceDeterministic = paintDiagnosticMapRasterResult?.status === 'rendered'
+        && paintSourceRasterResult?.status === 'rendered'
+        && paintDiagnosticMapRasterAttempt.threw === false
+        && paintSourceRasterAttempt.threw === false;
       const sourceCompositionTraceDeterministic = sourceRasterResult?.status === 'rendered'
         && diagnosticRasterResult?.status === 'rendered'
         && sourceRasterAttempt.threw === false
@@ -2127,6 +2207,29 @@ async function main(): Promise<void> {
         sourceGlyphTraceHasTint,
         sourceRasterReceipt: receiptSummary(sourceRasterResult?.receipt),
         sourceRasterTraceLength: sourceRasterTrace.length,
+      });
+      familyCheck('stage-b-causal', 'B119 non-dominating source diagnostics use boundary indicators while diagnostic-map retains opaque interiors', paintDiagnosticInteriorTarget !== undefined
+        && diagnosticTraceDeterministic
+        && diagnosticMapInteriorOpaque
+        && !sourceCompositionInteriorOpaque
+        && sourceBoundaryIndicator
+        && sourceFillSurvives
+        && sourceGlyphSurvives, {
+        paintDiagnosticInteriorTarget: paintDiagnosticInteriorTarget === undefined ? undefined : {
+          id: paintDiagnosticInteriorTarget.diagnostic.id,
+          kind: paintDiagnosticInteriorTarget.diagnostic.kind,
+          visible: paintDiagnosticInteriorTarget.visible,
+          point: [paintDiagnosticInteriorTarget.x, paintDiagnosticInteriorTarget.y],
+        },
+        paintDiagnosticInteriorPixel,
+        paintDiagnosticMapInteriorPixel,
+        expectedDiagnosticInteriorPixel: paintDiagnosticInteriorRgba,
+        sourceCompositionInteriorOpaque,
+        diagnosticMapInteriorOpaque,
+        sourceBoundaryIndicator,
+        diagnosticTraceDeterministic,
+        sourceFillSurvives,
+        sourceGlyphSurvives,
       });
       const structuralGeometry = colorPaintCommands.find(command => command.kind === 'node-geometry' && !Array.isArray(command.basePreviewTints) && effectiveCommandRect(command, 'geometry') !== undefined);
       const structuralRect = structuralGeometry === undefined ? undefined : effectiveCommandRect(structuralGeometry, 'geometry');
