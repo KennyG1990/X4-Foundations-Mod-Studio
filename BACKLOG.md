@@ -73,6 +73,20 @@ Full serial E2E passed `104/104`; precommit passed twice under Node `24.19.0`; g
 `ace6d46f286593443f4fa2dc6fe0b5f6938d4d88` is pushed with remote parity. Next work is truthful diagnostic
 presentation plus exact reference reconstruction, then real deploy/X4 acceptance when Ken is awake. Overall B119 stays
 `PARTIAL / Not verified in game`; GitHub #41 remains open and exact comment `5369110625` was read back.
+**AI Influence `1b` non-dominating diagnostics checkpoint 2026-08-21 — HOST VERIFIED / RECONSTRUCTION PARTIAL:** A
+real Paint-family fail-first was `119/120`: source-composition and diagnostic-map both painted uncovered diagnostic
+interior `(1,1)` opaquely red and source-composition emitted no boundary. The existing Canvas now strokes clipped
+uncovered diagnostic fragments only in source-composition; diagnostic-map remains opaque/default. Final Canvas is
+`120/120`; SourceEditor `12/12`, EditorSession `7/7`, Paint `165/165`, Preview `102/102`, Scene `139/139`,
+typecheck/lint/build all pass. Mounted exact `aic_menu.lua -> menu.display`, canonical/canonical, `2560x1440` scale `1`
+is `rendered/current`: exact opaque unavailable-gray fell from `3,209,776` pixels to `0`, `3,094,646` pixels are
+transparent, source colors/text remain, advisory guides project at `x=0.664`, `y=0.74`, and `y=0.788`, and console
+errors are zero. All twelve supplied design images plus the vanilla reference were visually inspected. The result is no
+longer gray-dominated but still does not match `1b`'s exact hierarchy/composition. Serial E2E passed `104/104`, complete
+precommit passed, graphify is `9690/24284/305`, and process/port/X4 containment is clean. Implementation commit
+`5a1b922f5344421927e4033522b2b217257788d3` is pushed with local/origin/remote parity. Next work is exact
+source/sample reconstruction, followed by the separately gated deploy/X4 proof. Overall B119 remains
+`PARTIAL / Not verified in game`; GitHub #41 stays open and exact checkpoint comment `5369666471` was read back.
 **P6 Canvas audit rejection 2026-08-19 — FINDINGS / correction active:** The first colour-bearing Canvas candidate is
 focused-green at `100/100`, Stage-B `25/25`, production/selftest
 `490F430673C51957751A3113C68046A10C811F355A349FDDBC2C064AB119DBB3` /

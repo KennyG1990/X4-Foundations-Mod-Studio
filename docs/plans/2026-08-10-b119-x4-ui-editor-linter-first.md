@@ -9056,3 +9056,144 @@ Status: `HOST VERIFIED / COMMITTED / VISUAL RECONSTRUCTION PARTIAL`; overall B11
   acceptance remains unknown. The next bounded experiment is a source-composition diagnostic presentation that keeps
   incompleteness visible without replacing most of the intended dark composition, followed by the exact same mounted
   reference comparison; only subsequent real-game evidence can establish frame acceptance.
+
+### AI Influence `1b` non-dominating source diagnostics — 2026-08-21
+
+Status: `HOST VERIFIED / VISUAL DOMINANCE FIXED / RECONSTRUCTION PARTIAL`; overall B119 remains
+`PARTIAL / Not verified in game`.
+
+#### PLAN / BASELINE / RECONCILE
+
+- Bounded unit: change only diagnostic presentation inside the existing Canvas `source-composition` mode. Preserve
+  `diagnostic-map` byte/trace behavior and every source-color, glyph, keep-out, refusal, receipt, and game-truth contract.
+- Baseline is committed/pushed `1a6de0c4a3f5fef01a106a9d65c4e5d83e67b419`; Canvas production/selftest hashes are
+  `0AFD884CC75B9D4E7785481D473B11F346EAD5A30F3FD9F6FCE59F173B3635AA` /
+  `1D0D5F15CCABBBDC1F6DF65DAE55095FF4B3147C9FDABE38F909CD5B7024F8F4`. SourceEditor already selects the explicit
+  presentation and is outside this implementation scope.
+- Reproduced visual baseline: exact reference-flat buffer
+  `7E2702C76D73B10EF7F6889BEDEB57DD9716BB9B7145798EA28F793CC25FE300` contains `3,209,776 / 3,686,400` exact
+  `#6b7280` unavailable pixels. Source text/colors survive, but opaque diagnostics replace most intended composition.
+- Manual visual-source audit completed against every supplied image in
+  `C:\Users\Moshi\Desktop\# AI Influence mod UI design\design_handoff_ai_influence\screenshots`: `00-brief`, the
+  vanilla reference, and `1a` through `1j`. The vanilla and design set consistently use flat square-edged near-black
+  surfaces, one-pixel blue rules, sparse state-only green/amber/red, filled blue selection/actions, and readable
+  near-white Zekton-like text; none uses an opaque neutral-gray substitute surface. The three comm-link variants are
+  intentionally distinct: `1a` is a right-docked framed panel, `1c` is a full-screen three-column menu, and selected
+  direction `1b` is a sparse chromeless overlay whose scene/NPC center and native-wheel bottom band remain visibly
+  unobstructed. `1d`-`1f` preserve the same grammar for proposal/contract/counter gates, while `1g`-`1j` extend it into
+  dense tabular hub views. Therefore the mounted gray dominance contradicts both the selected reference and the visual
+  system shared by all supplied screens; boundary-only unavailable diagnostics are the bounded preview correction.
+- Existing infrastructure reused: accepted Paint diagnostics, the two explicit Canvas presentations, current clipping,
+  current source-coverage subtraction, current diagnostic palette, and current Canvas path/stroke primitives. No new
+  renderer, presentation mode, route, component, dependency, alpha invention, material/texture claim, or source edit.
+- Fail-first must use the real color-bearing public Paint family already in Canvas selftests. It must prove, before
+  production change, that `source-composition` still paints an uncovered diagnostic interior opaquely while
+  `diagnostic-map` intentionally does so. It must separately prove the source-composition diagnostic remains visibly
+  represented at its boundary and that accepted source pixels remain unchanged.
+- Intended implementation: source-composition diagnostics are boundary indicators, not opaque substitute surfaces.
+  Use only existing clipped rectangle/path/stroke operations over uncovered diagnostic fragments. Diagnostic-map keeps
+  opaque fills exactly. Do not weaken or hide diagnostic metadata/status outside the bitmap.
+- Acceptance: Canvas focused suite and all prior families; Paint/Preview/Scene/EditorSession/SourceEditor adjacency;
+  typecheck, exact-file zero-warning ESLint, diff hygiene, build; mounted exact reference-flat canonical/canonical
+  `rendered/current` at `2560x1440` scale `1`; exact unavailable-gray interior dominance materially removed while
+  diagnostic boundaries, source text/palette, and advisory keep-outs remain visible; zero console errors; direct visual
+  comparison; serial full E2E, precommit, graph refresh, exact process/port teardown before promotion.
+- Negative path: invalid presentation/options, hostile plans, callback mutation, source/corpus identity, raster alpha,
+  clipping/order, default diagnostic-map, keep-out finality, stale adoption, and permanent `Not verified in game` remain
+  unchanged. Rollback is the exact two-file Canvas diff. Real mod/game/corpus/config writes and X4 launch remain out of
+  scope while unattended.
+
+#### IMPLEMENT
+
+- Exact native Luna worker `01a02410-5cbf-7102-869a-bae2dded843f` owned only
+  `src/lib/x4UiCanvasRenderer.ts` and `src/lib/x4UiCanvasRenderer.selftest.ts`; it reached terminal `completed` and was
+  immediately closed with terminal-status readback. No second worker or overlapping writer was opened.
+- Causal fail-first was Canvas `119/120`: public Paint diagnostic `gap:scene-gap:000011` selected an uncovered interior
+  pixel at `(1,1)` which was opaque gap red in both source-composition and diagnostic-map, while source-composition had
+  no boundary stroke. Frozen production remained SHA-256
+  `0AFD884CC75B9D4E7785481D473B11F346EAD5A30F3FD9F6FCE59F173B3635AA` for that receipt.
+- The existing Canvas owner now branches diagnostic paint by presentation. `diagnostic-map` retains its prior opaque
+  fill and deterministic trace. `source-composition` intersects the issued diagnostic geometry/clip, subtracts existing
+  source coverage, and strokes each remaining fragment using the existing diagnostic color. No opaque substitute
+  interior, renderer, route, state owner, dependency, global-alpha/material claim, source fixture edit, or game-truth
+  change was introduced.
+- Final production/selftest SHA-256 are
+  `5FAB04F896067917C178011612DEFE375BEB73B4B9ED0A2BA2915CD067E3645F` and
+  `6AD73BBF94A42220411F3A9C21B998BE83438C6439CC6F23827890F7B96A9E92`.
+
+#### VALIDATE
+
+- Worker and independent coordinator Canvas selftests passed `120/120`: prior diagnostic family `44/44`, callback
+  isolation `7/7`, pre-allocation `6/6`, emitted trace `3/3`, freeze truth `2/2`, oracle sensitivity `3/3`, prior
+  Batch-6D causal `10/10`, and Stage-B causal `45/45`. Typecheck, exact two-file zero-warning ESLint, diff hygiene, and
+  production build passed.
+- Adjacent authority matrix passed unchanged: SourceEditor canonical color `12/12`, EditorSession `7/7`, Paint
+  `165/165`, Preview `102/102`, and Scene `139/139`. Diagnostic-map remains the default; source text/glyph survival,
+  callback mutation, hostile shape, corpus/source identity, clipping/order, keep-out finality, stale adoption, and game
+  truth negatives remain green.
+- Mounted production selected exact source SHA-256
+  `1D7A3D67D94894FB3A90BBE4E6BD7A3C5FA32A2EAB1DD2BC5E43F714EC7E35E2`, target `menu.display`, configured
+  canonical core/color evidence, `2560x1440`, scale `1`, and keep-outs off. It reached `rendered/current`, retained
+  `Not verified in game`, and produced zero browser console errors.
+- Clean buffer SHA-256 is `06F3E3FD0A82B1B722B3C77FBBD42F7B0B1FE7EB96DC1FC58C0841FCC734420A`.
+  Of `3,686,400` pixels, `3,094,646` are transparent and `591,754` are nontransparent/nonblack. Exact opaque
+  unavailable-gray and exact opaque red diagnostics are both `0`; broad source/content counts remain nonzero: cyan
+  `96,004`, green `12,820`, amber `21,844`, white `50,757`, and dark `240,822`.
+- Cockpit keep-outs changed the buffer SHA-256 to
+  `4DD0134E64C87CB4E9EA9E2D8551EB825283FD03FF42D227B9C862B9BF7880A2`. Direct samples on the measured guides are
+  cyan at `x=0.664`, `y=0.788`, and `y=0.74`; visual inspection confirms all three lines. Returning overlays to off
+  restored the exact clean buffer hash.
+- Durable ignored evidence is
+  `dev-docs/b119-ai-influence-dogfood/evidence/reference-flat-source-composition-boundary-census.json`. Clean screenshot
+  `reference-flat-source-composition-boundary.png` is SHA-256
+  `7488612898B17FFA5C85218AFB6D935BD11E69C9CB885160FBDD5A0A09DA1B01`; cockpit screenshot
+  `reference-flat-source-composition-boundary-cockpit.png` is SHA-256
+  `D208266289CCBB72284E85C4358E6ACDDD75DEB39388161BA01DA8F570188083`.
+- Direct visual review covered the supplied vanilla reference plus every design image `00-brief` and `1a` through
+  `1j`. The bounded result now uses transparent/dark negative space with visible source content and thin diagnostic
+  boundaries rather than a gray full-canvas substitute. It still does not reproduce `1b`'s exact left rail,
+  bottom-anchored transcript/choices/input hierarchy, spacing, or native-wheel composition.
+- Full serial isolated E2E passed `104/104` in `8.4m`: zero failed, flaky, bad-result, or quarantined-blocking rows;
+  `child-close`, `treeGone=true`, and receipt SHA-256
+  `201E044179D245F68A2647DEDAABF64DAFA424D02366982AC89CE42D7FDC7A4C`.
+- Complete precommit passed under process-local Node `24.19.0` / libuv `1.52.1`: verdict oracle `55/55`, Vite
+  lifecycle, product-copy, writer `14/14` plus extension `8/8`, capability `12 / 297 / 1 / 11`, MCP, action-receipt
+  `82 / 56`, typecheck, and size guards. Graphify refreshed to `9,690` nodes / `24,284` edges / `305` communities.
+- Teardown left ports `3100`, `3101`, and `3300` free, X4 absent, zero owned Forge/browser/E2E/precommit/Graphify
+  processes, and Node at the pre-run baseline `50`. No real mod, live extension, unpacked corpus, standing config, or
+  game directory was written.
+
+#### REVIEW / DOCUMENT CLOSE
+
+- Done and evidenced: source-composition no longer replaces uncovered diagnostic interiors with opaque gray/red;
+  diagnostic boundaries remain visible; source colors/text and keep-outs survive; diagnostic-map behavior and the
+  permanent game-truth warning remain authoritative.
+- Partial: the static program still resolves only a fragmented subset of the supplied UI. The new clean mounted image
+  is useful for source/layout iteration but is not a visual match, package/deploy proof, C++ frame-acceptance proof, or
+  player-experience proof.
+- Deferred and still required: reconstruct exact `1b` source/sample semantics through the existing Layout -> Scene ->
+  Paint -> Canvas chain; compare the resulting Forge screen to the supplied image; then, when Ken is awake and grants
+  the separate write gate, prove real package/deploy byte identity and capture X4 frame/player-visible evidence.
+- No capability-map delta: this changes the presentation of an existing diagnostic owner and adds no capability
+  surface. Rollback is a targeted revert of the bounded two-file implementation; ignored evidence can be discarded
+  independently. GitHub owner issue #41 remains open.
+- Exact two-file implementation commit `5a1b922f5344421927e4033522b2b217257788d3`
+  (`fix(ui): keep source diagnostics non-dominating`) is pushed. Readback proved local `HEAD`, `origin/main`, and remote
+  `refs/heads/main` equal with an empty index; every unrelated dirty path remains preserved.
+- GitHub owner issue #41 remains open. Exact checkpoint comment `5369666471` was written and read back with the same
+  commit, causal receipt, mounted census, visual limitation, broad gates, and next-unit boundary.
+
+#### AAR
+
+- Sustain: one exact Luna writer, frozen preimages, real Paint-family fail-first evidence, default-contract
+  preservation, independent coordinator reruns, mounted pixel census, direct review of all supplied photos, safe-Node
+  serial gates, and exact process/port teardown.
+- Improve work/approach: the in-memory raster test does not paint strokes; it can prove the boundary command only from
+  the trace. The real mounted browser Canvas therefore remains mandatory for proving visible boundaries and detecting
+  anti-aliased spill/noise. Keep the focused oracle and native Canvas visual gate paired.
+- Improve tools: the first broad teardown query again matched its own PowerShell command line. The executable-specific
+  `node.exe`/`cmd.exe`/`conhost.exe` census corrected the false positive and proved zero owned processes. Never use a
+  broad command-line match as terminal-process evidence.
+- Highest-risk evidenced weakness: the preview is now substantially more persuasive while exact X4 composition and
+  C++ frame acceptance remain unproved. Preserve `Not verified in game`, reject any 1:1 claim from this screenshot, and
+  require the bounded source reconstruction plus subsequent real-game gate.

@@ -9,14 +9,15 @@ Status: `IN_PROGRESS / PARTIAL — Not verified in game`
 - Project: X4 Forge B119, the linter-first faithful 2D X4 UI editor. Port shipped `helper.lua` and
   `widget_fullscreen.lua`; preserve real Lua calls, configured unpacked-corpus authority, measured keep-outs, and the
   distinction between preview evidence and X4 truth.
-- Current boundary: the source-composition Canvas correction is host-verified, committed, and pushed. Exact source
-  text/colors now survive mounted diagnostics, but unavailable-gray still dominates the image; the supplied `1b`
-  composition is not visually faithful and X4 has not accepted or rendered it.
-- Commit question: `HEAD == origin/main == ace6d46f286593443f4fa2dc6fe0b5f6938d4d88` was proved after push with an
-  empty index. This handoff, `BACKLOG.md`, and the B119 plan are the pending documentation-close checkpoint; stage only
-  those exact paths and preserve every unrelated dirty path.
-- GitHub owner: issue #41 remains open. Source-composition checkpoint comment `5369110625` was written and read back;
-  comment `5367932527` is the prior Canvas checkpoint.
+- Current boundary: the non-dominating source-diagnostic correction is host-verified, committed, and pushed. Opaque
+  unavailable-gray no longer replaces most of the source composition; all supplied reference images were inspected.
+  Exact `1b` hierarchy/composition and X4 acceptance remain open.
+- Commit question: local `HEAD`, `origin/main`, and remote `refs/heads/main` equal
+  `5a1b922f5344421927e4033522b2b217257788d3` with an empty index after the implementation push. This handoff,
+  `BACKLOG.md`, and the B119 plan are the pending documentation-close checkpoint; stage only those exact paths and
+  preserve every unrelated dirty path.
+- GitHub owner: issue #41 remains open. Non-dominating checkpoint comment `5369666471`, source-composition comment
+  `5369110625`, and prior Canvas comment `5367932527` are written and read back.
 
 ## Machine and process state
 
@@ -27,40 +28,39 @@ Status: `IN_PROGRESS / PARTIAL — Not verified in game`
 - Do not deploy, launch X4, write the real mod/live extension/unpacked corpus, or mutate standing config while Ken is
   asleep. Those remain a separate explicit write gate.
 
-## Current source-composition checkpoint
+## Current non-dominating diagnostic checkpoint
 
-- Reproduced cause: `x4UiPaintPlan` emitted source tints/glyphs before whole-owner diagnostic rectangles; the existing
-  Canvas mounted the designed diagnostic map as `Source preview canvas`, so opaque diagnostics erased accepted source
-  composition.
-- Bounded implementation: existing `x4UiCanvasRenderer` now accepts explicit `diagnostic-map | source-composition`.
-  Diagnostic-map remains default. `X4UiSourceEditor` explicitly requests source composition. No second renderer,
-  endpoint, dependency, state owner, caller target, X4 material claim, or game-verification claim was added.
-- Causal fail-first was Canvas `118/119` plus the SourceEditor presentation assertion. Final receipts are Canvas
-  `119/119` (prior diagnostic `44/44`, Stage-B `44/44`), SourceEditor color `12/12`, EditorSession `7/7`, Paint
-  `165/165`, Preview `102/102`, and Scene `139/139`.
+- Reproduced cause: even after source tints/glyphs survived, source-composition filled every uncovered diagnostic
+  interior opaquely. The mounted reference contained `3,209,776 / 3,686,400` exact unavailable-gray pixels.
+- Causal fail-first was Canvas `119/120`: public Paint gap `scene-gap:000011` produced an opaque red interior at `(1,1)`
+  in both source-composition and diagnostic-map, and source-composition emitted no boundary stroke.
+- Bounded implementation: only source-composition now intersects the issued diagnostic geometry/clip, subtracts source
+  coverage, and strokes remaining fragment boundaries. Diagnostic-map retains opaque fill and remains the default. No
+  renderer, route, state owner, dependency, material claim, source edit, or game-truth change was added.
 - Final hashes:
-  - Canvas production `0AFD884CC75B9D4E7785481D473B11F346EAD5A30F3FD9F6FCE59F173B3635AA`;
-  - Canvas selftest `1D0D5F15CCABBBDC1F6DF65DAE55095FF4B3147C9FDABE38F909CD5B7024F8F4`;
-  - SourceEditor production `FB660DCF3DA8C1A9DF06F1CAD1B59A68C2F1AF00A7AE0ED50C83377886BB26B2`;
-  - SourceEditor selftest `3A0B08B90AED0AA72C9E90F78D76AE714C6EFBC987EDF88F271FFC5070B13376`.
-- Implementation commit `ace6d46f286593443f4fa2dc6fe0b5f6938d4d88`
-  (`fix(ui): preserve source composition under diagnostics`) is pushed with remote parity and empty index.
-- Exact mounted source is ignored fixture `aic_menu.lua` SHA-256
-  `1D7A3D67D94894FB3A90BBE4E6BD7A3C5FA32A2EAB1DD2BC5E43F714EC7E35E2`, target `menu.display`, configured
-  canonical core/color, `2560x1440`, scale `1`, overlays off.
-- Mounted result is `rendered/current`, permanent `Not verified in game`, zero console errors, buffer SHA-256
-  `7E2702C76D73B10EF7F6889BEDEB57DD9716BB9B7145798EA28F793CC25FE300`, all `3,686,400` pixels nontransparent/
-  nonblack, exact red diagnostic count `0`, and nonzero cyan/green/amber/white counts. Exact unavailable-gray remains
-  `3,209,776` pixels.
-- Visual evidence:
-  - overlays-off screenshot `evidence/reference-flat-source-composition-off.png`, SHA-256
-    `F30597C4E5173BC0D0AD5DFAA0A5C00BA0A449D8FCC5F91901DE1BC65A95E39C`;
-  - cockpit screenshot `evidence/reference-flat-source-composition-cockpit.png`, SHA-256
-    `F469C127497855F61C7B7398D8AEF620E2EC361CAE44C0204FB8F7FACEEA79B8`;
-  - cockpit buffer SHA-256 `26FD9B20C8675A5860C7224246634704CF1608B5E82C901458F822D1E768269F` and visible measured
-    `x=0.664` guide; overlays were returned off.
-- Direct inspection against supplied `1b-commlink-subtitle-plate.png` proves source content survival but rejects visual
-  parity: gray diagnostic field, fragmented layout, dark-field mismatch, hierarchy, and exact composition remain open.
+  - Canvas production `5FAB04F896067917C178011612DEFE375BEB73B4B9ED0A2BA2915CD067E3645F`;
+  - Canvas selftest `6AD73BBF94A42220411F3A9C21B998BE83438C6439CC6F23827890F7B96A9E92`.
+- Focused/adjacent receipts: Canvas `120/120`, SourceEditor color `12/12`, EditorSession `7/7`, Paint `165/165`, Preview
+  `102/102`, Scene `139/139`, plus typecheck, exact lint, diff hygiene, and production build.
+- Implementation commit `5a1b922f5344421927e4033522b2b217257788d3`
+  (`fix(ui): keep source diagnostics non-dominating`) is pushed with local/origin/remote parity and empty index.
+- Mounted exact source is `aic_menu.lua` SHA-256
+  `1D7A3D67D94894FB3A90BBE4E6BD7A3C5FA32A2EAB1DD2BC5E43F714EC7E35E2`, target `menu.display`, canonical core/color,
+  `2560x1440`, scale `1`, overlays off, `rendered/current`, permanent `Not verified in game`, and zero console errors.
+- Clean buffer SHA-256 `06F3E3FD0A82B1B722B3C77FBBD42F7B0B1FE7EB96DC1FC58C0841FCC734420A` has
+  `3,094,646` transparent and `591,754` nontransparent/nonblack pixels; exact opaque unavailable-gray and exact opaque
+  red diagnostics are both zero. Cyan/green/amber/white source/content classes remain nonzero.
+- Cockpit buffer SHA-256 `4DD0134E64C87CB4E9EA9E2D8551EB825283FD03FF42D227B9C862B9BF7880A2` visibly projects measured
+  `x=0.664`, `y=0.74`, and `y=0.788`; returning overlays off restored the exact clean hash.
+- Evidence census is
+  `dev-docs/b119-ai-influence-dogfood/evidence/reference-flat-source-composition-boundary-census.json`. Clean/cockpit
+  screenshots are `reference-flat-source-composition-boundary.png` SHA-256
+  `7488612898B17FFA5C85218AFB6D935BD11E69C9CB885160FBDD5A0A09DA1B01` and
+  `reference-flat-source-composition-boundary-cockpit.png` SHA-256
+  `D208266289CCBB72284E85C4358E6ACDDD75DEB39388161BA01DA8F570188083`.
+- Manual visual inspection covered the vanilla image and all supplied `00-brief`, `1a`-`1j` images. Gray dominance is
+  fixed, but source geometry remains fragmented and does not match `1b`'s exact left rail, bottom-anchored transcript,
+  three-choice plate, input dock, spacing, or protected native-wheel composition.
 
 ## Latest accepted checkpoint
 
@@ -107,34 +107,34 @@ Status: `IN_PROGRESS / PARTIAL — Not verified in game`
 
 ## Broad validation
 
-- Typecheck, exact-file ESLint, diff hygiene, production build, alternate-renderer scan, and forbidden-pattern scan
-  passed for the source-composition correction.
-- Full serial E2E passed `104/104`; receipt `test-results/e2e-verdict.json` SHA-256
-  `9010B4821ADCB8AD16082AA0EE6006FCC68BBC99325322CE61C274F415086080`; zero failed/flaky/bad, complete
-  discovery/terminal parity, `child-close`, `treeGone=true`, and no owned PID remained.
-- Complete precommit passed twice under process-local Node `24.19.0` / libuv `1.52.1`: verdict `55/55`, Vite lifecycle,
-  product-copy, writer `14/14` plus extension `8/8`, capability/MCP, action-receipt `82/56`, typecheck, and size limits.
-- Graph refreshed to `9689` nodes / `24281` edges / `301` communities; the post-commit hook reported no additional
+- Typecheck, exact-file ESLint, diff hygiene, production build, and all focused/adjacent X4 UI authority suites passed
+  for the non-dominating correction.
+- Full serial E2E passed `104/104` in `8.4m`; receipt `test-results/e2e-verdict.json` SHA-256
+  `201E044179D245F68A2647DEDAABF64DAFA424D02366982AC89CE42D7FDC7A4C`; zero failed/flaky/bad/quarantined-blocking,
+  `child-close`, `treeGone=true`, and no owned PID remained.
+- Complete precommit passed twice under process-local Node `24.19.0` / libuv `1.52.1` (direct promotion gate plus commit
+  hook): verdict `55/55`, Vite lifecycle, product-copy, writer `14/14` plus extension `8/8`, capability
+  `12 / 297 / 1 / 11`, MCP, action-receipt `82/56`, typecheck, and size limits.
+- Graph refreshed to `9690` nodes / `24284` edges / `305` communities; the post-commit hook reported no additional
   topology delta and no Graphify process remained.
-- Live-state containment remained exact: `.studio-state` 9 files / 4 dirs / 12,382,674 bytes; `data` 3,686 files /
-  42 dirs / 607,386,585 bytes; `config.json` 463 bytes at SHA-256
-  `3EC65D540E6763D13D6F8F27D9005F80C3C855B00D3DCFDD5E7330726AE37779` with unchanged timestamp.
-- Fresh zero-write Luna audit was `CLEAN`; no production, Scene, Paint, real-mod, live-game, or corpus bytes changed.
+- Final containment: ports `3100`, `3101`, and `3300` free; X4 absent; zero owned worker, Forge, browser, E2E,
+  precommit, or Graphify process; Node returned to baseline `50`. No real mod, live extension, unpacked corpus, standing
+  config, or game directory was written.
 - No capability-map delta.
 
 ## Honest visual state
 
-The mounted Canvas now preserves accepted source text and cyan/green/amber composition beneath diagnostics. That closes
-the reproduced diagnostic-occlusion defect. It does not close design fidelity: `3,209,776 / 3,686,400` pixels remain
-unavailable-gray and the source geometry is fragmented relative to
-`C:\Users\Moshi\Desktop\# AI Influence mod UI design`. Exact spatial hierarchy, dark field, imagery, and composition
-remain open. A better pixel-producing preview is still not proof of C++ frame acceptance or game appearance.
+The mounted Canvas now preserves accepted source text/colors while using thin diagnostic boundaries over transparent
+unavailable interiors. That closes both reproduced opaque-diagnostic defects. It does not close design fidelity: the
+source geometry is still fragmented relative to `C:\Users\Moshi\Desktop\# AI Influence mod UI design`, and exact
+spatial hierarchy/composition remains open. A better pixel-producing preview is still not proof of C++ frame acceptance
+or game appearance.
 
 ## Eyeball queue
 
 1. **Forge reference-parity check — pending reconstruction, not merely approval.**
    1. Open the supplied design folder and the clean mounted screenshot side by side.
-   2. Confirm the current screenshot is only the coarse gray/red geometry, not the intended design.
+   2. Confirm the gray dominance is gone but the current screenshot remains fragmented and is not the intended `1b`.
    3. Do not approve deployment from this image; first reconstruct the missing source samples/text/composition through
       the Forge source-first path and rerun mounted comparison.
 2. **X4 frame and experience proof — Ken-gated.**
@@ -148,11 +148,10 @@ remain open. A better pixel-producing preview is still not proof of C++ frame ac
 
 ## Next bounded unit
 
-Make unavailable diagnostics truthful but non-dominating in source composition, then continue reconstructing the AI
-Influence `1b` design inside the ignored isolated workspace using the supplied photos/spec and exact real Lua/corpus
-authority. Inspect every reference image visually; extend the existing source/sample/Scene/Paint/Canvas chain, not a
-parallel renderer. Acceptance is mounted Forge output that materially matches the reference at `2560x1440`, with
-linter/keep-outs visible and all host gates retained. It still cannot claim X4 acceptance.
+Reconstruct the AI Influence `1b` design inside the ignored isolated workspace using the already-inspected photos/spec
+and exact real Lua/corpus authority. Extend the existing source/sample/Scene/Paint/Canvas chain, not a parallel
+renderer. Acceptance is mounted Forge output that materially matches the reference at `2560x1440`, with linter and
+keep-outs visible and all host gates retained. It still cannot claim X4 acceptance.
 
 Before any real-mod/game write, present this exact gate in one paragraph: the operation will deploy the approved Forge
 candidate into the real mod/live extension so X4 can test it; a bad frame may disappear, close the conversation, or
@@ -186,7 +185,8 @@ untracked `({` path. Never stage or clean them as part of B119.
 
 - Authoritative plan: `docs/plans/2026-08-10-b119-x4-ui-editor-linter-first.md`.
 - Source-first design: `docs/plans/2026-08-10-b119-x4-ui-editor-source-first-design.md`.
-- Open owner issue: GitHub #41; source-composition checkpoint comment `5369110625` is read back.
-- Suggested documentation commit: `docs(ui): record B119 source-composition checkpoint`.
+- Open owner issue: GitHub #41; non-dominating checkpoint comment `5369666471` and source-composition checkpoint
+  comment `5369110625` are read back.
+- Suggested documentation commit: `docs(ui): record B119 non-dominating diagnostics checkpoint`.
 - Overall status remains `PARTIAL / Not verified in game`; source/sample reconstruction, deploy-byte identity, C++
   frame acceptance, and player-visible X4 comparison remain open.
