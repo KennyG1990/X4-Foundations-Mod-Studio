@@ -9897,3 +9897,25 @@ Status: `SPECIFIED / ISOLATED`; overall B119 remains `PARTIAL / Not verified in 
   screenshot/readback; until then every surface must retain `Not verified in game`.
 - Project AAR banking: recorded here. The external StarForge wiki AAR is intentionally not mutated while the operator
   is asleep; synchronize this repository-backed outcome in a later explicitly gated records pass.
+
+#### RECORD PROJECTION — source-canonical partial edit checkpoint — 2026-08-21
+
+- Git: implementation commit `743ef85f1d451a8f32c42670e716bffea215cb7d` was pushed; local `HEAD`,
+  `origin/main`, and remote `refs/heads/main` were identical and the index was empty after push.
+- GitHub: issue #41 remained open. Comment `5374884567` was written and read back with the exact commit, implementation
+  boundary, focused/oracle/E2E/precommit evidence, retained native-crash receipt, no-live-write statement, and open
+  game-truth gates.
+- Notion: page `3b84618e-d15b-8190-821e-c0eb96f43d5a` was fetched with its data-source schema, updated, and read back.
+  `Status=In Progress`, `Evidence Grade=Partial`, Summary/Reverse Sync name the commit and GitHub comment, both review
+  dates are `2026-08-21`, and the appended checkpoint retains `Not verified in game`.
+- Drive: document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE` was appended under a required-revision guard and
+  read back. The first exact insertion index displaced the prior paragraph's terminal period into a one-character
+  trailing paragraph; this was reproduced from paragraph indexes and corrected under the next revision guard. Final
+  revision
+  `AIroW34cZtAuZnOt_0zmtdCpU402iNV-uYE_5mVy2ObYxJcnN3Ihh6gTjvxSWNuYyC4o0G_gdF7u4LMqqVVlQAG31CDUH4vX63QSdPq0CS6E`
+  contains the complete checkpoint, restores the preceding period, and has no stray-dot paragraph.
+- Projection AAR trigger: Google Docs paragraph `endIndex` includes the terminal paragraph marker; insert before
+  `endIndex - 1` only after proving whether the visible final character is inside that range. Continue to use required
+  revision IDs and immediate paragraph-level readback.
+- Repository Markdown remains authoritative. External record synchronization does not complete B119 or authorize a
+  mod/game write; overall status remains `PARTIAL / Not verified in game`.

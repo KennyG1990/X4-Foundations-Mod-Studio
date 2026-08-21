@@ -15,9 +15,9 @@ Status: `IN_PROGRESS / PARTIAL — Not verified in game`
 - Overall boundary: host validation is green, but exact AI Influence `1b` reconstruction, deploy-byte identity, C++
   frame acceptance, and player-visible X4 comparison remain open. Every surface must still say
   `Not verified in game`.
-- Commit question: this source-edit checkpoint is fully validated but not yet committed at the time of this handoff
-  write. Baseline `HEAD == origin/main == abec685089a54748798ef3bea54a8e4be24191d5`; stage only the exact B119 paths
-  listed below, commit/push, then overwrite this handoff with the resulting commit and parity receipt.
+- Commit question: implementation commit `743ef85f1d451a8f32c42670e716bffea215cb7d` is pushed; local `HEAD`,
+  `origin/main`, and remote `refs/heads/main` are identical and the index is empty. GitHub, Notion, and Drive were
+  updated and read back. Commit/push this exact documentation synchronization before starting another unit.
 
 ## Operator and machine state
 
@@ -75,27 +75,25 @@ Status: `IN_PROGRESS / PARTIAL — Not verified in game`
   custom-prototype control is explicitly generic closed-data coverage, while six malformed records isolate strict
   color validation; four alias classes each have independent positive sensitivity assertions.
 - Triggered AAR: omitted replay authority, tests-first supported-color rejection, two review repair rounds, one TS2554
-  correction, first full E2E native crash, and corrected no-result PowerShell diagnostics. Full detail is appended to
-  `docs/plans/2026-08-10-b119-x4-ui-editor-linter-first.md`.
+  correction, first full E2E native crash, corrected no-result PowerShell diagnostics, and one revision-guarded Drive
+  insertion whose index displaced the preceding paragraph's final period. The exact punctuation was repaired and read
+  back under the new revision. Full detail is appended to the plan.
 - No capability-map delta. The external StarForge wiki AAR was intentionally not mutated while Ken slept.
 
-## Exact commit boundary
+## Git and projection receipts
 
-Stage only:
-
-- `BACKLOG.md`
-- `SESSION-HANDOFF.md`
-- `docs/plans/2026-08-10-b119-x4-ui-editor-linter-first.md`
-- `src/lib/x4UiLayoutProgram.ts`
-- `src/lib/x4UiLayoutProgram.selftest.ts`
-- `src/lib/x4UiSourceEdits.ts`
-- `src/lib/x4UiSourceEdits.selftest.ts`
-
-Suggested title: `fix(ui): preserve canonical color authority across source edits`.
-
-Before commit, verify the exact index path set and that no prior Git/precommit process remains. After push, prove local
-`HEAD`, `origin/main`, and remote `refs/heads/main` parity. Then update/read back GitHub #41 and the existing Notion and
-Drive B119 records; the issue stays open and repository Markdown remains authoritative.
+- Implementation commit: `743ef85f1d451a8f32c42670e716bffea215cb7d`,
+  `fix(ui): preserve canonical color authority across source edits`.
+- Git parity: local `HEAD == origin/main == remote refs/heads/main`; index empty after push.
+- GitHub #41: comment `5374884567` written and read back; issue state `open`, comment count `66`.
+- Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a`: properties and appended checkpoint read back with
+  `Status=In Progress`, `Evidence Grade=Partial`, commit/comment receipts, and both review dates `2026-08-21`.
+- Drive doc `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`: checkpoint read back at revision
+  `AIroW34cZtAuZnOt_0zmtdCpU402iNV-uYE_5mVy2ObYxJcnN3Ihh6gTjvxSWNuYyC4o0G_gdF7u4LMqqVVlQAG31CDUH4vX63QSdPq0CS6E`.
+  The first insertion displaced one period because the terminal paragraph index was exclusive; a second
+  revision-guarded batch restored it and removed the stray one-character paragraph. Final readback is clean.
+- Repository Markdown remains authoritative; external projections do not change the `PARTIAL / Not verified in game`
+  status or authorize deployment.
 
 ## Dirty-worktree preservation
 
@@ -118,5 +116,5 @@ scripts, `test-results/.last-run.json`, all VS Code extension/evidence changes, 
 
 - Authoritative plan: `docs/plans/2026-08-10-b119-x4-ui-editor-linter-first.md`.
 - Source-first design: `docs/plans/2026-08-10-b119-x4-ui-editor-source-first-design.md`.
-- Owner issue: GitHub #41 remains open; prior checkpoint comment `5370579401` is read back.
+- Owner issue: GitHub #41 remains open; current checkpoint comment `5374884567` is read back.
 - Overall B119 status: `PARTIAL / Not verified in game`.

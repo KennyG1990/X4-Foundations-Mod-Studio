@@ -110,8 +110,9 @@ and Source Edits `74/74`; six adjacent UI suites, typecheck, exact lint, build, 
 precommit pass. The first tracked full E2E attempt died fail-closed with Windows `0xC0000409`; one targeted `1/1`
 boundary check and one controlled retry passed `103/103`, complete receipt `5CE76552...41391`, with clean teardown and
 unchanged live-state hashes. Fresh review found no P0-P2 production defect; both P3 proof findings were corrected.
-No mod/game/corpus/config write occurred. Commit/push and record projections are the next checkpoint; exact `1b`
-reconstruction, deploy-byte identity, C++ frame acceptance, and player-visible X4 proof remain open. Overall B119 is
+No mod/game/corpus/config write occurred. Commit `743ef85f1d451a8f32c42670e716bffea215cb7d` is pushed with three-way
+parity; GitHub #41 comment `5374884567`, Notion, and Drive were written and read back. Exact `1b` reconstruction,
+deploy-byte identity, C++ frame acceptance, and player-visible X4 proof remain open. Overall B119 is
 `PARTIAL / Not verified in game`; GitHub #41 remains open.
 **P6 Canvas audit rejection 2026-08-19 — FINDINGS / correction active:** The first colour-bearing Canvas candidate is
 focused-green at `100/100`, Stage-B `25/25`, production/selftest
