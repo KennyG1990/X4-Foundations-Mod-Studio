@@ -12525,15 +12525,7 @@ app.post("/api/agent/deploy-verify", (req, res) => {
         ? `0 errors; ${pfWarnings} active warning(s), ${preflight.summary.suppressedWarnings} reviewed suppression(s), ${diskValidationSkipped.length} disk file(s) above/unavailable to the validation loader; ${deltaDetail}`
         : `0 errors, 0 warnings across the full stack; ${deltaDetail}`);
 
-    // 3. Deploy — staging (writeSnapshots) + game extensions (clean), same as /deploy.
-    let stagingPath = '';
-    if (modWorkspacePath) {
-      if (!fs.existsSync(modWorkspacePath)) fs.mkdirSync(modWorkspacePath, { recursive: true });
-      const stagingRoot = path.join(modWorkspacePath, '.forge-builds', 'loose');
-      stagingPath = compileWorkspaceToFolder(ws, stagingRoot, 'store', true);
-    }
     const extensionsPath = path.join(x4GamePath, 'extensions');
-    if (!fs.existsSync(extensionsPath)) fs.mkdirSync(extensionsPath, { recursive: true });
 
     // B93.6 — DRY RUN. Deletion is the direction that cannot be undone, and the author previously
     // only learned what a deploy removed by diffing afterwards. This reports the exact effect and
@@ -12562,6 +12554,15 @@ app.post("/api/agent/deploy-verify", (req, res) => {
         note: 'Nothing was written. Re-send without dryRun to apply exactly this effect.',
       });
     }
+
+    // 3. Deploy — staging (writeSnapshots) + game extensions (clean), same as /deploy.
+    let stagingPath = '';
+    if (modWorkspacePath) {
+      if (!fs.existsSync(modWorkspacePath)) fs.mkdirSync(modWorkspacePath, { recursive: true });
+      const stagingRoot = path.join(modWorkspacePath, '.forge-builds', 'loose');
+      stagingPath = compileWorkspaceToFolder(ws, stagingRoot, 'store', true);
+    }
+    if (!fs.existsSync(extensionsPath)) fs.mkdirSync(extensionsPath, { recursive: true });
     const deploymentTarget = path.join(extensionsPath, effectiveModId(activeBuildWorkspace(ws)));
     try {
       pendingDeployRecovery = prepareDeploymentRecoveryReceipt(extensionsPath, deploymentTarget, modId);

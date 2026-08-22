@@ -3490,17 +3490,29 @@ async function main() {
 
   // #6 dry run reports the effect and writes NOTHING.
   const dryTarget = path.join(liveExtensions, 'stale_probe_mod');
+  const dryStagingTarget = path.join(safeWorkspace, '.forge-builds', 'loose', 'stale_probe_mod');
   const beforeDry = fs.existsSync(dryTarget);
+  const beforeDryHash = beforeDry ? regularTreeHash(dryTarget) : null;
+  const beforeDryStaging = fs.existsSync(dryStagingTarget);
+  const beforeDryStagingHash = beforeDryStaging ? regularTreeHash(dryStagingTarget) : null;
   const dry = await req('POST', '/api/agent/deploy-verify', SESSION_TOKEN, { workspace: staleImport.json?.workspace, autoReimport: true, dryRun: true });
   ok('dry_run_returns_an_effect', dry.status === 200 && dry.json?.dryRun === true && !!dry.json?.effect, `status=${dry.status}`);
   ok('dry_run_lists_files_it_would_add', Array.isArray(dry.json?.effect?.added) && dry.json.effect.added.length > 0, `added=${(dry.json?.effect?.added || []).length}`);
   ok('dry_run_reports_deletions_explicitly', Array.isArray(dry.json?.effect?.deleted), JSON.stringify((dry.json?.effect?.deleted || []).slice(0, 3)));
-  ok('dry_run_wrote_nothing', fs.existsSync(dryTarget) === beforeDry, `targetExisted=${beforeDry} now=${fs.existsSync(dryTarget)}`);
+  const afterDry = fs.existsSync(dryTarget);
+  const afterDryHash = afterDry ? regularTreeHash(dryTarget) : null;
+  const afterDryStaging = fs.existsSync(dryStagingTarget);
+  const afterDryStagingHash = afterDryStaging ? regularTreeHash(dryStagingTarget) : null;
+  ok('dry_run_wrote_nothing', afterDry === beforeDry && (!beforeDry || afterDryHash === beforeDryHash) && afterDryStaging === beforeDryStaging && (!beforeDryStaging || afterDryStagingHash === beforeDryStagingHash),
+    `target=${beforeDry}/${afterDry} staging=${beforeDryStaging}/${afterDryStaging}`);
+  ok('dry_run_does_not_advertise_staging_path', !Object.prototype.hasOwnProperty.call(dry.json || {}, 'stagingPath'), JSON.stringify(dry.json || {}));
   ok('dry_run_does_not_promote_validation_baseline', dry.json?.baselinePromotion?.recorded === false && dry.json?.validationDelta?.status === 'no_baseline', JSON.stringify(dry.json?.baselinePromotion));
 
   // #4 autoReimport actually unblocks the deploy the guard refused.
   const autoDeploy = await req('POST', '/api/agent/deploy-verify', SESSION_TOKEN, { workspace: staleImport.json?.workspace, autoReimport: true });
   ok('auto_reimport_unblocks_the_deploy', autoDeploy.status === 200 && autoDeploy.json?.ok === true, `status=${autoDeploy.status} stage=${autoDeploy.json?.stage}`);
+  ok('auto_reimport_deploy_writes_and_returns_staging_path', autoDeploy.json?.stagingPath === dryStagingTarget && fs.existsSync(dryStagingTarget),
+    `expected=${dryStagingTarget} actual=${autoDeploy.json?.stagingPath}`);
   ok('verified_deploy_returns_ready_recovery', autoDeploy.json?.recovery?.kind === 'deploy' && /^[a-f0-9]{64}$/.test(String(autoDeploy.json?.recovery?.expectedCurrentHash || '')), JSON.stringify(autoDeploy.json?.recovery || {}));
   ok('successful_deploy_promotes_last_green_baseline', autoDeploy.json?.baselinePromotion?.recorded === true && (autoDeploy.json?.checklist || []).some(c => c.id === 'baseline' && c.status === 'pass'), JSON.stringify(autoDeploy.json?.baselinePromotion));
   ok('auto_reimport_is_reported_not_silent',
