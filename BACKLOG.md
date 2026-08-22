@@ -129,6 +129,13 @@ Exact design parity, real deploy bytes, C++ acceptance, and player-visible X4 pr
 `PARTIAL / Not verified in game` and GitHub #41 remains open. Implementation commit
 `959eb680125395148bd5ec969d01ce9685d94cc6` is pushed with local/origin/remote parity; GitHub #41 comment
 `5379470924`, Notion, and Drive revision `AIroW35k...F4CF` were written and read back.
+**Final mounted-source export checkpoint 2026-08-22 — HOST/EXPORT VERIFIED / GAME TRUTH OPEN:** Read-only parity found
+the mounted final source at `BF22DF42...40E44` while both static candidates still held older `C0FC458D...2BC4B`.
+Forge's existing package owner emitted exact `BF22DF42...40E44`; a fresh complete 42-file isolated candidate differs
+from the prior validated candidate at exactly `aic_menu.lua`. Full `validate:mod` is `VALID`, exit `0`, with zero
+errors/warnings and 24 informational static gaps; the real source remains exact `4253D9BD...47DD7`, port/process/game
+containment is clean, and receipts are under `dev-docs/b119-ai-influence-dogfood/final-export-validation/`. The candidate
+is ready for the separately authorized real-mod deploy/X4 gate. B119 remains `PARTIAL / Not verified in game`.
 **P6 Canvas audit rejection 2026-08-19 — FINDINGS / correction active:** The first colour-bearing Canvas candidate is
 focused-green at `100/100`, Stage-B `25/25`, production/selftest
 `490F430673C51957751A3113C68046A10C811F355A349FDDBC2C064AB119DBB3` /

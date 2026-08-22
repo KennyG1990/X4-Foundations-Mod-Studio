@@ -2,7 +2,7 @@
 
 Date: 2026-08-22
 Project: `F:\DEV_ENV\X4_Forge`
-Status: `IN_PROGRESS / PARTIAL — host checkpoint verified; not verified in game`
+Status: `IN_PROGRESS / PARTIAL — host and final export verified; not verified in game`
 
 ## Session-start brief
 
@@ -10,12 +10,13 @@ Status: `IN_PROGRESS / PARTIAL — host checkpoint verified; not verified in gam
   invent an approximate renderer or treat preview success as engine acceptance.
 - Current bounded result: source-canonical frame-block authoring, source-linked preview geometry diagnostics,
   wrapped-text placement evidence, and table-background draw applicability are host-verified. The isolated AI Influence
-  `1b` source is mounted and visually inspected, but exact design parity and game truth remain open.
-- Overall boundary: every preview surface continues to say `Not verified in game`. Real mod bytes, deployment, C++
-  frame acceptance, X4 launch, and player-visible comparison are not part of the host checkpoint.
-- Commit question: implementation commit `959eb680125395148bd5ec969d01ce9685d94cc6` is pushed and read back with
-  local/origin/remote parity and an empty index. GitHub, Notion, and Drive projections are also written and read back.
-  Commit/push this exact documentation synchronization before starting the real-mod/game unit.
+  `1b` source is mounted and visually inspected. Its final `BF22...` bytes are also exported through Forge into a fresh
+  complete 42-file candidate and pass full-mod validation. Exact design parity and game truth remain open.
+- Overall boundary: every preview surface continues to say `Not verified in game`. The real mod remains byte-identical;
+  deployment, C++ frame acceptance, X4 launch, and player-visible comparison are not part of the host/export checkpoint.
+- Commit question: implementation `959eb680125395148bd5ec969d01ce9685d94cc6` and documentation close
+  `c5afd886f3c105134bf2a2fea7ff1be82c84e491` are pushed with local/origin/remote parity. Commit and push only the
+  current three-file final-export synchronization before crossing the real-mod/game unit.
 
 ## Operator and machine state
 
@@ -50,6 +51,21 @@ Status: `IN_PROGRESS / PARTIAL — host checkpoint verified; not verified in gam
   `BF22DF42391F191C9F43D8F4EF6FEFDEFB8C60586D8646CC9F5436F426240E44`. Transcript budget is `303 px`, orange
   widget height is `187 px`, all three issued Zekton lines fit, and the old line-535 overflow is absent. No real mod,
   game, corpus, or config file changed.
+
+## Final Forge export and complete candidate
+
+- Read-only reconciliation found the old static variant/full candidate at `C0FC458D...2BC4B` while the mounted source
+  was final `BF22DF42...40E44`; this was a stale-export gap.
+- Forge's existing `POST /api/agent/package` owner emitted exact `BF22DF42...40E44`, `99,841` bytes, from mounted
+  workspace `ws_d3d5e1ca8d919c57d6f40cad` at content/snapshot hashes `39efe7d3c3be0a4c` / `b1122cc7f89f13f1`.
+- Fresh complete candidate:
+  `dev-docs/b119-ai-influence-dogfood/final-export-validation/candidate-mod`. It has `42` files and differs from the
+  prior validated complete candidate at exactly one path: `ui/addons/ai_influence_chat/aic_menu.lua`.
+- `npm run validate:mod` passed `VALID`, exit `0`, `0` errors, `0` warnings, and `24` informational static gaps.
+  Receipts: `final-export-validation/forge-export-receipt.json` and `validator.result.json`; validator stdout SHA-256
+  `935528374040C944F5F973A3C6E07B08EAC347EAF89ED46D5FB4AAF62AC4272F`.
+- Real source remains `4253D9BD...47DD7`. The isolated server is stopped, port `3300` is free, X4 is absent, and Node
+  returned to baseline `64`.
 
 ## Mounted and visual evidence
 
@@ -99,7 +115,10 @@ Status: `IN_PROGRESS / PARTIAL — host checkpoint verified; not verified in gam
   geometry fixture shapes; a stale build masked browser behavior; Playwright action timeouts required persisted
   readback; the first oracle run omitted its API; system Node produced a cascade; and an unrelated untracked E2E spec
   contaminated default discovery. External close also exposed a POSIX/PTY-only Google Docs trusted-read bridge on
-  Windows and one PowerShell silent-command truthiness mistake; both are recorded in the authoritative plan.
+  Windows and one PowerShell silent-command truthiness mistake; both are recorded in the authoritative plan. Final
+  reconciliation also found mounted/source-candidate drift; every future deploy gate must prove mounted source hash,
+  Forge package source hash, and isolated candidate hash are identical. The first export GET's missing-client refusal
+  and one parse-only teardown attempt changed no state and remain AAR triggers.
 - Highest-risk observed weakness: default Node `24.15.0` can turn one API-process loss into dozens of misleading
   feature failures. Keep the red receipt and use the controlled `24.19.0` tracked-only gate until the host defect is
   removed. No capability-map delta.
@@ -114,9 +133,9 @@ marketing-showcase spec/evidence, and untracked `({`. The controlled tracked E2E
 
 ## Git and external projection state
 
-- Implementation commit: `959eb680125395148bd5ec969d01ce9685d94cc6`; `HEAD == origin/main ==` remote
-  `refs/heads/main`; index empty after push. Exactly `14/14` declared B119 paths were staged; unrelated dirty files
-  remain preserved.
+- Implementation commit: `959eb680125395148bd5ec969d01ce9685d94cc6`; documentation close:
+  `c5afd886f3c105134bf2a2fea7ff1be82c84e491`. Before this final-export documentation delta,
+  `HEAD == origin/main ==` remote `refs/heads/main`; the index was empty and unrelated dirty files remained preserved.
 - GitHub owner issue #41 remains open with `67` comments; exact new comment `5379470924` contains the commit and
   partial/game-truth boundary.
 - Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a` readback: `Status=In Progress`, `Evidence Grade=Partial`, exact
@@ -125,16 +144,16 @@ marketing-showcase spec/evidence, and untracked `({`. The controlled tracked E2E
   one commit occurrence, revision
   `AIroW35kObhxwpQWkygyGlWs1Ww19hL3hH7Ryjrvjmr76NYq3dRLDlFGZKMeShtGD6TN5607S-swQ_OD77EWMUXkRDIYwZxQd2FsYiw7F4CF`.
 - Repository Markdown remains authoritative. External records do not authorize deployment or change
-  `PARTIAL / Not verified in game`. This three-file synchronization is the pending documentation-close commit.
+  `PARTIAL / Not verified in game`. This three-file final-export synchronization is the pending commit.
 
 ## Active next bounded unit and eyeball queue
 
-1. Commit and push only this three-file documentation synchronization; prove local/origin/remote parity and preserve
+1. Commit and push only this three-file final-export documentation synchronization; prove local/origin/remote parity and preserve
    every unrelated dirty path.
-2. When the operator is awake, present the real-write paragraph: exact real-mod target, frozen rollback snapshot and
+2. Present the real-write paragraph: exact real-mod target, frozen rollback snapshot and
    hashes, possible whole-frame refusal/UI reload/conversation closure, and restoration procedure. Wait for explicit
    `go`.
-3. Deploy only the approved candidate, launch X4, capture engine acceptance/failure and the player-visible frame, then
+3. Deploy only the approved `BF22...` candidate, launch X4, capture engine acceptance/failure and the player-visible frame, then
    compare it with Forge and the supplied `1b` reference. Until those pass, retain
    `PARTIAL / Not verified in game`.
 
@@ -143,4 +162,5 @@ marketing-showcase spec/evidence, and untracked `({`. The controlled tracked E2E
 - Authoritative plan: `docs/plans/2026-08-10-b119-x4-ui-editor-linter-first.md`.
 - Source-first design: `docs/plans/2026-08-10-b119-x4-ui-editor-source-first-design.md`.
 - Owner issue: GitHub #41 remains open.
+- Final isolated export/validation: `dev-docs/b119-ai-influence-dogfood/final-export-validation/`.
 - Overall B119 status: `PARTIAL / Not verified in game`.

@@ -10521,3 +10521,66 @@ Status: `SPECIFIED / IN PROGRESS`; overall B119 remains `PARTIAL / Not verified 
 - A separate post-commit Git assertion initially threw because PowerShell treats a silent `git diff --cached --quiet`
   result as false regardless of exit status. The corrected assertion checked `$LASTEXITCODE` and proved the index
   empty before push. Preserve exit-code assertions for silent Git commands.
+
+## FINAL MOUNTED-SOURCE EXPORT AND FULL-CANDIDATE VALIDATION — 2026-08-22
+
+### PLAN / BASELINE / RECONCILE
+
+- Bounded unit: reconcile the final Forge-mounted `BF22...` source with the static dogfood/deploy candidate, export
+  through Forge's existing package authority, build a fresh isolated complete-mod candidate, and validate it before
+  presenting any real-mod write gate. Real mod, game, unpacked corpus, and standing configuration remain read-only.
+- Baseline: `HEAD == origin/main == c5afd886f3c105134bf2a2fea7ff1be82c84e491`; unrelated dirty paths were
+  preserved. The real source was SHA-256
+  `4253D9BD9DE4113D4DE0B881DBF5A1E90CAA7B30F735BA925403EBEF7EC47DD7`, `87,366` bytes. The mounted workspace
+  contained final source SHA-256 `BF22DF42391F191C9F43D8F4EF6FEFDEFB8C60586D8646CC9F5436F426240E44`,
+  `99,841` bytes, while both the static source-built variant and prior full candidate still contained older
+  `C0FC458D2166E58E8DF7FE658458E88A7080DB15013451C88F7C9F05EA12BC4B`, `99,846` bytes.
+- `[REPRODUCED]` This was a stale-export gap, not a source-authoring failure: Forge's mounted registry persisted all
+  four final CAS edits, but the earlier static candidate predated them. The existing owner is
+  `POST /api/agent/package -> buildWorkspaceFileManifest()`, which materializes imported `passthroughFiles` into the
+  package manifest. Direct extraction from the registry JSON was therefore rejected as the export path.
+- The package endpoint's ten-file imported subset is not a complete AI Influence mod and its own cross-file validation
+  is expected red (`68` missing MD/listener relationships plus one fixture-ID readiness error). Its exact source bytes
+  are authoritative for export; the complete copied 42-file candidate plus `npm run validate:mod` is authoritative for
+  full-mod acceptance.
+- Rollback/checkpoint: the prior `C0FC...` candidate and source-built evidence remain immutable. New artifacts live only
+  under `dev-docs/b119-ai-influence-dogfood/final-export-validation/`; the real source hash is checked before and after.
+
+### IMPLEMENT / VALIDATE
+
+- An isolated production server was started on port `3300` against the existing mounted run's state/data/config/
+  discovery roots and the configured read-only X4 9.00 corpus. The first workspace GET correctly refused
+  `CLIENT_ID_REQUIRED`; it wrote nothing. Supplying bounded client identity `client_b119export20260822` produced
+  workspace `ws_d3d5e1ca8d919c57d6f40cad`, version `1787380417234`, content hash `39efe7d3c3be0a4c`, and snapshot
+  hash `b1122cc7f89f13f1`.
+- Forge's package response emitted `ui/addons/ai_influence_chat/aic_menu.lua` at exact SHA-256
+  `BF22DF42391F191C9F43D8F4EF6FEFDEFB8C60586D8646CC9F5436F426240E44`, `99,841` bytes. The exported file and
+  fresh complete candidate read back at the same hash.
+- The fresh candidate contains `42` files. Its deterministic manifest comparison with the previously validated complete
+  candidate reports exactly one changed path: `ui/addons/ai_influence_chat/aic_menu.lua`; no file is missing or added.
+  Export/locality receipt: `dev-docs/b119-ai-influence-dogfood/final-export-validation/forge-export-receipt.json`.
+- Full validation command used process-local Node `24.19.0`:
+  `npm run validate:mod -- "dev-docs/b119-ai-influence-dogfood/final-export-validation/candidate-mod"`.
+  It passed `VALID`, exit `0`, with `0` structural, cue, cross-file, schema, AI-script, script-property, warning, or
+  project-rule errors. The remaining `24` findings are informational undefined-global/static-verification gaps and
+  retain the explicit no-game-proof boundary. Receipt:
+  `dev-docs/b119-ai-influence-dogfood/final-export-validation/validator.result.json`; stdout SHA-256
+  `935528374040C944F5F973A3C6E07B08EAC347EAF89ED46D5FB4AAF62AC4272F`; stderr is empty.
+- Containment readback: the real source remained exactly `4253D9BD...47DD7`; no real mod/game/corpus/config byte was
+  written. The owned server was stopped; port `3300` is free, X4 count is `0`, and shared Node count returned to the
+  baseline `64`.
+
+### REVIEW / CLOSE / AAR
+
+- Requirement review: final mounted source-to-package identity, exact one-file candidate locality, complete-mod static
+  validation, rollback preservation, and live-root containment are done and evidenced. The approved candidate is now
+  ready for the separate real-write gate. Engine C++ frame acceptance and player-visible comparison remain untested.
+- Status: `HOST/EXPORT VERIFIED`; overall B119 remains `PARTIAL / Not verified in game`. The next operation is not more
+  preview implementation: present the real-mod write/deploy paragraph, wait for explicit `go`, then deploy and inspect
+  X4 itself.
+- Triggered AAR: mounted UI edits and static deploy candidates can diverge unless final export identity is checked
+  explicitly. Add the fail-closed rule `mounted source hash == Forge package source hash == isolated candidate hash`
+  before every deploy gate. The initial missing-client refusal and one parse-only PowerShell teardown attempt changed no
+  state; both are retained as tool/procedure failures. A package-subset validation result must never be substituted for
+  full-mod validation.
+- Suggested commit title: `docs(b119): record final Forge export candidate validation`.
