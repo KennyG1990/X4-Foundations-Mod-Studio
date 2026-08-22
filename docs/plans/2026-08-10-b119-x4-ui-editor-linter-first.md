@@ -10725,3 +10725,100 @@ Status: `SPECIFIED / IN PROGRESS`; overall B119 remains `PARTIAL / Not verified 
   issues and exposed the causal Windows absolute-path rejection. Do not substitute direct Docs writes when the required
   trusted-read bridge cannot establish control awareness. The Notion comment list also needs pagination/newest-comment
   targeting before it can serve as a universal comment-readback oracle.
+
+## ISOLATED ACTUAL DEPLOY / ROLLBACK AND TRUTHFUL HISTORY REPAIR — 2026-08-22
+
+### PLAN / BASELINE / RECONCILE
+
+- Bounded unit: before requesting authority to touch the real target, execute the normal non-dry deploy and exact
+  history rollback against an isolated X4 root whose `x4_ai_influence` pre-state is byte-identical to the installed
+  extension. Require response, disk, recovery, and history agreement; preserve every real source/staging/game byte.
+- Baseline: `HEAD == origin/main == f12a1678631a56c5cb0b97c0cb939d2b9fc08259`. Candidate remained
+  `42 / 11 / 9,285,585 / f2a1f2fd...1cfbf5`; real installed and scratch installed both began
+  `126 / 18 / 11,262,072 / a9046192...eb295`; standing staging remained
+  `155 / 19 / 537,684,179 / 1808f251...d758`. X4 and all owned ports were idle.
+- Isolation used sibling fake-game, source, mod-workspace, state, data, config, and discovery roots under ignored
+  `dev-docs/.../isolated-deploy-rehearsal-r1`. The first server start failed closed because data-backed runtime-debug
+  sessions overlapped the broad filesystem source root. Narrowing `filesystemPath` to a sibling `source-root` removed
+  the overlap without weakening the store guard or touching standing configuration.
+- The first actual deploy passed bytes/doctor/recovery and observed the authoritative applied tree, but its durable
+  history row recorded `0` deletions and `0` preserved roots despite preview and disk proving `39` and `6`. This violated
+  the declared receipt agreement gate, so real deployment remained locked and the plan reconciled to a bounded repair.
+- `[REPRODUCED]` Cause: successful non-dry responses omitted the planner `effect`; history middleware therefore fell
+  back to the process-global artifact report, which knows the 43 artifact outputs but not target deletions or preserved
+  roots. Extend the existing planner/response/history seam; do not add a second deploy owner.
+
+### IMPLEMENT
+
+- Exact native Luna `01a0294e-322c-7f91-87bc-31f3629dd1ae` changed only `server.ts`,
+  `scripts/route-integration.mjs`, and the exact `config/durable-writers.json` source fingerprint. It computes one
+  request-local `deploymentEffect` with the existing authoritative preview planner before any staging/target mutation,
+  reuses it for dry run, returns it on successful actual deploy, and leaves failed deploy responses/recovery semantics
+  unchanged.
+- The route fixture now seeds an existing target with 39 removable files and six preserved roots, requires dry-run
+  zero-write, response/history effect parity, observed add/write/delete/preserve application, exact pre-tree rollback,
+  and one-use replay rejection.
+- The successful-response addition is backward-compatible. The prior dry-run planner-error response retains
+  `dryRun:true`; staging, recovery preparation/finalization, byte confirmation, doctor, drift, baseline promotion, and
+  ordinary deploy output remain owned by their existing paths.
+
+### VALIDATE
+
+- Causal integration sequence: baseline green; first post-patch run exposed one fixture error at `490/491`; the worker
+  corrected the assertion without weakening production; final route integration is `491/491 PASS`. Exact rows prove
+  successful response/history parity, applied deletions/preservation, recovery linkage, byte-exact rollback, and
+  `409 RECOVERY_ALREADY_USED` on replay.
+- Final executable gates: `npm run typecheck` PASS; focused ESLint exit `0` with zero errors and `241` pre-existing
+  warnings; `npm run test:writers` PASS at `14/14`, live writer audit `42 / 11 / 2`, and extension durable-write `8/8`;
+  complete `npm run precommit:check` PASS on final state. Production build PASS at `1,847` Vite modules plus esbuild
+  server bundle. Graphify refresh is `9,820 nodes / 24,553 edges / 312 communities`; zero Graphify processes remain.
+- The first commit-hook run reached `npm run test:mcp-capabilities` and its child exited `3221226505` while waiting for
+  request 7. A controlled isolated rerun passed the full MCP matrix, including same-process recovery after 2019 ms; the
+  complete hook retry then passed MCP again, action-receipt coverage at `82 routes / 56 surfaces`, and typecheck. The
+  executable repair committed and pushed as `6f569e37ffc35da198796ca2adcafa3e1d6493b3`; local `HEAD`, tracking
+  `origin/main`, and direct `git ls-remote` readback match exactly.
+- Pre-repair isolated actual deploy observed `87 / 16 / 10,815,054 / cc8978ea...edfd8`; recovery
+  `deploy-mt4bbrbx-ebc5e905db54d23e` restored exact `a9046192...eb295` and replay was rejected. That run exposed the
+  false history effect and therefore stayed `PARTIAL_AUDIT_DEFECT_FOUND`.
+- Post-repair isolated preview and actual deploy both reported `0 added / 43 overwritten / 39 deleted / 6 preserved /
+  9,285,790 artifact bytes`. The history row `mt4cjpph-6bbe07b1` recorded the exact same effect, remained revertible,
+  linked recovery `deploy-mt4cjo21-32b8d422f8c604aa`, and its expected-current hash matched the observed
+  `cc8978ea...edfd8` tree. Rollback restored `a9046192...eb295` exactly; replay returned
+  `409 RECOVERY_ALREADY_USED`.
+- The prior independent applied-tree prediction was corrected. Forge generates a `205`-byte `README.md`, replacing the
+  installed `14,250`-byte file even though README is named by the preservation policy; managed artifact collisions win
+  and are reported. The actual isolated result is therefore `10,815,054 / cc8978ea...edfd8`, not
+  `10,829,099 / ab8894...`. The approved menu and generated README are the two content changes; `85` resulting files
+  stay byte-identical and `39` are removed.
+- Final containment readback: scratch installed rolled back to `a9046192...`; canonical/isolated candidates stayed
+  `f2a1f2fd...`; real installed stayed `a9046192...`; real staging stayed `1808f251...`; X4, Graphify, and listeners on
+  `3000/3001/3100/3101/3300/8972` are zero. Receipts:
+  `dev-docs/b119-ai-influence-dogfood/final-export-validation/isolated-deploy-rehearsal-r1/evidence/`.
+
+### REVIEW / CLOSE / AAR
+
+- Requirement review: actual deploy bytes, exact target effect, durable whole-tree recovery, truthful history
+  projection, exact rollback, replay refusal, and real-root containment are now `VERIFIED` in an isolated byte-identical
+  mirror. No X4 process was launched and no real target was written, so engine acceptance and player-visible experience
+  remain open.
+- Status: `HOST DEPLOY/ROLLBACK VERIFIED IN ISOLATION`; overall B119 remains
+  `PARTIAL / Not verified in game`. The next unit is again the explicit real-write paragraph and literal operator `go`,
+  followed by real deploy, X4 launch, engine-log inspection, player-visible screenshot/interaction, and rollback on
+  refusal.
+- No capability-map delta: this repairs truthfulness of the existing deploy/history owner rather than adding a new
+  capability.
+- Triggered AAR: the isolated rehearsal did what the real gate is for—it caught a durable receipt that understated
+  destructive scope. It also falsified the independent applied-tree predictor because that predictor treated every
+  keep-hint as authoritative over managed output. Sustain byte-identical mirrors, actual apply plus rollback before
+  live writes, and response/history/tree equality. Improve fixture design by seeding realistic deletes and preserved
+  roots from the outset. Tool failures included the fail-closed overlapping runtime-session root, the first `490/491`
+  fixture assertion, expected writer-fingerprint stop, two read-only PowerShell process-query errors, and the first
+  commit-hook MCP child exit `3221226505`; none touched real state. The isolated MCP rerun and complete hook retry both
+  passed, so the exit is retained as host/tool evidence rather than hidden or treated as product acceptance evidence.
+- Highest-risk evidenced weakness: a preview can be truthful while a downstream durable audit row lies by projecting a
+  narrower artifact report. The permanent `successful_deploy_returns_exact_planner_effect` and
+  `deploy_row_records_exact_file_effect` assertions now bind those surfaces. Preview and all host receipts still cannot
+  prove X4's C++ frame acceptance.
+- Executable close: `fix(deploy): record exact applied file effects` at
+  `6f569e37ffc35da198796ca2adcafa3e1d6493b3`. Suggested records title:
+  `docs(b119): record isolated deploy rollback proof`.

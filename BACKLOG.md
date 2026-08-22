@@ -1447,6 +1447,25 @@ extension, real-source menu, and installed menu fingerprints were identical befo
 ports, X4, Graphify, and native-worker census are clean. Full receipt and recovery gate:
 `dev-docs/b119-ai-influence-dogfood/final-export-validation/`. No real mod/game byte changed.
 
+**B119 isolated actual deploy/rollback checkpoint 2026-08-22 — VERIFIED IN ISOLATION / REAL WRITE GATED:** A
+byte-identical scratch installed target actually deployed to `87` files / `16` directories / `10,815,054` bytes /
+`cc8978ea...edfd8`, then history recovery restored exact `126 / 18 / 11,262,072 / a9046192...eb295` and rejected
+replay with `409 RECOVERY_ALREADY_USED`. The first run exposed a real audit defect: successful history recorded zero
+deletions/preserved roots even though preview and disk proved `39 / 6`. Exact native Luna
+`01a0294e-322c-7f91-87bc-31f3629dd1ae` repaired only `server.ts`, route integration, and the registered writer
+fingerprint by returning the existing request-local planner effect on successful deploy. Final route integration is
+`491/491`; typecheck, focused lint, writer `14/14 + 8/8`, full precommit, production build, and Graphify
+`9820/24553/312` pass. The post-repair AI Influence rerun proved response/history/recovery/tree equality at
+`0 / 43 / 39 / 6`, exact rollback, one-use refusal, zero live-root drift, zero listeners, and X4 absent.
+The executable repair is committed and pushed at `6f569e37ffc35da198796ca2adcafa3e1d6493b3`, with exact local,
+tracking, and direct remote parity. The first commit-hook MCP child exited `3221226505`; its isolated rerun passed and
+the complete hook retry passed before the commit was created.
+
+The earlier `10,829,099 / ab8894...` independent prediction is superseded: it incorrectly preserved the installed
+`14,250`-byte README even though the authoritative planner overwrites it with Forge's generated `205`-byte README. The
+approved menu and generated README are the two changed resulting files; `85` stay byte-identical and `39` are removed.
+Receipts are under `isolated-deploy-rehearsal-r1/evidence/`. No real mod/game byte changed.
+
 Next unit is the explicit real-write gate, not more preview work: present the exact target, 39-file deletion census,
 whole-tree recovery authority, and frame-refusal/UI-reload risk; wait for literal operator `go`; then deploy and inspect
 X4. Overall B119 remains `PARTIAL / Not verified in game`; GitHub #41 stays open.
