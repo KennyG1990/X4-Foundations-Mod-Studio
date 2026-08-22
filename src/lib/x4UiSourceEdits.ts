@@ -175,7 +175,7 @@ export interface X4UiSourceEditDeleteEntry {
   readonly provenance: X4UiSourceEditStructuralProvenance;
 }
 
-export type X4UiSourceEditInsertionAnchor = 'first-row' | 'fallback-display';
+export type X4UiSourceEditInsertionAnchor = 'first-row' | 'fallback-display' | 'frame-display';
 
 export interface X4UiSourceEditInsertEntry {
   readonly kind: 'insert-call';
@@ -191,9 +191,25 @@ export interface X4UiSourceEditInsertEntry {
   readonly provenance: X4UiSourceEditStructuralProvenance;
 }
 
+export interface X4UiSourceEditInsertBlockEntry {
+  readonly kind: 'insert-block';
+  readonly id: string;
+  readonly path: string;
+  readonly startOffset: number;
+  readonly endOffset: number;
+  readonly expectedText: '';
+  readonly anchor: 'frame-display';
+  readonly anchorSource: X4UiSourceLocation;
+  readonly indentation: string;
+  readonly lineEnding: '\n' | '\r\n';
+  readonly provenance: X4UiSourceEditStructuralProvenance;
+}
+
+export type X4UiSourceEditInsertionEntry = X4UiSourceEditInsertEntry | X4UiSourceEditInsertBlockEntry;
+
 export type X4UiSourceEditStructuralEntry =
   | X4UiSourceEditDeleteEntry
-  | X4UiSourceEditInsertEntry;
+  | X4UiSourceEditInsertionEntry;
 
 export interface X4UiSourceEditCatalog {
   readonly status: 'ready' | 'locked';
@@ -206,7 +222,7 @@ export interface X4UiSourceEditCatalog {
   readonly lockedEntries: readonly X4UiLockedSourceEditEntry[];
   readonly structuralEntries?: readonly X4UiSourceEditStructuralEntry[];
   readonly deleteEntries?: readonly X4UiSourceEditDeleteEntry[];
-  readonly insertEntries?: readonly X4UiSourceEditInsertEntry[];
+  readonly insertEntries?: readonly X4UiSourceEditInsertionEntry[];
   readonly editable: boolean;
   readonly reason?: X4UiSourceEditLockReason;
   readonly detail: string;
@@ -1573,14 +1589,11 @@ const deletionSourceIsBounded = (
     || !sourceIdentityMatchesLocation(identity, statement.source)
     || !sourceIdentityMatchesLocation(identity, statement.deletionSource)
     || statement.deletionSource.start.offset > statement.source.start.offset
-    || statement.deletionSource.end.offset < statement.source.end.offset
-    || statement.deletionSource.start.line !== statement.source.start.line
-    || statement.deletionSource.end.line !== statement.source.end.line) return false;
+    || statement.deletionSource.end.offset < statement.source.end.offset) return false;
   const prefix = text.slice(statement.deletionSource.start.offset, statement.source.start.offset);
   const suffix = text.slice(statement.source.end.offset, statement.deletionSource.end.offset);
   return /^[ \t]*$/.test(prefix)
-    && /^[ \t]*(?:;[ \t]*)?$/.test(suffix)
-    && !/[\r\n]/.test(text.slice(statement.deletionSource.start.offset, statement.deletionSource.end.offset));
+    && /^[ \t]*(?:;[ \t]*)?$/.test(suffix);
 };
 
 interface LuaLongBracketSpan {
@@ -1793,6 +1806,60 @@ const ownerForStructuralCandidate = (
   return operation ? owners.get(operation.id) : undefined;
 };
 
+interface StructuralRowOwnerFacts {
+  readonly standaloneCandidates: readonly CompleteStructuralStatement[];
+  readonly owners: readonly X4UiSourceEditStructuralOwner[];
+  readonly hasRows: boolean;
+  readonly valid: boolean;
+}
+
+const structuralRowOwnerFacts = (
+  file: X4UiSourceFile,
+  target: X4UiLayoutTarget,
+  program: X4UiLayoutProgram,
+  evidenceAuthority: X4UiLayoutEvidenceAuthority,
+  statements: readonly CompleteStructuralStatement[],
+  owners: ReadonlyMap<string, X4UiSourceEditStructuralOwner>,
+): StructuralRowOwnerFacts => {
+  const standaloneCandidates = statements.filter(candidate => candidate.calls.some(call => call.name === 'addRow'));
+  const standaloneOwners = standaloneCandidates.map(candidate => ownerForStructuralCandidate(candidate, 'addRow', program, owners));
+  let valid = standaloneOwners.every(owner => owner?.kind === 'table' && typeof owner.frameId === 'string');
+  const assignedRowCalls = file.callModel.calls.filter(call => call.name === 'addRow'
+    && Array.isArray(call.assignedTo)
+    && call.assignedTo.length > 0
+    && locationWithin(target.source, call.source));
+  const assignedOwners: X4UiSourceEditStructuralOwner[] = [];
+  const assignedOperationIds = new Set<string>();
+  for (const call of assignedRowCalls) {
+    const statement = enclosingStatementOf(call);
+    const assignedNames = assignedNamesOf(call);
+    const operation = structuralOperationForCall(call, program, target, evidenceAuthority);
+    const owner = operation ? owners.get(operation.id) : undefined;
+    if (!statement
+      || statement.isStandaloneCallStatementRoot
+      || !['local', 'assignment'].includes(statement.kind)
+      || assignedNames.length !== 1
+      || !operation
+      || assignedOperationIds.has(operation.id)
+      || owner?.kind !== 'table'
+      || typeof owner.frameId !== 'string') {
+      valid = false;
+      continue;
+    }
+    assignedOperationIds.add(operation.id);
+    assignedOwners.push(owner);
+  }
+  return {
+    standaloneCandidates,
+    owners: freezeArray([
+      ...standaloneOwners.filter((owner): owner is X4UiSourceEditStructuralOwner => owner !== undefined),
+      ...assignedOwners,
+    ]),
+    hasRows: standaloneCandidates.length > 0 || assignedRowCalls.length > 0,
+    valid,
+  };
+};
+
 const completeStructuralStatement = (
   model: X4UiCallModel,
   program: X4UiLayoutProgram,
@@ -1928,12 +1995,10 @@ const structuralEntriesFor = (
   const statements = structuralStatements(file, program, evidenceAuthority, target);
   const owners = structuralOwnerLedger(file.callModel, program);
   const ownerForStatement = (candidate: CompleteStructuralStatement): X4UiSourceEditStructuralOwner | undefined => {
-    const callName: X4UiRelevantCallName | undefined = candidate.calls.some(call => call.name === 'addRow')
-      ? 'addRow'
-      : candidate.calls.some(call => call.name === 'display')
-        ? 'display'
-        : undefined;
-    return callName ? ownerForStructuralCandidate(candidate, callName, program, owners) : undefined;
+    const candidateOwners = candidate.bindings.map(binding => owners.get(binding.operationId));
+    if (candidateOwners.length === 0 || candidateOwners.some(owner => owner === undefined)) return undefined;
+    const distinctOwners = new Set(candidateOwners.map(owner => structuralOwnerKey(owner!)));
+    return distinctOwners.size === 1 ? candidateOwners[0] : undefined;
   };
   const deletions: X4UiSourceEditDeleteEntry[] = statements.map(candidate => freezeDeep({
     kind: 'delete-statement',
@@ -1966,33 +2031,75 @@ const structuralEntriesFor = (
       ? { candidate: ownerCandidates[0].candidate, owner: ownerCandidates[0].owner! }
       : undefined;
   };
-  const firstRowCandidates = statements.filter(candidate => candidate.calls.some(call => call.name === 'addRow'));
-  const firstRowMatch = sameReceiverCandidate(firstRowCandidates, 'addRow');
+  const rowFacts = structuralRowOwnerFacts(file, target, program, evidenceAuthority, statements, owners);
+  const firstRowCandidates = rowFacts.standaloneCandidates;
+  const firstRowMatch = rowFacts.valid ? sameReceiverCandidate(firstRowCandidates, 'addRow') : undefined;
   const fallbackDisplayCandidates = statements.filter(candidate => candidate.calls.some(call => call.name === 'display'));
-  const fallbackDisplay = firstRowCandidates.length === 0
-    ? sameReceiverCandidate(fallbackDisplayCandidates, 'display')
+  const displayOwnerMatch = sameReceiverCandidate(fallbackDisplayCandidates, 'display');
+  const uniqueDisplayMatch = fallbackDisplayCandidates.length === 1 ? displayOwnerMatch : undefined;
+  const distinctRowOwners = new Set(rowFacts.owners.map(owner => structuralOwnerKey(owner)));
+  const multipleTableOwners = rowFacts.valid
+    && rowFacts.owners.length > 0
+    && rowFacts.owners.every(owner => owner.kind === 'table' && typeof owner.frameId === 'string')
+    && distinctRowOwners.size >= 2;
+  const fallbackDisplay = !multipleTableOwners && rowFacts.valid
+    ? displayOwnerMatch
     : undefined;
-  const anchorMatch = firstRowMatch || fallbackDisplay;
-  if (!anchorMatch) return freezeArray(deletions);
-  const anchorCandidate = anchorMatch.candidate;
-  const style = localInsertionStyle(file.text, anchorCandidate.statement.deletionSource);
-  if (!style) return freezeArray(deletions);
-  const anchor: X4UiSourceEditInsertionAnchor = firstRowMatch ? 'first-row' : 'fallback-display';
-  const anchorSource = pointLocation(anchorCandidate.statement.deletionSource, style.anchorOffset);
-  const insert: X4UiSourceEditInsertEntry = freezeDeep({
-    kind: 'insert-call',
-    id: structuralInsertId(target, anchor, style.anchorOffset),
-    path: file.path,
-    startOffset: style.anchorOffset,
-    endOffset: style.anchorOffset,
-    expectedText: '',
-    anchor,
-    anchorSource,
-    indentation: style.indentation,
-    lineEnding: style.lineEnding,
-    provenance: structuralEntryProvenance(target.sourceIdentity, target, anchorCandidate, anchorMatch.owner),
-  });
-  return freezeArray([...deletions, insert]);
+  const displayOwner = uniqueDisplayMatch?.owner;
+  const frameDisplayMatch = multipleTableOwners
+    && displayOwner?.kind === 'frame'
+    && rowFacts.owners.every(owner => owner.frameId === displayOwner.ownerId)
+    ? uniqueDisplayMatch
+    : undefined;
+  const anchorMatch = rowFacts.valid && !multipleTableOwners
+    ? firstRowMatch || fallbackDisplay
+    : undefined;
+  const insertions: X4UiSourceEditInsertionEntry[] = [];
+  if (anchorMatch) {
+    const anchorCandidate = anchorMatch.candidate;
+    const style = localInsertionStyle(file.text, anchorCandidate.statement.deletionSource);
+    if (style) {
+      const anchor: X4UiSourceEditInsertionAnchor = firstRowMatch ? 'first-row' : 'fallback-display';
+      const anchorSource = pointLocation(anchorCandidate.statement.deletionSource, style.anchorOffset);
+      insertions.push(freezeDeep({
+        kind: 'insert-call',
+        id: structuralInsertId(target, anchor, style.anchorOffset),
+        path: file.path,
+        startOffset: style.anchorOffset,
+        endOffset: style.anchorOffset,
+        expectedText: '',
+        anchor,
+        anchorSource,
+        indentation: style.indentation,
+        lineEnding: style.lineEnding,
+        provenance: structuralEntryProvenance(target.sourceIdentity, target, anchorCandidate, anchorMatch.owner),
+      }));
+    }
+  }
+  // A frame/display block is intentionally issued only for the ambiguity case
+  // that suppresses the legacy one-call anchor: the block owns a new hierarchy
+  // through one proven frame and never reuses an existing table owner.
+  if (frameDisplayMatch) {
+    const anchorCandidate = frameDisplayMatch.candidate;
+    const style = localInsertionStyle(file.text, anchorCandidate.statement.deletionSource);
+    if (style) {
+      const anchorSource = pointLocation(anchorCandidate.statement.deletionSource, style.anchorOffset);
+      insertions.push(freezeDeep({
+        kind: 'insert-block',
+        id: structuralInsertId(target, 'frame-display', style.anchorOffset),
+        path: file.path,
+        startOffset: style.anchorOffset,
+        endOffset: style.anchorOffset,
+        expectedText: '',
+        anchor: 'frame-display',
+        anchorSource,
+        indentation: style.indentation,
+        lineEnding: style.lineEnding,
+        provenance: structuralEntryProvenance(target.sourceIdentity, target, anchorCandidate, frameDisplayMatch.owner),
+      }));
+    }
+  }
+  return freezeArray([...deletions, ...insertions]);
 };
 
 const structuralIgnoredKeys = new Set<string>();
@@ -3211,7 +3318,7 @@ const structuralOrderShift = (
     const bounds = structuralLocationBounds(source);
     return bounds?.end;
   };
-  const insertedBefore = entry.kind === 'insert-call' && beforeOffset >= entry.startOffset
+  const insertedBefore = (entry.kind === 'insert-call' || entry.kind === 'insert-block') && beforeOffset >= entry.startOffset
     ? afterRecords.filter(record => {
       const start = completeRecordSourceStart(record);
       const end = completeRecordSourceEnd(record);
@@ -3738,9 +3845,12 @@ const structuralKernelLedgerStatesCorrespond = (
   beforeOperations: readonly X4UiLayoutOperation[],
   afterOperations: readonly X4UiLayoutOperation[],
   removedOperationIds: ReadonlySet<string>,
-  insertedOperationIndex: number,
+  insertedOperationIndex: number | ReadonlySet<number>,
   splice: StructuralSplice,
 ): boolean => {
+  const insertedOperationIndexes = typeof insertedOperationIndex === 'number'
+    ? new Set([insertedOperationIndex])
+    : insertedOperationIndex;
   const tableStates = new Map<string, unknown>();
   const beforeTableId = (operation: X4UiLayoutOperation): string | undefined => {
     const tableId = recordString(operation as unknown as Record<string, unknown>, 'tableId');
@@ -3795,6 +3905,11 @@ const structuralKernelLedgerStatesCorrespond = (
     const states = structuralKernelStates(operation);
     if (!states.hasStateBefore && !states.hasStateAfter) return true;
     const tableId = afterTableId(operation);
+    if (!states.hasStateBefore && states.hasStateAfter) {
+      if (operation.kind !== 'addTable' || !tableId || tableStates.has(tableId)) return false;
+      tableStates.set(tableId, states.stateAfter);
+      return true;
+    }
     if (!tableId || !states.hasStateBefore || !states.hasStateAfter || !tableStates.has(tableId)
       || !sameClosedData(tableStates.get(tableId), states.stateBefore)) return false;
     const recipe = structuralStateTransitionRecipe(states.stateBefore, states.stateAfter);
@@ -3825,7 +3940,7 @@ const structuralKernelLedgerStatesCorrespond = (
   };
   let beforeIndex = 0;
   for (let afterIndex = 0; afterIndex < afterOperations.length; afterIndex += 1) {
-    if (afterIndex === insertedOperationIndex) {
+    if (insertedOperationIndexes.has(afterIndex)) {
       if (!insert(afterOperations[afterIndex])) return false;
       continue;
     }
@@ -3892,6 +4007,24 @@ const structuralCorrespondenceInputKeys = new Set([
   'insertedOperationIndex',
 ]);
 
+const STRUCTURAL_CORRESPONDENCE_FIELD_BUDGET = 750_000;
+const STRUCTURAL_CORRESPONDENCE_TOTAL_BUDGET = 2_500_000;
+
+// Structural reparses carry complete kernel snapshots in both operation ledgers. Keep
+// each ledger bounded independently while allowing the aggregate input to remain bounded.
+const isClosedStructuralCorrespondenceInput = (value: unknown): boolean => {
+  if (!hasClosedStructuralKeys(value, structuralCorrespondenceInputKeys)) return false;
+  const input = value as Record<string, unknown>;
+  let totalRemaining = STRUCTURAL_CORRESPONDENCE_TOTAL_BUDGET;
+  for (const key of Object.keys(input)) {
+    const fieldBudget: ClosedDataTraversalBudget = { remaining: STRUCTURAL_CORRESPONDENCE_FIELD_BUDGET };
+    if (!isClosedPlainOwnData(input[key], new Set<object>(), input, key, false, fieldBudget)) return false;
+    totalRemaining -= STRUCTURAL_CORRESPONDENCE_FIELD_BUDGET - fieldBudget.remaining;
+    if (totalRemaining <= 0) return false;
+  }
+  return true;
+};
+
 const structuralProducerRecordIsValid = (
   value: unknown,
   schema: 'call' | 'operation',
@@ -3914,7 +4047,7 @@ export const compareX4UiSourceStructuralLedgerCorrespondence = (
   input: X4UiSourceStructuralLedgerCorrespondenceInput,
 ): boolean => {
   try {
-    if (!isClosedPlainOwnData(input)
+    if (!isClosedStructuralCorrespondenceInput(input)
       || !isStructuredCloneableClosedData(input)
       || !hasClosedStructuralKeys(input, structuralCorrespondenceInputKeys)) return false;
     const beforeCalls = ownData(input, 'beforeCalls');
@@ -3936,7 +4069,9 @@ export const compareX4UiSourceStructuralLedgerCorrespondence = (
       || !Array.isArray(beforeOperations)
       || !Array.isArray(afterOperations)
       || !isRecord(entryValue)
-      || (ownData(entryValue, 'kind') !== 'delete-statement' && ownData(entryValue, 'kind') !== 'insert-call')
+      || (ownData(entryValue, 'kind') !== 'delete-statement'
+        && ownData(entryValue, 'kind') !== 'insert-call'
+        && ownData(entryValue, 'kind') !== 'insert-block')
       || typeof beforeText !== 'string'
       || typeof afterText !== 'string'
       || typeof replacementLength !== 'number'
@@ -4002,6 +4137,8 @@ export const compareX4UiSourceStructuralLedgerCorrespondence = (
       if (typeof id !== 'string') return false;
       if (!removedOperationIds.has(id)) expectedOperations.push(operation);
     }
+    const insertedCallIndexes = new Set<number>();
+    const insertedOperationIndexes = new Set<number>();
     if (entry.kind === 'insert-call') {
       if (insertedCallIndex < 0
         || insertedCallIndex >= afterCalls.length
@@ -4009,18 +4146,43 @@ export const compareX4UiSourceStructuralLedgerCorrespondence = (
         || insertedOperationIndex >= afterOperations.length
         || afterCalls.length !== expectedCalls.length + 1
         || afterOperations.length !== expectedOperations.length + 1) return false;
+      insertedCallIndexes.add(insertedCallIndex);
+      insertedOperationIndexes.add(insertedOperationIndex);
+    } else if (entry.kind === 'insert-block') {
+      const insertedStart = startOffset + entry.indentation.length;
+      const insertedEnd = startOffset + replacementLength;
+      afterCalls.forEach((call, index) => {
+        if (!isRecord(call)) return;
+        const bounds = structuralLocationBounds(ownData(call, 'source'));
+        if (bounds !== undefined && bounds.start >= insertedStart && bounds.end <= insertedEnd) {
+          insertedCallIndexes.add(index);
+        }
+      });
+      afterOperations.forEach((operation, index) => {
+        if (!isRecord(operation)) return;
+        const bounds = structuralLocationBounds(ownData(operation, 'source'));
+        if (bounds !== undefined && bounds.start >= insertedStart && bounds.end <= insertedEnd) {
+          insertedOperationIndexes.add(index);
+        }
+      });
+      if (insertedCallIndex !== -1
+        || insertedOperationIndex !== -1
+        || insertedCallIndexes.size === 0
+        || insertedOperationIndexes.size === 0
+        || afterCalls.length !== expectedCalls.length + insertedCallIndexes.size
+        || afterOperations.length !== expectedOperations.length + insertedOperationIndexes.size) return false;
     } else if (insertedCallIndex !== -1
       || insertedOperationIndex !== -1
       || afterCalls.length !== expectedCalls.length
       || afterOperations.length !== expectedOperations.length) return false;
-    const comparableAfterCalls = afterCalls.filter((_, index) => index !== insertedCallIndex);
-    const comparableAfterOperations = afterOperations.filter((_, index) => index !== insertedOperationIndex);
+    const comparableAfterCalls = afterCalls.filter((_, index) => !insertedCallIndexes.has(index));
+    const comparableAfterOperations = afterOperations.filter((_, index) => !insertedOperationIndexes.has(index));
     if (comparableAfterCalls.length !== expectedCalls.length
       || comparableAfterOperations.length !== expectedOperations.length) return false;
-    const insertedStart = entry.kind === 'insert-call'
+    const insertedStart = entry.kind === 'insert-call' || entry.kind === 'insert-block'
       ? startOffset + entry.indentation.length
       : -1;
-    const insertedEnd = entry.kind === 'insert-call'
+    const insertedEnd = entry.kind === 'insert-call' || entry.kind === 'insert-block'
       ? startOffset + replacementLength
       : -1;
     const isRemovedRecord = (record: unknown): boolean => {
@@ -4031,7 +4193,7 @@ export const compareX4UiSourceStructuralLedgerCorrespondence = (
         && bounds.end <= endOffset;
     };
     const isInsertedRecord = (record: unknown): boolean => {
-      if (entry.kind !== 'insert-call' || !isRecord(record)) return false;
+      if ((entry.kind !== 'insert-call' && entry.kind !== 'insert-block') || !isRecord(record)) return false;
       const bounds = structuralLocationBounds(ownData(record, 'source'));
       return bounds !== undefined
         && bounds.start >= insertedStart
@@ -4040,7 +4202,7 @@ export const compareX4UiSourceStructuralLedgerCorrespondence = (
     const expectedRecords = beforeRecords.filter(record => !isRemovedRecord(record));
     const comparableAfterRecords = afterRecords.filter(record => !isInsertedRecord(record));
     const insertedRecords = afterRecords.filter(isInsertedRecord);
-    if (entry.kind === 'insert-call' && insertedRecords.length === 0) return false;
+    if ((entry.kind === 'insert-call' || entry.kind === 'insert-block') && insertedRecords.length === 0) return false;
     if (comparableAfterRecords.length !== expectedRecords.length) return false;
     const splice: StructuralSplice = {
       beforeText,
@@ -4103,7 +4265,7 @@ export const compareX4UiSourceStructuralLedgerCorrespondence = (
       beforeTypedOperations,
       afterTypedOperations,
       removedOperationIds,
-      insertedOperationIndex,
+      entry.kind === 'insert-block' ? insertedOperationIndexes : insertedOperationIndex,
       splice,
     );
     if (!beforeTransitions || !afterTransitions || !ledgerStates) return false;
@@ -4161,6 +4323,24 @@ interface DirectCallPayloadProof {
   readonly statement: EnclosingStatementFacts;
 }
 
+interface DirectBlockPayloadCallSpan {
+  readonly call: X4UiCallRecord;
+  readonly startOffset: number;
+  readonly endOffset: number;
+}
+
+interface DirectBlockPayloadProof {
+  readonly source: string;
+  readonly formattedSource: string;
+  readonly formattedCallSpans: readonly DirectBlockPayloadCallSpan[];
+  readonly model: X4UiCallModel;
+  readonly calls: readonly X4UiCallRecord[];
+  readonly statements: readonly EnclosingStatementFacts[];
+  readonly frameReceiver: string;
+}
+
+type DirectStructuralPayload = DirectCallPayloadProof | DirectBlockPayloadProof;
+
 const directCallPayload = (
   path: string,
   payload: string,
@@ -4195,6 +4375,255 @@ const directCallPayload = (
   return { source: trimmed, model, call, statement };
 };
 
+const BLOCK_DIRECT_CALL_NAMES = new Set<X4UiRelevantCallName>([
+  'addTable',
+  'setColWidthPercent',
+  'addRow',
+  'setColSpan',
+  'setText',
+  'createEditBox',
+  'createButton',
+]);
+
+const blockBindingRoot = (expression: string | undefined): string | undefined => {
+  if (expression === undefined) return undefined;
+  const match = /^([A-Za-z_][A-Za-z0-9_]*)/.exec(expression.trim());
+  return match?.[1];
+};
+
+const blockCallReceiver = (call: X4UiCallRecord): string | undefined =>
+  recordString(call.receiver, 'expression');
+
+const blockCallAssignedNames = (call: X4UiCallRecord): readonly string[] =>
+  Array.isArray(call.assignedTo)
+    ? call.assignedTo.filter((value): value is string => /^[A-Za-z_][A-Za-z0-9_]*$/.test(value))
+    : [];
+
+const blockStatementKey = (statement: EnclosingStatementFacts): string => [
+  statement.source.start.offset,
+  statement.source.end.offset,
+  statement.deletionSource.start.offset,
+  statement.deletionSource.end.offset,
+  statement.kind,
+].join('|');
+
+const directBlockPayload = (
+  path: string,
+  payload: string,
+  frameReceiver: string,
+  indentation: string,
+  lineEnding: '\n' | '\r\n',
+): DirectBlockPayloadProof | { readonly reason: X4UiSourceEditRefusalReason; readonly detail: string } => {
+  const trimmed = payload.replace(/^[ \t]+|[ \t]+$/g, '');
+  if (!trimmed || trimmed.length > 32768) {
+    return { reason: 'invalid-request', detail: 'frame insertion block must be non-empty and at most 32768 source characters' };
+  }
+  if (!frameReceiver || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(frameReceiver)) {
+    return { reason: 'replacement-parse-failure', detail: 'frame insertion block has no proven selected-frame receiver binding' };
+  }
+  let model: X4UiCallModel;
+  try {
+    model = buildX4UiCallModel({ rel: path, text: `${trimmed}\n` });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'unknown parser error';
+    return { reason: 'replacement-parse-failure', detail: `frame insertion block parse was contained: ${detail}` };
+  }
+  if (model.parsed !== true) {
+    return { reason: 'replacement-parse-failure', detail: 'frame insertion block must parse as a complete Lua source fragment' };
+  }
+  const rawHandlers = ownData(model as unknown as object, 'handlers');
+  const rawFunctions = ownData(model as unknown as object, 'localFunctions');
+  const rawInvocations = ownData(model as unknown as object, 'localInvocations');
+  if ((Array.isArray(rawHandlers) && rawHandlers.length > 0)
+    || (Array.isArray(rawFunctions) && rawFunctions.length > 0)
+    || (Array.isArray(rawInvocations) && rawInvocations.length > 0)) {
+    return { reason: 'replacement-parse-failure', detail: 'frame insertion block rejects handlers, function definitions, and nested or hidden non-UI invocations' };
+  }
+  if (model.calls.length < 2 || model.calls.length > 64) {
+    return { reason: 'replacement-parse-failure', detail: 'frame insertion block must contain between 2 and 64 relevant direct UI calls' };
+  }
+  const statementsByKey = new Map<string, { readonly statement: EnclosingStatementFacts; readonly calls: X4UiCallRecord[] }>();
+  for (const call of model.calls) {
+    if (!BLOCK_DIRECT_CALL_NAMES.has(call.name)) {
+      return { reason: 'replacement-parse-failure', detail: `frame insertion block call ${call.name} is outside the bounded direct UI construction allow-list` };
+    }
+    const statement = enclosingStatementOf(call);
+    if (!statement
+      || !validLocation(statement.source, `${trimmed}\n`)
+      || !validLocation(statement.deletionSource, `${trimmed}\n`)
+      || statement.source.start.offset < 0
+      || statement.source.end.offset > trimmed.length
+      || statement.deletionSource.start.offset < 0
+      || statement.deletionSource.end.offset > trimmed.length
+      || statement.kind !== 'local' && statement.kind !== 'call'
+      || (call.context.source !== undefined && (call.context.source.start.offset > 0
+        || call.context.source.end.offset < trimmed.length))) {
+      return { reason: 'replacement-parse-failure', detail: 'frame insertion block contains a non-top-level, conditional, looped, or malformed statement boundary' };
+    }
+    const context = call.context as unknown as Record<string, unknown>;
+    const branchPath = ownData(context, 'branchPath');
+    const loopPath = ownData(context, 'loopPath');
+    if (ownData(context, 'kind') !== 'top-level'
+      || !Array.isArray(branchPath)
+      || !Array.isArray(loopPath)
+      || branchPath.length !== 0
+      || loopPath.length !== 0
+      || ownData(context, 'reachability') !== 'reachable') {
+      return { reason: 'replacement-parse-failure', detail: 'frame insertion block rejects conditional, looped, or unreachable UI statements' };
+    }
+    if (hasUnprovenExecutableWithin(model, statement, `${trimmed}\n`)) {
+      return { reason: 'replacement-parse-failure', detail: 'frame insertion block contains an unproven nested executable invocation' };
+    }
+    const key = blockStatementKey(statement);
+    const existing = statementsByKey.get(key);
+    if (existing) existing.calls.push(call);
+    else statementsByKey.set(key, { statement, calls: [call] });
+  }
+  const statements = [...statementsByKey.values()].sort((left, right) => left.statement.source.start.offset - right.statement.source.start.offset);
+  if (statements.length < 2) {
+    return { reason: 'replacement-parse-failure', detail: 'frame insertion block must contain multiple complete source statements' };
+  }
+  let cursor = 0;
+  for (const group of statements) {
+    const { statement, calls } = group;
+    if (trimmed.slice(cursor, statement.source.start.offset).trim().length > 0
+      || statement.source.start.offset !== statement.deletionSource.start.offset
+      || statement.source.end.offset !== statement.deletionSource.end.offset) {
+      return { reason: 'replacement-parse-failure', detail: 'frame insertion block contains control flow, comments, separators, or an unproven source statement' };
+    }
+    cursor = statement.source.end.offset;
+    calls.sort((left, right) => left.order - right.order);
+    const finalCall = calls[calls.length - 1];
+    const finalStatement = enclosingStatementOf(finalCall);
+    const localBindingStatement = statement.kind === 'local'
+      && (calls[0].name === 'addTable' || calls[0].name === 'addRow');
+    if (!finalStatement?.isStandaloneCallStatementRoot && !localBindingStatement) {
+      return { reason: 'replacement-parse-failure', detail: 'each frame insertion statement must end in one standalone direct UI call chain' };
+    }
+    for (let index = 1; index < calls.length; index += 1) {
+      const previous = calls[index - 1];
+      const receiver = blockCallReceiver(calls[index]);
+      const previousSource = trimmed.slice(previous.source.start.offset, previous.source.end.offset);
+      if (!receiver || !receiver.includes(previousSource)) {
+        return { reason: 'replacement-parse-failure', detail: 'frame insertion block contains multiple calls that are not one local fluent UI chain' };
+      }
+    }
+    const assignedNames = calls.flatMap(blockCallAssignedNames);
+    if (statement.kind === 'local') {
+      if (assignedNames.length !== 1
+        || !/^[ \t]*local[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*=/.test(trimmed.slice(statement.source.start.offset, statement.source.end.offset))) {
+        return { reason: 'replacement-parse-failure', detail: 'local frame block declarations may bind only one returned table or row value' };
+      }
+      if (!['addTable', 'addRow'].includes(calls[0].name)) {
+        return { reason: 'replacement-parse-failure', detail: 'frame block local declarations may bind only returned tables or rows' };
+      }
+    } else if (assignedNames.length > 0) {
+      return { reason: 'replacement-parse-failure', detail: 'frame block assignments may not mutate existing locals or owners' };
+    }
+  }
+  if (trimmed.slice(cursor).trim().length > 0) {
+    return { reason: 'replacement-parse-failure', detail: 'frame insertion block contains trailing control flow, comments, or unrelated Lua' };
+  }
+  const tableBindings = new Set<string>();
+  const rowBindings = new Set<string>();
+  const seenBindings = new Set<string>();
+  for (const call of model.calls) {
+    const assignedNames = blockCallAssignedNames(call);
+    if (assignedNames.length > 0) {
+      const assignedName = assignedNames[0];
+      if (seenBindings.has(assignedName)) {
+        return { reason: 'replacement-parse-failure', detail: `frame insertion block reassigns local binding ${assignedName}` };
+      }
+      seenBindings.add(assignedName);
+      if (call.name === 'addTable') tableBindings.add(assignedName);
+      else if (call.name === 'addRow') rowBindings.add(assignedName);
+      else return { reason: 'replacement-parse-failure', detail: 'frame insertion block binds only addTable/addRow results' };
+    }
+    const receiver = blockCallReceiver(call);
+    const receiverRoot = blockBindingRoot(receiver);
+    if (call.name === 'addTable') {
+      if (receiver !== frameReceiver || assignedNames.length !== 1) {
+        return { reason: 'replacement-parse-failure', detail: 'every new table must be created directly through the selected frame owner' };
+      }
+    } else if (call.name === 'addRow' || call.name === 'setColWidth' || call.name === 'setColWidthPercent') {
+      if (!receiverRoot || !tableBindings.has(receiverRoot)) {
+        return { reason: 'replacement-parse-failure', detail: 'row and column operations must stay within a table created by this block' };
+      }
+    } else if (call.name !== 'display' && (!receiverRoot || !rowBindings.has(receiverRoot))) {
+      return { reason: 'replacement-parse-failure', detail: 'cell and widget operations must stay within rows created by this block' };
+    }
+  }
+  const rawAliases = ownData(model as unknown as object, 'aliases');
+  if (!Array.isArray(rawAliases) || rawAliases.length !== seenBindings.size || !rawAliases.every(alias => {
+    if (!isRecord(alias)) return false;
+    const name = ownData(alias, 'name');
+    const aliasKind = ownData(alias, 'aliasKind');
+    const value = ownData(alias, 'value');
+    const reference = isRecord(value) ? ownData(value, 'reference') : undefined;
+    const referenceKind = isRecord(reference) ? ownData(reference, 'kind') : undefined;
+    return typeof name === 'string'
+      && seenBindings.has(name)
+      && aliasKind === 'definition'
+      && ((tableBindings.has(name) && referenceKind === 'table') || (rowBindings.has(name) && referenceKind === 'row'));
+  })) {
+    return { reason: 'replacement-parse-failure', detail: 'frame insertion block local bindings do not have exact table/row return proof' };
+  }
+  const formattedParts: string[] = [];
+  const formattedCallSpans: DirectBlockPayloadCallSpan[] = [];
+  let formattedOffset = 0;
+  for (let index = 0; index < statements.length; index += 1) {
+    const group = statements[index];
+    const statementSource = trimmed.slice(group.statement.source.start.offset, group.statement.source.end.offset);
+    if (!statementSource || /[\r\n]/.test(statementSource)) {
+      return { reason: 'replacement-parse-failure', detail: 'frame insertion block formatting is unproven for a multi-line direct UI statement' };
+    }
+    const prefix = index === 0 ? '' : `${lineEnding}${indentation}`;
+    const statementOffset = formattedOffset + prefix.length;
+    formattedParts.push(prefix, statementSource);
+    for (const call of group.calls) {
+      const startOffset = call.source.start.offset - group.statement.source.start.offset;
+      const endOffset = call.source.end.offset - group.statement.source.start.offset;
+      if (startOffset < 0 || endOffset > statementSource.length || startOffset >= endOffset) {
+        return { reason: 'replacement-parse-failure', detail: 'frame insertion block call source is not bounded by its proven statement' };
+      }
+      formattedCallSpans.push({
+        call,
+        startOffset: statementOffset + startOffset,
+        endOffset: statementOffset + endOffset,
+      });
+    }
+    formattedOffset += prefix.length + statementSource.length;
+  }
+  return {
+    source: trimmed,
+    formattedSource: formattedParts.join(''),
+    formattedCallSpans,
+    model,
+    calls: model.calls,
+    statements: statements.map(group => group.statement),
+    frameReceiver,
+  };
+};
+
+const frameReceiverForEntry = (
+  entry: X4UiSourceEditInsertBlockEntry,
+  file: X4UiSourceFile,
+): string | undefined => {
+  const binding = entry.provenance.callBindings.find(candidate => candidate.callName === 'display');
+  if (!binding) return undefined;
+  const call = file.callModel.calls.find(candidate => candidate.order === binding.callOrder
+    && sameLocation(candidate.source, binding.callSource));
+  return call ? blockCallReceiver(call) : undefined;
+};
+
+const insertedBlockBounds = (
+  entry: X4UiSourceEditInsertBlockEntry,
+  payload: DirectBlockPayloadProof,
+): { readonly start: number; readonly end: number } => ({
+  start: entry.startOffset + entry.indentation.length,
+  end: entry.startOffset + entry.indentation.length + payload.formattedSource.length,
+});
+
 const insertedOperationFor = (
   afterProgram: X4UiLayoutProgram,
   entry: X4UiSourceEditInsertEntry,
@@ -4209,6 +4638,30 @@ const insertedOperationFor = (
     && operation.source.start.offset >= insertedStart
     && operation.source.end.offset <= insertedEnd);
   return candidates.length === 1 ? candidates[0] : undefined;
+};
+
+const insertedOperationsForBlock = (
+  afterProgram: X4UiLayoutProgram,
+  entry: X4UiSourceEditInsertBlockEntry,
+  payload: DirectBlockPayloadProof,
+): readonly X4UiLayoutOperation[] | undefined => {
+  const bounds = insertedBlockBounds(entry, payload);
+  const candidates = afterProgram.operations.filter(operation => operation.status === 'applied'
+    && !operation.localExpansion
+    && operation.source.start.offset >= bounds.start
+    && operation.source.end.offset <= bounds.end);
+  if (candidates.length !== payload.calls.length) return undefined;
+  const matched: X4UiLayoutOperation[] = [];
+  for (const span of payload.formattedCallSpans) {
+    const start = bounds.start + span.startOffset;
+    const end = bounds.start + span.endOffset;
+    const matches = candidates.filter(operation => operation.kind === span.call.name
+      && operation.source.start.offset === start
+      && operation.source.end.offset === end);
+    if (matches.length !== 1) return undefined;
+    matched.push(matches[0]);
+  }
+  return matched;
 };
 
 const structuralAnchorOwnerMatches = (
@@ -4234,6 +4687,28 @@ const structuralAnchorOwnerMatches = (
         && insertedOwner.frameId === anchorOwner.ownerId));
 };
 
+const structuralBlockOwnersMatch = (
+  entry: X4UiSourceEditInsertBlockEntry,
+  insertedOperations: readonly X4UiLayoutOperation[],
+  owners: ReadonlyMap<string, X4UiSourceEditStructuralOwner>,
+): boolean => {
+  const anchorOwner = entry.provenance.owner;
+  if (!anchorOwner || anchorOwner.kind !== 'frame' || insertedOperations.length === 0) return false;
+  const tableIds = new Set<string>();
+  let hasRow = false;
+  for (const operation of insertedOperations) {
+    const owner = owners.get(operation.id);
+    if (operation.kind === 'addTable') {
+      if (!owner || owner.kind !== 'table' || owner.frameId !== anchorOwner.ownerId) return false;
+      tableIds.add(owner.ownerId);
+      continue;
+    }
+    if (!owner || owner.kind !== 'table' || owner.frameId !== anchorOwner.ownerId || !tableIds.has(owner.ownerId)) return false;
+    if (operation.kind === 'addRow') hasRow = true;
+  }
+  return tableIds.size > 0 && hasRow;
+};
+
 const structuralLedgerDelta = (
   beforeFile: X4UiSourceFile,
   afterFile: X4UiSourceFile,
@@ -4241,13 +4716,13 @@ const structuralLedgerDelta = (
   afterProgram: X4UiLayoutProgram,
   entry: X4UiSourceEditStructuralEntry,
   replacement: string,
-  directPayload: DirectCallPayloadProof | undefined,
+  directPayload: DirectStructuralPayload | undefined,
 ): boolean => {
   const beforeCalls = beforeFile.callModel.calls;
   const afterCalls = afterFile.callModel.calls;
   let insertedIndex = -1;
   if (entry.kind === 'insert-call') {
-    if (!directPayload) return false;
+    if (!directPayload || !('call' in directPayload)) return false;
     const insertedStart = entry.startOffset + entry.indentation.length;
     const insertedEnd = entry.startOffset + replacement.length;
     const candidates = afterCalls.map((call, index) => ({ call, index })).filter(({ call }) =>
@@ -4258,15 +4733,33 @@ const structuralLedgerDelta = (
     );
     if (candidates.length !== 1) return false;
     insertedIndex = candidates[0].index;
+  } else if (entry.kind === 'insert-block') {
+    if (!directPayload || !('calls' in directPayload)) return false;
+    const bounds = insertedBlockBounds(entry, directPayload);
+    const candidates = afterCalls.filter(call => call.source.start.offset >= bounds.start
+      && call.source.end.offset <= bounds.end);
+    if (candidates.length !== directPayload.formattedCallSpans.length
+      || !directPayload.formattedCallSpans.every(expected => {
+        const start = bounds.start + expected.startOffset;
+        const end = bounds.start + expected.endOffset;
+        return candidates.filter(actual => actual.name === expected.call.name
+          && actual.source.start.offset === start
+          && actual.source.end.offset === end
+          && afterFile.text.slice(actual.source.start.offset, actual.source.end.offset)
+            === directPayload.formattedSource.slice(expected.startOffset, expected.endOffset)).length === 1;
+      })) return false;
   }
   const afterOperations = afterProgram.operations;
   let insertedOperationIndex = -1;
   if (entry.kind === 'insert-call') {
-    if (!directPayload) return false;
+    if (!directPayload || !('call' in directPayload)) return false;
     const insertedOperation = insertedOperationFor(afterProgram, entry, replacement, directPayload);
     if (!insertedOperation) return false;
     insertedOperationIndex = afterOperations.indexOf(insertedOperation);
     if (insertedOperationIndex < 0) return false;
+  } else if (entry.kind === 'insert-block') {
+    if (!directPayload || !('calls' in directPayload)
+      || !insertedOperationsForBlock(afterProgram, entry, directPayload)) return false;
   }
   return compareX4UiSourceStructuralLedgerCorrespondence({
     beforeCalls,
@@ -4354,9 +4847,13 @@ const discoverX4UiSourceEditsUnsafe = (context: X4UiSourceEditTrustedContext): X
     );
     const structuralEntries = context.program.status === 'projected'
       ? structuralEntriesFor(file, target, context.program, context.evidenceAuthority)
-      : [];
+      : context.program.status === 'partial'
+        ? structuralEntriesFor(file, target, context.program, context.evidenceAuthority)
+          .filter(entry => entry.kind === 'insert-block'
+            || (entry.kind === 'delete-statement' && entry.provenance.owner !== undefined))
+        : [];
     const deleteEntries = structuralEntries.filter((entry): entry is X4UiSourceEditDeleteEntry => entry.kind === 'delete-statement');
-    const insertEntries = structuralEntries.filter((entry): entry is X4UiSourceEditInsertEntry => entry.kind === 'insert-call');
+    const insertEntries = structuralEntries.filter((entry): entry is X4UiSourceEditInsertionEntry => entry.kind === 'insert-call' || entry.kind === 'insert-block');
     return issueCatalog(context, freezeDeep({
       ...catalog,
       structuralEntries,
@@ -4724,7 +5221,7 @@ const reparseStructuralAndProveUnsafe = (
   replacement: string,
   nextWorkspace: ModWorkspace,
   nextSource: X4UiWorkspaceSource,
-  directPayload: DirectCallPayloadProof | undefined,
+  directPayload: DirectStructuralPayload | undefined,
 ): StructuralReparseProof | ReparseFailure => {
   if (nextSource.status !== 'source-owned' || !nextSource.bundle || !nextSource.projection) {
     return { reason: 'reparse-failure', detail: 'complete source reparse no longer produces source-owned UI authority' };
@@ -4769,13 +5266,22 @@ const reparseStructuralAndProveUnsafe = (
     return { reason: 'reparse-provenance-drift', detail: 'reparsed structural source lost exact call/evidence authority' };
   }
   if (entry.kind === 'insert-call') {
-    if (!directPayload) {
+    if (!directPayload || !('call' in directPayload)) {
       return { reason: 'reparse-provenance-drift', detail: 'inserted structural call lost its direct payload proof' };
     }
     const insertedOperation = insertedOperationFor(nextProgramResult.program, entry, replacement, directPayload);
     const nextOwners = structuralOwnerLedger(nextModel, nextProgramResult.program);
     if (!insertedOperation || !structuralAnchorOwnerMatches(entry, nextOwners.get(insertedOperation.id))) {
       return { reason: 'reparse-provenance-drift', detail: 'inserted structural call is not owned by the issued anchor owner' };
+    }
+  } else if (entry.kind === 'insert-block') {
+    if (!directPayload || !('calls' in directPayload)) {
+      return { reason: 'reparse-provenance-drift', detail: 'inserted frame block lost its direct payload proof' };
+    }
+    const insertedOperations = insertedOperationsForBlock(nextProgramResult.program, entry, directPayload);
+    const nextOwners = structuralOwnerLedger(nextModel, nextProgramResult.program);
+    if (!insertedOperations || !structuralBlockOwnersMatch(entry, insertedOperations, nextOwners)) {
+      return { reason: 'reparse-provenance-drift', detail: 'inserted frame block is not owned by the issued frame/display authority' };
     }
   }
   if (!structuralLedgerDelta(
@@ -4803,7 +5309,7 @@ const reparseStructuralAndProveUnsafe = (
   if (entry.kind === 'insert-call') {
     const sameKindAnchor = nextCatalog.insertEntries?.find(candidate => candidate.anchor === entry.anchor);
     let reissuedAnchor = sameKindAnchor;
-    if (!reissuedAnchor && entry.anchor === 'fallback-display' && directPayload) {
+    if (!reissuedAnchor && entry.anchor === 'fallback-display' && directPayload && 'call' in directPayload) {
       const transitionedAnchor = nextCatalog.insertEntries?.find(candidate => candidate.anchor === 'first-row');
       const insertedOperation = insertedOperationFor(nextProgramResult.program, entry, replacement, directPayload);
       const nextOwners = structuralOwnerLedger(nextModel, nextProgramResult.program);
@@ -4825,6 +5331,16 @@ const reparseStructuralAndProveUnsafe = (
       || reissuedAnchor.provenance.sourceIdentity.sha256 === entry.provenance.sourceIdentity.sha256) {
       return { reason: 'reparse-provenance-drift', detail: 'inserted source did not reissue the selected structural anchor' };
     }
+  } else if (entry.kind === 'insert-block') {
+    const reissuedBlock = nextCatalog.insertEntries?.find(candidate => candidate.kind === 'insert-block'
+      && candidate.anchor === 'frame-display');
+    if (!reissuedBlock
+      || reissuedBlock.expectedText !== ''
+      || reissuedBlock.provenance.sourceIdentity.sha256 === entry.provenance.sourceIdentity.sha256
+      || reissuedBlock.provenance.owner?.kind !== 'frame'
+      || reissuedBlock.provenance.owner.ownerId !== entry.provenance.owner?.ownerId) {
+      return { reason: 'reparse-provenance-drift', detail: 'frame block insertion did not reissue the selected frame/display authority' };
+    }
   }
   return { workspace: nextWorkspace, source: nextSource, catalog: nextCatalog };
 };
@@ -4836,7 +5352,7 @@ const reparseStructuralAndProve = (
   replacement: string,
   nextWorkspace: ModWorkspace,
   nextSource: X4UiWorkspaceSource,
-  directPayload: DirectCallPayloadProof | undefined,
+  directPayload: DirectStructuralPayload | undefined,
 ): StructuralReparseProof | ReparseFailure => {
   try {
     return reparseStructuralAndProveUnsafe(
@@ -5245,12 +5761,12 @@ const applyX4UiSourceStructuralEditUnsafe = (
     }
 
     let replacement = '';
-    let directPayload: DirectCallPayloadProof | undefined;
+    let directPayload: DirectStructuralPayload | undefined;
     if (entry.kind === 'delete-statement') {
       if (directCall !== undefined) {
         return structuralRefusal(authority.workspace, authority.source, catalog, 'invalid-request', 'whole-statement deletion does not accept an insertion payload', entry);
       }
-    } else {
+    } else if (entry.kind === 'insert-call') {
       if (directCall === undefined) {
         return structuralRefusal(authority.workspace, authority.source, catalog, 'invalid-request', 'direct-call insertion requires a Lua source payload', entry);
       }
@@ -5260,6 +5776,26 @@ const applyX4UiSourceStructuralEditUnsafe = (
       }
       directPayload = parsedPayload;
       replacement = `${entry.indentation}${parsedPayload.source}${entry.lineEnding}`;
+    } else {
+      if (directCall === undefined) {
+        return structuralRefusal(authority.workspace, authority.source, catalog, 'invalid-request', 'frame block insertion requires a Lua source payload', entry);
+      }
+      const frameReceiver = frameReceiverForEntry(entry, selection.file);
+      if (!frameReceiver) {
+        return structuralRefusal(authority.workspace, authority.source, catalog, 'provenance-drift', 'frame block insertion has no exact selected-frame display receiver proof', entry);
+      }
+      const parsedPayload = directBlockPayload(
+        entry.path,
+        directCall,
+        frameReceiver,
+        entry.indentation,
+        entry.lineEnding,
+      );
+      if ('reason' in parsedPayload) {
+        return structuralRefusal(authority.workspace, authority.source, catalog, parsedPayload.reason, parsedPayload.detail, entry);
+      }
+      directPayload = parsedPayload;
+      replacement = `${entry.indentation}${parsedPayload.formattedSource}${entry.lineEnding}`;
     }
     const splice = spliceX4UiWorkspaceSource(
       spliceInputBoundary(authority.workspace),
@@ -5362,9 +5898,14 @@ export function applyX4UiSourceStructuralEdit(
   if (catalogAuthority.workspace !== workspace || catalogAuthority.source !== source) {
     return structuralRefusal(workspace, source, catalog, 'unsupported-provenance', 'structural source edit catalog belongs to a different issued workspace/source pair');
   }
+  const requestedStructuralEntry = typeof actionId === 'string'
+    ? catalogAuthority.structuralEntries.get(actionId)
+    : undefined;
+  const partialStructuralActionable = catalogAuthority.program.status === 'partial'
+    && (requestedStructuralEntry?.kind === 'delete-statement' || requestedStructuralEntry?.kind === 'insert-block');
   if (!isIssuedX4UiLayoutEvidencePair(catalogAuthority.program, catalogAuthority.evidenceAuthority)
-    || catalogAuthority.program.status !== 'projected') {
-    return structuralRefusal(workspace, source, catalog, 'unsupported-provenance', 'structural catalog layout authority is no longer an issued projected pair');
+    || (catalogAuthority.program.status !== 'projected' && !partialStructuralActionable)) {
+    return structuralRefusal(workspace, source, catalog, 'unsupported-provenance', 'structural catalog layout authority is neither an issued projected pair nor an issued actionable partial deletion/frame block');
   }
   if (typeof actionId !== 'string'
     || !optionalStringPrimitive(directCall)

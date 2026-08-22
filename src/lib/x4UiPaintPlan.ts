@@ -482,6 +482,12 @@ const colorFactsForNode = (node: Node): readonly X4UiSceneColorFact[] => {
   return Array.isArray(facts) ? facts as readonly X4UiSceneColorFact[] : [];
 };
 
+const tableBackgroundTintApplicable = (node: Node): boolean => {
+  if (node.kind !== 'table') return true;
+  const field = ownDataField(node as unknown as object, 'backgroundId');
+  return field.valid && typeof field.value === 'string' && field.value.length > 0;
+};
+
 const copyBasePreviewTint = (fact: X4UiSceneColorFact): X4UiPaintBasePreviewTint => {
   const copiedFact = materializePaintJsonDomain(fact) as JsonRecord;
   return {
@@ -493,7 +499,9 @@ const copyBasePreviewTint = (fact: X4UiSceneColorFact): X4UiPaintBasePreviewTint
 };
 
 const basePreviewTintsForNode = (node: Node): readonly X4UiPaintBasePreviewTint[] =>
-  colorFactsForNode(node).map(copyBasePreviewTint);
+  colorFactsForNode(node)
+    .filter(fact => fact.slot !== 'table-background' || tableBackgroundTintApplicable(node))
+    .map(copyBasePreviewTint);
 
 const sourceValid = (value: unknown): value is X4UiSceneSourceLocation => {
   if (!isRecord(value) || !exactKeys(value, ['file', 'start', 'end'], ['sourcePath']) || typeof value.file !== 'string' || value.file.length === 0) return false;
@@ -880,8 +888,11 @@ const sceneNodeShapeValid = (node: unknown): node is Node => {
     case 'frame':
       return exactKeys(node, [...baseRequired, 'tableIds'], [...baseOptional, 'layer']) && stringArrayValid(node.tableIds) && (node.layer === undefined || isFiniteSafe(node.layer));
     case 'table':
-      return exactKeys(node, [...baseRequired, 'rowIds'], [...baseOptional, 'frameId', 'columns', 'fixedColumns', 'fullHeight', 'visibleHeight', 'maxVisibleHeight', 'descriptorHasScrollBar', 'scrollbarEvidence', 'reserveScrollBar', 'viewportRect', 'scrollbar', 'viewState'])
+      {
+        const backgroundId = ownDataField(node, 'backgroundId');
+        return exactKeys(node, [...baseRequired, 'rowIds'], [...baseOptional, 'backgroundId', 'frameId', 'columns', 'fixedColumns', 'fullHeight', 'visibleHeight', 'maxVisibleHeight', 'descriptorHasScrollBar', 'scrollbarEvidence', 'reserveScrollBar', 'viewportRect', 'scrollbar', 'viewState'])
         && stringArrayValid(node.rowIds) && (node.frameId === undefined || typeof node.frameId === 'string')
+        && (!backgroundId.present || backgroundId.valid && typeof backgroundId.value === 'string')
         && (node.columns === undefined || Array.isArray(node.columns) && node.columns.every(item => sceneColumnValid(item, sourceOrderValue)))
         && (node.fixedColumns === undefined || Array.isArray(node.fixedColumns) && node.fixedColumns.every(item => sceneColumnValid(item, sourceOrderValue)))
         && ['fullHeight', 'visibleHeight', 'maxVisibleHeight'].every(key => node[key] === undefined || isDimension(node[key]))
@@ -889,6 +900,7 @@ const sceneNodeShapeValid = (node: unknown): node is Node => {
         && (node.scrollbarEvidence === undefined || isRecord(node.scrollbarEvidence) && exactKeys(node.scrollbarEvidence, ['descriptor', 'runtime']) && node.scrollbarEvidence.descriptor === 'helper-derived' && node.scrollbarEvidence.runtime === 'unavailable')
         && (node.reserveScrollBar === undefined || typeof node.reserveScrollBar === 'boolean') && (node.viewportRect === undefined || rectValid(node.viewportRect))
         && (node.scrollbar === undefined || sceneScrollbarValid(node.scrollbar)) && (node.viewState === undefined || sceneViewStateValid(node.viewState));
+      }
     case 'row':
       return exactKeys(node, [...baseRequired, 'tableId', 'cellIds'], [...baseOptional, 'rowIndex', 'fixed', 'visible', 'paddingTop', 'paddingBottom', 'borderBelow', 'naturalRect'])
         && (node.tableId === undefined || typeof node.tableId === 'string') && stringArrayValid(node.cellIds)
@@ -974,7 +986,7 @@ const sceneTextLayoutConsistent = (text: X4UiSceneTextNode, glyphsById: Map<stri
       || !Object.is(line.rect.width, layoutLine.width)
       || !Object.is(line.rect.height, layoutLine.lineBox.height)) return false;
     const xBase = line.rect.x - (layoutLine.lineBox.x as number);
-    const yBase = line.rect.y;
+    const yBase = line.rect.y - (layoutLine.lineBox.y as number);
     for (const [index, glyphId] of line.glyphIds.entries()) {
       const glyph = glyphsById.get(glyphId);
       const layoutQuad = layoutLine.glyphQuads[index];

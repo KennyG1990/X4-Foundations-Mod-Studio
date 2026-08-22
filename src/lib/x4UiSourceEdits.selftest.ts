@@ -43,7 +43,7 @@ import {
   encodeX4UiSourceEditReplacement,
   normalizeX4UiSourceEditLayoutModel,
   type X4UiSourceEditDeleteEntry,
-  type X4UiSourceEditInsertEntry,
+  type X4UiSourceEditInsertionEntry,
   type X4UiSourceEditStructuralEntry,
   type X4UiEditableSourceEditEntry,
   type X4UiSourceEditCatalog,
@@ -579,7 +579,7 @@ const applyById = (
 const structuralApply = (
   context: Pick<SourceEditFixtureContext, 'workspace' | 'source'>,
   catalog: X4UiSourceEditCatalog,
-  entry: X4UiSourceEditDeleteEntry | X4UiSourceEditInsertEntry,
+  entry: X4UiSourceEditDeleteEntry | X4UiSourceEditInsertionEntry,
   directCall?: string,
   expected?: { readonly path?: string; readonly startOffset?: number; readonly endOffset?: number; readonly expectedText?: string },
 ): ReturnType<typeof applyX4UiSourceStructuralEdit> => applyX4UiSourceStructuralEdit(
@@ -605,8 +605,8 @@ const structuralDelete = (
 
 const structuralInsert = (
   catalog: X4UiSourceEditCatalog,
-  anchor: X4UiSourceEditInsertEntry['anchor'],
-): X4UiSourceEditInsertEntry => {
+  anchor: X4UiSourceEditInsertionEntry['anchor'],
+): X4UiSourceEditInsertionEntry => {
   const entry = (catalog.insertEntries || []).find(candidate => candidate.anchor === anchor);
   if (!entry) throw new Error(`structural insert entry missing for ${anchor}: ${JSON.stringify(catalog.insertEntries)}`);
   return entry;
@@ -1231,7 +1231,8 @@ const run = (): void => {
       && appliedPartialWidth !== undefined
       && appliedPartialWidth.provenance.callName === 'addTable'
       && appliedPartialWidth.provenance.fields.includes('semantics.properties.width')
-      && (appliedPartialCatalog.structuralEntries || []).length === 0
+      && (appliedPartialCatalog.structuralEntries || []).length > 0
+      && (appliedPartialCatalog.structuralEntries || []).every(entry => entry.kind === 'delete-statement')
       && appliedPartialApplyOutcome.threw === false
       && appliedPartialApplyOutcome.value?.accepted === true
       && appliedPartialApplyOutcome.value.changed === true,
@@ -1247,7 +1248,8 @@ const run = (): void => {
       && appliedPartialResult.catalog.verification === 'Not verified in game'
       && appliedPartialResult.catalog.status === 'ready'
       && appliedPartialResult.catalog.editable
-      && (appliedPartialResult.catalog.structuralEntries || []).length === 0
+      && (appliedPartialResult.catalog.structuralEntries || []).length > 0
+      && (appliedPartialResult.catalog.structuralEntries || []).every(entry => entry.kind === 'delete-statement')
       && appliedPartialAfterProjection !== undefined
       && appliedPartialAfterProjection.program.status === 'partial'
       && appliedPartialAfterProjection.program.operations.length > 0
@@ -1276,8 +1278,9 @@ const run = (): void => {
     appliedPartialCatalog,
     'missing-applied-partial-structural-action',
   );
-  check('B119 applied-partial authority exposes no structural action and structural apply refuses',
-    (appliedPartialCatalog.structuralEntries || []).length === 0
+  check('B119 applied-partial authority retains complete deletion actions and rejects unknown structural action',
+    (appliedPartialCatalog.structuralEntries || []).length > 0
+      && (appliedPartialCatalog.structuralEntries || []).every(entry => entry.kind === 'delete-statement')
       && appliedPartialStructuralRefusal.accepted === false
       && appliedPartialStructuralRefusal.reason === 'unsupported-provenance'
       && appliedPartialStructuralRefusal.changed === false
@@ -1519,7 +1522,8 @@ const run = (): void => {
       && namedFunctionCatalog?.status === 'ready'
       && namedFunctionCatalog.editableEntries.some(entry => entry.provenance.callName === 'addTable'
         && entry.provenance.fields.includes('semantics.properties.width'))
-      && (namedFunctionCatalog.structuralEntries || []).length === 0,
+      && (namedFunctionCatalog.structuralEntries || []).length > 0
+      && (namedFunctionCatalog.structuralEntries || []).every(entry => entry.kind === 'delete-statement'),
     JSON.stringify(namedFunctionReceipt));
 
   const namedFunctionWidth = namedFunctionCatalog?.editableEntries.find(entry => entry.provenance.callName === 'addTable'
@@ -1567,7 +1571,8 @@ const run = (): void => {
       && namedFunctionResult.catalog.status === 'ready'
       && namedFunctionResult.catalog.editable
       && namedFunctionResult.catalog.verification === 'Not verified in game'
-      && (namedFunctionResult.catalog.structuralEntries || []).length === 0
+      && (namedFunctionResult.catalog.structuralEntries || []).length > 0
+      && (namedFunctionResult.catalog.structuralEntries || []).every(entry => entry.kind === 'delete-statement')
       && namedFunctionAfterSource === namedFunctionBeforeSource.slice(0, namedFunctionWidth.startOffset)
         + '81'
         + namedFunctionBeforeSource.slice(namedFunctionWidth.endOffset)
@@ -1797,7 +1802,8 @@ const run = (): void => {
       && dynamicHandlerCatalog.editable
       && dynamicHandlerWidth !== undefined
       && dynamicHandlerBeforeSource !== undefined
-      && (dynamicHandlerCatalog.structuralEntries || []).length === 0
+      && (dynamicHandlerCatalog.structuralEntries || []).length > 0
+      && (dynamicHandlerCatalog.structuralEntries || []).every(entry => entry.kind === 'delete-statement')
       && dynamicHandlerApplyOutcome.threw === false
       && dynamicHandlerResult !== undefined
       && dynamicHandlerResult.changed
@@ -1806,7 +1812,8 @@ const run = (): void => {
       && dynamicHandlerResult.catalog.status === 'ready'
       && dynamicHandlerResult.catalog.editable
       && dynamicHandlerResult.catalog.verification === 'Not verified in game'
-      && (dynamicHandlerResult.catalog.structuralEntries || []).length === 0
+      && (dynamicHandlerResult.catalog.structuralEntries || []).length > 0
+      && (dynamicHandlerResult.catalog.structuralEntries || []).every(entry => entry.kind === 'delete-statement')
       && dynamicHandlerAfterSource === dynamicHandlerBeforeSource.slice(0, dynamicHandlerWidth.startOffset)
         + '81'
         + dynamicHandlerBeforeSource.slice(dynamicHandlerWidth.endOffset)
@@ -3010,7 +3017,8 @@ const run = (): void => {
   check('8B ambiguous first-row anchors are refused without guessing a table',
     ambiguousRowError === undefined
       && ambiguousRowCatalog !== undefined
-      && (ambiguousRowCatalog.insertEntries || []).length === 0,
+      && (ambiguousRowCatalog.insertEntries || []).every(entry => entry.kind !== 'insert-call')
+      && (ambiguousRowCatalog.insertEntries || []).filter(entry => entry.kind === 'insert-block').length === 1,
     JSON.stringify({ error: ambiguousRowError, structuralEntries: ambiguousRowCatalog?.structuralEntries }));
 
   const structuralDiscoveryProxyCounter = { reads: 0 };
@@ -3306,6 +3314,288 @@ const run = (): void => {
     };
   };
 
+  const assignedRowsPartialLua = [
+    'local helper = rawget(_G, "Helper")',
+    'local menu = { name = "Assigned rows partial", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local tableA = frame:addTable(1, {})',
+    'local row = tableA:addRow(false, {})',
+    'local tableB = frame:addTable(3, {})',
+    'row = tableB:addRow(true, {})',
+    'row[1]:setColSpan(1):createEditBox({ width = 20, height = 20, scaling = false })',
+    'row[2]:setColSpan(1):createButton({ active = true }):setText("SEND", {})',
+    'row[3]:setColSpan(1):createButton({ active = true }):setText("END", {})',
+    'frame:display()',
+    '',
+  ].join('\n');
+  causal('B119-ASSIGNED-ROWS', 'assignment-root real-source shape exposes one frame block and only complete widget deletions', () => {
+    const context = contextFor(assignedRowsPartialLua);
+    const catalog = catalogFor(context);
+    const file = context.source.bundle?.sourceFiles.find(candidate => candidate.path === 'ui/edit.lua');
+    const calls = file?.callModel.calls || [];
+    const target = context.program.target.source;
+    const relevantNames = new Set(['addRow', 'createEditBox', 'createButton', 'setText', 'setColSpan', 'display']);
+    const locationWithinTarget = (source: { readonly file: string; readonly sourcePath?: string; readonly start: { readonly offset: number }; readonly end: { readonly offset: number } }): boolean =>
+      source.file === target.file
+      && source.sourcePath === target.sourcePath
+      && target.start.offset <= source.start.offset
+      && target.end.offset >= source.end.offset;
+    const sameSourceLocation = (left: unknown, right: unknown): boolean => JSON.stringify(left) === JSON.stringify(right);
+    const preFilterStructuralFacts = calls
+      .filter(call => relevantNames.has(call.name) && locationWithinTarget(call.source))
+      .map(call => {
+        const operation = context.program.operations.find(candidate => candidate.kind === call.name
+          && candidate.modelOrder === call.order
+          && sameSourceLocation(candidate.source, call.source));
+        const operationRecord = operation as unknown as Record<string, unknown> | undefined;
+        const binding = context.evidenceAuthority.sourceBindings.find(candidate => candidate.operationId === operation?.id
+          && sameSourceLocation(candidate.source, call.source));
+        const callRecord = call as unknown as Record<string, unknown>;
+        const statement = asRecord(callRecord.enclosingStatement);
+        return {
+          name: call.name,
+          order: call.order,
+          source: call.source,
+          receiver: asRecord(call.receiver)?.expression,
+          assignedTo: call.assignedTo,
+          statementKind: statement?.kind,
+          standaloneRoot: statement?.isStandaloneCallStatementRoot,
+          operation: operation
+            ? { id: operation.id, status: operation.status, tableId: operationRecord?.tableId, frameId: operationRecord?.frameId, rowId: operationRecord?.rowId, cellId: operationRecord?.cellId }
+            : undefined,
+          evidenceBinding: binding
+            ? { operationId: binding.operationId, callId: binding.callId, source: binding.source }
+            : undefined,
+        };
+      });
+    const blockEntries = (catalog.insertEntries || []).filter(entry => entry.kind === 'insert-block' && entry.anchor === 'frame-display');
+    const insertCallEntries = (catalog.insertEntries || []).filter(entry => entry.kind === 'insert-call');
+    const deleteEntries = catalog.deleteEntries || [];
+    const widgetDeleteEntries = deleteEntries.filter(entry => entry.callBindings.some(binding =>
+      binding.callName === 'createEditBox' || binding.callName === 'createButton'));
+    const rowDeleteEntries = deleteEntries.filter(entry => entry.callBindings.some(binding => binding.callName === 'addRow'));
+    return {
+      pass: context.program.status === 'partial'
+        && preFilterStructuralFacts.filter(fact => fact.name === 'addRow').length === 2
+        && preFilterStructuralFacts.filter(fact => fact.name === 'addRow').every(fact => fact.operation?.status === 'applied'
+          && typeof fact.operation.tableId === 'string'
+          && fact.standaloneRoot === false)
+        && blockEntries.length === 1
+        && widgetDeleteEntries.length === 3
+        && rowDeleteEntries.length === 0
+        && insertCallEntries.length === 0,
+      detail: {
+        selectedProgram: {
+          status: context.program.status,
+          operationCount: context.program.operations.length,
+          appliedOperationCount: context.program.operations.filter(operation => operation.status === 'applied').length,
+          target: context.program.target,
+        },
+        preFilterStructuralFacts,
+        postFilterCatalog: {
+          structuralEntries: catalog.structuralEntries,
+          deleteEntries,
+          insertEntries: catalog.insertEntries,
+          widgetDeleteEntries,
+          rowDeleteEntries,
+        },
+        ownerSnapshot: structuralOwnerSnapshot(context, catalog),
+      },
+    };
+  });
+  causal('B119-ASSIGNED-ROWS', 'partial assigned-row authority applies three owner-issued widget deletes then the reissued frame block', () => {
+    const initial = contextFor(assignedRowsPartialLua);
+    let current: Pick<SourceEditFixtureContext, 'workspace' | 'source'> = initial;
+    let currentCatalog = catalogFor(initial);
+    const parentBytes = workspaceBytes(initial.workspace);
+    const initialBlockEntries = (currentCatalog.insertEntries || []).filter(entry => entry.kind === 'insert-block' && entry.anchor === 'frame-display');
+    const initialWidgetDeletes = (currentCatalog.deleteEntries || []).filter(entry => entry.callBindings.some(binding =>
+      binding.callName === 'createEditBox' || binding.callName === 'createButton'));
+    const initialRowDeletes = (currentCatalog.deleteEntries || []).filter(entry => entry.callBindings.some(binding => binding.callName === 'addRow'));
+    const initialInsertCalls = (currentCatalog.insertEntries || []).filter(entry => entry.kind === 'insert-call');
+    const assignedFrameBlockPayload = [
+      'local inputTable = frame:addTable(2, { x = 8, y = 12, width = 72, scaling = false })',
+      'inputTable:setColWidthPercent(1, 50)',
+      'inputTable:setColWidthPercent(2, 50)',
+      'local inputRow = inputTable:addRow(false, { height = 20, scaling = false })',
+      'inputRow[1]:setColSpan(1):createEditBox({ width = 36, height = 20, scaling = false })',
+      'inputRow[2]:createEditBox({ width = 36, height = 20, scaling = false })',
+    ].join('\n');
+    const deletionSpecs = [
+      { name: 'editbox', matches: (entry: X4UiSourceEditDeleteEntry) => entry.callBindings.some(binding => binding.callName === 'createEditBox') },
+      { name: 'SEND', matches: (entry: X4UiSourceEditDeleteEntry) => entry.expectedText.includes('"SEND"') },
+      { name: 'END', matches: (entry: X4UiSourceEditDeleteEntry) => entry.expectedText.includes('"END"') },
+    ] as const;
+    const deltas: Array<Record<string, unknown>> = [];
+    for (const spec of deletionSpecs) {
+      const entry = (currentCatalog.deleteEntries || []).find(spec.matches);
+      if (!entry) return { pass: false, detail: { phase: spec.name, reason: 'issued widget delete missing' } };
+      const beforeText = sourceText(current);
+      const beforeProjected = projectedProgramFor(current.source);
+      const beforeLedger = ledgerCounts(current.source);
+      const beforeOperations = beforeProjected?.program.operations || [];
+      const owner = entry.provenance.owner;
+      const removedOperationIds = new Set(entry.callBindings.map(binding => binding.operationId));
+      const removedOperations = beforeOperations.filter(operation => removedOperationIds.has(operation.id));
+      const result = structuralApply(current, currentCatalog, entry);
+      if (!result.accepted) {
+        return {
+          pass: false,
+          detail: { phase: spec.name, accepted: false, reason: structuralResultReason(result), detail: structuralResultDetail(result) },
+        };
+      }
+      const afterProjected = projectedProgramFor(result.source);
+      const afterLedger = ledgerCounts(result.source);
+      const afterText = sourceText(result);
+      const afterOperations = afterProjected?.program.operations || [];
+      const afterBlockEntries = (result.catalog.insertEntries || []).filter(candidate => candidate.kind === 'insert-block' && candidate.anchor === 'frame-display');
+      const afterInsertCalls = (result.catalog.insertEntries || []).filter(candidate => candidate.kind === 'insert-call');
+      const afterRowDeletes = (result.catalog.deleteEntries || []).filter(candidate => candidate.callBindings.some(binding => binding.callName === 'addRow'));
+      const exactSourceDelta = afterText === beforeText.slice(0, entry.startOffset) + beforeText.slice(entry.endOffset)
+        && result.replacement === '';
+      const exactCallOperationDelta = beforeLedger !== undefined
+        && afterLedger !== undefined
+        && afterLedger.calls === beforeLedger.calls - entry.callBindings.length
+        && afterLedger.operations === beforeLedger.operations - entry.callBindings.length
+        && beforeProjected !== undefined
+        && afterProjected !== undefined
+        && afterProjected.model.calls.length === beforeProjected.model.calls.length - entry.callBindings.length
+        && afterOperations.length === beforeOperations.length - entry.callBindings.length
+        && entry.callBindings.every(binding => removedOperationIds.has(binding.operationId)
+          && removedOperations.some(operation => operation.id === binding.operationId))
+        && entry.callBindings.every(binding => !afterOperations.some(operation => operation.id === binding.operationId));
+      const exactOwnerDelta = owner?.kind === 'table'
+        && typeof owner.ownerId === 'string'
+        && typeof owner.frameId === 'string'
+        && removedOperations.length === entry.callBindings.length
+        && removedOperations.every(operation => (operation as unknown as Record<string, unknown>).tableId === owner.ownerId);
+      const authorityReissued = result.catalog.sourceIdentity.sha256 !== entry.provenance.sourceIdentity.sha256
+        && afterBlockEntries.length === 1
+        && afterInsertCalls.length === 0
+        && afterRowDeletes.length === 0
+        && workspaceBytes(initial.workspace) === parentBytes;
+      deltas.push({
+        phase: spec.name,
+        exactSourceDelta,
+        exactCallOperationDelta,
+        exactOwnerDelta,
+        authorityReissued,
+        beforeLedger,
+        afterLedger,
+        callBindings: entry.callBindings,
+        owner,
+      });
+      current = { workspace: result.workspace, source: result.source };
+      currentCatalog = result.catalog;
+    }
+    const blockEntry = (currentCatalog.insertEntries || []).find(entry => entry.kind === 'insert-block' && entry.anchor === 'frame-display');
+    if (!blockEntry) return { pass: false, detail: { phase: 'frame-display', reason: 'reissued frame block missing', deltas } };
+    const blockBeforeText = sourceText(current);
+    const blockBeforeLedger = ledgerCounts(current.source);
+    const blockResult = structuralApply(current, currentCatalog, blockEntry, assignedFrameBlockPayload);
+    if (!blockResult.accepted) {
+      return {
+        pass: false,
+        detail: { phase: 'frame-display', accepted: false, reason: structuralResultReason(blockResult), detail: structuralResultDetail(blockResult), deltas },
+      };
+    }
+    const blockAfterProjected = projectedProgramFor(blockResult.source);
+    const blockAfterFile = blockResult.source.bundle?.sourceFiles.find(file => file.path === 'ui/edit.lua');
+    const blockInsertedStart = blockEntry.startOffset + blockEntry.indentation.length;
+    const blockInsertedEnd = blockEntry.startOffset + blockResult.replacement.length;
+    const blockInsertedCalls = blockAfterFile?.callModel.calls.filter(call => call.source.start.offset >= blockInsertedStart && call.source.end.offset <= blockInsertedEnd) || [];
+    const blockInsertedOperations = blockAfterProjected?.program.operations.filter(operation => operation.source.start.offset >= blockInsertedStart && operation.source.end.offset <= blockInsertedEnd) || [];
+    const blockAfterLedger = ledgerCounts(blockResult.source);
+    const blockReissued = (blockResult.catalog.insertEntries || []).filter(entry => entry.kind === 'insert-block' && entry.anchor === 'frame-display');
+    const blockOwner = blockEntry.provenance.owner;
+    const blockExact = blockOwner?.kind === 'frame'
+      && typeof blockOwner.ownerId === 'string'
+      && blockBeforeLedger !== undefined
+      && blockAfterLedger !== undefined
+      && blockAfterLedger.calls === blockBeforeLedger.calls + blockInsertedCalls.length
+      && blockAfterLedger.operations === blockBeforeLedger.operations + blockInsertedOperations.length
+      && blockInsertedCalls.length === 7
+      && blockInsertedOperations.length === 7
+      && sourceText(blockResult) === blockBeforeText.slice(0, blockEntry.startOffset)
+        + blockResult.replacement
+        + blockBeforeText.slice(blockEntry.startOffset)
+      && workspaceBytes(initial.workspace) === parentBytes
+      && blockReissued.length === 1
+      && blockReissued[0].provenance.owner?.kind === 'frame'
+      && blockReissued[0].provenance.owner.ownerId === blockOwner.ownerId
+      && blockResult.catalog.sourceIdentity.sha256 !== blockEntry.provenance.sourceIdentity.sha256;
+    return {
+      pass: initial.program.status === 'partial'
+        && initialBlockEntries.length === 1
+        && initialWidgetDeletes.length === 3
+        && initialRowDeletes.length === 0
+        && initialInsertCalls.length === 0
+        && deltas.length === deletionSpecs.length
+        && deltas.every(delta => delta.exactSourceDelta && delta.exactCallOperationDelta && delta.exactOwnerDelta && delta.authorityReissued)
+        && blockExact,
+      detail: {
+        initial: {
+          status: initial.program.status,
+          blockEntries: initialBlockEntries.length,
+          widgetDeletes: initialWidgetDeletes.length,
+          rowDeletes: initialRowDeletes.length,
+          insertCalls: initialInsertCalls.length,
+        },
+        deltas,
+        block: {
+          exact: blockExact,
+          insertedCalls: blockInsertedCalls.length,
+          insertedOperations: blockInsertedOperations.length,
+          beforeLedger: blockBeforeLedger,
+          afterLedger: blockAfterLedger,
+          reissued: blockReissued.length,
+        },
+      },
+    };
+  });
+  const assignedRowsMultilinePartialLua = [
+    'local helper = rawget(_G, "Helper")',
+    'local menu = { name = "Assigned rows multiline", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local tableA = frame:addTable(1, {})',
+    'local row = tableA:addRow(false, {})',
+    'local tableB = frame:addTable(3, {})',
+    'row = tableB:addRow(true, {})',
+    'row[1]:setColSpan(1):createEditBox({',
+    '  width = 20, height = 20, scaling = false,',
+    '})',
+    'row[2]:setColSpan(1):createButton({ active = true }):setText("SEND", {',
+    '  halign = "center",',
+    '})',
+    'row[3]:setColSpan(1):createButton({ active = true }):setText("END", {',
+    '  halign = "center",',
+    '})',
+    'frame:display()',
+    '',
+  ].join('\n');
+  causal('B119-ASSIGNED-ROWS', 'multiline assigned-row chains retain complete widget deletes with one frame block', () => {
+    const context = contextFor(assignedRowsMultilinePartialLua);
+    const catalog = catalogFor(context);
+    const widgetDeletes = (catalog.deleteEntries || []).filter(entry => entry.callBindings.some(binding =>
+      binding.callName === 'createEditBox' || binding.callName === 'createButton'));
+    const rowDeletes = (catalog.deleteEntries || []).filter(entry => entry.callBindings.some(binding => binding.callName === 'addRow'));
+    const blockEntries = (catalog.insertEntries || []).filter(entry => entry.kind === 'insert-block' && entry.anchor === 'frame-display');
+    return {
+      pass: context.program.status === 'partial'
+        && widgetDeletes.length === 3
+        && rowDeletes.length === 0
+        && blockEntries.length === 1
+        && (catalog.insertEntries || []).every(entry => entry.kind === 'insert-block'),
+      detail: {
+        status: context.program.status,
+        widgetDeletes: widgetDeletes.length,
+        rowDeletes: rowDeletes.length,
+        blockEntries,
+        structuralEntries: catalog.structuralEntries,
+      },
+    };
+  });
+
   const tableOwnerReassignmentLua = [
     'local menu = { name = "Table reassignment", layer = 1 }',
     'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
@@ -3380,6 +3670,365 @@ const run = (): void => {
       };
     });
   }
+
+  const mixedTableFrameBlockLua = [
+    'local menu = { name = "Mixed table frame block", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local tableA = frame:addTable(1, {})',
+    'tableA:addRow(false, {})',
+    'local tableB = frame:addTable(1, {})',
+    'tableB:addRow(false, {})',
+    'frame:display()',
+    '',
+  ].join('\n');
+  const mixedTableFrameBlockPayload = [
+    'local inputTable = frame:addTable(2, { x = 8, y = 12, width = 72, scaling = false })',
+    'inputTable:setColWidthPercent(1, 50)',
+    'inputTable:setColWidthPercent(2, 50)',
+    'local inputRow = inputTable:addRow(false, { height = 20, scaling = false })',
+    'inputRow[1]:setColSpan(1):createEditBox({ width = 36, height = 20, scaling = false })',
+    'inputRow[2]:createEditBox({ width = 36, height = 20, scaling = false })',
+  ].join('\n');
+  const indentedCrlfMixedTableFrameBlockLua = mixedTableFrameBlockLua
+    .split('\n')
+    .map(line => line ? `    ${line}` : line)
+    .join('\r\n');
+  const mixedTableFrameBlockInvalidPayloads = [
+    ['hidden non-UI invocation inside valid block', [
+      'local inputTable = frame:addTable(2, {})',
+      'local inputRow = inputTable:addRow(false, { height = measureHeight() })',
+      'inputRow[1]:createText("x", {})',
+    ].join('\n'), 'replacement-parse-failure' as const],
+    ['arbitrary non-UI call', 'os.execute("unsafe")', 'replacement-parse-failure' as const],
+    ['function definition', 'function forgeHandler() end', 'replacement-parse-failure' as const],
+    ['control flow', 'if enabled then frame:display() end', 'replacement-parse-failure' as const],
+    ['loop', 'for index = 1, 1 do frame:display() end', 'replacement-parse-failure' as const],
+    ['unrelated declaration', 'local unrelated = 1', 'replacement-parse-failure' as const],
+    ['unrelated assignment between valid UI statements', [
+      'local inputTable = frame:addTable(2, {})',
+      'inputTable:setColWidthPercent(1, 50)',
+      'unrelated = 1',
+      'local inputRow = inputTable:addRow(false, {})',
+      'inputRow[1]:createText("x", {})',
+    ].join('\n'), 'replacement-parse-failure' as const],
+    ['malformed syntax after valid UI statement', [
+      'local inputTable = frame:addTable(2, {})',
+      'inputTable:addRow(false, {',
+    ].join('\n'), 'replacement-parse-failure' as const],
+    ['oversized payload', 'x'.repeat(32769), 'invalid-request' as const],
+    ['duplicate local binding', [
+      'local inputTable = frame:addTable(2, {})',
+      'local inputTable = frame:addTable(2, {})',
+    ].join('\n'), 'replacement-parse-failure' as const],
+    ['reassigned local binding', [
+      'local inputTable = frame:addTable(2, {})',
+      'inputTable = frame:addTable(2, {})',
+    ].join('\n'), 'replacement-parse-failure' as const],
+    ['cross-owner table reference', [
+      'local inputTable = frame:addTable(2, {})',
+      'local inputRow = tableA:addRow(false, {})',
+      'inputRow[1]:createText("x", {})',
+    ].join('\n'), 'replacement-parse-failure' as const],
+    ['cross-frame receiver', [
+      'local inputTable = frame:addTable(2, {})',
+      'local foreignTable = otherFrame:addTable(2, {})',
+    ].join('\n'), 'replacement-parse-failure' as const],
+  ] as const;
+  const mixedTableFrameBlockEntry = (catalog: X4UiSourceEditCatalog): X4UiSourceEditStructuralEntry | undefined =>
+    (catalog.structuralEntries || []).find(candidate => {
+      const record = candidate as unknown as Record<string, unknown>;
+      return record.kind === 'insert-block' && record.anchor === 'frame-display';
+    });
+  causal('B119-FRAME-BLOCK', 'mixed-table selected function receives exactly one frame/display block authority', () => {
+    const context = contextFor(mixedTableFrameBlockLua);
+    const catalog = catalogFor(context);
+    const blockEntries = (catalog.structuralEntries || []).filter(candidate => {
+      const record = candidate as unknown as Record<string, unknown>;
+      return record.kind === 'insert-block' && record.anchor === 'frame-display';
+    });
+    const entry = blockEntries[0] as unknown as Record<string, unknown> | undefined;
+    const provenance = asRecord(entry?.provenance);
+    const owner = asRecord(provenance?.owner);
+    return {
+      pass: blockEntries.length === 1
+        && owner?.kind === 'frame'
+        && typeof owner.ownerId === 'string'
+        && typeof entry?.startOffset === 'number'
+        && entry?.startOffset === entry?.endOffset
+        && entry?.expectedText === '',
+      detail: { blockEntries, ownerSnapshot: structuralOwnerSnapshot(context, catalog) },
+    };
+  });
+  causal('B119-FRAME-BLOCK', 'valid frame block applies as one bounded CAS insertion with exact hierarchy ledger delta', () => {
+    const context = contextFor(mixedTableFrameBlockLua);
+    const catalog = catalogFor(context);
+    const entry = mixedTableFrameBlockEntry(catalog) as X4UiSourceEditInsertionEntry | undefined;
+    if (!entry) return { pass: false, detail: { reason: 'frame block authority absent', structuralEntries: catalog.structuralEntries } };
+    const beforeText = sourceText(context);
+    const beforeBytes = workspaceBytes(context.workspace);
+    const beforeLedger = ledgerCounts(context.source);
+    const result = structuralApply(context, catalog, entry, mixedTableFrameBlockPayload, {
+      path: entry.path,
+      startOffset: entry.startOffset,
+      endOffset: entry.endOffset,
+      expectedText: entry.expectedText,
+    });
+    const afterLedger = result.accepted ? ledgerCounts(result.source) : undefined;
+    const reissuedEntry = result.accepted
+      ? (result.catalog.insertEntries || []).find(candidate => candidate.kind === 'insert-block' && candidate.anchor === 'frame-display')
+      : undefined;
+    const repeatedResult = result.accepted && reissuedEntry
+      ? structuralApply({ workspace: result.workspace, source: result.source }, result.catalog, reissuedEntry, mixedTableFrameBlockPayload, {
+        path: reissuedEntry.path,
+        startOffset: reissuedEntry.startOffset,
+        endOffset: reissuedEntry.endOffset,
+        expectedText: reissuedEntry.expectedText,
+      })
+      : undefined;
+    return {
+      pass: result.accepted
+        && result.changed
+        && result.reparsed
+        && result.provenanceReestablished
+        && sourceText(result).includes('local inputTable = frame:addTable(2, { x = 8, y = 12, width = 72, scaling = false })')
+        && sourceText(result).includes('inputRow[1]:setColSpan(1):createEditBox({ width = 36, height = 20, scaling = false })')
+        && sourceText(result).includes('inputTable:setColWidthPercent(2, 50)')
+        && workspaceBytes(context.workspace) === beforeBytes
+        && beforeText.slice(0, entry.startOffset) + `${entry.indentation}${mixedTableFrameBlockPayload}${entry.lineEnding}` + beforeText.slice(entry.startOffset) === sourceText(result)
+        && beforeLedger !== undefined
+        && afterLedger !== undefined
+        && afterLedger.calls === beforeLedger.calls + 7
+        && afterLedger.operations === beforeLedger.operations + 7
+        && result.catalog !== catalog
+        && reissuedEntry !== undefined
+        && repeatedResult?.accepted === true
+        && repeatedResult.reparsed
+        && repeatedResult.provenanceReestablished
+        && (result.catalog.insertEntries || []).some(candidate => candidate.anchor === 'frame-display'),
+      detail: {
+        result: {
+          accepted: result.accepted,
+          changed: result.changed,
+          reparsed: result.accepted ? result.reparsed : undefined,
+          provenanceReestablished: result.accepted ? result.provenanceReestablished : undefined,
+          reason: structuralResultReason(result),
+          detail: structuralResultDetail(result),
+        },
+        beforeLedger,
+        afterLedger,
+        repeated: repeatedResult?.accepted === true
+          ? { accepted: true, changed: repeatedResult.changed, reparsed: repeatedResult.reparsed, provenanceReestablished: repeatedResult.provenanceReestablished }
+          : repeatedResult === undefined
+            ? undefined
+            : { accepted: false, reason: repeatedResult.reason, detail: repeatedResult.detail },
+      },
+    };
+  });
+  causal('B119-FRAME-BLOCK', 'fail-first indented CRLF block formats every statement with the issued local style', () => {
+    const context = contextFor(indentedCrlfMixedTableFrameBlockLua);
+    const catalog = catalogFor(context);
+    const entry = mixedTableFrameBlockEntry(catalog) as X4UiSourceEditInsertionEntry | undefined;
+    if (!entry) return { pass: false, detail: { reason: 'frame block authority absent' } };
+    const beforeText = sourceText(context);
+    const beforeLedger = ledgerCounts(context.source);
+    const payloadWithIssuedStyle = mixedTableFrameBlockPayload.replace(/\n/g, `${entry.lineEnding}${entry.indentation}`);
+    const expectedReplacement = `${entry.indentation}${payloadWithIssuedStyle}${entry.lineEnding}`;
+    const result = structuralApply(context, catalog, entry, mixedTableFrameBlockPayload);
+    const actualReplacement = result.accepted ? result.replacement : undefined;
+    const afterLedger = result.accepted ? ledgerCounts(result.source) : undefined;
+    const reissuedEntry = result.accepted
+      ? mixedTableFrameBlockEntry(result.catalog)
+      : undefined;
+    const expectedSource = beforeText.slice(0, entry.startOffset)
+      + expectedReplacement
+      + beforeText.slice(entry.startOffset);
+    return {
+      pass: result.accepted
+        && result.reparsed
+        && result.provenanceReestablished
+        && actualReplacement === expectedReplacement
+        && sourceText(result) === expectedSource
+        && !/(?<!\r)\n/.test(sourceText(result))
+        && beforeLedger !== undefined
+        && afterLedger !== undefined
+        && afterLedger.calls === beforeLedger.calls + 7
+        && afterLedger.operations === beforeLedger.operations + 7
+        && reissuedEntry !== undefined
+        && reissuedEntry.provenance.sourceIdentity.sha256 !== entry.provenance.sourceIdentity.sha256,
+      detail: {
+        entry: {
+          indentation: entry.indentation,
+          lineEnding: entry.lineEnding,
+          startOffset: entry.startOffset,
+        },
+        expectedReplacement,
+        actualReplacement,
+        result: {
+          accepted: result.accepted,
+          reason: structuralResultReason(result),
+          detail: structuralResultDetail(result),
+        },
+        beforeLedger,
+        afterLedger,
+        reissued: reissuedEntry !== undefined,
+      },
+    };
+  });
+  for (const [name, payload, expectedReason] of mixedTableFrameBlockInvalidPayloads) {
+    causal('B119-FRAME-BLOCK', `${name} is rejected without source mutation`, () => {
+      const context = contextFor(mixedTableFrameBlockLua);
+      const catalog = catalogFor(context);
+      const entry = mixedTableFrameBlockEntry(catalog) as X4UiSourceEditInsertionEntry | undefined;
+      if (!entry) return { pass: false, detail: { reason: 'frame block authority absent' } };
+      const beforeText = sourceText(context);
+      const beforeBytes = workspaceBytes(context.workspace);
+      const result = structuralApply(context, catalog, entry, payload);
+      const repeated = structuralApply(context, catalog, entry, payload);
+      return {
+        pass: structuralRefusalPreservesInput(result, context, catalog, beforeBytes, beforeText)
+          && result.accepted === false
+          && result.reason === expectedReason
+          && result.detail.length > 0
+          && repeated.accepted === false
+          && repeated.reason === result.reason
+          && repeated.detail === result.detail
+          && structuralRefusalPreservesInput(repeated, context, catalog, beforeBytes, beforeText),
+        detail: {
+          expectedReason,
+          result: { accepted: result.accepted, reason: structuralResultReason(result), detail: structuralResultDetail(result) },
+          repeated: { accepted: repeated.accepted, reason: structuralResultReason(repeated), detail: structuralResultDetail(repeated) },
+        },
+      };
+    });
+  }
+  const forbiddenDirectBlockCases = [
+    ['setColWidth', mixedTableFrameBlockPayload.replace('inputTable:setColWidthPercent(1, 50)', 'inputTable:setColWidth(1, 50, false)')],
+    ['setText2', mixedTableFrameBlockPayload.replace('inputRow[2]:createEditBox({ width = 36, height = 20, scaling = false })', 'inputRow[2]:setText2("AI Influence", {})')],
+    ['createText', mixedTableFrameBlockPayload.replace('inputRow[1]:setColSpan(1):createEditBox({ width = 36, height = 20, scaling = false })', 'inputRow[1]:createText("AI Influence", { width = 36, height = 20, scaling = false }):setColSpan(1)')],
+    ['createIcon', mixedTableFrameBlockPayload.replace('inputRow[2]:createEditBox({ width = 36, height = 20, scaling = false })', 'inputRow[2]:createIcon({ width = 36, height = 20, scaling = false })')],
+  ] as const;
+  for (const [name, payload] of forbiddenDirectBlockCases) {
+    causal('B119-FRAME-BLOCK-ALLOWLIST', `${name} is rejected as a typed direct-block parse failure without attempting workspace or source`, () => {
+      const context = contextFor(mixedTableFrameBlockLua);
+      const catalog = catalogFor(context);
+      const entry = mixedTableFrameBlockEntry(catalog) as X4UiSourceEditInsertionEntry | undefined;
+      if (!entry) return { pass: false, detail: { name, reason: 'frame block authority absent' } };
+      const beforeText = sourceText(context);
+      const beforeBytes = workspaceBytes(context.workspace);
+      const beforeOwner = structuralOwnerSnapshot(context, catalog);
+      const result = structuralApply(context, catalog, entry, payload);
+      const afterOwner = structuralOwnerSnapshot(context, catalog);
+      return {
+        pass: result.accepted === false
+          && result.reason === 'replacement-parse-failure'
+          && structuralRefusalPreservesInput(result, context, catalog, beforeBytes, beforeText)
+          && JSON.stringify(afterOwner) === JSON.stringify(beforeOwner),
+        detail: {
+          name,
+          result: { accepted: result.accepted, reason: structuralResultReason(result), detail: structuralResultDetail(result) },
+          ownerPreserved: JSON.stringify(afterOwner) === JSON.stringify(beforeOwner),
+          entryOwner: entry.provenance.owner,
+        },
+      };
+    });
+  }
+  const missingFrameDisplayOwnerLua = mixedTableFrameBlockLua.replace('frame:display()\n', '');
+  const duplicateFrameDisplayOwnerLua = [
+    'local menu = { name = "Duplicate frame display owner", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local frameOther = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local tableA = frame:addTable(1, {})',
+    'tableA:addRow(false, {})',
+    'local tableB = frameOther:addTable(1, {})',
+    'tableB:addRow(false, {})',
+    'frame:display()',
+    'frame:display()',
+    '',
+  ].join('\n');
+  const ambiguousFrameDisplayOwnerLua = [
+    'local menu = { name = "Ambiguous frame display owner", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local frameOther = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local tableA = frame:addTable(1, {})',
+    'tableA:addRow(false, {})',
+    'local tableB = frameOther:addTable(1, {})',
+    'tableB:addRow(false, {})',
+    'frame:display()',
+    'frameOther:display()',
+    '',
+  ].join('\n');
+  const frameDisplayOwnerGaps = [
+    ['missing display owner', missingFrameDisplayOwnerLua],
+    ['duplicate display owner', duplicateFrameDisplayOwnerLua],
+    ['ambiguous display owner', ambiguousFrameDisplayOwnerLua],
+  ] as const;
+  for (const [name, lua] of frameDisplayOwnerGaps) {
+    causal('B119-FRAME-BLOCK', `${name} issues no block authority and refuses without mutation`, () => {
+      const context = contextFor(lua);
+      const catalog = catalogFor(context);
+      const beforeText = sourceText(context);
+      const beforeBytes = workspaceBytes(context.workspace);
+      const blockEntries = (catalog.insertEntries || []).filter(entry => entry.kind === 'insert-block');
+      const result = applyX4UiSourceStructuralEdit(
+        context.workspace,
+        context.source,
+        catalog,
+        'missing-frame-block-authority',
+        mixedTableFrameBlockPayload,
+      );
+      const repeated = applyX4UiSourceStructuralEdit(
+        context.workspace,
+        context.source,
+        catalog,
+        'missing-frame-block-authority',
+        mixedTableFrameBlockPayload,
+      );
+      return {
+        pass: blockEntries.length === 0
+          && result.accepted === false
+          && result.reason === 'entry-not-found'
+          && result.detail.length > 0
+          && structuralRefusalPreservesInput(result, context, catalog, beforeBytes, beforeText)
+          && repeated.accepted === false
+          && repeated.reason === result.reason
+          && repeated.detail === result.detail
+          && structuralRefusalPreservesInput(repeated, context, catalog, beforeBytes, beforeText),
+        detail: {
+          blockEntries,
+          result: { accepted: result.accepted, reason: structuralResultReason(result), detail: structuralResultDetail(result) },
+          repeated: { accepted: repeated.accepted, reason: structuralResultReason(repeated), detail: structuralResultDetail(repeated) },
+        },
+      };
+    });
+  }
+  causal('B119-FRAME-BLOCK', 'frame block stale CAS range is refused before source mutation', () => {
+    const context = contextFor(mixedTableFrameBlockLua);
+    const catalog = catalogFor(context);
+    const entry = mixedTableFrameBlockEntry(catalog) as X4UiSourceEditInsertionEntry | undefined;
+    if (!entry) return { pass: false, detail: { reason: 'frame block authority absent' } };
+    const beforeText = sourceText(context);
+    const beforeBytes = workspaceBytes(context.workspace);
+    const result = structuralApply(context, catalog, entry, mixedTableFrameBlockPayload, {
+      startOffset: entry.startOffset + 1,
+    });
+    const repeated = structuralApply(context, catalog, entry, mixedTableFrameBlockPayload, {
+      startOffset: entry.startOffset + 1,
+    });
+    return {
+      pass: structuralRefusalPreservesInput(result, context, catalog, beforeBytes, beforeText)
+        && result.accepted === false
+        && result.reason === 'stale-range'
+        && result.detail.length > 0
+        && repeated.accepted === false
+        && repeated.reason === result.reason
+        && repeated.detail === result.detail
+        && structuralRefusalPreservesInput(repeated, context, catalog, beforeBytes, beforeText),
+      detail: {
+        result: { accepted: result.accepted, reason: structuralResultReason(result), detail: structuralResultDetail(result) },
+        repeated: { accepted: repeated.accepted, reason: structuralResultReason(repeated), detail: structuralResultDetail(repeated) },
+      },
+    };
+  });
 
   const foreignTableFirstRowLua = [
     'local menu = { name = "Foreign table first row", layer = 1 }',
@@ -4472,6 +5121,424 @@ const run = (): void => {
       baseline: roundFourMutationBaseline,
       sourceOrderMapped: true,
       detail: structuralResultDetail(roundFourMutationResult),
+    },
+  }));
+  const realSourceLongPartialLua = [
+    'local helper = rawget(_G, "Helper")',
+    'local menu = { name = "choiceTable", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local choiceTable = frame:addTable(3, {})',
+    'choiceTable:setColWidthPercent(1, 33)',
+    'choiceTable:setColWidthPercent(2, 34)',
+    ...Array.from({ length: 56 }, () => 'frame:display()'),
+    ...Array.from({ length: 40 }, (_, index) => {
+      const row = `row${index + 1}`;
+      return [
+        `local ${row} = choiceTable:addRow(false, {})`,
+        `${row}[1]:setColSpan(1):createText("retained-${index + 1}", {})`,
+        `${row}[2]:setColSpan(1):createButton({ active = true }):setText("BUTTON-${index + 1}", {})`,
+        `${row}[3]:setColSpan(1):createText("tail-${index + 1}", {})`,
+      ];
+    }).flat(),
+    'local tailRow = choiceTable:addRow(true, {})',
+    'tailRow[1]:setColSpan(1):createEditBox({',
+    '  width = 20, height = 20, scaling = false,',
+    '})',
+    'tailRow[2]:setColSpan(1):createButton({ active = true }):setText("SEND", {})',
+    'tailRow[3]:setColSpan(1):createButton({ active = true }):setText("END", {})',
+    'frame:display()',
+    '',
+  ].join('\n');
+  const realSourceLongPartialPreflight = buildX4UiWorkspaceSource(workspace(realSourceLongPartialLua));
+  const realSourceLongPartialPreflightFile = realSourceLongPartialPreflight.bundle?.sourceFiles.find(file => file.path === 'ui/edit.lua');
+  const realSourceLongPartialPreflightNormalization = realSourceLongPartialPreflightFile
+    ? invokePublic(() => normalizeX4UiSourceEditLayoutModel(realSourceLongPartialPreflightFile.callModel))
+    : { threw: false };
+  if (realSourceLongPartialPreflightNormalization.threw) {
+    throw new Error(JSON.stringify({
+      stage: 'long partial fixture normalization',
+      error: realSourceLongPartialPreflightNormalization.error,
+      undefinedPaths: realSourceLongPartialPreflightFile ? ownUndefinedPaths(realSourceLongPartialPreflightFile.callModel) : [],
+    }));
+  }
+  const realSourceLongPartialContext = contextFor(realSourceLongPartialLua);
+  const realSourceLongPartialCatalog = catalogFor(realSourceLongPartialContext);
+  const realSourceLongPartialEntry = structuralDelete(realSourceLongPartialCatalog, entry => entry.callBindings.length === 2
+    && entry.callBindings[0]?.callName === 'setColSpan'
+    && entry.callBindings[1]?.callName === 'createEditBox');
+  const realSourceLongPartialBeforeFile = realSourceLongPartialContext.source.bundle?.sourceFiles
+    .find(file => file.path === realSourceLongPartialEntry.path);
+  if (!realSourceLongPartialBeforeFile) throw new Error('long partial source fixture Lua file missing');
+  const realSourceLongPartialBeforeText = sourceText(realSourceLongPartialContext);
+  const realSourceLongPartialAfterText = realSourceLongPartialBeforeText.slice(0, realSourceLongPartialEntry.startOffset)
+    + realSourceLongPartialBeforeText.slice(realSourceLongPartialEntry.endOffset);
+  const realSourceLongPartialAfterContext = contextFor(realSourceLongPartialAfterText);
+  const realSourceLongPartialAfterFile = realSourceLongPartialAfterContext.source.bundle?.sourceFiles
+    .find(file => file.path === realSourceLongPartialEntry.path);
+  if (!realSourceLongPartialAfterFile) throw new Error('long partial source fixture post-splice Lua file missing');
+  const realSourceLongPartialComparatorInput = {
+    beforeCalls: realSourceLongPartialBeforeFile.callModel.calls,
+    afterCalls: realSourceLongPartialAfterFile.callModel.calls,
+    beforeRecords: realSourceLongPartialBeforeFile.callModel.records,
+    afterRecords: realSourceLongPartialAfterFile.callModel.records,
+    beforeOperations: realSourceLongPartialContext.program.operations,
+    afterOperations: realSourceLongPartialAfterContext.program.operations,
+    entry: realSourceLongPartialEntry,
+    beforeText: realSourceLongPartialBeforeText,
+    afterText: realSourceLongPartialAfterText,
+    replacementLength: 0,
+    insertedCallIndex: -1,
+    insertedOperationIndex: -1,
+  } as const;
+  const realSourceLongPartialResult = structuralApply(
+    realSourceLongPartialContext,
+    realSourceLongPartialCatalog,
+    realSourceLongPartialEntry,
+  );
+  const realSourceLongPartialComparator = compareX4UiSourceStructuralLedgerCorrespondence(
+    realSourceLongPartialComparatorInput,
+  );
+  causal('B119-REAL-SOURCE-RED', 'long partial high-order multiline editbox delete proves the structural ledger splice', () => ({
+    pass: realSourceLongPartialResult.accepted === true
+      && realSourceLongPartialResult.reparsed
+      && realSourceLongPartialComparator
+      && realSourceLongPartialComparatorInput.beforeCalls.length - realSourceLongPartialComparatorInput.afterCalls.length === 2
+      && realSourceLongPartialComparatorInput.beforeOperations.length - realSourceLongPartialComparatorInput.afterOperations.length === 2
+      && realSourceLongPartialComparatorInput.beforeRecords.length - realSourceLongPartialComparatorInput.afterRecords.length === 5,
+    detail: {
+      entry: {
+        startOffset: realSourceLongPartialEntry.startOffset,
+        endOffset: realSourceLongPartialEntry.endOffset,
+        callBindings: realSourceLongPartialEntry.callBindings,
+      },
+      before: {
+        calls: realSourceLongPartialComparatorInput.beforeCalls.length,
+        records: realSourceLongPartialComparatorInput.beforeRecords.length,
+        operations: realSourceLongPartialComparatorInput.beforeOperations.length,
+      },
+      after: {
+        calls: realSourceLongPartialComparatorInput.afterCalls.length,
+        records: realSourceLongPartialComparatorInput.afterRecords.length,
+        operations: realSourceLongPartialComparatorInput.afterOperations.length,
+      },
+      apply: {
+        accepted: realSourceLongPartialResult.accepted,
+        reason: structuralResultReason(realSourceLongPartialResult),
+        detail: structuralResultDetail(realSourceLongPartialResult),
+      },
+      publicComparator: realSourceLongPartialComparator,
+    },
+  }));
+  type LongStructuralCorrespondenceInput = Parameters<typeof compareX4UiSourceStructuralLedgerCorrespondence>[0];
+  const cloneLongStructuralInput = (): LongStructuralCorrespondenceInput => ({
+    ...realSourceLongPartialComparatorInput,
+  });
+  const mutableLongStructuralInput = (input: LongStructuralCorrespondenceInput): Record<string, unknown> =>
+    input as unknown as Record<string, unknown>;
+  const longOperationClone = (
+    input: LongStructuralCorrespondenceInput,
+    predicate: (operation: Record<string, unknown>) => boolean = () => true,
+    side: 'beforeOperations' | 'afterOperations' = 'beforeOperations',
+  ): Record<string, unknown> | undefined => {
+    const operationsValue = (input as unknown as Record<string, unknown>)[side];
+    const operations = Array.isArray(operationsValue) ? [...operationsValue] : [];
+    const index = operations.findIndex(operation => {
+      const record = asRecord(operation);
+      return record !== undefined && predicate(record);
+    });
+    if (index < 0) return undefined;
+    const operation = asRecord(operations[index]);
+    if (!operation) return undefined;
+    const clone = { ...operation };
+    operations[index] = clone;
+    mutableLongStructuralInput(input)[side] = operations;
+    return clone;
+  };
+  const longRecordClone = (input: LongStructuralCorrespondenceInput): Record<string, unknown> | undefined => {
+    const records = Array.isArray(input.beforeRecords) ? [...input.beforeRecords] : [];
+    const index = records.findIndex(record => {
+      const candidate = asRecord(record);
+      const source = asRecord(candidate?.source);
+      const start = asRecord(source?.start);
+      return candidate !== undefined
+        && candidate.recordType === 'call'
+        && typeof start?.offset === 'number'
+        && start.offset < realSourceLongPartialEntry.startOffset;
+    });
+    if (index < 0) return undefined;
+    const record = asRecord(records[index]);
+    if (!record) return undefined;
+    const clone = { ...record };
+    records[index] = clone;
+    mutableLongStructuralInput(input).beforeRecords = records;
+    return clone;
+  };
+  const longEntryClone = (
+    input: LongStructuralCorrespondenceInput,
+    changes: (entry: Record<string, unknown>) => Record<string, unknown>,
+  ): boolean => {
+    const entry = asRecord(input.entry);
+    if (!entry) return false;
+    mutableLongStructuralInput(input).entry = changes({ ...entry });
+    return true;
+  };
+  const longMutationCases: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly expectedComparator?: boolean;
+    readonly mutate: (input: LongStructuralCorrespondenceInput) => boolean;
+  }[] = [
+    {
+      id: 'B119-LONG-RECORD-FIELD',
+      name: 'retained complete-record field',
+      mutate: input => {
+        const record = longRecordClone(input);
+        if (!record) return false;
+        record.name = '__retained-record-mutation__';
+        return true;
+      },
+    },
+    {
+      id: 'B119-LONG-OP-FIELD',
+      name: 'retained operation field',
+      mutate: input => {
+        const operation = longOperationClone(input);
+        if (!operation) return false;
+        operation.kind = '__operation-field-mutation__';
+        return true;
+      },
+    },
+    {
+      id: 'B119-LONG-OP-ORDER',
+      name: 'retained operation order',
+      mutate: input => {
+        const operation = longOperationClone(input);
+        if (!operation || typeof operation.modelOrder !== 'number') return false;
+        operation.modelOrder += 1;
+        return true;
+      },
+    },
+    {
+      id: 'B119-LONG-OP-SOURCE',
+      name: 'retained operation source',
+      mutate: input => {
+        const operation = longOperationClone(input);
+        const source = asRecord(operation?.source);
+        const start = asRecord(source?.start);
+        if (!operation || !source || !start || typeof start.offset !== 'number') return false;
+        operation.source = { ...source, start: { ...start, offset: start.offset + 1 } };
+        return true;
+      },
+    },
+    {
+      id: 'B119-LONG-KERNEL-STATE',
+      name: 'retained kernel state',
+      mutate: input => {
+        const operation = longOperationClone(input, candidate => {
+          const kernel = asRecord(candidate.kernel);
+          return kernel !== undefined && ['stateBefore', 'stateAfter'].some(stateKey => {
+            const state = asRecord(kernel[stateKey]);
+            const rows = Array.isArray(state?.rows) ? state.rows : [];
+            return rows.some(row => {
+              const rowRecord = asRecord(row);
+              return Array.isArray(rowRecord?.cells) && rowRecord.cells.length > 0;
+            });
+          });
+        }, 'afterOperations');
+        const kernel = asRecord(operation?.kernel);
+        const stateKey = kernel
+          ? (['stateBefore', 'stateAfter'] as const).find(candidateStateKey => {
+            const state = asRecord(kernel[candidateStateKey]);
+            const rows = Array.isArray(state?.rows) ? state.rows : [];
+            return rows.some(row => {
+              const rowRecord = asRecord(row);
+              return Array.isArray(rowRecord?.cells) && rowRecord.cells.length > 0;
+            });
+          })
+          : undefined;
+        const stateBefore = stateKey === undefined ? undefined : asRecord(kernel?.[stateKey]);
+        const rows = Array.isArray(stateBefore?.rows) ? [...stateBefore.rows] : [];
+        const rowIndex = rows.findIndex(rowValue => {
+          const rowRecord = asRecord(rowValue);
+          return Array.isArray(rowRecord?.cells) && rowRecord.cells.length > 0;
+        });
+        const row = asRecord(rows[rowIndex]);
+        const cells = Array.isArray(row?.cells) ? [...row.cells] : [];
+        const originalCell = asRecord(cells[0]);
+        const cell = originalCell ? { ...originalCell } : undefined;
+        if (!operation || !kernel || stateKey === undefined || !stateBefore || rowIndex < 0 || !row || !cell) return false;
+        cell.type = '__kernel-state-mutation__';
+        cells[0] = cell;
+        rows[rowIndex] = { ...row, cells };
+        operation.kernel = { ...kernel, [stateKey]: { ...stateBefore, rows } };
+        return true;
+      },
+    },
+    {
+      id: 'B119-LONG-OWNER',
+      name: 'issued removal owner identity (authority-gated outside comparator)',
+      expectedComparator: true,
+      mutate: input => longEntryClone(input, entry => {
+        const provenance = asRecord(entry.provenance);
+        const owner = asRecord(provenance?.owner);
+        return provenance && owner
+          ? { ...entry, provenance: { ...provenance, owner: { ...owner, ownerId: '__owner-mutation__' } } }
+          : entry;
+      }),
+    },
+    {
+      id: 'B119-LONG-BINDING',
+      name: 'removal binding identity',
+      mutate: input => longEntryClone(input, entry => {
+        const bindings = Array.isArray(entry.callBindings) ? [...entry.callBindings] : [];
+        const binding = asRecord(bindings[0]);
+        if (!binding) return entry;
+        bindings[0] = { ...binding, operationId: '__operation-binding-mutation__' };
+        return { ...entry, callBindings: bindings };
+      }),
+    },
+    {
+      id: 'B119-LONG-SPLICE-RANGE',
+      name: 'structural splice range',
+      mutate: input => longEntryClone(input, entry => ({
+        ...entry,
+        startOffset: typeof entry.startOffset === 'number' ? entry.startOffset + 1 : entry.startOffset,
+      })),
+    },
+    {
+      id: 'B119-LONG-ACCESSOR',
+      name: 'accessor payload',
+      mutate: input => {
+        const record = longRecordClone(input);
+        if (!record) return false;
+        Object.defineProperty(record, '__structuralAccessor', {
+          enumerable: true,
+          get: () => 'hostile',
+        });
+        return true;
+      },
+    },
+    {
+      id: 'B119-LONG-CYCLE',
+      name: 'cyclic payload',
+      mutate: input => {
+        const record = longRecordClone(input);
+        if (!record) return false;
+        record.__structuralCycle = record;
+        return true;
+      },
+    },
+    {
+      id: 'B119-LONG-NONPLAIN',
+      name: 'non-plain payload',
+      mutate: input => {
+        mutableLongStructuralInput(input).beforeRecords = Object.create(null);
+        return true;
+      },
+    },
+    {
+      id: 'B119-LONG-OVERSIZED',
+      name: 'oversized payload',
+      mutate: input => {
+        mutableLongStructuralInput(input).beforeOperations = new Array(750_001).fill(null);
+        return true;
+      },
+    },
+  ];
+  const longMutationRows = longMutationCases.map(item => {
+    const input = cloneLongStructuralInput();
+    let mutationApplied = false;
+    let comparator = false;
+    let threw = false;
+    try {
+      mutationApplied = item.mutate(input);
+      comparator = compareX4UiSourceStructuralLedgerCorrespondence(input);
+    } catch {
+      threw = true;
+    }
+    return {
+      id: item.id,
+      name: item.name,
+      mutationApplied,
+      comparator,
+      threw,
+      pass: mutationApplied && comparator === (item.expectedComparator ?? false) && !threw,
+    };
+  });
+  causal('B119-LONG-MUTATION-MATRIX', 'long structural correspondence rejects retained ledger, binding, range, and hostile-input mutations while owner identity remains authority-gated', () => ({
+    pass: realSourceLongPartialComparator && longMutationRows.every(row => row.pass),
+    detail: { baseline: realSourceLongPartialComparator, rows: longMutationRows },
+  }));
+  const longParentWorkspaceBytes = workspaceBytes(realSourceLongPartialContext.workspace);
+  const longParentSourceText = realSourceLongPartialBeforeText;
+  const longMutatedOwnerEntry = structuredClone(realSourceLongPartialEntry) as X4UiSourceEditDeleteEntry;
+  const longMutatedOwnerProvenance = asRecord((longMutatedOwnerEntry as unknown as Record<string, unknown>).provenance);
+  const longMutatedOwner = asRecord(longMutatedOwnerProvenance?.owner);
+  if (!longMutatedOwnerProvenance || !longMutatedOwner) throw new Error('long owner mutation fixture missing issued owner');
+  (longMutatedOwnerEntry as unknown as Record<string, unknown>).provenance = {
+    ...longMutatedOwnerProvenance,
+    owner: { ...longMutatedOwner, ownerId: '__owner-apply-mutation__' },
+  };
+  const longMutatedOwnerCatalog = catalogWithEntry(
+    realSourceLongPartialCatalog,
+    realSourceLongPartialEntry.id,
+    longMutatedOwnerEntry as unknown as X4UiEditableSourceEditEntry,
+  );
+  const longMutatedOwnerApply = structuralApply(
+    realSourceLongPartialContext,
+    longMutatedOwnerCatalog,
+    longMutatedOwnerEntry,
+  );
+  const longAcceptedPair = {
+    workspace: realSourceLongPartialResult.workspace,
+    source: realSourceLongPartialResult.source,
+  };
+  const longWrongStart = structuralApply(
+    realSourceLongPartialContext,
+    realSourceLongPartialCatalog,
+    realSourceLongPartialEntry,
+    undefined,
+    { startOffset: realSourceLongPartialEntry.startOffset + 1 },
+  );
+  const longWrongEnd = structuralApply(
+    realSourceLongPartialContext,
+    realSourceLongPartialCatalog,
+    realSourceLongPartialEntry,
+    undefined,
+    { endOffset: realSourceLongPartialEntry.endOffset + 1 },
+  );
+  const longWrongText = structuralApply(
+    realSourceLongPartialContext,
+    realSourceLongPartialCatalog,
+    realSourceLongPartialEntry,
+    undefined,
+    { expectedText: '__stale-structural-text__' },
+  );
+  const longStaleEntry = structuralApply(
+    longAcceptedPair,
+    realSourceLongPartialCatalog,
+    realSourceLongPartialEntry,
+  );
+  causal('B119-LONG-APPLY-MATRIX', 'long structural apply refuses stale pairs and altered splice expectations without mutation', () => ({
+    pass: realSourceLongPartialResult.accepted === true
+      && realSourceLongPartialResult.workspace !== realSourceLongPartialContext.workspace
+      && realSourceLongPartialResult.source !== realSourceLongPartialContext.source
+      && realSourceLongPartialResult.catalog !== realSourceLongPartialCatalog
+      && workspaceBytes(realSourceLongPartialContext.workspace) === longParentWorkspaceBytes
+      && sourceText(realSourceLongPartialContext) === longParentSourceText
+      && [
+        structuralRefusalPreservesInput(longWrongStart, realSourceLongPartialContext, realSourceLongPartialCatalog, longParentWorkspaceBytes, longParentSourceText),
+        structuralRefusalPreservesInput(longWrongEnd, realSourceLongPartialContext, realSourceLongPartialCatalog, longParentWorkspaceBytes, longParentSourceText),
+        structuralRefusalPreservesInput(longWrongText, realSourceLongPartialContext, realSourceLongPartialCatalog, longParentWorkspaceBytes, longParentSourceText),
+        structuralRefusalPreservesInput(longMutatedOwnerApply, realSourceLongPartialContext, longMutatedOwnerCatalog, longParentWorkspaceBytes, longParentSourceText),
+        structuralRefusalPreservesInput(longStaleEntry, longAcceptedPair, realSourceLongPartialCatalog, workspaceBytes(longAcceptedPair.workspace), sourceText(longAcceptedPair)),
+      ].every(Boolean),
+    detail: {
+      wrongStart: { reason: structuralResultReason(longWrongStart), detail: structuralResultDetail(longWrongStart) },
+      wrongEnd: { reason: structuralResultReason(longWrongEnd), detail: structuralResultDetail(longWrongEnd) },
+      wrongText: { reason: structuralResultReason(longWrongText), detail: structuralResultDetail(longWrongText) },
+      ownerMutation: { reason: structuralResultReason(longMutatedOwnerApply), detail: structuralResultDetail(longMutatedOwnerApply) },
+      stale: { reason: structuralResultReason(longStaleEntry), detail: structuralResultDetail(longStaleEntry) },
     },
   }));
   const roundFourParserPathMutation = (value: unknown): boolean => {
@@ -6883,7 +7950,7 @@ const run = (): void => {
 
   let completeRecordInsertionInput: RoundSevenAuditCorrespondenceInput | undefined;
   let completeRecordInsertionResult: ReturnType<typeof applyX4UiSourceStructuralEdit> | undefined;
-  let completeRecordInsertionEntry: X4UiSourceEditInsertEntry | undefined;
+  let completeRecordInsertionEntry: X4UiSourceEditInsertionEntry | undefined;
   let completeRecordInsertionContext: SourceEditFixtureContext | undefined;
   let completeRecordInsertionCatalog: X4UiSourceEditCatalog | undefined;
   try {

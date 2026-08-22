@@ -40,10 +40,14 @@ import {
 } from '../lib/x4UiCorpusAssets';
 import {
   applyX4UiSourceEdit,
+  applyX4UiSourceStructuralEdit,
   discoverX4UiSourceEdits,
   type X4UiSourceEditCatalog,
   type X4UiSourceEditCatalogEntry,
   type X4UiSourceEditScalar,
+  type X4UiSourceEditInsertBlockEntry,
+  type X4UiSourceEditResult,
+  type X4UiSourceStructuralEditResult,
 } from '../lib/x4UiSourceEdits';
 import {
   X4_UI_CANVAS_RENDERER_FORMAT,
@@ -215,6 +219,39 @@ export interface X4UiLintInspection {
 export interface X4UiLintSummary {
   readonly kind: X4UiLintSummaryKind;
   readonly label: string;
+}
+
+export type X4UiPreviewGeometryCategory = 'height' | 'width';
+
+export interface X4UiPreviewGeometryPosition {
+  readonly line: number;
+  readonly column: number;
+  readonly offset: number | null;
+}
+
+export interface X4UiPreviewGeometryRange {
+  readonly start: X4UiPreviewGeometryPosition;
+  readonly end: X4UiPreviewGeometryPosition;
+}
+
+export interface X4UiPreviewGeometryDiagnostic {
+  readonly category: X4UiPreviewGeometryCategory;
+  readonly status: string;
+  readonly file: string;
+  readonly range: X4UiPreviewGeometryRange;
+  readonly reason: string;
+  readonly nodeId?: string;
+}
+
+export type X4UiPreviewGeometryInspectionState = 'available' | 'empty' | 'unavailable' | 'incomplete';
+
+export interface X4UiPreviewGeometryInspection {
+  readonly state: X4UiPreviewGeometryInspectionState;
+  readonly sceneStatus: string;
+  readonly diagnostics: readonly X4UiPreviewGeometryDiagnostic[];
+  readonly diagnosticCount: number;
+  readonly incompleteCount: number;
+  readonly detail: string;
 }
 
 const EMPTY_CORPUS_STATE: CorpusLoadState = Object.freeze({
@@ -413,6 +450,240 @@ const ownDataString = (value: unknown, key: string): string | undefined => {
   return field.present && field.valid && typeof field.value === 'string' && field.value.length > 0
     ? field.value
     : undefined;
+};
+
+const ownPlainRecord = (value: unknown): ValueRecord | null => {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+  try {
+    const prototype = Reflect.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null ? value as ValueRecord : null;
+  } catch {
+    return null;
+  }
+};
+
+const usableOwnDataString = (value: unknown, key: string): string | undefined => {
+  const text = ownDataString(value, key);
+  return text !== undefined && text.trim().length > 0 ? text : undefined;
+};
+
+const previewGeometryPositionFor = (value: unknown): X4UiPreviewGeometryPosition | null => {
+  if (ownPlainRecord(value) === null) return null;
+  const lineField = ownEnumerableDataField(value, 'line');
+  const columnField = ownEnumerableDataField(value, 'column');
+  if (!lineField.present || !lineField.valid || !columnField.present || !columnField.valid) return null;
+  const line = finiteValue(lineField.value);
+  const column = finiteValue(columnField.value);
+  if (line === null || column === null || !Number.isInteger(line) || !Number.isInteger(column) || line < 1 || column < 0) return null;
+  const offsetField = ownEnumerableDataField(value, 'offset');
+  let offset: number | null = null;
+  if (offsetField.present) {
+    if (!offsetField.valid) return null;
+    const parsedOffset = finiteValue(offsetField.value);
+    if (parsedOffset === null || !Number.isInteger(parsedOffset) || parsedOffset < 0) return null;
+    offset = parsedOffset;
+  }
+  return { line, column, offset };
+};
+
+const previewGeometryRangeFor = (source: unknown): X4UiPreviewGeometryRange | null => {
+  if (ownPlainRecord(source) === null) return null;
+  const file = usableOwnDataString(source, 'file');
+  if (file === undefined) return null;
+  const rangeField = ownEnumerableDataField(source, 'range');
+  if (rangeField.present && !rangeField.valid) return null;
+  const range = rangeField.present ? ownPlainRecord(rangeField.value) : source;
+  if (range === null) return null;
+  const startField = ownEnumerableDataField(range, 'start');
+  const endField = ownEnumerableDataField(range, 'end');
+  if (!startField.present || !startField.valid || !endField.present || !endField.valid) return null;
+  const start = previewGeometryPositionFor(startField.value);
+  const end = previewGeometryPositionFor(endField.value);
+  if (start === null || end === null) return null;
+  if (end.line < start.line || (end.line === start.line && end.column < start.column)) return null;
+  if (start.offset !== null && end.offset !== null && end.offset < start.offset) return null;
+  return { start, end };
+};
+
+const PREVIEW_GEOMETRY_SCENE_STATUSES = new Set(['partial', 'projected']);
+
+const hasPreviewGeometryVerification = (value: unknown): boolean => {
+  if (ownPlainRecord(value) === null) return false;
+  const gameField = ownEnumerableDataField(value, 'game');
+  const gameVerifiedField = ownEnumerableDataField(value, 'gameVerified');
+  return gameField.present
+    && gameField.valid
+    && gameField.value === X4_UI_EDITOR_SESSION_GAME_TRUTH
+    && gameVerifiedField.present
+    && gameVerifiedField.valid
+    && gameVerifiedField.value === false;
+};
+
+const unavailablePreviewGeometryInspection = (detail: string, sceneStatus = 'unavailable'): X4UiPreviewGeometryInspection => ({
+  state: 'unavailable',
+  sceneStatus,
+  diagnostics: [],
+  diagnosticCount: 0,
+  incompleteCount: 0,
+  detail,
+});
+
+const previewGeometryPositionKey = (position: X4UiPreviewGeometryPosition): string => (
+  `${position.line}:${position.column}:${position.offset === null ? '' : position.offset}`
+);
+
+const previewGeometryDiagnosticKey = (diagnostic: X4UiPreviewGeometryDiagnostic): string => JSON.stringify([
+  diagnostic.nodeId ?? '',
+  diagnostic.category,
+  diagnostic.status,
+  diagnostic.file,
+  previewGeometryPositionKey(diagnostic.range.start),
+  previewGeometryPositionKey(diagnostic.range.end),
+  diagnostic.reason,
+]);
+
+const comparePreviewGeometryText = (left: string, right: string): number => (
+  left < right ? -1 : left > right ? 1 : 0
+);
+
+const comparePreviewGeometryPosition = (left: X4UiPreviewGeometryPosition, right: X4UiPreviewGeometryPosition): number => (
+  left.line - right.line
+  || left.column - right.column
+  || (left.offset ?? Number.MAX_SAFE_INTEGER) - (right.offset ?? Number.MAX_SAFE_INTEGER)
+);
+
+const comparePreviewGeometryDiagnostics = (
+  left: X4UiPreviewGeometryDiagnostic,
+  right: X4UiPreviewGeometryDiagnostic,
+): number => (
+  comparePreviewGeometryText(left.file, right.file)
+  || comparePreviewGeometryPosition(left.range.start, right.range.start)
+  || comparePreviewGeometryPosition(left.range.end, right.range.end)
+  || comparePreviewGeometryText(left.category, right.category)
+  || comparePreviewGeometryText(left.status, right.status)
+  || comparePreviewGeometryText(left.nodeId ?? '', right.nodeId ?? '')
+  || comparePreviewGeometryText(left.reason, right.reason)
+);
+
+export const inspectX4UiPreviewGeometry = (sceneResult: unknown): X4UiPreviewGeometryInspection => {
+  const resultRecord = ownPlainRecord(sceneResult);
+  if (resultRecord === null) return unavailablePreviewGeometryInspection('Scene result evidence is unavailable or malformed.');
+  const resultStatusField = ownEnumerableDataField(resultRecord, 'status');
+  if (!resultStatusField.present || !resultStatusField.valid || typeof resultStatusField.value !== 'string') {
+    return unavailablePreviewGeometryInspection('Scene result evidence has no usable own-data status.');
+  }
+  const resultStatus = resultStatusField.value;
+  if (!PREVIEW_GEOMETRY_SCENE_STATUSES.has(resultStatus)) {
+    return unavailablePreviewGeometryInspection(`Scene result evidence is ${resultStatus}; source-linked geometry diagnostics are unavailable.`, resultStatus);
+  }
+  const verificationField = ownEnumerableDataField(resultRecord, 'verification');
+  if (!verificationField.present || !verificationField.valid || !hasPreviewGeometryVerification(verificationField.value)) {
+    return unavailablePreviewGeometryInspection('Scene result verification is missing or malformed.', resultStatus);
+  }
+  const sceneField = ownEnumerableDataField(resultRecord, 'scene');
+  if (!sceneField.present || !sceneField.valid) {
+    return unavailablePreviewGeometryInspection('Scene result has no usable own-data nested Scene.', resultStatus);
+  }
+  const sceneRecord = ownPlainRecord(sceneField.value);
+  if (sceneRecord === null) {
+    return unavailablePreviewGeometryInspection('Scene result nested Scene is unavailable or malformed.', resultStatus);
+  }
+  const sceneStatusField = ownEnumerableDataField(sceneRecord, 'status');
+  if (!sceneStatusField.present || !sceneStatusField.valid || typeof sceneStatusField.value !== 'string' || !PREVIEW_GEOMETRY_SCENE_STATUSES.has(sceneStatusField.value)) {
+    return unavailablePreviewGeometryInspection('Nested Scene has no usable own-data projected/partial status.', resultStatus);
+  }
+  const sceneStatus = sceneStatusField.value;
+  const gapsField = ownEnumerableDataField(sceneRecord, 'gaps');
+  if (!gapsField.present || !gapsField.valid || !Array.isArray(gapsField.value)) {
+    return unavailablePreviewGeometryInspection('Scene evidence has no usable own-data gap list.', sceneStatus);
+  }
+
+  const diagnostics: X4UiPreviewGeometryDiagnostic[] = [];
+  let incompleteCount = 0;
+  const gapValues = gapsField.value;
+  for (let gapIndex = 0; gapIndex < gapValues.length; gapIndex += 1) {
+    const gapField = ownEnumerableDataField(gapValues, String(gapIndex));
+    if (!gapField.present || !gapField.valid) {
+      incompleteCount += 1;
+      continue;
+    }
+    const gapValue = gapField.value;
+    if (gapValue === null || typeof gapValue !== 'object' || Array.isArray(gapValue)) {
+      incompleteCount += 1;
+      continue;
+    }
+    const categoryField = ownEnumerableDataField(gapValue, 'category');
+    if (!categoryField.present) continue;
+    if (!categoryField.valid) {
+      incompleteCount += 1;
+      continue;
+    }
+    if (categoryField.value !== 'height' && categoryField.value !== 'width') continue;
+    if (ownPlainRecord(gapValue) === null) {
+      incompleteCount += 1;
+      continue;
+    }
+    const status = usableOwnDataString(gapValue, 'status');
+    const reason = usableOwnDataString(gapValue, 'reason');
+    const sourceField = ownEnumerableDataField(gapValue, 'source');
+    const source = sourceField.present && sourceField.valid ? sourceField.value : null;
+    const range = previewGeometryRangeFor(source);
+    if (status === undefined || reason === undefined || range === null) {
+      incompleteCount += 1;
+      continue;
+    }
+    const nodeIdField = ownEnumerableDataField(gapValue, 'nodeId');
+    if (nodeIdField.present && (
+      !nodeIdField.valid
+      || typeof nodeIdField.value !== 'string'
+      || nodeIdField.value.trim().length === 0
+    )) {
+      incompleteCount += 1;
+      continue;
+    }
+    const nodeId = nodeIdField.present ? nodeIdField.value as string : undefined;
+    const diagnostic: X4UiPreviewGeometryDiagnostic = {
+      category: categoryField.value,
+      status,
+      file: usableOwnDataString(source, 'file') ?? 'unavailable',
+      range,
+      reason,
+      ...(nodeId === undefined ? {} : { nodeId }),
+    };
+    if (diagnostic.file === 'unavailable') {
+      incompleteCount += 1;
+      continue;
+    }
+    diagnostics.push(diagnostic);
+  }
+
+  const uniqueDiagnostics: X4UiPreviewGeometryDiagnostic[] = [];
+  const diagnosticKeys = new Set<string>();
+  for (const diagnostic of diagnostics) {
+    const key = previewGeometryDiagnosticKey(diagnostic);
+    if (diagnosticKeys.has(key)) continue;
+    diagnosticKeys.add(key);
+    uniqueDiagnostics.push(diagnostic);
+  }
+  uniqueDiagnostics.sort(comparePreviewGeometryDiagnostics);
+  const diagnosticCount = uniqueDiagnostics.length;
+  const state: X4UiPreviewGeometryInspectionState = incompleteCount > 0
+    ? 'incomplete'
+    : diagnosticCount > 0
+      ? 'available'
+      : 'empty';
+  return {
+    state,
+    sceneStatus,
+    diagnostics: uniqueDiagnostics,
+    diagnosticCount,
+    incompleteCount,
+    detail: incompleteCount > 0
+      ? `${incompleteCount} source-linked height/width candidate${incompleteCount === 1 ? '' : 's'} were malformed and are not rendered.`
+      : diagnosticCount > 0
+        ? `${diagnosticCount} source-linked height/width diagnostic${diagnosticCount === 1 ? '' : 's'} accepted in stable source order.`
+        : 'No source-linked height/width diagnostics are available in this Scene.',
+  };
 };
 
 const corpusFailure = (value: unknown, fallbackDetail = 'Configured corpus evidence was not accepted.'): CorpusFailureClassification => {
@@ -1567,6 +1838,16 @@ const sourceEditLiteralLabel = (entry: X4UiSourceEditCatalogEntry): string => {
 
 const sourceEditInputTestId = (entryId: string): string => `x4-ui-source-edit-input-${entryId}`;
 
+const sourceEditBlockLocationLabel = (entry: X4UiSourceEditInsertBlockEntry): string => (
+  `${entry.path} · frame/display anchor bytes ${entry.startOffset}-${entry.endOffset}`
+);
+
+const sourceEditBlockOwnerLabel = (entry: X4UiSourceEditInsertBlockEntry): string => {
+  const owner = entry.provenance.owner;
+  if (owner === undefined) return 'owner unavailable';
+  return `${owner.kind} ${owner.ownerId}${owner.frameId === undefined ? '' : ` · frame ${owner.frameId}`}`;
+};
+
 export function X4UiSourceEditorSourceEdits({
   catalog,
   staged,
@@ -1575,6 +1856,9 @@ export function X4UiSourceEditorSourceEdits({
   onApply,
 }: X4UiSourceEditorSourceEditsProps) {
   const parentCommitPending = receipt?.status === 'pending';
+  const frameBlockEntries = (catalog.insertEntries ?? []).filter((entry): entry is X4UiSourceEditInsertBlockEntry => (
+    entry.kind === 'insert-block' && entry.anchor === 'frame-display'
+  ));
   return (
     <section data-testid="x4-ui-source-edits" className="mt-3 rounded border border-white/10 bg-black/20 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1672,6 +1956,56 @@ export function X4UiSourceEditorSourceEdits({
         })}
       </div>
       {catalog.entries.length === 0 && <div className="mt-2 text-slate-500">No owner-issued source properties were exposed for this exact target.</div>}
+      <section data-testid="x4-ui-source-edit-frame-blocks" className="mt-3 rounded border border-violet-500/30 bg-violet-950/10 p-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-[10px] font-bold uppercase tracking-wider text-violet-300">Frame-level direct X4 UI insertion block</h3>
+          <span className="text-[9px] font-bold text-amber-300">{X4_UI_EDITOR_SESSION_GAME_TRUTH}</span>
+        </div>
+        <div data-testid="x4-ui-source-edit-frame-block-detail" className="mt-1 break-words text-slate-500">
+          Only the owner-issued frame/display authority may stage a bounded direct-UI construction block. Parent acknowledgement remains required before adopting changed source.
+        </div>
+        {frameBlockEntries.length === 0 ? (
+          <div data-testid="x4-ui-source-edit-frame-block-none" className="mt-2 text-slate-500">No owner-issued frame/display block authority is available for this exact target.</div>
+        ) : (
+          <div className="mt-2 space-y-2">
+            {frameBlockEntries.map(entry => {
+              const hasStaged = Object.prototype.hasOwnProperty.call(staged, entry.id);
+              return (
+                <article key={entry.id} data-testid={`x4-ui-source-edit-frame-block-${entry.id}`} className="rounded border border-white/10 bg-black/30 p-2">
+                  <div className="font-bold text-slate-200">{entry.id}</div>
+                  <div className="mt-1 break-words text-slate-500">authority: <span className="text-slate-300">{sourceEditBlockLocationLabel(entry)}</span></div>
+                  <div className="break-words text-slate-500">owner proof: <span className="text-slate-300">{sourceEditBlockOwnerLabel(entry)}</span></div>
+                  <div className="break-words text-slate-500">CAS range: <span className="text-slate-300">{entry.startOffset}-{entry.endOffset} · expected text is empty at the display anchor</span></div>
+                  <label className="mt-2 flex flex-col gap-1 text-slate-500">
+                    Stage bounded direct X4 UI source block
+                    <textarea
+                      data-testid={`x4-ui-source-edit-block-input-${entry.id}`}
+                      value={staged[entry.id] ?? ''}
+                      disabled={parentCommitPending}
+                      rows={8}
+                      spellCheck={false}
+                      onChange={event => onStage(entry.id, event.target.value)}
+                      className="min-h-32 rounded border border-white/10 bg-black/40 px-2 py-1 text-slate-200"
+                    />
+                  </label>
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                    <span data-testid={`x4-ui-source-edit-block-diagnostic-${entry.id}`} className="break-words text-amber-200">Diagnostic: {catalog.detail} · {X4_UI_EDITOR_SESSION_GAME_TRUTH}</span>
+                    <button
+                      type="button"
+                      data-testid={`x4-ui-source-edit-apply-block-${entry.id}`}
+                      disabled={!hasStaged || parentCommitPending}
+                      onClick={() => onApply(entry.id)}
+                      className="rounded border border-violet-400/40 px-2 py-1 text-[9px] font-bold uppercase text-violet-300 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Apply frame block
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </section>
   );
 }
@@ -1728,6 +2062,60 @@ export function X4UiSourceEditorLinter({ inspection }: { readonly inspection: X4
       {(inspection.diagnosticCount > 0 || inspection.verificationGapCount > 0 || inspection.lintErrorCount > 0 || inspection.truncated || inspection.incompleteFindingCount > 0) && (
         <div className="mt-2 text-amber-300">Static evidence remains incomplete; diagnostics and verification gaps are not rendered as normalized findings.</div>
       )}
+    </section>
+  );
+}
+
+const previewGeometryPositionLabel = (position: X4UiPreviewGeometryPosition): string => (
+  `${position.line}:${position.column + 1}${position.offset === null ? '' : ` @${position.offset}`}`
+);
+
+const previewGeometryRangeLabel = (range: X4UiPreviewGeometryRange): string => (
+  `${previewGeometryPositionLabel(range.start)}-${previewGeometryPositionLabel(range.end)}`
+);
+
+export function X4UiSourceEditorPreviewGeometry({ scene }: { readonly scene: unknown }) {
+  const inspection = inspectX4UiPreviewGeometry(scene);
+  const stateLabel = inspection.state === 'available'
+    ? 'available'
+    : inspection.state === 'empty'
+      ? 'empty'
+      : inspection.state === 'incomplete'
+        ? 'incomplete'
+        : 'unavailable';
+  return (
+    <section data-testid="x4-ui-preview-geometry-region" className="mt-3 rounded border border-violet-500/30 bg-violet-950/10 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-[10px] font-bold uppercase tracking-wider text-violet-300">Preview geometry diagnostics</h2>
+        <span data-testid="x4-ui-preview-geometry-state" className="font-bold text-violet-200">{stateLabel}</span>
+      </div>
+      <div data-testid="x4-ui-preview-geometry-filter" className="mt-2 text-slate-500">Source-linked geometry filter: only height/width evidence is shown. Paint/text/kernel/scrollbar/state/data-flow gaps are not shown.</div>
+      <div className="mt-1 text-slate-400">Scene status: <span data-testid="x4-ui-preview-geometry-scene-status" className="text-slate-200">{inspection.sceneStatus}</span></div>
+      <div className="mt-1 text-slate-400">Count: <span data-testid="x4-ui-preview-geometry-count" className="font-bold text-slate-200">{inspection.diagnosticCount}</span> source-linked height/width diagnostics</div>
+      {inspection.incompleteCount > 0 && (
+        <div data-testid="x4-ui-preview-geometry-incomplete-count" className="mt-1 text-amber-300">Incomplete candidates: {inspection.incompleteCount} malformed source-linked height/width gap{inspection.incompleteCount === 1 ? '' : 's'} were not rendered.</div>
+      )}
+      {inspection.state === 'unavailable' ? (
+        <div data-testid="x4-ui-preview-geometry-unavailable" className="mt-2 break-words text-slate-500">Unavailable: {inspection.detail}</div>
+      ) : inspection.state === 'empty' ? (
+        <div data-testid="x4-ui-preview-geometry-empty" className="mt-2 text-slate-500">Empty: no source-linked height/width diagnostics are available.</div>
+      ) : (
+        <div className="mt-2 space-y-2">
+          {inspection.diagnostics.map((diagnostic, index) => (
+            <article key={`${diagnostic.file}:${previewGeometryRangeLabel(diagnostic.range)}:${diagnostic.category}:${diagnostic.status}:${diagnostic.nodeId ?? ''}:${diagnostic.reason}:${index}`} data-testid={`x4-ui-preview-geometry-diagnostic-${index}`} className="rounded border border-white/10 bg-black/25 p-2">
+              <div className="flex flex-wrap gap-x-3 gap-y-1">
+                <span>category: <strong className="text-slate-200">{diagnostic.category}</strong></span>
+                <span>status: <strong className="text-slate-200">{diagnostic.status}</strong></span>
+              </div>
+              <div className="mt-1 break-words">file: <span className="text-slate-200">{diagnostic.file}</span></div>
+              <div className="mt-1 break-words">range: <span className="text-slate-200">{previewGeometryRangeLabel(diagnostic.range)}</span></div>
+              <div className="mt-1 break-words">reason: <span className="text-slate-200">{diagnostic.reason}</span></div>
+              {diagnostic.nodeId !== undefined && <div className="mt-1 break-words">node owner: <span className="text-slate-200">{diagnostic.nodeId}</span></div>}
+            </article>
+          ))}
+        </div>
+      )}
+      <div data-testid="x4-ui-preview-geometry-boundary" className="mt-2 font-bold text-amber-300">Layout evidence only · Not verified in game</div>
     </section>
   );
 }
@@ -2220,31 +2608,47 @@ export default function X4UiSourceEditor({
     }
     if (!Object.prototype.hasOwnProperty.call(executionDraft.staged, entryId)) return;
     const raw = executionDraft.staged[entryId];
-    const entry = catalog.entries.find(candidate => candidate.id === entryId);
-    if (entry === undefined) {
-      refuseSourceEdit('entry-not-found', 'the selected entry is not in the exact current owner-issued catalog');
-      return;
+    let result: X4UiSourceEditResult | X4UiSourceStructuralEditResult;
+    const blockEntry = catalog.insertEntries?.find(candidate => candidate.id === entryId && candidate.kind === 'insert-block');
+    if (blockEntry !== undefined) {
+      result = applyX4UiSourceStructuralEdit(
+        executionContext.workspace as Parameters<typeof applyX4UiSourceStructuralEdit>[0],
+        projection.source,
+        catalog,
+        blockEntry.id,
+        raw,
+        blockEntry.path,
+        blockEntry.startOffset,
+        blockEntry.endOffset,
+        blockEntry.expectedText,
+      );
+    } else {
+      const entry = catalog.entries.find(candidate => candidate.id === entryId);
+      if (entry === undefined) {
+        refuseSourceEdit('entry-not-found', 'the selected entry is not in the exact current owner-issued catalog');
+        return;
+      }
+      if (entry.kind !== 'editable') {
+        refuseSourceEdit(entry.reason, entry.detail);
+        return;
+      }
+      const parsed = parseX4UiSourceEditInput(entry, raw);
+      if (parsed.accepted === false) {
+        refuseSourceEdit(parsed.reason, parsed.detail);
+        return;
+      }
+      result = applyX4UiSourceEdit(
+        executionContext.workspace as Parameters<typeof applyX4UiSourceEdit>[0],
+        projection.source,
+        catalog,
+        entry.id,
+        parsed.value,
+        entry.path,
+        entry.startOffset,
+        entry.endOffset,
+        entry.expectedText,
+      );
     }
-    if (entry.kind !== 'editable') {
-      refuseSourceEdit(entry.reason, entry.detail);
-      return;
-    }
-    const parsed = parseX4UiSourceEditInput(entry, raw);
-    if (parsed.accepted === false) {
-      refuseSourceEdit(parsed.reason, parsed.detail);
-      return;
-    }
-    const result = applyX4UiSourceEdit(
-      executionContext.workspace as Parameters<typeof applyX4UiSourceEdit>[0],
-      projection.source,
-      catalog,
-      entry.id,
-      parsed.value,
-      entry.path,
-      entry.startOffset,
-      entry.endOffset,
-      entry.expectedText,
-    );
     if (result.accepted === false) {
       refuseSourceEdit(result.reason, result.detail);
       return;
@@ -2438,6 +2842,8 @@ export default function X4UiSourceEditor({
       )}
 
       <X4UiSourceEditorLinter inspection={lintInspection} />
+
+      <X4UiSourceEditorPreviewGeometry scene={projection.preview.scene} />
 
       <X4UiSourceEditorSamples
         catalog={projection.sampleCatalog}

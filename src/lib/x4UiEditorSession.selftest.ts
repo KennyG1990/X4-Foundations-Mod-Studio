@@ -725,6 +725,8 @@ const P7_SESSION_COLOR_OWNERS: readonly P7SessionColorOwner[] = [
   { field: 'color', slot: 'primary-text', domain: 'canonical-xml-byte-alpha', values: [101, 102, 103, 104] },
 ];
 
+const P7_SESSION_PAINT_COLOR_OWNERS: readonly P7SessionColorOwner[] = P7_SESSION_COLOR_OWNERS.filter(owner => owner.slot !== 'table-background');
+
 type P7SessionRow = {
   readonly name: string;
   readonly fixtureReady: boolean;
@@ -822,7 +824,7 @@ const P7_SESSION_EXPECTED_CARDINALITIES: P7SessionCardinalities = Object.freeze(
   widgets: 4,
   texts: 6,
   colorFacts: 13,
-  paintTints: 32,
+  paintTints: 31,
 });
 
 const P7_SESSION_EXPECTED_FACT_OWNERS = Object.freeze({
@@ -851,11 +853,9 @@ type P7SessionPaintExpectedEntry = {
 const P7_SESSION_CANONICAL_COLOR_DOMAIN = 'canonical-xml-byte-alpha';
 const P7_SESSION_LITERAL_COLOR_DOMAIN = 'source-literal-percent-alpha';
 
-const P7_SESSION_SELECTED_TABLE_OWNER = 'scene:table:table|table|call|ui/p7-colors.lua||3:14:159|3:144:289|frame||';
 const P7_SESSION_SELECTED_CELL_OWNER_PREFIX = 'scene:cell:table:table|table|call|ui/p7-colors.lua||3:14:159|3:144:289|frame|||row:row|row|call|ui/p7-colors.lua||8:12:430|8:123:541|table|||';
 const P7_SESSION_SELECTED_WIDGET_OWNER_PREFIX = 'scene:widget:cell:table:table|table|call|ui/p7-colors.lua||3:14:159|3:144:289|frame|||row:row|row|call|ui/p7-colors.lua||8:12:430|8:123:541|table|||';
 const P7_SESSION_SELECTED_TEXT_OWNER_PREFIX = 'scene:text:cell:table:table|table|call|ui/p7-colors.lua||3:14:159|3:144:289|frame|||row:row|row|call|ui/p7-colors.lua||8:12:430|8:123:541|table|||';
-const P7_SESSION_SAMPLED_TABLE_OWNER = 'scene:table:table|table|call|ui/p7-color-samples.lua||4:16:216|4:153:353|frame||';
 const P7_SESSION_SAMPLED_CELL_OWNER_PREFIX = 'scene:cell:table:table|table|call|ui/p7-color-samples.lua||4:16:216|4:153:353|frame|||row:row|row|call|ui/p7-color-samples.lua||9:14:504|9:125:615|table|||';
 const P7_SESSION_SAMPLED_WIDGET_OWNER_PREFIX = 'scene:widget:cell:table:table|table|call|ui/p7-color-samples.lua||4:16:216|4:153:353|frame|||row:row|row|call|ui/p7-color-samples.lua||9:14:504|9:125:615|table|||';
 const P7_SESSION_SAMPLED_TEXT_OWNER_PREFIX = 'scene:text:cell:table:table|table|call|ui/p7-color-samples.lua||4:16:216|4:153:353|frame|||row:row|row|call|ui/p7-color-samples.lua||9:14:504|9:125:615|table|||';
@@ -908,7 +908,6 @@ function p7SessionPaintExpectedMultiplicity(entries: readonly P7SessionPaintExpe
 }
 
 const P7_SESSION_EXPECTED_SELECTED_PAINT_OWNERS = p7SessionPaintExpectedMultiplicity([
-  p7SessionPaintExpectedEntry('backgroundColor', 'table-background', P7_SESSION_CANONICAL_COLOR_DOMAIN, [11, 22, 33, 44], 'table_background_default', P7_SESSION_SELECTED_TABLE_OWNER),
   p7SessionPaintExpectedEntry('cellbgcolor', 'cell-background', P7_SESSION_CANONICAL_COLOR_DOMAIN, [51, 52, 53, 54], 'row_background', `${P7_SESSION_SELECTED_CELL_OWNER_PREFIX}1`),
   ...p7SessionPaintExpectedGlyphEntries('color', 'primary-text', P7_SESSION_LITERAL_COLOR_DOMAIN, [12.5, 23.5, 34.5, 45.5], '', `${P7_SESSION_SELECTED_TEXT_OWNER_PREFIX}1:primary`, 7),
   p7SessionPaintExpectedEntry('cellbgcolor', 'cell-background', P7_SESSION_CANONICAL_COLOR_DOMAIN, [51, 52, 53, 54], 'row_background', `${P7_SESSION_SELECTED_CELL_OWNER_PREFIX}2`),
@@ -924,7 +923,6 @@ const P7_SESSION_EXPECTED_SELECTED_PAINT_OWNERS = p7SessionPaintExpectedMultipli
 ]);
 
 const P7_SESSION_EXPECTED_SAMPLED_PAINT_OWNERS = p7SessionPaintExpectedMultiplicity([
-  p7SessionPaintExpectedEntry('backgroundColor', 'table-background', P7_SESSION_CANONICAL_COLOR_DOMAIN, [11, 22, 33, 44], 'table_background_default', P7_SESSION_SAMPLED_TABLE_OWNER),
   p7SessionPaintExpectedEntry('cellbgcolor', 'cell-background', P7_SESSION_CANONICAL_COLOR_DOMAIN, [51, 52, 53, 54], 'row_background', `${P7_SESSION_SAMPLED_CELL_OWNER_PREFIX}1`),
   ...p7SessionPaintExpectedGlyphEntries('color', 'primary-text', P7_SESSION_CANONICAL_COLOR_DOMAIN, [101, 102, 103, 104], 'text_normal', `${P7_SESSION_SAMPLED_TEXT_OWNER_PREFIX}1:primary`, 7),
   p7SessionPaintExpectedEntry('cellbgcolor', 'cell-background', P7_SESSION_CANONICAL_COLOR_DOMAIN, [51, 52, 53, 54], 'row_background', `${P7_SESSION_SAMPLED_CELL_OWNER_PREFIX}2`),
@@ -953,7 +951,7 @@ const P7_SESSION_EXPECTED_SELECTED_SHAPE: P7SessionShapeExpectation = Object.fre
   cardinalities: P7_SESSION_EXPECTED_CARDINALITIES,
   factOwners: P7_SESSION_EXPECTED_FACT_OWNERS,
   paintOwners: P7_SESSION_EXPECTED_PAINT_OWNERS,
-  wrongPaintOwnerId: P7_SESSION_SELECTED_TABLE_OWNER,
+  wrongPaintOwnerId: `${P7_SESSION_SELECTED_CELL_OWNER_PREFIX}1`,
   sameColorOwnerPair: [`${P7_SESSION_SELECTED_CELL_OWNER_PREFIX}1`, `${P7_SESSION_SELECTED_CELL_OWNER_PREFIX}2`] as const,
 });
 
@@ -965,7 +963,7 @@ const P7_SESSION_EXPECTED_SAMPLED_SHAPE: P7SessionShapeExpectation = Object.free
       .map(([key, count]) => [key, key === 'color|primary-text|canonical-xml-byte-alpha|101,102,103,104|text_normal' ? 2 : count]),
   )),
   paintOwners: P7_SESSION_EXPECTED_SAMPLED_PAINT_OWNERS,
-  wrongPaintOwnerId: P7_SESSION_SAMPLED_TABLE_OWNER,
+  wrongPaintOwnerId: `${P7_SESSION_SAMPLED_CELL_OWNER_PREFIX}1`,
   sameColorOwnerPair: [`${P7_SESSION_SAMPLED_CELL_OWNER_PREFIX}1`, `${P7_SESSION_SAMPLED_CELL_OWNER_PREFIX}2`] as const,
 });
 
@@ -1080,7 +1078,7 @@ function p7SessionLegacyProjectionHasColorOwners(result: unknown): boolean {
   const facts = p7SessionSceneFacts(result);
   const tints = p7SessionPaintTints(result);
   return P7_SESSION_COLOR_OWNERS.every(owner => facts.some(fact => p7SessionColorFactMatches(fact, owner)))
-    && P7_SESSION_COLOR_OWNERS.every(owner => tints.some(tint => p7SessionColorFactMatches(tint, owner) && typeof tint.ownerId === 'string'));
+    && P7_SESSION_PAINT_COLOR_OWNERS.every(owner => tints.some(tint => p7SessionColorFactMatches(tint, owner) && typeof tint.ownerId === 'string'));
 }
 
 function p7SessionLegacyExactShape(result: unknown, expected: P7SessionShapeExpectation): boolean {

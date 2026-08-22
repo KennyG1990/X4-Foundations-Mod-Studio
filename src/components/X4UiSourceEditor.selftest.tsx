@@ -46,6 +46,7 @@ import {
 import UIBuilder, * as UIBuilderApiModule from './UIBuilder';
 import X4UiSourceEditor, {
   X4UiSourceEditorLinter,
+  X4UiSourceEditorPreviewGeometry,
   X4UiSourceEditorSamples,
   addX4UiManualCalibrationPoint,
   addX4UiManualCalibrationDraft,
@@ -57,6 +58,7 @@ import X4UiSourceEditor, {
   createX4UiManualCalibrationDraft,
   createX4UiManualCalibrationState,
   inspectX4UiLint,
+  inspectX4UiPreviewGeometry,
   isBlockingX4UiAddTableFinding,
   isX4UiKeepOutEntryChecked,
   parseX4UiManualCalibrationDraft,
@@ -120,6 +122,20 @@ assert.match(sourceMarkup, /Configured X4 corpus/);
 assert.match(sourceMarkup, /Profile controls/);
 assert.match(sourceMarkup, /Source and target selection/);
 assert.match(sourceMarkup, /Imported-source linter/);
+assert.match(sourceMarkup, /Preview geometry diagnostics/);
+assert.match(sourceMarkup, /Layout evidence only · Not verified in game/);
+
+const sourceEditorApiFailFirst = X4UiSourceEditorApiModule as unknown as Record<string, unknown>;
+const previewGeometryFailFirstMissing = [
+  ['source-linked preview geometry inspector is absent', typeof sourceEditorApiFailFirst.inspectX4UiPreviewGeometry === 'function'],
+  ['source-linked preview geometry panel is absent', typeof sourceEditorApiFailFirst.X4UiSourceEditorPreviewGeometry === 'function'],
+].filter(([, pass]) => !pass).map(([name]) => name);
+assert.deepEqual(
+  previewGeometryFailFirstMissing,
+  [],
+  `SOURCE_LINKED_PREVIEW_GEOMETRY causal fail-first red assertions: ${previewGeometryFailFirstMissing.join(', ')}`,
+);
+
 assert.match(sourceMarkup, /Context keep-outs/);
 assert.match(sourceMarkup, /x4-ui-manual-calibration-region/);
 assert.match(sourceMarkup, /x4-ui-manual-calibration-stable-id/);
@@ -434,6 +450,317 @@ const cleanMarkup = renderToStaticMarkup(
 );
 assert.match(cleanMarkup, /No known static rule violated/);
 
+const geometrySource = (line: number, column: number, offset: number) => ({
+  file: 'ui/menu.lua',
+  start: { line, column, offset },
+  end: { line, column: column + 5, offset: offset + 5 },
+});
+const geometryGap = (overrides: Record<string, unknown> = {}) => ({
+  category: 'height',
+  status: 'unavailable',
+  source: geometrySource(531, 4, 5_310),
+  nodeId: 'menu.row.531',
+  reason: '81.6875 px bottom overflow',
+  ...overrides,
+});
+const withoutGeometryNodeId = (gap: Record<string, unknown>): Record<string, unknown> => {
+  const copy = { ...gap };
+  delete copy.nodeId;
+  return copy;
+};
+const geometryScene = {
+  status: 'partial',
+  gaps: [
+    { category: 'paint', reason: 'paint gap must remain filtered' },
+    geometryGap(),
+    geometryGap({
+      category: 'width',
+      source: geometrySource(312, 8, 3_120),
+      nodeId: 'menu.row.312',
+      reason: 'negative omitted width',
+    }),
+    geometryGap({
+      category: 'width',
+      source: geometrySource(312, 8, 3_120),
+      nodeId: 'menu.row.312',
+      reason: 'negative omitted width',
+    }),
+    geometryGap({
+      category: 'width',
+      source: geometrySource(312, 8, 3_120),
+      nodeId: 'different-owner',
+      reason: 'negative omitted width',
+    }),
+    { category: 'text', reason: 'text gap must remain filtered' },
+    { category: 'height', status: 'unavailable', reason: 'missing source is incomplete' },
+    {
+      category: 'width',
+      status: 'unavailable',
+      source: geometrySource(0, 8, 3_120),
+      reason: 'invalid range is incomplete',
+    },
+  ],
+};
+const geometryVerification = { game: 'Not verified in game', gameVerified: false };
+const geometryResult = { status: 'partial', scene: geometryScene, verification: geometryVerification };
+const geometryInspection = inspectX4UiPreviewGeometry(geometryResult);
+assert.equal(geometryInspection.state, 'incomplete');
+assert.equal(geometryInspection.diagnosticCount, 3, 'exact duplicate geometry entries dedupe once');
+assert.equal(geometryInspection.incompleteCount, 2, 'malformed height/width candidates are explicitly incomplete');
+assert.deepEqual(geometryInspection, inspectX4UiPreviewGeometry({
+  ...geometryResult,
+  scene: { ...geometryScene, gaps: [...geometryScene.gaps].reverse() },
+}), 'geometry inspection must be deterministic independent of gap arrival order');
+assert.equal(geometryInspection.diagnostics[0]?.range.start.line, 312, 'geometry diagnostics render in source order');
+assert.equal(geometryInspection.diagnostics[2]?.range.start.line, 531, 'height evidence remains after earlier width evidence');
+assert.equal(
+  geometryInspection.diagnostics.filter(diagnostic => diagnostic.reason === 'negative omitted width').length,
+  2,
+  'different nodeIds are never merged by matching reason',
+);
+assert.deepEqual(
+  geometryInspection.diagnostics
+    .filter(diagnostic => diagnostic.reason === 'negative omitted width')
+    .map(diagnostic => diagnostic.nodeId),
+  ['different-owner', 'menu.row.312'],
+  'authoritative nodeId participates in stable ordering and exact dedupe',
+);
+assert.equal(
+  geometryInspection.diagnostics.some(diagnostic => diagnostic.reason.endsWith('must remain filtered')),
+  false,
+  'paint/text candidates must remain outside the geometry diagnostics',
+);
+
+const geometryMarkup = renderToStaticMarkup(<X4UiSourceEditorPreviewGeometry scene={geometryResult} />);
+assert.match(geometryMarkup, /x4-ui-preview-geometry-region/);
+assert.match(geometryMarkup, /incomplete/);
+assert.match(geometryMarkup, />3<\/span> source-linked height\/width diagnostics/);
+assert.match(geometryMarkup, /Incomplete candidates: 2/);
+assert.match(geometryMarkup, /category:[\s\S]*height/);
+assert.match(geometryMarkup, /category:[\s\S]*width/);
+assert.match(geometryMarkup, /status:[\s\S]*unavailable/);
+assert.match(geometryMarkup, /file:[\s\S]*ui\/menu\.lua/);
+assert.match(geometryMarkup, /range:[\s\S]*312:/);
+assert.match(geometryMarkup, /81\.6875 px bottom overflow/);
+assert.match(geometryMarkup, /negative omitted width/);
+assert.match(geometryMarkup, /node owner:[\s\S]*menu\.row\.531/);
+assert.match(geometryMarkup, /node owner:[\s\S]*different-owner/);
+assert.match(geometryMarkup, /only height\/width evidence is shown/);
+assert.match(geometryMarkup, /Paint\/text\/kernel\/scrollbar\/state\/data-flow gaps are not shown/);
+assert.match(geometryMarkup, /Layout evidence only · Not verified in game/);
+assert.doesNotMatch(geometryMarkup, /paint gap must remain filtered|text gap must remain filtered/);
+
+const geometryAvailableResult = {
+  status: 'partial',
+  scene: { status: 'partial', gaps: [geometryGap()] },
+  verification: geometryVerification,
+};
+const geometryAvailableInspection = inspectX4UiPreviewGeometry(geometryAvailableResult);
+assert.equal(geometryAvailableInspection.state, 'available');
+assert.equal(geometryAvailableInspection.diagnosticCount, 1);
+assert.equal(geometryAvailableInspection.incompleteCount, 0);
+const geometryAvailableMarkup = renderToStaticMarkup(<X4UiSourceEditorPreviewGeometry scene={geometryAvailableResult} />);
+assert.match(geometryAvailableMarkup, /data-testid="x4-ui-preview-geometry-state"[^>]*>available</);
+assert.match(geometryAvailableMarkup, />1<\/span> source-linked height\/width diagnostics/);
+
+const geometryWithoutNodeIdResult = {
+  status: 'partial',
+  scene: {
+    status: 'partial',
+    gaps: [withoutGeometryNodeId(geometryGap({
+      source: geometrySource(540, 2, 5_400),
+      reason: 'optional nodeId is absent',
+    }))],
+  },
+  verification: geometryVerification,
+};
+const geometryWithoutNodeIdInspection = inspectX4UiPreviewGeometry(geometryWithoutNodeIdResult);
+assert.equal(geometryWithoutNodeIdInspection.state, 'available');
+assert.equal(geometryWithoutNodeIdInspection.diagnosticCount, 1);
+assert.equal(geometryWithoutNodeIdInspection.diagnostics[0]?.nodeId, undefined);
+const geometryWithoutNodeIdMarkup = renderToStaticMarkup(<X4UiSourceEditorPreviewGeometry scene={geometryWithoutNodeIdResult} />);
+assert.doesNotMatch(geometryWithoutNodeIdMarkup, /node owner:/);
+
+const aliasGeometryResult = {
+  status: 'partial',
+  scene: {
+    status: 'partial',
+    gaps: [
+      { ...withoutGeometryNodeId(geometryGap({ source: geometrySource(541, 2, 5_410), reason: 'nodeOwner alias' })), nodeOwner: 'synthetic-nodeOwner' },
+      { ...withoutGeometryNodeId(geometryGap({ source: geometrySource(542, 2, 5_420), reason: 'owner alias' })), owner: 'synthetic-owner' },
+      { ...withoutGeometryNodeId(geometryGap({ source: geometrySource(543, 2, 5_430), reason: 'node alias' })), node: 'synthetic-node' },
+    ],
+  },
+  verification: geometryVerification,
+};
+const aliasGeometryInspection = inspectX4UiPreviewGeometry(aliasGeometryResult);
+assert.equal(aliasGeometryInspection.diagnosticCount, 3, 'aliases do not invalidate an otherwise valid gap with optional nodeId absent');
+assert.equal(aliasGeometryInspection.diagnostics.every(diagnostic => diagnostic.nodeId === undefined), true);
+assert.equal(
+  aliasGeometryInspection.diagnostics.some(diagnostic => Object.prototype.hasOwnProperty.call(diagnostic, 'nodeOwner')),
+  false,
+  'synthetic owner aliases are not promoted into diagnostics',
+);
+const aliasGeometryMarkup = renderToStaticMarkup(<X4UiSourceEditorPreviewGeometry scene={aliasGeometryResult} />);
+assert.doesNotMatch(aliasGeometryMarkup, /synthetic-nodeOwner|synthetic-owner|synthetic-node/);
+
+const geometryEmptyResult = {
+  status: 'projected',
+  scene: { status: 'projected', gaps: [] },
+  verification: geometryVerification,
+};
+const geometryEmptyInspection = inspectX4UiPreviewGeometry(geometryEmptyResult);
+assert.equal(geometryEmptyInspection.state, 'empty');
+assert.equal(geometryEmptyInspection.diagnosticCount, 0);
+const geometryEmptyMarkup = renderToStaticMarkup(<X4UiSourceEditorPreviewGeometry scene={geometryEmptyResult} />);
+assert.match(geometryEmptyMarkup, /data-testid="x4-ui-preview-geometry-empty"/);
+assert.match(geometryEmptyMarkup, /Empty: no source-linked height\/width diagnostics are available/);
+
+const refusedGeometryResult = {
+  status: 'refused',
+  refusal: { code: 'invalid-input', message: 'fixture refusal' },
+  verification: geometryVerification,
+};
+const unavailableGeometryInspection = inspectX4UiPreviewGeometry(refusedGeometryResult);
+assert.equal(unavailableGeometryInspection.state, 'unavailable');
+assert.equal(unavailableGeometryInspection.diagnosticCount, 0, 'refused Scene cannot fabricate diagnostics');
+const unavailableGeometryMarkup = renderToStaticMarkup(<X4UiSourceEditorPreviewGeometry scene={refusedGeometryResult} />);
+assert.match(unavailableGeometryMarkup, /data-testid="x4-ui-preview-geometry-unavailable"/);
+assert.doesNotMatch(unavailableGeometryMarkup, /81\.6875 px bottom overflow/);
+assert.equal(inspectX4UiPreviewGeometry({
+  status: 'partial',
+  scene: { status: 'partial', gaps: 'malformed' },
+  verification: geometryVerification,
+}).state, 'unavailable');
+assert.equal(inspectX4UiPreviewGeometry(geometryScene).state, 'unavailable', 'raw inner Scene is not a production result wrapper');
+
+let geometryGetterReads = 0;
+const accessorGeometryGap = geometryGap();
+Object.defineProperty(accessorGeometryGap, 'reason', {
+  configurable: true,
+  enumerable: true,
+  get: () => {
+    geometryGetterReads += 1;
+    return 'getter reason must not be read';
+  },
+});
+const inheritedGeometryGap = Object.create({
+  category: 'height',
+  status: 'unavailable',
+  source: geometrySource(600, 0, 6_000),
+  reason: 'inherited reason must not be read',
+});
+const hostileGeometryInspection = inspectX4UiPreviewGeometry({
+  status: 'partial',
+  scene: { status: 'partial', gaps: [accessorGeometryGap, inheritedGeometryGap] },
+  verification: geometryVerification,
+});
+assert.equal(geometryGetterReads, 0, 'accessor-backed geometry fields must not be invoked');
+assert.equal(hostileGeometryInspection.diagnosticCount, 0, 'accessor/inherited geometry data cannot become diagnostics');
+assert.equal(hostileGeometryInspection.incompleteCount, 1, 'an own malformed geometry candidate is explicit incomplete evidence');
+
+let wrapperGetterReads = 0;
+const accessorSceneResult: Record<string, unknown> = { status: 'partial', verification: geometryVerification };
+Object.defineProperty(accessorSceneResult, 'scene', {
+  configurable: true,
+  enumerable: true,
+  get: () => {
+    wrapperGetterReads += 1;
+    return geometryScene;
+  },
+});
+const accessorVerificationResult: Record<string, unknown> = { status: 'partial', scene: geometryScene };
+Object.defineProperty(accessorVerificationResult, 'verification', {
+  configurable: true,
+  enumerable: true,
+  get: () => {
+    wrapperGetterReads += 1;
+    return geometryVerification;
+  },
+});
+const nonEnumerableSceneResult: Record<string, unknown> = { status: 'partial', verification: geometryVerification };
+Object.defineProperty(nonEnumerableSceneResult, 'scene', {
+  configurable: true,
+  enumerable: false,
+  writable: true,
+  value: geometryScene,
+});
+const inheritedSceneResult = Object.assign(Object.create({ scene: geometryScene }) as Record<string, unknown>, {
+  status: 'partial',
+  verification: geometryVerification,
+});
+for (const malformedResult of [
+  { status: 'partial', verification: geometryVerification },
+  { status: 'partial', scene: geometryScene },
+  { status: 'partial', scene: geometryScene, verification: { game: 'Not verified in game', gameVerified: true } },
+  accessorSceneResult,
+  accessorVerificationResult,
+  nonEnumerableSceneResult,
+  inheritedSceneResult,
+]) {
+  const inspection = inspectX4UiPreviewGeometry(malformedResult);
+  assert.equal(inspection.state, 'unavailable');
+  assert.equal(inspection.diagnosticCount, 0);
+}
+assert.equal(wrapperGetterReads, 0, 'accessor-backed nested Scene must not be invoked');
+
+let nodeIdGetterReads = 0;
+const accessorNodeIdGap = geometryGap({ source: geometrySource(610, 1, 6_100), reason: 'accessor nodeId' });
+Object.defineProperty(accessorNodeIdGap, 'nodeId', {
+  configurable: true,
+  enumerable: true,
+  get: () => {
+    nodeIdGetterReads += 1;
+    return 'accessor-node';
+  },
+});
+const nonEnumerableNodeIdGap = geometryGap({ source: geometrySource(611, 1, 6_110), reason: 'non-enumerable nodeId' });
+Object.defineProperty(nonEnumerableNodeIdGap, 'nodeId', {
+  configurable: true,
+  enumerable: false,
+  writable: true,
+  value: 'hidden-node',
+});
+const malformedNodeIdInspection = inspectX4UiPreviewGeometry({
+  status: 'partial',
+  scene: {
+    status: 'partial',
+    gaps: [
+      accessorNodeIdGap,
+      nonEnumerableNodeIdGap,
+      geometryGap({ source: geometrySource(612, 1, 6_120), reason: 'non-string nodeId', nodeId: 12 }),
+      geometryGap({ source: geometrySource(613, 1, 6_130), reason: 'empty nodeId', nodeId: '   ' }),
+    ],
+  },
+  verification: geometryVerification,
+});
+assert.equal(nodeIdGetterReads, 0, 'accessor-backed nodeId must not be invoked');
+assert.equal(malformedNodeIdInspection.diagnosticCount, 0, 'malformed own nodeId drops the candidate instead of stripping its owner');
+assert.equal(malformedNodeIdInspection.incompleteCount, 4, 'every malformed own nodeId is explicit incomplete evidence');
+
+let inheritedNodeIdGetterReads = 0;
+const inheritedNodeIdPrototype = {};
+Object.defineProperty(inheritedNodeIdPrototype, 'nodeId', {
+  configurable: true,
+  enumerable: true,
+  get: () => {
+    inheritedNodeIdGetterReads += 1;
+    return 'inherited-node';
+  },
+});
+const inheritedNodeIdGap = Object.assign(
+  Object.create(inheritedNodeIdPrototype) as Record<string, unknown>,
+  withoutGeometryNodeId(geometryGap({ source: geometrySource(614, 1, 6_140), reason: 'inherited nodeId' })),
+);
+const inheritedNodeIdInspection = inspectX4UiPreviewGeometry({
+  status: 'partial',
+  scene: { status: 'partial', gaps: [inheritedNodeIdGap] },
+  verification: geometryVerification,
+});
+assert.equal(inheritedNodeIdGetterReads, 0, 'inherited nodeId must not be invoked');
+assert.equal(inheritedNodeIdInspection.diagnosticCount, 0, 'forged prototype data is not promoted');
+assert.equal(inheritedNodeIdInspection.incompleteCount, 1);
+
 assert.deepEqual(reconcileX4UiEditorSelections({
   sourceSelector: 'missing-source',
   targetSelector: 'target-1',
@@ -449,6 +776,35 @@ assert.deepEqual(reconcileX4UiEditorSelections({
   targetSelector: '',
   candidates: [{ key: 'source-1', targets: [{ key: 'target-1' }] }],
 }), { sourceSelector: '', targetSelector: '' });
+
+const stableSelectionCandidates = [
+  {
+    key: 'source-menu',
+    targets: [{ key: 'target-cleanup' }, { key: 'target-display' }],
+  },
+  {
+    key: 'source-other',
+    targets: [{ key: 'target-other' }],
+  },
+] as const;
+const sourceSelectionTransition = reconcileX4UiEditorSelections({
+  sourceSelector: 'source-menu',
+  targetSelector: '',
+  candidates: stableSelectionCandidates,
+});
+assert.deepEqual(sourceSelectionTransition, { sourceSelector: 'source-menu', targetSelector: '' }, 'source selection must not auto-select a target');
+const targetSelectionTransition = reconcileX4UiEditorSelections({
+  sourceSelector: sourceSelectionTransition.sourceSelector,
+  targetSelector: 'target-display',
+  candidates: stableSelectionCandidates,
+});
+assert.deepEqual(targetSelectionTransition, { sourceSelector: 'source-menu', targetSelector: 'target-display' }, 'valid target must survive the user-selection/reconciliation transition');
+assert.deepEqual(reconcileX4UiEditorSelections({
+  sourceSelector: 'source-other',
+  targetSelector: targetSelectionTransition.targetSelector,
+  candidates: stableSelectionCandidates,
+}), { sourceSelector: 'source-other', targetSelector: '' }, 'changing source must clear the prior target');
+console.log('X4UiSourceEditor selection reconciliation regression: valid target retention 1/1; no-auto-select 1/1; source-change reset 1/1');
 
 assert.equal(classifyX4UiCorpusLoadResult({
   result: { ok: true },
@@ -669,6 +1025,8 @@ assert.match(sourceText, /isX4UiCorpusCanonicalSuccess/);
 assert.match(sourceText, /renderX4UiPaintPlanToCanvas\(/);
 // Fail-first B119 presentation contract: Source Preview must select source composition explicitly.
 assert.match(sourceText, /presentation:\s*['"]source-composition['"]/);
+assert.match(sourceText, /<X4UiSourceEditorPreviewGeometry scene=\{projection\.preview\.scene\} \/>/);
+assert.ok(sourceText.indexOf('<X4UiSourceEditorLinter inspection={lintInspection} />') < sourceText.indexOf('<X4UiSourceEditorPreviewGeometry scene={projection.preview.scene} />'));
 assert.match(sourceText, /adoptX4UiEditorCanvasResult/);
 assert.match(sourceText, /sampleBinding/);
 assert.match(sourceText, /projection\.sampleBinding/);
@@ -1391,7 +1749,7 @@ const compileActualSourceEditApply = (
   const callbackSource = sourceText.slice(startOffset, endOffset);
   const compiled = transpileModule([
     'export default function createApply(environment) {',
-    'const { sourceEditDraftMatches, refuseSourceEdit, sourceEditCatalog, currentProgram, currentEvidenceAuthority, sourceEditDraft, sourceEditContextRef, sourceEditDraftRef, parseX4UiSourceEditInput, applyX4UiSourceEdit, sourceEditContext, projection, onWorkspaceEdit, submitX4UiSourceEditWorkspaceCommit, setSourceEditDraft, settleX4UiSourceEditReceipt, X4_UI_EDITOR_SESSION_GAME_TRUTH } = environment;',
+    'const { sourceEditDraftMatches, refuseSourceEdit, sourceEditCatalog, currentProgram, currentEvidenceAuthority, sourceEditDraft, sourceEditContextRef, sourceEditDraftRef, parseX4UiSourceEditInput, applyX4UiSourceEdit, applyX4UiSourceStructuralEdit, sourceEditContext, projection, onWorkspaceEdit, submitX4UiSourceEditWorkspaceCommit, setSourceEditDraft, settleX4UiSourceEditReceipt, X4_UI_EDITOR_SESSION_GAME_TRUTH } = environment;',
     callbackSource,
     'return applySourceEdit;',
     '}',
@@ -2048,6 +2406,180 @@ assert.match(sourceEditControlsMarkup, /type="text"/);
 assert.match(sourceEditControlsMarkup, /type="checkbox"/);
 assert.doesNotMatch(sourceEditControlsMarkup, /data-testid="x4-ui-source-edit-input-fail-first-locked"/);
 assert.match(sourceEditControlsMarkup, /Not verified in game/);
+const failFirstBlockEntry = {
+  kind: 'insert-block',
+  id: 'fail-first-frame-block',
+  path: 'ui/edit.lua',
+  startOffset: 20,
+  endOffset: 20,
+  expectedText: '',
+  anchor: 'frame-display',
+  anchorSource: { file: 'ui/edit.lua', start: { line: 2, column: 0, offset: 20 }, end: { line: 2, column: 0, offset: 20 } },
+  indentation: '  ',
+  lineEnding: '\n',
+  provenance: {
+    sourceIdentity: { file: 'ui/edit.lua', sha256: 'a'.repeat(64) },
+    targetId: 'target',
+    targetSource: { file: 'ui/edit.lua', start: { line: 1, column: 0, offset: 0 }, end: { line: 3, column: 0, offset: 30 } },
+    statementSource: { file: 'ui/edit.lua', start: { line: 2, column: 0, offset: 20 }, end: { line: 2, column: 15, offset: 35 } },
+    callBindings: [{ operationId: 'operation-display', callName: 'display', callOrder: 2, callSource: { file: 'ui/edit.lua', start: { line: 2, column: 0, offset: 20 }, end: { line: 2, column: 15, offset: 35 } } }],
+    owner: { kind: 'frame', ownerId: 'frame:fixture' },
+  },
+} as const;
+const failFirstBlockCatalog = {
+  ...failFirstCatalog,
+  structuralEntries: [failFirstBlockEntry],
+  deleteEntries: [],
+  insertEntries: [failFirstBlockEntry],
+} as unknown as X4UiSourceEditCatalog;
+const sourceEditBlockControlsMarkup = renderToStaticMarkup(React.createElement(renderSourceEditControls, {
+  catalog: failFirstBlockCatalog,
+  staged: { [failFirstBlockEntry.id]: 'local inputTable = frame:addTable(1, {})' },
+  receipt: undefined,
+  onStage: () => undefined,
+  onApply: () => undefined,
+}));
+assert.match(sourceEditBlockControlsMarkup, /Frame-level direct X4 UI insertion block/);
+assert.match(sourceEditBlockControlsMarkup, /data-testid="x4-ui-source-edit-block-input-fail-first-frame-block"/);
+assert.match(sourceEditBlockControlsMarkup, /textarea/);
+assert.match(sourceEditBlockControlsMarkup, /Apply frame block/);
+assert.match(sourceEditBlockControlsMarkup, /Not verified in game/);
+const pendingSourceEditBlockControlsMarkup = renderToStaticMarkup(React.createElement(renderSourceEditControls, {
+  catalog: failFirstBlockCatalog,
+  staged: { [failFirstBlockEntry.id]: 'local inputTable = frame:addTable(1, {})' },
+  receipt: {
+    status: 'pending',
+    submission: acceptedSubmission,
+    context: replacementSourceEditContextR,
+    changed: true,
+    detail: 'awaiting exact parent-issued acknowledgement',
+    acceptedDetail: 'frame block must remain pending until exact acknowledgement',
+  },
+  onStage: () => undefined,
+  onApply: () => undefined,
+}));
+assert.match(pendingSourceEditBlockControlsMarkup, /Pending parent workspace acknowledgement/);
+assert.match(pendingSourceEditBlockControlsMarkup, /data-testid="x4-ui-source-edit-block-input-fail-first-frame-block"[^>]*disabled/);
+assert.match(pendingSourceEditBlockControlsMarkup, /data-testid="x4-ui-source-edit-apply-block-fail-first-frame-block"[^>]*disabled/);
+
+const frameBlockPayload = [
+  'local inputTable = frame:addTable(2, {})',
+  'inputTable:setColWidthPercent(1, 50)',
+  'inputTable:setColWidthPercent(2, 50)',
+  'local inputRow = inputTable:addRow(false, {})',
+  'inputRow[1]:createText("AI Influence", {}):setColSpan(1)',
+].join('\n');
+const stagedFrameBlock = stageScalar({}, failFirstBlockEntry.id, frameBlockPayload);
+assert.equal(stagedFrameBlock[failFirstBlockEntry.id], frameBlockPayload, 'frame block staging retains the exact source payload');
+const blockExpectedWorkspace = { identity: 'frame-block-current' };
+const blockReplacementWorkspace = blockExpectedWorkspace;
+const blockContextR = makeSourceEditContext({
+  workspace: blockExpectedWorkspace,
+  ...sourceEditAuthorityIdentity,
+});
+const blockContextAfter = makeSourceEditContext({
+  workspace: blockReplacementWorkspace,
+  ...sourceEditAuthorityIdentity,
+});
+const blockContextRef: { current: unknown } = { current: blockContextR };
+let blockStageDraft: unknown = { context: blockContextR, staged: {} };
+const stageFrameBlock = compileActualSourceEditStage({
+  sourceEditContext: blockContextR,
+  sourceEditContextRef: blockContextRef,
+  sourceEditDraftRef: { current: blockStageDraft },
+  setSourceEditDraft: update => {
+    blockStageDraft = typeof update === 'function' ? update(blockStageDraft) : update;
+  },
+  stageX4UiSourceEditInput: stageScalar,
+  shouldClearX4UiSourceEditState: clearOnDrift,
+});
+stageFrameBlock(failFirstBlockEntry.id, frameBlockPayload);
+const blockStagedDraft = blockStageDraft as { readonly context: unknown; readonly staged: Readonly<Record<string, string>> };
+let blockUpdater: WorkspaceUpdater | undefined;
+let blockAcknowledger: WorkspaceAcknowledger | undefined;
+const blockSubmission = beginWorkspaceCommit(
+  blockExpectedWorkspace,
+  { expectedWorkspace: blockExpectedWorkspace, workspace: blockReplacementWorkspace },
+  (updater, acknowledge) => {
+    blockUpdater = updater;
+    blockAcknowledger = acknowledge;
+  },
+);
+const blockDraftRef: { current: unknown } = { current: blockStagedDraft };
+let blockAppliedDraft: unknown = blockStagedDraft;
+let blockStructuralApplyCalls = 0;
+let blockStructuralApplyArgs: readonly unknown[] | undefined;
+const applyFrameBlock = compileActualSourceEditApply({
+  sourceEditDraftMatches: true,
+  refuseSourceEdit: (reason: string, detail: string) => {
+    blockAppliedDraft = { context: blockContextR, staged: {}, receipt: { status: 'refused', reason, detail } };
+  },
+  sourceEditCatalog: failFirstBlockCatalog,
+  currentProgram: {},
+  currentEvidenceAuthority: {},
+  sourceEditDraft: blockStagedDraft,
+  sourceEditContextRef: blockContextRef,
+  sourceEditDraftRef: blockDraftRef,
+  parseX4UiSourceEditInput: parseScalar,
+  applyX4UiSourceEdit: () => {
+    throw new Error('frame-block apply must use the structural owner');
+  },
+  applyX4UiSourceStructuralEdit: (...args: readonly unknown[]) => {
+    blockStructuralApplyCalls += 1;
+    blockStructuralApplyArgs = args;
+    return {
+      accepted: true,
+      changed: true,
+      workspace: blockReplacementWorkspace,
+      source: {},
+      catalog: failFirstBlockCatalog,
+      entry: failFirstBlockEntry,
+      path: failFirstBlockEntry.path,
+      startOffset: failFirstBlockEntry.startOffset,
+      endOffset: failFirstBlockEntry.endOffset,
+      expectedText: failFirstBlockEntry.expectedText,
+      replacement: `${failFirstBlockEntry.indentation}${frameBlockPayload}${failFirstBlockEntry.lineEnding}`,
+      byteLocal: true,
+      reparsed: true,
+      provenanceReestablished: true,
+    };
+  },
+  sourceEditContext: blockContextR,
+  projection: { source: {} },
+  onWorkspaceEdit: () => blockSubmission,
+  submitX4UiSourceEditWorkspaceCommit: submitSourceEditWorkspaceCommit,
+  setSourceEditDraft: update => {
+    blockAppliedDraft = typeof update === 'function' ? update(blockAppliedDraft) : update;
+  },
+  settleX4UiSourceEditReceipt: settleSourceEditReceipt,
+  X4_UI_EDITOR_SESSION_GAME_TRUTH: 'Not verified in game',
+});
+applyFrameBlock(failFirstBlockEntry.id);
+const pendingBlockReceipt = (blockAppliedDraft as { readonly receipt?: unknown }).receipt as { readonly status?: string; readonly submission?: unknown; readonly changed?: boolean } | undefined;
+const blockLiveWorkspace = blockUpdater?.(blockExpectedWorkspace);
+const blockAcknowledgement = blockAcknowledger?.(blockLiveWorkspace);
+const acceptedBlockSettlement = pendingBlockReceipt && blockAcknowledgement
+  ? settleSourceEditReceipt?.(blockReplacementWorkspace, pendingBlockReceipt, blockAcknowledgement, blockContextAfter) as { readonly status?: string; readonly changed?: boolean } | undefined
+  : undefined;
+const staleBlockSettlement = pendingBlockReceipt && blockAcknowledgement
+  ? settleSourceEditReceipt?.(newerWorkspaceN, pendingBlockReceipt, blockAcknowledgement, blockContextAfter) as { readonly status?: string; readonly reason?: string } | undefined
+  : undefined;
+const blockUiCausalRows: ReadonlyArray<CausalRow> = [
+  ['frame block stage callback preserves exact payload', blockStagedDraft.staged[failFirstBlockEntry.id] === frameBlockPayload],
+  ['frame block apply dispatches the owner structural path with exact CAS arguments', blockStructuralApplyCalls === 1
+    && blockStructuralApplyArgs?.[3] === failFirstBlockEntry.id
+    && blockStructuralApplyArgs?.[4] === frameBlockPayload
+    && blockStructuralApplyArgs?.[5] === failFirstBlockEntry.path
+    && blockStructuralApplyArgs?.[6] === failFirstBlockEntry.startOffset
+    && blockStructuralApplyArgs?.[7] === failFirstBlockEntry.endOffset
+    && blockStructuralApplyArgs?.[8] === failFirstBlockEntry.expectedText],
+  ['frame block apply waits in pending parent acknowledgement state', pendingBlockReceipt?.status === 'pending' && pendingBlockReceipt.changed === true],
+  ['exact frame block parent acknowledgement settles as accepted changed source', acceptedBlockSettlement?.status === 'accepted' && acceptedBlockSettlement.changed === true],
+  ['stale frame block parent readback refuses without acceptance', staleBlockSettlement?.status === 'refused' && staleBlockSettlement.reason === 'stale-parent-workspace'],
+];
+const blockUiCausalFailures = blockUiCausalRows.filter(([, pass]) => !pass).map(([name]) => name);
+assert.deepEqual(blockUiCausalFailures, [], `B119 frame-block UI causal red assertions: ${blockUiCausalFailures.join(', ')}`);
+
 const pendingSourceEditControlsMarkup = renderToStaticMarkup(React.createElement(renderSourceEditControls, {
   catalog: failFirstCatalog,
   staged: {},
@@ -3021,7 +3553,7 @@ assert.notEqual(JSON.stringify(integrationApply.workspace), originalIntegrationW
 assert.equal(JSON.stringify(sourceEditIntegrationWorkspace), originalIntegrationWorkspace, 'source editor integration must not mutate the original workspace object');
 assert.equal(integrationProjection.gameTruth, 'Not verified in game');
 
-console.log('X4UiSourceEditor selftest: B119 8C.2 row-local manual SSR/draft/state/session matrix passed; prior Batch 7D assertions 41/41; causal parent-CAS rows 10/10; pending SSR rows 2/2; causal no-op acknowledgement rows 29/29; passive-effect reconciliation rows 8/8; round-4 authority rows 27/27; round-5 stale-stage entry 24/24; round-5 stale-stage updater 24/24; round-5 stale-apply entry 24/24; round-5 stage positives 2/2; round-5 apply positives 2/2; round-5 stale-apply updater 8/8; round-6 reentrant parent 64/64; round-6 draft-only acknowledgement 16/16; round-6 exact settlement 2/2; all earlier SSR, authority, linter, canvas, and UIBuilder boundaries passed');
+console.log('X4UiSourceEditor selftest: B119 8C.2 row-local manual SSR/draft/state/session matrix passed; prior Batch 7D assertions 41/41; causal parent-CAS rows 10/10; pending SSR rows 2/2; frame-block UI causal rows 5/5; causal no-op acknowledgement rows 29/29; passive-effect reconciliation rows 8/8; round-4 authority rows 27/27; round-5 stale-stage entry 24/24; round-5 stale-stage updater 24/24; round-5 stale-apply entry 24/24; round-5 stage positives 2/2; round-5 apply positives 2/2; round-5 stale-apply updater 8/8; round-6 reentrant parent 64/64; round-6 draft-only acknowledgement 16/16; round-6 exact settlement 2/2; all earlier SSR, authority, linter, canvas, and UIBuilder boundaries passed');
 
 type P7SourceAuthorityFixture = {
   readonly core: X4UiCorpusCanonicalSuccess;

@@ -266,6 +266,8 @@ export interface X4UiSceneTableNode extends X4UiSceneNodeBase {
   readonly kind: 'table';
   readonly frameId?: string;
   readonly rowIds: readonly string[];
+  /** Known Helper/Layout backgroundID applicability; an empty value is an issued no-background fact. */
+  readonly backgroundId?: string;
   readonly columns?: readonly X4UiSceneColumn[];
   readonly fixedColumns?: readonly X4UiSceneColumn[];
   readonly fullHeight?: number;
@@ -1116,6 +1118,11 @@ const booleanFact = (
 const safeArithmetic = (value: number): number | undefined =>
   isFiniteSafe(value) && Math.abs(value) <= MAX_SAFE_LAYOUT_WIDTH ? value : undefined;
 
+const formatSceneDiagnosticPixels = (value: number): string => {
+  const rounded = Math.round(value * 10000) / 10000;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(4).replace(/0+$/, '');
+};
+
 const operationForCell = (
   operations: ReadonlyMap<string, X4UiLayoutOperation>,
   cell: X4UiLayoutCellNode,
@@ -1576,7 +1583,11 @@ const buildColumns = (
   if (!adjusted) return undefined;
   const borderTotal = (adjusted.length - 1) * state.metrics.borderSize;
   const insufficientRightmost = hasScrollBar && !reserveScrollBar && state.columns.length > 0 && state.columns[state.columns.length - 1].width < state.metrics.scrollbarWidth;
-  const maxWidth = frameWidth - tableX - (hasScrollBar && !insufficientRightmost ? state.metrics.scrollbarWidth : 0) - borderTotal;
+  // helper.lua finalizes from the requested table width. Only an exact zero
+  // width falls back to the remaining frame edge; do not derive explicit
+  // source tables from the parent frame's right edge.
+  const tableWidth = state.properties.width === 0 ? frameWidth - tableX : state.properties.width;
+  const maxWidth = tableWidth - (hasScrollBar && !insufficientRightmost ? state.metrics.scrollbarWidth : 0) - borderTotal;
   if (!isFiniteDimension(maxWidth)) {
     gapForChild(context, 'width', table.id, table.source, 'table has no finite drawable width after scrollbar and borders', links);
     return undefined;
@@ -1858,9 +1869,10 @@ const buildTableProjection = (
     const visible = Boolean(viewportRect && intersection(displayed, viewportRect));
     rowVisible.set(row.id, visible);
   }
-  const tableColorFacts = sceneColorFacts(table.descriptorFacts, [['backgroundColor', 'table-background']]);
+  const backgroundId = knownValue(table.descriptorFacts.backgroundID, 'string');
+  const tableBackgroundEvidence = sceneColorFacts(table.descriptorFacts, [['backgroundColor', 'table-background']]);
   addUnavailableColorGap(context, `scene:${table.id}`, 'backgroundColor', table.descriptorFacts.backgroundColor, links);
-  for (const colorFact of tableColorFacts) {
+  for (const colorFact of tableBackgroundEvidence) {
     addKnownColorUncertaintyGap(context, `scene:${table.id}`, colorFact.source, links, 'the table surface');
   }
   const tableCompleteness: X4UiSceneCompleteness = tableRect
@@ -1886,9 +1898,9 @@ const buildTableProjection = (
     ...(viewportRect ? { clipRect: fixedViewportRect || viewportRect, viewportRect } : {}),
     completeness: tableCompleteness,
     provenance: 'source-derived',
-    ...(tableColorFacts.length > 0 ? { colorFacts: tableColorFacts } : {}),
+    ...(tableBackgroundEvidence.length > 0 ? { colorFacts: tableBackgroundEvidence } : {}),
     provenanceLinks: [
-      ...factLinks(table.descriptorFacts, ['x', 'y', 'maxVisibleHeight', 'reserveScrollBar', 'finalWidth']),
+      ...factLinks(table.descriptorFacts, ['x', 'y', 'maxVisibleHeight', 'reserveScrollBar', 'finalWidth', 'backgroundID']),
       ...(state ? [makeSourceLink('kernel-state', table.source)] : []),
       ...(state && !state.final ? [makeSourceLink('source-pin', table.source, { sourcePath: X4_LAYOUT_PROVENANCE.helperSourcePath, lineStart: 4779, lineEnd: 4958 }, 'helper.lua finalizeTableColumnWidths and first addRow freeze boundary')] : []),
       ...tableViewLinks,
@@ -1898,6 +1910,7 @@ const buildTableProjection = (
     diagnosticStyle: diagnosticStyleForGeometry(Boolean(tableRect)),
     frameId: frameNodeId,
     rowIds,
+    ...(backgroundId !== undefined && typeof backgroundId.value === 'string' ? { backgroundId: backgroundId.value } : {}),
     ...(columns ? { columns } : {}),
     ...(fixedColumns ? { fixedColumns } : {}),
     ...(fullHeight === undefined ? {} : { fullHeight }),
@@ -2257,12 +2270,12 @@ const buildTextNode = (
         }
         const xBase = xAnchor! - (subtractLineWidth ? line.width : subtractHalfLineWidth ? line.width / 2 : 0);
         const yAnchor = widgetType === 'text'
-          ? parentRect.y + (offsetY.value as number)
+          ? parentRect.y + parentRect.height / 2 - (offsetY.value as number)
           : widgetType === 'icon'
             ? parentRect.y + parentRect.height / 2 - widgetRect.height / 2 + (offsetY.value as number)
             : widgetRect.y + widgetRect.height / 2 - (offsetY.value as number);
-        const yBase = yAnchor - line.lineBox.height / 2 + line.lineBox.y;
-        const lineRect = rect(xBase + line.lineBox.x, yBase, line.width, line.lineBox.height);
+        const yBase = yAnchor - line.lineBox.height / 2;
+        const lineRect = rect(xBase + line.lineBox.x, yBase + line.lineBox.y, line.width, line.lineBox.height);
         const lineGlyphIds: string[] = [];
         for (let glyphIndex = 0; glyphIndex < line.glyphQuads.length; glyphIndex += 1) {
           const quad = line.glyphQuads[glyphIndex];
@@ -2323,6 +2336,42 @@ const buildTextNode = (
           diagnosticLinks: [...textGapIds],
           glyphIds: lineGlyphIds,
         });
+      }
+      const explicitHeightFact = cell.descriptorFacts.outerHeight;
+      const explicitInputHeight = cell.kernelState?.height;
+      const hasExplicitNonzeroHeight = typeof explicitInputHeight === 'number'
+        ? Number.isFinite(explicitInputHeight) && explicitInputHeight > 0
+        : true;
+      const explicitHeight = explicitHeightFact?.status === 'known'
+        && explicitHeightFact.expectedType === 'number'
+        && typeof explicitHeightFact.value === 'number'
+        && Number.isFinite(explicitHeightFact.value)
+        && explicitHeightFact.value > 0
+        && hasExplicitNonzeroHeight
+        ? explicitHeightFact.value
+        : undefined;
+      if (widgetType === 'text' && slot === 'primary' && explicitHeight !== undefined && lines.length > 0) {
+        const lineMinY = Math.min(...lines.map(line => line.rect.y));
+        const lineMaxY = Math.max(...lines.map(line => line.rect.y + line.rect.height));
+        const requiredHeight = lineMaxY - lineMinY;
+        const spanHeightExcess = Math.max(0, requiredHeight - widgetRect.height);
+        const widgetMaxY = widgetRect.y + widgetRect.height;
+        const topOverflow = Math.max(0, widgetRect.y - lineMinY);
+        const bottomOverflow = Math.max(0, lineMaxY - widgetMaxY);
+        const totalOverflow = topOverflow + bottomOverflow;
+        if (topOverflow > 0 || bottomOverflow > 0) {
+          const gapId = addGap(context, {
+            category: 'height',
+            status: 'unknown',
+            reason: `un-clipped issued text line geometry exceeds the explicit widget rectangle: issued line bounds y=${formatSceneDiagnosticPixels(lineMinY)}..${formatSceneDiagnosticPixels(lineMaxY)} px, widget bounds y=${formatSceneDiagnosticPixels(widgetRect.y)}..${formatSceneDiagnosticPixels(widgetMaxY)} px, top overflow ${formatSceneDiagnosticPixels(topOverflow)} px, bottom overflow ${formatSceneDiagnosticPixels(bottomOverflow)} px, total overflow ${formatSceneDiagnosticPixels(totalOverflow)} px; required ${formatSceneDiagnosticPixels(requiredHeight)} px, available ${formatSceneDiagnosticPixels(widgetRect.height)} px, span-height excess ${formatSceneDiagnosticPixels(spanHeightExcess)} px; native clipping/overlap remains unverified`,
+            source: sourceCopy(explicitHeightFact.source),
+            ...(explicitHeightFact.expression ? { expression: explicitHeightFact.expression } : {}),
+            ...(explicitHeightFact.sourcePin ? { sourcePin: sourcePinCopy(explicitHeightFact.sourcePin) } : {}),
+            nodeId: textNodeId,
+          });
+          textGapIds.push(gapId);
+          links.push(gapId);
+        }
       }
     }
   }

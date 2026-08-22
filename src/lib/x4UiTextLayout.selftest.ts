@@ -276,6 +276,28 @@ const tests: readonly [string, () => void][] = [
     },
   ],
   [
+    'wrapped lines retain source line advances and line-local glyph offsets',
+    () => {
+      const layout = expectSuccess(layoutZektonText(
+        regularFont,
+        'A B A B A B A B',
+        makeProfile(regularIdentity, regularAtlasIdentity, 13 * scale, { wrapMode: 'greedy-word', lineSpacing: 1 }),
+      ));
+      assertCondition(layout.lines.length > 1, 'wrapped fixture must produce multiple lines');
+      const firstLine = layout.lines[0];
+      assertCondition(firstLine !== undefined, 'wrapped fixture must have a first line');
+      const firstQuad = firstLine.glyphQuads[0];
+      assertCondition(firstQuad !== undefined, 'wrapped fixture first line must have a glyph');
+      for (const [index, line] of layout.lines.entries()) {
+        assertApprox(line.lineBox.y, index * line.lineBox.lineAdvance, `source line ${index} uses the exact line advance`);
+        const quad = line.glyphQuads[0];
+        assertCondition(quad !== undefined, `wrapped fixture line ${index} must have a glyph`);
+        assertApprox(quad.lineBoxY, line.lineBox.y, `source line ${index} keeps its line-box offset`);
+        assertApprox(quad.y - quad.lineBoxY, firstQuad.y - firstQuad.lineBoxY, `source line ${index} keeps a line-local glyph offset`);
+      }
+    },
+  ],
+  [
     'hard newline, CRLF, empty text, exact fit, and one-over greedy wrap are deterministic',
     () => {
       const exactWidth = 19 * scale;

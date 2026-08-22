@@ -474,11 +474,39 @@ function sourceFixture(): X4UiWorkspaceSource {
   ]));
 }
 
-function colorSourceFixture(): X4UiWorkspaceSource {
+function wrappedTextSourceFixture(): X4UiWorkspaceSource {
+  const lua = [
+    'local menu = { name = "WrappedAuthority", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 20, height = 80, layer = 1 })',
+    'local table = frame:addTable(1, { width = 20, reserveScrollBar = false, scaling = false })',
+    'table:setColWidth(1, 20, false)',
+    'local row = table:addRow(false, { paddingTop = 1, paddingBottom = 1, borderBelow = false, fixed = false })',
+    'row[1]:createText("wrapped source backed paint authority regression", { width = 20, height = 12, minRowHeight = 10, wordwrap = true })',
+    'frame:display()',
+    '',
+  ].join('\n');
+  return buildX4UiWorkspaceSource(workspace([
+    passthrough('ui.xml', [
+      '<?xml version="1.0" encoding="utf-8"?>',
+      '<addon name="wrapped-authority-fixture">',
+      '  <environment type="menus">',
+      '    <file name="ui/wrapped-authority.lua" />',
+      '  </environment>',
+      '</addon>',
+      '',
+    ].join('\n')),
+    passthrough('ui/wrapped-authority.lua', lua, { reason: 'unparsed' }),
+  ]));
+}
+
+function colorSourceFixture(backgroundId: 'solid' | '' | null = 'solid'): X4UiWorkspaceSource {
+  const tableBackgroundOptions = backgroundId === null
+    ? ', backgroundColor = Color["paint_color_0"]'
+    : `, backgroundID = "${backgroundId}", backgroundColor = Color["paint_color_0"]`;
   const lua = [
     'local menu = { name = "ColorCanonical", layer = 1 }',
     'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80, layer = 1 })',
-    'local table = frame:addTable(4, { width = 100, reserveScrollBar = false, scaling = false, backgroundColor = Color["paint_color_0"] })',
+    `local table = frame:addTable(4, { width = 100, reserveScrollBar = false, scaling = false${tableBackgroundOptions} })`,
     'table:setColWidth(1, 20, false)',
     'table:setColWidth(2, 20, false)',
     'table:setColWidth(3, 20, false)',
@@ -1122,6 +1150,106 @@ async function main(): Promise<void> {
     baseInput = scene === undefined ? undefined : { scene, corpus: canonical };
     check('loader-issued canonical corpus and source-backed Scene fixture', canonical !== undefined && scene !== undefined, { pipelineStatus: pipeline.status, sceneStatus: pipeline.scene?.status, sceneRefusal: pipeline.scene && pipeline.scene.status === 'refused' ? pipeline.scene.refusal : undefined, programStatus: pipeline.program?.status, operationCount: pipeline.program && 'program' in pipeline.program ? pipeline.program.program.operations.length : undefined, gaps: pipeline.gaps, selection: pipeline.selection, source: pipeline.source.status, corpus: pipeline.corpus.status });
 
+    const wrappedSource = wrappedTextSourceFixture();
+    const wrappedSelection = selectionFor(wrappedSource, 'ui/wrapped-authority.lua');
+    const wrappedProfile = {
+      id: 'paint-wrapped-profile',
+      provenance: 'B119 source-backed wrapped-text Paint regression',
+      truthGrade: 'supplied' as const,
+      source: wrappedSelection.sourceIdentity,
+      drawable: { width: 20, height: 80 },
+      uiScale: 1,
+      minTextHeight: 10,
+      textPolicy: { wrapMode: 'greedy-word' as const },
+    };
+    const wrappedPipeline = projectX4UiPreviewPipeline({
+      source: wrappedSource,
+      corpus: canonical,
+      profile: wrappedProfile,
+      selection: wrappedSelection,
+    });
+    const wrappedScene = wrappedPipeline.scene !== undefined
+      && (wrappedPipeline.scene.status === 'projected' || wrappedPipeline.scene.status === 'partial')
+      ? wrappedPipeline.scene.scene
+      : undefined;
+    const wrappedText = wrappedScene?.texts.find(text => text.layout !== undefined && text.lines.length > 1);
+    const wrappedPaint = wrappedScene === undefined
+      ? undefined
+      : projectX4UiPaintPlanDirect({ scene: wrappedScene, corpus: canonical, previewAuthority: wrappedPipeline });
+    check('B119 issued wrapped-text Scene projects through Paint authority', wrappedScene !== undefined
+      && wrappedText !== undefined
+      && wrappedText.lines.length > 1
+      && wrappedText.layout?.lines.some(line => line.lineBox.y !== 0) === true
+      && wrappedPaint?.status !== 'refused', {
+      fixtureReady: wrappedScene !== undefined && wrappedText !== undefined,
+      pipelineStatus: wrappedPipeline.status,
+      sceneStatus: wrappedPipeline.scene?.status,
+      sceneRefusal: wrappedPipeline.scene?.status === 'refused' ? wrappedPipeline.scene.refusal : undefined,
+      lineCount: wrappedText?.lines.length,
+      nonZeroLineBoxYs: wrappedText?.layout?.lines.filter(line => line.lineBox.y !== 0).map(line => line.lineBox.y),
+      paintStatus: wrappedPaint?.status,
+      paintRefusal: wrappedPaint?.status === 'refused' ? wrappedPaint.refusal : undefined,
+    });
+    const mutationCandidate = wrappedScene === undefined ? undefined : clonedScene(wrappedScene);
+    const mutationText = mutationCandidate?.texts.find(text => text.layout !== undefined && text.lines.length > 1);
+    const mutationLine = mutationText?.lines.find(line => line.lineIndex > 0);
+    const mutationLayoutLine = mutationLine === undefined
+      ? undefined
+      : mutationText?.layout?.lines.find(line => line.lineIndex === mutationLine.lineIndex);
+    const mutationGlyph = mutationLine?.glyphIds[0] === undefined || mutationCandidate === undefined
+      ? undefined
+      : mutationCandidate.glyphs.find(glyph => glyph.id === mutationLine.glyphIds[0]);
+    let mutationResult: X4UiPaintPlanResult | undefined;
+    let mutationRepeatResult: X4UiPaintPlanResult | undefined;
+    let mutationThrew = false;
+    let mutationChanged = false;
+    let mutationRestored = false;
+    if (mutationCandidate !== undefined && mutationLayoutLine !== undefined && mutationGlyph !== undefined) {
+      const glyphQuad = mutationGlyph.quad as unknown as JsonRecord;
+      const beforeY = mutationGlyph.quad.y;
+      const doubleShift = Number(mutationLayoutLine.lineBox.y);
+      try {
+        glyphQuad.y = beforeY + doubleShift;
+        mutationChanged = glyphQuad.y !== beforeY;
+        mutationResult = projectX4UiPaintPlanDirect({ scene: mutationCandidate, corpus: canonical, previewAuthority: wrappedPipeline });
+        mutationRepeatResult = projectX4UiPaintPlanDirect({ scene: mutationCandidate, corpus: canonical, previewAuthority: wrappedPipeline });
+      } catch {
+        mutationThrew = true;
+      } finally {
+        glyphQuad.y = beforeY;
+        mutationRestored = glyphQuad.y === beforeY;
+      }
+    }
+    check('B119 wrapped-text double-shifted glyph refuses invalid-scene', wrappedScene !== undefined
+      && mutationCandidate !== undefined
+      && mutationCandidate !== wrappedScene
+      && mutationLine !== undefined
+      && mutationLayoutLine !== undefined
+      && mutationGlyph !== undefined
+      && mutationLayoutLine.lineBox.y !== 0
+      && mutationChanged
+      && !mutationThrew
+      && mutationRestored
+      && mutationResult?.status === 'refused'
+      && mutationResult.refusal.code === 'invalid-scene'
+      && mutationRepeatResult?.status === 'refused'
+      && mutationRepeatResult.refusal.code === 'invalid-scene'
+      && JSON.stringify(mutationRepeatResult) === JSON.stringify(mutationResult), {
+      fixtureReady: wrappedScene !== undefined && mutationLine !== undefined && mutationLayoutLine !== undefined && mutationGlyph !== undefined,
+      lineIndex: mutationLine?.lineIndex,
+      lineBoxY: mutationLayoutLine?.lineBox.y,
+      doubleShiftY: mutationLayoutLine?.lineBox.y,
+      glyphId: mutationGlyph?.id,
+      changed: mutationChanged,
+      threw: mutationThrew,
+      restored: mutationRestored,
+      resultStatus: mutationResult?.status,
+      refusal: mutationResult?.status === 'refused' ? mutationResult.refusal : undefined,
+      repeatStatus: mutationRepeatResult?.status,
+      repeatRefusal: mutationRepeatResult?.status === 'refused' ? mutationRepeatResult.refusal : undefined,
+      deterministic: mutationResult !== undefined && mutationRepeatResult !== undefined && JSON.stringify(mutationRepeatResult) === JSON.stringify(mutationResult),
+    });
+
     const colorSource = colorSourceFixture();
     const colorSelection = selectionFor(colorSource, 'ui/color.lua');
     const colorPipeline = projectX4UiPreviewPipeline({
@@ -1175,6 +1303,144 @@ async function main(): Promise<void> {
     const colorGeometryTints = colorGeometryCommands.flatMap(command => {
       const tints = (command as unknown as JsonRecord).basePreviewTints;
       return Array.isArray(tints) ? tints : [];
+    });
+    const colorTable = colorScene?.tables.find(table => table.colorFacts?.some(fact => fact.slot === 'table-background'));
+    const colorTableCommand = colorTable === undefined
+      ? undefined
+      : colorGeometryCommands.find(command => command.nodeId === colorTable.id);
+    const colorTableTints = colorTableCommand === undefined
+      ? []
+      : (colorTableCommand as unknown as JsonRecord).basePreviewTints;
+    check('P5 causal known nonempty backgroundID gates the active table tint', colorTable !== undefined
+      && Object.hasOwn(colorTable, 'backgroundId')
+      && colorTable.backgroundId === 'solid'
+      && Array.isArray(colorTableTints)
+      && colorTableTints.some(tint => (tint as JsonRecord).slot === 'table-background'), {
+      tableId: colorTable?.id,
+      backgroundId: colorTable?.backgroundId,
+      tableKeys: colorTable === undefined ? undefined : Object.keys(colorTable),
+      tableTints: colorTableTints,
+    });
+    const tableTintRecords = (result: X4UiPaintPlanResult | undefined, nodeId: string | undefined): JsonRecord[] => {
+      if (result === undefined || result.status === 'refused' || nodeId === undefined) return [];
+      return result.plan.layers.flatMap(layer => layer.commands)
+        .filter(command => command.nodeId === nodeId)
+        .flatMap(command => {
+          const tints = (command as unknown as JsonRecord).basePreviewTints;
+          return Array.isArray(tints) ? tints.map(asRecord).filter((tint): tint is JsonRecord => tint !== undefined) : [];
+        });
+    };
+    const projectColorApplicabilityFixture = (backgroundId: 'solid' | '' | null): { readonly scene?: X4UiScene; readonly paint?: X4UiPaintPlanResult } => {
+      const source = colorSourceFixture(backgroundId);
+      const selection = selectionFor(source, 'ui/color.lua');
+      const pipeline = projectX4UiPreviewPipeline({
+        source,
+        corpus: canonical,
+        colorEvidence,
+        profile: {
+          id: `paint-color-${backgroundId === null ? 'missing' : backgroundId === '' ? 'empty' : 'active'}-profile`,
+          provenance: 'B119 P5 table applicability fixture',
+          truthGrade: 'supplied',
+          source: selection.sourceIdentity,
+          drawable: { width: 100, height: 80 },
+          uiScale: 1,
+          minTextHeight: 10,
+        },
+        selection,
+      });
+      const fixtureScene = pipeline.scene !== undefined
+        && (pipeline.scene.status === 'projected' || pipeline.scene.status === 'partial')
+        ? pipeline.scene.scene
+        : undefined;
+      return {
+        scene: fixtureScene,
+        paint: fixtureScene === undefined ? undefined : projectX4UiPaintPlanDirect({ scene: fixtureScene, corpus: canonical, previewAuthority: pipeline }),
+      };
+    };
+    const emptyApplicability = projectColorApplicabilityFixture('');
+    const missingApplicability = projectColorApplicabilityFixture(null);
+    const emptyApplicabilityTable = emptyApplicability.scene?.tables.find(table => table.colorFacts?.some(fact => fact.slot === 'table-background'));
+    const missingApplicabilityTable = missingApplicability.scene?.tables.find(table => table.colorFacts?.some(fact => fact.slot === 'table-background'));
+    const emptyTablePaint = emptyApplicability.paint;
+    const missingTablePaint = missingApplicability.paint;
+    let malformedTablePaint: X4UiPaintPlanResult | undefined;
+    let accessorTablePaint: X4UiPaintPlanResult | undefined;
+    let inheritedTablePaint: X4UiPaintPlanResult | undefined;
+    let accessorBackgroundIdReads = 0;
+    let inheritedTable: JsonRecord | undefined;
+    if (colorScene !== undefined && colorTable !== undefined && colorAuthority !== undefined && canonical !== undefined) {
+      const malformedTableScene = clonedScene(colorScene);
+      const malformedTable = malformedTableScene.tables.find(table => table.id === colorTable.id) as unknown as JsonRecord | undefined;
+      if (malformedTable !== undefined) {
+        malformedTable.backgroundId = 42;
+        malformedTablePaint = projectX4UiPaintPlanDirect({ scene: malformedTableScene, corpus: canonical, previewAuthority: colorAuthority });
+      }
+      const accessorTableScene = clonedScene(colorScene);
+      const accessorTable = accessorTableScene.tables.find(table => table.id === colorTable.id) as unknown as JsonRecord | undefined;
+      if (accessorTable !== undefined) {
+        Object.defineProperty(accessorTable, 'backgroundId', {
+          configurable: true,
+          enumerable: true,
+          get: () => {
+            accessorBackgroundIdReads += 1;
+            throw new Error('P5 table backgroundId getter executed');
+          },
+        });
+        try {
+          accessorTablePaint = projectX4UiPaintPlanDirect({ scene: accessorTableScene, corpus: canonical, previewAuthority: colorAuthority });
+        } finally {
+          Reflect.deleteProperty(accessorTable, 'backgroundId');
+        }
+      }
+      const inheritedTableScene = clonedScene(colorScene);
+      inheritedTable = inheritedTableScene.tables.find(table => table.id === colorTable.id) as unknown as JsonRecord | undefined;
+      if (inheritedTable !== undefined) {
+        Reflect.deleteProperty(inheritedTable, 'backgroundId');
+        Object.setPrototypeOf(inheritedTable, { backgroundId: 'solid' });
+        try {
+          inheritedTablePaint = projectX4UiPaintPlanDirect({ scene: inheritedTableScene, corpus: canonical, previewAuthority: colorAuthority });
+        } finally {
+          Object.setPrototypeOf(inheritedTable, Object.prototype);
+        }
+      }
+    }
+    const emptyTableTints = tableTintRecords(emptyTablePaint, emptyApplicabilityTable?.id);
+    const missingTableTints = tableTintRecords(missingTablePaint, missingApplicabilityTable?.id);
+    const inheritedTableTints = tableTintRecords(inheritedTablePaint, colorTable?.id);
+    check('P5 causal empty, missing, inherited, malformed, and accessor backgroundID fail closed', colorTable !== undefined
+      && emptyApplicabilityTable !== undefined
+      && Object.hasOwn(emptyApplicabilityTable, 'backgroundId')
+      && emptyApplicabilityTable.backgroundId === ''
+      && emptyTablePaint?.status !== 'refused'
+      && emptyTableTints.every(tint => tint.slot !== 'table-background')
+      && missingApplicabilityTable !== undefined
+      && (!Object.hasOwn(missingApplicabilityTable, 'backgroundId') || missingApplicabilityTable.backgroundId === '')
+      && missingTablePaint?.status !== 'refused'
+      && missingTableTints.every(tint => tint.slot !== 'table-background')
+      && (inheritedTablePaint?.status === 'refused' || inheritedTableTints.every(tint => tint.slot !== 'table-background'))
+      && malformedTablePaint?.status === 'refused'
+      && malformedTablePaint.refusal.code === 'invalid-scene'
+      && accessorTablePaint?.status === 'refused'
+      && accessorTablePaint.refusal.code === 'invalid-scene'
+      && accessorBackgroundIdReads === 0, {
+      tableId: colorTable?.id,
+      emptyTableId: emptyApplicabilityTable?.id,
+      emptyTableBackgroundId: emptyApplicabilityTable?.backgroundId,
+      emptyStatus: emptyTablePaint?.status,
+      emptyTints: emptyTableTints,
+      missingTableId: missingApplicabilityTable?.id,
+      missingTableBackgroundId: missingApplicabilityTable?.backgroundId,
+      missingTableHasOwnBackgroundId: missingApplicabilityTable === undefined ? undefined : Object.hasOwn(missingApplicabilityTable, 'backgroundId'),
+      missingStatus: missingTablePaint?.status,
+      missingTints: missingTableTints,
+      inheritedStatus: inheritedTablePaint?.status,
+      inheritedTints: inheritedTableTints,
+      inheritedOwnKeys: inheritedTable === undefined ? undefined : Object.keys(inheritedTable),
+      malformedStatus: malformedTablePaint?.status,
+      malformedRefusal: malformedTablePaint?.status === 'refused' ? malformedTablePaint.refusal : undefined,
+      accessorStatus: accessorTablePaint?.status,
+      accessorRefusal: accessorTablePaint?.status === 'refused' ? accessorTablePaint.refusal : undefined,
+      accessorBackgroundIdReads,
     });
     check('P5 causal public color-bearing Preview -> Paint projection', colorPaint?.status === 'partial' || colorPaint?.status === 'projected', {
       paintStatus: colorPaint?.status,

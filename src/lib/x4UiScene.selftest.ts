@@ -259,19 +259,33 @@ const assets: X4UiSceneFontAssetMap = freezeFixtureGraph({
   'Zekton Bold': makeFont(true),
 });
 
-const makeCanonicalAbc = (advance: number): Uint8Array => {
+type CanonicalLineMetricsFixture = Pick<ZektonLineMetrics, 'outer' | 'top' | 'bottom' | 'inner' | 'split20' | 'split24'>;
+
+const DEFAULT_CANONICAL_LINE_METRICS: CanonicalLineMetricsFixture = {
+  outer: 16,
+  top: 3,
+  bottom: 3,
+  inner: 10,
+  split20: 4,
+  split24: 6,
+};
+
+const makeCanonicalAbc = (
+  advance: number,
+  lineMetrics: CanonicalLineMetricsFixture = DEFAULT_CANONICAL_LINE_METRICS,
+): Uint8Array => {
   const maxCodepoint = 127;
   const mapBytes = (maxCodepoint + 1) * 2;
   const recordStart = (ZEKTON_DESCRIPTOR_HEADER_SIZE + mapBytes + 3) & ~3;
   const bytes = new Uint8Array(recordStart + ZEKTON_RECORD_SIZE + ZEKTON_DESCRIPTOR_TRAILING_SIZE);
   const view = new DataView(bytes.buffer);
   view.setUint32(0, 9, true);
-  view.setFloat32(4, 16, true);
-  view.setFloat32(8, 3, true);
-  view.setFloat32(12, 3, true);
-  view.setFloat32(16, 10, true);
-  view.setInt32(20, 4, true);
-  view.setInt32(24, 6, true);
+  view.setFloat32(4, lineMetrics.outer, true);
+  view.setFloat32(8, lineMetrics.top, true);
+  view.setFloat32(12, lineMetrics.bottom, true);
+  view.setFloat32(16, lineMetrics.inner, true);
+  view.setInt32(20, lineMetrics.split20, true);
+  view.setInt32(24, lineMetrics.split24, true);
   view.setInt32(28, 0, true);
   view.setUint32(32, 0, true);
   view.setUint32(36, 8, true);
@@ -340,7 +354,7 @@ const withCanonicalPlatformHash = async <T>(expectedHashes: readonly string[], r
   }
 };
 
-const canonicalCorpus = async (): Promise<X4UiCorpusCanonicalSuccess> => {
+const canonicalCorpus = async (lineMetrics = DEFAULT_CANONICAL_LINE_METRICS): Promise<X4UiCorpusCanonicalSuccess> => {
   const root = 'canonical-selftest-root';
   const generation = 'canonical-selftest-generation';
   const generatedAt = '2026-08-11T00:00:00.000Z';
@@ -348,9 +362,9 @@ const canonicalCorpus = async (): Promise<X4UiCorpusCanonicalSuccess> => {
   const bytes = new Map<string, Uint8Array>([
     [contract.helper.relativePath, new TextEncoder().encode('-- canonical selftest helper\n')],
     [contract.widget.relativePath, new TextEncoder().encode('-- canonical selftest widget\n')],
-    [contract.regular.descriptor.relativePath, makeCanonicalAbc(8)],
+    [contract.regular.descriptor.relativePath, makeCanonicalAbc(8, lineMetrics)],
     [contract.regular.atlas.relativePath, makeCanonicalDds()],
-    [contract.bold.descriptor.relativePath, makeCanonicalAbc(8)],
+    [contract.bold.descriptor.relativePath, makeCanonicalAbc(8, lineMetrics)],
     [contract.bold.atlas.relativePath, makeCanonicalDds()],
   ]);
   const expectedHashes = [
@@ -408,6 +422,14 @@ const canonicalCorpus = async (): Promise<X4UiCorpusCanonicalSuccess> => {
 };
 
 const corpus = await canonicalCorpus();
+const pinnedLineAdvanceCorpus = await canonicalCorpus({
+  outer: 52,
+  top: 0,
+  bottom: 0,
+  inner: 52,
+  split20: 41,
+  split24: 11,
+});
 
 const P3_COLOR_BASE_IDS = [
   'white',
@@ -731,7 +753,7 @@ const colorProjection = (() => {
   const sourceText = [
     'local menu = { name = "SceneColors", layer = 1 }',
     'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
-    'local table = frame:addTable(4, { width = 100, reserveScrollBar = false, backgroundColor = Color["table_background_default"] })',
+    'local table = frame:addTable(4, { width = 100, reserveScrollBar = false, backgroundID = "solid", backgroundColor = Color["table_background_default"] })',
     'table:setColWidth(1, 20, false)',
     'table:setColWidth(2, 20, false)',
     'table:setColWidth(3, 20, false)',
@@ -754,6 +776,41 @@ const colorProjection = (() => {
   const profile: X4UiSceneProfile = Object.freeze({
     id: 'scene-colors-profile',
     provenance: 'B119 P4 Scene color selftest',
+    source: result.program.profile.source,
+    helper: { sourcePath: HELPER_PATH, sha256: X4_LAYOUT_PROVENANCE.helperSha256 },
+    widget: { sourcePath: WIDGET_PATH, sha256: X4_LAYOUT_PROVENANCE.widgetSha256 },
+    fonts: sceneProfile.fonts,
+    drawable: { width: result.program.profile.frame.width, height: result.program.profile.frame.height },
+    textPolicy: sceneProfile.textPolicy,
+  });
+  return { sourceText, result, program: result.program, profile };
+})();
+
+const boundedCompositionProjection = (() => {
+  const sourceText = [
+    'local menu = { name = "SceneBoundedComposition", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local active = frame:addTable(1, { x = 8, y = 4, width = 24, reserveScrollBar = false, scaling = false, backgroundID = "solid", backgroundColor = Color["table_background_default"] })',
+    'active:setColWidthMin(1, 1, 1, false)',
+    'local activeRow = active:addRow(false, { paddingTop = 0, paddingBottom = 0, borderBelow = false, fixed = false, scaling = false })',
+    'activeRow[1]:createText("bounded", { height = 8, minRowHeight = 8 })',
+    'local empty = frame:addTable(1, { x = 50, y = 4, width = 18, reserveScrollBar = false, scaling = false })',
+    'empty:setColWidthMin(1, 1, 1, false)',
+    'local emptyRow = empty:addRow(false, { paddingTop = 0, paddingBottom = 0, borderBelow = false, fixed = false, scaling = false })',
+    'emptyRow[1]:createText("default", { height = 8, minRowHeight = 8 })',
+    'frame:display()',
+  ].join('\n');
+  const model = buildX4UiCallModel({ rel: 'selftest/scene-bounded-composition.lua', text: sourceText, sourcePath: 'selftest/scene-bounded-composition.lua' });
+  const catalog = createX4UiLayoutTargetCatalog(model);
+  const target = catalog.targets.find(candidate => candidate.kind === 'top-level');
+  const baseProfile = rawProducerProjection.program?.profile;
+  if (!target || !baseProfile) return { sourceText, result: undefined, program: undefined, profile: undefined };
+  const producerProfile = { ...baseProfile, source: catalog.sourceIdentity };
+  const result = projectX4UiLayoutProgram(model, target, producerProfile, undefined, undefined, p3ColorAuthority);
+  if (!('program' in result) || !result.program) return { sourceText, result, program: undefined, profile: undefined };
+  const profile: X4UiSceneProfile = Object.freeze({
+    id: 'scene-bounded-composition-profile',
+    provenance: 'B119 bounded source-composition causal selftest',
     source: result.program.profile.source,
     helper: { sourcePath: HELPER_PATH, sha256: X4_LAYOUT_PROVENANCE.helperSha256 },
     widget: { sourcePath: WIDGET_PATH, sha256: X4_LAYOUT_PROVENANCE.widgetSha256 },
@@ -2113,6 +2170,26 @@ test('projects issued P3 color facts to exact Scene owners while retaining resid
   assert(scene.gameTruth === X4_UI_SCENE_GAME_TRUTH && scene.verification.gameVerified === false, 'color evidence must retain game truth');
 });
 
+test('fail-first: bounded table width separates Scene color authority from backgroundID applicability', () => {
+  const projected = boundedCompositionProjection.result;
+  const program = boundedCompositionProjection.program;
+  const profile = boundedCompositionProjection.profile;
+  assert(projected !== undefined && 'program' in projected && projected.program !== undefined && 'evidenceAuthority' in projected && projected.evidenceAuthority !== undefined && program !== undefined && profile !== undefined, 'bounded composition producer projection is required');
+  const result = buildX4UiScene(projected as X4UiLayoutProgramResult, corpus, profile);
+  assert(result.status !== 'refused', `bounded composition must cross the Scene boundary: ${JSON.stringify(result)}`);
+  const active = result.scene.tables.find(table => table.source.start.offset === program.tables[0]?.source.start.offset);
+  const empty = result.scene.tables.find(table => table.source.start.offset === program.tables[1]?.source.start.offset);
+  assert(active !== undefined && empty !== undefined, 'bounded composition must retain both table owners');
+  assert(active.rect?.x === 8 && active.rect.y === 4 && active.rect.width === 24 && active.columns?.[0]?.width === 24, `explicit active table bounds must survive Scene columns: ${JSON.stringify({ rect: active.rect, columns: active.columns })}`);
+  assert(empty.rect?.x === 50 && empty.rect.y === 4 && empty.rect.width === 18 && empty.columns?.[0]?.width === 18, `explicit empty table bounds must survive Scene columns: ${JSON.stringify({ rect: empty.rect, columns: empty.columns })}`);
+  assert(active.colorFacts?.some(fact => fact.slot === 'table-background') === true, 'nonempty backgroundID must retain the accepted table-background fact');
+  assert(empty.colorFacts?.some(fact => fact.slot === 'table-background') === true, 'empty backgroundID must retain the accepted table-background authority fact');
+  assert(active.backgroundId === 'solid' && Object.hasOwn(active, 'backgroundId'), `active table must retain the exact known backgroundID applicability: ${JSON.stringify({ backgroundId: active.backgroundId, keys: Object.keys(active) })}`);
+  assert(empty.backgroundId === '' && Object.hasOwn(empty, 'backgroundId'), `empty table must retain the exact known empty backgroundID applicability: ${JSON.stringify({ backgroundId: empty.backgroundId, keys: Object.keys(empty) })}`);
+  assert(active.provenanceLinks.some(link => link.kind === 'descriptor-fact' && link.fact === 'backgroundID')
+    && empty.provenanceLinks.some(link => link.kind === 'descriptor-fact' && link.fact === 'backgroundID'), 'known backgroundID applicability must retain descriptor provenance on both table owners');
+});
+
 test('projects frame/table offsets, scrollbar, border-separated columns, rows, and hidden colspan', () => {
   const fixture = makeFixture();
   const scene = sceneOf(sceneFor(fixture));
@@ -2447,6 +2524,247 @@ test('ports direct fontstring left/center/right anchors and nonzero y without do
     assert(text.availableWidth === 38, `${alignment} direct text width must follow the source cell width minus x`);
     assert(Number.isFinite(line.rect.x) && Number.isFinite(line.rect.y), `${alignment} direct text anchor must remain finite and source-derived`);
   }
+});
+
+test('fail-first: source-shaped 2560 rows keep known direct text inside accepted row clips', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "SourceCompositionTextBounds", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 2560, height = 1440 })',
+    'local rail = frame:addTable(1, { x = 40, y = 220, width = 300, maxVisibleHeight = 104, reserveScrollBar = false, scaling = false })',
+    'rail:setColWidth(1, 300, false)',
+    'local railRow = rail:addRow(false, { paddingTop = 0, paddingBottom = 0, borderBelow = false, fixed = false, scaling = false })',
+    'railRow[1]:createText("CHANNEL", { height = 104, minRowHeight = 104 })',
+    'local transcript = frame:addTable(1, { x = 600, y = 763, width = 1360, maxVisibleHeight = 285, reserveScrollBar = false, scaling = false })',
+    'transcript:setColWidth(1, 1360, false)',
+    'local transcriptRow = transcript:addRow(false, { paddingTop = 0, paddingBottom = 0, borderBelow = false, fixed = false, scaling = false })',
+    'transcriptRow[1]:createText("The Federation recorded your assistance.", { height = 285, minRowHeight = 285 })',
+    'local choice = frame:addTable(1, { x = 600, y = 1066, width = 1360, maxVisibleHeight = 138, reserveScrollBar = false, scaling = false })',
+    'choice:setColWidth(1, 1360, false)',
+    'local choiceRow = choice:addRow(false, { paddingTop = 0, paddingBottom = 0, borderBelow = false, fixed = false, scaling = false })',
+    'choiceRow[1]:createText("1. Pay the 2.4 million", { height = 138, minRowHeight = 138 })',
+    'local input = frame:addTable(1, { x = 600, y = 1220, width = 1360, maxVisibleHeight = 72, reserveScrollBar = false, scaling = false })',
+    'input:setColWidth(1, 1360, false)',
+    'local inputRow = input:addRow(false, { paddingTop = 0, paddingBottom = 0, borderBelow = false, fixed = false, scaling = false })',
+    'inputRow[1]:createText("Type your message...", { height = 72, minRowHeight = 72 })',
+    'frame:display()',
+  ].join('\n'), 'selftest/source-composition-text-bounds.lua', profile => ({
+    ...profile,
+    frame: { width: 2560, height: 1440 },
+    helper: {
+      ...profile.helper,
+      constants: {
+        ...profile.helper.constants,
+        viewWidth: { value: 2560, source: pin(707) },
+        viewHeight: { value: 1440, source: pin(708) },
+      },
+    },
+  }));
+  assert(projected.result !== undefined && 'program' in projected.result && projected.program !== undefined && projected.profile !== undefined, 'source-shaped text bounds fixture must produce a real result');
+  const scene = sceneOf(buildX4UiScene(projected.result as X4UiLayoutProgramResult, corpus, projected.profile));
+  const expectedTables = [
+    { x: 40, y: 220, width: 300, height: 104 },
+    { x: 600, y: 763, width: 1360, height: 285 },
+    { x: 600, y: 1066, width: 1360, height: 138 },
+    { x: 600, y: 1220, width: 1360, height: 72 },
+  ] as const;
+  assert(scene.tables.length === expectedTables.length, `source-shaped text bounds fixture table count changed: ${scene.tables.length}`);
+  for (const [index, expected] of expectedTables.entries()) {
+    const table = scene.tables[index];
+    assert(table?.rect !== undefined
+      && table.rect.x === expected.x
+      && table.rect.y === expected.y
+      && table.rect.width === expected.width
+      && table.rect.height === expected.height, `source-shaped table ${index} geometry must remain exact: ${JSON.stringify(table?.rect)}`);
+    const row = table === undefined ? undefined : scene.rows.find(candidate => candidate.parentId === table.id);
+    const cell = row === undefined ? undefined : scene.cells.find(candidate => candidate.parentId === row.id);
+    const widget = cell === undefined ? undefined : scene.widgets.find(candidate => candidate.parentId === cell.id);
+    const text = widget === undefined ? undefined : scene.texts.find(candidate => candidate.parentId === widget.id);
+    const line = text?.lines[0];
+    const clip = text?.clipRect;
+    assert(text?.layout !== undefined && line !== undefined && clip !== undefined, `source-shaped table ${index} must retain known text layout and clip`);
+    assert(line.rect.y >= clip.y && line.rect.y + line.rect.height <= clip.y + clip.height, `source-shaped table ${index} line must remain inside its row clip: ${JSON.stringify({ line: line.rect, clip })}`);
+    const glyphs = text === undefined ? [] : scene.glyphs.filter(candidate => candidate.textId === text.id);
+    assert(glyphs.length > 0, `source-shaped table ${index} must retain known glyph geometry`);
+    for (const glyph of glyphs) {
+      assert(glyph.rect !== undefined && glyph.rect.y >= clip.y && glyph.rect.y + glyph.rect.height <= clip.y + clip.height, `source-shaped table ${index} glyph must remain inside its row clip: ${JSON.stringify({ glyph: glyph.rect, clip })}`);
+    }
+  }
+});
+
+test('fail-first: wrapped direct transcript lines keep line-local glyph stacking', () => {
+  const orangeTranscript = 'The Federation recorded your assistance defending our miners last week, Commander. We also recorded your convoy attack the day after. Two wings is a real cost to us - and you are not yet a real ally. Fund the deployment, or give us the Hull Parts, and I will call it settled.';
+  const projected = rawProjectionFor([
+    'local menu = { name = "SourceCompositionTranscriptWrap", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 2560, height = 1440 })',
+    'local transcript = frame:addTable(2, { x = 600, y = 763, width = 1360, height = 285, maxVisibleHeight = 285, reserveScrollBar = false, scaling = false })',
+    'transcript:setColWidthPercent(1, 14)',
+    'transcript:setColWidthPercent(2, 86)',
+    'local row = transcript:addRow(false, { fixed = true, borderBelow = true, paddingTop = 0, paddingBottom = 0, scaling = false })',
+    'row[1]:createText("ADMINISTRATOR", { height = 24, minRowHeight = 24, fontsize = 15 })',
+    `row[2]:createText(${JSON.stringify(orangeTranscript)}, { height = 96, minRowHeight = 96, wordwrap = true, fontsize = 23 })`,
+    'frame:display()',
+  ].join('\n'), 'selftest/source-composition-transcript-wrap.lua', profile => ({
+    ...profile,
+    frame: { width: 2560, height: 1440 },
+    helper: {
+      ...profile.helper,
+      constants: {
+        ...profile.helper.constants,
+        viewWidth: { value: 2560, source: pin(707) },
+        viewHeight: { value: 1440, source: pin(708) },
+      },
+    },
+  }));
+  assert(projected.result !== undefined && 'program' in projected.result && projected.program !== undefined && projected.profile !== undefined, 'wrapped transcript fixture must produce a real result');
+  const wrappedProfile = Object.freeze({
+    ...projected.profile,
+    textPolicy: Object.freeze({ ...projected.profile.textPolicy, wrapMode: 'greedy-word' as const }),
+  });
+  const scene = sceneOf(buildX4UiScene(projected.result as X4UiLayoutProgramResult, corpus, wrappedProfile));
+  const text = scene.texts.find(candidate => candidate.content === orangeTranscript);
+  assert(text !== undefined && text.layout !== undefined && text.lines.length > 1, `wrapped transcript must produce multiple source-proven lines: ${JSON.stringify({ text: text?.content, lines: text?.lines.length, layoutLines: text?.layout?.lines.length, font: text?.font, fontSize: text?.fontSize, alignment: text?.alignment, offsetX: text?.offsetX, offsetY: text?.offsetY, availableWidth: text?.availableWidth, contentSelection: text?.contentSelection, diagnostics: text?.diagnosticLinks.map(id => scene.gaps.find(gap => gap.id === id)?.reason) })}`);
+  assert(text.availableWidth === 1163, `wrapped transcript must use the 86 percent column width from the 1360px table: ${String(text.availableWidth)}`);
+  const lineYs = text.lines.map(line => line.rect.y);
+  const glyphs = scene.glyphs.filter(glyph => glyph.textId === text.id);
+  const glyphYs = text.lines.map(line => glyphs.find(glyph => glyph.lineIndex === line.lineIndex)?.rect?.y);
+  const expectedGlyphOffsets = text.lines.map(line => {
+    const glyph = glyphs.find(candidate => candidate.lineIndex === line.lineIndex);
+    assert(glyph?.rect !== undefined, `wrapped transcript line ${line.lineIndex} must retain a glyph rectangle`);
+    return glyph.rect.y - line.rect.y;
+  });
+  assert(new Set(lineYs).size === lineYs.length && lineYs.every((value, index) => index === 0 || value > lineYs[index - 1]!), `wrapped transcript line rectangles must advance vertically: ${JSON.stringify(lineYs)}`);
+  assert(new Set(glyphYs).size === glyphYs.length && glyphYs.every((value, index) => index === 0 || value! > glyphYs[index - 1]!), `wrapped transcript glyph rectangles must advance vertically: ${JSON.stringify(glyphYs)}`);
+  assert(expectedGlyphOffsets.every(offset => offset >= 0 && offset < text.layout!.lines[0]!.lineBox.height), `wrapped transcript glyphs must remain line-local to their line boxes: ${JSON.stringify({ expectedGlyphOffsets, lineHeight: text.layout!.lines[0]!.lineBox.height })}`);
+  const clip = text.clipRect;
+  assert(clip !== undefined, 'wrapped transcript must retain a known row/widget clip');
+  for (const line of text.lines) {
+    assert(line.rect.y >= clip.y && line.rect.y + line.rect.height <= clip.y + clip.height, `wrapped transcript line must remain inside its accepted clip: ${JSON.stringify({ line: line.rect, clip })}`);
+  }
+  for (const glyph of glyphs) {
+    assert(glyph.rect !== undefined && glyph.rect.y >= clip.y && glyph.rect.y + glyph.rect.height <= clip.y + clip.height, `wrapped transcript glyph must remain inside its accepted clip: ${JSON.stringify({ glyph: glyph.rect, clip })}`);
+  }
+});
+
+test('B119 fail-first: explicit wrapped-text height reports source-linked Scene overflow without changing geometry', () => {
+  const wrappedText = 'The Federation recorded your assistance defending our miners last week, Commander. We also recorded your convoy attack the day after. Two wings is a real cost to us - and you are not yet a real ally. Fund the deployment, or give us the Hull Parts, and I will call it settled.';
+  const sourceFor = (height: number, maxVisibleHeight = height): string => [
+    'local menu = { name = "ExplicitWrappedTextHeightDiagnostic", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 2560, height = 1440 })',
+    `local table = frame:addTable(1, { x = 600, y = 300, width = 550, height = ${height}, maxVisibleHeight = ${maxVisibleHeight}, reserveScrollBar = false, scaling = false })`,
+    'table:setColWidth(1, 550, false)',
+    'local row = table:addRow(false, { fixed = false, borderBelow = false, paddingTop = 0, paddingBottom = 0, scaling = false })',
+    `row[1]:createText(${JSON.stringify(wrappedText)}, { height = ${height}, minRowHeight = ${height}, wordwrap = true, fontsize = 23 })`,
+    'frame:display()',
+  ].join('\n');
+  const producerProfileFor = (profile: Parameters<typeof projectX4UiLayoutProgram>[2]): Parameters<typeof projectX4UiLayoutProgram>[2] => ({
+    ...profile,
+    frame: { width: 2560, height: 1440 },
+    helper: {
+      ...profile.helper,
+      constants: {
+        ...profile.helper.constants,
+        viewWidth: { value: 2560, source: pin(707) },
+        viewHeight: { value: 1440, source: pin(708) },
+      },
+    },
+  });
+  const build = (height: number, maxVisibleHeight = height, viewportOnly = false): X4UiScene => {
+    const projected = rawProjectionFor(
+      sourceFor(height, maxVisibleHeight),
+      `selftest/raw-explicit-wrapped-height-${height}-${maxVisibleHeight}.lua`,
+      producerProfileFor,
+    );
+    assert(projected.result !== undefined && 'program' in projected.result && projected.program !== undefined && projected.profile !== undefined, 'explicit wrapped-text height fixture must produce a real result');
+    const sceneProfile = {
+      ...projected.profile,
+      textPolicy: { ...projected.profile.textPolicy, lineSpacing: 0, wrapMode: 'greedy-word' as const },
+      ...(viewportOnly ? { tableView: { [projected.program.tables[0]!.id]: { scrollOffset: 0 } } } : {}),
+    };
+    return sceneOf(buildX4UiScene(projected.result as X4UiLayoutProgramResult, pinnedLineAdvanceCorpus, sceneProfile));
+  };
+  const overflowScene = build(96);
+  const overflowWidget = overflowScene.widgets.find(widget => widget.kind === 'text')!;
+  const overflowText = overflowScene.texts.find(text => text.widgetId === overflowWidget.id)!;
+  assert(overflowText.lines.length === 3, `overflow fixture must issue exactly three wrapped lines: ${JSON.stringify({ lines: overflowText.lines.length, availableWidth: overflowText.availableWidth, content: overflowText.content })}`);
+  const requiredHeight = Math.max(...overflowText.lines.map(line => line.rect.y + line.rect.height))
+    - Math.min(...overflowText.lines.map(line => line.rect.y));
+  assert(requiredHeight === 112.125, `overflow fixture must issue the pinned 112.125px line extent: ${String(requiredHeight)}`);
+  const overflowGaps = overflowScene.gaps.filter(gap => gap.nodeId === overflowText.id && gap.category === 'height');
+  assert(overflowGaps.length === 1, `overflow fixture must produce exactly one text height gap: ${JSON.stringify(overflowGaps)}`);
+  assert(overflowGaps[0]!.reason.includes('required 112.125 px')
+    && overflowGaps[0]!.reason.includes('available 96 px')
+    && overflowGaps[0]!.reason.includes('excess 16.125 px'), `overflow gap must report required, available, and excess pixels: ${overflowGaps[0]!.reason}`);
+  assert(overflowGaps[0]!.source.file === overflowText.source.file
+    && overflowGaps[0]!.source.sourcePath === overflowText.source.sourcePath
+    && overflowGaps[0]!.source.start.offset <= overflowGaps[0]!.source.end.offset
+    && overflowGaps[0]!.nodeId === overflowText.id, 'overflow gap must retain the source file and exact text owner');
+
+  const placementScene = build(114);
+  const placementWidget = placementScene.widgets.find(widget => widget.kind === 'text')!;
+  const placementText = placementScene.texts.find(text => text.widgetId === placementWidget.id)!;
+  assert(placementText.lines.length === 3, '114px placement fixture must retain the same three issued wrapped lines');
+  assert(placementWidget.outerRect !== undefined, '114px placement fixture must retain an explicit widget rectangle');
+  const placementLineMinY = Math.min(...placementText.lines.map(line => line.rect.y));
+  const placementLineMaxY = Math.max(...placementText.lines.map(line => line.rect.y + line.rect.height));
+  const placementBottomOverflow = placementLineMaxY - (placementWidget.outerRect!.y + placementWidget.outerRect!.height);
+  assert(placementWidget.outerRect!.y === 300 && placementWidget.outerRect!.height === 114
+    && placementLineMinY === 338.3125
+    && placementLineMaxY === 450.4375
+    && placementBottomOverflow === 36.4375, `114px placement fixture must reproduce the issued/widget bounds and bottom overflow: ${JSON.stringify({ widget: placementWidget.outerRect, lineMinY: placementLineMinY, lineMaxY: placementLineMaxY, bottomOverflow: placementBottomOverflow })}`);
+  const placementGaps = placementScene.gaps.filter(gap => gap.nodeId === placementText.id && gap.category === 'height');
+  assert(placementGaps.length === 1, `114px explicit widget placement must produce exactly one text height gap for ${placementBottomOverflow}px bottom overflow; got ${JSON.stringify(placementGaps)}`);
+  assert(placementGaps[0]!.reason.includes('issued line bounds y=338.3125..450.4375 px')
+    && placementGaps[0]!.reason.includes('widget bounds y=300..414 px')
+    && placementGaps[0]!.reason.includes('bottom overflow 36.4375 px'), `114px placement gap must report auditable line/widget bounds and bottom overflow: ${placementGaps[0]!.reason}`);
+  assert(!/\bexcess\s+-/.test(placementGaps[0]!.reason), `114px placement gap must never label a negative value as excess: ${placementGaps[0]!.reason}`);
+  assert(placementGaps[0]!.reason.includes('span-height excess 0 px'), `114px placement gap must clamp its non-overflowing span-height excess to zero: ${placementGaps[0]!.reason}`);
+  assert(placementGaps[0]!.source.file === placementText.source.file
+    && placementGaps[0]!.source.sourcePath === placementText.source.sourcePath
+    && placementGaps[0]!.source.start.offset <= placementGaps[0]!.source.end.offset
+    && placementGaps[0]!.nodeId === placementText.id, 'placement gap must retain the source file and exact text owner');
+
+  const controlScene = build(187);
+  const controlText = controlScene.texts.find(text => text.content === wrappedText)!;
+  assert(controlText.lines.length === 3, '187px control must retain the same three issued wrapped lines');
+  assert(!controlScene.gaps.some(gap => gap.nodeId === controlText.id && gap.category === 'height'), '187px contained explicit widget height must not produce a text height gap');
+
+  const viewportScene = build(187, 96, true);
+  const viewportWidget = viewportScene.widgets.find(widget => widget.kind === 'text')!;
+  const viewportText = viewportScene.texts.find(text => text.widgetId === viewportWidget.id)!;
+  assert(viewportWidget.outerRect?.height === 187 && viewportText.clipRect?.height === 96, `viewport-only fixture must retain a 187px widget and 96px viewport clip: ${JSON.stringify({ widget: viewportWidget.outerRect, clip: viewportText.clipRect })}`);
+  assert(!viewportScene.gaps.some(gap => gap.nodeId === viewportText.id && gap.category === 'height'), 'viewport-only clipping must not produce a text height gap');
+
+  const geometry = (scene: X4UiScene, textId: string): unknown => {
+    const text = scene.texts.find(candidate => candidate.id === textId);
+    return {
+      widget: scene.widgets.find(widget => widget.textIds.includes(textId))?.outerRect,
+      textRect: text?.rect,
+      textClipRect: text?.clipRect,
+      lines: text?.lines.map(line => ({
+        lineIndex: line.lineIndex,
+        rect: line.rect,
+        width: line.width,
+        sourceRange: line.sourceRange,
+        sourceCodePointRange: line.sourceCodePointRange,
+        breakReason: line.breakReason,
+        truncated: line.truncated,
+        overflow: line.overflow,
+        glyphIds: line.glyphIds,
+      })),
+      glyphs: scene.glyphs.filter(glyph => glyph.textId === textId).map(glyph => ({
+        id: glyph.id,
+        rect: glyph.rect,
+        clipRect: glyph.clipRect,
+        lineIndex: glyph.lineIndex,
+        quad: glyph.quad,
+      })),
+    };
+  };
+  const overflowGeometry = geometry(overflowScene, overflowText.id);
+  const rebuiltOverflow = build(96);
+  const rebuiltText = rebuiltOverflow.texts.find(text => text.content === wrappedText)!;
+  assert(jsonEqual(overflowGeometry, geometry(rebuiltOverflow, rebuiltText.id)), 'overflow diagnostic must not change non-gap text/glyph geometry across deterministic rebuilds');
+  assert(overflowScene.gameTruth === X4_UI_SCENE_GAME_TRUTH && overflowScene.verification.gameVerified === false, 'overflow diagnostic must not change Scene game truth');
 });
 
 test('ports button and edit-box rectangles/text with independent nonzero offsets', () => {
@@ -4165,7 +4483,7 @@ test('fail-first: mapped unavailable color facts require exact owner-linked pain
   const scene = sceneFromRaw([
     'local menu = { name = "ColorPaint", layer = 1 }',
     'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
-    'local table = frame:addTable(4, { width = 100, reserveScrollBar = false, backgroundColor = runtimeTableColor })',
+    'local table = frame:addTable(4, { width = 100, reserveScrollBar = false, backgroundID = "solid", backgroundColor = runtimeTableColor })',
     'table:setColWidth(1, 20, false)',
     'table:setColWidth(2, 20, false)',
     'table:setColWidth(3, 20, false)',

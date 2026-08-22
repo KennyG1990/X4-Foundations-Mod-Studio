@@ -344,7 +344,7 @@ function colorSourceFixture(): X4UiWorkspaceSource {
   const lua = [
     'local menu = { name = "ColorCanonical", layer = 1 }',
     'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80, layer = 1 })',
-    'local table = frame:addTable(4, { width = 100, reserveScrollBar = false, scaling = false, backgroundColor = Color["paint_color_0"] })',
+    'local table = frame:addTable(4, { width = 100, reserveScrollBar = false, scaling = false, backgroundID = "solid", backgroundColor = Color["paint_color_0"] })',
     'table:setColWidth(1, 20, false)',
     'table:setColWidth(2, 20, false)',
     'table:setColWidth(3, 20, false)',
@@ -375,6 +375,31 @@ function colorSourceFixture(): X4UiWorkspaceSource {
       '',
     ].join('\n')),
     passthrough('ui/color.lua', lua, { reason: 'unparsed' }),
+  ]));
+}
+
+function boundedCompositionSourceFixture(): X4UiWorkspaceSource {
+  const lua = [
+    'local menu = { name = "BoundedComposition", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80, layer = 1 })',
+    'local active = frame:addTable(1, { x = 8, y = 4, width = 24, reserveScrollBar = false, scaling = false, backgroundID = "solid", backgroundColor = Color["paint_color_0"] })',
+    'active:setColWidthMin(1, 1, 1, false)',
+    'local activeRow = active:addRow(false, { paddingTop = 0, paddingBottom = 0, borderBelow = false, fixed = false, scaling = false })',
+    'activeRow[1]:createText("bounded", { height = 8, minRowHeight = 8 })',
+    'local empty = frame:addTable(1, { x = 50, y = 4, width = 18, reserveScrollBar = false, scaling = false, backgroundColor = Color["paint_color_0"] })',
+    'empty:setColWidthMin(1, 1, 1, false)',
+    'local emptyRow = empty:addRow(false, { paddingTop = 0, paddingBottom = 0, borderBelow = false, fixed = false, scaling = false })',
+    'emptyRow[1]:createText("default", { height = 8, minRowHeight = 8 })',
+    'local buttonTable = frame:addTable(1, { x = 8, y = 30, width = 24, reserveScrollBar = false, scaling = false, backgroundID = "solid", backgroundColor = Color["paint_color_0"] })',
+    'buttonTable:setColWidthMin(1, 1, 1, false)',
+    'local buttonRow = buttonTable:addRow(false, { paddingTop = 0, paddingBottom = 0, borderBelow = false, fixed = false, scaling = false })',
+    'buttonRow[1]:createButton({ height = 8, affectRowHeight = true, bgcolor = { r = 13, g = 23, b = 33, a = 43 }, bordercolor = { r = 15, g = 25, b = 35, a = 45 } }):setText("button", { x = 0, y = 0, color = { r = 16, g = 26, b = 36, a = 46 } })',
+    'frame:display()',
+    '',
+  ].join('\n');
+  return buildX4UiWorkspaceSource(workspace([
+    passthrough('ui.xml', '<?xml version="1.0" encoding="utf-8"?>\n<addon name="bounded-canvas-fixture"><environment type="menus"><file name="ui/bounded.lua" /></environment></addon>\n'),
+    passthrough('ui/bounded.lua', lua, { reason: 'unparsed' }),
   ]));
 }
 
@@ -785,21 +810,38 @@ function traceHasOpaqueFill(trace: readonly TraceEntry[], color: string, rect: R
 
 function traceHasDiagnosticBoundary(trace: readonly TraceEntry[], color: string, region: RasterRect): boolean {
   let activeStrokeStyle: unknown;
-  let pathRect: RasterRect | undefined;
+  let pendingRect: RasterRect | undefined;
+  let activeClip: RasterRect | undefined;
+  const savedClips: (RasterRect | undefined)[] = [];
   for (const entry of trace) {
     if (entry.name === 'setStrokeStyle') {
       activeStrokeStyle = entry.args[0];
       continue;
     }
+    if (entry.name === 'save') {
+      savedClips.push(activeClip);
+      continue;
+    }
+    if (entry.name === 'restore') {
+      activeClip = savedClips.pop();
+      continue;
+    }
     if (entry.name === 'beginPath') {
-      pathRect = undefined;
+      pendingRect = undefined;
       continue;
     }
     if (entry.name === 'rect' && entry.args.length === 4 && entry.args.every(value => typeof value === 'number')) {
-      pathRect = { x: Number(entry.args[0]), y: Number(entry.args[1]), width: Number(entry.args[2]), height: Number(entry.args[3]) };
+      pendingRect = { x: Number(entry.args[0]), y: Number(entry.args[1]), width: Number(entry.args[2]), height: Number(entry.args[3]) };
       continue;
     }
-    if (entry.name === 'stroke' && activeStrokeStyle === color && rasterIntersection(pathRect, region) !== undefined) return true;
+    if (entry.name === 'clip') {
+      activeClip = rasterIntersection(activeClip, pendingRect);
+      continue;
+    }
+    if (entry.name === 'stroke'
+      && activeStrokeStyle === color
+      && rasterIntersection(pendingRect, activeClip) !== undefined
+      && rasterIntersection(pendingRect, region) !== undefined) return true;
   }
   return false;
 }
@@ -922,7 +964,7 @@ const CANONICAL_COMPOSITE_TRACE: readonly TraceEntry[] = [
   traceEntry('composite', "beginPath"),
   traceEntry('composite', "rect", 5, 0, 35, 8),
   traceEntry('composite', "clip"),
-  traceEntry('composite', "fillRect", 5, 0, 20.25, 2.25),
+  traceEntry('composite', "fillRect", 5, 1.75, 20.25, 4.5),
   traceEntry('composite', "restore"),
   traceEntry('composite', "setFillStyle", "#6b7280"),
   traceEntry('composite', "save"),
@@ -958,7 +1000,7 @@ const CANONICAL_COMPOSITE_TRACE: readonly TraceEntry[] = [
   traceEntry('composite', "beginPath"),
   traceEntry('composite', "rect", 5, 1, 37, 12),
   traceEntry('composite', "clip"),
-  traceEntry('composite', "fillRect", 5, 1, 15.75, 2.25),
+  traceEntry('composite', "fillRect", 5, 4.75, 15.75, 4.5),
   traceEntry('composite', "restore"),
   traceEntry('composite', "setFillStyle", "#64748b"),
   traceEntry('composite', "save"),
@@ -1013,115 +1055,115 @@ const CANONICAL_COMPOSITE_TRACE: readonly TraceEntry[] = [
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 5, 0, 2.25, 1.40625),
+  traceEntry('composite', "rect", 5, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 5, 0, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 5, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 7.25, 0, 2.25, 1.40625),
+  traceEntry('composite', "rect", 7.25, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 7.25, 0, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 7.25, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 9.5, 0, 2.25, 1.40625),
+  traceEntry('composite', "rect", 9.5, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 9.5, 0, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 9.5, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 11.75, 0, 2.25, 1.40625),
+  traceEntry('composite', "rect", 11.75, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 11.75, 0, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 11.75, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 14, 0, 2.25, 1.40625),
+  traceEntry('composite', "rect", 14, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 14, 0, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 14, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 16.25, 0, 2.25, 1.40625),
+  traceEntry('composite', "rect", 16.25, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 16.25, 0, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 16.25, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 18.5, 0, 2.25, 1.40625),
+  traceEntry('composite', "rect", 18.5, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 18.5, 0, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 18.5, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 20.75, 0, 2.25, 1.40625),
+  traceEntry('composite', "rect", 20.75, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 20.75, 0, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 20.75, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 23, 0, 2.25, 1.40625),
+  traceEntry('composite', "rect", 23, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 23, 0, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 23, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 5, 1, 2.25, 1.40625),
+  traceEntry('composite', "rect", 5, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 5, 1, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 5, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 7.25, 1, 2.25, 1.40625),
+  traceEntry('composite', "rect", 7.25, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 7.25, 1, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 7.25, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 9.5, 1, 2.25, 1.40625),
+  traceEntry('composite', "rect", 9.5, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 9.5, 1, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 9.5, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 11.75, 1, 2.25, 1.40625),
+  traceEntry('composite', "rect", 11.75, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 11.75, 1, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 11.75, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 14, 1, 2.25, 1.40625),
+  traceEntry('composite', "rect", 14, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 14, 1, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 14, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 16.25, 1, 2.25, 1.40625),
+  traceEntry('composite', "rect", 16.25, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 16.25, 1, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 16.25, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 18.5, 1, 2.25, 1.40625),
+  traceEntry('composite', "rect", 18.5, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 18.5, 1, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 18.5, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
@@ -1342,7 +1384,7 @@ const CANONICAL_POLYGON_COMPOSITE_TRACE: readonly TraceEntry[] = [
   traceEntry('composite', "beginPath"),
   traceEntry('composite', "rect", 5, 0, 35, 8),
   traceEntry('composite', "clip"),
-  traceEntry('composite', "fillRect", 5, 0, 20.25, 2.25),
+  traceEntry('composite', "fillRect", 5, 1.75, 20.25, 4.5),
   traceEntry('composite', "restore"),
   traceEntry('composite', "setFillStyle", "#6b7280"),
   traceEntry('composite', "save"),
@@ -1378,7 +1420,7 @@ const CANONICAL_POLYGON_COMPOSITE_TRACE: readonly TraceEntry[] = [
   traceEntry('composite', "beginPath"),
   traceEntry('composite', "rect", 5, 1, 37, 12),
   traceEntry('composite', "clip"),
-  traceEntry('composite', "fillRect", 5, 1, 15.75, 2.25),
+  traceEntry('composite', "fillRect", 5, 4.75, 15.75, 4.5),
   traceEntry('composite', "restore"),
   traceEntry('composite', "setFillStyle", "#64748b"),
   traceEntry('composite', "save"),
@@ -1433,115 +1475,115 @@ const CANONICAL_POLYGON_COMPOSITE_TRACE: readonly TraceEntry[] = [
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 5, 0, 2.25, 1.40625),
+  traceEntry('composite', "rect", 5, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 5, 0, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 5, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 7.25, 0, 2.25, 1.40625),
+  traceEntry('composite', "rect", 7.25, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 7.25, 0, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 7.25, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 9.5, 0, 2.25, 1.40625),
+  traceEntry('composite', "rect", 9.5, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 9.5, 0, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 9.5, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 11.75, 0, 2.25, 1.40625),
+  traceEntry('composite', "rect", 11.75, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 11.75, 0, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 11.75, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 14, 0, 2.25, 1.40625),
+  traceEntry('composite', "rect", 14, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 14, 0, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 14, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 16.25, 0, 2.25, 1.40625),
+  traceEntry('composite', "rect", 16.25, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 16.25, 0, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 16.25, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 18.5, 0, 2.25, 1.40625),
+  traceEntry('composite', "rect", 18.5, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 18.5, 0, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 18.5, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 20.75, 0, 2.25, 1.40625),
+  traceEntry('composite', "rect", 20.75, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 20.75, 0, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 20.75, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 23, 0, 2.25, 1.40625),
+  traceEntry('composite', "rect", 23, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 23, 0, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 23, 2.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 5, 1, 2.25, 1.40625),
+  traceEntry('composite', "rect", 5, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 5, 1, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 5, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 7.25, 1, 2.25, 1.40625),
+  traceEntry('composite', "rect", 7.25, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 7.25, 1, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 7.25, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 9.5, 1, 2.25, 1.40625),
+  traceEntry('composite', "rect", 9.5, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 9.5, 1, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 9.5, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 11.75, 1, 2.25, 1.40625),
+  traceEntry('composite', "rect", 11.75, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 11.75, 1, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 11.75, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 14, 1, 2.25, 1.40625),
+  traceEntry('composite', "rect", 14, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 14, 1, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 14, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 16.25, 1, 2.25, 1.40625),
+  traceEntry('composite', "rect", 16.25, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 16.25, 1, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 16.25, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
-  traceEntry('composite', "rect", 18.5, 1, 2.25, 1.40625),
+  traceEntry('composite', "rect", 18.5, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "clip"),
   traceEntry('composite', "setFillStyle", "#e5e7eb"),
-  traceEntry('composite', "drawImage", "regular-atlas", 0, 5, 8, 5, 18.5, 1, 2.25, 1.40625),
+  traceEntry('composite', "drawImage", "regular-atlas", 0, 0, 8, 10, 18.5, 5.59375, 2.25, 2.8125),
   traceEntry('composite', "restore"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
@@ -2213,7 +2255,7 @@ async function main(): Promise<void> {
         sourceRasterReceipt: receiptSummary(sourceRasterResult?.receipt),
         sourceRasterTraceLength: sourceRasterTrace.length,
       });
-      familyCheck('stage-b-causal', 'B119 non-dominating source diagnostics use boundary indicators while diagnostic-map retains opaque interiors', paintDiagnosticInteriorTarget !== undefined
+      familyCheck('stage-b-causal', 'B119 source-composition keeps diagnostic interiors transparent but restores clipped boundary indicators while diagnostic-map retains opaque interiors', paintDiagnosticInteriorTarget !== undefined
         && diagnosticTraceDeterministic
         && diagnosticMapInteriorOpaque
         && !sourceCompositionInteriorOpaque
@@ -2981,6 +3023,223 @@ async function main(): Promise<void> {
         activity: activitySignature(callbackActivity),
       });
     }
+    const boundedSource = boundedCompositionSourceFixture();
+    const boundedSourceFile = boundedSource.bundle?.sourceFiles.find(file => file.path === 'ui/bounded.lua');
+    const boundedCatalog = boundedSourceFile === undefined ? undefined : createX4UiLayoutTargetCatalog(boundedSourceFile.callModel);
+    const boundedTarget = boundedCatalog?.targets.find(candidate => candidate.kind === 'top-level');
+    const boundedSelection = boundedSourceFile !== undefined && boundedCatalog !== undefined && boundedTarget !== undefined
+      ? {
+        sourceIndex: boundedSourceFile.index,
+        path: boundedSourceFile.path,
+        sourceIdentity: boundedCatalog.sourceIdentity,
+        target: { ...boundedTarget, id: boundedTarget.id },
+      }
+      : undefined;
+    const boundedPipeline = boundedSelection === undefined ? undefined : projectX4UiPreviewPipeline({
+      source: boundedSource,
+      corpus,
+      colorEvidence,
+      profile: {
+        id: 'canvas-bounded-composition-profile',
+        provenance: 'B119 bounded source-composition causal renderer fixture',
+        truthGrade: 'supplied',
+        source: boundedSelection.sourceIdentity,
+        drawable: { width: 100, height: 80 },
+        uiScale: 1,
+        minTextHeight: 10,
+      },
+      selection: boundedSelection,
+    });
+    const boundedScene = boundedPipeline?.scene !== undefined
+      && (boundedPipeline.scene.status === 'projected' || boundedPipeline.scene.status === 'partial')
+      ? boundedPipeline.scene.scene
+      : undefined;
+    const boundedNoKeepOutResult = boundedScene === undefined
+      ? undefined
+      : projectX4UiPaintPlan({ scene: boundedScene, corpus, previewAuthority: boundedPipeline! });
+    const boundedKeepOutEntry = getBuiltInKeepOut(KEEP_OUT_IDS.conversationBackRow);
+    const boundedKeepOutProjection = boundedKeepOutEntry === undefined ? undefined : projectBuiltInKeepOut(KEEP_OUT_IDS.conversationBackRow, { width: 100, height: 80 });
+    const boundedCockpitResult = boundedScene === undefined || boundedKeepOutEntry === undefined || boundedKeepOutProjection === undefined
+      ? undefined
+      : projectX4UiPaintPlan({
+        scene: boundedScene,
+        corpus,
+        previewAuthority: boundedPipeline!,
+        keepOuts: [{ context: KEEP_OUT_PRESET_IDS.cockpitConversation, entry: boundedKeepOutEntry, projection: boundedKeepOutProjection }],
+      });
+    const boundedNoKeepOut = boundedNoKeepOutResult !== undefined && boundedNoKeepOutResult.status !== 'refused' ? boundedNoKeepOutResult : undefined;
+    const boundedCockpit = boundedCockpitResult !== undefined && boundedCockpitResult.status !== 'refused' ? boundedCockpitResult : undefined;
+    const boundedActiveTable = boundedScene?.tables.find(table => table.source.start.offset === boundedScene.tables[0]?.source.start.offset);
+    const boundedEmptyTable = boundedScene?.tables.find(table => table.source.start.offset === boundedScene.tables[1]?.source.start.offset);
+    const boundedActiveCommand = boundedNoKeepOut === undefined || boundedActiveTable === undefined ? undefined : commandList(boundedNoKeepOut.plan).find(command => command.kind === 'node-geometry' && command.nodeId === boundedActiveTable.id);
+    const boundedEmptyCommand = boundedNoKeepOut === undefined || boundedEmptyTable === undefined ? undefined : commandList(boundedNoKeepOut.plan).find(command => command.kind === 'node-geometry' && command.nodeId === boundedEmptyTable.id);
+    const boundedCommands = boundedNoKeepOut === undefined ? [] : commandList(boundedNoKeepOut.plan);
+    const boundedUnavailableNodeCommands = boundedCommands.filter(command => command.kind === 'unavailable-node');
+    const boundedButtonCommand = boundedCommands.find(command => command.kind === 'node-geometry'
+      && typeof command.nodeId === 'string'
+      && command.nodeId.includes(':button')
+      && Array.isArray(command.basePreviewTints)
+      && command.basePreviewTints.some(tint => String(asRecord(tint)?.slot) === 'widget-border'));
+    const boundedButtonBorderTint = boundedButtonCommand === undefined || !Array.isArray(boundedButtonCommand.basePreviewTints)
+      ? undefined
+      : boundedButtonCommand.basePreviewTints.find(tint => String(asRecord(tint)?.slot) === 'widget-border');
+    const boundedButtonBorderValue = boundedButtonBorderTint === undefined ? undefined : asRecord(asRecord(boundedButtonBorderTint)?.value);
+    const boundedButtonBorderStyle = boundedButtonBorderValue !== undefined
+      && typeof boundedButtonBorderValue.r === 'number'
+      && typeof boundedButtonBorderValue.g === 'number'
+      && typeof boundedButtonBorderValue.b === 'number'
+      && typeof boundedButtonBorderValue.a === 'number'
+      ? `rgba(${String(boundedButtonBorderValue.r)}, ${String(boundedButtonBorderValue.g)}, ${String(boundedButtonBorderValue.b)}, ${String(boundedButtonBorderValue.a / 100)})`
+      : undefined;
+    const boundedActiveRect = boundedActiveCommand === undefined ? undefined : rasterRect(boundedActiveCommand.geometry);
+    const boundedEmptyRect = boundedEmptyCommand === undefined ? undefined : rasterRect(boundedEmptyCommand.geometry);
+    const boundedNoKeepOutOutput: RasterOutput = {};
+    const boundedNoKeepOutTrace: TraceEntry[] = [];
+    const boundedCockpitOutput: RasterOutput = {};
+    const boundedCockpitTrace: TraceEntry[] = [];
+    const boundedNoKeepOutAttempt = boundedNoKeepOut === undefined
+      ? undefined
+      : attemptRenderWithOptions(boundedNoKeepOut, corpus, { surfaceFactory: makeRasterFactory(boundedNoKeepOutTrace, boundedNoKeepOutOutput), presentation: 'source-composition' });
+    const boundedCockpitAttempt = boundedCockpit === undefined
+      ? undefined
+      : attemptRenderWithOptions(boundedCockpit, corpus, { surfaceFactory: makeRasterFactory(boundedCockpitTrace, boundedCockpitOutput), presentation: 'source-composition' });
+    const boundedNoKeepOutRendered = completedResult(boundedNoKeepOutAttempt)?.status === 'rendered';
+    const boundedCockpitRendered = completedResult(boundedCockpitAttempt)?.status === 'rendered';
+    const boundedSourceDiagnosticStyles = new Set<string>([
+      X4_UI_CANVAS_DIAGNOSTIC_PALETTE.geometry,
+      X4_UI_CANVAS_DIAGNOSTIC_PALETTE.selection,
+      X4_UI_CANVAS_DIAGNOSTIC_PALETTE.gap,
+      X4_UI_CANVAS_DIAGNOSTIC_PALETTE.unsupported,
+      X4_UI_CANVAS_DIAGNOSTIC_PALETTE.unavailable,
+      X4_UI_CANVAS_DIAGNOSTIC_PALETTE.emptyClip,
+      X4_UI_CANVAS_DIAGNOSTIC_PALETTE.invalidRaster,
+    ]);
+    const boundedSourceDiagnosticPaint = boundedNoKeepOutTrace.some(entry =>
+      (entry.name === 'setFillStyle' || entry.name === 'setStrokeStyle') && boundedSourceDiagnosticStyles.has(String(entry.args[0])));
+    const boundedUnavailableGrayStroke = boundedNoKeepOutTrace.some(entry => entry.name === 'setStrokeStyle' && entry.args[0] === X4_UI_CANVAS_DIAGNOSTIC_PALETTE.unavailable)
+      && boundedNoKeepOutTrace.some(entry => entry.name === 'stroke');
+    const boundedUnavailableGrayFill = boundedNoKeepOutTrace.some(entry => entry.name === 'setFillStyle' && entry.args[0] === X4_UI_CANVAS_DIAGNOSTIC_PALETTE.unavailable);
+    const boundedUnavailableBoundaryIndicator = boundedUnavailableNodeCommands.some(command => {
+      const visible = effectiveCommandRect(command, 'geometry') ?? rasterRect(command.clipRect);
+      return visible !== undefined && traceHasDiagnosticBoundary(boundedNoKeepOutTrace, X4_UI_CANVAS_DIAGNOSTIC_PALETTE.unavailable, visible);
+    });
+    const boundedButtonBorderStroke = boundedButtonBorderStyle !== undefined
+      && boundedNoKeepOutTrace.some(entry => entry.name === 'setStrokeStyle' && entry.args[0] === boundedButtonBorderStyle)
+      && boundedNoKeepOutTrace.some(entry => entry.name === 'stroke');
+    const boundedActivePoint = boundedActiveRect === undefined
+      ? undefined
+      : { x: Math.floor(boundedActiveRect.x + boundedActiveRect.width - 1), y: Math.floor(boundedActiveRect.y + boundedActiveRect.height - 1) };
+    const boundedEmptyPoint = boundedEmptyRect === undefined
+      ? undefined
+      : { x: Math.floor(boundedEmptyRect.x + boundedEmptyRect.width - 1), y: Math.floor(boundedEmptyRect.y + boundedEmptyRect.height - 1) };
+    const boundedActivePixel = boundedActivePoint === undefined ? undefined : rasterPixel(boundedNoKeepOutOutput, boundedActivePoint.x, boundedActivePoint.y);
+    const boundedEmptyPixel = boundedEmptyPoint === undefined ? undefined : rasterPixel(boundedNoKeepOutOutput, boundedEmptyPoint.x, boundedEmptyPoint.y);
+    const boundedCockpitActivePixel = boundedActivePoint === undefined ? undefined : rasterPixel(boundedCockpitOutput, boundedActivePoint.x, boundedActivePoint.y);
+    const boundedActiveFillTrace = boundedActiveRect !== undefined && boundedNoKeepOutTrace.some(entry => entry.name === 'fillRect' && JSON.stringify(entry.args) === JSON.stringify([boundedActiveRect.x, boundedActiveRect.y, boundedActiveRect.width, boundedActiveRect.height]));
+    const boundedEmptyFillTrace = boundedEmptyRect !== undefined && boundedNoKeepOutTrace.some(entry => entry.name === 'fillRect' && JSON.stringify(entry.args) === JSON.stringify([boundedEmptyRect.x, boundedEmptyRect.y, boundedEmptyRect.width, boundedEmptyRect.height]));
+    const boundedEmptyHasFillTint = Array.isArray(boundedEmptyCommand?.basePreviewTints)
+      && boundedEmptyCommand.basePreviewTints.some(tint => ['table-background', 'cell-background', 'widget-background'].includes(String(asRecord(tint)?.slot)));
+    const boundedKeepOutCommand = boundedCockpit?.plan.keepOuts.find(command => command.entryId === KEEP_OUT_IDS.conversationBackRow);
+    const boundedKeepOutTrace = boundedCockpitTrace.filter(entry => entry.role === 'composite');
+    const boundedKeepOutExpectedTrace = boundedKeepOutCommand === undefined ? [] : expectedCommandTrace(boundedKeepOutCommand as unknown as JsonRecord, boundedCockpit.plan, corpus);
+    const boundedGuideStart = boundedKeepOutTrace.findIndex(entry => entry.name === 'setStrokeStyle' && entry.args[0] === X4_UI_CANVAS_DIAGNOSTIC_PALETTE.keepOut);
+    const boundedGuideOperations = boundedGuideStart < 0 ? [] : boundedKeepOutTrace.slice(boundedGuideStart);
+    const boundedKeepOutOnlyStrokes = boundedGuideOperations.length > 0
+      && boundedGuideOperations.every(entry => ['setStrokeStyle', 'beginPath', 'moveTo', 'lineTo', 'closePath', 'stroke'].includes(entry.name))
+      && boundedGuideOperations.some(entry => entry.name === 'stroke');
+    const boundedSourceTraceEquivalent = boundedGuideStart >= 0
+      && traceEquals(boundedNoKeepOutTrace.filter(entry => entry.role === 'composite'), boundedKeepOutTrace.slice(0, boundedGuideStart));
+    const boundedGuideCoversPixel = (x: number, y: number): boolean => {
+      const geometry = boundedKeepOutCommand?.geometry;
+      if (geometry?.kind === 'horizontal-guide' && typeof geometry.y === 'number') return Math.abs(y - geometry.y) <= 1;
+      if (geometry?.kind === 'vertical-guide' && typeof geometry.x === 'number') return Math.abs(x - geometry.x) <= 1;
+      return false;
+    };
+    const boundedRasterOutsideGuideMatches = (() => {
+      const left = boundedNoKeepOutOutput.state;
+      const right = boundedCockpitOutput.state;
+      if (left === undefined || right === undefined || left.width !== right.width || left.height !== right.height || left.pixels.length !== right.pixels.length) return false;
+      for (let y = 0; y < left.height; y += 1) {
+        for (let x = 0; x < left.width; x += 1) {
+          if (boundedGuideCoversPixel(x, y)) continue;
+          const offset = (y * left.width + x) * 4;
+          for (let channel = 0; channel < 4; channel += 1) {
+            if (left.pixels[offset + channel] !== right.pixels[offset + channel]) return false;
+          }
+        }
+      }
+      return true;
+    })();
+    familyCheck('stage-b-causal', 'B119 bounded source composition preserves explicit table bounds, suppresses empty-ID fills, and keeps cockpit guides additive', boundedNoKeepOutRendered
+      && boundedCockpitRendered
+      && boundedActiveRect?.x === 8
+      && boundedActiveRect.y === 4
+      && boundedActiveRect.width === 24
+      && boundedEmptyRect?.x === 50
+      && boundedEmptyRect.y === 4
+      && boundedEmptyRect.width === 18
+      && boundedActiveFillTrace
+      && boundedActivePixel !== undefined
+      && boundedActivePixel[3] > 0
+      && !boundedEmptyHasFillTint
+      && !boundedEmptyFillTrace
+      && boundedEmptyPixel !== undefined
+      && boundedEmptyPixel[3] === 0
+      && boundedCockpitActivePixel !== undefined
+      && JSON.stringify(boundedCockpitActivePixel) === JSON.stringify(boundedActivePixel)
+      && boundedSourceTraceEquivalent
+      && boundedRasterOutsideGuideMatches
+      && boundedKeepOutCommand?.status === 'projected'
+      && traceContainsSequence(boundedKeepOutTrace, boundedKeepOutExpectedTrace)
+      && boundedKeepOutOnlyStrokes, {
+      previewStatus: boundedPipeline?.status,
+      sceneStatus: boundedPipeline?.scene?.status,
+      noKeepOutPaintStatus: boundedNoKeepOutResult?.status,
+      cockpitPaintStatus: boundedCockpitResult?.status,
+      tables: {
+        active: boundedActiveRect,
+        empty: boundedEmptyRect,
+      },
+      commands: {
+        activeHasFill: boundedActiveFillTrace,
+        emptyHasFill: boundedEmptyFillTrace,
+        emptyHasFillTint: boundedEmptyHasFillTint,
+      },
+      pixels: {
+        active: boundedActivePixel,
+        empty: boundedEmptyPixel,
+        cockpitActive: boundedCockpitActivePixel,
+      },
+      sourceTraceEquivalent: boundedSourceTraceEquivalent,
+      rasterOutsideGuideMatches: boundedRasterOutsideGuideMatches,
+      keepOut: {
+        status: boundedKeepOutCommand?.status,
+        expected: boundedKeepOutExpectedTrace,
+        observed: boundedKeepOutTrace,
+        onlyStrokes: boundedKeepOutOnlyStrokes,
+      },
+    });
+    familyCheck('stage-b-causal', 'B119 bounded source composition emits unavailable-node boundary strokes while retaining an explicitly sourced button border', boundedNoKeepOutRendered
+      && boundedUnavailableNodeCommands.length > 0
+      && boundedUnavailableGrayStroke
+      && boundedUnavailableBoundaryIndicator
+      && boundedUnavailableGrayFill === false
+      && boundedSourceDiagnosticPaint
+      && boundedButtonCommand !== undefined
+      && boundedButtonBorderStroke, {
+      unavailableNodeCount: boundedUnavailableNodeCommands.length,
+      unavailableNodeOwners: boundedUnavailableNodeCommands.map(command => command.nodeId),
+      unavailableDiagnosticColor: X4_UI_CANVAS_DIAGNOSTIC_PALETTE.unavailable,
+      unavailableGrayStroke: boundedUnavailableGrayStroke,
+      unavailableBoundaryIndicator: boundedUnavailableBoundaryIndicator,
+      unavailableGrayFill: boundedUnavailableGrayFill,
+      sourceDiagnosticPaint: boundedSourceDiagnosticPaint,
+      buttonCommand: boundedButtonCommand === undefined ? undefined : { id: boundedButtonCommand.id, nodeId: boundedButtonCommand.nodeId, geometry: boundedButtonCommand.geometry },
+      buttonBorderTint: boundedButtonBorderTint,
+      buttonBorderStyle: boundedButtonBorderStyle,
+      buttonBorderStroke: boundedButtonBorderStroke,
+      trace: boundedNoKeepOutTrace.filter(entry => entry.name === 'setFillStyle' || entry.name === 'setStrokeStyle' || entry.name === 'stroke'),
+    });
   } catch (error) {
     familyCheck('stage-b-causal', 'loader-issued color evidence reaches top-level Preview and exact public Paint owner census', false, { error: error instanceof Error ? error.message : String(error) });
   }

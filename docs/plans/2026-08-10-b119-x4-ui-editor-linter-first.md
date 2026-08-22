@@ -9919,3 +9919,576 @@ Status: `SPECIFIED / ISOLATED`; overall B119 remains `PARTIAL / Not verified in 
   revision IDs and immediate paragraph-level readback.
 - Repository Markdown remains authoritative. External record synchronization does not complete B119 or authorize a
   mod/game write; overall status remains `PARTIAL / Not verified in game`.
+
+## AI Influence `1b` exact reconstruction — structural source-authoring contract — 2026-08-21
+
+Status: `SPECIFIED / IN PROGRESS`; overall B119 remains `PARTIAL / Not verified in game`.
+
+### PLAN
+
+- Bounded unit: extend the existing source-canonical edit owner just enough to insert a bounded block of direct X4 UI
+  calls at one owner-issued frame anchor in an already multi-table target, mount that authority in the SourceEditor,
+  and use it to create an isolated literal-reference `1b` candidate. This is not a new renderer, descriptor DSL, or
+  whole-file generator.
+- Authoritative references: the supplied `1b-commlink-subtitle-plate.png` SHA-256
+  `C22D77069445514B52D0258D9AF98907AFAA2B4B2438D08EFE73FD9E67554CF2`; its README and HTML lines 124-164; shipped
+  X4 9.00 `helper.lua` / `widget_fullscreen.lua`; the source-first design; and the existing issued
+  `X4UiWorkspaceSource -> X4UiLayoutProgram -> X4UiSourceEditCatalog` ownership chain.
+- In scope: an exact frame-level insertion anchor when one selected frame/display owner is proven; a strictly bounded
+  multi-statement payload made only from direct relevant X4 UI calls and the local/assignment/call statements needed
+  to bind their returned table/row values; complete reparse, applied-operation, owner-descendant, ledger-delta, source
+  locality, and stale-CAS proof; SourceEditor staging/apply/parent-acknowledgement controls; and isolated dogfood use.
+- Out of scope: arbitrary Lua, handlers, functions, branches, loops, runtime state, HTML/CSS translation, a parallel
+  scene/paint/canvas path, writes to the real AI Influence mod/game/corpus/config, deployment, X4 launch, C++ frame
+  acceptance, the other `1a`/`1c`-`1j` screens, or any claim of game/pixel parity.
+- Risks and authorization boundary: an under-constrained block editor could become arbitrary-code insertion or corrupt
+  source despite a green preview. The owner must reject unproven executable calls, statements without a relevant UI
+  call, foreign/ambiguous owners, non-applied operations, stale ranges, oversized payloads, syntax errors, and any
+  graph or ledger mismatch before issuing a workspace. Unattended work stays entirely inside the repository and
+  ignored isolated dogfood root.
+- Rollback/checkpoint: revert only the bounded source-edit owner/UI production and selftest paths plus this record;
+  discard the new isolated candidate/evidence. Baseline `HEAD` is
+  `8a8ae63b3637b6433f1c3831f0e92bb668ecce9b`; the real mod and live roots are not mutation targets.
+- Acceptance criteria: the current exact `reference-flat` source first proves that no frame insertion is issued for
+  its multi-table target. After the repair, the owner issues one exact frame/display insertion authority and accepts a
+  complete input-dock block containing only real `frame:addTable`, `setColWidthPercent`, `addRow`, `setColSpan`,
+  `createEditBox`, `createButton`, and `setText` calls. The accepted result changes only the issued empty source range,
+  reparses, adds exactly the payload's applied operations beneath the selected frame, reissues current source/catalog
+  authority, and leaves the parent workspace immutable. SourceEditor must expose the owner-issued action, stage raw
+  direct calls locally, refuse stale context, and commit only after parent acknowledgement.
+- Negative/failure checks: hidden or nested non-UI invocation; pure assignment; function/handler/control-flow payload;
+  cross-frame/table receiver; missing/duplicate display owner; malformed/oversized block; stale expected path/range;
+  accessor/prototype/alias mutation; not-applied operation; ledger mismatch; parent workspace change; and malformed
+  canonical color authority all refuse without mutation. Existing one-call insertion/deletion and scalar behavior must
+  remain exact.
+- Required validation: causal source-edit and SourceEditor fail-first; final focused owner/UI suites; Layout,
+  WorkspaceSource, CallModel, EditorSession, Preview, Scene, Paint, and Canvas adjacency; TypeScript; exact-file
+  zero-warning ESLint; diff hygiene; production build; isolated AI Influence driver with source hashes and CAS receipt;
+  mounted Forge inspection at `2560x1440`, canonical core/color, source-composition, overlays off/on, and direct visual
+  comparison; tracked serial E2E and complete precommit before promotion. Every rendered surface remains
+  `Not verified in game`.
+- Evidence locations: this plan; `dev-docs/b119-ai-influence-dogfood/` reports, candidate source, receipts, censuses,
+  and screenshots; exact test output/receipt paths recorded at close.
+
+### BASELINE / RECONCILE
+
+- Baseline fixture SHA-256: `reference-flat` source
+  `1D7A3D67D94894FB3A90BBE4E6BD7A3C5FA32A2EAB1DD2BC5E43F714EC7E35E2`; literal source
+  `5BA006B64D45097A590267F879143829D04F7A4C11B7124973B8E44368BB4281`; keep-out-safe source
+  `37FAE9C83E1FEF6319378B9B8F60711D4E44ADE54FD6B5B26A44E4FC672E7A4F`; current mounted clean screenshot
+  `8217B3A560191043A67C2DF4B006839140F3CAE4D735B2F462CC147315FC930E`.
+- Current environment: ports `3100`, `3101`, `3300`, and `8972` are free; X4 is absent. The operator previously
+  confirmed Antigravity active, X4 stopped, and the machine quiet, then went to bed. No live mutation is authorized.
+- `[REPRODUCED]` The active static `reference-flat` function places the transcript at `x=330,y=660` and merges
+  read/choices/input into one table at `x=330,y=950`; the supplied literal reference centers width `1360` at `x=600`,
+  bottom-anchors transcript/choice/input independently at `392/236/148`, and therefore cannot be reconstructed by the
+  renderer from the current source.
+- `[REPRODUCED]` Existing scalar CAS can change the `330` literal to `600` and reissue ready authority, but the current
+  structural catalog reports zero entries for this multi-table target. `structuralEntriesFor` intentionally refuses an
+  ambiguous first-row owner and only falls back to frame/display when no row candidates exist. Its insertion parser
+  accepts exactly one standalone call statement, so it cannot create the separate table/row/widget hierarchy required
+  by `1b`.
+- Existing infrastructure reused: workspace/source issued-pair guard, call-model statement provenance, layout evidence
+  pair, exact source/color replay, scalar and structural catalog authority, splice CAS, byte-locality check, structural
+  ledger correspondence, parent acknowledgement, and permanent game-truth state. No capability-map delta yet.
+- Plan change from the earlier queue: exact visual reconstruction cannot honestly begin with scalar tuning alone. The
+  missing direct-call block boundary is now the first causal unit; reconstruction follows through that same owner.
+
+### FIRST REAL-SOURCE DOGFOOD RED / RECONCILED CORRECTION — 2026-08-21
+
+- Status: `FAILED REQUIRED METHOD / FAIL-CLOSED`; overall B119 remains `PARTIAL / Not verified in game`.
+- Baseline command: process-local `B119_CORPUS_ROOT=F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00` with the isolated
+  `run-b119-dogfood.ts` driver. Canonical corpus/color loading succeeded. The public catalog was `ready` with `601`
+  entries (`367` editable, `234` locked) but `0` structural, `0` deletion, and `0` insertion entries. It refused at
+  `expected exactly one owner-issued frame/display insert-block entry, found 0` before any operation or output write.
+- Containment evidence: candidate, stage, and snapshot remain absent; frozen reference source SHA-256 remains
+  `1D7A3D67D94894FB3A90BBE4E6BD7A3C5FA32A2EAB1DD2BC5E43F714EC7E35E2`; real mod source SHA-256 remains
+  `4253D9BD9DE4113D4DE0B881DBF5A1E90CAA7B30F735BA925403EBEF7EC47DD7`; no real-mod, corpus, config, or game write
+  occurred. TypeScript, driver ESLint (zero errors; ignored-file warning), and diff hygiene passed; candidate validation
+  was correctly not run because no candidate exists.
+- `[REPRODUCED]` The real fixture uses the shipped/common assignment form `row = table:addRow(...)` across many distinct
+  table owners. The current frame-block discovery derives first-row ambiguity only from standalone call-statement roots;
+  its canonical tests use unassigned `table:addRow(...)`. Assignment-root rows therefore do not establish the
+  multi-table ambiguity needed to authorize the frame-owned block. The selected program also returns partial authority,
+  where discovery currently retains only `insert-block` entries and discards otherwise complete deletion statements.
+- Reconciled bounded correction: extend structural discovery, not the renderer or driver, to derive assigned `addRow`
+  owner facts from exact applied call/operation/evidence bindings without making assignment statements deletable or
+  guessing a table. When multiple distinct table owners and exactly one selected frame/display owner are proven, issue
+  one `frame-display` block entry. For a partial but scalar-actionable program, retain only complete owner-issued
+  deletion statements plus that frame block; continue refusing legacy one-call insertion and every incomplete,
+  unsupported, foreign, ambiguous, or non-applied statement.
+- Added acceptance/negative contract: a fixture matching `row = tableA:addRow(...)`, reassignment to
+  `row = tableB:addRow(...)`, chained inline editbox/SEND/END statements, and one `frame:display()` must fail first, then
+  expose exactly one frame block and exactly the three proven widget deletion statements. It must expose no deletion for
+  either row assignment, no guessed `insert-call`, and no authority for duplicate/missing/foreign display ownership.
+  Applying the deletions and block must reparse, preserve parent bytes, prove exact call/operation/owner/ledger deltas,
+  and reissue current authority; stale CAS and issued-result mutation must refuse without output.
+- Scope remains `src/lib/x4UiSourceEdits.ts` and its selftest unless a causal public-UI regression requires the existing
+  SourceEditor selftest only. Dogfood geometry, browser mounting, production build/E2E/precommit, deployment, X4 launch,
+  and visual/game claims remain downstream gates.
+- AAR trigger: the first canonical preview fixture did not reproduce the assignment-root shape used by the supplied
+  source, so focused green tests overstated real-source discoverability. Sustain the fail-closed catalog and immutable
+  output gate; improve the fixture matrix with source-shaped assignment/reassignment and partial-program cases before
+  promotion.
+
+### REAL-SOURCE STRUCTURAL DELETE REPARSE RED / SECOND CORRECTION — 2026-08-21
+
+- Status: `FAILED REQUIRED METHOD / FAIL-CLOSED`; overall B119 remains `PARTIAL / Not verified in game`.
+- Focused correction result: the assigned-row/partial/multiline source owner is parent-revalidated at prior `74/74`
+  plus causal `41/41`; SourceEditor, TypeScript, exact ESLint, and diff hygiene are green. The real corpus-backed retry
+  now discovers the intended authority instead of zero entries.
+- `[REPRODUCED]` After five accepted scalar geometry edits, the real-source catalog is `ready` with `601` scalar/locked
+  entries and `63` structural entries (`62` deletes, one `frame-display` block). It issues the exact `choiceTable`
+  editbox delete at offsets `27337..27520`, with owner-issued bindings for `setColSpan` call order `470` and
+  `createEditBox` call order `471`, both beneath the selected table/frame owner.
+- `[REPRODUCED]` Applying that exact entry with explicit empty replacement refuses as
+  `reparse-provenance-drift: structural edit did not produce the exact intended call and operation ledger delta`.
+  The returned workspace/source pairs are unchanged; candidate, stage, snapshot, and source-built evidence remain
+  absent; frozen reference and real-mod hashes remain exact. Candidate validation is correctly not run.
+- Reconciliation delta: discovery and request selection are no longer blockers. The remaining production defect is in
+  `compareX4UiSourceStructuralLedgerCorrespondence` or the owner data it consumes after a near-tail two-call deletion
+  in a long partial target. The small assigned-row/multiline fixture passes, so it is not sufficient acceptance evidence
+  for high call/model order, many retained records/operations, or long kernel-state history.
+- Reconciled bounded correction: add a fail-first long partial source-shaped fixture that places a multiline
+  `setColSpan(...):createEditBox(...)` deletion after enough retained tables/rows/widgets to reproduce the real
+  high-order ledger, then identify the exact failing correspondence predicate. Repair only the proven remap/state/order
+  error; do not skip the ledger comparator, special-case the dogfood filename/offset, expose attempted output on refusal,
+  or weaken source/record/operation/kernel/owner invariants.
+- Acceptance/negative contract: the long fixture must refuse before repair and accept after repair with exact two-call/
+  two-operation removal, shifted retained record/call/operation correspondence, continuous kernel transitions, unchanged
+  parent bytes, current catalog reissue, and no row-assignment deletion. Mutations of any retained record, operation,
+  kernel state, source range/order, owner ID, or removal binding must still make the public comparator and apply path
+  refuse. All prior source/edit/layout matrices remain green.
+- Downstream gates remain unchanged: rerun the corpus-backed driver from a clean absent candidate/stage/snapshot state;
+  only then validate and mount the isolated candidate. No live mod/game/config write, deployment, X4 launch, or visual/
+  game claim is authorized by this correction.
+- AAR trigger: the first repair added the correct real-source discovery shapes but validated ledger deletion only on a
+  short operation history. Sustain the exact fail-closed comparator; add long-history/high-order adjacency whenever an
+  edit contract depends on source-order remapping.
+
+## EXPLICIT WRAPPED-TEXT HEIGHT DIAGNOSTIC — 2026-08-22
+
+### PLAN
+
+- Status: `SPECIFIED`; overall B119 remains `PARTIAL / Not verified in game`.
+- Bounded unit: add one source-backed Scene diagnostic when issued wrapped-text line geometry exceeds that text
+  widget's explicit vertical extent. Preserve the current clipped paint output and do not claim how the native Anark/C++
+  presentation resolves the excess; this unit diagnoses the source budget defect and changes no game-acceptance state.
+- Authoritative references: configured X4 9.00 corpus
+  `F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00`; pinned Helper SHA-256
+  `D24A08B8DA9F2C972794B60ACB48AE36F38CB026C991249DAB9F1164272D4DF2`; pinned fullscreen-widget SHA-256
+  `420AFBA33D925A7B55F2A82AB12773DF04826EF588317010D209B249DE7BAED1`; pinned Zekton ABC metrics
+  `Outer=52, Inner=52, Split20=41, Split24=11, nominal=32`; exact isolated candidate SHA-256
+  `C0FC458D2166E58E8DF7FE658458E88A7080DB15013451C88F7C9F05EA12BC4B`.
+- Reused infrastructure: issued source/call/layout authority, corpus-backed text-layout receipt, Scene gap/provenance
+  model, widget rectangle, source-linked diagnostics, clipped paint plan, and permanent `Not verified in game` state.
+- In scope: a deterministic vertical-overflow gap derived from the un-clipped issued line rectangles and the text
+  widget rectangle; exact required/available extent in its reason; one gap per overflowing text widget; regression tests
+  for the real three-line `23 px`/`96 px` shape, a sufficient-height control, and viewport-only clipping.
+- Out of scope: changing clipping, reflow, row height, glyph placement, linter call-model rules, editbox runtime-state
+  selection, font substitution, candidate source, real mod/game/corpus/config, deployment, X4 launch, or game proof.
+- Baseline: `HEAD` is `8a8ae63b3637b6433f1c3831f0e92bb668ecce9b`; Scene selftest is `142/142`; current
+  off-preview SHA-256 is `686100ACD1D31B10D240290561A50996C81595BB0AF65B2F4869D684E5BD6365`; reference
+  SHA-256 is `C22D77069445514B52D0258D9AF98907AFAA2B4B2438D08EFE73FD9E67554CF2`.
+- `[REPRODUCED]` The candidate's orange transcript row fixes `height=96`, `minRowHeight=96`, `fontsize=23`, and
+  `wordwrap=true`. Pinned Zekton line advance is `52 * 23 / 32 = 37.375 px`; three issued lines therefore require
+  `112.125 px`, exceeding the explicit source budget by `16.125 px`. Helper `cell:getHeight` uses the scaled explicit
+  height whenever it is nonzero; only zero-height text asks C++ for `GetTextHeight`/the minimum-text-height floor.
+- `[HYPOTHESIS]` The native presentation may clip, overlap, or otherwise resolve the 16.125 px excess after Lua setup.
+  Shipped `setUpFontString` does not prove that host behavior, so this unit must expose uncertainty rather than alter it.
+- Risks: a diagnostic based on viewport intersection could falsely report normal scrolling; comparing against clipped
+  glyph output could hide the defect; emitting per-line/per-glyph gaps could flood the UI; treating the warning as game
+  rejection would overstate Lua-side authority.
+- Rollback/checkpoint: revert only the bounded Scene implementation/selftest delta and this plan section. No external
+  state or isolated candidate is mutated by this unit.
+- Acceptance criteria: the exact three-line fixture emits exactly one source-linked vertical-overflow gap whose reason
+  reports `112.125 px` required, `96 px` available, and the `16.125 px` excess; a `114 px` fixture emits none; a line
+  clipped only by a scroll viewport emits none; existing paint/clipping geometry, provenance, and game-truth state are
+  byte/structurally unchanged apart from the additional diagnostic.
+- Required validation: causal fail-first receipt, focused Scene selftest, Paint and Canvas adjacency, TypeScript,
+  exact-file zero-warning ESLint, production build, isolated mounted-source recapture and visual inspection. Full serial
+  E2E/oracle/precommit remain promotion gates after the subsequent source correction. Negative path: viewport-only
+  clipping must not be diagnosed as explicit widget-height overflow.
+- Evidence locations: this section, focused command output, the isolated `run-20260822-01` source session, and its
+  subsequent diagnostic/visual capture. No capability-map delta: this strengthens the existing preview-gap contract.
+
+## REAL-HOST TARGET-SELECTION RESET — 2026-08-22
+
+### RECONCILE / QUEUED PLAN
+
+- Status: `SPECIFIED`; queued immediately after the explicit wrapped-text diagnostic because it blocks the required
+  mounted Forge validation. This is a separate bounded unit and is not assigned to the active Scene worker.
+- `[REPRODUCED]` On the isolated Forge host at `http://127.0.0.1:3300`, exact source
+  `ui/addons/ai_influence_chat/aic_menu.lua` remains selected with SHA-256
+  `C0FC458D2166E58E8DF7FE658458E88A7080DB15013451C88F7C9F05EA12BC4B`, the configured corpus/color states are
+  canonical, and the target selector exposes 17 stable options including one exact `menu.display` owner. Selecting that
+  option immediately returns the controlled selector to the empty option. The option-value array is identical before
+  and after; browser console error/warning output is empty.
+- Independent interaction evidence: the reset reproduces through the semantic select owner, native-keyboard interaction,
+  and visible DOM-control interaction. This is therefore not established as a browser-locator mismatch. The current
+  component selftest covers missing/empty reconciliation but has no positive interactive target-selection case.
+- Bounded unit: reproduce the reset in the narrowest component/state test, identify the exact state/reconciliation race
+  or invalidation, and repair only exact target retention. Reuse `reconcileX4UiEditorSelections`; do not bypass source or
+  target identity, accept stale keys, auto-select a target, weaken issued program authority, or alter source-edit CAS.
+- Likely owner paths: `src/components/X4UiSourceEditor.tsx` and
+  `src/components/X4UiSourceEditor.selftest.tsx`; expand only if causal evidence proves the state owner elsewhere.
+- Acceptance criteria: after selecting a current exact source, selecting its current `menu.display` key persists,
+  projects the issued program/evidence pair, exposes source-safe property controls, and renders the preview; changing
+  source still clears target; missing/stale/foreign target keys still clear/refuse; a target invalidated by a new source
+  identity cannot survive. Mounted semantic and visible-control selection must both pass.
+- Required validation: fail-first positive target-retention receipt, focused SourceEditor selftest, EditorSession/Preview
+  adjacency, TypeScript, exact-file ESLint, production build, and fresh mounted interaction. The real mod/game/corpus/
+  config remain immutable; rollback is the bounded component/selftest delta.
+- AAR trigger: the static selection reducer had only negative cases, so it did not prove the real controlled component
+  could retain a valid target across its reconciliation effect. Add a positive state-transition test before relying on
+  mounted source editing.
+
+## EXPLICIT WRAPPED-TEXT PLACEMENT DIAGNOSTIC CORRECTION — 2026-08-22
+
+### PLAN / BASELINE / RECONCILE
+
+- Status: `SPECIFIED`; overall B119 remains `PARTIAL / Not verified in game`.
+- Bounded unit: correct the new Scene diagnostic so it compares the un-clipped issued line rectangle bounds against the
+  explicit text-widget rectangle, including vertical placement, instead of comparing only total line-block height with
+  widget height. Preserve Scene geometry, Paint clipping, source calls, and game-truth state byte-for-byte apart from the
+  corrected diagnostic.
+- Authoritative references remain the configured X4 9.00 corpus and the pins already recorded above. In particular,
+  shipped `widget_fullscreen.lua:6243` passes the row-centre parent anchor into `setUpFontString`, while
+  `widget_fullscreen.lua:13144-13169` obtains the source size/offset and positions the text element at `parenty - y`.
+  Native Anark/C++ presentation of wrapped text remains outside Lua proof and must stay an explicit gap.
+- Baseline owner hashes: `src/lib/x4UiScene.ts`
+  `48FF493840D9AC79F2D1501DE750B1665551AE84EE94AC7FC694C110D1A0F599`; `src/lib/x4UiScene.selftest.ts`
+  `031E599AA4BC5250C58B1BFAE17597525DDCBCA66A93532221E1F4794CFB008E`; focused Scene selftest `143/143`.
+- `[REPRODUCED]` The isolated Forge source-edit path persisted exact source SHA-256
+  `B14A265197998AFA1D73A578933B505E17E17C5E4B47B111B2EB907A11343859`: active narration uses shipped `Zekton`, and
+  the orange widget now has `height=114` and `minRowHeight=114`. The exact loader-backed session remains `partial`,
+  `canRender=true`, `gameVerified=false`, and `Not verified in game`.
+- `[REPRODUCED]` The intended `112.125 required / 96 available` gap disappeared and total height gaps fell from 17 to
+  16, but the exact issued line bounds are `y=917.3125..1029.4375` while the explicit widget rectangle is
+  `y=879..993`. The current diagnostic therefore has a false negative for `36.4375 px` of bottom overflow. Exact Paint
+  screenshot `dev-docs/b119-ai-influence-dogfood/browser-evidence/2026-08-22-source-built-1b-menu-display-after-height-font-fix.png`
+  (SHA-256 `2EFE1AE373FB54A2EA64FDAA42857B02C3429A2B9C28729DA4F95CE9DB7BB5B3`) visibly clips the third line.
+- Reconciliation changed the earlier control: `114 px` is sufficient for the line block's height but not for its issued
+  placement. It is no longer a valid no-gap control. A control is valid only when every un-clipped line rectangle lies
+  inside the explicit widget rectangle. Viewport-only clipping remains a separate runtime/scroll boundary and must not
+  be mislabeled as an explicit-widget placement defect.
+- In scope: one source-linked `height` gap per explicit direct-text widget when the union of its issued line rectangles
+  extends above or below the widget rectangle; deterministic top/bottom and total overflow evidence in the reason;
+  producer-shaped fail-first coverage for the exact `23 px`, three-line, `114 px`, zero-offset false negative; an
+  actually-contained control; the existing viewport-only negative path.
+- Out of scope: changing line placement, widget/row/table geometry, clipping, paint, source editor behavior, candidate
+  Lua, editbox runtime-state selection, real mod/game/corpus/config, deployment, X4 launch, or game acceptance.
+- Risks: using the viewport clip would conflate scrolling with source widget placement; summing top and bottom overflow
+  without stable rounding could create noisy diagnostics; changing Scene geometry to make the test pass would corrupt
+  the oracle rather than repair it.
+- Rollback: revert only this bounded Scene/selftest correction and this section. The isolated mounted workspace remains
+  recoverable from `dev-docs/b119-ai-influence-dogfood/snapshots/source-built-1b.ModWorkspace.json`.
+- Acceptance criteria: the exact false-negative fixture produces one source-linked gap reporting its issued line bounds,
+  widget bounds, and `36.4375 px` bottom overflow; a fixture whose full issued line union is inside the explicit widget
+  emits none; viewport-only clipping emits none; all pre-existing Scene geometry and Paint/Canvas projections remain
+  unchanged; game state remains `Not verified in game`.
+- Required validation: causal fail-first focused receipt; final complete Scene selftest; Paint and Canvas adjacency;
+  TypeScript; exact-file zero-warning ESLint; exact mounted-source authority probe; unchanged Paint bitmap before any
+  subsequent Lua correction. Broad E2E/oracle/precommit remain promotion gates. No capability-map delta: this repairs a
+  false-negative in the already-declared preview-gap capability.
+
+## ISOLATED 1B TRANSCRIPT PLATE SOURCE CORRECTION — 2026-08-22
+
+### PLAN / BASELINE / RECONCILE
+
+- Status: `SPECIFIED`; this is isolated dogfood, not a real-mod deployment, and B119 remains
+  `PARTIAL / Not verified in game`.
+- Bounded unit: use Forge's own source-safe literal controls to make the mounted 1B transcript plate consume its exact
+  fixed design budget and retain all three orange lines. Change only the isolated mounted workspace state for
+  `ui/addons/ai_influence_chat/aic_menu.lua`; do not directly edit the variant file, frozen snapshot, real mod, corpus,
+  game installation, or standing Forge configuration.
+- Authoritative design reference: `C:\Users\Moshi\Desktop\# AI Influence mod UI design\design_handoff_ai_influence\README.md`
+  and `screenshots\1b-commlink-subtitle-plate.png` (SHA-256
+  `C22D77069445514B52D0258D9AF98907AFAA2B4B2438D08EFE73FD9E67554CF2`). The spec fixes the transcript plate at
+  `y=763`, the choice plate at `y=1066`, and requires a bottom-anchored internally scrolling transcript; the available
+  transcript budget is therefore exactly `303 px`.
+- Baseline mounted source SHA-256 is `B14A265197998AFA1D73A578933B505E17E17C5E4B47B111B2EB907A11343859`.
+  Exact current source has transcript `height=285`, `maxVisibleHeight=285`, and the orange text
+  `height=114`, `minRowHeight=114`. Loader-backed Scene produces transcript `fullHeight=230`, line bounds
+  `917.3125..1029.4375`, widget bounds `879..993`, and a `36.4375 px` bottom overflow. Paint screenshot
+  `2026-08-22-source-built-1b-menu-display-after-height-font-fix.png` visibly clips line three.
+- `[REPRODUCED]` A source-only, non-persisted dry projection changing transcript height/max-visible-height to `303/303`
+  and orange height/min-row-height to `187/187` produces source SHA-256
+  `BF22DF42391F191C9F43D8F4EF6FEFDEFB8C60586D8646CC9F5436F426240E44`, transcript rect/full/visible height `303`,
+  widget bounds `879..1066`, issued line bounds `953.8125..1065.9375`, no widget or viewport overflow, `canRender=true`,
+  and `gameVerified=false`.
+- In scope: four exact literal edits through the Forge UI: transcript `height 285 -> 303`, transcript
+  `maxVisibleHeight 285 -> 303`, orange `height 114 -> 187`, and orange `minRowHeight 114 -> 187`; persisted readback;
+  loader-backed reprojection; exact 2560x1440 canvas capture and visual comparison against the supplied screenshot.
+- Out of scope: changing source copy, coordinates, widths, choices, input runtime state, renderer code, real-mod files,
+  deployment, X4 launch, or claiming game acceptance. The missing inactive edit-box placeholder remains a separate
+  runtime-state preview boundary.
+- Risks: partial multi-edit persistence can leave a mixed source; every literal edit therefore requires a new source
+  identity, target reselection, and readback before the next edit. A table-only correction would still clip the widget;
+  a widget-only correction would exceed the old viewport cap.
+- Rollback: restore only the isolated workspace from
+  `dev-docs/b119-ai-influence-dogfood/snapshots/source-built-1b.ModWorkspace.json`; frozen snapshot source SHA-256 is
+  `C0FC458D2166E58E8DF7FE658458E88A7080DB15013451C88F7C9F05EA12BC4B`.
+- Acceptance criteria: exact final source SHA equals the dry-projection SHA; all four literals read back; selected
+  `menu.display` remains current and renders; transcript full/visible/max height is `303`; orange widget is `187`; all
+  three issued lines lie inside widget and viewport; the exact line-535 placement gap is absent; canvas visibly shows
+  all three orange lines above the static choice plate; `Not verified in game` remains visible and machine-readable.
+- Required evidence: source CAS/readback receipts, loader-backed authority probe, exact canvas PNG and SHA-256, visual
+  comparison notes, and unchanged real-mod/game/corpus inventories. No capability-map delta: this exercises existing
+  round-trip source editing and preview authority.
+
+### IMPLEMENT / VALIDATE / REVIEW / CLOSE
+
+- Isolated-unit status: `VERIFIED`; overall B119 remains `PARTIAL / Not verified in game` because no real-mod deploy,
+  C++ frame acceptance, or player-visible X4 proof occurred.
+- The bounded Scene correction now compares the complete un-clipped issued line union with the explicit widget
+  rectangle. Its exact mounted-source result reports line bounds `y=917.3125..1029.4375`, widget bounds `y=879..993`,
+  bottom and total overflow `36.4375 px`, required span `112.125 px`, available widget height `114 px`, and
+  `span-height excess 0 px`. The source owner is the `height` literal on line 535. Review rejected the first wording
+  because it labeled `-1.875 px` as an excess; production and the causal assertion now clamp that separate span-only
+  measure to zero without hiding the placement overflow.
+- Focused validation passed: Scene `143/143`, Paint `167/167`, Canvas `123/123`, TypeScript, exact-file zero-warning
+  ESLint, and `git diff --check`. A production build passed after transforming `1,847` modules. The isolated browser
+  initially retained the pre-correction production bundle; rebuilding and restarting only port `3300` against the same
+  mounted state made the new diagnostic observable. Before any source edit, the rebuilt canvas PNG was byte-identical
+  to the prior capture: SHA-256
+  `2EFE1AE373FB54A2EA64FDAA42857B02C3429A2B9C28729DA4F95CE9DB7BB5B3`.
+- Forge's own literal controls then persisted four CAS-authorized edits, with exact source identity progression
+  `B14A2651... -> A08541EB... -> BBACD7A1... -> 756DE80C... -> BF22DF42...`. Every edit cleared the stale selection,
+  required reselection of the newly issued source/`menu.display` owner, and was read back from the mounted workspace
+  before the next mutation. Final source SHA-256 exactly equals the dry-projection oracle:
+  `BF22DF42391F191C9F43D8F4EF6FEFDEFB8C60586D8646CC9F5436F426240E44`.
+- Final loader-backed authority is `partial`, `canRender=true`, Paint and Scene `partial`, `gameVerified=false`, and
+  `Not verified in game`. Transcript rect/clip/full/visible/max-visible height is `303`; the orange Zekton widget is
+  `y=879..1066`, height `187`; issued line bounds are `y=953.8125..1065.9375`; the line union lies inside both widget
+  and viewport; the line-535 height gap is absent.
+- Exact final canvas evidence:
+  `dev-docs/b119-ai-influence-dogfood/browser-evidence/2026-08-22-source-built-1b-menu-display-after-transcript-budget-fix.png`,
+  SHA-256 `9D98FFCB6B47143AC74872F80138D9E20BBFF7C18E43515B62BE55F6D5B9EEAB`. Visual inspection against the supplied
+  `1b-commlink-subtitle-plate.png` confirms the third orange line is now visible and the transcript reaches the fixed
+  choice boundary. The broader screen is not yet a visual match: the transcript still reserves a `14%` speaker gutter
+  that the `1b` reference does not have, so all three turn bodies start too far right and wrap too narrowly; choice/input
+  typography is materially too small; the left rail has horizontal table-border artifacts absent from the design; and
+  the inactive edit-box placeholder/state is not issued by the current runtime-state projection. Those remain explicit
+  dogfood findings, not hidden successes.
+- Requirement review: the four requested isolated literals, exact source hash/readback, source/target authority,
+  transcript geometry, no line-535 gap, visible three-line transcript, and game-truth label are done and evidenced.
+  Visual parity beyond this bounded clipping/budget repair, real-mod bytes, deploy, and X4 are deferred by scope.
+- Triggered AAR: the first diagnostic proved span size but missed translated placement; fresh review caught misleading
+  negative-excess wording; a stale production bundle initially masked the source correction; Playwright actions often
+  completed after the five-second tool timeout and therefore required persisted readback rather than trusting the tool
+  verdict. Sustain exact source hashes, pre-mutation bitmap identity, and one-CAS-edit-at-a-time readback.
+
+## SOURCE-LINKED PREVIEW GEOMETRY DIAGNOSTICS SURFACE — 2026-08-22
+
+### PLAN / BASELINE / RECONCILE
+
+- Status: `SPECIFIED`; overall B119 remains `PARTIAL / Not verified in game`.
+- Bounded unit: expose source-linked Scene `height` and `width` gaps in a distinct read-only preview-geometry panel
+  immediately below the imported-source linter. Do not merge them into normalized static findings, assign static
+  severity, change Scene/Paint/Canvas behavior, alter source, or imply engine acceptance.
+- Existing infrastructure reused: `projectX4UiEditorSession()` already issues the authoritative selected Scene;
+  `X4UiSourceEditor` already owns the selected projection and imported-source linter; Scene gaps already carry category,
+  status, source range, node owner, and exact reason. Graphify confines the UI/test blast radius to
+  `src/components/X4UiSourceEditor.tsx` and `src/components/X4UiSourceEditor.selftest.tsx`.
+- `[REPRODUCED]` The current linter UI explicitly states that diagnostics and verification gaps are not rendered as
+  normalized findings. The final `1b` Scene contains `198` total gaps: `97 paint`, `43 text`, `17 kernel`,
+  `17 scrollbar`, `16 height`, `6 state`, `1 data-flow`, and `1 width`. Rendering every uncertainty would bury the
+  actionable layout evidence. The exact bounded surface therefore includes every source-linked `height` and `width`
+  gap, with no pixel threshold or severity invention, and excludes the other categories while reporting that this is
+  a filtered geometry view.
+- Exact mounted acceptance fixture: source SHA-256
+  `BF22DF42391F191C9F43D8F4EF6FEFDEFB8C60586D8646CC9F5436F426240E44`, target `menu.display`, drawable
+  `2560x1440`, scale `1`, `16` source-linked height diagnostics plus one source-linked width diagnostic. The repaired
+  line-535 transcript diagnostic must remain absent; line 531's exact `81.6875 px` bottom-overflow evidence and line
+  312's negative omitted-width evidence must be visible, proving both included categories cross the UI boundary.
+- In scope: one deterministic inspector over the issued Scene result; stable source-order rendering; category, status,
+  file/range, exact reason, and optional node owner; explicit count/empty/unavailable/malformed states; a visible
+  `Layout evidence only / Not verified in game` boundary; focused component/helper tests and mounted browser readback.
+- Out of scope: adding or changing linter rules, classifying unknown/unsupported Scene evidence as error/warning,
+  rendering paint/text/kernel/scrollbar/state/data-flow gaps, source navigation, source mutation, auto-fix, changing the
+  candidate Lua, visual-style repair, deploy, X4 launch, or game truth.
+- Risks: treating all Scene uncertainty as a linter failure would make the panel unusable; dropping malformed entries
+  silently would create false completeness; deduplicating by reason alone could merge different source owners; showing
+  inherited or accessor-backed data would violate the closed-data discipline used elsewhere in B119.
+- Rollback: revert only the two bounded SourceEditor files and this section. The mounted isolated workspace remains
+  recoverable from `dev-docs/b119-ai-influence-dogfood/snapshots/source-built-1b.ModWorkspace.json`.
+- Acceptance criteria: exact own-data height/width gaps render once in stable source order with truthful count and
+  source location; other categories do not render; malformed geometry entries produce an explicit incomplete count;
+  refused/unavailable Scene states do not fabricate diagnostics; existing static-linter summaries and the addTable-24
+  whole-frame symptom remain unchanged; mounted final `1b` renders exactly `17` geometry diagnostics and retains
+  `Not verified in game`; source, Paint plan, and canvas bitmap remain unchanged.
+- Required validation: causal fail-first focused receipt; complete SourceEditor selftest; EditorSession/Preview/Scene
+  adjacency as needed; TypeScript; exact-file zero-warning ESLint; production build; mounted semantic/visible readback;
+  unchanged source SHA and canvas PNG. Broad E2E/oracle/precommit remain promotion gates. No capability-map delta until
+  the panel is implemented and visibly proven.
+
+### IMPLEMENTATION CHECKPOINT / REVIEW CORRECTIONS
+
+- Status: `PARTIAL`; the focused component contract is green, but mounted census proof remains intentionally blocked
+  on one reviewed owner-field correction and the cross-layer color regression below.
+- The first implementation added the separate read-only panel, deterministic source ordering, exact-entry dedupe,
+  height/width filtering, malformed/incomplete accounting, empty/refused states, and the permanent
+  `Layout evidence only · Not verified in game` boundary. Parent review rejected its first fixture because it passed the
+  raw inner Scene while production passes `X4UiSceneResult`. The corrected inspector now validates the outer
+  `projected|partial` result, exact false game verification, and own-data nested Scene; raw, refused, missing,
+  accessor-backed, nonenumerable, and inherited wrappers do not fabricate diagnostics.
+- Corrected focused evidence: `X4UiSourceEditor.selftest.tsx` exit `0`, P7 `12/12`; TypeScript exit `0`; exact-file
+  ESLint and diff-check exit `0`. Current owner hashes are production
+  `604F5DD300D6703AAA80649C06C299EFBF9F19E126B8D26B4AA11CEE4CF78AA3` and selftest
+  `07C7B788FEF1859A0BA03868313A7FB1A759F043DE65D6A031B85C40CA58FEFE`.
+- Fresh-eyes review found one remaining fixture mismatch before mount: the authoritative `X4UiSceneGap` owner field is
+  `nodeId`, while the panel currently reads synthetic `nodeOwner|owner|node` names. Counts, ranges, and reasons would
+  render, but owner provenance would be silently absent. The same SourceEditor worker must correct the fixture and
+  production mapping to exact `nodeId`, preserve exact-owner dedupe, and rerun the focused matrix before browser proof.
+
+## SCENE TABLE-COLOR AUTHORITY REGRESSION — 2026-08-22
+
+### PLAN / BASELINE / RECONCILE
+
+- Status: `SPECIFIED`; this is a required B119 promotion repair, not a waiver of the two red adjacency suites.
+- Bounded unit: restore the canonical table `backgroundColor` descriptor fact to the Scene authority graph while
+  preserving the separate fact that an empty `backgroundID` draws no native table background. Do not change source,
+  geometry, runtime-state claims, Paint ownership, or game verification.
+- `[REPRODUCED]` Current `x4UiPreviewPipeline.selftest.ts` is `101/102`; its only red row is
+  `P4.5 Preview forwards exact color authority into accepted Scene owners`, with every owner true except `table`.
+  Current `x4UiEditorSession.selftest.ts` is `3/7` in its P7 canonical-color matrix for the same missing table owner.
+  Both suites transitively consume the uncommitted `src/lib/x4UiScene.ts` delta; neither failed test owner is modified.
+- Authoritative source: configured X4 9.00 `helper.lua:3174-3175` defines `backgroundID = ""` as no background and
+  independently defines `backgroundColor = Color["table_background_default"]`; `widget_fullscreen.lua:14548-14555`
+  checks the ID before drawing. The established P4/P4.5/P5 contract intentionally keeps canonical descriptor facts in
+  Scene separately from native draw-state certainty. Suppressing the fact when the ID is empty conflates those layers.
+- Existing infrastructure reused: `sceneColorFacts`, the table `backgroundColor:table-background` owner, known-color
+  uncertainty links, exact Preview color authority, and Paint's owner-linked tint validation. No new provider or
+  fallback path is permitted.
+- In scope: the narrow Scene owner correction and a causal regression assertion if the existing P4.5/P7 matrices do
+  not already fail first strongly enough. Out of scope: weakening either oracle, changing the corpus fixture to add a
+  nonempty ID, painting a background that X4 would skip, or modifying any UI/editor surface.
+- Rollback: revert only the bounded Scene/selftest correction. No mounted workspace, corpus, real mod, game, config, or
+  external record is touched.
+- Acceptance criteria: P4.5 returns `102/102`; P7 returns `7/7`; focused Scene, Paint, Canvas, TypeScript, exact-file
+  ESLint, and diff-check remain green; no geometry or game-truth field changes; empty `backgroundID` remains represented
+  as no native background rather than as absent color authority.
+- Evidence locations: focused receipts in this task and this section. No capability-map delta: this restores the
+  previously verified color-authority contract.
+
+### RECONCILIATION REVISION — SCENE-ONLY REPAIR REJECTED
+
+- `[REPRODUCED]` Fresh cross-layer review rejected the apparent one-line repair. `previewColorLua` omits
+  `backgroundID`, so Helper issues the default empty ID. Paint currently copies every Scene `colorFacts` member into
+  `basePreviewTints`, and source-composition Canvas fills every active table-background tint. Restoring the table fact
+  without a separate applicability field would therefore green P4.5/P7 by rendering a background that shipped X4
+  explicitly skips. The first narrow Luna work order was stopped with no file changes and status `BLOCKED`.
+- Revised bounded unit: carry both independent Helper facts across the authority chain. Scene must retain the accepted
+  `backgroundColor` descriptor fact for audit/provenance and expose the exact known `backgroundID` draw-applicability
+  value separately. Paint may issue a table-background base tint only when that separately issued ID is known and
+  nonempty. Unknown, malformed, absent, or empty applicability must fail closed to no active table fill while retaining
+  the descriptor color fact and uncertainty.
+- Revised owners: `src/lib/x4UiScene.ts`, `src/lib/x4UiScene.selftest.ts`, `src/lib/x4UiPaintPlan.ts`,
+  `src/lib/x4UiPaintPlan.selftest.ts`, and the contradicted expectations in
+  `src/lib/x4UiEditorSession.selftest.ts`. PreviewPipeline production/oracle, EditorSession production, Canvas
+  production/oracle, and SourceEditor remain read-only consumers.
+- `[REPRODUCED]` P7's selected and sampled fixtures also omit `backgroundID` but require a table-background Paint tint
+  and cardinality `32`. That expectation contradicts shipped draw applicability. The corrected P7 contract keeps the
+  table descriptor in its `13` Scene color facts, expects `31` applicable Paint tints, excludes only the empty-ID table
+  tint from its exact Paint-owner maps, and preserves all active cell/widget/text owners and mutation/refusal checks.
+  This is an oracle correction forced by authoritative source, not a weakened acceptance test; P5's existing
+  `backgroundID = "solid"` fixture continues to prove the active table-tint path.
+- Revised acceptance: both active and empty-ID tables retain the exact table color authority in Scene; only the active
+  table produces a table-background Paint tint; a malformed/copied applicability field is refused or omitted rather
+  than promoted; source-composition Canvas cannot fill the empty-ID table from its default color fact; P4.5 is `102/102`;
+  corrected P7 is `7/7` with `13` Scene facts and `31` applicable Paint tints; Scene/Paint/Canvas focused suites and
+  TypeScript/ESLint/diff-check are green; game truth remains `Not verified in game`.
+- Revised rollback: revert only this four-owner contract delta. The mounted workspace and final `BF22...` Lua source
+  remain immutable. This revision is required for faithfulness, not optional scope expansion.
+
+## B119 HOST PROMOTION CHECKPOINT — 2026-08-22
+
+### IMPLEMENT
+
+- Bounded host result: `HOST VERIFIED / GAME TRUTH OPEN`; overall B119 remains
+  `PARTIAL / Not verified in game`.
+- The source-edit owner now issues one exact `frame-display` `insert-block` action for a selected frame whose display
+  ownership is proven even when the real source uses assigned/reassigned rows across multiple tables. The payload is
+  bounded to `2..64` top-level direct UI calls and `32,768` source characters. Its allow-list is `addTable`,
+  `setColWidthPercent`, `addRow`, `setColSpan`, `setText`, `createEditBox`, and `createButton`; handlers, functions,
+  branches, loops, assignments to existing owners, hidden/nested executable calls, foreign receivers, and unproven
+  local bindings fail closed. Accepted edits remain byte-local CAS splices, reparse the complete source, prove exact
+  call/operation/owner/kernel-ledger correspondence, reissue authority, and preserve the parent workspace.
+- `X4UiSourceEditor` exposes the owner-issued frame-block action through a local stage/apply/parent-acknowledgement
+  flow. It also presents source-linked Scene `height` and `width` evidence in a separate read-only geometry panel below
+  the static linter. The panel keeps stable source order and exact owner/range/reason data, reports incomplete or
+  unavailable input explicitly, filters out unrelated uncertainty categories, and permanently states
+  `Layout evidence only · Not verified in game`.
+- Scene geometry now diagnoses un-clipped issued wrapped-text placement against the explicit widget rectangle rather
+  than comparing only total line height. Scene also retains the canonical table `backgroundColor` descriptor and the
+  separately issued optional `backgroundID`; Paint emits a native table-background tint only when that ID is known and
+  nonempty. The empty-ID fixture therefore retains `13` Scene color facts while correctly emitting `31`, not `32`,
+  applicable Paint tints. The existing `backgroundID="solid"` fixture still proves the active fill path.
+- The isolated Forge dogfood source was edited only through issued UI controls to final SHA-256
+  `BF22DF42391F191C9F43D8F4EF6FEFDEFB8C60586D8646CC9F5436F426240E44`. Its transcript and visible budget are
+  `303 px`; the orange widget is `187 px`; all three issued Zekton lines fit inside the widget/viewport; the former
+  line-535 overflow is absent. No real mod, game, corpus, or standing configuration was written.
+
+### VALIDATE
+
+- Focused owner/adjacency receipts are green: SourceEditor P7 `12/12`, Preview `102/102`, EditorSession P7 `7/7`,
+  Scene `143/143`, Paint `169/169`, and Canvas `123/123`, plus TypeScript, exact-file zero-warning ESLint, and diff
+  hygiene. Final owner hashes include SourceEditor production/selftest
+  `6FF29A8B47CC1E9AAEFEADA2E6A7C398CFCA07B3271AFE99CCF8A0A732913773` /
+  `66AA8EC5BD61B97B242E1697D349F56B5145687D386BDCA4AC403E5F8724975C`, Scene
+  `0566562CD6CF2087C4F80BA8F05F4F81F3FC3374B8EB215A1EC2BE9D6BF8B8D6`, Paint
+  `FF49D5395D9168D7B4A5EDDF327048FA2D8CB3554702F694B3187A798D14A312`, and Source Edits
+  `B93F7B0BB488B64D77A52A13267C9DCFC017B5A47AFF20DD5D7D654B72B46E70`.
+- Mounted production at the isolated `2560x1440` profile rendered exactly `17` source-linked geometry diagnostics:
+  `16 height`, `1 width`, no incomplete entries, and all `17` with exact `nodeId` owners. Line 531 shows exact range
+  `531:18-531:20` and `81.6875 px` bottom overflow; line 312 shows the exact unsupported negative omitted-width reason;
+  line 535 is absent. The boundary remains `Layout evidence only · Not verified in game`.
+- Mounted visual evidence was inspected, not inferred: intrinsic canvas
+  `dev-docs/b119-ai-influence-dogfood/browser-evidence/2026-08-22-preview-canvas-intrinsic.png` is `2560x1440`,
+  SHA-256 `391C2A764047358028AFF1F417E85BC7B7BA78B437EE334ADA43E3958DFAA404`; unobstructed panel captures are
+  `2026-08-22-preview-geometry-header.png`, `2026-08-22-preview-geometry-line-312.png`, and
+  `2026-08-22-preview-geometry-line-531.png`. The preview visibly retains all transcript and choice content, but it
+  still differs from the supplied design in speaker gutter, typography, rail borders, and inactive edit-box state.
+- Oracle integration first failed environmentally with the isolated API stopped (`0/133`, fetch failures). After the
+  required API was restarted, the runtime index passed `134/134`; the first result is retained as an AAR trigger.
+- The default system Node `24.15.0` / libuv `1.51.0` full E2E run is valid red evidence: the API disappeared after 37
+  passes and the wrapper closed `38 passed / 66 failed`, receipt SHA-256
+  `B93206250E80562F2BA9A9E453E804E83A253C5AFEA254603F668DDFBA042956`. The run also discovered the unrelated,
+  untracked marketing-showcase spec. Lifecycle cleanup was complete and live-state hashes remained exact.
+- The controlled process-local Node `24.19.0` / libuv `1.52.1` run selected exactly the 23 tracked specs and passed
+  `103/103` with zero failed/flaky/bad/quarantined rows, child exit `0`, complete ownership/lifecycle, `treeGone=true`,
+  and receipt SHA-256 `E14FB1E3F797FAEA8BBE2CB3A8EEDD84386656AF12C5A561F376FC6174F14B67`.
+- Complete precommit passed: verdict `55/55`, Vite lifecycle, product copy, durable writers `14/14` plus extension
+  `8/8`, capability contract `12 capabilities / 297 routes / 1 dynamic registrar / 11 aliases`, MCP, action receipts
+  `82 routes / 56 surfaces`, TypeScript, and size guards. Production build passed with `1,847` modules and asset
+  `index-DGP3XNnk.js`. Graphify refreshed to `9,816 nodes / 24,550 edges / 303 communities` with no tracked graph
+  delta.
+- Containment remained exact across broad validation: ports `3000`, `3001`, `3100`, `3101`, `3300`, and `8972` are
+  free; X4 is absent; the test-owned trees are gone; shared Node process count returned to the baseline `64`; and
+  `.studio-state`, `data`, `config.json`, and `.studio-api-token` content hashes are unchanged. The isolated mounted
+  server/browser were stopped after evidence capture.
+
+### REVIEW / CLOSE / AAR
+
+- Fresh-eyes review found no P0-P2 defect in the bounded production delta. It confirmed that block authoring is an
+  owner-issued structured UI-call surface rather than arbitrary Lua execution, that every acceptance path is
+  CAS/reparse/ledger guarded, and that partial programs expose only exact owner-bound deletions plus the frame block.
+  It also rejected the first Scene-only table-color repair because that would have rendered an empty-ID table contrary
+  to shipped X4; the final Scene/Paint split preserves descriptor authority without inventing native applicability.
+- Requirement review: source-canonical frame-block authoring, source-linked geometry presentation, wrapped-text
+  placement diagnostics, table-background applicability, isolated source readback, mounted evidence, broad host gates,
+  build, and containment are done and evidenced. Exact visual parity, real deploy-byte identity, C++ frame acceptance,
+  and player-visible X4 comparison remain open. The owner issue must remain open; no capability-map delta.
+- Final status for this checkpoint: `HOST VERIFIED`; final status for B119: `PARTIAL / Not verified in game`.
+  Preview remains a layout tool, not proof. The next mutation is the separately authorized real-mod deploy followed by
+  X4 launch, frame acceptance readback, and player-visible screenshot comparison.
+- Triggered AAR: real-source assigned-row shape escaped the first canonical fixture; the short ledger history did not
+  cover the later real deletion; the first placement diagnostic measured span but missed translation; review corrected
+  misleading negative-excess wording and the raw-Scene/wrong-owner geometry fixtures; a stale bundle masked browser
+  behavior; Playwright actions sometimes completed after the interaction timeout; the first oracle run omitted its API;
+  system Node `24.15.0` produced a broad cascade; and an unrelated untracked E2E spec contaminated default discovery.
+  Sustain exact source hashes, explicit tracked-spec manifests, process-local safe runtime selection, mounted readback,
+  and immutable live-root censuses. Highest-risk evidenced weakness: the default Node runtime can turn one API-process
+  death into dozens of misleading feature failures; keep the fail-closed red receipt and require the controlled
+  `24.19.0` tracked-only gate until the host runtime defect is removed.

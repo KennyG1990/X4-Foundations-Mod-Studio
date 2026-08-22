@@ -114,6 +114,19 @@ No mod/game/corpus/config write occurred. Commit `743ef85f1d451a8f32c42670e716bf
 parity; GitHub #41 comment `5374884567`, Notion, and Drive were written and read back. Exact `1b` reconstruction,
 deploy-byte identity, C++ frame acceptance, and player-visible X4 proof remain open. Overall B119 is
 `PARTIAL / Not verified in game`; GitHub #41 remains open.
+**Source-linked geometry and structural-authoring checkpoint 2026-08-22 — HOST VERIFIED / GAME TRUTH OPEN:** The
+existing source owner now issues bounded frame/display block insertion for real assigned-row, multi-table sources,
+accepts only direct allow-listed X4 UI construction calls, and requires byte-local CAS, complete reparse, exact
+call/operation/owner/kernel-ledger correspondence, and reissued authority. SourceEditor mounts that action and a
+separate source-linked Scene geometry panel; the isolated final `BF22DF42...40E44` source renders exactly `17`
+height/width diagnostics with exact ranges and `nodeId` owners while retaining
+`Layout evidence only · Not verified in game`. Wrapped-text placement and table-background applicability now follow
+the shipped source boundary: empty `backgroundID` retains the descriptor fact but emits no Paint fill. Mounted visual
+evidence is inspected; focused suites, oracle `134/134`, controlled tracked E2E `103/103` receipt
+`E14FB1E3...4B67`, full precommit, production build, graphify `9816/24550/303`, teardown, and live-root parity pass.
+Default Node `24.15.0` remains valid red host evidence and the controlled Node `24.19.0` gate remains authoritative.
+Exact design parity, real deploy bytes, C++ acceptance, and player-visible X4 proof remain open, so B119 stays
+`PARTIAL / Not verified in game` and GitHub #41 remains open.
 **P6 Canvas audit rejection 2026-08-19 — FINDINGS / correction active:** The first colour-bearing Canvas candidate is
 focused-green at `100/100`, Stage-B `25/25`, production/selftest
 `490F430673C51957751A3113C68046A10C811F355A349FDDBC2C064AB119DBB3` /
