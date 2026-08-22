@@ -8,7 +8,9 @@ Status: `IN_PROGRESS / PARTIAL — isolated actual deploy and rollback verified;
 
 - B119 is the linter-first faithful X4 2D UI editor. Port shipped X4 9.00 Lua/corpus semantics; preview is layout evidence, never proof that the C++ engine accepts a frame.
 - Executable repair commit: `6f569e37ffc35da198796ca2adcafa3e1d6493b3`; local `HEAD`, `origin/main`, and direct remote readback match exactly.
-- The repository records remain uncommitted. Commit only their three exact paths with explicit staging.
+- Isolated-deploy record commit: `07ed939c48b50308dd1eb4c012a5278ac9f197ac`; local `HEAD`, `origin/main`, and direct remote readback match exactly.
+- GitHub #41 comment `5380523328` and the Notion owner page are updated and read back. Drive remains explicitly partial because the required trusted-read bridge rejects the Windows workspace path; no bypass was attempted.
+- This external-sync addendum is uncommitted. Commit only the B119 plan, backlog, and handoff with explicit staging.
 - Last operator state: Antigravity running, X4 not running, machine quiet.
 - Current containment readback: X4 count `0`; listeners on `3000`, `3001`, `3100`, `3101`, `3300`, and `8972` all `0`; isolated server and Graphify processes stopped.
 - No real installed mod, standing staging tree, unpacked corpus, or standing config was written.
@@ -74,9 +76,8 @@ Preserve all unrelated dirty paths, including onboarding/bug docs, deleted legac
 
 ## Next exact actions
 
-1. Commit and push only the three B119 record paths; prove local/origin/remote parity.
-2. Synchronize GitHub #41 and Notion; keep any unavailable Drive projection explicitly partial.
-3. Present the exact real-write paragraph and wait for literal `go`.
-4. Only after `go`: deploy to real staging and installed target, verify response/recovery/history/fingerprints, then launch X4 and capture engine acceptance or frame refusal plus the player-visible comparison.
+1. Commit and push this three-file external-sync addendum; prove local/origin/remote parity.
+2. Present the exact real-write paragraph and wait for literal `go`.
+3. Only after `go`: deploy to real staging and installed target, verify response/recovery/history/fingerprints, then launch X4 and capture engine acceptance or frame refusal plus the player-visible comparison.
 
 The eyeball queue remains one item: deployed AI Influence `1b` in X4. Until the real screenshot and interaction pass, B119 remains `PARTIAL / Not verified in game`.

@@ -1470,6 +1470,12 @@ Next unit is the explicit real-write gate, not more preview work: present the ex
 whole-tree recovery authority, and frame-refusal/UI-reload risk; wait for literal operator `go`; then deploy and inspect
 X4. Overall B119 remains `PARTIAL / Not verified in game`; GitHub #41 stays open.
 
+External projection readback: GitHub #41 comment `5380523328` contains both pushed commits and the exact isolated
+deploy/rollback boundary; the Notion owner page contains and read back the same commit hashes, `0 / 43 / 39 / 6`,
+`Not verified in game`, and literal-`go` gate. Drive remains explicitly partial because its required trusted-read bridge
+rejects the Windows workspace path; no bypass was attempted. Receipt:
+`dev-docs/b119-ai-influence-dogfood/final-export-validation/isolated-deploy-rehearsal-r1/evidence/external-sync-receipt.json`.
+
 ### B115 · Forge Capability Convergence `in_progress` (P0, PRIORITY OVERRIDE)
 
 Ken explicitly promoted GitHub initiative #9 and child requests #10–#21 above the active R13 close on 2026-07-31.

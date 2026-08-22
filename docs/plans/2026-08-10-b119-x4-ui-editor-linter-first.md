@@ -10822,3 +10822,19 @@ Status: `SPECIFIED / IN PROGRESS`; overall B119 remains `PARTIAL / Not verified 
 - Executable close: `fix(deploy): record exact applied file effects` at
   `6f569e37ffc35da198796ca2adcafa3e1d6493b3`. Suggested records title:
   `docs(b119): record isolated deploy rollback proof`.
+
+### EXTERNAL PROJECTION READBACK
+
+- The durable repository record committed and pushed as `07ed939c48b50308dd1eb4c012a5278ac9f197ac`; local
+  `HEAD`, tracking `origin/main`, and direct remote readback matched exactly before external projection.
+- GitHub owner issue #41 remains open. Comment `5380523328` was written and fetched back across all issue-comment
+  pages; its exact body contains both commit links, the isolated applied/restored tree facts, `0 / 43 / 39 / 6`, the
+  complete host gates, the no-real-write boundary, and the literal-`go` next gate.
+- Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a` accepted an appended checkpoint. A fresh fetch read back the exact
+  executable and record hashes, GitHub comment ID, `0 added / 43 overwritten / 39 deleted / 6 preserved`,
+  `PARTIAL — Not verified in game`, and literal operator `go`.
+- Drive document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE` was not mutated. Its required trusted-read
+  bridge still rejects the Windows workspace path before connector execution; bypassing that guard would invalidate the
+  workflow. Drive projection therefore remains explicitly `PARTIAL`, while repository Markdown stays authoritative.
+- Machine-readable external receipt:
+  `dev-docs/b119-ai-influence-dogfood/final-export-validation/isolated-deploy-rehearsal-r1/evidence/external-sync-receipt.json`.
