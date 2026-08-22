@@ -1431,6 +1431,26 @@ Broad precommit/oracle/E2E/build, installed Antigravity rendering/Problems inspe
 Canvas/source-edit integration, exact deploy hash, and in-game acceptance remain open; no focused preview is engine
 proof.
 
+**B119 zero-write deploy rehearsal checkpoint 2026-08-22 — HOST VERIFIED / REAL WRITE GATED:** Source-order review
+reproduced that `POST /api/agent/deploy-verify {dryRun:true}` staged the workspace before returning `Nothing was
+written`. Exact native Luna moved staging and game-directory creation below the dry-run return and expanded route
+integration to fingerprint both targets, reject preview `stagingPath`, and prove normal deploy still writes staging.
+Route integration is `489/489`; writer ownership is unchanged and its reconciled inventory passes `14/14`; complete
+precommit passed twice, production build passed, and Graphify is `9820/24553/305`. Executable commit
+`049205626107416b8da6f4ddb66bb5b77f214417` contains exactly `server.ts`, `scripts/route-integration.mjs`, and
+`config/durable-writers.json`.
+
+The corrected isolated preview resolved exact `x4_ai_influence`, targeted
+`G:\SteamLibrary\steamapps\common\X4 Foundations\extensions\x4_ai_influence`, returned no staging path, and planned
+`0` additions / `43` managed writes / `39` deletions / `6` preserved roots. Candidate, standing staging, installed
+extension, real-source menu, and installed menu fingerprints were identical before and after; port `3300`, all harness
+ports, X4, Graphify, and native-worker census are clean. Full receipt and recovery gate:
+`dev-docs/b119-ai-influence-dogfood/final-export-validation/`. No real mod/game byte changed.
+
+Next unit is the explicit real-write gate, not more preview work: present the exact target, 39-file deletion census,
+whole-tree recovery authority, and frame-refusal/UI-reload risk; wait for literal operator `go`; then deploy and inspect
+X4. Overall B119 remains `PARTIAL / Not verified in game`; GitHub #41 stays open.
+
 ### B115 · Forge Capability Convergence `in_progress` (P0, PRIORITY OVERRIDE)
 
 Ken explicitly promoted GitHub initiative #9 and child requests #10–#21 above the active R13 close on 2026-07-31.

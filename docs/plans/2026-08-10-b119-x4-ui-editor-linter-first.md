@@ -10584,3 +10584,116 @@ Status: `SPECIFIED / IN PROGRESS`; overall B119 remains `PARTIAL / Not verified 
   state; both are retained as tool/procedure failures. A package-subset validation result must never be substituted for
   full-mod validation.
 - Suggested commit title: `docs(b119): record final Forge export candidate validation`.
+
+## PRE-DEPLOY SAFETY CORRECTION — ZERO-WRITE DRY RUN — 2026-08-22
+
+### PLAN / BASELINE / RECONCILE
+
+- Bounded unit: make `POST /api/agent/deploy-verify` truthfully zero-write when `dryRun:true`, including when the
+  configured Mod Workspace Folder is present, and add a causal integration assertion covering the staging tree.
+  Actual source/mod/game deployment and X4 launch remain out of scope for this correction and stay separately gated.
+- Baseline: `HEAD == origin/main == 2f949faf885e9a7dee94f776128065f8cd2b16b0`; `server.ts` and
+  `scripts/route-integration.mjs` are clean. Every unrelated dirty path listed in `SESSION-HANDOFF.md` remains
+  user-owned and excluded.
+- `[REPRODUCED from source ordering]` `server.ts` currently calls `compileWorkspaceToFolder(..., true)` for
+  workspace staging at lines `12528-12534`, then checks `req.body?.dryRun` at `12538-12564`. Current configuration
+  has `modWorkspacePath=F:\\DEV_ENV\\projects\\Mods\\X4Mods`, so a request that returns `Nothing was written` can
+  replace the staging build first. The existing route-integration check proves only that the game target is unchanged;
+  it does not census the staging target.
+- Reused infrastructure: the existing `previewDeploymentEffect`, full validation stack, deploy checklist, artifact
+  planner, staging compiler, and exact deployment recovery remain the sole owners. No parallel deploy or preview path
+  will be introduced.
+- Risk: moving the branch too early could skip validation or change the normal deploy path. Rollback is an exact
+  two-file revert of this bounded correction; no persistent state migration is involved.
+- Acceptance contract:
+  1. `dryRun:true` still performs import/source-sync/well-formedness/compile/full-project validation and returns the
+     real artifact-plan effect.
+  2. It makes zero changes to both the game extension target and the configured staging target, and returns no
+     `stagingPath` suggesting a write occurred.
+  3. A non-dry deploy still writes staging and extensions through the existing recovery-protected route.
+  4. The causal test must fail against the current source because the staging target appears or changes, then pass
+     after the production correction.
+  5. Route integration, focused type/lint/diff checks, complete precommit, and production build pass; no real mod,
+     game extension, corpus, or standing configuration is written by validation.
+- Evidence locations: this section, the route-integration named assertion, command output, and the later deployment
+  preview receipt under `dev-docs/b119-ai-influence-dogfood/final-export-validation/`.
+- Status: `SPECIFIED`; implementation belongs to one native Luna worker owning only `server.ts` and
+  `scripts/route-integration.mjs`.
+
+### IMPLEMENT
+
+- Exact native Luna worker `01a028f4-55c7-7380-88eb-84a5e6f1a837` changed only the two declared paths. The dry-run
+  return now occurs before either the staging-root creation/compiler or the game `extensions` directory creation. The
+  ordinary deploy path retains both writes immediately after that return.
+- The route-integration owner now fingerprints both the game target and
+  `<modWorkspacePath>/.forge-builds/loose/<modId>`, requires both existence and content identity to remain unchanged,
+  refuses any dry-run `stagingPath`, and then proves the following non-dry deploy still creates and returns the exact
+  staging path.
+- The rehearsal used only ignored evidence roots. Its isolated config SHA-256 is
+  `0dde4460722959ec4743400b2ab90bb79c9b5938966b16bbe93d116eaa81065f`; it points filesystem imports at the final
+  candidate parent while retaining the operator-configured real game, staging, and X4 9.00 corpus paths for read-only
+  planning.
+- The first imported folder was literally `candidate-mod`; Forge correctly resolved that to `candidate_mod` and
+  previewed a separate extension. That result was discarded rather than weakening folder-identity safety. A
+  byte-identical isolated copy named `x4_ai_influence` then supplied the intended deployment identity.
+
+### VALIDATE
+
+- Worker and coordinator focused results: route integration `489/489 PASS`; repository TypeScript exit `0`; exact
+  changed-file ESLint exit `0`, zero errors, `241` pre-existing `server.ts` warnings, and zero changed-line warnings;
+  exact diff/whitespace review passed. The worker returned a causal fail-first receipt before the final green.
+- Accepted API rehearsal: import HTTP `200`; `contentId=x4_ai_influence`; source stamp
+  `6de9e3203a6821fd:42`; deploy HTTP `200`; `ok=true`; `dryRun=true`; `stage=preview`; exact target
+  `G:\SteamLibrary\steamapps\common\X4 Foundations\extensions\x4_ai_influence`; no `stagingPath` property. The
+  route completed source-sync, `23`-XML well-formedness, compile, and full preflight before returning. Preflight had
+  `0` errors and `2` active warnings; dry run did not promote a last-green baseline.
+- Exact planned effect: add `0`, write `43` managed files, delete `39`, and preserve six protected roots. The API calls
+  these existing managed paths `overwritten` even when bytes are identical; independent byte planning predicts one
+  content change, `86` unchanged result files, and the complete 39-path deletion census. Durable receipt:
+  `dev-docs/b119-ai-influence-dogfood/final-export-validation/deploy-preview-receipt.json`.
+- Pre/post containment passed exactly:
+  - canonical and identity-copy candidate: `42` files / `11` directories / `9,285,585` bytes /
+    `f2a1f2fdf9e3a2a4d1eda6d406950609e27edda2ef85ee0b8dab8c90227cfbf5`;
+  - standing staging tree: `155` / `19` / `537,684,179` /
+    `1808f251bf466545ee8b57e352289081453b8b71989dc915a47e160427e2d758`;
+  - installed extension: `126` / `18` / `11,262,072` /
+    `a9046192c83c8b5c0a1304af96d64a43a203f5ee8ef5e34987583752884eb295`;
+  - real-source and installed menus remained `87,366` bytes / `4253D9BD...47DD7`.
+- The isolated API process was stopped. Port `3300` has zero listeners and X4 has zero processes.
+- The first broad precommit attempt reached the durable-writer inventory and correctly stopped because `server.ts`'s
+  registered source fingerprint changed. Exact Luna worker `01a02916-3f24-7d71-8356-e47c69b4588a` changed only that
+  fingerprint line from `92e3f28c...e07ed28` to `6e7b5add...a6287358e`; no writer, host-store, browser-output,
+  database, owner, category, failure contract, or call-count field changed. Worker and coordinator selftests passed
+  `14/14`; the live audit passed `42 / 11 / 2` registered filesystem/host/browser sources.
+- Complete precommit then passed, and the enforced commit hook passed the same suite again: verdict selftest `55/55`,
+  Vite lifecycle, product-copy guard, writer `14/14` plus extension `8/8`, capability contract
+  `12 / 297 / 1 / 11`, MCP, action-receipt coverage `82 routes / 56 surfaces`, TypeScript, and size guards.
+- Production build passed under process-local Node `24.19.0`: Vite transformed `1,847` modules and esbuild emitted the
+  server bundle. Graphify's final hook rebuild is `9,820 nodes / 24,553 edges / 305 communities`; all Graphify worker
+  processes exited.
+
+### REVIEW / CLOSE / AAR
+
+- Acceptance review: full validation before preview, zero writes to both targets, absence of `stagingPath`, normal
+  staging-write regression coverage, durable-writer reconciliation, complete precommit, production build, graph refresh,
+  and exact process/port cleanup are done and evidenced. The executable correction is committed at
+  `049205626107416b8da6f4ddb66bb5b77f214417` with exactly the three declared files.
+- Real deployment remains separately gated. The exact target/effect/recovery paragraph is recorded at
+  `dev-docs/b119-ai-influence-dogfood/final-export-validation/deploy-and-rollback-gate.md`; no real source, staging,
+  extension, or game byte has changed. Overall B119 remains `PARTIAL / Not verified in game`.
+- Checkpoint status: `HOST/DRY-RUN VERIFIED / COMMITTED`. Push parity, owner-issue/Notion/Drive synchronization, and
+  repository close-record commit remain the next documentation operations; they do not authorize deployment.
+- No capability-map delta: the correction strengthens the existing deploy owner and dry-run contract rather than
+  adding a capability.
+- Triggered AAR: source ordering falsified the route's prior `Nothing was written` claim; the original integration test
+  omitted the configured staging tree; an evidence folder name initially selected the wrong extension identity; one
+  combined background-launch command was rejected before execution; the first compact result overflowed the model
+  context; repository-token and HTML-token recovery attempts failed because the isolated API used an explicit token
+  and `API_ONLY`; one PowerShell process-query pipeline had a parser error; the first Node 24.19 npm path was wrong;
+  and precommit exposed the writer-fingerprint coupling. None changed the real target. Sustain exact pre/post tree
+  fingerprints, folder-identity refusal, foreground owned processes, compact response projection, and safety-manifest
+  enforcement.
+- Highest-risk observed weakness: dry-run text can become false if any write-capable setup remains above its return.
+  Keep the staging plus game-tree causal census as a permanent route gate. The deploy preview still cannot prove C++
+  frame acceptance.
+- Suggested documentation commit title: `docs(b119): record zero-write deploy rehearsal`.
