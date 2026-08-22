@@ -10697,3 +10697,31 @@ Status: `SPECIFIED / IN PROGRESS`; overall B119 remains `PARTIAL / Not verified 
   Keep the staging plus game-tree causal census as a permanent route gate. The deploy preview still cannot prove C++
   frame acceptance.
 - Suggested documentation commit title: `docs(b119): record zero-write deploy rehearsal`.
+
+### PUSH AND EXTERNAL PROJECTION READBACK
+
+- Repository commits `049205626107416b8da6f4ddb66bb5b77f214417` and
+  `05dcf60fe4a2e02f51779a0dcdeb5cb93ba890fd` are pushed. Exact readback proved
+  `HEAD == origin/main == remote refs/heads/main == 05dcf60...`, an empty index, zero dirty owned paths, free harness
+  ports, X4 absent, and zero Luna/Graphify/isolated-server processes.
+- GitHub owner issue #41 remains open. Comment `5379964490` was written and read back exactly with both commit links,
+  `489/489`, the `0 / 43 / 39 / 6` preview effect, unchanged-tree evidence, rollback oracle, literal-`go` boundary,
+  and `PARTIAL / Not verified in game` status.
+- Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a` was fetched before mutation. Its properties now read back exact
+  `Status=In Progress`, `Evidence Grade=Partial`, both commits, GitHub comment `5379964490`, the unchanged-tree result,
+  the Drive limitation, and `Not verified in game`. Comment creation succeeded as
+  `3c44618e-d15b-8119-917f-001dcdbb60c7`; the comments reader exposes only the first 25 comments in the page-level
+  discussion and therefore cannot independently return that newest comment.
+- Google Drive remained unchanged. The required checked-in trusted-read bridge loaded byte-exactly but rejected the
+  valid Windows thread workspace root as non-absolute before any Drive connector call. The Google Docs workflow forbids
+  bypassing that advisory control-awareness read for an existing-document write, so no batch update was attempted. A
+  read-only metadata check confirmed exact document `X4 Forge — Current Status`, tab `t.0`, and unchanged revision
+  `AIroW36M4maJ2rlX2FFFD-bjtOPn4f1yQhLgqmBG01rvtARXSbr1DXUeRexPske8k05TfLAB2fdtKXDDTRp71jeZlZ78LJJZTpzIrDos27j7`.
+- External receipt:
+  `dev-docs/b119-ai-influence-dogfood/final-export-validation/external-sync-receipt.json`. Projection status is
+  `PARTIAL`: GitHub and Notion are current; Drive is safely stale and explicitly blocked. This does not weaken the
+  repository close, authorize deployment, or alter `PARTIAL / Not verified in game`.
+- Triggered tool AAR: the execution isolate lacked `atob` and `TextDecoder`; exact local decoders cleared those loader
+  issues and exposed the causal Windows absolute-path rejection. Do not substitute direct Docs writes when the required
+  trusted-read bridge cannot establish control awareness. The Notion comment list also needs pagination/newest-comment
+  targeting before it can serve as a universal comment-readback oracle.

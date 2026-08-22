@@ -11,10 +11,10 @@ Status: `IN_PROGRESS / PARTIAL — host, export, and zero-write deploy rehearsal
 - Latest milestone: the real deploy route now truthfully writes nothing for `dryRun:true`, even with a configured Mod
   Workspace Folder. The corrected route has been exercised against the final AI Influence candidate and the exact
   installed extension identity with before/after tree fingerprints.
-- Executable commit: `049205626107416b8da6f4ddb66bb5b77f214417` (`fix(deploy): make dry-run zero-write`), exactly three
-  files. Documentation close is prepared but not yet committed or pushed.
-- Commit question: finish and commit only `BACKLOG.md`, this handoff, and
-  `docs/plans/2026-08-10-b119-x4-ui-editor-linter-first.md`; then push both commits and prove local/origin/remote parity.
+- Executable commit: `049205626107416b8da6f4ddb66bb5b77f214417`; documentation close:
+  `05dcf60fe4a2e02f51779a0dcdeb5cb93ba890fd`. Both are pushed with local/origin/remote parity.
+- Commit question: external projections are now reconciled. Commit only this handoff plus the authoritative plan's
+  external-readback addendum; no executable path needs another commit before the real-write gate.
 
 ## Operator and machine state
 
@@ -86,9 +86,9 @@ Status: `IN_PROGRESS / PARTIAL — host, export, and zero-write deploy rehearsal
 
 ## Git and dirty-worktree boundary
 
-- Current HEAD: `049205626107416b8da6f4ddb66bb5b77f214417`.
-- `origin/main` and remote `main` remain at pre-push `2f949faf885e9a7dee94f776128065f8cd2b16b0` until documentation closes.
-- Index is empty after the implementation commit. Stage only the three documentation paths named above.
+- Current `HEAD == origin/main == remote main == 05dcf60fe4a2e02f51779a0dcdeb5cb93ba890fd`.
+- Index is empty and all six owned executable/record paths are clean. Stage only this handoff and the B119 plan for the
+  external-readback addendum.
 - Preserve every unrelated dirty path: `CODEX-ONBOARDING.md`, `KNOWN-BUGS.md`, deleted data/legacy bot files, the W3B1
   plans, `test-results/.last-run.json`, all VS Code extension/evidence changes, issue templates, `Note for Kimi.md`,
   `REFACTOR-PLAN.md`, root/reference screenshots, `media/`, `mermaid-diagram.png`, `target.name`, untracked
@@ -96,22 +96,22 @@ Status: `IN_PROGRESS / PARTIAL — host, export, and zero-write deploy rehearsal
 
 ## External records
 
-- GitHub owner issue #41 remains open. Its prior checkpoint is comment `5379470924`; add a new zero-write rehearsal
-  comment only after the documentation commit is pushed.
-- Notion page: `3b84618e-d15b-8190-821e-c0eb96f43d5a` (`In Progress`, `Partial`).
-- Drive document: `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`.
-- Repository Markdown remains authoritative. Synchronize all three external projections and read them back without
-  closing B119 or implying game verification.
+- GitHub owner issue #41 remains open. New comment `5379964490` is written and read back exactly.
+- Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a` reads back `In Progress / Partial`, both commits, the GitHub
+  receipt, the Drive blocker, and `Not verified in game`. Comment `3c44618e-d15b-8119-917f-001dcdbb60c7` was accepted;
+  the comments reader's first-25 cap prevents an exact newest-comment readback.
+- Drive document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, remains at revision
+  `AIroW36M4maJ2rlX2FFFD-bjtOPn4f1yQhLgqmBG01rvtARXSbr1DXUeRexPske8k05TfLAB2fdtKXDDTRp71jeZlZ78LJJZTpzIrDos27j7`.
+  No write was attempted because the mandatory Google Docs trusted-read bridge rejected the Windows workspace path
+  before connector execution. Do not bypass that control; Drive projection is explicitly partial.
+- Repository Markdown remains authoritative. External receipt:
+  `dev-docs/b119-ai-influence-dogfood/final-export-validation/external-sync-receipt.json`.
 
 ## Next exact actions
 
-1. Validate the three documentation diffs and ignored JSON receipt.
-2. Commit `BACKLOG.md`, `SESSION-HANDOFF.md`, and the authoritative plan as
-   `docs(b119): record zero-write deploy rehearsal`.
-3. Push both commits; assert `HEAD == origin/main == remote refs/heads/main`, empty index, and unrelated dirty parity.
-4. Update/read back GitHub #41, Notion, and Drive with both commit hashes and `PARTIAL / Not verified in game`.
-5. Present the exact real-write paragraph. Wait for literal `go`.
-6. Only after `go`: deploy the approved candidate, verify response/recovery/history/fingerprints, launch X4, capture
+1. Validate and commit only the plan/handoff external-readback addendum, then push and prove remote parity.
+2. Present the exact real-write paragraph. Wait for literal `go`.
+3. Only after `go`: deploy the approved candidate, verify response/recovery/history/fingerprints, launch X4, capture
    engine acceptance or frame refusal, inspect the player-visible UI, and compare against Forge plus supplied `1b`.
 
 The player-visible eyeball queue is one item: deployed `1b` in X4. Until that screenshot and interaction pass, preview
