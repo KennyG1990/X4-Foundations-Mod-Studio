@@ -12526,20 +12526,26 @@ app.post("/api/agent/deploy-verify", (req, res) => {
         : `0 errors, 0 warnings across the full stack; ${deltaDetail}`);
 
     const extensionsPath = path.join(x4GamePath, 'extensions');
+    const targetRoot = path.join(extensionsPath, effectiveModId(activeBuildWorkspace(ws)));
+    // Keep this request-local effect alongside the deploy request. It is the same planner used
+    // by dry-run and is computed before any staging or target mutation, so the successful
+    // response/history projection cannot fall back to the process-global artifact report.
+    const deploymentEffect = previewDeploymentEffect(ws, targetRoot, deployFormat);
+    if ('error' in deploymentEffect) {
+      check('deploy', 'Deploy preview', 'fail', deploymentEffect.error);
+      return res.status(400).json(failWith('deploy', {
+        error: deploymentEffect.error,
+        ...(req.body?.dryRun === true ? { dryRun: true } : {}),
+      }));
+    }
 
     // B93.6 — DRY RUN. Deletion is the direction that cannot be undone, and the author previously
     // only learned what a deploy removed by diffing afterwards. This reports the exact effect and
     // writes NOTHING. It is computed from the REAL artifact plan, not a second estimate, because a
     // dry run that drifts from the real planner is worse than none.
     if (req.body?.dryRun === true) {
-      const targetRoot = path.join(extensionsPath, effectiveModId(activeBuildWorkspace(ws)));
-      const preview = previewDeploymentEffect(ws, targetRoot, deployFormat);
-      if ('error' in preview) {
-        check('deploy', 'Deploy preview', 'fail', preview.error);
-        return res.status(400).json(failWith('deploy', { error: preview.error, dryRun: true }));
-      }
-      check('deploy', 'Deploy preview (dry run — nothing written)', preview.deleted.length ? 'warn' : 'pass',
-        `would add ${preview.added.length}, overwrite ${preview.overwritten.length}, delete ${preview.deleted.length}, preserve ${preview.preserved.length}`);
+      check('deploy', 'Deploy preview (dry run — nothing written)', deploymentEffect.deleted.length ? 'warn' : 'pass',
+        `would add ${deploymentEffect.added.length}, overwrite ${deploymentEffect.overwritten.length}, delete ${deploymentEffect.deleted.length}, preserve ${deploymentEffect.preserved.length}`);
       return res.json({
         ok: true,
         dryRun: true,
@@ -12547,7 +12553,7 @@ app.post("/api/agent/deploy-verify", (req, res) => {
         modId,
         targetRoot,
         deployFormat: { mode: deployFormat },
-        effect: preview,
+        effect: deploymentEffect,
         checklist,
         validationDelta,
         baselinePromotion: { recorded: false, reason: 'Dry-run deploys never change the last-green baseline.' },
@@ -12563,7 +12569,7 @@ app.post("/api/agent/deploy-verify", (req, res) => {
       stagingPath = compileWorkspaceToFolder(ws, stagingRoot, 'store', true);
     }
     if (!fs.existsSync(extensionsPath)) fs.mkdirSync(extensionsPath, { recursive: true });
-    const deploymentTarget = path.join(extensionsPath, effectiveModId(activeBuildWorkspace(ws)));
+    const deploymentTarget = targetRoot;
     try {
       pendingDeployRecovery = prepareDeploymentRecoveryReceipt(extensionsPath, deploymentTarget, modId);
     } catch (error) {
@@ -12705,6 +12711,7 @@ app.post("/api/agent/deploy-verify", (req, res) => {
     return res.json({
       ok, stage: 'done', modId, deployedPath, stagingPath, bytesConfirmed, deployedBytes,
       workspace: ws,
+      ...(ok ? { effect: deploymentEffect } : {}),
       ...(deploymentRecovery ? { recovery: {
         id: deploymentRecovery.id,
         kind: deploymentRecovery.kind,

@@ -3491,13 +3491,31 @@ async function main() {
   // #6 dry run reports the effect and writes NOTHING.
   const dryTarget = path.join(liveExtensions, 'stale_probe_mod');
   const dryStagingTarget = path.join(safeWorkspace, '.forge-builds', 'loose', 'stale_probe_mod');
+  fs.mkdirSync(path.join(dryTarget, 'md'), { recursive: true });
+  fs.writeFileSync(path.join(dryTarget, 'content.xml'), '<content id="stale_probe_mod" name="Old Stale Probe" version="99"/>');
+  fs.writeFileSync(path.join(dryTarget, 'md', 'sp.xml'), '<old-sp/>');
+  fs.writeFileSync(path.join(dryTarget, 'md', 'sp2.xml'), '<old-sp2/>');
+  fs.writeFileSync(path.join(dryTarget, 'README.md'), 'old readme\n');
+  for (let i = 0; i < 39; i++) fs.writeFileSync(path.join(dryTarget, `stale-${String(i).padStart(2, '0')}.txt`), `stale-${i}\n`);
+  fs.mkdirSync(path.join(dryTarget, 'runtime'), { recursive: true });
+  fs.writeFileSync(path.join(dryTarget, 'runtime', 'state.db'), 'runtime state');
+  fs.mkdirSync(path.join(dryTarget, 'preserved'), { recursive: true });
+  fs.writeFileSync(path.join(dryTarget, 'preserved', 'state.bin'), 'preserved state');
+  fs.mkdirSync(path.join(dryTarget, 'external_runtime'), { recursive: true });
+  fs.writeFileSync(path.join(dryTarget, 'external_runtime', 'state.db'), 'external runtime state');
+  fs.writeFileSync(path.join(dryTarget, '.forgekeep'), 'runtime\npreserved\nexternal_runtime\n');
+  fs.writeFileSync(path.join(dryTarget, '.mcp.json'), '{"mcpServers":{}}');
+  fs.writeFileSync(path.join(dryTarget, '.operator-state'), 'operator state');
   const beforeDry = fs.existsSync(dryTarget);
   const beforeDryHash = beforeDry ? regularTreeHash(dryTarget) : null;
   const beforeDryStaging = fs.existsSync(dryStagingTarget);
   const beforeDryStagingHash = beforeDryStaging ? regularTreeHash(dryStagingTarget) : null;
   const dry = await req('POST', '/api/agent/deploy-verify', SESSION_TOKEN, { workspace: staleImport.json?.workspace, autoReimport: true, dryRun: true });
   ok('dry_run_returns_an_effect', dry.status === 200 && dry.json?.dryRun === true && !!dry.json?.effect, `status=${dry.status}`);
-  ok('dry_run_lists_files_it_would_add', Array.isArray(dry.json?.effect?.added) && dry.json.effect.added.length > 0, `added=${(dry.json?.effect?.added || []).length}`);
+  ok('dry_run_lists_files_it_would_write',
+    Array.isArray(dry.json?.effect?.added) && Array.isArray(dry.json?.effect?.overwritten)
+      && dry.json.effect.added.length + dry.json.effect.overwritten.length > 0,
+    `added=${(dry.json?.effect?.added || []).length} overwritten=${(dry.json?.effect?.overwritten || []).length}`);
   ok('dry_run_reports_deletions_explicitly', Array.isArray(dry.json?.effect?.deleted), JSON.stringify((dry.json?.effect?.deleted || []).slice(0, 3)));
   const afterDry = fs.existsSync(dryTarget);
   const afterDryHash = afterDry ? regularTreeHash(dryTarget) : null;
@@ -3519,10 +3537,30 @@ async function main() {
     (autoDeploy.json?.checklist || []).some(c => c.id === 'source-sync' && /re-imported/i.test(c.detail || '')),
     JSON.stringify((autoDeploy.json?.checklist || []).find(c => c.id === 'source-sync')));
 
+  const effectSummary = effect => ({
+    added: (effect?.added || []).length,
+    overwritten: (effect?.overwritten || []).length,
+    deleted: (effect?.deleted || []).length,
+    preserved: (effect?.preserved || []).length,
+    bytes: Number(effect?.totalBytes) || 0,
+  });
+  const expectedDeployEffect = effectSummary(dry.json?.effect);
+  ok('successful_deploy_returns_exact_planner_effect',
+    JSON.stringify(effectSummary(autoDeploy.json?.effect)) === JSON.stringify(expectedDeployEffect),
+    JSON.stringify({ expected: expectedDeployEffect, actual: effectSummary(autoDeploy.json?.effect) }));
+  ok('successful_deploy_applies_planned_file_effect',
+    (dry.json?.effect?.added || []).every(entry => fs.existsSync(path.join(dryTarget, ...entry.path.split('/'))))
+      && (dry.json?.effect?.overwritten || []).every(entry => fs.existsSync(path.join(dryTarget, ...entry.path.split('/'))))
+      && (dry.json?.effect?.deleted || []).every(entry => !fs.existsSync(path.join(dryTarget, ...entry.path.split('/'))))
+      && (dry.json?.effect?.preserved || []).every(entry => fs.existsSync(path.join(dryTarget, ...entry.split('/')))),
+    JSON.stringify(effectSummary(dry.json?.effect)));
+
   // #9 the ledger row for that deploy carries its file effect.
   const histAfterDeploy = await req('GET', '/api/agent/history?kind=deploy', SESSION_TOKEN);
   const deployRow = (histAfterDeploy.json?.rows || [])[0];
-  ok('deploy_row_records_file_effect', !!deployRow?.fileEffect, JSON.stringify(deployRow?.fileEffect));
+  ok('deploy_row_records_exact_file_effect',
+    JSON.stringify(deployRow?.fileEffect) === JSON.stringify(expectedDeployEffect),
+    JSON.stringify({ expected: expectedDeployEffect, actual: deployRow?.fileEffect }));
   ok('verified_deploy_row_is_truthfully_revertible', deployRow?.revertible === true && deployRow?.recoveryId === autoDeploy.json?.recovery?.id, JSON.stringify(deployRow || {}));
 
   // A post-write doctor failure must roll back immediately and must not advertise later undo.
@@ -3536,7 +3574,9 @@ async function main() {
   fs.rmSync(duplicateDir, { recursive: true, force: true });
 
   const undoDeploy = await req('POST', `/api/agent/history/${deployRow?.id}/revert`, SESSION_TOKEN, {});
-  ok('deployment_history_undo_restores_absent_pre_state', undoDeploy.status === 200 && undoDeploy.json?.priorExisted === false && !fs.existsSync(dryTarget), JSON.stringify(undoDeploy.json || {}));
+  ok('deployment_history_undo_restores_exact_pre_state',
+    undoDeploy.status === 200 && undoDeploy.json?.priorExisted === true && regularTreeHash(dryTarget) === beforeDryHash,
+    JSON.stringify(undoDeploy.json || {}));
   const replayDeploy = await req('POST', `/api/agent/history/${deployRow?.id}/revert`, SESSION_TOKEN, {});
   ok('deployment_recovery_replay_is_rejected', replayDeploy.status === 409 && replayDeploy.json?.code === 'RECOVERY_ALREADY_USED', `status=${replayDeploy.status} code=${replayDeploy.json?.code}`);
 
