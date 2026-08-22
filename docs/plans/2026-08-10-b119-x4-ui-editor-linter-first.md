@@ -10492,3 +10492,32 @@ Status: `SPECIFIED / IN PROGRESS`; overall B119 remains `PARTIAL / Not verified 
   and immutable live-root censuses. Highest-risk evidenced weakness: the default Node runtime can turn one API-process
   death into dozens of misleading feature failures; keep the fail-closed red receipt and require the controlled
   `24.19.0` tracked-only gate until the host runtime defect is removed.
+
+### GIT / EXTERNAL PROJECTION RECEIPTS
+
+- Explicit-path staging contained exactly the `14/14` declared B119 paths and no unrelated worktree file. Complete
+  precommit passed directly and again in the commit hook. Implementation commit
+  `959eb680125395148bd5ec969d01ce9685d94cc6`
+  (`feat(ui): add source-linked X4 geometry diagnostics and frame block authoring`) is pushed; local `HEAD`,
+  `origin/main`, and remote `refs/heads/main` are identical and the index is empty.
+- GitHub #41 comment `5379470924` was written and read back. The issue remains open with `67` comments and explicitly
+  retains `IN PROGRESS / PARTIAL — Not verified in game`.
+- Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a` was updated and read back with `Status=In Progress`,
+  `Evidence Grade=Partial`, both review/sync dates `2026-08-22`, exact commit/comment/Drive receipts, the controlled
+  E2E receipt, and the open game-truth boundary.
+- Google Doc `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE` was revision-guarded at its exact one-tab `t.0` target and
+  read back at revision
+  `AIroW35kObhxwpQWkygyGlWs1Ww19hL3hH7Ryjrvjmr76NYq3dRLDlFGZKMeShtGD6TN5607S-swQ_OD77EWMUXkRDIYwZxQd2FsYiw7F4CF`.
+  The checkpoint occurs exactly once, the commit occurs exactly once, and the title is connector-visible
+  `HEADING_2`; all existing content remains in place.
+- Connector AAR: the Google Docs skill's checked-in trusted-read bridge is POSIX/PTY-specific. The first local attempt
+  required its documented UTF-8 byte-count fallback because this isolate lacks `TextEncoder`; the next rejected Windows
+  drive paths; Git Bash restored POSIX path containment, but Windows ConPTY did not deliver the bridge's ETX-delimited
+  commit marker. Codex also correctly rejected the bridge's raw `rm -f` cleanup. Every zero-byte bridge temp/output was
+  resolved inside the workspace and removed with validated PowerShell paths. No document mutation occurred during
+  those attempts. The fallback full native `get_document` read confirmed the exact document/revision/tab, `760` body
+  blocks, one tab, no private-use controls, and the live insertion index before the guarded write. This is a tool/runtime
+  limitation, not a product finding or a waiver of connector readback.
+- A separate post-commit Git assertion initially threw because PowerShell treats a silent `git diff --cached --quiet`
+  result as false regardless of exit status. The corrected assertion checked `$LASTEXITCODE` and proved the index
+  empty before push. Preserve exit-code assertions for silent Git commands.

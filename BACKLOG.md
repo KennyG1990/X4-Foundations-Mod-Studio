@@ -126,7 +126,9 @@ evidence is inspected; focused suites, oracle `134/134`, controlled tracked E2E 
 `E14FB1E3...4B67`, full precommit, production build, graphify `9816/24550/303`, teardown, and live-root parity pass.
 Default Node `24.15.0` remains valid red host evidence and the controlled Node `24.19.0` gate remains authoritative.
 Exact design parity, real deploy bytes, C++ acceptance, and player-visible X4 proof remain open, so B119 stays
-`PARTIAL / Not verified in game` and GitHub #41 remains open.
+`PARTIAL / Not verified in game` and GitHub #41 remains open. Implementation commit
+`959eb680125395148bd5ec969d01ce9685d94cc6` is pushed with local/origin/remote parity; GitHub #41 comment
+`5379470924`, Notion, and Drive revision `AIroW35k...F4CF` were written and read back.
 **P6 Canvas audit rejection 2026-08-19 — FINDINGS / correction active:** The first colour-bearing Canvas candidate is
 focused-green at `100/100`, Stage-B `25/25`, production/selftest
 `490F430673C51957751A3113C68046A10C811F355A349FDDBC2C064AB119DBB3` /

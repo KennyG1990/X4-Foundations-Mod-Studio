@@ -13,10 +13,9 @@ Status: `IN_PROGRESS / PARTIAL — host checkpoint verified; not verified in gam
   `1b` source is mounted and visually inspected, but exact design parity and game truth remain open.
 - Overall boundary: every preview surface continues to say `Not verified in game`. Real mod bytes, deployment, C++
   frame acceptance, X4 launch, and player-visible comparison are not part of the host checkpoint.
-- Commit question: baseline `HEAD == origin/main` is `8a8ae63b3637b6433f1c3831f0e92bb668ecce9b`. The exact B119 delta is
-  ready for explicit-path staging under proposed title
-  `feat(ui): add source-linked X4 geometry diagnostics and frame block authoring`; commit, push, and remote parity are
-  still pending at this handoff write.
+- Commit question: implementation commit `959eb680125395148bd5ec969d01ce9685d94cc6` is pushed and read back with
+  local/origin/remote parity and an empty index. GitHub, Notion, and Drive projections are also written and read back.
+  Commit/push this exact documentation synchronization before starting the real-mod/game unit.
 
 ## Operator and machine state
 
@@ -99,7 +98,8 @@ Status: `IN_PROGRESS / PARTIAL — host checkpoint verified; not verified in gam
   delete; the first text diagnostic ignored translated placement; review corrected negative-excess wording and two
   geometry fixture shapes; a stale build masked browser behavior; Playwright action timeouts required persisted
   readback; the first oracle run omitted its API; system Node produced a cascade; and an unrelated untracked E2E spec
-  contaminated default discovery.
+  contaminated default discovery. External close also exposed a POSIX/PTY-only Google Docs trusted-read bridge on
+  Windows and one PowerShell silent-command truthiness mistake; both are recorded in the authoritative plan.
 - Highest-risk observed weakness: default Node `24.15.0` can turn one API-process loss into dozens of misleading
   feature failures. Keep the red receipt and use the controlled `24.19.0` tracked-only gate until the host defect is
   removed. No capability-map delta.
@@ -114,25 +114,27 @@ marketing-showcase spec/evidence, and untracked `({`. The controlled tracked E2E
 
 ## Git and external projection state
 
-- Current baseline commit: `8a8ae63b3637b6433f1c3831f0e92bb668ecce9b`; `HEAD == origin/main` before staging.
-- B119 paths eligible for explicit staging: `BACKLOG.md`, this handoff, the authoritative B119 plan, and the exact
-  SourceEditor/Canvas/EditorSession/Paint/Scene/SourceEdits/TextLayout production/selftest paths listed in the plan.
-- GitHub owner issue #41 remains open; previous read-back checkpoint comment is `5374884567`.
-- Notion owner page: `3b84618e-d15b-8190-821e-c0eb96f43d5a`.
-- Drive owner document: `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`.
-- Update and read back all three after commit/push. Repository Markdown remains authoritative; external projections do
-  not authorize deployment or change the `PARTIAL / Not verified in game` status.
+- Implementation commit: `959eb680125395148bd5ec969d01ce9685d94cc6`; `HEAD == origin/main ==` remote
+  `refs/heads/main`; index empty after push. Exactly `14/14` declared B119 paths were staged; unrelated dirty files
+  remain preserved.
+- GitHub owner issue #41 remains open with `67` comments; exact new comment `5379470924` contains the commit and
+  partial/game-truth boundary.
+- Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a` readback: `Status=In Progress`, `Evidence Grade=Partial`, exact
+  commit/comment/Drive receipts, both current dates `2026-08-22`.
+- Drive document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE` readback: exact tab `t.0`, one H2 checkpoint,
+  one commit occurrence, revision
+  `AIroW35kObhxwpQWkygyGlWs1Ww19hL3hH7Ryjrvjmr76NYq3dRLDlFGZKMeShtGD6TN5607S-swQ_OD77EWMUXkRDIYwZxQd2FsYiw7F4CF`.
+- Repository Markdown remains authoritative. External records do not authorize deployment or change
+  `PARTIAL / Not verified in game`. This three-file synchronization is the pending documentation-close commit.
 
 ## Active next bounded unit and eyeball queue
 
-1. Commit and push only the explicit B119 checkpoint paths; prove local `HEAD == origin/main == remote refs/heads/main`
-   and zero B119 index residue while preserving unrelated dirty files.
-2. Update/read back GitHub #41, Notion, and Drive with the exact commit and validation receipts; keep all records open/
-   in-progress/partial.
-3. When the operator is awake, present the real-write paragraph: exact real-mod target, frozen rollback snapshot and
+1. Commit and push only this three-file documentation synchronization; prove local/origin/remote parity and preserve
+   every unrelated dirty path.
+2. When the operator is awake, present the real-write paragraph: exact real-mod target, frozen rollback snapshot and
    hashes, possible whole-frame refusal/UI reload/conversation closure, and restoration procedure. Wait for explicit
    `go`.
-4. Deploy only the approved candidate, launch X4, capture engine acceptance/failure and the player-visible frame, then
+3. Deploy only the approved candidate, launch X4, capture engine acceptance/failure and the player-visible frame, then
    compare it with Forge and the supplied `1b` reference. Until those pass, retain
    `PARTIAL / Not verified in game`.
 
