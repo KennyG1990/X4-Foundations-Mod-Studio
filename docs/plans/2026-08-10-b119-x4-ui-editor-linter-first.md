@@ -10838,3 +10838,408 @@ Status: `SPECIFIED / IN PROGRESS`; overall B119 remains `PARTIAL / Not verified 
   workflow. Drive projection therefore remains explicitly `PARTIAL`, while repository Markdown stays authoritative.
 - Machine-readable external receipt:
   `dev-docs/b119-ai-influence-dogfood/final-export-validation/isolated-deploy-rehearsal-r1/evidence/external-sync-receipt.json`.
+
+## PRE-DEPLOY VISUAL / SOURCE RECONCILIATION — 2026-08-22
+
+### PLAN / BASELINE / RECONCILE
+
+- Status: `SPECIFIED`; the prior real-write gate is withdrawn. B119 remains `PARTIAL / Not verified in game` and no
+  real mod, staging, game, corpus, or standing-configuration write is authorized by this unit.
+- Bounded unit: repair the isolated `1b` dogfood composition through Forge-owned source editing, then close the
+  separate edit-box design-state preview gap against shipped `widget_fullscreen.lua`. Re-export, re-render, visually
+  inspect, validate the complete candidate, and repeat isolated deploy/rollback only after candidate bytes are final.
+- Authoritative references: supplied `1b-commlink-subtitle-plate.png` and its README/HTML; configured X4 9.00
+  `helper.lua`, `widget_fullscreen.lua`, Zekton, and canonical colors; current source-canonical edit owner; and the
+  brief's `Port it, don't invent it` plus `preview for layout, game for truth` boundaries.
+- Baseline identities remain: mounted/exported menu SHA-256 `BF22DF42...40E44`; complete candidate tree
+  `f2a1f2fd...1cfbf5`; installed tree `a9046192...eb295`; standing staging tree `1808f251...d758`. A corrected
+  server-equivalent fingerprint reproduced all three after one rejected non-equivalent traversal/hash attempt; there
+  is no observed tree drift.
+- `[REPRODUCED]` The exported `BF22...` menu does not contain a deploy-ready dynamic replacement. Its active
+  `menu.display()` is a hard-coded `2560x1440` static dogfood fixture and explicitly says it is `not a deploy
+  candidate`; the prior dynamic implementation is retained only inside a long comment. Deploying this candidate as a
+  shipping mod would replace runtime behavior with the visual fixture.
+- `[REPRODUCED]` The exact intrinsic Forge canvas visibly differs from `1b`: the transcript reserves a `14%`
+  1c-style speaker gutter absent from `1b`, clips `ADMINISTRATOR NERRA` into the narrow header cell, starts body text
+  about `190 px` too far right, renders choice/input labels materially too small, and paints the empty edit box as a
+  solid default-blue rectangle without its design placeholder/chrome. The earlier bounded close at lines
+  `10265-10276` already recorded these findings; the later export/deploy checkpoint incorrectly treated static
+  validity as visual/deploy readiness.
+- `[REPRODUCED]` The input discrepancy is not only source geometry. `x4UiScene.ts` deliberately retains both empty
+  current text and `defaultText` but refuses to choose without runtime state, while `x4UiPaintPlan.ts` emits
+  `unsupported-runtime-paint` for buttons/edit boxes. Shipped `widget_fullscreen.lua:12603-12730` owns edit-box
+  geometry/text setup, `12733-12772` owns active/inactive colors, and `12774-12799` selects `defaultText` when the
+  inactive current text is empty. This is the next port boundary; no invented state is permitted.
+- In scope: source-safe transcript header/body correction in the isolated mounted workspace; explicit preview-only
+  widget state sufficient to select the shipped inactive-empty edit-box path; exact placeholder text/color and flat
+  chrome evidence derived from shipped sources/canonical colors; focused Scene/Paint/Canvas/pipeline/editor tests;
+  mounted screenshot and source hash; complete-mod validation; refreshed isolated deployment proof.
+- Out of scope: pretending the browser proves C++ frame acceptance; arbitrary Lua/file patching; changing real mod
+  behavior before visual candidate acceptance; other design screens; clearing `Not verified in game`; or writing the
+  installed extension without a renewed exact write paragraph and literal operator `go`.
+- Risks and negative paths: source-editor authority may be too narrow for the required structural row replacement;
+  explicit preview state could be mistaken for engine state; widget texture details may remain unavailable; stale CAS,
+  malformed/foreign widget-state entries, non-canonical color evidence, or unsupported texture claims must refuse
+  without mutation. Do not hide remaining texture/state gaps to make the screenshot appear green.
+- Rollback/checkpoint: preserve `snapshots/source-built-1b.ModWorkspace.json`, the `BF22...` candidate, and prior
+  receipts immutably. New source/evidence lives under `dev-docs/b119-ai-influence-dogfood/visual-parity-r2/`; tracked
+  product changes remain separately revertible. Real roots are fingerprinted before and after.
+- Acceptance criteria: the Forge-issued source removes the body gutter, gives the header its wide left/narrow right
+  split, preserves transcript/choice/input anchors and all three orange lines, and reparses without new blocking lint;
+  an explicit inactive-empty edit-box preview follows the shipped `defaultText` branch and remains visibly marked
+  preview-only; the mounted `2560x1440` capture is visually inspected against the supplied image; every unsupported
+  residual is named; complete candidate validation and isolated deploy/rollback pass again; only then is a renewed
+  real-write gate presented.
+- Required validation: source owner/CAS/readback and containment receipts; focused CallModel/Layout/Scene/Paint/Canvas/
+  Preview/EditorSession/SourceEditor tests affected by the final delta; typecheck and exact-file lint; production build;
+  mounted semantic and screenshot inspection; complete `validate:mod`; candidate identity/locality; isolated actual
+  deploy/history/rollback/replay proof. Broad precommit runs before tracked promotion. X4 remains the final authority.
+- Plan change: the previous statement that the next operation was only literal `go` is superseded. The immediate unit
+  is visual/source correction; the real-write request returns only after the candidate itself passes its declared
+  design and functional boundaries.
+
+## ROW-LOCAL SOURCE-OWNER REPLACEMENT AUTHORITY — 2026-08-22
+
+### PLAN / BASELINE / RECONCILE
+
+- Status: `SPECIFIED`; overall B119 remains `PARTIAL / Not verified in game`. This unit changes Forge's tracked
+  source-edit owner and isolated evidence only. It does not authorize a real-mod, staging, game, corpus, or standing
+  configuration write.
+- `[REPRODUCED]` The `BF22DF42...40E44` mounted source needs each transcript body statement to move from cell two to
+  cell one and apply `setColSpan(2)` while the header keeps its `14 / 86` split. Exact owner discovery exposes scalar
+  literals, whole-statement deletions, and one frame/display block after the transcript, but no row-local receiver
+  replacement or `setColSpan` insertion. Native Luna worker `01a0299d-fab4-7ea0-ac6b-52b57e8661b2` therefore closed
+  `BLOCKED` without a Forge API write; source SHA-256, workspace/snapshot authority, and forbidden roots remained
+  unchanged. Evidence: `dev-docs/b119-ai-influence-dogfood/visual-parity-r2/owner-catalog-r2.json`.
+- Existing infrastructure reused: exact workspace/source issued-pair guard, selected target and call-model statement
+  provenance, applied operation/evidence authority, statement deletion ranges, source CAS, byte-locality proof,
+  structural ledger correspondence, complete reparse/reprojection, catalog reissue, and immutable parent-workspace
+  acknowledgement. This is an extension of the existing owner, not a second editor or arbitrary text API.
+- Bounded unit: issue an atomic `replace-statement` authority for a complete standalone direct X4 UI call statement
+  only when its bound operations identify one exact row/table/frame chain. Accept one bounded replacement statement,
+  reparse it through the existing call model, and require every replacement call to be a supported direct X4 UI call
+  applied to that same issued row/table/frame owner. Permit the intentional same-row cell transition needed for
+  `row[2]:createText(...) -> row[1]:setColSpan(2):createText(...)`; do not permit a different row, table, frame,
+  function target, hidden invocation, assignment/control flow, or unproven operation.
+- In scope: `src/lib/x4UiSourceEdits.ts` and its selftest; exact owner-issued entry/provenance; positional stale-CAS
+  inputs; atomic replacement splice; exact removed-versus-added call/operation ledger delta; retained-record and kernel
+  correspondence; current catalog reissue; hostile graph containment; source-shaped positive and negative fixtures.
+- Out of scope: dogfood source mutation in this unit; SourceEditor React controls; arbitrary Lua/block replacement;
+  renderer semantics; source formatting beyond the issued range; real roots; deployment; X4 launch; or engine/pixel
+  acceptance. A later bounded UI unit may expose the proven action after the core owner is green.
+- Risks and negative paths: statement replacement is a broader mutation than literal CAS. Stale/foreign entry or
+  expected range, malformed/multistatement/oversized payload, non-UI or nested executable call, different row/table/
+  frame owner, non-applied operation, retained-ledger drift, parent mutation, accessor/prototype/alias mutation, parse
+  failure, or source-byte change outside the issued range must refuse and return the original workspace/source pair.
+- Rollback/checkpoint: revert only the two owned source-edit files and this plan delta. Baseline product-file hashes are
+  captured before the worker starts; unrelated dirty files and the frozen `BF22...` source remain untouched.
+- Acceptance criteria: the real source-shaped fixture issues an exact replacement action for a body `createText`
+  statement; replacing it with chained same-row `setColSpan(2):createText(...)` succeeds atomically, changes only the
+  issued bytes, removes the old bound operation(s), adds exactly the parsed replacement operations on the same row/
+  table/frame, reparses, reissues authority, and leaves the parent immutable. Cross-row/table/frame and all hostile
+  cases refuse without mutation. Existing scalar, delete, insert-call, and frame-block contracts remain green.
+- Required validation: causal fail-first receipt; complete `x4UiSourceEdits.selftest.ts`; TypeScript; exact-file ESLint;
+  `git diff --check`; adjacent LayoutProgram and WorkspaceSource selftests if the public contract requires them. After
+  review, a separate Forge-API dogfood worker must apply the issued action one CAS step at a time, read back every new
+  source identity, render the corrected candidate, and preserve `Not verified in game`.
+
+### LIVE CONFIGURED-CORPUS LINTER READBACK — 2026-08-22
+
+- The original brief's complete known-trap rule engine passed `112/112` in
+  `npx tsx src/lib/x4UiLint.selftest.ts`. The checks include the calibrated `addTable(24)` whole-frame refusal and
+  misleading conversation-close symptom, narrow populated tables, bad column indices and ordering, percentage totals,
+  colspan overrun, `scaleX/scaleY` fontsize misuse, rendered non-ASCII, row/frame budget loss, inline `display()`, and
+  same-layer inline menu opening. This is focused static-rule evidence, not engine acceptance.
+- `npm run test:x4-ui-corpus` discovered the running Forge sidecar and read its configured reference-manifest authority;
+  the root read back as `F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00`, generation
+  `1785035333079-2178b4c31f`, state `ready`. The successful retry selected and read `81/81` official UI Lua files with
+  zero read failures and `7,669,552` bytes, including
+  `ui/addons/ego_detailmonitorhelper/helper.lua` and `ui/widget/lua/widget_fullscreen.lua`.
+- Corpus verdict: `no-known-fatal-static-gaps`, zero applicable fatal findings, six explicitly not-applicable official-
+  source online-call findings, six warnings, `70` unverified files, `26` truncated files, and `13,657` verification
+  gaps. The gaps remain visible and prevent promotion of this read-only census into a broad proof claim.
+- AAR triggers: an attempted nonexistent `x4UiStaticAnalysis.selftest.ts` command failed before product execution; the
+  actual owner is `x4UiLint.selftest.ts`. The first corpus census timed out while fetching `/api/reference/status` and
+  returned `manifest-unavailable`; a direct status read then completed in `1.637 s`, a filtered `.lua` manifest page
+  completed in `0.500 s` with `157` rows, and the unchanged census retry completed normally in `35.141 s`. Preserve the
+  first timeout as host/runtime evidence rather than hiding it or weakening the configured-corpus gate.
+- Status remains `PARTIAL / Not verified in game`. The linter core and configured-corpus path are proven active, but the
+  row-local owner, corrected candidate, mounted UI, complete validator, refreshed deploy rehearsal, and X4 experience
+  gates remain open.
+
+### ROW-LOCAL SOURCE-OWNER IMPLEMENTATION CHECKPOINT — 2026-08-22
+
+- Exact native Luna `01a029b2-b91d-7f72-9ecf-527d705b006c` changed only
+  `src/lib/x4UiSourceEdits.ts` and `src/lib/x4UiSourceEdits.selftest.ts`. Candidate SHA-256 values are
+  `67BE6F0FEA1F00172B8855DEC01803E4A85E8BF5D43D2ED3D49A1B5D61680F96` and
+  `577B5AED1300E0B7DF754F51CB9D805A012B202B72479195F984E0E2EAB1CA7E` respectively.
+- The owner now issues `replace-statement` only for complete standalone statements whose applied, non-local operations
+  prove one exact row/table/frame chain. Replacement input is one bounded direct fluent X4 UI statement; malformed,
+  multiline, oversized, assignment/control-flow, hidden executable, unsupported-call, stale/foreign-CAS, different
+  row/table/frame, non-applied, retained-ledger, owner, kernel, accessor, prototype, and alias cases fail closed.
+- Accepted replacement still goes through the existing workspace-source CAS owner. It must be byte-local, reparse the
+  complete source, remove exactly the issued call/operation bindings, add exactly the parsed applied replacement
+  operations, preserve retained call/record/kernel correspondence, re-establish the same row/table/frame owner, and
+  reissue a new source/layout catalog. Partial programs do not issue this broader replacement authority.
+- Tests-first receipt: the first causal fixture exposed zero replacement entries and failed as required. Worker final
+  evidence passed prior `81/81` plus causal `48/48`, TypeScript, exact two-file ESLint with zero warnings, and scoped
+  diff hygiene. Coordinator fresh-eyes review found no authority widening outside the documented row-local contract;
+  an independent complete rerun passed `81/81`, with the causal matrix `48/48` and every later retained-payload/kernel
+  matrix green. `git diff --check` is also clean for the two files.
+- Status of this bounded owner unit: `IMPLEMENTED / FOCUSED TESTS VERIFIED`. Overall B119 remains
+  `PARTIAL / Not verified in game`: the action has not yet been applied to a newly issued dogfood candidate, and no
+  preview, validator, isolated deploy, real deploy, or X4 acceptance claim follows from this checkpoint.
+
+### EDIT-BOX SOURCE-COMPOSITION IMPLEMENTATION CHECKPOINT — 2026-08-22
+
+- Exact native Luna `01a029a6-eb5a-7cd1-9242-dc40076d41d6` changed only the existing LayoutProgram, Scene, PaintPlan,
+  and CanvasRenderer owners plus their four selftests. Final production SHA-256 values are LayoutProgram
+  `D77CD764672F141EB9E2B31BAF99A8911DA25AAD854F77AA76BCF699B160B497`, Scene
+  `24AF4FC837B6251C39691DE967010E69561D8DE4903FB9F9D56422EE51D55544`, PaintPlan
+  `8D1CC557EA95A1367495841C1FBC104D8DFF7A27FE9C8E3DE5D1651064810BE4`, and CanvasRenderer
+  `C1A825B4B73ED669FBD45CDA689BA882CA2D2BA65FA196D8CED127A977C9F4FA`.
+- The port keeps three values separate exactly as shipped: `config.editbox.border = 1`, the fixed text anchor/truncation
+  border `config.texturesizes.editbox.borderSize = 2`, and the black inner inset
+  `max(2, floor(config.editbox.border * uiScale + 0.5))`. Paint emits the black inner rectangle only with canonical
+  `editbox_background_black` evidence and exact source pins; Canvas validates the geometry, tint, and pins before
+  allocation. At UI scale `2.5`, the inner inset is `3` while the text border remains `2`.
+- Initial source composition now selects `defaultText`, including an explicitly empty default string, only for the
+  shipped inactive-empty branch. Non-empty current text still wins. Descriptor `active` remains widget configuration;
+  live direct-input activity, focus, hover, cursor, selection, hidden/encrypted input, hotkeys, runtime colors, C++
+  transforms, font raster behavior, materials/textures/glow, and frame acceptance remain explicit preview/runtime gaps.
+- Worker evidence passed LayoutProgram `626/626`; Scene `147/147` with configured MENU/HUB/COMM `3/3` unchanged;
+  PaintPlan `174/174`; CanvasRenderer `129/129`; TypeScript; exact eight-file ESLint; and scoped diff hygiene.
+  Coordinator review checked the implementation against shipped `widget_fullscreen.lua` lines `617-634`, `848-860`,
+  `6325-6332`, `8702-8727`, `9680-9689`, `12603-12730`, `12642-12646`, `12673-12686`, `12733-12772`, and
+  `12774-12799`. Independent reruns passed LayoutProgram `626/626`, Scene with the same configured `3/3` census,
+  PaintPlan exit `0`, and CanvasRenderer `129/129`.
+- Status of this bounded renderer unit: `IMPLEMENTED / FOCUSED TESTS VERIFIED`. It is a preview-only source
+  composition, not a texture/state emulator and not game proof. Overall B119 remains `PARTIAL / Not verified in game`
+  until the corrected owner-issued candidate is rendered, visually inspected, validated, rehearsed, and accepted by X4.
+
+## EARLY IN-GAME PIPELINE SMOKE — 2026-08-22
+
+### PLAN / BASELINE / RECONCILE
+
+- Status: `SPECIFIED / REPRIORITIZED`; overall B119 remains `PARTIAL / Not verified in game`. The operator corrected
+  the validation order: a small end-to-end X4 proof is required now, before pixel-perfect AI Influence reconstruction.
+  This smoke establishes whether Forge-authored Lua can survive the complete pipeline at all; it does not replace the
+  brief's three-menu parity acceptance or clear the permanent preview warning.
+- Reuse the existing `hud_button` Forge template from `src/lib/modTemplates.ts`. It already owns a visual-editor
+  `window` with `autoOpen = true` and a visual-editor `button`; the established compiler emits the real standalone-menu
+  lifecycle, `Helper.scaleX/scaleY`, `Helper.createFrameHandle`, `addTable/addRow`, `createButton`, the standard close
+  button, and `frame:display()`. Do not hand-author a parallel smoke renderer or deploy the AI Influence mod for this
+  bounded proof.
+- Bounded source/output: create a dedicated disposable workspace/package under
+  `dev-docs/b119-x4-ui-pipeline-smoke/` with mod/workspace/extension id exactly `pipeline_test`. The package is UI-only:
+  `content.xml`, `ui.xml`, and Forge-generated UI Lua, with no MD, AI scripts, libraries, wares/jobs, patches,
+  translations, transport, AI Influence content, or gameplay state. The visual workspace contains a compact panel,
+  title/text, at least two authored buttons, and an edit box/input, all composed through existing Forge visual-widget
+  owners; one widget retains `autoOpen = true`. The only eventual game write is the dedicated folder
+  `<GAME_INSTALL>/extensions/pipeline_test/`; the real `x4_ai_influence`, configured mod workspace, existing extensions,
+  X4 corpus, and standing Forge workspace remain immutable.
+- Acceptance before real write: the template workspace is materialized through the existing owner, compiled through
+  Forge's real package path, imported/rendered through the source-first preview, linted with no known fatal static rule,
+  project-validated with zero errors, and recorded with exact package/Lua hashes. Capture the Forge frame/button at two
+  declared drawable/UI-scale profiles; both remain `Not verified in game`.
+- Real-write gate: before deployment, state the exact dedicated folder, possible breakage (startup/UI reload or a
+  rejected frame), and rollback (remove only the dedicated smoke extension and restore no other bytes), then obtain a
+  literal operator `go`. Reconfirm Antigravity/X4/machine state immediately before validation-heavy or host-game work.
+- X4 acceptance: first launch X4 with the exact hashed smoke extension and stop at startup/main-menu state without
+  loading or saving a game. Prove the frame appears without `DisplayView(): Failed to set up the view`, UI reload, or
+  Lua error; capture the visible frame/button, exercise the standard close control and authored button surface, and
+  read the relevant debuglog interval. Repeat at a second drawable/UI-scale setting and measure frame/button boundaries
+  against the corresponding Forge captures. If X4 does not make the registered UI extension available before a save is
+  loaded, stop before opening a save and present a separate save-specific write/experience gate; do not silently widen
+  this smoke into persistent gameplay-state mutation.
+- Pass boundary: one accepted scale-matched frame/button pair proves the end-to-end pipeline works at that profile; two
+  profiles prove the scale path responds consistently. Neither result proves every widget, runtime state, font raster,
+  C++ transform, or the AI Influence design is 1:1. Those remain explicit B119 acceptance work.
+- Negative/rollback evidence: reject or quarantine any package whose lint/project gate fails; prove the compiled domain
+  census is UI-only and that Forge's validation/deploy gates accept a mod with no non-UI content. After the game
+  captures, remove only `pipeline_test`, verify its exact path is absent, and verify every pre-existing extension root
+  and real-mod hash is unchanged. Record screenshots, hashes, logs, deploy receipt, and rollback receipt under the
+  dedicated smoke evidence directory.
+- Triggered pre-deploy AAR: the first Windows validator invocation was malformed, and subsequent retry attempts left
+  sixteen command-line-verified `smoke-driver.ts` / staged-`pipeline_test` `x4validate.ts` process-tree PIDs alive.
+  Those exact PIDs were terminated and a readback proved zero matching processes remained; no game, real-mod, package,
+  or standing-workspace byte was touched by the cleanup. All further validator work is single-instance: supervise the
+  same process to terminal status, never interpret an empty poll as failure, never launch a parallel retry, and verify
+  process cleanup before continuing.
+- Preview evidence correction: the initial source-first profile receipts returned `canRender = true` but projected zero
+  rows, cells, texts, buttons, or edit boxes; only an unresolved frame/table shell existed. That is a renderer gap, not
+  a frame/button capture. The preparation remains `PARTIAL / Not verified in game`; pre-game visual evidence must come
+  from the real mounted Forge visual-editor canvas, while the source-first gap remains explicit until its generated-Lua
+  row/widget ownership is repaired and revalidated.
+
+### IMPLEMENT — PRE-DEPLOY CHECKPOINT — 2026-08-22
+
+- Reconciliation extended the existing CallModel, Layout, Scene, preview, compile, and package-validator owners. No
+  parallel renderer, compiler, or deployer was introduced. Capability-map delta: `pending final promotion` because the
+  external capability-map write is outside this checkpoint.
+- The staged root is `dev-docs/b119-x4-ui-pipeline-smoke/` with exact extension id `pipeline_test`. The package is
+  UI-only and contains exactly `content.xml` (`367`, `696c5c...`), `ui.xml` (`273`, `655331...`), and
+  `ui/pipeline_test.lua` (`5378`, `b8f4c1...`). It contains six UI widgets, compiles UI only, and has no MD, AI,
+  library, patch, translation, or gameplay-state content.
+- Forge readiness and Mod Doctor both returned zero errors; lifecycle proof is complete. The linter returned `0`
+  errors, `0` warnings, and `33` explicit verification gaps. The in-memory `addTable(24)` negative was rejected by
+  the real linter.
+- Root-cause repair chain: local width/height aliases from `Helper.scaleX/scaleY` had lost call provenance. CallModel
+  and Layout now preserve the exact closed `directHelperScaleResult`, resolving `1` frame / `1` table / `6` rows /
+  `12` cells and scaling `530x436` to `742x610` at `uiScale 1.4`. Focused CallModel is `70/70`; LayoutProgram is
+  `631/631`. Preview then exposed Scene's independent exact-value schema missing the new field, with a valid Layout
+  pair and exact `createFrameHandle` failure. Causal Scene was red at `147/148`, then the strict repair passed `149/149`;
+  malformed, extra, foreign, accessor, prototype, wrong-status, and wrong-type metadata remains fail-closed.
+- Final hashes: CallModel `B1BC14E0...FF04`; CallModel selftest `8B345638...5424`; Layout `3FF4DA82...BF57`;
+  Layout selftest `ECCD33F4...5FC5`; Scene `DCA31C89...90D35`; Scene selftest `2082C7B5...C11E6`; staged driver
+  `37204556...79545`.
+
+### VALIDATE — PRE-DEPLOY CHECKPOINT — 2026-08-22
+
+- The bounded staged package-validation unit is `VERIFIED`: both profiles-only/default-driver runs at `uiScale 1`
+  and `uiScale 1.4` exited successfully with `canRender=true`; program counts were `1/1/6/12`, and Scene retained
+  `6` rows / `12` cells.
+- The source-first geometry result is `PARTIAL`: frame, table, rows, and cells have no usable rectangle, and widgets
+  and texts are zero. The unresolved causes are generated x/y arithmetic aliases, `Helper.headerRowCenteredProperties`,
+  and C++ text-height candidates. Preserve `PARTIAL` and `Not verified in game`; do not claim a frame or button capture.
+- Exactly one external package-validator run occurred: exit `0`, `VALID`, zero errors, and three informational findings
+  (undefined `OpenMenu` and `RemoveScript` allowlist entries, plus one explicit X4 UI verification gap). Receipt
+  SHA-256 is `b0bf7a6e17e8a6522afe1355f262b1d761cfec07edeea21776edd0fc42e507bf`; a post-run readback found zero
+  matching processes.
+- Containment passed: no real mod, game, standing-workspace, or deploy write occurred; both
+  `F:\DEV_ENV\projects\Mods\X4Mods\pipeline_test` and
+  `G:\SteamLibrary\steamapps\common\X4 Foundations\extensions\pipeline_test` were absent; X4 was absent.
+  Live readback saw Antigravity open at CPU `13%`, but a fresh human machine-state answer remains pending.
+- The real-write gate remains closed: literal operator `go` has not been received. Eventual writes are limited to the
+  exact two dedicated `pipeline_test` workspace/game targets through Forge. Possible breakage is startup/UI reload or
+  frame rejection; rollback removes only `pipeline_test` and verifies pre-existing extensions are unchanged.
+
+### REVIEW — PRE-DEPLOY CHECKPOINT — 2026-08-22
+
+- The staged package, Forge readiness, Mod Doctor, lifecycle, linter, negative-path, owner-repair, hash, profile, and
+  single-validator requirements are done and evidenced above. The profile driver proves program counts and retention,
+  not usable geometry or engine acceptance.
+- Overall B119 remains `IN_PROGRESS / PARTIAL / Not verified in game`. Source-first geometry remains `PARTIAL`; Forge
+  mount/deploy and X4 validation remain pending the fresh human machine-state answer and literal `go`. No frame/button
+  capture, in-game claim, or capability-map promotion follows from this checkpoint.
+
+### AAR — PRE-DEPLOY CHECKPOINT — 2026-08-22
+
+- Triggers and corrections: an earlier malformed validator plus retry leaked `16` exact PIDs, which were cleaned;
+  the driver nested-program wrapper initially produced false zero counts; focused Layout green missed independent
+  Scene-schema coupling; `canRender=true` did not imply element geometry and required an explicit geometry census; and
+  one read-only package-hash probe initially emitted malformed display path labels because a relative base was used,
+  then was corrected with `Resolve-Path`. These observations remain recorded rather than hidden.
+- Sustain: reuse the existing owners, keep source/preview/runtime truth separate, and require explicit negative,
+  containment, process-cleanup, and geometry evidence before promotion.
+- Improve: keep nested driver output unwrapped for count assertions, pair every focused owner green with adjacent
+  schema consumers, and treat `canRender` as a capability flag requiring a separate rectangle/widget census.
+- Highest-risk evidenced weakness: a convincing rendered or `canRender=true` preview can still contain zero useful
+  element geometry or differ from C++ acceptance. An explicit geometry gate plus in-game authority is mandatory.
+
+### FRESH-EYES AUDIT AND CURRENT FOCUSED GATES — 2026-08-22
+
+- Read-only native Luna reviewer `01a02aad-6c72-7b90-abc9-8ba6205630d0` reproduced two P1 defects in the bounded
+  Scene/Paint authority chain: valid Lua whitespace in `Helper.scaleX (530)` was refused by a textual prefix check,
+  and a source-pinned but forged in-range `editboxBlackInset` could pass without recomputation from the authoritative
+  `uiScale`. It found no other P0-P2 defect in the CallModel/Layout reassignment, SourceEdits ledgers, Paint/Canvas
+  parity, or permanent game-truth boundary. The terminal reviewer was closed immediately.
+- Exact native Luna repair worker `01a02ac2-b44b-7d43-9f02-1bad8c68d0e9` changed only `src/lib/x4UiScene.ts`,
+  `src/lib/x4UiScene.selftest.ts`, and `src/lib/x4UiPaintPlan.selftest.ts`. Causal fail-first kept Scene production at
+  SHA-256 `981881E13BB4416DCB17E706B589EECCD60253F2F0E4095C4B6F130DB701F891` and produced `149/151`, with exactly the
+  whitespace and synchronized-inset-drift rows red. Final Scene accepts the shipped Lua whitespace envelope while
+  continuing to reject foreign/wrong/malformed/trailing calls, and recomputes the inset exactly as
+  `max(2, floor(1 * uiScale + 0.5))` before accepting the source-pinned fact. The terminal worker was closed.
+- Independent bundled-Node `v24.19.0` results are Scene `152/152`, PaintPlan `175/175`, CanvasRenderer `129/129`,
+  whole-repository TypeScript exit `0`, exact twelve-file ESLint exit `0`, and B119 diff hygiene exit `0`. Final hashes
+  are Scene `532F80811D06ABA5A3171F5C659D6DF6D45CF13148863FBC3029ACE822083EAB`, Scene selftest
+  `80C9F87A1C00644D489C43E02BDC3FBE085F6559C71502F04BFE03AB4CA8B647`, PaintPlan selftest
+  `78B20DD11F69BAD1CF327A331709BCE8CDE34BDEF43712E42083903D988C2B2D`, and staged driver
+  `F1A98BB65D02D57EE8CED785D49781F9F354D71328AA9181DC95AE73169A96D7`.
+- Graphify refreshed successfully to `9,862` nodes / `24,670` edges / `329` communities. Its bounded extraction
+  reached terminal exit `0`, and a process readback found no graphify process remaining.
+- Package SHA-256 values remain unchanged: `content.xml`
+  `696C5C951B2B36649EF8FA8ACDBCAF8A421F4235E03684BA5DA6F8B00241139B`, `ui.xml`
+  `655331A4423A550532042B23C8E60141A60DCC0E1C42D4DE6DA653DAAD1C1689`, and Lua
+  `B8F4C194812813BEE4509EFCC57D73E08BC5DF2F3F82C2D1464648C9D294C3C0`; therefore the one-instance external
+  validator was not rerun. Both real `pipeline_test` targets remain absent.
+- Forge-owner reconciliation confirms the eventual source materialization path is the existing project inventory and
+  compile owner followed by guarded `/api/fs/write`; deployment authority is `/api/agent/deploy-verify`. Its dry run
+  executes compile/full-project validation and the real artifact-effect planner but writes nothing; the subsequent
+  apply writes the Mod Workspace staging artifact and exact game extension with byte, doctor, drift, and recovery
+  receipts. No parallel filesystem compiler or deployer will be introduced.
+- The installed Antigravity extension's persisted Forge config was read back at SHA-256
+  `355B4B636AD6C0BB3B58DEA793DE409C2375B8A81230433C0F0FDD48FBEE3B5A`; it names
+  `F:\DEV_ENV\projects\Mods\X4Mods`, `G:\SteamLibrary\steamapps\common\X4 Foundations`, loose deploy, and
+  `F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00` as the reference root. Antigravity is observed open and X4
+  absent, but the required human machine-quiet answer and literal `go` remain absent. Complete precommit/build/oracle/
+  E2E and all real writes therefore remain pending.
+- Runtime-host reconciliation found Antigravity's active X4 Forge install is `0.0.69`; its bundled
+  `app/dist/server.cjs` is dated 2026-08-09 with SHA-256
+  `98475F18392BF86129D6DA66C9C349E2BC83A9C3C75514834D81CEE8C8008414`, so it predates B119 and cannot prove the
+  current feature. The accepted host path is the current checkout's production build launched with `X4_CONFIG_DIR`
+  pointing at the installed extension's persisted config directory. That reuses the user's exact saved paths without
+  changing Antigravity settings or silently testing stale bundled code.
+- Triggered AAR additions: the audit repaired two authority gaps missed by prior green suites; intermediate fixture
+  ordering and TypeScript attempts were red before the corrected causal/final receipts; three PowerShell
+  pipeline/filter attempts and one package parse were malformed and corrected without any product or external
+  mutation. The corrected port census found `3000`, `3001`, `3100`, `3101`, and `8972` free. Overall B119 remains
+  `IN_PROGRESS / PARTIAL / Not verified in game`.
+
+### HOST GATES AND REAL-WRITE AUTHORIZATION — 2026-08-28
+
+#### BASELINE / RECONCILE
+
+- Re-baseline proved `HEAD == origin/main == edcb2a7d645d041d2a75253c0207bbafae7972fa`; the same twelve B119
+  implementation/test files and three B119 records remained the only owned dirty paths. Every unrelated modified,
+  deleted, and untracked path remains outside staging authority. The exact package, driver, and one-instance validator
+  hashes remained unchanged, and both real `pipeline_test` targets remained absent.
+- The persisted Antigravity config remained byte-identical at SHA-256
+  `355B4B636AD6C0BB3B58DEA793DE409C2375B8A81230433C0F0FDD48FBEE3B5A`, with Mod Workspace
+  `F:\DEV_ENV\projects\Mods\X4Mods`, game installation
+  `G:\SteamLibrary\steamapps\common\X4 Foundations`, loose deploy, and unpacked corpus
+  `F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00`.
+- Antigravity's active Forge install is now `0.0.70`. Its bundled server is SHA-256
+  `D27EDFA78255EE5B9919431A0AAE226C62BC9C97E9B0085C4F8A98C8938D3437` and `3,508,512` bytes. The freshly
+  built current-checkout server is SHA-256
+  `64FE71D0C83007BDDAE09E1AD9C355F6D658182974E1A57FC2B6B24F8E53E121` and `3,509,970` bytes. Because those
+  bytes differ, the current checkout remains the smoke-test runtime authority; it will consume the saved config via
+  `X4_CONFIG_DIR` rather than claiming installed-bundle parity.
+- The operator supplied the required exact gate on 2026-08-28: Antigravity open, X4 not running, machine quiet, and
+  literal `go`. This authorizes only Forge-owner writes to
+  `F:\DEV_ENV\projects\Mods\X4Mods\pipeline_test`, Forge's dedicated loose-build artifact for that id, and
+  `G:\SteamLibrary\steamapps\common\X4 Foundations\extensions\pipeline_test`. No other mod, extension, save,
+  corpus, or standing setting is authorized.
+
+#### VALIDATE
+
+- Complete precommit passed under bundled Node `v24.19.0`: tripwires and canon mirrors passed; E2E verdict selftest
+  was `55/55`; durable writers were `14/14` plus `8/8`; capability, MCP, and action-receipt contracts passed;
+  whole-repository TypeScript and size guards passed. The production build passed with `1,847` Vite modules and the
+  existing chunk-size warning only.
+- A raw `node scripts/oracle-sweep.mjs` call without its required server exited `1` with `0/133` fetch failures. The
+  official owner `npm run test:oracles` then launched its isolated server and passed `134/134`, exit `0`. The former is
+  a reproduced invocation/harness failure, not a product red, and remains an AAR trigger.
+- Full serial isolated E2E passed `104/104` in 8.6 minutes with zero failed, flaky, bad, or quarantined-blocking tests.
+  Receipt `test-results/e2e-verdict.json` was generated at `2026-08-28T05:48:32.522Z`, SHA-256
+  `07A5BE43DC99415506CE85ACE263539FC426A0CEEECD13572CBD6E72597C7B39`, and proves `treeGone=true` with no
+  remaining child PIDs. Ports `3000`, `3001`, `3100`, `3101`, and `8972` were free afterward, the persisted config
+  hash was unchanged, and both real targets remained absent.
+- Full ESLint rerun exited `0` with `0` errors and `592` existing warnings. The first lint had already exited when its
+  terminal receipt was lost during context compaction; process readback proved no ESLint process remained before the
+  single evidence rerun.
+
+#### REVIEW / AAR / NEXT BOUNDARY
+
+- Required host code, build, oracle, integration, negative, teardown, and containment gates are green. This does not
+  prove a useful source-first preview rectangle or C++ frame acceptance. Overall B119 therefore remains
+  `IN_PROGRESS / PARTIAL / Not verified in game`.
+- Triggered AAR additions: host policy rejected the first computed temporary-shim cleanup command before execution;
+  an exact ignored repository-local runtime shim then selected bundled Node without product changes. One raw oracle
+  invocation omitted its server; one PowerShell liveness probe had an empty-pipe parser error before correction; and
+  the first full-lint terminal receipt was lost to output truncation/compaction. None changed package, config, source
+  mod, game extension, or game state.
+- Next boundary: explicitly stage and commit only the fifteen owned B119 tracked paths, push and prove direct remote
+  parity, then launch current-checkout Forge with isolated runtime state. Materialize through project/compile/fs-write
+  owners, read back exact package hashes, run full project validation, rehearse deploy with `dryRun:true`, apply only
+  the dedicated extension, and capture recovery/containment evidence before launching X4.

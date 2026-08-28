@@ -44,6 +44,7 @@ import {
   normalizeX4UiSourceEditLayoutModel,
   type X4UiSourceEditDeleteEntry,
   type X4UiSourceEditInsertionEntry,
+  type X4UiSourceEditReplaceEntry,
   type X4UiSourceEditStructuralEntry,
   type X4UiEditableSourceEditEntry,
   type X4UiSourceEditCatalog,
@@ -546,7 +547,7 @@ const causalOperationLedger = (
 
 const exactEntrySequence = (catalog: X4UiSourceEditCatalog): boolean => {
   const structural = catalog.structuralEntries || [];
-  const categorized = [...(catalog.deleteEntries || []), ...(catalog.insertEntries || [])];
+  const categorized = [...(catalog.deleteEntries || []), ...(catalog.replaceEntries || []), ...(catalog.insertEntries || [])];
   return structural.length === categorized.length && structural.every((entry, index) => entry === categorized[index]);
 };
 
@@ -579,7 +580,7 @@ const applyById = (
 const structuralApply = (
   context: Pick<SourceEditFixtureContext, 'workspace' | 'source'>,
   catalog: X4UiSourceEditCatalog,
-  entry: X4UiSourceEditDeleteEntry | X4UiSourceEditInsertionEntry,
+  entry: X4UiSourceEditDeleteEntry | X4UiSourceEditReplaceEntry | X4UiSourceEditInsertionEntry,
   directCall?: string,
   expected?: { readonly path?: string; readonly startOffset?: number; readonly endOffset?: number; readonly expectedText?: string },
 ): ReturnType<typeof applyX4UiSourceStructuralEdit> => applyX4UiSourceStructuralEdit(
@@ -609,6 +610,15 @@ const structuralInsert = (
 ): X4UiSourceEditInsertionEntry => {
   const entry = (catalog.insertEntries || []).find(candidate => candidate.anchor === anchor);
   if (!entry) throw new Error(`structural insert entry missing for ${anchor}: ${JSON.stringify(catalog.insertEntries)}`);
+  return entry;
+};
+
+const structuralReplace = (
+  catalog: X4UiSourceEditCatalog,
+  predicate: (entry: X4UiSourceEditReplaceEntry) => boolean,
+): X4UiSourceEditReplaceEntry => {
+  const entry = (catalog.replaceEntries || []).find(predicate);
+  if (!entry) throw new Error(`structural replacement entry missing: ${JSON.stringify(catalog.replaceEntries)}`);
   return entry;
 };
 
@@ -2814,6 +2824,330 @@ const run = (): void => {
       && (structuralInitialCatalog.deleteEntries || []).some(entry => entry.provenance.callBindings.some(binding => binding.callName === 'display'))
       && (structuralInitialCatalog.insertEntries || []).some(entry => entry.anchor === 'fallback-display'),
     JSON.stringify({ status: structuralInitialCatalog.status, deletes: structuralInitialCatalog.deleteEntries, inserts: structuralInitialCatalog.insertEntries }));
+  const causalReplaceLua = [
+    'local menu = { name = "Replace", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(2, {})',
+    'local row = table:addRow(false, {})',
+    'row[2]:createText("body", {})',
+    'frame:display()',
+    '',
+  ].join('\n');
+  const causalReplaceContext = contextFor(causalReplaceLua);
+  const causalReplaceCatalog = catalogFor(causalReplaceContext);
+  const causalReplaceEntries = (causalReplaceCatalog.structuralEntries || []).filter(entry =>
+    (entry as unknown as { readonly kind?: string }).kind === 'replace-statement');
+  check('B119 causal fail-first: owner issues one row-local replace-statement entry',
+    causalReplaceEntries.length === 1,
+    JSON.stringify({ structuralEntries: causalReplaceCatalog.structuralEntries }));
+  const causalReplaceEntry = structuralReplace(causalReplaceCatalog, entry =>
+    entry.callBindings.length === 1 && entry.callBindings[0].callName === 'createText');
+  const causalReplacePayload = 'row[1]:setColSpan(2):createText("body", {})';
+  const causalReplaceBefore = sourceText(causalReplaceContext);
+  const causalReplaceBeforeBytes = workspaceBytes(causalReplaceContext.workspace);
+  const causalReplaceBeforeFile = causalReplaceContext.source.bundle?.sourceFiles.find(file => file.path === 'ui/edit.lua');
+  const causalReplaceBeforeCalls = causalReplaceBeforeFile?.callModel.calls || [];
+  const causalReplaceBeforeOperations = causalReplaceContext.program.operations;
+  const causalReplaceResult = structuralApply(
+    causalReplaceContext,
+    causalReplaceCatalog,
+    causalReplaceEntry,
+    causalReplacePayload,
+  );
+  const causalReplaceAfterFile = causalReplaceResult.accepted
+    ? causalReplaceResult.source.bundle?.sourceFiles.find(file => file.path === 'ui/edit.lua')
+    : undefined;
+  const causalReplaceAfterOperations = causalReplaceResult.accepted
+    ? projectedProgramFor(causalReplaceResult.source)?.program.operations || []
+    : [];
+  const causalReplaceAfterRangeCalls = causalReplaceAfterFile?.callModel.calls.filter(call =>
+    call.source.start.offset >= causalReplaceEntry.startOffset
+      && call.source.end.offset <= causalReplaceEntry.startOffset + causalReplacePayload.length) || [];
+  const causalReplaceAfterRangeOperations = causalReplaceAfterOperations.filter(operation =>
+    operation.source.start.offset >= causalReplaceEntry.startOffset
+      && operation.source.end.offset <= causalReplaceEntry.startOffset + causalReplacePayload.length);
+  const causalReplaceRemovedCallOrders = new Set(causalReplaceEntry.callBindings.map(binding => binding.callOrder));
+  const causalReplaceRemovedOperationIds = new Set(causalReplaceEntry.callBindings.map(binding => binding.operationId));
+  const causalReplaceAfterEntry = causalReplaceResult.accepted
+    ? structuralReplace(causalReplaceResult.catalog, entry => entry.startOffset === causalReplaceEntry.startOffset
+      && entry.expectedText === causalReplacePayload)
+    : undefined;
+  check('B119 row-local replacement is atomic, exact-delta, same-chain, reparsed, and parent-immutable',
+    causalReplaceResult.accepted
+      && causalReplaceResult.changed
+      && causalReplaceResult.reparsed
+      && causalReplaceResult.provenanceReestablished
+      && sourceText(causalReplaceResult) === causalReplaceBefore.slice(0, causalReplaceEntry.startOffset)
+        + causalReplacePayload
+        + causalReplaceBefore.slice(causalReplaceEntry.endOffset)
+      && sourceText(causalReplaceResult).includes(causalReplacePayload)
+      && !sourceText(causalReplaceResult).includes('row[2]:createText("body", {})')
+      && workspaceBytes(causalReplaceContext.workspace) === causalReplaceBeforeBytes
+      && causalReplaceResult.catalog !== causalReplaceCatalog
+      && causalReplaceResult.catalog.sourceIdentity.sha256 !== causalReplaceCatalog.sourceIdentity.sha256
+      && causalReplaceBeforeCalls.length + 1 === (causalReplaceAfterFile?.callModel.calls.length || 0)
+      && causalReplaceBeforeOperations.length + 1 === causalReplaceAfterOperations.length
+      && causalReplaceEntry.callBindings.every(binding =>
+        !causalReplaceAfterFile?.callModel.calls.some(call => call.name === binding.callName
+          && call.source.start.offset === binding.callSource.start.offset
+          && call.source.end.offset === binding.callSource.end.offset))
+      && causalReplaceEntry.callBindings.every(binding =>
+        !causalReplaceAfterOperations.some(operation => operation.id === binding.operationId))
+      && causalReplaceAfterRangeCalls.map(call => call.name).join('|') === 'setColSpan|createText'
+      && causalReplaceAfterRangeOperations.map(operation => operation.kind).join('|') === 'setColSpan|createText'
+      && causalReplaceAfterRangeOperations.every(operation => operation.status === 'applied')
+      && causalReplaceAfterEntry?.provenance.rowOwner?.frameId === causalReplaceEntry.provenance.rowOwner.frameId
+      && causalReplaceAfterEntry.provenance.rowOwner?.tableId === causalReplaceEntry.provenance.rowOwner.tableId
+      && causalReplaceAfterEntry.provenance.rowOwner?.rowId === causalReplaceEntry.provenance.rowOwner.rowId
+      && causalReplaceRemovedCallOrders.size === 1
+      && causalReplaceRemovedOperationIds.size === 1,
+    JSON.stringify({
+      entry: causalReplaceEntry,
+      result: causalReplaceResult,
+      beforeCalls: causalReplaceBeforeCalls.length,
+      afterCalls: causalReplaceAfterFile?.callModel.calls.length,
+      beforeOperations: causalReplaceBeforeOperations.length,
+      afterOperations: causalReplaceAfterOperations.length,
+      replacementCalls: causalReplaceAfterRangeCalls.map(call => call.name),
+      replacementOperations: causalReplaceAfterRangeOperations.map(operation => operation.kind),
+    }));
+  const replacementPayloadRefusalCases: readonly {
+    readonly name: string;
+    readonly payload?: string;
+    readonly reason: string;
+  }[] = [
+    { name: 'missing payload', reason: 'invalid-request' },
+    { name: 'malformed payload', payload: 'row[1]:createText("body", {}', reason: 'replacement-parse-failure' },
+    { name: 'multiple statements', payload: 'row[1]:createText("body", {}); row[2]:createText("other", {})', reason: 'replacement-parse-failure' },
+    { name: 'newline payload', payload: 'row[1]:createText("body", {})\nrow[2]:createText("other", {})', reason: 'invalid-request' },
+    { name: 'oversized payload', payload: 'x'.repeat(32769), reason: 'invalid-request' },
+    { name: 'nested non-UI invocation', payload: 'row[1]:createText(measureHeight(), {})', reason: 'replacement-parse-failure' },
+    { name: 'assignment', payload: 'local replacement = row[1]:createText("body", {})', reason: 'replacement-parse-failure' },
+    { name: 'control flow', payload: 'if enabled then row[1]:createText("body", {}) end', reason: 'replacement-parse-failure' },
+    { name: 'non-UI call', payload: 'os.execute("unsafe")', reason: 'replacement-parse-failure' },
+    { name: 'unsupported direct UI call', payload: 'row[1]:setColWidthPercent(1, 50)', reason: 'replacement-parse-failure' },
+  ];
+  const replacementPayloadRefusalReceipts = replacementPayloadRefusalCases.map(item => {
+    const context = contextFor(causalReplaceLua);
+    const catalog = catalogFor(context);
+    const entry = structuralReplace(catalog, candidate => candidate.callBindings.length === 1);
+    const beforeSource = sourceText(context);
+    const beforeBytes = workspaceBytes(context.workspace);
+    const result = structuralApply(context, catalog, entry, item.payload);
+    return {
+      name: item.name,
+      reason: structuralResultReason(result),
+      pass: structuralRefusalPreservesInput(result, context, catalog, beforeBytes, beforeSource)
+        && structuralResultReason(result) === item.reason,
+    };
+  });
+  check('B119 replacement parser rejects malformed, multi-statement, oversized, hidden, assignment, control-flow, and non-UI payloads without mutation',
+    replacementPayloadRefusalReceipts.every(receipt => receipt.pass),
+    JSON.stringify(replacementPayloadRefusalReceipts));
+
+  const replacementOwnerLua = [
+    'local menu = { name = "Replacement owners", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(2, {})',
+    'local rowA = table:addRow(false, {})',
+    'local rowB = table:addRow(false, {})',
+    'local otherTable = frame:addTable(2, {})',
+    'local otherRow = otherTable:addRow(false, {})',
+    'local otherFrame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local foreignTable = otherFrame:addTable(2, {})',
+    'local foreignRow = foreignTable:addRow(false, {})',
+    'rowA[2]:createText("body", {})',
+    'frame:display()',
+    'otherFrame:display()',
+    '',
+  ].join('\n');
+  const replacementOwnerCases = [
+    { name: 'different row', payload: 'rowB[1]:createText("body", {})' },
+    { name: 'different table', payload: 'otherRow[1]:createText("body", {})' },
+    { name: 'different frame', payload: 'foreignRow[1]:createText("body", {})' },
+  ] as const;
+  const replacementOwnerReceipts = replacementOwnerCases.map(item => {
+    const context = contextFor(replacementOwnerLua);
+    const catalog = catalogFor(context);
+    const entry = structuralReplace(catalog, candidate => candidate.callBindings.some(binding => binding.callName === 'createText'));
+    const beforeSource = sourceText(context);
+    const beforeBytes = workspaceBytes(context.workspace);
+    const result = structuralApply(context, catalog, entry, item.payload);
+    return {
+      name: item.name,
+      reason: structuralResultReason(result),
+      pass: structuralRefusalPreservesInput(result, context, catalog, beforeBytes, beforeSource)
+        && structuralResultReason(result) === 'reparse-provenance-drift',
+    };
+  });
+  check('B119 replacement reparse refuses a different row, table, or frame owner chain without mutation',
+    replacementOwnerReceipts.every(receipt => receipt.pass),
+    JSON.stringify(replacementOwnerReceipts));
+
+  const staleReplacementContext = contextFor(causalReplaceLua.replace('row[2]:createText', 'row[1]:createText'));
+  const staleReplacementBeforeSource = sourceText(staleReplacementContext);
+  const staleReplacementBeforeBytes = workspaceBytes(staleReplacementContext.workspace);
+  const staleReplacementResult = structuralApply(
+    staleReplacementContext,
+    causalReplaceCatalog,
+    causalReplaceEntry,
+    causalReplacePayload,
+  );
+  const foreignReplacementCatalog = frozenClone(causalReplaceCatalog) as X4UiSourceEditCatalog;
+  const foreignReplacementEntry = structuralReplace(foreignReplacementCatalog, candidate => candidate.callBindings.length === 1);
+  const foreignReplacementBeforeSource = sourceText(causalReplaceContext);
+  const foreignReplacementBeforeBytes = workspaceBytes(causalReplaceContext.workspace);
+  const foreignReplacementResult = structuralApply(
+    causalReplaceContext,
+    foreignReplacementCatalog,
+    foreignReplacementEntry,
+    causalReplacePayload,
+  );
+  const casReplacementContext = contextFor(causalReplaceLua);
+  const casReplacementCatalog = catalogFor(casReplacementContext);
+  const casReplacementEntry = structuralReplace(casReplacementCatalog, candidate => candidate.callBindings.length === 1);
+  const casReplacementBeforeSource = sourceText(casReplacementContext);
+  const casReplacementBeforeBytes = workspaceBytes(casReplacementContext.workspace);
+  const casReplacementResult = structuralApply(
+    casReplacementContext,
+    casReplacementCatalog,
+    casReplacementEntry,
+    causalReplacePayload,
+    { startOffset: casReplacementEntry.startOffset + 1 },
+  );
+  const rangeReplacementContext = contextFor(causalReplaceLua);
+  const rangeReplacementCatalog = catalogFor(rangeReplacementContext);
+  const rangeReplacementEntry = structuralReplace(rangeReplacementCatalog, candidate => candidate.callBindings.length === 1);
+  const rangeReplacementBeforeSource = sourceText(rangeReplacementContext);
+  const rangeReplacementBeforeBytes = workspaceBytes(rangeReplacementContext.workspace);
+  const rangeReplacementResult = structuralApply(
+    rangeReplacementContext,
+    rangeReplacementCatalog,
+    rangeReplacementEntry,
+    causalReplacePayload,
+    { endOffset: rangeReplacementBeforeSource.length + 1 },
+  );
+  check('B119 stale/foreign replacement authority, CAS, and out-of-range byte requests refuse without mutation',
+    structuralRefusalPreservesInput(staleReplacementResult, staleReplacementContext, causalReplaceCatalog, staleReplacementBeforeBytes, staleReplacementBeforeSource)
+      && structuralRefusalPreservesInput(foreignReplacementResult, causalReplaceContext, foreignReplacementCatalog, foreignReplacementBeforeBytes, foreignReplacementBeforeSource)
+      && structuralRefusalPreservesInput(casReplacementResult, casReplacementContext, casReplacementCatalog, casReplacementBeforeBytes, casReplacementBeforeSource)
+      && structuralRefusalPreservesInput(rangeReplacementResult, rangeReplacementContext, rangeReplacementCatalog, rangeReplacementBeforeBytes, rangeReplacementBeforeSource)
+      && structuralResultReason(staleReplacementResult) === 'unsupported-provenance'
+      && structuralResultReason(foreignReplacementResult) === 'unsupported-provenance'
+      && structuralResultReason(casReplacementResult) === 'stale-range'
+      && structuralResultReason(rangeReplacementResult) === 'stale-range',
+    JSON.stringify({
+      stale: structuralResultReason(staleReplacementResult),
+      foreign: structuralResultReason(foreignReplacementResult),
+      cas: structuralResultReason(casReplacementResult),
+      range: structuralResultReason(rangeReplacementResult),
+    }));
+
+  const replacementHostileProxyCounter: TrapCounter = { reads: 0 };
+  const replacementHostileCatalog = hostileProxy(causalReplaceCatalog, replacementHostileProxyCounter);
+  const replacementHostileResult = structuralApply(
+    causalReplaceContext,
+    replacementHostileCatalog,
+    causalReplaceEntry,
+    causalReplacePayload,
+  );
+  const replacementPrototypeCatalog = Object.create({ inherited: true }) as X4UiSourceEditCatalog;
+  const replacementPrototypeResult = structuralApply(
+    causalReplaceContext,
+    replacementPrototypeCatalog,
+    causalReplaceEntry,
+    causalReplacePayload,
+  );
+  check('B119 replacement prototype and accessor/alias graph boundaries refuse before reads or mutation',
+    replacementHostileResult.accepted === false
+      && replacementHostileResult.changed === false
+      && replacementHostileResult.catalog === replacementHostileCatalog
+      && replacementHostileProxyCounter.reads === 0
+      && replacementPrototypeResult.accepted === false
+      && replacementPrototypeResult.changed === false
+      && replacementPrototypeResult.catalog === replacementPrototypeCatalog,
+    JSON.stringify({
+      hostile: structuralResultReason(replacementHostileResult),
+      hostileReads: replacementHostileProxyCounter.reads,
+      prototype: structuralResultReason(replacementPrototypeResult),
+    }));
+
+  const replacementOracleProjection = causalReplaceResult.accepted
+    ? projectedProgramFor(causalReplaceResult.source)
+    : undefined;
+  const replacementOracleAfterFile = causalReplaceResult.accepted
+    ? causalReplaceResult.source.bundle?.sourceFiles.find(file => file.path === 'ui/edit.lua')
+    : undefined;
+  const replacementOracleCallIndexes = replacementOracleAfterFile?.callModel.calls
+    .map((call, index) => ({ call, index }))
+    .filter(({ call }) => call.source.start.offset >= causalReplaceEntry.startOffset
+      && call.source.end.offset <= causalReplaceEntry.startOffset + causalReplacePayload.length)
+    .map(({ index }) => index) || [];
+  const replacementOracleOperationIndexes = replacementOracleProjection?.program.operations
+    .map((operation, index) => ({ operation, index }))
+    .filter(({ operation }) => operation.source.start.offset >= causalReplaceEntry.startOffset
+      && operation.source.end.offset <= causalReplaceEntry.startOffset + causalReplacePayload.length)
+    .map(({ index }) => index) || [];
+  const replacementOracleInput = causalReplaceResult.accepted
+    && replacementOracleAfterFile
+    && replacementOracleProjection
+    ? {
+      beforeCalls: causalReplaceBeforeFile?.callModel.calls || [],
+      afterCalls: replacementOracleAfterFile.callModel.calls,
+      beforeRecords: causalReplaceBeforeFile?.callModel.records || [],
+      afterRecords: replacementOracleAfterFile.callModel.records,
+      beforeOperations: causalReplaceBeforeOperations,
+      afterOperations: replacementOracleProjection.program.operations,
+      entry: causalReplaceEntry,
+      beforeText: causalReplaceBefore,
+      afterText: sourceText(causalReplaceResult),
+      replacementLength: causalReplacePayload.length,
+      insertedCallIndex: -1,
+      insertedOperationIndex: -1,
+      replacementCallIndexes: replacementOracleCallIndexes,
+      replacementCallNames: replacementOracleCallIndexes.map(index => replacementOracleAfterFile.callModel.calls[index].name),
+      replacementCallOrders: replacementOracleCallIndexes.map(index => replacementOracleAfterFile.callModel.calls[index].order),
+      replacementOperationIndexes: replacementOracleOperationIndexes,
+      replacementOperationKinds: replacementOracleOperationIndexes.map(index => replacementOracleProjection.program.operations[index].kind),
+      replacementOperationIds: replacementOracleOperationIndexes.map(index => replacementOracleProjection.program.operations[index].id),
+      replacementOperationModelOrders: replacementOracleOperationIndexes.map(index => replacementOracleProjection.program.operations[index].modelOrder),
+    }
+    : undefined;
+  const ledgerDriftInput = replacementOracleInput ? structuredClone(replacementOracleInput) : undefined;
+  if (ledgerDriftInput) ledgerDriftInput.replacementOperationIds[0] = 'foreign-replacement-operation';
+  const ownerDriftInput = replacementOracleInput ? structuredClone(replacementOracleInput) : undefined;
+  if (ownerDriftInput) {
+    const replacementOperation = ownerDriftInput.afterOperations[ownerDriftInput.replacementOperationIndexes[0]] as unknown as Record<string, unknown>;
+    replacementOperation.tableId = 'foreign-replacement-table';
+  }
+  const kernelDriftInput = replacementOracleInput ? structuredClone(replacementOracleInput) : undefined;
+  if (kernelDriftInput) {
+    const addRow = kernelDriftInput.afterOperations.find(operation => (operation as unknown as Record<string, unknown>).kind === 'addRow') as unknown as Record<string, unknown> | undefined;
+    const kernel = addRow ? asRecord(addRow.kernel) : undefined;
+    const stateAfter = kernel ? asRecord(kernel.stateAfter) : undefined;
+    const properties = stateAfter ? asRecord(stateAfter.properties) : undefined;
+    if (properties && typeof properties.width === 'number') properties.width += 1;
+  }
+  const dynamicReplacementCatalog = dynamicCatalog;
+  check('B119 replacement ledger, owner, kernel, and non-applied-operation drift refuse',
+    replacementOracleInput !== undefined
+      && compareX4UiSourceStructuralLedgerCorrespondence(replacementOracleInput)
+      && ledgerDriftInput !== undefined
+      && !compareX4UiSourceStructuralLedgerCorrespondence(ledgerDriftInput)
+      && ownerDriftInput !== undefined
+      && !compareX4UiSourceStructuralLedgerCorrespondence(ownerDriftInput)
+      && kernelDriftInput !== undefined
+      && !compareX4UiSourceStructuralLedgerCorrespondence(kernelDriftInput)
+      && dynamicReplacementCatalog.status === 'locked'
+      && dynamicReplacementCatalog.reason === 'operation-not-applied'
+      && (dynamicReplacementCatalog.replaceEntries || []).length === 0,
+    JSON.stringify({
+      baseline: replacementOracleInput ? compareX4UiSourceStructuralLedgerCorrespondence(replacementOracleInput) : false,
+      ledger: ledgerDriftInput ? compareX4UiSourceStructuralLedgerCorrespondence(ledgerDriftInput) : undefined,
+      owner: ownerDriftInput ? compareX4UiSourceStructuralLedgerCorrespondence(ownerDriftInput) : undefined,
+      kernel: kernelDriftInput ? compareX4UiSourceStructuralLedgerCorrespondence(kernelDriftInput) : undefined,
+      dynamic: { status: dynamicReplacementCatalog.status, reason: dynamicReplacementCatalog.reason, replacements: dynamicReplacementCatalog.replaceEntries?.length },
+    }));
   const plainDeleteContext = contextFor();
   const plainDeleteCatalog = catalogFor(plainDeleteContext);
   const plainDeleteEntry = structuralDelete(plainDeleteCatalog, entry => entry.callBindings.some(binding => binding.callName === 'display'));

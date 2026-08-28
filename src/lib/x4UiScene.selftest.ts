@@ -49,6 +49,7 @@ import {
 } from './x4UiLayoutProgram';
 import {
   buildX4UiCallModel,
+  type X4UiCallModel,
 } from './x4UiCallModel';
 import {
   createX4UiLayoutTargetCatalog,
@@ -433,6 +434,8 @@ const pinnedLineAdvanceCorpus = await canonicalCorpus({
 
 const P3_COLOR_BASE_IDS = [
   'white',
+  'black',
+  'grey_128',
   'black_alpha_0',
   'white_weak_glow',
   'azure_very_dark',
@@ -451,6 +454,8 @@ const P3_COLOR_MAPPING_IDS = [
   'button_highlight_default',
   'button_border_default',
   'editbox_background_default',
+  'editbox_text_default',
+  'editbox_background_black',
 ] as const;
 
 const p3PaddedUtf8 = (text: string, size: number): Uint8Array => {
@@ -473,6 +478,8 @@ const p3ColorAuthority = await (async (): Promise<X4UiCorpusCanonicalColorSucces
   while (baseIds.length < 224) baseIds.push(`scene_p3_base_${baseIds.length.toString().padStart(3, '0')}`);
   const specialValues: Record<string, readonly [number, number, number, number, number]> = {
     white: [11, 22, 33, 44, 0.1],
+    black: [0, 0, 0, 255, 0],
+    grey_128: [128, 128, 128, 255, 0],
     black_alpha_0: [51, 52, 53, 54, 0.2],
     white_weak_glow: [101, 102, 103, 104, 0.3],
     azure_very_dark: [61, 62, 63, 64, 0.4],
@@ -494,6 +501,8 @@ const p3ColorAuthority = await (async (): Promise<X4UiCorpusCanonicalColorSucces
     button_highlight_default: 'azure_moderate_glow',
     button_border_default: 'azure_dark_alpha_160_glow',
     editbox_background_default: 'azure_very_dark_alpha_224',
+    editbox_text_default: 'grey_128',
+    editbox_background_black: 'black',
   };
   const mappings = P3_COLOR_MAPPING_IDS.map(id => `    <mapping id="${id}" ref="${mappingRefs[id]}"/>`);
   for (let index = mappings.length; index < 804; index += 1) mappings.push(`    <mapping id="scene_p3_map_${index.toString().padStart(3, '0')}" ref="${baseIds[index % baseIds.length]}"/>`);
@@ -726,6 +735,7 @@ const rawProjectionFor = (
   producerProfileUpdate?: (
     profile: Parameters<typeof projectX4UiLayoutProgram>[2],
   ) => Parameters<typeof projectX4UiLayoutProgram>[2],
+  colorEvidence?: X4UiCorpusCanonicalColorSuccess,
 ) => {
   const model = buildX4UiCallModel({ rel: sourcePath, text: sourceText, sourcePath });
   const catalog = createX4UiLayoutTargetCatalog(model);
@@ -734,7 +744,15 @@ const rawProjectionFor = (
   if (!target || !baseProfile) return { model, target, result: undefined, program: undefined, profile: undefined };
   const baseBranchProfile = { ...baseProfile, source: catalog.sourceIdentity };
   const profile = producerProfileUpdate === undefined ? baseBranchProfile : producerProfileUpdate(baseBranchProfile);
-  const result = projectX4UiLayoutProgram(model, target, profile);
+  const projectWithColorEvidence = projectX4UiLayoutProgram as unknown as (
+    modelValue: X4UiCallModel,
+    targetValue: Parameters<typeof projectX4UiLayoutProgram>[1],
+    profileValue: Parameters<typeof projectX4UiLayoutProgram>[2],
+    previewSampleValue?: unknown,
+    previewPathValue?: unknown,
+    colorEvidenceValue?: unknown,
+  ) => ReturnType<typeof projectX4UiLayoutProgram>;
+  const result = projectWithColorEvidence(model, target, profile, undefined, undefined, colorEvidence);
   if (!('program' in result) || !result.program) return { model, target, result, program: undefined, profile: undefined };
   const branchProfile: X4UiSceneProfile = Object.freeze({
     id: 'raw-branch-profile',
@@ -761,7 +779,7 @@ const colorProjection = (() => {
     'local row = table:addRow(false, { paddingTop = 1, paddingBottom = 1, borderBelow = false, fixed = false, scaling = false })',
     'row[1]:createText("literal", { height = 12, minRowHeight = 10, color = { r = 12.5, g = 23.5, b = 34.5, a = 45.5, glow = 0.25 }, cellBGColor = Color["row_background"] })',
     'row[2]:createButton({ height = 12, bgcolor = Color["button_background_default"], highlightColor = Color["button_highlight_default"], borderColor = Color["button_border_default"] }):setText("primary", { color = Color["text_normal"] }):setText2("secondary", { color = { r = 15, g = 25, b = 35, a = 55 } })',
-    'row[3]:createEditBox({ height = 12, bgColor = Color["editbox_background_default"] })',
+    'row[3]:createEditBox({ height = 12, defaultText = "Placeholder", active = false, bgColor = Color["editbox_background_default"] }):setText("", { x = 5, y = 0 })',
     'row[4]:createIcon("icon", { height = 8, affectRowHeight = false, color = Color["white"] })',
     'frame:display()',
   ].join('\n');
@@ -1736,6 +1754,18 @@ const sceneFromRaw = (
   return sceneOf(buildX4UiScene(projected.result as X4UiLayoutProgramResult, corpus, profile));
 };
 
+const sceneFromRawWithColor = (
+  sourceText: string,
+  sourcePath: string,
+  producerProfileUpdate?: (
+    profile: Parameters<typeof projectX4UiLayoutProgram>[2],
+  ) => Parameters<typeof projectX4UiLayoutProgram>[2],
+): X4UiScene => {
+  const projected = rawProjectionFor(sourceText, sourcePath, producerProfileUpdate, p3ColorAuthority);
+  assert(projected.result !== undefined && 'program' in projected.result && projected.program !== undefined && projected.profile !== undefined, `raw color scene fixture did not produce a successful result: ${sourcePath}`);
+  return sceneOf(buildX4UiScene(projected.result as X4UiLayoutProgramResult, corpus, projected.profile));
+};
+
 const rawSceneProjection = (sourceText: string, sourcePath: string): { readonly scene: X4UiScene; readonly program: X4UiLayoutProgram } => {
   const projected = rawProjectionFor(sourceText, sourcePath);
   assert(projected.result !== undefined && 'program' in projected.result && projected.program !== undefined && projected.profile !== undefined, `raw scene projection did not produce a successful result: ${sourcePath}`);
@@ -2108,8 +2138,9 @@ test('projects issued P3 color facts to exact Scene owners while retaining resid
   const buttonPrimary = scene.texts.find(candidate => candidate.content === 'primary');
   const buttonSecondary = scene.texts.find(candidate => candidate.content === 'secondary');
   const editbox = scene.widgets.find(candidate => candidate.kind === 'editbox');
+  const editboxText = editbox === undefined ? undefined : scene.texts.find(candidate => candidate.widgetId === editbox.id && candidate.slot === 'primary');
   const icon = scene.widgets.find(candidate => candidate.kind === 'icon');
-  assert(table !== undefined && literalCell !== undefined && literalText !== undefined && button !== undefined && buttonPrimary !== undefined && buttonSecondary !== undefined && editbox !== undefined && icon !== undefined, 'P3 color owners must be projected');
+  assert(table !== undefined && literalCell !== undefined && literalText !== undefined && button !== undefined && buttonPrimary !== undefined && buttonSecondary !== undefined && editbox !== undefined && editboxText !== undefined && icon !== undefined, 'P3 color owners must be projected');
   const sourceColor = (fact: X4UiLayoutDescriptorFact | undefined, label: string) => {
     if (!fact || fact.status !== 'known' || fact.expectedType !== 'color-object') throw new Error(`${label} producer color fact must be known`);
     return fact;
@@ -2157,13 +2188,17 @@ test('projects issued P3 color facts to exact Scene owners while retaining resid
   expectColorFact(buttonPrimary, 'color', 'primary-text', operationColor('setText', 'color'), 'button setText color');
   expectColorFact(buttonSecondary, 'color', 'secondary-text', operationColor('setText2', 'color'), 'button setText2 color');
   expectColorFact(editbox, 'bgcolor', 'widget-background', operationColor('createEditBox', 'bgcolor'), 'editbox.bgcolor');
+  expectColorFact(editbox, 'editboxBackgroundBlackColor', 'editbox-inner-background', operationColor('createEditBox', 'editboxBackgroundBlackColor'), 'editbox black inner color');
+  expectColorFact(editboxText, 'defaultTextColor', 'primary-text', operationColor('createEditBox', 'defaultTextColor'), 'editbox defaultText color');
   expectColorFact(icon, 'color', 'widget-icon', operationColor('createIcon', 'color'), 'icon.color');
   assert(table.colorFacts?.length === 1 && literalCell.colorFacts?.length === 1 && literalText.colorFacts?.length === 1, 'single-owner table/cell/direct-text facts must not be duplicated');
-  assert(button.colorFacts?.length === 3 && buttonPrimary.colorFacts?.length === 1 && buttonSecondary.colorFacts?.length === 1 && editbox.colorFacts?.length === 1 && icon.colorFacts?.length === 1, 'widget/text owners must retain only their mapped facts');
+  assert(button.colorFacts?.length === 3 && buttonPrimary.colorFacts?.length === 1 && buttonSecondary.colorFacts?.length === 1 && editbox.colorFacts?.length === 2 && editboxText.colorFacts?.length === 1 && icon.colorFacts?.length === 1, 'widget/text owners must retain only their mapped facts');
+  assert(editboxText.content === '' && editboxText.defaultContent === 'Placeholder' && editboxText.contentSelection === 'preview-default' && editboxText.layout !== undefined && editboxText.lines[0]?.displayedText === 'Placeholder', `inactive-empty edit-box must layout source defaultText through a distinct preview selection: ${JSON.stringify({ content: editboxText.content, defaultContent: editboxText.defaultContent, selection: editboxText.contentSelection, layout: editboxText.layout !== undefined, firstLine: editboxText.lines[0]?.displayedText, colorFacts: editboxText.colorFacts })}`);
   assert(literalText.colorFacts?.[0]?.domain === 'source-literal-percent-alpha' && (literalText.colorFacts[0].value as { readonly a: number }).a === 45.5, 'source literal alpha domain must remain percent-alpha');
   assert(table.colorFacts?.[0]?.domain === 'canonical-xml-byte-alpha' && (table.colorFacts[0].value as { readonly a: number }).a === 44, 'canonical default alpha domain must remain byte-alpha');
   const knownColorGap = (node: { readonly diagnosticLinks: readonly string[] } | undefined): boolean => node?.diagnosticLinks.some(id => scene.gaps.find(gap => gap.id === id)?.reason.startsWith('known base color tint') === true) === true;
-  assert(scene.status === 'partial' && knownColorGap(table) && knownColorGap(literalCell) && knownColorGap(literalText) && knownColorGap(button) && knownColorGap(buttonPrimary) && knownColorGap(buttonSecondary) && knownColorGap(editbox) && knownColorGap(icon), 'known tint facts must retain separate residual uncertainty and prevent false node completeness');
+  assert(scene.status === 'partial' && knownColorGap(table) && knownColorGap(literalCell) && knownColorGap(literalText) && knownColorGap(button) && knownColorGap(buttonPrimary) && knownColorGap(buttonSecondary) && knownColorGap(editbox) && knownColorGap(editboxText) && knownColorGap(icon), 'known tint facts must retain separate residual uncertainty and prevent false node completeness');
+  assert(scene.gaps.some(gap => gap.previewOnly === true && gap.nodeId === editbox.id && gap.reason.includes('live direct-input activity')), 'inactive-empty edit-box selection must retain a preview-only widget state/runtime gap');
   const residualReason = scene.gaps.find(gap => gap.reason.startsWith('known base color tint'))?.reason || '';
   assert(['material/texture/glow', 'active/inactive/hover/selection', 'C++ effective color map/profile/daltonization', 'font raster color behavior', 'game-frame acceptance'].every(fragment => residualReason.includes(fragment)), 'known tint must not imply material, state, glow, font, C++, or game truth');
   assert(!scene.gaps.some(gap => gap.reason.includes('engine color fact')), 'known color facts must remove the legacy blanket unavailable-color gap');
@@ -2819,22 +2854,165 @@ test('ports icon outer and primary/secondary text anchors independently of butto
   }
 });
 
-test('keeps edit-box current/default facts without choosing a runtime display branch', () => {
+test('selects the source-proven initial inactive edit-box default branch without claiming runtime input state', () => {
   const scene = sceneFromRaw([
     'local menu = { name = "EditDefaults", layer = 1 }',
     'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
     'local table = frame:addTable(1, { width = 40, reserveScrollBar = false })',
     'table:setColWidth(1, 40, false)',
     'local row = table:addRow(false, {})',
-    'row[1]:createEditBox({ height = 10, text = "", defaultText = "DEFAULT", description = "edit description", active = false })',
+    'row[1]:createEditBox({ height = 10, text = "", defaultText = "DEFAULT", description = "edit description", active = false }):setText("", { x = 5, y = 0 })',
     'frame:display()',
   ].join('\n'), 'selftest/raw-edit-defaults.lua');
   const widget = scene.widgets.find(candidate => candidate.kind === 'editbox')!;
   const text = scene.texts.find(candidate => candidate.widgetId === widget.id)!;
   assert(text.content === '' && text.defaultContent === 'DEFAULT' && text.description === 'edit description', 'edit-box text facts must remain separately serializable');
-  assert(text.contentSelection === 'runtime-choice-unavailable' && text.layout === undefined && text.completeness === 'unavailable', 'empty current text must not silently select defaultText');
-  assert(text.diagnosticLinks.some(id => scene.gaps.find(gap => gap.id === id)?.reason.includes('runtime active state') === true), 'runtime display choice must have an exact local gap');
+  assert(text.contentSelection === 'preview-default' && text.layout !== undefined && text.lines[0]?.displayedText === 'DEFAULT', `initial inactive empty-current edit-box must select defaultText independently of missing paint colors: ${JSON.stringify(text)}`);
+  assert(text.editboxPreviewInputState === 'source-initial-inactive' && widget.editboxPreviewInputState === 'source-initial-inactive', 'initial source-composition activity must be explicit and separate from runtime state');
+  assert(scene.gaps.some(gap => gap.previewOnly === true && gap.nodeId === widget.id && gap.reason.includes('live direct-input activity')), 'selected preview branch must retain the exact preview-only widget runtime-state gap');
   assert(widget.configuredActive === false, 'configured active must be labeled as configuration, not runtime activity');
+  assert(scene.verification.gameVerified === false && scene.verification.game === X4_UI_SCENE_GAME_TRUTH, 'selected preview branch must remain Not verified in game');
+});
+
+test('empty edit-box default string still selects the default branch and emits no glyph text', () => {
+  const scene = sceneFromRaw([
+    'local menu = { name = "EditEmptyDefault", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 40, reserveScrollBar = false })',
+    'table:setColWidth(1, 40, false)',
+    'local row = table:addRow(false, {})',
+    'row[1]:createEditBox({ width = 30, height = 12, defaultText = "" }):setText("", { x = 5, y = 0 })',
+    'frame:display()',
+  ].join('\n'), 'selftest/raw-edit-empty-default.lua');
+  const widget = scene.widgets.find(candidate => candidate.kind === 'editbox')!;
+  const text = scene.texts.find(candidate => candidate.widgetId === widget.id)!;
+  const glyphs = scene.glyphs.filter(glyph => glyph.textId === text.id);
+  assert(text.content === '' && text.defaultContent === '' && text.contentSelection === 'preview-default', `empty default string must remain a distinct selected branch: ${JSON.stringify(text)}`);
+  assert(glyphs.length === 0 && text.lines.every(line => line.displayedText === ''), `empty selected default must not fabricate glyph text: ${JSON.stringify({ lines: text.lines, glyphs })}`);
+});
+
+test('non-empty edit-box current text wins over defaultText and keeps source-proven black inner chrome evidence', () => {
+  const scene = sceneFromRawWithColor([
+    'local menu = { name = "EditCurrentWins", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 40, reserveScrollBar = false })',
+    'table:setColWidth(1, 40, false)',
+    'local row = table:addRow(false, {})',
+    'row[1]:createEditBox({ height = 10, defaultText = "PLACEHOLDER", bgColor = Color["editbox_background_default"] }):setText("CURRENT", { x = 5, y = 0 })',
+    'frame:display()',
+  ].join('\n'), 'selftest/raw-edit-current-wins.lua');
+  const widget = scene.widgets.find(candidate => candidate.kind === 'editbox')!;
+  const text = scene.texts.find(candidate => candidate.widgetId === widget.id)!;
+  assert(text.content === 'CURRENT' && text.defaultContent === 'PLACEHOLDER' && text.contentSelection === 'current', `non-empty current text must remain selected over defaultText: ${JSON.stringify({ content: text.content, defaultContent: text.defaultContent, selection: text.contentSelection, colorFacts: text.colorFacts })}`);
+  assert(text.layout !== undefined && text.lines[0]?.displayedText === 'CURRENT', 'non-empty edit-box current text must retain glyph layout');
+  assert(!text.colorFacts?.some(fact => fact.field === 'defaultTextColor'), 'non-empty current text must not use placeholder color');
+  assert(widget.colorFacts?.some(fact => fact.field === 'editboxBackgroundBlackColor' && fact.slot === 'editbox-inner-background'), `non-empty current text must not suppress black inner chrome evidence: ${JSON.stringify(widget.colorFacts)}`);
+  assert(widget.editboxBlackInset === 2 && widget.editboxTextBorder === 2, 'uiScale-1 black inset and fixed text border must remain separately named facts');
+});
+
+test('scaled black inset and fixed text border remain distinct at uiScale 2.5', () => {
+  const scene = sceneFromRawWithColor([
+    'local menu = { name = "EditScaledBorder", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 40, reserveScrollBar = false })',
+    'table:setColWidth(1, 40, false)',
+    'local row = table:addRow(false, {})',
+    'row[1]:createEditBox({ width = 30, height = 20, defaultText = "PLACEHOLDER", active = false, bgColor = Color["editbox_background_default"] }):setText("", { x = 5, y = 0 })',
+    'frame:display()',
+  ].join('\n'),
+  'selftest/raw-edit-scaled-border.lua',
+  profile => ({ ...profile, metrics: { ...profile.metrics, uiScale: 2.5 } }));
+  const widget = scene.widgets.find(candidate => candidate.kind === 'editbox')!;
+  const text = scene.texts.find(candidate => candidate.widgetId === widget.id)!;
+  assert(widget.editboxBlackInset === 3, `scaled edit-box black inset must be max(2, floor(1*2.5+0.5)): ${JSON.stringify(widget)}`);
+  assert(widget.editboxConfigBorder === 1 && widget.editboxTextBorder === 2 && text.editboxTextBorder === 2, `base, scaled-inner, and fixed-text values must remain distinct: ${JSON.stringify({ widget, textBorder: text.editboxTextBorder })}`);
+  assert(text.contentSelection === 'preview-default' && text.layout !== undefined && text.lines[0]?.displayedText === 'PLACEHOLDER', `scaled inactive-empty edit-box must retain the preview default branch: ${JSON.stringify({ selection: text.contentSelection, layout: text.layout !== undefined, firstLine: text.lines[0]?.displayedText, widget })}`);
+  const expectedFixedWidth = widget.outerRect === undefined || text.offsetX === undefined
+    ? undefined
+    : widget.outerRect.width - 2 * (text.offsetX + 2);
+  const wronglyScaledWidth = widget.outerRect === undefined || text.offsetX === undefined || widget.editboxBlackInset === undefined
+    ? undefined
+    : widget.outerRect.width - 2 * (text.offsetX + widget.editboxBlackInset);
+  assert(text.availableWidth === expectedFixedWidth && text.availableWidth !== wronglyScaledWidth, `scaled edit-box text width must keep the fixed two-pixel border: ${JSON.stringify({ availableWidth: text.availableWidth, expectedFixedWidth, wronglyScaledWidth, offsetX: text.offsetX, widget: widget.outerRect, blackInset: widget.editboxBlackInset })}`);
+  const line = text.lines[0];
+  assert(line !== undefined && line.rect.x >= widget.outerRect!.x + 2, `left text anchor must retain the fixed two-pixel inset: ${JSON.stringify({ line: line?.rect, widget: widget.outerRect })}`);
+  assert(scene.gaps.some(gap => gap.previewOnly === true && gap.nodeId === text.id), 'scaled preview must retain a preview-only gap');
+});
+
+test('B119 uiScale 1.4 keeps the source-pinned edit-box inset floor at 2', () => {
+  const scene = sceneFromRawWithColor([
+    'local menu = { name = "EditFractionalBorder", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 40, reserveScrollBar = false })',
+    'table:setColWidth(1, 40, false)',
+    'local row = table:addRow(false, {})',
+    'row[1]:createEditBox({ width = 30, height = 20, defaultText = "PLACEHOLDER", active = false, bgColor = Color["editbox_background_default"] }):setText("", { x = 5, y = 0 })',
+    'frame:display()',
+  ].join('\n'),
+  'selftest/raw-edit-fractional-border.lua',
+  profile => ({ ...profile, metrics: { ...profile.metrics, uiScale: 1.4 } }));
+  const widget = scene.widgets.find(candidate => candidate.kind === 'editbox');
+  assert(widget?.editboxBlackInset === 2, `uiScale 1.4 must retain max(2, floor(1*1.4+0.5)) = 2: ${JSON.stringify(widget)}`);
+});
+
+test('B119 synchronized in-range edit-box inset drift refuses before Scene geometry', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "EditScaledInsetDrift", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 40, reserveScrollBar = false })',
+    'table:setColWidth(1, 40, false)',
+    'local row = table:addRow(false, {})',
+    'row[1]:createEditBox({ width = 30, height = 20, defaultText = "PLACEHOLDER", active = false, bgColor = Color["editbox_background_default"] }):setText("", { x = 5, y = 0 })',
+    'frame:display()',
+  ].join('\n'),
+  'selftest/b119-editbox-inset-drift.lua',
+  profile => ({ ...profile, metrics: { ...profile.metrics, uiScale: 2.5 } }),
+  p3ColorAuthority,
+  );
+  assert(projected.program !== undefined && projected.profile !== undefined && projected.result !== undefined && 'program' in projected.result && projected.result.program !== undefined && 'evidenceAuthority' in projected.result && projected.result.evidenceAuthority !== undefined, 'edit-box inset drift fixture must issue a producer authority pair');
+  const result = projected.result as X4UiLayoutProgramResult;
+  const sourceCell = projected.program.cells.find(cell => cell.descriptorFacts.contentKind?.status === 'known' && cell.descriptorFacts.contentKind.value === 'editbox');
+  const sourceCreator = sourceCell === undefined ? undefined : projected.program.operations.find(operationNode => operationNode.cellId === sourceCell.id && operationNode.kind === 'createEditBox');
+  assert(sourceCell !== undefined && sourceCreator !== undefined, 'edit-box inset drift fixture must expose a real edit-box cell and creator');
+  const forgedProgram = cloneProgram(projected.program);
+  const forgedCell = forgedProgram.cells.find(cell => cell.id === sourceCell.id)!;
+  const forgedCreator = forgedProgram.operations.find(operationNode => operationNode.id === sourceCreator.id)!;
+  const forgedFacts = [forgedCell.descriptorFacts, forgedCreator.descriptorFacts];
+  for (const facts of forgedFacts) {
+    const fact = facts.editboxBlackInset;
+    assert(fact?.status === 'known' && fact.expectedType === 'number', 'edit-box inset drift must start from a known numeric source fact');
+    (fact as unknown as Record<string, unknown>).value = 2;
+  }
+  const forgedAuthority = synchronizedAuthority(producerAuthority(result), forgedProgram);
+  freezeFixtureGraph(forgedProgram);
+  freezeFixtureGraph(forgedAuthority);
+  const pair = validateX4UiLayoutEvidencePair(forgedProgram, forgedAuthority);
+  const stage = diagnoseX4UiSceneStructureForTest(forgedProgram, forgedAuthority);
+  const accepted = buildX4UiScene(result, corpus, projected.profile);
+  const acceptedWidget = accepted.status === 'refused'
+    ? undefined
+    : accepted.scene.widgets.find(widget => widget.kind === 'editbox');
+  console.log(`B119 edit-box inset fail-first receipt: ${JSON.stringify({ uiScale: projected.program.profile.metrics.uiScale, canonicalInset: acceptedWidget?.editboxBlackInset, forgedInset: 2, pairValid: pair.valid, stage })}`);
+  assert(accepted.status !== 'refused' && acceptedWidget?.editboxBlackInset === 3, `uiScale 2.5 canonical inset must be exactly 3: ${JSON.stringify(accepted)}`);
+  assert(pair.valid, `synchronized in-range edit-box inset drift must remain an authority-valid producer pair: ${JSON.stringify(pair)}`);
+  assert(stage !== undefined, `synchronized in-range inset 2 escaped the Scene structure boundary: ${JSON.stringify({ stage, uiScale: projected.program.profile.metrics.uiScale, forgedInset: 2 })}`);
+});
+
+test('missing colors and hostile black-inset geometry do not flip the source-proven default text branch', () => {
+  const scene = sceneFromRaw([
+    'local menu = { name = "EditHostilePaint", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 40, reserveScrollBar = false })',
+    'table:setColWidth(1, 40, false)',
+    'local row = table:addRow(false, {})',
+    'row[1]:createEditBox({ width = 4, height = 4, defaultText = "DEFAULT" }):setText("", { x = 5, y = 0 })',
+    'frame:display()',
+  ].join('\n'), 'selftest/raw-edit-hostile-paint.lua');
+  const widget = scene.widgets.find(candidate => candidate.kind === 'editbox')!;
+  const text = scene.texts.find(candidate => candidate.widgetId === widget.id)!;
+  assert(text.contentSelection === 'preview-default' && text.defaultContent === 'DEFAULT', `missing color and unusable chrome geometry must not alter source text selection: ${JSON.stringify({ text, widget })}`);
+  assert(text.layout === undefined && widget.colorFacts?.some(fact => fact.slot === 'editbox-inner-background') !== true, 'paint gaps must fail closed without fabricated glyph/chrome evidence');
+  assert(scene.gaps.some(gap => gap.nodeId === widget.id && gap.reason.includes('source-scaled black inset')), `hostile inner geometry must remain an explicit gap: ${JSON.stringify(scene.gaps)}`);
 });
 
 test('keeps edit-box width unavailable when the raw text offset is unavailable', () => {
@@ -7093,6 +7271,125 @@ test('B119 missing-min-text-height requires the exact producer-emitted cell heig
   assert(knownPair.valid, `known/value cell-height drift must remain producer-pair valid: ${JSON.stringify(knownPair)}`);
   const knownResult = buildX4UiScene({ ...projected.result, program: knownProgram, evidenceAuthority: knownAuthority } as X4UiLayoutProgramResult, corpus, projected.profile);
   assert(diagnoseX4UiSceneStructureForTest(knownProgram, knownAuthority) === expectedStage && refusalHasNoScene(knownResult), 'known/value cell-height drift must refuse at the independent Scene relation');
+});
+
+test('B119 direct Helper scale aliases cross the Scene structure boundary', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "DirectHelperScale", layer = 1 }',
+    'local width = Helper.scaleX(530)',
+    'local height = Helper.scaleY(436)',
+    'local frame = Helper.createFrameHandle(menu, { width = width, height = height })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'table:setColWidth(1, 100, false)',
+    'local row = table:addRow(false, {})',
+    'row[1]:createText("direct scale", { height = 12, minRowHeight = 10 })',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-direct-helper-scale.lua');
+  assert(projected.program !== undefined && projected.profile !== undefined && projected.result !== undefined && 'program' in projected.result && projected.result.program !== undefined && 'evidenceAuthority' in projected.result && projected.result.evidenceAuthority !== undefined, 'direct Helper scale fixture must issue a producer authority pair');
+  const result = projected.result as X4UiLayoutProgramResult;
+  const authority = producerAuthority(result);
+  const pair = validateX4UiLayoutEvidencePair(projected.program, authority);
+  const frameOperation = projected.program.operations.find(operationNode => operationNode.kind === 'createFrameHandle');
+  const stage = diagnoseX4UiSceneStructureForTest(projected.program, authority);
+  console.log(`B119 direct Helper scale fail-first receipt: ${JSON.stringify({ pairValid: pair.valid, stage, frameOperation: frameOperation?.id, source: frameOperation?.source })}`);
+  assert(pair.valid, `direct Helper scale producer/evidence pair must validate: ${JSON.stringify(pair)}`);
+  assert(stage === undefined, `direct Helper scale fixture refused at Scene structure stage ${String(stage)} for ${frameOperation?.id}`);
+  const sceneResult = buildX4UiScene(result, corpus, projected.profile);
+  assert(sceneResult.status !== 'refused', `direct Helper scale fixture must cross Scene: ${JSON.stringify(sceneResult)}`);
+  assert(sceneResult.scene.gameTruth === 'Not verified in game' && sceneResult.verification.gameVerified === false, 'direct Helper scale fixture must remain Not verified in game');
+});
+
+test('B119 direct Helper scale calls accept Lua whitespace at the Scene boundary', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "DirectHelperScaleWhitespace", layer = 1 }',
+    'local width = Helper.scaleX (530)',
+    'local height = Helper.scaleY (436)',
+    'local fontSize = Helper.scaleFont ("Zekton", 14, false)',
+    'local frame = Helper.createFrameHandle(menu, { width = width, height = height })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'table:setColWidth(1, 100, false)',
+    'local row = table:addRow(false, {})',
+    'row[1]:createText("direct scale", { height = 12, fontsize = fontSize, minRowHeight = 10 })',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-direct-helper-scale-whitespace.lua');
+  assert(projected.program !== undefined && projected.profile !== undefined && projected.result !== undefined && 'program' in projected.result && projected.result.program !== undefined && 'evidenceAuthority' in projected.result && projected.result.evidenceAuthority !== undefined, 'whitespace direct Helper fixture must issue a producer authority pair');
+  const result = projected.result as X4UiLayoutProgramResult;
+  const authority = producerAuthority(result);
+  const directOperations = projected.program.operations
+    .filter(operationNode => ['scaleX', 'scaleY', 'scaleFont'].includes(operationNode.kind))
+    .map(operationNode => ({
+      kind: operationNode.kind,
+      expression: (operationNode.metadata.semantics as unknown as Record<string, unknown>).expression,
+      direct: (operationNode.metadata.semantics as unknown as Record<string, unknown>).directHelperScaleResult,
+    }));
+  const pair = validateX4UiLayoutEvidencePair(projected.program, authority);
+  const stage = diagnoseX4UiSceneStructureForTest(projected.program, authority);
+  const sceneResult = buildX4UiScene(result, corpus, projected.profile);
+  console.log(`B119 direct Helper whitespace fail-first receipt: ${JSON.stringify({ pairValid: pair.valid, stage, directOperations, sceneStatus: sceneResult.status, sceneRefusal: sceneResult.status === 'refused' ? sceneResult.refusal : undefined })}`);
+  assert(pair.valid, `whitespace direct Helper producer/evidence pair must validate: ${JSON.stringify(pair)}`);
+  assert(stage === undefined, `valid Lua whitespace direct Helper calls refused at Scene structure stage ${String(stage)}: ${JSON.stringify(directOperations)}`);
+  assert(sceneResult.status !== 'refused', `valid Lua whitespace direct Helper calls must cross Scene: ${JSON.stringify(sceneResult)}`);
+});
+
+test('B119 direct Helper scale metadata remains fail-closed at Scene structure', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "DirectHelperScaleHostile", layer = 1 }',
+    'local width = Helper.scaleX(530)',
+    'local height = Helper.scaleY(436)',
+    'local frame = Helper.createFrameHandle(menu, { width = width, height = height })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'table:setColWidth(1, 100, false)',
+    'local row = table:addRow(false, {})',
+    'row[1]:createText("direct scale", { height = 12, minRowHeight = 10 })',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-direct-helper-scale-hostile.lua');
+  assert(projected.program !== undefined && projected.profile !== undefined && projected.result !== undefined && 'program' in projected.result && projected.result.program !== undefined && 'evidenceAuthority' in projected.result && projected.result.evidenceAuthority !== undefined, 'hostile direct Helper scale fixture must issue a producer authority pair');
+  const result = projected.result as X4UiLayoutProgramResult;
+  const sourceAuthority = producerAuthority(result);
+  const sourceOperation = projected.program.operations.find(operationNode => operationNode.kind === 'createFrameHandle');
+  assert(sourceOperation !== undefined, 'hostile direct Helper scale fixture must expose createFrameHandle');
+  const expectedStage = 'operation:' + sourceOperation.id;
+  type DirectMutation = (value: Record<string, unknown>, direct: Record<string, unknown>) => void;
+  const mutations: ReadonlyArray<readonly [string, DirectMutation]> = [
+    ['extra key', (_value, direct) => { direct.extra = true; }],
+    ['invalid callName', (_value, direct) => { direct.callName = 'scaleZ'; }],
+    ['call source identity mismatch', (_value, direct) => {
+      direct.callSource = { ...(direct.callSource as Record<string, unknown>), file: 'forged.lua' };
+    }],
+    ['binding source order mismatch', (_value, direct) => {
+      const callSource = direct.callSource as Record<string, unknown>;
+      const callEnd = (callSource.end as Record<string, unknown>).offset as number;
+      const bindingSource = direct.bindingSource as Record<string, unknown>;
+      direct.bindingSource = {
+        ...bindingSource,
+        start: { ...(bindingSource.start as Record<string, unknown>), offset: callEnd + 1 },
+        end: { ...(bindingSource.end as Record<string, unknown>), offset: callEnd + 2 },
+      };
+    }],
+    ['invalid expression status', (value) => { value.status = 'static'; }],
+    ['invalid expression type', (value) => { value.type = 'number'; }],
+    ['call expression mismatch', (_value, direct) => { direct.callExpression = 'Other.scaleX(530)'; }],
+    ['wrong scale name', (_value, direct) => { direct.callExpression = 'Helper.scaleY(530)'; }],
+    ['malformed expression', (_value, direct) => { direct.callExpression = 'Helper.scaleX(530'; }],
+    ['trailing expression', (_value, direct) => { direct.callExpression = 'Helper.scaleX(530) + 1'; }],
+    ['prototype property', (_value, direct) => { Object.setPrototypeOf(direct, { forged: true }); }],
+    ['accessor property', (_value, direct) => {
+      Object.defineProperty(direct, 'callName', { configurable: true, enumerable: true, get: () => 'scaleX' });
+    }],
+  ];
+  for (const [label, mutate] of mutations) {
+    const program = cloneProgram(projected.program);
+    const operation = program.operations.find(operationNode => operationNode.id === sourceOperation.id)!;
+    const semantics = operation.metadata.semantics as unknown as Record<string, unknown>;
+    const width = semantics.width as Record<string, unknown>;
+    const direct = width.directHelperScaleResult as Record<string, unknown>;
+    assert(direct !== undefined, label + ' requires directHelperScaleResult');
+    mutate(width, direct);
+    freezeFixtureGraph(program);
+    const stage = diagnoseX4UiSceneStructureForTest(program, sourceAuthority);
+    const hostileResult = buildX4UiScene({ ...result, program, evidenceAuthority: sourceAuthority } as X4UiLayoutProgramResult, corpus, projected.profile);
+    assert(stage === expectedStage && refusalHasNoScene(hostileResult), label + ' escaped its Scene boundary: ' + JSON.stringify({ expectedStage, stage, result: hostileResult }));
+  }
 });
 
 test('B119 cell outer-height relation rejects synchronized one-field semantic drift', () => {

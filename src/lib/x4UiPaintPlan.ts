@@ -46,6 +46,24 @@ import {
 export const X4_UI_PAINT_PLAN_FORMAT = 'x4-ui-paint-plan' as const;
 export const X4_UI_PAINT_PLAN_VERSION = 1 as const;
 export const X4_UI_PAINT_GAME_TRUTH = NOT_VERIFIED_IN_GAME;
+const WIDGET_SOURCE_PATH = 'ui/widget/lua/widget_fullscreen.lua';
+
+export const X4_UI_EDITBOX_SOURCE_COMPOSITION_PINS = Object.freeze({
+  configBorder: Object.freeze({ sourcePath: WIDGET_SOURCE_PATH, lineStart: 617, lineEnd: 634 }),
+  fixedTextBorder: Object.freeze({ sourcePath: WIDGET_SOURCE_PATH, lineStart: 848, lineEnd: 860 }),
+  scaledInnerInset: Object.freeze({ sourcePath: WIDGET_SOURCE_PATH, lineStart: 8702, lineEnd: 8727 }),
+  innerApplication: Object.freeze({ sourcePath: WIDGET_SOURCE_PATH, lineStart: 12642, lineEnd: 12646 }),
+  textAnchor: Object.freeze({ sourcePath: WIDGET_SOURCE_PATH, lineStart: 12673, lineEnd: 12686 }),
+  textTruncation: Object.freeze({ sourcePath: WIDGET_SOURCE_PATH, lineStart: 12774, lineEnd: 12782 }),
+});
+
+export interface X4UiPaintEditBoxCompositionEvidence {
+  readonly previewOnly: true;
+  readonly configBorder: 1;
+  readonly innerInset: number;
+  readonly textBorder: 2;
+  readonly sourcePins: typeof X4_UI_EDITBOX_SOURCE_COMPOSITION_PINS;
+}
 
 /**
  * A source-backed color fact is only a partial preview tint.  It deliberately
@@ -117,6 +135,10 @@ interface PaintCommandBase {
 export interface X4UiPaintGeometryCommand extends PaintCommandBase {
   readonly kind: 'node-geometry';
   readonly geometry?: X4UiSceneRect;
+  /** Preview-only X4 edit-box inner layer, inset by the source-scaled border. */
+  readonly innerGeometry?: X4UiSceneRect;
+  /** Distinguishes scaled black inset geometry from the fixed text border. */
+  readonly editboxComposition?: X4UiPaintEditBoxCompositionEvidence;
   readonly completeness: 'complete' | 'partial' | 'unavailable';
   readonly style: 'source-derived' | 'unavailable';
   readonly basePreviewTints?: readonly X4UiPaintBasePreviewTint[];
@@ -605,6 +627,7 @@ const SCENE_COLOR_SLOTS = new Set([
   'table-background',
   'cell-background',
   'widget-background',
+  'editbox-inner-background',
   'widget-highlight',
   'widget-border',
   'widget-icon',
@@ -618,10 +641,12 @@ const SCENE_COLOR_FIELD_SLOTS = new Set([
   'backgroundColor:table-background',
   'cellbgcolor:cell-background',
   'bgcolor:widget-background',
+  'editboxBackgroundBlackColor:editbox-inner-background',
   'highlightcolor:widget-highlight',
   'bordercolor:widget-border',
   'color:widget-icon',
   'color:primary-text',
+  'defaultTextColor:primary-text',
   'color:secondary-text',
 ]);
 
@@ -712,6 +737,59 @@ const rectForNode = (node: Node): X4UiSceneRect | undefined => {
   if (rectValid(record.outerRect)) return record.outerRect;
   if (rectValid(record.naturalRect)) return record.naturalRect;
   return undefined;
+};
+
+const hasExactSourcePinLink = (
+  node: Node,
+  pin: { readonly sourcePath: string; readonly lineStart: number; readonly lineEnd: number },
+): boolean => node.provenanceLinks.some(link => link.kind === 'source-pin'
+  && link.sourcePin?.sourcePath === pin.sourcePath
+  && link.sourcePin.lineStart === pin.lineStart
+  && link.sourcePin.lineEnd === pin.lineEnd);
+
+const copyEditBoxCompositionEvidence = (
+  innerInset: number,
+): X4UiPaintEditBoxCompositionEvidence => ({
+  previewOnly: true,
+  configBorder: 1,
+  innerInset,
+  textBorder: 2,
+  sourcePins: {
+    configBorder: { ...X4_UI_EDITBOX_SOURCE_COMPOSITION_PINS.configBorder },
+    fixedTextBorder: { ...X4_UI_EDITBOX_SOURCE_COMPOSITION_PINS.fixedTextBorder },
+    scaledInnerInset: { ...X4_UI_EDITBOX_SOURCE_COMPOSITION_PINS.scaledInnerInset },
+    innerApplication: { ...X4_UI_EDITBOX_SOURCE_COMPOSITION_PINS.innerApplication },
+    textAnchor: { ...X4_UI_EDITBOX_SOURCE_COMPOSITION_PINS.textAnchor },
+    textTruncation: { ...X4_UI_EDITBOX_SOURCE_COMPOSITION_PINS.textTruncation },
+  },
+});
+
+const previewInnerGeometryForEditBox = (
+  node: Node,
+  clip: X4UiSceneRect,
+  tints: readonly X4UiPaintBasePreviewTint[],
+): { readonly geometry: X4UiSceneRect; readonly evidence: X4UiPaintEditBoxCompositionEvidence } | undefined => {
+  if (node.kind !== 'editbox') return undefined;
+  const record = node as unknown as JsonRecord;
+  const configBorder = record.editboxConfigBorder;
+  const textBorder = record.editboxTextBorder;
+  const innerInset = record.editboxBlackInset;
+  const outer = rectForNode(node);
+  if (configBorder !== 1 || textBorder !== 2 || !isSafeInteger(innerInset, 2) || innerInset > 1_000_000 || outer === undefined
+    || !Object.values(X4_UI_EDITBOX_SOURCE_COMPOSITION_PINS).every(pin => hasExactSourcePinLink(node, pin))
+    || !hasArea(outer) || outer.width <= 2 * innerInset || outer.height <= 2 * innerInset
+    || !tints.some(tint => tint.slot === 'widget-background')
+    || !tints.some(tint => tint.slot === 'editbox-inner-background')) return undefined;
+  const inner = {
+    x: outer.x + innerInset,
+    y: outer.y + innerInset,
+    width: outer.width - 2 * innerInset,
+    height: outer.height - 2 * innerInset,
+  };
+  const clipped = intersect(inner, clip);
+  return hasArea(clipped)
+    ? { geometry: clipped, evidence: copyEditBoxCompositionEvidence(innerInset) }
+    : undefined;
 };
 
 const fontNameForText = (text: X4UiSceneTextNode): 'Zekton' | 'Zekton Bold' | undefined => text.font;
@@ -881,9 +959,13 @@ const sceneNodeShapeValid = (node: unknown): node is Node => {
   if (!baseShapeValid) return false;
   if (node.colorFacts !== undefined && !['table', 'cell', 'button', 'editbox', 'icon', 'text'].includes(node.kind)) return false;
   const sourceOrderValue = (node.source as X4UiSceneSourceLocation).start.offset;
-  const widgetShapeValid = (): boolean => exactKeys(node, [...baseRequired, 'cellId', 'textIds'], [...baseOptional, 'primaryContent', 'iconIdentity', 'configuredActive', 'outerRect'])
+  const widgetShapeValid = (): boolean => exactKeys(node, [...baseRequired, 'cellId', 'textIds'], [...baseOptional, 'primaryContent', 'iconIdentity', 'configuredActive', 'outerRect', 'editboxConfigBorder', 'editboxBlackInset', 'editboxTextBorder', 'editboxPreviewInputState'])
     && typeof node.cellId === 'string' && stringArrayValid(node.textIds) && (node.primaryContent === undefined || typeof node.primaryContent === 'string') && (node.iconIdentity === undefined || typeof node.iconIdentity === 'string')
-    && (node.configuredActive === undefined || typeof node.configuredActive === 'boolean') && (node.outerRect === undefined || rectValid(node.outerRect));
+    && (node.configuredActive === undefined || typeof node.configuredActive === 'boolean') && (node.outerRect === undefined || rectValid(node.outerRect))
+    && (node.editboxConfigBorder === undefined || node.kind === 'editbox' && node.editboxConfigBorder === 1)
+    && (node.editboxBlackInset === undefined || node.kind === 'editbox' && isSafeInteger(node.editboxBlackInset, 2) && node.editboxBlackInset <= 1_000_000)
+    && (node.editboxTextBorder === undefined || node.kind === 'editbox' && node.editboxTextBorder === 2)
+    && (node.editboxPreviewInputState === undefined || node.kind === 'editbox' && ['source-initial-inactive', 'runtime-unknown'].includes(String(node.editboxPreviewInputState)));
   switch (node.kind) {
     case 'frame':
       return exactKeys(node, [...baseRequired, 'tableIds'], [...baseOptional, 'layer']) && stringArrayValid(node.tableIds) && (node.layer === undefined || isFiniteSafe(node.layer));
@@ -912,12 +994,14 @@ const sceneNodeShapeValid = (node: unknown): node is Node => {
         && (node.rowIndex === undefined || isSafeInteger(node.rowIndex, 1)) && (node.span === undefined || isSafeInteger(node.span, 0)) && (node.hidden === undefined || typeof node.hidden === 'boolean') && (node.naturalRect === undefined || rectValid(node.naturalRect));
     case 'text':
       if (Object.prototype.hasOwnProperty.call(node, 'cellId')) return widgetShapeValid();
-      return exactKeys(node, [...baseRequired, 'widgetId', 'slot', 'contentSelection', 'lines', 'textGaps', 'evidence'], [...baseOptional, 'content', 'defaultContent', 'description', 'font', 'fontSize', 'alignment', 'offsetX', 'offsetY', 'availableWidth', 'layout'])
-        && (node.widgetId === undefined || typeof node.widgetId === 'string') && ['primary', 'secondary'].includes(String(node.slot)) && ['current', 'runtime-choice-unavailable', 'unavailable'].includes(String(node.contentSelection))
+      return exactKeys(node, [...baseRequired, 'widgetId', 'slot', 'contentSelection', 'lines', 'textGaps', 'evidence'], [...baseOptional, 'content', 'defaultContent', 'description', 'editboxPreviewInputState', 'editboxTextBorder', 'font', 'fontSize', 'alignment', 'offsetX', 'offsetY', 'availableWidth', 'layout'])
+        && (node.widgetId === undefined || typeof node.widgetId === 'string') && ['primary', 'secondary'].includes(String(node.slot)) && ['current', 'preview-default', 'runtime-choice-unavailable', 'unavailable'].includes(String(node.contentSelection))
         && Array.isArray(node.lines) && node.lines.every(line => isRecord(line) && exactKeys(line, ['lineIndex', 'displayedText', 'rect', 'completeness', 'diagnosticLinks', 'width', 'sourceRange', 'sourceCodePointRange', 'breakReason', 'truncated', 'overflow', 'glyphIds']) && isSafeInteger(line.lineIndex, 0) && typeof line.displayedText === 'string' && rectValid(line.rect) && ['complete', 'partial', 'unavailable'].includes(String(line.completeness)) && stringArrayValid(line.diagnosticLinks) && isFiniteSafe(line.width) && sourceRangeValid(line.sourceRange) && sourceRangeValid(line.sourceCodePointRange) && typeof line.breakReason === 'string' && typeof line.truncated === 'boolean' && typeof line.overflow === 'boolean' && stringArrayValid(line.glyphIds))
         && stringArrayValid(node.textGaps) && isRecord(node.evidence) && exactKeys(node.evidence, ['metrics', 'wrapAndTruncationPolicy', 'gameParity']) && (node.evidence.metrics === 'exact-source-backed' || node.evidence.metrics === 'unavailable') && node.evidence.wrapAndTruncationPolicy === 'provisional-until-game-parity' && node.evidence.gameParity === 'not-verified'
         && (node.content === undefined || typeof node.content === 'string') && (node.defaultContent === undefined || typeof node.defaultContent === 'string') && (node.description === undefined || typeof node.description === 'string')
         && (node.font === undefined || node.font === 'Zekton' || node.font === 'Zekton Bold') && (node.fontSize === undefined || isDimension(node.fontSize)) && (node.alignment === undefined || ['left', 'center', 'right'].includes(String(node.alignment)))
+        && (node.editboxPreviewInputState === undefined || ['source-initial-inactive', 'runtime-unknown'].includes(String(node.editboxPreviewInputState)))
+        && (node.editboxTextBorder === undefined || node.editboxTextBorder === 2)
         && (node.offsetX === undefined || isFiniteSafe(node.offsetX)) && (node.offsetY === undefined || isFiniteSafe(node.offsetY)) && (node.availableWidth === undefined || isDimension(node.availableWidth))
         && (node.layout === undefined || textLayoutValid(node.layout, node.font === 'Zekton Bold' ? ZEKTON_CORPUS_ASSETS.bold : ZEKTON_CORPUS_ASSETS.regular));
     case 'button':
@@ -1387,7 +1471,22 @@ export function projectX4UiPaintPlan(input: X4UiPaintPlanInput): X4UiPaintPlanRe
       const drawableGeometry = clippedGeometry !== undefined && hasArea(clippedGeometry) ? clippedGeometry : undefined;
       const base = diagnosticBase(`geometry:${node.id}`, 'diagnostic-background', order++, node, frameId);
       const basePreviewTints = basePreviewTintsForNode(node);
-      background.push({ ...base, ...(drawableGeometry === undefined ? {} : { clipRect: rectCopy(clip), geometry: rectCopy(drawableGeometry) }), ...(basePreviewTints.length === 0 ? {} : { basePreviewTints }), kind: 'node-geometry', completeness: node.completeness, style: geometry === undefined ? 'unavailable' : 'source-derived' });
+      const editboxInner = previewInnerGeometryForEditBox(node, clip, basePreviewTints);
+      const commandPreviewTints = editboxInner === undefined
+        ? basePreviewTints.filter(tint => tint.slot !== 'editbox-inner-background')
+        : basePreviewTints;
+      background.push({
+        ...base,
+        ...(drawableGeometry === undefined ? {} : { clipRect: rectCopy(clip), geometry: rectCopy(drawableGeometry) }),
+        ...(editboxInner === undefined ? {} : {
+          innerGeometry: rectCopy(editboxInner.geometry),
+          editboxComposition: editboxInner.evidence,
+        }),
+        ...(commandPreviewTints.length === 0 ? {} : { basePreviewTints: commandPreviewTints }),
+        kind: 'node-geometry',
+        completeness: node.completeness,
+        style: geometry === undefined ? 'unavailable' : 'source-derived',
+      });
       if (geometry !== undefined && drawableGeometry === undefined) {
         diagnostics.push({ ...diagnosticBase(`empty-clip:geometry:${node.id}`, 'diagnostics', order++, node, frameId), clipRect: rectCopy(clip), kind: 'empty-clip', reason: 'node geometry has no drawable intersection with its accepted clip hierarchy' });
       }

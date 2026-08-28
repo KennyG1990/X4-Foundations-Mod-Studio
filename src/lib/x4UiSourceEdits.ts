@@ -153,6 +153,13 @@ export interface X4UiSourceEditStructuralOwner {
   readonly frameId?: string;
 }
 
+/** Exact row/table/frame chain owned by a row-local structural statement. */
+export interface X4UiSourceEditStructuralRowOwner {
+  readonly frameId: string;
+  readonly tableId: string;
+  readonly rowId: string;
+}
+
 export interface X4UiSourceEditStructuralProvenance {
   readonly sourceIdentity: X4UiLayoutModelIdentity;
   readonly targetId: string;
@@ -160,6 +167,7 @@ export interface X4UiSourceEditStructuralProvenance {
   readonly statementSource: X4UiSourceLocation;
   readonly callBindings: readonly X4UiSourceEditStructuralCallBinding[];
   readonly owner?: X4UiSourceEditStructuralOwner;
+  readonly rowOwner?: X4UiSourceEditStructuralRowOwner;
 }
 
 export interface X4UiSourceEditDeleteEntry {
@@ -173,6 +181,23 @@ export interface X4UiSourceEditDeleteEntry {
   readonly deletionSource: X4UiSourceLocation;
   readonly callBindings: readonly X4UiSourceEditStructuralCallBinding[];
   readonly provenance: X4UiSourceEditStructuralProvenance;
+}
+
+export interface X4UiSourceEditReplaceEntry {
+  readonly kind: 'replace-statement';
+  readonly id: string;
+  readonly path: string;
+  readonly startOffset: number;
+  readonly endOffset: number;
+  readonly expectedText: string;
+  readonly statementSource: X4UiSourceLocation;
+  readonly deletionSource: X4UiSourceLocation;
+  /** Calls and operations removed by this atomic replacement. */
+  readonly callBindings: readonly X4UiSourceEditStructuralCallBinding[];
+  readonly provenance: X4UiSourceEditStructuralProvenance & {
+    readonly owner: X4UiSourceEditStructuralOwner;
+    readonly rowOwner: X4UiSourceEditStructuralRowOwner;
+  };
 }
 
 export type X4UiSourceEditInsertionAnchor = 'first-row' | 'fallback-display' | 'frame-display';
@@ -209,6 +234,7 @@ export type X4UiSourceEditInsertionEntry = X4UiSourceEditInsertEntry | X4UiSourc
 
 export type X4UiSourceEditStructuralEntry =
   | X4UiSourceEditDeleteEntry
+  | X4UiSourceEditReplaceEntry
   | X4UiSourceEditInsertionEntry;
 
 export interface X4UiSourceEditCatalog {
@@ -222,6 +248,7 @@ export interface X4UiSourceEditCatalog {
   readonly lockedEntries: readonly X4UiLockedSourceEditEntry[];
   readonly structuralEntries?: readonly X4UiSourceEditStructuralEntry[];
   readonly deleteEntries?: readonly X4UiSourceEditDeleteEntry[];
+  readonly replaceEntries?: readonly X4UiSourceEditReplaceEntry[];
   readonly insertEntries?: readonly X4UiSourceEditInsertionEntry[];
   readonly editable: boolean;
   readonly reason?: X4UiSourceEditLockReason;
@@ -1427,6 +1454,7 @@ const catalogFromEntries = (
     lockedEntries: freezeArray(lockedEntries),
     structuralEntries: freezeArray([]),
     deleteEntries: freezeArray([]),
+    replaceEntries: freezeArray([]),
     insertEntries: freezeArray([]),
     editable: status === 'ready' && editableEntries.length > 0,
     ...(reason ? { reason } : {}),
@@ -1940,6 +1968,7 @@ const structuralEntryProvenance = (
   target: X4UiLayoutTarget,
   candidate: CompleteStructuralStatement,
   owner?: X4UiSourceEditStructuralOwner,
+  rowOwner?: X4UiSourceEditStructuralRowOwner,
 ): X4UiSourceEditStructuralProvenance => freezeDeep({
   sourceIdentity: identity,
   targetId: target.id,
@@ -1947,6 +1976,7 @@ const structuralEntryProvenance = (
   statementSource: candidate.statement.source,
   callBindings: candidate.bindings,
   ...(owner ? { owner } : {}),
+  ...(rowOwner ? { rowOwner } : {}),
 });
 
 const pointLocation = (source: X4UiSourceLocation, offset: number): X4UiSourceLocation => ({
@@ -1986,6 +2016,45 @@ const structuralInsertId = (
   offset: number,
 ): string => `x4-ui-source-insert:${target.id}:${anchor}:${offset}`;
 
+const structuralReplaceId = (
+  target: X4UiLayoutTarget,
+  statement: EnclosingStatementFacts,
+): string => `x4-ui-source-replace:${target.id}:${statement.deletionSource.start.offset}:${statement.deletionSource.end.offset}`;
+
+const rowOwnerForStructuralCandidate = (
+  candidate: CompleteStructuralStatement,
+  program: X4UiLayoutProgram,
+  owners: ReadonlyMap<string, X4UiSourceEditStructuralOwner>,
+): X4UiSourceEditStructuralRowOwner | undefined => {
+  if (candidate.bindings.length === 0) return undefined;
+  let rowOwner: X4UiSourceEditStructuralRowOwner | undefined;
+  for (const binding of candidate.bindings) {
+    const operation = program.operations.find(item => item.id === binding.operationId);
+    const owner = owners.get(binding.operationId);
+    const record = operation as unknown as Record<string, unknown> | undefined;
+    const tableId = recordString(record, 'tableId');
+    const rowId = recordString(record, 'rowId');
+    const cellId = recordString(record, 'cellId');
+    if (!operation
+      || operation.status !== 'applied'
+      || operation.localExpansion
+      || !owner
+      || owner.kind !== 'table'
+      || !tableId
+      || !rowId
+      || !cellId
+      || owner.ownerId !== tableId
+      || typeof owner.frameId !== 'string'
+      || owner.frameId.length === 0) return undefined;
+    const candidateOwner = { frameId: owner.frameId, tableId, rowId };
+    if (!rowOwner) rowOwner = candidateOwner;
+    else if (rowOwner.frameId !== candidateOwner.frameId
+      || rowOwner.tableId !== candidateOwner.tableId
+      || rowOwner.rowId !== candidateOwner.rowId) return undefined;
+  }
+  return rowOwner ? freezeDeep(rowOwner) : undefined;
+};
+
 const structuralEntriesFor = (
   file: X4UiSourceFile,
   target: X4UiLayoutTarget,
@@ -2012,6 +2081,23 @@ const structuralEntriesFor = (
     callBindings: candidate.bindings,
     provenance: structuralEntryProvenance(target.sourceIdentity, target, candidate, ownerForStatement(candidate)),
   }));
+  const replacements: X4UiSourceEditReplaceEntry[] = statements.flatMap(candidate => {
+    const owner = ownerForStatement(candidate);
+    const rowOwner = rowOwnerForStructuralCandidate(candidate, program, owners);
+    if (!owner || !rowOwner) return [];
+    return [freezeDeep({
+      kind: 'replace-statement' as const,
+      id: structuralReplaceId(target, candidate.statement),
+      path: file.path,
+      startOffset: candidate.statement.deletionSource.start.offset,
+      endOffset: candidate.statement.deletionSource.end.offset,
+      expectedText: file.text.slice(candidate.statement.deletionSource.start.offset, candidate.statement.deletionSource.end.offset),
+      statementSource: candidate.statement.source,
+      deletionSource: candidate.statement.deletionSource,
+      callBindings: candidate.bindings,
+      provenance: structuralEntryProvenance(target.sourceIdentity, target, candidate, owner, rowOwner),
+    } as X4UiSourceEditReplaceEntry)];
+  });
   interface OwnerCandidate {
     readonly candidate: CompleteStructuralStatement;
     readonly owner: X4UiSourceEditStructuralOwner;
@@ -2099,7 +2185,7 @@ const structuralEntriesFor = (
       }));
     }
   }
-  return freezeArray([...deletions, ...insertions]);
+  return freezeArray([...deletions, ...replacements, ...insertions]);
 };
 
 const structuralIgnoredKeys = new Set<string>();
@@ -3318,18 +3404,18 @@ const structuralOrderShift = (
     const bounds = structuralLocationBounds(source);
     return bounds?.end;
   };
-  const insertedBefore = (entry.kind === 'insert-call' || entry.kind === 'insert-block') && beforeOffset >= entry.startOffset
+  const insertedBefore = (entry.kind === 'insert-call' || entry.kind === 'insert-block' || entry.kind === 'replace-statement') && beforeOffset >= entry.startOffset
     ? afterRecords.filter(record => {
       const start = completeRecordSourceStart(record);
       const end = completeRecordSourceEnd(record);
-      const insertedStart = entry.startOffset + entry.indentation.length;
+      const insertedStart = entry.startOffset + (entry.kind === 'replace-statement' ? 0 : entry.indentation.length);
       const insertedEnd = entry.startOffset + replacementLength;
       return start !== undefined && end !== undefined
         && start >= insertedStart
         && end <= insertedEnd;
     }).length
     : 0;
-  const removedBefore = entry.kind === 'delete-statement'
+  const removedBefore = (entry.kind === 'delete-statement' || entry.kind === 'replace-statement')
     ? beforeRecords.filter(record => {
       const start = completeRecordSourceStart(record);
       const end = completeRecordSourceEnd(record);
@@ -3682,6 +3768,14 @@ export interface X4UiSourceStructuralLedgerCorrespondenceInput {
   readonly replacementLength: number;
   readonly insertedCallIndex: number;
   readonly insertedOperationIndex: number;
+  /** Replacement-only added ledger indexes and their producer facts. */
+  readonly replacementCallIndexes?: readonly number[];
+  readonly replacementCallNames?: readonly string[];
+  readonly replacementCallOrders?: readonly number[];
+  readonly replacementOperationIndexes?: readonly number[];
+  readonly replacementOperationKinds?: readonly string[];
+  readonly replacementOperationIds?: readonly string[];
+  readonly replacementOperationModelOrders?: readonly number[];
 }
 
 const structuralKernelStateKeysMatch = (
@@ -3847,6 +3941,7 @@ const structuralKernelLedgerStatesCorrespond = (
   removedOperationIds: ReadonlySet<string>,
   insertedOperationIndex: number | ReadonlySet<number>,
   splice: StructuralSplice,
+  allowInsertedTransitionDrift = false,
 ): boolean => {
   const insertedOperationIndexes = typeof insertedOperationIndex === 'number'
     ? new Set([insertedOperationIndex])
@@ -3864,6 +3959,7 @@ const structuralKernelLedgerStatesCorrespond = (
   ): boolean => {
     const states = structuralKernelStates(operation);
     if (!states.hasStateBefore && !states.hasStateAfter) return true;
+    if (allowInsertedTransitionDrift) return true;
     const tableId = beforeTableId(operation);
     if (!tableId || (!states.hasStateBefore && states.hasStateAfter)) return false;
     if (boundedTables.has(tableId)) return true;
@@ -3912,6 +4008,19 @@ const structuralKernelLedgerStatesCorrespond = (
     }
     if (!tableId || !states.hasStateBefore || !states.hasStateAfter || !tableStates.has(tableId)
       || !sameClosedData(tableStates.get(tableId), states.stateBefore)) return false;
+    if (allowInsertedTransitionDrift) {
+      const authoritativeEnvelope = beforeOperations
+        .filter(before => {
+          const beforeStates = structuralKernelStates(before);
+          return beforeStates.hasStateBefore
+            && beforeStates.hasStateAfter
+            && beforeTableId(before) === tableId
+            && structuralKernelEnvelope(before) !== undefined;
+        })
+        .map(before => structuralKernelEnvelope(before))[0];
+      if (authoritativeEnvelope !== undefined
+        && !sameClosedData(authoritativeEnvelope, structuralKernelEnvelope(operation))) return false;
+    }
     const recipe = structuralStateTransitionRecipe(states.stateBefore, states.stateAfter);
     if (recipe === STRUCTURAL_STATE_UNMAPPABLE) return false;
     const authoritativeAnalogues = beforeOperations.filter(before => {
@@ -3932,7 +4041,7 @@ const structuralKernelLedgerStatesCorrespond = (
       const beforeRecipe = structuralStateTransitionRecipe(beforeStates.stateBefore, beforeStates.stateAfter);
       return beforeRecipe !== STRUCTURAL_STATE_UNMAPPABLE && sameClosedData(beforeRecipe, recipe);
     });
-    if (authoritativeAnalogues.length > 0 && !hasMatchingAuthoritativeAnalogue) return false;
+    if (authoritativeAnalogues.length > 0 && !hasMatchingAuthoritativeAnalogue && !allowInsertedTransitionDrift) return false;
     const replayed = applyStructuralStateTransitionRecipe(tableStates.get(tableId), recipe);
     if (replayed === STRUCTURAL_STATE_UNMAPPABLE || !sameClosedData(replayed, states.stateAfter)) return false;
     tableStates.set(tableId, replayed);
@@ -4007,13 +4116,23 @@ const structuralCorrespondenceInputKeys = new Set([
   'insertedOperationIndex',
 ]);
 
+const structuralCorrespondenceOptionalKeys = new Set([
+  'replacementCallIndexes',
+  'replacementCallNames',
+  'replacementCallOrders',
+  'replacementOperationIndexes',
+  'replacementOperationKinds',
+  'replacementOperationIds',
+  'replacementOperationModelOrders',
+]);
+
 const STRUCTURAL_CORRESPONDENCE_FIELD_BUDGET = 750_000;
 const STRUCTURAL_CORRESPONDENCE_TOTAL_BUDGET = 2_500_000;
 
 // Structural reparses carry complete kernel snapshots in both operation ledgers. Keep
 // each ledger bounded independently while allowing the aggregate input to remain bounded.
 const isClosedStructuralCorrespondenceInput = (value: unknown): boolean => {
-  if (!hasClosedStructuralKeys(value, structuralCorrespondenceInputKeys)) return false;
+  if (!hasClosedStructuralKeys(value, structuralCorrespondenceInputKeys, structuralCorrespondenceOptionalKeys)) return false;
   const input = value as Record<string, unknown>;
   let totalRemaining = STRUCTURAL_CORRESPONDENCE_TOTAL_BUDGET;
   for (const key of Object.keys(input)) {
@@ -4049,7 +4168,7 @@ export const compareX4UiSourceStructuralLedgerCorrespondence = (
   try {
     if (!isClosedStructuralCorrespondenceInput(input)
       || !isStructuredCloneableClosedData(input)
-      || !hasClosedStructuralKeys(input, structuralCorrespondenceInputKeys)) return false;
+      || !hasClosedStructuralKeys(input, structuralCorrespondenceInputKeys, structuralCorrespondenceOptionalKeys)) return false;
     const beforeCalls = ownData(input, 'beforeCalls');
     const afterCalls = ownData(input, 'afterCalls');
     const beforeRecords = ownData(input, 'beforeRecords');
@@ -4062,6 +4181,14 @@ export const compareX4UiSourceStructuralLedgerCorrespondence = (
     const replacementLength = ownData(input, 'replacementLength');
     const insertedCallIndex = ownData(input, 'insertedCallIndex');
     const insertedOperationIndex = ownData(input, 'insertedOperationIndex');
+    const replacementCallIndexesValue = ownData(input, 'replacementCallIndexes');
+    const replacementCallNamesValue = ownData(input, 'replacementCallNames');
+    const replacementCallOrdersValue = ownData(input, 'replacementCallOrders');
+    const replacementOperationIndexesValue = ownData(input, 'replacementOperationIndexes');
+    const replacementOperationKindsValue = ownData(input, 'replacementOperationKinds');
+    const replacementOperationIdsValue = ownData(input, 'replacementOperationIds');
+    const replacementOperationModelOrdersValue = ownData(input, 'replacementOperationModelOrders');
+    const entryKind = isRecord(entryValue) ? ownData(entryValue, 'kind') : undefined;
     if (!Array.isArray(beforeCalls)
       || !Array.isArray(afterCalls)
       || !Array.isArray(beforeRecords)
@@ -4069,9 +4196,10 @@ export const compareX4UiSourceStructuralLedgerCorrespondence = (
       || !Array.isArray(beforeOperations)
       || !Array.isArray(afterOperations)
       || !isRecord(entryValue)
-      || (ownData(entryValue, 'kind') !== 'delete-statement'
-        && ownData(entryValue, 'kind') !== 'insert-call'
-        && ownData(entryValue, 'kind') !== 'insert-block')
+      || (entryKind !== 'delete-statement'
+        && entryKind !== 'replace-statement'
+        && entryKind !== 'insert-call'
+        && entryKind !== 'insert-block')
       || typeof beforeText !== 'string'
       || typeof afterText !== 'string'
       || typeof replacementLength !== 'number'
@@ -4080,6 +4208,31 @@ export const compareX4UiSourceStructuralLedgerCorrespondence = (
       || !Number.isInteger(insertedCallIndex)
       || typeof insertedOperationIndex !== 'number'
       || !Number.isInteger(insertedOperationIndex)) return false;
+    const replacementFields = [
+      replacementCallIndexesValue,
+      replacementCallNamesValue,
+      replacementCallOrdersValue,
+      replacementOperationIndexesValue,
+      replacementOperationKindsValue,
+      replacementOperationIdsValue,
+      replacementOperationModelOrdersValue,
+    ];
+    if (entryKind !== 'replace-statement' && replacementFields.some(value => value !== undefined)) return false;
+    if (entryKind === 'replace-statement'
+      && (!Array.isArray(replacementCallIndexesValue)
+        || !Array.isArray(replacementCallNamesValue)
+        || !Array.isArray(replacementCallOrdersValue)
+        || !Array.isArray(replacementOperationIndexesValue)
+        || !Array.isArray(replacementOperationKindsValue)
+        || !Array.isArray(replacementOperationIdsValue)
+        || !Array.isArray(replacementOperationModelOrdersValue)
+        || replacementCallIndexesValue.length === 0
+        || replacementCallIndexesValue.length !== replacementCallNamesValue.length
+        || replacementCallIndexesValue.length !== replacementCallOrdersValue.length
+        || replacementOperationIndexesValue.length === 0
+        || replacementOperationIndexesValue.length !== replacementOperationKindsValue.length
+        || replacementOperationIndexesValue.length !== replacementOperationIdsValue.length
+        || replacementOperationIndexesValue.length !== replacementOperationModelOrdersValue.length)) return false;
     if (![...beforeCalls, ...afterCalls].every(isStructuralCorrespondenceCall)
       || ![...beforeOperations, ...afterOperations].every(isStructuralCorrespondenceOperation)) return false;
     if (!beforeCalls.every(value => structuralProducerRecordIsValid(value, 'call', beforeText))
@@ -4106,7 +4259,9 @@ export const compareX4UiSourceStructuralLedgerCorrespondence = (
       || startOffset > endOffset
       || endOffset > beforeText.length
       || afterText.length !== beforeText.length - (endOffset - startOffset) + replacementLength) return false;
-    const callBindingsValue = entry.kind === 'delete-statement' ? ownData(entryValue, 'callBindings') : [];
+    const callBindingsValue = (entry.kind === 'delete-statement' || entry.kind === 'replace-statement')
+      ? ownData(entryValue, 'callBindings')
+      : [];
     if (!Array.isArray(callBindingsValue)) return false;
     const callBindings = callBindingsValue as readonly unknown[];
     const removedOrders = new Set<number>();
@@ -4120,6 +4275,20 @@ export const compareX4UiSourceStructuralLedgerCorrespondence = (
         || typeof operationId !== 'string'
         || removedOrders.has(callOrder)
         || removedOperationIds.has(operationId)) return false;
+      const beforeCall = beforeCalls.find(candidate => isRecord(candidate) && ownData(candidate, 'order') === callOrder);
+      const beforeOperation = beforeOperations.find(candidate => isRecord(candidate) && ownData(candidate, 'id') === operationId);
+      if (!isRecord(beforeCall)
+        || !isRecord(beforeOperation)
+         || ownData(beforeCall, 'name') !== ownData(binding, 'callName')
+         || !sameClosedData(ownData(beforeCall, 'source'), ownData(binding, 'callSource'))
+         || ownData(beforeOperation, 'kind') !== ownData(binding, 'callName')
+         || !isLocationRecord(ownData(beforeOperation, 'source'))
+         || !isLocationRecord(ownData(binding, 'callSource'))
+         || !sameLocation(
+           ownData(beforeOperation, 'source') as X4UiSourceLocation,
+           ownData(binding, 'callSource') as X4UiSourceLocation,
+         )
+         || ownData(beforeOperation, 'modelOrder') !== callOrder) return false;
       removedOrders.add(callOrder);
       removedOperationIds.add(operationId);
     }
@@ -4171,6 +4340,67 @@ export const compareX4UiSourceStructuralLedgerCorrespondence = (
         || insertedOperationIndexes.size === 0
         || afterCalls.length !== expectedCalls.length + insertedCallIndexes.size
         || afterOperations.length !== expectedOperations.length + insertedOperationIndexes.size) return false;
+    } else if (entry.kind === 'replace-statement') {
+      if (insertedCallIndex !== -1
+        || insertedOperationIndex !== -1
+        || !Array.isArray(replacementCallIndexesValue)
+        || !Array.isArray(replacementCallNamesValue)
+        || !Array.isArray(replacementCallOrdersValue)
+        || !Array.isArray(replacementOperationIndexesValue)
+        || !Array.isArray(replacementOperationKindsValue)
+        || !Array.isArray(replacementOperationIdsValue)
+        || !Array.isArray(replacementOperationModelOrdersValue)) return false;
+      const replacementStart = startOffset;
+      const replacementEnd = startOffset + replacementLength;
+      const addCallIndexes = replacementCallIndexesValue as readonly unknown[];
+      const addCallNames = replacementCallNamesValue as readonly unknown[];
+      const addCallOrders = replacementCallOrdersValue as readonly unknown[];
+      const addOperationIndexes = replacementOperationIndexesValue as readonly unknown[];
+      const addOperationKinds = replacementOperationKindsValue as readonly unknown[];
+      const addOperationIds = replacementOperationIdsValue as readonly unknown[];
+      const addOperationModelOrders = replacementOperationModelOrdersValue as readonly unknown[];
+      const validIndexList = (values: readonly unknown[], length: number): boolean => {
+        const indexes = new Set<number>();
+        for (const value of values) {
+          if (typeof value !== 'number'
+            || !Number.isInteger(value)
+            || value < 0
+            || value >= length
+            || indexes.has(value)) return false;
+          indexes.add(value);
+        }
+        return true;
+      };
+      if (!validIndexList(addCallIndexes, afterCalls.length)
+        || !validIndexList(addOperationIndexes, afterOperations.length)) return false;
+      for (let index = 0; index < addCallIndexes.length; index += 1) {
+        const afterCall = afterCalls[addCallIndexes[index] as number];
+        if (!isRecord(afterCall)
+          || typeof addCallNames[index] !== 'string'
+          || typeof addCallOrders[index] !== 'number'
+          || !Number.isInteger(addCallOrders[index])
+          || ownData(afterCall, 'name') !== addCallNames[index]
+          || ownData(afterCall, 'order') !== addCallOrders[index]) return false;
+        const bounds = structuralLocationBounds(ownData(afterCall, 'source'));
+        if (!bounds || bounds.start < replacementStart || bounds.end > replacementEnd) return false;
+        insertedCallIndexes.add(addCallIndexes[index] as number);
+      }
+      for (let index = 0; index < addOperationIndexes.length; index += 1) {
+        const afterOperation = afterOperations[addOperationIndexes[index] as number];
+        if (!isRecord(afterOperation)
+          || typeof addOperationKinds[index] !== 'string'
+          || typeof addOperationIds[index] !== 'string'
+          || typeof addOperationModelOrders[index] !== 'number'
+          || !Number.isInteger(addOperationModelOrders[index])
+          || ownData(afterOperation, 'kind') !== addOperationKinds[index]
+          || ownData(afterOperation, 'id') !== addOperationIds[index]
+          || ownData(afterOperation, 'modelOrder') !== addOperationModelOrders[index]) return false;
+        const bounds = structuralLocationBounds(ownData(afterOperation, 'source'));
+        if (!bounds || bounds.start < replacementStart || bounds.end > replacementEnd) return false;
+        insertedOperationIndexes.add(addOperationIndexes[index] as number);
+      }
+      if (afterCalls.length !== expectedCalls.length + insertedCallIndexes.size
+        || afterOperations.length !== expectedOperations.length + insertedOperationIndexes.size) return false;
     } else if (insertedCallIndex !== -1
       || insertedOperationIndex !== -1
       || afterCalls.length !== expectedCalls.length
@@ -4179,21 +4409,24 @@ export const compareX4UiSourceStructuralLedgerCorrespondence = (
     const comparableAfterOperations = afterOperations.filter((_, index) => !insertedOperationIndexes.has(index));
     if (comparableAfterCalls.length !== expectedCalls.length
       || comparableAfterOperations.length !== expectedOperations.length) return false;
-    const insertedStart = entry.kind === 'insert-call' || entry.kind === 'insert-block'
-      ? startOffset + entry.indentation.length
+    const insertedStart = entry.kind === 'replace-statement'
+      ? startOffset
+      : entry.kind === 'insert-call' || entry.kind === 'insert-block'
+        ? startOffset + entry.indentation.length
       : -1;
-    const insertedEnd = entry.kind === 'insert-call' || entry.kind === 'insert-block'
+    const insertedEnd = entry.kind === 'replace-statement'
+      || entry.kind === 'insert-call' || entry.kind === 'insert-block'
       ? startOffset + replacementLength
       : -1;
     const isRemovedRecord = (record: unknown): boolean => {
-      if (entry.kind !== 'delete-statement' || !isRecord(record)) return false;
+      if ((entry.kind !== 'delete-statement' && entry.kind !== 'replace-statement') || !isRecord(record)) return false;
       const bounds = structuralLocationBounds(ownData(record, 'source'));
       return bounds !== undefined
         && bounds.start >= startOffset
         && bounds.end <= endOffset;
     };
     const isInsertedRecord = (record: unknown): boolean => {
-      if ((entry.kind !== 'insert-call' && entry.kind !== 'insert-block') || !isRecord(record)) return false;
+      if ((entry.kind !== 'insert-call' && entry.kind !== 'insert-block' && entry.kind !== 'replace-statement') || !isRecord(record)) return false;
       const bounds = structuralLocationBounds(ownData(record, 'source'));
       return bounds !== undefined
         && bounds.start >= insertedStart
@@ -4202,7 +4435,7 @@ export const compareX4UiSourceStructuralLedgerCorrespondence = (
     const expectedRecords = beforeRecords.filter(record => !isRemovedRecord(record));
     const comparableAfterRecords = afterRecords.filter(record => !isInsertedRecord(record));
     const insertedRecords = afterRecords.filter(isInsertedRecord);
-    if ((entry.kind === 'insert-call' || entry.kind === 'insert-block') && insertedRecords.length === 0) return false;
+    if ((entry.kind === 'insert-call' || entry.kind === 'insert-block' || entry.kind === 'replace-statement') && insertedRecords.length === 0) return false;
     if (comparableAfterRecords.length !== expectedRecords.length) return false;
     const splice: StructuralSplice = {
       beforeText,
@@ -4265,8 +4498,11 @@ export const compareX4UiSourceStructuralLedgerCorrespondence = (
       beforeTypedOperations,
       afterTypedOperations,
       removedOperationIds,
-      entry.kind === 'insert-block' ? insertedOperationIndexes : insertedOperationIndex,
+      entry.kind === 'insert-block' || entry.kind === 'replace-statement'
+        ? insertedOperationIndexes
+        : insertedOperationIndex,
       splice,
+      entry.kind === 'replace-statement',
     );
     if (!beforeTransitions || !afterTransitions || !ledgerStates) return false;
     for (let index = 0; index < expectedOperations.length; index += 1) {
@@ -4339,7 +4575,106 @@ interface DirectBlockPayloadProof {
   readonly frameReceiver: string;
 }
 
-type DirectStructuralPayload = DirectCallPayloadProof | DirectBlockPayloadProof;
+interface DirectStatementReplacementPayloadProof {
+  readonly source: string;
+  readonly model: X4UiCallModel;
+  readonly calls: readonly X4UiCallRecord[];
+  readonly statement: EnclosingStatementFacts;
+}
+
+const ROW_LOCAL_REPLACEMENT_CALL_NAMES = new Set<X4UiRelevantCallName>([
+  'setColSpan',
+  'setText',
+  'setText2',
+  'createText',
+  'createEditBox',
+  'createButton',
+  'createIcon',
+]);
+
+type DirectStructuralPayload = DirectCallPayloadProof | DirectBlockPayloadProof | DirectStatementReplacementPayloadProof;
+
+const directStatementReplacementPayload = (
+  path: string,
+  payload: string,
+): DirectStatementReplacementPayloadProof | { readonly reason: X4UiSourceEditRefusalReason; readonly detail: string } => {
+  const trimmed = payload.replace(/^[ \t]+|[ \t]+$/g, '');
+  if (!trimmed || trimmed.length > 32768 || /[\r\n]/.test(trimmed)) {
+    return { reason: 'invalid-request', detail: 'statement replacement must be one non-empty single-line Lua source statement at most 32768 characters' };
+  }
+  let model: X4UiCallModel;
+  try {
+    model = buildX4UiCallModel({ rel: path, text: `${trimmed}\n` });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'unknown parser error';
+    return { reason: 'replacement-parse-failure', detail: `statement replacement parse was contained: ${detail}` };
+  }
+  if (model.parsed !== true || model.calls.length === 0 || model.calls.length > 32) {
+    return { reason: 'replacement-parse-failure', detail: 'statement replacement must parse to between 1 and 32 relevant direct X4 UI calls' };
+  }
+  const rawHandlers = ownData(model as unknown as object, 'handlers');
+  const rawFunctions = ownData(model as unknown as object, 'localFunctions');
+  const rawInvocations = ownData(model as unknown as object, 'localInvocations');
+  if ((Array.isArray(rawHandlers) && rawHandlers.length > 0)
+    || (Array.isArray(rawFunctions) && rawFunctions.length > 0)
+    || (Array.isArray(rawInvocations) && rawInvocations.length > 0)) {
+    return { reason: 'replacement-parse-failure', detail: 'statement replacement rejects handlers, function definitions, and hidden or nested non-UI invocations' };
+  }
+  const statements = new Map<string, EnclosingStatementFacts>();
+  for (const call of model.calls) {
+    if (!ROW_LOCAL_REPLACEMENT_CALL_NAMES.has(call.name)) {
+      return { reason: 'replacement-parse-failure', detail: `statement replacement call ${call.name} is outside the bounded row-local direct X4 UI allow-list` };
+    }
+    const statement = enclosingStatementOf(call);
+    if (!statement
+      || statement.kind !== 'call'
+      || statement.source.start.offset !== 0
+      || statement.deletionSource.start.offset !== 0
+      || statement.deletionSource.end.offset > trimmed.length
+      || trimmed.slice(statement.deletionSource.end.offset).trim().length > 0) {
+      return { reason: 'replacement-parse-failure', detail: 'statement replacement must be exactly one standalone direct call statement' };
+    }
+    const context = call.context as unknown as Record<string, unknown>;
+    const branchPath = ownData(context, 'branchPath');
+    const loopPath = ownData(context, 'loopPath');
+    if (ownData(context, 'kind') !== 'top-level'
+      || !Array.isArray(branchPath)
+      || !Array.isArray(loopPath)
+      || branchPath.length !== 0
+      || loopPath.length !== 0
+      || ownData(context, 'reachability') !== 'reachable'
+      || (call.context.source !== undefined
+        && (call.context.source.start.offset > 0 || call.context.source.end.offset < trimmed.length))) {
+      return { reason: 'replacement-parse-failure', detail: 'statement replacement rejects conditional, looped, unreachable, or nested call context' };
+    }
+    if (hasUnprovenExecutableWithin(model, statement, `${trimmed}\n`)) {
+      return { reason: 'replacement-parse-failure', detail: 'statement replacement contains an unproven nested executable invocation' };
+    }
+    statements.set(statementKey(statement), statement);
+  }
+  if (statements.size !== 1) {
+    return { reason: 'replacement-parse-failure', detail: 'statement replacement contains multiple source statements' };
+  }
+  const statement = [...statements.values()][0];
+  if (!model.calls.some(call => enclosingStatementOf(call)?.isStandaloneCallStatementRoot === true)) {
+    return { reason: 'replacement-parse-failure', detail: 'statement replacement must have one standalone direct call statement root' };
+  }
+  const orderedCalls = [...model.calls].sort((left, right) => left.order - right.order);
+  for (let index = 1; index < orderedCalls.length; index += 1) {
+    const previous = orderedCalls[index - 1];
+    const current = orderedCalls[index];
+    const previousSource = trimmed.slice(previous.source.start.offset, previous.source.end.offset);
+    const receiver = recordString(current.receiver, 'expression');
+    if (!previousSource
+      || !receiver
+      || !receiver.includes(previousSource)
+      || current.source.start.offset < previous.source.start.offset
+      || current.source.end.offset > statement.source.end.offset) {
+      return { reason: 'replacement-parse-failure', detail: 'statement replacement calls must form one direct fluent X4 UI chain' };
+    }
+  }
+  return { source: trimmed, model, calls: model.calls, statement };
+};
 
 const directCallPayload = (
   path: string,
@@ -4664,6 +4999,100 @@ const insertedOperationsForBlock = (
   return matched;
 };
 
+interface ReplacementLedgerProof {
+  readonly callIndexes: readonly number[];
+  readonly operationIndexes: readonly number[];
+  readonly operations: readonly X4UiLayoutOperation[];
+}
+
+const replacementLedgerFor = (
+  file: X4UiSourceFile,
+  program: X4UiLayoutProgram,
+  entry: X4UiSourceEditReplaceEntry,
+  replacement: string,
+  payload: DirectStatementReplacementPayloadProof,
+): ReplacementLedgerProof | undefined => {
+  const replacementStart = entry.startOffset;
+  const replacementEnd = entry.startOffset + replacement.length;
+  const callIndexes: number[] = [];
+  const usedCallIndexes = new Set<number>();
+  for (const expected of payload.calls) {
+    const expectedStart = replacementStart + expected.source.start.offset;
+    const expectedEnd = replacementStart + expected.source.end.offset;
+    const expectedSource = payload.source.slice(expected.source.start.offset, expected.source.end.offset);
+    const candidates = file.callModel.calls
+      .map((call, index) => ({ call, index }))
+      .filter(({ call, index }) => !usedCallIndexes.has(index)
+        && call.name === expected.name
+        && call.source.start.offset === expectedStart
+        && call.source.end.offset === expectedEnd
+        && file.text.slice(call.source.start.offset, call.source.end.offset) === expectedSource);
+    if (candidates.length !== 1) return undefined;
+    usedCallIndexes.add(candidates[0].index);
+    callIndexes.push(candidates[0].index);
+  }
+  const boundedCallIndexes = file.callModel.calls
+    .map((call, index) => ({ call, index }))
+    .filter(({ call }) => call.source.start.offset >= replacementStart
+      && call.source.end.offset <= replacementEnd)
+    .map(({ index }) => index);
+  if (boundedCallIndexes.length !== callIndexes.length
+    || boundedCallIndexes.some(index => !usedCallIndexes.has(index))) return undefined;
+
+  const operationIndexes: number[] = [];
+  const operations: X4UiLayoutOperation[] = [];
+  const usedOperationIndexes = new Set<number>();
+  for (let index = 0; index < payload.calls.length; index += 1) {
+    const expectedCall = payload.calls[index];
+    const callIndex = callIndexes[index];
+    const afterCall = file.callModel.calls[callIndex];
+    const candidates = program.operations
+      .map((operation, operationIndex) => ({ operation, operationIndex }))
+      .filter(({ operation, operationIndex }) => !usedOperationIndexes.has(operationIndex)
+        && operation.kind === expectedCall.name
+        && operation.modelOrder === afterCall.order
+        && operation.status === 'applied'
+        && !operation.localExpansion
+        && sameLocation(operation.source, afterCall.source));
+    if (candidates.length !== 1) return undefined;
+    usedOperationIndexes.add(candidates[0].operationIndex);
+    operationIndexes.push(candidates[0].operationIndex);
+    operations.push(candidates[0].operation);
+  }
+  const boundedOperationIndexes = program.operations
+    .map((operation, index) => ({ operation, index }))
+    .filter(({ operation }) => operation.source.start.offset >= replacementStart
+      && operation.source.end.offset <= replacementEnd)
+    .map(({ index }) => index);
+  if (boundedOperationIndexes.length !== operationIndexes.length
+    || boundedOperationIndexes.some(index => !usedOperationIndexes.has(index))
+    || boundedOperationIndexes.some(index => program.operations[index].status !== 'applied'
+      || program.operations[index].localExpansion)) return undefined;
+  return { callIndexes, operationIndexes, operations };
+};
+
+const replacementRowOwnerMatches = (
+  entry: X4UiSourceEditReplaceEntry,
+  operations: readonly X4UiLayoutOperation[],
+  owners: ReadonlyMap<string, X4UiSourceEditStructuralOwner>,
+): boolean => {
+  const expected = entry.provenance.rowOwner;
+  if (!expected || operations.length === 0) return false;
+  return operations.every(operation => {
+    const owner = owners.get(operation.id);
+    const record = operation as unknown as Record<string, unknown>;
+    const tableId = recordString(record, 'tableId');
+    const rowId = recordString(record, 'rowId');
+    const cellId = recordString(record, 'cellId');
+    return owner?.kind === 'table'
+      && owner.ownerId === expected.tableId
+      && owner.frameId === expected.frameId
+      && tableId === expected.tableId
+      && rowId === expected.rowId
+      && cellId !== undefined;
+  });
+};
+
 const structuralAnchorOwnerMatches = (
   entry: X4UiSourceEditInsertEntry,
   insertedOwner: X4UiSourceEditStructuralOwner | undefined,
@@ -4709,6 +5138,11 @@ const structuralBlockOwnersMatch = (
   return tableIds.size > 0 && hasRow;
 };
 
+interface StructuralLedgerDeltaProof {
+  readonly addedCallIndexes: readonly number[];
+  readonly addedOperationIndexes: readonly number[];
+}
+
 const structuralLedgerDelta = (
   beforeFile: X4UiSourceFile,
   afterFile: X4UiSourceFile,
@@ -4717,12 +5151,14 @@ const structuralLedgerDelta = (
   entry: X4UiSourceEditStructuralEntry,
   replacement: string,
   directPayload: DirectStructuralPayload | undefined,
-): boolean => {
+): StructuralLedgerDeltaProof | undefined => {
   const beforeCalls = beforeFile.callModel.calls;
   const afterCalls = afterFile.callModel.calls;
   let insertedIndex = -1;
+  let insertedCallIndexes: readonly number[] = [];
+  let replacementLedger: ReplacementLedgerProof | undefined;
   if (entry.kind === 'insert-call') {
-    if (!directPayload || !('call' in directPayload)) return false;
+    if (!directPayload || !('call' in directPayload)) return undefined;
     const insertedStart = entry.startOffset + entry.indentation.length;
     const insertedEnd = entry.startOffset + replacement.length;
     const candidates = afterCalls.map((call, index) => ({ call, index })).filter(({ call }) =>
@@ -4731,10 +5167,11 @@ const structuralLedgerDelta = (
       && call.name === directPayload.call.name
       && afterFile.text.slice(call.source.start.offset, call.source.end.offset) === directPayload.source,
     );
-    if (candidates.length !== 1) return false;
+    if (candidates.length !== 1) return undefined;
     insertedIndex = candidates[0].index;
+    insertedCallIndexes = [insertedIndex];
   } else if (entry.kind === 'insert-block') {
-    if (!directPayload || !('calls' in directPayload)) return false;
+    if (!directPayload || !('calls' in directPayload) || !('formattedCallSpans' in directPayload)) return undefined;
     const bounds = insertedBlockBounds(entry, directPayload);
     const candidates = afterCalls.filter(call => call.source.start.offset >= bounds.start
       && call.source.end.offset <= bounds.end);
@@ -4747,21 +5184,50 @@ const structuralLedgerDelta = (
           && actual.source.end.offset === end
           && afterFile.text.slice(actual.source.start.offset, actual.source.end.offset)
             === directPayload.formattedSource.slice(expected.startOffset, expected.endOffset)).length === 1;
-      })) return false;
+      })) return undefined;
+    insertedCallIndexes = afterCalls
+      .map((call, index) => ({ call, index }))
+      .filter(({ call }) => call.source.start.offset >= bounds.start
+        && call.source.end.offset <= bounds.end)
+      .map(({ index }) => index);
+  } else if (entry.kind === 'replace-statement') {
+    if (!directPayload || !('calls' in directPayload) || !('statement' in directPayload)) return undefined;
+    replacementLedger = replacementLedgerFor(
+      afterFile,
+      afterProgram,
+      entry,
+      replacement,
+      directPayload,
+    );
+    if (!replacementLedger) return undefined;
+    insertedCallIndexes = replacementLedger.callIndexes;
   }
   const afterOperations = afterProgram.operations;
   let insertedOperationIndex = -1;
+  let insertedOperationIndexes: readonly number[] = [];
   if (entry.kind === 'insert-call') {
-    if (!directPayload || !('call' in directPayload)) return false;
+    if (!directPayload || !('call' in directPayload)) return undefined;
     const insertedOperation = insertedOperationFor(afterProgram, entry, replacement, directPayload);
-    if (!insertedOperation) return false;
+    if (!insertedOperation) return undefined;
     insertedOperationIndex = afterOperations.indexOf(insertedOperation);
-    if (insertedOperationIndex < 0) return false;
+    if (insertedOperationIndex < 0) return undefined;
+    insertedOperationIndexes = [insertedOperationIndex];
   } else if (entry.kind === 'insert-block') {
-    if (!directPayload || !('calls' in directPayload)
-      || !insertedOperationsForBlock(afterProgram, entry, directPayload)) return false;
+    if (!directPayload || !('calls' in directPayload) || !('formattedCallSpans' in directPayload)
+      || !insertedOperationsForBlock(afterProgram, entry, directPayload)) return undefined;
+    const bounds = insertedBlockBounds(entry, directPayload);
+    insertedOperationIndexes = afterOperations
+      .map((operation, index) => ({ operation, index }))
+      .filter(({ operation }) => operation.source.start.offset >= bounds.start
+        && operation.source.end.offset <= bounds.end
+        && operation.status === 'applied'
+        && !operation.localExpansion)
+      .map(({ index }) => index);
+  } else if (entry.kind === 'replace-statement') {
+    if (!replacementLedger) return undefined;
+    insertedOperationIndexes = replacementLedger.operationIndexes;
   }
-  return compareX4UiSourceStructuralLedgerCorrespondence({
+  const correspondenceInput: X4UiSourceStructuralLedgerCorrespondenceInput = {
     beforeCalls,
     afterCalls,
     beforeRecords: beforeFile.callModel.records,
@@ -4774,7 +5240,18 @@ const structuralLedgerDelta = (
     replacementLength: replacement.length,
     insertedCallIndex: insertedIndex,
     insertedOperationIndex,
-  });
+    ...(entry.kind === 'replace-statement' && replacementLedger ? {
+      replacementCallIndexes: replacementLedger.callIndexes,
+      replacementCallNames: replacementLedger.callIndexes.map(index => afterCalls[index].name),
+      replacementCallOrders: replacementLedger.callIndexes.map(index => afterCalls[index].order),
+      replacementOperationIndexes: replacementLedger.operationIndexes,
+      replacementOperationKinds: replacementLedger.operationIndexes.map(index => afterOperations[index].kind),
+      replacementOperationIds: replacementLedger.operationIndexes.map(index => afterOperations[index].id),
+      replacementOperationModelOrders: replacementLedger.operationIndexes.map(index => afterOperations[index].modelOrder),
+    } : {}),
+  };
+  const correspondence = compareX4UiSourceStructuralLedgerCorrespondence(correspondenceInput);
+  return correspondence ? { addedCallIndexes: insertedCallIndexes, addedOperationIndexes: insertedOperationIndexes } : undefined;
 };
 
 const discoverX4UiSourceEditsUnsafe = (context: X4UiSourceEditTrustedContext): X4UiSourceEditCatalog => {
@@ -4853,11 +5330,13 @@ const discoverX4UiSourceEditsUnsafe = (context: X4UiSourceEditTrustedContext): X
             || (entry.kind === 'delete-statement' && entry.provenance.owner !== undefined))
         : [];
     const deleteEntries = structuralEntries.filter((entry): entry is X4UiSourceEditDeleteEntry => entry.kind === 'delete-statement');
+    const replaceEntries = structuralEntries.filter((entry): entry is X4UiSourceEditReplaceEntry => entry.kind === 'replace-statement');
     const insertEntries = structuralEntries.filter((entry): entry is X4UiSourceEditInsertionEntry => entry.kind === 'insert-call' || entry.kind === 'insert-block');
     return issueCatalog(context, freezeDeep({
       ...catalog,
       structuralEntries,
       deleteEntries: freezeArray(deleteEntries),
+      replaceEntries: freezeArray(replaceEntries),
       insertEntries: freezeArray(insertEntries),
     }));
   } catch (error) {
@@ -5239,7 +5718,7 @@ const reparseStructuralAndProveUnsafe = (
     ...(nextModel.file.sourcePath !== undefined ? { sourcePath: nextModel.file.sourcePath } : {}),
     sha256: sha256(nextFile.text),
   };
-  const retainedOffset = entry.kind === 'insert-call'
+  const retainedOffset = entry.kind === 'insert-call' || entry.kind === 'replace-statement'
     ? entry.startOffset + replacement.length
     : entry.startOffset;
   const nextTarget = nextTargetFor(
@@ -5275,7 +5754,7 @@ const reparseStructuralAndProveUnsafe = (
       return { reason: 'reparse-provenance-drift', detail: 'inserted structural call is not owned by the issued anchor owner' };
     }
   } else if (entry.kind === 'insert-block') {
-    if (!directPayload || !('calls' in directPayload)) {
+    if (!directPayload || !('calls' in directPayload) || !('formattedSource' in directPayload)) {
       return { reason: 'reparse-provenance-drift', detail: 'inserted frame block lost its direct payload proof' };
     }
     const insertedOperations = insertedOperationsForBlock(nextProgramResult.program, entry, directPayload);
@@ -5283,8 +5762,19 @@ const reparseStructuralAndProveUnsafe = (
     if (!insertedOperations || !structuralBlockOwnersMatch(entry, insertedOperations, nextOwners)) {
       return { reason: 'reparse-provenance-drift', detail: 'inserted frame block is not owned by the issued frame/display authority' };
     }
+  } else if (entry.kind === 'replace-statement') {
+    if (!directPayload || !('calls' in directPayload) || !('statement' in directPayload)) {
+      return { reason: 'reparse-provenance-drift', detail: 'replacement statement lost its direct payload proof' };
+    }
+    const replacementLedger = replacementLedgerFor(nextFile, nextProgramResult.program, entry, replacement, directPayload);
+    const nextOwners = structuralOwnerLedger(nextModel, nextProgramResult.program);
+    if (!replacementLedger
+      || replacementLedger.operations.length !== directPayload.calls.length
+      || !replacementRowOwnerMatches(entry, replacementLedger.operations, nextOwners)) {
+      return { reason: 'reparse-provenance-drift', detail: 'replacement calls are not all applied on the issued row/table/frame owner chain' };
+    }
   }
-  if (!structuralLedgerDelta(
+  const ledgerDelta = structuralLedgerDelta(
     selection.file,
     nextFile,
     input.program,
@@ -5292,7 +5782,8 @@ const reparseStructuralAndProveUnsafe = (
     entry,
     replacement,
     directPayload,
-  )) {
+  );
+  if (!ledgerDelta) {
     return { reason: 'reparse-provenance-drift', detail: 'structural edit did not produce the exact intended call and operation ledger delta' };
   }
   const nextCatalog = discoverX4UiSourceEdits(
@@ -5340,6 +5831,18 @@ const reparseStructuralAndProveUnsafe = (
       || reissuedBlock.provenance.owner?.kind !== 'frame'
       || reissuedBlock.provenance.owner.ownerId !== entry.provenance.owner?.ownerId) {
       return { reason: 'reparse-provenance-drift', detail: 'frame block insertion did not reissue the selected frame/display authority' };
+    }
+  } else if (entry.kind === 'replace-statement') {
+    const reissuedReplacement = nextCatalog.replaceEntries?.find(candidate =>
+      candidate.kind === 'replace-statement'
+      && candidate.startOffset === entry.startOffset
+      && candidate.expectedText === replacement
+      && candidate.provenance.rowOwner?.frameId === entry.provenance.rowOwner.frameId
+      && candidate.provenance.rowOwner?.tableId === entry.provenance.rowOwner.tableId
+      && candidate.provenance.rowOwner?.rowId === entry.provenance.rowOwner.rowId);
+    if (!reissuedReplacement
+      || reissuedReplacement.provenance.sourceIdentity.sha256 === entry.provenance.sourceIdentity.sha256) {
+      return { reason: 'reparse-provenance-drift', detail: 'replacement source did not reissue the selected row/table/frame authority' };
     }
   }
   return { workspace: nextWorkspace, source: nextSource, catalog: nextCatalog };
@@ -5674,9 +6177,14 @@ const structuralSequenceMatches = (
   authority: X4UiSourceEditAuthority,
 ): boolean => {
   const structuralEntries = catalog.structuralEntries;
+  const issuedReplaceEntries = authority.structuralSequence.filter((entry): entry is X4UiSourceEditReplaceEntry => entry.kind === 'replace-statement');
+  const replaceEntries = catalog.replaceEntries;
   return Array.isArray(structuralEntries)
     && structuralEntries.length === authority.structuralSequence.length
-    && structuralEntries.every((entry, index) => entry === authority.structuralSequence[index]);
+    && structuralEntries.every((entry, index) => entry === authority.structuralSequence[index])
+    && Array.isArray(replaceEntries)
+    && replaceEntries.length === issuedReplaceEntries.length
+    && replaceEntries.every((entry, index) => entry === issuedReplaceEntries[index]);
 };
 
 const applyX4UiSourceStructuralEditUnsafe = (
@@ -5766,6 +6274,19 @@ const applyX4UiSourceStructuralEditUnsafe = (
       if (directCall !== undefined) {
         return structuralRefusal(authority.workspace, authority.source, catalog, 'invalid-request', 'whole-statement deletion does not accept an insertion payload', entry);
       }
+    } else if (entry.kind === 'replace-statement') {
+      if (directCall === undefined) {
+        return structuralRefusal(authority.workspace, authority.source, catalog, 'invalid-request', 'statement replacement requires a Lua source payload', entry);
+      }
+      if (!entry.provenance.owner || !entry.provenance.rowOwner) {
+        return structuralRefusal(authority.workspace, authority.source, catalog, 'provenance-drift', 'statement replacement has no exact issued row/table/frame owner proof', entry);
+      }
+      const parsedPayload = directStatementReplacementPayload(entry.path, directCall);
+      if ('reason' in parsedPayload) {
+        return structuralRefusal(authority.workspace, authority.source, catalog, parsedPayload.reason, parsedPayload.detail, entry);
+      }
+      directPayload = parsedPayload;
+      replacement = parsedPayload.source;
     } else if (entry.kind === 'insert-call') {
       if (directCall === undefined) {
         return structuralRefusal(authority.workspace, authority.source, catalog, 'invalid-request', 'direct-call insertion requires a Lua source payload', entry);
@@ -5870,7 +6391,7 @@ const applyX4UiSourceStructuralEditUnsafe = (
   }
 };
 
-/** Apply one owner-issued whole-statement deletion or direct-call insertion. */
+/** Apply one owner-issued whole-statement deletion, row-local replacement, or direct-call insertion. */
 export function applyX4UiSourceStructuralEdit(
   workspace: ModWorkspace,
   source: X4UiWorkspaceSource,
@@ -5902,10 +6423,11 @@ export function applyX4UiSourceStructuralEdit(
     ? catalogAuthority.structuralEntries.get(actionId)
     : undefined;
   const partialStructuralActionable = catalogAuthority.program.status === 'partial'
-    && (requestedStructuralEntry?.kind === 'delete-statement' || requestedStructuralEntry?.kind === 'insert-block');
+    && (requestedStructuralEntry?.kind === 'delete-statement'
+      || requestedStructuralEntry?.kind === 'insert-block');
   if (!isIssuedX4UiLayoutEvidencePair(catalogAuthority.program, catalogAuthority.evidenceAuthority)
     || (catalogAuthority.program.status !== 'projected' && !partialStructuralActionable)) {
-    return structuralRefusal(workspace, source, catalog, 'unsupported-provenance', 'structural catalog layout authority is neither an issued projected pair nor an issued actionable partial deletion/frame block');
+    return structuralRefusal(workspace, source, catalog, 'unsupported-provenance', 'structural catalog layout authority is neither an issued projected pair nor an issued actionable partial deletion or frame block');
   }
   if (typeof actionId !== 'string'
     || !optionalStringPrimitive(directCall)

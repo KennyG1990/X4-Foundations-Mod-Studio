@@ -10,9 +10,11 @@ import {
   ZEKTON_EVIDENCE_STATE,
 } from './x4UiFontMetrics';
 import {
+  X4_UI_EDITBOX_SOURCE_COMPOSITION_PINS,
   X4_UI_PAINT_GAME_TRUTH,
   X4_UI_PAINT_PLAN_FORMAT,
   X4_UI_PAINT_PLAN_VERSION,
+  type X4UiPaintEditBoxCompositionEvidence,
   type X4UiPaintPlanResult,
 } from './x4UiPaintPlan';
 
@@ -193,10 +195,10 @@ interface AtlasSnapshot {
 }
 
 type TintDomain = 'source-literal-percent-alpha' | 'canonical-xml-byte-alpha';
-type TintSlot = 'table-background' | 'cell-background' | 'widget-background' | 'widget-border' | 'widget-highlight' | 'widget-icon' | 'primary-text' | 'secondary-text';
+type TintSlot = 'table-background' | 'cell-background' | 'widget-background' | 'editbox-inner-background' | 'widget-border' | 'widget-highlight' | 'widget-icon' | 'primary-text' | 'secondary-text';
 
 interface ValidatedTint {
-  readonly field: 'backgroundColor' | 'cellbgcolor' | 'bgcolor' | 'bordercolor' | 'highlightcolor' | 'color';
+  readonly field: 'backgroundColor' | 'cellbgcolor' | 'bgcolor' | 'editboxBackgroundBlackColor' | 'bordercolor' | 'highlightcolor' | 'defaultTextColor' | 'color';
   readonly slot: TintSlot;
   readonly domain: TintDomain;
   readonly red: number;
@@ -222,6 +224,8 @@ interface DetachedCommandBase {
 interface DetachedGeometryCommand extends DetachedCommandBase {
   readonly kind: 'node-geometry';
   readonly geometry?: Rect;
+  readonly innerGeometry?: Rect;
+  readonly editboxComposition?: X4UiPaintEditBoxCompositionEvidence;
   readonly color: string;
   readonly tints?: readonly ValidatedTint[];
 }
@@ -595,6 +599,46 @@ const validSourcePin = (value: unknown): boolean => {
     && safeInteger(fieldValue(value, 'lineEnd'), fieldValue(value, 'lineStart') as number);
 };
 
+const exactSourcePin = (
+  value: unknown,
+  expected: { readonly sourcePath: string; readonly lineStart: number; readonly lineEnd: number },
+): boolean => validSourcePin(value)
+  && fieldValue(value as object, 'sourcePath') === expected.sourcePath
+  && fieldValue(value as object, 'lineStart') === expected.lineStart
+  && fieldValue(value as object, 'lineEnd') === expected.lineEnd;
+
+const validEditBoxComposition = (value: unknown): value is X4UiPaintEditBoxCompositionEvidence => {
+  if (!exactRecord(value, ['previewOnly', 'configBorder', 'innerInset', 'textBorder', 'sourcePins'])
+    || fieldValue(value, 'previewOnly') !== true
+    || fieldValue(value, 'configBorder') !== 1
+    || !safeInteger(fieldValue(value, 'innerInset'), 2)
+    || (fieldValue(value, 'innerInset') as number) > 1_000_000
+    || fieldValue(value, 'textBorder') !== 2) return false;
+  const pins = fieldValue(value, 'sourcePins');
+  if (!exactRecord(pins, ['configBorder', 'fixedTextBorder', 'scaledInnerInset', 'innerApplication', 'textAnchor', 'textTruncation'])) return false;
+  return exactSourcePin(fieldValue(pins, 'configBorder'), X4_UI_EDITBOX_SOURCE_COMPOSITION_PINS.configBorder)
+    && exactSourcePin(fieldValue(pins, 'fixedTextBorder'), X4_UI_EDITBOX_SOURCE_COMPOSITION_PINS.fixedTextBorder)
+    && exactSourcePin(fieldValue(pins, 'scaledInnerInset'), X4_UI_EDITBOX_SOURCE_COMPOSITION_PINS.scaledInnerInset)
+    && exactSourcePin(fieldValue(pins, 'innerApplication'), X4_UI_EDITBOX_SOURCE_COMPOSITION_PINS.innerApplication)
+    && exactSourcePin(fieldValue(pins, 'textAnchor'), X4_UI_EDITBOX_SOURCE_COMPOSITION_PINS.textAnchor)
+    && exactSourcePin(fieldValue(pins, 'textTruncation'), X4_UI_EDITBOX_SOURCE_COMPOSITION_PINS.textTruncation);
+};
+
+const copyEditBoxComposition = (value: X4UiPaintEditBoxCompositionEvidence): X4UiPaintEditBoxCompositionEvidence => ({
+  previewOnly: true,
+  configBorder: 1,
+  innerInset: value.innerInset,
+  textBorder: 2,
+  sourcePins: {
+    configBorder: { ...value.sourcePins.configBorder },
+    fixedTextBorder: { ...value.sourcePins.fixedTextBorder },
+    scaledInnerInset: { ...value.sourcePins.scaledInnerInset },
+    innerApplication: { ...value.sourcePins.innerApplication },
+    textAnchor: { ...value.sourcePins.textAnchor },
+    textTruncation: { ...value.sourcePins.textTruncation },
+  },
+});
+
 const sourceContains = (outer: unknown, inner: unknown): boolean => {
   if (!validSource(outer) || !validSource(inner)) return false;
   const outerRecord = outer as object;
@@ -625,8 +669,10 @@ const COLOR_TINT_FIELD_SLOTS: ReadonlyMap<string, TintSlot> = new Map([
   ['backgroundColor', 'table-background'],
   ['cellbgcolor', 'cell-background'],
   ['bgcolor', 'widget-background'],
+  ['editboxBackgroundBlackColor', 'editbox-inner-background'],
   ['bordercolor', 'widget-border'],
   ['highlightcolor', 'widget-highlight'],
+  ['defaultTextColor', 'primary-text'],
   ['color', 'widget-icon'],
 ]);
 
@@ -1223,10 +1269,37 @@ const validateCommand = (
   };
   if (expectedLayer === 'diagnostic-background') {
     if (kind !== 'node-geometry') return refusal('unsupported-command', 'diagnostic background contains a non-geometry command');
-    const valid = baseResult(['completeness', 'style'], ['geometry', 'basePreviewTints']);
+    const valid = baseResult(['completeness', 'style'], ['geometry', 'innerGeometry', 'editboxComposition', 'basePreviewTints']);
     if (isValidationFailure(valid)) return { ok: false, refusal: valid.refusal };
     const geometry = fieldValue(value, 'geometry');
     if (geometry !== undefined && !validRect(geometry, drawable, true)) return refusal('invalid-geometry', 'node geometry is unsafe or outside the drawable');
+    const innerGeometry = fieldValue(value, 'innerGeometry');
+    const editboxComposition = fieldValue(value, 'editboxComposition');
+    if (innerGeometry === undefined !== (editboxComposition === undefined)) {
+      return refusal('invalid-command', 'edit-box inner geometry and its distinct scaled-inset/fixed-text evidence must be issued together');
+    }
+    if (editboxComposition !== undefined && !validEditBoxComposition(editboxComposition)) {
+      return refusal('invalid-command', 'edit-box composition evidence has malformed values or wrong shipped source pins');
+    }
+    if (innerGeometry !== undefined) {
+      if (geometry === undefined || !validRect(innerGeometry, drawable, true)) return refusal('invalid-geometry', 'edit-box inner geometry is unsafe, outside the drawable, or has no outer geometry');
+      const outer = geometry as object;
+      const inner = innerGeometry as object;
+      const outerX = fieldValue(outer, 'x') as number;
+      const outerY = fieldValue(outer, 'y') as number;
+      const outerRight = outerX + (fieldValue(outer, 'width') as number);
+      const outerBottom = outerY + (fieldValue(outer, 'height') as number);
+      const innerX = fieldValue(inner, 'x') as number;
+      const innerY = fieldValue(inner, 'y') as number;
+      const innerRight = innerX + (fieldValue(inner, 'width') as number);
+      const innerBottom = innerY + (fieldValue(inner, 'height') as number);
+      if (innerX < outerX || innerY < outerY || innerRight > outerRight || innerBottom > outerBottom) return refusal('invalid-geometry', 'edit-box inner geometry is not contained by its outer geometry');
+      const innerInset = (editboxComposition as X4UiPaintEditBoxCompositionEvidence).innerInset;
+      const clippedEdgeInsets = [innerX - outerX, innerY - outerY, outerRight - innerRight, outerBottom - innerBottom];
+      if (clippedEdgeInsets.some(inset => inset < 0 || inset > innerInset)) {
+        return refusal('invalid-geometry', 'edit-box inner geometry exceeds the source-scaled inset after clipping');
+      }
+    }
     if (!['complete', 'partial', 'unavailable'].includes(String(fieldValue(value, 'completeness'))) || !['source-derived', 'unavailable'].includes(String(fieldValue(value, 'style')))) {
       return refusal('invalid-command', 'node geometry completeness or style is invalid');
     }
@@ -1237,7 +1310,10 @@ const validateCommand = (
       tints = tintResult.value;
       const activeFillCount = tints.filter(tint => tint.slot === 'table-background' || tint.slot === 'cell-background' || tint.slot === 'widget-background').length;
       if (activeFillCount > 1) return refusal('invalid-command', 'node geometry carries multiple reassigned base fill tints');
+      const innerTintCount = tints.filter(tint => tint.slot === 'editbox-inner-background').length;
+      if (innerTintCount > 1 || innerGeometry === undefined && innerTintCount !== 0 || innerGeometry !== undefined && innerTintCount !== 1) return refusal('invalid-command', 'edit-box inner geometry and canonical black tint must be issued together exactly once');
     }
+    if (innerGeometry !== undefined && (tints === undefined || !tints.some(tint => tint.slot === 'editbox-inner-background'))) return refusal('invalid-command', 'edit-box inner geometry requires its canonical black preview tint');
     const base = detachedCommandBase(value);
     return {
       ok: true,
@@ -1245,6 +1321,8 @@ const validateCommand = (
         ...base,
         kind: 'node-geometry',
         ...(geometry === undefined ? {} : { geometry: copyValidatedRect(geometry) }),
+        ...(innerGeometry === undefined ? {} : { innerGeometry: copyValidatedRect(innerGeometry) }),
+        ...(editboxComposition === undefined ? {} : { editboxComposition: copyEditBoxComposition(editboxComposition as X4UiPaintEditBoxCompositionEvidence) }),
         color: fieldValue(value, 'style') === 'unavailable' || fieldValue(value, 'completeness') !== 'complete'
           ? X4_UI_CANVAS_DIAGNOSTIC_PALETTE.unavailable
           : X4_UI_CANVAS_DIAGNOSTIC_PALETTE.geometry,
@@ -1290,7 +1368,7 @@ const validateCommand = (
     if (hasField(value, 'basePreviewTints')) {
       const tintResult = validateBasePreviewTints(fieldValue(value, 'basePreviewTints'));
       if (isValidationFailure(tintResult)) return { ok: false, refusal: tintResult.refusal };
-      if (tintResult.value.length !== 1 || (tintResult.value[0]?.slot !== 'primary-text' && tintResult.value[0]?.slot !== 'secondary-text') || tintResult.value[0]?.field !== 'color') {
+      if (tintResult.value.length !== 1 || (tintResult.value[0]?.slot !== 'primary-text' && tintResult.value[0]?.slot !== 'secondary-text') || (tintResult.value[0]?.field !== 'color' && tintResult.value[0]?.field !== 'defaultTextColor')) {
         return refusal('invalid-command', 'glyph basePreviewTints must carry exactly its parent primary or secondary text tint');
       }
       tint = tintResult.value[0];
@@ -1771,6 +1849,7 @@ const buildOperations = (
           const clip = item.clip;
           const color = item.color;
           const fillTint = activeFillTint(item.tints);
+          const innerFillTint = item.tints?.find(tint => tint.slot === 'editbox-inner-background');
           const outlineTint = borderTint(item.tints);
           operations.push(api => {
             if (presentation === 'source-composition') {
@@ -1778,6 +1857,10 @@ const buildOperations = (
               if (fillTint !== undefined) api.setFillStyle(tintStyle(fillTint));
               withClip(api, clip, () => {
                 if (fillTint !== undefined) api.fillRect(geometry.x, geometry.y, geometry.width, geometry.height);
+                if (item.innerGeometry !== undefined && innerFillTint !== undefined) {
+                  api.setFillStyle(tintStyle(innerFillTint));
+                  api.fillRect(item.innerGeometry.x, item.innerGeometry.y, item.innerGeometry.width, item.innerGeometry.height);
+                }
                 if (outlineTint !== undefined) {
                   api.setStrokeStyle(tintStyle(outlineTint));
                   api.beginPath();

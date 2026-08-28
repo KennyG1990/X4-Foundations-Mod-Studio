@@ -289,6 +289,8 @@ const freezeCycleClone = <T>(value: T): T => {
 
 const P3_COLOR_BASE_IDS = [
   'white',
+  'black',
+  'grey_128',
   'black_alpha_0',
   'white_weak_glow',
   'azure_very_dark',
@@ -307,6 +309,8 @@ const P3_COLOR_MAPPING_IDS = [
   'button_highlight_default',
   'button_border_default',
   'editbox_background_default',
+  'editbox_text_default',
+  'editbox_background_black',
 ] as const;
 
 const p3PaddedUtf8 = (text: string, size: number): Uint8Array => {
@@ -366,6 +370,8 @@ const p3MakeColorFixture = (): P3ColorFixture => {
   while (baseIds.length < 224) baseIds.push(`p3_base_${baseIds.length.toString().padStart(3, '0')}`);
   const specialValues: Record<string, readonly [number, number, number, number, number]> = {
     white: [11, 22, 33, 44, 0.1],
+    black: [0, 0, 0, 255, 0],
+    grey_128: [128, 128, 128, 255, 0],
     black_alpha_0: [51, 52, 53, 54, 0.2],
     white_weak_glow: [101, 102, 103, 104, 0.3],
     azure_very_dark: [61, 62, 63, 64, 0.4],
@@ -387,6 +393,8 @@ const p3MakeColorFixture = (): P3ColorFixture => {
     button_highlight_default: 'azure_moderate_glow',
     button_border_default: 'azure_dark_alpha_160_glow',
     editbox_background_default: 'azure_very_dark_alpha_224',
+    editbox_text_default: 'grey_128',
+    editbox_background_black: 'black',
   };
   const mappings = P3_COLOR_MAPPING_IDS.map(id => `    <mapping id="${id}" ref="${mappingRefs[id]}"/>`);
   for (let index = mappings.length; index < 804; index += 1) {
@@ -3240,6 +3248,215 @@ const run = (): { readonly allPassed: boolean; readonly passed: number; readonly
       && fontCell?.kernelState?.type === 'cell'
       && scaledProgram.gaps.some(gap => gap.category === 'height' && gap.expression?.includes('Helper.scaleFont')),
     detail({ scaleFontOperation, fontCell, gaps: scaledProgram.gaps.filter(gap => gap.expression?.includes('Helper.scaleFont')) }));
+
+  const pipelineSource = [
+    'local menu = { name = "pipeline_test", layer = 4 }',
+    'function menu.createFrame()',
+    '  local width = Helper.scaleX(530)',
+    '  local height = Helper.scaleY(436)',
+    '  menu.frame = Helper.createFrameHandle(menu, { x = 0, y = 0, width = width, height = height, layer = menu.layer })',
+    '  local ftable = menu.frame:addTable(2, { tabOrder = 1, width = width, highlightMode = "off" })',
+    '  local row',
+    '  row = ftable:addRow(false, {})',
+    '  row[1]:setColSpan(2):createText("Pipeline Test Panel", Helper.headerRowCenteredProperties)',
+    '  row = ftable:addRow(false, {})',
+    '  row[1]:setColSpan(2):createText("B119 Pipeline Test", Helper.headerRowCenteredProperties)',
+    '  row = ftable:addRow(true, {})',
+    '  row[1]:setColSpan(2):createButton({ active = true }):setText("My First Button", { halign = "center" })',
+    '  row = ftable:addRow(false, {})',
+    '  row[1]:setColSpan(2):createText("Status: source-first Forge preview", { wordwrap = true })',
+    '  row = ftable:addRow(true, {})',
+    '  row[1]:setColSpan(2):createButton({ active = true }):setText("Second Button", { halign = "center" })',
+    '  row = ftable:addRow(true, {})',
+    '  row[1]:createEditBox({ defaultText = "Type a note...", maxChars = 255 })',
+    '  menu.frame:display()',
+    'end',
+  ].join('\n');
+  const pipelineModel = buildX4UiCallModel(input(pipelineSource, 'selftest/b119-pipeline-test.lua'));
+  const pipelineTarget = namedTarget(pipelineModel, 'menu.createFrame');
+  const pipelineProfile = profileFor(pipelineModel, { minTextHeight: 7 });
+  const pipelineAtOneResult = projectX4UiLayoutProgram(pipelineModel, pipelineTarget, pipelineProfile);
+  const pipelineAtOneProgram = resultProgram(pipelineAtOneResult);
+  const pipelineAtOneAuthority = evidenceAuthorityOf(pipelineAtOneResult);
+  const pipelineScaledResult = projectX4UiLayoutProgram(
+    pipelineModel,
+    pipelineTarget,
+    { ...pipelineProfile, metrics: { ...pipelineProfile.metrics, uiScale: 1.4 } },
+  );
+  const pipelineScaledProgram = resultProgram(pipelineScaledResult);
+  const pipelineScaledAuthority = evidenceAuthorityOf(pipelineScaledResult);
+  const pipelineRequiredKinds = ['createText', 'createButton', 'setText', 'createEditBox'];
+  const pipelineRequiredOperations = pipelineAtOneProgram?.operations.filter(operationValue =>
+    pipelineRequiredKinds.includes(operationValue.kind)) || [];
+  const pipelineWidthAlias = pipelineModel.aliases.find(alias =>
+    alias.name === 'width' && alias.value.expression === 'Helper.scaleX(530)');
+  const pipelineHeightAlias = pipelineModel.aliases.find(alias =>
+    alias.name === 'height' && alias.value.expression === 'Helper.scaleY(436)');
+  const pipelineAtOneSchema = pipelineAtOneProgram && pipelineAtOneAuthority
+    ? safeSchemaPairValidation(pipelineAtOneProgram, pipelineAtOneAuthority)
+    : { threw: false, valid: false, reason: 'pipeline program or authority missing' };
+  const pipelineScaledSchema = pipelineScaledProgram && pipelineScaledAuthority
+    ? safeSchemaPairValidation(pipelineScaledProgram, pipelineScaledAuthority)
+    : { threw: false, valid: false, reason: 'scaled pipeline program or authority missing' };
+  check('B119 exact pipeline local scale results project one frame/table, six rows, and twelve owned base cells',
+    pipelineAtOneResult.status !== 'refused'
+      && pipelineAtOneProgram !== undefined
+      && pipelineAtOneProgram.frames.length === 1
+      && pipelineAtOneProgram.tables.length === 1
+      && pipelineAtOneProgram.rows.length === 6
+      && pipelineAtOneProgram.cells.length === 12
+      && pipelineAtOneProgram.operations.filter(operationValue => operationValue.kind === 'createFrameHandle' && operationValue.status === 'applied').length === 1
+      && pipelineAtOneProgram.operations.filter(operationValue => operationValue.kind === 'addTable' && operationValue.status === 'applied').length === 1
+      && pipelineAtOneProgram.operations.filter(operationValue => operationValue.kind === 'addRow' && operationValue.status === 'applied').length === 6
+      && pipelineWidthAlias?.value.directHelperScaleResult?.callName === 'scaleX'
+      && pipelineHeightAlias?.value.directHelperScaleResult?.callName === 'scaleY'
+      && pipelineAtOneProgram.frames[0].descriptorFacts.width.expression === 'width'
+      && pipelineAtOneProgram.frames[0].descriptorFacts.height.expression === 'height',
+    detail({
+      status: pipelineAtOneResult.status,
+      counts: pipelineAtOneProgram && {
+        frames: pipelineAtOneProgram.frames.length,
+        tables: pipelineAtOneProgram.tables.length,
+        rows: pipelineAtOneProgram.rows.length,
+        cells: pipelineAtOneProgram.cells.length,
+      },
+      frame: pipelineAtOneProgram?.frames[0].descriptorFacts,
+      table: pipelineAtOneProgram?.tables[0].descriptorFacts,
+      widthAlias: pipelineWidthAlias?.value,
+      heightAlias: pipelineHeightAlias?.value,
+    }));
+  check('B119 exact pipeline text/button/editbox calls retain applied table-row-cell ownership',
+    pipelineRequiredOperations.length === 8
+      && pipelineRequiredOperations.filter(operationValue => operationValue.kind === 'createText').length === 3
+      && pipelineRequiredOperations.filter(operationValue => operationValue.kind === 'createButton').length === 2
+      && pipelineRequiredOperations.filter(operationValue => operationValue.kind === 'setText').length === 2
+      && pipelineRequiredOperations.filter(operationValue => operationValue.kind === 'createEditBox').length === 1
+      && pipelineRequiredOperations.every(operationValue =>
+        operationValue.tableId !== undefined
+        && operationValue.rowId !== undefined
+        && operationValue.cellId !== undefined)
+      && pipelineRequiredOperations.filter(operationValue => ['createButton', 'setText', 'createEditBox'].includes(operationValue.kind))
+        .every(operationValue => operationValue.status === 'applied'),
+    detail(pipelineRequiredOperations.map(operationValue => ({
+      kind: operationValue.kind,
+      status: operationValue.status,
+      tableId: operationValue.tableId,
+      rowId: operationValue.rowId,
+      cellId: operationValue.cellId,
+    }))));
+  check('B119 exact pipeline scale provenance deterministically scales frame/table geometry and closes evidence',
+    pipelineScaledResult.status !== 'refused'
+      && pipelineScaledProgram !== undefined
+      && factValue(pipelineScaledProgram.frames[0].descriptorFacts.width) === 742
+      && factValue(pipelineScaledProgram.frames[0].descriptorFacts.height) === 610
+      && factValue(pipelineScaledProgram.tables[0].descriptorFacts.requestedWidth) === 742
+      && factProvenance(pipelineScaledProgram.frames[0].descriptorFacts.width) === 'direct-helper-scale'
+      && factProvenance(pipelineScaledProgram.frames[0].descriptorFacts.height) === 'direct-helper-scale'
+      && factProvenance(pipelineScaledProgram.tables[0].descriptorFacts.requestedWidth) === 'direct-helper-scale'
+      && pipelineAtOneSchema.threw === false
+      && pipelineAtOneSchema.valid === true
+      && pipelineScaledSchema.threw === false
+      && pipelineScaledSchema.valid === true,
+    detail({
+      status: pipelineScaledResult.status,
+      frame: pipelineScaledProgram?.frames[0].descriptorFacts,
+      table: pipelineScaledProgram?.tables[0].descriptorFacts,
+      validation: { atOne: pipelineAtOneSchema, scaled: pipelineScaledSchema },
+    }));
+
+  const projectPipelineNegative = (source: string, rel: string) => {
+    const candidateModel = buildX4UiCallModel(input(source, rel));
+    const candidateResult = projectX4UiLayoutProgram(candidateModel, topTarget(candidateModel), profileFor(candidateModel));
+    return { model: candidateModel, result: candidateResult, program: resultProgram(candidateResult) };
+  };
+  const nonScalePipeline = projectPipelineNegative([
+    'local menu = { name = "PipelineNonScale", layer = 1 }',
+    'local runtimeWidth = getWidth()',
+    'local frame = Helper.createFrameHandle(menu, { width = runtimeWidth, height = 80 })',
+  ].join('\n'), 'selftest/b119-pipeline-nonscale.lua');
+  const scaleFontPipeline = projectPipelineNegative([
+    'local menu = { name = "PipelineScaleFont", layer = 1 }',
+    'local fontSize = Helper.scaleFont("Zekton", 14)',
+    'local frame = Helper.createFrameHandle(menu, { width = fontSize, height = fontSize })',
+  ].join('\n'), 'selftest/b119-pipeline-scalefont.lua');
+  const reassignedPipeline = projectPipelineNegative([
+    'local menu = { name = "PipelineReassigned", layer = 1 }',
+    'local width = Helper.scaleX(530)',
+    'width = getWidth()',
+    'local frame = Helper.createFrameHandle(menu, { width = width, height = 80 })',
+  ].join('\n'), 'selftest/b119-pipeline-reassigned.lua');
+  const branchedPipeline = projectPipelineNegative([
+    'local menu = { name = "PipelineBranched", layer = 1 }',
+    'local width = Helper.scaleX(530)',
+    'if pending then width = getWidth() end',
+    'local frame = Helper.createFrameHandle(menu, { width = width, height = 80 })',
+  ].join('\n'), 'selftest/b119-pipeline-branched.lua');
+  const helperAliasPipeline = projectPipelineNegative([
+    'local menu = { name = "PipelineHelperAlias", layer = 1 }',
+    'local H = Helper',
+    'local width = H.scaleX(530)',
+    'local frame = Helper.createFrameHandle(menu, { width = width, height = 80 })',
+  ].join('\n'), 'selftest/b119-pipeline-helper-alias.lua');
+  const reassignedFrameCall = reassignedPipeline.model.calls.find(call => call.name === 'createFrameHandle');
+  const negativeWidthFact = (candidate: typeof nonScalePipeline): X4UiLayoutProgram['frames'][number]['descriptorFacts'][string] | undefined =>
+    candidate.program?.frames[0]?.descriptorFacts.width;
+  check('B119 scale provenance remains narrow: non-scale calls, scaleFont, reassignment, branches, and unknown Helper aliases stay unresolved',
+    negativeWidthFact(nonScalePipeline)?.status !== 'known'
+      && negativeWidthFact(scaleFontPipeline)?.status !== 'known'
+      && negativeWidthFact(reassignedPipeline)?.status !== 'known'
+      && negativeWidthFact(branchedPipeline)?.status !== 'known'
+      && negativeWidthFact(helperAliasPipeline)?.status !== 'known'
+      && scaleFontPipeline.model.aliases.find(alias => alias.name === 'fontSize')?.value.directHelperScaleResult?.callName === 'scaleFont'
+      && reassignedFrameCall?.semantics.width?.directHelperScaleResult === undefined
+      && helperAliasPipeline.model.helperReceiverAliases.some(alias => alias.name === 'H' && alias.status === 'rejected'),
+    detail({
+      nonScale: { status: nonScalePipeline.result.status, width: negativeWidthFact(nonScalePipeline) },
+      scaleFont: { status: scaleFontPipeline.result.status, width: negativeWidthFact(scaleFontPipeline), alias: scaleFontPipeline.model.aliases.find(alias => alias.name === 'fontSize')?.value },
+      reassigned: { status: reassignedPipeline.result.status, width: negativeWidthFact(reassignedPipeline), aliases: reassignedPipeline.model.aliases.filter(alias => alias.name === 'width') },
+      branched: { status: branchedPipeline.result.status, width: negativeWidthFact(branchedPipeline) },
+      helperAlias: { status: helperAliasPipeline.result.status, width: negativeWidthFact(helperAliasPipeline), aliases: helperAliasPipeline.model.helperReceiverAliases },
+    }));
+
+  const forgedPipelineModelRecord = jsonClone(pipelineModel) as unknown as ValueRecord;
+  const forgedPipelineWidthAlias = (forgedPipelineModelRecord.aliases as ValueRecord[]).find(alias =>
+    alias.name === 'width' && (alias.value as ValueRecord).directHelperScaleResult !== undefined);
+  const forgedPipelineIdentity = forgedPipelineWidthAlias
+    ? (forgedPipelineWidthAlias.value as ValueRecord).directHelperScaleResult as ValueRecord
+    : undefined;
+  if (forgedPipelineIdentity) forgedPipelineIdentity.callName = 'scaleFont';
+  const forgedPipelineModel = freezeClone(forgedPipelineModelRecord) as unknown as X4UiCallModel;
+  const forgedPipelineResult = projectX4UiLayoutProgram(
+    forgedPipelineModel,
+    namedTarget(forgedPipelineModel, 'menu.createFrame'),
+    profileFor(forgedPipelineModel),
+  );
+  const forgedPipelineProgram = resultProgram(forgedPipelineResult);
+  const forgedSchemaProgram = pipelineAtOneProgram
+    ? mutateProgramJson(pipelineAtOneProgram, candidate => {
+      const frameOperation = (candidate.operations as ValueRecord[]).find(operationValue => operationValue.kind === 'createFrameHandle');
+      const semantics = frameOperation?.metadata && (frameOperation.metadata as ValueRecord).semantics as ValueRecord | undefined;
+      const width = semantics?.width as ValueRecord | undefined;
+      const identity = width?.directHelperScaleResult as ValueRecord | undefined;
+      if (identity) identity.callName = 'forged-scale';
+    })
+    : undefined;
+  const forgedSchemaValidation = forgedSchemaProgram
+    ? safeSchemaPairValidation(forgedSchemaProgram, pipelineAtOneAuthority)
+    : { threw: false, valid: false, reason: 'pipeline program missing' };
+  check('B119 forged or stale direct-scale provenance fails closed without false geometry success',
+    forgedPipelineIdentity !== undefined
+      && forgedPipelineResult.status !== 'refused'
+      && forgedPipelineProgram !== undefined
+      && forgedPipelineProgram.frames[0].descriptorFacts.width.status !== 'known'
+      && forgedSchemaProgram !== undefined
+      && forgedSchemaValidation.threw === false
+      && forgedSchemaValidation.valid === false,
+    detail({
+      forgedIdentity: forgedPipelineIdentity,
+      resultStatus: forgedPipelineResult.status,
+      frameWidth: forgedPipelineProgram?.frames[0].descriptorFacts.width,
+      schemaValidation: forgedSchemaValidation,
+    }));
 
   const sampledSource = [
     'local menu = { name = "Sampled", layer = 1 }',
@@ -12536,7 +12753,7 @@ const runP3ColorChecks = async (): Promise<Check[]> => {
     'local row = table:addRow(false, {})',
     'row[1]:createText("literal", { color = { r = 12.5, g = 23.5, b = 34.5, a = 45.5, glow = 0.25 }, cellBGColor = Color["row_background"] })',
     'row[2]:createButton({ bgColor = Color["button_background_default"], highlightColor = Color["button_highlight_default"], borderColor = Color["button_border_default"] }):setText("button", { color = Color["text_normal"] }):setText2("button2", { color = { r = 15, g = 25, b = 35, a = 55 } })',
-    'row[3]:createEditBox({ bgColor = Color["editbox_background_default"] })',
+    'row[3]:createEditBox({ defaultText = "Placeholder", active = false, bgColor = Color["editbox_background_default"] }):setText("", { x = 5, y = 0 })',
     'row[4]:createIcon("icon", { color = Color["white"] })',
     'row[5]:createText("default", {})',
     'row[6]:createButton({}):setText("nestedDefault", {})',
@@ -12560,7 +12777,13 @@ const runP3ColorChecks = async (): Promise<Check[]> => {
   const legacy = projectX4UiLayoutProgram(model, target, profile);
   const omitted = projectWithColorEvidence(model, target, profile, undefined, undefined, undefined);
   const supplied = projectWithColorEvidence(model, target, profile, undefined, undefined, authority);
+  const scaledProfile = {
+    ...profile,
+    metrics: { ...profile.metrics, uiScale: 2.5 },
+  };
+  const scaled = projectWithColorEvidence(model, target, scaledProfile, undefined, undefined, authority);
   const program = resultProgram(supplied);
+  const scaledProgram = resultProgram(scaled);
   const evidenceAuthority = evidenceAuthorityOf(supplied);
   const ownerReproject = (x4UiLayoutProgramExports as unknown as {
     reprojectX4UiLayoutProgramWithIssuedColorAuthority?: (
@@ -12609,10 +12832,10 @@ const runP3ColorChecks = async (): Promise<Check[]> => {
     : undefined;
   p3Check(
     'B119 owner-controlled color replay closes the omitted-evidence fail-first receipt without relaxing applied status',
-    omittedStatusCensus.applied === 10
+    omittedStatusCensus.applied === 11
       && omittedStatusCensus.unresolved === 8
       && omittedStatusCensus.selectedStatus === 'unresolved'
-      && suppliedStatusCensus.applied === 16
+      && suppliedStatusCensus.applied === 17
       && suppliedStatusCensus.unresolved === 2
       && suppliedStatusCensus.selectedStatus === 'applied'
       && omittedColorReplayOperation?.descriptorFacts.bgcolor?.status === 'unavailable'
@@ -13632,6 +13855,128 @@ const runP3ColorChecks = async (): Promise<Check[]> => {
     const record = candidate as Record<string, unknown> | undefined;
     return Boolean(record) && record.status === 'unavailable' && typeof record.reason === 'string';
   };
+  const previewEditBoxOperation = operationFor('createEditBox', 'defaultText = "Placeholder"');
+  const previewDefaultTextFact = previewEditBoxOperation?.descriptorFacts.defaultText;
+  const previewDefaultTextColorFact = previewEditBoxOperation?.descriptorFacts.defaultTextColor;
+  const previewInnerColorFact = previewEditBoxOperation?.descriptorFacts.editboxBackgroundBlackColor;
+  const previewConfigBorderFact = previewEditBoxOperation?.descriptorFacts.editboxConfigBorder;
+  const previewTextBorderFact = previewEditBoxOperation?.descriptorFacts.editboxTextBorder;
+  const previewBlackInsetFact = previewEditBoxOperation?.descriptorFacts.editboxBlackInset;
+  const previewInitialInputActiveFact = previewEditBoxOperation?.descriptorFacts.editboxInitialInputActive;
+  p3Check(
+    'inactive-empty edit-box retains source defaultText plus distinct canonical preview color and geometry facts',
+    previewEditBoxOperation?.kind === 'createEditBox'
+      && previewDefaultTextFact?.status === 'known'
+      && previewDefaultTextFact.value === 'Placeholder'
+      && knownColor(previewDefaultTextColorFact)
+      && previewDefaultTextColorFact.value.requestedId === 'editbox_text_default'
+      && previewDefaultTextColorFact.value.gameVerification === X4_UI_LAYOUT_GAME_TRUTH
+      && knownColor(previewInnerColorFact)
+      && previewInnerColorFact.value.requestedId === 'editbox_background_black'
+      && previewInnerColorFact.value.gameVerification === X4_UI_LAYOUT_GAME_TRUTH
+      && previewConfigBorderFact?.status === 'known'
+      && previewConfigBorderFact.value === 1
+      && previewConfigBorderFact.sourcePin?.lineStart === 617
+      && previewConfigBorderFact.sourcePin.lineEnd === 634
+      && previewTextBorderFact?.status === 'known'
+      && previewTextBorderFact.value === 2
+      && previewTextBorderFact.sourcePin?.lineStart === 848
+      && previewTextBorderFact.sourcePin.lineEnd === 860
+      && previewBlackInsetFact?.status === 'known'
+      && previewBlackInsetFact.value === 2
+      && previewBlackInsetFact.sourcePin?.sourcePath === X4_LAYOUT_PROVENANCE.widgetSourcePath
+      && previewBlackInsetFact.sourcePin.lineStart === 8702
+      && previewBlackInsetFact.sourcePin.lineEnd === 8727
+      && previewInitialInputActiveFact?.status === 'known'
+      && previewInitialInputActiveFact.value === false
+      && previewInitialInputActiveFact.sourcePin?.lineStart === 6325
+      && previewInitialInputActiveFact.sourcePin.lineEnd === 6332,
+    {
+      defaultText: previewDefaultTextFact,
+      defaultTextColor: previewDefaultTextColorFact,
+      innerColor: previewInnerColorFact,
+      configBorder: previewConfigBorderFact,
+      textBorder: previewTextBorderFact,
+      blackInset: previewBlackInsetFact,
+      initialInputActive: previewInitialInputActiveFact,
+    },
+  );
+  const scaledPreviewOperation = scaledProgram?.operations.find(operationValue =>
+    operationValue.kind === 'createEditBox'
+      && colorSource.slice(operationValue.source.start.offset, operationValue.source.end.offset).includes('defaultText = "Placeholder"'));
+  p3Check(
+    'uiScale 2.5 changes only the scaled black inset while the text border stays fixed at two pixels',
+    scaledPreviewOperation?.descriptorFacts.editboxBlackInset?.status === 'known'
+      && scaledPreviewOperation.descriptorFacts.editboxBlackInset.value === 3
+      && scaledPreviewOperation.descriptorFacts.editboxBlackInset.sourcePin?.lineStart === 8702
+      && scaledPreviewOperation.descriptorFacts.editboxTextBorder?.status === 'known'
+      && scaledPreviewOperation.descriptorFacts.editboxTextBorder.value === 2
+      && scaledPreviewOperation.descriptorFacts.editboxTextBorder.sourcePin?.lineStart === 848,
+    {
+      blackInset: scaledPreviewOperation?.descriptorFacts.editboxBlackInset,
+      textBorder: scaledPreviewOperation?.descriptorFacts.editboxTextBorder,
+    },
+  );
+  const branchSource = [
+    'local menu = { name = "Editbox branch inputs", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(2, { width = 40 })',
+    'local row = table:addRow(false, {})',
+    'row[1]:createEditBox({ defaultText = "", bgColor = Color["editbox_background_default"] }):setText("", { x = 5, y = 0 })',
+    'row[2]:createEditBox({ defaultText = "SHOULD_NOT_WIN", bgColor = Color["editbox_background_default"] }):setText("CURRENT", { x = 5, y = 0 })',
+    'frame:display()',
+  ].join('\n');
+  const branchModel = buildX4UiCallModel(input(branchSource, 'selftest/p3-editbox-branches.lua'));
+  const branchTarget = topTarget(branchModel);
+  const branchProfile = profileFor(branchModel);
+  const branchProgram = branchTarget
+    ? resultProgram(projectWithColorEvidence(
+      branchModel,
+      branchTarget,
+      branchProfile,
+      undefined,
+      undefined,
+      authority,
+    ))
+    : undefined;
+  const branchOperationFor = (sourceNeedle: string) => branchProgram?.operations.find(operationValue =>
+    operationValue.kind === 'createEditBox'
+      && branchSource.slice(operationValue.source.start.offset, operationValue.source.end.offset).includes(sourceNeedle));
+  const emptyDefaultOperation = branchOperationFor('defaultText = ""');
+  const currentControlOperation = branchOperationFor('defaultText = "SHOULD_NOT_WIN"');
+  p3Check(
+    'empty default and non-empty-current controls retain branch inputs independently of paint evidence',
+    emptyDefaultOperation?.descriptorFacts.defaultText?.status === 'known'
+      && emptyDefaultOperation.descriptorFacts.defaultText.value === ''
+      && emptyDefaultOperation.descriptorFacts.editboxInitialInputActive?.status === 'known'
+      && emptyDefaultOperation.descriptorFacts.editboxInitialInputActive.value === false
+      && currentControlOperation?.descriptorFacts.defaultText?.status === 'known'
+      && currentControlOperation.descriptorFacts.defaultText.value === 'SHOULD_NOT_WIN',
+    { emptyDefault: emptyDefaultOperation?.descriptorFacts, currentControl: currentControlOperation?.descriptorFacts },
+  );
+  const omittedPreviewEditBox = omitted.program?.operations.find(operationValue =>
+    operationValue.kind === 'createEditBox'
+      && colorSource.slice(operationValue.source.start.offset, operationValue.source.end.offset).includes('defaultText = "Placeholder"'));
+  p3Check(
+    'omitted canonical preview evidence remains an explicit gap without fabricated color values',
+    omittedPreviewEditBox?.descriptorFacts.defaultText?.status === 'known'
+      && omittedPreviewEditBox.descriptorFacts.defaultText.value === 'Placeholder'
+      && omittedPreviewEditBox.descriptorFacts.defaultTextColor?.status === 'unavailable'
+      && omittedPreviewEditBox.descriptorFacts.editboxBackgroundBlackColor?.status === 'unavailable'
+      && omittedPreviewEditBox.descriptorFacts.editboxConfigBorder?.status === 'known'
+      && omittedPreviewEditBox.descriptorFacts.editboxTextBorder?.status === 'known'
+      && omittedPreviewEditBox.descriptorFacts.editboxBlackInset?.status === 'known'
+      && omittedPreviewEditBox.descriptorFacts.editboxInitialInputActive?.status === 'known',
+    {
+      defaultText: omittedPreviewEditBox?.descriptorFacts.defaultText,
+      defaultTextColor: omittedPreviewEditBox?.descriptorFacts.defaultTextColor,
+      innerColor: omittedPreviewEditBox?.descriptorFacts.editboxBackgroundBlackColor,
+      configBorder: omittedPreviewEditBox?.descriptorFacts.editboxConfigBorder,
+      textBorder: omittedPreviewEditBox?.descriptorFacts.editboxTextBorder,
+      blackInset: omittedPreviewEditBox?.descriptorFacts.editboxBlackInset,
+      initialInputActive: omittedPreviewEditBox?.descriptorFacts.editboxInitialInputActive,
+    },
+  );
 
   p3Check(
     'omitted evidence preserves the exact old serialized result',
@@ -13661,7 +14006,7 @@ const runP3ColorChecks = async (): Promise<Check[]> => {
       && symbolicTextFact.provenance === 'canonical-default-only'
       && symbolicTextValue?.requestedId === 'text_normal'
       && symbolicTextValue.resolvedBaseId === 'white_weak_glow'
-      && (symbolicTextValue.baseSource as Record<string, unknown> | undefined)?.index === 2
+      && (symbolicTextValue.baseSource as Record<string, unknown> | undefined)?.index === 4
       && (symbolicTextValue.mappingSource as Record<string, unknown> | undefined)?.index === 2
       && (symbolicTextValue.sourceIdentities as Record<string, unknown> | undefined)?.xml !== undefined
       && ((symbolicTextValue.sourceIdentities as Record<string, unknown>).xml as Record<string, unknown>).sha256 === X4_UI_CORPUS_COLORS_XML_SHA256

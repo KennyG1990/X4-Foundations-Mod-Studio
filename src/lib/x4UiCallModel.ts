@@ -168,6 +168,8 @@ export interface X4UiStaticValue<T = X4UiLiteral> {
   parameter?: X4UiLocalFunctionParameterIdentity;
   /** Exact local-helper call result that produced this otherwise-dynamic value. */
   localInvocationResult?: X4UiLocalInvocationResultIdentity;
+  /** Exact direct Helper.scale* call that produced this local result. */
+  directHelperScaleResult?: X4UiDirectHelperScaleResultIdentity;
   /** Original literal range; direct argument binding requires this to equal the use range. */
   sourceLiteral?: X4UiSourceLocation;
 }
@@ -506,6 +508,17 @@ export interface X4UiLocalInvocationResultIdentity {
   readonly expression: string;
 }
 
+/** Exact source identity of a directly bound Helper scale result. */
+export type X4UiDirectHelperScaleCallName = 'scaleX' | 'scaleY' | 'scaleFont';
+
+export interface X4UiDirectHelperScaleResultIdentity {
+  readonly callName: X4UiDirectHelperScaleCallName;
+  readonly callSource: X4UiSourceLocation;
+  readonly callExpression: string;
+  readonly bindingName: string;
+  readonly bindingSource: X4UiSourceLocation;
+}
+
 export interface X4UiLocalFunctionDeclaration {
   readonly id: string;
   readonly name: string;
@@ -628,6 +641,13 @@ interface InternalValue {
   localFunction?: InternalLocalFunction;
   helperAlias?: InternalHelperAlias;
   helperAliasCandidate?: InternalHelperAliasCandidate;
+  directHelperScaleCall?: InternalDirectHelperScaleCall;
+}
+
+interface InternalDirectHelperScaleCall {
+  readonly callName: X4UiDirectHelperScaleCallName;
+  readonly source: X4UiSourceLocation;
+  readonly expression: string;
 }
 
 interface InternalLocalFunction {
@@ -1267,7 +1287,8 @@ class X4UiCallModelBuilder {
       functionNode: source.functionNode,
       localFunction: source.localFunction,
       helperAlias: source.helperAlias,
-      helperAliasCandidate: source.helperAliasCandidate
+      helperAliasCandidate: source.helperAliasCandidate,
+      directHelperScaleCall: source.directHelperScaleCall
     };
   }
 
@@ -1804,7 +1825,21 @@ class X4UiCallModelBuilder {
       existing.push(record);
       this.resultCalls.set(analyzed.result.id, existing);
     }
-    return analyzed.result ? this.referenceValue(analyzed.result, node) : this.dynamic(node, 'expression', `${name} result is not modeled`);
+    if (analyzed.result) return this.referenceValue(analyzed.result, node);
+    const result = this.dynamic(node, 'expression', `${name} result is not modeled`);
+    if ((name === 'scaleX' || name === 'scaleY' || name === 'scaleFont')
+      && shape.method === '.'
+      && receiver?.publicValue.status === 'static'
+      && receiver.publicValue.reference?.kind === 'global'
+      && receiver.publicValue.reference.path === 'Helper'
+      && !analyzed.semantics.dataFlow) {
+      result.directHelperScaleCall = {
+        callName: name,
+        source: this.location(node),
+        expression: this.textOf(node),
+      };
+    }
+    return result;
   }
 
   private analyzeRelevantCall(
@@ -2747,8 +2782,33 @@ class X4UiCallModelBuilder {
   }
 
   private isRelevantBinding(name: string, value: InternalValue): boolean {
-    if (value.object || value.functionNode || value.publicValue.type === 'reference' || value.publicValue.type === 'table' || value.publicValue.type === 'function') return true;
+    if (value.object || value.functionNode || value.publicValue.type === 'reference' || value.publicValue.type === 'table' || value.publicValue.type === 'function'
+      || value.directHelperScaleCall || value.publicValue.directHelperScaleResult) return true;
     return /^(menu|frame|table|row|cell|handler|handlers|onClick)$/i.test(name);
+  }
+
+  private bindDirectHelperScaleResult(
+    name: string,
+    value: InternalValue,
+    target: LuaNode,
+  ): InternalValue {
+    const prior = value.publicValue.directHelperScaleResult;
+    const directCall = value.directHelperScaleCall;
+    if (!prior && !directCall) return value;
+    const identity: X4UiDirectHelperScaleResultIdentity = freezeDeepFact({
+      callName: prior?.callName || directCall!.callName,
+      callSource: prior?.callSource || directCall!.source,
+      callExpression: prior?.callExpression || directCall!.expression,
+      bindingName: name,
+      bindingSource: this.location(target),
+    });
+    return {
+      ...value,
+      publicValue: {
+        ...value.publicValue,
+        directHelperScaleResult: identity,
+      },
+    };
   }
 
   private bindName(name: string, value: InternalValue, target: LuaNode, context: X4UiFunctionContext, aliasKind: X4UiAliasRecord['aliasKind']): void {
@@ -2809,6 +2869,8 @@ class X4UiCallModelBuilder {
       this.addGap('data-flow', 'unsupported', this.location(target), reason);
       if (previous?.helperAlias) this.recordControlFlowHelperAliasAssignment(name, false);
     }
+
+    boundValue = this.bindDirectHelperScaleResult(name, boundValue, target);
 
     this.bindings.set(name, { value: boundValue, source: this.location(target) });
     if (boundValue.object) {

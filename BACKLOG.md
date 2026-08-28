@@ -1476,6 +1476,27 @@ deploy/rollback boundary; the Notion owner page contains and read back the same 
 rejects the Windows workspace path; no bypass was attempted. Receipt:
 `dev-docs/b119-ai-influence-dogfood/final-export-validation/isolated-deploy-rehearsal-r1/evidence/external-sync-receipt.json`.
 
+**B119 current `pipeline_test` pre-deploy checkpoint 2026-08-22 — VERIFIED bounded package validation / PARTIAL source-first geometry:** staged root `dev-docs/b119-x4-ui-pipeline-smoke/` and exact id `pipeline_test` contain only `content.xml` (`367`, `696c5c...`), `ui.xml` (`273`, `655331...`), and `ui/pipeline_test.lua` (`5378`, `b8f4c1...`) for six UI widgets; Forge readiness, Mod Doctor, lifecycle, and linter gates are green (`0` errors, `0` warnings, `33` explicit gaps), and one external validator run returned `VALID` with receipt `b0bf7a6e17e8a6522afe1355f262b1d761cfec07edeea21776edd0fc42e507bf`. Default-driver profiles at UI scale `1` and `1.4` exit with `canRender=true` and counts `1/1/6/12`, but geometry remains unusable with zero widgets/texts, so no frame/button capture is claimed. No real target was written, literal `go` has not been received, and overall B119 remains `IN_PROGRESS / PARTIAL / Not verified in game`; full evidence is appended to the plan and handoff.**
+
+**B119 `pipeline_test` fresh-audit checkpoint 2026-08-22 — FOCUSED GATES VERIFIED / HOST GATES PENDING:** a fresh audit reproduced and repaired valid-whitespace Scene refusal plus forged edit-box-inset acceptance. Independent bundled-Node results are Scene `152/152`, PaintPlan `175/175`, CanvasRenderer `129/129`, whole-repository TypeScript green, exact twelve-file ESLint green, and B119 diff hygiene green. Package bytes and the one-instance validator receipt remain unchanged; both real targets remain absent. Antigravity is observed open and X4 absent, but complete precommit/build/oracle/E2E await the required human machine-quiet answer, and materialization/deploy await literal `go`. Overall B119 remains `IN_PROGRESS / PARTIAL / Not verified in game`.**
+
+**B119 runtime-host reconciliation 2026-08-28:** Antigravity now has X4 Forge `0.0.70`; its installed server is
+`D27EDFA7...3437` / `3,508,512` bytes, while the freshly validated current-checkout build is
+`64FE71D0...E121` / `3,509,970` bytes. They are not byte-identical, so current-checkout `dist/server.cjs` remains the
+runtime authority for this smoke and will reuse the existing Antigravity global-storage config through
+`X4_CONFIG_DIR` without changing IDE settings.**
+
+**B119 `pipeline_test` host-gate checkpoint 2026-08-28 — HOST VERIFIED / REAL WRITE AUTHORIZED:** The operator
+supplied the exact gate answer: Antigravity open, X4 not running, machine quiet, and literal `go`. Under bundled Node
+`24.19.0`, complete precommit, production build, official runtime-index oracle sweep `134/134`, serial isolated E2E
+`104/104`, and full ESLint all exit `0`; ESLint reports `0` errors / `592` existing warnings. The E2E verdict receipt
+is `07A5BE43...7B39`, proves child-close with `treeGone=true`, and left live/ephemeral ports and persisted config
+unchanged. A direct oracle script invocation without its required server reproduced `0/133` fetch failures; the
+official owner then passed `134/134`, so this is recorded as harness-invocation evidence rather than hidden. Both real
+`pipeline_test` targets were still absent after validation. Explicit-path commit/push is next, followed by Forge-owner
+materialization, deploy-verify dry-run/apply, exact-byte containment, and X4 truth. Overall B119 remains
+`IN_PROGRESS / PARTIAL / Not verified in game` until the game supplies visible acceptance.**
+
 ### B115 · Forge Capability Convergence `in_progress` (P0, PRIORITY OVERRIDE)
 
 Ken explicitly promoted GitHub initiative #9 and child requests #10–#21 above the active R13 close on 2026-07-31.

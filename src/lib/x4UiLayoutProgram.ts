@@ -13,6 +13,7 @@ import type {
   X4UiCallPropertyProjection,
   X4UiCallRecord,
   X4UiBranchPathSegment,
+  X4UiDirectHelperScaleResultIdentity,
   X4UiFunctionContext,
   X4UiLocalFunctionDeclaration,
   X4UiLocalFunctionInvocation,
@@ -795,6 +796,21 @@ const helperPin = (lineStart: number, lineEnd = lineStart): X4UiLayoutSourcePin 
   lineEnd,
 });
 
+const widgetPin = (lineStart: number, lineEnd = lineStart): X4UiLayoutSourcePin => ({
+  sourcePath: WIDGET_SOURCE_PATH,
+  lineStart,
+  lineEnd,
+});
+
+const WIDGET_DEFAULT_PINS = Object.freeze({
+  editBoxDefaultTextColor: widgetPin(12774, 12799),
+  editBoxBackgroundBlackColor: widgetPin(9680, 9689),
+  editBoxConfigBorder: widgetPin(617, 634),
+  editBoxTextBorder: widgetPin(848, 860),
+  editBoxBlackInset: widgetPin(8702, 8727),
+  editBoxInitialInputActive: widgetPin(6325, 6332),
+});
+
 const HELPER_DEFAULT_PINS = Object.freeze({
   standardHalignment: helperPin(515),
   standardButtonHeight: helperPin(522),
@@ -1569,19 +1585,67 @@ interface DirectScaleValue {
   readonly instanceScope: string;
 }
 
+const directHelperScaleResultKey = (identity: X4UiDirectHelperScaleResultIdentity): string => [
+  identity.callName,
+  locationKey(identity.callSource),
+  identity.callExpression,
+  identity.bindingName,
+  locationKey(identity.bindingSource),
+].join('|');
+
+const directHelperScaleResultIsBound = (
+  model: X4UiCallModel,
+  value: X4UiValue,
+): boolean => {
+  const identity = value.directHelperScaleResult;
+  if (!identity
+    || value.expression.trim() !== identity.bindingName
+    || identity.callSource.file !== model.file.rel
+    || !sameOptionalString(identity.callSource.sourcePath, model.file.sourcePath)
+    || identity.bindingSource.file !== model.file.rel
+    || !sameOptionalString(identity.bindingSource.sourcePath, model.file.sourcePath)) return false;
+  const call = model.calls.find(candidate => locationsEqual(candidate.source, identity.callSource));
+  if (!call
+    || call.name !== identity.callName
+    || !isHelperReceiver(call)
+    || call.semantics.dataFlow
+    || model.file.text.slice(call.source.start.offset, call.source.end.offset) !== identity.callExpression) return false;
+  const binding = model.aliases.find(candidate => candidate.name === identity.bindingName
+    && locationsEqual(candidate.source, identity.bindingSource)
+    && candidate.value.directHelperScaleResult !== undefined
+    && directHelperScaleResultKey(candidate.value.directHelperScaleResult) === directHelperScaleResultKey(identity));
+  if (!binding || !locationsEqual(call.context.source, binding.context.source)) return false;
+  if (identity.bindingSource.start.offset > identity.callSource.start.offset
+    || identity.callSource.end.offset > value.location.start.offset
+    || identity.bindingSource.start.offset > value.location.start.offset) return false;
+  return !model.aliases.some(candidate => candidate !== binding
+    && candidate.name === identity.bindingName
+    && locationsEqual(candidate.context.source, binding.context.source)
+    && candidate.source.start.offset > binding.source.start.offset
+    && candidate.source.start.offset < value.location.start.offset
+    && candidate.context.reachability !== 'unreachable');
+};
+
 const scopedLocationKey = (source: X4UiSourceLocation, instanceScope = ''): string =>
   `${instanceScope}|${locationKey(source)}`;
 
 const directScaleForValue = (
   values: ReadonlyMap<string, DirectScaleValue> | undefined,
-  source: X4UiSourceLocation,
+  value: X4UiValue | undefined,
   instanceScope: string,
+  model: X4UiCallModel | undefined,
 ): DirectScaleValue | undefined => {
+  const identity = value?.directHelperScaleResult;
+  if (identity && (!model || !directHelperScaleResultIsBound(model, value))) return undefined;
+  const source = identity?.callSource || value?.location;
+  if (!source) return undefined;
   const exact = values?.get(scopedLocationKey(source, instanceScope));
-  if (exact) return exact;
+  if (exact && (!identity || exact.kind === identity.callName)) return exact;
+  if (exact) return undefined;
   if (!values) return undefined;
   return [...values.values()]
     .filter(candidate => locationsEqual(candidate.source, source)
+      && (!identity || candidate.kind === identity.callName)
       && (candidate.instanceScope.length === 0
         || instanceScope.startsWith(`${candidate.instanceScope}>`)))
     .sort((left, right) => right.instanceScope.length - left.instanceScope.length)[0];
@@ -1605,7 +1669,7 @@ const unresolved = <T>(
 });
 
 const sampleSourceForValue = (value: X4UiValue): X4UiSourceLocation =>
-  value.localInvocationResult?.source || value.location;
+  value.directHelperScaleResult?.callSource || value.localInvocationResult?.source || value.location;
 
 const evidenceExpressionForValue = (value: X4UiValue | undefined): string | undefined =>
   value?.localInvocationResult?.expression || value?.expression;
@@ -1621,11 +1685,12 @@ const resolveNumber = (
   consumedSamples?: Set<string>,
   allowedScaleKinds: readonly DirectScaleValue['kind'][] = ['scaleX', 'scaleY'],
   instanceScope = '',
+  model?: X4UiCallModel,
 ): Resolution<number> => {
   if (value?.status === 'static' && value.type === 'number' && isFiniteNumber(value.value)) {
     return { value: value.value, source: cloneLocation(value.location), provenance: 'source-literal' };
   }
-  const directScale = value ? directScaleForValue(directScaleValues, value.location, instanceScope) : undefined;
+  const directScale = directScaleForValue(directScaleValues, value, instanceScope, model);
   if (directScale && allowedScaleKinds.includes(directScale.kind)) {
     return { value: directScale.value, source: cloneLocation(directScale.source), provenance: 'direct-helper-scale' };
   }
@@ -4308,9 +4373,31 @@ const isSourceBoundPropagatedLiteral = (value: Record<string, unknown>): boolean
     && sourceLiteral.end.offset <= location.start.offset;
 };
 
+const schemaDirectHelperScaleResult = (value: unknown, path: string): ClosedSchemaError => {
+  const objectError = schemaObject(value, path, ['callName', 'callSource', 'callExpression', 'bindingName', 'bindingSource']);
+  if (objectError) return objectError;
+  const identity = value as Record<string, unknown>;
+  const errors = schemaEnum(identity.callName, `${path}.callName`, ['scaleX', 'scaleY', 'scaleFont'])
+    || schemaSource(identity.callSource, `${path}.callSource`)
+    || schemaString(identity.callExpression, `${path}.callExpression`, true)
+    || schemaString(identity.bindingName, `${path}.bindingName`, true)
+    || schemaSource(identity.bindingSource, `${path}.bindingSource`);
+  if (errors) return errors;
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(identity.bindingName as string)) {
+    return `${path}.bindingName must be a direct local identifier`;
+  }
+  const callSource = identity.callSource as X4UiSourceLocation;
+  const bindingSource = identity.bindingSource as X4UiSourceLocation;
+  if (callSource.file !== bindingSource.file
+    || !sameOptionalString(callSource.sourcePath, bindingSource.sourcePath)) {
+    return `${path} call and binding sources must belong to the same source`;
+  }
+  return undefined;
+};
+
 const schemaValue = (value: unknown, path: string, allowExpandedSourceMismatch = false): ClosedSchemaError => {
   const objectError = schemaObject(value, path, ['status', 'type', 'expression', 'location'], [
-    'value', 'reference', 'sourceLiteral', 'reason', 'symbol', 'parameter', 'localInvocationResult',
+    'value', 'reference', 'sourceLiteral', 'reason', 'symbol', 'parameter', 'localInvocationResult', 'directHelperScaleResult',
   ]);
   if (objectError) return objectError;
   const candidate = value as Record<string, unknown>;
@@ -4330,7 +4417,8 @@ const schemaValue = (value: unknown, path: string, allowExpandedSourceMismatch =
       return schemaString(result.invocationId, `${childPath}.invocationId`, true)
         || schemaSource(result.source, `${childPath}.source`)
         || schemaString(result.expression, `${childPath}.expression`);
-    }, path);
+    }, path)
+    || schemaOptional(candidate, 'directHelperScaleResult', schemaDirectHelperScaleResult, path);
   if (errors) return errors;
   const valueType = candidate.type;
   const valueStatus = candidate.status;
@@ -4428,6 +4516,19 @@ const schemaValue = (value: unknown, path: string, allowExpandedSourceMismatch =
       && (!Object.is((localResult.source as X4UiSourceLocation).file, (candidate.location as X4UiSourceLocation).file)
         || !sameOptionalString((localResult.source as X4UiSourceLocation).sourcePath, (candidate.location as X4UiSourceLocation).sourcePath))) {
       return `${path}.expanded localInvocationResult must retain source identity`;
+    }
+  }
+  if (candidate.directHelperScaleResult !== undefined
+    && (candidate.status !== 'dynamic' || valueType !== 'expression')) {
+    return `${path}.directHelperScaleResult is only valid for dynamic expressions`;
+  }
+  if (candidate.directHelperScaleResult !== undefined) {
+    const directScale = candidate.directHelperScaleResult as Record<string, unknown>;
+    const directSource = directScale.callSource as X4UiSourceLocation;
+    const valueLocation = candidate.location as X4UiSourceLocation;
+    if (directSource.file !== valueLocation.file
+      || !sameOptionalString(directSource.sourcePath, valueLocation.sourcePath)) {
+      return `${path}.directHelperScaleResult must retain source identity`;
     }
   }
   return undefined;
@@ -7254,6 +7355,7 @@ export function projectX4UiLayoutProgram(
     consumedSamples,
     allowedScaleKinds,
     activeCall?.expansionInstance?.ancestry.join('>') || '',
+    model,
   );
 
   const resolveProjectedBoolean = (
@@ -8366,6 +8468,53 @@ export function projectX4UiLayoutProgram(
           minRowHeightFloorExpression,
           HELPER_DEFAULT_PINS.textMinHeightBoundary,
         );
+      const editBoxDefaultTextColorResolution = type === 'editbox'
+        ? resolveColorFact(
+          modelColorExpressions,
+          call,
+          'defaultTextColor',
+          undefined,
+          colorEvidenceInput,
+          'editbox_text_default',
+          call.source,
+          WIDGET_DEFAULT_PINS.editBoxDefaultTextColor,
+          'text',
+          'edit-box defaultText color requires canonical editbox_text_default evidence',
+          'Color["editbox_text_default"]',
+        )
+        : undefined;
+      const editBoxBackgroundBlackColorResolution = type === 'editbox'
+        ? resolveColorFact(
+          modelColorExpressions,
+          call,
+          'editboxBackgroundBlackColor',
+          undefined,
+          colorEvidenceInput,
+          'editbox_background_black',
+          call.source,
+          WIDGET_DEFAULT_PINS.editBoxBackgroundBlackColor,
+          'cell',
+          'edit-box inner background requires canonical editbox_background_black evidence',
+          'Color["editbox_background_black"]',
+        )
+        : undefined;
+      const editBoxBlackInsetExpression = 'max(2, floor(config.editbox.border * uiScale + 0.5))';
+      const editBoxBlackInsetValue = type === 'editbox'
+        ? Math.max(2, Math.floor(profileValue.metrics.uiScale + 0.5))
+        : undefined;
+      const editBoxBlackInsetFact = type === 'editbox' && editBoxBlackInsetValue !== undefined
+        && Number.isSafeInteger(editBoxBlackInsetValue)
+        && editBoxBlackInsetValue <= 1_000_000
+        ? knownDefaultFact(editBoxBlackInsetValue, 'number', call.source, WIDGET_DEFAULT_PINS.editBoxBlackInset, editBoxBlackInsetExpression)
+        : type === 'editbox'
+          ? unavailableFact(
+            'number',
+            'scaled edit-box black inset is outside the safe preview geometry domain',
+            call.source,
+            editBoxBlackInsetExpression,
+            WIDGET_DEFAULT_PINS.editBoxBlackInset,
+          )
+          : undefined;
       const pendingFacts: Record<string, X4UiLayoutDescriptorFact> = {
         contentKind: knownSourceFact(type, 'string', call.source, call.name),
         span: found.cell.descriptorFacts.span,
@@ -8429,6 +8578,14 @@ export function projectX4UiLayoutProgram(
             ? factFromResolution(defaultTextValue, defaultText, 'string', call.source, 'edit-box defaultText')
             : knownDefaultFact('', 'string', call.source, HELPER_DEFAULT_PINS.editBoxDefaultText, '""'))
           : unavailableFact('string', `${type} has no edit-box defaultText`, call.source),
+        ...(type === 'editbox' ? {
+          defaultTextColor: editBoxDefaultTextColorResolution!.fact,
+          editboxBackgroundBlackColor: editBoxBackgroundBlackColorResolution!.fact,
+          editboxConfigBorder: knownDefaultFact(1, 'number', call.source, WIDGET_DEFAULT_PINS.editBoxConfigBorder, 'config.editbox.border'),
+          editboxTextBorder: knownDefaultFact(2, 'number', call.source, WIDGET_DEFAULT_PINS.editBoxTextBorder, 'config.texturesizes.editbox.borderSize'),
+          editboxBlackInset: editBoxBlackInsetFact!,
+          editboxInitialInputActive: knownDefaultFact(false, 'boolean', call.source, WIDGET_DEFAULT_PINS.editBoxInitialInputActive, 'initial setUpEditBox entry has no active direct-input flag'),
+        } : {}),
         description: type === 'editbox'
           ? (descriptionValue
             ? factFromResolution(descriptionValue, description, 'string', call.source, 'edit-box description')

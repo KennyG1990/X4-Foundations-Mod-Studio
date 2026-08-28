@@ -379,8 +379,20 @@ async function loadCanonicalColorFixture(): Promise<X4UiCorpusCanonicalColorSucc
   const root = 'paint-plan-color-canonical-root';
   const generation = 'paint-plan-color-canonical-generation';
   const contract = X4_UI_CORPUS_9_00_COLOR_CONTRACT;
-  const colorDefinitions = Array.from({ length: 224 }, (_unused, index) => `<color id="paint_color_${String(index)}" r="${String(index % 256)}" g="${String((index + 1) % 256)}" b="${String((index + 2) % 256)}" a="255" glow="0" />`).join('');
-  const colorMappings = Array.from({ length: 804 }, (_unused, index) => `<mapping id="paint_mapping_${String(index)}" ref="paint_color_${String(index % 224)}" />`).join('');
+  const colorDefinitions = [
+    '<color id="paint_color_0" r="0" g="1" b="2" a="255" glow="0" />',
+    '<color id="black" r="0" g="0" b="0" a="255" glow="0" />',
+    '<color id="grey_128" r="128" g="128" b="128" a="255" glow="0" />',
+    '<color id="azure_very_dark_alpha_224" r="91" g="92" b="93" a="224" glow="0" />',
+    ...Array.from({ length: 220 }, (_unused, index) => `<color id="paint_color_${String(index + 1)}" r="${String((index + 1) % 256)}" g="${String((index + 2) % 256)}" b="${String((index + 3) % 256)}" a="255" glow="0" />`),
+  ].join('');
+  const colorMappings = [
+    '<mapping id="paint_mapping_0" ref="paint_color_0" />',
+    '<mapping id="editbox_background_default" ref="azure_very_dark_alpha_224" />',
+    '<mapping id="editbox_text_default" ref="grey_128" />',
+    '<mapping id="editbox_background_black" ref="black" />',
+    ...Array.from({ length: 800 }, (_unused, index) => `<mapping id="paint_mapping_${String(index + 1)}" ref="paint_color_${String((index + 1) % 221)}" />`),
+  ].join('');
   const xmlText = `<colormap><colors>${colorDefinitions}</colors><mappings>${colorMappings}</mappings></colormap>`;
   const xsdText = '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:simpleType name="colorId"><xs:restriction base="xs:string"><xs:pattern value="[a-zA-Z_][a-zA-Z0-9_]*"/></xs:restriction></xs:simpleType><xs:simpleType name="colorid"><xs:restriction base="xs:string"><xs:pattern value="[a-zA-Z_][a-zA-Z0-9_]*"/></xs:restriction></xs:simpleType><xs:element name="colormap"><xs:complexType><xs:sequence><xs:choice minOccurs="0" maxOccurs="unbounded"><xs:element name="color"><xs:complexType><xs:attribute name="id" type="colorId" use="required"/><xs:attribute name="r" type="xs:unsignedByte"/><xs:attribute name="g" type="xs:unsignedByte"/><xs:attribute name="b" type="xs:unsignedByte"/><xs:attribute name="a" type="xs:unsignedByte"/><xs:attribute name="glow" type="xs:unsignedByte"/></xs:complexType></xs:element><xs:element name="mapping"><xs:complexType><xs:attribute name="id" type="colorId" use="required"/><xs:attribute name="ref" type="colorId" use="required"/></xs:complexType></xs:element></xs:choice></xs:sequence></xs:complexType></xs:element></xs:schema>';
   const padToSize = (value: string, size: number): Uint8Array => new TextEncoder().encode(`${value}${' '.repeat(size - new TextEncoder().encode(value).byteLength)}`);
@@ -516,7 +528,8 @@ function colorSourceFixture(backgroundId: 'solid' | '' | null = 'solid'): X4UiWo
     'row[3]:createButton({ height = 0, affectRowHeight = false, bgcolor = { r = 13, g = 23, b = 33, a = 43 }, highlightcolor = { r = 14, g = 24, b = 34, a = 44 }, bordercolor = { r = 15, g = 25, b = 35, a = 45 } }):setText("button", { x = 0, y = 0, color = { r = 16, g = 26, b = 36, a = 46 } }):setText2("bold", { x = 0, y = 0, halign = "right", font = "Zekton Bold", fontsize = 16, color = { r = 17, g = 27, b = 37, a = 47 } })',
     'row[4]:createIcon("solid", { height = 8, affectRowHeight = false, color = { r = 19, g = 29, b = 39, a = 49 } })',
     'local editRow = table:addRow(false, { paddingTop = 1, paddingBottom = 1, borderBelow = false, fixed = false })',
-    'editRow[1]:createEditBox({ height = 8, affectRowHeight = false, bgcolor = { r = 18, g = 28, b = 38, a = 48 } })',
+    'editRow[1]:createEditBox({ height = 8, affectRowHeight = false, defaultText = "PLACEHOLDER", active = false, bgcolor = Color["editbox_background_default"] }):setText("", { x = 5, y = 0 })',
+    'editRow[2]:createEditBox({ height = 8, affectRowHeight = false, defaultText = "SHOULD_NOT_WIN", bgcolor = Color["editbox_background_default"] }):setText("CURRENT", { x = 5, y = 0 })',
     'local secondaryMenu = { name = "Secondary", layer = 0 }',
     'local secondaryFrame = Helper.createFrameHandle(secondaryMenu, { width = 100, height = 80, layer = 0 })',
     'local secondaryTable = secondaryFrame:addTable(1, { width = 40, reserveScrollBar = false, scaling = false })',
@@ -1304,6 +1317,163 @@ async function main(): Promise<void> {
       const tints = (command as unknown as JsonRecord).basePreviewTints;
       return Array.isArray(tints) ? tints : [];
     });
+    const colorEditBox = colorScene?.widgets.find(widget => widget.kind === 'editbox' && widget.primaryContent === '');
+    const colorCurrentEditBox = colorScene?.widgets.find(widget => widget.kind === 'editbox' && widget.primaryContent === 'CURRENT');
+    const colorEditBoxText = colorEditBox === undefined ? undefined : colorScene?.texts.find(text => text.widgetId === colorEditBox.id);
+    const colorEditBoxCommand = colorEditBox === undefined
+      ? undefined
+      : colorGeometryCommands.find(command => command.nodeId === colorEditBox.id);
+    const colorCurrentEditBoxCommand = colorCurrentEditBox === undefined
+      ? undefined
+      : colorGeometryCommands.find(command => command.nodeId === colorCurrentEditBox.id);
+    const colorEditBoxRecord = colorEditBoxCommand as unknown as JsonRecord | undefined;
+    const colorCurrentEditBoxRecord = colorCurrentEditBoxCommand as unknown as JsonRecord | undefined;
+    const colorEditBoxInner = colorEditBoxRecord?.innerGeometry as JsonRecord | undefined;
+    const colorEditBoxComposition = colorEditBoxRecord?.editboxComposition as JsonRecord | undefined;
+    const colorEditBoxTints = Array.isArray(colorEditBoxRecord?.basePreviewTints)
+      ? colorEditBoxRecord.basePreviewTints as unknown[]
+      : [];
+    check('P5 causal inactive-empty edit-box issues exact outer tint plus 2px black inner inset at uiScale 1',
+      colorEditBox !== undefined
+        && colorEditBoxText?.contentSelection === 'preview-default'
+        && colorEditBox.editboxConfigBorder === 1
+        && colorEditBox.editboxBlackInset === 2
+        && colorEditBox.editboxTextBorder === 2
+        && colorEditBoxCommand !== undefined
+        && colorEditBoxRecord?.geometry !== undefined
+        && colorEditBoxInner !== undefined
+        && colorEditBoxInner.x === ((colorEditBoxRecord.geometry as JsonRecord).x as number) + 2
+        && colorEditBoxInner.y === ((colorEditBoxRecord.geometry as JsonRecord).y as number) + 2
+        && colorEditBoxInner.width === ((colorEditBoxRecord.geometry as JsonRecord).width as number) - 4
+        && colorEditBoxInner.height === ((colorEditBoxRecord.geometry as JsonRecord).height as number) - 4
+        && colorEditBoxComposition?.previewOnly === true
+        && colorEditBoxComposition.configBorder === 1
+        && colorEditBoxComposition.innerInset === 2
+        && colorEditBoxComposition.textBorder === 2
+        && ((colorEditBoxComposition.sourcePins as JsonRecord).scaledInnerInset as JsonRecord).lineStart === 8702
+        && ((colorEditBoxComposition.sourcePins as JsonRecord).fixedTextBorder as JsonRecord).lineStart === 848
+        && ((colorEditBoxComposition.sourcePins as JsonRecord).innerApplication as JsonRecord).lineStart === 12642
+        && colorEditBoxTints.some(tint => (tint as JsonRecord).field === 'bgcolor' && (tint as JsonRecord).slot === 'widget-background')
+        && colorEditBoxTints.some(tint => (tint as JsonRecord).field === 'editboxBackgroundBlackColor' && (tint as JsonRecord).slot === 'editbox-inner-background')
+        && (colorEditBoxTints.find(tint => (tint as JsonRecord).field === 'editboxBackgroundBlackColor') as JsonRecord | undefined)?.gameVerification === NOT_VERIFIED_IN_GAME,
+      { widget: colorEditBox, command: colorEditBoxRecord, tints: colorEditBoxTints },
+    );
+    const colorCurrentTints = Array.isArray(colorCurrentEditBoxRecord?.basePreviewTints)
+      ? colorCurrentEditBoxRecord.basePreviewTints as unknown[]
+      : [];
+    check('P5 non-empty current edit-box keeps current selection and still issues black inner chrome',
+      colorCurrentEditBox !== undefined
+        && colorScene?.texts.find(text => text.widgetId === colorCurrentEditBox.id)?.contentSelection === 'current'
+        && colorCurrentEditBoxRecord?.innerGeometry !== undefined
+        && (colorCurrentEditBoxRecord.editboxComposition as JsonRecord | undefined)?.innerInset === 2
+        && colorCurrentTints.some(tint => (tint as JsonRecord).slot === 'editbox-inner-background'),
+      { widget: colorCurrentEditBox, command: colorCurrentEditBoxRecord, tints: colorCurrentTints },
+    );
+    let malformedEditBoxPaint: X4UiPaintPlanResult | undefined;
+    if (colorScene !== undefined && colorAuthority !== undefined && canonical !== undefined && colorEditBox !== undefined) {
+      const malformedScene = clonedScene(colorScene);
+      const malformedWidget = malformedScene.widgets.find(widget => widget.id === colorEditBox.id) as unknown as JsonRecord | undefined;
+      if (malformedWidget !== undefined) malformedWidget.editboxBlackInset = -1;
+      malformedEditBoxPaint = projectX4UiPaintPlanDirect({ scene: malformedScene, corpus: canonical, previewAuthority: colorAuthority });
+    }
+    check('P5 fail-first malformed edit-box black inset refuses before fabricating inner chrome or changing source text selection', colorEditBoxText?.contentSelection === 'preview-default' && malformedEditBoxPaint?.status === 'refused' && malformedEditBoxPaint.refusal.code === 'invalid-scene', {
+      status: malformedEditBoxPaint?.status,
+      refusal: malformedEditBoxPaint?.status === 'refused' ? malformedEditBoxPaint.refusal : undefined,
+    });
+    const scaledColorPipeline = projectX4UiPreviewPipeline({
+      source: colorSource,
+      corpus: canonical,
+      colorEvidence,
+      profile: {
+        id: 'paint-color-scaled-profile',
+        provenance: 'edit-box scaled inset versus fixed text border regression',
+        truthGrade: 'supplied',
+        source: colorSelection.sourceIdentity,
+        drawable: { width: 100, height: 80 },
+        uiScale: 2.5,
+        minTextHeight: 10,
+      },
+      selection: colorSelection,
+    });
+    const scaledColorScene = scaledColorPipeline.scene !== undefined
+      && (scaledColorPipeline.scene.status === 'projected' || scaledColorPipeline.scene.status === 'partial')
+      ? scaledColorPipeline.scene.scene
+      : undefined;
+    const scaledColorPaint = scaledColorScene === undefined
+      ? undefined
+      : projectX4UiPaintPlanDirect({ scene: scaledColorScene, corpus: canonical, previewAuthority: scaledColorPipeline });
+    const scaledEditBox = scaledColorScene?.widgets.find(widget => widget.kind === 'editbox' && widget.primaryContent === '');
+    const scaledEditCommand = scaledEditBox === undefined || scaledColorPaint === undefined || scaledColorPaint.status === 'refused'
+      ? undefined
+      : scaledColorPaint.plan.layers.flatMap(layer => layer.commands).find(command => command.kind === 'node-geometry' && command.nodeId === scaledEditBox.id) as unknown as JsonRecord | undefined;
+    const scaledComposition = scaledEditCommand?.editboxComposition as JsonRecord | undefined;
+    check('P5 uiScale 2.5 paints a 3px black inset while preserving the fixed 2px text-border trace',
+      scaledEditBox?.editboxBlackInset === 3
+        && scaledEditBox.editboxTextBorder === 2
+        && scaledComposition?.innerInset === 3
+        && scaledComposition.textBorder === 2
+        && scaledEditCommand?.innerGeometry !== undefined,
+      { widget: scaledEditBox, command: scaledEditCommand },
+    );
+    const forgedScaledScene = scaledColorScene === undefined ? undefined : clonedScene(scaledColorScene);
+    const forgedScaledWidget = forgedScaledScene === undefined || scaledEditBox === undefined
+      ? undefined
+      : forgedScaledScene.widgets.find(widget => widget.id === scaledEditBox.id) as unknown as JsonRecord | undefined;
+    if (forgedScaledWidget !== undefined) forgedScaledWidget.editboxBlackInset = 2;
+    const forgedScaledPaint = forgedScaledScene === undefined
+      ? undefined
+      : projectX4UiPaintPlanDirect({ scene: forgedScaledScene, corpus: canonical, previewAuthority: scaledColorPipeline });
+    const forgedScaledCommands = forgedScaledPaint?.status === 'refused'
+      ? []
+      : forgedScaledPaint?.plan.layers.flatMap(layer => layer.commands) ?? [];
+    check('P5 in-range forged 2px inset cannot emit Paint inner geometry at uiScale 2.5',
+      scaledEditBox !== undefined
+        && forgedScaledWidget?.editboxBlackInset === 2
+        && forgedScaledPaint?.status === 'refused'
+        && forgedScaledCommands.every(command => command.kind !== 'node-geometry' || (command as unknown as JsonRecord).innerGeometry === undefined),
+      {
+        fixtureReady: scaledEditBox !== undefined && forgedScaledWidget !== undefined,
+        forgedInset: forgedScaledWidget?.editboxBlackInset,
+        paintStatus: forgedScaledPaint?.status,
+        refusal: forgedScaledPaint?.status === 'refused' ? forgedScaledPaint.refusal : undefined,
+        innerGeometryCommands: forgedScaledCommands.filter(command => command.kind === 'node-geometry' && (command as unknown as JsonRecord).innerGeometry !== undefined).map(command => command.nodeId),
+      },
+    );
+    const missingColorPipeline = projectX4UiPreviewPipeline({
+      source: colorSource,
+      corpus: canonical,
+      profile: {
+        id: 'paint-missing-editbox-color-profile',
+        provenance: 'edit-box text branch independent of missing canonical paint evidence',
+        truthGrade: 'supplied',
+        source: colorSelection.sourceIdentity,
+        drawable: { width: 100, height: 80 },
+        uiScale: 1,
+        minTextHeight: 10,
+      },
+      selection: colorSelection,
+    });
+    const missingColorScene = missingColorPipeline.scene !== undefined
+      && (missingColorPipeline.scene.status === 'projected' || missingColorPipeline.scene.status === 'partial')
+      ? missingColorPipeline.scene.scene
+      : undefined;
+    const missingColorPaint = missingColorScene === undefined
+      ? undefined
+      : projectX4UiPaintPlanDirect({ scene: missingColorScene, corpus: canonical, previewAuthority: missingColorPipeline });
+    const missingColorEditBox = missingColorScene?.widgets.find(widget => widget.kind === 'editbox' && widget.primaryContent === '');
+    const missingColorText = missingColorEditBox === undefined ? undefined : missingColorScene?.texts.find(text => text.widgetId === missingColorEditBox.id);
+    const missingColorCommand = missingColorEditBox === undefined || missingColorPaint === undefined || missingColorPaint.status === 'refused'
+      ? undefined
+      : missingColorPaint.plan.layers.flatMap(layer => layer.commands).find(command => command.kind === 'node-geometry' && command.nodeId === missingColorEditBox.id) as unknown as JsonRecord | undefined;
+    check('P5 missing canonical edit-box colors suppress chrome without flipping the source default branch',
+      missingColorText?.contentSelection === 'preview-default'
+        && missingColorText.defaultContent === 'PLACEHOLDER'
+        && missingColorCommand?.innerGeometry === undefined
+        && missingColorCommand?.editboxComposition === undefined
+        && missingColorPaint?.verification.gameVerified === false
+        && missingColorPaint.verification.game === NOT_VERIFIED_IN_GAME,
+      { text: missingColorText, command: missingColorCommand, paintStatus: missingColorPaint?.status },
+    );
     const colorTable = colorScene?.tables.find(table => table.colorFacts?.some(fact => fact.slot === 'table-background'));
     const colorTableCommand = colorTable === undefined
       ? undefined
@@ -1464,9 +1634,13 @@ async function main(): Promise<void> {
       'button:highlightcolor:widget-highlight',
       'button:bordercolor:widget-border',
       'editbox:bgcolor:widget-background',
+      'editbox:editboxBackgroundBlackColor:editbox-inner-background',
+      'editbox:bgcolor:widget-background',
+      'editbox:editboxBackgroundBlackColor:editbox-inner-background',
       'icon:color:widget-icon',
       'text:color:primary-text',
       'text:color:primary-text',
+      'text:defaultTextColor:primary-text',
       'text:color:secondary-text',
     ].sort();
     const actualColorOwners = colorFacts.map(item => {
@@ -1522,6 +1696,14 @@ async function main(): Promise<void> {
       textCount: colorTextNodes.length,
       glyphCommandCount: colorPaintCommands.filter(command => command.kind === 'glyph-alpha-blit').length,
       textIds: [directText?.id, primaryButtonText?.id, secondaryButtonText?.id],
+      textCoverage: colorTextNodes.map(text => ({
+        id: text.id,
+        content: (text as unknown as JsonRecord).content,
+        defaultContent: (text as unknown as JsonRecord).defaultContent,
+        selection: (text as unknown as JsonRecord).contentSelection,
+        facts: (text as unknown as JsonRecord).colorFacts,
+        glyphs: colorPaintCommands.filter(command => command.kind === 'glyph-alpha-blit' && command.textId === text.id).length,
+      })),
     });
 
     const colorDiagnostics = colorPaint?.status === 'refused' ? [] : colorPaint.plan.diagnostics;

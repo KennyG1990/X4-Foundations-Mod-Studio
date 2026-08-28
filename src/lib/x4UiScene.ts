@@ -96,7 +96,15 @@ export const X4_UI_SCENE_VERSION = 1 as const;
 export const X4_UI_SCENE_GAME_TRUTH = X4_UI_LAYOUT_GAME_TRUTH;
 
 const WIDGET_SOURCE_PATH = X4_LAYOUT_PROVENANCE.widgetSourcePath;
-const BUTTON_EDITBOX_BORDER_SIZE = 2;
+const BUTTON_BORDER_SIZE = 2;
+const EDITBOX_CONFIG_BORDER = 1;
+const EDITBOX_TEXT_BORDER = 2;
+const EDITBOX_SOURCE_PINS = Object.freeze({
+  configBorder: Object.freeze({ sourcePath: WIDGET_SOURCE_PATH, lineStart: 617, lineEnd: 634 }),
+  textBorder: Object.freeze({ sourcePath: WIDGET_SOURCE_PATH, lineStart: 848, lineEnd: 860 }),
+  blackInset: Object.freeze({ sourcePath: WIDGET_SOURCE_PATH, lineStart: 8702, lineEnd: 8727 }),
+  initialInputActive: Object.freeze({ sourcePath: WIDGET_SOURCE_PATH, lineStart: 6325, lineEnd: 6332 }),
+});
 
 export type X4UiSceneStatus = 'projected' | 'partial' | 'refused';
 export type X4UiSceneCompleteness = 'complete' | 'partial' | 'unavailable';
@@ -106,6 +114,7 @@ export type X4UiSceneColorSlot =
   | 'table-background'
   | 'cell-background'
   | 'widget-background'
+  | 'editbox-inner-background'
   | 'widget-highlight'
   | 'widget-border'
   | 'widget-icon'
@@ -319,6 +328,14 @@ export interface X4UiSceneWidgetNode extends X4UiSceneNodeBase {
   /** Descriptor configuration only; runtime widget activity remains unknown. */
   readonly configuredActive?: boolean;
   readonly outerRect?: X4UiSceneRect;
+  /** Source-pinned base config value; it is not the fixed text border. */
+  readonly editboxConfigBorder?: 1;
+  /** Source-pinned scaled inset used only for the black inner preview layer. */
+  readonly editboxBlackInset?: number;
+  /** Source-pinned fixed text anchor/truncation border. */
+  readonly editboxTextBorder?: 2;
+  /** Initial source-composition state only; never a live input/focus observation. */
+  readonly editboxPreviewInputState?: 'source-initial-inactive' | 'runtime-unknown';
 }
 
 export interface X4UiSceneTextLine {
@@ -349,7 +366,11 @@ export interface X4UiSceneTextNode extends X4UiSceneNodeBase {
   readonly content?: string;
   readonly defaultContent?: string;
   readonly description?: string;
-  readonly contentSelection: 'current' | 'runtime-choice-unavailable' | 'unavailable';
+  readonly contentSelection: 'current' | 'preview-default' | 'runtime-choice-unavailable' | 'unavailable';
+  /** Initial source-composition state only; runtime input mode remains unavailable. */
+  readonly editboxPreviewInputState?: 'source-initial-inactive' | 'runtime-unknown';
+  /** Fixed source text border; independent of the scaled black inset. */
+  readonly editboxTextBorder?: 2;
   readonly font?: 'Zekton' | 'Zekton Bold';
   readonly fontSize?: number;
   readonly alignment?: 'left' | 'center' | 'right';
@@ -2046,7 +2067,19 @@ const widgetSourceLinks = (
     : widgetType === 'button'
       ? [{ lineStart: 6279, lineEnd: 6279 }, { lineStart: 12135, lineEnd: 12176 }]
       : widgetType === 'editbox'
-        ? [{ lineStart: 6332, lineEnd: 6332 }, { lineStart: 12603, lineEnd: 12720 }]
+        ? [
+          { lineStart: 6332, lineEnd: 6332 },
+          { lineStart: 617, lineEnd: 634 },
+          { lineStart: 848, lineEnd: 860 },
+          { lineStart: 8702, lineEnd: 8727 },
+          { lineStart: 9680, lineEnd: 9689 },
+          { lineStart: 12603, lineEnd: 12730 },
+          { lineStart: 12642, lineEnd: 12646 },
+          { lineStart: 12673, lineEnd: 12686 },
+          { lineStart: 12733, lineEnd: 12772 },
+          { lineStart: 12774, lineEnd: 12782 },
+          { lineStart: 12774, lineEnd: 12799 },
+        ]
         : [{ lineStart: 6259, lineEnd: 6259 }, { lineStart: 17790, lineEnd: 17861 }];
   return pins.map(pin => makeSourceLink(
     'source-pin',
@@ -2055,6 +2088,55 @@ const widgetSourceLinks = (
     `widget_fullscreen.lua ${widgetType} table call/setup geometry`,
   ));
 };
+
+const factHasExactPin = (fact: X4UiLayoutDescriptorFact, pin: X4UiLayoutSourcePin): boolean =>
+  fact.sourcePin?.sourcePath === pin.sourcePath
+  && fact.sourcePin.lineStart === pin.lineStart
+  && fact.sourcePin.lineEnd === pin.lineEnd;
+
+const validEditBoxConfigBorderFact = (fact: X4UiLayoutDescriptorFact | undefined): 1 | undefined =>
+  fact?.status === 'known'
+    && fact.expectedType === 'number'
+    && fact.value === EDITBOX_CONFIG_BORDER
+    && fact.provenance === 'source-pinned-default'
+    && fact.expression === 'config.editbox.border'
+    && factHasExactPin(fact, EDITBOX_SOURCE_PINS.configBorder)
+    ? EDITBOX_CONFIG_BORDER
+    : undefined;
+
+const validEditBoxTextBorderFact = (fact: X4UiLayoutDescriptorFact | undefined): 2 | undefined =>
+  fact?.status === 'known'
+    && fact.expectedType === 'number'
+    && fact.value === EDITBOX_TEXT_BORDER
+    && fact.provenance === 'source-pinned-default'
+    && fact.expression === 'config.texturesizes.editbox.borderSize'
+    && factHasExactPin(fact, EDITBOX_SOURCE_PINS.textBorder)
+    ? EDITBOX_TEXT_BORDER
+    : undefined;
+
+const validEditBoxBlackInsetFact = (fact: X4UiLayoutDescriptorFact | undefined, uiScale: number): number | undefined => {
+  if (fact?.status !== 'known'
+    || fact.expectedType !== 'number'
+    || typeof fact.value !== 'number'
+    || fact.provenance !== 'source-pinned-default'
+    || fact.expression !== 'max(2, floor(config.editbox.border * uiScale + 0.5))'
+    || !factHasExactPin(fact, EDITBOX_SOURCE_PINS.blackInset)
+    || !isFiniteSafe(uiScale)) return undefined;
+  const expected = Math.max(EDITBOX_TEXT_BORDER, Math.floor(EDITBOX_CONFIG_BORDER * uiScale + 0.5));
+  return Number.isSafeInteger(expected) && expected <= 1_000_000 && fact.value === expected
+    ? fact.value
+    : undefined;
+};
+
+const validEditBoxInitialInputActiveFact = (fact: X4UiLayoutDescriptorFact | undefined): false | undefined =>
+  fact?.status === 'known'
+    && fact.expectedType === 'boolean'
+    && fact.value === false
+    && fact.provenance === 'source-pinned-default'
+    && fact.expression === 'initial setUpEditBox entry has no active direct-input flag'
+    && factHasExactPin(fact, EDITBOX_SOURCE_PINS.initialInputActive)
+    ? false
+    : undefined;
 
 const nestedTextNoWrapLinks = (source: X4UiSceneSourceLocation): X4UiSceneProvenanceLink[] => [
   makeSourceLink(
@@ -2124,12 +2206,6 @@ const buildTextNode = (
   const textNodeId = `scene:text:${cell.id}:${slot}`;
   const links = [...new Set([...widgetLinks, ...linkProgramGaps(context, cell.id)])];
   const source = contentFact?.source || cell.source;
-  const textColorDescriptorFact = widgetType === 'text' && slot === 'primary'
-    ? cell.descriptorFacts.color
-    : operationForCell(operations, cell, [slot === 'primary' ? 'setText' : 'setText2'])?.descriptorFacts.color;
-  const textColorFact = sceneColorFact('color', slot === 'primary' ? 'primary-text' : 'secondary-text', textColorDescriptorFact);
-  addUnavailableColorGap(context, textNodeId, 'color', textColorDescriptorFact, links);
-  if (textColorFact) addKnownColorUncertaintyGap(context, textNodeId, textColorFact.source, links, 'font raster color');
   const wordwrapFact = widgetType === 'text' ? cell.descriptorFacts.wordwrap : undefined;
   const nestedNoWrapLinks = widgetType === 'text' ? [] : nestedTextNoWrapLinks(source);
   let wrapMode: ZektonWrapMode = 'no-wrap';
@@ -2156,13 +2232,60 @@ const buildTextNode = (
   const descriptionFact = slot === 'primary' && widgetType === 'editbox' ? cell.descriptorFacts.description : undefined;
   const defaultContent = defaultFact?.status === 'known' && defaultFact.expectedType === 'string' && typeof defaultFact.value === 'string' ? defaultFact.value : undefined;
   const description = descriptionFact?.status === 'known' && descriptionFact.expectedType === 'string' && typeof descriptionFact.value === 'string' ? descriptionFact.value : undefined;
+  const editBoxOperation = widgetType === 'editbox' && slot === 'primary'
+    ? operationForCell(operations, cell, ['createEditBox'])
+    : undefined;
+  const editBoxDescriptorFacts = editBoxOperation?.descriptorFacts;
+  const editBoxTextBorderFact = editBoxDescriptorFacts?.editboxTextBorder || cell.descriptorFacts.editboxTextBorder;
+  const editBoxTextBorder = widgetType === 'editbox'
+    ? validEditBoxTextBorderFact(editBoxTextBorderFact)
+    : undefined;
+  const editBoxInitialInputActiveFact = editBoxDescriptorFacts?.editboxInitialInputActive || cell.descriptorFacts.editboxInitialInputActive;
+  const editBoxInitialInputActive = widgetType === 'editbox'
+    ? validEditBoxInitialInputActiveFact(editBoxInitialInputActiveFact)
+    : undefined;
+  const editBoxPreviewInputState = widgetType === 'editbox'
+    ? editBoxInitialInputActive === false ? 'source-initial-inactive' as const : 'runtime-unknown' as const
+    : undefined;
+  const previewTextColorDescriptorFact = widgetType === 'editbox' && slot === 'primary'
+    ? editBoxDescriptorFacts?.defaultTextColor || cell.descriptorFacts.defaultTextColor
+    : undefined;
+  const previewTextColorFact = sceneColorFact('defaultTextColor', 'primary-text', previewTextColorDescriptorFact);
   let contentSelection: X4UiSceneTextNode['contentSelection'] = content === undefined ? 'unavailable' : 'current';
   let runtimeChoiceUnavailable = false;
+  let previewDefaultSelection = false;
   if (widgetType === 'editbox' && slot === 'primary' && content === '') {
-    runtimeChoiceUnavailable = true;
-    contentSelection = 'runtime-choice-unavailable';
-    gapForChild(context, 'text', textNodeId, source, 'edit-box display text depends on unknown runtime active state; current text and defaultText are both retained without choosing one', links, 'unknown');
+    if (editBoxInitialInputActive === false) {
+      previewDefaultSelection = true;
+      contentSelection = 'preview-default';
+      if (defaultContent === undefined) gapForMissingFact(context, 'text', textNodeId, source, 'defaultText', defaultFact, links);
+    } else {
+      runtimeChoiceUnavailable = true;
+      contentSelection = 'runtime-choice-unavailable';
+      gapForChild(context, 'text', textNodeId, source, 'edit-box current text is empty but the accepted source-composition input does not prove the initial inactive direct-input branch; descriptor active is only widget configuration, so live active/focus state is not guessed', links, 'unknown');
+    }
   }
+  const textColorDescriptorFact = previewDefaultSelection
+    ? previewTextColorDescriptorFact
+    : widgetType === 'text' && slot === 'primary'
+      ? cell.descriptorFacts.color
+      : operationForCell(operations, cell, [slot === 'primary' ? 'setText' : 'setText2'])?.descriptorFacts.color;
+  const textColorFact = previewDefaultSelection
+    ? previewTextColorFact
+    : sceneColorFact('color', slot === 'primary' ? 'primary-text' : 'secondary-text', textColorDescriptorFact);
+  addUnavailableColorGap(context, textNodeId, previewDefaultSelection ? 'defaultTextColor' : 'color', textColorDescriptorFact, links);
+  if (textColorFact) addKnownColorUncertaintyGap(context, textNodeId, textColorFact.source, links, 'font raster color');
+  if (widgetType === 'editbox' && editBoxTextBorder === undefined) {
+    gapForMissingFact(context, 'geometry', textNodeId, source, 'editboxTextBorder', editBoxTextBorderFact, links);
+  }
+  const previewSourceLink = previewDefaultSelection
+    ? makeSourceLink(
+      'preview-only',
+      defaultFact?.source || source,
+      { sourcePath: WIDGET_SOURCE_PATH, lineStart: 12774, lineEnd: 12799 },
+      'widget_fullscreen.lua setEditBoxText selects defaultText for inactive-empty edit-box preview',
+    )
+    : undefined;
   const fontFact = cell.descriptorFacts[fontName];
   const sizeFact = cell.descriptorFacts[sizeName];
   const alignFact = cell.descriptorFacts[alignName];
@@ -2189,9 +2312,13 @@ const buildTextNode = (
     availableWidth = parentRect.width;
   } else if (offsetX) {
     const textOffsetX = offsetX.value as number;
-    availableWidth = widgetType === 'button'
-      ? safeArithmetic(widgetRect.width - textOffsetX)
-      : safeArithmetic(widgetRect.width - 2 * (textOffsetX + BUTTON_EDITBOX_BORDER_SIZE));
+    if (widgetType === 'button') {
+      availableWidth = safeArithmetic(widgetRect.width - textOffsetX);
+    } else {
+      availableWidth = editBoxTextBorder === undefined
+        ? undefined
+        : safeArithmetic(widgetRect.width - 2 * (textOffsetX + editBoxTextBorder));
+    }
   }
   if (availableWidth === undefined || !isFiniteDimension(availableWidth)) gapForChild(context, 'text', textNodeId, source, 'text available width is unavailable', links);
   const textClip = viewportRect || widgetRect;
@@ -2202,9 +2329,10 @@ const buildTextNode = (
   const validFont = font === 'Zekton' || font === 'Zekton Bold';
   if (!validFont && font !== undefined) gapForChild(context, 'font', textNodeId, source, `unsupported text font ${font}`, links, 'unsupported');
   const assets = validFont ? context.assets[font] : undefined;
-  if (!runtimeChoiceUnavailable && wrapPolicyAvailable && content !== undefined && assets && fontSize && Number.isSafeInteger(fontSize.value) && alignment && availableWidth !== undefined && offsetX && offsetY) {
+  const displayContent = previewDefaultSelection ? defaultContent : content;
+  if (!runtimeChoiceUnavailable && wrapPolicyAvailable && displayContent !== undefined && assets && fontSize && Number.isSafeInteger(fontSize.value) && alignment && availableWidth !== undefined && offsetX && offsetY) {
     const profile = textPolicyFor(context.profile, assets, fontSize.value as number, availableWidth, wrapMode);
-    const result: ZektonTextLayoutResult = layoutZektonText(assets, content, profile);
+    const result: ZektonTextLayoutResult = layoutZektonText(assets, displayContent, profile);
     if (result.ok === false) {
       gapForChild(context, 'text', textNodeId, source, result.error.message, links, 'unsupported');
     } else {
@@ -2259,10 +2387,11 @@ const buildTextNode = (
             subtractHalfLineWidth = true;
           }
         } else {
+          const borderSize = widgetType === 'editbox' ? editBoxTextBorder! : BUTTON_BORDER_SIZE;
           const localAnchor = alignment === 'left'
-            ? xValue - widgetRect.width / 2 + BUTTON_EDITBOX_BORDER_SIZE
+            ? xValue - widgetRect.width / 2 + borderSize
             : alignment === 'right'
-              ? -xValue + widgetRect.width / 2 - BUTTON_EDITBOX_BORDER_SIZE
+              ? -xValue + widgetRect.width / 2 - borderSize
               : 0;
           xAnchor = widgetRect.x + widgetRect.width / 2 + localAnchor;
           if (alignment === 'right') subtractLineWidth = true;
@@ -2295,7 +2424,7 @@ const buildTextNode = (
               kind: 'font-metrics',
               source: sourceCopy(source),
               expression: `${font} Zekton glyph ${quad.glyphIndex}`,
-            }],
+            }, ...(previewSourceLink ? [previewSourceLink] : [])],
             diagnosticLinks: textGapIds,
             diagnosticStyle: STYLE,
             textId: textNodeId,
@@ -2396,7 +2525,7 @@ const buildTextNode = (
       ...(bounds ? { rect: bounds } : {}),
       clipRect: textClip,
       completeness,
-      provenance: 'font-metrics',
+      provenance: previewDefaultSelection ? 'preview-only' : 'font-metrics',
       ...(textColorFact ? { colorFacts: [textColorFact] } : {}),
       provenanceLinks: [
         ...(wordwrapFact?.status === 'known' ? [factProvenanceLink('wordwrap', wordwrapFact)] : []),
@@ -2404,6 +2533,10 @@ const buildTextNode = (
         ...(fontFact?.status === 'known' ? [factProvenanceLink(fontName, fontFact)] : []),
         ...(sizeFact?.status === 'known' ? [factProvenanceLink(sizeName, sizeFact)] : []),
         ...(alignFact?.status === 'known' ? [factProvenanceLink(alignName, alignFact)] : []),
+        ...(editBoxTextBorderFact?.status === 'known' ? [factProvenanceLink('editboxTextBorder', editBoxTextBorderFact)] : []),
+        ...(editBoxInitialInputActiveFact?.status === 'known' ? [factProvenanceLink('editboxInitialInputActive', editBoxInitialInputActiveFact)] : []),
+        ...(previewDefaultSelection && defaultFact?.status === 'known' ? [factProvenanceLink('defaultText', defaultFact)] : []),
+        ...(previewSourceLink ? [previewSourceLink] : []),
         makeSourceLink('font-metrics', source),
         makeSourceLink(
           'source-pin',
@@ -2413,7 +2546,7 @@ const buildTextNode = (
             : widgetType === 'button'
               ? { sourcePath: WIDGET_SOURCE_PATH, lineStart: 12135, lineEnd: 12176 }
               : widgetType === 'editbox'
-                ? { sourcePath: WIDGET_SOURCE_PATH, lineStart: 12603, lineEnd: 12720 }
+                ? { sourcePath: WIDGET_SOURCE_PATH, lineStart: 12673, lineEnd: 12782 }
                 : { sourcePath: WIDGET_SOURCE_PATH, lineStart: 17790, lineEnd: 17861 },
           widgetType === 'text'
             ? 'widget_fullscreen.lua setUpFontString parent anchor and alignment'
@@ -2432,6 +2565,8 @@ const buildTextNode = (
       ...(defaultContent === undefined ? {} : { defaultContent }),
       ...(description === undefined ? {} : { description }),
       contentSelection,
+      ...(editBoxPreviewInputState === undefined ? {} : { editboxPreviewInputState: editBoxPreviewInputState }),
+      ...(editBoxTextBorder === undefined ? {} : { editboxTextBorder: editBoxTextBorder }),
       font: font as 'Zekton' | 'Zekton Bold',
       fontSize: fontSize!.value as number,
       alignment,
@@ -2454,11 +2589,15 @@ const buildTextNode = (
     sourceOrder: sourceOrder(source),
     clipRect: textClip,
     completeness: 'unavailable',
-    provenance: 'unavailable',
+    provenance: previewDefaultSelection ? 'preview-only' : 'unavailable',
     ...(textColorFact ? { colorFacts: [textColorFact] } : {}),
     provenanceLinks: [
       ...(wordwrapFact?.status === 'known' ? [factProvenanceLink('wordwrap', wordwrapFact)] : []),
       ...nestedNoWrapLinks,
+      ...(editBoxTextBorderFact?.status === 'known' ? [factProvenanceLink('editboxTextBorder', editBoxTextBorderFact)] : []),
+      ...(editBoxInitialInputActiveFact?.status === 'known' ? [factProvenanceLink('editboxInitialInputActive', editBoxInitialInputActiveFact)] : []),
+      ...(previewDefaultSelection && defaultFact?.status === 'known' ? [factProvenanceLink('defaultText', defaultFact)] : []),
+      ...(previewSourceLink ? [previewSourceLink] : []),
       makeSourceLink('descriptor-fact', source),
     ],
     diagnosticLinks: links,
@@ -2469,6 +2608,8 @@ const buildTextNode = (
     ...(defaultContent === undefined ? {} : { defaultContent }),
     ...(description === undefined ? {} : { description }),
     contentSelection,
+    ...(editBoxPreviewInputState === undefined ? {} : { editboxPreviewInputState: editBoxPreviewInputState }),
+    ...(editBoxTextBorder === undefined ? {} : { editboxTextBorder: editBoxTextBorder }),
     ...(validFont && font !== undefined ? { font: font as 'Zekton' | 'Zekton Bold' } : {}),
     ...(fontSize && Number.isSafeInteger(fontSize.value) && (fontSize.value as number) > 0 ? { fontSize: fontSize.value as number } : {}),
     ...(alignment === 'left' || alignment === 'center' || alignment === 'right' ? { alignment } : {}),
@@ -2652,12 +2793,33 @@ const buildRowAndCellNodes = (
                   ? [['color', 'widget-icon']]
                   : [];
             const widgetDescriptorFacts = operation?.descriptorFacts || {};
-            const widgetColorFacts = sceneColorFacts(widgetDescriptorFacts, widgetColorEntries);
+            const widgetEditBoxConfigBorder = widgetType === 'editbox'
+              ? validEditBoxConfigBorderFact(widgetDescriptorFacts.editboxConfigBorder || cell.descriptorFacts.editboxConfigBorder)
+              : undefined;
+            const widgetEditBoxTextBorder = widgetType === 'editbox'
+              ? validEditBoxTextBorderFact(widgetDescriptorFacts.editboxTextBorder || cell.descriptorFacts.editboxTextBorder)
+              : undefined;
+            const widgetEditBoxBlackInset = widgetType === 'editbox'
+              ? validEditBoxBlackInsetFact(widgetDescriptorFacts.editboxBlackInset || cell.descriptorFacts.editboxBlackInset, state.metrics.uiScale)
+              : undefined;
+            const widgetEditBoxInitialInputActive = widgetType === 'editbox'
+              ? validEditBoxInitialInputActiveFact(widgetDescriptorFacts.editboxInitialInputActive || cell.descriptorFacts.editboxInitialInputActive)
+              : undefined;
+            const widgetEditBoxPreviewInputState = widgetType === 'editbox'
+              ? widgetEditBoxInitialInputActive === false ? 'source-initial-inactive' as const : 'runtime-unknown' as const
+              : undefined;
+            const widgetColorFacts: X4UiSceneColorFact[] = [...sceneColorFacts(widgetDescriptorFacts, widgetColorEntries)];
             for (const [field] of widgetColorEntries) {
               addUnavailableColorGap(context, widgetNodeId, field, widgetDescriptorFacts[field], baseWidgetLinks);
             }
             for (const colorFact of widgetColorFacts) {
               addKnownColorUncertaintyGap(context, widgetNodeId, colorFact.source, baseWidgetLinks, `widget ${colorFact.slot}`);
+            }
+            if (widgetType === 'editbox') {
+              const innerColorFact = sceneColorFact('editboxBackgroundBlackColor', 'editbox-inner-background', widgetDescriptorFacts.editboxBackgroundBlackColor);
+              if (innerColorFact) {
+                widgetColorFacts.push(innerColorFact);
+              }
             }
             const unavailableWidgetLinks = [...new Set([...baseWidgetLinks, ...cellLinks])];
             if (sourceWidthValid) {
@@ -2682,9 +2844,36 @@ const buildRowAndCellNodes = (
                 glyphs.push(...result.glyphs);
                 textDiagnosticLinks.push(...result.node.diagnosticLinks);
               }
+              if (widgetType === 'editbox') {
+                if (widgetEditBoxConfigBorder === undefined) {
+                  gapForMissingFact(context, 'geometry', widgetNodeId, cell.source, 'editboxConfigBorder', widgetDescriptorFacts.editboxConfigBorder, baseWidgetLinks);
+                }
+                if (widgetEditBoxTextBorder === undefined) {
+                  gapForMissingFact(context, 'geometry', widgetNodeId, cell.source, 'editboxTextBorder', widgetDescriptorFacts.editboxTextBorder, baseWidgetLinks);
+                }
+                if (widgetEditBoxBlackInset === undefined || widgetRect.width <= 2 * widgetEditBoxBlackInset || widgetRect.height <= 2 * widgetEditBoxBlackInset) {
+                  gapForChild(context, 'geometry', widgetNodeId, cell.source, 'preview-only edit-box black inner rectangle requires a finite positive outer rectangle larger than twice the source-scaled black inset', baseWidgetLinks, 'unsupported');
+                }
+              }
               const widgetLinks = [...new Set([...baseWidgetLinks, ...textDiagnosticLinks])];
               if (widgetType === 'icon') gapForChild(context, 'texture', widgetNodeId, cell.source, 'icon material/texture is not projected as engine truth', widgetLinks, 'unsupported');
-              if (widgetType === 'button' || widgetType === 'editbox') gapForChild(context, 'state', widgetNodeId, cell.source, 'runtime widget interaction state is not projected as engine truth', widgetLinks, 'unsupported');
+              if (widgetType === 'button') {
+                gapForChild(context, 'state', widgetNodeId, cell.source, 'runtime widget interaction state is not projected as engine truth', widgetLinks, 'unsupported');
+              } else if (widgetType === 'editbox') {
+                widgetLinks.push(addGap(context, {
+                  category: 'state',
+                  status: 'unsupported',
+                  reason: 'preview-only edit-box source composition does not observe live direct-input activity, focus/hover/cursor/selection/hidden/encrypted/hotkey state, engine material/texture state, font raster behavior, or game-frame acceptance',
+                  source: sourceCopy(operation?.source || cell.source),
+                  sourcePin: {
+                    sourcePath: WIDGET_SOURCE_PATH,
+                    lineStart: 12603,
+                    lineEnd: 12799,
+                  },
+                  nodeId: widgetNodeId,
+                  previewOnly: true,
+                }));
+              }
               const widgetCompleteness: X4UiSceneCompleteness = widgetLinks.length === 0 ? 'complete' : 'partial';
               const primaryContent = cell.descriptorFacts.text?.status === 'known' && typeof cell.descriptorFacts.text.value === 'string'
                 ? cell.descriptorFacts.text.value
@@ -2704,7 +2893,7 @@ const buildRowAndCellNodes = (
                 provenance: 'source-derived',
                 ...(widgetColorFacts.length > 0 ? { colorFacts: widgetColorFacts } : {}),
                 provenanceLinks: [
-                  ...factLinks(cell.descriptorFacts, ['contentKind', 'outerX', 'outerY', 'outerWidth', 'outerHeight', 'text', 'text2', 'icon', 'active']),
+                  ...factLinks(cell.descriptorFacts, ['contentKind', 'outerX', 'outerY', 'outerWidth', 'outerHeight', 'text', 'text2', 'icon', 'active', 'defaultTextColor', 'editboxBackgroundBlackColor', 'editboxConfigBorder', 'editboxTextBorder', 'editboxBlackInset', 'editboxInitialInputActive']),
                   makeSourceLink('source-pin', operation?.source || cell.source),
                   ...widgetSourceLinks(operation?.source || cell.source, widgetType),
                 ],
@@ -2716,6 +2905,10 @@ const buildRowAndCellNodes = (
                 ...(iconIdentity === undefined ? {} : { iconIdentity }),
                 ...(cell.descriptorFacts.active?.status === 'known' ? { configuredActive: cell.descriptorFacts.active.value as boolean } : {}),
                 outerRect: widgetRect,
+                ...(widgetEditBoxConfigBorder === undefined ? {} : { editboxConfigBorder: widgetEditBoxConfigBorder }),
+                ...(widgetEditBoxTextBorder === undefined ? {} : { editboxTextBorder: widgetEditBoxTextBorder }),
+                ...(widgetEditBoxBlackInset === undefined ? {} : { editboxBlackInset: widgetEditBoxBlackInset }),
+                ...(widgetEditBoxPreviewInputState === undefined ? {} : { editboxPreviewInputState: widgetEditBoxPreviewInputState }),
               });
               widgetIds.push(widgetNodeId);
               void textNodes;
@@ -2730,7 +2923,7 @@ const buildRowAndCellNodes = (
                 provenance: 'unavailable',
                 ...(widgetColorFacts.length > 0 ? { colorFacts: widgetColorFacts } : {}),
                 provenanceLinks: [
-                  ...factLinks(cell.descriptorFacts, ['contentKind', 'outerX', 'outerY', 'outerWidth', 'outerHeight']),
+                  ...factLinks(cell.descriptorFacts, ['contentKind', 'outerX', 'outerY', 'outerWidth', 'outerHeight', 'defaultTextColor', 'editboxBackgroundBlackColor', 'editboxConfigBorder', 'editboxTextBorder', 'editboxBlackInset', 'editboxInitialInputActive']),
                   makeSourceLink('source-pin', operation?.source || cell.source),
                   ...widgetSourceLinks(operation?.source || cell.source, widgetType),
                 ],
@@ -2738,6 +2931,7 @@ const buildRowAndCellNodes = (
                 diagnosticStyle: diagnosticStyleForGeometry(false),
                 cellId: cellNodeId,
                 textIds,
+                ...(widgetEditBoxPreviewInputState === undefined ? {} : { editboxPreviewInputState: widgetEditBoxPreviewInputState }),
               });
               widgetIds.push(widgetNodeId);
             }
@@ -3766,8 +3960,101 @@ const validateValueReference = (value: unknown): boolean => {
   return value.index === undefined || validateLayoutValue(value.index);
 };
 
+const DIRECT_HELPER_SCALE_CALL_NAMES = ['scaleX', 'scaleY', 'scaleFont'] as const;
+const LUA_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+const isLuaWhitespace = (value: string): boolean => value === ' '
+  || value === '\t'
+  || value === '\r'
+  || value === '\n'
+  || value === '\v'
+  || value === '\f';
+
+const directHelperScaleCallMatches = (expression: string, callName: string): boolean => {
+  const end = expression.length;
+  let cursor = 0;
+  const skipWhitespace = (): void => {
+    while (cursor < end && isLuaWhitespace(expression[cursor] ?? '')) cursor += 1;
+  };
+  const readToken = (token: string): boolean => {
+    if (expression.slice(cursor, cursor + token.length) !== token) return false;
+    cursor += token.length;
+    return true;
+  };
+  skipWhitespace();
+  if (!readToken('Helper')) return false;
+  skipWhitespace();
+  if (!readToken('.')) return false;
+  skipWhitespace();
+  if (!readToken(callName)) return false;
+  skipWhitespace();
+  if (expression[cursor] !== '(') return false;
+  const opening = cursor;
+  let depth = 0;
+  let quote: '"' | "'" | undefined;
+  let escaped = false;
+  for (; cursor < end; cursor += 1) {
+    const character = expression[cursor];
+    if (quote !== undefined) {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === quote) quote = undefined;
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+      continue;
+    }
+    if (character === '(') depth += 1;
+    else if (character === ')') {
+      depth -= 1;
+      if (depth < 0) return false;
+      if (depth === 0) {
+        cursor += 1;
+        while (cursor < end && isLuaWhitespace(expression[cursor] ?? '')) cursor += 1;
+        return opening < cursor && cursor === end;
+      }
+    }
+  }
+  return false;
+};
+
+const validateDirectHelperScaleResult = (
+  layoutValue: Record<string, unknown>,
+  directResult: unknown,
+): boolean => {
+  if (!closedDataRecord(directResult, ['callName', 'callSource', 'callExpression', 'bindingName', 'bindingSource'])) return false;
+  const callName = directResult.callName;
+  const callSource = directResult.callSource;
+  const callExpression = directResult.callExpression;
+  const bindingSource = directResult.bindingSource;
+  const location = layoutValue.location;
+  if (!DIRECT_HELPER_SCALE_CALL_NAMES.includes(callName as typeof DIRECT_HELPER_SCALE_CALL_NAMES[number])
+    || typeof callName !== 'string'
+    || typeof callExpression !== 'string'
+    || callExpression.length === 0
+    || typeof directResult.bindingName !== 'string'
+    || !LUA_IDENTIFIER.test(directResult.bindingName)
+    || !closedSourceIsValid(callSource)
+    || !closedSourceIsValid(bindingSource)
+    || !closedSourceIsValid(location)
+    || layoutValue.status !== 'dynamic'
+    || layoutValue.type !== 'expression'
+    || layoutValue.expression !== directResult.bindingName
+    || !directHelperScaleCallMatches(callExpression, callName)) return false;
+  if (callSource.file !== location.file
+    || callSource.sourcePath !== location.sourcePath
+    || bindingSource.file !== location.file
+    || bindingSource.sourcePath !== location.sourcePath
+    || bindingSource.start.offset >= bindingSource.end.offset
+    || callSource.start.offset >= callSource.end.offset
+    || bindingSource.end.offset > callSource.start.offset
+    || callSource.end.offset > location.start.offset) return false;
+  return true;
+};
+
 const validateLayoutValue = (value: unknown): boolean => {
-  if (!isRecord(value) || !exactKeys(value, ['status', 'type', 'expression', 'location'], ['value', 'reference', 'symbol', 'reason', 'parameter', 'localInvocationResult', 'sourceLiteral'])) return false;
+  if (!isRecord(value) || !exactKeys(value, ['status', 'type', 'expression', 'location'], ['value', 'reference', 'symbol', 'reason', 'parameter', 'localInvocationResult', 'sourceLiteral', 'directHelperScaleResult'])) return false;
   if (!['static', 'dynamic', 'unknown'].includes(String(value.status)) || !['string', 'number', 'boolean', 'nil', 'table', 'function', 'reference', 'identifier', 'expression', 'unknown'].includes(String(value.type)) || typeof value.expression !== 'string' || !sourceIsValid(value.location)) return false;
   if (value.value !== undefined && !(value.value === null || typeof value.value === 'string' || typeof value.value === 'boolean' || isFiniteSafe(value.value))) return false;
   if (value.reference !== undefined && !validateValueReference(value.reference)) return false;
@@ -3775,6 +4062,12 @@ const validateLayoutValue = (value: unknown): boolean => {
   if (value.sourceLiteral !== undefined && !sourceIsValid(value.sourceLiteral)) return false;
   if (value.parameter !== undefined && !validateSerializable(value.parameter)) return false;
   if (value.localInvocationResult !== undefined && !validateSerializable(value.localInvocationResult)) return false;
+  const directResultDescriptor = Object.getOwnPropertyDescriptor(value, 'directHelperScaleResult');
+  if (directResultDescriptor === undefined) {
+    if ('directHelperScaleResult' in value) return false;
+  } else if (!('value' in directResultDescriptor)
+    || directResultDescriptor.enumerable !== true
+    || !validateDirectHelperScaleResult(value, directResultDescriptor.value)) return false;
   return true;
 };
 
@@ -4721,6 +5014,15 @@ const validateProgramStructure = (
           .filter(operation => operation.cellId === cell.id && isCreatorKind(operation.kind))
           .sort((left, right) => left.modelOrder - right.modelOrder);
         const creator = creatorOperations[creatorOperations.length - 1];
+        if (creator?.kind === 'createEditBox') {
+          const editBoxInsetFacts = [
+            creator.descriptorFacts.editboxBlackInset,
+            cell.descriptorFacts.editboxBlackInset,
+          ];
+          if (editBoxInsetFacts.some(fact => fact?.status === 'known' && validEditBoxBlackInsetFact(fact, state.metrics.uiScale) === undefined)) {
+            return refuseStructure(`cell-editbox-black-inset:${cell.id}`);
+          }
+        }
         const expectedOuterY = scaleY(stateCell.y, state.metrics.uiScale, stateCell.scaling);
         const expectedOuterHeight = stateCell.type === 'icon' || stateCell.type === 'button'
           ? scaleY(stateCell.height, state.metrics.uiScale, stateCell.scaling)

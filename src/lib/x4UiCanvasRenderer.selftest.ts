@@ -253,8 +253,20 @@ async function loadCanonicalColorFixture(): Promise<X4UiCorpusCanonicalColorSucc
   const root = 'canvas-renderer-color-canonical-root';
   const generation = 'canvas-renderer-color-canonical-generation';
   const contract = X4_UI_CORPUS_9_00_COLOR_CONTRACT;
-  const colorDefinitions = Array.from({ length: 224 }, (_unused, index) => `<color id="paint_color_${String(index)}" r="${String(index % 256)}" g="${String((index + 1) % 256)}" b="${String((index + 2) % 256)}" a="255" glow="0" />`).join('');
-  const colorMappings = Array.from({ length: 804 }, (_unused, index) => `<mapping id="paint_mapping_${String(index)}" ref="paint_color_${String(index % 224)}" />`).join('');
+  const colorDefinitions = [
+    '<color id="paint_color_0" r="0" g="1" b="2" a="255" glow="0" />',
+    '<color id="black" r="0" g="0" b="0" a="255" glow="0" />',
+    '<color id="grey_128" r="128" g="128" b="128" a="255" glow="0" />',
+    '<color id="azure_very_dark_alpha_224" r="91" g="92" b="93" a="224" glow="0" />',
+    ...Array.from({ length: 220 }, (_unused, index) => `<color id="paint_color_${String(index + 1)}" r="${String((index + 1) % 256)}" g="${String((index + 2) % 256)}" b="${String((index + 3) % 256)}" a="255" glow="0" />`),
+  ].join('');
+  const colorMappings = [
+    '<mapping id="paint_mapping_0" ref="paint_color_0" />',
+    '<mapping id="editbox_background_default" ref="azure_very_dark_alpha_224" />',
+    '<mapping id="editbox_text_default" ref="grey_128" />',
+    '<mapping id="editbox_background_black" ref="black" />',
+    ...Array.from({ length: 800 }, (_unused, index) => `<mapping id="paint_mapping_${String(index + 1)}" ref="paint_color_${String((index + 1) % 221)}" />`),
+  ].join('');
   const xmlText = `<colormap><colors>${colorDefinitions}</colors><mappings>${colorMappings}</mappings></colormap>`;
   const xsdText = '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:simpleType name="colorId"><xs:restriction base="xs:string"><xs:pattern value="[a-zA-Z_][a-zA-Z0-9_]*"/></xs:restriction></xs:simpleType><xs:simpleType name="colorid"><xs:restriction base="xs:string"><xs:pattern value="[a-zA-Z_][a-zA-Z0-9_]*"/></xs:restriction></xs:simpleType><xs:element name="colormap"><xs:complexType><xs:sequence><xs:choice minOccurs="0" maxOccurs="unbounded"><xs:element name="color"><xs:complexType><xs:attribute name="id" type="colorId" use="required"/><xs:attribute name="r" type="xs:unsignedByte"/><xs:attribute name="g" type="xs:unsignedByte"/><xs:attribute name="b" type="xs:unsignedByte"/><xs:attribute name="a" type="xs:unsignedByte"/><xs:attribute name="glow" type="xs:unsignedByte"/></xs:complexType></xs:element><xs:element name="mapping"><xs:complexType><xs:attribute name="id" type="colorId" use="required"/><xs:attribute name="ref" type="colorId" use="required"/></xs:complexType></xs:element></xs:choice></xs:sequence></xs:complexType></xs:element></xs:schema>';
   const padToSize = (value: string, size: number): Uint8Array => new TextEncoder().encode(`${value}${' '.repeat(size - new TextEncoder().encode(value).byteLength)}`);
@@ -354,7 +366,8 @@ function colorSourceFixture(): X4UiWorkspaceSource {
     'row[3]:createButton({ height = 0, affectRowHeight = false, bgcolor = { r = 13, g = 23, b = 33, a = 43 }, highlightcolor = { r = 14, g = 24, b = 34, a = 44 }, bordercolor = { r = 15, g = 25, b = 35, a = 45 } }):setText("button", { x = 0, y = 0, color = { r = 16, g = 26, b = 36, a = 46 } }):setText2("bold", { x = 0, y = 0, halign = "right", font = "Zekton Bold", fontsize = 16, color = { r = 17, g = 27, b = 37, a = 47 } })',
     'row[4]:createIcon("solid", { height = 8, affectRowHeight = false, color = { r = 19, g = 29, b = 39, a = 49 } })',
     'local editRow = table:addRow(false, { paddingTop = 1, paddingBottom = 1, borderBelow = false, fixed = false })',
-    'editRow[1]:createEditBox({ height = 8, affectRowHeight = false, bgcolor = { r = 18, g = 28, b = 38, a = 48 } })',
+    'editRow[1]:createEditBox({ height = 8, affectRowHeight = false, defaultText = "PLACEHOLDER", active = false, bgcolor = Color["editbox_background_default"] }):setText("", { x = 5, y = 0 })',
+    'editRow[2]:createEditBox({ height = 8, affectRowHeight = false, defaultText = "SHOULD_NOT_WIN", bgcolor = Color["editbox_background_default"] }):setText("CURRENT", { x = 5, y = 0 })',
     'local secondaryMenu = { name = "Secondary", layer = 0 }',
     'local secondaryFrame = Helper.createFrameHandle(secondaryMenu, { width = 100, height = 80, layer = 0 })',
     'local secondaryTable = secondaryFrame:addTable(1, { width = 40, reserveScrollBar = false, scaling = false })',
@@ -1992,6 +2005,23 @@ async function main(): Promise<void> {
       const tints = command.basePreviewTints;
       return Array.isArray(tints) ? tints : [];
     });
+    const colorEditBox = colorScene?.widgets.find(widget => widget.kind === 'editbox' && widget.primaryContent === '');
+    const colorCurrentEditBox = colorScene?.widgets.find(widget => widget.kind === 'editbox' && widget.primaryContent === 'CURRENT');
+    const colorEditBoxText = colorEditBox === undefined
+      ? undefined
+      : colorScene?.texts.find(text => text.widgetId === colorEditBox.id && text.slot === 'primary');
+    const colorEditBoxCommand = colorEditBox === undefined
+      ? undefined
+      : colorGeometryCommands.find(command => command.nodeId === colorEditBox.id);
+    const colorCurrentEditBoxCommand = colorCurrentEditBox === undefined
+      ? undefined
+      : colorGeometryCommands.find(command => command.nodeId === colorCurrentEditBox.id);
+    const colorEditBoxRecord = colorEditBoxCommand;
+    const colorEditBoxInner = asRecord(colorEditBoxRecord?.innerGeometry);
+    const colorEditBoxComposition = asRecord(colorEditBoxRecord?.editboxComposition);
+    const colorEditBoxTints = Array.isArray(colorEditBoxRecord?.basePreviewTints)
+      ? colorEditBoxRecord.basePreviewTints
+      : [];
     const expectedColorOwners = [
       'table:backgroundColor:table-background',
       'cell:cellbgcolor:cell-background',
@@ -1999,10 +2029,14 @@ async function main(): Promise<void> {
       'button:highlightcolor:widget-highlight',
       'button:bordercolor:widget-border',
       'editbox:bgcolor:widget-background',
+      'editbox:editboxBackgroundBlackColor:editbox-inner-background',
+      'editbox:bgcolor:widget-background',
+      'editbox:editboxBackgroundBlackColor:editbox-inner-background',
       'icon:color:widget-icon',
       'text:color:primary-text',
       'text:color:primary-text',
       'text:color:secondary-text',
+      'text:defaultTextColor:primary-text',
     ].sort();
     const actualColorOwners = colorFacts.map(item => {
       const fact = item.fact as JsonRecord;
@@ -2016,9 +2050,9 @@ async function main(): Promise<void> {
       && colorScene !== undefined
       && (colorPaint?.status === 'projected' || colorPaint?.status === 'partial')
       && stableJson(actualColorOwners) === stableJson(expectedColorOwners)
-      && colorFacts.length === 10
-      && colorGeometryTints.length === 10
-      && colorTints.length >= 10;
+      && colorFacts.length === 14
+      && colorGeometryTints.length === 14
+      && colorTints.length >= 14;
     familyCheck('stage-b-causal', 'loader-issued color evidence reaches top-level Preview and exact public Paint owner census', publicColorReady, {
       colorEvidence: {
         status: asRecord(colorEvidence)?.status,
@@ -2035,6 +2069,94 @@ async function main(): Promise<void> {
       expectedOwners: expectedColorOwners,
       actualOwners: actualColorOwners,
     });
+    familyCheck('stage-b-causal', 'inactive-empty edit-box preview carries the exact outer tint and uiScale-1 black inset without game truth', publicColorReady
+      && colorEditBox !== undefined
+      && colorEditBoxText?.contentSelection === 'preview-default'
+      && colorEditBox.editboxConfigBorder === 1
+      && colorEditBox.editboxBlackInset === 2
+      && colorEditBox.editboxTextBorder === 2
+      && colorEditBoxCommand !== undefined
+      && colorEditBoxRecord?.geometry !== undefined
+      && colorEditBoxInner !== undefined
+      && colorEditBoxInner.x === ((asRecord(colorEditBoxRecord.geometry)?.x as number) + 2)
+      && colorEditBoxInner.y === ((asRecord(colorEditBoxRecord.geometry)?.y as number) + 2)
+      && colorEditBoxInner.width === ((asRecord(colorEditBoxRecord.geometry)?.width as number) - 4)
+      && colorEditBoxInner.height === ((asRecord(colorEditBoxRecord.geometry)?.height as number) - 4)
+      && colorEditBoxComposition?.previewOnly === true
+      && colorEditBoxComposition.configBorder === 1
+      && colorEditBoxComposition.innerInset === 2
+      && colorEditBoxComposition.textBorder === 2
+      && asRecord(asRecord(colorEditBoxComposition.sourcePins)?.scaledInnerInset)?.lineStart === 8702
+      && asRecord(asRecord(colorEditBoxComposition.sourcePins)?.fixedTextBorder)?.lineStart === 848
+      && colorEditBoxTints.some(tint => asRecord(tint)?.field === 'bgcolor' && asRecord(tint)?.slot === 'widget-background')
+      && colorEditBoxTints.some(tint => asRecord(tint)?.field === 'editboxBackgroundBlackColor' && asRecord(tint)?.slot === 'editbox-inner-background')
+      && colorEditBoxTints.find(tint => asRecord(tint)?.field === 'editboxBackgroundBlackColor') !== undefined
+      && asRecord(colorEditBoxTints.find(tint => asRecord(tint)?.field === 'editboxBackgroundBlackColor'))?.gameVerification === NOT_VERIFIED_IN_GAME
+      && colorPaint?.verification.gameVerified === false
+      && colorPaint.verification.game === NOT_VERIFIED_IN_GAME, {
+      widget: colorEditBox,
+      command: colorEditBoxRecord,
+      tints: colorEditBoxTints,
+      gameTruth: colorPaint?.verification,
+    });
+    familyCheck('stage-b-causal', 'non-empty current edit-box retains current selection and black inner Canvas command', publicColorReady
+      && colorCurrentEditBox !== undefined
+      && colorScene?.texts.find(text => text.widgetId === colorCurrentEditBox.id)?.contentSelection === 'current'
+      && colorCurrentEditBoxCommand?.innerGeometry !== undefined
+      && asRecord(colorCurrentEditBoxCommand?.editboxComposition)?.innerInset === 2
+      && Array.isArray(colorCurrentEditBoxCommand?.basePreviewTints)
+      && colorCurrentEditBoxCommand.basePreviewTints.some(tint => asRecord(tint)?.slot === 'editbox-inner-background'), {
+      widget: colorCurrentEditBox,
+      command: colorCurrentEditBoxCommand,
+    });
+    const scaledColorPipeline = projectX4UiPreviewPipeline({
+      source: colorSource,
+      corpus,
+      colorEvidence,
+      profile: {
+        id: 'canvas-color-scaled-profile',
+        provenance: 'edit-box scaled inset versus fixed text border Canvas regression',
+        truthGrade: 'supplied',
+        source: colorSelection.sourceIdentity,
+        drawable: { width: 100, height: 80 },
+        uiScale: 2.5,
+        minTextHeight: 10,
+      },
+      selection: colorSelection,
+    });
+    const scaledColorScene = scaledColorPipeline.scene !== undefined
+      && (scaledColorPipeline.scene.status === 'projected' || scaledColorPipeline.scene.status === 'partial')
+      ? scaledColorPipeline.scene.scene
+      : undefined;
+    const scaledColorPaint = scaledColorScene === undefined
+      ? undefined
+      : projectX4UiPaintPlan({ scene: scaledColorScene, corpus, previewAuthority: scaledColorPipeline });
+    const scaledEditBox = scaledColorScene?.widgets.find(widget => widget.kind === 'editbox' && widget.primaryContent === '');
+    const scaledEditCommand = scaledEditBox === undefined || scaledColorPaint === undefined || scaledColorPaint.status === 'refused'
+      ? undefined
+      : commandList(scaledColorPaint.plan).find(command => command.kind === 'node-geometry' && command.nodeId === scaledEditBox.id);
+    const scaledComposition = asRecord(scaledEditCommand?.editboxComposition);
+    const scaledInnerRect = rasterRect(scaledEditCommand?.innerGeometry);
+    const scaledTrace: TraceEntry[] = [];
+    const scaledOutput: RasterOutput = {};
+    const scaledRenderAttempt = scaledColorPaint === undefined || scaledColorPaint.status === 'refused'
+      ? undefined
+      : attemptRenderWithOptions(scaledColorPaint, corpus, {
+        surfaceFactory: makeRasterFactory(scaledTrace, scaledOutput),
+        presentation: 'source-composition',
+      });
+    const scaledRenderResult = scaledRenderAttempt === undefined ? undefined : completedResult(scaledRenderAttempt);
+    familyCheck('stage-b-causal', 'uiScale 2.5 Canvas accepts and draws scaled black inset 3 with fixed text border 2',
+      scaledEditBox?.editboxBlackInset === 3
+        && scaledEditBox.editboxTextBorder === 2
+        && scaledComposition?.innerInset === 3
+        && scaledComposition.textBorder === 2
+        && scaledInnerRect !== undefined
+        && scaledRenderResult?.status === 'rendered'
+        && scaledTrace.some(entry => entry.name === 'fillRect' && stableJson(entry.args) === stableJson([scaledInnerRect.x, scaledInnerRect.y, scaledInnerRect.width, scaledInnerRect.height]))
+        && scaledRenderResult.receipt.gameVerified === false,
+      { widget: scaledEditBox, command: scaledEditCommand, result: scaledRenderResult?.status, traceLength: scaledTrace.length },
+    );
     if (publicColorReady && colorPaint !== undefined) {
       const acceptedColorPaint = colorPaint as Extract<X4UiPaintPlanResult, { readonly status: 'projected' | 'partial' }>;
       const tintValue = (tint: unknown): JsonRecord | undefined => {
@@ -2181,6 +2303,24 @@ async function main(): Promise<void> {
       const sourceRasterResult = completedResult(sourceRasterAttempt);
       const paintDiagnosticMapRasterResult = completedResult(paintDiagnosticMapRasterAttempt);
       const paintSourceRasterResult = completedResult(paintSourceRasterAttempt);
+      const sourceEditBoxInnerTint = colorEditBoxTints.find(tint => asRecord(tint)?.slot === 'editbox-inner-background');
+      const sourceEditBoxInnerRect = rasterRect(colorEditBoxRecord?.innerGeometry);
+      const sourceEditBoxInnerStyle = sourceEditBoxInnerTint === undefined ? undefined : sourceTintCss(sourceEditBoxInnerTint);
+      const sourceEditBoxInnerTraceHasChrome = sourceEditBoxInnerRect !== undefined
+        && sourceEditBoxInnerStyle !== undefined
+        && sourceRasterTrace.some(entry => entry.name === 'setFillStyle' && entry.args[0] === sourceEditBoxInnerStyle)
+        && sourceRasterTrace.some(entry => entry.name === 'fillRect' && JSON.stringify(entry.args) === JSON.stringify([sourceEditBoxInnerRect.x, sourceEditBoxInnerRect.y, sourceEditBoxInnerRect.width, sourceEditBoxInnerRect.height]));
+      familyCheck('stage-b-causal', 'Canvas source-composition emits the canonical black edit-box inner rectangle at the exact projected inset', sourceRasterResult?.status === 'rendered'
+        && sourceRasterAttempt.threw === false
+        && sourceEditBoxInnerTraceHasChrome
+        && colorPaint?.verification.gameVerified === false
+        && colorPaint.verification.game === NOT_VERIFIED_IN_GAME, {
+        innerRect: sourceEditBoxInnerRect,
+        innerStyle: sourceEditBoxInnerStyle,
+        traceHasChrome: sourceEditBoxInnerTraceHasChrome,
+        result: sourceRasterResult === undefined ? undefined : receiptSummary(sourceRasterResult.receipt),
+        gameTruth: colorPaint?.verification,
+      });
       const sourceFillTint = sourceFillTarget === undefined || !Array.isArray(sourceFillTarget.geometry.basePreviewTints)
         ? undefined
         : sourceFillTarget.geometry.basePreviewTints.find(tint => {
@@ -2374,6 +2514,39 @@ async function main(): Promise<void> {
         const activity = emptyActivityLedger();
         return { attempt: attemptRender(candidate, corpus, makeObservedFactory(activity)), activity };
       };
+      const hostileInnerGeometry = hostileRender((_plan, layers) => {
+        const command = layers.flatMap(layer => layer.commands).find(candidate => candidate.kind === 'node-geometry' && candidate.innerGeometry !== undefined);
+        const geometry = command?.geometry as JsonRecord | undefined;
+        const inner = command?.innerGeometry as JsonRecord | undefined;
+        if (geometry !== undefined && inner !== undefined) inner.x = (geometry.x as number) - 1;
+      });
+      const hostileInnerGeometryResult = completedResult(hostileInnerGeometry.attempt);
+      familyCheck('stage-b-causal', 'forged post-projection edit-box inset refuses before Canvas allocation and cannot fabricate chrome', hostileInnerGeometryResult?.status === 'refused'
+        && hostileInnerGeometryResult.receipt.refusal.code === 'invalid-geometry'
+        && refusalBoundaryIsComplete(hostileInnerGeometryResult)
+        && hostileInnerGeometry.attempt.threw === false
+        && activityIsZero(hostileInnerGeometry.activity), {
+        threw: hostileInnerGeometry.attempt.threw,
+        receipt: receiptSummary(hostileInnerGeometryResult?.receipt),
+        activity: activitySignature(hostileInnerGeometry.activity),
+      });
+      const hostileCompositionPin = hostileRender((_plan, layers) => {
+        const command = layers.flatMap(layer => layer.commands).find(candidate => candidate.kind === 'node-geometry' && candidate.editboxComposition !== undefined);
+        const composition = asRecord(command?.editboxComposition);
+        const pins = asRecord(composition?.sourcePins);
+        const fixedTextBorder = asRecord(pins?.fixedTextBorder);
+        if (fixedTextBorder !== undefined) fixedTextBorder.lineStart = 849;
+      });
+      const hostileCompositionPinResult = completedResult(hostileCompositionPin.attempt);
+      familyCheck('stage-b-causal', 'forged edit-box fixed-text source pin refuses without allocation or false chrome', hostileCompositionPinResult?.status === 'refused'
+        && hostileCompositionPinResult.receipt.refusal.code === 'invalid-command'
+        && refusalBoundaryIsComplete(hostileCompositionPinResult)
+        && hostileCompositionPin.attempt.threw === false
+        && activityIsZero(hostileCompositionPin.activity), {
+        threw: hostileCompositionPin.attempt.threw,
+        receipt: receiptSummary(hostileCompositionPinResult?.receipt),
+        activity: activitySignature(hostileCompositionPin.activity),
+      });
       const sourceLiteralTopology = (layers: MutableLayer[]): {
         readonly tint: JsonRecord;
         readonly useSite: JsonRecord;

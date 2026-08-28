@@ -644,6 +644,41 @@ function run(): { allPassed: boolean; pass: boolean; passed: number; total: numb
     !scaleX?.semantics.dataFlow && !scaleY?.semantics.dataFlow && !scaleFont?.semantics.dataFlow,
     detail({ scaleX: scaleX?.semantics.dataFlow, scaleY: scaleY?.semantics.dataFlow, scaleFont: scaleFont?.semantics.dataFlow }));
 
+  const localScaleSource = [
+    'local menu = { name = "LocalScale", layer = 1 }',
+    'local width = Helper.scaleX(530)',
+    'local height = Helper.scaleY(436)',
+    'local fontSize = Helper.scaleFont("Zekton", 14)',
+    'local frame = Helper.createFrameHandle(menu, { width = width, height = height })',
+    'local fontFrame = Helper.createFrameHandle(menu, { width = fontSize, height = fontSize })',
+  ].join('\n');
+  const localScaleModel = buildX4UiCallModel(input(localScaleSource, 'selftest/local-scale-result.lua'));
+  const localScaleFrame = localScaleModel.calls.filter(candidate => candidate.name === 'createFrameHandle')[0];
+  const localFontFrame = localScaleModel.calls.filter(candidate => candidate.name === 'createFrameHandle')[1];
+  const localWidth = property(localScaleFrame, 'width')?.value;
+  const localHeight = property(localScaleFrame, 'height')?.value;
+  const localFontWidth = property(localFontFrame, 'width')?.value;
+  const localWidthIdentity = localWidth?.directHelperScaleResult;
+  const localHeightIdentity = localHeight?.directHelperScaleResult;
+  check('direct local Helper scale results preserve use spelling/location with separate closed provenance',
+    localWidth?.expression === 'width'
+      && localHeight?.expression === 'height'
+      && exactLocatedText(localScaleSource, { expression: localWidth.expression, source: localWidth.location }, 'width')
+      && exactLocatedText(localScaleSource, { expression: localHeight.expression, source: localHeight.location }, 'height')
+      && localWidthIdentity?.callName === 'scaleX'
+      && localHeightIdentity?.callName === 'scaleY'
+      && localWidthIdentity?.callExpression === 'Helper.scaleX(530)'
+      && localHeightIdentity?.callExpression === 'Helper.scaleY(436)'
+      && localWidthIdentity?.bindingName === 'width'
+      && localHeightIdentity?.bindingName === 'height'
+      && localScaleModel.aliases.filter(alias => alias.value.directHelperScaleResult).length === 3,
+    detail({ width: localWidth, height: localHeight, fontWidth: localFontWidth, aliases: localScaleModel.aliases }));
+  check('scaleFont local provenance is explicit and cannot be mistaken for X/Y scale geometry',
+    localFontWidth?.expression === 'fontSize'
+      && localFontWidth.directHelperScaleResult?.callName === 'scaleFont'
+      && localFontWidth.directHelperScaleResult.callExpression === 'Helper.scaleFont("Zekton", 14)',
+    detail({ fontWidth: localFontWidth }));
+
   const constantsSource = [
     'local menu = { name = "Constants", layer = 1 }',
     'local frame = Helper.createFrameHandle(menu, { width = Helper.viewWidth, height = Helper.viewHeight })',
