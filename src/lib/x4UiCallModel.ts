@@ -136,6 +136,13 @@ export type X4UiValueType =
 
 export type X4UiLiteral = string | number | boolean | null;
 
+export type X4UiHelperNumericConstantName =
+  | 'standardTextHeight'
+  | 'standardButtonHeight'
+  | 'borderSize'
+  | 'viewWidth'
+  | 'viewHeight';
+
 export interface X4UiValueReference {
   kind: 'global' | 'menu' | 'frame' | 'table' | 'row' | 'cell' | 'object' | 'handler' | 'unknown';
   path: string;
@@ -170,6 +177,8 @@ export interface X4UiStaticValue<T = X4UiLiteral> {
   localInvocationResult?: X4UiLocalInvocationResultIdentity;
   /** Exact direct Helper.scale* call that produced this local result. */
   directHelperScaleResult?: X4UiDirectHelperScaleResultIdentity;
+  /** Closed source-proven numeric expression; profile-bound evaluation is deferred to the layout program. */
+  numericExpression?: X4UiNumericExpression;
   /** Original literal range; direct argument binding requires this to equal the use range. */
   sourceLiteral?: X4UiSourceLocation;
 }
@@ -519,6 +528,62 @@ export interface X4UiDirectHelperScaleResultIdentity {
   readonly bindingSource: X4UiSourceLocation;
 }
 
+export interface X4UiNumericHelperReceiver {
+  readonly name: string;
+  readonly origin: 'global' | 'alias';
+  readonly source: X4UiSourceLocation;
+  readonly aliasSource?: X4UiSourceLocation;
+}
+
+export type X4UiNumericExpression =
+  | {
+    readonly kind: 'literal';
+    readonly value: number;
+    readonly expression: string;
+    readonly source: X4UiSourceLocation;
+  }
+  | {
+    readonly kind: 'helper-constant';
+    readonly name: X4UiHelperNumericConstantName;
+    readonly receiver: X4UiNumericHelperReceiver;
+    readonly expression: string;
+    readonly source: X4UiSourceLocation;
+  }
+  | {
+    readonly kind: 'direct-helper-scale';
+    readonly identity: X4UiDirectHelperScaleResultIdentity;
+    readonly expression: string;
+    readonly source: X4UiSourceLocation;
+  }
+  | {
+    readonly kind: 'group';
+    readonly operand: X4UiNumericExpression;
+    readonly expression: string;
+    readonly source: X4UiSourceLocation;
+  }
+  | {
+    readonly kind: 'unary';
+    readonly operator: '+' | '-';
+    readonly operand: X4UiNumericExpression;
+    readonly expression: string;
+    readonly source: X4UiSourceLocation;
+  }
+  | {
+    readonly kind: 'binary';
+    readonly operator: '+' | '-' | '*' | '/';
+    readonly left: X4UiNumericExpression;
+    readonly right: X4UiNumericExpression;
+    readonly expression: string;
+    readonly source: X4UiSourceLocation;
+  }
+  | {
+    readonly kind: 'or';
+    readonly left: X4UiNumericExpression;
+    readonly right: X4UiNumericExpression;
+    readonly expression: string;
+    readonly source: X4UiSourceLocation;
+  };
+
 export interface X4UiLocalFunctionDeclaration {
   readonly id: string;
   readonly name: string;
@@ -850,7 +915,9 @@ function staticBoolean(node: LuaNode | undefined): boolean | undefined {
 }
 
 function luaTruthy(value: X4UiValue): boolean | undefined {
-  if (value.status !== 'static') return undefined;
+  if (value.status !== 'static') {
+    return value.type === 'number' && value.numericExpression ? true : undefined;
+  }
   if (value.type === 'nil') return false;
   if (value.type === 'boolean') return value.value as boolean;
   return true;
@@ -877,6 +944,8 @@ const freezeDeepFact = <T>(value: T, seen = new WeakSet<object>()): T => {
   Object.freeze(object);
   return value;
 };
+
+const freezeNumericExpression = <T extends X4UiNumericExpression>(value: T): T => freezeDeepFact(value);
 
 class X4UiCallModelBuilder {
   private readonly input: X4UiLuaFileInput;
@@ -1281,6 +1350,16 @@ class X4UiCallModelBuilder {
 
   private valueAtUse(source: InternalValue, node: LuaNode | undefined): InternalValue {
     const publicValue = { ...source.publicValue, expression: this.textOf(node), location: this.location(node) };
+    const numericExpression = source.publicValue.numericExpression;
+    if (numericExpression?.kind === 'direct-helper-scale') {
+      publicValue.numericExpression = freezeNumericExpression({
+        ...numericExpression,
+        expression: this.textOf(node),
+        source: this.location(node),
+      });
+    } else if (numericExpression?.kind === 'literal' || numericExpression?.kind === 'helper-constant') {
+      delete publicValue.numericExpression;
+    }
     return {
       publicValue,
       object: source.object,
@@ -1290,6 +1369,17 @@ class X4UiCallModelBuilder {
       helperAliasCandidate: source.helperAliasCandidate,
       directHelperScaleCall: source.directHelperScaleCall
     };
+  }
+
+  private numericLiteralExpression(value: X4UiValue): X4UiNumericExpression | undefined {
+    if (value.status !== 'static' || value.type !== 'number' || typeof value.value !== 'number'
+      || !value.sourceLiteral || this.locationIdentity(value.sourceLiteral) !== this.locationIdentity(value.location)) return undefined;
+    return freezeNumericExpression({
+      kind: 'literal',
+      value: value.value,
+      expression: value.expression,
+      source: value.location,
+    });
   }
 
   private unknown(node: LuaNode | undefined, type: X4UiValueType, reason: string, symbol?: string): InternalValue {
@@ -1415,7 +1505,12 @@ class X4UiCallModelBuilder {
         const number = staticNumber(node);
         return number === undefined
           ? this.dynamic(node, 'number', 'numeric literal could not be decoded')
-          : { publicValue: { ...this.value(node, 'static', 'number', number), sourceLiteral: this.location(node) } };
+          : {
+            publicValue: {
+              ...this.value(node, 'static', 'number', number),
+              sourceLiteral: this.location(node),
+            }
+          };
       }
       case 'BooleanLiteral': {
         const boolean = staticBoolean(node);
@@ -1447,8 +1542,25 @@ class X4UiCallModelBuilder {
       case 'BinaryExpression':
       case 'LogicalExpression':
         return this.evaluateBinary(node, context);
-      case 'ParenthesizedExpression':
-        return this.evaluate(nodeField<LuaNode>(node, 'expression'), context);
+      case 'ParenthesizedExpression': {
+        const expression = this.evaluate(nodeField<LuaNode>(node, 'expression'), context);
+        const operand = expression.publicValue.numericExpression
+          || this.numericLiteralExpression(expression.publicValue);
+        if (!operand) return expression;
+        const numericExpression = freezeNumericExpression({
+          kind: 'group',
+          operand,
+          expression: this.textOf(node),
+          source: this.location(node),
+        });
+        const publicValue = {
+          ...expression.publicValue,
+          expression: this.textOf(node),
+          location: this.location(node),
+          numericExpression,
+        };
+        return { ...expression, publicValue };
+      }
       default:
         this.processNestedCalls(node, context);
         return this.dynamic(node, 'expression', `unsupported Lua expression shape ${node.type || 'unknown'}`);
@@ -1519,8 +1631,16 @@ class X4UiCallModelBuilder {
       && KNOWN_HELPER_CONSTANTS.has(property)
     ) {
       const symbol = `Helper.${property}`;
+      const baseReference = base.publicValue.reference;
+      const receiver = freezeDeepFact({
+        name: this.textOf(baseNode),
+        origin: baseReference.origin === 'alias' ? 'alias' as const : 'global' as const,
+        source: this.location(baseNode),
+        ...(baseReference.helperAliasSource ? { aliasSource: baseReference.helperAliasSource } : {}),
+      });
       return {
-        publicValue: this.value(
+        publicValue: {
+          ...this.value(
           node,
           'unknown',
           'number',
@@ -1528,7 +1648,15 @@ class X4UiCallModelBuilder {
           undefined,
           `${symbol} is a recognized Helper constant whose runtime value is not supplied`,
           symbol
-        )
+          ),
+          numericExpression: freezeNumericExpression({
+            kind: 'helper-constant',
+            name: property as X4UiHelperNumericConstantName,
+            receiver,
+            expression: this.textOf(node),
+            source: this.location(node),
+          }),
+        }
       };
     }
     if (base.object) {
@@ -1581,6 +1709,35 @@ class X4UiCallModelBuilder {
   private evaluateUnary(node: LuaNode, context: X4UiFunctionContext): InternalValue {
     const argument = this.evaluate(nodeField<LuaNode>(node, 'argument'), context);
     const operator = nodeField<string>(node, 'operator');
+    const numericArgument = argument.publicValue.numericExpression
+      || this.numericLiteralExpression(argument.publicValue);
+    if ((operator === '-' || operator === '+') && numericArgument) {
+      const argumentValue = argument.publicValue.value;
+      const result = argument.publicValue.status === 'static'
+        && argument.publicValue.type === 'number'
+        && typeof argumentValue === 'number'
+        ? (operator === '-' ? -argumentValue : argumentValue)
+        : undefined;
+      const numericExpression = freezeNumericExpression({
+        kind: 'unary',
+        operator,
+        operand: numericArgument,
+        expression: this.textOf(node),
+        source: this.location(node),
+      });
+      const publicValue = result !== undefined && Number.isFinite(result)
+        ? this.value(node, 'static', 'number', result)
+        : this.value(
+          node,
+          argument.publicValue.status === 'unknown' ? 'unknown' : 'dynamic',
+          'number',
+          undefined,
+          undefined,
+          `unary ${operator} value is not a finite static number`
+        );
+      publicValue.numericExpression = numericExpression;
+      return { publicValue };
+    }
     if (argument.publicValue.status !== 'static') return this.dynamic(node, 'expression', `unary ${operator || 'operator'} depends on a runtime value`);
     const value = argument.publicValue.value;
     if (operator === '-' && typeof value === 'number') return { publicValue: this.value(node, 'static', 'number', -value) };
@@ -1594,6 +1751,86 @@ class X4UiCallModelBuilder {
     const left = this.evaluate(nodeField<LuaNode>(node, 'left'), context);
     const right = this.evaluate(nodeField<LuaNode>(node, 'right'), context);
     const operator = nodeField<string>(node, 'operator') || '';
+    const leftNumericExpression = left.publicValue.numericExpression
+      || this.numericLiteralExpression(left.publicValue);
+    const rightNumericExpression = right.publicValue.numericExpression
+      || this.numericLiteralExpression(right.publicValue);
+    if (operator === 'or' && leftNumericExpression) {
+      const leftTruth = luaTruthy(left.publicValue);
+      if (leftTruth === undefined || !rightNumericExpression) {
+        return this.dynamic(node, 'number', 'logical or has an unsupported or undecidable numeric branch');
+      }
+      const numericExpression = freezeNumericExpression({
+        kind: 'or',
+        left: leftNumericExpression,
+        right: rightNumericExpression,
+        expression: this.textOf(node),
+        source: this.location(node),
+      });
+      const selected = leftTruth ? left.publicValue : right.publicValue;
+      const selectedValue = selected.value;
+      const publicValue = selected.status === 'static'
+        && selected.type === 'number'
+        && typeof selectedValue === 'number'
+        && Number.isFinite(selectedValue)
+        ? this.value(node, 'static', 'number', selectedValue)
+        : this.value(
+          node,
+          selected.status === 'unknown' ? 'unknown' : 'dynamic',
+          'number',
+          undefined,
+          undefined,
+          `logical or value is not a finite static number`
+        );
+      publicValue.numericExpression = numericExpression;
+      return { publicValue };
+    }
+    if (operator === 'or' && rightNumericExpression) {
+      return this.dynamic(node, 'number', 'logical or has an unsupported non-numeric left branch');
+    }
+    if (operator === 'and' && (leftNumericExpression || rightNumericExpression)) {
+      return this.dynamic(node, 'number', 'logical and is not part of the closed numeric expression grammar');
+    }
+    if (['+', '-', '*', '/'].includes(operator)
+      && leftNumericExpression && rightNumericExpression) {
+      const numericExpression = freezeNumericExpression({
+        kind: 'binary',
+        operator: operator as '+' | '-' | '*' | '/',
+        left: leftNumericExpression,
+        right: rightNumericExpression,
+        expression: this.textOf(node),
+        source: this.location(node),
+      });
+      const leftValue = left.publicValue.value;
+      const rightValue = right.publicValue.value;
+      const bothStaticNumbers = left.publicValue.status === 'static'
+        && right.publicValue.status === 'static'
+        && typeof leftValue === 'number'
+        && typeof rightValue === 'number';
+      const result = bothStaticNumbers
+        ? operator === '+' ? leftValue + rightValue
+          : operator === '-' ? leftValue - rightValue
+            : operator === '*' ? leftValue * rightValue
+              : leftValue / rightValue
+        : undefined;
+      const invalidResult = bothStaticNumbers
+        && (operator === '/' && rightValue === 0
+          || result !== undefined && !Number.isFinite(result));
+      const publicValue = result !== undefined && !invalidResult
+        ? this.value(node, 'static', 'number', result)
+        : this.value(
+          node,
+          left.publicValue.status === 'unknown' || right.publicValue.status === 'unknown' ? 'unknown' : 'dynamic',
+          'number',
+          undefined,
+          undefined,
+          invalidResult
+            ? `binary ${operator} value is not finite or divides by zero`
+            : `binary ${operator} value is not a static number`
+        );
+      publicValue.numericExpression = numericExpression;
+      return { publicValue };
+    }
     if (operator === 'and' || operator === 'or') {
       const leftTruth = luaTruthy(left.publicValue);
       if (leftTruth === undefined) return this.dynamic(node, 'expression', `logical ${operator} value is runtime-dependent`);
@@ -1614,8 +1851,9 @@ class X4UiCallModelBuilder {
         : operator === '-' ? leftValue - rightValue
           : operator === '*' ? leftValue * rightValue
             : operator === '/' ? leftValue / rightValue
-              : operator === '%' ? leftValue % rightValue
-                : leftValue ** rightValue;
+                : operator === '%' ? leftValue % rightValue
+                  : leftValue ** rightValue;
+      if (!Number.isFinite(result)) return this.dynamic(node, 'number', `binary ${operator} result is not finite`);
       return { publicValue: this.value(node, 'static', 'number', result) };
     }
     if (operator === '..' && (typeof leftValue === 'string' || typeof leftValue === 'number') && (typeof rightValue === 'string' || typeof rightValue === 'number')) {
@@ -2783,7 +3021,7 @@ class X4UiCallModelBuilder {
 
   private isRelevantBinding(name: string, value: InternalValue): boolean {
     if (value.object || value.functionNode || value.publicValue.type === 'reference' || value.publicValue.type === 'table' || value.publicValue.type === 'function'
-      || value.directHelperScaleCall || value.publicValue.directHelperScaleResult) return true;
+      || value.directHelperScaleCall || value.publicValue.directHelperScaleResult || value.publicValue.numericExpression) return true;
     return /^(menu|frame|table|row|cell|handler|handlers|onClick)$/i.test(name);
   }
 
@@ -2802,12 +3040,23 @@ class X4UiCallModelBuilder {
       bindingName: name,
       bindingSource: this.location(target),
     });
+    const publicValue = {
+      ...value.publicValue,
+      directHelperScaleResult: identity,
+    };
+    if (identity.callName === 'scaleX' || identity.callName === 'scaleY') {
+      publicValue.numericExpression = freezeNumericExpression({
+        kind: 'direct-helper-scale',
+        identity,
+        expression: value.publicValue.expression,
+        source: value.publicValue.location,
+      });
+    } else {
+      delete publicValue.numericExpression;
+    }
     return {
       ...value,
-      publicValue: {
-        ...value.publicValue,
-        directHelperScaleResult: identity,
-      },
+      publicValue,
     };
   }
 

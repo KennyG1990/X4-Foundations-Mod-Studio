@@ -1,104 +1,111 @@
-# Session handoff — B119 second-profile X4 close
+# Session handoff — B119 source-proven numeric geometry
 
 Date: 2026-08-28
 Project: `F:\DEV_ENV\X4_Forge`
-Status: exact deploy-bound implementation, complete host validation, and two-profile real-X4 pipeline proof green;
-overall B119 `IN_PROGRESS / PARTIAL`
+Status: bounded source-proven numeric frame geometry `VERIFIED`; overall B119 `IN_PROGRESS / PARTIAL`
 
-## Current state
+## Current repository state
 
-- Second-profile runtime checkpoint `d5dcc80284e6c1dac2326871cd106fc9a5119d2a` is committed and pushed with exact
-  local/tracking/direct-remote parity. Source implementation is `ff1e26f509d81e3b4c87b63eebdc2bfe73afcbe8`.
-  Preserve every unrelated dirty path; never broad-stage. The record-close commit carrying this handoff becomes the
-  current repository authority after its exact-path commit/push.
-- The unchanged UI-only `pipeline_test` package is exactly four files / `6,338` bytes / regular-tree fingerprint
-  `88574c00ce6d9aa5b1dd2686425fae0a8b492df75a04a25bd94d19e82f7d844f`.
-- Real X4 9.00 has now accepted that exact package at two drawable profiles: prior `2544x1353`, and current
-  `1920x1080` at default UI scale `1`. The second run loaded no save and wrote no save.
-- Second-profile evidence is under
-  `dev-docs/b119-x4-ui-pipeline-smoke/in-game-20260828/second-profile/`; `runtime-receipt.json` is the compact
-  authority and `pixel-measurements.json` records the exact scan predicate and bounds.
-- Runtime cleanup is complete: X4 count zero; isolated Forge PID `13840` stopped; ports
-  `3000/3001/3100/3101/3300/8713` free; game target absent; extensions count restored `44 -> 43`;
-  `config.xml` and `uidata.xml` exactly match their pre-run SHA-256 hashes.
-- No native Luna worker was needed for the second-profile gate because no source/test defect was found and no code
-  changed. All earlier workers for the implementation unit were already terminal and closed.
+- Baseline and current parent are `HEAD == origin/main == c8d06ae98942c5aaea12a4f1ab05b8820b8990c3` before the pending
+  implementation commit. Preserve every unrelated dirty path and use explicit-path staging only.
+- Bounded owned implementation/test paths are:
+  - `src/lib/x4UiCallModel.ts`
+  - `src/lib/x4UiCallModel.selftest.ts`
+  - `src/lib/x4UiLayoutProgram.ts`
+  - `src/lib/x4UiLayoutProgram.selftest.ts`
+  - `src/lib/x4UiScene.selftest.ts`
+- Owned records for this checkpoint are:
+  - `docs/plans/2026-08-28-b119-source-proven-numeric-geometry.md`
+  - `BACKLOG.md`
+  - `SESSION-HANDOFF.md`
+- Production `x4UiScene.ts`, Paint, Canvas, SourceEditor, server routes, deploy owners, the mod, game directory, X4
+  profile, unpacked corpus, and Antigravity configuration were not changed.
+- The native Luna implementation worker is terminal and closed. No spawned worker remains open.
 
-## Exact deploy-bound implementation already pushed
+## Bounded capability now implemented
 
-- Successful deploys persist and reconstruct the exact regular-tree `deployedFingerprint`; failed deploy evidence
-  cannot replace the last exact success.
-- The existing global experience-confirmation owner carries an optional X4 UI snapshot. External verification requires
-  exact workspace/source identity, deploy timestamp/path/fingerprint, target identity, clean readiness, normalized
-  drawable/UI-scale profile, and explicit human confirmation.
-- Internal preview/session/paint/canvas receipts remain `gameVerified:false` and `Not verified in game`.
-- Fresh-eyes corrections preserve snapshots only while workspace/deploy evidence matches, remove the parent/child
-  lifecycle race, and prevent enabled-but-inert confirmation.
+- The call model emits a deeply frozen, exact-source numeric-expression descriptor for numeric literals, accepted
+  Helper constants, bound direct `scaleX` / `scaleY` results, grouping, unary sign, binary `+ - * /`, and Lua `or`.
+- The layout program independently reparses the model's exact Lua 5.2 source, validates every descriptor node/operator/
+  operand/range against that AST, pins Helper receiver and direct-scale identities, rejects later reachable reassignment,
+  and resolves only against the selected normalized profile.
+- Source-proven expressions are excluded from preview-sample authority. Internal descriptor metadata is removed from
+  issued operation/evidence metadata, so the existing Scene/public contract is unchanged.
+- The all-copy same-context alias-decoy defect is closed: a valid nearby `/4` formula can no longer impersonate the
+  selected `/2` binding. The selected alias value expression and location must equal the descriptor root.
+- This is not a generic Lua evaluator. Unknown identifiers, conditional/reassigned aliases, unsupported calls/operators,
+  modulo/power/`and`, divide-by-zero/non-finite values, malformed/forged/range/schema inputs, and `scaleFont` geometry
+  remain unavailable or rejected.
 
-## Host validation already green
+## Current validation authority
 
-- Verification owner selftest PASS; runtime adapter `44/44`; SourceEditor matrices PASS; typecheck PASS; bounded lint
-  zero errors; Graphify `9,931 / 24,845 / 327` at the implementation checkpoint.
-- Route integration `491/491`; runtime-index oracles `134/134`; targeted browser `3/3`; controlled unchanged full e2e
-  `104/104`, zero flaky, `treeGone=true`; complete precommit; production build `1,848` modules.
-- The initial full e2e remains retained red evidence at `103 + 1 flaky`; it is not relabeled green.
-- Writer authority `14/14 + 8/8`; capability audit `12 / 297 / 1 / 11`; action receipts `82 / 56`.
+- Focused suites: Call Model `72/72`; Layout Program `641/641`; Scene `153/153`; configured MENU/HUB/COMM census `3/3`.
+- Static gates: whole-repository TypeScript exit `0`; exact owned-file ESLint exit `0`; owned diff hygiene exit `0`;
+  full repository lint exit `0` with zero errors and `592` pre-existing warnings.
+- Graphify refreshed deterministically to `9,955` nodes / `24,922` edges / `334` communities;
+  `projectX4UiLayoutProgram()` resolves with `84` relationships.
+- Runtime-indexed isolated oracle owner: `134/134` green. The preceding raw no-server sweep `0/133` is retained as an
+  invocation/AAR failure and is not product evidence.
+- First full E2E is retained red: test 24 retried, execution later died after test 81 with Windows `0xC0000409`, and no
+  complete structured report existed. Receipt SHA-256 `E0D2AE77...B7653B5` is under
+  `dev-docs/b119-source-proven-numeric-geometry/e2e-red-20260828-01/`.
+- Controlled bundled Node `v24.19.0` full E2E: `104/104` in `7.9m`, zero failed/flaky/bad/quarantined-blocking,
+  discovery `104 == terminal 104`, child-close, `treeGone=true`, zero remaining PIDs. Receipt SHA-256
+  `F58275F0...C6DEFB4` is under `dev-docs/b119-source-proven-numeric-geometry/e2e-green-20260828-01/`.
+- Complete precommit passed: verdict `55/55`, durable writers `14/14 + 8/8`, capability `12/297/1/11`, MCP contract,
+  action receipts `82/56`, TypeScript, and size guards. Production build passed with `1,848` modules.
 
-## Second-profile real-X4 proof
+## Exact real `pipeline_test` read-only proof
 
-- A current-checkout isolated Forge server on `127.0.0.1:3300` used the saved X4 Forge configuration and the real
-  unpacked corpus at `F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00`.
-- Dry-run predicted exactly four additions and left the live target absent. Apply produced the exact source/deployed
-  fingerprint, confirmed all `6,338` bytes, and passed eleven config/import/source-sync/wellformed/compile/preflight/
-  deploy/bytes/doctor/drift/baseline stages.
-- Deploy history row `mtd4sixo-1fb619df` bound recovery `deploy-mtd4sfjy-a21c3c86b1b4b4a0`.
-- X4 visibly rendered the centered panel. Both buttons responded; the second visibly highlighted; the editbox accepted
-  `b119`; deactivation retained it; standard close removed the panel.
-- Scoped debuglog counts are zero for view/frame setup refusal, zero-height editbox, nil `onCloseElement`, reserved
-  scrollbar, and Lua runtime error. The receipt separately retains one expected loose-file signature diagnostic and
-  unrelated SW Interworlds / AI Chat error-marked output; do not call the entire log globally clean.
-- Measured first-button fill is `529x23` at `1920x1080` and `665x29` at `2544x1353`; width and height scaling are
-  within `0.65%` of the drawable-height ratio, with normalized top placement differing by `0.110` percentage points.
-  This is real-X4 scaling evidence, not exact Forge-versus-X4 parity.
-- Recovery returned HTTP `200`, restored fingerprint `absent`, and `priorExisted:false`; replay returned
-  `409 / RECOVERY_ALREADY_USED`. Exact profile backups were then restored and hash-verified.
+- File: `F:\DEV_ENV\projects\Mods\X4Mods\pipeline_test\ui\pipeline_test.lua`.
+- Before/after: `5,488` bytes and SHA-256
+  `C1D9CD8580C6175E95C543259A2AB19F8B463282BF48B2229EB6013D6052718E`; byte-identical.
+- Parsed target: `menu.createFrame`, lines `77-106`, offsets `2709-4565`.
+- `1920x1080`, UI scale `1`: x `695`, y `322`, width `530`, height `436`.
+- `2544x1353`, UI scale `1.25`: x `940.5`, y `404`, width `663`, height `545`.
+- x/y retain the exact line-83/84 source formulas; width/height retain the line-81/82 direct Helper call sources. Both
+  program/evidence pairs validate. Both programs remain `partial` because of nineteen unrelated unsupported facts.
+- Prior deployed-X4 evidence for this unchanged four-file / `6,338`-byte package remains under
+  `dev-docs/b119-x4-ui-pipeline-smoke/in-game-20260828/`. It proves real X4 acceptance/interactions at both profiles,
+  but no new pixel-edge comparison was captured in this checkpoint.
 
-## Documentation and external projection
+## Machine and containment state
 
-- Repository runtime record `d5dcc80284e6c1dac2326871cd106fc9a5119d2a` is pushed with exact parity after the
-  complete precommit gate passed both standalone and in the commit hook. Zero B119 path remains staged.
-- GitHub issue #41 comment `5455192771` was written and fetched back exactly with commit, package, interaction,
-  scaling, debuglog, recovery, and truthful parity/release boundaries. The issue remains open at `74` comments.
-- Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a` was appended and fetched back with the exact commit, GitHub
-  receipt, `BOUNDED VERIFIED / OVERALL B119 IN PROGRESS / PARTIAL`, and no-OpenVSX boundary.
-- Google Doc `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE` was freshly read at revision
-  `AIroW3566q2IOoh7o5wf5r5fQa_ez2Nku1oUWWpL3pMqPwwwgp6ds8nhN3qSh_CnYlTxZucImzWAHjM2Y_qqTCkcLGqY2pfczqeCKJLMn3aO`,
-  revision-locked at exact tab `t.0` / index `105408`, appended, and read back at revision
-  `AIroW35ORAD2b16wtqsH8JNjJ03uib5jxFvleX03tDcvhkOVlZmEgQmddPsyOveZSskE7fp54ySMVePGX8lvtV7cve4MvkxLj-v86YevGGag`.
-  Its new marker is `HEADING_2`; all nine appended paragraphs and boundary statements match exactly. Trusted-read
-  evidence remains under `dev-docs/google-docs-trusted-read/b119-20260828-05-second-profile/`.
-- StarForge capability-map and project-AAR deltas are updated outside the repository with the same bounded claim.
+- X4 was closed normally with Alt+F4 and is absent.
+- Ports `3000/3001/3100/3101/8972` are free; no owned oracle/E2E/precommit/build/Graphify process remains.
+- Persisted Antigravity Forge config remains byte-identical at SHA-256
+  `355B4B636AD6C0BB3B58DEA793DE409C2375B8A81230433C0F0FDD48FBEE3B5A`.
+- The configured unpacked X4 9.00 corpus remains
+  `F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00` and was read only.
 
-## Next exact actions
+## Commit and bookkeeping boundary
 
-1. Validate the exact external-receipt documentation diff, run complete precommit, commit only the four repository
-   records as `docs(ui-editor): record second-profile projection`, and push with local/tracking/direct-remote parity.
-2. Continue B119 with dynamic `Helper.scaleX` / `Helper.scaleY` geometry projection and exact Forge-versus-X4
-   comparison before claiming renderer parity. Then finish remaining linter/layout brief coverage and reconstruct the
-   AI Influence UI from all visually inspected references.
-3. Do not publish OpenVSX while B119 is partial. At release quality, reconcile the user-owned extension release edits,
-   then build/package/probe/publish/read back before the release commit.
+- Required implementation commit title: `feat(ui-editor): project source-proven numeric geometry`.
+- Before commit, stage only the eight owned paths listed above, run `git diff --cached --check`, inspect the staged
+  name/status census, commit, push, and prove `HEAD == origin/main == direct remote main`.
+- GitHub #41, Notion owner page `3b84618e-d15b-8190-821e-c0eb96f43d5a`, Google Doc
+  `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, StarForge capability map, and project AAR still need the exact
+  commit-backed checkpoint and readback. The issue must remain open and the overall B119 boundary must remain PARTIAL.
+- After those readbacks, overwrite this handoff with commit/receipt IDs and create the documentation record commit.
+
+## Next product boundary
+
+1. Commit/push this bounded unit and complete/read back all four durable projections.
+2. Measure exact Forge frame/button/text/editbox pixel edges against the already captured X4 screenshots at both profiles;
+   do not infer parity merely because the source formula now resolves.
+3. Continue complete `helper.lua` / `widget_fullscreen.lua` port coverage, remaining linter rules and keep-out behavior,
+   then reconstruct the AI Influence UI from all visually inspected references.
+4. Keep `Not verified in game` permanent for internal preview receipts. Do not publish OpenVSX until B119 reaches release
+   quality and the unrelated extension release edits are reconciled with their owner.
 
 ## Triggered AAR hazards
 
-- The first second-profile config patch introduced a four-byte indentation drift. Exact expected-text and hash
-  readback caught and corrected it before X4 launched. Profile changes need byte-exact prelaunch and postrestore gates.
-- X4 had a live process before it exposed a targetable window; wait and enumerate the real window rather than treating
-  the launch helper's early no-window result as a failed game launch.
-- Generic `type_text` did not reach X4's direct-input editbox. Observed native key events did; use them for this class
-  of widget and inspect after every action.
-- The first compact Python image probe used invalid one-line compound-statement syntax. The corrected multiline probe
-  produced reproducible pixel bounds; only the corrected result is accepted.
-- Highest risk remains live target-tree drift after a persisted human confirmation. The pure classifier refuses known
-  source/target/deploy/workspace/profile drift, and two real profiles now close the experience sub-gate, but live
-  target-tree recomputation remains open.
+- A structurally valid descriptor copied from a nearby same-context expression escaped until the alias root's ordinary
+  expression/location was pinned. Keep the all-copy decoy regression.
+- Raw `oracle-sweep.mjs` requires a running server; use `npm run test:oracles` for isolated standalone evidence.
+- Default Node `24.15.0` produced an incomplete `0xC0000409` E2E run. Bundled Node `24.19.0` is the accepted controlled
+  runtime on this host; the failed receipt remains evidence rather than being overwritten conceptually.
+- Large selftest/artifact JSON must be reduced in-process. One raw Layout run emitted roughly 51 MB, and one recursive
+  artifact listing exceeded the tool boundary.
+- Highest risk remains a convincing preview being mistaken for game truth. This checkpoint proves exact bounded frame
+  facts, not C++ acceptance or 1:1 pixels.

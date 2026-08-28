@@ -2,10 +2,13 @@
  * Pure, source-ordered projection from the accepted X4 UI call model to the
  * accepted Helper layout kernel.
  *
- * This module is intentionally a bridge only.  It does not parse Lua, load a
- * file, inspect a browser, or claim that any projected geometry was accepted
- * by a running game.
+ * This module is intentionally a bridge only. It reparses accepted source only
+ * to validate closed numeric-expression structure; it does not interpret Lua,
+ * load a file, inspect a browser, or claim that any projected geometry was
+ * accepted by a running game.
  */
+
+import { parse } from 'luaparse';
 
 import type {
   X4UiCallModel,
@@ -20,6 +23,7 @@ import type {
   X4UiLocalFunctionParameterIdentity,
   X4UiLocalInvocationResultIdentity,
   X4UiRelevantCallName,
+  X4UiNumericExpression,
   X4UiSourceLocation,
   X4UiValue,
   X4UiValueReference,
@@ -989,14 +993,26 @@ const snapshotCompleteX4UiCallModel = (model: X4UiCallModel): X4UiCallModel | un
 const cloneLocation = (location: X4UiSourceLocation): X4UiSourceLocation =>
   cloneDeep(location) as X4UiSourceLocation;
 
+const cloneMetadataValue = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(item => cloneMetadataValue(item));
+  if (value !== null && typeof value === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(value)) {
+      if (key !== 'numericExpression') result[key] = cloneMetadataValue(child);
+    }
+    return result;
+  }
+  return value;
+};
+
 const cloneReference = (reference: X4UiValueReference | undefined): X4UiValueReference | undefined =>
-  reference ? cloneDeep(reference) as X4UiValueReference : undefined;
+  reference ? cloneMetadataValue(reference) as X4UiValueReference : undefined;
 
 const cloneMetadata = (call: X4UiCallRecord): X4UiLayoutCallMetadata => ({
-  arguments: cloneDeep(call.arguments) as X4UiValue[],
-  ...(call.receiver ? { receiver: cloneDeep(call.receiver) as X4UiValue } : {}),
-  ...(call.result ? { result: cloneReference(call.result) } : {}),
-  semantics: cloneDeep(call.semantics) as X4UiCallRecord['semantics'],
+  arguments: cloneMetadataValue(call.arguments) as X4UiValue[],
+  ...(call.receiver ? { receiver: cloneMetadataValue(call.receiver) as X4UiValue } : {}),
+  ...(call.result ? { result: cloneMetadataValue(call.result) as X4UiValueReference } : {}),
+  semantics: cloneMetadataValue(call.semantics) as X4UiCallRecord['semantics'],
 });
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
@@ -1651,6 +1667,390 @@ const directScaleForValue = (
     .sort((left, right) => right.instanceScope.length - left.instanceScope.length)[0];
 };
 
+const NUMERIC_LITERAL_EXPRESSION = /^(?:0[xX][0-9A-Fa-f]+|(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)$/;
+const NUMERIC_EXPRESSION_OPERATORS = ['+', '-', '*', '/'] as const;
+
+const sourcePositionAtOffset = (
+  text: string,
+  offset: number,
+): { readonly line: number; readonly column: number } => {
+  const lastNewline = text.lastIndexOf('\n', offset - 1);
+  let line = 1;
+  for (let index = 0; index < offset; index += 1) {
+    if (text[index] === '\n') line += 1;
+  }
+  return { line, column: offset - (lastNewline + 1) };
+};
+
+const sourceLocationMatchesModel = (
+  model: X4UiCallModel,
+  source: unknown,
+  expression: unknown,
+): source is X4UiSourceLocation => {
+  if (!isSourceLocationShape(source) || typeof expression !== 'string'
+    || source.file !== model.file.rel
+    || !sameOptionalString(source.sourcePath, model.file.sourcePath)
+    || !Number.isSafeInteger(source.start.offset)
+    || !Number.isSafeInteger(source.end.offset)
+    || source.start.offset < 0
+    || source.end.offset <= source.start.offset
+    || source.end.offset > model.file.text.length
+    || model.file.text.slice(source.start.offset, source.end.offset) !== expression) return false;
+  const start = sourcePositionAtOffset(model.file.text, source.start.offset);
+  const end = sourcePositionAtOffset(model.file.text, source.end.offset);
+  return source.start.line === start.line
+    && source.start.column === start.column
+    && source.end.line === end.line
+    && source.end.column === end.column;
+};
+
+const numericExpressionReceiverError = (
+  value: unknown,
+  model: X4UiCallModel,
+): string | undefined => {
+  if (!isObject(value)
+    || Object.getPrototypeOf(value) !== Object.prototype
+    || !hasExactRecordKeys(value, ['name', 'origin', 'source'], ['aliasSource'])
+    || !hasOnlyJsonDataProperties(value)) return 'numeric Helper receiver is malformed';
+  if (typeof value.name !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(value.name)) {
+    return 'numeric Helper receiver name is invalid';
+  }
+  if (value.origin !== 'global' && value.origin !== 'alias') return 'numeric Helper receiver origin is invalid';
+  if (!sourceLocationMatchesModel(model, value.source, value.name)) return 'numeric Helper receiver source does not match the model';
+  if (value.origin === 'global') {
+    if (value.name !== 'Helper' || value.aliasSource !== undefined) return 'global numeric Helper receiver identity is invalid';
+    const shadowed = model.helperReceiverAliases.some(alias => alias.name === value.name
+      && alias.targetSource.start.offset <= (value.source as X4UiSourceLocation).start.offset
+      && locationContains(alias.context.source, value.source as X4UiSourceLocation));
+    return shadowed ? 'global numeric Helper receiver is shadowed by a lexical alias' : undefined;
+  }
+  if (!sourceLocationMatchesModel(model, value.aliasSource, model.file.text.slice(
+    (value.aliasSource as X4UiSourceLocation | undefined)?.start.offset || 0,
+    (value.aliasSource as X4UiSourceLocation | undefined)?.end.offset || 0,
+  ))) return 'aliased numeric Helper receiver source is malformed';
+  const receiverSource = value.source as X4UiSourceLocation;
+  const facts = model.helperReceiverAliases
+    .filter(alias => alias.name === value.name
+      && alias.targetSource.start.offset <= receiverSource.start.offset
+      && locationContains(alias.context.source, receiverSource))
+    .sort((left, right) => left.targetSource.start.offset - right.targetSource.start.offset);
+  const latest = facts[facts.length - 1];
+  const descriptorIdentity = facts.some(alias =>
+    (alias.status === 'bound' || alias.status === 'preserved')
+      && alias.callSource
+      && locationsEqual(alias.callSource, value.aliasSource as X4UiSourceLocation));
+  if (!latest || (latest.status !== 'bound' && latest.status !== 'preserved') || !descriptorIdentity) {
+    return 'aliased numeric Helper receiver is not an active bound or preserved rawget identity';
+  }
+  return undefined;
+};
+
+interface NumericExpressionSourceAstNode {
+  readonly type?: unknown;
+  readonly range?: unknown;
+  readonly operator?: unknown;
+  readonly name?: unknown;
+  readonly value?: unknown;
+  readonly indexer?: unknown;
+  readonly base?: unknown;
+  readonly identifier?: unknown;
+  readonly argument?: unknown;
+  readonly expression?: unknown;
+  readonly left?: unknown;
+  readonly right?: unknown;
+  readonly [key: string]: unknown;
+}
+
+interface NumericExpressionSourceAstIndex {
+  readonly sourceText: string;
+  readonly nodesByRange: ReadonlyMap<string, readonly NumericExpressionSourceAstNode[]>;
+  readonly error?: string;
+}
+
+const numericExpressionSourceAstCache = new WeakMap<X4UiCallModel, NumericExpressionSourceAstIndex>();
+
+const sourceAstRange = (node: NumericExpressionSourceAstNode): readonly [number, number] | undefined => {
+  if (!Array.isArray(node.range)
+    || node.range.length !== 2
+    || !Number.isSafeInteger(node.range[0])
+    || !Number.isSafeInteger(node.range[1])
+    || node.range[0] < 0
+    || node.range[1] < node.range[0]) return undefined;
+  return [node.range[0], node.range[1]];
+};
+
+const sourceAstRangeKey = (start: number, end: number): string => `${start}:${end}`;
+
+const numericExpressionSourceAstIndex = (model: X4UiCallModel): NumericExpressionSourceAstIndex => {
+  const cached = numericExpressionSourceAstCache.get(model);
+  if (cached?.sourceText === model.file.text) return cached;
+  try {
+    const ast = parse(model.file.text, {
+      comments: false,
+      locations: true,
+      ranges: true,
+      scope: true,
+      luaVersion: '5.2',
+    }) as unknown as NumericExpressionSourceAstNode;
+    const mutableNodes = new Map<string, NumericExpressionSourceAstNode[]>();
+    const seen = new Set<object>();
+    const visit = (value: unknown): void => {
+      if (Array.isArray(value)) {
+        value.forEach(visit);
+        return;
+      }
+      if (!isObject(value) || seen.has(value)) return;
+      seen.add(value);
+      const node = value as NumericExpressionSourceAstNode;
+      const range = sourceAstRange(node);
+      if (typeof node.type === 'string' && range) {
+        const key = sourceAstRangeKey(range[0], range[1]);
+        const nodes = mutableNodes.get(key) || [];
+        nodes.push(node);
+        mutableNodes.set(key, nodes);
+      }
+      for (const [key, child] of Object.entries(value)) {
+        if (key !== 'loc' && key !== 'range') visit(child);
+      }
+    };
+    visit(ast);
+    const index: NumericExpressionSourceAstIndex = {
+      sourceText: model.file.text,
+      nodesByRange: new Map([...mutableNodes].map(([key, nodes]) => [key, Object.freeze([...nodes])])),
+    };
+    numericExpressionSourceAstCache.set(model, index);
+    return index;
+  } catch {
+    const index: NumericExpressionSourceAstIndex = {
+      sourceText: model.file.text,
+      nodesByRange: new Map(),
+      error: 'numeric expression source could not be parsed for structural validation',
+    };
+    numericExpressionSourceAstCache.set(model, index);
+    return index;
+  }
+};
+
+const numericExpressionStructureError = (
+  descriptor: X4UiNumericExpression,
+  model: X4UiCallModel,
+): string | undefined => {
+  const index = numericExpressionSourceAstIndex(model);
+  if (index.error) return index.error;
+  const nodeMatches = (candidate: X4UiNumericExpression, nodeValue: unknown): boolean => {
+    if (!isObject(nodeValue)) return false;
+    const node = nodeValue as NumericExpressionSourceAstNode;
+    const range = sourceAstRange(node);
+    if (!range
+      || range[0] !== candidate.source.start.offset
+      || range[1] !== candidate.source.end.offset) return false;
+    switch (candidate.kind) {
+      case 'literal':
+        return node.type === 'NumericLiteral' && node.value === candidate.value;
+      case 'helper-constant': {
+        if (node.type !== 'MemberExpression' || node.indexer !== '.'
+          || !isObject(node.base) || !isObject(node.identifier)) return false;
+        const base = node.base as NumericExpressionSourceAstNode;
+        const identifier = node.identifier as NumericExpressionSourceAstNode;
+        const baseRange = sourceAstRange(base);
+        return base.type === 'Identifier'
+          && base.name === candidate.receiver.name
+          && identifier.type === 'Identifier'
+          && identifier.name === candidate.name
+          && baseRange?.[0] === candidate.receiver.source.start.offset
+          && baseRange[1] === candidate.receiver.source.end.offset;
+      }
+      case 'direct-helper-scale':
+        return node.type === 'Identifier' && node.name === candidate.identity.bindingName;
+      case 'group':
+        return node.type === 'ParenthesizedExpression'
+          && nodeMatches(candidate.operand, node.expression || node.argument);
+      case 'unary':
+        return node.type === 'UnaryExpression'
+          && node.operator === candidate.operator
+          && nodeMatches(candidate.operand, node.argument);
+      case 'binary':
+        return node.type === 'BinaryExpression'
+          && node.operator === candidate.operator
+          && nodeMatches(candidate.left, node.left)
+          && nodeMatches(candidate.right, node.right);
+      case 'or':
+        return node.type === 'LogicalExpression'
+          && node.operator === 'or'
+          && nodeMatches(candidate.left, node.left)
+          && nodeMatches(candidate.right, node.right);
+    }
+  };
+  const rootNodes = index.nodesByRange.get(sourceAstRangeKey(
+    descriptor.source.start.offset,
+    descriptor.source.end.offset,
+  )) || [];
+  return rootNodes.some(node => nodeMatches(descriptor, node))
+    ? undefined
+    : 'numeric expression structure does not match the exact source AST';
+};
+
+const numericExpressionError = (
+  descriptor: unknown,
+  value: X4UiValue,
+  model: X4UiCallModel,
+): string | undefined => {
+  try {
+    if (!isObject(descriptor)
+      || Object.getPrototypeOf(descriptor) !== Object.prototype
+      || !hasOnlyJsonDataProperties(descriptor)) return 'numeric expression descriptor is malformed';
+    const active = new Set<object>();
+    const visit = (candidate: unknown): string | undefined => {
+      if (!isObject(candidate)
+        || Object.getPrototypeOf(candidate) !== Object.prototype
+        || !hasOnlyJsonDataProperties(candidate)
+        || active.has(candidate)) return 'numeric expression node is malformed or cyclic';
+      active.add(candidate);
+      const finish = (error?: string): string | undefined => {
+        active.delete(candidate);
+        return error;
+      };
+      if (typeof candidate.kind !== 'string'
+        || typeof candidate.expression !== 'string'
+        || !sourceLocationMatchesModel(model, candidate.source, candidate.expression)) {
+        return finish('numeric expression node source does not match the model');
+      }
+      const source = candidate.source as X4UiSourceLocation;
+      switch (candidate.kind) {
+        case 'literal': {
+          if (!hasExactRecordKeys(candidate, ['kind', 'value', 'expression', 'source'])
+            || !isFiniteNumber(candidate.value)
+            || !NUMERIC_LITERAL_EXPRESSION.test(candidate.expression.trim())
+            || Number(candidate.expression.trim()) !== candidate.value) {
+            return finish('numeric literal descriptor is malformed');
+          }
+          return finish();
+        }
+        case 'helper-constant': {
+          if (!hasExactRecordKeys(candidate, ['kind', 'name', 'receiver', 'expression', 'source'])
+            || !HELPER_CONSTANT_NAMES.includes(candidate.name as X4UiLayoutHelperConstantName)) {
+            return finish('numeric Helper constant descriptor is malformed');
+          }
+          const receiverError = numericExpressionReceiverError(candidate.receiver, model);
+          if (receiverError) return finish(receiverError);
+          const receiver = candidate.receiver as Record<string, unknown>;
+          const receiverSource = receiver.source as X4UiSourceLocation;
+          if (!locationContains(source, receiverSource)) return finish('numeric Helper receiver range escapes its member expression');
+          return finish();
+        }
+        case 'direct-helper-scale': {
+          if (!hasExactRecordKeys(candidate, ['kind', 'identity', 'expression', 'source'])
+            || !isObject(candidate.identity)
+            || Object.getPrototypeOf(candidate.identity) !== Object.prototype
+            || !hasExactRecordKeys(candidate.identity, ['callName', 'callSource', 'callExpression', 'bindingName', 'bindingSource'])
+            || (candidate.identity.callName !== 'scaleX' && candidate.identity.callName !== 'scaleY')
+            || typeof candidate.identity.callExpression !== 'string'
+            || typeof candidate.identity.bindingName !== 'string'
+            || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(candidate.identity.bindingName)
+            || !sourceLocationMatchesModel(model, candidate.identity.callSource, candidate.identity.callExpression)
+            || !sourceLocationMatchesModel(model, candidate.identity.bindingSource, candidate.identity.bindingName)) {
+            return finish('direct numeric scale identity is malformed');
+          }
+          const identity = candidate.identity as unknown as X4UiDirectHelperScaleResultIdentity;
+          const syntheticValue: X4UiValue = {
+            status: 'dynamic',
+            type: 'expression',
+            expression: candidate.expression,
+            location: source,
+            directHelperScaleResult: identity,
+          };
+          if (!directHelperScaleResultIsBound(model, syntheticValue)) {
+            return finish('direct numeric scale identity is not bound to the source model');
+          }
+          return finish();
+        }
+        case 'group': {
+          if (!hasExactRecordKeys(candidate, ['kind', 'operand', 'expression', 'source'])) return finish('numeric group descriptor is malformed');
+          const error = visit(candidate.operand);
+          if (error) return finish(error);
+          if (!isObject(candidate.operand) || !locationContains(source, candidate.operand.source as X4UiSourceLocation)) {
+            return finish('numeric group operand escapes its source range');
+          }
+          return finish();
+        }
+        case 'unary': {
+          if (!hasExactRecordKeys(candidate, ['kind', 'operator', 'operand', 'expression', 'source'])
+            || (candidate.operator !== '+' && candidate.operator !== '-')) return finish('numeric unary descriptor is malformed');
+          const error = visit(candidate.operand);
+          if (error) return finish(error);
+          if (!isObject(candidate.operand) || !locationContains(source, candidate.operand.source as X4UiSourceLocation)) {
+            return finish('numeric unary operand escapes its source range');
+          }
+          return finish();
+        }
+        case 'binary': {
+          if (!hasExactRecordKeys(candidate, ['kind', 'operator', 'left', 'right', 'expression', 'source'])
+            || !NUMERIC_EXPRESSION_OPERATORS.includes(candidate.operator as typeof NUMERIC_EXPRESSION_OPERATORS[number])) {
+            return finish('numeric binary descriptor is malformed');
+          }
+          const leftError = visit(candidate.left);
+          if (leftError) return finish(leftError);
+          const rightError = visit(candidate.right);
+          if (rightError) return finish(rightError);
+          if (!isObject(candidate.left) || !isObject(candidate.right)
+            || !locationContains(source, candidate.left.source as X4UiSourceLocation)
+            || !locationContains(source, candidate.right.source as X4UiSourceLocation)
+            || (candidate.left.source as X4UiSourceLocation).start.offset > (candidate.right.source as X4UiSourceLocation).start.offset) {
+            return finish('numeric binary operands escape or reorder the source range');
+          }
+          return finish();
+        }
+        case 'or': {
+          if (!hasExactRecordKeys(candidate, ['kind', 'left', 'right', 'expression', 'source'])) return finish('numeric or descriptor is malformed');
+          const leftError = visit(candidate.left);
+          if (leftError) return finish(leftError);
+          const rightError = visit(candidate.right);
+          if (rightError) return finish(rightError);
+          if (!isObject(candidate.left) || !isObject(candidate.right)
+            || !locationContains(source, candidate.left.source as X4UiSourceLocation)
+            || !locationContains(source, candidate.right.source as X4UiSourceLocation)) {
+            return finish('numeric or operands escape the source range');
+          }
+          return finish();
+        }
+        default:
+          return finish('numeric expression operator or node kind is unsupported');
+      }
+    };
+    const rootError = visit(descriptor);
+    if (rootError) return rootError;
+    const structureError = numericExpressionStructureError(descriptor as X4UiNumericExpression, model);
+    if (structureError) return structureError;
+    const root = descriptor as Record<string, unknown>;
+    if (root.expression === value.expression && locationsEqual(root.source as X4UiSourceLocation, value.location)) return undefined;
+    const aliasName = value.expression.trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(aliasName)) return 'numeric expression root is not bound to the value use';
+    const propertyContext = model.properties.find(candidate => locationsEqual(candidate.value.location, value.location))?.context.source;
+    const bindings = model.aliases
+      .filter(candidate => candidate.name === aliasName
+        && candidate.value.numericExpression !== undefined
+        && jsonEqual(candidate.value.numericExpression, descriptor)
+        && candidate.value.expression === root.expression
+        && locationsEqual(candidate.value.location, root.source as X4UiSourceLocation)
+        && candidate.source.end.offset <= value.location.start.offset
+        && (!propertyContext || locationsEqual(candidate.context.source, propertyContext)))
+      .sort((left, right) => left.source.start.offset - right.source.start.offset);
+    const binding = bindings[bindings.length - 1];
+    if (!binding) return 'numeric expression root has no exact source binding';
+    if (model.aliases.some(candidate => candidate !== binding
+      && candidate.name === aliasName
+      && locationsEqual(candidate.context.source, binding.context.source)
+      && candidate.source.start.offset > binding.source.start.offset
+      && candidate.source.start.offset < value.location.start.offset
+      && candidate.context.reachability !== 'unreachable')) {
+      return 'numeric expression binding was reassigned before use';
+    }
+    return undefined;
+  } catch {
+    return 'numeric expression descriptor could not be safely inspected';
+  }
+};
+
 const unresolved = <T>(
   value: X4UiValue | undefined,
   category: X4UiLayoutGapCategory,
@@ -1672,7 +2072,97 @@ const sampleSourceForValue = (value: X4UiValue): X4UiSourceLocation =>
   value.directHelperScaleResult?.callSource || value.localInvocationResult?.source || value.location;
 
 const evidenceExpressionForValue = (value: X4UiValue | undefined): string | undefined =>
-  value?.localInvocationResult?.expression || value?.expression;
+  value?.numericExpression?.expression || value?.localInvocationResult?.expression || value?.expression;
+
+const resolveNumericExpression = (
+  value: X4UiValue,
+  descriptor: X4UiNumericExpression,
+  profile: X4UiLayoutProjectionProfile,
+  category: X4UiLayoutGapCategory,
+  label: string,
+  fallbackSource: X4UiSourceLocation,
+  directScaleValues: ReadonlyMap<string, DirectScaleValue> | undefined,
+  allowedScaleKinds: readonly DirectScaleValue['kind'][],
+  instanceScope: string,
+  model: X4UiCallModel,
+): Resolution<number> => {
+  const expressionGap = (expression: X4UiNumericExpression, reason: string): Resolution<number> => ({
+    gap: {
+      category,
+      status: 'unsupported',
+      expression: expression.expression,
+      reason,
+      source: cloneLocation(expression.source || fallbackSource),
+    },
+  });
+  const evaluate = (expression: X4UiNumericExpression): Resolution<number> => {
+    switch (expression.kind) {
+      case 'literal':
+        return { value: expression.value, source: cloneLocation(expression.source), provenance: 'source-literal' };
+      case 'helper-constant':
+        return {
+          value: profile.helper.constants[expression.name].value,
+          source: cloneLocation(expression.source),
+          provenance: 'source-pinned-default',
+          sourcePin: cloneDeep(profile.helper.constants[expression.name].source) as X4UiLayoutSourcePin,
+        };
+      case 'direct-helper-scale': {
+        const syntheticValue: X4UiValue = {
+          status: 'dynamic',
+          type: 'expression',
+          expression: expression.expression,
+          location: cloneLocation(expression.source),
+          directHelperScaleResult: expression.identity,
+        };
+        const directScale = directScaleForValue(directScaleValues, syntheticValue, instanceScope, model);
+        if (!directScale || !allowedScaleKinds.includes(directScale.kind)) {
+          return expressionGap(expression, `${label} uses an unavailable or disallowed direct Helper scale result`);
+        }
+        return { value: directScale.value, source: cloneLocation(directScale.source), provenance: 'direct-helper-scale' };
+      }
+      case 'group': {
+        const operand = evaluate(expression.operand);
+        if (operand.gap || operand.value === undefined) return expressionGap(expression, `${label} contains an unavailable grouped number`);
+        return { value: operand.value, source: cloneLocation(expression.source), provenance: 'source-literal' };
+      }
+      case 'unary': {
+        const operand = evaluate(expression.operand);
+        if (operand.gap || operand.value === undefined) return expressionGap(expression, `${label} contains an unavailable unary number`);
+        const result = expression.operator === '-' ? -operand.value : operand.value;
+        return Number.isFinite(result)
+          ? { value: result, source: cloneLocation(expression.source), provenance: 'source-literal' }
+          : expressionGap(expression, `${label} unary result is not finite`);
+      }
+      case 'binary': {
+        const left = evaluate(expression.left);
+        const right = evaluate(expression.right);
+        if (left.gap || right.gap || left.value === undefined || right.value === undefined) {
+          return expressionGap(expression, `${label} contains an unavailable arithmetic operand`);
+        }
+        if (expression.operator === '/' && right.value === 0) {
+          return expressionGap(expression, `${label} divides by zero`);
+        }
+        const result = expression.operator === '+' ? left.value + right.value
+          : expression.operator === '-' ? left.value - right.value
+            : expression.operator === '*' ? left.value * right.value
+              : left.value / right.value;
+        return Number.isFinite(result)
+          ? { value: result, source: cloneLocation(expression.source), provenance: 'source-literal' }
+          : expressionGap(expression, `${label} arithmetic result is not finite`);
+      }
+      case 'or': {
+        const left = evaluate(expression.left);
+        if (left.gap || left.value === undefined) return expressionGap(expression, `${label} has an unavailable Lua or condition`);
+        // A finite Lua number, including zero, is truthy.  The right branch is
+        // retained for provenance but is not evaluated when the left wins.
+        return { value: left.value, source: cloneLocation(expression.source), provenance: 'source-literal' };
+      }
+      default:
+        return expressionGap(expression, `${label} contains an unsupported numeric expression node`);
+    }
+  };
+  return evaluate(descriptor);
+};
 
 const resolveNumber = (
   value: X4UiValue | undefined,
@@ -1687,6 +2177,35 @@ const resolveNumber = (
   instanceScope = '',
   model?: X4UiCallModel,
 ): Resolution<number> => {
+  if (value?.numericExpression !== undefined) {
+    if (!model) {
+      return unresolved(value, category, `${label} numeric expression has no source model`, fallbackSource);
+    }
+    const descriptorError = numericExpressionError(value.numericExpression, value, model);
+    if (descriptorError) {
+      return {
+        gap: {
+          category,
+          status: 'unsupported',
+          expression: value.numericExpression.expression,
+          reason: `${label} numeric expression rejected: ${descriptorError}`,
+          source: cloneLocation(value.numericExpression.source),
+        },
+      };
+    }
+    return resolveNumericExpression(
+      value,
+      value.numericExpression,
+      profile,
+      category,
+      label,
+      fallbackSource,
+      directScaleValues,
+      allowedScaleKinds,
+      instanceScope,
+      model,
+    );
+  }
   if (value?.status === 'static' && value.type === 'number' && isFiniteNumber(value.value)) {
     return { value: value.value, source: cloneLocation(value.location), provenance: 'source-literal' };
   }
@@ -2556,6 +3075,7 @@ const PROPERTY_SAMPLE_TYPES: Readonly<Record<string, X4UiLayoutScalarType | unde
 });
 
 const isSampleableValue = (value: X4UiValue, allowLocalInvocationResults: boolean): boolean => {
+  if (value.numericExpression) return false;
   if (value.localInvocationResult && allowLocalInvocationResults) {
     return value.status !== 'static'
       && !value.reference
@@ -4395,9 +4915,88 @@ const schemaDirectHelperScaleResult = (value: unknown, path: string): ClosedSche
   return undefined;
 };
 
+const schemaNumericHelperReceiver = (value: unknown, path: string): ClosedSchemaError => {
+  const objectError = schemaObject(value, path, ['name', 'origin', 'source'], ['aliasSource']);
+  if (objectError) return objectError;
+  const receiver = value as Record<string, unknown>;
+  return schemaString(receiver.name, `${path}.name`, true)
+    || schemaEnum(receiver.origin, `${path}.origin`, ['global', 'alias'])
+    || schemaSource(receiver.source, `${path}.source`)
+    || schemaOptional(receiver, 'aliasSource', schemaSource, path);
+};
+
+const schemaNumericExpression = (value: unknown, path: string): ClosedSchemaError => {
+  if (!isObject(value)) return `${path} must be a numeric expression descriptor`;
+  const candidate = value as Record<string, unknown>;
+  if (candidate.kind === 'literal') {
+    const objectError = schemaObject(value, path, ['kind', 'value', 'expression', 'source']);
+    if (objectError) return objectError;
+    return schemaEnum(candidate.kind, `${path}.kind`, ['literal'])
+      || schemaNumber(candidate.value, `${path}.value`)
+      || schemaString(candidate.expression, `${path}.expression`)
+      || schemaSource(candidate.source, `${path}.source`);
+  }
+  if (candidate.kind === 'helper-constant') {
+    const objectError = schemaObject(value, path, ['kind', 'name', 'receiver', 'expression', 'source']);
+    if (objectError) return objectError;
+    return schemaEnum(candidate.kind, `${path}.kind`, ['helper-constant'])
+      || schemaEnum(candidate.name, `${path}.name`, [
+        'standardTextHeight', 'standardButtonHeight', 'borderSize', 'viewWidth', 'viewHeight',
+      ])
+      || schemaNumericHelperReceiver(candidate.receiver, `${path}.receiver`)
+      || schemaString(candidate.expression, `${path}.expression`)
+      || schemaSource(candidate.source, `${path}.source`);
+  }
+  if (candidate.kind === 'direct-helper-scale') {
+    const objectError = schemaObject(value, path, ['kind', 'identity', 'expression', 'source']);
+    if (objectError) return objectError;
+    if (!isObject(candidate.identity)) return `${path}.identity must be a direct Helper scale identity`;
+    return schemaEnum(candidate.kind, `${path}.kind`, ['direct-helper-scale'])
+      || schemaDirectHelperScaleResult(candidate.identity, `${path}.identity`)
+      || (candidate.identity.callName === 'scaleX' || candidate.identity.callName === 'scaleY'
+        ? undefined
+        : `${path}.identity.callName must be scaleX or scaleY`)
+      || schemaString(candidate.expression, `${path}.expression`)
+      || schemaSource(candidate.source, `${path}.source`);
+  }
+  if (candidate.kind === 'group') {
+    const objectError = schemaObject(value, path, ['kind', 'operand', 'expression', 'source']);
+    if (objectError) return objectError;
+    return schemaEnum(candidate.kind, `${path}.kind`, ['group'])
+      || schemaNumericExpression(candidate.operand, `${path}.operand`)
+      || schemaString(candidate.expression, `${path}.expression`)
+      || schemaSource(candidate.source, `${path}.source`);
+  }
+  if (candidate.kind === 'unary') {
+    const objectError = schemaObject(value, path, ['kind', 'operator', 'operand', 'expression', 'source']);
+    if (objectError) return objectError;
+    return schemaEnum(candidate.kind, `${path}.kind`, ['unary'])
+      || schemaEnum(candidate.operator, `${path}.operator`, ['+', '-'])
+      || schemaNumericExpression(candidate.operand, `${path}.operand`)
+      || schemaString(candidate.expression, `${path}.expression`)
+      || schemaSource(candidate.source, `${path}.source`);
+  }
+  if (candidate.kind === 'binary' || candidate.kind === 'or') {
+    const required = candidate.kind === 'binary'
+      ? ['kind', 'operator', 'left', 'right', 'expression', 'source']
+      : ['kind', 'left', 'right', 'expression', 'source'];
+    const objectError = schemaObject(value, path, required);
+    if (objectError) return objectError;
+    return schemaEnum(candidate.kind, `${path}.kind`, ['binary', 'or'])
+      || (candidate.kind === 'binary'
+        ? schemaEnum(candidate.operator, `${path}.operator`, ['+', '-', '*', '/'])
+        : undefined)
+      || schemaNumericExpression(candidate.left, `${path}.left`)
+      || schemaNumericExpression(candidate.right, `${path}.right`)
+      || schemaString(candidate.expression, `${path}.expression`)
+      || schemaSource(candidate.source, `${path}.source`);
+  }
+  return `${path}.kind is invalid`;
+};
+
 const schemaValue = (value: unknown, path: string, allowExpandedSourceMismatch = false): ClosedSchemaError => {
   const objectError = schemaObject(value, path, ['status', 'type', 'expression', 'location'], [
-    'value', 'reference', 'sourceLiteral', 'reason', 'symbol', 'parameter', 'localInvocationResult', 'directHelperScaleResult',
+    'value', 'reference', 'sourceLiteral', 'reason', 'symbol', 'parameter', 'localInvocationResult', 'directHelperScaleResult', 'numericExpression',
   ]);
   if (objectError) return objectError;
   const candidate = value as Record<string, unknown>;
@@ -4418,7 +5017,8 @@ const schemaValue = (value: unknown, path: string, allowExpandedSourceMismatch =
         || schemaSource(result.source, `${childPath}.source`)
         || schemaString(result.expression, `${childPath}.expression`);
     }, path)
-    || schemaOptional(candidate, 'directHelperScaleResult', schemaDirectHelperScaleResult, path);
+    || schemaOptional(candidate, 'directHelperScaleResult', schemaDirectHelperScaleResult, path)
+    || schemaOptional(candidate, 'numericExpression', schemaNumericExpression, path);
   if (errors) return errors;
   const valueType = candidate.type;
   const valueStatus = candidate.status;
@@ -7147,6 +7747,7 @@ export function projectX4UiLayoutProgram(
       || isCallReachabilityBlocked(call)
       || !isHelperReceiver(call)
       || call.semantics.dataFlow) continue;
+    const instanceScope = call.expansionInstance?.ancestry.join('>') || '';
     const scale = call.semantics.scale;
     const enabled = scale?.enabled
       ? resolveBoolean(scale.enabled, 'scale', `${call.name} enabled`, call.source)
@@ -7154,18 +7755,41 @@ export function projectX4UiLayoutProgram(
     let result: LayoutResult<number> | undefined;
     if (call.name === 'scaleFont') {
       const font = resolveString(scale?.fontname, 'scale', 'scaleFont font name', call.source);
-      const fontSize = resolveNumber(scale?.fontsize, profileValue, 'scale', 'scaleFont font size', call.source);
+      const fontSize = resolveNumber(
+        scale?.fontsize,
+        profileValue,
+        'scale',
+        'scaleFont font size',
+        call.source,
+        undefined,
+        undefined,
+        undefined,
+        ['scaleX', 'scaleY'],
+        instanceScope,
+        model,
+      );
       if (font.value === undefined || fontSize.value === undefined || font.gap || fontSize.gap || enabled.gap) continue;
       result = scaleFont(font.value, fontSize.value, profileValue.metrics.uiScale, enabled.value);
     } else {
-      const input = resolveNumber(scale?.input, profileValue, 'scale', `${call.name} input`, call.source);
+      const input = resolveNumber(
+        scale?.input,
+        profileValue,
+        'scale',
+        `${call.name} input`,
+        call.source,
+        undefined,
+        undefined,
+        undefined,
+        ['scaleX', 'scaleY'],
+        instanceScope,
+        model,
+      );
       if (input.value === undefined || input.gap || enabled.gap) continue;
       result = call.name === 'scaleX'
         ? scaleX(input.value, profileValue.metrics.uiScale, enabled.value)
         : scaleY(input.value, profileValue.metrics.uiScale, enabled.value);
     }
     if (result.status === 'ok') {
-      const instanceScope = call.expansionInstance?.ancestry.join('>') || '';
       directScaleValues.set(scopedLocationKey(call.source, instanceScope), {
         value: result.value,
         kind: call.name,
@@ -8941,7 +9565,19 @@ export function projectX4UiLayoutProgram(
       let scaleResult: LayoutResult<number> | undefined;
       if (call.name === 'scaleFont') {
         const font = resolveString(scale?.fontname, 'scale', 'scaleFont font name', call.source);
-        const fontSize = resolveNumber(scale?.fontsize, profileValue, 'scale', 'scaleFont font size', call.source);
+        const fontSize = resolveNumber(
+          scale?.fontsize,
+          profileValue,
+          'scale',
+          'scaleFont font size',
+          call.source,
+          undefined,
+          undefined,
+          undefined,
+          ['scaleX', 'scaleY'],
+          call.expansionInstance?.ancestry.join('>') || '',
+          model,
+        );
         const enabled = scale?.enabled ? resolveBoolean(scale.enabled, 'scale', 'scaleFont enabled', call.source) : { value: undefined };
         for (const resolution of [font, fontSize, enabled]) {
           appendGapForResolution(operation, resolution, undefined);
@@ -8951,7 +9587,19 @@ export function projectX4UiLayoutProgram(
         if (font.value === undefined || fontSize.value === undefined || font.gap || fontSize.gap || enabled.gap) hasGap = true;
         if (!hasGap) scaleResult = scaleFont(font.value, fontSize.value, profileValue.metrics.uiScale, enabled.value);
       } else {
-        const input = resolveNumber(scale?.input, profileValue, 'scale', `${call.name} input`, call.source);
+        const input = resolveNumber(
+          scale?.input,
+          profileValue,
+          'scale',
+          `${call.name} input`,
+          call.source,
+          undefined,
+          undefined,
+          undefined,
+          ['scaleX', 'scaleY'],
+          call.expansionInstance?.ancestry.join('>') || '',
+          model,
+        );
         const enabled = scale?.enabled ? resolveBoolean(scale.enabled, 'scale', `${call.name} enabled`, call.source) : { value: undefined };
         for (const resolution of [input, enabled]) {
           appendGapForResolution(operation, resolution, undefined);

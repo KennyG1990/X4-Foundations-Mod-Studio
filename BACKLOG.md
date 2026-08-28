@@ -74,6 +74,20 @@ local/tracking/direct-remote parity. GitHub #41 comment `5455192771`, Notion pag
 `3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Drive revision
 `AIroW35ORAD2b16wtqsH8JNjJ03uib5jxFvleX03tDcvhkOVlZmEgQmddPsyOveZSskE7fp54ySMVePGX8lvtV7cve4MvkxLj-v86YevGGag`
 were written and read back; the issue remains open.
+**Source-proven numeric frame geometry 2026-08-28 — BOUNDED VERIFIED / FULL B119 PARTIAL:** The existing call-model
+and layout-program owners now retain and independently revalidate a deliberately closed numeric-expression grammar from
+exact Lua source, then resolve it only through profile-pinned Helper constants and bound `scaleX` / `scaleY` results.
+The unchanged real `pipeline_test.lua` is byte-identical at SHA-256 `C1D9CD85...718E`; Forge now projects exact frame
+facts `695/322/530/436` at `1920x1080` scale `1` and `940.5/404/663/545` at `2544x1353` scale `1.25`, with both
+program/evidence pairs valid. Preview samples cannot override these facts, `scaleFont` cannot become geometry, and the
+mutation matrix rejects unknown/reassigned/conditional/unsupported/non-finite, source-range, structural, schema, and
+same-context decoy forgeries. Final focused gates are Call Model `72/72`, Layout `641/641`, Scene `153/153` with
+MENU/HUB/COMM `3/3`; runtime oracles are `134/134`; controlled bundled-Node E2E is `104/104` with zero flakes and
+`treeGone=true`; complete precommit, full lint (zero errors), and the `1,848`-module production build pass. The first
+default-Node E2E remains retained red evidence after a retry and later `0xC0000409` incomplete report. Record:
+`docs/plans/2026-08-28-b119-source-proven-numeric-geometry.md`. This closes the prior dynamic-frame-fact gap, not exact
+Forge/X4 pixel parity, arbitrary C++ acceptance, remaining brief coverage, AI Influence reconstruction, or OpenVSX
+release. B119 and GitHub #41 remain `in_progress / PARTIAL`.
 **AI Influence `1b` visual reconciliation 2026-08-19 — REPRODUCED GUIDE CONFLICT:** The source pixels were re-opened
 and immutable hashes/dimensions are frozen in the plan. Forge's existing cockpit preset projects the measured guides to
 `y=1134.72`, `y=1065.6`, and `x=1699.84` at `2560x1440`; the supplied `1b` choice/input geometry intersects all three.

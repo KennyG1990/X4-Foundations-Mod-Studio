@@ -6913,9 +6913,9 @@ test('B119 repaired: portable consumer-aware MENU/HUB/COMM owner shapes cross Sc
     COMM: '88FAB05A79EF33CB28E098081EA6A5E29E8F3B7C4150C39BF38913C51C063511',
   });
   const configuredSessionReceiptConstants = Object.freeze([
-    { label: 'MENU', sourceSha256: configuredSourceHashes.MENU, samples: 16, consumed: 11, notConsumed: 5, operations: 66, appliedOperations: 27, cells: 88, gaps: 95 },
-    { label: 'HUB', sourceSha256: configuredSourceHashes.HUB, samples: 11, consumed: 9, notConsumed: 2, operations: 18, appliedOperations: 11, cells: 4, gaps: 16 },
-    { label: 'COMM', sourceSha256: configuredSourceHashes.COMM, samples: 5, consumed: 5, notConsumed: 0, operations: 14, appliedOperations: 12, cells: 3, gaps: 11 },
+    { label: 'MENU', sourceSha256: configuredSourceHashes.MENU, samples: 14, consumed: 9, notConsumed: 5, operations: 66, appliedOperations: 27, cells: 88, gaps: 97 },
+    { label: 'HUB', sourceSha256: configuredSourceHashes.HUB, samples: 9, consumed: 7, notConsumed: 2, operations: 18, appliedOperations: 11, cells: 4, gaps: 16 },
+    { label: 'COMM', sourceSha256: configuredSourceHashes.COMM, samples: 3, consumed: 3, notConsumed: 0, operations: 14, appliedOperations: 12, cells: 3, gaps: 11 },
   ] as const);
   assert(configuredSessionReceiptConstants.length === 3 && configuredSessionReceiptConstants.every(entry => /^[A-F0-9]{64}$/.test(entry.sourceSha256)), 'B119 configured source receipt constants must retain all three source hashes');
   console.log(`B119 configured-session receipt constants only: ${JSON.stringify(configuredSessionReceiptConstants)}`);
@@ -7299,6 +7299,50 @@ test('B119 direct Helper scale aliases cross the Scene structure boundary', () =
   assert(sceneResult.scene.gameTruth === 'Not verified in game' && sceneResult.verification.gameVerified === false, 'direct Helper scale fixture must remain Not verified in game');
 });
 
+test('B119 exact source formula crosses the existing Scene consumer with a finite frame rect', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "B119ExactFormula", layer = 1 }',
+    'local width = Helper.scaleX(530)',
+    'local height = Helper.scaleY(436)',
+    'local x = ((Helper.viewWidth or 1920) - width) / 2',
+    'local y = ((Helper.viewHeight or 1080) - height) / 2',
+    'local frame = Helper.createFrameHandle(menu, { x = x, y = y, width = width, height = height })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'table:setColWidth(1, 100, false)',
+    'local row = table:addRow(false, {})',
+    'row[1]:createText("exact formula", { height = 12, minRowHeight = 10 })',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-exact-formula-scene.lua', profile => ({
+    ...profile,
+    id: 'b119-exact-formula-scene-profile',
+    frame: { width: 1920, height: 1080 },
+    helper: {
+      ...profile.helper,
+      constants: {
+        ...profile.helper.constants,
+        viewWidth: { value: 1920, source: pin(707) },
+        viewHeight: { value: 1080, source: pin(708) },
+      },
+    },
+  }));
+  assert(projected.program !== undefined && projected.profile !== undefined && projected.result !== undefined && 'program' in projected.result && projected.result.program !== undefined && 'evidenceAuthority' in projected.result && projected.result.evidenceAuthority !== undefined, 'exact formula fixture must issue a producer authority pair');
+  const result = projected.result as X4UiLayoutProgramResult;
+  const authority = producerAuthority(result);
+  const pair = validateX4UiLayoutEvidencePair(projected.program, authority);
+  const stage = diagnoseX4UiSceneStructureForTest(projected.program, authority);
+  const sceneResult = buildX4UiScene(result, corpus, projected.profile);
+  const frameRect = sceneResult.status === 'refused' ? undefined : sceneResult.scene.frames[0]?.rect;
+  assert(pair.valid, `exact formula producer/evidence pair must validate: ${JSON.stringify(pair)}`);
+  assert(stage === undefined, `exact formula fixture refused at Scene structure stage ${String(stage)}`);
+  assert(sceneResult.status !== 'refused' && frameRect !== undefined
+    && Number.isFinite(frameRect.x) && Number.isFinite(frameRect.y)
+    && Number.isFinite(frameRect.width) && Number.isFinite(frameRect.height)
+    && frameRect.x === 695 && frameRect.y === 322
+    && frameRect.width === 530 && frameRect.height === 436,
+  `exact formula Scene frame rect must be finite and exact: ${JSON.stringify({ status: sceneResult.status, frameRect })}`);
+  assert(sceneResult.scene.gameTruth === 'Not verified in game' && sceneResult.verification.gameVerified === false, 'exact formula Scene fixture must remain Not verified in game');
+});
+
 test('B119 direct Helper scale calls accept Lua whitespace at the Scene boundary', () => {
   const projected = rawProjectionFor([
     'local menu = { name = "DirectHelperScaleWhitespace", layer = 1 }',
@@ -7569,9 +7613,9 @@ const b119ConfiguredSourceSpecs = [
       _choiceY: 734,
       _readSpan: 6,
     },
-    expectedLayout: { samples: 16, consumed: 11, notConsumed: 5, operations: 66, applied: 27, frames: 1, tables: 4, rows: 9, cells: 88, gaps: 95 },
-    expectedScene: { frames: 1, tables: 4, rows: 2, cells: 16, widgets: 3, texts: 5, glyphs: 7, gaps: 141, drawable: { x: 0, y: 0, width: 1920, height: 1080 } },
-    expectedPaint: { commands: 207, diagnostics: 169 },
+    expectedLayout: { samples: 14, consumed: 9, notConsumed: 5, operations: 66, applied: 27, frames: 1, tables: 4, rows: 9, cells: 88, gaps: 97 },
+    expectedScene: { frames: 1, tables: 4, rows: 2, cells: 16, widgets: 3, texts: 5, glyphs: 7, gaps: 143, drawable: { x: 0, y: 0, width: 1920, height: 1080 } },
+    expectedPaint: { commands: 209, diagnostics: 171 },
   },
   {
     label: 'HUB',
@@ -7580,7 +7624,7 @@ const b119ConfiguredSourceSpecs = [
     targetName: 'hub.display',
     sourceSha256: '657476EAD08229977E1F2A69079FFDCAB56D908B72AF5C87BD4F4734DCCB8C4F',
     consumerNumbers: { vw: 1920, vh: 1080, x: 27, my: 27, w: 1866, '#TABS': 2, y: 62, i: 1 },
-    expectedLayout: { samples: 11, consumed: 9, notConsumed: 2, operations: 18, applied: 11, frames: 1, tables: 2, rows: 2, cells: 4, gaps: 16 },
+    expectedLayout: { samples: 9, consumed: 7, notConsumed: 2, operations: 18, applied: 11, frames: 1, tables: 2, rows: 2, cells: 4, gaps: 16 },
     expectedScene: { frames: 1, tables: 2, rows: 2, cells: 4, widgets: 0, texts: 0, glyphs: 0, gaps: 31, drawable: { x: 0, y: 0, width: 1920, height: 1080 } },
     expectedPaint: { commands: 46, diagnostics: 37 },
   },
@@ -7591,7 +7635,7 @@ const b119ConfiguredSourceSpecs = [
     targetName: 'comm.display',
     sourceSha256: '88FAB05A79EF33CB28E098081EA6A5E29E8F3B7C4150C39BF38913C51C063511',
     consumerNumbers: { vw: 1920, vh: 1080, mx: 27, my: 27, 'vw - mx * 2': 1866 },
-    expectedLayout: { samples: 5, consumed: 5, notConsumed: 0, operations: 14, applied: 12, frames: 1, tables: 1, rows: 1, cells: 3, gaps: 11 },
+    expectedLayout: { samples: 3, consumed: 3, notConsumed: 0, operations: 14, applied: 12, frames: 1, tables: 1, rows: 1, cells: 3, gaps: 11 },
     expectedScene: { frames: 1, tables: 1, rows: 1, cells: 3, widgets: 0, texts: 0, glyphs: 0, gaps: 23, drawable: { x: 0, y: 0, width: 1920, height: 1080 } },
     expectedPaint: { commands: 35, diagnostics: 29 },
   },

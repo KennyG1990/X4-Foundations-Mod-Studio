@@ -3254,7 +3254,9 @@ const run = (): { readonly allPassed: boolean; readonly passed: number; readonly
     'function menu.createFrame()',
     '  local width = Helper.scaleX(530)',
     '  local height = Helper.scaleY(436)',
-    '  menu.frame = Helper.createFrameHandle(menu, { x = 0, y = 0, width = width, height = height, layer = menu.layer })',
+    '  local x = ((Helper.viewWidth or 1920) - width) / 2',
+    '  local y = ((Helper.viewHeight or 1080) - height) / 2',
+    '  menu.frame = Helper.createFrameHandle(menu, { x = x, y = y, width = width, height = height, layer = menu.layer })',
     '  local ftable = menu.frame:addTable(2, { tabOrder = 1, width = width, highlightMode = "off" })',
     '  local row',
     '  row = ftable:addRow(false, {})',
@@ -3275,13 +3277,43 @@ const run = (): { readonly allPassed: boolean; readonly passed: number; readonly
   const pipelineModel = buildX4UiCallModel(input(pipelineSource, 'selftest/b119-pipeline-test.lua'));
   const pipelineTarget = namedTarget(pipelineModel, 'menu.createFrame');
   const pipelineProfile = profileFor(pipelineModel, { minTextHeight: 7 });
-  const pipelineAtOneResult = projectX4UiLayoutProgram(pipelineModel, pipelineTarget, pipelineProfile);
+  const pipelineAt1920Profile: X4UiLayoutProjectionProfile = {
+    ...pipelineProfile,
+    id: 'selftest-b119-1920x1080',
+    frame: { width: 1920, height: 1080 },
+    helper: {
+      ...pipelineProfile.helper,
+      constants: {
+        ...pipelineProfile.helper.constants,
+        viewWidth: pin(1920, 707),
+        viewHeight: pin(1080, 708),
+      },
+    },
+  };
+  const pipelineAt125Profile: X4UiLayoutProjectionProfile = {
+    ...pipelineAt1920Profile,
+    id: 'selftest-b119-2544x1353-scale125',
+    frame: { width: 2544, height: 1353 },
+    metrics: { ...pipelineAt1920Profile.metrics, uiScale: 1.25 },
+    helper: {
+      ...pipelineAt1920Profile.helper,
+      constants: {
+        ...pipelineAt1920Profile.helper.constants,
+        viewWidth: pin(2544, 707),
+        viewHeight: pin(1353, 708),
+      },
+    },
+  };
+  const pipelineAtOneResult = projectX4UiLayoutProgram(pipelineModel, pipelineTarget, pipelineAt1920Profile);
   const pipelineAtOneProgram = resultProgram(pipelineAtOneResult);
   const pipelineAtOneAuthority = evidenceAuthorityOf(pipelineAtOneResult);
+  const pipelineAt125Result = projectX4UiLayoutProgram(pipelineModel, pipelineTarget, pipelineAt125Profile);
+  const pipelineAt125Program = resultProgram(pipelineAt125Result);
+  const pipelineAt125Authority = evidenceAuthorityOf(pipelineAt125Result);
   const pipelineScaledResult = projectX4UiLayoutProgram(
     pipelineModel,
     pipelineTarget,
-    { ...pipelineProfile, metrics: { ...pipelineProfile.metrics, uiScale: 1.4 } },
+    { ...pipelineAt1920Profile, id: 'selftest-b119-1920x1080-scale140', metrics: { ...pipelineAt1920Profile.metrics, uiScale: 1.4 } },
   );
   const pipelineScaledProgram = resultProgram(pipelineScaledResult);
   const pipelineScaledAuthority = evidenceAuthorityOf(pipelineScaledResult);
@@ -3298,6 +3330,74 @@ const run = (): { readonly allPassed: boolean; readonly passed: number; readonly
   const pipelineScaledSchema = pipelineScaledProgram && pipelineScaledAuthority
     ? safeSchemaPairValidation(pipelineScaledProgram, pipelineScaledAuthority)
     : { threw: false, valid: false, reason: 'scaled pipeline program or authority missing' };
+  const pipelineAt125Schema = pipelineAt125Program && pipelineAt125Authority
+    ? safeSchemaPairValidation(pipelineAt125Program, pipelineAt125Authority)
+    : { threw: false, valid: false, reason: '1.25 pipeline program or authority missing' };
+  const pipelineXExpression = '((Helper.viewWidth or 1920) - width) / 2';
+  const pipelineYExpression = '((Helper.viewHeight or 1080) - height) / 2';
+  const pipelineFormulaSampleEntries = pipelineAtOneProgram?.sampleCatalog.entries.filter(entry =>
+    entry.consumers.some(consumer =>
+      consumer.operationKind === 'createFrameHandle' && (consumer.field === 'x' || consumer.field === 'y'))) || [];
+  const pipelineFormulaSampleAttempt = pipelineAtOneProgram
+    ? projectX4UiLayoutProgram(
+      pipelineModel,
+      pipelineTarget,
+      pipelineAt1920Profile,
+      {
+        catalogId: pipelineAtOneProgram.sampleCatalog.id,
+        source: pipelineAtOneProgram.sampleCatalog.sourceIdentity,
+        values: pipelineFormulaSampleEntries.length > 0
+          ? pipelineFormulaSampleEntries.map(entry => ({ id: entry.id, value: -999 }))
+          : [{ id: 'preview-sample:forged-source-proven-expression', value: -999 }],
+      },
+    )
+    : undefined;
+  const pipelineFormulaSampleAttemptProgram = pipelineFormulaSampleAttempt
+    ? resultProgram(pipelineFormulaSampleAttempt)
+    : undefined;
+  const exactPipelineFact = (
+    program: X4UiLayoutProgram | undefined,
+    field: 'x' | 'y',
+    expectedValue: number,
+    expectedExpression: string,
+  ): boolean => {
+    const fact = program?.frames[0]?.descriptorFacts[field];
+    return fact?.status === 'known'
+      && fact.value === expectedValue
+       && fact.provenance === 'source-literal'
+      && fact.expression === expectedExpression
+      && pipelineSource.slice(fact.source.start.offset, fact.source.end.offset) === expectedExpression;
+  };
+  check('B119 exact formula resolves 1920x1080 frame geometry with exact source provenance',
+    pipelineAtOneResult.status !== 'refused'
+      && exactPipelineFact(pipelineAtOneProgram, 'x', 695, pipelineXExpression)
+      && exactPipelineFact(pipelineAtOneProgram, 'y', 322, pipelineYExpression)
+      && factValue(pipelineAtOneProgram?.frames[0].descriptorFacts.width) === 530
+      && factValue(pipelineAtOneProgram?.frames[0].descriptorFacts.height) === 436,
+    detail({ status: pipelineAtOneResult.status, frame: pipelineAtOneProgram?.frames[0].descriptorFacts }));
+  check('B119 exact formula applies shipped 1.25 rounding at 2544x1353',
+    pipelineAt125Result.status !== 'refused'
+      && exactPipelineFact(pipelineAt125Program, 'x', 940.5, pipelineXExpression)
+      && exactPipelineFact(pipelineAt125Program, 'y', 404, pipelineYExpression)
+      && factValue(pipelineAt125Program?.frames[0].descriptorFacts.width) === 663
+      && factValue(pipelineAt125Program?.frames[0].descriptorFacts.height) === 545
+      && pipelineAt125Schema.threw === false
+      && pipelineAt125Schema.valid === true,
+    detail({ status: pipelineAt125Result.status, frame: pipelineAt125Program?.frames[0].descriptorFacts, validation: pipelineAt125Schema }));
+  check('B119 source-proven numeric expressions are absent from preview sample authority',
+    pipelineFormulaSampleEntries.length === 0
+      && pipelineAtOneProgram?.previewSampleBindings.every(binding =>
+        !pipelineFormulaSampleEntries.some(entry => entry.id === binding.id)) === true
+      && pipelineFormulaSampleAttempt?.status === 'refused'
+      && refusalCode(pipelineFormulaSampleAttempt) === 'invalid-samples'
+      && pipelineFormulaSampleAttemptProgram === undefined,
+    detail({
+      catalogEntries: pipelineFormulaSampleEntries,
+      attemptStatus: pipelineFormulaSampleAttempt?.status,
+      refusal: pipelineFormulaSampleAttempt && refusalCode(pipelineFormulaSampleAttempt),
+      bindings: pipelineFormulaSampleAttemptProgram?.previewSampleBindings,
+      frame: pipelineFormulaSampleAttemptProgram?.frames[0]?.descriptorFacts,
+    }));
   check('B119 exact pipeline local scale results project one frame/table, six rows, and twelve owned base cells',
     pipelineAtOneResult.status !== 'refused'
       && pipelineAtOneProgram !== undefined
@@ -3397,6 +3497,74 @@ const run = (): { readonly allPassed: boolean; readonly passed: number; readonly
     'local width = H.scaleX(530)',
     'local frame = Helper.createFrameHandle(menu, { width = width, height = 80 })',
   ].join('\n'), 'selftest/b119-pipeline-helper-alias.lua');
+  const unknownExpressionPipeline = projectPipelineNegative([
+    'local menu = { name = "PipelineUnknownExpression", layer = 1 }',
+    'local width = Helper.scaleX(530)',
+    'local x = ((runtimeViewWidth or 1920) - width) / 2',
+    'local frame = Helper.createFrameHandle(menu, { x = x, width = width, height = 80 })',
+  ].join('\n'), 'selftest/b119-pipeline-unknown-expression.lua');
+  const reassignedExpressionPipeline = projectPipelineNegative([
+    'local menu = { name = "PipelineReassignedExpression", layer = 1 }',
+    'local width = Helper.scaleX(530)',
+    'local x = ((Helper.viewWidth or 1920) - width) / 2',
+    'x = getX()',
+    'local frame = Helper.createFrameHandle(menu, { x = x, width = width, height = 80 })',
+  ].join('\n'), 'selftest/b119-pipeline-reassigned-expression.lua');
+  const branchedExpressionPipeline = projectPipelineNegative([
+    'local menu = { name = "PipelineBranchedExpression", layer = 1 }',
+    'local width = Helper.scaleX(530)',
+    'local x = ((Helper.viewWidth or 1920) - width) / 2',
+    'if pending then x = getX() end',
+    'local frame = Helper.createFrameHandle(menu, { x = x, width = width, height = 80 })',
+  ].join('\n'), 'selftest/b119-pipeline-branched-expression.lua');
+  const unsupportedOperatorPipeline = projectPipelineNegative([
+    'local menu = { name = "PipelineUnsupportedOperator", layer = 1 }',
+    'local width = Helper.scaleX(530)',
+    'local x = ((Helper.viewWidth and 1920) - width) / 2',
+    'local frame = Helper.createFrameHandle(menu, { x = x, width = width, height = 80 })',
+  ].join('\n'), 'selftest/b119-pipeline-unsupported-operator.lua');
+  const divideByZeroPipeline = projectPipelineNegative([
+    'local menu = { name = "PipelineDivideByZero", layer = 1 }',
+    'local width = Helper.scaleX(530)',
+    'local x = ((Helper.viewWidth or 1920) - width) / 0',
+    'local frame = Helper.createFrameHandle(menu, { x = x, width = width, height = 80 })',
+  ].join('\n'), 'selftest/b119-pipeline-divide-by-zero.lua');
+  const nonFinitePipeline = projectPipelineNegative([
+    'local menu = { name = "PipelineNonFinite", layer = 1 }',
+    'local x = 1e308 * 1e308',
+    'local frame = Helper.createFrameHandle(menu, { x = x, width = 80, height = 80 })',
+  ].join('\n'), 'selftest/b119-pipeline-nonfinite.lua');
+  const commentedExpressionPipeline = projectPipelineNegative([
+    'local menu = { name = "PipelineCommentedExpression", layer = 1 }',
+    'local width = Helper.scaleX(530)',
+    'local x = ((Helper --[[ source-proven ]] . viewWidth or 1920) - width) / 2',
+    'local frame = Helper.createFrameHandle(menu, { x = x, width = width, height = 80 })',
+  ].join('\n'), 'selftest/b119-pipeline-commented-expression.lua');
+  const moduloExpressionSource = [
+    'local menu = { name = "PipelineModuloExpression", layer = 1 }',
+    'local x = (0 - (Helper.viewWidth or 1920)) % 7',
+    'local frame = Helper.createFrameHandle(menu, { x = x, width = 80, height = 80 })',
+  ].join('\n');
+  const moduloExpressionModel = buildX4UiCallModel(input(moduloExpressionSource, 'selftest/b119-pipeline-modulo-expression.lua'));
+  const moduloExpressionBaseProfile = profileFor(moduloExpressionModel);
+  const moduloExpressionProfile: X4UiLayoutProjectionProfile = {
+    ...moduloExpressionBaseProfile,
+    id: 'selftest-b119-modulo-2544',
+    frame: { ...moduloExpressionBaseProfile.frame, width: 2544 },
+    helper: {
+      ...moduloExpressionBaseProfile.helper,
+      constants: {
+        ...moduloExpressionBaseProfile.helper.constants,
+        viewWidth: pin(2544, 707),
+      },
+    },
+  };
+  const moduloExpressionResult = projectX4UiLayoutProgram(
+    moduloExpressionModel,
+    topTarget(moduloExpressionModel),
+    moduloExpressionProfile,
+  );
+  const moduloExpressionFact = resultProgram(moduloExpressionResult)?.frames[0]?.descriptorFacts.x;
   const reassignedFrameCall = reassignedPipeline.model.calls.find(call => call.name === 'createFrameHandle');
   const negativeWidthFact = (candidate: typeof nonScalePipeline): X4UiLayoutProgram['frames'][number]['descriptorFacts'][string] | undefined =>
     candidate.program?.frames[0]?.descriptorFacts.width;
@@ -3416,6 +3584,32 @@ const run = (): { readonly allPassed: boolean; readonly passed: number; readonly
       branched: { status: branchedPipeline.result.status, width: negativeWidthFact(branchedPipeline) },
       helperAlias: { status: helperAliasPipeline.result.status, width: negativeWidthFact(helperAliasPipeline), aliases: helperAliasPipeline.model.helperReceiverAliases },
     }));
+  const negativeXFact = (candidate: typeof nonScalePipeline): X4UiLayoutProgram['frames'][number]['descriptorFacts'][string] | undefined =>
+    candidate.program?.frames[0]?.descriptorFacts.x;
+  const commentedExpressionFact = negativeXFact(commentedExpressionPipeline);
+  check('B119 closed numeric grammar rejects unknown, reassigned, conditional, unsupported, divide-by-zero, and nonfinite expressions',
+    negativeXFact(unknownExpressionPipeline)?.status !== 'known'
+      && negativeXFact(reassignedExpressionPipeline)?.status !== 'known'
+      && negativeXFact(branchedExpressionPipeline)?.status !== 'known'
+      && negativeXFact(unsupportedOperatorPipeline)?.status !== 'known'
+      && negativeXFact(divideByZeroPipeline)?.status !== 'known'
+      && negativeXFact(nonFinitePipeline)?.status !== 'known',
+    detail({
+      unknown: { status: unknownExpressionPipeline.result.status, x: negativeXFact(unknownExpressionPipeline) },
+      reassigned: { status: reassignedExpressionPipeline.result.status, x: negativeXFact(reassignedExpressionPipeline) },
+      branched: { status: branchedExpressionPipeline.result.status, x: negativeXFact(branchedExpressionPipeline) },
+      operator: { status: unsupportedOperatorPipeline.result.status, x: negativeXFact(unsupportedOperatorPipeline) },
+      divideByZero: { status: divideByZeroPipeline.result.status, x: negativeXFact(divideByZeroPipeline) },
+      nonFinite: { status: nonFinitePipeline.result.status, x: negativeXFact(nonFinitePipeline) },
+    }));
+  check('B119 structural source validation preserves parser-accepted whitespace and comments',
+    commentedExpressionFact?.status === 'known'
+      && commentedExpressionFact.value === -215
+      && commentedExpressionFact.expression === '((Helper --[[ source-proven ]] . viewWidth or 1920) - width) / 2',
+    detail({ status: commentedExpressionPipeline.result.status, x: commentedExpressionFact }));
+  check('B119 profile-dependent modulo remains outside the numeric descriptor grammar',
+    moduloExpressionFact?.status !== 'known',
+    detail({ status: moduloExpressionResult.status, fact: moduloExpressionFact }));
 
   const forgedPipelineModelRecord = jsonClone(pipelineModel) as unknown as ValueRecord;
   const forgedPipelineWidthAlias = (forgedPipelineModelRecord.aliases as ValueRecord[]).find(alias =>
@@ -3456,6 +3650,222 @@ const run = (): { readonly allPassed: boolean; readonly passed: number; readonly
       resultStatus: forgedPipelineResult.status,
       frameWidth: forgedPipelineProgram?.frames[0].descriptorFacts.width,
       schemaValidation: forgedSchemaValidation,
+    }));
+
+  const mutateAllNumericDescriptorCopies = (
+    candidate: ValueRecord,
+    expression: string,
+    mutate: (descriptor: ValueRecord) => number,
+  ): { readonly matchedCopies: number; readonly mutatedNodes: number } => {
+    let matchedCopies = 0;
+    let mutatedNodes = 0;
+    const visit = (value: unknown): void => {
+      if (Array.isArray(value)) {
+        value.forEach(visit);
+        return;
+      }
+      if (value === null || typeof value !== 'object') return;
+      const record = value as ValueRecord;
+      const descriptor = record.numericExpression;
+      if (descriptor !== null
+        && typeof descriptor === 'object'
+        && !Array.isArray(descriptor)
+        && (descriptor as ValueRecord).expression === expression) {
+        matchedCopies += 1;
+        mutatedNodes += mutate(descriptor as ValueRecord);
+      }
+      Object.values(record).forEach(visit);
+    };
+    visit(candidate);
+    return { matchedCopies, mutatedNodes };
+  };
+  const aliasBindingForgerySource = [
+    'local menu = { name = "PipelineAliasBindingForgery", layer = 1 }',
+    'function menu.createFrame()',
+    '  local width = Helper.scaleX(530)',
+    '  local x = ((Helper.viewWidth or 1920) - width) / 2',
+    '  local decoy = ((Helper.viewWidth or 1920) - width) / 4',
+    '  menu.frame = Helper.createFrameHandle(menu, { x = x, width = width, height = 80 })',
+    'end',
+  ].join('\n');
+  const aliasBindingForgeryModel = buildX4UiCallModel(input(
+    aliasBindingForgerySource,
+    'selftest/b119-alias-binding-forgery.lua',
+  ));
+  const aliasBindingXExpression = '((Helper.viewWidth or 1920) - width) / 2';
+  const aliasBindingDecoyExpression = '((Helper.viewWidth or 1920) - width) / 4';
+  const aliasBindingDecoyDescriptor = aliasBindingForgeryModel.aliases.find(alias =>
+    alias.name === 'decoy' && alias.value.expression === aliasBindingDecoyExpression)?.value.numericExpression;
+  const aliasBindingBaseProfile = profileFor(aliasBindingForgeryModel);
+  const aliasBindingProfile: X4UiLayoutProjectionProfile = {
+    ...aliasBindingBaseProfile,
+    id: 'selftest-b119-alias-binding-1920x1080',
+    frame: { width: 1920, height: 1080 },
+    helper: {
+      ...aliasBindingBaseProfile.helper,
+      constants: {
+        ...aliasBindingBaseProfile.helper.constants,
+        viewWidth: pin(1920, 707),
+        viewHeight: pin(1080, 708),
+      },
+    },
+  };
+  const aliasBindingForgeryRecord = jsonClone(aliasBindingForgeryModel) as unknown as ValueRecord;
+  let aliasBindingReplacedCopies = 0;
+  const replaceAliasBindingDescriptors = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      value.forEach(replaceAliasBindingDescriptors);
+      return;
+    }
+    if (value === null || typeof value !== 'object') return;
+    const record = value as ValueRecord;
+    const descriptor = record.numericExpression;
+    if (aliasBindingDecoyDescriptor
+      && descriptor !== null
+      && typeof descriptor === 'object'
+      && !Array.isArray(descriptor)
+      && (descriptor as ValueRecord).expression === aliasBindingXExpression) {
+      record.numericExpression = jsonClone(aliasBindingDecoyDescriptor);
+      aliasBindingReplacedCopies += 1;
+    }
+    Object.values(record).forEach(replaceAliasBindingDescriptors);
+  };
+  replaceAliasBindingDescriptors(aliasBindingForgeryRecord);
+  const aliasBindingRemainingCopies = mutateAllNumericDescriptorCopies(
+    aliasBindingForgeryRecord,
+    aliasBindingXExpression,
+    () => 0,
+  ).matchedCopies;
+  const forgedAliasBindingModel = freezeClone(aliasBindingForgeryRecord) as unknown as X4UiCallModel;
+  const forgedAliasBindingResult = projectX4UiLayoutProgram(
+    forgedAliasBindingModel,
+    namedTarget(forgedAliasBindingModel, 'menu.createFrame'),
+    aliasBindingProfile,
+  );
+  const forgedAliasBindingFact = resultProgram(forgedAliasBindingResult)?.frames[0]?.descriptorFacts.x;
+  check('B119 alias root rejects an all-copy substitution with another valid same-context source descriptor',
+    aliasBindingDecoyDescriptor !== undefined
+      && aliasBindingReplacedCopies > 1
+      && aliasBindingRemainingCopies === 0
+      && forgedAliasBindingFact?.status !== 'known',
+    detail({
+      replacedCopies: aliasBindingReplacedCopies,
+      remainingOriginalCopies: aliasBindingRemainingCopies,
+      status: forgedAliasBindingResult.status,
+      refusal: refusalCode(forgedAliasBindingResult),
+      fact: forgedAliasBindingFact,
+    }));
+  const forgedOperatorModelRecord = jsonClone(pipelineModel) as unknown as ValueRecord;
+  const forgedOperatorMutation = mutateAllNumericDescriptorCopies(
+    forgedOperatorModelRecord,
+    pipelineXExpression,
+    descriptor => {
+      if (descriptor.kind !== 'binary' || descriptor.operator !== '/') return 0;
+      descriptor.operator = '+';
+      return 1;
+    },
+  );
+  const forgedOperatorModel = freezeClone(forgedOperatorModelRecord) as unknown as X4UiCallModel;
+  const forgedOperatorResult = projectX4UiLayoutProgram(
+    forgedOperatorModel,
+    namedTarget(forgedOperatorModel, 'menu.createFrame'),
+    pipelineAt125Profile,
+  );
+  const forgedOperatorFact = resultProgram(forgedOperatorResult)?.frames[0]?.descriptorFacts.x;
+  check('B119 source AST rejects an all-copy root binary operator forgery with valid text and ranges',
+    forgedOperatorMutation.matchedCopies > 1
+      && forgedOperatorMutation.mutatedNodes === forgedOperatorMutation.matchedCopies
+      && forgedOperatorFact?.status !== 'known',
+    detail({ mutation: forgedOperatorMutation, status: forgedOperatorResult.status, fact: forgedOperatorFact }));
+
+  const forgedOrderingModelRecord = jsonClone(pipelineModel) as unknown as ValueRecord;
+  const forgedOrderingMutation = mutateAllNumericDescriptorCopies(
+    forgedOrderingModelRecord,
+    pipelineXExpression,
+    descriptor => {
+      let mutations = 0;
+      const visitNode = (node: unknown): void => {
+        if (node === null || typeof node !== 'object' || Array.isArray(node)) return;
+        const record = node as ValueRecord;
+        if (record.kind === 'or' && record.expression === 'Helper.viewWidth or 1920') {
+          const left = record.left;
+          record.left = record.right;
+          record.right = left;
+          mutations += 1;
+        }
+        visitNode(record.operand);
+        visitNode(record.left);
+        visitNode(record.right);
+      };
+      visitNode(descriptor);
+      return mutations;
+    },
+  );
+  const forgedOrderingModel = freezeClone(forgedOrderingModelRecord) as unknown as X4UiCallModel;
+  const forgedOrderingResult = projectX4UiLayoutProgram(
+    forgedOrderingModel,
+    namedTarget(forgedOrderingModel, 'menu.createFrame'),
+    pipelineAt125Profile,
+  );
+  const forgedOrderingFact = resultProgram(forgedOrderingResult)?.frames[0]?.descriptorFacts.x;
+  check('B119 source AST rejects an all-copy Lua-or operand-order forgery with valid text and ranges',
+    forgedOrderingMutation.matchedCopies > 1
+      && forgedOrderingMutation.mutatedNodes === forgedOrderingMutation.matchedCopies
+      && forgedOrderingFact?.status !== 'known',
+    detail({ mutation: forgedOrderingMutation, status: forgedOrderingResult.status, fact: forgedOrderingFact }));
+
+  const forgedNumericModelRecord = jsonClone(pipelineModel) as unknown as ValueRecord;
+  const forgedNumericFrameCall = (forgedNumericModelRecord.records as ValueRecord[]).find(callValue => callValue.name === 'createFrameHandle');
+  const forgedNumericProperty = (forgedNumericFrameCall?.semantics as ValueRecord | undefined)?.properties as ValueRecord[] | undefined;
+  const forgedNumericValue = forgedNumericProperty?.find(propertyValue => propertyValue.name === 'x')?.value as ValueRecord | undefined;
+  const forgedNumericDescriptor = forgedNumericValue?.numericExpression as ValueRecord | undefined;
+  if (forgedNumericDescriptor) forgedNumericDescriptor.kind = 'forged-numeric-node';
+  const forgedNumericModel = freezeClone(forgedNumericModelRecord) as unknown as X4UiCallModel;
+  const forgedNumericResult = projectX4UiLayoutProgram(
+    forgedNumericModel,
+    namedTarget(forgedNumericModel, 'menu.createFrame'),
+    pipelineAt1920Profile,
+  );
+  const forgedNumericProgram = resultProgram(forgedNumericResult);
+  const sourceMismatchModelRecord = jsonClone(pipelineModel) as unknown as ValueRecord;
+  const sourceMismatchFrameCall = (sourceMismatchModelRecord.records as ValueRecord[]).find(callValue => callValue.name === 'createFrameHandle');
+  const sourceMismatchProperties = (sourceMismatchFrameCall?.semantics as ValueRecord | undefined)?.properties as ValueRecord[] | undefined;
+  const sourceMismatchDescriptor = (sourceMismatchProperties?.find(propertyValue => propertyValue.name === 'x')?.value as ValueRecord | undefined)?.numericExpression as ValueRecord | undefined;
+  const sourceMismatchSource = sourceMismatchDescriptor?.source as ValueRecord | undefined;
+  const sourceMismatchStart = sourceMismatchSource?.start as ValueRecord | undefined;
+  if (sourceMismatchStart && typeof sourceMismatchStart.offset === 'number') sourceMismatchStart.offset += 1;
+  const sourceMismatchModel = freezeClone(sourceMismatchModelRecord) as unknown as X4UiCallModel;
+  const sourceMismatchResult = projectX4UiLayoutProgram(
+    sourceMismatchModel,
+    namedTarget(sourceMismatchModel, 'menu.createFrame'),
+    pipelineAt1920Profile,
+  );
+  const sourceMismatchProgram = resultProgram(sourceMismatchResult);
+  const numericSchemaProgram = pipelineAtOneProgram
+    ? mutateProgramJson(pipelineAtOneProgram, candidate => {
+      const frameOperation = (candidate.operations as ValueRecord[]).find(operationValue => operationValue.kind === 'createFrameHandle');
+      const descriptorFacts = frameOperation?.descriptorFacts as ValueRecord | undefined;
+      const xFact = descriptorFacts?.x as ValueRecord | undefined;
+      if (xFact) xFact.provenance = 'forged-numeric-provenance';
+    })
+    : undefined;
+  const numericSchemaValidation = numericSchemaProgram
+    ? safeSchemaPairValidation(numericSchemaProgram, pipelineAtOneAuthority)
+    : { threw: false, valid: false, reason: 'pipeline program missing' };
+  check('B119 malformed, forged, source-range-mismatched, and schema-mutated numeric descriptors fail closed',
+    forgedNumericDescriptor !== undefined
+      && (forgedNumericResult.status === 'refused'
+        || forgedNumericProgram?.frames[0].descriptorFacts.x.status !== 'known')
+      && sourceMismatchDescriptor !== undefined
+      && sourceMismatchResult.status !== 'refused'
+      && sourceMismatchProgram?.frames[0].descriptorFacts.x.status !== 'known'
+      && numericSchemaProgram !== undefined
+      && numericSchemaValidation.threw === false
+      && numericSchemaValidation.valid === false,
+    detail({
+      forged: { status: forgedNumericResult.status, fact: forgedNumericProgram?.frames[0].descriptorFacts.x },
+      sourceMismatch: { status: sourceMismatchResult.status, fact: sourceMismatchProgram?.frames[0].descriptorFacts.x },
+      schema: numericSchemaValidation,
     }));
 
   const sampledSource = [
@@ -7797,7 +8207,11 @@ const run = (): { readonly allPassed: boolean; readonly passed: number; readonly
     'local function display()',
     '  if not Helper then Helper = rawget(_G, "Helper") end',
     '  local menu = { name = "Refresh", layer = 1 }',
-    '  local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    '  local width = Helper.scaleX(530)',
+    '  local height = Helper.scaleY(436)',
+    '  local x = ((Helper.viewWidth or 1920) - width) / 2',
+    '  local y = ((Helper.viewHeight or 1080) - height) / 2',
+    '  local frame = Helper.createFrameHandle(menu, { x = x, y = y, width = width, height = height })',
     '  local table = frame:addTable(1, { width = 45 })',
     '  table:addRow(false, {})',
     'end',
@@ -7808,11 +8222,16 @@ const run = (): { readonly allPassed: boolean; readonly passed: number; readonly
     namedTarget(refreshedHelperModel, 'display'),
     profileFor(refreshedHelperModel),
   ));
+  const refreshedHelperFrame = refreshedHelperProgram.frames[0];
   check('exact rawget Helper declaration and lazy same-expression refresh prove preview identity only',
     refreshedHelperModel.helperReceiverAliases.map(candidate => candidate.status).join(',') === 'bound,preserved'
       && refreshedHelperProgram.frames.length === 1
       && refreshedHelperProgram.tables.length === 1
       && refreshedHelperProgram.tables[0].kernelState?.rows.length === 1
+      && refreshedHelperFrame.descriptorFacts.x.status === 'known'
+      && refreshedHelperFrame.descriptorFacts.y.status === 'known'
+      && refreshedHelperFrame.descriptorFacts.x.value === -215
+      && refreshedHelperFrame.descriptorFacts.y.value === -178
       && refreshedHelperProgram.gaps.some(gap => gap.reason.includes('runtime non-nil availability remains unverified'))
       && refreshedHelperProgram.verification.game === X4_UI_LAYOUT_GAME_TRUTH,
     detail({

@@ -679,6 +679,86 @@ function run(): { allPassed: boolean; pass: boolean; passed: number; total: numb
       && localFontWidth.directHelperScaleResult.callExpression === 'Helper.scaleFont("Zekton", 14)',
     detail({ fontWidth: localFontWidth }));
 
+  const numericExpressionSource = [
+    'local Helper = rawget(_G, "Helper")',
+    'local function refreshHelper()',
+    '  if not Helper then Helper = rawget(_G, "Helper") end',
+    '  return Helper',
+    'end',
+    'local menu = { name = "NumericExpression", layer = 1 }',
+    'function menu.createFrame()',
+    '  refreshHelper()',
+    '  local width = Helper.scaleX(530)',
+    '  local height = Helper.scaleY(436)',
+    '  local fontSize = Helper.scaleFont("Zekton", 14)',
+    '  local x = ((Helper.viewWidth or 1920) - width) / 2',
+    '  local y = ((Helper.viewHeight or 1080) - height) / 2',
+    '  menu.frame = Helper.createFrameHandle(menu, { x = x, y = y, width = width, height = height })',
+    'end',
+  ].join('\n');
+  const numericExpressionModel = buildX4UiCallModel(input(numericExpressionSource, 'selftest/numeric-expression.lua'));
+  const numericExpressionFrame = numericExpressionModel.calls.find(candidate => candidate.name === 'createFrameHandle');
+  const numericExpressionX = property(numericExpressionFrame, 'x')?.value;
+  const numericExpressionY = property(numericExpressionFrame, 'y')?.value;
+  const numericXDescriptor = numericExpressionX?.numericExpression;
+  const numericYDescriptor = numericExpressionY?.numericExpression;
+  const numericXRecord = numericXDescriptor as unknown as Record<string, unknown> | undefined;
+  const numericYRecord = numericYDescriptor as unknown as Record<string, unknown> | undefined;
+  const numericXLeft = numericXRecord?.left as Record<string, unknown> | undefined;
+  const numericYLeft = numericYRecord?.left as Record<string, unknown> | undefined;
+  const numericXOr = numericXLeft?.left as Record<string, unknown> | undefined;
+  const numericYOr = numericYLeft?.left as Record<string, unknown> | undefined;
+  const numericXOrLeft = numericXOr?.left as Record<string, unknown> | undefined;
+  const numericYOrLeft = numericYOr?.left as Record<string, unknown> | undefined;
+  const numericXRight = numericXLeft?.right as Record<string, unknown> | undefined;
+  const numericYRight = numericYLeft?.right as Record<string, unknown> | undefined;
+  check('closed numeric expressions preserve exact formula source, Helper pins, and direct scale aliases',
+    numericExpressionX?.status === 'unknown'
+      && numericExpressionY?.status === 'unknown'
+      && numericXDescriptor?.kind === 'binary'
+      && numericYDescriptor?.kind === 'binary'
+      && numericXDescriptor?.expression === '((Helper.viewWidth or 1920) - width) / 2'
+      && numericYDescriptor?.expression === '((Helper.viewHeight or 1080) - height) / 2'
+      && numericXRecord?.operator === '/'
+      && numericYRecord?.operator === '/'
+      && numericXOr?.kind === 'or'
+      && numericXOrLeft?.kind === 'helper-constant'
+      && numericXOrLeft?.name === 'viewWidth'
+      && numericXOrLeft?.receiver
+      && (numericXOrLeft.receiver as Record<string, unknown>).origin === 'alias'
+      && numericXRight?.kind === 'direct-helper-scale'
+      && numericXRight?.identity
+      && (numericXRight.identity as Record<string, unknown>).callName === 'scaleX'
+      && numericYOr?.kind === 'or'
+      && numericYOrLeft?.kind === 'helper-constant'
+      && numericYOrLeft?.name === 'viewHeight'
+      && numericYRight?.kind === 'direct-helper-scale'
+      && (numericYRight.identity as Record<string, unknown>).callName === 'scaleY'
+      && exactLocatedText(numericExpressionSource, numericXDescriptor && {
+        expression: numericXDescriptor.expression,
+        source: numericXDescriptor.source,
+      }, numericXDescriptor?.expression || '')
+      && exactLocatedText(numericExpressionSource, numericYDescriptor && {
+        expression: numericYDescriptor.expression,
+        source: numericYDescriptor.source,
+      }, numericYDescriptor?.expression || '')
+      && closedFrozenData(numericXDescriptor)
+      && closedFrozenData(numericYDescriptor)
+      && JSON.stringify(numericXDescriptor) === JSON.stringify(JSON.parse(JSON.stringify(numericXDescriptor)))
+      && JSON.stringify(numericYDescriptor) === JSON.stringify(JSON.parse(JSON.stringify(numericYDescriptor))),
+    detail({ x: numericExpressionX, y: numericExpressionY, helperAliases: numericExpressionModel.helperReceiverAliases }));
+  check('numeric expression negative shapes remain unavailable and scaleFont stays non-geometry',
+    !numericExpressionModel.aliases.some(alias => alias.name === 'x' && alias.value.numericExpression?.kind === 'direct-helper-scale')
+      && !numericExpressionModel.aliases.some(alias => alias.name === 'y' && alias.value.numericExpression?.kind === 'direct-helper-scale')
+      && numericExpressionModel.calls.filter(candidate => candidate.name === 'scaleFont')
+        .every(candidate => candidate.semantics.scale?.fontsize?.sourceLiteral !== undefined
+          && candidate.semantics.scale?.fontsize?.numericExpression === undefined)
+      && numericExpressionModel.aliases
+        .filter(alias => alias.name === 'fontSize')
+        .every(alias => alias.value.directHelperScaleResult?.callName === 'scaleFont'
+          && alias.value.numericExpression === undefined),
+    detail({ aliases: numericExpressionModel.aliases, calls: numericExpressionModel.calls.filter(candidate => candidate.name === 'scaleFont') }));
+
   const constantsSource = [
     'local menu = { name = "Constants", layer = 1 }',
     'local frame = Helper.createFrameHandle(menu, { width = Helper.viewWidth, height = Helper.viewHeight })',
