@@ -11517,6 +11517,12 @@ Task record: `docs/plans/2026-08-28-b119-exact-deploy-confirmation-second-profil
 - Current Forge receipts still classify this fixture's dynamic `Helper.scaleX` / `Helper.scaleY` geometry as
   unavailable. Two X4 profiles now prove real-game scaling and the end-to-end UI-only pipeline; they do not establish
   exact Forge-versus-X4 pixel parity. Overall B119 therefore remains PARTIAL.
+- Second-profile record checkpoint `d5dcc80284e6c1dac2326871cd106fc9a5119d2a` is pushed with exact
+  local/tracking/direct-remote parity. GitHub #41 comment `5455192771` and the Notion owner section were written and
+  read back. Drive document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE` was revision-locked at tab `t.0`,
+  appended, and read back with its marker as `HEADING_2` at revision
+  `AIroW35ORAD2b16wtqsH8JNjJ03uib5jxFvleX03tDcvhkOVlZmEgQmddPsyOveZSskE7fp54ySMVePGX8lvtV7cve4MvkxLj-v86YevGGag`.
+  All three projections retain the open issue and overall PARTIAL boundary.
 - No OpenVSX release is claimed. Publish-before-commit begins only after B119 reaches release quality and the current
   unrelated extension release edits are reconciled with their owner.
 

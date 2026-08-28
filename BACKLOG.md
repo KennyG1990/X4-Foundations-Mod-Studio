@@ -69,7 +69,11 @@ process/port containment checks pass. Evidence:
 `dev-docs/b119-x4-ui-pipeline-smoke/in-game-20260828/second-profile/runtime-receipt.json`. Dynamic
 `Helper.scaleX` / `Helper.scaleY` geometry remains unavailable in Forge receipts, so this proves real-X4 scaling and
 the UI-only pipeline, not exact Forge-versus-X4 parity. Full B119 remains `in_progress / PARTIAL`; no OpenVSX release
-is claimed.
+is claimed. Second-profile record checkpoint `d5dcc80284e6c1dac2326871cd106fc9a5119d2a` is pushed with
+local/tracking/direct-remote parity. GitHub #41 comment `5455192771`, Notion page
+`3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Drive revision
+`AIroW35ORAD2b16wtqsH8JNjJ03uib5jxFvleX03tDcvhkOVlZmEgQmddPsyOveZSskE7fp54ySMVePGX8lvtV7cve4MvkxLj-v86YevGGag`
+were written and read back; the issue remains open.
 **AI Influence `1b` visual reconciliation 2026-08-19 — REPRODUCED GUIDE CONFLICT:** The source pixels were re-opened
 and immutable hashes/dimensions are frozen in the plan. Forge's existing cockpit preset projects the measured guides to
 `y=1134.72`, `y=1065.6`, and `x=1699.84` at `2560x1440`; the supplied `1b` choice/input geometry intersects all three.

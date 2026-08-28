@@ -7,9 +7,10 @@ overall B119 `IN_PROGRESS / PARTIAL`
 
 ## Current state
 
-- Current committed baseline before this close is `99e58055b5e66df27a36cb58af697b6bd5da87b4`, equal to `origin/main`.
-  Source implementation is `ff1e26f509d81e3b4c87b63eebdc2bfe73afcbe8`. Preserve every unrelated dirty path;
-  never broad-stage.
+- Second-profile runtime checkpoint `d5dcc80284e6c1dac2326871cd106fc9a5119d2a` is committed and pushed with exact
+  local/tracking/direct-remote parity. Source implementation is `ff1e26f509d81e3b4c87b63eebdc2bfe73afcbe8`.
+  Preserve every unrelated dirty path; never broad-stage. The record-close commit carrying this handoff becomes the
+  current repository authority after its exact-path commit/push.
 - The unchanged UI-only `pipeline_test` package is exactly four files / `6,338` bytes / regular-tree fingerprint
   `88574c00ce6d9aa5b1dd2686425fae0a8b492df75a04a25bd94d19e82f7d844f`.
 - Real X4 9.00 has now accepted that exact package at two drawable profiles: prior `2544x1353`, and current
@@ -64,29 +65,28 @@ overall B119 `IN_PROGRESS / PARTIAL`
 
 ## Documentation and external projection
 
-- Repository records updated locally: `BACKLOG.md`, this handoff,
-  `docs/plans/2026-08-10-b119-x4-ui-editor-linter-first.md`, and
-  `docs/plans/2026-08-28-b119-exact-deploy-confirmation-second-profile.md`.
-- StarForge capability-map and project-AAR deltas are updated outside the repository.
-- Fresh Google Docs trusted read completed at revision
-  `AIroW3566q2IOoh7o5wf5r5fQa_ez2Nku1oUWWpL3pMqPwwwgp6ds8nhN3qSh_CnYlTxZucImzWAHjM2Y_qqTCkcLGqY2pfczqeCKJLMn3aO`
-  with no protected controls. Evidence:
-  `dev-docs/google-docs-trusted-read/b119-20260828-05-second-profile/`.
-- GitHub #41, Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Google Doc
-  `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE` still show the prior host-close boundary. Update/readback is the next
-  exact action after the repository runtime-proof commit is pushed.
+- Repository runtime record `d5dcc80284e6c1dac2326871cd106fc9a5119d2a` is pushed with exact parity after the
+  complete precommit gate passed both standalone and in the commit hook. Zero B119 path remains staged.
+- GitHub issue #41 comment `5455192771` was written and fetched back exactly with commit, package, interaction,
+  scaling, debuglog, recovery, and truthful parity/release boundaries. The issue remains open at `74` comments.
+- Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a` was appended and fetched back with the exact commit, GitHub
+  receipt, `BOUNDED VERIFIED / OVERALL B119 IN PROGRESS / PARTIAL`, and no-OpenVSX boundary.
+- Google Doc `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE` was freshly read at revision
+  `AIroW3566q2IOoh7o5wf5r5fQa_ez2Nku1oUWWpL3pMqPwwwgp6ds8nhN3qSh_CnYlTxZucImzWAHjM2Y_qqTCkcLGqY2pfczqeCKJLMn3aO`,
+  revision-locked at exact tab `t.0` / index `105408`, appended, and read back at revision
+  `AIroW35ORAD2b16wtqsH8JNjJ03uib5jxFvleX03tDcvhkOVlZmEgQmddPsyOveZSskE7fp54ySMVePGX8lvtV7cve4MvkxLj-v86YevGGag`.
+  Its new marker is `HEADING_2`; all nine appended paragraphs and boundary statements match exactly. Trusted-read
+  evidence remains under `dev-docs/google-docs-trusted-read/b119-20260828-05-second-profile/`.
+- StarForge capability-map and project-AAR deltas are updated outside the repository with the same bounded claim.
 
 ## Next exact actions
 
-1. Validate the exact documentation diff, run complete precommit, commit only the four repository records, and push
-   with local/tracking/direct-remote parity.
-2. Append the commit-backed second-profile milestone to GitHub #41, Notion, and Google Docs; read back each exact
-   target. Then record those external IDs/revision in repository docs, commit/push the final projection close, and
-   overwrite this handoff with that parity.
-3. Continue B119 with dynamic `Helper.scaleX` / `Helper.scaleY` geometry projection and exact Forge-versus-X4
+1. Validate the exact external-receipt documentation diff, run complete precommit, commit only the four repository
+   records as `docs(ui-editor): record second-profile projection`, and push with local/tracking/direct-remote parity.
+2. Continue B119 with dynamic `Helper.scaleX` / `Helper.scaleY` geometry projection and exact Forge-versus-X4
    comparison before claiming renderer parity. Then finish remaining linter/layout brief coverage and reconstruct the
    AI Influence UI from all visually inspected references.
-4. Do not publish OpenVSX while B119 is partial. At release quality, reconcile the user-owned extension release edits,
+3. Do not publish OpenVSX while B119 is partial. At release quality, reconcile the user-owned extension release edits,
    then build/package/probe/publish/read back before the release commit.
 
 ## Triggered AAR hazards
