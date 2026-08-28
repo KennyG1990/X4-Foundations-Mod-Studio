@@ -11243,3 +11243,206 @@ Status: `SPECIFIED / IN PROGRESS`; overall B119 remains `PARTIAL / Not verified 
   parity, then launch current-checkout Forge with isolated runtime state. Materialize through project/compile/fs-write
   owners, read back exact package hashes, run full project validation, rehearse deploy with `dryRun:true`, apply only
   the dedicated extension, and capture recovery/containment evidence before launching X4.
+
+### IN-GAME FAIL-FIRST REPAIR CONTRACT — 2026-08-28
+
+Status: `SPECIFIED / FAIL-FIRST REPRODUCED`. The end-to-end UI-only pipeline is now proven far enough to expose two
+generator defects and one avoidable Helper diagnostic; none may be hidden behind the broader `Not verified in game`
+warning.
+
+- X4 9.00 accepted and visibly displayed the exact Forge-generated `pipeline_test` frame at the configured
+  `2544x1353` windowed profile. Both authored buttons accepted pointer focus/clicks, and the edit box accepted text.
+  The current-session debuglog contains zero `DisplayView` / `Failed to set up the view` failures.
+- `[REPRODUCED]` The edit-box row is visibly clipped. X4 logged
+  `Dimensions for editbox are too small ... width(663 px) height(0 px)`. Shipped `helper.lua` proves why:
+  base widget height defaults to zero, edit boxes do not override that default, and `editbox:getHeight()` returns the
+  base-cell height. The generator currently emits `createEditBox` without the authored widget height.
+- `[REPRODUCED]` Clicking the standard close control and pressing Escape invoked X4's on-hide path but did not close
+  the panel. X4 logged `helper.lua:1086: attempt to call field 'onCloseElement' (a nil value)`. Shipped `helper.lua`
+  requires `menu.onCloseElement(dueToClose)` and states that it must call a `Helper.closeMenu*()` owner.
+- `[REPRODUCED]` The generated table fixes both column widths while leaving the shipped
+  `reserveScrollBar=true` default active. X4 logged `No column with variable width defined`; shipped `helper.lua`
+  then disables the reservation. The generated fixed-width table must opt out explicitly.
+- Bounded ownership: `src/types.ts` and `src/lib/uiCompilerSelftest.ts` repair and causally guard the emitter;
+  `src/lib/x4UiLint.ts` and `src/lib/x4UiLint.selftest.ts` add a stable, source-located error for a statically proven
+  omitted/zero edit-box height. No renderer, Scene/Paint owner, deploy route, workspace schema, save, AI Influence
+  content, or unrelated generator behavior is in scope.
+- Acceptance: generated edit boxes retain the authored positive height; the generated fixed-width table sets
+  `reserveScrollBar = false`; generated menus define the shipped close callback and route programmatic close through
+  the same callback; the linter rejects omitted/zero edit-box height with the real overlap failure mode while positive
+  explicit heights remain clean. Focused selftests, TypeScript, exact owned-file ESLint, and diff hygiene must pass.
+  After X4 exits, recompile/redeploy only `pipeline_test`, relaunch at the same profile, and require a non-clipped
+  editable field, working standard close, zero current-session occurrences of all three reproduced diagnostics, and
+  unchanged neighboring extension hashes. Preview remains `Not verified in game`; this repair can verify only the
+  bounded smoke profile.
+- Rollback: revert only the four bounded Forge source/test files and use the already-linked one-use Forge deployment
+  recovery for `pipeline_test`. No save or gameplay state will be opened or written.
+
+### CROSS-VOLUME FIRST-DEPLOY RECOVERY REPAIR CONTRACT — 2026-08-28
+
+Status: `SPECIFIED / FAIL-FIRST REPRODUCED`. This is a correctness prerequisite for completing the bounded
+`pipeline_test` smoke; it does not expand the UI renderer or linter feature.
+
+- `[REPRODUCED]` The ready one-use recovery for first deployment failed before mutation with Windows `EXDEV` when
+  `restoreDeploymentRecovery()` attempted to rename the deployed target from the configured `G:` X4 extensions root
+  into the isolated `F:` Forge recovery store. The target remained present, the receipt remained ready, and neighboring
+  extension content stayed unchanged. The current implementation assumes both roots share a filesystem.
+- Existing capability reused: the current recovery route, target containment and stale-hash checks, regular-tree
+  inspection/fingerprints, one-use receipt state, and same-volume atomic rename fast path. No parallel recovery product,
+  manual game-folder deletion, ordinary deploy change, schema change, or broad filesystem helper is in scope.
+- Bounded ownership: `server.ts` implements and causally selftests the first-deploy cross-volume fallback;
+  `scripts/route-integration.mjs` requires the new public selftest evidence. Unrelated dirty files remain untouched.
+- Acceptance: same-volume behavior remains valid. On `EXDEV`, Forge copies the exact regular tree into the existing
+  quarantine, verifies fingerprint and byte count before removing the target, verifies absence, then consumes the
+  receipt. If copy verification fails, the target is untouched. If receipt consumption fails after removal, Forge
+  restores the exact target from quarantine and leaves the receipt reusable. Existing stale-hash, symlink, target-root,
+  corrupt-payload, and replay refusal gates remain strict.
+- Required evidence: a causal selftest forces `EXDEV` rather than depending on host drive layout; it proves successful
+  removal and exact quarantine, one-use consumption/replay refusal, pre-removal copy-verification failure safety, and
+  exact rollback after simulated receipt-write failure. TypeScript, focused artifact selftest, route integration, and
+  diff hygiene must pass. Then rebuild/restart the isolated current-checkout server and read back the original live
+  recovery: first call succeeds, replay returns `RECOVERY_ALREADY_USED`, `pipeline_test` is absent from the game target,
+  and neighboring extension hashes are unchanged.
+- Rollback: revert only the bounded recovery source/test changes. Until repaired and validated, preserve the deployed
+  `pipeline_test` target and its still-ready recovery record; do not substitute an untracked manual deletion.
+
+## BOUNDED UI-ONLY PIPELINE SMOKE CLOSE — 2026-08-28
+
+Status: `VERIFIED AT ONE REAL X4 PROFILE`; overall B119 remains
+`IN_PROGRESS / PARTIAL`. The permanent Forge preview label remains `Not verified in game` because this one accepted
+frame does not prove every source, widget, display profile, font raster, or C++ acceptance path.
+
+### BASELINE / RECONCILE
+
+- Repository authority before this repair was
+  `HEAD == origin/main == remote main == 1502b1e9f53197e74e9a2e6370b3af18cba0cf70`. The broad dirty worktree
+  contains unrelated user changes; only the six bounded implementation/test files and B119 records belong to this
+  checkpoint.
+- Existing owners were reused end to end: `generateUILuaScript`, the source-backed X4 UI linter, project compiler and
+  validator, guarded Mod Workspace writer, deploy-verify planner/applier, action history, and one-use deployment
+  recovery. No parallel renderer, compiler, package writer, deployer, recovery product, or manual game-directory
+  deletion was introduced.
+- The installed Antigravity settings remained the authority for Mod Workspace, game, loose-deploy, and unpacked-corpus
+  roots. The current checkout's rebuilt production server ran only on isolated port `3300` with isolated state/data/
+  discovery roots; Antigravity's sidecar and saved settings were not changed.
+- The operator's exact write/runtime gate remained satisfied: Antigravity open, X4 absent before launch, machine quiet,
+  and literal `go`. The test opened no save and wrote no gameplay state.
+
+### IMPLEMENT
+
+- `src/types.ts` now carries the authored edit-box height into `createEditBox`, disables scrollbar reservation for its
+  generated fixed-width table, defines the shipped `menu.onCloseElement(dueToClose)` owner through
+  `Helper.closeMenu`, and routes programmatic close through that same callback.
+- `src/lib/x4UiLint.ts` adds stable rule `x4-ui.editbox-height-minimum`. Statically omitted or literal-zero outer
+  heights are errors with the observed X4 failure mode; dynamic height remains an explicit verification gap. The rule
+  deliberately does not claim that X4 rejects the entire frame.
+- `src/lib/uiCompilerSelftest.ts` and `src/lib/x4UiLint.selftest.ts` causally bind those emitter/linter behaviors and
+  truthful wording.
+- `server.ts` retains same-volume rename as the first-deploy recovery fast path and falls back only on `EXDEV`:
+  regular-tree copy to quarantine, source/quarantine fingerprint and byte verification before target removal, exact
+  rollback on removal or receipt-consumption failure, and one-use retry semantics. Non-`EXDEV`, corrupt-copy, stale,
+  symlink, and target-root failures remain fail-closed. `scripts/route-integration.mjs` requires all thirteen new causal
+  recovery checks from the public artifact selftest.
+
+### VALIDATE — STATIC / FOCUSED / HOST
+
+- Causal UI compiler: `18/22` fail-first, then `22/22` final. Causal linter: `113/116`, wording correction
+  `114/116`, then `116/116` final.
+- TypeScript passed. Exact owned-file ESLint passed with zero errors (warnings remain existing style debt). Diff hygiene
+  passed apart from the repository's existing LF/CRLF notices.
+- Graphify refreshed deterministically to `9867` nodes, `24697` edges, and `322` communities after the bounded source
+  changes.
+- Route integration passed `491/491`; compile-artifact selftest passed `74/74`; all thirteen new cross-volume recovery
+  checks passed. The production build passed with `1,847` Vite modules. The rebuilt live artifact selftest on isolated
+  port `3300` again returned `74/74`, including the thirteen causal checks.
+- The repaired UI-only package contains exactly four files and `6,338` bytes. Its regular-tree fingerprint is
+  `88574c00ce6d9aa5b1dd2686425fae0a8b492df75a04a25bd94d19e82f7d844f`:
+  `content.xml` `23a7e9...5034`, `README.md` `31b80a...c871`, `ui.xml` `655331...1689`, and generated Lua
+  `c1d9cd...718e`. Lint returned zero errors, zero warnings, and 33 explicit verification gaps. The external package
+  validator exited `0` with zero errors.
+- Live `/api/agent/compile` and separate `/api/agent/project/validate` agreed on the same four files/hashes and zero
+  errors/warnings. Four sequential guarded `/api/fs/write` calls materialized only
+  `F:\DEV_ENV\projects\Mods\X4Mods\pipeline_test`, each with `byteExact=true`.
+- Deploy dry-run returned exactly four additions, zero overwrite/delete/preserve operations, and `6,338` bytes with
+  every checklist stage passing. Apply returned the same effect and an exact live target, history row
+  `mtclxb6r-16c92a38`, and ready recovery `deploy-mtclxa6u-83b54fd4f07a641a`.
+- Final precommit first stopped safely on the expected durable-writer authority coupling after `server.ts` changed.
+  Native Luna updated only `config/durable-writers.json` to source fingerprint `71e71e3c...0ed5`, the exact current
+  writer counts, and the truthful EXDEV restore contract. `npm run test:writers` passed `14/14` plus `8/8`;
+  action-receipt selftests passed `57/57` and `23/23`; the official audit passed `82` routes / `56` surfaces at
+  reviewed SHA-256 `dbf9366e...548fa`. No action-receipt candidate or promotion was required.
+- The complete serial `npm run precommit:check` then passed under bundled Node `24.19.0`: tripwires, canon mirrors,
+  verdict oracle `55/55`, Vite lifecycle, product-copy guard, durable writers, capability and MCP contracts,
+  action-receipt coverage, whole-repository TypeScript, and size guards all passed.
+
+### VALIDATE — REAL X4 EXPERIENCE
+
+- Fail-first X4 had already accepted and displayed the generated frame, proving that this defect class was not whole-
+  frame rejection. It visibly clipped the edit field and failed standard close, while debuglog identified zero-height
+  editbox, missing `onCloseElement`, and fixed-column scrollbar-reservation diagnostics. Those facts authorized the
+  bounded repair above.
+- Repaired X4 launched as PID `21012` with `-scriptlogfiles -allowextensionupdates -logfile debuglog.txt -debug all`
+  and no save load. At the configured `2544x1353` drawable profile, the exact Forge-generated frame, title, status,
+  both authored buttons, and full-height edit field were visible.
+- Computer-use interaction clicked both authored buttons, focused the edit field, entered visible text `b119test`, and
+  clicked the standard frame close control. The panel disappeared in the real rendered host; X4 itself remained
+  responsive until it was closed cleanly with `Alt+F4`.
+- The repaired-session debuglog contains zero matches for all four acceptance signatures: `DisplayView`/setup failure,
+  editbox zero-height/small-dimensions, nil `onCloseElement`, and reserved-scrollbar diagnostics. The retained log is
+  `15,652` bytes, SHA-256 `f5390a...fedd`.
+- Durable ignored evidence is under
+  `dev-docs/b119-x4-ui-pipeline-smoke/in-game-20260828/repaired/`: interactive open-panel screenshot
+  `45658d...7bd7`, closed-panel screenshot `19bced...e735`, debuglog, and machine-readable runtime receipt
+  `7fa60f...168f`.
+- This verifies the UI-only Forge-to-X4 pipeline at one real profile. A second display/UI-scale run, complete
+  helper.lua/widget parity, and pixel-comparison against Forge remain open; therefore scale-path and 1:1 claims remain
+  `PARTIAL`.
+
+### VALIDATE — RECOVERY / CONTAINMENT
+
+- The original live recovery reproduced Windows `EXDEV` without mutating the target. After the bounded repair, replaying
+  that same receipt succeeded and its second use returned `409 RECOVERY_ALREADY_USED`.
+- The repaired package's fresh first-deploy recovery then succeeded live across `G:` game storage to `F:` recovery
+  storage: HTTP `200`, `priorExisted=false`, `restoredFingerprint=absent`. Replay returned HTTP `409` with
+  `RECOVERY_ALREADY_USED`; the durable record is `used`.
+- The game target is absent. Its quarantine and retained Mod Workspace each contain the exact four files,
+  `6,338` bytes, and fingerprint `88574c...44f`. The extensions parent is exactly the 45-entry pre-census minus only
+  `pipeline_test`: 44 entries, reconstructed pre-census SHA-256 `43b713...ccfe`, current SHA-256
+  `b8d52d...baa0`.
+- Existing AI Influence game and workspace fingerprints remained
+  `a9046192...eb295` and `477a9ea0...5af6` across final recovery. No other extension root was removed.
+- X4 count is zero; the isolated server PID is absent; ports `3000`, `3001`, `3100`, `3101`, `3300`, and `8972` are
+  free. Antigravity remained open and its sidecar was not touched.
+
+### REVIEW / CLOSE
+
+- Done and evidenced: UI-only Forge compile, lint, project validation, guarded workspace materialization, dry deploy,
+  actual deploy, exact deployed bytes, C++ frame acceptance at one profile, visible button/input interaction, standard
+  close, repaired-session log cleanliness, cross-volume one-use recovery, replay refusal, and neighboring-root
+  containment.
+- Partial/open: second display/UI-scale proof, useful source-first geometry for this generated package, complete
+  helper.lua/widget_fullscreen parity, exact Forge-versus-X4 pixel comparison, and full AI Influence reference
+  reconstruction. These remain B119 work and keep GitHub #41 open.
+- Capability-map delta: Forge-generated standalone menus and UI-only mods now have one real X4 acceptance receipt;
+  omitted/zero editbox height is a source-backed blocking lint rule; first-deploy recovery now works across volumes with
+  causal rollback/retry evidence. No claim extends beyond that proof boundary.
+
+### AAR
+
+- Sustain: fail first in X4, derive the correction from shipped helper.lua, retain exact package hashes, exercise visible
+  interaction rather than treating launch as proof, and use Forge's own recovery receipt instead of manual cleanup.
+- Improve work/approach: the first canonical smoke fixture omitted an outer editbox height and lifecycle callback even
+  though both are mechanically derivable from shipped code. Future generated fixtures must run the linter and lifecycle
+  matrix before game deployment.
+- Improve tools: a direct `sky.launch_app` timed out after successfully starting X4; fresh window enumeration recovered
+  it. `type_text` did not visibly enter text after focus, while individual `press_key` events did. The first saved
+  screenshot used a `.png` suffix for JPEG data and was immediately renamed. A relative-root custom fingerprint caused
+  one false mismatch before `Resolve-Path` corrected the oracle. Broad `rg`, three empty PowerShell pipelines, one missing
+  `/api/health` assumption, and one validator process guard that matched its own command were also corrected without
+  product or external-state damage.
+- The final precommit durable-writer stop was the intended authority behavior, not a product regression. Exact manifest
+  reconciliation restored the gate without weakening policy or changing action-receipt coverage.
+- Highest-risk evidenced weakness: a preview can be convincing while generated lifecycle or dimension fields are
+  absent. The linter and compiler selftests now catch this specific class, but X4 remains the authority for every frame
+  not yet run there.
+- Suggested commit title: `fix(ui-editor): verify UI-only Forge pipeline in X4`.

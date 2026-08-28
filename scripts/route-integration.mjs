@@ -964,6 +964,19 @@ async function main() {
     'deploy recovery rejects a stale post-state',
     'deploy recovery rejects a corrupt pre-state payload',
     'first-deploy recovery removes the new target atomically',
+    'first-deploy EXDEV fallback removes target after verified quarantine copy',
+    'first-deploy EXDEV fallback leaves an exact quarantine tree',
+    'first-deploy EXDEV fallback consumes the receipt exactly once',
+    'first-deploy EXDEV recovery refuses replay consumption',
+    'first-deploy non-EXDEV rename error fails closed without fallback',
+    'first-deploy non-EXDEV rename error leaves target and receipt unchanged',
+    'first-deploy EXDEV corrupt quarantine fails closed',
+    'first-deploy EXDEV corrupt quarantine leaves target exact and receipt ready',
+    'first-deploy EXDEV target-removal failure restores exact target',
+    'first-deploy EXDEV target-removal failure leaves receipt ready',
+    'first-deploy EXDEV consume failure restores exact post-deploy target',
+    'first-deploy EXDEV consume failure leaves receipt ready and quarantine reusable',
+    'first-deploy EXDEV failed consume can be retried safely',
   ];
   ok('artifact_selftest_public_and_green', artifactSelftest.status === 200 && artifactSelftest.json?.pass === true, `status=${artifactSelftest.status} summary=${artifactSelftest.json?.summary}`);
   ok('artifact_selftest_proves_locked_root_transaction', requiredArtifactChecks.every(name => artifactChecks.get(name) === true), JSON.stringify(Object.fromEntries(requiredArtifactChecks.map(name => [name, artifactChecks.get(name)]))));

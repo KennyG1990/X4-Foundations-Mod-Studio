@@ -1,15 +1,15 @@
 {
   "version": 1,
-  "sourceFingerprint": "87e20e6cee084a62871edde45052b576659fb81a853a63340089d3c3a3dca474",
+  "sourceFingerprint": "71e71e3c40255ac808b956997dabca9c6aba93c60ae349df66c2e633d21b0ed5",
   "policy": "Every raw production filesystem mutation source is count-pinned here. Authoritative files use atomic sibling promotion; stronger tree, archive, append-log, SQLite, retention, ephemeral, and fixture contracts remain explicit exceptions.",
   "writers": [
     {
       "file": "server.ts",
-      "calls": { "writeFileSync": 31, "appendFileSync": 1, "renameSync": 10, "copyFileSync": 4, "mkdirSync": 34, "rmSync": 38, "unlinkSync": 4, "chmodSync": 2, "mkdtempSync": 9 },
+      "calls": { "writeFileSync": 41, "appendFileSync": 1, "renameSync": 17, "copyFileSync": 4, "mkdirSync": 40, "rmSync": 47, "unlinkSync": 4, "chmodSync": 2, "mkdtempSync": 9 },
       "categories": ["mixed", "authoritative-atomic", "verified-tree-transaction", "isolated-artifact-stage", "retention-cleanup", "fixture-only"],
       "owners": ["writeWorkspaceFileGuarded and fs/create", "snapshot create/prune/delete/restore", "copyRegularTree and synchronizeRegularTree", "replaceValidatedDeployment and recovery", "compileWorkspaceToFolder scratch cleanup", "replaceReleaseDirectory", "Nexus and Steam release handlers", "embedded route/artifact/workspace API selftests", "route-integration caller-key provider-dispatch marker"],
-      "rationale": "The composition root contains guarded atomic source/snapshot writes, verified deployment/release directory transactions, isolated compilation/release materializers, bounded snapshot/artifact retention, and embedded scratch-only route fixtures including the isolated provider-dispatch evidence marker.",
-      "failureContract": "Authoritative files preserve prior bytes; tree promotion rolls back; scratch trees never target configured live roots; retention deletes only named bounded artifacts; the provider-dispatch marker requires non-production plus explicit route-test mode, writes fixed-name non-secret evidence only beneath the harness-provided isolated fixture directory, and propagates append failure so the oracle cannot report false success."
+      "rationale": "The composition root contains guarded atomic source/snapshot writes, verified deployment/release directory transactions including bounded EXDEV quarantine-copy recovery with exact restore, isolated compilation/release materializers, bounded snapshot/artifact retention, and embedded scratch-only route fixtures including causal provider-dispatch evidence.",
+      "failureContract": "Authoritative files preserve prior bytes; tree promotion rolls back; EXDEV recovery verifies the quarantine copy and, on removal or receipt failure, exactly restores the validated deployed post-action target; scratch trees never target configured live roots; retention deletes only named bounded artifacts; embedded causal fixtures require non-production plus explicit route-test mode, write fixed-name non-secret evidence only beneath the harness-provided isolated fixture directory, and propagate append failure so the oracle cannot report false success."
     },
     {
       "file": "src/lib/actionReceipt.selftest.ts",

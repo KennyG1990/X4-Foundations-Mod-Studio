@@ -1,79 +1,100 @@
-# Session handoff — B119 `pipeline_test` authorized pre-deploy checkpoint
+# Session handoff — B119 UI-only Forge-to-X4 pipeline proof
 
 Date: 2026-08-28
 Project: `F:\DEV_ENV\X4_Forge`
-Status: `IN_PROGRESS / PARTIAL / Not verified in game`
+Status: bounded `VERIFIED AT ONE REAL X4 PROFILE`; overall B119
+`IN_PROGRESS / PARTIAL`
 
 ## Current state
 
-- The operator supplied the exact gate: Antigravity open, X4 not running, machine quiet, and literal `go`.
-- Host validation is green under bundled Node `v24.19.0`: complete precommit, production build, official oracle sweep
-  `134/134`, serial isolated E2E `104/104`, and full ESLint exit `0`. ESLint has `0` errors and `592` existing
-  warnings. The E2E verdict SHA-256 is
-  `07A5BE43DC99415506CE85ACE263539FC426A0CEEECD13572CBD6E72597C7B39`; it proves `treeGone=true`, zero
-  remaining child PIDs, free live/ephemeral ports, and unchanged persisted config.
-- The staged UI-only package under `dev-docs/b119-x4-ui-pipeline-smoke/` remains exactly `content.xml` (`367`,
-  `696c5c...`), `ui.xml` (`273`, `655331...`), and `ui/pipeline_test.lua` (`5378`, `b8f4c1...`). It has six UI
-  widgets and no MD, AI, library, patch, translation, or gameplay-state content. The one-instance external validator
-  receipt remains `b0bf7a6e...07bf`; package bytes have not changed, so it was not rerun.
-- Both profiles at UI scale `1` and `1.4` still produce program counts `1/1/6/12` and `canRender=true`, but source-first
-  geometry remains unusable with zero widgets/texts. This is not a frame/button capture and is not game proof.
+- `pipeline_test` proved the UI-only path end to end through the existing Forge owners: compile, linter, project
+  validation, guarded Mod Workspace writes, dry deploy, actual deploy, exact game bytes, real X4 frame acceptance,
+  visible interaction, standard close, one-use rollback, and replay refusal.
+- X4 displayed the repaired generated panel at the configured `2544x1353` drawable profile. Both authored buttons were
+  clicked, the full-height edit field visibly accepted `b119test`, and the standard close removed the panel. No save
+  was loaded or written.
+- Repaired-session debuglog counts are all zero for `DisplayView`/setup failure, zero-height editbox, nil
+  `onCloseElement`, and reserved-scrollbar diagnostics.
+- Durable ignored evidence is under
+  `dev-docs/b119-x4-ui-pipeline-smoke/in-game-20260828/repaired/`. `runtime-receipt.json` is the compact authority;
+  it links the interactive/closed screenshots, debuglog, package hashes, deploy/recovery IDs, and containment census.
+- The package workspace remains at `F:\DEV_ENV\projects\Mods\X4Mods\pipeline_test`. It is four files, `6,338`
+  bytes, tree fingerprint `88574c00...44f`. The live game target is absent after recovery.
+- Recovery row `mtclxb6r-16c92a38` used receipt `deploy-mtclxa6u-83b54fd4f07a641a`: first call HTTP `200`,
+  `restoredFingerprint=absent`; replay HTTP `409 RECOVERY_ALREADY_USED`; durable status `used`. Quarantine is an exact
+  four-file copy.
+- The extensions census is exactly its 45-entry pre-state minus only `pipeline_test` (44 current entries). AI Influence
+  game/workspace regular-tree fingerprints remain `a9046192...eb295` / `477a9ea0...5af6`.
+- X4 and the isolated server are stopped. Ports `3000`, `3001`, `3100`, `3101`, `3300`, and `8972` are free.
+  Antigravity remains open and untouched.
 
-## Runtime and exact authority
+## Implemented bounded repair
 
-- Persisted Antigravity config SHA-256 is
-  `355B4B636AD6C0BB3B58DEA793DE409C2375B8A81230433C0F0FDD48FBEE3B5A`; it names:
-  - Mod Workspace: `F:\DEV_ENV\projects\Mods\X4Mods`
-  - Game: `G:\SteamLibrary\steamapps\common\X4 Foundations`
-  - Filesystem: `G:\SteamLibrary\steamapps\common\X4 Foundations\extensions`
-  - Corpus: `F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00`
-  - Deploy format: `loose`
-- Antigravity Forge `0.0.70` is running on its private sidecar port. Its bundled server is
-  `D27EDFA78255EE5B9919431A0AAE226C62BC9C97E9B0085C4F8A98C8938D3437` / `3,508,512` bytes. The freshly
-  built current-checkout server is `64FE71D0C83007BDDAE09E1AD9C355F6D658182974E1A57FC2B6B24F8E53E121` / `3,509,970` bytes. They differ;
-  launch the current checkout with `X4_CONFIG_DIR` pointed at the persisted config and isolated runtime state.
-- Authorized writes are limited to:
-  - `F:\DEV_ENV\projects\Mods\X4Mods\pipeline_test`
-  - Forge's dedicated loose-build artifact for `pipeline_test`
-  - `G:\SteamLibrary\steamapps\common\X4 Foundations\extensions\pipeline_test`
-- Possible breakage is X4 startup/UI reload, Lua error, or C++ frame rejection. Rollback removes only the dedicated
-  game extension after evidence and proves every pre-existing extension/root fingerprint unchanged. No save may be
-  loaded without a separate gate.
+- `src/types.ts`: preserve authored editbox height; emit `reserveScrollBar=false` for the generated fixed-width table;
+  define shipped `menu.onCloseElement(dueToClose)` through `Helper.closeMenu`; delegate `menu.close()` to it.
+- `src/lib/x4UiLint.ts`: stable `x4-ui.editbox-height-minimum` error for statically omitted/literal-zero outer height;
+  dynamic values remain verification gaps and wording truthfully says X4 displays a clipped/overlapped field.
+- `src/lib/uiCompilerSelftest.ts` and `src/lib/x4UiLint.selftest.ts`: causal emitter/linter coverage.
+- `server.ts`: same-volume first-deploy recovery remains the rename fast path; only `EXDEV` enters copy/verify/remove,
+  with exact rollback after removal or receipt-consumption failure.
+- `scripts/route-integration.mjs`: requires thirteen causal cross-volume recovery checks from the public selftest.
 
-## Dirty-file boundary and commit point
+## Validation already green
 
-- Owned B119 implementation/test paths are the twelve `x4UiCallModel`, `x4UiLayoutProgram`, `x4UiScene`,
-  `x4UiSourceEdits`, `x4UiPaintPlan`, and `x4UiCanvasRenderer` source/selftest files.
-- Owned B119 records are `BACKLOG.md`, `SESSION-HANDOFF.md`, and
-  `docs/plans/2026-08-10-b119-x4-ui-editor-linter-first.md`.
-- Baseline is `HEAD == origin/main == edcb2a7d645d041d2a75253c0207bbafae7972fa`. Preserve all unrelated modified,
-  deleted, and untracked paths. Stage only the fifteen explicit owned paths; never use broad staging.
-- Suggested commit title: `feat(ui-editor): prepare B119 UI-only in-game pipeline smoke`.
+- UI compiler `22/22`; X4 UI linter `116/116`; TypeScript pass; exact lint zero errors; diff hygiene pass.
+- Route integration `491/491`; compile-artifact selftest `74/74`; thirteen new causal recovery checks `13/13`.
+- Production build passed at `1,847` Vite modules. Rebuilt isolated live artifact selftest again passed `74/74`.
+- Live compile and separate project validation agreed on all four exact files with zero errors/warnings. Package linter
+  returned zero errors, zero warnings, and 33 explicit verification gaps. External validator exited `0`.
+- Graphify refreshed deterministically to `9867` nodes, `24697` edges, and `322` communities.
+- The expected durable-writer authority stop was reviewed and repaired by exact native Luna ownership only:
+  `config/durable-writers.json` now pins source fingerprint `71e71e3c...0ed5` and the real `server.ts` writer counts.
+  Writer audit passed `14/14` plus `8/8`. Action-receipt selftests passed `57/57` and `23/23`; the official audit passed
+  `82` routes / `56` surfaces at reviewed SHA-256 `dbf9366e...548fa`. No candidate or promotion was required.
+- Final complete `npm run precommit:check` passed under bundled Node `24.19.0`: tripwires, canon mirrors, verdict
+  `55/55`, Vite lifecycle, product copy, durable writers, capability/MCP contracts, action receipts, TypeScript, and
+  size guards all passed.
 
-## Hazards and AAR
+## Truth boundary and eyeball queue
 
-- The raw oracle script was once called without its required server and returned `0/133`; the official owner passed
-  `134/134`. The first full-lint receipt was lost to output truncation after the process had exited; process readback
-  showed zero ESLint processes before a single successful evidence rerun.
-- Host policy rejected one computed temporary-shim cleanup command before execution. The accepted ignored runtime shim
-  contains only `node.cmd` and `npm.cmd`, selects bundled Node `24.19.0`, and changes no tracked product file.
-- Highest-risk weakness remains unchanged: a convincing preview can still differ from X4 C++ frame acceptance. Keep
-  `Not verified in game` until the visible host proves the dedicated frame and interaction.
+- This proves the UI-only Forge-to-X4 pipeline at one real profile. It does not prove a second scale, every widget,
+  complete `helper.lua`/`widget_fullscreen.lua` parity, exact Forge-versus-X4 pixels, or the AI Influence design.
+- Optional 30-second Ken check: open
+  `dev-docs/b119-x4-ui-pipeline-smoke/in-game-20260828/repaired/panel-open-interactive.jpg`; verify the visible title,
+  two buttons, status, full-height field, and `b119test`. Then open `panel-closed.jpg`; verify the panel is absent.
+  This check is not needed to establish that X4 accepted and interacted with the panel because computer-use and
+  debuglog evidence already do so.
+- Next experience gate: rerun the same exact package at a second drawable/UI-scale profile and compare measured bounds
+  with Forge. AI Influence reconstruction remains the later benchmark, not a prerequisite for this pipeline proof.
 
-## Eyeball queue
+## Dirty boundary and commit question
 
-- After exact deploy-byte and debuglog baseline evidence, launch X4 to startup/main menu only. Confirm the authored
-  panel appears, inspect its text/buttons/edit box, exercise the close and authored button surfaces, and capture a
-  screenshot plus relevant debuglog interval. Repeat at a second UI-scale/display profile if the first profile passes.
-- If the menu is unavailable before loading a save, stop. Do not open a save; present a separate save-specific gate.
+- Baseline is `HEAD == origin/main == remote main == 1502b1e9f53197e74e9a2e6370b3af18cba0cf70`.
+- Owned tracked paths are `BACKLOG.md`, `SESSION-HANDOFF.md`,
+  `docs/plans/2026-08-10-b119-x4-ui-editor-linter-first.md`, `scripts/route-integration.mjs`, `server.ts`,
+  `src/types.ts`, `src/lib/uiCompilerSelftest.ts`, `src/lib/x4UiLint.ts`, and
+  `src/lib/x4UiLint.selftest.ts`, plus reviewed authority manifest `config/durable-writers.json`.
+- Preserve every other modified, deleted, and untracked path. Stage with explicit paths only; never broad-stage.
+- Commit question: this bounded close is ready for explicit-path commit and push as
+  `fix(ui-editor): verify UI-only Forge pipeline in X4`; then prove local/tracking/direct-remote parity.
 
 ## Next exact actions
 
-1. Diff-check, explicitly stage the fifteen owned paths, commit, push, and prove local/tracking/direct-remote parity.
-2. Start current-checkout `dist/server.cjs` with persisted config and isolated runtime state/token.
-3. Through Forge project/compile/guarded-write owners, materialize only the exact UI-only `pipeline_test` source and
-   read back byte hashes; run full project validation and the static negative gate.
-4. Run deploy-verify dry-run, confirm exact effect/containment, apply only the dedicated target, and capture recovery
-   authority plus surrounding-root fingerprints.
-5. Launch X4 for visible truth, then roll back only `pipeline_test` after evidence. Update GitHub #41, Notion, Drive,
-   capability map, plan, backlog, and this handoff at the promotion checkpoint.
+1. Fresh-eyes review the final owned diff, explicitly stage only owned paths, commit, push, and prove
+   `HEAD == origin/main == git ls-remote`.
+2. Update and read back GitHub #41, Notion, and Google Drive. Keep #41 open and label the overall feature `PARTIAL`.
+3. Resume B119 with the same exact package at a second drawable/UI-scale profile, then Forge/X4 measured comparison.
+
+## Triggered AAR hazards
+
+- X4 launch returned a targeting timeout despite starting successfully; fresh window enumeration recovered it.
+- `type_text` did not visibly populate the focused X4 editbox; individual `press_key` events did.
+- The first evidence suffix said `.png` for JPEG bytes and was immediately normalized to `.jpg`.
+- A relative-root custom fingerprint produced one false mismatch; resolving the root restored exact equality.
+- Broad `rg`, three empty PowerShell pipelines, one assumed `/api/health`, and one validator process guard that matched its
+  own command were corrected without mutating product, game neighbors, or standing configuration.
+- Final precommit correctly stopped on the changed `server.ts` durable-writer fingerprint/counts. Native Luna updated
+  only the reviewed manifest; writer and action-receipt audits then passed without weakening policy or promoting a
+  coverage candidate.
+- Highest-risk weakness: a convincing preview can still omit lifecycle/dimension fields. The new rule and selftests
+  close this exact defect class; X4 remains authoritative for every untested frame.

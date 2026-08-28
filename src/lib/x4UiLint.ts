@@ -34,6 +34,7 @@ export const X4_UI_LINT_RULES = {
   renderedNonAscii: 'x4-ui.rendered-non-ascii',
   rowHeightBudget: 'x4-ui.row-height-budget',
   tableHeightBudget: 'x4-ui.table-height-budget',
+  editBoxHeightMinimum: 'x4-ui.editbox-height-minimum',
   inlineDisplay: 'x4-ui.inline-display',
   sameLayerInlineOpen: 'x4-ui.same-layer-inline-open',
   verificationGap: 'x4-ui.verification-gap',
@@ -355,6 +356,7 @@ class X4UiLintEvaluator {
     this.checkPercentages();
     this.checkColspans();
     this.checkFontsAndRenderedText();
+    this.checkEditBoxHeights();
     this.checkRowHeightBudgets();
     this.checkInlineDisplay();
     this.checkSameLayerInlineOpen();
@@ -995,6 +997,60 @@ class X4UiLintEvaluator {
           }
         }
       }
+    }
+  }
+
+  private checkEditBoxHeights(): void {
+    for (const call of this.calls) {
+      if (call.name !== 'createEditBox') continue;
+
+      const options = call.semantics.options;
+      if (options && options.status !== 'static') {
+        this.addValueGap(
+          'height',
+          options,
+          'createEditBox height is unverified because its options table is dynamic or unknown',
+          call.source
+        );
+        continue;
+      }
+
+      const heightValue = projectedProperty(call, ['height']);
+      const height = staticNumber(heightValue);
+      if (height === undefined) {
+        if (heightValue) {
+          this.addValueGap(
+            'height',
+            heightValue,
+            'createEditBox height is dynamic or unsupported; the zero-height overlap boundary is not statically proven',
+            call.source
+          );
+        } else {
+          this.addFinding({
+            rule: X4_UI_LINT_RULES.editBoxHeightMinimum,
+            severity: 'error',
+            message: 'createEditBox outer height is omitted; Helper leaves the base cell at zero.',
+            cause: 'Helper base cell height defaults to zero when createEditBox height is omitted or literal zero.',
+            failureMode: 'X4 displays the frame, logs "Dimensions for editbox are too small ... height(0 px)" and "Editbox elements will overlap eachother", and shows the edit field clipped/overlapped.',
+            evidenceBoundary: 'Only statically proven omitted or literal-zero createEditBox outer height produces this lint error; dynamic or unresolved height remains a verification gap.',
+            nextAction: 'Add a positive height to the createEditBox outer properties and verify the rendered layout in-game.',
+            location: call.source
+          });
+        }
+        continue;
+      }
+      if (height !== 0) continue;
+
+      this.addFinding({
+        rule: X4_UI_LINT_RULES.editBoxHeightMinimum,
+        severity: 'error',
+        message: 'createEditBox outer height is the literal zero; Helper leaves the base cell at zero.',
+        cause: 'Helper base cell height defaults to zero when createEditBox height is omitted or literal zero.',
+        failureMode: 'X4 displays the frame, logs "Dimensions for editbox are too small ... height(0 px)" and "Editbox elements will overlap eachother", and shows the edit field clipped/overlapped.',
+        evidenceBoundary: 'Only statically proven omitted or literal-zero createEditBox outer height produces this lint error; dynamic or unresolved height remains a verification gap.',
+        nextAction: 'Add a positive height to the createEditBox outer properties and verify the rendered layout in-game.',
+        location: heightValue.location
+      });
     }
   }
 

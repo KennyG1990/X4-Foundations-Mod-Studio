@@ -10993,6 +10993,16 @@ function samePathName(left: string, right: string): boolean {
   return process.platform === 'win32' ? left.toLowerCase() === right.toLowerCase() : left === right;
 }
 
+function pathHasEntry(filePath: string): boolean {
+  try {
+    fs.lstatSync(filePath);
+    return true;
+  } catch (error) {
+    if (String((error as NodeJS.ErrnoException | undefined)?.code || '').toUpperCase() === 'ENOENT') return false;
+    throw error;
+  }
+}
+
 function assertDeploymentRecoveryTarget(record: DeploymentRecoveryRecord, currentTargetRoot: string): void {
   const targetRoot = path.resolve(record.targetRoot);
   const targetPath = path.resolve(record.targetPath);
@@ -11105,15 +11115,58 @@ function replaceRegularTreeExact(sourceRoot: string, targetPath: string, hooks: 
   }
 }
 
+function restoreFirstDeployTargetFromQuarantine(
+  quarantinePath: string,
+  targetPath: string,
+  expectedFingerprint: string,
+  expectedBytes: number,
+): void {
+  const parent = path.dirname(targetPath);
+  fs.mkdirSync(parent, { recursive: true });
+  const nonce = `${process.pid}-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+  const stage = path.join(parent, `.${path.basename(targetPath)}.x4forge-recovery-restore-${nonce}`);
+  try {
+    if (!pathHasEntry(quarantinePath)) throw new Error('First-deploy recovery quarantine is missing.');
+    if (regularTreeFingerprint(quarantinePath) !== expectedFingerprint || regularTreeBytes(quarantinePath) !== expectedBytes) {
+      throw new Error('First-deploy recovery quarantine no longer matches the verified deployed target.');
+    }
+    copyRegularTree(quarantinePath, stage);
+    if (regularTreeFingerprint(stage) !== expectedFingerprint || regularTreeBytes(stage) !== expectedBytes) {
+      throw new Error('First-deploy recovery rollback copy did not verify against the deployed target.');
+    }
+
+    if (pathHasEntry(targetPath)) {
+      const targetStat = fs.lstatSync(targetPath);
+      if (targetStat.isSymbolicLink() || !targetStat.isDirectory()) {
+        throw new Error('First-deploy recovery rollback target is not a regular directory.');
+      }
+      inspectRegularTree(targetPath);
+      fs.rmSync(targetPath, { recursive: true, force: true });
+      if (pathHasEntry(targetPath)) throw new Error('First-deploy recovery rollback could not remove the partial target.');
+    }
+    fs.renameSync(stage, targetPath);
+    if (!pathHasEntry(targetPath)
+      || regularTreeFingerprint(targetPath) !== expectedFingerprint
+      || regularTreeBytes(targetPath) !== expectedBytes) {
+      throw new Error('First-deploy recovery rollback target did not verify against the deployed target.');
+    }
+    fs.rmSync(quarantinePath, { recursive: true, force: true });
+    if (pathHasEntry(quarantinePath)) throw new Error('First-deploy recovery rollback could not release its quarantine.');
+  } finally {
+    try { if (pathHasEntry(stage)) fs.rmSync(stage, { recursive: true, force: true }); } catch { /* best effort */ }
+  }
+}
+
 function restoreDeploymentRecovery(
   record: DeploymentRecoveryRecord,
   currentTargetRoot: string,
   expectedCurrentHash = record.expectedCurrentHash,
   store: DestructiveRecoveryStore = destructiveRecoveryStore,
   consume?: () => void,
+  hooks: DeploymentTransactionHooks = {},
 ): { targetPath: string; restoredFingerprint: string } {
   assertDeploymentRecoveryTarget(record, currentTargetRoot);
-  if (!fs.existsSync(record.targetPath)) throw new Error('Recovery refused because the deployed mod no longer exists.');
+  if (!pathHasEntry(record.targetPath)) throw new Error('Recovery refused because the deployed mod no longer exists.');
   const targetStat = fs.lstatSync(record.targetPath);
   if (targetStat.isSymbolicLink() || !targetStat.isDirectory()) throw new Error('Recovery refused because the deployed mod target is not a regular directory.');
   const currentFingerprint = regularTreeFingerprint(record.targetPath);
@@ -11136,9 +11189,69 @@ function restoreDeploymentRecovery(
   const quarantineRoot = store.payloadPath(record.id);
   const quarantine = path.join(quarantineRoot, 'removed-current');
   fs.mkdirSync(quarantineRoot, { recursive: true });
-  if (fs.existsSync(quarantine)) throw new Error('First-deploy recovery quarantine is already occupied.');
-  fs.renameSync(record.targetPath, quarantine);
-  if (fs.existsSync(record.targetPath)) {
+  if (pathHasEntry(quarantine)) throw new Error('First-deploy recovery quarantine is already occupied.');
+  const rename = hooks.rename || ((oldPath: string, newPath: string) => fs.renameSync(oldPath, newPath));
+  const currentBytes = regularTreeBytes(record.targetPath);
+  try {
+    rename(record.targetPath, quarantine);
+  } catch (error) {
+    if (!isCrossDeviceRenameError(error)) throw error;
+
+    try {
+      copyRegularTree(record.targetPath, quarantine);
+      hooks.afterFirstDeployQuarantineCopy?.(quarantine);
+      const targetFingerprintAfterCopy = regularTreeFingerprint(record.targetPath);
+      const targetBytesAfterCopy = regularTreeBytes(record.targetPath);
+      const quarantineFingerprint = regularTreeFingerprint(quarantine);
+      const quarantineBytes = regularTreeBytes(quarantine);
+      if (targetFingerprintAfterCopy !== currentFingerprint || targetBytesAfterCopy !== currentBytes) {
+        throw new Error('First-deploy recovery target changed while its cross-volume quarantine was being captured.');
+      }
+      if (quarantineFingerprint !== currentFingerprint || quarantineBytes !== currentBytes) {
+        throw new Error('First-deploy recovery quarantine copy did not verify against the validated deployed target.');
+      }
+    } catch (copyError) {
+      try { if (pathHasEntry(quarantine)) fs.rmSync(quarantine, { recursive: true, force: true }); } catch (cleanupError) {
+        throw new Error(
+          `First-deploy recovery quarantine copy failed: ${copyError instanceof Error ? copyError.message : String(copyError)}; ` +
+          `quarantine cleanup also failed: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
+        );
+      }
+      throw new Error(`First-deploy recovery quarantine copy failed: ${copyError instanceof Error ? copyError.message : String(copyError)}`);
+    }
+
+    try {
+      const removeTarget = hooks.removeFirstDeployTarget || ((targetPath: string) => fs.rmSync(targetPath, { recursive: true, force: true }));
+      removeTarget(record.targetPath);
+      if (pathHasEntry(record.targetPath)) throw new Error('First-deploy recovery could not remove the deployed target.');
+    } catch (removeError) {
+      try {
+        restoreFirstDeployTargetFromQuarantine(quarantine, record.targetPath, currentFingerprint, currentBytes);
+      } catch (rollbackError) {
+        throw new Error(
+          `First-deploy recovery could not remove the deployed target: ${removeError instanceof Error ? removeError.message : String(removeError)}; ` +
+          `rollback also failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`,
+        );
+      }
+      throw new Error(`First-deploy recovery could not remove the deployed target, so the removal was rolled back: ${removeError instanceof Error ? removeError.message : String(removeError)}`);
+    }
+
+    try {
+      consume?.();
+    } catch (consumeError) {
+      try {
+        restoreFirstDeployTargetFromQuarantine(quarantine, record.targetPath, currentFingerprint, currentBytes);
+      } catch (rollbackError) {
+        throw new Error(
+          `First-deploy recovery receipt failed: ${consumeError instanceof Error ? consumeError.message : String(consumeError)}; ` +
+          `rollback also failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`,
+        );
+      }
+      throw new Error(`First-deploy recovery receipt failed, so the removal was rolled back: ${consumeError instanceof Error ? consumeError.message : String(consumeError)}`);
+    }
+    return { targetPath: record.targetPath, restoredFingerprint: 'absent' };
+  }
+  if (pathHasEntry(record.targetPath)) {
     try { fs.renameSync(quarantine, record.targetPath); } catch { /* reported by the invariant below */ }
     throw new Error('First-deploy recovery could not remove the deployed target atomically.');
   }
@@ -11324,11 +11437,20 @@ interface DeploymentTransactionHooks {
   afterFallbackApply?: (targetPath: string) => void;
   /** Runs after target verification while the prior target is still rollback-capable. */
   beforeFinalize?: () => void;
+  /** Test seam for corrupting or truncating the first-deploy cross-volume quarantine. */
+  afterFirstDeployQuarantineCopy?: (quarantinePath: string) => void;
+  /** Test seam for proving first-deploy removal failures roll back exactly. */
+  removeFirstDeployTarget?: (targetPath: string) => void;
 }
 
 function isLockedRootRenameError(error: unknown): boolean {
   const code = String((error as NodeJS.ErrnoException | undefined)?.code || '').toUpperCase();
   return code === 'EBUSY' || code === 'EPERM';
+}
+
+function isCrossDeviceRenameError(error: unknown): boolean {
+  const code = String((error as NodeJS.ErrnoException | undefined)?.code || '').toUpperCase();
+  return code === 'EXDEV';
 }
 
 function replaceLockedDeploymentInPlace(
@@ -11897,6 +12019,251 @@ function runCompileArtifactSelftest() {
       () => recoveryStore.markUsed(firstReady.id),
     );
     record('first-deploy recovery removes the new target atomically', firstRestored.restoredFingerprint === 'absent' && !fs.existsSync(firstTarget));
+
+    // A recovery store may be on a different volume from the deployed target. Force the
+    // platform error so this remains causal and deterministic on hosts with one volume.
+    const crossVolumeTarget = path.join(deployRoot, 'first_deploy_cross_volume');
+    const crossVolumeReceipt = prepareDeploymentRecoveryReceipt(deployRoot, crossVolumeTarget, 'first_deploy_cross_volume', recoveryStore);
+    fs.mkdirSync(path.join(crossVolumeTarget, 'nested'), { recursive: true });
+    fs.writeFileSync(path.join(crossVolumeTarget, 'content.xml'), '<content id="first_deploy_cross_volume"/>');
+    fs.writeFileSync(path.join(crossVolumeTarget, 'nested', 'state.bin'), 'cross-volume post-deploy state');
+    const crossVolumePostFingerprint = regularTreeFingerprint(crossVolumeTarget);
+    const crossVolumePostBytes = regularTreeBytes(crossVolumeTarget);
+    const crossVolumeReady = recoveryStore.finalizeDeployment(crossVolumeReceipt.id, crossVolumePostFingerprint);
+    const crossVolumeQuarantine = path.join(recoveryStore.payloadPath(crossVolumeReady.id), 'removed-current');
+    const crossVolumeRenameAttempts = { value: 0 };
+    let crossVolumeConsumeCalls = 0;
+    const crossVolumeRestored = restoreDeploymentRecovery(
+      crossVolumeReady,
+      deployRoot,
+      crossVolumeReady.expectedCurrentHash,
+      recoveryStore,
+      () => {
+        crossVolumeConsumeCalls++;
+        recoveryStore.markUsed(crossVolumeReady.id);
+      },
+      {
+        rename: (oldPath, newPath) => {
+          if (path.resolve(oldPath) === path.resolve(crossVolumeTarget) && path.resolve(newPath) === path.resolve(crossVolumeQuarantine)) {
+            crossVolumeRenameAttempts.value++;
+            throw Object.assign(new Error('simulated cross-volume rename'), { code: 'EXDEV' });
+          }
+          fs.renameSync(oldPath, newPath);
+        },
+      },
+    );
+    const crossVolumeUsed = recoveryStore.read(crossVolumeReady.id);
+    let crossVolumeReplayRejected = false;
+    try { recoveryStore.markUsed(crossVolumeReady.id); } catch { crossVolumeReplayRejected = true; }
+    record(
+      'first-deploy EXDEV fallback removes target after verified quarantine copy',
+      crossVolumeRestored.restoredFingerprint === 'absent' && !pathHasEntry(crossVolumeTarget) && crossVolumeRenameAttempts.value === 1,
+    );
+    record(
+      'first-deploy EXDEV fallback leaves an exact quarantine tree',
+      pathHasEntry(crossVolumeQuarantine)
+        && regularTreeFingerprint(crossVolumeQuarantine) === crossVolumePostFingerprint
+        && regularTreeBytes(crossVolumeQuarantine) === crossVolumePostBytes,
+    );
+    record(
+      'first-deploy EXDEV fallback consumes the receipt exactly once',
+      crossVolumeConsumeCalls === 1 && crossVolumeUsed.ok && crossVolumeUsed.record.status === 'used',
+    );
+    record('first-deploy EXDEV recovery refuses replay consumption', crossVolumeReplayRejected && crossVolumeUsed.ok && crossVolumeUsed.record.status === 'used');
+
+    const nonExdevTarget = path.join(deployRoot, 'first_deploy_non_exdev');
+    const nonExdevReceipt = prepareDeploymentRecoveryReceipt(deployRoot, nonExdevTarget, 'first_deploy_non_exdev', recoveryStore);
+    fs.mkdirSync(path.join(nonExdevTarget, 'nested'), { recursive: true });
+    fs.writeFileSync(path.join(nonExdevTarget, 'content.xml'), '<content id="first_deploy_non_exdev"/>');
+    fs.writeFileSync(path.join(nonExdevTarget, 'nested', 'state.bin'), 'non-exdev state');
+    const nonExdevFingerprint = regularTreeFingerprint(nonExdevTarget);
+    const nonExdevBytes = regularTreeBytes(nonExdevTarget);
+    const nonExdevReady = recoveryStore.finalizeDeployment(nonExdevReceipt.id, nonExdevFingerprint);
+    const nonExdevQuarantine = path.join(recoveryStore.payloadPath(nonExdevReady.id), 'removed-current');
+    let nonExdevRejected = false;
+    let nonExdevCopyCalled = false;
+    try {
+      restoreDeploymentRecovery(
+        nonExdevReady,
+        deployRoot,
+        nonExdevReady.expectedCurrentHash,
+        recoveryStore,
+        undefined,
+        {
+          rename: (oldPath, newPath) => {
+            if (path.resolve(oldPath) === path.resolve(nonExdevTarget) && path.resolve(newPath) === path.resolve(nonExdevQuarantine)) {
+              throw Object.assign(new Error('simulated non-cross-device rename failure'), { code: 'EACCES' });
+            }
+            fs.renameSync(oldPath, newPath);
+          },
+          afterFirstDeployQuarantineCopy: () => { nonExdevCopyCalled = true; },
+        },
+      );
+    } catch (error) {
+      nonExdevRejected = /non-cross-device rename failure/.test(String(error));
+    }
+    const nonExdevAfterFingerprint = regularTreeFingerprint(nonExdevTarget);
+    const nonExdevAfterBytes = regularTreeBytes(nonExdevTarget);
+    const nonExdevState = recoveryStore.read(nonExdevReady.id);
+    record('first-deploy non-EXDEV rename error fails closed without fallback', nonExdevRejected && !nonExdevCopyCalled && !pathHasEntry(nonExdevQuarantine));
+    record(
+      'first-deploy non-EXDEV rename error leaves target and receipt unchanged',
+      nonExdevAfterFingerprint === nonExdevFingerprint && nonExdevAfterBytes === nonExdevBytes && nonExdevState.ok && nonExdevState.record.status === 'ready',
+    );
+    recoveryStore.abandon(nonExdevReceipt.id);
+    fs.rmSync(nonExdevTarget, { recursive: true, force: true });
+
+    const corruptCopyTarget = path.join(deployRoot, 'first_deploy_corrupt_copy');
+    const corruptCopyReceipt = prepareDeploymentRecoveryReceipt(deployRoot, corruptCopyTarget, 'first_deploy_corrupt_copy', recoveryStore);
+    fs.mkdirSync(path.join(corruptCopyTarget, 'nested'), { recursive: true });
+    fs.writeFileSync(path.join(corruptCopyTarget, 'content.xml'), '<content id="first_deploy_corrupt_copy"/>');
+    fs.writeFileSync(path.join(corruptCopyTarget, 'nested', 'state.bin'), 'copy must verify');
+    const corruptCopyFingerprint = regularTreeFingerprint(corruptCopyTarget);
+    const corruptCopyBytes = regularTreeBytes(corruptCopyTarget);
+    const corruptCopyReady = recoveryStore.finalizeDeployment(corruptCopyReceipt.id, corruptCopyFingerprint);
+    const corruptCopyQuarantine = path.join(recoveryStore.payloadPath(corruptCopyReady.id), 'removed-current');
+    let corruptCopyRejected = false;
+    try {
+      restoreDeploymentRecovery(
+        corruptCopyReady,
+        deployRoot,
+        corruptCopyReady.expectedCurrentHash,
+        recoveryStore,
+        undefined,
+        {
+          rename: (oldPath, newPath) => {
+            if (path.resolve(oldPath) === path.resolve(corruptCopyTarget) && path.resolve(newPath) === path.resolve(corruptCopyQuarantine)) {
+              throw Object.assign(new Error('simulated cross-volume rename'), { code: 'EXDEV' });
+            }
+            fs.renameSync(oldPath, newPath);
+          },
+          afterFirstDeployQuarantineCopy: quarantinePath => {
+            fs.rmSync(path.join(quarantinePath, 'nested', 'state.bin'), { force: true });
+          },
+        },
+      );
+    } catch (error) {
+      corruptCopyRejected = /quarantine copy failed/.test(String(error));
+    }
+    const corruptCopyState = recoveryStore.read(corruptCopyReady.id);
+    record(
+      'first-deploy EXDEV corrupt quarantine fails closed',
+      corruptCopyRejected && regularTreeFingerprint(corruptCopyTarget) === corruptCopyFingerprint && regularTreeBytes(corruptCopyTarget) === corruptCopyBytes,
+    );
+    record(
+      'first-deploy EXDEV corrupt quarantine leaves target exact and receipt ready',
+      !pathHasEntry(corruptCopyQuarantine) && corruptCopyState.ok && corruptCopyState.record.status === 'ready',
+    );
+    recoveryStore.abandon(corruptCopyReceipt.id);
+    fs.rmSync(corruptCopyTarget, { recursive: true, force: true });
+
+    const removalFailureTarget = path.join(deployRoot, 'first_deploy_removal_failure');
+    const removalFailureReceipt = prepareDeploymentRecoveryReceipt(deployRoot, removalFailureTarget, 'first_deploy_removal_failure', recoveryStore);
+    fs.mkdirSync(path.join(removalFailureTarget, 'nested'), { recursive: true });
+    fs.writeFileSync(path.join(removalFailureTarget, 'content.xml'), '<content id="first_deploy_removal_failure"/>');
+    fs.writeFileSync(path.join(removalFailureTarget, 'nested', 'state.bin'), 'removal failure state');
+    const removalFailureFingerprint = regularTreeFingerprint(removalFailureTarget);
+    const removalFailureBytes = regularTreeBytes(removalFailureTarget);
+    const removalFailureReady = recoveryStore.finalizeDeployment(removalFailureReceipt.id, removalFailureFingerprint);
+    const removalFailureQuarantine = path.join(recoveryStore.payloadPath(removalFailureReady.id), 'removed-current');
+    let removalFailureRejected = false;
+    try {
+      restoreDeploymentRecovery(
+        removalFailureReady,
+        deployRoot,
+        removalFailureReady.expectedCurrentHash,
+        recoveryStore,
+        undefined,
+        {
+          rename: (oldPath, newPath) => {
+            if (path.resolve(oldPath) === path.resolve(removalFailureTarget) && path.resolve(newPath) === path.resolve(removalFailureQuarantine)) {
+              throw Object.assign(new Error('simulated cross-volume rename'), { code: 'EXDEV' });
+            }
+            fs.renameSync(oldPath, newPath);
+          },
+          removeFirstDeployTarget: () => { throw new Error('simulated target removal failure'); },
+        },
+      );
+    } catch (error) {
+      removalFailureRejected = /removal was rolled back/.test(String(error));
+    }
+    const removalFailureState = recoveryStore.read(removalFailureReady.id);
+    record(
+      'first-deploy EXDEV target-removal failure restores exact target',
+      removalFailureRejected
+        && pathHasEntry(removalFailureTarget)
+        && regularTreeFingerprint(removalFailureTarget) === removalFailureFingerprint
+        && regularTreeBytes(removalFailureTarget) === removalFailureBytes,
+    );
+    record(
+      'first-deploy EXDEV target-removal failure leaves receipt ready',
+      !pathHasEntry(removalFailureQuarantine) && removalFailureState.ok && removalFailureState.record.status === 'ready',
+    );
+    recoveryStore.abandon(removalFailureReceipt.id);
+    fs.rmSync(removalFailureTarget, { recursive: true, force: true });
+
+    const consumeCrossVolumeTarget = path.join(deployRoot, 'first_deploy_consume_failure');
+    const consumeCrossVolumeReceipt = prepareDeploymentRecoveryReceipt(deployRoot, consumeCrossVolumeTarget, 'first_deploy_consume_failure', recoveryStore);
+    fs.mkdirSync(path.join(consumeCrossVolumeTarget, 'nested'), { recursive: true });
+    fs.writeFileSync(path.join(consumeCrossVolumeTarget, 'content.xml'), '<content id="first_deploy_consume_failure"/>');
+    fs.writeFileSync(path.join(consumeCrossVolumeTarget, 'nested', 'state.bin'), 'consume failure state');
+    const consumeCrossVolumeFingerprint = regularTreeFingerprint(consumeCrossVolumeTarget);
+    const consumeCrossVolumeBytes = regularTreeBytes(consumeCrossVolumeTarget);
+    const consumeCrossVolumeReady = recoveryStore.finalizeDeployment(consumeCrossVolumeReceipt.id, consumeCrossVolumeFingerprint);
+    const consumeCrossVolumeQuarantine = path.join(recoveryStore.payloadPath(consumeCrossVolumeReady.id), 'removed-current');
+    let consumeCrossVolumeRejected = false;
+    try {
+      restoreDeploymentRecovery(
+        consumeCrossVolumeReady,
+        deployRoot,
+        consumeCrossVolumeReady.expectedCurrentHash,
+        recoveryStore,
+        () => { throw new Error('simulated cross-volume consume failure'); },
+        {
+          rename: (oldPath, newPath) => {
+            if (path.resolve(oldPath) === path.resolve(consumeCrossVolumeTarget) && path.resolve(newPath) === path.resolve(consumeCrossVolumeQuarantine)) {
+              throw Object.assign(new Error('simulated cross-volume rename'), { code: 'EXDEV' });
+            }
+            fs.renameSync(oldPath, newPath);
+          },
+        },
+      );
+    } catch (error) {
+      consumeCrossVolumeRejected = /receipt failed, so the removal was rolled back/.test(String(error));
+    }
+    const consumeCrossVolumeState = recoveryStore.read(consumeCrossVolumeReady.id);
+    record(
+      'first-deploy EXDEV consume failure restores exact post-deploy target',
+      consumeCrossVolumeRejected
+        && pathHasEntry(consumeCrossVolumeTarget)
+        && regularTreeFingerprint(consumeCrossVolumeTarget) === consumeCrossVolumeFingerprint
+        && regularTreeBytes(consumeCrossVolumeTarget) === consumeCrossVolumeBytes,
+    );
+    record(
+      'first-deploy EXDEV consume failure leaves receipt ready and quarantine reusable',
+      !pathHasEntry(consumeCrossVolumeQuarantine) && consumeCrossVolumeState.ok && consumeCrossVolumeState.record.status === 'ready',
+    );
+    let consumeCrossVolumeRetried = false;
+    try {
+      const retried = restoreDeploymentRecovery(
+        consumeCrossVolumeReady,
+        deployRoot,
+        consumeCrossVolumeReady.expectedCurrentHash,
+        recoveryStore,
+        () => recoveryStore.markUsed(consumeCrossVolumeReady.id),
+        {
+          rename: (oldPath, newPath) => {
+            if (path.resolve(oldPath) === path.resolve(consumeCrossVolumeTarget) && path.resolve(newPath) === path.resolve(consumeCrossVolumeQuarantine)) {
+              throw Object.assign(new Error('simulated cross-volume rename'), { code: 'EXDEV' });
+            }
+            fs.renameSync(oldPath, newPath);
+          },
+        },
+      );
+      consumeCrossVolumeRetried = retried.restoredFingerprint === 'absent' && !pathHasEntry(consumeCrossVolumeTarget);
+    } catch { consumeCrossVolumeRetried = false; }
+    const consumeCrossVolumeUsed = recoveryStore.read(consumeCrossVolumeReady.id);
+    record('first-deploy EXDEV failed consume can be retried safely', consumeCrossVolumeRetried && consumeCrossVolumeUsed.ok && consumeCrossVolumeUsed.record.status === 'used');
 
     const firstFailureTarget = path.join(deployRoot, 'first_deploy_receipt_failure');
     const firstFailureReceipt = prepareDeploymentRecoveryReceipt(deployRoot, firstFailureTarget, 'first_deploy_receipt_failure', recoveryStore);

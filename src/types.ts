@@ -1251,7 +1251,7 @@ export function generateUILuaScript(workspace: ModWorkspace, modId: string): str
     }
     if (w.type === 'input') {
       const placeholder = esc(props.placeholder || w.label || 'Enter text');
-      return `  row = ftable:addRow(true, {})\n  row[1]:setColSpan(2):createEditBox({ defaultText = "${placeholder}", maxChars = 255 })\n  row[1].handlers.onEditBoxDeactivated = function(_, text) menu.emit("${id}", { text = text }) end`;
+      return `  row = ftable:addRow(true, {})\n  row[1]:setColSpan(2):createEditBox({ defaultText = "${placeholder}", maxChars = 255, height = ${Math.round(w.h)} })\n  row[1].handlers.onEditBoxDeactivated = function(_, text) menu.emit("${id}", { text = text }) end`;
     }
     if (w.type === 'dropdown') {
       const rawOptions = Array.isArray(props.options) && props.options.length > 0 ? props.options : ['Option 1', 'Option 2'];
@@ -1357,7 +1357,7 @@ function menu.createFrame()
   local x = ((Helper.viewWidth or 1920) - width) / 2
   local y = ((Helper.viewHeight or 1080) - height) / 2
   menu.frame = Helper.createFrameHandle(menu, { x = x, y = y, width = width, height = height, layer = menu.layer, standardButtons = { close = true } })
-  local ftable = menu.frame:addTable(2, { tabOrder = 1, width = width, highlightMode = "off" })
+  local ftable = menu.frame:addTable(2, { tabOrder = 1, width = width, highlightMode = "off", reserveScrollBar = false })
   ftable:setColWidthPercent(1, 55)
   ftable:setColWidthPercent(2, 45)
   local row
@@ -1370,10 +1370,14 @@ function menu.cleanup()
   menu.active = false
 end
 
-function menu.close()
+function menu.onCloseElement(dueToClose)
   refreshHelper()
-  if Helper and Helper.closeMenuAndReturn then Helper.closeMenuAndReturn(menu) end
+  if Helper and Helper.closeMenu then Helper.closeMenu(menu, dueToClose) end
   menu.cleanup()
+end
+
+function menu.close()
+  menu.onCloseElement("close")
 end
 
 -- Deliberate opening path for MD/companion Lua: <raise_lua_event name="'${menuName}.open'"/>.

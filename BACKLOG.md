@@ -22,6 +22,22 @@ bundle. All twelve reference images (`00` plus `1a`-`1j`) must be visually inspe
 the real X4 Lua rather than porting the HTML/CSS prototype. Build recommended screen `1b` first, then the remaining
 comm-link, confirmation-gate, and hub screens. Compare Forge output to the 2560x1440 references, preserve the measured
 conversation-wheel/NPC keep-outs, and require deployed X4 screenshots before any 1:1 claim.
+**UI-only end-to-end smoke 2026-08-28 — ONE-PROFILE X4 VERIFIED / FULL B119 PARTIAL:** Forge compiled,
+linted, project-validated, guarded-wrote, dry-deployed, and actually deployed the dedicated four-file `pipeline_test`
+mod. X4 9.00 visibly rendered the generated frame at the configured `2544x1353` drawable profile; both buttons were
+clicked, the repaired full-height editbox visibly accepted `b119test`, and the standard close removed the panel. The
+current-session debuglog has zero frame-setup, zero-height editbox, nil-`onCloseElement`, or reserved-scrollbar
+diagnostics. Source-backed repair adds `x4-ui.editbox-height-minimum`, preserves authored editbox height, emits the
+shipped close callback, and disables reservation on its fixed-width table. The live run also exposed first-deploy
+recovery's cross-volume `EXDEV` assumption; the existing recovery owner now copy-verifies before removal and restores
+exactly on removal/receipt failure. Live rollback removed only `pipeline_test`, replay returned
+`RECOVERY_ALREADY_USED`, and the 44-entry extensions census equals the pre-state minus that one root. Evidence:
+`dev-docs/b119-x4-ui-pipeline-smoke/in-game-20260828/repaired/`. Final authority gates passed under bundled Node
+`24.19.0`: durable writers `14/14` plus `8/8`, action-receipt coverage `82` routes / `56` surfaces, complete
+precommit, and refreshed Graphify `9867` nodes / `24697` edges / `322` communities. A second profile, complete
+shipped-layout parity,
+Forge/X4 pixel comparison, and AI Influence reconstruction remain open, so B119 stays
+`in_progress / PARTIAL`; GitHub #41 remains open.
 **AI Influence `1b` visual reconciliation 2026-08-19 — REPRODUCED GUIDE CONFLICT:** The source pixels were re-opened
 and immutable hashes/dimensions are frozen in the plan. Forge's existing cockpit preset projects the measured guides to
 `y=1134.72`, `y=1065.6`, and `x=1699.84` at `2560x1440`; the supplied `1b` choice/input geometry intersects all three.

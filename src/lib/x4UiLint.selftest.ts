@@ -78,6 +78,13 @@ function budgetFrame(frameHeight: number, tableOptions: string, body: string): s
   return baseFrame(`2, { width = 2, height = ${frameHeight}${tableOptions} }`, body, frameHeight);
 }
 
+function editBoxFrame(call: string): string {
+  return baseFrame('2, { width = 2, height = 20, scaling = false }', [
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    `row[1]:${call}`,
+  ].join('\n'));
+}
+
 const CLEAN_TABLE = baseFrame('2, { width = 2, height = 20 }', [
   'local row = table:addRow(nil, { height = 10 })',
   'row[1]:setText("ok", { fontsize = 12 })'
@@ -581,6 +588,42 @@ export function runX4UiLintSelftest(): X4UiLintSelftestResult {
   check('row overflow failure mode records last table disappearance', hasFailureMode(summedRows, 'x4-ui.row-height-budget', 'last table silently vanish'), detail(summedRows));
   check('table height above frame height warns', hasCode(tableOverflow, 'x4-ui.table-height-budget', 'warning'), detail(tableOverflow));
   check('equal row/table/frame budgets are clean', !hasCode(budgetEqual, 'x4-ui.row-height-budget') && !hasCode(budgetEqual, 'x4-ui.table-height-budget'), detail(budgetEqual));
+
+  const editBoxOmitted = lint(editBoxFrame('createEditBox()'));
+  const editBoxZero = lint(editBoxFrame('createEditBox({ height = 0 })'));
+  const editBoxPositive = lint(editBoxFrame('createEditBox({ height = 12 })'));
+  const editBoxDynamic = lint(editBoxFrame('createEditBox({ height = getHeight() })'));
+  const editBoxFinding = editBoxOmitted.findings.find(finding => finding.code === 'x4-ui.editbox-height-minimum');
+  const editBoxZeroFinding = editBoxZero.findings.find(finding => finding.code === 'x4-ui.editbox-height-minimum');
+  const hasTruthfulEditBoxFailureMode = (failureMode: string | undefined): boolean => {
+    const normalized = failureMode?.toLowerCase() || '';
+    return normalized.includes('x4 displays the frame')
+      && normalized.includes('height(0 px)')
+      && normalized.includes('overlap eachother')
+      && normalized.includes('clipped/overlapped')
+      && !normalized.includes('reject')
+      && !normalized.includes('refus')
+      && !normalized.includes('entire frame');
+  };
+  check('omitted editbox height is a causal error', Boolean(
+    editBoxFinding
+      && editBoxFinding.severity === 'error'
+      && editBoxFinding.cause.includes('base cell height defaults to zero')
+      && hasTruthfulEditBoxFailureMode(editBoxFinding.failureMode)
+      && editBoxFinding.evidenceBoundary.includes('statically proven')
+      && editBoxFinding.nextAction.includes('positive height')
+      && editBoxFinding.location.file === 'selftest/ui.lua'
+      && editBoxFinding.location.start.line >= 1
+  ), detail(editBoxOmitted));
+  check('literal-zero editbox height reports the displayed clipped field', Boolean(
+    editBoxZeroFinding
+      && editBoxZeroFinding.severity === 'error'
+      && hasTruthfulEditBoxFailureMode(editBoxZeroFinding.failureMode)
+  ), detail(editBoxZero));
+  check('positive static editbox height is clean for the rule', !hasCode(editBoxPositive, 'x4-ui.editbox-height-minimum'), detail(editBoxPositive));
+  check('dynamic editbox height is an explicit verification gap', editBoxDynamic.hasVerificationGaps
+    && editBoxDynamic.verificationGaps.some(gap => gap.category === 'height' && gap.status === 'dynamic' && gap.expression === 'getHeight()')
+    && !hasCode(editBoxDynamic, 'x4-ui.editbox-height-minimum', 'error'), detail(editBoxDynamic));
 
   const inlineDisplay = lint([
     'local menu = { name = "Main", layer = 1 }',

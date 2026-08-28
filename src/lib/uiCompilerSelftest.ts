@@ -49,6 +49,20 @@ export function runUiCompilerSelftest() {
     'createText(', 'createButton(', 'createEditBox(', 'createDropDown(', 'createStatusBar(',
     'Item', 'menu.transcript',
   ].every(token => lua.includes(token)));
+  ok('editbox_preserves_authored_height', lua.includes('createEditBox({ defaultText = "input 8", maxChars = 255, height = 40 })'));
+  ok('fixed_columns_disable_scrollbar_reservation', lua.includes('addTable(2, { tabOrder = 1, width = width, highlightMode = "off", reserveScrollBar = false })'));
+  ok('menu_on_close_element_owns_helper_close_and_cleanup', lua.includes([
+    'function menu.onCloseElement(dueToClose)\n',
+    '  refreshHelper()\n',
+    '  if Helper and Helper.closeMenu then Helper.closeMenu(menu, dueToClose) end\n',
+    '  menu.cleanup()\n',
+    'end',
+  ].join('')));
+  ok('menu_close_delegates_to_on_close_element', lua.includes([
+    'function menu.close()\n',
+    '  menu.onCloseElement("close")\n',
+    'end',
+  ].join('')));
   ok('standalone_menu_lifecycle', [
     'rawget(_G, "Helper")', 'function menu.ensureRegistered()', 'Helper.registerMenu',
     'function menu.open(context)', 'OpenMenu(menu.name', 'function menu.onShowMenu()',
