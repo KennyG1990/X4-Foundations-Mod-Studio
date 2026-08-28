@@ -27,6 +27,12 @@ Status: bounded `VERIFIED AT ONE REAL X4 PROFILE`; overall B119
   game/workspace regular-tree fingerprints remain `a9046192...eb295` / `477a9ea0...5af6`.
 - X4 and the isolated server are stopped. Ports `3000`, `3001`, `3100`, `3101`, `3300`, and `8972` are free.
   Antigravity remains open and untouched.
+- Source checkpoint `474eab7e1e1881344c7cdf138a8f0993c1061948` is pushed; `HEAD`, `origin/main`, and direct
+  `git ls-remote` are identical. No B119 path remains staged.
+- GitHub #41 comment `5449987062` and Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a` were written and read
+  back with the issue open and status `In Progress / Partial`. Google Drive document
+  `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE` was not written: the mandatory trusted-read bridge rejected
+  valid Windows root `F:\DEV_ENV\X4_Forge` as non-absolute before connector execution. No bypass was attempted.
 
 ## Implemented bounded repair
 
@@ -69,21 +75,23 @@ Status: bounded `VERIFIED AT ONE REAL X4 PROFILE`; overall B119
 
 ## Dirty boundary and commit question
 
-- Baseline is `HEAD == origin/main == remote main == 1502b1e9f53197e74e9a2e6370b3af18cba0cf70`.
+- Executable source checkpoint `474eab7e1e1881344c7cdf138a8f0993c1061948` was pushed with exact
+  local/tracking/direct-remote parity. The commit containing this handoff is the record-only close that follows it;
+  it changes no executable behavior.
 - Owned tracked paths are `BACKLOG.md`, `SESSION-HANDOFF.md`,
   `docs/plans/2026-08-10-b119-x4-ui-editor-linter-first.md`, `scripts/route-integration.mjs`, `server.ts`,
   `src/types.ts`, `src/lib/uiCompilerSelftest.ts`, `src/lib/x4UiLint.ts`, and
   `src/lib/x4UiLint.selftest.ts`, plus reviewed authority manifest `config/durable-writers.json`.
 - Preserve every other modified, deleted, and untracked path. Stage with explicit paths only; never broad-stage.
-- Commit question: this bounded close is ready for explicit-path commit and push as
-  `fix(ui-editor): verify UI-only Forge pipeline in X4`; then prove local/tracking/direct-remote parity.
+- Commit question: the executable bounded close is committed and pushed as
+  `fix(ui-editor): verify UI-only Forge pipeline in X4` at `474eab7e1e1881344c7cdf138a8f0993c1061948`.
+  This handoff belongs in the immediately following record-only close; preserve every unrelated path.
 
 ## Next exact actions
 
-1. Fresh-eyes review the final owned diff, explicitly stage only owned paths, commit, push, and prove
-   `HEAD == origin/main == git ls-remote`.
-2. Update and read back GitHub #41, Notion, and Google Drive. Keep #41 open and label the overall feature `PARTIAL`.
-3. Resume B119 with the same exact package at a second drawable/UI-scale profile, then Forge/X4 measured comparison.
+1. Resume B119 with the same exact package at a second drawable/UI-scale profile, then Forge/X4 measured comparison.
+2. Repair the Google Docs trusted-read bridge's Windows absolute-path handling in its owning plugin task before the
+   next Drive projection; do not bypass the bridge from B119.
 
 ## Triggered AAR hazards
 
@@ -96,5 +104,8 @@ Status: bounded `VERIFIED AT ONE REAL X4 PROFILE`; overall B119
 - Final precommit correctly stopped on the changed `server.ts` durable-writer fingerprint/counts. Native Luna updated
   only the reviewed manifest; writer and action-receipt audits then passed without weakening policy or promoting a
   coverage candidate.
+- The Google Docs trusted-read loader first hit an unavailable `TextEncoder`; the skill's own byte-count method then
+  loaded the complete bridge. The bridge reproduced its known Windows-root rejection before connector execution, so
+  Drive remained intentionally stale rather than receiving an untrusted write.
 - Highest-risk weakness: a convincing preview can still omit lifecycle/dimension fields. The new rule and selftests
   close this exact defect class; X4 remains authoritative for every untested frame.

@@ -11446,3 +11446,19 @@ frame does not prove every source, widget, display profile, font raster, or C++ 
   absent. The linter and compiler selftests now catch this specific class, but X4 remains the authority for every frame
   not yet run there.
 - Suggested commit title: `fix(ui-editor): verify UI-only Forge pipeline in X4`.
+
+### DURABLE RECORD / GIT CLOSE
+
+- Exact source checkpoint `474eab7e1e1881344c7cdf138a8f0993c1061948` was committed and pushed after the commit
+  hook reran the complete Node `24.19.0` precommit contract. Readback proved
+  `HEAD == origin/main == git ls-remote`; no B119 path remained staged and every unrelated dirty path stayed outside
+  the commit.
+- GitHub #41 checkpoint comment `5449987062` was written and read back with the issue still open and the bounded
+  status `VERIFIED AT ONE REAL X4 PROFILE / OVERALL B119 IN PROGRESS / PARTIAL`.
+- Notion owner page `3b84618e-d15b-8190-821e-c0eb96f43d5a` was updated and read back at `Status=In Progress`,
+  `Evidence Grade=Partial`, with the exact commit, GitHub comment, X4 proof, recovery receipt, and remaining gates.
+- Google Drive document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE` was deliberately left unchanged. The
+  mandatory trusted-read bridge rejected valid Windows root `F:\DEV_ENV\X4_Forge` with
+  `workspaceRoot must be an absolute path` before connector execution. The first loader attempt also stopped before
+  connector execution because this isolate lacked `TextEncoder`; the skill-prescribed URI byte count then loaded the
+  complete bridge and reproduced the owning path-validation defect. No bypass or blind document write was attempted.

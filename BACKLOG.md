@@ -37,7 +37,10 @@ exactly on removal/receipt failure. Live rollback removed only `pipeline_test`, 
 precommit, and refreshed Graphify `9867` nodes / `24697` edges / `322` communities. A second profile, complete
 shipped-layout parity,
 Forge/X4 pixel comparison, and AI Influence reconstruction remain open, so B119 stays
-`in_progress / PARTIAL`; GitHub #41 remains open.
+`in_progress / PARTIAL`; GitHub #41 remains open. Source checkpoint
+`474eab7e1e1881344c7cdf138a8f0993c1061948` is pushed with local/tracking/direct-remote parity; GitHub comment
+`5449987062` and the Notion owner page were written and read back. Google Drive remains unchanged because its
+mandatory trusted-read bridge rejected the valid Windows workspace root before connector execution; no bypass was used.
 **AI Influence `1b` visual reconciliation 2026-08-19 — REPRODUCED GUIDE CONFLICT:** The source pixels were re-opened
 and immutable hashes/dimensions are frozen in the plan. Forge's existing cockpit preset projects the measured guides to
 `y=1134.72`, `y=1065.6`, and `x=1699.84` at `2560x1440`; the supplied `1b` choice/input geometry intersects all three.
