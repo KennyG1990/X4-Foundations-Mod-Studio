@@ -11490,12 +11490,12 @@ Task record: `docs/plans/2026-08-28-b119-exact-deploy-confirmation-second-profil
   errors, diff hygiene, and Graphify `9,931 / 24,845 / 327` are green. The graph resolves the new owner and its
   deploy/source/profile dependencies.
 - Bridge production/selftest syntax checks, `11` owner checks, and a real Windows ConPTY exact-receipt probe pass.
-  Immutable trusted read `dev-docs/google-docs-trusted-read/b119-20260828-04` enabled a revision-locked Drive append;
-  exact content was read back at revision
-  `AIroW35g1L39c6IcRasl_o3p9SKsqKtlH5GoRCLjpja1ATvLh-iMM0G4e6Kp7OXYr8XjJ8-aIQ0yHZuBbmql3HxlmUK4nwecuJcDf89fN2iu`.
-- The Notion owner page was appended and read back with `IN PROGRESS / PARTIAL`. GitHub #41 comment
-  `5450866946` was written and read back as an explicitly uncommitted focused checkpoint; the issue remains open and
-  still requires a commit-backed close marker.
+  Immutable trusted read `dev-docs/google-docs-trusted-read/b119-20260828-04` enabled revision-locked Drive writes.
+  Commit-backed final content was read back at revision
+  `AIroW35I6fub9etyYoDD299v49jAQeCtdxtSzd5SFIrGKhkiYwRyDhB3vOxFGKuda5PLLeUje2liSYyjDa3VkWPLJyLspPBjYwtKr7ZTMXRE`.
+- Source checkpoint `ff1e26f509d81e3b4c87b63eebdc2bfe73afcbe8` is pushed with local/tracking/direct-remote parity and zero B119
+  staged or dirty residue. GitHub #41 host-close comment `5451702392`, the Notion owner page, and the Drive marker were
+  written and read back; the issue remains open and overall B119 remains PARTIAL.
 - Host close is green: route `491/491`; runtime-index oracles `134/134`; exact project-browser reproduction `3/3`;
   controlled full e2e `104/104` with zero flaky results and `treeGone=true`; complete precommit; final production build
   `1,848` modules. The initial full run remains retained red evidence at `103 + 1 flaky`; it timed out in the
@@ -11524,6 +11524,10 @@ Task record: `docs/plans/2026-08-28-b119-exact-deploy-confirmation-second-profil
 - The first full e2e's one flaky timeout is retained under
   `dev-docs/b119-exact-deploy-verification/e2e-red-20260828-01/`; exact focused and controlled full retry receipts are
   adjacent. This was a non-clean validation history even though the final host gate is green.
+- The first commit-backed Drive append used the extracted paragraph `endIndex - 1` as if it were the terminating
+  boundary and instead inserted before the prior paragraph's final period. Readback exposed the moved/doubled
+  punctuation. A two-character revision-locked repair restored both paragraphs; final readback proves one period at
+  each boundary and preserves the new `HEADING_2` marker. Extracted paragraph indexes are targeting hints, not proof.
 - Highest-risk weakness: a persisted human confirmation becomes a convincing liar when source, target, deploy, or
   display identity drifts. The pure classifier now refuses each known drift; live target-tree recomputation and the
   second-profile experience gate remain open.

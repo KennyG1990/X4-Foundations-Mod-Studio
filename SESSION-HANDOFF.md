@@ -7,8 +7,9 @@ overall B119 `IN_PROGRESS / PARTIAL`
 
 ## Current state
 
-- Baseline `HEAD == origin/main == cfb87ac89e453a912e5a0be28fe20e814e7b20b1`. The bounded executable changes
-  are uncommitted and unstaged. Preserve the many unrelated user-owned worktree changes.
+- Source checkpoint `ff1e26f509d81e3b4c87b63eebdc2bfe73afcbe8` is committed and pushed. Readback proved
+  `HEAD == origin/main == git ls-remote` at that hash with zero B119 staged or dirty residue. Preserve the many
+  unrelated user-owned worktree changes.
 - The prior real-X4 `pipeline_test` proof remains authoritative at one `2544x1353` drawable profile. Exact package:
   four files, `6,338` bytes, fingerprint
   `88574c00ce6d9aa5b1dd2686425fae0a8b492df75a04a25bd94d19e82f7d844f`.
@@ -64,14 +65,16 @@ overall B119 `IN_PROGRESS / PARTIAL`
   are repaired. Syntax checks, `11` owner checks, and a real ConPTY exact-receipt probe pass.
 - Three failed trusted reads remain red evidence. Successful immutable read evidence is
   `dev-docs/google-docs-trusted-read/b119-20260828-04`.
-- Drive document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE` was revision-locked, appended, and read back at
-  final revision `AIroW35g1L39c6IcRasl_o3p9SKsqKtlH5GoRCLjpja1ATvLh-iMM0G4e6Kp7OXYr8XjJ8-aIQ0yHZuBbmql3HxlmUK4nwecuJcDf89fN2iu`.
+- Drive document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE` was revision-locked, appended, repaired after exact
+  readback caught a one-character insertion-boundary defect, and read back at final revision
+  `AIroW35I6fub9etyYoDD299v49jAQeCtdxtSzd5SFIrGKhkiYwRyDhB3vOxFGKuda5PLLeUje2liSYyjDa3VkWPLJyLspPBjYwtKr7ZTMXRE`.
+  The prior and new final paragraphs each end with exactly one period; the new marker remains `HEADING_2`.
 - Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a` was appended and read back as
   `HOST-VALIDATED / IN PROGRESS / PARTIAL`.
-- GitHub issue #41 focused comment `5450866946` was written and read back as explicitly uncommitted/PARTIAL. The
-  issue remains open; add the next comment only after the bounded commit/push exists, then read it back.
+- GitHub issue #41 source-backed host-close comment `5451702392` was written and read back with exact commit and gate
+  evidence. The issue remains open and overall B119 remains PARTIAL.
 
-## Dirty boundary and commit question
+## Committed boundary
 
 - Executable/test paths: `server.ts`, `src/App.tsx`, `src/components/UIBuilder.tsx`,
   `src/components/X4UiSourceEditor.tsx`, `src/components/X4UiSourceEditor.selftest.tsx`, `src/lib/readiness.ts`,
@@ -82,20 +85,18 @@ overall B119 `IN_PROGRESS / PARTIAL`
   `docs/plans/2026-08-10-b119-x4-ui-editor-linter-first.md`, and
   `docs/plans/2026-08-28-b119-exact-deploy-confirmation-second-profile.md`.
 - Capability-map and project-AAR deltas under `F:\StarForge\wiki\x4-forge\` are updated outside this repository.
-- Never broad-stage. Full precommit is green; use explicit `git add -- <paths>` only.
-- Suggested commit: `feat(ui-editor): bind game verification to exact deploy evidence`.
-- Push only after the commit hook passes; prove `HEAD == origin/main == git ls-remote` and zero staged residue.
+- Never broad-stage. Source commit `ff1e26f509d81e3b4c87b63eebdc2bfe73afcbe8` contains exactly these 16 paths;
+  its commit hook reran complete precommit and remote parity is exact.
+- This handoff and the companion repository records contain the commit-backed external readbacks. Current repository
+  `HEAD` is the record-close authority after this documentation checkpoint is committed.
 
 ## Next exact actions
 
-1. Fresh-eyes review the exact staged diff, commit/push the narrow checkpoint, and prove local/tracking/direct-remote
-   parity with zero staged residue.
-2. Update/read back GitHub #41, Notion, and Drive with the exact commit.
-3. Present the separate real-game write/recovery paragraph and wait for literal `go` before deploying the unchanged
+1. Present the separate real-game write/recovery paragraph and wait for literal `go` before deploying the unchanged
    package at a second profile.
-4. Capture interaction, debuglog, measured bounds, exact package identity, and recovery. Dynamic `Helper.scaleX` /
+2. Capture interaction, debuglog, measured bounds, exact package identity, and recovery. Dynamic `Helper.scaleX` /
    `Helper.scaleY` geometry remains unavailable, so do not claim exact Forge-versus-X4 pixel parity.
-5. Do not publish OpenVSX while B119 is partial. At release quality, reconcile the user-owned extension release
+3. Do not publish OpenVSX while B119 is partial. At release quality, reconcile the user-owned extension release
    edits, then build, package, inspect, probe, publish once, verify public parity, and commit/push.
 
 ## Triggered AAR hazards
@@ -112,5 +113,9 @@ overall B119 `IN_PROGRESS / PARTIAL`
 - First full e2e was red at `103 + 1 flaky`; exact `3/3` and one unchanged `104/104` retry cleared the host gate while
   retaining the original red receipt. Precommit legitimately refused stale writer and capability manifests, which
   exact native Luna owners reconciled without production/test changes.
+- The first commit-backed Drive append targeted the old paragraph's final period instead of its terminating boundary.
+  Connector readback exposed the moved/doubled punctuation; a two-character revision-locked repair restored both exact
+  paragraphs, and final readback proved one period at each boundary. Never infer Docs end-of-segment indexes from
+  extracted paragraph `endIndex` without an immediate exact-content readback.
 - Highest risk: persisted confirmation can become a false green after source, target, deploy, or profile drift. The
   pure owner refuses known drift; live target recomputation and the second-profile experience proof remain open.

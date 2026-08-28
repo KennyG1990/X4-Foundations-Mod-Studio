@@ -54,8 +54,12 @@ oracles are `134/134`, final serial e2e is `104/104` with zero flaky results and
 green, and production build emits `1,848` modules. The first full e2e remains retained red evidence at `103 + 1 flaky`;
 exact `3/3` and one controlled unchanged `104/104` retry cleared the host gate. Writer governance passes `14/14 + 8/8`;
 capability candidate `25af9c77...ccfae` added only the new source boundary and final audit passes `12/297/1/11`; action
-receipts remain `82` routes / `56` surfaces. GitHub #41 focused comment `5450866946` was read back as explicitly
-uncommitted/PARTIAL. Only the second X4 profile remains for this bounded unit; no OpenVSX release is claimed.
+receipts remain `82` routes / `56` surfaces. Source checkpoint
+`ff1e26f509d81e3b4c87b63eebdc2bfe73afcbe8` is pushed with local/tracking/direct-remote parity and zero B119 staged
+residue. GitHub #41 host-close comment `5451702392`, the Notion owner page, and Drive revision
+`AIroW35I6fub9etyYoDD299v49jAQeCtdxtSzd5SFIrGKhkiYwRyDhB3vOxFGKuda5PLLeUje2liSYyjDa3VkWPLJyLspPBjYwtKr7ZTMXRE`
+were written and read back with the issue open. Only the second X4 profile remains for this bounded unit; no OpenVSX
+release is claimed.
 **AI Influence `1b` visual reconciliation 2026-08-19 — REPRODUCED GUIDE CONFLICT:** The source pixels were re-opened
 and immutable hashes/dimensions are frozen in the plan. Forge's existing cockpit preset projects the measured guides to
 `y=1134.72`, `y=1065.6`, and `x=1699.84` at `2560x1440`; the supplied `1b` choice/input geometry intersects all three.
