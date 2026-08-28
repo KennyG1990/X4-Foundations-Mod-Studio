@@ -11504,10 +11504,19 @@ Task record: `docs/plans/2026-08-28-b119-exact-deploy-confirmation-second-profil
   `25af9c77b0d84020426cad609459883e010a622bee9d6caaf7b4762c155ccfae` added only
   `src/lib/x4UiGameVerification.ts` to the reviewed source boundary (`192 -> 193`); the final audit is
   `12 capabilities / 297 routes / 1 dynamic registrar / 11 MCP aliases`. Action receipts remain `82 / 56`.
-- Still pending: the second drawable/UI-scale X4 run with interaction, debuglog, measured bounds, and exact recovery.
-  Current Forge receipts classify this fixture's dynamic
-  `Helper.scaleX` / `Helper.scaleY` geometry as unavailable, so the second profile proves scaling and pipeline behavior
-  but cannot by itself establish exact Forge-versus-X4 pixel parity.
+- Second-profile close is VERIFIED for the bounded pipeline. From current checkout `99e58055...`, Forge dry-run and
+  guarded apply selected the unchanged four-file / `6,338`-byte package at exact fingerprint `88574c00...7d844f`.
+  X4 9.00 rendered it at configured `1920x1080` / default UI scale `1`; both buttons responded, the second visibly
+  highlighted, the editbox accepted `b119`, and standard close removed the panel. The scoped debuglog oracle is zero
+  for frame/view refusal, zero-height editbox, nil close callback, reserved scrollbar, and Lua runtime error.
+- Measured first-button fill changed from `529x23` at `1920x1080` to `665x29` at `2544x1353`, within `0.65%` of the
+  drawable-height scale; normalized top placement differs by `0.110` percentage points. Recovery HTTP `200` restored
+  the absent target, replay returned `409 / RECOVERY_ALREADY_USED`, extensions returned `44 -> 43`, both profile files
+  match their exact pre-run hashes, X4/server processes are gone, and ports `3000/3001/3100/3101/3300/8713` are free.
+  Receipt: `dev-docs/b119-x4-ui-pipeline-smoke/in-game-20260828/second-profile/runtime-receipt.json`.
+- Current Forge receipts still classify this fixture's dynamic `Helper.scaleX` / `Helper.scaleY` geometry as
+  unavailable. Two X4 profiles now prove real-game scaling and the end-to-end UI-only pipeline; they do not establish
+  exact Forge-versus-X4 pixel parity. Overall B119 therefore remains PARTIAL.
 - No OpenVSX release is claimed. Publish-before-commit begins only after B119 reaches release quality and the current
   unrelated extension release edits are reconciled with their owner.
 
@@ -11528,6 +11537,10 @@ Task record: `docs/plans/2026-08-28-b119-exact-deploy-confirmation-second-profil
   boundary and instead inserted before the prior paragraph's final period. Readback exposed the moved/doubled
   punctuation. A two-character revision-locked repair restored both paragraphs; final readback proves one period at
   each boundary and preserves the new `HEADING_2` marker. Extracted paragraph indexes are targeting hints, not proof.
+- The first second-profile config patch introduced a four-byte indentation drift; exact expected-text and hash
+  readback caught it before launch, and the corrected file preserved size while changing only drawable dimensions.
+  Generic text injection did not reach X4's direct-input editbox; observed native key events did. Both lessons are now
+  explicit run gates: byte-exact profile checks before launch and native-key interaction evidence for direct input.
 - Highest-risk weakness: a persisted human confirmation becomes a convincing liar when source, target, deploy, or
-  display identity drifts. The pure classifier now refuses each known drift; live target-tree recomputation and the
-  second-profile experience gate remain open.
+  display identity drifts. The pure classifier refuses each known drift and the second-profile experience gate is now
+  closed; live target-tree recomputation remains open.

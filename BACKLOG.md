@@ -42,7 +42,7 @@ Forge/X4 pixel comparison, and AI Influence reconstruction remain open, so B119 
 `5449987062` and the Notion owner page were written and read back. The Google Docs trusted-read bridge's Windows path,
 UTF-8 runtime, and ConPTY receipt defects are repaired with `11/11` owner checks and a real exact-receipt probe; the
 canonical Drive status document was revision-locked, updated, and read back without bypassing the bridge.
-**Exact deploy-bound confirmation 2026-08-28 — HOST VERIFIED / SECOND PROFILE OPEN:** the existing
+**Exact deploy-bound confirmation 2026-08-28 — BOUNDED VERIFIED / FULL B119 PARTIAL:** the existing
 deploy/runtime owner now persists and reconstructs the exact deployed regular-tree fingerprint. The existing global
 experience-confirmation owner carries an optional X4 UI snapshot that verifies externally only when workspace/source,
 successful deploy timestamp/path/fingerprint, target identity, clean readiness, and normalized drawable/UI-scale profile
@@ -58,8 +58,18 @@ receipts remain `82` routes / `56` surfaces. Source checkpoint
 `ff1e26f509d81e3b4c87b63eebdc2bfe73afcbe8` is pushed with local/tracking/direct-remote parity and zero B119 staged
 residue. GitHub #41 host-close comment `5451702392`, the Notion owner page, and Drive revision
 `AIroW35I6fub9etyYoDD299v49jAQeCtdxtSzd5SFIrGKhkiYwRyDhB3vOxFGKuda5PLLeUje2liSYyjDa3VkWPLJyLspPBjYwtKr7ZTMXRE`
-were written and read back with the issue open. Only the second X4 profile remains for this bounded unit; no OpenVSX
-release is claimed.
+were written and read back with the issue open. The unchanged exact four-file / `6,338`-byte `pipeline_test` package
+then passed Forge dry-run/apply and real X4 9.00 at a second configured `1920x1080` / default-scale profile: both
+buttons responded, the second highlighted, the editbox accepted `b119`, close removed the panel, and the scoped
+debuglog oracle found zero frame/view refusal, zero-height editbox, nil close callback, reserved scrollbar, or Lua
+runtime error. Against the prior `2544x1353` profile, measured first-button width/height scaling is within `0.65%` of
+the drawable-height ratio. One-use recovery restored the absent target, replay returned
+`RECOVERY_ALREADY_USED`, extensions returned `44 -> 43`, touched profile files match exact pre-run hashes, and all
+process/port containment checks pass. Evidence:
+`dev-docs/b119-x4-ui-pipeline-smoke/in-game-20260828/second-profile/runtime-receipt.json`. Dynamic
+`Helper.scaleX` / `Helper.scaleY` geometry remains unavailable in Forge receipts, so this proves real-X4 scaling and
+the UI-only pipeline, not exact Forge-versus-X4 parity. Full B119 remains `in_progress / PARTIAL`; no OpenVSX release
+is claimed.
 **AI Influence `1b` visual reconciliation 2026-08-19 — REPRODUCED GUIDE CONFLICT:** The source pixels were re-opened
 and immutable hashes/dimensions are frozen in the plan. Forge's existing cockpit preset projects the measured guides to
 `y=1134.72`, `y=1065.6`, and `x=1699.84` at `2560x1440`; the supplied `1b` choice/input geometry intersects all three.
