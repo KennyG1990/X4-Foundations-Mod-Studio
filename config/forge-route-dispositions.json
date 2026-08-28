@@ -159,6 +159,7 @@
     "src/lib/x4RulePacks.ts",
     "src/lib/x4RulePackTypes.ts",
     "src/lib/x4UiCallModel.ts",
+    "src/lib/x4UiGameVerification.ts",
     "src/lib/x4UiLint.ts",
     "src/lib/xmlInputLimits.ts",
     "src/lib/xmlLite.ts",

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   X4_UI_EDITOR_DEFAULT_PROFILE,
   X4_UI_EDITOR_EMPTY_CANVAS_STATE,
@@ -59,6 +59,10 @@ import {
 } from '../lib/x4UiCanvasRenderer';
 import { KEEP_OUT_PRESETS } from '../lib/x4UiKeepOuts';
 import type { KeepOutCalibrationInput } from '../lib/x4UiKeepOuts';
+import {
+  buildX4UiGameVerificationCurrentSnapshot,
+  type X4UiGameVerificationCurrentSnapshot,
+} from '../lib/x4UiGameVerification';
 
 /** The editor deliberately receives the workspace as an opaque session input. */
 export interface X4UiSourceEditorProps {
@@ -66,6 +70,8 @@ export interface X4UiSourceEditorProps {
   readonly corpusLoader?: X4UiSourceEditorCorpusLoader;
   readonly surfaceFactory?: X4UiCanvasSurfaceFactory;
   readonly onWorkspaceEdit?: X4UiWorkspaceEditHandler;
+  /** Emits only current plain source/target/profile data; deploy evidence remains parent-owned. */
+  readonly onVerificationSnapshotChange?: (snapshot: X4UiGameVerificationCurrentSnapshot | null) => void;
 }
 
 export interface X4UiWorkspaceEditRequest {
@@ -2198,6 +2204,7 @@ export default function X4UiSourceEditor({
   corpusLoader,
   surfaceFactory,
   onWorkspaceEdit,
+  onVerificationSnapshotChange,
 }: X4UiSourceEditorProps) {
   const [profile, setProfile] = useState<X4UiEditorProfileControls>(() => ({
     width: X4_UI_EDITOR_DEFAULT_PROFILE.drawable.width,
@@ -2382,6 +2389,21 @@ export default function X4UiSourceEditor({
   );
   const projectionView = projectionFor(projection);
   const preview = previewFor(projection);
+  const currentVerificationSnapshot = useMemo(
+    () => buildX4UiGameVerificationCurrentSnapshot({
+      sourceIdentity: selection.selection?.sourceIdentity,
+      targetIdentity: selection.selection?.target,
+      normalizedProfile: projectionView.normalizedProfile,
+    }),
+    [projectionView.normalizedProfile, selection.selection],
+  );
+
+  useLayoutEffect(() => {
+    if (onVerificationSnapshotChange === undefined) return;
+    onVerificationSnapshotChange(currentVerificationSnapshot);
+    return () => onVerificationSnapshotChange(null);
+  }, [currentVerificationSnapshot, onVerificationSnapshotChange]);
+
   const source = projectionView.source;
   const lintInspection = lintInspectionFor(preview);
   const currentProgramResult = projection.preview.program;

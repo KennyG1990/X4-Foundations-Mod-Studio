@@ -53,6 +53,7 @@ import {
 import { dataPath } from "../lib/dataDir";
 import { findCatDatArchives, parseCat, readEntryText, type CatEntry } from "../lib/x4CatDat";
 import { resolveXsdConfig } from "../lib/xsdParser";
+import { isSha256Fingerprint } from "../lib/x4UiGameVerification";
 import type { ModWorkspace } from "../types";
 import type { WorkspaceRecord } from "../lib/workspaceRegistry";
 
@@ -90,6 +91,7 @@ export interface RuntimeDebuggerDeployInfo {
   deployedAt: string;
   stagingPath?: string;
   deployedPath?: string;
+  deployedFingerprint?: string;
 }
 
 export interface RuntimeInstalledExtensionInventory {
@@ -566,6 +568,7 @@ function deploymentToken(workspaceId: string, info: RuntimeDebuggerDeployInfo): 
     workspaceId,
     deployedAt: info.deployedAt,
     workspaceHash: info.workspaceHash,
+    deployedFingerprint: info.deployedFingerprint || "",
     destinationPath: info.deployedPath || info.stagingPath || "",
   }))}`;
 }
@@ -900,6 +903,7 @@ function reconstructDeploy(raw: RuntimeDebugIncident): PersistedDeployEnvelope |
   const workspaceHash = typeof attrs.workspaceHash === "string" ? attrs.workspaceHash : "";
   const deployedAt = typeof attrs.deployedAt === "string" ? attrs.deployedAt : "";
   const tokenHash = typeof attrs.tokenHash === "string" ? attrs.tokenHash : "";
+  const deployedFingerprint = isSha256Fingerprint(attrs.deployedFingerprint) ? attrs.deployedFingerprint.toLowerCase() : undefined;
   if (!modId || !workspaceHash || !deployedAt || !/^[0-9a-f]{64}$/i.test(tokenHash)) return undefined;
   return {
     tokenHash,
@@ -911,6 +915,7 @@ function reconstructDeploy(raw: RuntimeDebugIncident): PersistedDeployEnvelope |
       deployedAt: boundedText(deployedAt, 128),
       ...(typeof attrs.stagingPath === "string" && attrs.stagingPath ? { stagingPath: boundedText(attrs.stagingPath, MAX_RESPONSE_PATH) } : {}),
       ...(typeof attrs.deployedPath === "string" && attrs.deployedPath ? { deployedPath: boundedText(attrs.deployedPath, MAX_RESPONSE_PATH) } : {}),
+      ...(deployedFingerprint ? { deployedFingerprint } : {}),
     },
   };
 }
@@ -1354,7 +1359,12 @@ export class RuntimeDebuggerAdapter {
   }
 
   recordSuccessfulDeploy(workspaceId: string, infoInput: RuntimeDebuggerDeployInfo): RuntimeDebugSessionResult {
-    const info = { ...infoInput, workspaceId };
+    const { deployedFingerprint, ...rest } = infoInput;
+    const info: RuntimeDebuggerDeployInfo = {
+      ...rest,
+      workspaceId,
+      ...(isSha256Fingerprint(deployedFingerprint) ? { deployedFingerprint: deployedFingerprint.toLowerCase() } : {}),
+    };
     const selected = this.selectLog();
     if (!selected) {
       return {
@@ -1407,6 +1417,7 @@ export class RuntimeDebuggerAdapter {
           deployedAt: info.deployedAt,
           stagingPath: info.stagingPath || null,
           deployedPath: info.deployedPath || null,
+          ...(info.deployedFingerprint ? { deployedFingerprint: info.deployedFingerprint } : {}),
         },
         position: {
           segmentId: baseline.snapshot.currentSegmentId,

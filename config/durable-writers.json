@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "sourceFingerprint": "71e71e3c40255ac808b956997dabca9c6aba93c60ae349df66c2e633d21b0ed5",
+  "sourceFingerprint": "05690bb5f10e2db021404ccac32a259f4372c1ddaad91303d7c9a1e029c41ab5",
   "policy": "Every raw production filesystem mutation source is count-pinned here. Authoritative files use atomic sibling promotion; stronger tree, archive, append-log, SQLite, retention, ephemeral, and fixture contracts remain explicit exceptions.",
   "writers": [
     {
@@ -352,7 +352,7 @@
   "hostStores": [
     {
       "file": "src/App.tsx",
-      "calls": { "localStorageSet": 7 },
+      "calls": { "localStorageSet": 8 },
       "categories": ["browser-cache", "browser-preference"],
       "owners": ["Studio layout/release preferences", "workspace-ID-scoped revision and content cache", "experience confirmations"],
       "rationale": "Browser storage mirrors server-owned workspace/release state by immutable ID or retains non-authoritative UI preferences and acknowledgements.",

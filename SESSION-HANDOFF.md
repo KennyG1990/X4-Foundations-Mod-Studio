@@ -1,111 +1,116 @@
-# Session handoff — B119 UI-only Forge-to-X4 pipeline proof
+# Session handoff — B119 exact deploy-bound X4 UI verification
 
 Date: 2026-08-28
 Project: `F:\DEV_ENV\X4_Forge`
-Status: bounded `VERIFIED AT ONE REAL X4 PROFILE`; overall B119
-`IN_PROGRESS / PARTIAL`
+Status: implementation and complete host validation green; second-profile X4 gate pending;
+overall B119 `IN_PROGRESS / PARTIAL`
 
 ## Current state
 
-- `pipeline_test` proved the UI-only path end to end through the existing Forge owners: compile, linter, project
-  validation, guarded Mod Workspace writes, dry deploy, actual deploy, exact game bytes, real X4 frame acceptance,
-  visible interaction, standard close, one-use rollback, and replay refusal.
-- X4 displayed the repaired generated panel at the configured `2544x1353` drawable profile. Both authored buttons were
-  clicked, the full-height edit field visibly accepted `b119test`, and the standard close removed the panel. No save
-  was loaded or written.
-- Repaired-session debuglog counts are all zero for `DisplayView`/setup failure, zero-height editbox, nil
-  `onCloseElement`, and reserved-scrollbar diagnostics.
-- Durable ignored evidence is under
-  `dev-docs/b119-x4-ui-pipeline-smoke/in-game-20260828/repaired/`. `runtime-receipt.json` is the compact authority;
-  it links the interactive/closed screenshots, debuglog, package hashes, deploy/recovery IDs, and containment census.
-- The package workspace remains at `F:\DEV_ENV\projects\Mods\X4Mods\pipeline_test`. It is four files, `6,338`
-  bytes, tree fingerprint `88574c00...44f`. The live game target is absent after recovery.
-- Recovery row `mtclxb6r-16c92a38` used receipt `deploy-mtclxa6u-83b54fd4f07a641a`: first call HTTP `200`,
-  `restoredFingerprint=absent`; replay HTTP `409 RECOVERY_ALREADY_USED`; durable status `used`. Quarantine is an exact
-  four-file copy.
-- The extensions census is exactly its 45-entry pre-state minus only `pipeline_test` (44 current entries). AI Influence
-  game/workspace regular-tree fingerprints remain `a9046192...eb295` / `477a9ea0...5af6`.
-- X4 and the isolated server are stopped. Ports `3000`, `3001`, `3100`, `3101`, `3300`, and `8972` are free.
-  Antigravity remains open and untouched.
-- Source checkpoint `474eab7e1e1881344c7cdf138a8f0993c1061948` is pushed; `HEAD`, `origin/main`, and direct
-  `git ls-remote` are identical. No B119 path remains staged.
-- GitHub #41 comment `5449987062` and Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a` were written and read
-  back with the issue open and status `In Progress / Partial`. Google Drive document
-  `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE` was not written: the mandatory trusted-read bridge rejected
-  valid Windows root `F:\DEV_ENV\X4_Forge` as non-absolute before connector execution. No bypass was attempted.
+- Baseline `HEAD == origin/main == cfb87ac89e453a912e5a0be28fe20e814e7b20b1`. The bounded executable changes
+  are uncommitted and unstaged. Preserve the many unrelated user-owned worktree changes.
+- The prior real-X4 `pipeline_test` proof remains authoritative at one `2544x1353` drawable profile. Exact package:
+  four files, `6,338` bytes, fingerprint
+  `88574c00ce6d9aa5b1dd2686425fae0a8b492df75a04a25bd94d19e82f7d844f`.
+- The live game target remains absent after its one-use recovery. No mod, game, corpus, credential, or standing
+  configuration byte was written by the current unit.
+- Antigravity is open by window/process evidence; X4 is absent; the operator confirmed the machine quiet before the
+  heavy host gate.
+- All four Luna workers used by this bounded unit reached terminal status and were closed. Zero workers are open.
 
-## Implemented bounded repair
+## Implemented bounded unit
 
-- `src/types.ts`: preserve authored editbox height; emit `reserveScrollBar=false` for the generated fixed-width table;
-  define shipped `menu.onCloseElement(dueToClose)` through `Helper.closeMenu`; delegate `menu.close()` to it.
-- `src/lib/x4UiLint.ts`: stable `x4-ui.editbox-height-minimum` error for statically omitted/literal-zero outer height;
-  dynamic values remain verification gaps and wording truthfully says X4 displays a clipped/overlapped field.
-- `src/lib/uiCompilerSelftest.ts` and `src/lib/x4UiLint.selftest.ts`: causal emitter/linter coverage.
-- `server.ts`: same-volume first-deploy recovery remains the rename fast path; only `EXDEV` enters copy/verify/remove,
-  with exact rollback after removal or receipt-consumption failure.
-- `scripts/route-integration.mjs`: requires thirteen causal cross-volume recovery checks from the public selftest.
+- `server.ts` returns and persists the exact regular-tree `deployedFingerprint` for successful legacy and guarded
+  deploys.
+- `src/server/runtimeDebuggerAdapter.ts` validates, persists, and reconstructs that fingerprint across restart;
+  failed deploy evidence cannot replace the last successful exact deploy.
+- New pure `src/lib/x4UiGameVerification.ts` extends the existing global experience-confirmation authority with an
+  optional X4 UI snapshot. External verification requires exact workspace/source identity, successful deploy
+  timestamp/path/fingerprint, target identity, clean readiness, normalized drawable/UI-scale profile, and explicit
+  human confirmation.
+- `App`, `UIBuilder`, `X4UiSourceEditor`, and readiness wiring consume that external state without changing internal
+  preview truth. Preview/session/paint/canvas receipts remain `gameVerified:false` and `Not verified in game`.
+- Fresh-eyes corrections preserve a prior X4 UI snapshot only while workspace and deploy evidence still match,
+  remove a parent/child snapshot-lifecycle race, and prevent an enabled-but-inert confirmation control.
 
-## Validation already green
+## Host validation green
 
-- UI compiler `22/22`; X4 UI linter `116/116`; TypeScript pass; exact lint zero errors; diff hygiene pass.
-- Route integration `491/491`; compile-artifact selftest `74/74`; thirteen new causal recovery checks `13/13`.
-- Production build passed at `1,847` Vite modules. Rebuilt isolated live artifact selftest again passed `74/74`.
-- Live compile and separate project validation agreed on all four exact files with zero errors/warnings. Package linter
-  returned zero errors, zero warnings, and 33 explicit verification gaps. External validator exited `0`.
-- Graphify refreshed deterministically to `9867` nodes, `24697` edges, and `322` communities.
-- The expected durable-writer authority stop was reviewed and repaired by exact native Luna ownership only:
-  `config/durable-writers.json` now pins source fingerprint `71e71e3c...0ed5` and the real `server.ts` writer counts.
-  Writer audit passed `14/14` plus `8/8`. Action-receipt selftests passed `57/57` and `23/23`; the official audit passed
-  `82` routes / `56` surfaces at reviewed SHA-256 `dbf9366e...548fa`. No candidate or promotion was required.
-- Final complete `npm run precommit:check` passed under bundled Node `24.19.0`: tripwires, canon mirrors, verdict
-  `55/55`, Vite lifecycle, product copy, durable writers, capability/MCP contracts, action receipts, TypeScript, and
-  size guards all passed.
+- X4 UI verification owner selftest: PASS.
+- Runtime debugger adapter: PASS `44/44`.
+- SourceEditor selftest: PASS all current matrices.
+- Host typecheck: PASS.
+- Bounded ESLint: exit `0`, zero errors; broad existing warnings remain outside this unit.
+- `git diff --check`: PASS, with only the existing UIBuilder line-ending warning.
+- Graphify refreshed and queried: `9,931` nodes / `24,845` edges / `327` communities.
+- Route integration: `491/491`; runtime-index oracles: `134/134`.
+- First full e2e is retained red evidence: `103` passed / `1` flaky / `treeGone=true`. Exact project-browser
+  reproduction passed `3/3`; one controlled unchanged full retry passed `104/104`, zero flaky, `treeGone=true`.
+  Green receipt SHA-256: `19636EE9351736DEBA2E1ED9186E1F0C3F9CC27F3E5C60E93588187CF6DEA865`.
+- Writer authority: selftest `14/14`, live inventory PASS, host-store `8/8`. Exact manifest delta updates only the
+  current server fingerprint and App local-storage write count.
+- Capability authority: reviewed candidate SHA-256
+  `25af9c77b0d84020426cad609459883e010a622bee9d6caaf7b4762c155ccfae`; source boundary `192 -> 193`, no
+  route/authority changes; audit `12 capabilities / 297 routes / 1 dynamic registrar / 11 MCP aliases`.
+- Action receipts: `82` routes / `56` surfaces. Complete precommit: PASS. Final production build: PASS at `1,848`
+  Vite modules. Ports `3000/3001/3100/3101` are free and X4 remains absent.
+- Evidence: `dev-docs/b119-exact-deploy-verification/e2e-red-20260828-01/` preserves red, targeted green, trace, and
+  full-retry green receipts.
 
-## Truth boundary and eyeball queue
+## Google Docs bridge and external records
 
-- This proves the UI-only Forge-to-X4 pipeline at one real profile. It does not prove a second scale, every widget,
-  complete `helper.lua`/`widget_fullscreen.lua` parity, exact Forge-versus-X4 pixels, or the AI Influence design.
-- Optional 30-second Ken check: open
-  `dev-docs/b119-x4-ui-pipeline-smoke/in-game-20260828/repaired/panel-open-interactive.jpg`; verify the visible title,
-  two buttons, status, full-height field, and `b119test`. Then open `panel-closed.jpg`; verify the panel is absent.
-  This check is not needed to establish that X4 accepted and interacted with the panel because computer-use and
-  debuglog evidence already do so.
-- Next experience gate: rerun the same exact package at a second drawable/UI-scale profile and compare measured bounds
-  with Forge. AI Influence reconstruction remains the later benchmark, not a prerequisite for this pipeline proof.
+- Installed bridge owner:
+  `C:\Users\Moshi\.codex\plugins\cache\openai-curated-remote\google-drive\0.1.16\skills\google-docs\host\docs-trusted-read-file-bridge.mjs`.
+- Windows absolute paths, strict UTF-8 without Web API globals, ConPTY line framing, and short exact byte/hash receipts
+  are repaired. Syntax checks, `11` owner checks, and a real ConPTY exact-receipt probe pass.
+- Three failed trusted reads remain red evidence. Successful immutable read evidence is
+  `dev-docs/google-docs-trusted-read/b119-20260828-04`.
+- Drive document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE` was revision-locked, appended, and read back at
+  final revision `AIroW35g1L39c6IcRasl_o3p9SKsqKtlH5GoRCLjpja1ATvLh-iMM0G4e6Kp7OXYr8XjJ8-aIQ0yHZuBbmql3HxlmUK4nwecuJcDf89fN2iu`.
+- Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a` was appended and read back as
+  `HOST-VALIDATED / IN PROGRESS / PARTIAL`.
+- GitHub issue #41 focused comment `5450866946` was written and read back as explicitly uncommitted/PARTIAL. The
+  issue remains open; add the next comment only after the bounded commit/push exists, then read it back.
 
 ## Dirty boundary and commit question
 
-- Executable source checkpoint `474eab7e1e1881344c7cdf138a8f0993c1061948` was pushed with exact
-  local/tracking/direct-remote parity. The commit containing this handoff is the record-only close that follows it;
-  it changes no executable behavior.
-- Owned tracked paths are `BACKLOG.md`, `SESSION-HANDOFF.md`,
-  `docs/plans/2026-08-10-b119-x4-ui-editor-linter-first.md`, `scripts/route-integration.mjs`, `server.ts`,
-  `src/types.ts`, `src/lib/uiCompilerSelftest.ts`, `src/lib/x4UiLint.ts`, and
-  `src/lib/x4UiLint.selftest.ts`, plus reviewed authority manifest `config/durable-writers.json`.
-- Preserve every other modified, deleted, and untracked path. Stage with explicit paths only; never broad-stage.
-- Commit question: the executable bounded close is committed and pushed as
-  `fix(ui-editor): verify UI-only Forge pipeline in X4` at `474eab7e1e1881344c7cdf138a8f0993c1061948`.
-  This handoff belongs in the immediately following record-only close; preserve every unrelated path.
+- Executable/test paths: `server.ts`, `src/App.tsx`, `src/components/UIBuilder.tsx`,
+  `src/components/X4UiSourceEditor.tsx`, `src/components/X4UiSourceEditor.selftest.tsx`, `src/lib/readiness.ts`,
+  `src/lib/x4UiGameVerification.ts`, `src/lib/x4UiGameVerification.selftest.ts`,
+  `src/server/runtimeDebuggerAdapter.ts`, and `src/server/runtimeDebuggerAdapter.selftest.ts`.
+- Reviewed authority paths: `config/durable-writers.json` and `config/forge-route-dispositions.json`.
+- Repository records: `BACKLOG.md`, `SESSION-HANDOFF.md`,
+  `docs/plans/2026-08-10-b119-x4-ui-editor-linter-first.md`, and
+  `docs/plans/2026-08-28-b119-exact-deploy-confirmation-second-profile.md`.
+- Capability-map and project-AAR deltas under `F:\StarForge\wiki\x4-forge\` are updated outside this repository.
+- Never broad-stage. Full precommit is green; use explicit `git add -- <paths>` only.
+- Suggested commit: `feat(ui-editor): bind game verification to exact deploy evidence`.
+- Push only after the commit hook passes; prove `HEAD == origin/main == git ls-remote` and zero staged residue.
 
 ## Next exact actions
 
-1. Resume B119 with the same exact package at a second drawable/UI-scale profile, then Forge/X4 measured comparison.
-2. Repair the Google Docs trusted-read bridge's Windows absolute-path handling in its owning plugin task before the
-   next Drive projection; do not bypass the bridge from B119.
+1. Fresh-eyes review the exact staged diff, commit/push the narrow checkpoint, and prove local/tracking/direct-remote
+   parity with zero staged residue.
+2. Update/read back GitHub #41, Notion, and Drive with the exact commit.
+3. Present the separate real-game write/recovery paragraph and wait for literal `go` before deploying the unchanged
+   package at a second profile.
+4. Capture interaction, debuglog, measured bounds, exact package identity, and recovery. Dynamic `Helper.scaleX` /
+   `Helper.scaleY` geometry remains unavailable, so do not claim exact Forge-versus-X4 pixel parity.
+5. Do not publish OpenVSX while B119 is partial. At release quality, reconcile the user-owned extension release
+   edits, then build, package, inspect, probe, publish once, verify public parity, and commit/push.
 
 ## Triggered AAR hazards
 
-- X4 launch returned a targeting timeout despite starting successfully; fresh window enumeration recovered it.
-- `type_text` did not visibly populate the focused X4 editbox; individual `press_key` events did.
-- The first evidence suffix said `.png` for JPEG bytes and was immediately normalized to `.jpg`.
-- A relative-root custom fingerprint produced one false mismatch; resolving the root restored exact equality.
-- Broad `rg`, three empty PowerShell pipelines, one assumed `/api/health`, and one validator process guard that matched its
-  own command were corrected without mutating product, game neighbors, or standing configuration.
-- Final precommit correctly stopped on the changed `server.ts` durable-writer fingerprint/counts. Native Luna updated
-  only the reviewed manifest; writer and action-receipt audits then passed without weakening policy or promoting a
-  coverage candidate.
-- The Google Docs trusted-read loader first hit an unavailable `TextEncoder`; the skill's own byte-count method then
-  loaded the complete bridge. The bridge reproduced its known Windows-root rejection before connector execution, so
-  Drive remained intentionally stale rather than receiving an untrusted write.
-- Highest-risk weakness: a convincing preview can still omit lifecycle/dimension fields. The new rule and selftests
-  close this exact defect class; X4 remains authoritative for every untested frame.
+- Reconciliation replaced a proposed local verification store with the existing readiness/confirmation owner.
+- Fresh-eyes review forced two state-ownership repairs.
+- The Docs bridge required separate Windows-path, missing-Web-API, ETX/ConPTY, and ANSI-wrap corrections.
+- `reviewctl` is unavailable; complete diff review and causal tests remain the authority.
+- A broad Docs extraction exceeded the useful context boundary; the compact paragraph API supplied safe readback.
+- A broad recursive live-state fingerprint probe was stopped after it proved too expensive; the e2e lifecycle receipt
+  is the bounded containment authority. The bundled npm path changed after the Codex update; fallback pnpm created an
+  untracked lock and rewired dependencies before failing. The generated lock was removed and exact `npm ci` restored
+  committed-lockfile state; final manifests are unchanged.
+- First full e2e was red at `103 + 1 flaky`; exact `3/3` and one unchanged `104/104` retry cleared the host gate while
+  retaining the original red receipt. Precommit legitimately refused stale writer and capability manifests, which
+  exact native Luna owners reconciled without production/test changes.
+- Highest risk: persisted confirmation can become a false green after source, target, deploy, or profile drift. The
+  pure owner refuses known drift; live target recomputation and the second-profile experience proof remain open.

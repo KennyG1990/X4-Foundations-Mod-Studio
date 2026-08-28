@@ -1,0 +1,103 @@
+# B119 exact deploy confirmation and second-profile proof
+
+Task: B119 X4 UI editor exact game-verification authority and second drawable/UI-scale profile
+Lane: FULL
+Status: HOST VERIFIED / SECOND PROFILE PENDING / OVERALL PARTIAL
+
+## PLAN
+
+- Bounded unit: extend Forge's existing deploy/readiness authority so the X4 UI editor can present an external exact-deploy-and-human-confirmation state without allowing preview, layout, paint, or canvas output to verify itself; then exercise the already-proven `pipeline_test` package at one additional drawable/UI-scale profile.
+- Assumptions: the committed one-profile `pipeline_test` receipt remains the current baseline; the installed package has been recovered to its pre-test absent state; Antigravity is available; X4 is not currently running; machine quietness must be reconfirmed immediately before heavy or in-game validation.
+- Authoritative references: `FORGE-UI-EDITOR-BRIEF.md`; unpacked X4 `helper.lua` and `widget_fullscreen.lua`; `docs/plans/2026-08-10-b119-x4-ui-editor-linter-first.md`; `docs/plans/2026-08-10-b119-x4-ui-editor-source-first-design.md`; ADR-F1, ADR-F4, ADR-F5; existing `src/lib/readiness.ts`, `server.ts`, and `src/server/runtimeDebuggerAdapter.ts` authorities.
+- Existing infrastructure reused: B36 workspace-hash readiness, the single global experience-confirmation store, deploy-verify's exact regular-tree fingerprint, runtime-debugger deploy persistence, source-canonical X4 UI projection, and the guarded `pipeline_test` deploy/recovery path.
+- In scope: durable deployed-tree fingerprint evidence; an optional source/profile snapshot attached to the existing experience confirmation; exact current-state classification for the X4 UI editor; UI presentation and explicit confirmation wiring; causal negative-path tests; focused server/runtime persistence tests; second-profile package deployment, screenshot, measured comparison, and exact recovery; repository/GitHub/Notion/Google Drive checkpoint projection with readback.
+- Out of scope: changing the internal `gameVerified: false` invariant; claiming C++ frame acceptance from preview; full three-menu pixel-parity closure; final Zekton metric parity; reconstructing the AI Influence UI; publishing a partial B119 build to OpenVSX.
+- Risks and authorization boundaries: a stale or forged confirmation could create a false “verified” state; adding deploy evidence changes a persisted cross-layer contract; game-directory writes are destructive unless the existing recovery receipt is used; e2e must use only the ephemeral 3100/3101 stack; the existing dirty worktree and independently modified VS Code release files are user-owned and must not be overwritten or staged. GitHub, Notion, Google Drive, commit, push, and a later release-quality OpenVSX publish are explicitly authorized by the user.
+- Rollback/checkpoint: HEAD and `origin/main` are both `cfb87ac89e453a912e5a0be28fe20e814e7b20b1`; stage only named B119 paths; source changes are revertible by their eventual bounded commit; runtime fields are backward-compatible optional reads; `pipeline_test` uses its one-use recovery receipt and must end with the live target absent; Google Docs bridge repair must be confined to its installed plugin owner and its tests.
+- Acceptance criteria:
+  - The X4 UI preview/session/paint/canvas owners still report `gameVerified: false` and `Not verified in game` independently of external state.
+  - The UI editor presents external game verification only when the current workspace hash, deploy timestamp, deployed-tree fingerprint, selected exact source identity, and normalized drawable/UI-scale profile all match an existing clean in-game readiness signal plus an explicit human confirmation.
+  - Source edits, profile edits, workspace drift, deploy replacement, missing/invalid fingerprint evidence, or confirmation corruption restore `Not verified in game` without mutating preview receipts.
+  - The deployed-tree fingerprint is returned by successful guarded deploys and survives runtime-debugger restart reconstruction; failed deploys do not replace prior successful evidence.
+  - Focused selftests, TypeScript typecheck, lint, relevant server route tests, production build, and applicable machine-gated checks pass without weakening existing assertions.
+  - The same exact `pipeline_test` artifact is accepted by X4 under a second drawable/UI-scale profile; a screenshot and measured panel bounds are recorded; the game/debug log is checked; exact rollback restores the absent pre-state.
+  - GitHub issue #41, the canonical Notion B119 page, and Google Doc `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE` are updated and read back from their authoritative surfaces.
+- Required validation and negative path: focused source/readiness/runtime/route selftests; host `npm run typecheck`; host `npm run lint`; graph rebuild; production build; machine-gated e2e/precommit; second-profile X4 interaction and debuglog inspection; explicit stale-source, stale-profile, stale-fingerprint, failed-deploy, corrupt-store, restart-reconstruction, and renderer-self-verification refusal checks.
+- Evidence locations: focused command output in the task close; `dev-docs/b119-x4-ui-pipeline-smoke/in-game-20260828/second-profile/`; GitHub issue #41 comment readback; Notion page readback; Google Docs trusted-read/write/readback artifacts; `SESSION-HANDOFF.md`; this record.
+- Currently unavailable validation: second-profile in-game execution and heavy host gates wait on the operator machine-state confirmation required by project policy. Current Forge receipts for the unchanged `pipeline_test` package identify the frame/table but classify their geometry as unavailable because width, height, x, and y flow through local `Helper.scaleX` / `Helper.scaleY` expressions. The second profile can prove X4 scaling and end-to-end behavior, but exact Forge-versus-X4 pixel parity remains a separately required renderer-expression capability unless the existing owner is extended in a later planned unit.
+
+## BASELINE
+
+- Revision/version: `main` at `cfb87ac89e453a912e5a0be28fe20e814e7b20b1`, equal to `origin/main`; public installed VS Code extension baseline is recorded as 0.0.69.
+- Existing changes/failures/runtime state: the worktree contains many unrelated modified, deleted, and untracked files, including VS Code release metadata and historical docs; none are owned by this unit. The prior one-profile package proof is green and committed. Antigravity processes are present and no X4 process was observed; machine quietness is not inferred from process presence.
+
+## RECONCILE
+
+- Resources and readers/writers searched: Graphify paths among `X4UiSourceEditor.tsx`, `UIBuilder.tsx`, `App.tsx`, `readiness.ts`, `server.ts`, and `runtimeDebuggerAdapter.ts`; deploy record writers/readers; experience-confirmation persistence; source/profile projection; current B119 plans and handoff; GitHub issue #41; canonical Notion page; Drive document metadata.
+- Existing capability reused: Forge already owns workspace-fresh deploy evidence and explicit human experience confirmation globally. Deploy-verify already calculates the exact regular-tree fingerprint, but the successful-deploy record does not retain it. The X4 UI editor deliberately keeps internal verification false.
+- Couplings checked: server deploy response and runtime persistence; readiness parsing and App confirmation; UIBuilder and SourceEditor presentation; source/profile invalidation; prior UI selftests that forbid `gameVerified: true`; external status projections.
+- Capability-map delta: exact deployed-tree identity now persists through the existing runtime/deploy evidence owner, and the existing experience-confirmation owner can carry an optional source/target/profile-bound X4 UI snapshot. Internal renderer/session receipts remain permanently non-authoritative. Full host and second-profile proof remain open.
+- Plan changes: the initial idea of a B119-local verification store was rejected after reconciliation. The implementation must extend the existing readiness owner. Google Drive projection requires a bounded Windows absolute-path repair in the installed Google Docs trusted-read bridge owner before any document write; bypassing the guard is forbidden. Receipt inspection also changed the second-profile claim: it will record and compare X4 pixel bounds and scaling behavior, but cannot be called exact Forge-versus-X4 parity while Forge labels this dynamic frame geometry unavailable.
+
+## IMPLEMENT
+
+- Actual bounded changes:
+  - Successful legacy and guarded deploy paths now return and persist the exact regular-tree `deployedFingerprint`; runtime-debugger reconstruction preserves valid prior evidence across restart and refuses to replace it after a failed deploy.
+  - New pure `src/lib/x4UiGameVerification.ts` builds, parses, binds, refreshes, and classifies an optional X4 UI snapshot carried by the existing global experience-confirmation record. Verification requires exact workspace/source identity, deploy timestamp/path/fingerprint, target identity, clean readiness, normalized drawable/UI-scale profile, and explicit human confirmation.
+  - `UIBuilder`, `X4UiSourceEditor`, and `App` use that owner for external status and confirmation. Preview/session/paint receipts remain `gameVerified:false`; generic experience confirmation cannot promote an unmatched X4 UI snapshot.
+  - Fresh-eyes correction preserves a prior X4 UI snapshot only when workspace hash/name and current valid deploy timestamp/fingerprint still match, removes a parent/child snapshot-lifecycle race, and prevents an enabled-but-inert confirmation button.
+  - The installed Google Docs trusted-read bridge now recognizes Windows absolute roots, uses a dependency-free strict UTF-8 fallback when Web APIs are absent, and uses line-framed short receipts under Windows ConPTY. Its owner selftest covers the new boundaries.
+- Scope changes and reasons: no product scope expansion. The bridge repair was required to perform the already-authorized Drive projection without bypassing its mandatory trusted-read safety owner.
+
+## VALIDATE
+
+- Method -> result -> evidence:
+  - `x4UiGameVerification.selftest.ts` -> PASS, including source/profile/target/deploy drift, malformed evidence, legacy compatibility, and preservation/refusal boundaries.
+  - `runtimeDebuggerAdapter.selftest.ts` -> PASS `44/44`, including restart reconstruction and failed-deploy retention.
+  - `X4UiSourceEditor.selftest.tsx` -> PASS, including external-confirmation ownership and the permanent internal `gameVerified:false` boundary.
+  - host TypeScript typecheck -> PASS.
+  - bounded ESLint over the ten affected production/selftest files -> exit `0`, zero errors; broad pre-existing warnings remain outside this unit.
+  - `git diff --check` -> PASS; the existing UIBuilder line-ending warning remains informational.
+  - Graphify -> refreshed and queried successfully at `9,931` nodes / `24,845` edges / `327` communities; the graph resolves the new verification owner and deploy/source/profile dependencies.
+  - Google Docs bridge `node --check` -> PASS for production and selftest; owner selftest -> PASS `11` checks; real Windows ConPTY exact-receipt probe -> PASS. Revision-locked Drive updates were read back at final revision `AIroW35g1L39c6IcRasl_o3p9SKsqKtlH5GoRCLjpja1ATvLh-iMM0G4e6Kp7OXYr8XjJ8-aIQ0yHZuBbmql3HxlmUK4nwecuJcDf89fN2iu`.
+  - GitHub issue #41 focused checkpoint comment `5450866946` -> written and read back with the issue still open and the comment explicitly marked uncommitted/PARTIAL.
+  - Route integration -> PASS `491/491`; its required production build emitted `1,848` Vite modules and the packaged server contract passed.
+  - Runtime-index oracle sweep -> PASS `134/134`, including runtime debugger `44/44` and X4 UI integration.
+  - First full serial e2e -> authoritative RED: `103` passed / `0` failed / `1` flaky / `1` bad result. The complex-project browser test timed out at 60 seconds during cleanup, then passed its built-in retry in 2.4 seconds; lifecycle still proved `treeGone=true`.
+  - Exact project-browser reproduction -> PASS `3/3`, failing case 2.3 seconds, zero flaky, `treeGone=true`.
+  - One controlled unchanged full e2e retry -> PASS `104/104`, zero failed/flaky/bad/quarantined, `treeGone=true`; receipt SHA-256 `19636EE9351736DEBA2E1ED9186E1F0C3F9CC27F3E5C60E93588187CF6DEA865`.
+  - Initial precommit -> legitimate durable-writer refusal for current `server.ts` fingerprint and `App.tsx` local-storage call count. Exact native Luna reconciled only `config/durable-writers.json`; selftest `14/14`, live inventory, and host-store `8/8` passed.
+  - Second precommit -> legitimate route-source-boundary refusal. Exact native Luna generated/reviewed/promoted candidate SHA-256 `25af9c77b0d84020426cad609459883e010a622bee9d6caaf7b4762c155ccfae`; the only delta was source `src/lib/x4UiGameVerification.ts` (`192 -> 193`), with no route or authority change. Audit passed `12` capabilities / `297` routes / `1` dynamic registrar / `11` MCP aliases.
+  - Final complete precommit -> PASS: verdict oracle `55/55`, Vite lifecycle, product-copy guard, writer `14/14 + 8/8`, capability/MCP contracts, action receipts `82` routes / `56` surfaces, whole-repository typecheck, and size guards.
+  - Final production build -> PASS, `1,848` Vite modules plus packaged `dist/server.cjs`.
+  - Post-e2e containment -> PASS: ports `3000/3001/3100/3101` free, X4 count zero, e2e process tree gone.
+  - Second-profile X4 validation -> PENDING the separately required real-game write/recovery gate.
+- Negative/rollback result: focused tests refuse stale source, profile, target, fingerprint, timestamp, corrupt store, and generic-confirmation substitution. Failed deploy evidence does not replace the last exact successful deploy. Governance refused both stale manifests until exact reviewed reconciliation. The first flaky e2e remained red evidence rather than being overwritten. The game target remains absent from the prior one-use recovery; no new game write has occurred in this unit.
+- Visual/live result when applicable: the existing one-profile X4 receipt remains valid for the exact four-file `pipeline_test` package. No second-profile screenshot or measured bounds exist yet.
+
+## REVIEW
+
+- Requirement classification:
+  - exact deployed fingerprint persistence -> done and focused-evidenced;
+  - source/target/profile-bound external confirmation -> done and focused-evidenced;
+  - permanent internal preview non-authority -> done and focused-evidenced;
+  - full host route/oracle/e2e/precommit/build -> done and evidenced, with the initial flaky run retained as a non-clean trigger;
+  - second-profile X4 execution/experience -> missed for this checkpoint, still required;
+  - complete B119 parity and AI Influence reconstruction -> deliberately deferred under the original program plan;
+  - OpenVSX publish -> out of scope until release quality.
+- Fresh-eyes findings: review found that a later generic confirmation could erase an otherwise matching X4 UI snapshot and that a parent layout effect could race the child snapshot owner. Both were corrected and causally covered before promotion. No second verification store or internal `gameVerified:true` path was introduced.
+
+## CLOSE
+
+- Status: HOST VERIFIED / OVERALL PARTIAL
+- Remaining risks/deferred work: second-profile deployment/interaction/debuglog/bounds/recovery, dynamic geometry expression support needed for exact Forge-versus-X4 measurement, remaining linter/layout parity, and AI Influence reconstruction. Full B119 release remains PARTIAL until the original three-menu/profile acceptance contract closes.
+- Suggested commit title when applicable: `feat(ui-editor): bind game verification to exact deploy evidence`
+
+## AAR
+
+- Triggers: reconciliation changed the architecture from a local verification owner to an extension of the existing global readiness owner; fresh-eyes review forced two state-ownership corrections; the Google Docs bridge required Windows-path, missing-Web-API, ETX framing, and ANSI/wrap receipt repairs; three trusted-read attempts failed before the fourth immutable read succeeded; a broad live-state hash probe was stopped after it proved too expensive; bundled npm discovery failed, the fallback pnpm transaction created an untracked lock and rewired dependencies before failing, and `npm ci` restored the authoritative lockfile state; the first full e2e was red at `103 + 1 flaky`; precommit legitimately refused stale writer and capability manifests; the current smoke fixture exposed unavailable dynamic frame geometry in the Forge receipt.
+- Sustain: source-first invariants and exact deploy/recovery receipts exposed the correct authority boundary before code changed.
+- Improve work/approach: keep proof work in smaller commit-sized units and promote one bounded checkpoint before expanding parity coverage.
+- Improve tools: retain the repaired bridge's strict UTF-8 and short Windows ConPTY receipt checks; full receipt lines can be wrapped and ANSI-decorated before the parent parser sees them. Use the installed npm CLI through bundled Node with process-local `npm_execpath`; do not invoke the bundled fallback pnpm in an npm-owned worktree. Use the e2e harness receipt for bounded live-state containment instead of recursively hashing the live `data` tree.
+- Highest-risk evidenced weakness: persisted human confirmation can become a convincing liar unless every source, target, deploy, and display-profile identity is reclassified against current state. The pure owner now refuses those drifts; live target-tree recomputation and the second-profile experience proof remain open.
+- Global/project lessons banked: project capability/AAR deltas record the verification authority, bridge failure mechanism, npm-launcher hazard, non-clean e2e history, and exact manifest-candidate workflow. Second-profile close remains pending.

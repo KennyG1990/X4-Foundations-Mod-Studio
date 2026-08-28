@@ -11462,3 +11462,68 @@ frame does not prove every source, widget, display profile, font raster, or C++ 
   `workspaceRoot must be an absolute path` before connector execution. The first loader attempt also stopped before
   connector execution because this isolate lacked `TextEncoder`; the skill-prescribed URI byte count then loaded the
   complete bridge and reproduced the owning path-validation defect. No bypass or blind document write was attempted.
+
+## 2026-08-28 — Exact deploy-bound external verification checkpoint
+
+Task record: `docs/plans/2026-08-28-b119-exact-deploy-confirmation-second-profile.md`.
+
+### RECONCILE / IMPLEMENT
+
+- Reconciliation rejected a B119-local verification store. Forge already owns workspace-fresh deployment and explicit
+  human experience confirmation; the bounded change extends those authorities.
+- Successful deploy evidence now retains the exact regular-tree `deployedFingerprint`, including runtime-debugger
+  restart reconstruction. A failed deploy cannot replace the last exact successful evidence.
+- The existing confirmation record can carry an optional X4 UI snapshot. External verification requires exact current
+  workspace/source identity, deploy timestamp/path/fingerprint, target identity, clean readiness, normalized
+  drawable/UI-scale profile, and explicit human confirmation. Internal renderer/session receipts remain
+  `gameVerified:false` and `Not verified in game`.
+- Fresh-eyes review corrected two state-ownership defects before promotion: generic confirmation preserves an X4 UI
+  snapshot only when its workspace and deploy fingerprint/timestamp still match, and the parent no longer races the
+  source editor's snapshot lifecycle. An absent handler cannot leave an enabled-but-inert confirmation action.
+- The installed Google Docs trusted-read bridge owner was repaired for Windows absolute paths, strict UTF-8 operation
+  without Web API globals, and Windows ConPTY line framing/short receipts. This was required to update Drive through
+  the mandated safety path, not a bypass or B119 product expansion.
+
+### VALIDATE / CURRENT BOUNDARY
+
+- Verification-owner selftests, runtime adapter `44/44`, SourceEditor matrices, host typecheck, bounded lint with zero
+  errors, diff hygiene, and Graphify `9,931 / 24,845 / 327` are green. The graph resolves the new owner and its
+  deploy/source/profile dependencies.
+- Bridge production/selftest syntax checks, `11` owner checks, and a real Windows ConPTY exact-receipt probe pass.
+  Immutable trusted read `dev-docs/google-docs-trusted-read/b119-20260828-04` enabled a revision-locked Drive append;
+  exact content was read back at revision
+  `AIroW35g1L39c6IcRasl_o3p9SKsqKtlH5GoRCLjpja1ATvLh-iMM0G4e6Kp7OXYr8XjJ8-aIQ0yHZuBbmql3HxlmUK4nwecuJcDf89fN2iu`.
+- The Notion owner page was appended and read back with `IN PROGRESS / PARTIAL`. GitHub #41 comment
+  `5450866946` was written and read back as an explicitly uncommitted focused checkpoint; the issue remains open and
+  still requires a commit-backed close marker.
+- Host close is green: route `491/491`; runtime-index oracles `134/134`; exact project-browser reproduction `3/3`;
+  controlled full e2e `104/104` with zero flaky results and `treeGone=true`; complete precommit; final production build
+  `1,848` modules. The initial full run remains retained red evidence at `103 + 1 flaky`; it timed out in the
+  complex-project cleanup after 60 seconds, then passed its retry, and was never relabeled green.
+- Writer governance passes `14/14` plus `8/8` after exact manifest reconciliation. Capability candidate SHA-256
+  `25af9c77b0d84020426cad609459883e010a622bee9d6caaf7b4762c155ccfae` added only
+  `src/lib/x4UiGameVerification.ts` to the reviewed source boundary (`192 -> 193`); the final audit is
+  `12 capabilities / 297 routes / 1 dynamic registrar / 11 MCP aliases`. Action receipts remain `82 / 56`.
+- Still pending: the second drawable/UI-scale X4 run with interaction, debuglog, measured bounds, and exact recovery.
+  Current Forge receipts classify this fixture's dynamic
+  `Helper.scaleX` / `Helper.scaleY` geometry as unavailable, so the second profile proves scaling and pipeline behavior
+  but cannot by itself establish exact Forge-versus-X4 pixel parity.
+- No OpenVSX release is claimed. Publish-before-commit begins only after B119 reaches release quality and the current
+  unrelated extension release edits are reconciled with their owner.
+
+### AAR DELTA
+
+- Three trusted-read attempts failed before the immutable fourth read succeeded: Windows-root recognition, absent
+  `TextDecoder`/`TextEncoder`, ETX handling under ConPTY, and wrapped ANSI-decorated receipts were separate causal
+  defects. Short byte/hash receipt rows plus strict decoding make the Windows bridge deterministic.
+- Bundled npm discovery changed after the Codex update. The first explicit path was absent; invoking fallback pnpm in
+  an npm-owned worktree created an untracked lock and rewired dependency links before failing. The generated lock was
+  removed and `npm ci` restored the exact committed lockfile state. Subsequent commands use bundled Node plus the
+  installed npm CLI through process-local `npm_execpath`. A broad recursive live-state fingerprint probe was also
+  stopped and replaced by the e2e harness's bounded lifecycle receipt.
+- The first full e2e's one flaky timeout is retained under
+  `dev-docs/b119-exact-deploy-verification/e2e-red-20260828-01/`; exact focused and controlled full retry receipts are
+  adjacent. This was a non-clean validation history even though the final host gate is green.
+- Highest-risk weakness: a persisted human confirmation becomes a convincing liar when source, target, deploy, or
+  display identity drifts. The pure classifier now refuses each known drift; live target-tree recomputation and the
+  second-profile experience gate remain open.

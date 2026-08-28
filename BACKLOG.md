@@ -39,8 +39,23 @@ shipped-layout parity,
 Forge/X4 pixel comparison, and AI Influence reconstruction remain open, so B119 stays
 `in_progress / PARTIAL`; GitHub #41 remains open. Source checkpoint
 `474eab7e1e1881344c7cdf138a8f0993c1061948` is pushed with local/tracking/direct-remote parity; GitHub comment
-`5449987062` and the Notion owner page were written and read back. Google Drive remains unchanged because its
-mandatory trusted-read bridge rejected the valid Windows workspace root before connector execution; no bypass was used.
+`5449987062` and the Notion owner page were written and read back. The Google Docs trusted-read bridge's Windows path,
+UTF-8 runtime, and ConPTY receipt defects are repaired with `11/11` owner checks and a real exact-receipt probe; the
+canonical Drive status document was revision-locked, updated, and read back without bypassing the bridge.
+**Exact deploy-bound confirmation 2026-08-28 — HOST VERIFIED / SECOND PROFILE OPEN:** the existing
+deploy/runtime owner now persists and reconstructs the exact deployed regular-tree fingerprint. The existing global
+experience-confirmation owner carries an optional X4 UI snapshot that verifies externally only when workspace/source,
+successful deploy timestamp/path/fingerprint, target identity, clean readiness, and normalized drawable/UI-scale profile
+all still match explicit human confirmation. Internal preview/session receipts remain `gameVerified:false` and generic
+confirmation cannot promote an unmatched UI snapshot. Fresh-eyes review corrected generic-confirmation preservation and
+parent/child snapshot-lifecycle races. Verification-owner tests, runtime adapter `44/44`, SourceEditor matrices,
+typecheck, bounded lint, diff hygiene, and Graphify `9931/24845/327` are green. Route integration is `491/491`, runtime
+oracles are `134/134`, final serial e2e is `104/104` with zero flaky results and `treeGone=true`, complete precommit is
+green, and production build emits `1,848` modules. The first full e2e remains retained red evidence at `103 + 1 flaky`;
+exact `3/3` and one controlled unchanged `104/104` retry cleared the host gate. Writer governance passes `14/14 + 8/8`;
+capability candidate `25af9c77...ccfae` added only the new source boundary and final audit passes `12/297/1/11`; action
+receipts remain `82` routes / `56` surfaces. GitHub #41 focused comment `5450866946` was read back as explicitly
+uncommitted/PARTIAL. Only the second X4 profile remains for this bounded unit; no OpenVSX release is claimed.
 **AI Influence `1b` visual reconciliation 2026-08-19 — REPRODUCED GUIDE CONFLICT:** The source pixels were re-opened
 and immutable hashes/dimensions are frozen in the plan. Forge's existing cockpit preset projects the measured guides to
 `y=1134.72`, `y=1065.6`, and `x=1699.84` at `2560x1440`; the supplied `1b` choice/input geometry intersects all three.

@@ -92,6 +92,13 @@ import {
   type ReadinessWatcherEvidence,
 } from './lib/readiness';
 import {
+  bindX4UiGameVerificationSnapshot,
+  classifyX4UiGameVerification,
+  refreshExperienceConfirmationPreservingX4UiSnapshot,
+  type X4UiGameVerificationCurrentSnapshot,
+  type X4UiGameVerificationDecision,
+} from './lib/x4UiGameVerification';
+import {
   STUDIO_LAYOUT_KEY,
   WORKSPACE_NAV_ITEMS,
   moveOrderedItem,
@@ -537,6 +544,7 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
   const [experienceConfirmations, setExperienceConfirmations] = useState<Record<string, ExperienceConfirmation>>(
     () => parseExperienceConfirmations(localStorage.getItem(EXPERIENCE_CONFIRMATIONS_KEY))
   );
+  const [x4UiVerificationSnapshot, setX4UiVerificationSnapshot] = useState<X4UiGameVerificationCurrentSnapshot | null>(null);
 
   const mdCode = React.useMemo(() => {
     try {
@@ -645,6 +653,23 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
     confirmation: experienceConfirmations[workspace.name] || null,
   }), [workspace.name, readinessWorkspaceHash, graphDiagnostics, effectiveDiagnostics, diagnosticSource, readinessWatcher, experienceConfirmations]);
 
+  const x4UiVerification = React.useMemo<X4UiGameVerificationDecision>(() => {
+    const statusFor = (id: ReadinessStageId) => readinessStages.find(stage => stage.id === id)?.status || 'pending';
+    return classifyX4UiGameVerification({
+      workspaceName: workspace.name,
+      workspaceHash: readinessWorkspaceHash,
+      deploy: readinessWatcher.lastDeploy,
+      readiness: {
+        graph: statusFor('graph'),
+        package: statusFor('package'),
+        deployed: statusFor('deployed'),
+        seen: statusFor('seen'),
+      },
+      currentSnapshot: x4UiVerificationSnapshot,
+      confirmation: experienceConfirmations[workspace.name] || null,
+    });
+  }, [experienceConfirmations, readinessStages, readinessWatcher.lastDeploy, readinessWorkspaceHash, workspace.name, x4UiVerificationSnapshot]);
+
   const navigateReadiness = React.useCallback((owner: ReadinessOwner, stage: ReadinessStageId) => {
     if (experienceMode === 'beginner') {
       if (stage === 'graph' || stage === 'package') {
@@ -680,11 +705,36 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
       confirmedAt: new Date().toISOString(),
     };
     setExperienceConfirmations(current => {
-      const next = { ...current, [workspace.name]: confirmation };
+      const refreshed = refreshExperienceConfirmationPreservingX4UiSnapshot({
+        previousConfirmation: current[workspace.name],
+        nextConfirmation: confirmation,
+        deployedFingerprint: deploy.deployedFingerprint,
+      });
+      const next = { ...current, [workspace.name]: refreshed };
       try { localStorage.setItem(EXPERIENCE_CONFIRMATIONS_KEY, JSON.stringify(next)); } catch { /* optional evidence preference */ }
       return next;
     });
   }, [readinessWatcher.lastDeploy, readinessWorkspaceHash, workspace.name]);
+
+  const confirmCurrentX4UiExperience = React.useCallback(() => {
+    const deploy = readinessWatcher.lastDeploy;
+    if (!x4UiVerification.canConfirm || x4UiVerificationSnapshot === null || !deploy?.deployedFingerprint) return;
+    const snapshot = bindX4UiGameVerificationSnapshot(x4UiVerificationSnapshot, deploy.deployedFingerprint);
+    if (snapshot === null) return;
+    const confirmation: ExperienceConfirmation = {
+      workspaceName: workspace.name,
+      workspaceHash: readinessWorkspaceHash,
+      deployedAt: deploy.deployedAt || '',
+      confirmedAt: new Date().toISOString(),
+      x4UiSnapshot: snapshot,
+    };
+    if (!confirmation.deployedAt) return;
+    setExperienceConfirmations(current => {
+      const next = { ...current, [workspace.name]: confirmation };
+      try { localStorage.setItem(EXPERIENCE_CONFIRMATIONS_KEY, JSON.stringify(next)); } catch { /* optional evidence preference */ }
+      return next;
+    });
+  }, [readinessWatcher.lastDeploy, readinessWorkspaceHash, workspace.name, x4UiVerification.canConfirm, x4UiVerificationSnapshot]);
 
   const [visibleCueIds, setVisibleCueIds] = useState<string[] | null>(null);
   const [focusNodeRequest, setFocusNodeRequest] = useState<{ nodeId: string; timestamp: number } | null>(null);
@@ -2824,6 +2874,9 @@ export default function App({ bootstrapWorkspace }: { bootstrapWorkspace?: Works
               setWorkspace={setWorkspace}
               selectedWidget={selectedWidget}
               setSelectedWidget={setSelectedWidget}
+              x4UiVerification={x4UiVerification}
+              onConfirmX4UiVerification={confirmCurrentX4UiExperience}
+              onX4UiVerificationSnapshotChange={setX4UiVerificationSnapshot}
             />
           ) : workspaceView === 'aiscripts' ? (
             <AIScriptEditor

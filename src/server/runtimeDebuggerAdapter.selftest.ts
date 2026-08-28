@@ -16,6 +16,7 @@ const DEPLOY_INFO: RuntimeDebuggerDeployInfo = {
   workspaceHash: "hash-runtime-adapter",
   deployedAt: "2026-08-08T12:00:00.000Z",
   deployedPath: "F:/X4/extensions/x4_ai_influence",
+  deployedFingerprint: "c".repeat(64),
 };
 
 function mdFixture(): string {
@@ -623,6 +624,29 @@ export function runRuntimeDebuggerAdapterSelftest(): {
 
     const baseline = adapter.recordSuccessfulDeploy(WORKSPACE_ID, DEPLOY_INFO);
     check("successful_deploy_creates_current_eof_baseline", baseline.ok && baseline.snapshot.baselineTokens.length === 1 && baseline.snapshot.currentSegmentId.length > 0, baseline.ok ? baseline.snapshot : baseline);
+    const reconstructedDeploy = restarted.readDeployInfo(WORKSPACE_ID);
+    check(
+      "successful_deploy_fingerprint_survives_restart_reconstruction",
+      baseline.ok && reconstructedDeploy?.deployedFingerprint === DEPLOY_INFO.deployedFingerprint,
+      reconstructedDeploy,
+    );
+    const failedDeploy = createAdapter(
+      adapterRoot,
+      () => path.join(root, "missing-deploy-debuglog.txt"),
+      () => profile,
+      inventory,
+      () => now,
+      { store: new RuntimeDebugSessionStore({ root: adapterRoot }) },
+    ).recordSuccessfulDeploy(WORKSPACE_ID, {
+      ...DEPLOY_INFO,
+      deployedAt: "2026-08-08T12:01:00.000Z",
+      deployedFingerprint: "d".repeat(64),
+    });
+    check(
+      "failed_deploy_does_not_replace_prior_successful_fingerprint",
+      failedDeploy.ok === false && adapter.readDeployInfo(WORKSPACE_ID)?.deployedFingerprint === DEPLOY_INFO.deployedFingerprint,
+      { failedDeploy, retained: adapter.readDeployInfo(WORKSPACE_ID) },
+    );
     const immediate = adapter.buildBrief({ record, manifest, modId: "x4_ailive", expectedSteps: expectedInputFromLegacy(["marker:AICHAT"]) });
     check("immediate_eof_baseline_reports_no_post_deploy_change", immediate.payload.session.state === "current" && immediate.changedSinceDeploy === false, immediate.payload.session);
     const segmentsBeforeRetry = baseline.ok ? baseline.snapshot.segments.length : -1;

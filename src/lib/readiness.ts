@@ -1,5 +1,6 @@
 import type { PackageDiagnostic } from '../types';
 import type { WatcherVerdictState } from './watcherVerdict';
+import { parseX4UiGameVerificationSnapshot, type X4UiGameVerificationSnapshot } from './x4UiGameVerification';
 
 export const READINESS_STAGE_IDS = ['graph', 'package', 'deployed', 'seen', 'experience'] as const;
 export type ReadinessStageId = typeof READINESS_STAGE_IDS[number];
@@ -12,6 +13,8 @@ export interface DeployEvidence {
   deployedAt?: string;
   deployedPath?: string;
   stagingPath?: string;
+  /** Optional exact fingerprint of the deployed regular file tree. */
+  deployedFingerprint?: string;
 }
 
 export interface ReadinessWatcherEvidence {
@@ -27,6 +30,8 @@ export interface ExperienceConfirmation {
   workspaceHash: string;
   deployedAt: string;
   confirmedAt: string;
+  /** Optional X4 UI-specific binding; legacy global confirmations omit this. */
+  x4UiSnapshot?: X4UiGameVerificationSnapshot;
 }
 
 export interface ReadinessStage {
@@ -64,7 +69,19 @@ export function parseExperienceConfirmations(raw: string | null | undefined): Re
         typeof item.workspaceHash === 'string' &&
         typeof item.deployedAt === 'string' &&
         typeof item.confirmedAt === 'string'
-      ) valid[key] = item as ExperienceConfirmation;
+      ) {
+        const confirmation: ExperienceConfirmation = {
+          workspaceName: item.workspaceName,
+          workspaceHash: item.workspaceHash,
+          deployedAt: item.deployedAt,
+          confirmedAt: item.confirmedAt,
+        };
+        if (Object.prototype.hasOwnProperty.call(item, 'x4UiSnapshot')) {
+          const snapshot = parseX4UiGameVerificationSnapshot(item.x4UiSnapshot);
+          if (snapshot !== null) confirmation.x4UiSnapshot = snapshot;
+        }
+        valid[key] = confirmation;
+      }
     }
     return valid;
   } catch {

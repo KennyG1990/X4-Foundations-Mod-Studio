@@ -86,6 +86,7 @@ import { runPortSemanticsSelftest } from "./src/lib/portSemantics";
 import { runFriendlyNamesSelftest } from "./src/lib/mdFriendlyNames";
 import { runNodeToolboxSelftest } from "./src/lib/nodeToolbox";
 import { buildReadinessStages, runReadinessSelftest } from "./src/lib/readiness";
+import { isSha256Fingerprint } from "./src/lib/x4UiGameVerification";
 import { runExperienceModeSelftest } from "./src/lib/experienceMode";
 import { runCompileSelftest } from "./src/lib/mdCompileSelftest";
 import { runModTemplatesSelftest } from "./src/lib/modTemplates";
@@ -1272,32 +1273,44 @@ type LastDeployInfo = {
   deployedAt: string;
   stagingPath?: string;
   deployedPath?: string;
+  /** Exact SHA-256 fingerprint of the deployed regular file tree when game bytes were written. */
+  deployedFingerprint?: string;
 };
 
 let lastDeployInfo: LastDeployInfo | null = null;
 const lastDeployByWorkspaceId = new Map<string, LastDeployInfo>();
 
+function normalizeLastDeployInfo(info: LastDeployInfo): LastDeployInfo {
+  const { deployedFingerprint, ...rest } = info;
+  return {
+    ...rest,
+    ...(isSha256Fingerprint(deployedFingerprint) ? { deployedFingerprint: deployedFingerprint.toLowerCase() } : {}),
+  };
+}
+
 function recordSuccessfulDeploy(req: express.Request, info: LastDeployInfo): LastDeployInfo {
   // Keep the explicit-mod diagnostic routes backward compatible while ensuring every
   // addressed workspace's readiness/status surface only observes its own deployment.
-  lastDeployInfo = info;
+  const normalizedInfo = normalizeLastDeployInfo(info);
+  lastDeployInfo = normalizedInfo;
   const record = (req as any).__workspaceRecord as WorkspaceRecord | undefined;
   if (record) {
-    lastDeployByWorkspaceId.set(record.workspaceId, info);
+    lastDeployByWorkspaceId.set(record.workspaceId, normalizedInfo);
     const baseline = runtimeDebuggerAdapter.recordSuccessfulDeploy(record.workspaceId, {
       workspaceId: record.workspaceId,
-      modId: info.modId,
-      workspaceName: info.workspaceName,
-      workspaceHash: info.workspaceHash,
-      deployedAt: info.deployedAt,
-      ...(info.stagingPath ? { stagingPath: info.stagingPath } : {}),
-      ...(info.deployedPath ? { deployedPath: info.deployedPath } : {}),
+      modId: normalizedInfo.modId,
+      workspaceName: normalizedInfo.workspaceName,
+      workspaceHash: normalizedInfo.workspaceHash,
+      deployedAt: normalizedInfo.deployedAt,
+      ...(normalizedInfo.stagingPath ? { stagingPath: normalizedInfo.stagingPath } : {}),
+      ...(normalizedInfo.deployedPath ? { deployedPath: normalizedInfo.deployedPath } : {}),
+      ...(normalizedInfo.deployedFingerprint ? { deployedFingerprint: normalizedInfo.deployedFingerprint } : {}),
     });
     if (baseline.ok === false) {
       console.warn(`[runtime-debugger] successful deploy baseline unavailable: ${baseline.error}`);
     }
   }
-  return info;
+  return normalizedInfo;
 }
 
 function deployInfoForWorkspace(record: WorkspaceRecord): LastDeployInfo | null {
@@ -12580,13 +12593,15 @@ app.post("/api/agent/deploy", (req, res) => {
       message = `Successfully deployed to game extensions: ${deployedPath}`;
     }
 
+    const deployedFingerprint = deployedPath ? regularTreeFingerprint(deployedPath) : undefined;
     const successfulDeploy = recordSuccessfulDeploy(req, {
       modId,
       workspaceName: ws.name,
       workspaceHash: workspaceContentHash(sanitizeWorkspace(ws)),
       deployedAt: new Date().toISOString(),
       stagingPath: stagingPath || undefined,
-      deployedPath: deployedPath || undefined
+      deployedPath: deployedPath || undefined,
+      ...(deployedFingerprint ? { deployedFingerprint } : {}),
     });
 
     return res.json({
@@ -13054,14 +13069,16 @@ app.post("/api/agent/deploy-verify", (req, res) => {
     // readiness against the exact workspace state adopted after deploy.
     // Failed byte/doctor gates are attempted writes, not successful deploy evidence.
     // Preserve the prior successful record instead of painting the readiness ladder green.
+    let successfulDeploy: LastDeployInfo | null = null;
     if (ok) {
-      recordSuccessfulDeploy(req, {
+      successfulDeploy = recordSuccessfulDeploy(req, {
         modId,
         workspaceName: ws.name,
         workspaceHash: workspaceContentHash(sanitizeWorkspace(ws)),
         deployedAt,
         stagingPath: stagingPath || undefined,
         deployedPath: deployedPath || undefined,
+        ...(deployedFingerprint ? { deployedFingerprint } : {}),
       });
     }
     const baselinePromotion = ok
@@ -13078,6 +13095,7 @@ app.post("/api/agent/deploy-verify", (req, res) => {
     return res.json({
       ok, stage: 'done', modId, deployedPath, stagingPath, bytesConfirmed, deployedBytes,
       workspace: ws,
+      ...(successfulDeploy ? { lastDeploy: successfulDeploy, deployedFingerprint } : {}),
       ...(ok ? { effect: deploymentEffect } : {}),
       ...(deploymentRecovery ? { recovery: {
         id: deploymentRecovery.id,

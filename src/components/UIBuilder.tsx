@@ -21,6 +21,10 @@ import { aiInfluenceChatBlocks, buildLuaLogicScript } from '../lib/luaLogicBlock
 import { validateUiWidgets } from '../lib/uiWidgetValidate';
 import { pixelLayoutToGrid } from '../lib/uiLayout';
 import { resolveWorkspaceArtifactId } from '../lib/modCompiler';
+import type {
+  X4UiGameVerificationCurrentSnapshot,
+  X4UiGameVerificationDecision,
+} from '../lib/x4UiGameVerification';
 import { UIWidget, ModWorkspace, generateUILuaScript } from '../types';
 import X4UiSourceEditor, {
   classifyX4UiWorkspaceCommit,
@@ -35,6 +39,9 @@ interface UIBuilderProps {
   setWorkspace: React.Dispatch<React.SetStateAction<ModWorkspace>>;
   selectedWidget: UIWidget | null;
   setSelectedWidget: (widget: UIWidget | null) => void;
+  x4UiVerification?: X4UiGameVerificationDecision;
+  onConfirmX4UiVerification?: () => void;
+  onX4UiVerificationSnapshotChange?: (snapshot: X4UiGameVerificationCurrentSnapshot | null) => void;
 }
 
 type X4UiWorkspaceEditAcknowledger = (
@@ -122,7 +129,10 @@ export default function UIBuilder({
   workspace,
   setWorkspace,
   selectedWidget,
-  setSelectedWidget
+  setSelectedWidget,
+  x4UiVerification,
+  onConfirmX4UiVerification,
+  onX4UiVerificationSnapshotChange,
 }: UIBuilderProps) {
   const pendingWorkspaceAcknowledgementsRef = useRef<ReadonlyArray<X4UiWorkspaceEditAcknowledger>>([]);
   const [workspaceCommitBoundary, setWorkspaceCommitBoundary] = useState(0);
@@ -192,6 +202,16 @@ export default function UIBuilder({
     () => analyzeLuaRuntimeLog(runtimeLogText, [runtimeLuaFile]),
     [runtimeLogText, runtimeLuaFile]
   );
+
+  const externalVerification = x4UiVerification || {
+    status: 'not-verified' as const,
+    label: 'Not verified in game' as const,
+    detail: 'Current exact deploy and clean in-game evidence are not available to the external X4 UI verifier.',
+    canConfirm: false,
+    reason: 'deploy-evidence-missing' as const,
+  };
+  const canInvokeExternalConfirmation = externalVerification.canConfirm
+    && typeof onConfirmX4UiVerification === 'function';
 
   const commitX4UiSourceEditWorkspace = (request: X4UiWorkspaceEditRequest): X4UiWorkspaceEditSubmission => (
     beginX4UiWorkspaceCommit(workspace, request, (updater, acknowledge) => {
@@ -381,10 +401,21 @@ export default function UIBuilder({
       </div>
 
       <div className="border-b border-white/10 bg-[#10131a] p-2 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2 font-mono text-[10px]">
-        <div data-testid="ui-game-verification-status" className="rounded border border-amber-500/25 bg-amber-950/15 p-2">
-          <div className="text-[9px] uppercase font-bold tracking-wider text-slate-500">Game verification</div>
-          <div className="font-bold text-amber-300">Not verified in game</div>
-          <div className="mt-1 text-slate-500">Static preview and geometry checks do not establish engine acceptance.</div>
+        <div data-testid="ui-game-verification-status" className={`rounded border p-2 ${externalVerification.status === 'verified' ? 'border-emerald-500/35 bg-emerald-950/15' : 'border-amber-500/25 bg-amber-950/15'}`}>
+          <div className="text-[9px] uppercase font-bold tracking-wider text-slate-500">External game verification</div>
+          <div className={`font-bold ${externalVerification.status === 'verified' ? 'text-emerald-300' : 'text-amber-300'}`}>{externalVerification.label}</div>
+          <div className="mt-1 text-slate-500">{externalVerification.detail}</div>
+          {externalVerification.status !== 'verified' && (
+            <button
+              type="button"
+              data-testid="ui-game-verification-confirm"
+              disabled={!canInvokeExternalConfirmation}
+              onClick={canInvokeExternalConfirmation ? onConfirmX4UiVerification : undefined}
+              className="mt-2 rounded border border-cyan-500/30 px-2 py-1 text-[9px] font-bold uppercase text-cyan-300 enabled:hover:bg-cyan-500/10 disabled:cursor-not-allowed disabled:border-white/10 disabled:text-slate-600"
+            >
+              {canInvokeExternalConfirmation ? 'Confirm X4 UI in game' : 'Confirm after exact clean deploy'}
+            </button>
+          )}
         </div>
 
         <div data-testid="ui-generated-lint-status" className="rounded border border-white/10 bg-black/20 p-2 min-w-0">
@@ -442,7 +473,10 @@ export default function UIBuilder({
       </div>
 
       {activeUiSubTab === 'source' ? (
-        <X4UiSourceEditor workspace={workspace} onWorkspaceEdit={commitX4UiSourceEditWorkspace} />
+        <X4UiSourceEditor workspace={workspace}
+          onWorkspaceEdit={commitX4UiSourceEditWorkspace}
+          onVerificationSnapshotChange={onX4UiVerificationSnapshotChange}
+        />
       ) : activeUiSubTab === 'canvas' ? (
         <div className="flex-1 flex overflow-hidden">
           {/* Custom Theme sliders & HUD hierarchy tree */}

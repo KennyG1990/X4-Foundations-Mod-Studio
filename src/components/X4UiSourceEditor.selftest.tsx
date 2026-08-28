@@ -982,10 +982,64 @@ assert.match(uiBuilderMarkup, /Legacy pixel designer/);
 assert.match(uiBuilderMarkup, /LUA Script Event Manager/);
 assert.match(uiBuilderMarkup, /x4-ui-source-editor/);
 assert.match(uiBuilderMarkup, /Not verified in game/);
+const verifiedUiBuilderMarkup = renderToStaticMarkup(
+  <UIBuilder
+    workspace={workspace}
+    setWorkspace={() => undefined}
+    selectedWidget={null}
+    setSelectedWidget={() => undefined}
+    x4UiVerification={{
+      status: 'verified',
+      label: 'Externally verified in game',
+      detail: 'Exact evidence fixture',
+      canConfirm: false,
+      reason: 'verified',
+    }}
+  />,
+);
+assert.match(verifiedUiBuilderMarkup, /data-testid="ui-game-verification-status"/);
+assert.match(verifiedUiBuilderMarkup, /External game verification/);
+assert.match(verifiedUiBuilderMarkup, /Externally verified in game/);
+const confirmReadyDecision = {
+  status: 'not-verified' as const,
+  label: 'Not verified in game' as const,
+  detail: 'Exact evidence is ready for explicit confirmation.',
+  canConfirm: true,
+  reason: 'confirmation-required' as const,
+};
+const confirmWithoutHandlerMarkup = renderToStaticMarkup(
+  <UIBuilder
+    workspace={workspace}
+    setWorkspace={() => undefined}
+    selectedWidget={null}
+    setSelectedWidget={() => undefined}
+    x4UiVerification={confirmReadyDecision}
+  />,
+);
+const confirmWithoutHandlerButton = confirmWithoutHandlerMarkup.match(/<button[^>]*data-testid="ui-game-verification-confirm"[^>]*>[\s\S]*?<\/button>/)?.[0] ?? '';
+assert.match(confirmWithoutHandlerButton, /disabled=""/);
+assert.match(confirmWithoutHandlerButton, /Confirm after exact clean deploy/);
+const confirmWithHandlerMarkup = renderToStaticMarkup(
+  <UIBuilder
+    workspace={workspace}
+    setWorkspace={() => undefined}
+    selectedWidget={null}
+    setSelectedWidget={() => undefined}
+    x4UiVerification={confirmReadyDecision}
+    onConfirmX4UiVerification={() => undefined}
+  />,
+);
+const confirmWithHandlerButton = confirmWithHandlerMarkup.match(/<button[^>]*data-testid="ui-game-verification-confirm"[^>]*>[\s\S]*?<\/button>/)?.[0] ?? '';
+assert.doesNotMatch(confirmWithHandlerButton, /disabled=/);
+assert.match(confirmWithHandlerButton, /Confirm X4 UI in game/);
 
 const sourceText = readFileSync(new URL('./X4UiSourceEditor.tsx', import.meta.url), 'utf8');
 const selftestText = readFileSync(new URL('./X4UiSourceEditor.selftest.tsx', import.meta.url), 'utf8');
 const uiBuilderText = readFileSync(new URL('./UIBuilder.tsx', import.meta.url), 'utf8');
+const appText = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
+assert.doesNotMatch(appText, /setX4UiVerificationSnapshot\(null\)/, 'App must not clobber the child-owned current snapshot from a parent layout effect');
+assert.match(appText, /refreshExperienceConfirmationPreservingX4UiSnapshot/);
+assert.match(sourceText, /return \(\) => onVerificationSnapshotChange\(null\);/, 'SourceEditor cleanup remains the null-emission owner');
 const manualStateSourceStart = sourceText.indexOf('export interface X4UiManualCalibrationState');
 const manualStateSourceEnd = sourceText.indexOf('export interface X4UiCanvasStateDescription', manualStateSourceStart);
 const manualActionSourceStart = sourceText.indexOf('  const updateManualDraftField');
@@ -1051,6 +1105,10 @@ assert.match(selftestText, /Historical B119 8C\.2 duplicate-admission fail-first
 assert.match(selftestText, /these hashes are evidence for that earlier red run, not current file-hash expectations/);
 assert.match(uiBuilderText, /useState<'source' \| 'canvas' \| 'lua'>\('source'\)/);
 assert.match(uiBuilderText, /<X4UiSourceEditor workspace=\{workspace\}/);
+assert.match(uiBuilderText, /data-testid="ui-game-verification-status"/);
+assert.match(uiBuilderText, /External game verification/);
+assert.match(uiBuilderText, /onX4UiVerificationSnapshotChange/);
+assert.match(uiBuilderText, /onConfirmX4UiVerification/);
 
 const sourceEditorApiUnknown = X4UiSourceEditorApiModule as unknown as Record<string, unknown>;
 const batch8c2FailFirstMissing = [
