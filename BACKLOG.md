@@ -88,6 +88,11 @@ default-Node E2E remains retained red evidence after a retry and later `0xC00004
 `docs/plans/2026-08-28-b119-source-proven-numeric-geometry.md`. This closes the prior dynamic-frame-fact gap, not exact
 Forge/X4 pixel parity, arbitrary C++ acceptance, remaining brief coverage, AI Influence reconstruction, or OpenVSX
 release. B119 and GitHub #41 remain `in_progress / PARTIAL`.
+Source checkpoint `13af741735fb4309996292037c41223b853052eb` is pushed with exact
+local/tracking/direct-remote parity. GitHub #41 comment `5458587855`, Notion page
+`3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Drive revision
+`AIroW34vaIbo_BkljAW6-Et0lTWBHdAk1cEJujn4fuHgb38zN9PXQzfgeOjPtSMMt17rhizxVjqhN6vGLQ2u06QWlUuKyd8oXu2GRsmnSEzr`
+were written and read back with the issue open and the full-B119 PARTIAL boundary intact.
 **AI Influence `1b` visual reconciliation 2026-08-19 — REPRODUCED GUIDE CONFLICT:** The source pixels were re-opened
 and immutable hashes/dimensions are frozen in the plan. Forge's existing cockpit preset projects the measured guides to
 `y=1134.72`, `y=1065.6`, and `x=1699.84` at `2560x1440`; the supplied `1b` choice/input geometry intersects all three.

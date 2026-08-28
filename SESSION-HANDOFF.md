@@ -6,8 +6,9 @@ Status: bounded source-proven numeric frame geometry `VERIFIED`; overall B119 `I
 
 ## Current repository state
 
-- Baseline and current parent are `HEAD == origin/main == c8d06ae98942c5aaea12a4f1ab05b8820b8990c3` before the pending
-  implementation commit. Preserve every unrelated dirty path and use explicit-path staging only.
+- Source checkpoint `13af741735fb4309996292037c41223b853052eb` is committed and pushed with exact
+  local/tracking/direct-remote parity. Preserve every unrelated dirty path and use explicit-path staging only for the
+  record-only close.
 - Bounded owned implementation/test paths are:
   - `src/lib/x4UiCallModel.ts`
   - `src/lib/x4UiCallModel.selftest.ts`
@@ -80,22 +81,30 @@ Status: bounded source-proven numeric frame geometry `VERIFIED`; overall B119 `I
 
 ## Commit and bookkeeping boundary
 
-- Required implementation commit title: `feat(ui-editor): project source-proven numeric geometry`.
-- Before commit, stage only the eight owned paths listed above, run `git diff --cached --check`, inspect the staged
-  name/status census, commit, push, and prove `HEAD == origin/main == direct remote main`.
-- GitHub #41, Notion owner page `3b84618e-d15b-8190-821e-c0eb96f43d5a`, Google Doc
-  `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, StarForge capability map, and project AAR still need the exact
-  commit-backed checkpoint and readback. The issue must remain open and the overall B119 boundary must remain PARTIAL.
-- After those readbacks, overwrite this handoff with commit/receipt IDs and create the documentation record commit.
+- Implementation commit `13af741735fb4309996292037c41223b853052eb` (`feat(ui-editor): project source-proven
+  numeric geometry`) is pushed with exact local/tracking/direct-remote parity and an empty index.
+- GitHub #41 comment `5458587855` was written and read back verbatim; the issue remains open.
+- Notion owner page `3b84618e-d15b-8190-821e-c0eb96f43d5a` contains and read back the source-proven geometry section,
+  exact source commit, both profiles, focused/broad gates, preserved red E2E, and full-B119 PARTIAL boundary.
+- Google Doc `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, exact tab `t.0`, was revision-locked from
+  `AIroW35ORAD2b16wtqsH8JNjJ03uib5jxFvleX03tDcvhkOVlZmEgQmddPsyOveZSskE7fp54ySMVePGX8lvtV7cve4MvkxLj-v86YevGGag`
+  to `AIroW34vaIbo_BkljAW6-Et0lTWBHdAk1cEJujn4fuHgb38zN9PXQzfgeOjPtSMMt17rhizxVjqhN6vGLQ2u06QWlUuKyd8oXu2GRsmnSEzr`.
+  Readback proves the exact document/title/tab, `HEADING_2` marker, all inserted paragraphs, and matching revision.
+- `F:\StarForge\wiki\x4-forge\capability-map.md` now explicitly supersedes only the earlier dynamic-geometry
+  unavailability claim; `F:\StarForge\wiki\x4-forge\aar-log.md` records the bounded task and triggered hazards.
+- Record-only precommit passed under bundled Node `24.19.0`: tripwires/canon, verdict `55/55`, Vite lifecycle,
+  product copy, durable writers `14/14 + 8/8`, capability `12/297/1/11`, MCP, action receipts `82/56`, TypeScript,
+  and size guards are green. The record-only commit owns only this handoff, the B119 plan, and `BACKLOG.md`, with title
+  `docs(ui-editor): record source-proven geometry checkpoint`; its resulting hash is reported by Git/remote readback
+  because a commit cannot cite its own hash.
 
 ## Next product boundary
 
-1. Commit/push this bounded unit and complete/read back all four durable projections.
-2. Measure exact Forge frame/button/text/editbox pixel edges against the already captured X4 screenshots at both profiles;
+1. Measure exact Forge frame/button/text/editbox pixel edges against the already captured X4 screenshots at both profiles;
    do not infer parity merely because the source formula now resolves.
-3. Continue complete `helper.lua` / `widget_fullscreen.lua` port coverage, remaining linter rules and keep-out behavior,
+2. Continue complete `helper.lua` / `widget_fullscreen.lua` port coverage, remaining linter rules and keep-out behavior,
    then reconstruct the AI Influence UI from all visually inspected references.
-4. Keep `Not verified in game` permanent for internal preview receipts. Do not publish OpenVSX until B119 reaches release
+3. Keep `Not verified in game` permanent for internal preview receipts. Do not publish OpenVSX until B119 reaches release
    quality and the unrelated extension release edits are reconciled with their owner.
 
 ## Triggered AAR hazards
@@ -107,5 +116,8 @@ Status: bounded source-proven numeric frame geometry `VERIFIED`; overall B119 `I
   runtime on this host; the failed receipt remains evidence rather than being overwritten conceptually.
 - Large selftest/artifact JSON must be reduced in-process. One raw Layout run emitted roughly 51 MB, and one recursive
   artifact listing exceeded the tool boundary.
+- The Google Docs trusted-read bridge requires an existing Windows workspace root and an absent immutable output
+  directory. This isolate lacks `atob` and `TextDecoder`; byte-verified JSON source loading preserved the checked-in
+  bridge unchanged, then the revision-locked write/readback passed.
 - Highest risk remains a convincing preview being mistaken for game truth. This checkpoint proves exact bounded frame
   facts, not C++ acceptance or 1:1 pixels.
