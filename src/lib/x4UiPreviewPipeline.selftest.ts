@@ -900,6 +900,7 @@ const previewColorBaseIds = [
   'azure_very_dark',
   'azure_moderate_glow',
   'azure_dark_alpha_160_glow',
+  'azure_dark_alpha_26',
   'azure_very_dark_alpha_224',
   'literal_base',
 ] as const;
@@ -913,6 +914,7 @@ const previewColorMappingIds = [
   'button_highlight_default',
   'button_border_default',
   'editbox_background_default',
+  'container_subsection_header',
 ] as const;
 
 function paddedUtf8(text: string, size: number): Uint8Array {
@@ -929,19 +931,21 @@ async function loadCanonicalColorSelftestResult(): Promise<X4UiCorpusCanonicalCo
   const generation = 'preview-color-generation-1';
   const baseIds: string[] = [...previewColorBaseIds];
   while (baseIds.length < 224) baseIds.push(`preview_base_${baseIds.length.toString().padStart(3, '0')}`);
-  const specialValues: Record<string, readonly [number, number, number, number, number]> = {
+  const specialValues: Record<string, readonly [number, number, number, number, number | undefined]> = {
     white: [11, 22, 33, 44, 0.1],
     black_alpha_0: [51, 52, 53, 54, 0.2],
     white_weak_glow: [101, 102, 103, 104, 0.3],
     azure_very_dark: [61, 62, 63, 64, 0.4],
     azure_moderate_glow: [71, 72, 73, 74, 0.5],
     azure_dark_alpha_160_glow: [81, 82, 83, 84, 0.6],
+    azure_dark_alpha_26: [0, 105, 179, 26, undefined],
     azure_very_dark_alpha_224: [91, 92, 93, 94, 0.7],
     literal_base: [131, 132, 133, 134, 0.9],
   };
   const colors = baseIds.map((id, index) => {
     const values = specialValues[id] || [index % 256, (index + 1) % 256, (index + 2) % 256, (index + 3) % 256, 0];
-    return `    <color id="${id}" r="${values[0]}" g="${values[1]}" b="${values[2]}" a="${values[3]}" glow="${values[4]}"/>`;
+    const glow = values[4] === undefined ? '' : ` glow="${values[4]}"`;
+    return `    <color id="${id}" r="${values[0]}" g="${values[1]}" b="${values[2]}" a="${values[3]}"${glow}/>`;
   });
   const mappingRefs: Record<string, string> = {
     table_background_default: 'white',
@@ -952,6 +956,7 @@ async function loadCanonicalColorSelftestResult(): Promise<X4UiCorpusCanonicalCo
     button_highlight_default: 'azure_moderate_glow',
     button_border_default: 'azure_dark_alpha_160_glow',
     editbox_background_default: 'azure_very_dark_alpha_224',
+    container_subsection_header: 'azure_dark_alpha_26',
   };
   const mappings = previewColorMappingIds.map(id => `    <mapping id="${id}" ref="${mappingRefs[id]}"/>`);
   for (let index = mappings.length; index < 804; index += 1) {
@@ -1797,6 +1802,417 @@ async function runIndependentReviewCorrections(): Promise<{
     baseColors: colorAuthority?.graph.baseColors.length,
     mappings: colorAuthority?.graph.mappings.length,
   });
+
+  const exactPipelineFixtureText = `-- Pipeline Test UI — X4 UI extension entry point
+-- Packaged at: extensions/pipeline_test/ui/pipeline_test.lua
+-- Registered by: extensions/pipeline_test/ui.xml (<environment type="menus">)
+-- Generated from the visual designer by X4 Forge. Uses the corpus-backed
+-- standalone-menu lifecycle: lazy Helper -> deferred registration -> OpenMenu
+-- -> onShowMenu -> createFrameHandle/fTable -> frame:display().
+
+local widgets = {
+    { type = "window", id = "w_win", label = "Pipeline Test Panel", x = 120, y = 120, width = 280, height = 120 },
+    { type = "header", id = "w_header", label = "B119 Pipeline Test", x = 140, y = 140, width = 380, height = 32 },
+    { type = "button", id = "w_btn", label = "My First Button", x = 150, y = 170, width = 220, height = 40 },
+    { type = "text", id = "w_status", label = "Status: source-first Forge preview", x = 140, y = 182, width = 380, height = 32 },
+    { type = "button", id = "w_btn_secondary", label = "Second Button", x = 390, y = 230, width = 160, height = 40 },
+    { type = "input", id = "w_input", label = "Operator note", x = 140, y = 286, width = 410, height = 44 },
+}
+
+local Helper = rawget(_G, "Helper")
+local function refreshHelper()
+  if not Helper then Helper = rawget(_G, "Helper") end
+  return Helper
+end
+
+local menu = {
+  name = "pipeline_test_menu",
+  layer = 4,
+  active = false,
+  widgets = widgets,
+  transcript = "",
+}
+
+local function log(message)
+  if DebugError then DebugError("[pipeline_test] " .. tostring(message)) end
+end
+
+function menu.ensureRegistered()
+  refreshHelper()
+  _G.Menus = _G.Menus or {}
+  local found = false
+  for i, existing in ipairs(_G.Menus) do
+    if existing.name == menu.name then _G.Menus[i] = menu; found = true; break end
+  end
+  if not found then table.insert(_G.Menus, menu) end
+  if Helper and Helper.registerMenu and not menu._registered then
+    local ok = pcall(Helper.registerMenu, menu)
+    menu._registered = ok
+  end
+  return menu._registered == true
+end
+
+function menu.open(context)
+  menu.context = type(context) == "table" and context or {}
+  if not menu.ensureRegistered() then
+    if SetScript then SetScript("onUpdate", menu.retryOpen) end
+    return false
+  end
+  if OpenMenu then OpenMenu(menu.name, nil, nil, true)
+  elseif menu.onShowMenu then menu.onShowMenu() end
+  return true
+end
+
+function menu.retryOpen()
+  if not menu.ensureRegistered() then return end
+  if RemoveScript then RemoveScript("onUpdate", menu.retryOpen) end
+  menu.open(menu.context)
+end
+
+function menu.onShowMenu()
+  refreshHelper()
+  menu.active = true
+  menu.createFrame()
+end
+
+function menu.emit(widgetId, payload)
+  if AddUITriggeredEvent then AddUITriggeredEvent(menu.name, widgetId, payload or {}) end
+end
+
+function menu.createFrame()
+  refreshHelper()
+  if not Helper then log("Helper unavailable; frame not built"); return end
+  if menu.frame and Helper.clearDataForRefresh then Helper.clearDataForRefresh(menu, menu.layer) end
+  local width = Helper.scaleX(530)
+  local height = Helper.scaleY(436)
+  local x = ((Helper.viewWidth or 1920) - width) / 2
+  local y = ((Helper.viewHeight or 1080) - height) / 2
+  menu.frame = Helper.createFrameHandle(menu, { x = x, y = y, width = width, height = height, layer = menu.layer, standardButtons = { close = true } })
+  local ftable = menu.frame:addTable(2, { tabOrder = 1, width = width, highlightMode = "off", reserveScrollBar = false })
+  ftable:setColWidthPercent(1, 55)
+  ftable:setColWidthPercent(2, 45)
+  local row
+  row = ftable:addRow(false, {})
+  row[1]:setColSpan(2):createText("Pipeline Test Panel", Helper.headerRowCenteredProperties)
+  row = ftable:addRow(false, {})
+  row[1]:setColSpan(2):createText("B119 Pipeline Test", Helper.headerRowCenteredProperties)
+  row = ftable:addRow(true, {})
+  row[1]:setColSpan(2):createButton({ active = true }):setText("My First Button", { halign = "center" })
+  row[1].handlers.onClick = function() menu.emit("w_btn", { widget = "w_btn" }) end
+  row = ftable:addRow(false, {})
+  row[1]:setColSpan(2):createText("Status: source-first Forge preview", { wordwrap = true })
+  row = ftable:addRow(true, {})
+  row[1]:setColSpan(2):createButton({ active = true }):setText("Second Button", { halign = "center" })
+  row[1].handlers.onClick = function() menu.emit("w_btn_secondary", { widget = "w_btn_secondary" }) end
+  row = ftable:addRow(true, {})
+  row[1]:setColSpan(2):createEditBox({ defaultText = "Type a note...", maxChars = 255, height = 44 })
+  row[1].handlers.onEditBoxDeactivated = function(_, text) menu.emit("w_input", { text = text }) end
+  menu.frame:display()
+end
+
+function menu.cleanup()
+  menu.frame = nil
+  menu.active = false
+end
+
+function menu.onCloseElement(dueToClose)
+  refreshHelper()
+  if Helper and Helper.closeMenu then Helper.closeMenu(menu, dueToClose) end
+  menu.cleanup()
+end
+
+function menu.close()
+  menu.onCloseElement("close")
+end
+
+-- Deliberate opening path for MD/companion Lua: <raise_lua_event name="'pipeline_test_menu.open'"/>.
+if RegisterEvent then RegisterEvent("pipeline_test_menu.open", function(_, context) menu.open(context) end) end
+_G["pipeline_test_menu"] = menu
+
+-- The beginner template opts into one visible first result. Ordinary authored menus do not auto-open.
+local function autoOpenWhenReady()
+  refreshHelper()
+  if not Helper then return end
+  if RemoveScript then RemoveScript("onUpdate", autoOpenWhenReady) end
+  menu.open({ source = "x4_forge_template" })
+end
+if SetScript then SetScript("onUpdate", autoOpenWhenReady) end
+
+
+return menu
+`;
+  const exactPipelineXml = [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    '<addon name="pipeline_test">',
+    '  <environment type="menus">',
+    '    <file name="ui/pipeline_test.lua" />',
+    '  </environment>',
+    '</addon>',
+    '',
+  ].join('\n');
+  const exactPipelineSource = sourceFor([
+    passthrough('ui.xml', exactPipelineXml),
+    passthrough('ui/pipeline_test.lua', exactPipelineFixtureText, { reason: 'unparsed' }),
+  ]);
+  const exactPipelineSelection = selectionFor(exactPipelineSource, 'ui/pipeline_test.lua', 'function', 'menu.createFrame');
+  const exactPipelineAtOne = canonical === undefined || !colorAuthorityReady
+    ? undefined
+    : pipeline(exactPipelineSource, exactPipelineSelection, canonical, {}, {
+      truthGrade: 'supplied',
+      drawable: { width: 1920, height: 1080 },
+      uiScale: 1,
+    }, colorAuthority);
+  const exactPipelineAt125 = canonical === undefined || !colorAuthorityReady
+    ? undefined
+    : pipeline(exactPipelineSource, exactPipelineSelection, canonical, {}, {
+      truthGrade: 'supplied',
+      drawable: { width: 2544, height: 1353 },
+      uiScale: 1.25,
+    }, colorAuthority);
+  const exactPipelineProgram = (result: typeof exactPipelineAtOne) =>
+    result?.program !== undefined && 'program' in result.program ? result.program.program : undefined;
+  const exactPipelineScene = (result: typeof exactPipelineAtOne) =>
+    result?.scene !== undefined && 'scene' in result.scene ? result.scene.scene : undefined;
+  const exactPipelineOneProgram = exactPipelineProgram(exactPipelineAtOne);
+  const exactPipeline125Program = exactPipelineProgram(exactPipelineAt125);
+  const exactPipelineOneScene = exactPipelineScene(exactPipelineAtOne);
+  const exactPipeline125Scene = exactPipelineScene(exactPipelineAt125);
+  const exactPipelineCellHeights = (program: typeof exactPipelineOneProgram) => program?.rows.map(row => {
+    const cell = program.cells.find(candidate => candidate.id === row.cellIds[0]);
+    return cell?.height?.value;
+  });
+  const exactPipelineSceneGeometry = (scene: typeof exactPipelineOneScene) => scene === undefined ? undefined : {
+    frames: scene.frames.length,
+    tables: scene.tables.length,
+    rows: scene.rows.length,
+    cells: scene.cells.length,
+    widgets: scene.widgets.length,
+    texts: scene.texts.length,
+    glyphs: scene.glyphs.length,
+    gaps: scene.gaps.length,
+  };
+  const exactPipelineSceneFiniteGeometry = (scene: typeof exactPipelineOneScene): boolean => {
+    const finiteRect = (value: unknown): boolean => {
+      const rect = asRecord(value);
+      return rect !== undefined
+        && ['x', 'y', 'width', 'height'].every(key => typeof rect[key] === 'number' && Number.isFinite(rect[key]));
+    };
+    return scene !== undefined
+      && scene.widgets.length === 6
+      && scene.widgets.every(widget => finiteRect(widget.outerRect))
+      && scene.texts.length === 8
+      && scene.texts.every(text => text.lines.every(line => finiteRect(line.rect)));
+  };
+  const exactPipelineFact = (facts: unknown, name: string): {
+    readonly status: unknown;
+    readonly expectedType?: unknown;
+    readonly domain?: unknown;
+    readonly value?: unknown;
+    readonly expression?: unknown;
+  } | undefined => {
+    const fact = asRecord(asRecord(facts)?.[name]);
+    return fact === undefined ? undefined : {
+      status: fact.status,
+      expectedType: fact.expectedType,
+      domain: fact.domain,
+      value: fact.value,
+      expression: fact.expression,
+    };
+  };
+  const exactPipelineCreatorEvidence = (program: typeof exactPipelineOneProgram) => program?.operations
+    .filter(operation => operation.kind === 'createText')
+    .map(operation => {
+      const cell = program.cells.find(candidate => candidate.id === operation.cellId);
+      return {
+        content: exactPipelineFact(cell?.descriptorFacts, 'text'),
+        operation: {
+          font: exactPipelineFact(operation.descriptorFacts, 'font'),
+          fontsize: exactPipelineFact(operation.descriptorFacts, 'fontsize'),
+          outerY: exactPipelineFact(operation.descriptorFacts, 'outerY'),
+          outerHeight: exactPipelineFact(operation.descriptorFacts, 'outerHeight'),
+          minTextHeight: exactPipelineFact(operation.descriptorFacts, 'minTextHeight'),
+          halign: exactPipelineFact(operation.descriptorFacts, 'halign'),
+          wordwrap: exactPipelineFact(operation.descriptorFacts, 'wordwrap'),
+          cellbgcolor: exactPipelineFact(operation.descriptorFacts, 'cellbgcolor'),
+        },
+        cell: {
+          font: exactPipelineFact(cell?.descriptorFacts, 'font'),
+          fontsize: exactPipelineFact(cell?.descriptorFacts, 'fontsize'),
+          outerY: exactPipelineFact(cell?.descriptorFacts, 'outerY'),
+          outerHeight: exactPipelineFact(cell?.descriptorFacts, 'outerHeight'),
+          minTextHeight: exactPipelineFact(cell?.descriptorFacts, 'minTextHeight'),
+          halign: exactPipelineFact(cell?.descriptorFacts, 'halign'),
+          wordwrap: exactPipelineFact(cell?.descriptorFacts, 'wordwrap'),
+          cellbgcolor: exactPipelineFact(cell?.descriptorFacts, 'cellbgcolor'),
+        },
+        kernel: cell?.kernelState,
+      };
+    });
+  const expectedHeaderCellBgColor: JsonRecord = {
+    kind: 'color',
+    domain: 'canonical-xml-byte-alpha',
+    canonicalIdentity: 'x4-9.00',
+    requestedId: 'container_subsection_header',
+    resolvedBaseId: 'azure_dark_alpha_26',
+    r: 0,
+    g: 105,
+    b: 179,
+    a: 26,
+    glow: 0,
+    baseSource: {
+      path: 'libraries/colors.xml',
+      index: 6,
+      id: 'azure_dark_alpha_26',
+    },
+    mappingSource: {
+      path: 'libraries/colors.xml',
+      index: 8,
+      id: 'container_subsection_header',
+    },
+    sourceIdentities: {
+      xml: {
+        path: 'libraries/colors.xml',
+        relativePath: 'libraries/colors.xml',
+        sha256: X4_UI_CORPUS_COLORS_XML_SHA256,
+        size: X4_UI_CORPUS_COLORS_XML_SIZE,
+      },
+      xsd: {
+        path: 'libraries/colors.xsd',
+        relativePath: 'libraries/colors.xsd',
+        sha256: X4_UI_CORPUS_COLORS_XSD_SHA256,
+        size: X4_UI_CORPUS_COLORS_XSD_SIZE,
+      },
+    },
+    gameVerification: 'Not verified in game',
+  };
+  const exactPipelineKnownHeaderCellBgColor = (fact: unknown): boolean => {
+    const record = asRecord(fact);
+    return record?.status === 'known'
+      && record.expectedType === 'color-object'
+      && record.expression === 'Color["container_subsection_header"]'
+      && firstJsonDifference(record.value, expectedHeaderCellBgColor) === undefined;
+  };
+  const exactPipelineTextEvidenceMatches = (
+    program: typeof exactPipelineOneProgram,
+    expectedOuterY: number,
+    expectedFontSize: number,
+    expectedHeaderMinTextHeight: number,
+    expectedStatusMinTextHeight: number,
+  ): boolean => {
+    const creators = exactPipelineCreatorEvidence(program);
+    if (creators === undefined || creators.length !== 3) return false;
+    const headers = creators.slice(0, 2);
+    const status = creators[2];
+    const factValue = (fact: { readonly value?: unknown } | undefined): unknown => fact?.value;
+    return headers.every(header =>
+      factValue(header.operation.font) === 'Zekton Bold'
+      && factValue(header.operation.fontsize) === expectedFontSize
+      && factValue(header.operation.outerY) === expectedOuterY
+      && factValue(header.operation.outerHeight) === expectedHeaderMinTextHeight
+      && factValue(header.operation.minTextHeight) === expectedHeaderMinTextHeight
+      && factValue(header.operation.halign) === 'center'
+      && factValue(header.cell.font) === 'Zekton Bold'
+      && factValue(header.cell.fontsize) === expectedFontSize
+      && factValue(header.cell.outerY) === expectedOuterY
+      && factValue(header.cell.outerHeight) === expectedHeaderMinTextHeight
+      && factValue(header.cell.minTextHeight) === expectedHeaderMinTextHeight
+      && factValue(header.cell.halign) === 'center'
+      && exactPipelineKnownHeaderCellBgColor(header.operation.cellbgcolor)
+      && exactPipelineKnownHeaderCellBgColor(header.cell.cellbgcolor)
+      && header.kernel?.type === 'text'
+      && header.kernel.y === 2
+      && header.kernel.height === 0
+      && header.kernel.minTextHeight === expectedHeaderMinTextHeight)
+      && factValue(status?.operation.font) === 'Zekton'
+      && factValue(status?.operation.fontsize) === expectedFontSize
+      && factValue(status?.operation.outerY) === 0
+      && factValue(status?.operation.outerHeight) === expectedStatusMinTextHeight
+      && factValue(status?.operation.minTextHeight) === expectedStatusMinTextHeight
+      && factValue(status?.operation.wordwrap) === true
+      && factValue(status?.cell.font) === 'Zekton'
+      && factValue(status?.cell.fontsize) === expectedFontSize
+      && factValue(status?.cell.outerY) === 0
+      && factValue(status?.cell.outerHeight) === expectedStatusMinTextHeight
+      && factValue(status?.cell.minTextHeight) === expectedStatusMinTextHeight
+      && factValue(status?.cell.wordwrap) === true
+      && status?.kernel?.type === 'text'
+      && status.kernel.y === 0
+      && status.kernel.height === 0
+      && status.kernel.minTextHeight === expectedStatusMinTextHeight;
+  };
+  const exactPipelinePaintAuthority = (result: typeof exactPipelineAtOne, scene: typeof exactPipelineOneScene): boolean =>
+    scene !== undefined
+    && issuedPaintSourceAuthority(result, scene)
+    && materializeIssuedPaintScene(result, scene).value !== undefined;
+  check('B119 fail-first exact deployed fixture source-proven geometry reaches six Scene/Paint creators at both profiles',
+    exactPipelineSelection.sourceIdentity.sha256
+      === 'C1D9CD8580C6175E95C543259A2AB19F8B463282BF48B2229EB6013D6052718E'
+      && exactPipelineCellHeights(exactPipelineOneProgram)?.join(',') === '18,18,25,16,25,44'
+      && exactPipelineOneProgram?.rows.map(row => row.height?.value).join(',') === '20,20,25,16,25,44'
+      && exactPipelineOneProgram?.tables[0]?.height?.value === 160
+      && exactPipelineCellHeights(exactPipeline125Program)?.join(',') === '22,22,31,20,31,55'
+      && exactPipeline125Program?.rows.map(row => row.height?.value).join(',') === '25,25,31,20,31,55'
+      && exactPipeline125Program?.tables[0]?.height?.value === 202
+      && exactPipelineTextEvidenceMatches(exactPipelineOneProgram, 2, 9, 18, 16)
+      && exactPipelineTextEvidenceMatches(exactPipeline125Program, 3, 12, 22, 20)
+      && JSON.stringify(exactPipelineSceneGeometry(exactPipelineOneScene)) === JSON.stringify({ frames: 1, tables: 1, rows: 6, cells: 12, widgets: 6, texts: 8, glyphs: 99, gaps: 56 })
+      && JSON.stringify(exactPipelineSceneGeometry(exactPipeline125Scene)) === JSON.stringify({ frames: 1, tables: 1, rows: 6, cells: 12, widgets: 6, texts: 8, glyphs: 99, gaps: 56 })
+      && exactPipelineSceneFiniteGeometry(exactPipelineOneScene)
+      && exactPipelineSceneFiniteGeometry(exactPipeline125Scene)
+      && exactPipelinePaintAuthority(exactPipelineAtOne, exactPipelineOneScene)
+      && exactPipelinePaintAuthority(exactPipelineAt125, exactPipeline125Scene),
+    {
+      sourceStatus: exactPipelineSource.status,
+      sourceFiles: exactPipelineSource.bundle?.sourceFiles.map(file => ({ path: file.path })),
+      selectedTarget: {
+        id: exactPipelineSelection.target.id,
+        kind: exactPipelineSelection.target.kind,
+        name: exactPipelineSelection.target.name,
+      },
+      sourceSha256: exactPipelineSelection.sourceIdentity.sha256,
+      modelSourcePath: exactPipelineSource.bundle?.sourceFiles.find(file => file.path === 'ui/pipeline_test.lua')?.callModel.file.sourcePath,
+      canonical: canonical === undefined ? undefined : {
+        guard: isX4UiCorpusCanonicalSuccess(canonical),
+        helperPath: canonical.assets.helper.relativePath,
+        helperHash: canonical.helperSourceHash,
+        widgetPath: canonical.assets.widget.relativePath,
+        widgetHash: canonical.widgetSourceHash,
+        regularAlias: canonical.assets.regular.decoded === canonical.fonts.regular,
+        boldAlias: canonical.assets.bold.decoded === canonical.fonts.bold,
+        regularDescriptor: canonical.fonts.regular.descriptorIdentity,
+        regularAtlas: canonical.fonts.regular.atlasIdentity,
+        boldDescriptor: canonical.fonts.bold.descriptorIdentity,
+        boldAtlas: canonical.fonts.bold.atlasIdentity,
+      },
+      atOne: {
+        status: exactPipelineAtOne?.status,
+        programStatus: exactPipelineAtOne?.program?.status,
+        gaps: exactPipelineAtOne?.gaps,
+        cellHeights: exactPipelineCellHeights(exactPipelineOneProgram),
+        rowHeights: exactPipelineOneProgram?.rows.map(row => row.height?.value),
+        tableHeight: exactPipelineOneProgram?.tables[0]?.height?.value,
+        textEvidenceMatch: exactPipelineTextEvidenceMatches(exactPipelineOneProgram, 2, 9, 18, 16),
+        creatorEvidence: exactPipelineCreatorEvidence(exactPipelineOneProgram),
+        sceneGeometry: exactPipelineSceneGeometry(exactPipelineOneScene),
+        sceneFiniteGeometry: exactPipelineSceneFiniteGeometry(exactPipelineOneScene),
+        sceneStatus: exactPipelineAtOne?.scene?.status,
+        paintAuthority: exactPipelinePaintAuthority(exactPipelineAtOne, exactPipelineOneScene),
+      },
+      at125: {
+        status: exactPipelineAt125?.status,
+        programStatus: exactPipelineAt125?.program?.status,
+        gaps: exactPipelineAt125?.gaps,
+        cellHeights: exactPipelineCellHeights(exactPipeline125Program),
+        rowHeights: exactPipeline125Program?.rows.map(row => row.height?.value),
+        tableHeight: exactPipeline125Program?.tables[0]?.height?.value,
+        textEvidenceMatch: exactPipelineTextEvidenceMatches(exactPipeline125Program, 3, 12, 22, 20),
+        creatorEvidence: exactPipelineCreatorEvidence(exactPipeline125Program),
+        sceneGeometry: exactPipelineSceneGeometry(exactPipeline125Scene),
+        sceneFiniteGeometry: exactPipelineSceneFiniteGeometry(exactPipeline125Scene),
+        sceneStatus: exactPipelineAt125?.scene?.status,
+        paintAuthority: exactPipelinePaintAuthority(exactPipelineAt125, exactPipeline125Scene),
+      },
+    });
   const colorPipeline = (evidence?: unknown) => canonical === undefined
     ? undefined
     : pipeline(previewColorSource, previewColorSelection, canonical, {}, {

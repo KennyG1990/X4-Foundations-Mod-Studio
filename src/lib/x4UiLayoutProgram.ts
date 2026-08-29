@@ -37,9 +37,21 @@ import {
   X4_UI_CORPUS_COLORS_XSD_PATH,
   X4_UI_CORPUS_COLORS_XSD_SHA256,
   X4_UI_CORPUS_COLORS_XSD_SIZE,
+  isX4UiCorpusCanonicalSuccess,
   isX4UiCorpusCanonicalColorSuccess,
+  type X4UiCorpusCanonicalSuccess,
   type X4UiCorpusCanonicalColorSuccess,
 } from './x4UiCorpusAssets';
+import {
+  ZEKTON_CORPUS_ASSETS,
+  ZEKTON_EVIDENCE_STATE,
+  type ZektonFontAssets,
+} from './x4UiFontMetrics';
+import {
+  ZEKTON_TEXT_TRUTH_GRADE,
+  layoutZektonText,
+} from './x4UiTextLayout';
+import type { ZektonTextLayoutProfile } from './x4UiTextLayout';
 import {
   addRow,
   createHelperTable,
@@ -765,7 +777,8 @@ export type X4UiLayoutProgramResult =
         | 'malformed-preview-path'
         | 'preview-path-source-mismatch'
         | 'invalid-preview-path'
-        | 'malformed-color-evidence';
+        | 'malformed-color-evidence'
+        | 'malformed-corpus-evidence';
       readonly message: string;
       readonly source?: X4UiSourceLocation;
     };
@@ -884,6 +897,16 @@ const HELPER_DEFAULT_PINS = Object.freeze({
   baseCellSpan: helperPin(4926),
   baseCellScaling: helperPin(4937, 4939),
   cellSpecialization: helperPin(5432, 5469),
+});
+
+const HELPER_HEADER_ROW_PINS = Object.freeze({
+  bundle: helperPin(614, 621),
+  titleFont: helperPin(537),
+  standardFontSize: helperPin(530),
+  offsetY: helperPin(546),
+  minRowHeight: helperPin(547),
+  halign: helperPin(619),
+  cellBackgroundColor: helperPin(620),
 });
 
 const freezeDeep = <T>(value: T, seen = new WeakSet<object>()): T => {
@@ -1026,6 +1049,47 @@ const isNonNegativeNumber = (value: unknown): value is number =>
 
 const isHexSha256 = (value: unknown): value is string =>
   typeof value === 'string' && /^[0-9A-Fa-f]{64}$/.test(value);
+
+const exactAssetIdentity = (
+  value: unknown,
+  expected: { readonly relativePath: string; readonly sha256: string },
+): boolean => isObject(value)
+  && value.relativePath === expected.relativePath
+  && value.sha256 === expected.sha256;
+
+const exactZektonFontIdentity = (
+  value: unknown,
+  expected: {
+    readonly descriptor: { readonly relativePath: string; readonly sha256: string };
+    readonly atlas: { readonly relativePath: string; readonly sha256: string };
+  },
+): value is ZektonFontAssets => isObject(value)
+  && value.format === 'x4-zekton-font-assets'
+  && value.evidenceState === ZEKTON_EVIDENCE_STATE
+  && exactAssetIdentity(value.descriptorIdentity, expected.descriptor)
+  && exactAssetIdentity(value.atlasIdentity, expected.atlas)
+  && isObject(value.descriptor)
+  && exactAssetIdentity(value.descriptor.identity, expected.descriptor)
+  && isObject(value.atlas)
+  && exactAssetIdentity(value.atlas.identity, expected.atlas);
+
+const isPinnedCanonicalCorpus = (value: unknown): value is X4UiCorpusCanonicalSuccess => {
+  try {
+    if (!isX4UiCorpusCanonicalSuccess(value)) return false;
+    return value.helperSourceHash === HELPER_SOURCE_SHA256
+      && value.widgetSourceHash === WIDGET_SOURCE_SHA256
+      && value.assets.helper.relativePath === HELPER_SOURCE_PATH
+      && value.assets.helper.sha256 === HELPER_SOURCE_SHA256
+      && value.assets.widget.relativePath === WIDGET_SOURCE_PATH
+      && value.assets.widget.sha256 === WIDGET_SOURCE_SHA256
+      && value.assets.regular.decoded === value.fonts.regular
+      && value.assets.bold.decoded === value.fonts.bold
+      && exactZektonFontIdentity(value.fonts.regular, ZEKTON_CORPUS_ASSETS.regular)
+      && exactZektonFontIdentity(value.fonts.bold, ZEKTON_CORPUS_ASSETS.bold);
+  } catch {
+    return false;
+  }
+};
 
 const sourcePositionKey = (position: X4UiSourceLocation['start']): string =>
   `${position.line}:${position.column}:${position.offset}`;
@@ -1288,7 +1352,8 @@ const refusalResult = (
     | 'malformed-preview-path'
     | 'preview-path-source-mismatch'
     | 'invalid-preview-path'
-    | 'malformed-color-evidence',
+    | 'malformed-color-evidence'
+    | 'malformed-corpus-evidence',
   message: string,
   model?: X4UiCallModel,
   source?: X4UiSourceLocation,
@@ -1576,6 +1641,121 @@ const optionMode = (call: X4UiCallRecord): 'omitted' | 'known' | 'unresolved' =>
 };
 
 const propertyValue = (call: X4UiCallRecord, name: string): X4UiValue | undefined => property(call, name)?.value;
+
+const HEADER_ROW_CENTERED_PROPERTIES_EXPRESSION = 'Helper.headerRowCenteredProperties';
+
+const isHeaderRowCenteredProperties = (
+  call: X4UiCallRecord,
+  canonicalCorpus: X4UiCorpusCanonicalSuccess | undefined,
+): boolean => canonicalCorpus !== undefined
+  && call.name === 'createText'
+  && call.semantics.options?.expression === HEADER_ROW_CENTERED_PROPERTIES_EXPRESSION;
+
+type HeaderBundleScalar = string | number | boolean;
+
+const synthesizedHeaderBundleProperty = (
+  call: X4UiCallRecord,
+  name: string,
+  value: HeaderBundleScalar,
+  expression: string,
+): X4UiCallPropertyProjection => {
+  const source = cloneLocation(call.semantics.options?.location || call.source);
+  return {
+    name,
+    normalizedName: name.toLowerCase(),
+    value: {
+      status: 'static',
+      type: typeof value as 'string' | 'number' | 'boolean',
+      expression,
+      location: cloneLocation(source),
+      value,
+    } as X4UiValue,
+    source,
+    sourceOrder: source.start.offset,
+  };
+};
+
+const synthesizeHeaderBundleMetadata = (
+  metadata: X4UiLayoutCallMetadata,
+  call: X4UiCallRecord,
+  canonicalCorpus: X4UiCorpusCanonicalSuccess | undefined,
+): X4UiLayoutCallMetadata => {
+  if (!isHeaderRowCenteredProperties(call, canonicalCorpus)) return metadata;
+  return {
+    ...metadata,
+    semantics: {
+      ...metadata.semantics,
+      properties: [
+        synthesizedHeaderBundleProperty(call, 'font', 'Zekton Bold', 'Helper.titleFont'),
+        synthesizedHeaderBundleProperty(call, 'fontsize', 9, 'Helper.standardFontSize'),
+        synthesizedHeaderBundleProperty(call, 'y', 2, 'Helper.headerRow1Offsety'),
+        synthesizedHeaderBundleProperty(call, 'minrowheight', 20, 'Helper.headerRow1Height'),
+        synthesizedHeaderBundleProperty(call, 'halign', 'center', '"center"'),
+        synthesizedHeaderBundleProperty(call, 'cellbgcolor', 'container_subsection_header', 'Color["container_subsection_header"]'),
+      ],
+    },
+  };
+};
+
+interface DerivedTextHeightCandidate {
+  readonly value?: number;
+  readonly expression?: string;
+  readonly reason?: string;
+}
+
+const deriveCanonicalTextHeightCandidate = (
+  canonicalCorpus: X4UiCorpusCanonicalSuccess,
+  fontName: string | undefined,
+  text: string | undefined,
+  requestedFontSize: number | undefined,
+  maxWidth: number | undefined,
+  wordwrap: boolean | undefined,
+): DerivedTextHeightCandidate => {
+  if (text === undefined) return { reason: 'text content is unavailable for the canonical Zekton height candidate' };
+  const fontAssets: ZektonFontAssets | undefined = fontName === 'Zekton'
+    ? canonicalCorpus.fonts.regular
+    : fontName === 'Zekton Bold'
+      ? canonicalCorpus.fonts.bold
+      : undefined;
+  if (!fontAssets) return { reason: `unsupported canonical text font ${fontName || '<missing>'}` };
+  if (requestedFontSize === undefined || !Number.isSafeInteger(requestedFontSize) || requestedFontSize <= 0) {
+    return { reason: 'scaled Zekton font size is unavailable for the canonical text height candidate' };
+  }
+  if (maxWidth === undefined || !isNonNegativeNumber(maxWidth)) {
+    return { reason: 'finalized cell span width is unavailable for the canonical text height candidate' };
+  }
+  const layoutProfile: ZektonTextLayoutProfile = {
+    descriptorIdentity: fontAssets.descriptorIdentity,
+    atlasIdentity: fontAssets.atlasIdentity,
+    nominalDesignSize: 32,
+    requestedFontSize,
+    maxWidth: Math.floor(maxWidth),
+    lineSpacing: 0,
+    wrapMode: wordwrap === true ? 'word-wrap' : 'no-wrap',
+    truncationMode: 'none',
+    whitespacePolicy: { mode: 'preserve', breakOn: 'ascii-space' },
+    ellipsisPolicy: { token: '…', placement: 'end' },
+    newlinePolicy: 'lf-crlf',
+    fallbackPolicy: 'gap',
+    truthGrade: ZEKTON_TEXT_TRUTH_GRADE,
+    evidenceState: ZEKTON_EVIDENCE_STATE,
+  };
+  const layout = layoutZektonText(fontAssets, text, layoutProfile);
+  if (layout.ok === false) return { reason: `canonical Zekton text layout was refused: ${layout.error.message}` };
+  if (layout.value.gaps.length > 0) return { reason: 'canonical Zekton text layout contains an unresolved glyph or layout gap' };
+  const height = layout.value.lines.reduce(
+    (maximum, line) => Math.max(maximum, line.lineBox.y + line.lineBox.height),
+    0,
+  );
+  const candidate = Math.ceil(height);
+  if (!Number.isFinite(candidate) || candidate < 0) {
+    return { reason: 'canonical Zekton text height candidate is outside the finite non-negative domain' };
+  }
+  return {
+    value: candidate,
+    expression: `Math.ceil(layoutZektonText(${fontName}, text, { requestedFontSize: ${requestedFontSize}, maxWidth: ${Math.floor(maxWidth)}, wrapMode: ${wordwrap === true ? 'word-wrap' : 'no-wrap'} }))`,
+  };
+};
 
 interface Resolution<T> {
   readonly value?: T;
@@ -4072,7 +4252,7 @@ const buildEvidenceAuthority = (
       modelOrder: call.order,
       streamIndex,
       reachability: evidenceReachabilityFor(call),
-      metadata: cloneJsonLike(cloneMetadata(call)) as X4UiLayoutCallMetadata,
+      metadata: cloneJsonLike(operation.metadata) as X4UiLayoutCallMetadata,
       ...(expansion ? { expansion: cloneDeep(expansion) as X4UiLayoutEvidenceExpansionLink } : {}),
     });
     authorityOperations.push({
@@ -7673,8 +7853,9 @@ export const validateX4UiLayoutEvidencePair = (
  * The optional fourth parameter binds preview-only scalar samples by exact
  * source hash and range. The optional fifth parameter selects exact
  * conditional invocation arms for preview only. The optional sixth parameter
- * is loader-issued P2 canonical-default color evidence. No ambient state is
- * consulted.
+ * is loader-issued P2 canonical-default color evidence. The optional seventh
+ * parameter is the exact loader-issued X4 9.00 corpus authority used for the
+ * bounded font/property projection. No ambient state is consulted.
  */
 export function projectX4UiLayoutProgram(
   model: X4UiCallModel,
@@ -7683,9 +7864,13 @@ export function projectX4UiLayoutProgram(
   previewSampleInput?: X4UiLayoutPreviewSampleInput,
   previewPathInput?: X4UiLayoutPreviewPathSelectionInput,
   colorEvidenceInput?: X4UiCorpusCanonicalColorSuccess,
+  canonicalCorpusInput?: X4UiCorpusCanonicalSuccess,
 ): X4UiLayoutProgramResult {
   if (colorEvidenceInput !== undefined && !isX4UiCorpusCanonicalColorSuccess(colorEvidenceInput)) {
     return refusalResult('malformed-color-evidence', 'color evidence is not the exact loader-issued P2 canonical authority');
+  }
+  if (canonicalCorpusInput !== undefined && !isPinnedCanonicalCorpus(canonicalCorpusInput)) {
+    return refusalResult('malformed-corpus-evidence', 'corpus evidence is not the exact loader-issued X4 9.00 canonical authority');
   }
   if (!isObject(model) || !isObject(model.file) || typeof model.file.text !== 'string' || typeof model.file.rel !== 'string') {
     return refusalResult('malformed-model', 'call-model input is malformed');
@@ -8842,8 +9027,11 @@ export function projectX4UiLayoutProgram(
         addOperationGap(gaps, operation, 'data-flow', 'unknown', operation.reason, call.source, cellReference(call)?.path, found.cell?.id);
         continue;
       }
+      const type = call.name === 'createText' ? 'text' : call.name === 'createButton' ? 'button' : call.name === 'createEditBox' ? 'editbox' : 'icon';
+      const recognizedHeaderBundle = isHeaderRowCenteredProperties(call, canonicalCorpusInput);
+      operation.metadata = synthesizeHeaderBundleMetadata(operation.metadata, call, canonicalCorpusInput);
       const mode = optionMode(call);
-      if (mode === 'unresolved') {
+      if (mode === 'unresolved' && !recognizedHeaderBundle) {
         operation.reason = 'specialization options are dynamic or unknown; source defaults were not substituted';
         found.cell.hadGap = true;
         markTableGap(found.table);
@@ -8869,7 +9057,6 @@ export function projectX4UiLayoutProgram(
         addOperationGap(gaps, operation, 'options', 'dynamic', operation.reason, call.semantics.options?.location || call.source, call.semantics.options?.expression, found.cell.id);
         continue;
       }
-      const type = call.name === 'createText' ? 'text' : call.name === 'createButton' ? 'button' : call.name === 'createEditBox' ? 'editbox' : 'icon';
       const xValue = propertyValue(call, 'x');
       const heightValue = propertyValue(call, 'height');
       const yValue = propertyValue(call, 'y');
@@ -8878,13 +9065,16 @@ export function projectX4UiLayoutProgram(
       const affectValue = propertyValue(call, 'affectrowheight');
       const xDefault = type === 'text' ? 5 : 0;
       const xDefaultPin = type === 'text' ? HELPER_DEFAULT_PINS.textX : HELPER_DEFAULT_PINS.widgetX;
-      const yDefaultPin = type === 'text' ? HELPER_DEFAULT_PINS.textY : HELPER_DEFAULT_PINS.widgetY;
+      const yDefault = recognizedHeaderBundle ? 2 : 0;
+      const yDefaultPin = recognizedHeaderBundle
+        ? HELPER_HEADER_ROW_PINS.offsetY
+        : type === 'text' ? HELPER_DEFAULT_PINS.textY : HELPER_DEFAULT_PINS.widgetY;
       const x = xValue
         ? resolveProjectedNumber(xValue, 'width', `${type} x`, call.source, ['scaleX'])
         : { value: xDefault, source: cloneLocation(call.source), provenance: 'source-pinned-default' as const, sourcePin: xDefaultPin };
       const y = yValue
         ? resolveProjectedNumber(yValue, 'height', `${type} y`, call.source, ['scaleY'])
-        : { value: 0, source: cloneLocation(call.source), provenance: 'source-pinned-default' as const, sourcePin: yDefaultPin };
+        : { value: yDefault, source: cloneLocation(call.source), provenance: 'source-pinned-default' as const, sourcePin: yDefaultPin };
       const width = widthValue
         ? resolveProjectedNumber(widthValue, 'width', `${type} width`, call.source, ['scaleX'])
         : { value: 0, source: cloneLocation(call.source), provenance: 'source-pinned-default' as const, sourcePin: HELPER_DEFAULT_PINS.widgetWidth };
@@ -8920,13 +9110,23 @@ export function projectX4UiLayoutProgram(
       const minRowHeightValue = type === 'text' ? propertyValue(call, 'minrowheight') : undefined;
       const font = fontValue
         ? resolveProjectedString(fontValue, 'text', `${type} font`, call.source)
-        : { value: 'Zekton', source: cloneLocation(call.source), provenance: 'source-pinned-default' as const, sourcePin: HELPER_DEFAULT_PINS.standardFont };
+        : {
+          value: recognizedHeaderBundle ? 'Zekton Bold' : 'Zekton',
+          source: cloneLocation(call.source),
+          provenance: 'source-pinned-default' as const,
+          sourcePin: recognizedHeaderBundle ? HELPER_HEADER_ROW_PINS.titleFont : HELPER_DEFAULT_PINS.standardFont,
+        };
       const fontSize = fontSizeValue
         ? resolveProjectedNumber(fontSizeValue, 'text', `${type} font size`, call.source, ['scaleFont'])
         : { value: 9, source: cloneLocation(call.source), provenance: 'source-pinned-default' as const, sourcePin: HELPER_DEFAULT_PINS.standardFontSize };
       const halign = halignValue
         ? resolveProjectedString(halignValue, 'text', `${type} horizontal alignment`, call.source)
-        : { value: 'left', source: cloneLocation(call.source), provenance: 'source-pinned-default' as const, sourcePin: HELPER_DEFAULT_PINS.standardHalignment };
+        : {
+          value: recognizedHeaderBundle ? 'center' : 'left',
+          source: cloneLocation(call.source),
+          provenance: 'source-pinned-default' as const,
+          sourcePin: recognizedHeaderBundle ? HELPER_HEADER_ROW_PINS.halign : HELPER_DEFAULT_PINS.standardHalignment,
+        };
       const wordwrap = wordwrapValue
         ? resolveProjectedBoolean(wordwrapValue, 'text', `${type} wordwrap`, call.source)
         : { value: false, source: cloneLocation(call.source), provenance: 'source-pinned-default' as const, sourcePin: HELPER_DEFAULT_PINS.textWordwrap };
@@ -8949,10 +9149,10 @@ export function projectX4UiLayoutProgram(
         ? minRowHeightValue
           ? resolveProjectedNumber(minRowHeightValue, 'height', 'text minRowHeight', call.source, ['scaleY'])
           : {
-            value: profileValue.helper.constants.standardTextHeight.value,
+            value: recognizedHeaderBundle ? 20 : profileValue.helper.constants.standardTextHeight.value,
             source: cloneLocation(call.source),
             provenance: 'source-pinned-default' as const,
-            sourcePin: HELPER_DEFAULT_PINS.textMinRowHeight,
+            sourcePin: recognizedHeaderBundle ? HELPER_HEADER_ROW_PINS.minRowHeight : HELPER_DEFAULT_PINS.textMinRowHeight,
           }
         : { value: undefined };
       for (const resolution of [font, fontSize, halign, wordwrap]) appendGapForResolution(operation, resolution, found.cell.id);
@@ -8976,7 +9176,7 @@ export function projectX4UiLayoutProgram(
         : knownDefaultFact(xDefault, 'number', call.source, xDefaultPin, type === 'text' ? 'Helper.standardTextOffsetx' : '0');
       operation.descriptorFacts.outerY = yValue
         ? factFromResolution(yValue, y, 'number', call.source, `${type} y`)
-        : knownDefaultFact(0, 'number', call.source, yDefaultPin, type === 'text' ? 'Helper.standardTextOffsety' : '0');
+        : knownDefaultFact(yDefault, 'number', call.source, yDefaultPin, recognizedHeaderBundle ? 'Helper.headerRow1Offsety' : type === 'text' ? 'Helper.standardTextOffsety' : '0');
       operation.descriptorFacts.outerWidth = widthValue
         ? factFromResolution(widthValue, width, 'number', call.source, `${type} width`)
         : knownDefaultFact(0, 'number', call.source, HELPER_DEFAULT_PINS.widgetWidth, '0');
@@ -9027,18 +9227,20 @@ export function projectX4UiLayoutProgram(
             'text minRowHeight floor cannot be resolved exactly',
             call.source,
           );
-      const minRowHeightExpression = minRowHeightValue?.expression || 'Helper.standardTextHeight';
-      const textYExpression = yValue?.expression || 'Helper.standardTextOffsety';
+      const minRowHeightExpression = minRowHeightValue?.expression
+        || (recognizedHeaderBundle ? 'Helper.headerRow1Height' : 'Helper.standardTextHeight');
+      const textYExpression = yValue?.expression
+        || (recognizedHeaderBundle ? 'Helper.headerRow1Offsety' : 'Helper.standardTextOffsety');
       const minRowHeightFloorExpression = `Helper.scaleY(${minRowHeightExpression}) - Helper.scaleY(${textYExpression})`;
       const sourceMinRowHeightFact = type === 'text'
         ? minRowHeightValue
           ? factFromResolution(minRowHeightValue, minRowHeight, 'number', call.source, 'text minRowHeight')
           : knownDefaultFact(
-            profileValue.helper.constants.standardTextHeight.value,
+            recognizedHeaderBundle ? 20 : profileValue.helper.constants.standardTextHeight.value,
             'number',
             call.source,
-            HELPER_DEFAULT_PINS.textMinRowHeight,
-            'Helper.standardTextHeight',
+            recognizedHeaderBundle ? HELPER_HEADER_ROW_PINS.minRowHeight : HELPER_DEFAULT_PINS.textMinRowHeight,
+            recognizedHeaderBundle ? 'Helper.headerRow1Height' : 'Helper.standardTextHeight',
           )
         : unavailableFact('number', `${type} has no text minRowHeight`, call.source);
       const minRowHeightFloorFact = type === 'text' && minRowHeightFloor.value !== undefined
@@ -9059,17 +9261,59 @@ export function projectX4UiLayoutProgram(
           type === 'text' ? minRowHeightFloorExpression : undefined,
           type === 'text' ? HELPER_DEFAULT_PINS.textMinHeightBoundary : undefined,
         );
+      let canonicalTextHeightCandidate: DerivedTextHeightCandidate | undefined;
+      if (type === 'text' && height.value === 0 && canonicalCorpusInput !== undefined) {
+        const spanWidth = getColSpanWidth(found.table.kernelState, found.row.rowIndex, found.cell.column);
+        if (spanWidth.status !== 'ok') {
+          canonicalTextHeightCandidate = {
+            reason: `finalized cell span width is unavailable: ${spanWidth.message}`,
+          };
+        } else if (scaledX.status !== 'ok') {
+          canonicalTextHeightCandidate = { reason: 'scaled text x offset is unavailable for the finalized cell span width' };
+        } else {
+          const explicitWidth = width.value !== undefined && width.value !== 0
+            ? scaleX(width.value, profileValue.metrics.uiScale, effectiveScaling)
+            : undefined;
+          const maxWidth = explicitWidth?.status === 'ok'
+            ? explicitWidth.value
+            : spanWidth.value - scaledX.value;
+          canonicalTextHeightCandidate = explicitWidth !== undefined && explicitWidth.status !== 'ok'
+            ? { reason: `explicit text width could not be scaled: ${explicitWidth.message}` }
+            : deriveCanonicalTextHeightCandidate(
+              canonicalCorpusInput,
+              font.value,
+              content.value,
+              scaledFontSize?.status === 'ok' ? scaledFontSize.value : undefined,
+              maxWidth,
+              wordwrap.value,
+            );
+        }
+      }
+      const rawTextHeightCandidate = canonicalTextHeightCandidate?.value;
       const textHeightCandidate = type === 'text'
         && height.value === 0
-        && profileValue.defaults.minTextHeight !== undefined
         && minRowHeightFloor.value !== undefined
-        ? Math.max(profileValue.defaults.minTextHeight, minRowHeightFloor.value)
+        ? canonicalCorpusInput !== undefined
+          ? rawTextHeightCandidate !== undefined
+            ? Math.max(rawTextHeightCandidate, profileValue.defaults.minTextHeight || 0, minRowHeightFloor.value)
+            : profileValue.defaults.minTextHeight !== undefined
+              ? Math.max(profileValue.defaults.minTextHeight, minRowHeightFloor.value)
+              : undefined
+          : profileValue.defaults.minTextHeight !== undefined
+            ? Math.max(profileValue.defaults.minTextHeight, minRowHeightFloor.value)
+            : undefined
         : undefined;
+      const textHeightCandidateExpression = rawTextHeightCandidate !== undefined
+        ? profileValue.defaults.minTextHeight !== undefined
+          ? `max(${canonicalTextHeightCandidate?.expression || 'Math.ceil(layoutZektonText(...))'}, profile.defaults.minTextHeight, ${minRowHeightFloorExpression})`
+          : `max(${canonicalTextHeightCandidate?.expression || 'Math.ceil(layoutZektonText(...))'}, ${minRowHeightFloorExpression})`
+        : 'max(profile.defaults.minTextHeight, ' + minRowHeightFloorExpression + ')';
       if (type === 'text' && height.value === 0 && textHeightCandidate === undefined) {
         found.cell.missingHeight = true;
-        const reason = profileValue.defaults.minTextHeight === undefined
+        const reason = canonicalTextHeightCandidate?.reason
+          || (profileValue.defaults.minTextHeight === undefined
           ? 'zero-height text requires a supplied/proven C++ text-height candidate; minRowHeight proves only the Helper floor'
-          : 'zero-height text cannot combine the supplied/proven C++ text-height candidate with an unresolved minRowHeight floor';
+          : 'zero-height text cannot combine the supplied/proven C++ text-height candidate with an unresolved minRowHeight floor');
         addOperationGap(gaps, operation, 'height', 'unknown', reason, minRowHeightValue?.location || call.source, minRowHeightValue?.expression, found.cell.id);
         found.cell.hadGap = true;
         found.table.hadGap = true;
@@ -9080,7 +9324,7 @@ export function projectX4UiLayoutProgram(
           expectedType: 'number',
           value: textHeightCandidate,
           provenance: minRowHeightFloor.provenance || 'source-pinned-default',
-          expression: `max(profile.defaults.minTextHeight, ${minRowHeightFloorExpression})`,
+          expression: textHeightCandidateExpression,
           source: cloneLocation(minRowHeightFloor.source || call.source),
           sourcePin: HELPER_DEFAULT_PINS.textMinHeightBoundary,
           ...(minRowHeightFloor.sampleId ? { sampleId: minRowHeightFloor.sampleId } : {}),
@@ -9157,6 +9401,7 @@ export function projectX4UiLayoutProgram(
               ? finalTextHeightFact
             : knownDefaultFact(0, 'number', call.source, HELPER_DEFAULT_PINS.widgetHeight, '0'),
         ...(type === 'text' ? {
+          minTextHeight: finalTextHeightFact,
           minRowHeight: sourceMinRowHeightFact,
           minRowHeightFloor: minRowHeightFloorFact,
         } : {}),
@@ -9179,7 +9424,13 @@ export function projectX4UiLayoutProgram(
         text2: knownDefaultFact('', 'string', call.source, HELPER_DEFAULT_PINS.textContent, '""'),
         font: fontValue
           ? factFromResolution(fontValue, font, 'string', call.source, `${type} font`)
-          : knownDefaultFact('Zekton', 'string', call.source, HELPER_DEFAULT_PINS.standardFont, 'Helper.standardFont'),
+          : knownDefaultFact(
+            recognizedHeaderBundle ? 'Zekton Bold' : 'Zekton',
+            'string',
+            call.source,
+            recognizedHeaderBundle ? HELPER_HEADER_ROW_PINS.titleFont : HELPER_DEFAULT_PINS.standardFont,
+            recognizedHeaderBundle ? 'Helper.titleFont' : 'Helper.standardFont',
+          ),
         fontsize: fontSizeValue
           ? scaledFontSize?.status === 'ok'
             ? withKnownFactValue(factFromResolution(fontSizeValue, fontSize, 'number', call.source, `${type} font size`), scaledFontSize.value)
@@ -9188,12 +9439,18 @@ export function projectX4UiLayoutProgram(
             scaledFontSize?.status === 'ok' ? scaledFontSize.value : 9,
             'number',
             call.source,
-            HELPER_DEFAULT_PINS.standardFontSize,
+            recognizedHeaderBundle ? HELPER_HEADER_ROW_PINS.standardFontSize : HELPER_DEFAULT_PINS.standardFontSize,
             'Helper.scaleFont(Helper.standardFontSize)',
           ),
         halign: halignValue
           ? factFromResolution(halignValue, halign, 'string', call.source, `${type} horizontal alignment`)
-          : knownDefaultFact('left', 'string', call.source, HELPER_DEFAULT_PINS.standardHalignment, 'Helper.standardHalignment'),
+          : knownDefaultFact(
+            recognizedHeaderBundle ? 'center' : 'left',
+            'string',
+            call.source,
+            recognizedHeaderBundle ? HELPER_HEADER_ROW_PINS.halign : HELPER_DEFAULT_PINS.standardHalignment,
+            recognizedHeaderBundle ? 'halign = "center" in Helper.headerRowCenteredProperties' : 'Helper.standardHalignment',
+          ),
         wordwrap: wordwrapValue
           ? factFromResolution(wordwrapValue, wordwrap, 'boolean', call.source, `${type} wordwrap`)
           : knownDefaultFact(false, 'boolean', call.source, HELPER_DEFAULT_PINS.textWordwrap, 'false'),
@@ -9239,7 +9496,11 @@ export function projectX4UiLayoutProgram(
       for (const [field, fact] of Object.entries(pendingFacts)) operation.descriptorFacts[field] = fact;
       const colorProperties = ['color', 'cellbgcolor', 'bgcolor', 'highlightcolor', 'bordercolor'] as const;
       const helperColorDefault = (colorName: typeof colorProperties[number]): { readonly id: string; readonly pin: X4UiLayoutSourcePin } | undefined => {
-        if (colorName === 'cellbgcolor') return { id: 'row_background', pin: HELPER_DEFAULT_PINS.cellBackgroundColor };
+        if (colorName === 'cellbgcolor') {
+          return recognizedHeaderBundle
+            ? { id: 'container_subsection_header', pin: HELPER_HEADER_ROW_PINS.cellBackgroundColor }
+            : { id: 'row_background', pin: HELPER_DEFAULT_PINS.cellBackgroundColor };
+        }
         if (colorName === 'color') {
           return type === 'icon'
             ? { id: 'icon_normal', pin: HELPER_DEFAULT_PINS.iconColor }

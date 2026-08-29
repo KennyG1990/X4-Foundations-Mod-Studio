@@ -1058,7 +1058,16 @@ export function projectX4UiPreviewPipeline(input: X4UiPreviewPipelineInput): X4U
     // view of that existing model; linting above still uses the original callModel directly and no
     // parser/model rebuild is performed here.
     const projectModel = cloneJson(sourceFile.callModel) as typeof sourceFile.callModel;
-    const program = projectX4UiLayoutProgram(projectModel, target, layoutProfile, input.samples, input.paths, colorEvidence);
+    const canonical = isX4UiCorpusCanonicalSuccess(input.corpus) ? input.corpus : undefined;
+    const program = projectX4UiLayoutProgram(
+      projectModel,
+      target,
+      layoutProfile,
+      input.samples,
+      input.paths,
+      colorEvidence,
+      canonical,
+    );
     if (program.status === 'refused' && 'refusal' in program) {
       gaps.push({ stage: 'program', reason: program.refusal.message });
       return freezeDeep({
@@ -1077,7 +1086,6 @@ export function projectX4UiPreviewPipeline(input: X4UiPreviewPipelineInput): X4U
         program,
       });
     }
-    const canonical = isX4UiCorpusCanonicalSuccess(input.corpus) ? input.corpus : undefined;
     if (!canonical) {
       gaps.push({ stage: 'corpus', reason: 'Scene geometry requires loader-issued canonical configured-corpus evidence' });
       return freezeDeep({

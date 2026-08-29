@@ -3902,7 +3902,37 @@ const validateProducerNodeFacts = (
     const scaling = cell.kernelState?.scaling;
     const creatorOuterHeight = creator.descriptorFacts.outerHeight;
     const cellOuterHeight = cell.descriptorFacts.outerHeight;
-    if (creatorOuterHeight?.status === 'known' && creatorOuterHeight.expectedType === 'number'
+    const creatorMinTextHeight = creator.descriptorFacts.minTextHeight;
+    const cellMinTextHeight = cell.descriptorFacts.minTextHeight;
+    const zeroHeightTextHasKnownHeightFacts = creator.kind === 'createText'
+      && cell.kernelState?.type === 'text'
+      && cell.kernelState.height === 0
+      && creatorOuterHeight?.status === 'known'
+      && creatorOuterHeight.expectedType === 'number'
+      && cellOuterHeight?.status === 'known'
+      && cellOuterHeight.expectedType === 'number';
+    const zeroHeightTextHasAlreadyScaledCandidate = creator.kind === 'createText'
+      && cell.kernelState?.type === 'text'
+      && cell.kernelState.height === 0
+      && typeof cell.kernelState.minTextHeight === 'number'
+      && isFiniteSafe(cell.kernelState.minTextHeight)
+      && creatorMinTextHeight?.status === 'known'
+      && creatorMinTextHeight.expectedType === 'number'
+      && cellMinTextHeight?.status === 'known'
+      && cellMinTextHeight.expectedType === 'number'
+      && creatorOuterHeight?.status === 'known'
+      && creatorOuterHeight.expectedType === 'number'
+      && cellOuterHeight?.status === 'known' && cellOuterHeight.expectedType === 'number'
+      && creatorMinTextHeight.value === cell.kernelState.minTextHeight
+      && cellMinTextHeight.value === cell.kernelState.minTextHeight
+      && creatorOuterHeight.value === cell.kernelState.minTextHeight
+      && cellOuterHeight.value === cell.kernelState.minTextHeight
+      && sameStructuralValue(creatorMinTextHeight, cellMinTextHeight)
+      && sameStructuralValue(creatorMinTextHeight, creatorOuterHeight)
+      && sameStructuralValue(creatorOuterHeight, cellOuterHeight);
+    if (zeroHeightTextHasKnownHeightFacts) {
+      if (!zeroHeightTextHasAlreadyScaledCandidate) return fail(`cell-zero-text-height:${cell.id}`);
+    } else if (creatorOuterHeight?.status === 'known' && creatorOuterHeight.expectedType === 'number'
       && cellOuterHeight?.status === 'known' && cellOuterHeight.expectedType === 'number'
       && table?.kernelState && typeof scaling === 'boolean') {
       const explicitHeight = staticOperationProperty(creator, 'height', 'number');

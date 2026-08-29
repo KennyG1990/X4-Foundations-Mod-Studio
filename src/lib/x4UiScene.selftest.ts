@@ -1671,6 +1671,57 @@ const sceneFor = (fixture: Fixture, program?: X4UiLayoutProgram, profile = fixtu
   return buildX4UiScene({ ...authorityResult, program } as X4UiLayoutProgramResult, fixture.corpus, profile);
 };
 
+const zeroHeightTextProjection = rawProjectionFor([
+  'local menu = { name = "ZeroHeightText", layer = 1 }',
+  'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+  'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = true })',
+  'local row = table:addRow(false, { paddingTop = 0, paddingBottom = 0, borderBelow = false, fixed = false, scaling = true })',
+  'row[1]:createText("zero", { minRowHeight = 16, scaling = true })',
+  'frame:display()',
+].join('\n'), 'selftest/scene-zero-height-text.lua', profile => ({
+  ...profile,
+  metrics: { ...profile.metrics, uiScale: 1.25 },
+  defaults: { ...profile.defaults, minTextHeight: 22 },
+}));
+
+test('B119 causal zero-height text keeps the already-scaled Helper candidate at uiScale 1.25', () => {
+  const projected = zeroHeightTextProjection;
+  assert(projected.program !== undefined && projected.profile !== undefined && projected.result !== undefined && 'program' in projected.result && projected.result.program !== undefined && 'evidenceAuthority' in projected.result && projected.result.evidenceAuthority !== undefined, 'zero-height text fixture must produce an issued program/evidence pair');
+  const creator = projected.program.operations.find(operation => operation.kind === 'createText');
+  const cell = projected.program.cells.find(candidate => candidate.id === creator?.cellId);
+  assert(creator !== undefined && cell !== undefined && creator.descriptorFacts.minTextHeight?.status === 'known' && cell.descriptorFacts.minTextHeight?.status === 'known', 'zero-height text fixture must expose creator and cell minTextHeight facts');
+  assert(creator.descriptorFacts.minTextHeight.value === 22 && cell.descriptorFacts.minTextHeight.value === 22, 'zero-height text fixture must expose the scaled minTextHeight candidate');
+  const result = buildX4UiScene(projected.result as X4UiLayoutProgramResult, corpus, projected.profile);
+  assert(result.status !== 'refused', `source-proven zero-height text must reach Scene projection at ${diagnoseX4UiSceneStructureForTest(projected.program, projected.result.evidenceAuthority)}: ${JSON.stringify(result)}`);
+
+  const changedValue = cloneProgram(projected.program);
+  const changedCreator = changedValue.operations.find(operation => operation.kind === 'createText');
+  assert(changedCreator !== undefined, 'changed-value fixture must retain its creator');
+  (changedCreator.descriptorFacts.minTextHeight as unknown as { value: number }).value = 23;
+  assert(diagnoseX4UiSceneStructureForTest(changedValue, projected.result.evidenceAuthority) !== undefined, 'changed creator minTextHeight must fail closed');
+
+  const changedCellValue = cloneProgram(projected.program);
+  const changedCellCreator = changedCellValue.operations.find(operation => operation.kind === 'createText');
+  const changedCell = changedCellValue.cells.find(candidate => candidate.id === changedCellCreator?.cellId);
+  assert(changedCell !== undefined, 'changed-cell fixture must retain its cell');
+  (changedCell.descriptorFacts.minTextHeight as unknown as { value: number }).value = 23;
+  assert(diagnoseX4UiSceneStructureForTest(changedCellValue, projected.result.evidenceAuthority) !== undefined, 'changed cell minTextHeight must fail closed');
+
+  const changedProvenance = cloneProgram(projected.program);
+  const provenanceCreator = changedProvenance.operations.find(operation => operation.kind === 'createText');
+  assert(provenanceCreator !== undefined, 'changed-provenance fixture must retain its creator');
+  (provenanceCreator.descriptorFacts.minTextHeight as unknown as { provenance: string }).provenance = 'preview-only';
+  assert(diagnoseX4UiSceneStructureForTest(changedProvenance, projected.result.evidenceAuthority) !== undefined, 'changed minTextHeight provenance must fail closed');
+
+  const removedRelationship = cloneProgram(projected.program);
+  const removedCreator = removedRelationship.operations.find(operation => operation.kind === 'createText');
+  const removedCell = removedRelationship.cells.find(candidate => candidate.id === removedCreator?.cellId);
+  assert(removedCreator !== undefined && removedCell !== undefined, 'removed-relationship fixture must retain creator and cell');
+  delete (removedCreator.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>).minTextHeight;
+  delete (removedCell.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>).minTextHeight;
+  assert(diagnoseX4UiSceneStructureForTest(removedRelationship, projected.result.evidenceAuthority) !== undefined, 'removed creator/cell minTextHeight relationship must fail closed');
+});
+
 const producerAuthority = (result: X4UiLayoutProgramResult): X4UiLayoutEvidenceAuthority => {
   if (!('evidenceAuthority' in result) || result.evidenceAuthority === undefined) throw new Error('successful producer result must expose evidence authority');
   return result.evidenceAuthority;
