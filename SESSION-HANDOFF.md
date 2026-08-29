@@ -1,123 +1,108 @@
-# Session handoff — B119 source-proven numeric geometry
+# Session handoff — B119 source-proven table/widget geometry
 
 Date: 2026-08-28
 Project: `F:\DEV_ENV\X4_Forge`
-Status: bounded source-proven numeric frame geometry `VERIFIED`; overall B119 `IN_PROGRESS / PARTIAL`
+Status: bounded source-proven table/widget geometry `VERIFIED`; overall B119 `IN_PROGRESS / PARTIAL`
 
 ## Current repository state
 
-- Source checkpoint `13af741735fb4309996292037c41223b853052eb` is committed and pushed with exact
-  local/tracking/direct-remote parity. Preserve every unrelated dirty path and use explicit-path staging only for the
-  record-only close.
-- Bounded owned implementation/test paths are:
-  - `src/lib/x4UiCallModel.ts`
-  - `src/lib/x4UiCallModel.selftest.ts`
+- Source checkpoint `188d5c02363d3a25dd818b32401c7e0bd2cad34b` is committed and pushed with exact
+  local/tracking/direct-remote parity. It owns only:
+  - `docs/plans/2026-08-28-b119-source-proven-table-widget-geometry.md`
   - `src/lib/x4UiLayoutProgram.ts`
-  - `src/lib/x4UiLayoutProgram.selftest.ts`
+  - `src/lib/x4UiPreviewPipeline.ts`
+  - `src/lib/x4UiPreviewPipeline.selftest.ts`
+  - `src/lib/x4UiScene.ts`
   - `src/lib/x4UiScene.selftest.ts`
-- Owned records for this checkpoint are:
-  - `docs/plans/2026-08-28-b119-source-proven-numeric-geometry.md`
-  - `BACKLOG.md`
-  - `SESSION-HANDOFF.md`
-- Production `x4UiScene.ts`, Paint, Canvas, SourceEditor, server routes, deploy owners, the mod, game directory, X4
-  profile, unpacked corpus, and Antigravity configuration were not changed.
-- The native Luna implementation worker is terminal and closed. No spawned worker remains open.
+- The exact native `gpt-5.6-luna` implementation/test worker is terminal and closed. No spawned worker remains open.
+- All pre-existing user-owned dirty paths remain outside the checkpoint. Tracked examples are `CODEX-ONBOARDING.md`,
+  `KNOWN-BUGS.md`, `docs/plans/2026-08-02-w3b1-addressed-state-receipts.md`, `test-results/.last-run.json`, the deleted
+  Discord/data scripts and records, and the existing VS Code extension release files. Existing issue templates,
+  screenshots, media/showcase assets, W3B1 plans, `REFACTOR-PLAN.md`, `pnpm-workspace.yaml`, `target.name`, and other
+  untracked files are also unrelated. Continue explicit-path staging only.
 
 ## Bounded capability now implemented
 
-- The call model emits a deeply frozen, exact-source numeric-expression descriptor for numeric literals, accepted
-  Helper constants, bound direct `scaleX` / `scaleY` results, grouping, unary sign, binary `+ - * /`, and Lua `or`.
-- The layout program independently reparses the model's exact Lua 5.2 source, validates every descriptor node/operator/
-  operand/range against that AST, pins Helper receiver and direct-scale identities, rejects later reachable reassignment,
-  and resolves only against the selected normalized profile.
-- Source-proven expressions are excluded from preview-sample authority. Internal descriptor metadata is removed from
-  issued operation/evidence metadata, so the existing Scene/public contract is unchanged.
-- The all-copy same-context alias-decoy defect is closed: a valid nearby `/4` formula can no longer impersonate the
-  selected `/2` binding. The selected alias value expression and location must equal the descriptor root.
-- This is not a generic Lua evaluator. Unknown identifiers, conditional/reassigned aliases, unsupported calls/operators,
-  modulo/power/`and`, divide-by-zero/non-finite values, malformed/forged/range/schema inputs, and `scaleFont` geometry
-  remain unavailable or rejected.
+- The existing preview pipeline passes its already validated canonical corpus into the layout program; there is no
+  second loader or renderer.
+- Layout recognizes only exact shipped `Helper.headerRowCenteredProperties` and source-pins its regular Zekton font,
+  font size, y offset, minimum row height, centered alignment, and canonical `container_subsection_header` background.
+- Per-cell minimum text height is projected from finalized colspan width, scaled font size, exact regular/bold Zekton
+  metrics, wrap layout, and Helper floors. The ordinary fact remains independently replayable and mutation-sensitive.
+- Scene treats zero-height text `minTextHeight` as the final scaled Helper result and no longer applies `scaleY` twice
+  at non-unit scale.
+- The test corpus includes the exact synthetic `container_subsection_header -> azure_dark_alpha_26` mapping while
+  retaining exactly `224` base colors and `804` mappings. Production color assets were not changed.
+- This is bounded exact-source support, not arbitrary Lua evaluation, full Helper/widget parity, C++ frame acceptance,
+  or a 1:1 renderer claim. Internal state remains `Not verified in game`.
 
-## Current validation authority
+## Exact fixture and validation authority
 
-- Focused suites: Call Model `72/72`; Layout Program `641/641`; Scene `153/153`; configured MENU/HUB/COMM census `3/3`.
-- Static gates: whole-repository TypeScript exit `0`; exact owned-file ESLint exit `0`; owned diff hygiene exit `0`;
-  full repository lint exit `0` with zero errors and `592` pre-existing warnings.
-- Graphify refreshed deterministically to `9,955` nodes / `24,922` edges / `334` communities;
-  `projectX4UiLayoutProgram()` resolves with `84` relationships.
-- Runtime-indexed isolated oracle owner: `134/134` green. The preceding raw no-server sweep `0/133` is retained as an
-  invocation/AAR failure and is not product evidence.
-- First full E2E is retained red: test 24 retried, execution later died after test 81 with Windows `0xC0000409`, and no
-  complete structured report existed. Receipt SHA-256 `E0D2AE77...B7653B5` is under
-  `dev-docs/b119-source-proven-numeric-geometry/e2e-red-20260828-01/`.
-- Controlled bundled Node `v24.19.0` full E2E: `104/104` in `7.9m`, zero failed/flaky/bad/quarantined-blocking,
-  discovery `104 == terminal 104`, child-close, `treeGone=true`, zero remaining PIDs. Receipt SHA-256
-  `F58275F0...C6DEFB4` is under `dev-docs/b119-source-proven-numeric-geometry/e2e-green-20260828-01/`.
-- Complete precommit passed: verdict `55/55`, durable writers `14/14 + 8/8`, capability `12/297/1/11`, MCP contract,
-  action receipts `82/56`, TypeScript, and size guards. Production build passed with `1,848` modules.
+- Exact embedded/deployed Lua SHA-256:
+  `C1D9CD8580C6175E95C543259A2AB19F8B463282BF48B2229EB6013D6052718E`.
+- `1920x1080 / UI scale 1`: cell heights `18,18,25,16,25,44`; row heights `20,20,25,16,25,44`; table `160`.
+- `2544x1353 / UI scale 1.25`: cell heights `22,22,31,20,31,55`; row heights `25,25,31,20,31,55`; table `202`.
+- Scene census: one frame, one table, six rows, twelve cells, six widgets, eight texts, ninety-nine glyphs, fifty-six
+  explicit gaps. The source-backed color mapping closes five former color-only gaps (`61 -> 56`).
+- Focused coordinator reruns: Layout Program `641/641`; Preview Pipeline `103/103`; Scene `154/154`; exact
+  MENU/HUB/COMM census `3/3`; whole-repository TypeScript exit `0`; exact six-file ESLint exit `0`; diff checks clean.
+- Complete precommit passed before commit and again in the commit hook: verdict `55/55`, durable writers `14/14 + 8/8`,
+  capability `12/297/1/11`, action receipts `82/56`, TypeScript, Vite/product-copy/MCP checks, and size guards.
+- The accepted unchanged full E2E `104/104` with `treeGone=true` and the `1,848`-module production build remain retained
+  broad evidence. Graphify's accepted refreshed state is `9,966` nodes / `24,959` edges / `310` communities.
+- Rendered evidence under `dev-docs/b119-x4-ui-pipeline-smoke/pixel-comparison-20260828/` confirms the centered table,
+  row order, spans, header hierarchy, status text, two buttons, and editbox region. It also confirms the remaining large
+  Forge frame outline and missing X4 background/alpha composition.
 
-## Exact real `pipeline_test` read-only proof
+## External and durable records
 
-- File: `F:\DEV_ENV\projects\Mods\X4Mods\pipeline_test\ui\pipeline_test.lua`.
-- Before/after: `5,488` bytes and SHA-256
-  `C1D9CD8580C6175E95C543259A2AB19F8B463282BF48B2229EB6013D6052718E`; byte-identical.
-- Parsed target: `menu.createFrame`, lines `77-106`, offsets `2709-4565`.
-- `1920x1080`, UI scale `1`: x `695`, y `322`, width `530`, height `436`.
-- `2544x1353`, UI scale `1.25`: x `940.5`, y `404`, width `663`, height `545`.
-- x/y retain the exact line-83/84 source formulas; width/height retain the line-81/82 direct Helper call sources. Both
-  program/evidence pairs validate. Both programs remain `partial` because of nineteen unrelated unsupported facts.
-- Prior deployed-X4 evidence for this unchanged four-file / `6,338`-byte package remains under
-  `dev-docs/b119-x4-ui-pipeline-smoke/in-game-20260828/`. It proves real X4 acceptance/interactions at both profiles,
-  but no new pixel-edge comparison was captured in this checkpoint.
+- GitHub #41 comment `5460008598` was written and read back; the issue remains open.
+- Notion owner page `3b84618e-d15b-8190-821e-c0eb96f43d5a` was written and fetched back with Status `In Progress`
+  and Evidence Grade `Partial`.
+- Google Doc `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, was revision-locked from
+  `AIroW34vaIbo_BkljAW6-Et0lTWBHdAk1cEJujn4fuHgb38zN9PXQzfgeOjPtSMMt17rhizxVjqhN6vGLQ2u06QWlUuKyd8oXu2GRsmnSEzr`
+  to `AIroW36lt84Fqx6FIveaiTHVv9nd8X-o6l9iFOYppQWhdkjZFUA81qeRoHdAReUfyo4bN7CTowAQzIt_QcnW94fJ05flKFDe3w19meoxANUN`.
+  Trusted readback confirmed the exact document/title/tab, new heading, eight normal paragraphs, and final revision.
+- `BACKLOG.md`, the bounded plan, this handoff, and the StarForge capability/AAR ledgers are the record-close owners.
 
 ## Machine and containment state
 
-- X4 was closed normally with Alt+F4 and is absent.
-- Ports `3000/3001/3100/3101/8972` are free; no owned oracle/E2E/precommit/build/Graphify process remains.
-- Persisted Antigravity Forge config remains byte-identical at SHA-256
-  `355B4B636AD6C0BB3B58DEA793DE409C2375B8A81230433C0F0FDD48FBEE3B5A`.
-- The configured unpacked X4 9.00 corpus remains
-  `F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00` and was read only.
+- X4 is absent. Live Antigravity/Forge listeners are unchanged at `127.0.0.1:3000` PID `21500` and
+  `127.0.0.1:3300` PID `32036`; ephemeral `3001/3100/3101/8972` are free.
+- The configured unpacked X4 9.00 corpus remains read only at
+  `F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00`.
+- The final color-test worker accidentally launched a broad recursive `rg` over the 1,028,384-file / 33 GB corpus.
+  Only exact scan PID `59608` and wrapper PID `45700` were terminated; no corpus, game, app, or source file changed.
 
-## Commit and bookkeeping boundary
+## Next exact product unit — linter first
 
-- Implementation commit `13af741735fb4309996292037c41223b853052eb` (`feat(ui-editor): project source-proven
-  numeric geometry`) is pushed with exact local/tracking/direct-remote parity and an empty index.
-- GitHub #41 comment `5458587855` was written and read back verbatim; the issue remains open.
-- Notion owner page `3b84618e-d15b-8190-821e-c0eb96f43d5a` contains and read back the source-proven geometry section,
-  exact source commit, both profiles, focused/broad gates, preserved red E2E, and full-B119 PARTIAL boundary.
-- Google Doc `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, exact tab `t.0`, was revision-locked from
-  `AIroW35ORAD2b16wtqsH8JNjJ03uib5jxFvleX03tDcvhkOVlZmEgQmddPsyOveZSskE7fp54ySMVePGX8lvtV7cve4MvkxLj-v86YevGGag`
-  to `AIroW34vaIbo_BkljAW6-Et0lTWBHdAk1cEJujn4fuHgb38zN9PXQzfgeOjPtSMMt17rhizxVjqhN6vGLQ2u06QWlUuKyd8oXu2GRsmnSEzr`.
-  Readback proves the exact document/title/tab, `HEADING_2` marker, all inserted paragraphs, and matching revision.
-- `F:\StarForge\wiki\x4-forge\capability-map.md` now explicitly supersedes only the earlier dynamic-geometry
-  unavailability claim; `F:\StarForge\wiki\x4-forge\aar-log.md` records the bounded task and triggered hazards.
-- Record-only precommit passed under bundled Node `24.19.0`: tripwires/canon, verdict `55/55`, Vite lifecycle,
-  product copy, durable writers `14/14 + 8/8`, capability `12/297/1/11`, MCP, action receipts `82/56`, TypeScript,
-  and size guards are green. The record-only commit owns only this handoff, the B119 plan, and `BACKLOG.md`, with title
-  `docs(ui-editor): record source-proven geometry checkpoint`; its resulting hash is reported by Git/remote readback
-  because a commit cannot cite its own hash.
+1. Re-open the supplied brief and reconcile every defect row against `src/lib/x4UiLint.ts`,
+   `src/lib/x4UiLint.selftest.ts`, all analyzer/validator/UI consumers, and current diagnostics. Produce a positive,
+   negative, dynamic/unresolved, integration, and user-copy coverage matrix before changing code.
+2. If a rule is missing, issue one bounded native Luna work order for the highest-severity missing rule and its exact
+   owner tests. If all rules already exist, strengthen the weakest integration/UX evidence instead of inventing a new
+   duplicate rule.
+3. Preserve the reconciled official column boundary: literal `24+` blocks; `13-23` warns because official X4 9.00 has
+   13-column tables. Dynamic shapes must say `not statically verified`; clean output is only `No known rule violated`.
+4. Do not widen renderer scope until the linter coverage matrix is closed. No OpenVSX publish until release quality.
 
-## Next product boundary
+## Eyeball queue and release boundary
 
-1. Measure exact Forge frame/button/text/editbox pixel edges against the already captured X4 screenshots at both profiles;
-   do not infer parity merely because the source formula now resolves.
-2. Continue complete `helper.lua` / `widget_fullscreen.lua` port coverage, remaining linter rules and keep-out behavior,
-   then reconstruct the AI Influence UI from all visually inspected references.
-3. Keep `Not verified in game` permanent for internal preview receipts. Do not publish OpenVSX until B119 reaches release
-   quality and the unrelated extension release edits are reconciled with their owner.
+- Compare exact Forge/X4 frame, button, text, and editbox edges at both retained profiles; explain or remove the large
+  frame outline and background/alpha mismatch from shipped source.
+- Exercise MENU/HUB/COMM in the real mounted editor and retain screenshots, then verify keep-out overlays.
+- Reconstruct the supplied AI Influence `1b` screen first and the remaining references only after the linter-first
+  boundary and exact source behavior are stable.
+- Preview is for layout; game is truth. Pixel similarity never promotes engine acceptance. Installed extension and
+  OpenVSX release remain unproved/unpublished.
 
-## Triggered AAR hazards
+## Triggered AAR failure shields
 
-- A structurally valid descriptor copied from a nearby same-context expression escaped until the alias root's ordinary
-  expression/location was pinned. Keep the all-copy decoy regression.
-- Raw `oracle-sweep.mjs` requires a running server; use `npm run test:oracles` for isolated standalone evidence.
-- Default Node `24.15.0` produced an incomplete `0xC0000409` E2E run. Bundled Node `24.19.0` is the accepted controlled
-  runtime on this host; the failed receipt remains evidence rather than being overwritten conceptually.
-- Large selftest/artifact JSON must be reduced in-process. One raw Layout run emitted roughly 51 MB, and one recursive
-  artifact listing exceeded the tool boundary.
-- The Google Docs trusted-read bridge requires an existing Windows workspace root and an absent immutable output
-  directory. This isolate lacks `atob` and `TextDecoder`; byte-verified JSON source loading preserved the checked-in
-  bridge unchanged, then the revision-locked write/readback passed.
-- Highest risk remains a convincing preview being mistaken for game truth. This checkpoint proves exact bounded frame
-  facts, not C++ acceptance or 1:1 pixels.
+- Never recursively search the configured 33 GB corpus for a known authoritative asset. Target reconciled files such as
+  `libraries/colors.xml`, `ui/addons/helper.lua`, or `ui/addons/widget_fullscreen.lua` directly.
+- PowerShell braced `foreach` statements cannot be piped directly; collect into an array before piping.
+- One raw oracle command targeted a dead server; use the owning isolated oracle script. Retain failed evidence.
+- A first canonical fixture simplified away source formulas, and a same-context alias decoy escaped until the exact
+  source root was pinned. Exact source identity and mutation tests remain mandatory.
+- Highest risk is a convincing preview being mistaken for game truth. Keep the disclaimer and deploy/game gate
+  authoritative while exact frame/alpha and broader Helper/widget coverage remain open.

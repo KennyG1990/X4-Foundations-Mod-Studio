@@ -93,6 +93,27 @@ local/tracking/direct-remote parity. GitHub #41 comment `5458587855`, Notion pag
 `3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Drive revision
 `AIroW34vaIbo_BkljAW6-Et0lTWBHdAk1cEJujn4fuHgb38zN9PXQzfgeOjPtSMMt17rhizxVjqhN6vGLQ2u06QWlUuKyd8oXu2GRsmnSEzr`
 were written and read back with the issue open and the full-B119 PARTIAL boundary intact.
+**Source-proven table/widget geometry 2026-08-28 — BOUNDED VERIFIED / FULL B119 PARTIAL:** The existing preview
+pipeline now carries its already validated X4 9.00 corpus into the layout program, recognizes only shipped
+`Helper.headerRowCenteredProperties`, and source-pins the header font, size, y offset, minimum row height, centered
+alignment, and `container_subsection_header` color. Per-cell minimum text height now comes from finalized colspan width,
+scaled Zekton metrics, wrap layout, and Helper floors; Scene no longer double-scales that already-final value at non-unit
+scale. The exact unchanged `pipeline_test.lua` remains SHA-256
+`C1D9CD8580C6175E95C543259A2AB19F8B463282BF48B2229EB6013D6052718E`. Exact table heights are `160` at
+`1920x1080 / scale 1` and `202` at `2544x1353 / scale 1.25`; downstream evidence is one frame, one table, six rows,
+twelve cells, six widgets, eight texts, ninety-nine glyphs, and fifty-six explicit gaps. The exact synthetic
+`container_subsection_header -> azure_dark_alpha_26` mapping retains `224` base colors / `804` mappings and closes five
+color-only gaps without changing production. Focused Layout `641/641`, Preview `103/103`, Scene `154/154`, MENU/HUB/COMM
+`3/3`, TypeScript, bounded lint, diff hygiene, and complete precommit are green; the final commit hook repeated the same
+precommit authority. The accepted unchanged full E2E `104/104` and `1,848`-module production build remain retained
+evidence. Source commit `188d5c02363d3a25dd818b32401c7e0bd2cad34b` is pushed with exact local/tracking/direct-remote
+parity. GitHub #41 comment `5460008598`, Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Drive revision
+`AIroW36lt84Fqx6FIveaiTHVv9nd8X-o6l9iFOYppQWhdkjZFUA81qeRoHdAReUfyo4bN7CTowAQzIt_QcnW94fJ05flKFDe3w19meoxANUN`
+were written and read back with the issue open. The rendered Forge canvas now shares the centered table, row order,
+spans, headers, status, buttons, and editbox region with retained X4 evidence, but still has a large frame outline and
+missing X4 background/alpha composition. Complete linter-table reconciliation, broader shipped Helper/widget coverage,
+pixel parity, AI Influence reconstruction, installed-extension proof, and OpenVSX release remain open; B119 stays
+`in_progress / PARTIAL` and every internal preview remains `Not verified in game`.
 **AI Influence `1b` visual reconciliation 2026-08-19 — REPRODUCED GUIDE CONFLICT:** The source pixels were re-opened
 and immutable hashes/dimensions are frozen in the plan. Forge's existing cockpit preset projects the measured guides to
 `y=1134.72`, `y=1065.6`, and `x=1699.84` at `2560x1440`; the supplied `1b` choice/input geometry intersects all three.

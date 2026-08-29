@@ -190,3 +190,20 @@ Owner: GitHub #41
   remove them; the disclaimer and deploy/game gate remain authoritative meanwhile.
 - Global/project lessons banked: project capability-map and AAR deltas are required at record close; no global memory
   update is authorized.
+
+## RECORD CLOSE
+
+- Source commit `188d5c02363d3a25dd818b32401c7e0bd2cad34b` is pushed with exact local, tracking, and
+  direct-remote parity.
+- GitHub #41 comment `5460008598` was written and read back; the issue remains open and full B119 remains
+  `IN_PROGRESS / PARTIAL`.
+- Notion owner page `3b84618e-d15b-8190-821e-c0eb96f43d5a` was updated and read back with Status `In Progress`,
+  Evidence Grade `Partial`, the exact source commit, geometry/color receipts, validation, and remaining boundaries.
+- Google Doc `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, advanced under revision lock from
+  `AIroW34vaIbo_BkljAW6-Et0lTWBHdAk1cEJujn4fuHgb38zN9PXQzfgeOjPtSMMt17rhizxVjqhN6vGLQ2u06QWlUuKyd8oXu2GRsmnSEzr`
+  to `AIroW36lt84Fqx6FIveaiTHVv9nd8X-o6l9iFOYppQWhdkjZFUA81qeRoHdAReUfyo4bN7CTowAQzIt_QcnW94fJ05flKFDe3w19meoxANUN`;
+  trusted readback confirmed the document, tab, heading, eight paragraphs, and final revision.
+- `BACKLOG.md`, `SESSION-HANDOFF.md`, `F:\StarForge\wiki\x4-forge\capability-map.md`,
+  `F:\StarForge\wiki\x4-forge\aar-log.md`, and the global workflow AAR now record the bounded close and its
+  failure shields. The repository record commit's hash is established by subsequent Git/remote readback because a
+  commit cannot cite itself.
