@@ -1,108 +1,113 @@
-# Session handoff — B119 source-proven table/widget geometry
+# Session handoff — B119 source-calibrated editbox-height lint
 
-Date: 2026-08-28
+Date: 2026-08-29
 Project: `F:\DEV_ENV\X4_Forge`
-Status: bounded source-proven table/widget geometry `VERIFIED`; overall B119 `IN_PROGRESS / PARTIAL`
+Status: bounded linter calibration `VERIFIED`; overall B119 `IN_PROGRESS / PARTIAL`
 
 ## Current repository state
 
-- Source checkpoint `188d5c02363d3a25dd818b32401c7e0bd2cad34b` is committed and pushed with exact
-  local/tracking/direct-remote parity. It owns only:
-  - `docs/plans/2026-08-28-b119-source-proven-table-widget-geometry.md`
-  - `src/lib/x4UiLayoutProgram.ts`
-  - `src/lib/x4UiPreviewPipeline.ts`
-  - `src/lib/x4UiPreviewPipeline.selftest.ts`
-  - `src/lib/x4UiScene.ts`
-  - `src/lib/x4UiScene.selftest.ts`
-- The exact native `gpt-5.6-luna` implementation/test worker is terminal and closed. No spawned worker remains open.
-- All pre-existing user-owned dirty paths remain outside the checkpoint. Tracked examples are `CODEX-ONBOARDING.md`,
-  `KNOWN-BUGS.md`, `docs/plans/2026-08-02-w3b1-addressed-state-receipts.md`, `test-results/.last-run.json`, the deleted
-  Discord/data scripts and records, and the existing VS Code extension release files. Existing issue templates,
-  screenshots, media/showcase assets, W3B1 plans, `REFACTOR-PLAN.md`, `pnpm-workspace.yaml`, `target.name`, and other
-  untracked files are also unrelated. Continue explicit-path staging only.
+- Source checkpoint `60dbb0a93fd9e6b7faf466218f0101d748627434` is committed and pushed with exact local
+  `HEAD`, `origin/main`, and direct remote `main` parity at source close. It owns only:
+  - `docs/plans/2026-08-28-b119-editbox-height-lint-calibration.md`
+  - `src/lib/x4UiLint.ts`
+  - `src/lib/x4UiLint.selftest.ts`
+  - `src/server/x4UiIntegration.selftest.ts`
+- The exact native `gpt-5.6-luna` worker is terminal and closed. No spawned worker remains open.
+- Current record-close edits are limited to `BACKLOG.md`, `SESSION-HANDOFF.md`, and the bounded plan. StarForge
+  capability/project/workflow AAR deltas are outside this Git repository.
+- Preserve all unrelated dirty paths. Tracked examples remain `CODEX-ONBOARDING.md`, `KNOWN-BUGS.md`,
+  `docs/plans/2026-08-02-w3b1-addressed-state-receipts.md`, `test-results/.last-run.json`, deleted Discord/data scripts,
+  and existing VS Code extension release files. Existing issue templates, screenshots, showcase media, W3B1 plans,
+  `REFACTOR-PLAN.md`, `pnpm-workspace.yaml`, `target.name`, and other untracked files are not B119 record owners.
+  Continue explicit-path staging only.
 
-## Bounded capability now implemented
+## Bounded capability now verified
 
-- The existing preview pipeline passes its already validated canonical corpus into the layout program; there is no
-  second loader or renderer.
-- Layout recognizes only exact shipped `Helper.headerRowCenteredProperties` and source-pins its regular Zekton font,
-  font size, y offset, minimum row height, centered alignment, and canonical `container_subsection_header` background.
-- Per-cell minimum text height is projected from finalized colspan width, scaled font size, exact regular/bold Zekton
-  metrics, wrap layout, and Helper floors. The ordinary fact remains independently replayable and mutation-sensitive.
-- Scene treats zero-height text `minTextHeight` as the final scaled Helper result and no longer applies `scaleY` twice
-  at non-unit scale.
-- The test corpus includes the exact synthetic `container_subsection_header -> azure_dark_alpha_26` mapping while
-  retaining exactly `224` base colors and `804` mappings. Production color assets were not changed.
-- This is bounded exact-source support, not arbitrary Lua evaluation, full Helper/widget parity, C++ frame acceptance,
-  or a 1:1 renderer claim. Internal state remains `Not verified in game`.
+- All eleven original brief-table linter families already exist with positive, safe-negative, dynamic/unresolved,
+  real-failure, and shared-consumer coverage. No duplicate rule was added.
+- `x4-ui.editbox-height-minimum` now distinguishes omitted call-specific height from explicit literal zero:
+  - omission is one visible nonblocking warning with the retained X4 zero-height overlap/log failure;
+  - literal zero remains a conservative blocking error;
+  - positive static height is clean;
+  - dynamic or unsupported height remains `Not statically verified`.
+- Shipped X4 9.00 `helper.lua` is the source authority: positive row peers affect `row:getHeight()` only; table default
+  cell properties and displayed-hotkey minimum handling are the descriptor-height paths. Production copy and tests
+  explicitly preserve that distinction.
+- Former omitted and current `height = 44` `pipeline_test` fixtures are permanent focused checks. Project validation,
+  IDE Problems, and package readiness preserve exact path, line, stable rule, severity, and blocking parity.
+- This is a linter-policy correction, not complete `setDefaultCellProperties`/`setHotkey` modeling, renderer parity,
+  arbitrary Lua evaluation, C++ frame acceptance, or a release claim. Preview remains `Not verified in game`.
 
-## Exact fixture and validation authority
+## Exact validation authority
 
-- Exact embedded/deployed Lua SHA-256:
-  `C1D9CD8580C6175E95C543259A2AB19F8B463282BF48B2229EB6013D6052718E`.
-- `1920x1080 / UI scale 1`: cell heights `18,18,25,16,25,44`; row heights `20,20,25,16,25,44`; table `160`.
-- `2544x1353 / UI scale 1.25`: cell heights `22,22,31,20,31,55`; row heights `25,25,31,20,31,55`; table `202`.
-- Scene census: one frame, one table, six rows, twelve cells, six widgets, eight texts, ninety-nine glyphs, fifty-six
-  explicit gaps. The source-backed color mapping closes five former color-only gaps (`61 -> 56`).
-- Focused coordinator reruns: Layout Program `641/641`; Preview Pipeline `103/103`; Scene `154/154`; exact
-  MENU/HUB/COMM census `3/3`; whole-repository TypeScript exit `0`; exact six-file ESLint exit `0`; diff checks clean.
-- Complete precommit passed before commit and again in the commit hook: verdict `55/55`, durable writers `14/14 + 8/8`,
-  capability `12/297/1/11`, action receipts `82/56`, TypeScript, Vite/product-copy/MCP checks, and size guards.
-- The accepted unchanged full E2E `104/104` with `treeGone=true` and the `1,848`-module production build remain retained
-  broad evidence. Graphify's accepted refreshed state is `9,966` nodes / `24,959` edges / `310` communities.
-- Rendered evidence under `dev-docs/b119-x4-ui-pipeline-smoke/pixel-comparison-20260828/` confirms the centered table,
-  row order, spans, header hierarchy, status text, two buttons, and editbox region. It also confirms the remaining large
-  Forge frame outline and missing X4 background/alpha composition.
+- Reproduced baseline official corpus: `81/81/0`, `7,669,552` bytes, `25` applicable fatal findings, all omitted
+  editbox height; warnings `6`, unverified files `70`, truncated files `26`, gaps `13,681`.
+- Final unchanged official corpus: status `no-known-fatal-static-gaps`, `81/81/0`, applicable fatal `0`, warnings `31`,
+  unverified files `70`, truncated files `26`, gaps `13,681`. Six restricted-online-call errors remain visible and are
+  not applicable only to the trusted official base/DLC census.
+- Focused linter `118/118`; project/IDE Problems integration `11/11`; direct package-readiness probe proves omitted
+  warning with zero package errors and literal zero as the sole package error at the exact Lua path/line.
+- TypeScript, exact three-file ESLint with zero warnings, diff hygiene, full lint with zero errors, and production build
+  at `1,848` modules pass.
+- Isolated runtime-index oracle owner is `134/134`; live ports remained unchanged. Complete precommit passed directly
+  and again in the commit hook: verdict `55/55`, durable writers `14/14 + 8/8`, capability `12/297/1/11`, action
+  receipts `82/56`, TypeScript, Vite/product-copy/MCP checks, and size guards.
+- Graphify refreshed deterministically to `9,967` nodes / `24,963` edges / `308` communities.
+- Native visual/game validation was not applicable to this severity-policy-only unit. Retained two-profile
+  `pipeline_test` evidence still proves Forge-to-X4 UI paint and interaction, not exact standalone-preview parity.
 
 ## External and durable records
 
-- GitHub #41 comment `5460008598` was written and read back; the issue remains open.
-- Notion owner page `3b84618e-d15b-8190-821e-c0eb96f43d5a` was written and fetched back with Status `In Progress`
-  and Evidence Grade `Partial`.
+- GitHub #41 comment `5460382092` was written and read back; the issue remains open.
+- Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a` was written and fetched back with Status `In Progress`, Evidence
+  Grade `Partial`, exact source commit, tests, corpus result, and remaining game/release boundary.
 - Google Doc `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, was revision-locked from
-  `AIroW34vaIbo_BkljAW6-Et0lTWBHdAk1cEJujn4fuHgb38zN9PXQzfgeOjPtSMMt17rhizxVjqhN6vGLQ2u06QWlUuKyd8oXu2GRsmnSEzr`
-  to `AIroW36lt84Fqx6FIveaiTHVv9nd8X-o6l9iFOYppQWhdkjZFUA81qeRoHdAReUfyo4bN7CTowAQzIt_QcnW94fJ05flKFDe3w19meoxANUN`.
-  Trusted readback confirmed the exact document/title/tab, new heading, eight normal paragraphs, and final revision.
-- `BACKLOG.md`, the bounded plan, this handoff, and the StarForge capability/AAR ledgers are the record-close owners.
+  `AIroW36lt84Fqx6FIveaiTHVv9nd8X-o6l9iFOYppQWhdkjZFUA81qeRoHdAReUfyo4bN7CTowAQzIt_QcnW94fJ05flKFDe3w19meoxANUN`
+  to `AIroW36P8KYF1ZNNxZJdRU5PSzdZFmgZXoaTQQcYCNFfSl3DB7YL9fHA41Mstl0lcmMPNEdjKbc9JrGW_Eu1nNZCMGbi1h9aOD_kQkUF3hzu`.
+  Readback confirmed document/title/tab, `HEADING_2`, seven normal paragraphs, exact content, and final revision.
+- `BACKLOG.md`, the bounded plan, this handoff, StarForge capability map, and both AAR ledgers carry the same boundary.
 
 ## Machine and containment state
 
-- X4 is absent. Live Antigravity/Forge listeners are unchanged at `127.0.0.1:3000` PID `21500` and
-  `127.0.0.1:3300` PID `32036`; ephemeral `3001/3100/3101/8972` are free.
-- The configured unpacked X4 9.00 corpus remains read only at
-  `F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00`.
-- The final color-test worker accidentally launched a broad recursive `rg` over the 1,028,384-file / 33 GB corpus.
-  Only exact scan PID `59608` and wrapper PID `45700` were terminated; no corpus, game, app, or source file changed.
+- X4 is absent. Live Antigravity/Forge listeners remained at `127.0.0.1:3000` PID `21500` and
+  `127.0.0.1:3300` PID `32036`; ephemeral `3001/3100/3101/8972` were clear after validation.
+- The configured X4 corpus at `F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00` remained read only.
+- Raw `node scripts/oracle-sweep.mjs` was retained red at `0/133` because no default `localhost:3001` server existed;
+  `npm run test:oracles` is the isolated owner and passed `134/134`.
+- The isolated oracle owner left temp-only
+  `C:\Users\Moshi\AppData\Local\Temp\x4-oracle-discovery-17744`. Exact resolved cleanup was blocked by host
+  destructive-operation policy; do not bypass the guard. Older temp roots predate this unit.
 
-## Next exact product unit — linter first
+## Next exact product unit — finish the descriptor-height source path
 
-1. Re-open the supplied brief and reconcile every defect row against `src/lib/x4UiLint.ts`,
-   `src/lib/x4UiLint.selftest.ts`, all analyzer/validator/UI consumers, and current diagnostics. Produce a positive,
-   negative, dynamic/unresolved, integration, and user-copy coverage matrix before changing code.
-2. If a rule is missing, issue one bounded native Luna work order for the highest-severity missing rule and its exact
-   owner tests. If all rules already exist, strengthen the weakest integration/UX evidence instead of inventing a new
-   duplicate rule.
-3. Preserve the reconciled official column boundary: literal `24+` blocks; `13-23` warns because official X4 9.00 has
-   13-column tables. Dynamic shapes must say `not statically verified`; clean output is only `No known rule violated`.
-4. Do not widen renderer scope until the linter coverage matrix is closed. No OpenVSX publish until release quality.
+1. Reconcile exact shipped `table:setDefaultCellProperties("editbox", ...)`, `editbox:setHotkey(...)`,
+   `initTableCell`, and `editbox:getHeight()` readers/writers against the existing call model, layout program, linter,
+   Scene, source editor, and official corpus. Use Graphify first and open known source paths directly.
+2. Document one bounded tests-first plan. Port only the closed source semantics needed to resolve editbox descriptor
+   height; do not invent row-peer inheritance or general Lua execution.
+3. Require omission-with-positive-table-default and omission-with-displayed-hotkey positives, bare omission warning,
+   literal-zero/hotkey policy, dynamic gaps, forged ownership/provenance negatives, project/package/Problems parity,
+   and an unchanged official-corpus census.
+4. After that source path is stable, return to the visible renderer gap: explain or remove the large Forge frame outline
+   and missing X4 background/alpha composition from shipped source before expanding the AI Influence reconstruction.
 
 ## Eyeball queue and release boundary
 
-- Compare exact Forge/X4 frame, button, text, and editbox edges at both retained profiles; explain or remove the large
-  frame outline and background/alpha mismatch from shipped source.
-- Exercise MENU/HUB/COMM in the real mounted editor and retain screenshots, then verify keep-out overlays.
-- Reconstruct the supplied AI Influence `1b` screen first and the remaining references only after the linter-first
-  boundary and exact source behavior are stable.
-- Preview is for layout; game is truth. Pixel similarity never promotes engine acceptance. Installed extension and
-  OpenVSX release remain unproved/unpublished.
+- Compare exact Forge/X4 frame, button, text, and editbox edges at both retained profiles; current common structure is
+  real, but frame outline and background/alpha composition still differ.
+- Exercise MENU/HUB/COMM in the mounted editor and retain screenshots, then verify measured keep-out overlays.
+- Reconstruct supplied AI Influence screen `1b` first, then remaining screens, only from visually inspected references
+  and real X4 Lua output.
+- Preview is for layout; game is truth. General C++ acceptance, exact pixels, installed-extension proof, and OpenVSX
+  release remain open. Do not publish yet.
 
 ## Triggered AAR failure shields
 
-- Never recursively search the configured 33 GB corpus for a known authoritative asset. Target reconciled files such as
-  `libraries/colors.xml`, `ui/addons/helper.lua`, or `ui/addons/widget_fullscreen.lua` directly.
-- PowerShell braced `foreach` statements cannot be piped directly; collect into an array before piping.
-- One raw oracle command targeted a dead server; use the owning isolated oracle script. Retain failed evidence.
-- A first canonical fixture simplified away source formulas, and a same-context alias decoy escaped until the exact
-  source root was pinned. Exact source identity and mutation tests remain mandatory.
-- Highest risk is a convincing preview being mistaken for game truth. Keep the disclaimer and deploy/game gate
-  authoritative while exact frame/alpha and broader Helper/widget coverage remain open.
+- A focused green linter suite does not validate severity against shipped source; run the unchanged canonical corpus.
+- Row aggregate height and widget descriptor height are different source owners. Reject wording that conflates them.
+- Package-readiness probes need a valid standalone-menu lifecycle, including `OpenMenu`, before aggregate blocking state
+  can isolate one rule.
+- Run oracles through `npm run test:oracles`; raw `oracle-sweep.mjs` needs an already-running server.
+- Never recursively search the 33 GB corpus for a known asset; open the reconciled authoritative path and exact range.
+- Highest product risk remains a convincing preview being mistaken for game truth. Keep the disclaimer and deploy/game
+  gate authoritative until exact frame/alpha, broader Helper/widget coverage, and current X4 evidence are closed.

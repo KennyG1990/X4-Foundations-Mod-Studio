@@ -184,6 +184,10 @@ coordinator accepted the diff. No unrelated metadata or generated-file churn was
 ## CLOSE
 
 - Status: **VERIFIED** for this bounded editbox-height lint calibration.
+- Source checkpoint `60dbb0a93fd9e6b7faf466218f0101d748627434` is committed and pushed with exact local
+  `HEAD`, `origin/main`, and direct remote `main` parity. Its commit hook repeated the complete precommit gate green.
+- Graphify refreshed deterministically to `9,967` nodes / `24,963` edges / `308` communities; no graph output became
+  a staged repository path.
 - Overall B119 status: **PARTIAL**. This close does not clear renderer pixel parity, complete helper/widget coverage,
   general engine acceptance, installed-extension release, or broader in-game experience proof.
 - Capability-map delta: the existing X4 UI linter claim is strengthened from a reproduced official-corpus false-fatal
@@ -191,7 +195,12 @@ coordinator accepted the diff. No unrelated metadata or generated-file churn was
   introduced.
 - Rollback remains one exact source commit after commit creation; the mod, game, corpus, and live workspace were not
   mutated.
-- Suggested commit title: `fix(ui-lint): calibrate omitted editbox height`.
+- External readback: GitHub #41 comment `5460382092`; Notion page
+  `3b84618e-d15b-8190-821e-c0eb96f43d5a`; Google Doc
+  `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, revision
+  `AIroW36P8KYF1ZNNxZJdRU5PSzdZFmgZXoaTQQcYCNFfSl3DB7YL9fHA41Mstl0lcmMPNEdjKbc9JrGW_Eu1nNZCMGbi1h9aOD_kQkUF3hzu`.
+  GitHub #41 remains open; Notion remains In Progress / Partial.
+- Commit title: `fix(ui-lint): calibrate omitted editbox height`.
 
 ## AAR
 
@@ -210,3 +219,5 @@ coordinator accepted the diff. No unrelated metadata or generated-file churn was
   future model expansion must be source-ported and corpus-tested before either warning can be narrowed further.
 - Lessons to bank: project AAR records the descriptor-height distinction and corpus-first severity calibration;
   workflow AAR records the isolated-oracle invocation and temp-cleanup failure shield.
+- Durable close: source commit `60dbb0a93fd9e6b7faf466218f0101d748627434`, GitHub comment `5460382092`, Notion
+  owner page, and Drive revision above were all written and read back with the full-B119 PARTIAL boundary intact.

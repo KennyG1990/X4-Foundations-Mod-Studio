@@ -114,6 +114,22 @@ spans, headers, status, buttons, and editbox region with retained X4 evidence, b
 missing X4 background/alpha composition. Complete linter-table reconciliation, broader shipped Helper/widget coverage,
 pixel parity, AI Influence reconstruction, installed-extension proof, and OpenVSX release remain open; B119 stays
 `in_progress / PARTIAL` and every internal preview remains `Not verified in game`.
+**Source-calibrated editbox-height lint 2026-08-29 — BOUNDED VERIFIED / FULL B119 PARTIAL:** Reopening the supplied
+linter table confirmed all eleven requested defect families already exist with positive, safe-negative,
+dynamic/unresolved, and real-failure coverage. The unchanged official X4 9.00 census then reproduced one overbroad
+post-smoke rule: `81/81/0` files produced `25` applicable fatal `x4-ui.editbox-height-minimum` findings, all for omitted
+height in shipped source. Exact `helper.lua` reconciliation proves positive row peers affect row height only, while
+table default cell properties and displayed-hotkey minimum handling are the modeled descriptor-height paths. Omitted
+call-specific height is now a visible nonblocking warning; literal zero remains a conservative blocking error; positive
+static height stays clean; dynamic height stays `Not statically verified`. Final corpus is `81/81/0`, applicable fatal
+`0`, warnings `31`; linter is `118/118`, project/IDE Problems `11/11`, direct package-readiness parity passes, isolated
+oracles are `134/134`, full lint has zero errors, build is `1,848` modules, and complete precommit passed directly and
+in the commit hook. Source commit `60dbb0a93fd9e6b7faf466218f0101d748627434` is pushed with exact three-way parity.
+GitHub #41 comment `5460382092`, Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Drive revision
+`AIroW36P8KYF1ZNNxZJdRU5PSzdZFmgZXoaTQQcYCNFfSl3DB7YL9fHA41Mstl0lcmMPNEdjKbc9JrGW_Eu1nNZCMGbi1h9aOD_kQkUF3hzu`
+were written and read back with the issue open. Table-default/hotkey modeling, exact pixel parity, general C++ frame
+acceptance, full AI Influence reconstruction, installed-extension proof, and OpenVSX release remain open; B119 stays
+`in_progress / PARTIAL` and every internal preview remains `Not verified in game`.
 **AI Influence `1b` visual reconciliation 2026-08-19 — REPRODUCED GUIDE CONFLICT:** The source pixels were re-opened
 and immutable hashes/dimensions are frozen in the plan. Forge's existing cockpit preset projects the measured guides to
 `y=1134.72`, `y=1065.6`, and `x=1699.84` at `2560x1440`; the supplied `1b` choice/input geometry intersects all three.
