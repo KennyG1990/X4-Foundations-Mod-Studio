@@ -590,10 +590,13 @@ export function runX4UiLintSelftest(): X4UiLintSelftestResult {
   check('equal row/table/frame budgets are clean', !hasCode(budgetEqual, 'x4-ui.row-height-budget') && !hasCode(budgetEqual, 'x4-ui.table-height-budget'), detail(budgetEqual));
 
   const editBoxOmitted = lint(editBoxFrame('createEditBox()'));
+  const editBoxFormerPipelineOmitted = lint(editBoxFrame('createEditBox()'), 'ui/pipeline_test.lua');
+  const editBoxCurrentPipeline = lint(editBoxFrame('createEditBox({ height = 44 })'), 'ui/pipeline_test.lua');
   const editBoxZero = lint(editBoxFrame('createEditBox({ height = 0 })'));
   const editBoxPositive = lint(editBoxFrame('createEditBox({ height = 12 })'));
   const editBoxDynamic = lint(editBoxFrame('createEditBox({ height = getHeight() })'));
   const editBoxFinding = editBoxOmitted.findings.find(finding => finding.code === 'x4-ui.editbox-height-minimum');
+  const editBoxFormerPipelineFinding = editBoxFormerPipelineOmitted.findings.find(finding => finding.code === 'x4-ui.editbox-height-minimum');
   const editBoxZeroFinding = editBoxZero.findings.find(finding => finding.code === 'x4-ui.editbox-height-minimum');
   const hasTruthfulEditBoxFailureMode = (failureMode: string | undefined): boolean => {
     const normalized = failureMode?.toLowerCase() || '';
@@ -605,19 +608,44 @@ export function runX4UiLintSelftest(): X4UiLintSelftestResult {
       && !normalized.includes('refus')
       && !normalized.includes('entire frame');
   };
-  check('omitted editbox height is a causal error', Boolean(
+  check('omitted editbox height is a nonblocking calibrated warning', Boolean(
     editBoxFinding
-      && editBoxFinding.severity === 'error'
-      && editBoxFinding.cause.includes('base cell height defaults to zero')
+      && editBoxFinding.severity === 'warning'
+      && !editBoxOmitted.hasErrors
+      && editBoxOmitted.hasWarnings
+      && editBoxFinding.cause.includes('base widget height defaults to zero')
+      && editBoxFinding.cause.includes('table default cell properties')
+      && editBoxFinding.cause.includes('displayed-hotkey minimum handling')
+      && editBoxFinding.cause.includes('positive row peers affect row height only')
       && hasTruthfulEditBoxFailureMode(editBoxFinding.failureMode)
-      && editBoxFinding.evidenceBoundary.includes('statically proven')
-      && editBoxFinding.nextAction.includes('positive height')
+      && editBoxFinding.evidenceBoundary.includes('Official X4 9.00 omission counterexamples')
+      && editBoxFinding.evidenceBoundary.includes('positive-height row contexts')
+      && editBoxFinding.evidenceBoundary.includes('row:getHeight()')
+      && editBoxFinding.evidenceBoundary.includes('does not supply the editbox descriptor height')
+      && editBoxFinding.evidenceBoundary.includes('only table default cell properties and displayed-hotkey minimum handling')
+      && editBoxFinding.nextAction.includes('explicit positive')
+      && editBoxFinding.nextAction.includes('in-game')
       && editBoxFinding.location.file === 'selftest/ui.lua'
       && editBoxFinding.location.start.line >= 1
   ), detail(editBoxOmitted));
+  check('former pipeline omitted editbox fixture is a nonblocking warning', Boolean(
+    editBoxFormerPipelineOmitted.status === 'warnings'
+      && !editBoxFormerPipelineOmitted.hasErrors
+      && editBoxFormerPipelineFinding
+      && editBoxFormerPipelineFinding.severity === 'warning'
+      && editBoxFormerPipelineFinding.location.file === 'ui/pipeline_test.lua'
+  ), detail(editBoxFormerPipelineOmitted));
+  check('current height=44 pipeline fixture is clean for the rule', editBoxCurrentPipeline.status === 'clean'
+    && !hasCode(editBoxCurrentPipeline, 'x4-ui.editbox-height-minimum'), detail(editBoxCurrentPipeline));
   check('literal-zero editbox height reports the displayed clipped field', Boolean(
     editBoxZeroFinding
       && editBoxZeroFinding.severity === 'error'
+      && editBoxZero.hasErrors
+      && editBoxZero.status === 'errors'
+      && editBoxZeroFinding.cause.includes('overrides table default cell properties')
+      && editBoxZeroFinding.cause.includes('absent the separate displayed-hotkey minimum')
+      && editBoxZeroFinding.cause.includes('positive row peers affect row height only')
+      && editBoxZeroFinding.evidenceBoundary.includes('positive row peers do not alter the editbox descriptor height')
       && hasTruthfulEditBoxFailureMode(editBoxZeroFinding.failureMode)
   ), detail(editBoxZero));
   check('positive static editbox height is clean for the rule', !hasCode(editBoxPositive, 'x4-ui.editbox-height-minimum'), detail(editBoxPositive));

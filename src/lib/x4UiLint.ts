@@ -1028,12 +1028,12 @@ class X4UiLintEvaluator {
         } else {
           this.addFinding({
             rule: X4_UI_LINT_RULES.editBoxHeightMinimum,
-            severity: 'error',
-            message: 'createEditBox outer height is omitted; Helper leaves the base cell at zero.',
-            cause: 'Helper base cell height defaults to zero when createEditBox height is omitted or literal zero.',
-            failureMode: 'X4 displays the frame, logs "Dimensions for editbox are too small ... height(0 px)" and "Editbox elements will overlap eachother", and shows the edit field clipped/overlapped.',
-            evidenceBoundary: 'Only statically proven omitted or literal-zero createEditBox outer height produces this lint error; dynamic or unresolved height remains a verification gap.',
-            nextAction: 'Add a positive height to the createEditBox outer properties and verify the rendered layout in-game.',
+            severity: 'warning',
+            message: 'createEditBox outer height is omitted; the known zero-height overlap failure remains possible, but omission alone is not universally unsafe.',
+            cause: 'Helper base widget height defaults to zero, but table default cell properties or displayed-hotkey minimum handling can supply a positive editbox descriptor height when call-specific height is omitted; positive row peers affect row height only.',
+            failureMode: 'If neither a positive table default nor displayed-hotkey minimum handling supplies the editbox descriptor height, X4 displays the frame, logs "Dimensions for editbox are too small ... height(0 px)" and "Editbox elements will overlap eachother", and shows the edit field clipped/overlapped.',
+            evidenceBoundary: 'Official X4 9.00 omission counterexamples occur in positive-height row contexts and displayed-hotkey contexts. A positive row peer can raise row:getHeight() but does not supply the editbox descriptor height; among the modeled source facts, only table default cell properties and displayed-hotkey minimum handling can do that when call-specific height is omitted. This bounded model does not resolve those descriptor paths, so omission is a nonblocking warning rather than proof of the known zero-height failure. Not verified in game.',
+            nextAction: 'Add an explicit positive outer height, or verify the effective height and rendered layout in-game; this warning is not proof of X4 frame acceptance.',
             location: call.source
           });
         }
@@ -1044,11 +1044,11 @@ class X4UiLintEvaluator {
       this.addFinding({
         rule: X4_UI_LINT_RULES.editBoxHeightMinimum,
         severity: 'error',
-        message: 'createEditBox outer height is the literal zero; Helper leaves the base cell at zero.',
-        cause: 'Helper base cell height defaults to zero when createEditBox height is omitted or literal zero.',
-        failureMode: 'X4 displays the frame, logs "Dimensions for editbox are too small ... height(0 px)" and "Editbox elements will overlap eachother", and shows the edit field clipped/overlapped.',
-        evidenceBoundary: 'Only statically proven omitted or literal-zero createEditBox outer height produces this lint error; dynamic or unresolved height remains a verification gap.',
-        nextAction: 'Add a positive height to the createEditBox outer properties and verify the rendered layout in-game.',
+        message: 'createEditBox outer height is the literal zero; it overrides a table default and remains zero unless displayed-hotkey minimum handling applies.',
+        cause: 'An explicit literal-zero outer height overrides table default cell properties and leaves the editbox descriptor at zero absent the separate displayed-hotkey minimum; positive row peers affect row height only.',
+        failureMode: 'Absent displayed-hotkey minimum handling, X4 displays the frame, logs "Dimensions for editbox are too small ... height(0 px)" and "Editbox elements will overlap eachother", and shows the edit field clipped/overlapped.',
+        evidenceBoundary: 'A literal-zero call-specific height is source-proven to override a positive table default and remain zero unless the separate displayed-hotkey minimum applies. This rule treats that literal as blocking; positive row peers do not alter the editbox descriptor height, and omitted, dynamic, and unresolved heights are outside this blocking policy. This is not proof of general X4 frame acceptance. Not verified in game.',
+        nextAction: 'Replace the literal zero with an explicit positive outer height and verify the rendered layout in-game.',
         location: heightValue.location
       });
     }

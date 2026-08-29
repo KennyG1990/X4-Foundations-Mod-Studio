@@ -17,6 +17,17 @@ const addTableFixture = (expression: string): string => [
   "",
 ].join("\n");
 
+const editBoxFixture = (call: string): string => [
+  "local menu = { name = 'B119' }",
+  "local frame = Helper.createFrameHandle(menu, { width = 100, height = 100 })",
+  "local table = frame:addTable(2, { width = 2, height = 20, scaling = false })",
+  "local row = table:addRow(nil, { borderBelow = false, scaling = false })",
+  `row[1]:${call}`,
+  "frame:display()",
+  "OpenMenu('B119', nil, nil, true)",
+  "",
+].join("\n");
+
 const projectFor = (luaPath: string, luaText: string) => ({
   id: "b119-ui-integration-selftest",
   name: "B119 UI integration selftest",
@@ -98,6 +109,60 @@ export function runX4UiIntegrationSelftest(): { pass: boolean; checks: Check[] }
         && warningDiagnostic.code === "x4-ui.add-table-column-limit"
         && warningDiagnostic.message === warningFinding?.message,
       warningDiagnostic,
+    );
+
+    const omittedPath = "ui/pipeline_test.lua";
+    const omitted = runProjectValidation(projectFor(omittedPath, editBoxFixture("createEditBox()")));
+    const omittedFlat = flattenProjectValidation(omitted);
+    const omittedFindings = targetFindings(omittedFlat, "x4-ui.editbox-height-minimum", omittedPath);
+    const omittedFinding = omittedFindings[0];
+    const omittedMapped = mapFlatFindings(omittedFindings, ["content.xml", omittedPath]).byFile.get(omittedPath) || [];
+    const omittedDiagnostic = omittedMapped[0];
+    check(
+      "omitted_editbox_height_is_one_nonblocking_project_warning",
+      omitted.ok
+        && omittedFindings.length === 1
+        && omittedFinding?.severity === "warning"
+        && omittedFinding.line === 5
+        && /known zero-height overlap failure/i.test(omittedFinding.message)
+        && /in-game/i.test(omittedFinding.message),
+      omittedFindings,
+    );
+    check(
+      "omitted_editbox_height_problems_mapping_preserves_parity",
+      omittedMapped.length === 1
+        && omittedDiagnostic?.relPath === omittedPath
+        && omittedDiagnostic.line === 4
+        && omittedDiagnostic.severity === "warning"
+        && omittedDiagnostic.code === "x4-ui.editbox-height-minimum"
+        && omittedDiagnostic.message === omittedFinding?.message,
+      omittedDiagnostic,
+    );
+
+    const zeroPath = "ui/pipeline_zero_height.lua";
+    const zero = runProjectValidation(projectFor(zeroPath, editBoxFixture("createEditBox({ height = 0 })")));
+    const zeroFlat = flattenProjectValidation(zero);
+    const zeroFindings = targetFindings(zeroFlat, "x4-ui.editbox-height-minimum", zeroPath);
+    const zeroFinding = zeroFindings[0];
+    const zeroMapped = mapFlatFindings(zeroFindings, ["content.xml", zeroPath]).byFile.get(zeroPath) || [];
+    const zeroDiagnostic = zeroMapped[0];
+    check(
+      "literal_zero_editbox_height_is_one_blocking_project_error",
+      !zero.ok
+        && zeroFindings.length === 1
+        && zeroFinding?.severity === "error"
+        && zeroFinding.line === 5,
+      zeroFindings,
+    );
+    check(
+      "literal_zero_editbox_height_problems_mapping_preserves_parity",
+      zeroMapped.length === 1
+        && zeroDiagnostic?.relPath === zeroPath
+        && zeroDiagnostic.line === 4
+        && zeroDiagnostic.severity === "error"
+        && zeroDiagnostic.code === "x4-ui.editbox-height-minimum"
+        && zeroDiagnostic.message === zeroFinding?.message,
+      zeroDiagnostic,
     );
 
     const dynamicPath = "ui/dynamic_columns.lua";
