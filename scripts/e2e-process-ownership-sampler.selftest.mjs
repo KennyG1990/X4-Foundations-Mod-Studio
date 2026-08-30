@@ -11,6 +11,22 @@ const ROOT_TOKEN = '20260802043333.860108-240';
 const CHILD_TOKEN = '20260802043334.860108-240';
 const SNAPSHOT_TIMEOUT_MS = 1234;
 const SNAPSHOT_MAX_BUFFER = 4 * 1024 * 1024;
+const WINDOWS_PROCESS_TABLE_SCRIPT = [
+  "$ErrorActionPreference = 'Stop';",
+  "$ProgressPreference = 'SilentlyContinue';",
+  "'Node,CreationDate,ParentProcessId,ProcessId';",
+  'Get-CimInstance -ClassName Win32_Process -Property CreationDate,ParentProcessId,ProcessId | ForEach-Object {',
+  "if ($null -eq $_.CreationDate -or $null -eq $_.ParentProcessId -or $null -eq $_.ProcessId) { throw 'incomplete Win32_Process row' };",
+  "\"{0},{1},{2},{3}\" -f '.', [System.Management.ManagementDateTimeConverter]::ToDmtfDateTime($_.CreationDate), $_.ParentProcessId, $_.ProcessId",
+  '}',
+].join(' ');
+const WINDOWS_PROCESS_TABLE_ARGS = [
+  '-NoLogo',
+  '-NoProfile',
+  '-NonInteractive',
+  '-Command',
+  WINDOWS_PROCESS_TABLE_SCRIPT,
+];
 const ROOT = { pid: ROOT_PID, creationToken: ROOT_TOKEN };
 const CHILD = { pid: CHILD_PID, creationToken: CHILD_TOKEN };
 const ERR_INVALID_INPUT = 'spawned-ownership-invalid-input';
@@ -26,24 +42,26 @@ const wmicCsv = (...rows) =>
     ...rows,
   ].join('\n');
 
+const assertProcessTableInvocation = (command, args, options, timeoutMs, callback) => {
+  assert.equal(command, 'powershell.exe');
+  assert.deepEqual(args, WINDOWS_PROCESS_TABLE_ARGS);
+  assert.deepEqual(options, {
+    shell: false,
+    windowsHide: true,
+    encoding: 'utf8',
+    timeout: timeoutMs,
+    maxBuffer: SNAPSHOT_MAX_BUFFER,
+    killSignal: 'SIGKILL',
+  });
+  assert.equal(typeof callback, 'function');
+};
+
 const makeFakeExecFile = (csv) => {
   let calls = 0;
 
   const execFile = (command, args, options, callback) => {
     calls += 1;
-    assert.equal(command, 'wmic.exe');
-    assert.deepEqual(args, [
-      'process',
-      'get',
-      'CreationDate,ParentProcessId,ProcessId',
-      '/format:csv',
-    ]);
-    assert.equal(options.shell, false);
-    assert.equal(options.windowsHide, true);
-    assert.equal(options.encoding, 'utf8');
-    assert.equal(options.timeout, SNAPSHOT_TIMEOUT_MS);
-    assert.equal(options.maxBuffer, SNAPSHOT_MAX_BUFFER);
-    assert.equal(options.killSignal, 'SIGKILL');
+    assertProcessTableInvocation(command, args, options, SNAPSHOT_TIMEOUT_MS, callback);
     callback(null, csv, '');
     return { kill() {} };
   };
@@ -57,19 +75,7 @@ const makeSnapshotResponseExecFile = (respond) => {
 
   const execFile = (command, args, options, callback) => {
     calls += 1;
-    assert.equal(command, 'wmic.exe');
-    assert.deepEqual(args, [
-      'process',
-      'get',
-      'CreationDate,ParentProcessId,ProcessId',
-      '/format:csv',
-    ]);
-    assert.equal(options.shell, false);
-    assert.equal(options.windowsHide, true);
-    assert.equal(options.encoding, 'utf8');
-    assert.equal(options.timeout, SNAPSHOT_TIMEOUT_MS);
-    assert.equal(options.maxBuffer, SNAPSHOT_MAX_BUFFER);
-    assert.equal(options.killSignal, 'SIGKILL');
+    assertProcessTableInvocation(command, args, options, SNAPSHOT_TIMEOUT_MS, callback);
     respond(callback);
     return { kill() {} };
   };
@@ -370,20 +376,7 @@ const runCase7 = async () => {
   let helperKillCalls = 0;
   const fakeExecFile = (command, args, options, callback) => {
     execCalls += 1;
-    assert.equal(command, 'wmic.exe');
-    assert.deepEqual(args, [
-      'process',
-      'get',
-      'CreationDate,ParentProcessId,ProcessId',
-      '/format:csv',
-    ]);
-    assert.equal(options.shell, false);
-    assert.equal(options.windowsHide, true);
-    assert.equal(options.encoding, 'utf8');
-    assert.equal(options.timeout, 10);
-    assert.equal(options.maxBuffer, SNAPSHOT_MAX_BUFFER);
-    assert.equal(options.killSignal, 'SIGKILL');
-    assert.equal(typeof callback, 'function');
+    assertProcessTableInvocation(command, args, options, 10, callback);
     return {
       kill() {
         helperKillCalls += 1;

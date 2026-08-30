@@ -15,6 +15,8 @@ const MAX_VERIFICATION_GAPS = 128;
 const RELEVANT_CALL_NAMES = new Set<X4UiRelevantCallName>([
   'createFrameHandle',
   'addTable',
+  'setDefaultCellProperties',
+  'setDefaultComplexCellProperties',
   'setColWidthPercent',
   'setColWidth',
   'addRow',
@@ -25,12 +27,19 @@ const RELEVANT_CALL_NAMES = new Set<X4UiRelevantCallName>([
   'setText2',
   'createText',
   'createEditBox',
+  'setHotkey',
   'createButton',
   'createIcon',
   'scaleX',
   'scaleY',
   'scaleFont'
 ]);
+
+/** Shipped fluent button methods that preserve a tracked button receiver without a relevant call record. */
+const SELF_RETURNING_BUTTON_METHODS = new Set(['setIcon', 'setIcon2']);
+
+/** Shipped fluent button setters permitted between createButton and setHotkey. */
+const SELF_RETURNING_BUTTON_CHAIN_METHODS = new Set(['setText', 'setText2', ...SELF_RETURNING_BUTTON_METHODS]);
 
 const KNOWN_X4_GLOBALS = new Set(['Helper', 'Menus', 'OpenMenu', 'widgetSystem']);
 
@@ -51,6 +60,9 @@ const V1_PROPERTY_NAMES_BY_CALL: Readonly<Record<string, readonly string[]>> = {
     'x', 'y', 'width', 'tabOrder', 'backgroundID', 'backgroundColor', 'highlightMode',
     'maxVisibleHeight', 'reserveScrollBar', 'scaling'
   ],
+  setDefaultCellProperties: ['height', 'scaling'],
+  setDefaultComplexCellProperties: ['hotkey', 'displayIcon'],
+  setHotkey: ['hotkey', 'displayIcon'],
   addRow: ['height', 'paddingTop', 'paddingBottom', 'borderBelow', 'fixed', 'scaling', 'interactive'],
   createText: [
     'color', 'fontsize', 'halign', 'wordwrap', 'font', 'cellBGColor', 'x', 'y', 'width', 'height', 'scaling',
@@ -255,6 +267,8 @@ export interface X4UiFunctionContext {
 export type X4UiRelevantCallName =
   | 'createFrameHandle'
   | 'addTable'
+  | 'setDefaultCellProperties'
+  | 'setDefaultComplexCellProperties'
   | 'setColWidthPercent'
   | 'setColWidth'
   | 'addRow'
@@ -265,6 +279,7 @@ export type X4UiRelevantCallName =
   | 'setText2'
   | 'createText'
   | 'createEditBox'
+  | 'setHotkey'
   | 'createButton'
   | 'createIcon'
   | 'scaleX'
@@ -420,6 +435,10 @@ export interface X4UiCallSemantics {
   table?: X4UiValue;
   row?: X4UiValue;
   cell?: X4UiValue;
+  cellType?: X4UiValue;
+  propertyName?: X4UiValue;
+  hotkey?: X4UiValue;
+  displayIcon?: X4UiValue;
   dataFlow?: X4UiValue;
   text?: X4UiValue;
   editBox?: X4UiEditBoxSemantics;
@@ -702,6 +721,8 @@ interface InternalValue {
   /** AST node at the exact value use; private source evidence only. */
   sourceNode?: LuaNode;
   object?: TrackedObject;
+  /** Private row provenance retained across conservative control-flow merges. */
+  rowBindingEvidence?: boolean;
   functionNode?: LuaNode;
   localFunction?: InternalLocalFunction;
   helperAlias?: InternalHelperAlias;
@@ -967,6 +988,7 @@ class X4UiCallModelBuilder {
   private nextObjectId = 1;
   private nextRecordTie = 1;
   private gapsTruncated = false;
+  private verificationGapSuppressionDepth = 0;
   private functionAnalysisDepth = 0;
   private currentStatement: LuaNode | undefined;
   private currentStandaloneCallStatementRoot: LuaNode | undefined;
@@ -1311,6 +1333,7 @@ class X4UiCallModelBuilder {
     reason: string,
     expression = this.input.text.slice(source.start.offset, source.end.offset)
   ): void {
+    if (this.verificationGapSuppressionDepth > 0) return;
     const key = `${category}|${status}|${source.start.offset}|${source.end.offset}`;
     if (this.gapKeys.has(key)) return;
     this.gapKeys.add(key);
@@ -1319,6 +1342,15 @@ class X4UiCallModelBuilder {
       return;
     }
     this.gaps.push({ category, status, expression, reason, source });
+  }
+
+  private withVerificationGapsSuppressed<T>(action: () => T): T {
+    this.verificationGapSuppressionDepth += 1;
+    try {
+      return action();
+    } finally {
+      this.verificationGapSuppressionDepth -= 1;
+    }
   }
 
   private addValueGap(category: X4UiVerificationGapCategory, value: InternalValue, reason: string): void {
@@ -1912,6 +1944,66 @@ class X4UiCallModelBuilder {
     return { method: 'unknown', calleeNode: base, args };
   }
 
+  private sourceProvenButtonHotkeyChain(node: LuaNode): LuaNode | undefined {
+    const hotkeyShape = this.callShape(node);
+    if (hotkeyShape.name !== 'setHotkey' || hotkeyShape.method !== ':' || !hotkeyShape.receiver) return undefined;
+
+    const statementRange = nodeRange(this.currentStatement);
+    const hotkeyRange = nodeRange(node);
+    if (!statementRange || !hotkeyRange
+      || hotkeyRange[0] < statementRange[0] || hotkeyRange[1] > statementRange[1]) return undefined;
+
+    let candidate = hotkeyShape.receiver;
+    while (candidate.type === 'CallExpression') {
+      const candidateRange = nodeRange(candidate);
+      if (!candidateRange
+        || candidateRange[0] < hotkeyRange[0]
+        || candidateRange[1] > hotkeyRange[1]) return undefined;
+
+      const candidateShape = this.callShape(candidate);
+      if (candidateShape.method !== ':' || !candidateShape.name || !candidateShape.receiver) return undefined;
+
+      if (candidateShape.name === 'createButton') {
+        const base = candidateShape.receiver;
+        const index = nodeField<LuaNode>(base, 'index');
+        const baseNode = nodeField<LuaNode>(base, 'base');
+        const baseName = nodeField<string>(baseNode, 'name');
+        if (base.type !== 'IndexExpression'
+          || baseNode?.type !== 'Identifier'
+          || !baseName
+          || !this.hasRowBindingEvidence(baseName)
+          || (staticString(index) === undefined && staticNumber(index) === undefined)) return undefined;
+
+        const createCalleeOffset = this.sourceOffset(candidateShape.calleeNode);
+        const hotkeyCalleeOffset = this.sourceOffset(hotkeyShape.calleeNode);
+        if (createCalleeOffset >= hotkeyCalleeOffset || candidateRange[1] > hotkeyRange[1]) return undefined;
+        return candidate;
+      }
+
+      if (!SELF_RETURNING_BUTTON_CHAIN_METHODS.has(candidateShape.name)) return undefined;
+      candidate = candidateShape.receiver;
+    }
+
+    return undefined;
+  }
+
+  private hasRowBindingEvidence(name: string): boolean {
+    const value = this.bindings.get(name)?.value;
+    return value?.object?.reference.kind === 'row' || value?.rowBindingEvidence === true;
+  }
+
+  private structuralButtonCell(
+    createButtonNode: LuaNode,
+  ): InternalValue {
+    const createButtonShape = this.callShape(createButtonNode);
+    const base = createButtonShape.receiver;
+    const cell = this.newObject('cell', base, 'index', undefined, undefined, false);
+    const path = this.expressionPath(base);
+    if (path) cell.reference.path = path;
+    cell.cellKind = 'button';
+    return this.referenceValue(cell, base);
+  }
+
   private rawgetHelperAliasCandidate(node: LuaNode, shape: CallShape): InternalValue | undefined {
     if (shape.name !== 'rawget') return undefined;
     const callSource = this.location(node);
@@ -2002,9 +2094,18 @@ class X4UiCallModelBuilder {
   ): InternalValue {
     const shape = this.callShape(node);
     const receiver = shape.receiver ? this.evaluate(shape.receiver, context) : undefined;
-    const args = shape.args.map(argument => this.evaluate(argument, context));
+    const evaluated = this.evaluateCallArguments(node, shape, receiver, context);
+    const args = evaluated.args;
     const helperAliasCandidate = this.rawgetHelperAliasCandidate(node, shape);
     if (helperAliasCandidate) return helperAliasCandidate;
+
+    if (shape.method === ':'
+      && shape.name
+      && SELF_RETURNING_BUTTON_METHODS.has(shape.name)
+      && receiver?.object?.reference.kind === 'cell'
+      && receiver.object.cellKind === 'button') {
+      return this.referenceValue(receiver.object, node, receiver.publicValue.status);
+    }
 
     const directBinding = shape.method === 'direct' && shape.name ? this.bindings.get(shape.name) : undefined;
     if (directBinding?.value.localFunction) {
@@ -2041,7 +2142,9 @@ class X4UiCallModelBuilder {
       );
       return this.dynamic(node, 'expression', `${name} result is not modeled`);
     }
-    const analyzed = this.analyzeRelevantCall(name, node, args, receiver, context);
+    const analyzed = evaluated.provablyIrrelevantToEditBox
+      ? this.withVerificationGapsSuppressed(() => this.analyzeRelevantCall(name, node, args, receiver, context))
+      : this.analyzeRelevantCall(name, node, args, receiver, context);
     const record: X4UiCallRecord = {
       recordType: 'call',
       name,
@@ -2078,6 +2181,67 @@ class X4UiCallModelBuilder {
       };
     }
     return result;
+  }
+
+  private evaluateCallArguments(
+    node: LuaNode,
+    shape: CallShape,
+    receiver: InternalValue | undefined,
+    context: X4UiFunctionContext,
+  ): { readonly args: InternalValue[]; readonly provablyIrrelevantToEditBox: boolean } {
+    const evaluate = (argument: LuaNode, suppressGaps: boolean): InternalValue => suppressGaps
+      ? this.withVerificationGapsSuppressed(() => this.evaluate(argument, context))
+      : this.evaluate(argument, context);
+    const staticStringValue = (value: InternalValue | undefined): string | undefined =>
+      value?.publicValue.status === 'static'
+        && value.publicValue.type === 'string'
+        && typeof value.publicValue.value === 'string'
+        ? value.publicValue.value
+        : undefined;
+
+    if (shape.receiver && shape.name === 'setDefaultCellProperties') {
+      const first = shape.args[0] ? evaluate(shape.args[0], false) : undefined;
+      const cellType = staticStringValue(first);
+      const irrelevant = cellType !== undefined && cellType !== 'editbox';
+      return {
+        args: [
+          ...(first ? [first] : []),
+          ...shape.args.slice(1).map(argument => evaluate(argument, irrelevant)),
+        ],
+        provablyIrrelevantToEditBox: irrelevant,
+      };
+    }
+
+    if (shape.receiver && shape.name === 'setDefaultComplexCellProperties') {
+      const first = shape.args[0] ? evaluate(shape.args[0], false) : undefined;
+      const cellType = staticStringValue(first);
+      const nonEditBox = cellType !== undefined && cellType !== 'editbox';
+      const second = shape.args[1] ? evaluate(shape.args[1], nonEditBox) : undefined;
+      const propertyName = staticStringValue(second);
+      const wrongEditBoxProperty = cellType === 'editbox'
+        && propertyName !== undefined
+        && propertyName !== 'hotkey';
+      const irrelevant = nonEditBox || wrongEditBoxProperty;
+      return {
+        args: [
+          ...(first ? [first] : []),
+          ...(second ? [second] : []),
+          ...shape.args.slice(2).map(argument => evaluate(argument, irrelevant)),
+        ],
+        provablyIrrelevantToEditBox: irrelevant,
+      };
+    }
+
+    const trackedButtonHotkey = shape.receiver !== undefined
+      && shape.name === 'setHotkey'
+      && shape.method === ':'
+      && receiver?.object?.reference.kind === 'cell'
+      && receiver.object.cellKind === 'button';
+    const buttonHotkey = trackedButtonHotkey || this.sourceProvenButtonHotkeyChain(node) !== undefined;
+    return {
+      args: shape.args.map(argument => evaluate(argument, buttonHotkey)),
+      provablyIrrelevantToEditBox: buttonHotkey,
+    };
   }
 
   private analyzeRelevantCall(
@@ -2129,6 +2293,44 @@ class X4UiCallModelBuilder {
         this.copyOptionFields(table, options);
         return table;
       }
+      case 'setDefaultCellProperties': {
+        const cellType = this.requiredArgument(args, 0, 'data-flow', 'default cell-properties type', node);
+        semantics.cellType = cellType.publicValue;
+        const options = this.requiredArgument(args, 1, 'property', 'default cell-properties table', node);
+        this.setOptionProjection(semantics, options, name, node);
+        const height = this.propertyField(options, ['height'], 'default edit-box height');
+        const scaling = this.propertyField(options, ['scaling'], 'default edit-box scaling');
+        if (height) {
+          this.addValueGap('height', height, 'default edit-box height is dynamic or unknown');
+          semantics.height = height.publicValue;
+        }
+        if (scaling) {
+          this.addValueGap('data-flow', scaling, 'default edit-box scaling is dynamic or unknown');
+          semantics.scaling = scaling.publicValue;
+        }
+        this.attachExactReceiver(semantics, receiver, 'table', node, 'table used for setDefaultCellProperties');
+        return receiver?.object;
+      }
+      case 'setDefaultComplexCellProperties': {
+        const cellType = this.requiredArgument(args, 0, 'data-flow', 'default complex cell-properties type', node);
+        const propertyName = this.requiredArgument(args, 1, 'property', 'default complex cell property name', node);
+        semantics.cellType = cellType.publicValue;
+        semantics.propertyName = propertyName.publicValue;
+        const options = this.requiredArgument(args, 2, 'property', 'default complex cell-properties table', node);
+        this.setOptionProjection(semantics, options, name, node);
+        const hotkey = this.propertyField(options, ['hotkey'], 'default edit-box hotkey');
+        const displayIcon = this.propertyField(options, ['displayIcon'], 'default edit-box displayIcon');
+        if (hotkey) {
+          this.addValueGap('edit-box', hotkey, 'default edit-box hotkey is dynamic or unknown');
+          semantics.hotkey = hotkey.publicValue;
+        }
+        if (displayIcon) {
+          this.addValueGap('edit-box', displayIcon, 'default edit-box displayIcon is dynamic or unknown');
+          semantics.displayIcon = displayIcon.publicValue;
+        }
+        this.attachExactReceiver(semantics, receiver, 'table', node, 'table used for setDefaultComplexCellProperties');
+        return receiver?.object;
+      }
       case 'addRow': {
         const options = args[1];
         if (args[0]) {
@@ -2168,6 +2370,40 @@ class X4UiCallModelBuilder {
         const span = this.requiredArgument(args, 0, 'span', 'column span', node);
         semantics.span = span.publicValue;
         this.attachReceiver(semantics, receiver, 'cell', node, 'cell used for setColSpan');
+        return receiver?.object;
+      }
+      case 'setHotkey': {
+        const hotkey = this.requiredArgument(args, 0, 'edit-box', 'edit-box hotkey', node);
+        semantics.hotkey = hotkey.publicValue;
+        const options = args[1];
+        this.setOptionProjection(semantics, options, name, node);
+        const displayIcon = this.propertyField(options, ['displayIcon'], 'edit-box displayIcon');
+        if (displayIcon) {
+          this.addValueGap('edit-box', displayIcon, 'edit-box displayIcon is dynamic or unknown');
+          semantics.displayIcon = displayIcon.publicValue;
+        }
+        const trackedButton = this.callShape(node).method === ':'
+          && receiver?.object?.reference.kind === 'cell'
+          && receiver.object.cellKind === 'button';
+        if (trackedButton && receiver) {
+          semantics.cell = receiver.publicValue;
+          return receiver.object;
+        }
+        const structuralButton = this.sourceProvenButtonHotkeyChain(node);
+        if (structuralButton) {
+          const cell = this.structuralButtonCell(structuralButton);
+          semantics.cell = cell.publicValue;
+          return cell.object;
+        }
+        this.attachExactReceiver(semantics, receiver, 'cell', node, 'edit-box used for setHotkey');
+        if (receiver?.object?.reference.kind === 'cell' && receiver.object.cellKind !== 'editbox') {
+          this.addGap(
+            'data-flow',
+            'unsupported',
+            this.location(node),
+            `setHotkey receiver is tracked as ${receiver.object.cellKind || 'base'} rather than an edit-box cell`
+          );
+        }
         return receiver?.object;
       }
       case 'display':
@@ -2635,18 +2871,23 @@ class X4UiCallModelBuilder {
       };
       const fields = [...options.object.fields.entries()];
       semantics.properties = fields.filter(([name]) => wanted.has(normalizePropertyName(name))).map(project);
-      if (callName === 'setText' || callName === 'setText2') {
+      if (callName === 'setText' || callName === 'setText2'
+        || callName === 'setDefaultCellProperties'
+        || callName === 'setDefaultComplexCellProperties'
+        || callName === 'setHotkey') {
         const unsupported = fields.filter(([name]) => !wanted.has(normalizePropertyName(name))).map(project);
         if (unsupported.length > 0) {
           semantics.unsupportedProperties = unsupported;
-          for (const projected of unsupported) {
-            this.addGap(
-              'property',
-              'unsupported',
-              projected.source,
-              `${callName} property ${projected.name} is not part of shipped textproperty`,
-              projected.value.expression
-            );
+          if (callName === 'setText' || callName === 'setText2') {
+            for (const projected of unsupported) {
+              this.addGap(
+                'property',
+                'unsupported',
+                projected.source,
+                `${callName} property ${projected.name} is not part of shipped textproperty`,
+                projected.value.expression
+              );
+            }
           }
         }
       }
@@ -2778,6 +3019,35 @@ class X4UiCallModelBuilder {
       ? actual === 'cell' || actual === 'row' || actual === 'table'
       : actual === expected;
     if (!compatible) {
+      const mismatch = this.dynamic(node, 'reference', `${label} has tracked kind ${actual}, expected ${expected}`);
+      semantics.dataFlow = mismatch.publicValue;
+      this.addValueGap('data-flow', mismatch, `${label} receiver kind is not statically compatible`);
+    }
+  }
+
+  private attachExactReceiver(
+    semantics: X4UiCallSemantics,
+    receiver: InternalValue | undefined,
+    expected: 'table' | 'cell',
+    node: LuaNode,
+    label: string
+  ): void {
+    const field = expected;
+    if (receiver) semantics[field] = receiver.publicValue;
+    if (this.callShape(node).method !== ':') {
+      const method = this.dynamic(node, 'reference', `${label} must use the shipped colon-method call shape`);
+      semantics.dataFlow = method.publicValue;
+      this.addValueGap('unsupported', method, `${label} uses an unsupported receiver/method shape`);
+      return;
+    }
+    if (!receiver || receiver.publicValue.status !== 'static' || !receiver.object?.known) {
+      const unresolved = receiver || this.unknown(node, 'reference', `${label} is unresolved`);
+      semantics.dataFlow = unresolved.publicValue;
+      this.addValueGap('data-flow', unresolved, `${label} data-flow is dynamic or unknown`);
+      return;
+    }
+    const actual = receiver.object.reference.kind;
+    if (actual !== expected) {
       const mismatch = this.dynamic(node, 'reference', `${label} has tracked kind ${actual}, expected ${expected}`);
       semantics.dataFlow = mismatch.publicValue;
       this.addValueGap('data-flow', mismatch, `${label} receiver kind is not statically compatible`);
@@ -3348,10 +3618,12 @@ class X4UiCallModelBuilder {
     }
   }
 
-  private processStatements(statements: LuaNode[], bindings: Map<string, Binding>, context: X4UiFunctionContext): void {
+  private processStatements(statements: LuaNode[], bindings: Map<string, Binding>, context: X4UiFunctionContext): Map<string, Binding> {
     const previousBindings = this.replaceBindings(bindings);
     for (const statement of statements) this.processStatement(statement, bindings, context);
+    const result = new Map(this.bindings);
     this.restoreBindings(previousBindings);
+    return result;
   }
 
   private replaceBindings(bindings: Map<string, Binding>): Map<string, Binding> {
@@ -3484,7 +3756,9 @@ class X4UiCallModelBuilder {
   private invalidateControlFlowBindings(
     reassignments: Set<string>,
     preBodyBindings: Map<string, Binding>,
-    boundary: LuaNode
+    boundary: LuaNode,
+    bodyResults: readonly Map<string, Binding>[],
+    preBodyPathPossible: boolean
   ): void {
     for (const name of reassignments) {
       const binding = preBodyBindings.get(name);
@@ -3495,8 +3769,41 @@ class X4UiCallModelBuilder {
           'identifier',
           `identifier "${name}" may be reassigned in a control-flow block`,
           name
-        )
+        ),
+        source: binding.source
       });
+    }
+    this.preserveControlFlowRowEvidence(preBodyBindings, bodyResults, boundary, preBodyPathPossible);
+  }
+
+  private isRowBinding(binding: Binding | undefined): boolean {
+    const value = binding?.value;
+    return value?.object?.reference.kind === 'row' || value?.rowBindingEvidence === true;
+  }
+
+  private preserveControlFlowRowEvidence(
+    preBodyBindings: Map<string, Binding>,
+    bodyResults: readonly Map<string, Binding>[],
+    boundary: LuaNode,
+    preBodyPathPossible: boolean
+  ): void {
+    if (bodyResults.length === 0) return;
+    const names = new Set(preBodyBindings.keys());
+    for (const result of bodyResults) for (const name of result.keys()) names.add(name);
+
+    for (const name of names) {
+      if (preBodyPathPossible && !this.isRowBinding(preBodyBindings.get(name))) continue;
+      if (!bodyResults.every(result => this.isRowBinding(result.get(name)))) continue;
+      const binding = this.bindings.get(name);
+      if (!binding || this.isRowBinding(binding)) continue;
+      const value = this.unknown(
+        boundary,
+        'identifier',
+        `identifier "${name}" resolves to a row-shaped control-flow result`,
+        name
+      );
+      value.rowBindingEvidence = true;
+      this.bindings.set(name, { value, source: binding.source });
     }
   }
 
@@ -3576,10 +3883,12 @@ class X4UiCallModelBuilder {
     context: X4UiFunctionContext,
     boundary: LuaNode,
     loopStatement?: LuaNode,
-    bodyContexts?: readonly X4UiFunctionContext[]
+    bodyContexts?: readonly X4UiFunctionContext[],
+    preBodyPathPossible = false
   ): void {
     const preBodyBindings = new Map(this.bindings);
     const reassignments = new Set<string>();
+    const bodyResults: Map<string, Binding>[] = [];
     const mutationState: ControlFlowMutationState = {
       functionAnalysisDepth: this.functionAnalysisDepth,
       propertyMutations: new Map(),
@@ -3593,7 +3902,7 @@ class X4UiCallModelBuilder {
       const bodyBindings = loopStatement ? this.loopBodyBindings(preBodyBindings, loopStatement) : new Map(preBodyBindings);
       this.controlFlowMutationStates.push(mutationState);
       try {
-        this.processStatements(body, bodyBindings, bodyContexts?.[bodyIndex] || context);
+        bodyResults.push(this.processStatements(body, bodyBindings, bodyContexts?.[bodyIndex] || context));
       } finally {
         this.controlFlowMutationStates.pop();
       }
@@ -3601,7 +3910,13 @@ class X4UiCallModelBuilder {
     for (const name of mutationState.preservedHelperAliases) {
       if (!mutationState.invalidatedHelperAliases.has(name)) reassignments.delete(name);
     }
-    this.invalidateControlFlowBindings(reassignments, preBodyBindings, boundary);
+    this.invalidateControlFlowBindings(
+      reassignments,
+      preBodyBindings,
+      boundary,
+      bodyResults,
+      preBodyPathPossible,
+    );
     this.invalidateControlFlowProperties(mutationState, boundary);
   }
 
@@ -3656,7 +3971,8 @@ class X4UiCallModelBuilder {
           context,
           statement,
           undefined,
-          this.ifBranchContexts(statement, context, conditions)
+          this.ifBranchContexts(statement, context, conditions),
+          !hasElseClause && elseBody.length === 0
         );
         break;
       }
@@ -3667,7 +3983,8 @@ class X4UiCallModelBuilder {
           context,
           statement,
           undefined,
-          [this.loopContext(context, statement, 'while')]
+          [this.loopContext(context, statement, 'while')],
+          true
         );
         break;
       case 'RepeatStatement':
@@ -3691,7 +4008,8 @@ class X4UiCallModelBuilder {
           context,
           statement,
           statement,
-          [this.loopContext(context, statement, 'numeric-for')]
+          [this.loopContext(context, statement, 'numeric-for')],
+          true
         );
         break;
       case 'ForGenericStatement':
@@ -3701,7 +4019,8 @@ class X4UiCallModelBuilder {
           context,
           statement,
           statement,
-          [this.loopContext(context, statement, 'generic-for')]
+          [this.loopContext(context, statement, 'generic-for')],
+          true
         );
         break;
       case 'DoStatement':

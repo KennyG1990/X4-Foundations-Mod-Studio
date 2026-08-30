@@ -678,6 +678,366 @@ const run = (): { readonly allPassed: boolean; readonly passed: number; readonly
       refusal: refusalCode(b119PropagatedLayerResult),
     }));
 
+  const b119EditBoxHeightSource = [
+    'local menu = { name = "B119EditBoxHeight", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'table:setDefaultCellProperties("editbox", { height = 4, scaling = true })',
+    'table:setDefaultComplexCellProperties("editbox", "hotkey", { hotkey = "FIRST", displayIcon = true })',
+    'local firstRow = table:addRow(false, { scaling = false })',
+    'local first = firstRow[1]:createEditBox({})',
+    'table:setDefaultCellProperties("editbox", { height = 40, scaling = false })',
+    'table:setDefaultComplexCellProperties("editbox", "hotkey", { hotkey = "SECOND" })',
+    'local secondRow = table:addRow(false, { scaling = false })',
+    'local second = secondRow[1]:createEditBox({})',
+    'local thirdRow = table:addRow(false, { scaling = false })',
+    'local third = thirdRow[1]:createEditBox({ height = 0, scaling = true })',
+    'third:setHotkey("", { displayIcon = false })',
+    'local fourthRow = table:addRow(false, { scaling = false })',
+    'local fourth = fourthRow[1]:createEditBox({ height = 7, scaling = true })',
+    'fourth:setHotkey("FOURTH", { displayIcon = true })',
+    'frame:display()',
+  ].join('\n');
+  const b119EditBoxHeightModel = buildX4UiCallModel(input(
+    b119EditBoxHeightSource,
+    'selftest/b119-editbox-descriptor-height.lua',
+  ));
+  const b119EditBoxHeightResult = projectX4UiLayoutProgram(
+    b119EditBoxHeightModel,
+    topTarget(b119EditBoxHeightModel),
+    profileFor(b119EditBoxHeightModel, { uiScale: 1.5 }),
+  );
+  const b119EditBoxHeightProgram = programOf(b119EditBoxHeightResult);
+  const b119EditBoxHeightAuthority = evidenceAuthorityOf(b119EditBoxHeightResult);
+  const b119EditBoxHeightTable = b119EditBoxHeightProgram.tables[0];
+  const b119EditBoxCells = ['firstRow[1]', 'secondRow[1]', 'thirdRow[1]', 'fourthRow[1]']
+    .map(path => b119EditBoxHeightProgram.cells.find(candidate => candidate.identity?.path === path));
+  const b119EditBoxCreates = b119EditBoxHeightProgram.operations.filter(candidate => candidate.kind === 'createEditBox');
+  const b119EditBoxDirects = b119EditBoxHeightProgram.operations.filter(candidate => candidate.kind === 'setHotkey');
+  const b119EditBoxDefaultOperations = b119EditBoxHeightProgram.operations.filter(candidate =>
+    candidate.kind === 'setDefaultCellProperties' || candidate.kind === 'setDefaultComplexCellProperties');
+  check('B119 editbox defaults and direct hotkeys project through the real kernel with source order and final geometry',
+    b119EditBoxHeightResult.status !== 'refused'
+      && b119EditBoxHeightAuthority !== undefined
+      && validateX4UiLayoutEvidencePair(b119EditBoxHeightProgram, b119EditBoxHeightAuthority).valid
+      && b119EditBoxDefaultOperations.length === 4
+      && b119EditBoxDefaultOperations.every(candidate => candidate.status === 'applied')
+      && b119EditBoxCreates.length === 4
+      && b119EditBoxCreates.every(candidate => candidate.status === 'applied')
+      && b119EditBoxDirects.length === 2
+      && b119EditBoxDirects.every(candidate => candidate.status === 'applied')
+      && b119EditBoxHeightTable.kernelState?.editBoxDefaults.height === 40
+      && b119EditBoxHeightTable.kernelState?.editBoxDefaults.scaling === false
+      && b119EditBoxHeightTable.kernelState?.editBoxDefaults.hotkey === 'SECOND'
+      && b119EditBoxHeightTable.kernelState?.editBoxDefaults.displayIcon === true
+      && b119EditBoxCells[0]?.kernelState?.height === 4
+      && b119EditBoxCells[0]?.kernelState?.scaling === true
+      && b119EditBoxCells[0]?.kernelState?.hotkey === 'FIRST'
+      && b119EditBoxCells[0]?.kernelState?.displayIcon === true
+      && b119EditBoxCells[0]?.descriptorFacts.outerHeight?.status === 'known'
+      && factValue(b119EditBoxCells[0]?.descriptorFacts.outerHeight) === 23
+      && b119EditBoxCells[1]?.kernelState?.height === 40
+      && b119EditBoxCells[1]?.kernelState?.scaling === false
+      && b119EditBoxCells[1]?.kernelState?.hotkey === 'SECOND'
+      && b119EditBoxCells[1]?.kernelState?.displayIcon === true
+      && factValue(b119EditBoxCells[1]?.descriptorFacts.outerHeight) === 40
+      && b119EditBoxCells[2]?.kernelState?.height === 0
+      && b119EditBoxCells[2]?.kernelState?.hotkey === ''
+      && b119EditBoxCells[2]?.kernelState?.displayIcon === false
+      && factValue(b119EditBoxCells[2]?.descriptorFacts.outerHeight) === 0
+      && b119EditBoxCells[3]?.kernelState?.height === 7
+      && b119EditBoxCells[3]?.kernelState?.scaling === true
+      && b119EditBoxCells[3]?.kernelState?.hotkey === 'FOURTH'
+      && b119EditBoxCells[3]?.kernelState?.displayIcon === true
+      && factValue(b119EditBoxCells[3]?.descriptorFacts.outerHeight) === 23,
+    detail({
+      status: b119EditBoxHeightResult.status,
+      pair: b119EditBoxHeightAuthority === undefined ? undefined : validateX4UiLayoutEvidencePair(b119EditBoxHeightProgram, b119EditBoxHeightAuthority),
+      table: {
+        defaults: b119EditBoxHeightTable.kernelState?.editBoxDefaults,
+        facts: Object.fromEntries(Object.entries(b119EditBoxHeightTable.descriptorFacts)
+          .filter(([key]) => key.startsWith('editBoxDefault'))
+          .map(([key, value]) => [key, value.status === 'known' ? value.value : value.status])),
+      },
+      cells: b119EditBoxCells.map(cell => ({
+        path: cell?.identity?.path,
+        status: cell?.status,
+        kernel: cell?.kernelState && {
+          type: cell.kernelState.type,
+          height: cell.kernelState.height,
+          scaling: cell.kernelState.scaling,
+          hotkey: cell.kernelState.hotkey,
+          displayIcon: cell.kernelState.displayIcon,
+        },
+        outerHeight: cell?.descriptorFacts.outerHeight?.status === 'known'
+          ? cell.descriptorFacts.outerHeight.value : cell?.descriptorFacts.outerHeight?.status,
+      })),
+      defaults: b119EditBoxDefaultOperations.map(candidate => ({
+        kind: candidate.kind,
+        status: candidate.status,
+        reason: candidate.reason,
+        facts: Object.fromEntries(Object.entries(candidate.descriptorFacts)
+          .filter(([key]) => ['cellType', 'propertyName', 'height', 'scaling', 'hotkey', 'displayIcon'].includes(key))
+          .map(([key, value]) => [key, value.status === 'known' ? value.value : value.status])),
+      })),
+      creates: b119EditBoxCreates.map(candidate => ({ kind: candidate.kind, status: candidate.status, reason: candidate.reason })),
+      directs: b119EditBoxDirects.map(candidate => ({ kind: candidate.kind, status: candidate.status, reason: candidate.reason })),
+    }));
+
+  const b119HotkeyPropertySource = [
+    'local menu = { name = "B119HotkeyProperty", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'table:setDefaultCellProperties("editbox", { height = 0, scaling = false, x = 0, y = 1 })',
+    'table:setDefaultComplexCellProperties("editbox", "hotkey", { hotkey = "DEFAULT", displayIcon = true, x = 0, y = 2 })',
+    'local row = table:addRow(false, { scaling = false })',
+    'local editbox = row[1]:createEditBox({ height = 0, scaling = false })',
+    'editbox:setHotkey("VISIBLE_ARGUMENT", { hotkey = "", displayIcon = false, x = 0, y = 3 })',
+    'frame:display()',
+  ].join('\n');
+  const b119HotkeyPropertyModel = buildX4UiCallModel(input(
+    b119HotkeyPropertySource,
+    'selftest/b119-editbox-hotkey-property.lua',
+  ));
+  const b119HotkeyPropertyResult = projectX4UiLayoutProgram(
+    b119HotkeyPropertyModel,
+    topTarget(b119HotkeyPropertyModel),
+    profileFor(b119HotkeyPropertyModel),
+  );
+  const b119HotkeyPropertyProgram = programOf(b119HotkeyPropertyResult);
+  const b119HotkeyPropertyAuthority = evidenceAuthorityOf(b119HotkeyPropertyResult);
+  const b119HotkeyPropertyOperations = b119HotkeyPropertyProgram.operations.filter(candidate =>
+    candidate.kind === 'setDefaultCellProperties'
+      || candidate.kind === 'setDefaultComplexCellProperties'
+      || candidate.kind === 'setHotkey');
+  const b119HotkeyPropertyCell = b119HotkeyPropertyProgram.cells.find(candidate => candidate.identity?.path === 'row[1]');
+  const b119HotkeyPropertyGaps = b119HotkeyPropertyOperations.map(operation =>
+    b119HotkeyPropertyProgram.gaps.filter(gap => gap.operationId === operation.id));
+  const b119HotkeyPropertyDirect = b119HotkeyPropertyOperations.find(candidate => candidate.kind === 'setHotkey');
+  const b119HotkeyPropertyValue = b119HotkeyPropertyDirect?.descriptorFacts.hotkey;
+  const b119HotkeyPropertySourceHotkey = b119HotkeyPropertyDirect?.metadata.semantics.properties
+    ?.find(property => property.normalizedName === 'hotkey');
+  check('B119 properties.hotkey wins the Program transition while x/y remain exact partial source gaps',
+    b119HotkeyPropertyResult.status === 'partial'
+      && b119HotkeyPropertyProgram.status === 'partial'
+      && b119HotkeyPropertyAuthority !== undefined
+      && validateX4UiLayoutEvidencePair(b119HotkeyPropertyProgram, b119HotkeyPropertyAuthority).valid
+      && b119HotkeyPropertyModel.verificationGaps.length === 0
+      && b119HotkeyPropertyOperations.length === 3
+      && b119HotkeyPropertyOperations.every(operation => operation.status === 'unresolved' && operation.kernel !== undefined)
+      && b119HotkeyPropertyGaps.every(gaps => gaps.length === 2
+        && gaps.every(gap => gap.category === 'property' && gap.status === 'unsupported'))
+      && b119HotkeyPropertyCell?.kernelState?.height === 0
+      && b119HotkeyPropertyCell.kernelState.hotkey === ''
+      && b119HotkeyPropertyCell.kernelState.displayIcon === false
+      && b119HotkeyPropertyValue?.status === 'known'
+      && b119HotkeyPropertyValue.value === ''
+      && b119HotkeyPropertySourceHotkey !== undefined
+      && b119HotkeyPropertyValue.expression === b119HotkeyPropertySourceHotkey.value.expression
+      && locationsSameForTest(b119HotkeyPropertyValue.source, b119HotkeyPropertySourceHotkey.value.location),
+    detail({
+      status: b119HotkeyPropertyResult.status,
+      modelGaps: b119HotkeyPropertyModel.verificationGaps,
+      operations: b119HotkeyPropertyOperations,
+      gaps: b119HotkeyPropertyGaps,
+      cell: b119HotkeyPropertyCell,
+    }));
+
+  const b119DynamicDefaultModel = buildX4UiCallModel(input([
+    'local menu = { name = "B119DynamicDefault", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'table:setDefaultCellProperties("editbox", { height = getHeight() })',
+    'local row = table:addRow(false, { scaling = false })',
+    'row[1]:createEditBox({})',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-editbox-dynamic-default.lua'));
+  const b119DynamicDefaultResult = projectX4UiLayoutProgram(
+    b119DynamicDefaultModel,
+    topTarget(b119DynamicDefaultModel),
+    profileFor(b119DynamicDefaultModel),
+  );
+  const b119DynamicDefaultProgram = programOf(b119DynamicDefaultResult);
+  check('B119 dynamic editbox defaults remain unresolved and never fabricate geometry',
+    b119DynamicDefaultResult.status !== 'refused'
+      && operation(b119DynamicDefaultProgram, 'setDefaultCellProperties')?.status === 'unresolved'
+      && operation(b119DynamicDefaultProgram, 'createEditBox')?.status === 'unresolved'
+      && b119DynamicDefaultProgram.gaps.some(gap => gap.category === 'options' || gap.category === 'data-flow' || gap.category === 'edit-box'),
+    detail({
+      status: b119DynamicDefaultResult.status,
+      operations: b119DynamicDefaultProgram.operations,
+      gaps: b119DynamicDefaultProgram.gaps,
+    }));
+
+  const b119WrongReceiverModel = buildX4UiCallModel(input([
+    'local menu = { name = "B119WrongReceiver", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'frame:setDefaultCellProperties("editbox", { height = 99 })',
+    'local row = table:addRow(false, { scaling = false })',
+    'row[1]:createEditBox({})',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-editbox-wrong-receiver.lua'));
+  const b119WrongReceiverResult = projectX4UiLayoutProgram(
+    b119WrongReceiverModel,
+    topTarget(b119WrongReceiverModel),
+    profileFor(b119WrongReceiverModel),
+  );
+  const b119WrongReceiverProgram = programOf(b119WrongReceiverResult);
+  const b119WrongReceiverCell = b119WrongReceiverProgram.cells.find(candidate => candidate.identity?.path === 'row[1]');
+  check('B119 wrong receiver cannot contaminate the actual table default state',
+    b119WrongReceiverResult.status !== 'refused'
+      && operation(b119WrongReceiverProgram, 'setDefaultCellProperties')?.status === 'unresolved'
+      && operation(b119WrongReceiverProgram, 'setDefaultCellProperties')?.tableId === undefined
+      && b119WrongReceiverProgram.tables[0].kernelState?.editBoxDefaults.height === undefined
+      && operation(b119WrongReceiverProgram, 'createEditBox')?.status === 'applied'
+      && b119WrongReceiverCell?.kernelState?.type === 'editbox'
+      && b119WrongReceiverCell.kernelState.height === 0,
+    detail({
+      status: b119WrongReceiverResult.status,
+      operations: b119WrongReceiverProgram.operations.map(candidate => ({
+        kind: candidate.kind,
+        status: candidate.status,
+        reason: candidate.reason,
+        tableId: candidate.tableId,
+        height: candidate.descriptorFacts.height?.status === 'known'
+          ? candidate.descriptorFacts.height.value : candidate.descriptorFacts.height?.status,
+      })),
+      table: {
+        defaults: b119WrongReceiverProgram.tables[0].kernelState?.editBoxDefaults,
+        editBoxDefaultHeight: b119WrongReceiverProgram.tables[0].descriptorFacts.editBoxDefaultHeight,
+      },
+      cell: b119WrongReceiverCell && {
+        type: b119WrongReceiverCell.kernelState?.type,
+        height: b119WrongReceiverCell.kernelState?.height,
+      },
+    }));
+
+  const b119IrrelevantNoOpModel = buildX4UiCallModel(input([
+    'local menu = { name = "B119IrrelevantNoOp", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(2, { width = 100, reserveScrollBar = false, scaling = false })',
+    'table:setDefaultCellProperties("button", { height = getHeight(), scaling = getScaling() })',
+    'table:setDefaultComplexCellProperties("editbox", "caption", { hotkey = getHotkey(), displayIcon = getDisplayIcon() })',
+    'local row = table:addRow(false, { scaling = false })',
+    'local button = row[1]:createButton({ height = 25, scaling = false })',
+    'button:setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })',
+    'row[2]:createEditBox({ height = 12, scaling = false })',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-editbox-irrelevant-noop.lua'));
+  const b119IrrelevantNoOpResult = projectX4UiLayoutProgram(
+    b119IrrelevantNoOpModel,
+    topTarget(b119IrrelevantNoOpModel),
+    profileFor(b119IrrelevantNoOpModel),
+  );
+  const b119IrrelevantNoOpProgram = programOf(b119IrrelevantNoOpResult);
+  const b119IrrelevantNoOpAuthority = evidenceAuthorityOf(b119IrrelevantNoOpResult);
+  const b119IrrelevantOperations = b119IrrelevantNoOpProgram.operations.filter(candidate =>
+    candidate.kind === 'setDefaultCellProperties'
+      || candidate.kind === 'setDefaultComplexCellProperties'
+      || candidate.kind === 'setHotkey');
+  const b119IrrelevantEditBox = b119IrrelevantNoOpProgram.cells.find(candidate => candidate.identity?.path === 'row[2]');
+  const operationGaps = (candidate: typeof b119IrrelevantOperations[number]) =>
+    b119IrrelevantNoOpProgram.gaps.filter(gap => gap.operationId === candidate.id);
+  check('B119 out-of-scope button and complex UI mutations remain unresolved source gaps',
+    b119IrrelevantNoOpResult.status === 'partial'
+      && b119IrrelevantNoOpProgram.status === 'partial'
+      && b119IrrelevantNoOpModel.verificationGaps.length === 0
+      && b119IrrelevantNoOpAuthority !== undefined
+      && validateX4UiLayoutEvidencePair(b119IrrelevantNoOpProgram, b119IrrelevantNoOpAuthority).valid
+      && b119IrrelevantOperations.length === 3
+      && b119IrrelevantOperations[0]?.reason === 'non-editbox widget default effects are outside the bounded editbox-height projection'
+      && b119IrrelevantOperations[1]?.reason === 'non-hotkey editbox default effects are outside the bounded editbox-height projection'
+      && b119IrrelevantOperations[2]?.reason === 'button setHotkey effects are outside the bounded editbox-height projection'
+      && b119IrrelevantOperations.every(candidate => {
+        const gapsForOperation = operationGaps(candidate);
+        return candidate.status === 'unresolved'
+          && candidate.kernel === undefined
+          && typeof candidate.reason === 'string'
+          && candidate.reason.includes('bounded editbox-height projection')
+          && gapsForOperation.length === 1
+          && locationsSameForTest(gapsForOperation[0]?.source, candidate.source);
+      })
+      && factValue(b119IrrelevantOperations[0]?.descriptorFacts.cellType) === 'button'
+      && factValue(b119IrrelevantOperations[1]?.descriptorFacts.propertyName) === 'caption'
+      && factValue(b119IrrelevantOperations[2]?.descriptorFacts.contentKind) === 'button'
+      && b119IrrelevantNoOpProgram.tables[0].kernelState?.editBoxDefaults.height === undefined
+      && b119IrrelevantNoOpProgram.tables[0].kernelState?.editBoxDefaults.hotkey === undefined
+      && b119IrrelevantEditBox?.kernelState?.height === 12
+      && b119IrrelevantEditBox.kernelState.hotkey === ''
+      && b119IrrelevantEditBox.kernelState.displayIcon === false
+      && factValue(b119IrrelevantEditBox.descriptorFacts.outerHeight) === 12,
+    detail({
+      status: b119IrrelevantNoOpProgram.status,
+      modelGaps: b119IrrelevantNoOpModel.verificationGaps,
+      programGaps: b119IrrelevantNoOpProgram.gaps,
+      pair: b119IrrelevantNoOpAuthority === undefined
+        ? undefined : validateX4UiLayoutEvidencePair(b119IrrelevantNoOpProgram, b119IrrelevantNoOpAuthority),
+      operations: b119IrrelevantOperations,
+      defaults: b119IrrelevantNoOpProgram.tables[0].kernelState?.editBoxDefaults,
+      editbox: b119IrrelevantEditBox,
+    }));
+
+  const b119DynamicShapeModel = buildX4UiCallModel(input([
+    'local menu = { name = "B119DynamicShape", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'table:setDefaultCellProperties(getCellType(), { height = 99, scaling = false })',
+    'table:setDefaultComplexCellProperties("editbox", getPropertyName(), { hotkey = "DYNAMIC", displayIcon = true })',
+    'local row = table:addRow(false, { scaling = false })',
+    'row[1]:createEditBox({ height = 12, scaling = false })',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-editbox-dynamic-shape.lua'));
+  const b119DynamicShapeResult = projectX4UiLayoutProgram(
+    b119DynamicShapeModel,
+    topTarget(b119DynamicShapeModel),
+    profileFor(b119DynamicShapeModel),
+  );
+  const b119DynamicShapeProgram = programOf(b119DynamicShapeResult);
+  const b119DynamicShapeDefaults = b119DynamicShapeProgram.operations.filter(candidate =>
+    candidate.kind === 'setDefaultCellProperties' || candidate.kind === 'setDefaultComplexCellProperties');
+  check('B119 dynamic cell type and potentially relevant complex property remain fail-closed without kernel mutation',
+    b119DynamicShapeDefaults.length === 2
+      && b119DynamicShapeDefaults.every(candidate => candidate.status === 'unresolved' && candidate.kernel === undefined)
+      && b119DynamicShapeProgram.gaps.length >= 2
+      && b119DynamicShapeProgram.tables[0].kernelState?.editBoxDefaults.height === undefined
+      && b119DynamicShapeProgram.tables[0].kernelState?.editBoxDefaults.hotkey === undefined,
+    detail({ operations: b119DynamicShapeDefaults, gaps: b119DynamicShapeProgram.gaps }));
+
+  const b119DotMethodModel = buildX4UiCallModel(input([
+    'local menu = { name = "B119DotMethod", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'table.setDefaultCellProperties("editbox", { height = 99, scaling = false })',
+    'table.setDefaultComplexCellProperties("editbox", "hotkey", { hotkey = "DOT_DEFAULT", displayIcon = true })',
+    'local row = table:addRow(false, { scaling = false })',
+    'local editbox = row[1]:createEditBox({ height = 12, scaling = false })',
+    'editbox.setHotkey("DOT_DIRECT", { displayIcon = true })',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-editbox-dot-method.lua'));
+  const b119DotMethodResult = projectX4UiLayoutProgram(
+    b119DotMethodModel,
+    topTarget(b119DotMethodModel),
+    profileFor(b119DotMethodModel),
+  );
+  const b119DotMethodProgram = programOf(b119DotMethodResult);
+  const b119DotOperations = b119DotMethodProgram.operations.filter(candidate =>
+    candidate.kind === 'setDefaultCellProperties'
+      || candidate.kind === 'setDefaultComplexCellProperties'
+      || candidate.kind === 'setHotkey');
+  const b119DotCell = b119DotMethodProgram.cells.find(candidate => candidate.identity?.path === 'row[1]');
+  check('B119 relevant dot-method defaults and direct hotkeys stay unresolved and cannot mutate kernel state',
+    b119DotOperations.length === 3
+      && b119DotOperations.every(candidate => candidate.status === 'unresolved' && candidate.kernel === undefined)
+      && b119DotMethodProgram.gaps.length >= 3
+      && b119DotMethodProgram.tables[0].kernelState?.editBoxDefaults.height === undefined
+      && b119DotMethodProgram.tables[0].kernelState?.editBoxDefaults.hotkey === undefined
+      && b119DotCell?.kernelState?.type === 'cell'
+      && b119DotCell.kernelState.height === 0
+      && b119DotCell.kernelState.hotkey === ''
+      && b119DotCell.kernelState.displayIcon === false,
+    detail({ operations: b119DotOperations, gaps: b119DotMethodProgram.gaps, cell: b119DotCell }));
+
   check('fixture Helper constants use the shipped values and exact evidence lines',
     profile.helper.constants.standardTextHeight.value === 16
       && profile.helper.constants.standardTextHeight.source.lineStart === 533

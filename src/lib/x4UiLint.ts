@@ -100,6 +100,7 @@ interface TableInfo {
   maxVisibleHeight?: X4UiValue;
   frameKey?: string;
   rowCalls: X4UiCallRecord[];
+  editBoxDefaultCalls: X4UiCallRecord[];
 }
 
 interface FrameInfo {
@@ -112,6 +113,17 @@ interface FrameInfo {
 interface CellHeightEvidence {
   height: number;
   sourcePinned: boolean;
+}
+
+interface EditBoxStateEvidence {
+  height?: X4UiValue;
+  scaling?: X4UiValue;
+  hotkey?: X4UiValue;
+  displayIcon?: X4UiValue;
+  heightUnresolved: boolean;
+  hotkeyUnresolved: boolean;
+  heightUnresolvedCall?: X4UiCallRecord;
+  hotkeyUnresolvedCall?: X4UiCallRecord;
 }
 
 interface RowHeightEvidence {
@@ -140,6 +152,7 @@ interface FindingInput {
 }
 
 const RENDERED_CALLS = new Set(['setText', 'setText2', 'createText', 'createEditBox']);
+const EDITBOX_MIN_HEIGHT = 23;
 
 function normalizeName(name: string): string {
   return name.replace(/[-_\s]/g, '').toLowerCase();
@@ -169,12 +182,32 @@ function staticReference(value: X4UiValue | undefined): X4UiValueReference | und
   return value.reference;
 }
 
+/**
+ * A non-static reference is usable only as source evidence in the bounded
+ * edit-box chain proof below.  Other lint ownership paths remain static-only.
+ */
+function sourceCellReference(value: X4UiValue | undefined): X4UiValueReference | undefined {
+  if (!value || value.type !== 'reference' || value.reference?.kind !== 'cell') return undefined;
+  return value.reference;
+}
+
+function sourceContains(outer: X4UiSourceLocation, inner: X4UiSourceLocation): boolean {
+  return outer.file === inner.file
+    && outer.sourcePath === inner.sourcePath
+    && outer.start.offset <= inner.start.offset
+    && outer.end.offset >= inner.end.offset;
+}
+
 function projectedProperty(call: X4UiCallRecord, names: readonly string[]): X4UiValue | undefined {
   const normalizedNames = names.map(normalizeName);
   return call.semantics.properties?.find(property => normalizedNames.includes(normalizeName(property.normalizedName || property.name)))?.value;
 }
 
-function effectiveScalingValue(cell: X4UiValue | undefined, row: X4UiValue | undefined, table: X4UiValue | undefined): X4UiValue | undefined {
+function effectiveScalingValue(
+  cell: X4UiValue | undefined,
+  row: X4UiValue | undefined,
+  table: X4UiValue | undefined,
+): X4UiValue | undefined {
   const values = [table, row, cell].filter((value): value is X4UiValue => Boolean(value));
   // Helper propagates a false table/row scaling flag down to descendants.
   const forcedFalse = values.find(value => staticBoolean(value) === false);
@@ -182,6 +215,20 @@ function effectiveScalingValue(cell: X4UiValue | undefined, row: X4UiValue | und
   const unresolved = values.find(value => staticBoolean(value) === undefined);
   if (unresolved) return unresolved;
   return values.length > 0 ? values[values.length - 1] : undefined;
+}
+
+function effectiveEditBoxScalingValue(
+  cell: X4UiValue | undefined,
+  row: X4UiValue | undefined,
+  table: X4UiValue | undefined,
+  tableCellDefault: X4UiValue | undefined,
+): X4UiValue | undefined {
+  // Helper applies these owners in order: table, row, editbox table default,
+  // then call-specific properties. The last supplied value wins even when an
+  // earlier owner was false.
+  return [table, row, tableCellDefault, cell]
+    .filter((value): value is X4UiValue => Boolean(value))
+    .at(-1);
 }
 
 function pinnedStandardButtonHeight(value: X4UiValue | undefined): number | undefined {
@@ -203,6 +250,21 @@ function locationKey(location: X4UiSourceLocation): string {
     location.start.offset,
     location.end.offset
   ].join('|');
+}
+
+function sameSourceLocation(
+  left: X4UiSourceLocation | undefined,
+  right: X4UiSourceLocation | undefined,
+): boolean {
+  return Boolean(left && right
+    && left.file === right.file
+    && left.sourcePath === right.sourcePath
+    && left.start.line === right.start.line
+    && left.start.column === right.start.column
+    && left.start.offset === right.start.offset
+    && left.end.line === right.end.line
+    && left.end.column === right.end.column
+    && left.end.offset === right.end.offset);
 }
 
 function executionContextKey(context: X4UiFunctionContext): string | undefined {
@@ -227,6 +289,12 @@ function callsCompatible(left: X4UiCallRecord, right: X4UiCallRecord): boolean {
   return leftContext !== undefined
     && leftContext === rightContext
     && branchPathsCompatible(left.context, right.context);
+}
+
+function callsCompatibleOnReachablePath(left: X4UiCallRecord, right: X4UiCallRecord): boolean {
+  return left.context.reachability !== 'unreachable'
+    && right.context.reachability !== 'unreachable'
+    && callsCompatible(left, right);
 }
 
 function recordsReachable(record: X4UiRelevantRecord): boolean {
@@ -312,6 +380,8 @@ class X4UiLintEvaluator {
   private readonly gapKeys = new Set<string>();
   private readonly tables = new Map<string, TableInfo>();
   private readonly unresolvedRowCalls: X4UiCallRecord[] = [];
+  private readonly unresolvedEditBoxDefaultCalls: X4UiCallRecord[] = [];
+  private readonly unresolvedEditBoxHotkeyCalls: X4UiCallRecord[] = [];
   private readonly frames = new Map<string, FrameInfo>();
   private readonly pathToReference = new Map<string, X4UiValueReference | undefined>();
   private readonly tablePathToKey = new Map<string, string | undefined>();
@@ -568,7 +638,8 @@ class X4UiLintEvaluator {
         tableHeight: call.semantics.height,
         tableY: projectedProperty(call, ['y']),
         maxVisibleHeight: projectedProperty(call, ['maxVisibleHeight']),
-        rowCalls: []
+        rowCalls: [],
+        editBoxDefaultCalls: []
       };
       const frameReference = staticReference(call.semantics.frame);
       if (frameReference) {
@@ -584,6 +655,26 @@ class X4UiLintEvaluator {
       const tableKey = this.tableKeyFromValue(call.semantics.table);
       if (tableKey && this.tables.has(tableKey)) this.tables.get(tableKey)?.rowCalls.push(call);
       else this.unresolvedRowCalls.push(call);
+    }
+
+    for (const call of this.calls) {
+      if (call.name !== 'setDefaultCellProperties' && call.name !== 'setDefaultComplexCellProperties') continue;
+      const cellType = staticString(call.semantics.cellType);
+      const potentiallyEditBox = cellType === undefined || cellType === 'editbox';
+      if (!potentiallyEditBox) continue;
+      if (call.name === 'setDefaultComplexCellProperties') {
+        const propertyName = staticString(call.semantics.propertyName);
+        if (propertyName !== undefined && propertyName !== 'hotkey') continue;
+      }
+      const tableKey = this.tableKeyFromValue(call.semantics.table);
+      if (tableKey && this.tables.has(tableKey)) this.tables.get(tableKey)?.editBoxDefaultCalls.push(call);
+      else this.unresolvedEditBoxDefaultCalls.push(call);
+    }
+
+    for (const call of this.calls) {
+      if (call.name !== 'setHotkey') continue;
+      const cellReference = staticReference(call.semantics.cell);
+      if (!cellReference || cellReference.kind !== 'cell') this.unresolvedEditBoxHotkeyCalls.push(call);
     }
   }
 
@@ -1000,11 +1091,279 @@ class X4UiLintEvaluator {
     }
   }
 
+  private sameCellReference(left: X4UiValueReference | undefined, right: X4UiValueReference | undefined): boolean {
+    if (!left || !right || left.kind !== 'cell' || right.kind !== 'cell') return false;
+    if (referenceKey(left) !== referenceKey(right)) return false;
+    if (!sameSourceLocation(left.source, right.source)) return false;
+    if (left.path !== right.path
+      || left.origin !== right.origin
+      || left.parentPath !== right.parentPath
+      || left.relatedPath !== right.relatedPath
+      || left.helperRuntimeAvailability !== right.helperRuntimeAvailability) return false;
+    if (Boolean(left.helperAliasSource) !== Boolean(right.helperAliasSource)) return false;
+    if (left.helperAliasSource && right.helperAliasSource
+      && !sameSourceLocation(left.helperAliasSource, right.helperAliasSource)) return false;
+
+    const leftIndex = left.index;
+    const rightIndex = right.index;
+    if (!leftIndex || !rightIndex) return !leftIndex && !rightIndex;
+    return leftIndex.status === rightIndex.status
+      && leftIndex.type === rightIndex.type
+      && leftIndex.value === rightIndex.value
+      && leftIndex.expression === rightIndex.expression
+      && sameSourceLocation(leftIndex.location, rightIndex.location);
+  }
+
+  private sourceProvenEditBoxHotkeyChain(
+    create: X4UiCallRecord,
+    hotkeyCall: X4UiCallRecord,
+    createCell: X4UiValueReference | undefined,
+    hotkeyCell: X4UiValueReference,
+  ): boolean {
+    const intermediateCalls = this.calls.filter(candidate =>
+      candidate !== create
+      && candidate !== hotkeyCall
+      && candidate.sourceOrder > create.sourceOrder
+      && candidate.sourceOrder < hotkeyCall.sourceOrder
+      && candidate.method === ':'
+      && callsCompatibleOnReachablePath(candidate, create)
+      && sameSourceLocation(candidate.enclosingStatement.source, hotkeyCall.enclosingStatement.source)
+      && sourceContains(hotkeyCall.source, candidate.source));
+    const allowedIntermediateCalls = intermediateCalls.every(candidate =>
+      (candidate.name === 'setColSpan' || candidate.name === 'setText')
+      && this.sameCellReference(sourceCellReference(candidate.semantics.cell), createCell));
+    return create.method === ':'
+      && hotkeyCall.method === ':'
+      && callsCompatibleOnReachablePath(create, hotkeyCall)
+      && hotkeyCall.sourceOrder > create.sourceOrder
+      && createCell?.origin === 'index'
+      && hotkeyCell.origin === 'index'
+      && createCell.index?.status === 'static'
+      && hotkeyCell.index?.status === 'static'
+      && this.sameCellReference(createCell, hotkeyCell)
+      && sameSourceLocation(create.enclosingStatement.source, hotkeyCall.enclosingStatement.source)
+      && sourceContains(hotkeyCall.source, createCell.source)
+      && sourceContains(hotkeyCall.source, create.source)
+      && allowedIntermediateCalls;
+  }
+
+  private sourceProvenButtonHotkeyChain(hotkeyCall: X4UiCallRecord): boolean {
+    const hotkeyCellValue = hotkeyCall.semantics.cell;
+    const hotkeyCell = sourceCellReference(hotkeyCellValue);
+    if (!hotkeyCellValue || !hotkeyCell) return false;
+
+    return this.calls
+      .filter(candidate => candidate.name === 'createButton' && candidate.sourceOrder < hotkeyCall.sourceOrder)
+      .some(buttonCreate => {
+        const buttonCellValue = buttonCreate.semantics.cell;
+        const buttonCell = sourceCellReference(buttonCellValue);
+        if (!buttonCellValue || !buttonCell) return false;
+        const intermediateCalls = this.calls.filter(candidate =>
+          candidate !== buttonCreate
+          && candidate !== hotkeyCall
+          && candidate.sourceOrder > buttonCreate.sourceOrder
+          && candidate.sourceOrder < hotkeyCall.sourceOrder
+          && candidate.method === ':'
+          && callsCompatibleOnReachablePath(candidate, buttonCreate)
+          && sameSourceLocation(candidate.enclosingStatement.source, hotkeyCall.enclosingStatement.source)
+          && sourceContains(hotkeyCall.source, candidate.source));
+        const allowedIntermediateCalls = intermediateCalls.every(candidate =>
+          (candidate.name === 'setColSpan' || candidate.name === 'setText' || candidate.name === 'setText2')
+          && this.sameCellReference(sourceCellReference(candidate.semantics.cell), buttonCell));
+        return buttonCreate.method === ':'
+          && hotkeyCall.method === ':'
+          && callsCompatibleOnReachablePath(buttonCreate, hotkeyCall)
+          && this.sameCellReference(buttonCell, hotkeyCell)
+          && buttonCell.origin === 'index'
+          && hotkeyCell.origin === 'index'
+          && buttonCell.index?.status === 'static'
+          && hotkeyCell.index?.status === 'static'
+          && sameSourceLocation(buttonCreate.enclosingStatement.source, hotkeyCall.enclosingStatement.source)
+          && sourceContains(hotkeyCall.source, buttonCellValue.location)
+          && sourceContains(hotkeyCall.source, hotkeyCellValue.location)
+          && sourceContains(hotkeyCall.source, buttonCreate.source)
+          && allowedIntermediateCalls;
+      });
+  }
+
+  private editBoxStateEvidence(
+    table: TableInfo | undefined,
+    create: X4UiCallRecord,
+  ): EditBoxStateEvidence {
+    const state: EditBoxStateEvidence = {
+      heightUnresolved: false,
+      hotkeyUnresolved: false
+    };
+    const markHeightUnresolved = (call: X4UiCallRecord): void => {
+      state.heightUnresolved = true;
+      state.heightUnresolvedCall ||= call;
+    };
+    const markHotkeyUnresolved = (call: X4UiCallRecord): void => {
+      state.hotkeyUnresolved = true;
+      state.hotkeyUnresolvedCall ||= call;
+    };
+    const applySimpleDefault = (call: X4UiCallRecord): void => {
+      if (call.method !== ':' || call.context.reachability !== 'reachable') {
+        markHeightUnresolved(call);
+        return;
+      }
+      const options = call.semantics.options;
+      if (!options || options.status !== 'static') {
+        markHeightUnresolved(call);
+      }
+      const height = call.semantics.height;
+      if (height) {
+        state.height = height;
+        if (staticNumber(height) === undefined) markHeightUnresolved(call);
+      }
+      const scaling = call.semantics.scaling;
+      if (scaling) {
+        state.scaling = scaling;
+        if (staticBoolean(scaling) === undefined) markHeightUnresolved(call);
+      }
+    };
+    const applyComplexDefault = (call: X4UiCallRecord): void => {
+      if (call.method !== ':' || call.context.reachability !== 'reachable') {
+        markHotkeyUnresolved(call);
+        return;
+      }
+      const options = call.semantics.options;
+      if (!options || options.status !== 'static') {
+        markHotkeyUnresolved(call);
+      }
+      const hotkey = call.semantics.hotkey;
+      if (hotkey) {
+        state.hotkey = hotkey;
+        if (staticString(hotkey) === undefined) markHotkeyUnresolved(call);
+      }
+      const displayIcon = call.semantics.displayIcon;
+      if (displayIcon) {
+        state.displayIcon = displayIcon;
+        if (staticBoolean(displayIcon) === undefined) markHotkeyUnresolved(call);
+      }
+    };
+    const applyDefault = (call: X4UiCallRecord): void => {
+      const cellType = staticString(call.semantics.cellType);
+      if (cellType !== 'editbox') {
+        if (cellType !== undefined) return;
+        if (call.name === 'setDefaultCellProperties') markHeightUnresolved(call);
+        else markHotkeyUnresolved(call);
+        return;
+      }
+      if (call.name === 'setDefaultCellProperties') applySimpleDefault(call);
+      else {
+        const propertyName = staticString(call.semantics.propertyName);
+        if (propertyName === 'hotkey') applyComplexDefault(call);
+        else if (propertyName === undefined) markHotkeyUnresolved(call);
+      }
+    };
+
+    const defaults = table?.editBoxDefaultCalls || [];
+    for (const call of defaults) {
+      if (call.sourceOrder >= create.sourceOrder || !callsCompatible(call, create)) continue;
+      applyDefault(call);
+    }
+    for (const call of this.unresolvedEditBoxDefaultCalls) {
+      if (call.sourceOrder >= create.sourceOrder || !callsCompatible(call, create)) continue;
+      // A call reaches this collection only when its receiver/table ownership
+      // could not be proven.  Never let that call mutate this table's inferred
+      // defaults: doing so would turn an unrelated or forged receiver into a
+      // false clean result.  Preserve the conservative gap instead.
+      const cellType = staticString(call.semantics.cellType);
+      if (cellType !== undefined && cellType !== 'editbox') continue;
+      if (call.name === 'setDefaultCellProperties') markHeightUnresolved(call);
+      else {
+        const propertyName = staticString(call.semantics.propertyName);
+        if (propertyName === undefined || propertyName === 'hotkey') markHotkeyUnresolved(call);
+      }
+    }
+
+    const createCell = sourceCellReference(create.semantics.cell);
+    const directCalls = this.calls
+      .filter(call => call.name === 'setHotkey')
+      .sort((left, right) => left.sourceOrder - right.sourceOrder || left.order - right.order);
+    for (const call of directCalls) {
+      if (call.sourceOrder <= create.sourceOrder) continue;
+      if (this.sourceProvenButtonHotkeyChain(call)) continue;
+      const cell = sourceCellReference(call.semantics.cell);
+      if (cell && this.sameCellReference(cell, createCell)) {
+        const nonStaticCellReference = create.semantics.cell?.status !== 'static'
+          || call.semantics.cell?.status !== 'static';
+        const sourceProvenChain = this.sourceProvenEditBoxHotkeyChain(create, call, createCell, cell);
+        if (nonStaticCellReference && !sourceProvenChain) {
+          markHotkeyUnresolved(call);
+          continue;
+        }
+        if (!sourceProvenChain
+          && (call.method !== ':' || call.context.reachability !== 'reachable' || !callsCompatible(call, create))) {
+          markHotkeyUnresolved(call);
+          continue;
+        }
+        const hotkey = projectedProperty(call, ['hotkey']) || call.semantics.hotkey;
+        const displayIcon = projectedProperty(call, ['displayIcon']) || call.semantics.displayIcon;
+        const staticHotkey = staticString(hotkey);
+        const staticDisplayIcon = staticBoolean(displayIcon);
+        const sourceProvenStaticHotkey = staticHotkey !== undefined;
+        const sourceProvenStaticDisplayIcon = staticDisplayIcon !== undefined;
+        if (sourceProvenStaticHotkey && sourceProvenStaticDisplayIcon
+          && call.semantics.options?.status === 'static') {
+          state.hotkey = hotkey;
+          state.displayIcon = displayIcon;
+          state.hotkeyUnresolved = false;
+          delete state.hotkeyUnresolvedCall;
+        } else {
+          if (!hotkey || staticHotkey === undefined) markHotkeyUnresolved(call);
+          else state.hotkey = hotkey;
+          if (displayIcon) {
+            state.displayIcon = displayIcon;
+            if (staticDisplayIcon === undefined) markHotkeyUnresolved(call);
+          } else {
+            // helper.lua preserves the prior displayIcon when omitted, but a
+            // direct omission is not source proof of that winning state.
+            markHotkeyUnresolved(call);
+          }
+          if (call.semantics.options && call.semantics.options.status !== 'static') markHotkeyUnresolved(call);
+        }
+        continue;
+      }
+      if (!cell && callsCompatible(call, create)) markHotkeyUnresolved(call);
+    }
+    return state;
+  }
+
+  private hasProvenDisplayedHotkey(state: EditBoxStateEvidence): boolean {
+    return !state.hotkeyUnresolved
+      && staticString(state.hotkey) !== undefined
+      && staticString(state.hotkey)!.length > 0
+      && staticBoolean(state.displayIcon) === true;
+  }
+
+  private addEditBoxUncertaintyWarning(call: X4UiCallRecord, reason: string): void {
+    this.addFinding({
+      rule: X4_UI_LINT_RULES.editBoxHeightMinimum,
+      severity: 'warning',
+      message: 'createEditBox effective height is not statically proven because a potentially applicable editbox default or hotkey is dynamic or conditional.',
+      cause: reason,
+      failureMode: 'If the unresolved path leaves the editbox base height at zero without a displayed-hotkey minimum, X4 displays the frame, logs "Dimensions for editbox are too small ... height(0 px)" and "Editbox elements will overlap eachother", and shows the edit field clipped/overlapped.',
+      evidenceBoundary: 'Only an exact same-table, same-cell, source-ordered, unconditional literal default or displayed hotkey is treated as proof. Dynamic, conditional, malformed, and unresolved ownership remain nonblocking gaps. Not verified in game.',
+      nextAction: 'Make the relevant editbox default/hotkey source-visible and unconditional, or verify the effective height and rendered layout in-game.',
+      location: call.source
+    });
+  }
+
   private checkEditBoxHeights(): void {
     for (const call of this.calls) {
       if (call.name !== 'createEditBox') continue;
 
       const options = call.semantics.options;
+      const explicitHeightValue = projectedProperty(call, ['height']);
+      const explicitHeight = staticNumber(explicitHeightValue);
+      const explicitPositiveHeight = explicitHeight !== undefined && explicitHeight > 0;
+      const cellReference = staticReference(call.semantics.cell);
+      const tableKey = this.tableKeyFromReference(cellReference);
+      const table = tableKey ? this.tables.get(tableKey) : undefined;
+      const state = this.editBoxStateEvidence(table, call);
+      const displayedHotkey = this.hasProvenDisplayedHotkey(state);
       if (options && options.status !== 'static') {
         this.addValueGap(
           'height',
@@ -1012,34 +1371,76 @@ class X4UiLintEvaluator {
           'createEditBox height is unverified because its options table is dynamic or unknown',
           call.source
         );
-        continue;
+      }
+      if (state.heightUnresolved && !explicitHeightValue) {
+        const unresolved = state.heightUnresolvedCall;
+        this.addGap(
+          'height',
+          valueStatus(unresolved?.semantics.height || unresolved?.semantics.options),
+          unresolved?.source || call.source,
+          'createEditBox height is unverified because a potentially applicable same-table editbox default is dynamic, conditional, or malformed',
+          unresolved?.semantics.height?.expression || unresolved?.semantics.options?.expression || '<editbox default height>'
+        );
+      }
+      if (state.hotkeyUnresolved && !explicitPositiveHeight) {
+        const unresolved = state.hotkeyUnresolvedCall;
+        this.addGap(
+          'edit-box',
+          valueStatus(unresolved?.semantics.hotkey || unresolved?.semantics.displayIcon || unresolved?.semantics.options),
+          unresolved?.source || call.source,
+          'createEditBox displayed-hotkey minimum is unverified because a potentially applicable hotkey or displayIcon is dynamic, conditional, malformed, or unresolved',
+          unresolved?.semantics.hotkey?.expression || unresolved?.semantics.displayIcon?.expression || unresolved?.semantics.options?.expression || '<editbox hotkey>'
+        );
+        this.addEditBoxUncertaintyWarning(unresolved || call, 'A potentially applicable editbox hotkey or displayIcon cannot be resolved to the exact non-empty-and-visible state required by Helper.editboxMinHeight.');
       }
 
-      const heightValue = projectedProperty(call, ['height']);
+      const heightValue = explicitHeightValue || state.height;
       const height = staticNumber(heightValue);
       if (height === undefined) {
-        if (heightValue) {
+        if (explicitHeightValue) {
           this.addValueGap(
             'height',
-            heightValue,
+            explicitHeightValue,
             'createEditBox height is dynamic or unsupported; the zero-height overlap boundary is not statically proven',
             call.source
           );
-        } else {
+        } else if (displayedHotkey) {
+          // A proven displayed hotkey guarantees the shipped positive minimum.
+        } else if (state.height && state.heightUnresolved) {
+          this.addValueGap(
+            'height',
+            state.height,
+            'createEditBox table-default height is dynamic or unsupported; the zero-height overlap boundary is not statically proven',
+            call.source
+          );
+          this.addEditBoxUncertaintyWarning(
+            state.heightUnresolvedCall || call,
+            'A potentially applicable editbox table default height is not a statically known non-negative number, so the omitted descriptor height cannot be resolved.'
+          );
+        } else if (!state.heightUnresolved) {
           this.addFinding({
             rule: X4_UI_LINT_RULES.editBoxHeightMinimum,
             severity: 'warning',
             message: 'createEditBox outer height is omitted; the known zero-height overlap failure remains possible, but omission alone is not universally unsafe.',
             cause: 'Helper base widget height defaults to zero, but table default cell properties or displayed-hotkey minimum handling can supply a positive editbox descriptor height when call-specific height is omitted; positive row peers affect row height only.',
             failureMode: 'If neither a positive table default nor displayed-hotkey minimum handling supplies the editbox descriptor height, X4 displays the frame, logs "Dimensions for editbox are too small ... height(0 px)" and "Editbox elements will overlap eachother", and shows the edit field clipped/overlapped.',
-            evidenceBoundary: 'Official X4 9.00 omission counterexamples occur in positive-height row contexts and displayed-hotkey contexts. A positive row peer can raise row:getHeight() but does not supply the editbox descriptor height; among the modeled source facts, only table default cell properties and displayed-hotkey minimum handling can do that when call-specific height is omitted. This bounded model does not resolve those descriptor paths, so omission is a nonblocking warning rather than proof of the known zero-height failure. Not verified in game.',
+            evidenceBoundary: 'Official X4 9.00 omission counterexamples occur in positive-height row contexts and displayed-hotkey contexts. A positive row peer can raise row:getHeight() but does not supply the editbox descriptor height; among the modeled source facts, only table default cell properties and displayed-hotkey minimum handling can do that when call-specific height is omitted. Exact statically modeled table default cell properties and displayed-hotkey minimum handling are resolved. This warning applies because no such positive source-proven path was found for this editbox; dynamic, conditional, malformed, and unresolved paths remain verification gaps. Omission is a nonblocking warning rather than proof of the known zero-height failure. Not verified in game.',
             nextAction: 'Add an explicit positive outer height, or verify the effective height and rendered layout in-game; this warning is not proof of X4 frame acceptance.',
             location: call.source
           });
+        } else if (!displayedHotkey && state.heightUnresolved && !state.hotkeyUnresolved) {
+          this.addEditBoxUncertaintyWarning(
+            state.heightUnresolvedCall || call,
+            'A potentially applicable editbox table default height is not a statically known non-negative number, so the omitted descriptor height cannot be resolved.'
+          );
         }
         continue;
       }
-      if (height !== 0) continue;
+      if (height !== 0) {
+        continue;
+      }
+      if (displayedHotkey) continue;
+      if (state.hotkeyUnresolved) continue;
 
       this.addFinding({
         rule: X4_UI_LINT_RULES.editBoxHeightMinimum,
@@ -1049,7 +1450,7 @@ class X4UiLintEvaluator {
         failureMode: 'Absent displayed-hotkey minimum handling, X4 displays the frame, logs "Dimensions for editbox are too small ... height(0 px)" and "Editbox elements will overlap eachother", and shows the edit field clipped/overlapped.',
         evidenceBoundary: 'A literal-zero call-specific height is source-proven to override a positive table default and remain zero unless the separate displayed-hotkey minimum applies. This rule treats that literal as blocking; positive row peers do not alter the editbox descriptor height, and omitted, dynamic, and unresolved heights are outside this blocking policy. This is not proof of general X4 frame acceptance. Not verified in game.',
         nextAction: 'Replace the literal zero with an explicit positive outer height and verify the rendered layout in-game.',
-        location: heightValue.location
+        location: explicitHeightValue?.location || call.source
       });
     }
   }
@@ -1069,6 +1470,34 @@ class X4UiLintEvaluator {
     const options = call.semantics.options;
     if (options && options.status !== 'static') {
       this.addValueGap('height', options, `${call.name} outer-cell geometry is unverified because its options table is dynamic or unknown`, call.source);
+      return undefined;
+    }
+
+    const editBoxState = call.name === 'createEditBox'
+      ? this.editBoxStateEvidence(table, call)
+      : undefined;
+    const explicitHeightValue = projectedProperty(call, ['height']);
+    const defaultHeightValue = editBoxState && !explicitHeightValue ? editBoxState.height : undefined;
+    if (editBoxState?.heightUnresolved && !explicitHeightValue) {
+      const unresolved = editBoxState.heightUnresolvedCall;
+      this.addGap(
+        'height',
+        valueStatus(unresolved?.semantics.height || unresolved?.semantics.options),
+        unresolved?.source || call.source,
+        'editbox row geometry is unverified because a potentially applicable same-table default height is dynamic, conditional, or malformed',
+        unresolved?.semantics.height?.expression || unresolved?.semantics.options?.expression || '<editbox default height>'
+      );
+      return undefined;
+    }
+    if (editBoxState?.hotkeyUnresolved) {
+      const unresolved = editBoxState.hotkeyUnresolvedCall;
+      this.addGap(
+        'edit-box',
+        valueStatus(unresolved?.semantics.hotkey || unresolved?.semantics.displayIcon || unresolved?.semantics.options),
+        unresolved?.source || call.source,
+        'editbox row geometry is unverified because the effective displayed-hotkey state is dynamic, conditional, malformed, or unresolved',
+        unresolved?.semantics.hotkey?.expression || unresolved?.semantics.displayIcon?.expression || unresolved?.semantics.options?.expression || '<editbox hotkey>'
+      );
       return undefined;
     }
 
@@ -1092,7 +1521,7 @@ class X4UiLintEvaluator {
       }
     }
 
-    const heightValue = projectedProperty(call, ['height']);
+    const heightValue = explicitHeightValue || defaultHeightValue;
     const yValue = projectedProperty(call, ['y']);
     const heightSource = call.name === 'createButton'
       ? pinnedStandardButtonHeight(heightValue)
@@ -1140,11 +1569,12 @@ class X4UiLintEvaluator {
     }
     if (!affectRowHeight) y = 0;
 
-    const scalingValue = effectiveScalingValue(
-      projectedProperty(call, ['scaling']),
-      projectedProperty(row, ['scaling']),
-      projectedProperty(table.call, ['scaling'])
-    );
+    const callScaling = projectedProperty(call, ['scaling']);
+    const rowScaling = projectedProperty(row, ['scaling']);
+    const tableScaling = projectedProperty(table.call, ['scaling']);
+    const scalingValue = call.name === 'createEditBox'
+      ? effectiveEditBoxScalingValue(callScaling, rowScaling, tableScaling, editBoxState?.scaling)
+      : effectiveScalingValue(callScaling, rowScaling, tableScaling);
     const scaling = staticBoolean(scalingValue);
     const scaleNeeded = height !== 0 || y !== 0;
     if (scaleNeeded && scaling !== false) {
@@ -1167,8 +1597,13 @@ class X4UiLintEvaluator {
       return undefined;
     }
 
+    const displayedHotkey = call.name === 'createEditBox'
+      && editBoxState !== undefined
+      && this.hasProvenDisplayedHotkey(editBoxState);
     return {
-      height: helperRound(y) + helperRound(height),
+      height: helperRound(y) + (displayedHotkey
+        ? Math.max(helperRound(height), EDITBOX_MIN_HEIGHT)
+        : helperRound(height)),
       sourcePinned: call.name === 'createButton' && (!heightValue || /^Helper\s*[:.]\s*standardButtonHeight$/i.test(heightValue.expression))
     };
   }

@@ -1745,6 +1745,17 @@ const synchronizedAuthority = (
       if (Object.prototype.hasOwnProperty.call(record, key)) record[key] = cloneJsonValue((operation as unknown as Record<string, unknown>)[key]);
     }
   }
+  const calls = copy.calls;
+  if (Array.isArray(calls)) {
+    for (const candidate of calls) {
+      if (candidate === null || typeof candidate !== 'object' || Array.isArray(candidate)) continue;
+      const record = candidate as Record<string, unknown>;
+      const operation = typeof record.operationId === 'string' ? programById.get(record.operationId) : undefined;
+      if (operation !== undefined) {
+        if (Object.prototype.hasOwnProperty.call(record, 'status')) record.status = cloneJsonValue(operation.status);
+      }
+    }
+  }
   const nodes = copy.nodes;
   if (nodes !== null && typeof nodes === 'object' && !Array.isArray(nodes)) {
     const nodeRecord = nodes as Record<string, unknown>;
@@ -1776,6 +1787,580 @@ const synchronizedAuthority = (
   }
   return copy as unknown as X4UiLayoutEvidenceAuthority;
 };
+
+const hostileEditBoxDefaultTransition = (
+  projected: ReturnType<typeof rawProjectionFor>,
+  operationKind: 'setDefaultCellProperties' | 'setDefaultComplexCellProperties',
+  factName: string,
+  fact: X4UiLayoutDescriptorFact,
+  mutateDefaults: (defaults: Record<string, unknown>) => void,
+): { program: X4UiLayoutProgram; authority: X4UiLayoutEvidenceAuthority } => {
+  assert(projected.program !== undefined && projected.result !== undefined && 'evidenceAuthority' in projected.result && projected.result.evidenceAuthority !== undefined, 'hostile edit-box default fixture must issue an evidence pair');
+  const program = cloneProgram(projected.program);
+  const operation = program.operations.find(operationNode => operationNode.kind === operationKind);
+  assert(operation !== undefined && operation.kernel?.stateAfter !== undefined, `hostile ${operationKind} fixture must retain its issued transition`);
+  const table = program.tables.find(tableNode => tableNode.id === operation.tableId);
+  assert(table?.kernelState !== undefined, `hostile ${operationKind} fixture must retain its table state`);
+  (operation.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>)[factName] = fact;
+  const stateAfter = cloneKernelState(operation.kernel.stateAfter);
+  assert(stateAfter.editBoxDefaults !== undefined, `hostile ${operationKind} fixture must retain edit-box defaults`);
+  mutateDefaults(stateAfter.editBoxDefaults as unknown as Record<string, unknown>);
+  (operation.kernel as unknown as { stateAfter: HelperTableState }).stateAfter = stateAfter;
+  (table as unknown as { kernelState: HelperTableState }).kernelState = stateAfter;
+  const authority = synchronizedAuthority(projected.result.evidenceAuthority, program);
+  freezeFixtureGraph(program);
+  freezeFixtureGraph(authority);
+  return { program, authority };
+};
+
+const hostileDynamicEditBoxDefaultTransition = (
+  projected: ReturnType<typeof rawProjectionFor>,
+  operationKind: 'setDefaultCellProperties' | 'setDefaultComplexCellProperties',
+  factName: 'height' | 'scaling' | 'hotkey' | 'displayIcon',
+  factValue: number | string | boolean,
+  expectedType: 'number' | 'string' | 'boolean',
+): { program: X4UiLayoutProgram; authority: X4UiLayoutEvidenceAuthority } => {
+  assert(projected.program !== undefined && projected.result !== undefined && 'evidenceAuthority' in projected.result && projected.result.evidenceAuthority !== undefined, 'hostile dynamic edit-box default fixture must issue an evidence pair');
+  const program = cloneProgram(projected.program);
+  const operation = program.operations.find(operationNode => operationNode.kind === operationKind);
+  assert(operation !== undefined && operation.status === 'unresolved' && operation.kernel === undefined && operation.tableId !== undefined, `hostile dynamic ${operationKind} fixture must retain an unresolved unmaterialized transition`);
+  const table = program.tables.find(tableNode => tableNode.id === operation.tableId);
+  const previous = program.operations
+    .filter(operationNode => operationNode.tableId === operation.tableId && operationNode.modelOrder < operation.modelOrder && operationNode.kernel?.stateAfter !== undefined)
+    .sort((left, right) => left.modelOrder - right.modelOrder)
+    .at(-1);
+  assert(table?.kernelState !== undefined && previous?.kernel?.stateAfter !== undefined, `hostile dynamic ${operationKind} fixture must retain its table and preceding kernel state`);
+  assert(jsonEqual(table.kernelState, previous.kernel.stateAfter), `hostile dynamic ${operationKind} fixture must start from the preceding table state`);
+  const stateBefore = cloneKernelState(previous.kernel.stateAfter);
+  const stateAfter = cloneKernelState(stateBefore);
+  assert(stateAfter.editBoxDefaults !== undefined, `hostile dynamic ${operationKind} fixture must retain edit-box defaults`);
+  (stateAfter.editBoxDefaults as unknown as Record<string, unknown>)[factName] = factValue;
+  (operation.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>)[factName] = known(factValue, expectedType, operation.source, `runtime${factName[0].toUpperCase()}${factName.slice(1)}`);
+  const mutableOperation = operation as unknown as {
+    kernel: { stateBefore: HelperTableState; stateAfter: HelperTableState };
+  };
+  mutableOperation.kernel = { stateBefore, stateAfter };
+  (table as unknown as { kernelState: HelperTableState }).kernelState = stateAfter;
+  const authority = synchronizedAuthority(projected.result.evidenceAuthority, program);
+  freezeFixtureGraph(program);
+  freezeFixtureGraph(authority);
+  return { program, authority };
+};
+
+const hostileDynamicSetHotkeyTransition = (
+  projected: ReturnType<typeof rawProjectionFor>,
+): { program: X4UiLayoutProgram; authority: X4UiLayoutEvidenceAuthority } => {
+  assert(projected.program !== undefined && projected.result !== undefined && 'evidenceAuthority' in projected.result && projected.result.evidenceAuthority !== undefined, 'hostile dynamic setHotkey fixture must issue an evidence pair');
+  const program = cloneProgram(projected.program);
+  const operation = program.operations.find(operationNode => operationNode.kind === 'setHotkey');
+  assert(operation !== undefined && operation.status === 'unresolved' && operation.kernel === undefined && operation.tableId !== undefined && operation.rowId !== undefined && operation.cellId !== undefined, 'hostile dynamic setHotkey fixture must retain an unresolved unmaterialized transition and owners');
+  const table = program.tables.find(tableNode => tableNode.id === operation.tableId);
+  const row = program.rows.find(rowNode => rowNode.id === operation.rowId);
+  const cell = program.cells.find(cellNode => cellNode.id === operation.cellId);
+  const previous = program.operations
+    .filter(operationNode => operationNode.tableId === operation.tableId && operationNode.modelOrder < operation.modelOrder && operationNode.kernel?.stateAfter !== undefined)
+    .sort((left, right) => left.modelOrder - right.modelOrder)
+    .at(-1);
+  assert(table?.kernelState !== undefined && row?.rowIndex !== undefined && cell?.rowIndex === row.rowIndex && previous?.kernel?.stateAfter !== undefined, 'hostile dynamic setHotkey fixture must retain its table, row, cell, and preceding kernel state');
+  assert(jsonEqual(table.kernelState, previous.kernel.stateAfter), 'hostile dynamic setHotkey fixture must start from the preceding table state');
+  const stateBefore = cloneKernelState(previous.kernel.stateAfter);
+  const stateAfter = cloneKernelState(stateBefore);
+  const stateCell = stateAfter.rows[row.rowIndex - 1]?.cells[cell.column - 1];
+  assert(stateCell !== undefined, 'hostile dynamic setHotkey fixture must retain its cell slot');
+  (stateCell as unknown as { hotkey: string; displayIcon: boolean }).hotkey = 'KEY';
+  (stateCell as unknown as { hotkey: string; displayIcon: boolean }).displayIcon = true;
+  (operation.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>).hotkey = known('KEY', 'string', operation.source, '"KEY"');
+  (operation.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>).displayIcon = known(true, 'boolean', operation.source, 'runtimeDisplayIcon');
+  (cell.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>).hotkey = known('KEY', 'string', cell.source, '"KEY"');
+  (cell.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>).displayIcon = known(true, 'boolean', cell.source, 'runtimeDisplayIcon');
+  const mutableOperation = operation as unknown as {
+    kernel: { stateBefore: HelperTableState; stateAfter: HelperTableState };
+  };
+  mutableOperation.kernel = { stateBefore, stateAfter };
+  (table as unknown as { kernelState: HelperTableState }).kernelState = stateAfter;
+  (row as unknown as { kernelState: HelperTableState['rows'][number] }).kernelState = stateAfter.rows[row.rowIndex - 1]!;
+  (cell as unknown as { kernelState: HelperTableState['rows'][number]['cells'][number] }).kernelState = stateCell;
+  refreshProgramKernelProjection(program);
+  const authority = synchronizedAuthority(projected.result.evidenceAuthority, program);
+  freezeFixtureGraph(program);
+  freezeFixtureGraph(authority);
+  return { program, authority };
+};
+
+test('B119 dynamic edit-box default height cannot become a forged producer', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "B119DynamicDefaultHeight", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'table:setDefaultCellProperties("editbox", { height = runtimeHeight })',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-dynamic-default-height.lua');
+  const hostile = hostileDynamicEditBoxDefaultTransition(projected, 'setDefaultCellProperties', 'height', 77, 'number');
+  const pair = validateX4UiLayoutEvidencePair(hostile.program, hostile.authority);
+  const stage = diagnoseX4UiSceneStructureForTest(hostile.program, hostile.authority);
+  console.log(`B119 dynamic-default height hostile receipt: ${JSON.stringify({ pairValid: pair.valid, stage })}`);
+  assert(pair.valid, `forged dynamic-height transition must remain producer-pair valid: ${JSON.stringify(pair)}`);
+  assert(stage !== undefined, 'dynamic source height must be rejected when a known fact and coherent transition are forged');
+});
+
+test('B119 dynamic edit-box default scaling cannot become a forged producer', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "B119DynamicDefaultScaling", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'table:setDefaultCellProperties("editbox", { scaling = runtimeScaling })',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-dynamic-default-scaling.lua');
+  const hostile = hostileDynamicEditBoxDefaultTransition(projected, 'setDefaultCellProperties', 'scaling', true, 'boolean');
+  const pair = validateX4UiLayoutEvidencePair(hostile.program, hostile.authority);
+  const stage = diagnoseX4UiSceneStructureForTest(hostile.program, hostile.authority);
+  console.log(`B119 dynamic-default scaling hostile receipt: ${JSON.stringify({ pairValid: pair.valid, stage })}`);
+  assert(pair.valid, `forged dynamic-scaling transition must remain producer-pair valid: ${JSON.stringify(pair)}`);
+  assert(stage !== undefined, 'dynamic source scaling must be rejected when a known fact and coherent transition are forged');
+});
+
+test('B119 dynamic edit-box default hotkey cannot become a forged producer', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "B119DynamicDefaultHotkey", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'table:setDefaultComplexCellProperties("editbox", "hotkey", { hotkey = runtimeHotkey })',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-dynamic-default-hotkey.lua');
+  const hostile = hostileDynamicEditBoxDefaultTransition(projected, 'setDefaultComplexCellProperties', 'hotkey', 'FORGED', 'string');
+  const pair = validateX4UiLayoutEvidencePair(hostile.program, hostile.authority);
+  const stage = diagnoseX4UiSceneStructureForTest(hostile.program, hostile.authority);
+  console.log(`B119 dynamic-default hotkey hostile receipt: ${JSON.stringify({ pairValid: pair.valid, stage })}`);
+  assert(pair.valid, `forged dynamic-hotkey transition must remain producer-pair valid: ${JSON.stringify(pair)}`);
+  assert(stage !== undefined, 'dynamic source hotkey must be rejected when a known fact and coherent transition are forged');
+});
+
+test('B119 dynamic edit-box default displayIcon cannot become a forged producer', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "B119DynamicDefaultDisplayIcon", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'table:setDefaultComplexCellProperties("editbox", "hotkey", { displayIcon = runtimeFlag })',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-dynamic-default-display-icon.lua');
+  const hostile = hostileDynamicEditBoxDefaultTransition(projected, 'setDefaultComplexCellProperties', 'displayIcon', true, 'boolean');
+  const pair = validateX4UiLayoutEvidencePair(hostile.program, hostile.authority);
+  const stage = diagnoseX4UiSceneStructureForTest(hostile.program, hostile.authority);
+  console.log(`B119 dynamic-default displayIcon hostile receipt: ${JSON.stringify({ pairValid: pair.valid, stage })}`);
+  assert(pair.valid, `forged dynamic-displayIcon transition must remain producer-pair valid: ${JSON.stringify(pair)}`);
+  assert(stage !== undefined, 'dynamic source displayIcon must be rejected when a known fact and coherent transition are forged');
+});
+
+test('B119 dynamic edit-box setHotkey displayIcon cannot become a forged producer', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "B119DynamicSetHotkeyDisplayIcon", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'local row = table:addRow(false, {})',
+    'local edit = row[1]:createEditBox({ height = 25, scaling = false })',
+    'edit:setHotkey("KEY", { displayIcon = runtimeFlag })',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-dynamic-set-hotkey-display-icon.lua');
+  const hostile = hostileDynamicSetHotkeyTransition(projected);
+  const pair = validateX4UiLayoutEvidencePair(hostile.program, hostile.authority);
+  const stage = diagnoseX4UiSceneStructureForTest(hostile.program, hostile.authority);
+  console.log(`B119 dynamic-setHotkey displayIcon hostile receipt: ${JSON.stringify({ pairValid: pair.valid, stage })}`);
+  assert(pair.valid, `forged dynamic-setHotkey displayIcon transition must remain producer-pair valid: ${JSON.stringify(pair)}`);
+  assert(stage !== undefined, 'dynamic setHotkey displayIcon must be rejected when a known fact and coherent transition are forged');
+});
+
+test('B119 source reciprocity rejects forged height from omitted setDefaultCellProperties input', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "B119OmittedDefaultHeight", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'table:setDefaultCellProperties("editbox", {})',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-omitted-default-height.lua');
+  const hostile = hostileEditBoxDefaultTransition(projected, 'setDefaultCellProperties', 'height', known(77, 'number', source(401)), defaults => {
+    defaults.height = 77;
+  });
+  const pair = validateX4UiLayoutEvidencePair(hostile.program, hostile.authority);
+  assert(pair.valid, `forged omitted-height transition must remain producer-pair valid: ${JSON.stringify(pair)}`);
+  assert(diagnoseX4UiSceneStructureForTest(hostile.program, hostile.authority) !== undefined, 'forged height descriptor fact must be rejected when source height was omitted');
+});
+
+test('B119 source reciprocity rejects forged scaling from omitted setDefaultCellProperties input', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "B119OmittedDefaultScaling", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'table:setDefaultCellProperties("editbox", {})',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-omitted-default-scaling.lua');
+  const hostile = hostileEditBoxDefaultTransition(projected, 'setDefaultCellProperties', 'scaling', known(true, 'boolean', source(402)), defaults => {
+    defaults.scaling = true;
+  });
+  const pair = validateX4UiLayoutEvidencePair(hostile.program, hostile.authority);
+  assert(pair.valid, `forged omitted-scaling transition must remain producer-pair valid: ${JSON.stringify(pair)}`);
+  assert(diagnoseX4UiSceneStructureForTest(hostile.program, hostile.authority) !== undefined, 'forged scaling descriptor fact must be rejected when source scaling was omitted');
+});
+
+test('B119 source reciprocity rejects forged hotkey from omitted setDefaultComplexCellProperties input', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "B119OmittedDefaultHotkey", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'table:setDefaultComplexCellProperties("editbox", "hotkey", {})',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-omitted-default-hotkey.lua');
+  const hostile = hostileEditBoxDefaultTransition(projected, 'setDefaultComplexCellProperties', 'hotkey', known('FORGED', 'string', source(403)), defaults => {
+    defaults.hotkey = 'FORGED';
+  });
+  const pair = validateX4UiLayoutEvidencePair(hostile.program, hostile.authority);
+  assert(pair.valid, `forged omitted-hotkey transition must remain producer-pair valid: ${JSON.stringify(pair)}`);
+  assert(diagnoseX4UiSceneStructureForTest(hostile.program, hostile.authority) !== undefined, 'forged hotkey descriptor fact must be rejected when source hotkey was omitted');
+});
+
+test('B119 source reciprocity rejects forged displayIcon from omitted setDefaultComplexCellProperties input', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "B119OmittedDefaultDisplayIcon", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'table:setDefaultComplexCellProperties("editbox", "hotkey", {})',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-omitted-default-display-icon.lua');
+  const hostile = hostileEditBoxDefaultTransition(projected, 'setDefaultComplexCellProperties', 'displayIcon', known(true, 'boolean', source(404)), defaults => {
+    defaults.displayIcon = true;
+  });
+  const pair = validateX4UiLayoutEvidencePair(hostile.program, hostile.authority);
+  assert(pair.valid, `forged omitted-displayIcon transition must remain producer-pair valid: ${JSON.stringify(pair)}`);
+  assert(diagnoseX4UiSceneStructureForTest(hostile.program, hostile.authority) !== undefined, 'forged displayIcon descriptor fact must be rejected when source displayIcon was omitted');
+});
+
+test('B119 source reciprocity rejects forged displayIcon from omitted setHotkey input', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "B119OmittedSetHotkeyDisplayIcon", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'local row = table:addRow(false, {})',
+    'local edit = row[1]:createEditBox({ height = 25, scaling = false })',
+    'edit:setHotkey("KEY")',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-omitted-set-hotkey-display-icon.lua');
+  assert(projected.program !== undefined && projected.result !== undefined && 'evidenceAuthority' in projected.result && projected.result.evidenceAuthority !== undefined, 'hostile setHotkey fixture must issue an evidence pair');
+  const program = cloneProgram(projected.program);
+  const operation = program.operations.find(operationNode => operationNode.kind === 'setHotkey');
+  assert(operation !== undefined && operation.kernel?.stateAfter !== undefined && operation.tableId !== undefined && operation.rowId !== undefined && operation.cellId !== undefined, 'hostile setHotkey fixture must retain its issued transition and owners');
+  const table = program.tables.find(tableNode => tableNode.id === operation.tableId);
+  const row = program.rows.find(rowNode => rowNode.id === operation.rowId);
+  const cell = program.cells.find(cellNode => cellNode.id === operation.cellId);
+  assert(table?.kernelState !== undefined && row?.rowIndex !== undefined && cell?.rowIndex === row.rowIndex, 'hostile setHotkey fixture must retain its table, row, and cell state');
+  (operation.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>).displayIcon = known(true, 'boolean', operation.source);
+  const stateAfter = cloneKernelState(operation.kernel.stateAfter);
+  const stateCell = stateAfter.rows[row.rowIndex - 1]?.cells[cell.column - 1];
+  assert(stateCell !== undefined, 'hostile setHotkey fixture must retain its cell slot');
+  (stateCell as unknown as { displayIcon: boolean }).displayIcon = true;
+  (cell.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>).displayIcon = known(true, 'boolean', cell.source);
+  (operation.kernel as unknown as { stateAfter: HelperTableState }).stateAfter = stateAfter;
+  (table as unknown as { kernelState: HelperTableState }).kernelState = stateAfter;
+  (row as unknown as { kernelState: HelperTableState['rows'][number] }).kernelState = stateAfter.rows[row.rowIndex - 1]!;
+  (cell as unknown as { kernelState: HelperTableState['rows'][number]['cells'][number] }).kernelState = stateCell;
+  refreshProgramKernelProjection(program);
+  const authority = synchronizedAuthority(projected.result.evidenceAuthority, program);
+  freezeFixtureGraph(program);
+  freezeFixtureGraph(authority);
+  const pair = validateX4UiLayoutEvidencePair(program, authority);
+  assert(pair.valid, `forged omitted-setHotkey displayIcon transition must remain producer-pair valid: ${JSON.stringify(pair)}`);
+  const stage = diagnoseX4UiSceneStructureForTest(program, authority);
+  console.log(`B119 omitted-setHotkey displayIcon hostile receipt: ${JSON.stringify({ pairValid: pair.valid, stage })}`);
+  assert(stage !== undefined, 'forged displayIcon descriptor fact must be rejected when source setHotkey displayIcon was omitted');
+});
+
+const b119UnsupportedHotkeyProjection = rawProjectionFor([
+  'local menu = { name = "B119UnsupportedHotkeyProperties", layer = 1 }',
+  'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+  'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+  'table:setDefaultCellProperties("editbox", { height = 0, scaling = false, x = 0 })',
+  'table:setDefaultComplexCellProperties("editbox", "hotkey", { hotkey = "DEFAULT", displayIcon = true, x = 0 })',
+  'local row = table:addRow(false, {})',
+  'local edit = row[1]:createEditBox({ height = 0, scaling = false })',
+  'edit:setHotkey("VISIBLE_ARGUMENT", { hotkey = "", displayIcon = false, x = 0, hotkey_x = 7 })',
+  'frame:display()',
+].join('\n'), 'selftest/b119-unsupported-hotkey-properties.lua');
+
+test('B119 authentic unsupported hotkey properties retain exact height while crossing Scene partial', () => {
+  assert(b119UnsupportedHotkeyProjection.program !== undefined
+    && b119UnsupportedHotkeyProjection.profile !== undefined
+    && b119UnsupportedHotkeyProjection.result !== undefined
+    && 'evidenceAuthority' in b119UnsupportedHotkeyProjection.result
+    && b119UnsupportedHotkeyProjection.result.evidenceAuthority !== undefined,
+  'unsupported hotkey property fixture must issue an evidence pair');
+  const result = b119UnsupportedHotkeyProjection.result as X4UiLayoutProgramResult;
+  const program = b119UnsupportedHotkeyProjection.program;
+  const authority = producerAuthority(result);
+  const direct = program.operations.find(operation => operation.kind === 'setHotkey');
+  const cell = direct?.cellId === undefined ? undefined : program.cells.find(candidate => candidate.id === direct.cellId);
+  const directGaps = direct === undefined ? [] : program.gaps.filter(gap => gap.operationId === direct.id);
+  const unsupportedProperties = direct === undefined
+    ? []
+    : ((direct.metadata.semantics as unknown as {
+      unsupportedProperties?: Array<{ name: string; normalizedName: string; value: { expression: string } }>;
+    }).unsupportedProperties ?? []);
+  const underscoredProperty = unsupportedProperties.find(candidate => candidate.name === 'hotkey_x');
+  const sceneResult = buildX4UiScene(result, corpus, b119UnsupportedHotkeyProjection.profile);
+  const pair = validateX4UiLayoutEvidencePair(program, authority);
+  const stage = diagnoseX4UiSceneStructureForTest(program, authority);
+  assert(direct !== undefined && cell !== undefined && direct.kernel?.stateAfter !== undefined, 'unsupported hotkey property fixture must retain direct transition and cell');
+  assert(pair.valid && stage === undefined, `authentic unsupported hotkey evidence must cross Scene structure: ${JSON.stringify({ pair, stage })}`);
+  assert(program.status === 'partial' && result.status === 'partial' && sceneResult.status === 'partial', 'unsupported hotkey properties must preserve partial status');
+  assert(direct.status === 'unresolved' && direct.kernel.stateAfter.rows[0]?.cells[0]?.height === 0, 'unsupported hotkey property transition must retain exact zero height in an unresolved operation');
+  assert(cell.kernelState?.height === 0 && cell.kernelState.hotkey === '' && cell.kernelState.displayIcon === false, 'unsupported hotkey property transition must retain the winning empty hotkey and icon state');
+  assert(underscoredProperty?.normalizedName === 'hotkeyx' && underscoredProperty.value.expression === '7', 'CallModel must retain the normalized underscore property contract in Scene source evidence');
+  assert(directGaps.length === 2
+    && directGaps.every(gap => gap.category === 'property'
+      && gap.status === 'unsupported'
+      && gap.source.start.offset > direct.source.start.offset
+      && gap.source.end.offset <= direct.source.end.offset)
+    && directGaps.some(gap => gap.expression === '0')
+    && directGaps.some(gap => gap.expression === '7'),
+  'direct x and hotkey_x properties must each have one exact source-linked unsupported gap');
+  assert(sceneResult.scene.widgets.some(widget => widget.cellId === `scene:${cell.id}` && widget.outerRect?.height === 0), 'Scene must retain known editbox geometry while the source property remains partial');
+  assert(sceneResult.scene.gameTruth === 'Not verified in game' && sceneResult.verification.gameVerified === false, 'Scene must retain literal Not verified in game');
+});
+
+test('B119 Scene rejects pair-valid forged unsupported-property completeness and source authority', () => {
+  assert(b119UnsupportedHotkeyProjection.program !== undefined
+    && b119UnsupportedHotkeyProjection.result !== undefined
+    && 'evidenceAuthority' in b119UnsupportedHotkeyProjection.result
+    && b119UnsupportedHotkeyProjection.result.evidenceAuthority !== undefined,
+  'hostile unsupported hotkey property fixture must issue an evidence pair');
+  const baseProgram = b119UnsupportedHotkeyProjection.program;
+  const baseAuthority = producerAuthority(b119UnsupportedHotkeyProjection.result as X4UiLayoutProgramResult);
+  const hostile = (
+    label: string,
+    mutate: (program: X4UiLayoutProgram, operation: X4UiLayoutOperation) => void,
+    mutateAuthority?: (authority: X4UiLayoutEvidenceAuthority, program: X4UiLayoutProgram, operation: X4UiLayoutOperation) => void,
+  ): void => {
+    const program = cloneProgram(baseProgram);
+    const operation = program.operations.find(candidate => candidate.kind === 'setHotkey');
+    assert(operation !== undefined, `${label} fixture must retain setHotkey operation`);
+    mutate(program, operation);
+    const authority = synchronizedAuthority(baseAuthority, program);
+    if (mutateAuthority !== undefined) mutateAuthority(authority, program, operation);
+    freezeFixtureGraph(program);
+    freezeFixtureGraph(authority);
+    const pair = validateX4UiLayoutEvidencePair(program, authority);
+    const stage = diagnoseX4UiSceneStructureForTest(program, authority);
+    console.log(`B119 unsupported-property ${label} hostile receipt: ${JSON.stringify({ pairValid: pair.valid, stage })}`);
+    assert(pair.valid, `${label} hostile must remain producer-pair valid: ${JSON.stringify(pair)}`);
+    assert(stage !== undefined, `${label} hostile must be rejected at Scene structure before geometry`);
+  };
+  hostile('winning-source-fact', (_program, operation) => {
+    (operation.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>).hotkey = known('VISIBLE_ARGUMENT', 'string', operation.source, '"VISIBLE_ARGUMENT"');
+  });
+  hostile('altered-source-authority', (_program, operation) => {
+    (operation.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>).hotkey = known('', 'string', operation.source, '""');
+  });
+  let droppedGapIndex = -1;
+  hostile('dropped-property-gap', (program, operation) => {
+    droppedGapIndex = program.gaps.findIndex(gap => gap.operationId === operation.id && gap.category === 'property' && gap.status === 'unsupported');
+    assert(droppedGapIndex >= 0, 'dropped-property-gap fixture must locate a direct unsupported gap');
+    (program as unknown as { gaps: { splice(index: number, deleteCount: number): void } }).gaps.splice(droppedGapIndex, 1);
+  }, authority => {
+    const mutableAuthority = authority as unknown as {
+      gaps: X4UiLayoutEvidenceAuthority['gaps'];
+      linkedGapIndexes: number[];
+      unlinkedGapIndexes: number[];
+    };
+    const gaps = [...mutableAuthority.gaps];
+    gaps.splice(droppedGapIndex, 1);
+    mutableAuthority.gaps = gaps;
+    mutableAuthority.linkedGapIndexes = gaps
+      .map((gap, index) => gap.operationId === undefined ? undefined : index)
+      .filter((index): index is number => index !== undefined);
+    mutableAuthority.unlinkedGapIndexes = gaps
+      .map((gap, index) => gap.operationId === undefined ? index : undefined)
+      .filter((index): index is number => index !== undefined);
+  });
+  hostile('applied-operation-completeness', (_program, operation) => {
+    (operation as unknown as { status: 'applied' }).status = 'applied';
+  });
+  hostile('projected-program-completeness', (program) => {
+    (program as unknown as { status: 'projected' }).status = 'projected';
+  });
+
+  const normalizedProgram = cloneProgram(baseProgram);
+  const normalizedOperation = normalizedProgram.operations.find(candidate => candidate.kind === 'setHotkey');
+  assert(normalizedOperation !== undefined, 'normalized-name-mismatch fixture must retain setHotkey operation');
+  const normalizedSemantics = normalizedOperation.metadata.semantics as unknown as {
+    unsupportedProperties?: Array<{ name: string; normalizedName: string }>;
+  };
+  const normalizedProperty = normalizedSemantics.unsupportedProperties?.find(candidate => candidate.name === 'hotkey_x');
+  assert(normalizedProperty !== undefined, 'normalized-name-mismatch fixture must retain the underscored unsupported property');
+  normalizedProperty.normalizedName = 'hotkey_x';
+  const normalizedAuthority = synchronizedAuthority(baseAuthority, normalizedProgram);
+  const normalizedOperationIndex = normalizedProgram.operations.findIndex(candidate => candidate.id === normalizedOperation.id);
+  const mutableNormalizedAuthority = normalizedAuthority as unknown as {
+    sourceBindings: Array<{ metadata: X4UiLayoutOperation['metadata'] }>;
+  };
+  const normalizedSourceBinding = mutableNormalizedAuthority.sourceBindings[normalizedOperationIndex];
+  assert(normalizedSourceBinding !== undefined, 'normalized-name-mismatch fixture must retain its detached source binding');
+  normalizedSourceBinding.metadata = cloneJsonValue(normalizedOperation.metadata);
+  freezeFixtureGraph(normalizedProgram);
+  freezeFixtureGraph(normalizedAuthority);
+  const normalizedPair = validateX4UiLayoutEvidencePair(normalizedProgram, normalizedAuthority);
+  const normalizedStage = diagnoseX4UiSceneStructureForTest(normalizedProgram, normalizedAuthority);
+  assert(normalizedPair.valid, `normalized-name-mismatch hostile must remain producer-pair valid: ${JSON.stringify(normalizedPair)}`);
+  assert(normalizedStage?.startsWith(`unsupported-property:${normalizedOperation.id}`) === true, 'Scene must independently reject a forged normalized name before geometry');
+});
+
+test('B119 unavailable simple-default descriptor facts cannot forge omitted properties', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "B119UnavailableDefaultProperties", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'table:setDefaultCellProperties("editbox", {})',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-unavailable-default-properties.lua');
+  assert(projected.program !== undefined && projected.result !== undefined && 'evidenceAuthority' in projected.result && projected.result.evidenceAuthority !== undefined, 'unavailable simple-default fixture must issue an evidence pair');
+  const sourceOperation = projected.program.operations.find(operationNode => operationNode.kind === 'setDefaultCellProperties');
+  assert(sourceOperation !== undefined && sourceOperation.kernel?.stateAfter !== undefined, 'unavailable simple-default fixture must retain its source operation');
+  assert(JSON.stringify(Object.keys(sourceOperation.descriptorFacts).sort()) === JSON.stringify(['cellType']), 'simple-default descriptor facts must start with the required cellType key only');
+  for (const [factName, expectedType] of [['height', 'number'], ['scaling', 'boolean']] as const) {
+    const hostile = hostileEditBoxDefaultTransition(projected, 'setDefaultCellProperties', factName, unavailable(expectedType, `forged unavailable ${factName}`, source(405)), () => {});
+    const hostileOperation = hostile.program.operations.find(operationNode => operationNode.kind === 'setDefaultCellProperties');
+    assert(hostileOperation?.kernel?.stateAfter !== undefined && jsonEqual(sourceOperation.kernel.stateAfter, hostileOperation.kernel.stateAfter), `${factName} hostile fixture must leave the kernel state unchanged`);
+    const pair = validateX4UiLayoutEvidencePair(hostile.program, hostile.authority);
+    const stage = diagnoseX4UiSceneStructureForTest(hostile.program, hostile.authority);
+    console.log(`B119 unavailable simple-default ${factName} hostile receipt: ${JSON.stringify({ pairValid: pair.valid, stage })}`);
+    assert(pair.valid, `unavailable ${factName} hostile must remain producer-pair valid: ${JSON.stringify(pair)}`);
+    assert(stage !== undefined, `unavailable ${factName} descriptor fact must be rejected when the source property was omitted`);
+  }
+});
+
+test('B119 unavailable complex-default descriptor facts cannot forge omitted properties', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "B119UnavailableComplexDefaultProperties", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'table:setDefaultComplexCellProperties("editbox", "hotkey", {})',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-unavailable-complex-default-properties.lua');
+  assert(projected.program !== undefined && projected.result !== undefined && 'evidenceAuthority' in projected.result && projected.result.evidenceAuthority !== undefined, 'unavailable complex-default fixture must issue an evidence pair');
+  const sourceOperation = projected.program.operations.find(operationNode => operationNode.kind === 'setDefaultComplexCellProperties');
+  assert(sourceOperation !== undefined && sourceOperation.kernel?.stateAfter !== undefined, 'unavailable complex-default fixture must retain its source operation');
+  assert(JSON.stringify(Object.keys(sourceOperation.descriptorFacts).sort()) === JSON.stringify(['cellType', 'propertyName']), 'complex-default descriptor facts must start with the required cellType/propertyName keys only');
+  for (const [factName, expectedType] of [['hotkey', 'string'], ['displayIcon', 'boolean']] as const) {
+    const hostile = hostileEditBoxDefaultTransition(projected, 'setDefaultComplexCellProperties', factName, unavailable(expectedType, `forged unavailable ${factName}`, source(406)), () => {});
+    const hostileOperation = hostile.program.operations.find(operationNode => operationNode.kind === 'setDefaultComplexCellProperties');
+    assert(hostileOperation?.kernel?.stateAfter !== undefined && jsonEqual(sourceOperation.kernel.stateAfter, hostileOperation.kernel.stateAfter), `${factName} hostile fixture must leave the kernel state unchanged`);
+    const pair = validateX4UiLayoutEvidencePair(hostile.program, hostile.authority);
+    const stage = diagnoseX4UiSceneStructureForTest(hostile.program, hostile.authority);
+    console.log(`B119 unavailable complex-default ${factName} hostile receipt: ${JSON.stringify({ pairValid: pair.valid, stage })}`);
+    assert(pair.valid, `unavailable ${factName} hostile must remain producer-pair valid: ${JSON.stringify(pair)}`);
+    assert(stage !== undefined, `unavailable ${factName} descriptor fact must be rejected when the source property was omitted`);
+  }
+});
+
+test('B119 unavailable setHotkey displayIcon cannot forge an omitted property', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "B119UnavailableSetHotkeyDisplayIcon", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'local row = table:addRow(false, {})',
+    'local edit = row[1]:createEditBox({ height = 25, scaling = false })',
+    'edit:setHotkey("KEY")',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-unavailable-set-hotkey-display-icon.lua');
+  assert(projected.program !== undefined && projected.result !== undefined && 'evidenceAuthority' in projected.result && projected.result.evidenceAuthority !== undefined, 'unavailable setHotkey fixture must issue an evidence pair');
+  const program = cloneProgram(projected.program);
+  const operation = program.operations.find(operationNode => operationNode.kind === 'setHotkey');
+  const cell = operation?.cellId === undefined ? undefined : program.cells.find(cellNode => cellNode.id === operation.cellId);
+  assert(operation !== undefined && operation.kernel?.stateAfter !== undefined && cell !== undefined, 'unavailable setHotkey fixture must retain its source operation and cell');
+  assert(JSON.stringify(Object.keys(operation.descriptorFacts).sort()) === JSON.stringify(['hotkey']), 'setHotkey descriptor facts must start with the required hotkey key only');
+  const displayIconFact = unavailable('boolean', 'forged unavailable displayIcon', operation.source);
+  (operation.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>).displayIcon = displayIconFact;
+  (cell.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>).displayIcon = unavailable('boolean', 'forged unavailable displayIcon', cell.source);
+  const authority = synchronizedAuthority(projected.result.evidenceAuthority, program);
+  freezeFixtureGraph(program);
+  freezeFixtureGraph(authority);
+  const pair = validateX4UiLayoutEvidencePair(program, authority);
+  const stage = diagnoseX4UiSceneStructureForTest(program, authority);
+  console.log(`B119 unavailable setHotkey displayIcon hostile receipt: ${JSON.stringify({ pairValid: pair.valid, stage })}`);
+  assert(pair.valid, `unavailable setHotkey displayIcon hostile must remain producer-pair valid: ${JSON.stringify(pair)}`);
+  assert(stage !== undefined, 'unavailable displayIcon descriptor fact must be rejected when the source property was omitted');
+});
+
+test('B119 edit-box producer descriptor facts reject arbitrary extra keys by operation kind', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "B119ExtraDescriptorFacts", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'table:setDefaultCellProperties("editbox", {})',
+    'table:setDefaultComplexCellProperties("editbox", "hotkey", {})',
+    'local row = table:addRow(false, {})',
+    'local edit = row[1]:createEditBox({ height = 25, scaling = false })',
+    'edit:setHotkey("KEY")',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-extra-descriptor-facts.lua');
+  assert(projected.program !== undefined && projected.result !== undefined && 'evidenceAuthority' in projected.result && projected.result.evidenceAuthority !== undefined, 'extra descriptor-fact fixture must issue an evidence pair');
+  const sourceAuthority = projected.result.evidenceAuthority;
+  const cases = [
+    ['setDefaultCellProperties', 'simple-default'],
+    ['setDefaultComplexCellProperties', 'complex-default'],
+    ['setHotkey', 'setHotkey'],
+  ] as const;
+  for (const [kind, label] of cases) {
+    const program = cloneProgram(projected.program);
+    const operation = program.operations.find(operationNode => operationNode.kind === kind);
+    assert(operation !== undefined, `${label} extra-key fixture must retain its source operation`);
+    (operation.descriptorFacts as Record<string, X4UiLayoutDescriptorFact>).forgedExtra = unavailable('string', `forged extra ${label} descriptor fact`, operation.source);
+    const authority = synchronizedAuthority(sourceAuthority, program);
+    freezeFixtureGraph(program);
+    freezeFixtureGraph(authority);
+    const pair = validateX4UiLayoutEvidencePair(program, authority);
+    const stage = diagnoseX4UiSceneStructureForTest(program, authority);
+    console.log(`B119 extra descriptor fact ${label} hostile receipt: ${JSON.stringify({ pairValid: pair.valid, stage })}`);
+    assert(pair.valid, `${label} extra descriptor fact hostile must remain producer-pair valid: ${JSON.stringify(pair)}`);
+    assert(stage !== undefined, `${label} arbitrary extra descriptor fact must be rejected by its closed producer key set`);
+  }
+});
+
+test('B119 legitimate omitted edit-box producer properties remain accepted', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "B119LegitimateOmittedProperties", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'table:setDefaultCellProperties("editbox", {})',
+    'table:setDefaultComplexCellProperties("editbox", "hotkey", {})',
+    'local row = table:addRow(false, {})',
+    'local edit = row[1]:createEditBox({ height = 12, scaling = false })',
+    'edit:setHotkey("KEY")',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-legitimate-omitted-properties.lua');
+  assert(projected.program !== undefined && projected.result !== undefined && 'evidenceAuthority' in projected.result && projected.result.evidenceAuthority !== undefined, 'legitimate omitted-property fixture must issue an evidence pair');
+  const pair = validateX4UiLayoutEvidencePair(projected.program, projected.result.evidenceAuthority);
+  assert(pair.valid, `legitimate omitted-property producer pair must validate: ${JSON.stringify(pair)}`);
+  assert(diagnoseX4UiSceneStructureForTest(projected.program, projected.result.evidenceAuthority) === undefined, 'legitimate omitted producer properties must remain accepted');
+  const sceneResult = buildX4UiScene(projected.result as X4UiLayoutProgramResult, corpus, projected.profile!);
+  assert(sceneResult.status !== 'refused', `legitimate omitted producer properties must reach Scene: ${JSON.stringify(sceneResult)}`);
+});
+
+test('B119 explicit zero false and empty-string edit-box producer properties remain accepted', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "B119ExplicitFalsyProperties", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'table:setDefaultCellProperties("editbox", { height = 0, scaling = false })',
+    'table:setDefaultComplexCellProperties("editbox", "hotkey", { hotkey = "", displayIcon = false })',
+    'local row = table:addRow(false, {})',
+    'local edit = row[1]:createEditBox({})',
+    'edit:setHotkey("KEY", { displayIcon = false })',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-explicit-falsy-properties.lua');
+  assert(projected.program !== undefined && projected.result !== undefined && 'evidenceAuthority' in projected.result && projected.result.evidenceAuthority !== undefined, 'explicit-falsy fixture must issue an evidence pair');
+  const pair = validateX4UiLayoutEvidencePair(projected.program, projected.result.evidenceAuthority);
+  assert(pair.valid, `explicit zero/false/empty-string producer pair must validate: ${JSON.stringify(pair)}`);
+  assert(diagnoseX4UiSceneStructureForTest(projected.program, projected.result.evidenceAuthority) === undefined, 'explicit zero/false/empty-string producer properties must remain accepted');
+  const sceneResult = buildX4UiScene(projected.result as X4UiLayoutProgramResult, corpus, projected.profile!);
+  assert(sceneResult.status !== 'refused', `explicit zero/false/empty-string producer properties must reach Scene: ${JSON.stringify(sceneResult)}`);
+});
 
 const pairInvalidProgram = (
   program: X4UiLayoutProgram,
@@ -3047,6 +3632,145 @@ test('B119 synchronized in-range edit-box inset drift refuses before Scene geome
   assert(accepted.status !== 'refused' && acceptedWidget?.editboxBlackInset === 3, `uiScale 2.5 canonical inset must be exactly 3: ${JSON.stringify(accepted)}`);
   assert(pair.valid, `synchronized in-range edit-box inset drift must remain an authority-valid producer pair: ${JSON.stringify(pair)}`);
   assert(stage !== undefined, `synchronized in-range inset 2 escaped the Scene structure boundary: ${JSON.stringify({ stage, uiScale: projected.program.profile.metrics.uiScale, forgedInset: 2 })}`);
+});
+
+test('B119 editbox descriptor defaults and displayed-hotkey minimum reach Scene, while altered authority refuses', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "B119DescriptorHeightScene", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+    'table:setDefaultCellProperties("editbox", { height = 4, scaling = true })',
+    'table:setDefaultComplexCellProperties("editbox", "hotkey", { hotkey = "FIRST", displayIcon = true })',
+    'local firstRow = table:addRow(false, { scaling = false })',
+    'local first = firstRow[1]:createEditBox({})',
+    'table:setDefaultCellProperties("editbox", { height = 20, scaling = false })',
+    'table:setDefaultComplexCellProperties("editbox", "hotkey", { hotkey = "SECOND" })',
+    'local secondRow = table:addRow(false, { scaling = false })',
+    'local second = secondRow[1]:createEditBox({})',
+    'local thirdRow = table:addRow(false, { scaling = false })',
+    'local third = thirdRow[1]:createEditBox({ height = 0, scaling = true })',
+    'third:setHotkey("VISIBLE", { displayIcon = true })',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-descriptor-height-scene.lua', profile => ({
+    ...profile,
+    metrics: { ...profile.metrics, uiScale: 1.5 },
+  }));
+  assert(projected.program !== undefined && projected.profile !== undefined && projected.result !== undefined && 'program' in projected.result && projected.result.program !== undefined && 'evidenceAuthority' in projected.result && projected.result.evidenceAuthority !== undefined, 'B119 descriptor-height Scene fixture must issue a producer pair');
+  const program = projected.program;
+  const authority = projected.result.evidenceAuthority;
+  assert(validateX4UiLayoutEvidencePair(program, authority).valid, 'B119 descriptor-height producer pair must validate before Scene');
+  assert(diagnoseX4UiSceneStructureForTest(program, authority) === undefined, 'B119 descriptor-height producer must pass Scene structure');
+  const accepted = buildX4UiScene(projected.result as X4UiLayoutProgramResult, corpus, projected.profile);
+  assert(accepted.status !== 'refused', `B119 descriptor-height producer must reach Scene: ${JSON.stringify(accepted)}`);
+  const scene = accepted.scene;
+  const cellFor = (identityPath: string) => program.cells.find(cell => cell.identity?.path === identityPath);
+  const widgetFor = (identityPath: string) => {
+    const cell = cellFor(identityPath);
+    return cell === undefined ? undefined : scene.widgets.find(widget => widget.cellId === `scene:${cell.id}`);
+  };
+  const firstWidget = widgetFor('firstRow[1]');
+  const secondWidget = widgetFor('secondRow[1]');
+  const thirdWidget = widgetFor('thirdRow[1]');
+  assert(firstWidget?.outerRect?.height === 23, `B119 first defaulted displayed editbox must use the 23px minimum: ${JSON.stringify(firstWidget)}`);
+  assert(secondWidget?.outerRect?.height === 23, `B119 second source-ordered displayed hotkey must retain the 23px minimum: ${JSON.stringify(secondWidget)}`);
+  assert(thirdWidget?.outerRect?.height === 23, `B119 direct displayed hotkey must use the 23px minimum from zero: ${JSON.stringify(thirdWidget)}`);
+  const forgedAuthority = cloneJsonValue(authority) as unknown as Record<string, unknown>;
+  const authorityOperations = forgedAuthority.operations as Record<string, unknown>[];
+  const defaultOperation = authorityOperations.find(operationNode => operationNode.kind === 'setDefaultCellProperties');
+  assert(defaultOperation !== undefined, 'B119 altered-authority fixture must retain a default operation');
+  defaultOperation.sourceOrder = (defaultOperation.sourceOrder as number) + 1;
+  freezeFixtureGraph(forgedAuthority);
+  const altered = buildX4UiScene({
+    ...(projected.result as X4UiLayoutProgramResult),
+    evidenceAuthority: forgedAuthority as unknown as X4UiLayoutEvidenceAuthority,
+  }, corpus, projected.profile);
+  assert(refusalHasNoScene(altered), `B119 altered source-order authority must refuse before Scene geometry: ${JSON.stringify(altered)}`);
+});
+
+test('B119 Scene accepts authentic unresolved out-of-scope producers and rejects forged materialization or authority', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "B119NoOpScene", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(2, { width = 100, reserveScrollBar = false, scaling = false })',
+    'table:setDefaultCellProperties("button", { height = getHeight(), scaling = getScaling() })',
+    'table:setDefaultComplexCellProperties("editbox", "caption", { hotkey = getHotkey(), displayIcon = getDisplayIcon() })',
+    'local row = table:addRow(false, { scaling = false })',
+    'local button = row[1]:createButton({ height = 25, scaling = false })',
+    'button:setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })',
+    'row[2]:createEditBox({ height = 12, scaling = false })',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-noop-scene.lua');
+  assert(projected.program !== undefined && projected.profile !== undefined && projected.result !== undefined
+    && 'program' in projected.result && projected.result.program !== undefined
+    && 'evidenceAuthority' in projected.result && projected.result.evidenceAuthority !== undefined,
+  'B119 no-op Scene fixture must issue a producer pair');
+  const result = projected.result as X4UiLayoutProgramResult;
+  const program = projected.program;
+  const authority = producerAuthority(result);
+  const noOps = program.operations.filter(operationNode => operationNode.kind === 'setDefaultCellProperties'
+    || operationNode.kind === 'setDefaultComplexCellProperties'
+    || operationNode.kind === 'setHotkey');
+  const operationGaps = (operationNode: typeof noOps[number]) => program.gaps.filter(gap => gap.operationId === operationNode.id);
+  assert(noOps.length === 3
+    && result.status === 'partial'
+    && program.status === 'partial'
+    && noOps[0]?.reason === 'non-editbox widget default effects are outside the bounded editbox-height projection'
+    && noOps[1]?.reason === 'non-hotkey editbox default effects are outside the bounded editbox-height projection'
+    && noOps[2]?.reason === 'button setHotkey effects are outside the bounded editbox-height projection'
+    && noOps.every(operationNode => {
+      const gapsForOperation = operationGaps(operationNode);
+      return operationNode.status === 'unresolved'
+        && operationNode.kernel === undefined
+        && typeof operationNode.reason === 'string'
+        && operationNode.reason.includes('bounded editbox-height projection')
+        && gapsForOperation.length === 1
+        && jsonEqual(gapsForOperation[0]?.source, operationNode.source);
+    }),
+  `B119 out-of-scope calls must remain unresolved source gaps: ${JSON.stringify(noOps)}`);
+  assert(validateX4UiLayoutEvidencePair(program, authority).valid, 'B119 authentic unresolved pair must validate');
+  assert(diagnoseX4UiSceneStructureForTest(program, authority) === undefined, 'B119 authentic unresolved chain must pass Scene structure');
+  const accepted = buildX4UiScene(result, corpus, projected.profile);
+  assert(accepted.status === 'partial' && accepted.scene.programStatus === 'partial', `B119 authentic unresolved producer must reach partial Scene: ${JSON.stringify(accepted)}`);
+  const editboxCell = program.cells.find(cell => cell.identity?.path === 'row[2]');
+  const editboxWidget = editboxCell === undefined
+    ? undefined : accepted.scene.widgets.find(widget => widget.cellId === `scene:${editboxCell.id}`);
+  assert(editboxWidget?.outerRect?.height === 12
+    && editboxCell?.kernelState?.hotkey === ''
+    && editboxCell.kernelState.displayIcon === false,
+  `unresolved out-of-scope calls must leave known editbox geometry and defaults unchanged: ${JSON.stringify({ editboxWidget, editboxCell })}`);
+
+  const forgedMaterializedProgram = cloneProgram(program);
+  const forgedMaterialized = forgedMaterializedProgram.operations.find(operationNode => operationNode.kind === 'setDefaultCellProperties')!;
+  const addTable = forgedMaterializedProgram.operations.find(operationNode => operationNode.kind === 'addTable');
+  assert(addTable?.kernel?.stateAfter !== undefined, 'materialized-transition forgery requires the preceding table state');
+  const forgedStateBefore = cloneKernelState(addTable.kernel.stateAfter);
+  const forgedStateAfter = cloneKernelState(forgedStateBefore);
+  (forgedStateAfter.editBoxDefaults as unknown as Record<string, unknown>).height = 77;
+  (forgedMaterialized as unknown as { kernel: { stateBefore: HelperTableState; stateAfter: HelperTableState } }).kernel = {
+    stateBefore: forgedStateBefore,
+    stateAfter: forgedStateAfter,
+  };
+  const forgedMaterializedAuthority = synchronizedAuthority(authority, forgedMaterializedProgram);
+  freezeFixtureGraph(forgedMaterializedProgram);
+  freezeFixtureGraph(forgedMaterializedAuthority);
+  const alteredTransition = buildX4UiScene({
+    ...result,
+    program: forgedMaterializedProgram,
+    evidenceAuthority: forgedMaterializedAuthority,
+  }, corpus, projected.profile);
+  assert(refusalHasNoScene(alteredTransition), `forged materialized transition must refuse before Scene geometry: ${JSON.stringify(alteredTransition)}`);
+
+  const forgedSourceAuthority = cloneJsonValue(authority) as unknown as Record<string, unknown>;
+  const authorityOperations = forgedSourceAuthority.operations as Record<string, unknown>[];
+  const unresolvedAuthorityOperation = authorityOperations.find(operationNode => operationNode.kind === 'setDefaultComplexCellProperties');
+  assert(unresolvedAuthorityOperation !== undefined, 'source-authority forgery requires the unresolved complex operation');
+  unresolvedAuthorityOperation.sourceOrder = (unresolvedAuthorityOperation.sourceOrder as number) + 1;
+  freezeFixtureGraph(forgedSourceAuthority);
+  const alteredSource = buildX4UiScene({
+    ...result,
+    evidenceAuthority: forgedSourceAuthority as unknown as X4UiLayoutEvidenceAuthority,
+  }, corpus, projected.profile);
+  assert(refusalHasNoScene(alteredSource), `altered unresolved source authority must refuse before Scene geometry: ${JSON.stringify(alteredSource)}`);
 });
 
 test('missing colors and hostile black-inset geometry do not flip the source-proven default text branch', () => {

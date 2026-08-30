@@ -17,16 +17,18 @@ const addTableFixture = (expression: string): string => [
   "",
 ].join("\n");
 
-const editBoxFixture = (call: string): string => [
+const editBoxProgramFixture = (lines: readonly string[]): string => [
   "local menu = { name = 'B119' }",
   "local frame = Helper.createFrameHandle(menu, { width = 100, height = 100 })",
   "local table = frame:addTable(2, { width = 2, height = 20, scaling = false })",
   "local row = table:addRow(nil, { borderBelow = false, scaling = false })",
-  `row[1]:${call}`,
+  ...lines,
   "frame:display()",
   "OpenMenu('B119', nil, nil, true)",
   "",
 ].join("\n");
+
+const editBoxFixture = (call: string): string => editBoxProgramFixture([`row[1]:${call}`]);
 
 const projectFor = (luaPath: string, luaText: string) => ({
   id: "b119-ui-integration-selftest",
@@ -163,6 +165,211 @@ export function runX4UiIntegrationSelftest(): { pass: boolean; checks: Check[] }
         && zeroDiagnostic.code === "x4-ui.editbox-height-minimum"
         && zeroDiagnostic.message === zeroFinding?.message,
       zeroDiagnostic,
+    );
+
+    const simpleDefaultPath = "ui/pipeline_default_height.lua";
+    const simpleDefault = runProjectValidation(projectFor(simpleDefaultPath, editBoxProgramFixture([
+      'table:setDefaultCellProperties("editbox", { height = 24, scaling = false })',
+      'row[1]:createEditBox({})',
+    ])));
+    const simpleDefaultFlat = flattenProjectValidation(simpleDefault);
+    const simpleDefaultFindings = targetFindings(simpleDefaultFlat, "x4-ui.editbox-height-minimum", simpleDefaultPath);
+    const simpleDefaultMapped = mapFlatFindings(simpleDefaultFindings, ["content.xml", simpleDefaultPath]).byFile.get(simpleDefaultPath) || [];
+    check(
+      "positive_simple_table_default_is_clean_in_project_validation",
+      simpleDefault.ok && simpleDefaultFindings.length === 0 && simpleDefaultMapped.length === 0,
+      { flat: simpleDefaultFindings, mapped: simpleDefaultMapped },
+    );
+
+    const complexDefaultPath = "ui/pipeline_default_hotkey.lua";
+    const complexDefault = runProjectValidation(projectFor(complexDefaultPath, editBoxProgramFixture([
+      'table:setDefaultComplexCellProperties("editbox", "hotkey", { hotkey = "DEFAULT", displayIcon = true })',
+      'row[1]:createEditBox({ height = 0 })',
+    ])));
+    const complexDefaultFlat = flattenProjectValidation(complexDefault);
+    const complexDefaultFindings = targetFindings(complexDefaultFlat, "x4-ui.editbox-height-minimum", complexDefaultPath);
+    const complexDefaultMapped = mapFlatFindings(complexDefaultFindings, ["content.xml", complexDefaultPath]).byFile.get(complexDefaultPath) || [];
+    check(
+      "positive_complex_hotkey_default_is_clean_in_project_validation",
+      complexDefault.ok && complexDefaultFindings.length === 0 && complexDefaultMapped.length === 0,
+      { flat: complexDefaultFindings, mapped: complexDefaultMapped },
+    );
+
+    const displayedZeroPath = "ui/pipeline_displayed_zero.lua";
+    const displayedZero = runProjectValidation(projectFor(displayedZeroPath, editBoxProgramFixture([
+      'local edit = row[1]:createEditBox({ height = 0 })',
+      'edit:setHotkey("DISPLAYED", { displayIcon = true })',
+    ])));
+    const displayedZeroFlat = flattenProjectValidation(displayedZero);
+    const displayedZeroFindings = targetFindings(displayedZeroFlat, "x4-ui.editbox-height-minimum", displayedZeroPath);
+    const displayedZeroMapped = mapFlatFindings(displayedZeroFindings, ["content.xml", displayedZeroPath]).byFile.get(displayedZeroPath) || [];
+    check(
+      "positive_direct_displayed_zero_is_clean_in_project_and_problems",
+      displayedZero.ok && displayedZeroFindings.length === 0 && displayedZeroMapped.length === 0,
+      { flat: displayedZeroFindings, mapped: displayedZeroMapped },
+    );
+
+    const sourceProvenChainPath = "ui/pipeline_source_proven_chain.lua";
+    const sourceProvenChain = runProjectValidation(projectFor(sourceProvenChainPath, [
+      "local table = getTable()",
+      "local row = table:addRow()",
+      "row[1]:setColSpan(1):createEditBox({}):setText('EDIT', {}):setHotkey('CHAIN', { displayIcon = true })",
+      "",
+    ].join("\n")));
+    const sourceProvenChainFlat = flattenProjectValidation(sourceProvenChain);
+    const sourceProvenChainHeight = targetFindings(sourceProvenChainFlat, "x4-ui.editbox-height-minimum", sourceProvenChainPath);
+    const sourceProvenChainHotkeyGaps = targetFindings(sourceProvenChainFlat, "x4-ui.verification-gap", sourceProvenChainPath)
+      .filter(finding => /displayed-hotkey|hotkey or displayIcon/i.test(finding.message));
+    const sourceProvenChainMapped = mapFlatFindings(sourceProvenChainHeight, ["content.xml", sourceProvenChainPath]).byFile.get(sourceProvenChainPath) || [];
+    check(
+      "source_proven_non_static_chain_is_clean_in_project_and_problems",
+      sourceProvenChain.ok
+        && sourceProvenChainHeight.length === 0
+        && sourceProvenChainHotkeyGaps.length === 0
+        && sourceProvenChainMapped.length === 0,
+      { height: sourceProvenChainHeight, hotkeyGaps: sourceProvenChainHotkeyGaps, mapped: sourceProvenChainMapped },
+    );
+
+    const sourceProvenButtonPath = "ui/pipeline_source_proven_button_chain.lua";
+    const sourceProvenButton = runProjectValidation(projectFor(sourceProvenButtonPath, [
+      "local table = getTable()",
+      "local row = table:addRow()",
+      "row[1]:createButton({ height = 25 }):setText('BUTTON', {}):setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })",
+      "row[2]:createEditBox({})",
+      "",
+    ].join("\n")));
+    const sourceProvenButtonFlat = flattenProjectValidation(sourceProvenButton);
+    const sourceProvenButtonHeight = targetFindings(sourceProvenButtonFlat, "x4-ui.editbox-height-minimum", sourceProvenButtonPath);
+    const sourceProvenButtonHotkeyGaps = targetFindings(sourceProvenButtonFlat, "x4-ui.verification-gap", sourceProvenButtonPath)
+      .filter(finding => /displayed-hotkey|hotkey or displayIcon/i.test(finding.message));
+    check(
+      "source_proven_button_chain_does_not_contaminate_editbox_project_validation",
+      sourceProvenButton.ok
+        && sourceProvenButtonHeight.length === 1
+        && sourceProvenButtonHeight[0]?.severity === "warning"
+        && sourceProvenButtonHotkeyGaps.length === 0,
+      { height: sourceProvenButtonHeight, hotkeyGaps: sourceProvenButtonHotkeyGaps },
+    );
+
+    const branchMergedButtonPath = "ui/pipeline_branch_merged_button_chain.lua";
+    const branchMergedButton = runProjectValidation(projectFor(branchMergedButtonPath, [
+      "local table = getTable()",
+      "local row = table:addRow()",
+      "if mode then",
+      "  row = table:addRow()",
+      "end",
+      "row[1]:createButton({ height = 25 }):setText('BUTTON', {}):setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })",
+      "",
+    ].join("\n")));
+    const branchMergedButtonFlat = flattenProjectValidation(branchMergedButton);
+    const branchMergedButtonHotkeyGaps = targetFindings(
+      branchMergedButtonFlat,
+      "x4-ui.verification-gap",
+      branchMergedButtonPath,
+    ).filter(finding => /edit-box|displayed-hotkey|hotkey or displayIcon/i.test(finding.message));
+    check(
+      "branch_merged_button_chain_does_not_contaminate_editbox_project_validation",
+      branchMergedButton.ok && branchMergedButtonHotkeyGaps.length === 0,
+      { hotkeyGaps: branchMergedButtonHotkeyGaps },
+    );
+
+    const conditionalSourceProvenChainPath = "ui/pipeline_conditional_source_proven_chain.lua";
+    const conditionalSourceProvenChain = runProjectValidation(projectFor(
+      conditionalSourceProvenChainPath,
+      editBoxProgramFixture([
+        "if mode then",
+        "  row[1]:setColSpan(1):createEditBox({ height = 0 }):setText('EDIT', {}):setHotkey('CHAIN', { displayIcon = true })",
+        "end",
+      ]),
+    ));
+    const conditionalSourceProvenChainFlat = flattenProjectValidation(conditionalSourceProvenChain);
+    const conditionalSourceProvenChainHeight = targetFindings(
+      conditionalSourceProvenChainFlat,
+      "x4-ui.editbox-height-minimum",
+      conditionalSourceProvenChainPath,
+    );
+    const conditionalSourceProvenChainHotkeyGaps = targetFindings(
+      conditionalSourceProvenChainFlat,
+      "x4-ui.verification-gap",
+      conditionalSourceProvenChainPath,
+    ).filter(finding => /displayed-hotkey|hotkey or displayIcon/i.test(finding.message));
+    check(
+      "conditional_source_proven_editbox_chain_is_clean_in_project_and_problems",
+      conditionalSourceProvenChain.ok
+        && conditionalSourceProvenChainHeight.length === 0
+        && conditionalSourceProvenChainHotkeyGaps.length === 0,
+      { height: conditionalSourceProvenChainHeight, hotkeyGaps: conditionalSourceProvenChainHotkeyGaps },
+    );
+
+    const conditionalSourceProvenButtonPath = "ui/pipeline_conditional_source_proven_button.lua";
+    const conditionalSourceProvenButton = runProjectValidation(projectFor(
+      conditionalSourceProvenButtonPath,
+      editBoxProgramFixture([
+        "row[2]:createEditBox({})",
+        "if mode then",
+        "  row[1]:createButton({ height = 25 }):setIcon('ICON'):setHotkey('BUTTON', { displayIcon = true })",
+        "end",
+      ]),
+    ));
+    const conditionalSourceProvenButtonFlat = flattenProjectValidation(conditionalSourceProvenButton);
+    const conditionalSourceProvenButtonHeight = targetFindings(
+      conditionalSourceProvenButtonFlat,
+      "x4-ui.editbox-height-minimum",
+      conditionalSourceProvenButtonPath,
+    );
+    const conditionalSourceProvenButtonHotkeyGaps = targetFindings(
+      conditionalSourceProvenButtonFlat,
+      "x4-ui.verification-gap",
+      conditionalSourceProvenButtonPath,
+    ).filter(finding => /displayed-hotkey|hotkey or displayIcon/i.test(finding.message));
+    check(
+      "conditional_source_proven_button_setIcon_chain_leaves_one_omission_warning",
+      conditionalSourceProvenButton.ok
+        && conditionalSourceProvenButtonHeight.length === 1
+        && conditionalSourceProvenButtonHeight[0]?.severity === "warning"
+        && conditionalSourceProvenButtonHotkeyGaps.length === 0,
+      { height: conditionalSourceProvenButtonHeight, hotkeyGaps: conditionalSourceProvenButtonHotkeyGaps },
+    );
+
+    const dynamicDefaultPath = "ui/pipeline_dynamic_default.lua";
+    const dynamicDefault = runProjectValidation(projectFor(dynamicDefaultPath, editBoxProgramFixture([
+      'table:setDefaultCellProperties("editbox", { height = getHeight() })',
+      'row[1]:createEditBox({})',
+    ])));
+    const dynamicDefaultFlat = flattenProjectValidation(dynamicDefault);
+    const dynamicDefaultWarnings = targetFindings(dynamicDefaultFlat, "x4-ui.editbox-height-minimum", dynamicDefaultPath);
+    const dynamicDefaultGaps = targetFindings(dynamicDefaultFlat, "x4-ui.verification-gap", dynamicDefaultPath);
+    const dynamicDefaultMapped = mapFlatFindings(dynamicDefaultWarnings, ["content.xml", dynamicDefaultPath]).byFile.get(dynamicDefaultPath) || [];
+    check(
+      "dynamic_relevant_default_is_nonblocking_but_not_silent",
+      dynamicDefault.ok
+        && dynamicDefaultWarnings.length === 1
+        && dynamicDefaultWarnings[0]?.severity === "warning"
+        && dynamicDefaultGaps.length >= 1
+        && dynamicDefaultMapped.length === 1
+        && dynamicDefaultMapped[0]?.code === "x4-ui.editbox-height-minimum",
+      { warnings: dynamicDefaultWarnings, gaps: dynamicDefaultGaps, mapped: dynamicDefaultMapped },
+    );
+
+    const irrelevantButtonPath = "ui/pipeline_irrelevant_button.lua";
+    const irrelevantButton = runProjectValidation(projectFor(irrelevantButtonPath, editBoxProgramFixture([
+      'table:setDefaultCellProperties("button", { height = getHeight(), scaling = getScaling() })',
+      'table:setDefaultComplexCellProperties("editbox", "caption", { hotkey = getHotkey(), displayIcon = getDisplayIcon() })',
+      'local button = row[1]:createButton({ height = 25, scaling = false, affectRowHeight = false })',
+      'button:setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })',
+      'row[2]:createEditBox({ height = 12, scaling = false })',
+    ])));
+    const irrelevantButtonFlat = flattenProjectValidation(irrelevantButton);
+    const irrelevantButtonFindings = irrelevantButtonFlat.filter(finding => finding.filePath === irrelevantButtonPath
+      && (finding.code === "x4-ui.editbox-height-minimum" || finding.code === "x4-ui.verification-gap"));
+    const irrelevantButtonMapped = mapFlatFindings(
+      irrelevantButtonFindings,
+      ["content.xml", irrelevantButtonPath],
+    ).byFile.get(irrelevantButtonPath) || [];
+    check(
+      "dynamic_button_defaults_and_hotkey_are_clean_in_project_and_problems",
+      irrelevantButton.ok && irrelevantButtonFindings.length === 0 && irrelevantButtonMapped.length === 0,
+      { flat: irrelevantButtonFindings, mapped: irrelevantButtonMapped },
     );
 
     const dynamicPath = "ui/dynamic_columns.lua";

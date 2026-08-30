@@ -35,6 +35,9 @@ import {
   getFullTableHeight,
   getColSpanWidth,
   setCellColSpan,
+  setDefaultCellProperties,
+  setDefaultComplexCellProperties,
+  setCellHotkey,
   specializeCell,
   scaleX,
   scaleY,
@@ -3201,7 +3204,7 @@ const HELPER_CELL_TYPES = new Set(['cell', 'text', 'boxtext', 'icon', 'button', 
 const validateKernelCell = (cell: unknown): boolean => {
   if (!isRecord(cell) || typeof cell.type !== 'string' || !HELPER_CELL_TYPES.has(cell.type)) return false;
   if (!isSafeIntegerAtLeast(cell.colspan, 0) || !isSafeIntegerAtLeast(cell.bgcolspan, 0)) return false;
-  if (!isFiniteSafe(cell.y) || Math.abs(cell.y as number) > MAX_SAFE_LAYOUT_WIDTH || !isFiniteDimension(cell.height) || typeof cell.scaling !== 'boolean' || typeof cell.affectRowHeight !== 'boolean') return false;
+  if (!isFiniteSafe(cell.y) || Math.abs(cell.y as number) > MAX_SAFE_LAYOUT_WIDTH || !isFiniteDimension(cell.height) || typeof cell.scaling !== 'boolean' || typeof cell.affectRowHeight !== 'boolean' || typeof cell.hotkey !== 'string' || typeof cell.displayIcon !== 'boolean') return false;
   return cell.minTextHeight === undefined || isFiniteDimension(cell.minTextHeight);
 };
 
@@ -3256,9 +3259,15 @@ const validateKernelState = (state: unknown): boolean => {
   if (!isFiniteDimension(state.frameWidth) || !isRecord(state.metrics)) return false;
   const metrics = state.metrics as Record<string, unknown>;
   if (!exactKeys(metrics, ['uiScale', 'borderSize', 'scrollbarWidth', 'standardContainerOffset']) || !isFiniteSafe(metrics.uiScale) || metrics.uiScale <= 0 || !isFiniteDimension(metrics.borderSize) || !isFiniteDimension(metrics.scrollbarWidth) || !isFiniteDimension(metrics.standardContainerOffset)) return false;
-  if (!isFiniteDimension(state.requestedWidth) || !isRecord(state.properties) || !Array.isArray(state.columns) || !Array.isArray(state.rows) || !Array.isArray(state.rowGroups) || typeof state.createdWithScrollBar !== 'boolean' || typeof state.final !== 'boolean' || !Array.isArray(state.diagnostics)) return false;
+  if (!isFiniteDimension(state.requestedWidth) || !isRecord(state.properties) || !isRecord(state.editBoxDefaults) || !Array.isArray(state.columns) || !Array.isArray(state.rows) || !Array.isArray(state.rowGroups) || typeof state.createdWithScrollBar !== 'boolean' || typeof state.final !== 'boolean' || !Array.isArray(state.diagnostics)) return false;
   const properties = state.properties as Record<string, unknown>;
   if (!isFiniteDimension(properties.width) || !isFiniteSafe(properties.x) || Math.abs(properties.x as number) > MAX_SAFE_LAYOUT_WIDTH || typeof properties.scaling !== 'boolean' || typeof properties.reserveScrollBar !== 'boolean') return false;
+  const editBoxDefaults = state.editBoxDefaults as Record<string, unknown>;
+  if (Object.keys(editBoxDefaults).some(key => !['height', 'scaling', 'hotkey', 'displayIcon'].includes(key))
+    || (editBoxDefaults.height !== undefined && (!isFiniteDimension(editBoxDefaults.height) || (editBoxDefaults.height as number) < 0))
+    || (editBoxDefaults.scaling !== undefined && typeof editBoxDefaults.scaling !== 'boolean')
+    || (editBoxDefaults.hotkey !== undefined && typeof editBoxDefaults.hotkey !== 'string')
+    || (editBoxDefaults.displayIcon !== undefined && typeof editBoxDefaults.displayIcon !== 'boolean')) return false;
   const columns = state.columns as unknown[];
   const rowGroups = state.rowGroups as unknown[];
   const rows = state.rows as unknown[];
@@ -3345,6 +3354,8 @@ const isExactUnavailableCellHeight = (value: unknown): boolean => {
 const SUPPORTED_OPERATION_KINDS = new Set([
   'createFrameHandle',
   'addTable',
+  'setDefaultCellProperties',
+  'setDefaultComplexCellProperties',
   'setColWidthPercent',
   'setColWidth',
   'addRow',
@@ -3355,6 +3366,7 @@ const SUPPORTED_OPERATION_KINDS = new Set([
   'setText2',
   'createText',
   'createEditBox',
+  'setHotkey',
   'createButton',
   'createIcon',
   'scaleX',
@@ -3364,12 +3376,15 @@ const SUPPORTED_OPERATION_KINDS = new Set([
 
 const KERNEL_PRODUCER_KINDS = new Set([
   'addTable',
+  'setDefaultCellProperties',
+  'setDefaultComplexCellProperties',
   'setColWidth',
   'setColWidthPercent',
   'addRow',
   'setColSpan',
   'createText',
   'createEditBox',
+  'setHotkey',
   'createButton',
   'createIcon',
 ]);
@@ -3433,6 +3448,8 @@ const operationHasOwnerShape = (
   }
   if (kind === 'addTable') return operation.tableId !== undefined && operation.frameId === undefined && operation.rowId === undefined && operation.cellId === undefined;
   if (kind === 'setColWidth' || kind === 'setColWidthPercent') return operation.tableId !== undefined
+    && operation.frameId === undefined && operation.rowId === undefined && operation.cellId === undefined;
+  if (kind === 'setDefaultCellProperties' || kind === 'setDefaultComplexCellProperties') return operation.tableId !== undefined
     && operation.frameId === undefined && operation.rowId === undefined && operation.cellId === undefined;
   if (kind === 'addRow') return operation.rowId !== undefined
     && operation.cellId === undefined
@@ -3504,6 +3521,22 @@ const creatorTypeForOperation = (kind: X4UiLayoutOperation['kind']): 'text' | 'e
       : kind === 'createButton' ? 'button'
         : kind === 'createIcon' ? 'icon' : undefined;
 
+const sourcePropertyExists = (operation: X4UiLayoutOperation, name: string): boolean => {
+  const semantics = operation.metadata.semantics as unknown as Record<string, unknown>;
+  const properties = Array.isArray(semantics.properties) ? semantics.properties : [];
+  return properties.some(candidate => isRecord(candidate) && candidate.normalizedName === name);
+};
+
+const sourceProperty = (operation: X4UiLayoutOperation, name: string): Record<string, unknown> | undefined => {
+  const semantics = operation.metadata.semantics as unknown as Record<string, unknown>;
+  const properties = Array.isArray(semantics.properties) ? semantics.properties : [];
+  const candidate = properties.find(value => isRecord(value) && value.normalizedName === name);
+  return isRecord(candidate) ? candidate : undefined;
+};
+
+const descriptorFactExists = (operation: X4UiLayoutOperation, name: string): boolean =>
+  Object.prototype.hasOwnProperty.call(operation.descriptorFacts, name);
+
 const staticOperationProperty = (
   operation: X4UiLayoutOperation,
   name: string,
@@ -3524,6 +3557,95 @@ const knownOperationFactValue = (
   const fact = operation.descriptorFacts[name];
   if (!fact || fact.status !== 'known' || fact.expectedType !== expectedType) return undefined;
   return fact.value as number | boolean;
+};
+
+const knownOperationStringFact = (
+  operation: X4UiLayoutOperation,
+  name: string,
+): string | undefined => {
+  const fact = operation.descriptorFacts[name];
+  if (!fact || fact.status !== 'known' || fact.expectedType !== 'string' || typeof fact.value !== 'string') return undefined;
+  return fact.value;
+};
+
+const staticOperationStringProperty = (
+  operation: X4UiLayoutOperation,
+  name: string,
+): string | undefined => {
+  const property = sourceProperty(operation, name);
+  if (!isRecord(property) || !isRecord(property.value) || property.value.status !== 'static' || property.value.type !== 'string') return undefined;
+  return typeof property.value.value === 'string' ? property.value.value : undefined;
+};
+
+const B119_UNSUPPORTED_PROPERTY_OPERATION_KINDS = new Set<X4UiLayoutOperation['kind']>([
+  'setDefaultCellProperties',
+  'setDefaultComplexCellProperties',
+  'setHotkey',
+]);
+
+const normalizeB119PropertyName = (name: string): string => name.replace(/[-_\s]/g, '').toLowerCase();
+
+const validateB119UnsupportedPropertyGaps = (
+  program: X4UiLayoutProgram,
+  evidenceAuthority: X4UiLayoutEvidenceAuthority,
+  operation: X4UiLayoutOperation,
+): boolean => {
+  if (!B119_UNSUPPORTED_PROPERTY_OPERATION_KINDS.has(operation.kind)) return true;
+  const semantics = operation.metadata.semantics as unknown as Record<string, unknown>;
+  const hasUnsupportedField = Object.prototype.hasOwnProperty.call(semantics, 'unsupportedProperties');
+  if (!hasUnsupportedField) return true;
+  if (!Array.isArray(semantics.unsupportedProperties) || semantics.unsupportedProperties.length === 0) return false;
+  if (operation.status !== 'unresolved') return false;
+  const expectedNodeId = operation.kind === 'setHotkey' ? operation.cellId : operation.tableId;
+  const unsupported = semantics.unsupportedProperties;
+  const validProjection = (candidate: unknown): candidate is Record<string, unknown> => {
+    if (!isRecord(candidate)
+      || typeof candidate.name !== 'string'
+      || typeof candidate.normalizedName !== 'string'
+      || candidate.normalizedName !== normalizeB119PropertyName(candidate.name)
+      || !Number.isSafeInteger(candidate.sourceOrder)
+      || !sourceIsValid(candidate.source)
+      || !isRecord(candidate.value)
+      || typeof candidate.value.expression !== 'string'
+      || !sourceIsValid(candidate.value.location)
+      || candidate.sourceOrder !== (candidate.source as { readonly start: { readonly offset: number } }).start.offset
+      || !sameStructuralValue(candidate.source, candidate.value.location)) return false;
+    return true;
+  };
+  if (!unsupported.every(validProjection)) return false;
+  const matches = (candidate: unknown): boolean => {
+    if (!isRecord(candidate)
+      || candidate.operationId !== operation.id
+      || candidate.category !== 'property'
+      || candidate.status !== 'unsupported'
+      || candidate.nodeId !== expectedNodeId) return false;
+    return unsupported.some(property => isRecord(property)
+      && candidate.source !== undefined
+      && sameStructuralValue(candidate.source, property.source)
+      && candidate.expression === (property.value as Record<string, unknown>).expression
+      && candidate.reason === `${operation.kind} property ${property.name} is retained as source evidence but not applied by bounded layout projection`);
+  };
+  const exactGapSet = (candidateGaps: readonly unknown[]): boolean => {
+    if (candidateGaps.length !== unsupported.length) return false;
+    const used = new Set<number>();
+    return unsupported.every(property => {
+      const index = candidateGaps.findIndex((candidate, candidateIndex) => !used.has(candidateIndex)
+        && isRecord(candidate)
+        && candidate.operationId === operation.id
+        && matches(candidate)
+        && sameStructuralValue(candidate.source, property.source)
+        && candidate.expression === (property.value as Record<string, unknown>).expression);
+      if (index < 0) return false;
+      used.add(index);
+      return true;
+    });
+  };
+  const programGaps = program.gaps.filter(gap => gap.operationId === operation.id
+    && gap.category === 'property'
+    && gap.status === 'unsupported');
+  const authorityGaps = authorityGapsFor(evidenceAuthority, operation.id).filter(gap => gap.category === 'property'
+    && gap.status === 'unsupported');
+  return exactGapSet(programGaps) && exactGapSet(authorityGaps);
 };
 
 const stateSameOutsideCell = (
@@ -3579,10 +3701,13 @@ const validateCreatorProducerTransition = (
     height?: number;
     scaling?: boolean;
     affectRowHeight?: boolean;
+    hotkey?: string;
+    displayIcon?: boolean;
     minTextHeight?: number;
   } = { type };
   const y = staticOperationProperty(operation, 'y', 'number') ?? knownOperationFactValue(operation, 'outerY', 'number');
   const explicitHeight = staticOperationProperty(operation, 'height', 'number');
+  const baseHeight = knownOperationFactValue(operation, 'baseHeight', 'number');
   const derivedOuterHeight = knownOperationFactValue(operation, 'outerHeight', 'number');
   // Helper's default height input is zero.  The producer's outerHeight fact is
   // the post-creation descriptor result, not the height argument to
@@ -3592,7 +3717,9 @@ const validateCreatorProducerTransition = (
   const height = explicitHeight ?? (
     type === 'text'
       ? 0
-      : derivedOuterHeight
+      : type === 'editbox'
+        ? baseHeight ?? derivedOuterHeight
+        : derivedOuterHeight
   );
   const scaling = staticOperationProperty(operation, 'scaling', 'boolean') ?? knownOperationFactValue(operation, 'scaling', 'boolean');
   const affect = staticOperationProperty(operation, 'affectrowheight', 'boolean') ?? knownOperationFactValue(operation, 'affectRowHeight', 'boolean');
@@ -3601,6 +3728,13 @@ const validateCreatorProducerTransition = (
   input.height = height;
   input.scaling = scaling;
   if (typeof affect === 'boolean') input.affectRowHeight = affect;
+  if (type === 'editbox') {
+    const hotkey = knownOperationStringFact(operation, 'hotkey');
+    const displayIcon = knownOperationFactValue(operation, 'displayIcon', 'boolean');
+    if (hotkey === undefined || typeof displayIcon !== 'boolean') return creatorFailure('editbox-hotkey-facts');
+    input.hotkey = hotkey;
+    input.displayIcon = displayIcon;
+  }
   const minRowHeight = knownOperationFactValue(operation, 'minRowHeight', 'number');
   const operationOuterHeight = knownOperationFactValue(operation, 'outerHeight', 'number');
   const minTextHeightFact = operation.descriptorFacts.minTextHeight;
@@ -3622,6 +3756,164 @@ const validateCreatorProducerTransition = (
   if (!sameKernelStateIgnoringUndefinedOptionals(transition.stateBefore.diagnostics, transition.stateAfter.diagnostics)) return creatorFailure('diagnostics');
   if (!sameKernelStateIgnoringUndefinedOptionals(replayed.value, transition.stateAfter)) return creatorFailure('replayed-state');
   return true;
+};
+
+const validateEditBoxDefaultProducerTransition = (
+  operation: X4UiLayoutOperation,
+): boolean => {
+  const transition = producerTransition(operation);
+  if (!transition || !transition.stateBefore || !transition.stateAfter) return false;
+  const semantics = operation.metadata.semantics as unknown as Record<string, unknown>;
+  if (!isRecord(semantics) || !Array.isArray(operation.metadata.arguments) || operation.metadata.arguments.length === 0) return false;
+  const cellTypeFact = operation.descriptorFacts.cellType;
+  if (cellTypeFact?.status !== 'known' || cellTypeFact.expectedType !== 'string' || typeof cellTypeFact.value !== 'string') return false;
+  if (semantics.cellType === undefined || !isRecord(semantics.cellType)
+    || semantics.cellType.status !== 'static' || semantics.cellType.type !== 'string' || semantics.cellType.value !== cellTypeFact.value) return false;
+  const cellType = cellTypeFact.value;
+  const propertyFact = operation.kind === 'setDefaultComplexCellProperties'
+    ? operation.descriptorFacts.propertyName
+    : undefined;
+  const staticPropertyName = operation.kind === 'setDefaultComplexCellProperties'
+    && isRecord(semantics.propertyName)
+    && semantics.propertyName.status === 'static'
+    && semantics.propertyName.type === 'string'
+    && typeof semantics.propertyName.value === 'string'
+    ? semantics.propertyName.value
+    : undefined;
+  const irrelevant = cellType !== 'editbox'
+    || (operation.kind === 'setDefaultComplexCellProperties'
+      && staticPropertyName !== undefined
+      && staticPropertyName !== 'hotkey');
+  if (irrelevant) {
+    if (operation.kind === 'setDefaultCellProperties') {
+      if (!exactKeys(operation.descriptorFacts as Record<string, unknown>, ['cellType'])) return false;
+    } else {
+      if (!exactKeys(operation.descriptorFacts as Record<string, unknown>, ['cellType', 'propertyName'])) return false;
+      if (cellType === 'editbox'
+        && (propertyFact?.status !== 'known'
+          || propertyFact.expectedType !== 'string'
+          || propertyFact.value !== staticPropertyName)) return false;
+    }
+    return sameKernelStateIgnoringUndefinedOptionals(transition.stateBefore, transition.stateAfter);
+  }
+  if (cellType !== 'editbox') return false;
+  if (operation.kind === 'setDefaultCellProperties'
+    ? !exactKeys(operation.descriptorFacts as Record<string, unknown>, ['cellType'], ['height', 'scaling'])
+    : !exactKeys(operation.descriptorFacts as Record<string, unknown>, ['cellType', 'propertyName'], ['hotkey', 'displayIcon'])) return false;
+  const height = operation.kind === 'setDefaultCellProperties'
+    ? knownOperationFactValue(operation, 'height', 'number')
+    : undefined;
+  const scaling = operation.kind === 'setDefaultCellProperties'
+    ? knownOperationFactValue(operation, 'scaling', 'boolean')
+    : undefined;
+  const hotkey = operation.kind === 'setDefaultComplexCellProperties'
+    ? knownOperationStringFact(operation, 'hotkey')
+    : undefined;
+  const displayIcon = operation.kind === 'setDefaultComplexCellProperties'
+    ? knownOperationFactValue(operation, 'displayIcon', 'boolean')
+    : undefined;
+  if (operation.kind === 'setDefaultComplexCellProperties') {
+    if (propertyFact?.status !== 'known' || propertyFact.expectedType !== 'string' || propertyFact.value !== 'hotkey') return false;
+    if (semantics.propertyName === undefined || !isRecord(semantics.propertyName)
+      || semantics.propertyName.status !== 'static' || semantics.propertyName.type !== 'string' || semantics.propertyName.value !== 'hotkey') return false;
+  }
+  const sourceHeight = operation.kind === 'setDefaultCellProperties' ? staticOperationProperty(operation, 'height', 'number') : undefined;
+  const sourceScaling = operation.kind === 'setDefaultCellProperties' ? staticOperationProperty(operation, 'scaling', 'boolean') : undefined;
+  const sourceHotkey = operation.kind === 'setDefaultComplexCellProperties' ? staticOperationStringProperty(operation, 'hotkey') : undefined;
+  const sourceDisplayIcon = operation.kind === 'setDefaultComplexCellProperties' ? staticOperationProperty(operation, 'displayicon', 'boolean') : undefined;
+  if (operation.kind === 'setDefaultCellProperties') {
+    if (descriptorFactExists(operation, 'height') !== sourcePropertyExists(operation, 'height')) return false;
+    if (descriptorFactExists(operation, 'scaling') !== sourcePropertyExists(operation, 'scaling')) return false;
+  } else {
+    if (descriptorFactExists(operation, 'hotkey') !== sourcePropertyExists(operation, 'hotkey')) return false;
+    if (descriptorFactExists(operation, 'displayIcon') !== sourcePropertyExists(operation, 'displayicon')) return false;
+  }
+  if (height !== undefined && sourceHeight === undefined) return false;
+  if (scaling !== undefined && sourceScaling === undefined) return false;
+  if (hotkey !== undefined && sourceHotkey === undefined) return false;
+  if (displayIcon !== undefined && sourceDisplayIcon === undefined) return false;
+  if (sourceHeight !== undefined && height !== sourceHeight) return false;
+  if (sourceScaling !== undefined && scaling !== sourceScaling) return false;
+  if (sourceHotkey !== undefined && hotkey !== sourceHotkey) return false;
+  if (sourceDisplayIcon !== undefined && displayIcon !== sourceDisplayIcon) return false;
+  const replayed = operation.kind === 'setDefaultCellProperties'
+    ? setDefaultCellProperties(transition.stateBefore, 'editbox', {
+      ...(height === undefined ? {} : { height }),
+      ...(scaling === undefined ? {} : { scaling }),
+    })
+    : setDefaultComplexCellProperties(transition.stateBefore, 'editbox', 'hotkey', {
+      ...(hotkey === undefined ? {} : { hotkey }),
+      ...(displayIcon === undefined ? {} : { displayIcon }),
+    });
+  return replayed.status === 'ok' && sameKernelStateIgnoringUndefinedOptionals(replayed.value, transition.stateAfter);
+};
+
+const validateSetHotkeyProducerTransition = (
+  program: X4UiLayoutProgram,
+  operation: X4UiLayoutOperation,
+): boolean => {
+  const transition = producerTransition(operation);
+  if (!transition || !transition.stateBefore || !transition.stateAfter || operation.tableId === undefined || operation.rowId === undefined || operation.cellId === undefined) return false;
+  const row = program.rows.find(candidate => candidate.id === operation.rowId);
+  const cell = program.cells.find(candidate => candidate.id === operation.cellId);
+  if (!row || !cell || row.tableId !== operation.tableId || cell.tableId !== operation.tableId || cell.rowId !== row.id || row.rowIndex === undefined || cell.rowIndex !== row.rowIndex) return false;
+  const contentKind = cell.descriptorFacts.contentKind;
+  const operationContentKind = operation.descriptorFacts.contentKind;
+  if (contentKind?.status === 'known' && contentKind.expectedType === 'string' && contentKind.value === 'button') {
+    const semantics = operation.metadata.semantics as unknown as Record<string, unknown>;
+    const semanticsCell = isRecord(semantics) && isRecord(semantics.cell) ? semantics.cell : undefined;
+    const semanticsReference = semanticsCell && isRecord(semanticsCell.reference) ? semanticsCell.reference : undefined;
+    if (!exactKeys(operation.descriptorFacts as Record<string, unknown>, ['contentKind'])
+      || !sameStructuralValue(operationContentKind, contentKind)
+      || !sameStructuralValue(operation.metadata.receiver?.reference, cell.identity)
+      || !sameStructuralValue(semanticsReference, cell.identity)
+      || transition.stateBefore.rows[row.rowIndex - 1]?.cells[cell.column - 1]?.type !== 'button'
+      || transition.stateAfter.rows[row.rowIndex - 1]?.cells[cell.column - 1]?.type !== 'button') return false;
+    return sameKernelStateIgnoringUndefinedOptionals(transition.stateBefore, transition.stateAfter);
+  }
+  if (!stateSameOutsideCell(transition.stateBefore, transition.stateAfter, row.rowIndex, cell.column)) return false;
+  const semantics = operation.metadata.semantics as unknown as Record<string, unknown>;
+  if (!exactKeys(operation.descriptorFacts as Record<string, unknown>, ['hotkey'], ['displayIcon'])) return false;
+  const sourceHotkey = sourceProperty(operation, 'hotkey');
+  const sourceHotkeyValue = sourceHotkey && isRecord(sourceHotkey.value) ? sourceHotkey.value : undefined;
+  const winningHotkeyValue = sourceHotkeyValue || semantics.hotkey;
+  if (winningHotkeyValue === undefined || !isRecord(winningHotkeyValue)
+    || winningHotkeyValue.status !== 'static' || winningHotkeyValue.type !== 'string'
+    || typeof winningHotkeyValue.value !== 'string') return false;
+  const hotkey = winningHotkeyValue.value;
+  const hotkeyFact = operation.descriptorFacts.hotkey;
+  if (hotkeyFact?.status !== 'known' || hotkeyFact.expectedType !== 'string'
+    || hotkeyFact.value !== hotkey
+    || !sameStructuralValue(hotkeyFact.source, winningHotkeyValue.location)
+    || hotkeyFact.expression !== winningHotkeyValue.expression) return false;
+  if (!sourceHotkey && (!isRecord(semantics.hotkey)
+    || semantics.hotkey.status !== 'static' || semantics.hotkey.type !== 'string'
+    || semantics.hotkey.value !== hotkey)) return false;
+  const displayIcon = knownOperationFactValue(operation, 'displayIcon', 'boolean');
+  const sourceDisplayIconProperty = sourceProperty(operation, 'displayicon');
+  const sourceDisplayIcon = staticOperationProperty(operation, 'displayicon', 'boolean');
+  if (descriptorFactExists(operation, 'displayIcon') !== sourcePropertyExists(operation, 'displayicon')) return false;
+  if (displayIcon !== undefined && sourceDisplayIcon === undefined) return false;
+  if (sourceDisplayIcon !== undefined && displayIcon !== sourceDisplayIcon) return false;
+  const argumentHotkey = isRecord(semantics.hotkey)
+    && semantics.hotkey.status === 'static'
+    && semantics.hotkey.type === 'string'
+    && typeof semantics.hotkey.value === 'string'
+    ? semantics.hotkey.value
+    : hotkey;
+  const replayed = setCellHotkey(
+    transition.stateBefore,
+    row.rowIndex,
+    cell.column,
+    argumentHotkey,
+    sourceHotkey || sourceDisplayIconProperty
+      ? {
+        ...(sourceHotkey ? { hotkey } : {}),
+        ...(sourceDisplayIconProperty ? { displayIcon } : {}),
+      }
+      : undefined,
+  );
+  return replayed.status === 'ok' && sameKernelStateIgnoringUndefinedOptionals(replayed.value, transition.stateAfter);
 };
 
 const validateCompleteProducerChain = (
@@ -3657,6 +3949,10 @@ const validateCompleteProducerChain = (
       }
     } else if (operation.kind === 'setColSpan') {
       if (!validateSetColSpanProducerTransition(program, operation)) return chainFailure(`span:${operation.id}`);
+    } else if (operation.kind === 'setDefaultCellProperties' || operation.kind === 'setDefaultComplexCellProperties') {
+      if (!validateEditBoxDefaultProducerTransition(operation)) return chainFailure(`editbox-default:${operation.id}`);
+    } else if (operation.kind === 'setHotkey') {
+      if (!validateSetHotkeyProducerTransition(program, operation)) return chainFailure(`set-hotkey:${operation.id}`);
     } else if (isCreatorKind(operation.kind)) {
       if (!validateCreatorProducerTransition(program, operation)) return chainFailure(`creator:${operation.id}`);
     } else if (!sameStructuralValue(transition.stateBefore.diagnostics, transition.stateAfter.diagnostics)) {
@@ -3885,10 +4181,12 @@ const validateProducerNodeFacts = (
     if (!creator) continue;
     const creatorMaterialized = creator.status === 'applied' || (creator.status === 'unresolved' && creator.kernel !== undefined);
     if (!creatorMaterialized) continue;
+    const hotkeyOperations = operations.filter(operation => operation.kind === 'setHotkey' && (operation.status === 'applied' || (operation.status === 'unresolved' && operation.kernel !== undefined)));
     const requiredCreatorFacts = [
       'contentKind', 'outerX', 'outerY', 'outerWidth', 'outerHeight', 'scaling', 'affectRowHeight',
       'primaryContent', 'text', 'text2', 'font', 'fontsize', 'halign', 'wordwrap',
       'defaultText', 'description', 'maxChars', 'selectTextOnActivation', 'icon', 'active',
+      ...(creator.kind === 'createEditBox' ? ['baseHeight', 'baseScaling', 'hotkey', 'displayIcon'] : []),
       ...(creator.kind === 'createText' ? ['minRowHeight', 'minRowHeightFloor'] : []),
     ];
     if (requiredCreatorFacts.some(key => creator.descriptorFacts[key] === undefined)) return fail(`cell-required:${cell.id}:${creator.kind}`);
@@ -3936,9 +4234,24 @@ const validateProducerNodeFacts = (
       && cellOuterHeight?.status === 'known' && cellOuterHeight.expectedType === 'number'
       && table?.kernelState && typeof scaling === 'boolean') {
       const explicitHeight = staticOperationProperty(creator, 'height', 'number');
-      const rawHeight = explicitHeight ?? creatorOuterHeight.value;
+      const rawHeight = explicitHeight
+        ?? (creator.kind === 'createEditBox' ? knownOperationFactValue(creator, 'baseHeight', 'number') : undefined)
+        ?? creatorOuterHeight.value;
       const scaledHeight = scaleY(rawHeight, table.kernelState.metrics.uiScale, scaling);
-      if (scaledHeight.status !== 'ok' || cellOuterHeight.value !== scaledHeight.value) return fail(`cell-outer-height-scaled:${cell.id}`);
+      const effectiveHotkeyFact = latestProducerFact(hotkeyOperations, 'hotkey') || creator.descriptorFacts.hotkey;
+      const effectiveDisplayIconFact = latestProducerFact(hotkeyOperations, 'displayIcon') || creator.descriptorFacts.displayIcon;
+      const displayedHotkey = creator.kind === 'createEditBox'
+        && effectiveHotkeyFact?.status === 'known'
+        && effectiveHotkeyFact.expectedType === 'string'
+        && typeof effectiveHotkeyFact.value === 'string'
+        && effectiveHotkeyFact.value !== ''
+        && effectiveDisplayIconFact?.status === 'known'
+        && effectiveDisplayIconFact.expectedType === 'boolean'
+        && effectiveDisplayIconFact.value === true;
+      const expectedHeight = scaledHeight.status === 'ok' && displayedHotkey
+        ? Math.max(scaledHeight.value, 23)
+        : scaledHeight.status === 'ok' ? scaledHeight.value : undefined;
+      if (scaledHeight.status !== 'ok' || cellOuterHeight.value !== expectedHeight) return fail(`cell-outer-height-scaled:${cell.id}`);
       if (explicitHeight !== undefined && creatorOuterHeight.value !== explicitHeight) return fail(`cell-outer-height-source:${cell.id}`);
     }
     const outerWidth = cell.descriptorFacts.outerWidth;
@@ -3976,6 +4289,10 @@ const validateProducerNodeFacts = (
       const producerFact = latestProducerFact(factOperations, key);
       if (producerFact !== undefined && !producerFactMatchesNodeFact(cell.descriptorFacts[key], producerFact)) return fail(`cell:${cell.id}:${key}`);
     }
+    const hotkeyFact = latestProducerFact(hotkeyOperations, 'hotkey');
+    const displayIconFact = latestProducerFact(hotkeyOperations, 'displayIcon');
+    if (hotkeyFact !== undefined && !producerFactMatchesNodeFact(cell.descriptorFacts.hotkey, hotkeyFact)) return fail(`cell:${cell.id}:hotkey`);
+    if (displayIconFact !== undefined && !producerFactMatchesNodeFact(cell.descriptorFacts.displayIcon, displayIconFact)) return fail(`cell:${cell.id}:displayIcon`);
   }
   return true;
 };
@@ -4103,7 +4420,7 @@ const validateLayoutValue = (value: unknown): boolean => {
 
 const CALL_SEMANTICS_KEYS = [
   'count', 'index', 'span', 'width', 'percentage', 'height', 'layer', 'menu', 'menuName',
-  'frame', 'table', 'row', 'cell', 'dataFlow', 'text', 'editBox', 'fontsize', 'options',
+  'frame', 'table', 'row', 'cell', 'cellType', 'propertyName', 'hotkey', 'displayIcon', 'dataFlow', 'text', 'editBox', 'fontsize', 'options',
   'properties', 'unsupportedProperties', 'rowData', 'icon', 'scaling', 'scale',
 ] as const;
 
@@ -4613,6 +4930,11 @@ const validateProgramStructure = (
   for (const gap of program.gaps) {
     const categories = new Set(['profile', 'target', 'source', 'analysis', 'data-flow', 'frame', 'table', 'row', 'cell', 'count', 'index', 'span', 'width', 'percentage', 'height', 'options', 'constant', 'scale', 'sample', 'local-expansion', 'preview-path', 'text', 'parse', 'unsupported', 'layer', 'menu', 'edit-box', 'fontsize', 'property']);
      if (!isRecord(gap) || !exactKeys(gap, ['category', 'status', 'reason', 'source'], ['expression', 'operationId', 'nodeId']) || !sourceIsValid(gap.source) || typeof gap.reason !== 'string' || !categories.has(String(gap.category)) || !['dynamic', 'unknown', 'unsupported', 'incomplete', 'refused'].includes(String(gap.status)) || (gap.expression !== undefined && typeof gap.expression !== 'string') || (gap.operationId !== undefined && typeof gap.operationId !== 'string') || (gap.nodeId !== undefined && typeof gap.nodeId !== 'string')) return refuseStructure('gap');
+  }
+  for (const operation of typedProgram.operations) {
+    if (!validateB119UnsupportedPropertyGaps(typedProgram, evidenceAuthority, operation)) {
+      return refuseStructure(`unsupported-property:${operation.id}`);
+    }
   }
   if (program.status === 'projected' && (program.gaps.length > 0 || program.operations.some(operation => operation.status !== 'applied') || program.frames.some(frame => !['projected', 'applied'].includes(String(frame.status))) || program.tables.some(table => !['projected', 'applied'].includes(String(table.status))))) return refuseStructure('projected-status');
   for (const frame of program.frames) {

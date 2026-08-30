@@ -1153,6 +1153,32 @@ const partialLua = [
   '',
 ].join('\n');
 
+const outOfScopeLua = [
+  'local menu = { name = "B119OutOfScopePreview", layer = 1 }',
+  'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+  'local table = frame:addTable(2, { width = 100, reserveScrollBar = false, scaling = false })',
+  'table:setDefaultCellProperties("button", { height = getHeight(), scaling = getScaling() })',
+  'table:setDefaultComplexCellProperties("editbox", "caption", { hotkey = getHotkey(), displayIcon = getDisplayIcon() })',
+  'local row = table:addRow(false, { scaling = false })',
+  'local button = row[1]:createButton({ height = 25, scaling = false })',
+  'button:setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })',
+  'row[2]:createEditBox({ height = 12, scaling = false })',
+  'frame:display()',
+  '',
+].join('\n');
+
+const hotkeyPositionLua = [
+  'local menu = { name = "B119HotkeyPositionPreview", layer = 1 }',
+  'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+  'local table = frame:addTable(1, { width = 100, reserveScrollBar = false, scaling = false })',
+  'table:setColWidth(1, 100, false)',
+  'local row = table:addRow(false, {})',
+  'local edit = row[1]:createEditBox({ height = 0, scaling = false })',
+  'edit:setHotkey("VISIBLE_ARGUMENT", { hotkey = "", displayIcon = false, x = 0 })',
+  'frame:display()',
+  '',
+].join('\n');
+
 const lintLua = [
   'local frame = Menus.createFrameHandle()',
   'frame:addTable(24)',
@@ -3471,6 +3497,158 @@ return menu
     knownTextWidgets: partialResultScene?.widgets.filter(widget => widget.kind === 'text').length,
     programGapCount: partialResultProgram?.gaps.length,
     gapSourceOffsets: partialResultProgram?.gaps.map(gap => gap.source.start.offset),
+  });
+
+  const outOfScopeXml = [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    '<addon name="out-of-scope-fixture">',
+    '  <environment type="menus">',
+    '    <file name="ui/out-of-scope.lua" />',
+    '  </environment>',
+    '</addon>',
+    '',
+  ].join('\n');
+  const outOfScopeSource = sourceFor([
+    passthrough('ui.xml', outOfScopeXml),
+    passthrough('ui/out-of-scope.lua', outOfScopeLua, { reason: 'unparsed' }),
+  ]);
+  const outOfScopeSelection = selectionFor(outOfScopeSource, 'ui/out-of-scope.lua', 'top-level');
+  const outOfScopeResult = canonical === undefined
+    ? undefined
+    : pipeline(outOfScopeSource, outOfScopeSelection, canonical, {}, {
+      truthGrade: 'unverified-default',
+      minTextHeight: 10,
+      drawable: { width: 100, height: 80 },
+      uiScale: 1,
+    });
+  const outOfScopeProgram = outOfScopeResult?.program !== undefined && 'program' in outOfScopeResult.program
+    ? outOfScopeResult.program.program
+    : undefined;
+  const outOfScopeScene = outOfScopeResult?.scene !== undefined && 'scene' in outOfScopeResult.scene
+    ? outOfScopeResult.scene.scene
+    : undefined;
+  const outOfScopeOperations = outOfScopeProgram?.operations.filter(operation =>
+    operation.kind === 'setDefaultCellProperties'
+      || operation.kind === 'setDefaultComplexCellProperties'
+      || operation.kind === 'setHotkey') || [];
+  const outOfScopeEditbox = outOfScopeProgram?.cells.find(cell => cell.identity?.path === 'row[2]');
+  const outOfScopeWidget = outOfScopeEditbox === undefined || outOfScopeScene === undefined
+    ? undefined
+    : outOfScopeScene.widgets.find(widget => widget.cellId === `scene:${outOfScopeEditbox.id}`);
+  const outOfScopePreview = outOfScopeResult?.status === 'partial'
+    && outOfScopeResult.program?.status === 'partial'
+    && outOfScopeScene?.status === 'partial'
+    && outOfScopeScene.programStatus === 'partial'
+    && outOfScopeResult.gameTruth === 'Not verified in game'
+    && outOfScopeScene.gameTruth === 'Not verified in game'
+    && outOfScopeOperations.length === 3
+    && outOfScopeOperations.every(operation => {
+      const gaps = outOfScopeProgram?.gaps.filter(gap => gap.operationId === operation.id) || [];
+      return operation.status === 'unresolved'
+        && operation.kernel === undefined
+        && typeof operation.reason === 'string'
+        && operation.reason.includes('bounded editbox-height projection')
+        && gaps.length === 1
+        && gaps[0]?.source.start.offset === operation.source.start.offset
+        && gaps[0]?.source.end.offset === operation.source.end.offset;
+    })
+    && outOfScopeWidget?.outerRect?.height === 12
+    && outOfScopeEditbox?.kernelState?.height === 12
+    && outOfScopeEditbox.kernelState.hotkey === ''
+    && outOfScopeEditbox.kernelState.displayIcon === false;
+  check('B119 Preview keeps out-of-scope mutations unresolved while retaining known editbox geometry and game-truth labeling', outOfScopePreview, {
+    fixtureReady: canonical !== undefined && outOfScopeSelection.target.id.length > 0,
+    pipelineStatus: outOfScopeResult?.status,
+    programStatus: outOfScopeResult?.program?.status,
+    sceneStatus: outOfScopeScene?.status,
+    gameTruth: { pipeline: outOfScopeResult?.gameTruth, scene: outOfScopeScene?.gameTruth },
+    operations: outOfScopeOperations.map(operation => ({
+      kind: operation.kind,
+      status: operation.status,
+      kernel: operation.kernel,
+      reason: operation.reason,
+      gaps: outOfScopeProgram?.gaps.filter(gap => gap.operationId === operation.id),
+    })),
+    editbox: {
+      widgetHeight: outOfScopeWidget?.outerRect?.height,
+      height: outOfScopeEditbox?.kernelState?.height,
+      hotkey: outOfScopeEditbox?.kernelState?.hotkey,
+      displayIcon: outOfScopeEditbox?.kernelState?.displayIcon,
+    },
+  });
+
+  const hotkeyPositionXml = [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    '<addon name="hotkey-position-fixture">',
+    '  <environment type="menus">',
+    '    <file name="ui/hotkey-position.lua" />',
+    '  </environment>',
+    '</addon>',
+    '',
+  ].join('\n');
+  const hotkeyPositionSource = sourceFor([
+    passthrough('ui.xml', hotkeyPositionXml),
+    passthrough('ui/hotkey-position.lua', hotkeyPositionLua, { reason: 'unparsed' }),
+  ]);
+  const hotkeyPositionSelection = selectionFor(hotkeyPositionSource, 'ui/hotkey-position.lua', 'top-level');
+  const hotkeyPositionResult = canonical === undefined
+    ? undefined
+    : pipeline(hotkeyPositionSource, hotkeyPositionSelection, canonical, {}, {
+      truthGrade: 'unverified-default',
+      minTextHeight: 10,
+      drawable: { width: 100, height: 80 },
+      uiScale: 1,
+    });
+  const hotkeyPositionProgram = hotkeyPositionResult?.program !== undefined && 'program' in hotkeyPositionResult.program
+    ? hotkeyPositionResult.program.program
+    : undefined;
+  const hotkeyPositionScene = hotkeyPositionResult?.scene !== undefined && 'scene' in hotkeyPositionResult.scene
+    ? hotkeyPositionResult.scene.scene
+    : undefined;
+  const hotkeyPositionOperation = hotkeyPositionProgram?.operations.find(operation => operation.kind === 'setHotkey');
+  const hotkeyPositionCell = hotkeyPositionOperation?.cellId === undefined
+    ? undefined
+    : hotkeyPositionProgram?.cells.find(cell => cell.id === hotkeyPositionOperation.cellId);
+  const hotkeyPositionGaps = hotkeyPositionOperation === undefined
+    ? []
+    : hotkeyPositionProgram?.gaps.filter(gap => gap.operationId === hotkeyPositionOperation.id) || [];
+  const hotkeyPositionWidget = hotkeyPositionCell === undefined || hotkeyPositionScene === undefined
+    ? undefined
+    : hotkeyPositionScene.widgets.find(widget => widget.cellId === `scene:${hotkeyPositionCell.id}`);
+  const hotkeyPositionPreview = hotkeyPositionResult?.status === 'partial'
+    && hotkeyPositionResult.program?.status === 'partial'
+    && hotkeyPositionScene?.status === 'partial'
+    && hotkeyPositionResult.gameTruth === 'Not verified in game'
+    && hotkeyPositionScene.gameTruth === 'Not verified in game'
+    && hotkeyPositionOperation?.status === 'unresolved'
+    && hotkeyPositionOperation.kernel !== undefined
+    && hotkeyPositionGaps.length === 1
+    && hotkeyPositionGaps[0]?.category === 'property'
+    && hotkeyPositionGaps[0].status === 'unsupported'
+    && hotkeyPositionGaps[0].expression === '0'
+    && hotkeyPositionGaps[0].source.start.offset > hotkeyPositionOperation.source.start.offset
+    && hotkeyPositionGaps[0].source.end.offset <= hotkeyPositionOperation.source.end.offset
+    && hotkeyPositionCell?.kernelState?.height === 0
+    && hotkeyPositionCell.kernelState.hotkey === ''
+    && hotkeyPositionCell.kernelState.displayIcon === false
+    && hotkeyPositionWidget?.outerRect?.height === 0;
+  check('B119 Preview gameoptions-like x=0 setHotkey is partial with exact known height and source gap', hotkeyPositionPreview, {
+    fixtureReady: canonical !== undefined && hotkeyPositionSelection.target.id.length > 0,
+    pipelineStatus: hotkeyPositionResult?.status,
+    programStatus: hotkeyPositionResult?.program?.status,
+    sceneStatus: hotkeyPositionScene?.status,
+    gameTruth: { pipeline: hotkeyPositionResult?.gameTruth, scene: hotkeyPositionScene?.gameTruth },
+    operation: {
+      status: hotkeyPositionOperation?.status,
+      kernel: hotkeyPositionOperation?.kernel,
+      gaps: hotkeyPositionGaps,
+    },
+    editbox: {
+      height: hotkeyPositionCell?.kernelState?.height,
+      hotkey: hotkeyPositionCell?.kernelState?.hotkey,
+      displayIcon: hotkeyPositionCell?.kernelState?.displayIcon,
+      widgetHeight: hotkeyPositionWidget?.outerRect?.height,
+    },
   });
   check('partial and refusal branches retain exact minTextHeight grade',
     String(partialResult?.profile.minTextHeight?.truthGrade) === 'unverified-default'

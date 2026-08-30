@@ -18,6 +18,10 @@ const helperAnchors = Object.freeze({
   defaultWidgetScaling: Object.freeze([3104, 3104] as const),
   defaultTableReserveScrollBar: Object.freeze([3170, 3170] as const),
   defaultRowScalingAndBorderBelow: Object.freeze([3189, 3191] as const),
+  editBoxMinHeight: Object.freeze([565, 565] as const),
+  editBoxHotkeyDefaults: Object.freeze([3440, 3445] as const),
+  initTableCell: Object.freeze([5432, 5470] as const),
+  editBoxHotkeyAndHeight: Object.freeze([5953, 5981] as const),
   iconGetHeight: Object.freeze([5676, 5683] as const),
   buttonGetHeight: Object.freeze([5782, 5797] as const),
   roundAndScale: Object.freeze([806, 858] as const),
@@ -142,6 +146,10 @@ export interface HelperCellState {
   readonly height: number;
   readonly scaling: boolean;
   readonly affectRowHeight: boolean;
+  /** Effective editbox hotkey property after table defaults and cell calls. */
+  readonly hotkey: string;
+  /** Effective editbox hotkey icon flag after table defaults and cell calls. */
+  readonly displayIcon: boolean;
   /** Caller-supplied metric used for zero-height text/boxtext cells. */
   readonly minTextHeight: number | undefined;
 }
@@ -175,6 +183,8 @@ export interface HelperTableState {
   readonly metrics: X4UiLayoutMetrics;
   readonly requestedWidth: number;
   readonly properties: HelperTableProperties;
+  /** The only table defaults projected for this bounded editbox port. */
+  readonly editBoxDefaults: HelperEditBoxDefaults;
   readonly columns: readonly HelperColumnState[];
   readonly rows: readonly HelperRowState[];
   readonly rowGroups: readonly HelperRowGroupState[];
@@ -183,6 +193,26 @@ export interface HelperTableState {
   /** columndata.final in helper.lua. */
   readonly final: boolean;
   readonly diagnostics: readonly HelperDiagnostic[];
+}
+
+/** Values merged by table:setDefaultCellProperties("editbox", ...). */
+export interface HelperCellPropertiesInput {
+  readonly height?: number;
+  readonly scaling?: boolean;
+}
+
+/** Values merged by table:setDefaultComplexCellProperties("editbox", "hotkey", ...). */
+export interface HelperComplexCellPropertiesInput {
+  readonly hotkey?: string;
+  readonly displayIcon?: boolean;
+}
+
+/** Effective editbox defaults; absent keys retain the cell/widget fallback. */
+export interface HelperEditBoxDefaults {
+  readonly height?: number;
+  readonly scaling?: boolean;
+  readonly hotkey?: string;
+  readonly displayIcon?: boolean;
 }
 
 export interface HelperRowGroupInput {
@@ -197,6 +227,8 @@ export interface HelperCellInput {
   readonly height?: number;
   readonly scaling?: boolean;
   readonly affectRowHeight?: boolean;
+  readonly hotkey?: string;
+  readonly displayIcon?: boolean;
   readonly minTextHeight?: number;
 }
 
@@ -206,6 +238,8 @@ export interface HelperCellSpecializationInput {
   readonly height?: number;
   readonly scaling?: boolean;
   readonly affectRowHeight?: boolean;
+  readonly hotkey?: string;
+  readonly displayIcon?: boolean;
   readonly minTextHeight?: number;
 }
 
@@ -344,6 +378,31 @@ const booleanFailure = (
   return undefined;
 };
 
+const stringFailure = (
+  value: unknown,
+  field: string,
+  optional = false,
+): LayoutFailure | undefined => {
+  if (optional && value === undefined) {
+    return undefined;
+  }
+  if (isDynamicInput(value)) {
+    return failure(
+      "unsupported",
+      "unsupported-dynamic-input",
+      `${field} is dynamic and has no deterministic geometry`,
+    );
+  }
+  if (typeof value !== "string") {
+    return failure(
+      "refused",
+      "invalid-domain",
+      `${field} must be string`,
+    );
+  }
+  return undefined;
+};
+
 const safeIntegerFailure = (
   value: unknown,
   field: string,
@@ -436,6 +495,7 @@ const replaceTable = (
     Pick<
       HelperTableState,
       | "properties"
+      | "editBoxDefaults"
       | "columns"
       | "rows"
       | "rowGroups"
@@ -450,6 +510,7 @@ const replaceTable = (
     metrics: state.metrics,
     requestedWidth: state.requestedWidth,
     properties: patch.properties ?? state.properties,
+    editBoxDefaults: patch.editBoxDefaults ?? state.editBoxDefaults,
     columns: patch.columns ?? state.columns,
     rows: patch.rows ?? state.rows,
     rowGroups: patch.rowGroups ?? state.rowGroups,
@@ -731,6 +792,7 @@ export function createHelperTable(input: HelperTableInput): LayoutResult<HelperT
     metrics,
     requestedWidth: width,
     properties,
+    editBoxDefaults: freezeObject({}),
     columns,
     rows: freezeArray([] as HelperRowState[]),
     rowGroups: freezeArray(rowGroups),
@@ -739,6 +801,97 @@ export function createHelperTable(input: HelperTableInput): LayoutResult<HelperT
     diagnostics: freezeArray([] as HelperDiagnostic[]),
   });
   return success(state);
+}
+
+const editBoxDefaultPropertiesFailure = (
+  value: unknown,
+  allowedKeys: readonly string[],
+): LayoutFailure | undefined => {
+  if (isDynamicInput(value)) {
+    return failure(
+      "unsupported",
+      "unsupported-dynamic-input",
+      "editbox default properties are dynamic and have no deterministic geometry",
+    );
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return failure(
+      "refused",
+      "invalid-input",
+      "editbox default properties must be an object",
+    );
+  }
+  if (Object.keys(value).some(key => !allowedKeys.includes(key))) {
+    return failure(
+      "refused",
+      "invalid-input",
+      `editbox default properties may only contain ${allowedKeys.join(", ")}`,
+    );
+  }
+  return undefined;
+};
+
+/**
+ * Port table:setDefaultCellProperties for the only bounded relevant shape.
+ * The defaults live on the table and therefore do not mutate existing rows.
+ */
+export function setDefaultCellProperties(
+  state: HelperTableState,
+  cellType: unknown,
+  properties: unknown,
+): StateResult<HelperTableState> {
+  const typeError = stringFailure(cellType, "default cell type");
+  if (typeError) return stateFailure(state, typeError.status, typeError.code, typeError.message);
+  if (cellType !== "editbox") {
+    return stateFailure(state, "refused", "invalid-cell", "only editbox default cell properties are projected");
+  }
+  const propertiesError = editBoxDefaultPropertiesFailure(properties, ["height", "scaling"]);
+  if (propertiesError) return stateFailure(state, propertiesError.status, propertiesError.code, propertiesError.message);
+  const candidate = properties as Partial<HelperCellPropertiesInput>;
+  const heightError = candidate.height === undefined
+    ? undefined
+    : nonNegativeFailure(candidate.height, "editbox default height");
+  if (heightError) return stateFailure(state, heightError.status, heightError.code, heightError.message);
+  const scalingError = booleanFailure(candidate.scaling, "editbox default scaling", true);
+  if (scalingError) return stateFailure(state, scalingError.status, scalingError.code, scalingError.message);
+  const defaults: HelperEditBoxDefaults = {
+    ...state.editBoxDefaults,
+    ...(candidate.height === undefined ? {} : { height: candidate.height }),
+    ...(candidate.scaling === undefined ? {} : { scaling: candidate.scaling }),
+  };
+  return success(replaceTable(state, { editBoxDefaults: freezeObject(defaults) }));
+}
+
+/**
+ * Port table:setDefaultComplexCellProperties for editbox.hotkey only.
+ * Omitted fields retain their prior table default exactly as Lua apply does.
+ */
+export function setDefaultComplexCellProperties(
+  state: HelperTableState,
+  cellType: unknown,
+  propertyName: unknown,
+  properties: unknown,
+): StateResult<HelperTableState> {
+  const typeError = stringFailure(cellType, "default complex cell type");
+  if (typeError) return stateFailure(state, typeError.status, typeError.code, typeError.message);
+  const propertyError = stringFailure(propertyName, "default complex property name");
+  if (propertyError) return stateFailure(state, propertyError.status, propertyError.code, propertyError.message);
+  if (cellType !== "editbox" || propertyName !== "hotkey") {
+    return stateFailure(state, "refused", "invalid-cell", "only editbox hotkey defaults are projected");
+  }
+  const propertiesError = editBoxDefaultPropertiesFailure(properties, ["hotkey", "displayIcon"]);
+  if (propertiesError) return stateFailure(state, propertiesError.status, propertiesError.code, propertiesError.message);
+  const candidate = properties as Partial<HelperComplexCellPropertiesInput>;
+  const hotkeyError = stringFailure(candidate.hotkey, "editbox default hotkey", true);
+  if (hotkeyError) return stateFailure(state, hotkeyError.status, hotkeyError.code, hotkeyError.message);
+  const displayIconError = booleanFailure(candidate.displayIcon, "editbox default displayIcon", true);
+  if (displayIconError) return stateFailure(state, displayIconError.status, displayIconError.code, displayIconError.message);
+  const defaults: HelperEditBoxDefaults = {
+    ...state.editBoxDefaults,
+    ...(candidate.hotkey === undefined ? {} : { hotkey: candidate.hotkey }),
+    ...(candidate.displayIcon === undefined ? {} : { displayIcon: candidate.displayIcon }),
+  };
+  return success(replaceTable(state, { editBoxDefaults: freezeObject(defaults) }));
 }
 
 const widthSetterFailure = (
@@ -1140,12 +1293,15 @@ const validateRowInput = (
     for (const [field, value] of [
       [`cell ${index + 1} scaling`, cell.scaling],
       [`cell ${index + 1} affectRowHeight`, cell.affectRowHeight],
+      [`cell ${index + 1} displayIcon`, cell.displayIcon],
     ] as const) {
       const error = booleanFailure(value, field, true);
       if (error) {
         return error;
       }
     }
+    const hotkeyError = stringFailure(cell.hotkey, `cell ${index + 1} hotkey`, true);
+    if (hotkeyError) return hotkeyError;
     for (const [field, value] of [
       [`cell ${index + 1} colspan`, cell.colspan],
       [`cell ${index + 1} bgcolspan`, cell.bgcolspan],
@@ -1234,15 +1390,26 @@ const makeRowCells = (
   const cells: HelperCellState[] = [];
   for (let index = 0; index < state.columns.length; index += 1) {
     const candidate = supplied[index];
+    const type = candidate?.type ?? "cell";
     const cellScaling = candidate?.scaling ?? rowScaling;
     cells.push(freezeObject({
-      type: candidate?.type ?? "cell",
+      type,
       colspan: 1,
       bgcolspan: 1,
       y: candidate?.y ?? 0,
-      height: candidate?.height ?? 0,
-      scaling: cellScaling,
+      height: type === "editbox"
+        ? candidate?.height ?? state.editBoxDefaults.height ?? 0
+        : candidate?.height ?? 0,
+      scaling: type === "editbox"
+        ? state.editBoxDefaults.scaling ?? cellScaling
+        : cellScaling,
       affectRowHeight: candidate?.affectRowHeight ?? true,
+      hotkey: type === "editbox"
+        ? candidate?.hotkey ?? state.editBoxDefaults.hotkey ?? ""
+        : "",
+      displayIcon: type === "editbox"
+        ? candidate?.displayIcon ?? state.editBoxDefaults.displayIcon ?? false
+        : false,
       minTextHeight: candidate?.minTextHeight,
     }));
   }
@@ -1369,12 +1536,15 @@ const validateCellSpecializationInput = (
   for (const [field, value] of [
     ["cell specialization scaling", input.scaling],
     ["cell specialization affectRowHeight", input.affectRowHeight],
+    ["cell specialization displayIcon", input.displayIcon],
   ] as const) {
     const error = booleanFailure(value, field, true);
     if (error) {
       return error;
     }
   }
+  const hotkeyError = stringFailure(input.hotkey, "cell specialization hotkey", true);
+  if (hotkeyError) return hotkeyError;
   return undefined;
 };
 
@@ -1421,13 +1591,27 @@ export function specializeCell(
     );
   }
   const cells = [...rowState.cells];
+  const height = input.type === "editbox"
+    ? input.height ?? state.editBoxDefaults.height ?? cell.height
+    : input.height ?? cell.height;
+  const scaling = input.type === "editbox"
+    ? input.scaling ?? state.editBoxDefaults.scaling ?? cell.scaling
+    : input.scaling ?? cell.scaling;
+  const hotkey = input.type === "editbox"
+    ? input.hotkey ?? state.editBoxDefaults.hotkey ?? ""
+    : "";
+  const displayIcon = input.type === "editbox"
+    ? input.displayIcon ?? state.editBoxDefaults.displayIcon ?? false
+    : false;
   cells[column - 1] = freezeObject({
     ...cell,
     type: input.type,
     y: input.y ?? cell.y,
-    height: input.height ?? cell.height,
-    scaling: input.scaling ?? cell.scaling,
+    height,
+    scaling,
     affectRowHeight: input.affectRowHeight ?? cell.affectRowHeight,
+    hotkey,
+    displayIcon,
     minTextHeight: input.minTextHeight ?? cell.minTextHeight,
   });
   const nextRow = freezeObject({
@@ -1517,6 +1701,50 @@ export function setCellBackgroundColSpan(
   return setCellSpan(state, row, column, colspan, true);
 }
 
+/**
+ * Port editbox:setHotkey. helper.lua writes the first hotkey argument and then
+ * applies hotkeyproperty, so a supplied properties.hotkey wins while omitted
+ * properties.hotkey preserves the argument. displayIcon changes only when the
+ * second argument supplies that property.
+ */
+export function setCellHotkey(
+  state: HelperTableState,
+  row: number,
+  column: number,
+  hotkey: unknown,
+  properties?: unknown,
+): StateResult<HelperTableState> {
+  const rowError = validateRowIndex(state, row);
+  if (rowError) return stateFailure(state, rowError.status, rowError.code, rowError.message);
+  const columnError = validateColumnIndex(state, column);
+  if (columnError) return stateFailure(state, columnError.status, columnError.code, columnError.message);
+  const propertiesError = properties === undefined
+    ? undefined
+    : editBoxDefaultPropertiesFailure(properties, ["hotkey", "displayIcon"]);
+  if (propertiesError) return stateFailure(state, propertiesError.status, propertiesError.code, propertiesError.message);
+  const candidate = (properties ?? {}) as Partial<HelperComplexCellPropertiesInput>;
+  const hotkeyPropertyError = stringFailure(candidate.hotkey, "editbox hotkey property", true);
+  if (hotkeyPropertyError) return stateFailure(state, hotkeyPropertyError.status, hotkeyPropertyError.code, hotkeyPropertyError.message);
+  const effectiveHotkey = candidate.hotkey === undefined ? hotkey : candidate.hotkey;
+  const hotkeyError = stringFailure(effectiveHotkey, "editbox hotkey");
+  if (hotkeyError) return stateFailure(state, hotkeyError.status, hotkeyError.code, hotkeyError.message);
+  const displayIconError = booleanFailure(candidate.displayIcon, "editbox displayIcon", true);
+  if (displayIconError) return stateFailure(state, displayIconError.status, displayIconError.code, displayIconError.message);
+  const rowState = state.rows[row - 1];
+  const cell = rowState.cells[column - 1];
+  if (cell.type !== "editbox" || cell.colspan === 0) {
+    return stateFailure(state, "refused", "invalid-cell", "setHotkey requires a visible editbox cell");
+  }
+  const cells = [...rowState.cells];
+  cells[column - 1] = freezeObject({
+    ...cell,
+    hotkey: effectiveHotkey as string,
+    ...(candidate.displayIcon === undefined ? {} : { displayIcon: candidate.displayIcon }),
+  });
+  const nextRow = freezeObject({ ...rowState, cells: freezeArray(cells) });
+  return success(replaceRow(state, row, nextRow));
+}
+
 const cellHeightUnchecked = (
   state: HelperTableState,
   cell: HelperCellState,
@@ -1544,10 +1772,15 @@ const cellHeightUnchecked = (
     if (cell.type === "cell") {
       return success(1);
     }
-    return success(0);
+    return success(cell.type === "editbox" && cell.hotkey !== "" && cell.displayIcon
+      ? 23
+      : 0);
   }
   const height = scaleYUnchecked(cell.height, state.metrics.uiScale, cell.scaling);
-  return Number.isFinite(height) ? success(height) : finiteResultFailure("cell height");
+  if (!Number.isFinite(height)) return finiteResultFailure("cell height");
+  return success(cell.type === "editbox" && cell.hotkey !== "" && cell.displayIcon
+    ? Math.max(height, 23)
+    : height);
 };
 
 /** Port helper.lua cell:getHeight, including the explicit Zekton boundary. */

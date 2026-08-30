@@ -4,7 +4,8 @@ import {
   type X4UiColorExpression,
   type X4UiCallRecord,
   type X4UiCallPropertyProjection,
-  type X4UiValue
+  type X4UiValue,
+  type X4UiValueReference
 } from './x4UiCallModel';
 
 interface Check {
@@ -48,6 +49,36 @@ function sameSourceRange(
     && left.end.line === right.end.line
     && left.end.column === right.end.column
     && left.end.offset === right.end.offset);
+}
+
+function sameReferenceIdentity(
+  left: X4UiValueReference | undefined,
+  right: X4UiValueReference | undefined,
+): boolean {
+  if (!left || !right) return false;
+  const leftIndex = left.index;
+  const rightIndex = right.index;
+  return left.kind === right.kind
+    && left.path === right.path
+    && left.origin === right.origin
+    && left.parentPath === right.parentPath
+    && left.relatedPath === right.relatedPath
+    && sameSourceRange(left.source, right.source)
+    && left.helperRuntimeAvailability === right.helperRuntimeAvailability
+    && ((!left.helperAliasSource && !right.helperAliasSource) || Boolean(
+      left.helperAliasSource
+        && right.helperAliasSource
+        && sameSourceRange(left.helperAliasSource, right.helperAliasSource),
+    ))
+    && ((!leftIndex && !rightIndex) || Boolean(
+      leftIndex
+        && rightIndex
+        && leftIndex.status === rightIndex.status
+        && leftIndex.type === rightIndex.type
+        && leftIndex.value === rightIndex.value
+        && leftIndex.expression === rightIndex.expression
+        && sameSourceRange(leftIndex.location, rightIndex.location),
+    ));
 }
 
 function frozenSourceLocation(source: X4UiCallRecord['source'] | undefined): boolean {
@@ -792,6 +823,468 @@ function run(): { allPassed: boolean; pass: boolean; passed: number; total: numb
       && !omittedRow?.semantics.rowData
       && !property(omittedRow, 'interactive'),
     detail({ button: omittedButton?.semantics, row: omittedRow?.semantics }));
+
+  const b119Source = [
+    'local menu = { name = "B119", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 100 })',
+    'table:setDefaultCellProperties("editbox", { height = 17, scaling = false, x = 0, y = 4, extra = "simple" })',
+    'table:setDefaultComplexCellProperties("editbox", "hotkey", { hotkey = "INPUT_STATE_DEFAULT", displayIcon = true, x = 0, y = 5, extra = "complex" })',
+    'local row = table:addRow(false, {})',
+    'local editbox = row[1]:createEditBox({})',
+    'editbox:setHotkey("INPUT_STATE_DIRECT", { hotkey = "", displayIcon = false, x = 0, y = 6, extra = "direct" })',
+  ].join('\n');
+  const b119 = buildX4UiCallModel(input(b119Source, 'selftest/b119-editbox-height.lua'));
+  const b119Calls = b119.calls.filter(candidate =>
+    candidate.name === 'setDefaultCellProperties'
+      || candidate.name === 'setDefaultComplexCellProperties'
+      || candidate.name === 'createEditBox'
+      || candidate.name === 'setHotkey');
+  const b119Simple = b119Calls.find(candidate => candidate.name === 'setDefaultCellProperties');
+  const b119Complex = b119Calls.find(candidate => candidate.name === 'setDefaultComplexCellProperties');
+  const b119Create = b119Calls.find(candidate => candidate.name === 'createEditBox');
+  const b119Direct = b119Calls.find(candidate => candidate.name === 'setHotkey');
+  const b119Unsupported = [b119Simple, b119Complex, b119Direct].map(candidate => candidate?.semantics.unsupportedProperties?.map(property => ({
+    name: property.name,
+    expression: property.value.expression,
+    sourceOrder: property.sourceOrder,
+    source: property.source,
+  })) || []);
+  check('B119 editbox height source calls retain exact ordered ownership and fields',
+    b119Calls.map(candidate => candidate.name).join(',') === 'setDefaultCellProperties,setDefaultComplexCellProperties,createEditBox,setHotkey'
+      && b119Simple?.semantics.cellType?.value === 'editbox'
+      && b119Simple.semantics.height?.value === 17
+      && b119Simple.semantics.scaling?.value === false
+      && b119Complex?.semantics.cellType?.value === 'editbox'
+      && b119Complex.semantics.propertyName?.value === 'hotkey'
+      && b119Complex.semantics.hotkey?.value === 'INPUT_STATE_DEFAULT'
+      && b119Complex.semantics.displayIcon?.value === true
+      && b119Create?.semantics.cell?.reference?.kind === 'cell'
+      && b119Direct?.semantics.hotkey?.value === 'INPUT_STATE_DIRECT'
+      && b119Direct.semantics.displayIcon?.value === false
+      && b119Calls.every(candidate => candidate.source.file === 'selftest/b119-editbox-height.lua'),
+    detail(b119Calls));
+  check('B119 source retains ordered unmodeled properties without static x/y model gaps',
+    JSON.stringify(b119Unsupported.map(properties => properties.map(property => property.name))) === JSON.stringify([
+      ['x', 'y', 'extra'],
+      ['x', 'y', 'extra'],
+      ['x', 'y', 'extra'],
+    ])
+      && b119Unsupported.flat().every(property => property.sourceOrder === property.source.start.offset)
+      && b119Unsupported.flat().every(property => property.expression
+        === b119Source.slice(property.source.start.offset, property.source.end.offset))
+      && b119Unsupported.every(properties => properties.every((property, index) => index === 0
+        || properties[index - 1].sourceOrder < property.sourceOrder))
+      && !b119.verificationGaps.some(gap => gap.category === 'property'),
+    detail({ unsupported: b119Unsupported, verificationGaps: b119.verificationGaps }));
+
+  const b119BoundarySource = [
+    'local menu = { name = "B119Boundary", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(2, { width = 100 })',
+    'table:setDefaultCellProperties("button", { height = 99 })',
+    'table:setDefaultComplexCellProperties("editbox", "caption", { hotkey = "CAPTION", displayIcon = true })',
+    'frame:setDefaultCellProperties("editbox", { height = 99 })',
+    'table:setDefaultCellProperties("editbox", { height = getHeight() })',
+    'table:setDefaultComplexCellProperties("editbox", getPropertyName(), { hotkey = getHotkey(), displayIcon = getDisplayIcon() })',
+    'local row = table:addRow(false, {})',
+    'local editbox = row[1]:createEditBox({})',
+    'editbox:setHotkey("", {})',
+    'editbox:setHotkey(getHotkey(), { displayIcon = false })',
+  ].join('\n');
+  const b119Boundary = buildX4UiCallModel(input(b119BoundarySource, 'selftest/b119-editbox-boundaries.lua'));
+  const boundaryDefaults = b119Boundary.calls.filter(candidate =>
+    candidate.name === 'setDefaultCellProperties' || candidate.name === 'setDefaultComplexCellProperties');
+  const boundaryDirect = b119Boundary.calls.filter(candidate => candidate.name === 'setHotkey');
+  const boundaryWrongReceiver = boundaryDefaults.find(candidate => candidate.receiver?.reference?.path === 'frame');
+  const boundaryNonEditbox = boundaryDefaults.find(candidate => candidate.semantics.cellType?.value === 'button');
+  const boundaryWrongProperty = boundaryDefaults.find(candidate => candidate.semantics.propertyName?.value === 'caption');
+  const boundaryDynamicSimple = boundaryDefaults.find(candidate => candidate.name === 'setDefaultCellProperties'
+    && candidate.semantics.height?.status === 'dynamic');
+  const boundaryDynamicComplex = boundaryDefaults.find(candidate => candidate.name === 'setDefaultComplexCellProperties'
+    && candidate.semantics.propertyName?.status === 'dynamic');
+  check('B119 call-model boundaries keep non-editbox, wrong-property, wrong-receiver, and dynamic forms explicit',
+    boundaryDefaults.length === 5
+      && boundaryDirect.length === 2
+      && boundaryNonEditbox?.semantics.cellType?.value === 'button'
+      && boundaryWrongProperty?.semantics.propertyName?.value === 'caption'
+      && boundaryWrongReceiver?.semantics.cellType?.value === 'editbox'
+      && boundaryWrongReceiver.semantics.dataFlow?.status !== 'static'
+      && boundaryDynamicSimple?.semantics.height?.status === 'dynamic'
+      && boundaryDynamicComplex?.semantics.propertyName?.status === 'dynamic'
+      && boundaryDynamicComplex.semantics.hotkey?.status === 'dynamic'
+      && boundaryDirect[0]?.semantics.hotkey?.value === ''
+      && boundaryDirect[1]?.semantics.hotkey?.status === 'dynamic'
+      && boundaryDirect[1]?.semantics.displayIcon?.value === false,
+    detail({ defaults: boundaryDefaults, direct: boundaryDirect }));
+
+  const b119IrrelevantDynamicSource = [
+    'local menu = { name = "B119IrrelevantDynamic", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(2, { width = 100, scaling = false })',
+    'table:setDefaultCellProperties("button", { height = getHeight(), scaling = getScaling() })',
+    'table:setDefaultComplexCellProperties("editbox", "caption", { hotkey = getHotkey(), displayIcon = getDisplayIcon() })',
+    'local row = table:addRow(false, { scaling = false })',
+    'local button = row[1]:createButton({ height = 25, scaling = false })',
+    'button:setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })',
+    'row[2]:createEditBox({ height = 12, scaling = false })',
+  ].join('\n');
+  const b119IrrelevantDynamic = buildX4UiCallModel(input(
+    b119IrrelevantDynamicSource,
+    'selftest/b119-editbox-irrelevant-dynamic.lua',
+  ));
+  const b119RelevantDynamic = buildX4UiCallModel(input([
+    'local menu = { name = "B119RelevantDynamic", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'local table = frame:addTable(1, { width = 100, scaling = false })',
+    'table:setDefaultCellProperties(getCellType(), { height = getHeight(), scaling = getScaling() })',
+    'table:setDefaultComplexCellProperties("editbox", getPropertyName(), { hotkey = getHotkey(), displayIcon = getDisplayIcon() })',
+    'local row = table:addRow(false, { scaling = false })',
+    'local editbox = row[1]:createEditBox({ height = 12, scaling = false })',
+    'editbox:setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })',
+  ].join('\n'), 'selftest/b119-editbox-relevant-dynamic.lua'));
+  check('B119 dynamic button defaults/hotkeys and literal wrong complex properties add no bounded editbox gaps',
+    b119IrrelevantDynamic.verificationGaps.length === 0
+      && b119IrrelevantDynamic.calls.filter(candidate => candidate.name === 'setDefaultCellProperties').length === 1
+      && b119IrrelevantDynamic.calls.filter(candidate => candidate.name === 'setDefaultComplexCellProperties').length === 1
+      && b119IrrelevantDynamic.calls.filter(candidate => candidate.name === 'setHotkey').length === 1,
+    detail({ calls: b119IrrelevantDynamic.calls, gaps: b119IrrelevantDynamic.verificationGaps }));
+  check('B119 dynamic editbox cell types/properties/hotkeys remain fail-closed model gaps',
+    b119RelevantDynamic.verificationGaps.some(gap => gap.expression.includes('getCellType'))
+      && b119RelevantDynamic.verificationGaps.some(gap => gap.expression.includes('getHeight'))
+      && b119RelevantDynamic.verificationGaps.some(gap => gap.expression.includes('getPropertyName'))
+      && b119RelevantDynamic.verificationGaps.some(gap => gap.expression.includes('getHotkey')),
+    detail(b119RelevantDynamic.verificationGaps));
+
+  const b119SourceProvenUnknownChainSource = [
+    'local table = getTable()',
+    'local row = table:addRow()',
+    'row[1]:setColSpan(1):createEditBox({ height = 0 }):setText("EDIT", {}):setHotkey("CHAIN", { displayIcon = true })',
+  ].join('\n');
+  const b119SourceProvenUnknownChain = buildX4UiCallModel(input(
+    b119SourceProvenUnknownChainSource,
+    'selftest/b119-source-proven-unknown-chain.lua',
+  ));
+  const b119UnknownChainCreate = b119SourceProvenUnknownChain.calls.find(candidate => candidate.name === 'createEditBox');
+  const b119UnknownChainHotkey = b119SourceProvenUnknownChain.calls.find(candidate => candidate.name === 'setHotkey');
+  const b119UnknownChainHasExactCellAndStatement = Boolean(
+    b119UnknownChainCreate
+      && b119UnknownChainHotkey
+      && b119UnknownChainCreate.semantics.cell?.status !== 'static'
+      && b119UnknownChainHotkey.semantics.cell?.status !== 'static'
+      && b119UnknownChainCreate.semantics.cell?.reference?.kind === 'cell'
+      && b119UnknownChainHotkey.semantics.cell?.reference?.kind === 'cell'
+      && sameReferenceIdentity(
+        b119UnknownChainCreate.semantics.cell.reference,
+        b119UnknownChainHotkey.semantics.cell.reference,
+      )
+      && sameSourceRange(enclosingStatement(b119UnknownChainCreate)?.source, enclosingStatement(b119UnknownChainHotkey)?.source)
+      && b119UnknownChainHotkey.source.start.offset <= b119UnknownChainCreate.source.start.offset
+      && b119UnknownChainHotkey.source.end.offset >= b119UnknownChainCreate.source.end.offset
+      && b119SourceProvenUnknownChainSource.slice(
+        b119UnknownChainHotkey.source.start.offset,
+        b119UnknownChainHotkey.source.end.offset,
+      ).includes('createEditBox'),
+  );
+  check('B119 source-proven chained editbox retains exact non-static cell identity and statement provenance',
+    b119UnknownChainHasExactCellAndStatement,
+    detail({
+      create: b119UnknownChainCreate,
+      hotkey: b119UnknownChainHotkey,
+      gaps: b119SourceProvenUnknownChain.verificationGaps,
+    }));
+
+  const b119ButtonChainSource = [
+    'local table = getTable()',
+    'local row = table:addRow()',
+    'row[1]:createButton({ height = 25 }):setText("BUTTON", {}):setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })',
+    'row[2]:createEditBox({})',
+  ].join('\n');
+  const b119ButtonChain = buildX4UiCallModel(input(
+    b119ButtonChainSource,
+    'selftest/b119-button-unknown-chain.lua',
+  ));
+  check('B119 nested button hotkey chain stays irrelevant to editbox model state',
+    !b119ButtonChain.verificationGaps.some(gap => gap.category === 'edit-box')
+      && !b119ButtonChain.verificationGaps.some(gap => gap.reason.includes('setHotkey receiver is tracked as button'))
+      && b119ButtonChain.calls.filter(candidate => candidate.name === 'createButton').length === 1
+      && b119ButtonChain.calls.filter(candidate => candidate.name === 'setHotkey').length === 1,
+    detail({ calls: b119ButtonChain.calls, gaps: b119ButtonChain.verificationGaps }));
+
+  const b119BranchResolvedButtonSource = [
+    'local table = getTable()',
+    'local row = table:addRow()',
+    'if mode then',
+    '  row[1]:createButton({ height = 25 }):setText("BUTTON", {}):setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })',
+    'end',
+  ].join('\n');
+  const b119BranchResolvedButton = buildX4UiCallModel(input(
+    b119BranchResolvedButtonSource,
+    'selftest/b119-branch-resolved-button.lua',
+  ));
+  const b119BranchResolvedHotkey = b119BranchResolvedButton.calls.find(candidate => candidate.name === 'setHotkey');
+  check('B119 branch-resolved button hotkey retains cell semantics without edit-box receiver gaps',
+    b119BranchResolvedHotkey?.semantics.cell?.reference?.kind === 'cell'
+      && !b119BranchResolvedHotkey.semantics.dataFlow
+      && !b119BranchResolvedButton.verificationGaps.some(gap => gap.category === 'edit-box')
+      && !b119BranchResolvedButton.verificationGaps.some(gap => gap.reason.includes('edit-box used for setHotkey')),
+    detail({ hotkey: b119BranchResolvedHotkey, gaps: b119BranchResolvedButton.verificationGaps }));
+
+  const b119BranchMergedRowSource = [
+    'local table = getTable()',
+    'local row = table:addRow()',
+    'if mode then',
+    '  row = table:addRow()',
+    'end',
+    'row[1]:createButton({ height = 25 }):setText("BUTTON", {}):setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })',
+  ].join('\n');
+  const b119BranchMergedRow = buildX4UiCallModel(input(
+    b119BranchMergedRowSource,
+    'selftest/b119-branch-merged-row.lua',
+  ));
+  const b119BranchMergedHotkey = b119BranchMergedRow.calls.find(candidate => candidate.name === 'setHotkey');
+  check('B119 branch-merged row button chain has narrow button attribution',
+    b119BranchMergedHotkey?.semantics.cell?.reference?.kind === 'cell'
+      && !b119BranchMergedHotkey.semantics.dataFlow
+      && !b119BranchMergedRow.verificationGaps.some(gap => gap.category === 'edit-box')
+      && !b119BranchMergedRow.verificationGaps.some(gap => gap.reason.includes('edit-box used for setHotkey')),
+    detail({ hotkey: b119BranchMergedHotkey, gaps: b119BranchMergedRow.verificationGaps }));
+
+  const b119BranchMergedRowIconSource = [
+    'local table = getTable()',
+    'local row = table:addRow()',
+    'if mode then',
+    '  row = table:addRow()',
+    'end',
+    'row[1]:createButton({ height = 25 }):setIcon("ICON", {}):setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })',
+  ].join('\n');
+  const b119BranchMergedRowIcon = buildX4UiCallModel(input(
+    b119BranchMergedRowIconSource,
+    'selftest/b119-branch-merged-row-icon.lua',
+  ));
+  const b119BranchMergedIconHotkey = b119BranchMergedRowIcon.calls.find(candidate => candidate.name === 'setHotkey');
+  check('B119 branch-merged row setIcon button chain has narrow button attribution',
+    b119BranchMergedIconHotkey?.semantics.cell?.reference?.kind === 'cell'
+      && !b119BranchMergedIconHotkey.semantics.dataFlow
+      && !b119BranchMergedRowIcon.verificationGaps.some(gap => gap.category === 'edit-box')
+      && !b119BranchMergedRowIcon.verificationGaps.some(gap => gap.reason.includes('edit-box used for setHotkey'))
+      && !b119BranchMergedRowIcon.calls.some(candidate => (candidate.name as string) === 'setIcon'),
+    detail({
+      hotkey: b119BranchMergedIconHotkey,
+      calls: b119BranchMergedRowIcon.calls,
+      gaps: b119BranchMergedRowIcon.verificationGaps,
+    }));
+
+  const b119BranchMergedRowIcon2Source = [
+    'local table = getTable()',
+    'local row = table:addRow()',
+    'if mode then',
+    '  row = table:addRow()',
+    'end',
+    'row[1]:createButton({ height = 25 }):setIcon2("ICON", {}):setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })',
+  ].join('\n');
+  const b119BranchMergedRowIcon2 = buildX4UiCallModel(input(
+    b119BranchMergedRowIcon2Source,
+    'selftest/b119-branch-merged-row-icon2.lua',
+  ));
+  const b119BranchMergedIcon2Hotkey = b119BranchMergedRowIcon2.calls.find(candidate => candidate.name === 'setHotkey');
+  check('B119 branch-merged row setIcon2 button chain has narrow button attribution',
+    b119BranchMergedIcon2Hotkey?.semantics.cell?.reference?.kind === 'cell'
+      && !b119BranchMergedIcon2Hotkey.semantics.dataFlow
+      && !b119BranchMergedRowIcon2.verificationGaps.some(gap => gap.category === 'edit-box')
+      && !b119BranchMergedRowIcon2.verificationGaps.some(gap => gap.reason.includes('edit-box used for setHotkey'))
+      && !b119BranchMergedRowIcon2.calls.some(candidate => (candidate.name as string) === 'setIcon2'),
+    detail({
+      hotkey: b119BranchMergedIcon2Hotkey,
+      calls: b119BranchMergedRowIcon2.calls,
+      gaps: b119BranchMergedRowIcon2.verificationGaps,
+    }));
+
+  const b119ButtonChainNegativeSources = [
+    {
+      name: 'separate statements',
+      source: [
+        'local row = getRow()',
+        'row[1]:createButton({ height = 25 }):setText("BUTTON", {})',
+        'row[1]:setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })',
+      ].join('\n'),
+    },
+    {
+      name: 'dot createButton call',
+      source: [
+        'local row = getRow()',
+        'row[1].createButton({ height = 25 }):setText("BUTTON", {}):setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })',
+      ].join('\n'),
+    },
+    {
+      name: 'unknown factory',
+      source: [
+        'local row = getRow()',
+        'row[1]:makeButton({ height = 25 }):setText("BUTTON", {}):setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })',
+      ].join('\n'),
+    },
+    {
+      name: 'sibling branches',
+      source: [
+        'local row = getRow()',
+        'if mode then',
+        '  row[1]:createButton({ height = 25 }):setText("BUTTON", {})',
+        'else',
+        '  row[1]:setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })',
+        'end',
+      ].join('\n'),
+    },
+    {
+      name: 'same-spelled distinct cells',
+      source: [
+        'local row = getRow()',
+        'row[1]:createButton({ height = 25 }):setText("BUTTON", {})',
+        'row[2]:setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })',
+      ].join('\n'),
+    },
+    {
+      name: 'forged receiver',
+      source: [
+        'local row = getRow()',
+        'local other = getRow()',
+        'row[1]:createButton({ height = 25 }):setText("BUTTON", {})',
+        'other[1]:setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })',
+      ].join('\n'),
+    },
+    {
+      name: 'later createButton call',
+      source: [
+        'local row = getRow()',
+        'row[1]:createButton({ height = 25 }):setText("BUTTON", {}):createButton({ height = 25 }):setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })',
+      ].join('\n'),
+    },
+    {
+      name: 'arbitrary dynamic receiver',
+      source: 'getRow()[1]:createButton({ height = 25 }):setText("BUTTON", {}):setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })',
+    },
+    {
+      name: 'arbitrary bound indexed value',
+      source: [
+        'local value = getRow()',
+        'value[1]:createButton({ height = 25 }):setText("BUTTON", {}):setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })',
+      ].join('\n'),
+    },
+    {
+      name: 'unknown fluent method',
+      source: [
+        'local row = getRow()',
+        'row[1]:createButton({ height = 25 }):unknownSetter():setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })',
+      ].join('\n'),
+    },
+  ] as const;
+  const b119ButtonChainNegatives = b119ButtonChainNegativeSources.map(candidate => ({
+    ...candidate,
+    model: buildX4UiCallModel(input(candidate.source, `selftest/b119-button-chain-negative-${candidate.name}.lua`)),
+  }));
+  check('B119 button attribution negatives remain conservative',
+    b119ButtonChainNegatives.every(candidate => {
+      const hotkey = candidate.model.calls.find(callRecord => callRecord.name === 'setHotkey');
+      return Boolean(hotkey)
+        && candidate.model.verificationGaps.some(gap => gap.reason.includes('edit-box used for setHotkey'))
+        && candidate.model.verificationGaps.some(gap => gap.category === 'edit-box');
+    }),
+    detail(b119ButtonChainNegatives.map(candidate => ({
+      name: candidate.name,
+      hotkey: candidate.model.calls.find(callRecord => callRecord.name === 'setHotkey'),
+      gaps: candidate.model.verificationGaps,
+    }))));
+
+  const b119ConditionalButtonIconSource = [
+    'local table = getTable()',
+    'local row = table:addRow()',
+    'if mode then',
+    '  row[1]:createButton({ height = 25 }):setIcon("ICON"):setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })',
+    'end',
+    'row[2]:createEditBox({})',
+  ].join('\n');
+  const b119ConditionalButtonIcon = buildX4UiCallModel(input(
+    b119ConditionalButtonIconSource,
+    'selftest/b119-conditional-button-icon.lua',
+  ));
+  const b119ConditionalButtonIconHotkey = b119ConditionalButtonIcon.calls.find(candidate => candidate.name === 'setHotkey');
+  check('B119 untracked self-returning setIcon preserves the source-proven button receiver',
+    b119ConditionalButtonIconHotkey?.semantics.cell?.reference?.kind === 'cell'
+      && !b119ConditionalButtonIconHotkey.semantics.dataFlow
+      && !b119ConditionalButtonIcon.verificationGaps.some(gap => gap.category === 'edit-box')
+      && !b119ConditionalButtonIcon.verificationGaps.some(gap => gap.reason.includes('edit-box used for setHotkey'))
+      && !b119ConditionalButtonIcon.calls.some(candidate => (candidate.name as string) === 'setIcon'),
+    detail({ hotkey: b119ConditionalButtonIconHotkey, calls: b119ConditionalButtonIcon.calls, gaps: b119ConditionalButtonIcon.verificationGaps }));
+
+  const b119TrackedButtonIconChains = (['setIcon', 'setIcon2'] as const).map(method => {
+    const source = [
+      'local table = getTable()',
+      'local row = table:addRow()',
+      'local button = row[1]:createButton({ height = 25 })',
+      `button:${method}("ICON", {}):setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })`,
+    ].join('\n');
+    return {
+      method,
+      model: buildX4UiCallModel(input(source, `selftest/b119-tracked-button-${method}.lua`)),
+    };
+  });
+  check('B119 tracked buttons preserve shipped setIcon and setIcon2 receivers',
+    b119TrackedButtonIconChains.every(candidate => {
+      const hotkey = candidate.model.calls.find(callRecord => callRecord.name === 'setHotkey');
+      return hotkey?.semantics.cell?.reference?.kind === 'cell'
+        && !hotkey.semantics.dataFlow
+        && !candidate.model.verificationGaps.some(gap => gap.category === 'edit-box')
+        && !candidate.model.verificationGaps.some(gap => gap.reason.includes('edit-box used for setHotkey'))
+        && !candidate.model.calls.some(callRecord => (callRecord.name as string) === candidate.method);
+    }),
+    detail(b119TrackedButtonIconChains.map(candidate => ({
+      method: candidate.method,
+      hotkey: candidate.model.calls.find(callRecord => callRecord.name === 'setHotkey'),
+      calls: candidate.model.calls,
+      gaps: candidate.model.verificationGaps,
+    }))));
+
+  const b119InvalidEditBoxIconChains = (['setIcon', 'setIcon2'] as const).map(method => {
+    const source = [
+      'local table = getTable()',
+      'local row = table:addRow()',
+      `row[1]:createEditBox({ height = 0 }):${method}("ICON", {}):setHotkey("HOT", { displayIcon = true })`,
+    ].join('\n');
+    return {
+      method,
+      model: buildX4UiCallModel(input(source, `selftest/b119-invalid-editbox-${method}.lua`)),
+    };
+  });
+  check('B119 editboxes cannot inherit button-only setIcon or setIcon2 receiver identity',
+    b119InvalidEditBoxIconChains.every(candidate => {
+      const hotkey = candidate.model.calls.find(callRecord => callRecord.name === 'setHotkey');
+      return Boolean(hotkey?.semantics.dataFlow)
+        && hotkey?.semantics.cell?.reference?.kind !== 'cell'
+        && candidate.model.verificationGaps.some(gap => gap.category === 'data-flow'
+          && gap.reason.includes('edit-box used for setHotkey'));
+    }),
+    detail(b119InvalidEditBoxIconChains.map(candidate => ({
+      method: candidate.method,
+      hotkey: candidate.model.calls.find(callRecord => callRecord.name === 'setHotkey'),
+      gaps: candidate.model.verificationGaps,
+    }))));
+
+  const b119GenericDescriptorSource = [
+    'local descriptor = {}',
+    'descriptor.hotkey = getHotkey()',
+    'descriptor.displayIcon = getDisplayIcon()',
+  ].join('\n');
+  const b119GenericDescriptor = buildX4UiCallModel(input(
+    b119GenericDescriptorSource,
+    'selftest/b119-generic-descriptor.lua',
+  ));
+  check('generic descriptor hotkey/displayIcon assignments stay outside bounded B119 property tracking',
+    b119GenericDescriptor.verificationGaps.length === 0
+      && !b119GenericDescriptor.properties.some(record => ['hotkey', 'displayicon'].includes(record.name.replace(/[-_\s]/g, '').toLowerCase())),
+    detail({ properties: b119GenericDescriptor.properties, gaps: b119GenericDescriptor.verificationGaps }));
+  check('bounded B119 option projection still exposes hotkey/displayIcon source fields',
+    b119Complex?.semantics.properties?.some(propertyRecord => propertyRecord.name === 'hotkey') === true
+      && b119Complex.semantics.properties?.some(propertyRecord => propertyRecord.name === 'displayIcon') === true,
+    detail(b119Complex?.semantics));
 
   const rowDataSource = [
     'local menu = { name = "RowData", layer = 1 }',

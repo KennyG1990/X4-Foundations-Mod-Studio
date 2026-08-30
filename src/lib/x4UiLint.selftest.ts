@@ -623,6 +623,11 @@ export function runX4UiLintSelftest(): X4UiLintSelftestResult {
       && editBoxFinding.evidenceBoundary.includes('row:getHeight()')
       && editBoxFinding.evidenceBoundary.includes('does not supply the editbox descriptor height')
       && editBoxFinding.evidenceBoundary.includes('only table default cell properties and displayed-hotkey minimum handling')
+      && !editBoxFinding.evidenceBoundary.includes('This bounded model does not resolve those descriptor paths')
+      && editBoxFinding.evidenceBoundary.includes('Exact statically modeled table default cell properties and displayed-hotkey minimum handling are resolved')
+      && editBoxFinding.evidenceBoundary.includes('no such positive source-proven path was found')
+      && editBoxFinding.evidenceBoundary.includes('dynamic, conditional, malformed, and unresolved paths remain verification gaps')
+      && editBoxFinding.evidenceBoundary.includes('Not verified in game.')
       && editBoxFinding.nextAction.includes('explicit positive')
       && editBoxFinding.nextAction.includes('in-game')
       && editBoxFinding.location.file === 'selftest/ui.lua'
@@ -652,6 +657,367 @@ export function runX4UiLintSelftest(): X4UiLintSelftestResult {
   check('dynamic editbox height is an explicit verification gap', editBoxDynamic.hasVerificationGaps
     && editBoxDynamic.verificationGaps.some(gap => gap.category === 'height' && gap.status === 'dynamic' && gap.expression === 'getHeight()')
     && !hasCode(editBoxDynamic, 'x4-ui.editbox-height-minimum', 'error'), detail(editBoxDynamic));
+
+  const editBoxDefaultFrame = (body: string): string => baseFrame('1, { width = 2, height = 20, scaling = false }', [
+    body,
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'row[1]:createEditBox({})',
+  ].join('\n'));
+  const editBoxSimpleDefault = lint(editBoxDefaultFrame(
+    'table:setDefaultCellProperties("editbox", { height = 12, scaling = false })',
+  ));
+  const editBoxComplexDefault = lint(editBoxDefaultFrame(
+    'table:setDefaultComplexCellProperties("editbox", "hotkey", { hotkey = "DEFAULT", displayIcon = true })',
+  ));
+  const editBoxZeroDisplayedDefault = lint(baseFrame('1, { width = 2, height = 20, scaling = false }', [
+    'table:setDefaultComplexCellProperties("editbox", "hotkey", { hotkey = "DEFAULT", displayIcon = true })',
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'row[1]:createEditBox({ height = 0 })',
+  ].join('\n')));
+  const editBoxDirectDisplayed = lint(baseFrame('1, { width = 2, height = 20, scaling = false }', [
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'local editbox = row[1]:createEditBox({})',
+    'editbox:setHotkey("DIRECT", { displayIcon = true })',
+  ].join('\n')));
+  const editBoxDirectZeroDisplayed = lint(baseFrame('1, { width = 2, height = 20, scaling = false }', [
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'local editbox = row[1]:createEditBox({ height = 0 })',
+    'editbox:setHotkey("DIRECT", { displayIcon = true })',
+  ].join('\n')));
+  const editBoxDirectEmpty = lint(baseFrame('1, { width = 2, height = 20, scaling = false }', [
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'local editbox = row[1]:createEditBox({ height = 0 })',
+    'editbox:setHotkey("", { displayIcon = false })',
+  ].join('\n')));
+  const editBoxDynamicDefaultThenStaticEmptyOverride = lint(baseFrame('1, { width = 2, height = 20, scaling = false }', [
+    'table:setDefaultComplexCellProperties("editbox", "hotkey", { hotkey = getHotkey(), displayIcon = true })',
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'local editbox = row[1]:createEditBox({ height = 0 })',
+    'editbox:setHotkey("VISIBLE_ARGUMENT", { hotkey = "", displayIcon = false, x = 0 })',
+  ].join('\n')));
+  const editBoxDynamicDefaultThenStaticVisibleOverride = lint(baseFrame('1, { width = 2, height = 20, scaling = false }', [
+    'table:setDefaultComplexCellProperties("editbox", "hotkey", { hotkey = getHotkey(), displayIcon = true })',
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'local editbox = row[1]:createEditBox({ height = 0 })',
+    'editbox:setHotkey("", { hotkey = "VISIBLE_PROPERTY", displayIcon = true })',
+  ].join('\n')));
+  const editBoxDynamicDefaultThenOmittedIcon = lint(baseFrame('1, { width = 2, height = 20, scaling = false }', [
+    'table:setDefaultComplexCellProperties("editbox", "hotkey", { hotkey = getHotkey(), displayIcon = true })',
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'local editbox = row[1]:createEditBox({ height = 0 })',
+    'editbox:setHotkey("", { hotkey = "" })',
+  ].join('\n')));
+  const editBoxDynamicDefaultThenDynamicIcon = lint(baseFrame('1, { width = 2, height = 20, scaling = false }', [
+    'table:setDefaultComplexCellProperties("editbox", "hotkey", { hotkey = getHotkey(), displayIcon = true })',
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'local editbox = row[1]:createEditBox({ height = 0 })',
+    'editbox:setHotkey("", { hotkey = "", displayIcon = getDisplayIcon() })',
+  ].join('\n')));
+  const editBoxDefaultIconFalse = lint(baseFrame('1, { width = 2, height = 20, scaling = false }', [
+    'table:setDefaultComplexCellProperties("editbox", "hotkey", { hotkey = "DEFAULT", displayIcon = false })',
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'row[1]:createEditBox({ height = 0 })',
+  ].join('\n')));
+  const editBoxDefaultEmptyHotkey = lint(baseFrame('1, { width = 2, height = 20, scaling = false }', [
+    'table:setDefaultComplexCellProperties("editbox", "hotkey", { hotkey = "", displayIcon = true })',
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'row[1]:createEditBox({ height = 0 })',
+  ].join('\n')));
+  const editBoxDefaultAfterCreate = lint(baseFrame('1, { width = 2, height = 20, scaling = false }', [
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'row[1]:createEditBox({})',
+    'table:setDefaultCellProperties("editbox", { height = 12, scaling = false })',
+  ].join('\n')));
+  const editBoxOtherTable = lint([
+    'local menu = { name = "Main", layer = 1 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 100 })',
+    'local firstTable = frame:addTable(1, { width = 2, height = 20, scaling = false })',
+    'firstTable:setDefaultCellProperties("editbox", { height = 20, scaling = false })',
+    'local secondTable = frame:addTable(1, { width = 2, height = 20, scaling = false })',
+    'local row = secondTable:addRow(nil, { borderBelow = false, scaling = false })',
+    'row[1]:createEditBox({})',
+    'frame:display()',
+  ].join('\n'));
+  const editBoxOtherWidget = lint(baseFrame('2, { width = 2, height = 20, scaling = false }', [
+    'table:setDefaultCellProperties("button", { height = 20, scaling = false })',
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'row[1]:createButton({})',
+    'row[2]:createEditBox({})',
+  ].join('\n')));
+  const editBoxWrongReceiver = lint(baseFrame('1, { width = 2, height = 20, scaling = false }', [
+    'frame:setDefaultCellProperties("editbox", { height = 20, scaling = false })',
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'row[1]:createEditBox({})',
+  ].join('\n')));
+  const editBoxDynamicDefault = lint(baseFrame('1, { width = 2, height = 20, scaling = false }', [
+    'local dynamicHeight = getHeight()',
+    'table:setDefaultCellProperties("editbox", { height = dynamicHeight })',
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'row[1]:createEditBox({})',
+  ].join('\n')));
+  const editBoxConditionalDefault = lint(baseFrame('1, { width = 2, height = 20, scaling = false }', [
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'if mode then',
+    '  table:setDefaultCellProperties("editbox", { height = 20, scaling = false })',
+    'end',
+    'row[1]:createEditBox({})',
+  ].join('\n')));
+  const editBoxOtherCellHotkey = lint(baseFrame('2, { width = 2, height = 20, scaling = false }', [
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'local button = row[1]:createButton({})',
+    'button:setHotkey("BUTTON", { displayIcon = true })',
+    'row[2]:createEditBox({})',
+  ].join('\n')));
+  const editBoxIrrelevantDynamic = lint(baseFrame('2, { width = 2, height = 40, scaling = false }', [
+    'table:setDefaultCellProperties("button", { height = getHeight(), scaling = getScaling() })',
+    'table:setDefaultComplexCellProperties("editbox", "caption", { hotkey = getHotkey(), displayIcon = getDisplayIcon() })',
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'local button = row[1]:createButton({ height = 25, scaling = false })',
+    'button:setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })',
+    'row[2]:createEditBox({ height = 12, scaling = false })',
+  ].join('\n')));
+  const editBoxDynamicHotkey = lint(baseFrame('1, { width = 2, height = 20, scaling = false }', [
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'local editbox = row[1]:createEditBox({ height = 0 })',
+    'editbox:setHotkey(getHotkey(), { displayIcon = true })',
+  ].join('\n')));
+  const editBoxConditionalHotkey = lint(baseFrame('1, { width = 2, height = 20, scaling = false }', [
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'local editbox = row[1]:createEditBox({ height = 0 })',
+    'if mode then editbox:setHotkey("CONDITIONAL", { displayIcon = true }) end',
+  ].join('\n')));
+  const editBoxConditionalFluentChain = lint(baseFrame('1, { width = 2, height = 20, scaling = false }', [
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'if mode then',
+    '  row[1]:setColSpan(1):createEditBox({ height = 0 }):setText("EDIT", {}):setHotkey("CHAIN", { displayIcon = true })',
+    'end',
+  ].join('\n')));
+  const editBoxSiblingArmHotkey = lint(baseFrame('1, { width = 2, height = 20, scaling = false }', [
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'if mode then',
+    '  row[1]:createEditBox({ height = 0 })',
+    'else',
+    '  row[1]:setHotkey("SIBLING", { displayIcon = true })',
+    'end',
+  ].join('\n')));
+  const conditionalButtonIconChain = lint(baseFrame('2, { width = 2, height = 20, scaling = false }', [
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'row[2]:createEditBox({})',
+    'if mode then',
+    '  row[1]:createButton({ height = 25 }):setIcon("ICON"):setHotkey("BUTTON", { displayIcon = true })',
+    'end',
+  ].join('\n')));
+  const invalidEditBoxIconChains = (['setIcon', 'setIcon2'] as const).map(method => ({
+    method,
+    result: lint(baseFrame('1, { width = 2, height = 20, scaling = false }', [
+      'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+      `row[1]:createEditBox({ height = 0 }):${method}("ICON", {}):setHotkey("HOT", { displayIcon = true })`,
+    ].join('\n'))),
+  }));
+  const editBoxSourceProvenUnknownChain = lint([
+    'local table = getTable()',
+    'local row = table:addRow()',
+    'row[1]:setColSpan(1):createEditBox({ height = 0 }):setText("EDIT", {}):setHotkey("CHAIN", { displayIcon = true })',
+  ].join('\n'));
+  const editBoxSourceProvenUnknownOmitted = lint([
+    'local table = getTable()',
+    'local row = table:addRow()',
+    'row[1]:createEditBox({}):setHotkey("CHAIN", { displayIcon = true })',
+  ].join('\n'));
+  const editBoxDistinctSameSpelling = lint(baseFrame('1, { width = 2, height = 20, scaling = false }', [
+    'do',
+    '  local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    '  row[1]:createEditBox({ height = 0 })',
+    'end',
+    'do',
+    '  local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    '  row[1]:setHotkey("OTHER", { displayIcon = true })',
+    'end',
+  ].join('\n')));
+  const editBoxButtonUnknownChain = lint([
+    'local table = getTable()',
+    'local row = table:addRow()',
+    'row[1]:createEditBox({})',
+    'row[1]:createButton({ height = 25 }):setText("BUTTON", {}):setHotkey(getHotkey(), { displayIcon = getDisplayIcon() })',
+  ].join('\n'));
+  const editBoxUnknownReceiver = lint(baseFrame('1, { width = 2, height = 20, scaling = false }', [
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'row[1]:createEditBox({ height = 0 })',
+    'local unknownCell = getCell()',
+    'unknownCell:setHotkey("UNKNOWN", { displayIcon = true })',
+  ].join('\n')));
+  const editBoxDotMethod = lint(baseFrame('1, { width = 2, height = 20, scaling = false }', [
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'row[1].createEditBox({ height = 0 }).setHotkey("DOT", { displayIcon = true })',
+  ].join('\n')));
+  const editBoxPositiveHeightDynamicHotkey = lint(baseFrame('1, { width = 2, height = 20, scaling = false }', [
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'local editbox = row[1]:createEditBox({ height = 12 })',
+    'editbox:setHotkey(getHotkey(), { displayIcon = true })',
+  ].join('\n')));
+  const genericDescriptorOptions = lint([
+    'local descriptor = {}',
+    'descriptor.hotkey = getHotkey()',
+    'descriptor.displayIcon = getDisplayIcon()',
+  ].join('\n'));
+  const editBoxDefaultTrueOverridesFalse = lint(baseFrame('1, { width = 2, height = 10, scaling = false }', [
+    'table:setDefaultCellProperties("editbox", { height = 12, scaling = true })',
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'row[1]:createEditBox({})',
+  ].join('\n')));
+  const editBoxDefaultFalseExact = lint(baseFrame('1, { width = 2, height = 10, scaling = false }', [
+    'table:setDefaultCellProperties("editbox", { height = 12, scaling = false })',
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'row[1]:createEditBox({})',
+  ].join('\n')));
+  const editBoxExplicitFalseExact = lint(baseFrame('1, { width = 2, height = 10, scaling = false }', [
+    'table:setDefaultCellProperties("editbox", { height = 12, scaling = true })',
+    'local row = table:addRow(nil, { borderBelow = false, scaling = false })',
+    'row[1]:createEditBox({ height = 12, scaling = false })',
+  ].join('\n')));
+  check('simple and complex same-table defaults make omitted editboxes clean',
+    !hasCode(editBoxSimpleDefault, 'x4-ui.editbox-height-minimum')
+      && !hasCode(editBoxComplexDefault, 'x4-ui.editbox-height-minimum')
+      && !editBoxSimpleDefault.hasVerificationGaps
+      && !editBoxComplexDefault.hasVerificationGaps,
+    JSON.stringify({ simple: detail(editBoxSimpleDefault), complex: detail(editBoxComplexDefault) }));
+  check('displayed hotkeys make omitted and zero-height editboxes clean',
+    !hasCode(editBoxZeroDisplayedDefault, 'x4-ui.editbox-height-minimum')
+      && !hasCode(editBoxDirectDisplayed, 'x4-ui.editbox-height-minimum')
+      && !hasCode(editBoxDirectZeroDisplayed, 'x4-ui.editbox-height-minimum'),
+    JSON.stringify({ defaultZero: detail(editBoxZeroDisplayedDefault), direct: detail(editBoxDirectDisplayed), directZero: detail(editBoxDirectZeroDisplayed) }));
+  check('empty or icon-hidden hotkeys do not prove the minimum',
+    hasCode(editBoxDirectEmpty, 'x4-ui.editbox-height-minimum', 'error')
+      && hasCode(editBoxDefaultIconFalse, 'x4-ui.editbox-height-minimum', 'error')
+      && hasCode(editBoxDefaultEmptyHotkey, 'x4-ui.editbox-height-minimum', 'error'),
+    JSON.stringify({ directEmpty: detail(editBoxDirectEmpty), iconFalse: detail(editBoxDefaultIconFalse), emptyDefault: detail(editBoxDefaultEmptyHotkey) }));
+  check('later source-proven static hotkey and icon overrides clear earlier complex-default uncertainty',
+    hasCode(editBoxDynamicDefaultThenStaticEmptyOverride, 'x4-ui.editbox-height-minimum', 'error')
+      && !hasCode(editBoxDynamicDefaultThenStaticEmptyOverride, 'x4-ui.editbox-height-minimum', 'warning')
+      && !hasCode(editBoxDynamicDefaultThenStaticVisibleOverride, 'x4-ui.editbox-height-minimum')
+      && !editBoxDynamicDefaultThenStaticEmptyOverride.verificationGaps.some(gap => gap.category === 'property'),
+    JSON.stringify({
+      emptyOverride: detail(editBoxDynamicDefaultThenStaticEmptyOverride),
+      visibleOverride: detail(editBoxDynamicDefaultThenStaticVisibleOverride),
+    }));
+  check('omitted or dynamic direct displayIcon keeps the editbox height uncertainty',
+    editBoxDynamicDefaultThenOmittedIcon.verificationGaps.some(gap => gap.category === 'edit-box')
+      && hasCode(editBoxDynamicDefaultThenOmittedIcon, 'x4-ui.editbox-height-minimum', 'warning')
+      && !hasCode(editBoxDynamicDefaultThenOmittedIcon, 'x4-ui.editbox-height-minimum', 'error')
+      && editBoxDynamicDefaultThenDynamicIcon.verificationGaps.some(gap => gap.category === 'edit-box')
+      && hasCode(editBoxDynamicDefaultThenDynamicIcon, 'x4-ui.editbox-height-minimum', 'warning')
+      && !hasCode(editBoxDynamicDefaultThenDynamicIcon, 'x4-ui.editbox-height-minimum', 'error'),
+    JSON.stringify({ omitted: detail(editBoxDynamicDefaultThenOmittedIcon), dynamic: detail(editBoxDynamicDefaultThenDynamicIcon) }));
+  check('defaults after creation do not mutate the already-created editbox',
+    hasCode(editBoxDefaultAfterCreate, 'x4-ui.editbox-height-minimum', 'warning')
+      && !hasCode(editBoxDefaultAfterCreate, 'x4-ui.editbox-height-minimum', 'error'),
+    detail(editBoxDefaultAfterCreate));
+  check('other table, widget, and cell hotkey data cannot clean the editbox rule',
+    hasCode(editBoxOtherTable, 'x4-ui.editbox-height-minimum', 'warning')
+      && hasCode(editBoxOtherWidget, 'x4-ui.editbox-height-minimum', 'warning')
+      && hasCode(editBoxOtherCellHotkey, 'x4-ui.editbox-height-minimum', 'warning')
+      && !editBoxOtherWidget.hasVerificationGaps
+      && !editBoxOtherCellHotkey.hasVerificationGaps,
+    JSON.stringify({ table: detail(editBoxOtherTable), widget: detail(editBoxOtherWidget), cell: detail(editBoxOtherCellHotkey) }));
+  check('dynamic button defaults/hotkeys and literal wrong complex properties add no lint gaps or findings',
+    !editBoxIrrelevantDynamic.hasVerificationGaps
+      && editBoxIrrelevantDynamic.findings.length === 0,
+    detail(editBoxIrrelevantDynamic));
+  check('wrong receiver and dynamic or conditional defaults remain gaps with warnings',
+    editBoxWrongReceiver.hasVerificationGaps
+      && hasCode(editBoxWrongReceiver, 'x4-ui.editbox-height-minimum', 'warning')
+      && editBoxDynamicDefault.hasVerificationGaps
+      && hasCode(editBoxDynamicDefault, 'x4-ui.editbox-height-minimum', 'warning')
+      && !hasCode(editBoxDynamicDefault, 'x4-ui.editbox-height-minimum', 'error')
+      && editBoxConditionalDefault.hasVerificationGaps
+      && hasCode(editBoxConditionalDefault, 'x4-ui.editbox-height-minimum', 'warning')
+      && !hasCode(editBoxConditionalDefault, 'x4-ui.editbox-height-minimum', 'error'),
+    JSON.stringify({
+      wrongReceiver: detail(editBoxWrongReceiver),
+      dynamic: {
+        summary: detail(editBoxDynamicDefault),
+        findings: editBoxDynamicDefault.findings.map(finding => ({ code: finding.code, severity: finding.severity, cause: finding.cause })),
+        gaps: editBoxDynamicDefault.verificationGaps.map(gap => ({ category: gap.category, status: gap.status, expression: gap.expression, reason: gap.reason })),
+      },
+      conditional: detail(editBoxConditionalDefault),
+    }));
+  check('dynamic or conditional direct hotkeys remain nonblocking gaps',
+    editBoxDynamicHotkey.hasVerificationGaps
+      && hasCode(editBoxDynamicHotkey, 'x4-ui.editbox-height-minimum', 'warning')
+      && !hasCode(editBoxDynamicHotkey, 'x4-ui.editbox-height-minimum', 'error')
+      && editBoxConditionalHotkey.hasVerificationGaps
+      && hasCode(editBoxConditionalHotkey, 'x4-ui.editbox-height-minimum', 'warning')
+      && !hasCode(editBoxConditionalHotkey, 'x4-ui.editbox-height-minimum', 'error'),
+    JSON.stringify({ dynamic: detail(editBoxDynamicHotkey), conditional: detail(editBoxConditionalHotkey) }));
+  check('same-statement conditional fluent editbox chain proves displayed hotkey without height finding',
+    !editBoxConditionalFluentChain.verificationGaps.some(gap => gap.category === 'edit-box')
+      && !hasCode(editBoxConditionalFluentChain, 'x4-ui.editbox-height-minimum'),
+    detail(editBoxConditionalFluentChain));
+  check('incompatible sibling conditional arms remain conservative for editbox hotkeys',
+    editBoxSiblingArmHotkey.verificationGaps.some(gap => gap.category === 'edit-box')
+      && hasCode(editBoxSiblingArmHotkey, 'x4-ui.editbox-height-minimum', 'warning'),
+    detail(editBoxSiblingArmHotkey));
+  check('conditional fluent button setIcon chain leaves exactly one omitted-editbox warning',
+    conditionalButtonIconChain.findings.filter(finding => finding.code === 'x4-ui.editbox-height-minimum').length === 1
+      && conditionalButtonIconChain.findings.some(finding => finding.code === 'x4-ui.editbox-height-minimum' && finding.severity === 'warning')
+      && !conditionalButtonIconChain.verificationGaps.some(gap => gap.category === 'edit-box'),
+    detail(conditionalButtonIconChain));
+  check('button-only setIcon and setIcon2 cannot falsely clean literal-zero editboxes',
+    invalidEditBoxIconChains.every(candidate => candidate.result.verificationGaps.some(gap => gap.category === 'data-flow'
+      && gap.reason.includes('edit-box used for setHotkey'))
+      && candidate.result.verificationGaps.some(gap => gap.category === 'edit-box')
+      && candidate.result.findings.filter(finding => finding.code === 'x4-ui.editbox-height-minimum').length === 1
+      && hasCode(candidate.result, 'x4-ui.editbox-height-minimum', 'warning')
+      && !hasCode(candidate.result, 'x4-ui.editbox-height-minimum', 'error')),
+    JSON.stringify(invalidEditBoxIconChains.map(candidate => ({
+      method: candidate.method,
+      result: detail(candidate.result),
+    }))));
+  check('same-statement source-proven non-static cell chain proves displayed hotkey without an editbox gap',
+    editBoxSourceProvenUnknownChain.hasVerificationGaps
+      && !editBoxSourceProvenUnknownChain.verificationGaps.some(gap => gap.category === 'edit-box')
+      && !hasCode(editBoxSourceProvenUnknownChain, 'x4-ui.editbox-height-minimum'),
+    detail(editBoxSourceProvenUnknownChain));
+  check('same-statement source-proven omitted editbox with static displayed hotkey is clean',
+    editBoxSourceProvenUnknownOmitted.hasVerificationGaps
+      && !editBoxSourceProvenUnknownOmitted.verificationGaps.some(gap => gap.category === 'edit-box')
+      && !hasCode(editBoxSourceProvenUnknownOmitted, 'x4-ui.editbox-height-minimum'),
+    detail(editBoxSourceProvenUnknownOmitted));
+  check('distinct source cells both spelled row[1] cannot cross-clean',
+    hasCode(editBoxDistinctSameSpelling, 'x4-ui.editbox-height-minimum', 'error')
+      && !editBoxDistinctSameSpelling.verificationGaps.some(gap => gap.category === 'edit-box'),
+    detail(editBoxDistinctSameSpelling));
+  check('unresolved button chain does not create an editbox hotkey gap or contaminate omitted editbox',
+    editBoxButtonUnknownChain.verificationGaps.every(gap => gap.category !== 'edit-box')
+      && editBoxButtonUnknownChain.findings.filter(finding => finding.code === 'x4-ui.editbox-height-minimum').length === 1
+      && hasCode(editBoxButtonUnknownChain, 'x4-ui.editbox-height-minimum', 'warning'),
+    detail(editBoxButtonUnknownChain));
+  check('unknown receiver and dot-method hotkeys remain conservative',
+    editBoxUnknownReceiver.verificationGaps.some(gap => gap.category === 'edit-box')
+      && hasCode(editBoxUnknownReceiver, 'x4-ui.editbox-height-minimum', 'warning')
+      && editBoxDotMethod.verificationGaps.some(gap => gap.category === 'edit-box')
+      && hasCode(editBoxDotMethod, 'x4-ui.editbox-height-minimum', 'warning'),
+    JSON.stringify({ unknownReceiver: detail(editBoxUnknownReceiver), dotMethod: detail(editBoxDotMethod) }));
+  check('explicit positive height suppresses unrelated hotkey uncertainty for the height rule',
+    !hasCode(editBoxPositiveHeightDynamicHotkey, 'x4-ui.editbox-height-minimum')
+      && !editBoxPositiveHeightDynamicHotkey.findings.some(finding => finding.code === 'x4-ui.editbox-height-minimum'),
+    detail(editBoxPositiveHeightDynamicHotkey));
+  check('generic descriptor hotkey/displayIcon options do not create B119 property gaps',
+    !genericDescriptorOptions.hasVerificationGaps
+      && !hasCode(genericDescriptorOptions, 'x4-ui.verification-gap'),
+    detail(genericDescriptorOptions));
+  check('editbox scaling follows table then row then editbox default then call-specific last writer',
+    editBoxDefaultTrueOverridesFalse.verificationGaps.some(gap => gap.category === 'scale')
+      && !hasCode(editBoxDefaultTrueOverridesFalse, 'x4-ui.row-height-budget', 'warning')
+      && !editBoxDefaultFalseExact.verificationGaps.some(gap => gap.category === 'scale')
+      && !editBoxExplicitFalseExact.verificationGaps.some(gap => gap.category === 'scale')
+      && !hasCode(editBoxDefaultFalseExact, 'x4-ui.editbox-height-minimum')
+      && !hasCode(editBoxExplicitFalseExact, 'x4-ui.editbox-height-minimum'),
+    JSON.stringify({
+      defaultTrue: detail(editBoxDefaultTrueOverridesFalse),
+      defaultFalse: detail(editBoxDefaultFalseExact),
+      explicitFalse: detail(editBoxExplicitFalseExact),
+    }));
 
   const inlineDisplay = lint([
     'local menu = { name = "Main", layer = 1 }',

@@ -108,7 +108,8 @@ const RESTRICTED_X4_UI_CALLS = [
 
 const X4_UI_MODELED_CALL_NAMES = new Set([
   'createFrameHandle', 'addTable', 'setColWidthPercent', 'setColWidth', 'addRow',
-  'setColSpan', 'display', 'OpenMenu', 'setText', 'setText2', 'createText', 'createEditBox'
+  'setColSpan', 'display', 'OpenMenu', 'setText', 'setText2', 'createText', 'createEditBox',
+  'setDefaultCellProperties', 'setDefaultComplexCellProperties', 'setHotkey'
 ]);
 
 const X4_UI_VERIFICATION_SUMMARY_CODE = 'x4-ui.verification-gap';

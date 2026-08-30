@@ -27,6 +27,24 @@ const FAILURE_CODES = Object.freeze({
   PLATFORM_UNSUPPORTED: 'snapshot-platform-unsupported',
 });
 
+const WINDOWS_PROCESS_TABLE_COMMAND = 'powershell.exe';
+const WINDOWS_PROCESS_TABLE_SCRIPT = [
+  "$ErrorActionPreference = 'Stop';",
+  "$ProgressPreference = 'SilentlyContinue';",
+  "'Node,CreationDate,ParentProcessId,ProcessId';",
+  'Get-CimInstance -ClassName Win32_Process -Property CreationDate,ParentProcessId,ProcessId | ForEach-Object {',
+  "if ($null -eq $_.CreationDate -or $null -eq $_.ParentProcessId -or $null -eq $_.ProcessId) { throw 'incomplete Win32_Process row' };",
+  "\"{0},{1},{2},{3}\" -f '.', [System.Management.ManagementDateTimeConverter]::ToDmtfDateTime($_.CreationDate), $_.ParentProcessId, $_.ProcessId",
+  '}',
+].join(' ');
+const WINDOWS_PROCESS_TABLE_ARGS = Object.freeze([
+  '-NoLogo',
+  '-NoProfile',
+  '-NonInteractive',
+  '-Command',
+  WINDOWS_PROCESS_TABLE_SCRIPT,
+]);
+
 function failure(code) {
   return { complete: false, errors: [code], rows: [] };
 }
@@ -242,15 +260,16 @@ function captureCommandProcessTableSnapshot(input, { command, args, parser, make
 }
 
 /**
- * Capture and parse the Windows WMIC process table.
+ * Capture and parse a Windows process table using PowerShell/CIM and the
+ * existing WMIC-compatible CSV contract.
  *
  * @param {unknown} options
  * @returns {Promise<{complete: boolean, errors: string[], rows: Array<object>}>}
  */
 export async function captureWindowsProcessTableSnapshot(options = {}) {
   return captureCommandProcessTableSnapshot(options, {
-    command: 'wmic.exe',
-    args: ['process', 'get', 'CreationDate,ParentProcessId,ProcessId', '/format:csv'],
+    command: WINDOWS_PROCESS_TABLE_COMMAND,
+    args: WINDOWS_PROCESS_TABLE_ARGS,
     parser: parseWindowsWmicProcessCsv,
   });
 }
@@ -272,7 +291,7 @@ export async function capturePosixProcessTableSnapshot(options = {}) {
   });
 }
 
-const SELFTEST_WMIC_HEADER = 'Node,CreationDate,ParentProcessId,ProcessId';
+const SELFTEST_WINDOWS_HEADER = 'Node,CreationDate,ParentProcessId,ProcessId';
 const SELFTEST_SECRET = 'SELFTEST_SECRET_SENTINEL_MUST_NOT_LEAK';
 const SELFTEST_ENV_SENTINEL_KEY = 'X4_FORGE_PROCESS_TABLE_ADAPTER_SELFTEST_SENTINEL';
 const SELFTEST_ENV_SENTINEL_VALUE = 'x4-forge-process-table-adapter-selftest-sentinel';
@@ -281,7 +300,7 @@ const SELFTEST_WATCHDOG_MS = 1000;
 function selftestSnapshotText({ crcrlf = false } = {}) {
   const separator = crcrlf ? '\r\r\n' : '\n';
   return [
-    SELFTEST_WMIC_HEADER,
+    SELFTEST_WINDOWS_HEADER,
     'DESKTOP-SELFTEST,20260802043333.860108-240,4,42',
     'DESKTOP-SELFTEST,20260802043334.860108-240,42,84',
   ].join(separator);
@@ -302,6 +321,36 @@ function assertSnapshotResult(result, expected) {
 
 function expectedFailure(code) {
   return { complete: false, errors: [code], rows: [] };
+}
+
+function expectedWindowsCommandCall(timeoutMs) {
+  return {
+    command: 'powershell.exe',
+    args: [
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      [
+        "$ErrorActionPreference = 'Stop';",
+        "$ProgressPreference = 'SilentlyContinue';",
+        "'Node,CreationDate,ParentProcessId,ProcessId';",
+        'Get-CimInstance -ClassName Win32_Process -Property CreationDate,ParentProcessId,ProcessId | ForEach-Object {',
+        "if ($null -eq $_.CreationDate -or $null -eq $_.ParentProcessId -or $null -eq $_.ProcessId) { throw 'incomplete Win32_Process row' };",
+        "\"{0},{1},{2},{3}\" -f '.', [System.Management.ManagementDateTimeConverter]::ToDmtfDateTime($_.CreationDate), $_.ParentProcessId, $_.ProcessId",
+        '}',
+      ].join(' '),
+    ],
+    options: {
+      shell: false,
+      windowsHide: true,
+      encoding: 'utf8',
+      timeout: timeoutMs,
+      maxBuffer: 4 * 1024 * 1024,
+      killSignal: 'SIGKILL',
+    },
+    callbackType: 'function',
+  };
 }
 
 async function settleWithSelftestWatchdog(promise, label) {
@@ -380,19 +429,7 @@ async function runSelftest() {
         { pid: 84, parentPid: 42, creationToken: '20260802043334.860108-240' },
       ],
     });
-    assert.deepEqual(calls, [{
-      command: 'wmic.exe',
-      args: ['process', 'get', 'CreationDate,ParentProcessId,ProcessId', '/format:csv'],
-      options: {
-        shell: false,
-        windowsHide: true,
-        encoding: 'utf8',
-        timeout: 1234,
-        maxBuffer: 4 * 1024 * 1024,
-        killSignal: 'SIGKILL',
-      },
-      callbackType: 'function',
-    }]);
+    assert.deepEqual(calls, [expectedWindowsCommandCall(1234)]);
   });
 
   await check('exact POSIX command and common bounded options', async () => {
@@ -691,7 +728,7 @@ async function runSelftest() {
       timeoutMs: 10,
       execFileImpl(_command, _args, _options, callback) {
         callback(null, [
-          SELFTEST_WMIC_HEADER,
+          SELFTEST_WINDOWS_HEADER,
           'NODE,not-a-creation-token,4,42',
           'NODE,20260802043333.860108-240,4,84',
         ].join('\n'));
@@ -795,7 +832,7 @@ async function runSelftest() {
     const stdoutResult = await captureWindowsProcessTableSnapshot({
       timeoutMs: 10,
       execFileImpl(_command, _args, _options, callback) {
-        callback(null, `${SELFTEST_WMIC_HEADER}\n${SELFTEST_SECRET},not-a-token,4,not-a-pid`, SELFTEST_SECRET);
+        callback(null, `${SELFTEST_WINDOWS_HEADER}\n${SELFTEST_SECRET},not-a-token,4,not-a-pid`, SELFTEST_SECRET);
         return { kill() {} };
       },
     });
@@ -851,19 +888,7 @@ async function runSelftest() {
         { pid: 84, parentPid: 42, creationToken: '20260802043334.860108-240' },
       ],
     });
-    assert.deepEqual(calls, [{
-      command: 'wmic.exe',
-      args: ['process', 'get', 'CreationDate,ParentProcessId,ProcessId', '/format:csv'],
-      options: {
-        shell: false,
-        windowsHide: true,
-        encoding: 'utf8',
-        timeout: 1234,
-        maxBuffer: 4 * 1024 * 1024,
-        killSignal: 'SIGKILL',
-      },
-      callbackType: 'function',
-    }]);
+    assert.deepEqual(calls, [expectedWindowsCommandCall(1234)]);
   });
 
   await check('generic POSIX dispatcher supports every accepted platform', async () => {
@@ -922,8 +947,8 @@ async function runSelftest() {
   await check('generic default platform dispatch uses this host', async () => {
     const expected = process.platform === 'win32'
       ? {
-        command: 'wmic.exe',
-        args: ['process', 'get', 'CreationDate,ParentProcessId,ProcessId', '/format:csv'],
+        command: 'powershell.exe',
+        args: expectedWindowsCommandCall(1234).args,
         output: selftestSnapshotText(),
         rows: [
           { pid: 42, parentPid: 4, creationToken: '20260802043333.860108-240' },
@@ -973,6 +998,26 @@ async function runSelftest() {
       assert.equal(call.options.env.LANG, 'C');
     }
   });
+
+  if (process.platform === 'win32') {
+    await check('current Windows PowerShell/CIM capture includes own PID', async () => {
+      const result = await captureProcessTableSnapshot({
+        platform: 'win32',
+        timeoutMs: DEFAULT_TIMEOUT_MS,
+      });
+
+      assert.equal(result.complete, true);
+      assert.deepEqual(result.errors, []);
+      assert(result.rows.length > 0);
+      for (let index = 1; index < result.rows.length; index += 1) {
+        assert(result.rows[index - 1].pid < result.rows[index].pid, 'Windows rows should be sorted by PID');
+      }
+
+      const ownRow = result.rows.find((row) => row.pid === process.pid);
+      assert(ownRow !== undefined, 'current Node PID should be present');
+      assert.match(ownRow.creationToken, /^\d{14}\.\d{6}[+-]\d{3}$/);
+    });
+  }
 
   await check('generic malformed options fail closed without execution', async () => {
     let executorCalls = 0;

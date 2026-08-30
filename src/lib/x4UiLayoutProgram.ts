@@ -64,6 +64,9 @@ import {
   setCellColSpan,
   setColWidth,
   setColWidthPercent,
+  setDefaultCellProperties,
+  setDefaultComplexCellProperties,
+  setCellHotkey,
   specializeCell,
   scaleFont,
   scaleX,
@@ -897,6 +900,8 @@ const HELPER_DEFAULT_PINS = Object.freeze({
   baseCellSpan: helperPin(4926),
   baseCellScaling: helperPin(4937, 4939),
   cellSpecialization: helperPin(5432, 5469),
+  editBoxMinHeight: helperPin(565),
+  editBoxHotkeyDefaults: helperPin(3440, 3445),
 });
 
 const HELPER_HEADER_ROW_PINS = Object.freeze({
@@ -3063,6 +3068,7 @@ interface MutableTable extends Mutable<Omit<X4UiLayoutTableNode, 'rowIds' | 'ope
   hadGap: boolean;
   hadRefusal: boolean;
   tableIdentityKey?: string;
+  editBoxDefaultsUnresolved: boolean;
 }
 
 interface MutableRow extends Mutable<Omit<X4UiLayoutRowNode, 'cellIds' | 'operationIds' | 'descriptorFacts' | 'status'>> {
@@ -3179,6 +3185,8 @@ interface ProjectableCall extends X4UiCallRecord {
 const EVIDENCE_RELEVANT_CALL_NAMES: readonly X4UiRelevantCallName[] = Object.freeze([
   'createFrameHandle',
   'addTable',
+  'setDefaultCellProperties',
+  'setDefaultComplexCellProperties',
   'setColWidth',
   'setColWidthPercent',
   'addRow',
@@ -3186,6 +3194,7 @@ const EVIDENCE_RELEVANT_CALL_NAMES: readonly X4UiRelevantCallName[] = Object.fre
   'createText',
   'createButton',
   'createEditBox',
+  'setHotkey',
   'createIcon',
   'setText',
   'setText2',
@@ -4394,6 +4403,8 @@ const makeBaseCells = (
         outerHeight: unavailableFact('number', 'cell outer height is unavailable until specialization/finalization', source),
         scaling: scalingFact,
         affectRowHeight: unavailableFact('boolean', 'base cells do not emit affectRowHeight descriptor data', source),
+        hotkey: unavailableFact('string', 'base cell has no edit-box hotkey', source),
+        displayIcon: unavailableFact('boolean', 'base cell has no edit-box hotkey icon flag', source),
         primaryContent: unavailableFact('string', 'base cell has no specialized primary content', source),
         text: unavailableFact('string', 'base cell has no text content', source),
         text2: unavailableFact('string', 'base cell has no secondary text content', source),
@@ -5375,14 +5386,14 @@ const schemaProperty = (value: unknown, path: string, allowExpandedSourceMismatc
 const schemaSemantics = (value: unknown, path: string, allowExpandedSourceMismatch = false): ClosedSchemaError => {
   const objectError = schemaObject(value, path, [], [
     'count', 'index', 'span', 'width', 'percentage', 'height', 'layer', 'menu', 'menuName', 'frame', 'table', 'row',
-    'cell', 'dataFlow', 'text', 'editBox', 'fontsize', 'options', 'properties', 'unsupportedProperties', 'rowData',
-    'icon', 'scaling', 'scale',
+    'cell', 'cellType', 'propertyName', 'hotkey', 'displayIcon', 'dataFlow', 'text', 'editBox', 'fontsize', 'options',
+    'properties', 'unsupportedProperties', 'rowData', 'icon', 'scaling', 'scale',
   ]);
   if (objectError) return objectError;
   const semantics = value as Record<string, unknown>;
   for (const key of [
     'count', 'index', 'span', 'width', 'percentage', 'height', 'layer', 'menu', 'menuName', 'frame', 'table', 'row',
-    'cell', 'dataFlow', 'text', 'fontsize', 'options', 'rowData', 'icon', 'scaling',
+    'cell', 'cellType', 'propertyName', 'hotkey', 'displayIcon', 'dataFlow', 'text', 'fontsize', 'options', 'rowData', 'icon', 'scaling',
   ]) {
     const error = schemaOptional(semantics, key, (child, childPath) =>
       schemaValue(child, childPath, allowExpandedSourceMismatch), path);
@@ -5612,7 +5623,8 @@ const schemaProvenance = (value: unknown, path: string): ClosedSchemaError => {
   if (errors) return errors;
   const anchorKeys: Readonly<Record<string, readonly string[]>> = {
     helperLineAnchors: [
-      'defaultWidgetScaling', 'defaultTableReserveScrollBar', 'defaultRowScalingAndBorderBelow', 'iconGetHeight',
+      'defaultWidgetScaling', 'defaultTableReserveScrollBar', 'defaultRowScalingAndBorderBelow', 'editBoxMinHeight',
+      'editBoxHotkeyDefaults', 'initTableCell', 'editBoxHotkeyAndHeight', 'iconGetHeight',
       'buttonGetHeight', 'roundAndScale', 'addTableDefaults', 'settersAndFinalization', 'fullHeight',
       'firstAddRowAndFreeze', 'rowHeight', 'colspan', 'cellHeight',
     ],
@@ -5636,7 +5648,7 @@ const schemaProvenance = (value: unknown, path: string): ClosedSchemaError => {
 };
 
 const schemaKernelCell = (value: unknown, path: string): ClosedSchemaError => {
-  const objectError = schemaObject(value, path, ['type', 'colspan', 'bgcolspan', 'y', 'height', 'scaling', 'affectRowHeight'], ['minTextHeight']);
+  const objectError = schemaObject(value, path, ['type', 'colspan', 'bgcolspan', 'y', 'height', 'scaling', 'affectRowHeight', 'hotkey', 'displayIcon'], ['minTextHeight']);
   if (objectError) return objectError;
   const cell = value as Record<string, unknown>;
   const errors = schemaEnum(cell.type, `${path}.type`, HELPER_CELL_TYPES)
@@ -5646,6 +5658,8 @@ const schemaKernelCell = (value: unknown, path: string): ClosedSchemaError => {
     || schemaNumber(cell.height, `${path}.height`)
     || schemaBoolean(cell.scaling, `${path}.scaling`)
     || schemaBoolean(cell.affectRowHeight, `${path}.affectRowHeight`)
+    || schemaString(cell.hotkey, `${path}.hotkey`)
+    || schemaBoolean(cell.displayIcon, `${path}.displayIcon`)
     || schemaOptional(cell, 'minTextHeight', schemaNumber, path);
   if (errors) return errors;
   if ((cell.height as number) < 0) return `${path}.height must be non-negative`;
@@ -5681,7 +5695,7 @@ const schemaKernelRow = (value: unknown, path: string): ClosedSchemaError => {
 
 const schemaKernelState = (value: unknown, path: string): ClosedSchemaError => {
   const objectError = schemaObject(value, path, [
-    'provenance', 'frameWidth', 'metrics', 'requestedWidth', 'properties', 'columns', 'rows', 'rowGroups', 'createdWithScrollBar', 'final', 'diagnostics',
+    'provenance', 'frameWidth', 'metrics', 'requestedWidth', 'properties', 'editBoxDefaults', 'columns', 'rows', 'rowGroups', 'createdWithScrollBar', 'final', 'diagnostics',
   ]);
   if (objectError) return objectError;
   const state = value as Record<string, unknown>;
@@ -5690,6 +5704,7 @@ const schemaKernelState = (value: unknown, path: string): ClosedSchemaError => {
     || schemaMetrics(state.metrics, `${path}.metrics`)
     || schemaNumber(state.requestedWidth, `${path}.requestedWidth`)
     || schemaObject(state.properties, `${path}.properties`, ['width', 'x', 'scaling', 'reserveScrollBar'])
+    || schemaObject(state.editBoxDefaults, `${path}.editBoxDefaults`, [], ['height', 'scaling', 'hotkey', 'displayIcon'])
     || schemaArray(state.columns, `${path}.columns`)
     || schemaArray(state.rows, `${path}.rows`)
     || schemaArray(state.rowGroups, `${path}.rowGroups`)
@@ -5697,6 +5712,13 @@ const schemaKernelState = (value: unknown, path: string): ClosedSchemaError => {
     || schemaBoolean(state.final, `${path}.final`)
     || schemaArray(state.diagnostics, `${path}.diagnostics`);
   if (errors) return errors;
+  const editBoxDefaults = state.editBoxDefaults as Record<string, unknown>;
+  const editBoxDefaultsError = schemaOptional(editBoxDefaults, 'height', schemaNumber, `${path}.editBoxDefaults`)
+    || schemaOptional(editBoxDefaults, 'scaling', schemaBoolean, `${path}.editBoxDefaults`)
+    || schemaOptional(editBoxDefaults, 'hotkey', schemaString, `${path}.editBoxDefaults`)
+    || schemaOptional(editBoxDefaults, 'displayIcon', schemaBoolean, `${path}.editBoxDefaults`);
+  if (editBoxDefaultsError) return editBoxDefaultsError;
+  if (editBoxDefaults.height !== undefined && (editBoxDefaults.height as number) < 0) return `${path}.editBoxDefaults.height must be non-negative`;
   const properties = state.properties as Record<string, unknown>;
   for (const key of ['width', 'x']) {
     const error = schemaNumber(properties[key], `${path}.properties.${key}`);
@@ -5859,6 +5881,8 @@ const OPERATION_OWNER_SHAPES: Readonly<Record<string, readonly OperationOwnerKey
   createFrameHandle: ['frameId'],
   display: ['frameId'],
   addTable: ['tableId'],
+  setDefaultCellProperties: ['tableId'],
+  setDefaultComplexCellProperties: ['tableId'],
   setColWidth: ['tableId'],
   setColWidthPercent: ['tableId'],
   addRow: ['tableId', 'rowId'],
@@ -5868,6 +5892,7 @@ const OPERATION_OWNER_SHAPES: Readonly<Record<string, readonly OperationOwnerKey
   setText2: ['tableId', 'rowId', 'cellId'],
   createText: ['tableId', 'rowId', 'cellId'],
   createEditBox: ['tableId', 'rowId', 'cellId'],
+  setHotkey: ['tableId', 'rowId', 'cellId'],
   createIcon: ['tableId', 'rowId', 'cellId'],
 };
 
@@ -8201,6 +8226,30 @@ export function projectX4UiLayoutProgram(
     if (refusal) table.hadRefusal = true;
   };
 
+  const addUnsupportedB119PropertyGaps = (
+    call: ProjectableCall,
+    operation: MutableOperation,
+    nodeId?: string,
+  ): boolean => {
+    if (call.name !== 'setDefaultCellProperties'
+      && call.name !== 'setDefaultComplexCellProperties'
+      && call.name !== 'setHotkey') return false;
+    const unsupported = call.semantics.unsupportedProperties || [];
+    for (const property of unsupported) {
+      addOperationGap(
+        gaps,
+        operation,
+        'property',
+        'unsupported',
+        `${call.name} property ${property.name} is retained as source evidence but not applied by bounded layout projection`,
+        property.source,
+        property.value.expression,
+        nodeId,
+      );
+    }
+    return unsupported.length > 0;
+  };
+
   const findTable = (reference: X4UiValueReference | undefined): MutableTable | undefined => {
     const key = referenceKey(reference);
     return key ? tableByReference.get(key) : undefined;
@@ -8449,6 +8498,10 @@ export function projectX4UiLayoutProgram(
           y: knownDefaultFact(0, 'number', call.source, HELPER_DEFAULT_PINS.widgetY, '0'),
           requestedWidth: knownDefaultFact(0, 'number', call.source, HELPER_DEFAULT_PINS.widgetWidth, '0'),
           finalWidth: unavailableFact('number', 'table finalization awaits the first successfully applied addRow', call.source),
+          editBoxDefaultHeight: knownDefaultFact(0, 'number', call.source, HELPER_DEFAULT_PINS.widgetHeight, '0'),
+          editBoxDefaultScaling: knownDefaultFact(true, 'boolean', call.source, HELPER_DEFAULT_PINS.widgetScaling, 'true'),
+          editBoxDefaultHotkey: knownDefaultFact('', 'string', call.source, HELPER_DEFAULT_PINS.editBoxHotkeyDefaults, '""'),
+          editBoxDefaultDisplayIcon: knownDefaultFact(false, 'boolean', call.source, HELPER_DEFAULT_PINS.editBoxHotkeyDefaults, 'false'),
           maxVisibleHeight: knownDefaultFact(0, 'number', call.source, HELPER_DEFAULT_PINS.tableMaxVisibleHeight, '0'),
           scaling: knownDefaultFact(true, 'boolean', call.source, HELPER_DEFAULT_PINS.widgetScaling, 'true'),
           tabOrder: knownDefaultFact(0, 'number', call.source, HELPER_DEFAULT_PINS.tableTabOrder, '0'),
@@ -8467,6 +8520,7 @@ export function projectX4UiLayoutProgram(
         hadGap: false,
         hadRefusal: false,
         tableIdentityKey: referenceKey(reference),
+        editBoxDefaultsUnresolved: false,
       };
       tables.push(table);
       recordNode('table', table.id);
@@ -8638,6 +8692,208 @@ export function projectX4UiLayoutProgram(
       }
       operation.kernel = { stateAfter: created.value };
       table.status = 'projected';
+      continue;
+    }
+
+    if (call.name === 'setDefaultCellProperties' || call.name === 'setDefaultComplexCellProperties') {
+      const table = findTable(call.semantics.table?.reference);
+      const operation = makeOperation(call, blocked || 'unresolved');
+      setOperationLinks(operation, { tableId: table?.id });
+      appendNodeOperation('table', table, operation.id);
+      appendOperation(operation);
+      const hasUnsupportedProperties = addUnsupportedB119PropertyGaps(call, operation, table?.id);
+      if (hasUnsupportedProperties) markTableGap(table);
+      if (blocked) {
+        operation.reason = blocked === 'unreachable'
+          ? 'unreachable source operation was recorded but not applied'
+          : 'conditional or looped source operation was recorded but not applied';
+        markTableGap(table);
+        if (table && (call.semantics.cellType?.status !== 'static'
+          || (call.semantics.cellType.type === 'string' && call.semantics.cellType.value === 'editbox'))) {
+          table.editBoxDefaultsUnresolved = true;
+        }
+        if (blocked === 'conditional') {
+          addOperationGap(
+            gaps,
+            operation,
+            'data-flow',
+            'incomplete',
+            'conditional editbox defaults cannot be proven for every execution path',
+            call.source,
+            call.semantics.cellType?.expression,
+            table?.id,
+          );
+        }
+        continue;
+      }
+      if (!table || !table.kernelState) {
+        operation.reason = 'editbox default receiver is not an applied source table identity';
+        markTableGap(table);
+        addOperationGap(gaps, operation, 'data-flow', 'unknown', operation.reason, call.source, call.semantics.table?.expression, table?.id);
+        continue;
+      }
+      const cellType = call.semantics.cellType;
+      const cellTypeKnown = cellType?.status === 'static'
+        && cellType.type === 'string'
+        && typeof cellType.value === 'string';
+      operation.descriptorFacts.cellType = cellTypeKnown
+        ? knownSourceFact(cellType.value as string, 'string', cellType.location, cellType.expression)
+        : unavailableFact('string', 'editbox default cell type is dynamic or unknown', cellType?.location || call.source, cellType?.expression);
+      const propertyName = call.name === 'setDefaultComplexCellProperties' ? call.semantics.propertyName : undefined;
+      const propertyNameKnown = call.name === 'setDefaultComplexCellProperties'
+        ? propertyName?.status === 'static' && propertyName.type === 'string' && typeof propertyName.value === 'string'
+        : true;
+      if (propertyName !== undefined) {
+        operation.descriptorFacts.propertyName = propertyNameKnown
+          ? knownSourceFact(propertyName.value as string, 'string', propertyName.location, propertyName.expression)
+          : unavailableFact('string', 'editbox default complex property name is dynamic or unknown', propertyName.location, propertyName.expression);
+      }
+      const isEditBoxType = cellTypeKnown && cellType.value === 'editbox';
+      const isSupportedDefaultForm = isEditBoxType
+        && (call.name === 'setDefaultCellProperties'
+          || (propertyNameKnown && propertyName?.value === 'hotkey'));
+      const isProvablyIrrelevantDefault = cellTypeKnown
+        && (cellType.value !== 'editbox'
+          || (call.name === 'setDefaultComplexCellProperties'
+            && propertyNameKnown
+            && propertyName?.value !== 'hotkey'));
+      if (isProvablyIrrelevantDefault) {
+        operation.status = 'unresolved';
+        operation.reason = cellType.value !== 'editbox'
+          ? 'non-editbox widget default effects are outside the bounded editbox-height projection'
+          : 'non-hotkey editbox default effects are outside the bounded editbox-height projection';
+        markTableGap(table);
+        addOperationGap(
+          gaps,
+          operation,
+          'options',
+          'unsupported',
+          operation.reason,
+          call.source,
+          call.semantics.options?.expression,
+          table.id,
+        );
+        continue;
+      }
+      if (!isSupportedDefaultForm) {
+        operation.status = 'unresolved';
+        operation.reason = 'only the literal editbox and hotkey default forms are projected';
+        markTableGap(table);
+        const potentiallyEditBoxSimple = call.name === 'setDefaultCellProperties'
+          && (!cellTypeKnown || cellType.value === 'editbox');
+        const potentiallyEditBoxHotkey = call.name === 'setDefaultComplexCellProperties'
+          && (!cellTypeKnown || cellType.value === 'editbox')
+          && (!propertyNameKnown || propertyName?.value === 'hotkey');
+        if (potentiallyEditBoxSimple || potentiallyEditBoxHotkey) table.editBoxDefaultsUnresolved = true;
+        const invalidValue = !cellTypeKnown || cellType.value !== 'editbox' ? cellType : propertyName;
+        addOperationGap(
+          gaps,
+          operation,
+          'data-flow',
+          valueStatus(invalidValue),
+          operation.reason,
+          invalidValue?.location || call.source,
+          invalidValue?.expression,
+          table.id,
+        );
+        continue;
+      }
+      if (call.method !== ':' || call.semantics.dataFlow !== undefined) {
+        operation.status = 'unresolved';
+        operation.reason = 'editbox defaults require the shipped colon-method shape and exact table data-flow';
+        markTableGap(table);
+        table.editBoxDefaultsUnresolved = true;
+        addOperationGap(
+          gaps,
+          operation,
+          'data-flow',
+          valueStatus(call.semantics.dataFlow),
+          operation.reason,
+          call.semantics.dataFlow?.location || call.source,
+          call.semantics.dataFlow?.expression || call.callee,
+          table.id,
+        );
+        continue;
+      }
+      if (optionMode(call) === 'unresolved') {
+        operation.status = 'unresolved';
+        operation.reason = 'editbox default properties are dynamic or unknown; defaults were not applied';
+        markTableGap(table);
+        table.editBoxDefaultsUnresolved = true;
+        addOperationGap(gaps, operation, 'options', 'dynamic', operation.reason, call.semantics.options?.location || call.source, call.semantics.options?.expression, table.id);
+        continue;
+      }
+      const heightValue = call.name === 'setDefaultCellProperties' ? propertyValue(call, 'height') : undefined;
+      const scalingValue = call.name === 'setDefaultCellProperties' ? propertyValue(call, 'scaling') : undefined;
+      const hotkeyValue = call.name === 'setDefaultComplexCellProperties' ? propertyValue(call, 'hotkey') : undefined;
+      const displayIconValue = call.name === 'setDefaultComplexCellProperties' ? propertyValue(call, 'displayicon') : undefined;
+      const staticNumber = (value: X4UiValue | undefined): number | undefined => value?.status === 'static'
+        && value.type === 'number' && typeof value.value === 'number' && Number.isFinite(value.value)
+        ? value.value
+        : undefined;
+      const staticBoolean = (value: X4UiValue | undefined): boolean | undefined => value?.status === 'static'
+        && value.type === 'boolean' && typeof value.value === 'boolean'
+        ? value.value
+        : undefined;
+      const staticString = (value: X4UiValue | undefined): string | undefined => value?.status === 'static'
+        && value.type === 'string' && typeof value.value === 'string'
+        ? value.value
+        : undefined;
+      const height = staticNumber(heightValue);
+      const scaling = staticBoolean(scalingValue);
+      const hotkey = staticString(hotkeyValue);
+      const displayIcon = staticBoolean(displayIconValue);
+      const invalidProperty = [heightValue, scalingValue, hotkeyValue, displayIconValue]
+        .find(value => value !== undefined && value.status !== 'static');
+      const invalidPropertyType = [
+        heightValue && height === undefined,
+        scalingValue && scaling === undefined,
+        hotkeyValue && hotkey === undefined,
+        displayIconValue && displayIcon === undefined,
+      ].some(Boolean);
+      if (invalidProperty || invalidPropertyType) {
+        operation.status = 'unresolved';
+        operation.reason = 'editbox default property is dynamic, unknown, or has the wrong literal type';
+        markTableGap(table);
+        table.editBoxDefaultsUnresolved = true;
+        const invalid = invalidProperty || (heightValue && height === undefined ? heightValue
+          : scalingValue && scaling === undefined ? scalingValue
+            : hotkeyValue && hotkey === undefined ? hotkeyValue : displayIconValue);
+        addOperationGap(gaps, operation, 'data-flow', valueStatus(invalid), operation.reason, invalid?.location || call.source, invalid?.expression, table.id);
+        continue;
+      }
+      if (heightValue) operation.descriptorFacts.height = knownSourceFact(height!, 'number', heightValue.location, heightValue.expression);
+      if (scalingValue) operation.descriptorFacts.scaling = knownSourceFact(scaling!, 'boolean', scalingValue.location, scalingValue.expression);
+      if (hotkeyValue) operation.descriptorFacts.hotkey = knownSourceFact(hotkey!, 'string', hotkeyValue.location, hotkeyValue.expression);
+      if (displayIconValue) operation.descriptorFacts.displayIcon = knownSourceFact(displayIcon!, 'boolean', displayIconValue.location, displayIconValue.expression);
+      const before = table.kernelState;
+      const result = call.name === 'setDefaultCellProperties'
+        ? setDefaultCellProperties(before, 'editbox', {
+          ...(heightValue ? { height: height! } : {}),
+          ...(scalingValue ? { scaling: scaling! } : {}),
+        })
+        : setDefaultComplexCellProperties(before, 'editbox', 'hotkey', {
+          ...(hotkeyValue ? { hotkey: hotkey! } : {}),
+          ...(displayIconValue ? { displayIcon: displayIcon! } : {}),
+        });
+      operation.kernel = stateResultTransition(result, before);
+      if (result.status !== 'ok') {
+        operation.status = 'rejected';
+        operation.reason = result.message;
+        markTableGap(table, true);
+        const gap = kernelFailureGap(result, 'table', call.source, operation.id, table.id);
+        if (gap) addGap(gaps, gap);
+      } else {
+        operation.status = hasUnsupportedProperties ? 'unresolved' : 'applied';
+        if (hasUnsupportedProperties) {
+          operation.reason = 'editbox default kernel state is deterministic but one or more source properties remain outside the bounded projection';
+        }
+        table.kernelState = result.value;
+        if (heightValue) table.descriptorFacts.editBoxDefaultHeight = operation.descriptorFacts.height;
+        if (scalingValue) table.descriptorFacts.editBoxDefaultScaling = operation.descriptorFacts.scaling;
+        if (hotkeyValue) table.descriptorFacts.editBoxDefaultHotkey = operation.descriptorFacts.hotkey;
+        if (displayIconValue) table.descriptorFacts.editBoxDefaultDisplayIcon = operation.descriptorFacts.displayIcon;
+      }
       continue;
     }
 
@@ -8996,6 +9252,162 @@ export function projectX4UiLayoutProgram(
       continue;
     }
 
+    if (call.name === 'setHotkey') {
+      const found = findCell(call);
+      const operation = makeOperation(call, blocked || 'unresolved');
+      const deferredOwner = blocked === 'conditional'
+        && found.table !== undefined
+        && found.table.kernelState !== undefined
+        && found.cell === undefined;
+      setOperationLinks(operation, {
+        tableId: found.table?.id,
+        ...(deferredOwner ? {} : { rowId: found.row?.id, cellId: found.cell?.id }),
+      });
+      appendNodeOperation('table', found.table, operation.id);
+      if (!deferredOwner) {
+        appendNodeOperation('row', found.row, operation.id);
+        appendNodeOperation('cell', found.cell, operation.id);
+      }
+      appendOperation(operation);
+      const hasUnsupportedProperties = addUnsupportedB119PropertyGaps(call, operation, found.cell?.id);
+      if (hasUnsupportedProperties) {
+        if (found.cell) found.cell.hadGap = true;
+        markTableGap(found.table);
+      }
+      if (deferredOwner) deferredConditionalCellOwners.push({ call, operation });
+      if (blocked) {
+        operation.reason = blocked === 'unreachable'
+          ? 'unreachable source operation was recorded but not applied'
+          : 'conditional or looped source operation was recorded but not applied';
+        if (found.cell) found.cell.hadGap = true;
+        markTableGap(found.table);
+        if (blocked === 'conditional') {
+          addOperationGap(gaps, operation, 'edit-box', 'incomplete', 'conditional editbox hotkey cannot be proven for every execution path', call.source, call.semantics.hotkey?.expression, found.cell?.id);
+        }
+        continue;
+      }
+      if (!found.table || !found.row || !found.cell || !found.table.kernelState || found.row.rowIndex === undefined) {
+        operation.reason = 'setHotkey receiver is not an applied source editbox cell identity';
+        if (found.cell) found.cell.hadGap = true;
+        markTableGap(found.table);
+        addOperationGap(gaps, operation, 'data-flow', 'unknown', operation.reason, call.source, call.semantics.cell?.expression, found.cell?.id);
+        continue;
+      }
+      const contentKindFact = found.cell.descriptorFacts.contentKind;
+      const isButtonReceiver = contentKindFact.status === 'known'
+        && contentKindFact.expectedType === 'string'
+        && contentKindFact.value === 'button';
+      if (isButtonReceiver && call.method === ':' && call.semantics.dataFlow === undefined) {
+        operation.status = 'unresolved';
+        operation.reason = 'button setHotkey effects are outside the bounded editbox-height projection';
+        operation.descriptorFacts.contentKind = cloneDeep(contentKindFact) as X4UiLayoutDescriptorFact;
+        found.cell.hadGap = true;
+        markTableGap(found.table);
+        addOperationGap(
+          gaps,
+          operation,
+          'options',
+          'unsupported',
+          operation.reason,
+          call.source,
+          call.semantics.options?.expression || call.semantics.hotkey?.expression,
+          found.cell.id,
+        );
+        continue;
+      }
+      if (call.method !== ':' || call.semantics.dataFlow !== undefined) {
+        operation.status = 'unresolved';
+        operation.reason = 'editbox setHotkey requires the shipped colon-method shape and exact cell data-flow';
+        found.cell.hadGap = true;
+        markTableGap(found.table);
+        addOperationGap(
+          gaps,
+          operation,
+          'data-flow',
+          valueStatus(call.semantics.dataFlow),
+          operation.reason,
+          call.semantics.dataFlow?.location || call.source,
+          call.semantics.dataFlow?.expression || call.callee,
+          found.cell.id,
+        );
+        continue;
+      }
+      if (optionMode(call) === 'unresolved') {
+        operation.reason = 'setHotkey options are dynamic or unknown; displayIcon was not projected';
+        found.cell.hadGap = true;
+        markTableGap(found.table);
+        addOperationGap(gaps, operation, 'options', 'dynamic', operation.reason, call.semantics.options?.location || call.source, call.semantics.options?.expression, found.cell.id);
+        continue;
+      }
+      const hotkeyProperty = property(call, 'hotkey');
+      const hotkeyValue = hotkeyProperty?.value || call.semantics.hotkey;
+      const argumentHotkeyValue = call.semantics.hotkey;
+      const displayIconValue = propertyValue(call, 'displayicon');
+      const hotkey = hotkeyValue?.status === 'static' && hotkeyValue.type === 'string' && typeof hotkeyValue.value === 'string'
+        ? hotkeyValue.value
+        : undefined;
+      const displayIcon = displayIconValue?.status === 'static' && displayIconValue.type === 'boolean' && typeof displayIconValue.value === 'boolean'
+        ? displayIconValue.value
+        : undefined;
+      const invalidValue = hotkey === undefined
+        ? hotkeyValue
+        : displayIconValue !== undefined && displayIcon === undefined
+          ? displayIconValue
+          : undefined;
+      operation.descriptorFacts.hotkey = hotkeyValue && hotkey !== undefined
+        ? knownSourceFact(hotkey, 'string', hotkeyValue.location, hotkeyValue.expression)
+        : unavailableFact('string', 'setHotkey value is dynamic, unknown, or not a string', hotkeyValue?.location || call.source, hotkeyValue?.expression);
+      if (displayIconValue) {
+        operation.descriptorFacts.displayIcon = displayIcon !== undefined
+          ? knownSourceFact(displayIcon, 'boolean', displayIconValue.location, displayIconValue.expression)
+          : unavailableFact('boolean', 'setHotkey displayIcon is dynamic, unknown, or not boolean', displayIconValue.location, displayIconValue.expression);
+      }
+      if (invalidValue || hotkey === undefined) {
+        operation.reason = 'setHotkey requires a static string hotkey and optional static boolean displayIcon';
+        found.cell.hadGap = true;
+        markTableGap(found.table);
+        addOperationGap(gaps, operation, 'edit-box', valueStatus(invalidValue), operation.reason, invalidValue?.location || call.source, invalidValue?.expression, found.cell.id);
+        continue;
+      }
+      const before = found.table.kernelState;
+      const argumentHotkey = argumentHotkeyValue?.status === 'static'
+        && argumentHotkeyValue.type === 'string'
+        && typeof argumentHotkeyValue.value === 'string'
+        ? argumentHotkeyValue.value
+        : hotkey!;
+      const result = setCellHotkey(
+        before,
+        found.row.rowIndex,
+        found.cell.column,
+        argumentHotkey,
+        hotkeyProperty || displayIconValue
+          ? {
+            ...(hotkeyProperty ? { hotkey: hotkey! } : {}),
+            ...(displayIconValue ? { displayIcon } : {}),
+          }
+          : undefined,
+      );
+      operation.kernel = stateResultTransition(result, before);
+      if (result.status !== 'ok') {
+        operation.status = 'rejected';
+        operation.reason = result.message;
+        found.cell.hadGap = true;
+        found.cell.hadRefusal = true;
+        markTableGap(found.table, true);
+        const gap = kernelFailureGap(result, 'cell', call.source, operation.id, found.cell.id);
+        if (gap) addGap(gaps, gap);
+      } else {
+        operation.status = hasUnsupportedProperties ? 'unresolved' : 'applied';
+        if (hasUnsupportedProperties) {
+          operation.reason = 'setHotkey kernel state is deterministic but one or more source properties remain outside the bounded projection';
+        }
+        found.table.kernelState = result.value;
+        found.cell.descriptorFacts.hotkey = operation.descriptorFacts.hotkey;
+        if (displayIconValue) found.cell.descriptorFacts.displayIcon = operation.descriptorFacts.displayIcon;
+      }
+      continue;
+    }
+
     if (call.name === 'createText' || call.name === 'createButton' || call.name === 'createEditBox' || call.name === 'createIcon') {
       const found = findCell(call);
       const operation = makeOperation(call, blocked || 'unresolved');
@@ -9057,6 +9469,13 @@ export function projectX4UiLayoutProgram(
         addOperationGap(gaps, operation, 'options', 'dynamic', operation.reason, call.semantics.options?.location || call.source, call.semantics.options?.expression, found.cell.id);
         continue;
       }
+      if (type === 'editbox' && found.table.editBoxDefaultsUnresolved) {
+        operation.reason = 'an earlier editbox table default is dynamic or conditional; editbox geometry was not projected';
+        found.cell.hadGap = true;
+        markTableGap(found.table);
+        addOperationGap(gaps, operation, 'edit-box', 'incomplete', operation.reason, call.source, call.semantics.options?.expression, found.cell.id);
+        continue;
+      }
       const xValue = propertyValue(call, 'x');
       const heightValue = propertyValue(call, 'height');
       const yValue = propertyValue(call, 'y');
@@ -9080,10 +9499,32 @@ export function projectX4UiLayoutProgram(
         : { value: 0, source: cloneLocation(call.source), provenance: 'source-pinned-default' as const, sourcePin: HELPER_DEFAULT_PINS.widgetWidth };
       const height = heightValue
         ? resolveProjectedNumber(heightValue, 'height', `${type} height`, call.source, ['scaleY'])
-        : { value: type === 'button' ? undefined : 0, source: cloneLocation(call.source), provenance: 'source-pinned-default' as const, sourcePin: HELPER_DEFAULT_PINS.widgetHeight };
-      const scaling = scalingValue
+        : type === 'button'
+          ? { value: undefined }
+          : type === 'editbox'
+            ? { value: undefined }
+            : { value: 0, source: cloneLocation(call.source), provenance: 'source-pinned-default' as const, sourcePin: HELPER_DEFAULT_PINS.widgetHeight };
+      const editBoxDefaultScaling = type === 'editbox'
+        ? found.table.kernelState.editBoxDefaults.scaling
+        : undefined;
+      const editBoxScalingFact = editBoxDefaultScaling === undefined
+        ? undefined
+        : found.table.descriptorFacts.editBoxDefaultScaling;
+      const scalingFactProvenance = editBoxScalingFact?.status === 'known' && editBoxScalingFact.expectedType === 'boolean'
+        ? editBoxScalingFact.provenance
+        : undefined;
+      const scaling: Resolution<boolean> = scalingValue
         ? resolveProjectedBoolean(scalingValue, 'options', `${type} scaling`, call.source)
-        : { value: found.row.kernelState?.scaling ?? true, source: cloneLocation(call.source), provenance: 'source-pinned-default' as const, sourcePin: HELPER_DEFAULT_PINS.baseCellScaling };
+        : type === 'editbox'
+          ? {
+            value: editBoxDefaultScaling ?? found.row.kernelState?.scaling ?? true,
+            source: cloneLocation(editBoxScalingFact?.source || call.source),
+            provenance: scalingFactProvenance || 'source-pinned-default' as const,
+            ...(editBoxScalingFact?.sourcePin
+              ? { sourcePin: cloneDeep(editBoxScalingFact.sourcePin) as X4UiLayoutSourcePin }
+              : { sourcePin: HELPER_DEFAULT_PINS.baseCellScaling }),
+          }
+          : { value: found.row.kernelState?.scaling ?? true, source: cloneLocation(call.source), provenance: 'source-pinned-default' as const, sourcePin: HELPER_DEFAULT_PINS.baseCellScaling };
       const affect = affectValue
         ? resolveProjectedBoolean(affectValue, 'options', `${type} affectRowHeight`, call.source)
         : { value: type === 'button' || type === 'icon' ? true : undefined };
@@ -9383,6 +9824,30 @@ export function projectX4UiLayoutProgram(
             WIDGET_DEFAULT_PINS.editBoxBlackInset,
           )
           : undefined;
+      const editBoxBaseHeightFact = type === 'editbox'
+        ? heightValue
+          ? factFromResolution(heightValue, height, 'number', call.source, 'edit-box base height')
+          : found.table.descriptorFacts.editBoxDefaultHeight?.status === 'known'
+            ? cloneDeep(found.table.descriptorFacts.editBoxDefaultHeight) as X4UiLayoutDescriptorFact
+            : knownDefaultFact(0, 'number', call.source, HELPER_DEFAULT_PINS.widgetHeight, '0')
+        : knownDefaultFact(height.value ?? 0, 'number', call.source, HELPER_DEFAULT_PINS.widgetHeight, '0');
+      const editBoxBaseScalingFact = type === 'editbox'
+        ? scalingValue
+          ? factFromResolution(scalingValue, scaling, 'boolean', call.source, 'edit-box base scaling')
+          : editBoxDefaultScaling !== undefined && editBoxScalingFact?.status === 'known'
+            ? cloneDeep(editBoxScalingFact) as X4UiLayoutDescriptorFact
+            : knownDefaultFact(effectiveScaling, 'boolean', call.source, HELPER_DEFAULT_PINS.baseCellScaling, 'row.properties.scaling')
+        : knownDefaultFact(effectiveScaling, 'boolean', call.source, HELPER_DEFAULT_PINS.baseCellScaling, 'row.properties.scaling');
+      const editBoxHotkeyFact = type === 'editbox'
+        ? found.table.descriptorFacts.editBoxDefaultHotkey?.status === 'known'
+          ? cloneDeep(found.table.descriptorFacts.editBoxDefaultHotkey) as X4UiLayoutDescriptorFact
+          : knownDefaultFact('', 'string', call.source, HELPER_DEFAULT_PINS.editBoxHotkeyDefaults, '""')
+        : unavailableFact('string', `${type} has no edit-box hotkey`, call.source);
+      const editBoxDisplayIconFact = type === 'editbox'
+        ? found.table.descriptorFacts.editBoxDefaultDisplayIcon?.status === 'known'
+          ? cloneDeep(found.table.descriptorFacts.editBoxDefaultDisplayIcon) as X4UiLayoutDescriptorFact
+          : knownDefaultFact(false, 'boolean', call.source, HELPER_DEFAULT_PINS.editBoxHotkeyDefaults, 'false')
+        : unavailableFact('boolean', `${type} has no edit-box hotkey icon flag`, call.source);
       const pendingFacts: Record<string, X4UiLayoutDescriptorFact> = {
         contentKind: knownSourceFact(type, 'string', call.source, call.name),
         span: found.cell.descriptorFacts.span,
@@ -9399,7 +9864,18 @@ export function projectX4UiLayoutProgram(
             ? knownDefaultFact(buttonHeight!, 'number', call.source, profileValue.defaults.standardButtonHeight.source, 'Helper.standardButtonHeight')
             : type === 'text'
               ? finalTextHeightFact
-            : knownDefaultFact(0, 'number', call.source, HELPER_DEFAULT_PINS.widgetHeight, '0'),
+            : type === 'editbox'
+              ? editBoxBaseHeightFact
+              : knownDefaultFact(0, 'number', call.source, HELPER_DEFAULT_PINS.widgetHeight, '0'),
+        ...(type === 'editbox' ? {
+          baseHeight: editBoxBaseHeightFact,
+          baseScaling: editBoxBaseScalingFact,
+          hotkey: editBoxHotkeyFact,
+          displayIcon: editBoxDisplayIconFact,
+        } : {
+          hotkey: unavailableFact('string', `${type} has no edit-box hotkey`, call.source),
+          displayIcon: unavailableFact('boolean', `${type} has no edit-box hotkey icon flag`, call.source),
+        }),
         ...(type === 'text' ? {
           minTextHeight: finalTextHeightFact,
           minRowHeight: sourceMinRowHeightFact,
@@ -9407,7 +9883,7 @@ export function projectX4UiLayoutProgram(
         } : {}),
         scaling: scalingValue
           ? factFromResolution(scalingValue, scaling, 'boolean', call.source, `${type} scaling`)
-          : knownDefaultFact(effectiveScaling, 'boolean', call.source, HELPER_DEFAULT_PINS.baseCellScaling, 'row.properties.scaling'),
+          : editBoxBaseScalingFact,
         affectRowHeight: affectValue
           ? factFromResolution(affectValue, affect, 'boolean', call.source, `${type} affectRowHeight`)
           : type === 'button'
@@ -9552,9 +10028,9 @@ export function projectX4UiLayoutProgram(
       }
       const input: HelperCellSpecializationInput = {
         type,
-        ...(height.value !== undefined ? { height: height.value } : {}),
+        ...(height.value !== undefined && (heightValue !== undefined || type !== 'editbox') ? { height: height.value } : {}),
         ...(y.value !== undefined ? { y: y.value } : {}),
-        ...(scaling.value !== undefined ? { scaling: scaling.value } : {}),
+        ...(scaling.value !== undefined && (scalingValue !== undefined || type !== 'editbox') ? { scaling: scaling.value } : {}),
         ...(affect.value !== undefined ? { affectRowHeight: affect.value } : {}),
         ...(textHeightCandidate !== undefined ? { minTextHeight: textHeightCandidate } : {}),
         ...(type === 'button' && buttonHeight !== undefined ? { height: buttonHeight } : {}),
@@ -10017,6 +10493,16 @@ export function projectX4UiLayoutProgram(
       cell.descriptorFacts.scaling = priorScaling.status === 'known' && priorScaling.expectedType === 'boolean'
         ? { ...priorScaling, value: cellState.scaling }
         : knownDefaultFact(cellState.scaling, 'boolean', cell.source, HELPER_DEFAULT_PINS.cellSpecialization, 'row.properties.scaling');
+      if (cellState.type === 'editbox') {
+        const priorHotkey = cell.descriptorFacts.hotkey;
+        cell.descriptorFacts.hotkey = priorHotkey?.status === 'known' && priorHotkey.expectedType === 'string'
+          ? { ...priorHotkey, value: cellState.hotkey }
+          : knownDefaultFact(cellState.hotkey, 'string', cell.source, HELPER_DEFAULT_PINS.editBoxHotkeyDefaults, 'editbox.properties.hotkey');
+        const priorDisplayIcon = cell.descriptorFacts.displayIcon;
+        cell.descriptorFacts.displayIcon = priorDisplayIcon?.status === 'known' && priorDisplayIcon.expectedType === 'boolean'
+          ? { ...priorDisplayIcon, value: cellState.displayIcon }
+          : knownDefaultFact(cellState.displayIcon, 'boolean', cell.source, HELPER_DEFAULT_PINS.editBoxHotkeyDefaults, 'editbox.properties.hotkey.displayIcon');
+      }
       if (cell.descriptorFacts.affectRowHeight.status === 'unavailable') {
         cell.descriptorFacts.affectRowHeight = knownDefaultFact(
           cellState.affectRowHeight,

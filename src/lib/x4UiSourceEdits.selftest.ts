@@ -89,6 +89,19 @@ const baseLua = [
   '',
 ].join('\n');
 
+const b119EditBoxLua = [
+  'local menu = { name = "B119SourceEdit", layer = 1 }',
+  'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+  'local table = frame:addTable(1, { width = 80, scaling = false })',
+  'table:setDefaultCellProperties("editbox", { height = 4, scaling = true })',
+  'table:setDefaultComplexCellProperties("editbox", "hotkey", { hotkey = "DEFAULT", displayIcon = true })',
+  'local row = table:addRow(false, {})',
+  'local edit = row[1]:createEditBox({ height = 0, scaling = true })',
+  'edit:setHotkey("DIRECT", { displayIcon = false })',
+  'frame:display()',
+  '',
+].join('\n');
+
 const passthrough = (path: string, content?: string, extra: Partial<PassthroughFile> = {}): PassthroughFile => ({
   path,
   ...(content === undefined ? {} : { content }),
@@ -899,6 +912,113 @@ const run = (): void => {
     JSON.stringify(initialCatalog.editableEntries));
   check('direct call insertion/deletion is absent from the public edit shape',
     !('insert' in initialCatalog) && !('delete' in initialCatalog) && initialCatalog.entries.every(entry => entry.kind === 'editable' || entry.kind === 'locked'));
+
+  const b119Context = contextFor(b119EditBoxLua);
+  const b119Catalog = catalogFor(b119Context);
+  const b119SimpleHeight = editableField(
+    b119Catalog,
+    'number',
+    'semantics.properties.height',
+    '4',
+    'setDefaultCellProperties',
+  );
+  const b119ComplexHotkey = editableField(
+    b119Catalog,
+    'string',
+    'semantics.properties.hotkey',
+    '"DEFAULT"',
+    'setDefaultComplexCellProperties',
+  );
+  const b119DirectHotkey = editableField(
+    b119Catalog,
+    'string',
+    'arguments[0]',
+    '"DIRECT"',
+    'setHotkey',
+  );
+  const b119DirectDisplayIcon = editableField(
+    b119Catalog,
+    'boolean',
+    'semantics.displayIcon',
+    'false',
+    'setHotkey',
+  );
+  const b119BeforeSource = sourceText(b119Context);
+  const b119Edited = accepted(apply(b119Context, b119Catalog, b119SimpleHeight, 6));
+  check('B119 bounded defaults and direct hotkey fields issue exact source-edit entries and reparse',
+    b119Catalog.status === 'ready'
+      && b119Catalog.editableEntries.some(entry => entry.provenance.callName === 'setDefaultCellProperties')
+      && b119Catalog.editableEntries.some(entry => entry.provenance.callName === 'setDefaultComplexCellProperties')
+      && b119Catalog.editableEntries.some(entry => entry.provenance.callName === 'setHotkey')
+      && b119SimpleHeight.provenance.callOrder < b119ComplexHotkey.provenance.callOrder
+      && b119ComplexHotkey.provenance.callOrder < b119DirectHotkey.provenance.callOrder
+      && b119DirectDisplayIcon.provenance.callOrder === b119DirectHotkey.provenance.callOrder
+      && b119Edited.changed
+      && b119Edited.reparsed
+      && b119Edited.provenanceReestablished
+      && b119BeforeSource.slice(b119SimpleHeight.startOffset, b119SimpleHeight.endOffset) === '4'
+      && sourceText(b119Edited).slice(b119Edited.entry.startOffset, b119Edited.entry.endOffset) === '6',
+    JSON.stringify({
+      entries: b119Catalog.editableEntries.map(entry => ({
+        call: entry.provenance.callName,
+        fields: entry.provenance.fields,
+        expectedText: entry.expectedText,
+      })),
+      edited: {
+        changed: b119Edited.changed,
+        reparsed: b119Edited.reparsed,
+        replacement: b119Edited.replacement,
+      },
+    }));
+
+  const b119AuthorityBeforeBytes = workspaceBytes(b119Context.workspace);
+  const b119AuthorityBeforeSource = sourceText(b119Context);
+  const b119ForgedCases = [
+    {
+      name: 'owner',
+      catalog: catalogWithEntry(b119Catalog, b119SimpleHeight.id, {
+        ...b119SimpleHeight,
+        provenance: { ...b119SimpleHeight.provenance, targetId: 'foreign-target' },
+      }),
+    },
+    {
+      name: 'order',
+      catalog: catalogWithEntry(b119Catalog, b119SimpleHeight.id, {
+        ...b119SimpleHeight,
+        provenance: { ...b119SimpleHeight.provenance, callOrder: b119SimpleHeight.provenance.callOrder + 1 },
+      }),
+    },
+    {
+      name: 'state',
+      catalog: catalogWithEntry(b119Catalog, b119SimpleHeight.id, {
+        ...b119SimpleHeight,
+        expectedText: '99',
+        expression: '99',
+      }),
+    },
+    {
+      name: 'source pin',
+      catalog: catalogWithEntry(b119Catalog, b119SimpleHeight.id, {
+        ...b119SimpleHeight,
+        provenance: {
+          ...b119SimpleHeight.provenance,
+          targetSource: {
+            ...b119SimpleHeight.provenance.targetSource,
+            start: { ...b119SimpleHeight.provenance.targetSource.start, offset: b119SimpleHeight.provenance.targetSource.start.offset + 1 },
+          },
+        },
+      }),
+    },
+  ];
+  check('B119 source-edit authority rejects forged owner, order, state, and source pins before mutation',
+    b119ForgedCases.every(item => refusalPreservesInput(
+      applyById(b119Context, item.catalog, b119SimpleHeight.id, 7),
+      b119Context,
+      item.catalog,
+      b119AuthorityBeforeBytes,
+      b119AuthorityBeforeSource,
+    )),
+    JSON.stringify(b119ForgedCases.map(item => ({ name: item.name, status: item.catalog.status }))));
 
   const numberContext = contextFor();
   const numberCatalog = catalogFor(numberContext);

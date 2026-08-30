@@ -1102,6 +1102,9 @@ const argumentExpectedType = (
 ): X4UiSourceEditScalarType | undefined => {
   switch (call) {
     case 'addTable': return index === 0 ? 'number' : undefined;
+    case 'setDefaultCellProperties': return index === 0 ? 'string' : undefined;
+    case 'setDefaultComplexCellProperties': return index === 0 || index === 1 ? 'string' : undefined;
+    case 'setHotkey': return index === 0 ? 'string' : undefined;
     case 'setColWidth': return index === 0 || index === 1 ? 'number' : index === 2 ? 'boolean' : undefined;
     case 'setColWidthPercent': return index === 0 || index === 1 ? 'number' : undefined;
     case 'setColSpan': return index === 0 ? 'number' : undefined;
@@ -1119,8 +1122,8 @@ const argumentExpectedType = (
 const propertyExpectedType = (name: string): X4UiSourceEditScalarType | undefined => {
   const normalized = name.replace(/[-_\s]/g, '').toLowerCase();
   if (['width', 'height', 'x', 'y', 'fontsize', 'maxchars', 'paddingtop', 'paddingbottom'].includes(normalized)) return 'number';
-  if (['scaling', 'active', 'affectrowheight', 'wordwrap', 'selecttextonactivation', 'interactive', 'fixed', 'borderbelow'].includes(normalized)) return 'boolean';
-  if (['text', 'font', 'fontname', 'halign', 'alignment', 'description', 'defaulttext', 'icon'].includes(normalized)) return 'string';
+  if (['scaling', 'active', 'affectrowheight', 'wordwrap', 'selecttextonactivation', 'interactive', 'fixed', 'borderbelow', 'displayicon'].includes(normalized)) return 'boolean';
+  if (['text', 'font', 'fontname', 'halign', 'alignment', 'description', 'defaulttext', 'icon', 'hotkey'].includes(normalized)) return 'string';
   return undefined;
 };
 
@@ -1142,6 +1145,7 @@ const callValues = (call: X4UiCallRecord): readonly RawValueReference[] => {
     ['height', 'number'], ['layer', 'number'], ['menu', 'string'], ['menuName', 'string'], ['frame', undefined],
     ['table', undefined], ['row', undefined], ['cell', undefined], ['dataFlow', undefined], ['text', 'string'],
     ['fontsize', 'number'], ['options', undefined], ['rowData', undefined], ['icon', 'string'], ['scaling', 'boolean'],
+    ['cellType', 'string'], ['propertyName', 'string'], ['hotkey', 'string'], ['displayIcon', 'boolean'],
   ];
   for (const [field, expectedType] of scalarFields) {
     const value = semantics[field];
@@ -2207,12 +2211,15 @@ const structuralOperationOwnerKeysByKind: Readonly<Record<string, readonly strin
   setColWidth: ['tableId'],
   setColWidthPercent: ['tableId'],
   addRow: ['tableId', 'rowId'],
+  setDefaultCellProperties: ['tableId'],
+  setDefaultComplexCellProperties: ['tableId'],
   setColSpan: ['tableId', 'rowId', 'cellId'],
   createButton: ['tableId', 'rowId', 'cellId'],
   setText: ['tableId', 'rowId', 'cellId'],
   setText2: ['tableId', 'rowId', 'cellId'],
   createText: ['tableId', 'rowId', 'cellId'],
   createEditBox: ['tableId', 'rowId', 'cellId'],
+  setHotkey: ['tableId', 'rowId', 'cellId'],
   createIcon: ['tableId', 'rowId', 'cellId'],
 };
 
@@ -2281,7 +2288,7 @@ const isStructuralDescriptorFact = (value: unknown): boolean => isRecord(value)
 const structuralCallSemanticsValueKeys = new Set([
   'count', 'index', 'span', 'width', 'percentage', 'height', 'layer', 'menu', 'menuName',
   'frame', 'table', 'row', 'cell', 'dataFlow', 'text', 'fontsize', 'options', 'rowData',
-  'icon', 'scaling',
+  'icon', 'scaling', 'cellType', 'propertyName', 'hotkey', 'displayIcon',
 ]);
 
 const structuralChildSchema = (
@@ -2839,7 +2846,7 @@ const structuralKernelMetricsIsValid = (value: unknown): boolean => {
 };
 
 const structuralKernelCellIsValid = (value: unknown): boolean => {
-  if (!structuralRecordKeys(value, ['type', 'colspan', 'bgcolspan', 'y', 'height', 'scaling', 'affectRowHeight'], ['minTextHeight'])) return false;
+  if (!structuralRecordKeys(value, ['type', 'colspan', 'bgcolspan', 'y', 'height', 'scaling', 'affectRowHeight', 'hotkey', 'displayIcon'], ['minTextHeight'])) return false;
   const height = ownData(value, 'height');
   const minTextHeight = ownData(value, 'minTextHeight');
   if (!structuralFiniteNumber(height) || height < 0) return false;
@@ -2850,6 +2857,8 @@ const structuralKernelCellIsValid = (value: unknown): boolean => {
     && structuralFiniteNumber(ownData(value, 'y'))
     && structuralBoolean(ownData(value, 'scaling'))
     && structuralBoolean(ownData(value, 'affectRowHeight'))
+    && structuralString(ownData(value, 'hotkey'))
+    && structuralBoolean(ownData(value, 'displayIcon'))
     && structuralOptionalData(value, 'minTextHeight', structuralFiniteNumber);
 };
 
@@ -2889,7 +2898,7 @@ const structuralKernelDiagnosticIsValid = (value: unknown): boolean =>
 
 const structuralKernelStateIsValid = (value: unknown): boolean => {
   if (!structuralRecordKeys(value, [
-    'provenance', 'frameWidth', 'metrics', 'requestedWidth', 'properties', 'columns', 'rows', 'rowGroups', 'createdWithScrollBar', 'final', 'diagnostics',
+    'provenance', 'frameWidth', 'metrics', 'requestedWidth', 'properties', 'columns', 'rows', 'rowGroups', 'createdWithScrollBar', 'final', 'diagnostics', 'editBoxDefaults',
   ])) return false;
   const frameWidth = ownData(value, 'frameWidth');
   const requestedWidth = ownData(value, 'requestedWidth');
@@ -2898,6 +2907,7 @@ const structuralKernelStateIsValid = (value: unknown): boolean => {
   const rows = ownData(value, 'rows');
   const rowGroups = ownData(value, 'rowGroups');
   const diagnostics = ownData(value, 'diagnostics');
+  const editBoxDefaults = ownData(value, 'editBoxDefaults');
   if (!structuralKernelProvenanceIsValid(ownData(value, 'provenance'))
     || !structuralFiniteNumber(frameWidth)
     || !structuralKernelMetricsIsValid(ownData(value, 'metrics'))
@@ -2913,7 +2923,12 @@ const structuralKernelStateIsValid = (value: unknown): boolean => {
     || !Array.isArray(rowGroups)
     || !structuralBoolean(ownData(value, 'createdWithScrollBar'))
     || !structuralBoolean(ownData(value, 'final'))
-    || !Array.isArray(diagnostics)) return false;
+    || !Array.isArray(diagnostics)
+    || !structuralRecordKeys(editBoxDefaults, [], ['height', 'scaling', 'hotkey', 'displayIcon'])
+    || !structuralOptionalData(editBoxDefaults, 'height', candidate => structuralFiniteNumber(candidate) && candidate >= 0)
+    || !structuralOptionalData(editBoxDefaults, 'scaling', structuralBoolean)
+    || !structuralOptionalData(editBoxDefaults, 'hotkey', structuralString)
+    || !structuralOptionalData(editBoxDefaults, 'displayIcon', structuralBoolean)) return false;
   for (const column of columns) {
     if (!structuralRecordKeys(column, ['width', 'percent', 'min', 'weight', 'colspan', 'bgcolspan'], ['scaling'])) return false;
     const width = ownData(column, 'width');
@@ -3084,7 +3099,7 @@ const structuralProducerSchemaNodeIsValid = (
       && structuralEnum(ownData(value, 'name'), [
         'createFrameHandle', 'addTable', 'setColWidthPercent', 'setColWidth', 'addRow', 'setColSpan', 'display',
         'OpenMenu', 'setText', 'setText2', 'createText', 'createEditBox', 'createButton', 'createIcon',
-        'scaleX', 'scaleY', 'scaleFont',
+        'scaleX', 'scaleY', 'scaleFont', 'setDefaultCellProperties', 'setDefaultComplexCellProperties', 'setHotkey',
       ])
       && structuralString(ownData(value, 'callee'), true)
       && structuralEnum(ownData(value, 'method'), [':', '.', 'direct', 'unknown'])
@@ -3124,7 +3139,7 @@ const structuralProducerSchemaNodeIsValid = (
       && structuralEnum(ownData(value, 'kind'), [
         'createFrameHandle', 'addTable', 'setColWidthPercent', 'setColWidth', 'addRow', 'setColSpan', 'display',
         'OpenMenu', 'setText', 'setText2', 'createText', 'createEditBox', 'createButton', 'createIcon',
-        'scaleX', 'scaleY', 'scaleFont',
+        'scaleX', 'scaleY', 'scaleFont', 'setDefaultCellProperties', 'setDefaultComplexCellProperties', 'setHotkey',
       ])
       && structuralLocationForText(ownData(value, 'source'), text)
       && source !== undefined
@@ -3162,7 +3177,7 @@ const structuralProducerSchemaNodeIsValid = (
     const keys = [
       'count', 'index', 'span', 'width', 'percentage', 'height', 'layer', 'menu', 'menuName', 'frame', 'table',
       'row', 'cell', 'dataFlow', 'text', 'editBox', 'fontsize', 'options', 'properties', 'unsupportedProperties',
-      'rowData', 'icon', 'scaling', 'scale',
+      'rowData', 'icon', 'scaling', 'scale', 'cellType', 'propertyName', 'hotkey', 'displayIcon',
     ];
     return structuralRecordKeys(value, [], keys);
   }

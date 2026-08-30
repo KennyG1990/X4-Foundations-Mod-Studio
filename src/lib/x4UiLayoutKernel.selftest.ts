@@ -13,17 +13,21 @@ import {
   scaleFont,
   scaleX,
   scaleY,
+  setCellHotkey,
   setCellColSpan,
   setColWidth,
   setColWidthMin,
   setColWidthMinPercent,
   setColWidthPercent,
   setDefaultColSpan,
+  setDefaultCellProperties,
+  setDefaultComplexCellProperties,
   specializeCell,
   type HelperTableState,
   type LayoutResult,
   type StateResult,
 } from "./x4UiLayoutKernel";
+import * as layoutKernel from "./x4UiLayoutKernel";
 
 const metrics = Object.freeze({
   uiScale: 1,
@@ -129,6 +133,183 @@ const test = (name: string, callback: () => void): void => {
     console.error(`FAIL ${name}: ${message}`);
   }
 };
+
+type B119KernelApi = {
+  setDefaultCellProperties?: (...args: never[]) => StateResult<HelperTableState>;
+  setDefaultComplexCellProperties?: (...args: never[]) => StateResult<HelperTableState>;
+  setCellHotkey?: (...args: never[]) => StateResult<HelperTableState>;
+};
+
+const b119Kernel = layoutKernel as unknown as B119KernelApi;
+
+test("B119 table default and direct hotkey kernel operations exist", () => {
+  expect(typeof b119Kernel.setDefaultCellProperties === "function", "missing setDefaultCellProperties");
+  expect(typeof b119Kernel.setDefaultComplexCellProperties === "function", "missing setDefaultComplexCellProperties");
+  expect(typeof b119Kernel.setCellHotkey === "function", "missing setCellHotkey");
+});
+
+test("B119 displayed hotkey raises editbox cell geometry to the shipped minimum", () => {
+  const table = makeTable();
+  const withRow = expectOk(addRow(table, { cells: [{}] }), "add B119 row");
+  const specialized = expectOk(specializeCell(withRow, 1, 1, {
+    type: "editbox",
+    height: 0,
+    scaling: true,
+    ...({ hotkey: "INPUT_STATE_B119", displayIcon: true } as unknown as Record<string, unknown>),
+  }), "specialize B119 editbox");
+  expectEqual(getCellHeight(specialized, 1, 1).status, "ok", "B119 cell height result");
+  const height = getCellHeight(specialized, 1, 1);
+  expect(height.status === "ok", "B119 cell height unexpectedly refused");
+  if (height.status === "ok") expectEqual(height.value, 23, "B119 editbox minimum");
+});
+
+test("B119 table defaults merge in source order, preserve existing cells, and direct hotkeys replace", () => {
+  const scaledMetrics = { ...metrics, uiScale: 1.5 };
+  let state = makeTable({ numColumns: 1, metrics: scaledMetrics, scaling: false });
+  state = expectOk(
+    setDefaultCellProperties(state, "editbox", { height: 4, scaling: true }),
+    "B119 first simple default",
+  );
+  state = expectOk(
+    setDefaultComplexCellProperties(state, "editbox", "hotkey", { hotkey: "FIRST", displayIcon: true }),
+    "B119 first complex default",
+  );
+  state = expectOk(addRow(state, { cells: [{}] }), "B119 first defaulted row");
+  state = expectOk(specializeCell(state, 1, 1, { type: "editbox" }), "B119 first defaulted editbox");
+  const firstBeforeLaterDefaults = state.rows[0].cells[0];
+
+  state = expectOk(
+    setDefaultCellProperties(state, "editbox", { height: 40, scaling: false }),
+    "B119 later simple default",
+  );
+  state = expectOk(
+    setDefaultComplexCellProperties(state, "editbox", "hotkey", { hotkey: "SECOND" }),
+    "B119 later complex default without icon override",
+  );
+  expect(state.rows[0].cells[0] === firstBeforeLaterDefaults, "B119 defaults after creation mutated an existing cell");
+  expectEqual(firstBeforeLaterDefaults.height, 4, "B119 first base height");
+  expectEqual(firstBeforeLaterDefaults.scaling, true, "B119 first scaling");
+  expectEqual(firstBeforeLaterDefaults.hotkey, "FIRST", "B119 first hotkey");
+  expectEqual(firstBeforeLaterDefaults.displayIcon, true, "B119 first display icon");
+
+  state = expectOk(addRow(state, { cells: [{}] }), "B119 second defaulted row");
+  state = expectOk(specializeCell(state, 2, 1, { type: "editbox" }), "B119 second defaulted editbox");
+  const second = state.rows[1].cells[0];
+  expectEqual(second.height, 40, "B119 second base height");
+  expectEqual(second.scaling, false, "B119 second scaling");
+  expectEqual(second.hotkey, "SECOND", "B119 second hotkey");
+  expectEqual(second.displayIcon, true, "B119 omitted complex field preserves prior default");
+
+  state = expectOk(
+    addRow(state, {
+      cells: [{}],
+    }),
+    "B119 call-specific override row",
+  );
+  state = expectOk(specializeCell(state, 3, 1, {
+    type: "editbox", height: 7, scaling: false, hotkey: "OVERRIDE", displayIcon: false,
+  }), "B119 call-specific override editbox");
+  const override = state.rows[2].cells[0];
+  expectEqual(override.height, 7, "B119 explicit height override");
+  expectEqual(override.scaling, false, "B119 explicit scaling override");
+  expectEqual(override.hotkey, "OVERRIDE", "B119 explicit hotkey override");
+  expectEqual(override.displayIcon, false, "B119 explicit display icon override");
+  expectEqual(expectOk(getCellHeight(state, 1, 1), "B119 first displayed height"), 23, "B119 first minimum at scale 1.5");
+  expectEqual(expectOk(getCellHeight(state, 2, 1), "B119 second scaled height"), 40, "B119 second unscaled height");
+  expectEqual(expectOk(getCellHeight(state, 3, 1), "B119 override height"), 7, "B119 override has no displayed minimum");
+
+  state = expectOk(setCellHotkey(state, 1, 1, "DIRECT"), "B119 direct hotkey without options");
+  expectEqual(state.rows[0].cells[0].hotkey, "DIRECT", "B119 direct hotkey replacement");
+  expectEqual(state.rows[0].cells[0].displayIcon, true, "B119 omitted direct display icon preserves prior value");
+  state = expectOk(setCellHotkey(state, 1, 1, "", { displayIcon: false }), "B119 empty direct hotkey");
+  expectEqual(expectOk(getCellHeight(state, 1, 1), "B119 empty direct height"), 6, "B119 empty hotkey removes minimum");
+  state = expectOk(setCellHotkey(state, 1, 1, "DIRECT_VISIBLE", { displayIcon: true }), "B119 visible direct hotkey");
+  expectEqual(expectOk(getCellHeight(state, 1, 1), "B119 visible direct height"), 23, "B119 visible direct hotkey restores minimum");
+});
+
+test("B119 direct hotkey properties use shipped argument-then-properties merge order", () => {
+  let state = makeTable({ numColumns: 1 });
+  state = expectOk(addRow(state, { cells: [{}] }), "B119 merge-order row");
+  state = expectOk(specializeCell(state, 1, 1, {
+    type: "editbox",
+    height: 0,
+    hotkey: "INITIAL",
+    displayIcon: false,
+  }), "B119 merge-order editbox");
+
+  state = expectOk(
+    setCellHotkey(state, 1, 1, "VISIBLE_ARGUMENT", { hotkey: "", displayIcon: true }),
+    "B119 properties.hotkey empty override",
+  );
+  expectEqual(state.rows[0].cells[0].hotkey, "", "B119 empty property overrides visible argument");
+  expectEqual(expectOk(getCellHeight(state, 1, 1), "B119 empty-property height"), 0, "B119 empty property suppresses minimum");
+
+  state = expectOk(
+    setCellHotkey(state, 1, 1, "", { hotkey: "VISIBLE_PROPERTY", displayIcon: true }),
+    "B119 properties.hotkey visible override",
+  );
+  expectEqual(state.rows[0].cells[0].hotkey, "VISIBLE_PROPERTY", "B119 visible property overrides empty argument");
+  expectEqual(expectOk(getCellHeight(state, 1, 1), "B119 visible-property height"), 23, "B119 visible property restores minimum");
+
+  state = expectOk(setCellHotkey(state, 1, 1, "OMITTED_PROPERTY"), "B119 omitted hotkey property");
+  expectEqual(state.rows[0].cells[0].hotkey, "OMITTED_PROPERTY", "B119 omitted property preserves argument");
+  expectEqual(state.rows[0].cells[0].displayIcon, true, "B119 omitted property preserves displayIcon");
+
+  expectStateFailure(
+    setCellHotkey(state, 1, 1, "VISIBLE_ARGUMENT", { hotkey: { kind: "dynamic" } }),
+    state,
+    "unsupported",
+    "unsupported-dynamic-input",
+    "B119 dynamic properties.hotkey override",
+  );
+  expectStateFailure(
+    setCellHotkey(state, 1, 1, "VISIBLE_ARGUMENT", { hotkey: 23 }),
+    state,
+    "refused",
+    "invalid-domain",
+    "B119 wrong-type properties.hotkey override",
+  );
+});
+
+test("B119 default and direct-hotkey kernel forms reject wrong, dynamic, and non-editbox inputs", () => {
+  const state = makeTable({ numColumns: 1 });
+  expectStateFailure(
+    setDefaultCellProperties(state, "button", { height: 10 }),
+    state,
+    "refused",
+    "invalid-cell",
+    "B119 non-editbox default",
+  );
+  expectStateFailure(
+    setDefaultComplexCellProperties(state, "editbox", "caption", { hotkey: "X" }),
+    state,
+    "refused",
+    "invalid-cell",
+    "B119 non-hotkey default",
+  );
+  expectStateFailure(
+    setDefaultCellProperties(state, "editbox", { height: { kind: "dynamic" } }),
+    state,
+    "unsupported",
+    "unsupported-dynamic-input",
+    "B119 dynamic simple default",
+  );
+  expectStateFailure(
+    setDefaultComplexCellProperties(state, "editbox", "hotkey", { displayIcon: { kind: "dynamic" } }),
+    state,
+    "unsupported",
+    "unsupported-dynamic-input",
+    "B119 dynamic complex default",
+  );
+  const withRow = expectOk(addRow(state, { cells: [{ type: "button" }] }), "B119 non-editbox row");
+  expectStateFailure(
+    setCellHotkey(withRow, 1, 1, "X"),
+    withRow,
+    "refused",
+    "invalid-cell",
+    "B119 non-editbox direct hotkey",
+  );
+});
 
 test("provenance is exact and exported", () => {
   expectEqual(PROVENANCE_ID, "x4-9.00-ui-layout-kernel", "provenance id");

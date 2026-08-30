@@ -31,6 +31,18 @@ function killTree(pid) {
   catch { try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ } }
 }
 
+function removeOwnedRoot(root) {
+  let cleanupError;
+  try {
+    fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  } catch (error) {
+    cleanupError = error;
+  }
+  if (!fs.existsSync(root)) return true;
+  console.error(`[oracle-integration] owned root cleanup failed: ${root}${cleanupError instanceof Error ? ` (${cleanupError.message})` : ''}`);
+  return false;
+}
+
 let server;
 let exitCode = 1;
 let serverOutput = '';
@@ -45,6 +57,8 @@ try {
       ...process.env, X4FORGE_DISCOVERY_DIR: discoveryDirForTests,
       PORT: String(port),
       NODE_ENV: 'development',
+      API_ONLY: 'true',
+      DISABLE_HMR: 'true',
       X4_STATE_DIR: stateDir,
       X4_DATA_DIR: dataDir,
     },
@@ -86,7 +100,8 @@ try {
   console.error(`[oracle-integration] ${error instanceof Error ? error.message : String(error)}`);
 } finally {
   killTree(server?.pid);
-  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* best effort */ }
+  const cleanupOk = [tmp, discoveryDirForTests].map(removeOwnedRoot).every(Boolean);
+  if (!cleanupOk) exitCode = 1;
 }
 
 process.exit(exitCode);
