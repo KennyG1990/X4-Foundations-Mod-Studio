@@ -60,7 +60,10 @@ Date: 2026-08-30
   - `npm run typecheck`; exact changed-file ESLint; B119 diff hygiene.
   - `npm run test:x4-ui-corpus -- --base-url http://127.0.0.1:52061 --json` against the installed read-only manifest authority.
   - After a fresh machine-state confirmation: oracle sweep, full serial E2E, precommit, production build, process/port cleanup, and live-workspace non-mutation checks.
-- Evidence locations: this record; focused command output; corpus JSON summary; `BACKLOG.md`; `SESSION-HANDOFF.md`; GitHub #41; the B119 Notion owner page; the AI Knowledgebase Drive document; eventual exact commits and remote-parity receipt.
+- Evidence locations: this record; focused command output; corpus JSON summary; `BACKLOG.md`; `SESSION-HANDOFF.md`;
+  source commit `2443399ffdb46dbaca4eef784396cce4e68bcd02`; GitHub #41 comment `5469712047`; Notion page
+  `3b84618e-d15b-8190-821e-c0eb96f43d5a`; and Drive revision
+  `AIroW34i2k73hJ1YmnKtELjTFYTbDYMJBeWky7pZhoZnk8ti3ebnd1g4dUZYbAskwjckN61_0wEJUNpe09v8CsFimJDC-PMiFIDcxdH_okmc`.
 - Currently unavailable validation: exact Forge-versus-X4 pixel comparison is a later renderer-composition unit. No game write is needed to prove this source law because shipped source and the retained two-profile `pipeline_test` receipts already establish the real failure/positive boundary.
 
 ## BASELINE
@@ -86,7 +89,10 @@ Date: 2026-08-30
   - Official corpus has no literal `setDefaultCellProperties("editbox", ...)` or matching editbox complex-default call. Synthetic causal tests therefore prove those shipped APIs without pretending they changed the corpus.
   - Official corpus has one editbox `setHotkey` property table with `x = 0` (`ui/addons/ego_gameoptions/gameoptions.lua:11841`), no `y` property, and no property-table `hotkey` override. The current port silently drops that valid `x` field and therefore overstates preview completeness even though the height result is unchanged.
   - Existing Forge does not model any of the three bounded calls. It emits omission warnings and literal-zero errors without resolving the source paths named in its own evidence boundary.
-- Capability-map delta: none yet. Record the exact bounded delta only after all required evidence passes.
+- Capability-map delta: the canonical StarForge map now records that the existing source/layout/lint/Scene pipeline
+  resolves shipped editbox simple defaults, complex hotkey defaults, direct hotkey override order, and the displayed
+  minimum-height law while retaining unported `x`/`y` geometry as source-linked gaps. It does not promote B119,
+  C++ acceptance, pixel parity, or release state.
 - Plan changes:
   - Reconciliation expands the handoff's two named calls to include the shipped complex-default hotkey path required for source closure.
   - The forecast `31 -> 26` was rejected by the authoritative corpus. Faithful source attribution produces `31 -> 29`: five displayed-hotkey omissions become clean and three previously misattributed button/editbox cases become legitimate warnings. File, byte, fatal, unverified, truncated, and verification-gap counts remain stable. This acceptance-contract correction makes the task non-clean.
@@ -156,14 +162,22 @@ Date: 2026-08-30
 ## CLOSE
 
 - Status: VERIFIED for this bounded editbox descriptor-height source port. Focused, downstream, official-corpus, oracle, lifecycle-complete E2E, precommit, production-build, Graphify, and exact live-state containment gates are green. Parent B119 remains PARTIAL and `Not verified in game`; this close does not claim C++ acceptance or global pixel parity.
-- Remaining risks/deferred work: exact-path source commit/push and GitHub/Notion/Drive readback are the immediate record-close steps; then frame outline/background-alpha parity, keep-out overlays, AI Influence visual reconstruction, installed-extension proof, OpenVSX publication, and final exact two-profile Forge/X4 comparison remain parent-B119 work.
-- Suggested commit title when applicable: `feat(ui-editor): port editbox descriptor height semantics`.
+- Durable projection: source commit `2443399ffdb46dbaca4eef784396cce4e68bcd02` is pushed with exact local,
+  tracking, and direct-remote parity. GitHub #41 comment `5469712047`, the Notion owner page, and Drive revision
+  `AIroW34i2k73hJ1YmnKtELjTFYTbDYMJBeWky7pZhoZnk8ti3ebnd1g4dUZYbAskwjckN61_0wEJUNpe09v8CsFimJDC-PMiFIDcxdH_okmc`
+  were written and read back; GitHub #41 remains open.
+- Remaining risks/deferred work: frame outline/background-alpha parity, keep-out overlays, AI Influence visual
+  reconstruction, installed-extension proof, OpenVSX publication, and final exact two-profile Forge/X4 comparison
+  remain parent-B119 work.
+- Suggested record-close commit title: `docs(ui-editor): record editbox source-port close`.
 
 ## AAR
 
-- Triggers: reconciliation added the complex-default source path; five fail-first review corrections were required; the warning-count forecast was wrong; the first sidecar timeout was misdiagnosed before a controlled retry; one retry command had a literal-path quoting failure before launch; the first oracle run exposed API readiness/temporary-root ownership defects; the first E2E run passed `103/103` browser assertions but correctly failed lifecycle ownership because `wmic.exe` is absent; the sampler selftest still encoded WMIC after the production adapter repair; the first trusted-read wrapper attempt used an unavailable V8 `TextEncoder` before any connector write; one read-only PowerShell inspection used invalid inline `if` syntax and was rerun fail-closed; the first host command assumed a missing `npm.cmd` before the accepted Node runtime's npm CLI was selected; and `reviewctl` was unavailable, requiring the documented manual/automated fresh-eyes review boundary.
+- Triggers: reconciliation added the complex-default source path; five fail-first review corrections were required; the warning-count forecast was wrong; the first sidecar timeout was misdiagnosed before a controlled retry; one retry command had a literal-path quoting failure before launch; the first oracle run exposed API readiness/temporary-root ownership defects; the first E2E run passed `103/103` browser assertions but correctly failed lifecycle ownership because `wmic.exe` is absent; the sampler selftest still encoded WMIC after the production adapter repair; the first trusted-read wrapper attempt used an unavailable V8 `TextEncoder` before any connector write; two read-only PowerShell inspections used invalid inline `if` / `foreach | pipeline` syntax and were rerun fail-closed; the first host command assumed a missing `npm.cmd` before the accepted Node runtime's npm CLI was selected; and `reviewctl` was unavailable, requiring the documented manual/automated fresh-eyes review boundary.
 - Sustain: inspect the manifest-selected shipped corpus and require causal negatives before changing a linter rule that cites official counterexamples.
 - Improve work/approach: distinguish forecasted count changes from acceptance invariants. The analyzer must follow source semantics even when that produces a less attractive count.
 - Improve tools: sidecar readiness needs an explicit health/readiness wait so startup timing cannot be confused with storage failure. Validation harnesses must test their real host dependency: the Windows ownership adapter now uses PowerShell/CIM and has a live-own-PID assertion, while the oracle owner starts API-only and treats owned-root cleanup failure as gate failure.
 - Highest-risk evidenced weakness: a pair-valid evidence snapshot could previously manufacture a Scene producer transition from omitted or dynamic Lua properties. Closed descriptor schemas, reciprocal own-key/source-property checks, static-source requirements, and nine causal hostile cases now contain that authority boundary.
-- Global/project lessons banked: the bounded source port and both harness corrections are now backed by focused, corpus, lifecycle-complete host, and containment evidence. Repository/external record projection follows the exact source commit; parent B119 remains open.
+- Global/project lessons banked: StarForge now records the bounded source-port capability delta, the project AAR, and
+  the general failure shield that passing browser assertions cannot override incomplete process ownership. Repository,
+  GitHub, Notion, and Drive projections all cite the exact pushed source commit; parent B119 remains open.

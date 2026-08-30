@@ -130,6 +130,35 @@ GitHub #41 comment `5460382092`, Notion page `3b84618e-d15b-8190-821e-c0eb96f43d
 were written and read back with the issue open. Table-default/hotkey modeling, exact pixel parity, general C++ frame
 acceptance, full AI Influence reconstruction, installed-extension proof, and OpenVSX release remain open; B119 stays
 `in_progress / PARTIAL` and every internal preview remains `Not verified in game`.
+**Editbox descriptor-height source port 2026-08-30 — BOUNDED VERIFIED / FULL B119 PARTIAL:** The existing call-model,
+kernel/program, linter, Scene, source-edit, and integration owners now port shipped
+X4 9.00 simple editbox defaults, complex hotkey defaults, direct hotkey overrides, `initTableCell` ordering, and
+displayed-hotkey minimum height. Button hotkeys are separated by source proof; `setIcon`/`setIcon2` preserve identity
+only for tracked buttons, and invalid editbox chains remain explicit gaps/warnings. Independent focused validation is
+`1,189/1,189` (CallModel `89`, Kernel `34`, Program `648`, Lint `140`, Scene `174`, SourceEdits `83`, integration
+`21`); downstream PreviewPipeline `105/105`, PaintPlan `175/175`, CanvasRenderer `129/129`, typecheck, and exact-path
+lint are green with zero errors. Direct `setHotkey` now honors the shipped property-table override order; valid unported
+`x`/`y` remain source-linked partial gaps, and Scene rejects dropped/forged gaps plus mismatched normalized property
+names. The final official corpus is repeatable at `81/81/0`,
+`7,669,552` bytes, applicable fatal `0`, warnings `29`, unverified `70`, truncated `26`, gaps `13,681`. The forecast
+`31 -> 26` was rejected: five real displayed-hotkey positives clean while faithful button/editbox attribution restores
+three legitimate warnings, for exact net `31 -> 29`. A fresh two-pass retry against installed 0.0.70 proved `F:` healthy
+and the configured sidecar/corpus connection sound; the earlier timeout was readiness timing, not storage. After the
+operator supplied the machine gate, isolated oracles passed `134/134`; exact tracked serial E2E passed `103/103` with
+complete process ownership, teardown, and zero remaining PIDs; complete precommit and the `1,848`-module production
+build passed; Graphify refreshed to `10,029` nodes / `25,198` edges / `317` communities; protected live roots and
+configured ports remained unchanged.
+Fresh Scene review also closed three pair-valid evidence escapes: forged facts for omitted properties, materialized
+transitions from dynamic properties, and unavailable/arbitrary-extra descriptor facts. The causal receipts were
+`156/163 -> 163/163`, `163/168 -> 168/168`, and `168/172 -> 172/172`; per-kind keys and own-key/source-property
+reciprocity preserve explicit `0`, `false`, and empty strings while rejecting forged provenance.
+Source commit `2443399ffdb46dbaca4eef784396cce4e68bcd02` is pushed with exact local/tracking/direct-remote parity.
+GitHub #41 comment `5469712047`, Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Drive revision
+`AIroW34i2k73hJ1YmnKtELjTFYTbDYMJBeWky7pZhoZnk8ti3ebnd1g4dUZYbAskwjckN61_0wEJUNpe09v8CsFimJDC-PMiFIDcxdH_okmc`
+were written and read back with the issue open. Record:
+`docs/plans/2026-08-29-b119-editbox-descriptor-height-source-port.md`. Frame/background parity, keep-outs, AI Influence
+reconstruction, installed-extension proof, OpenVSX publication, and final two-profile Forge/X4 comparison remain open;
+overall B119 stays `in_progress / PARTIAL` and preview remains `Not verified in game`.
 **AI Influence `1b` visual reconciliation 2026-08-19 — REPRODUCED GUIDE CONFLICT:** The source pixels were re-opened
 and immutable hashes/dimensions are frozen in the plan. Forge's existing cockpit preset projects the measured guides to
 `y=1134.72`, `y=1065.6`, and `x=1699.84` at `2560x1440`; the supplied `1b` choice/input geometry intersects all three.
