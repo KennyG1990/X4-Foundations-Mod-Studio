@@ -8465,9 +8465,9 @@ const b119ConfiguredSourceSpecs = [
     targetName: 'hub.display',
     sourceSha256: '657476EAD08229977E1F2A69079FFDCAB56D908B72AF5C87BD4F4734DCCB8C4F',
     consumerNumbers: { vw: 1920, vh: 1080, x: 27, my: 27, w: 1866, '#TABS': 2, y: 62, i: 1 },
-    expectedLayout: { samples: 9, consumed: 7, notConsumed: 2, operations: 18, applied: 11, frames: 1, tables: 2, rows: 2, cells: 4, gaps: 16 },
-    expectedScene: { frames: 1, tables: 2, rows: 2, cells: 4, widgets: 0, texts: 0, glyphs: 0, gaps: 32, drawable: { x: 0, y: 0, width: 1920, height: 1080 } },
-    expectedPaint: { commands: 47, diagnostics: 38 },
+    expectedLayout: { samples: 9, consumed: 7, notConsumed: 2, operations: 18, applied: 11, frames: 1, tables: 2, rows: 2, cells: 4, gaps: 12 },
+    expectedScene: { frames: 1, tables: 2, rows: 2, cells: 4, widgets: 2, texts: 3, glyphs: 17, gaps: 30, drawable: { x: 0, y: 0, width: 1920, height: 1080 } },
+    expectedPaint: { commands: 70, diagnostics: 39 },
   },
   {
     label: 'COMM',
@@ -8476,9 +8476,9 @@ const b119ConfiguredSourceSpecs = [
     targetName: 'comm.display',
     sourceSha256: '88FAB05A79EF33CB28E098081EA6A5E29E8F3B7C4150C39BF38913C51C063511',
     consumerNumbers: { vw: 1920, vh: 1080, mx: 27, my: 27, 'vw - mx * 2': 1866 },
-    expectedLayout: { samples: 3, consumed: 3, notConsumed: 0, operations: 14, applied: 12, frames: 1, tables: 1, rows: 1, cells: 3, gaps: 11 },
-    expectedScene: { frames: 1, tables: 1, rows: 1, cells: 3, widgets: 0, texts: 0, glyphs: 0, gaps: 24, drawable: { x: 0, y: 0, width: 1920, height: 1080 } },
-    expectedPaint: { commands: 36, diagnostics: 30 },
+    expectedLayout: { samples: 3, consumed: 3, notConsumed: 0, operations: 14, applied: 12, frames: 1, tables: 1, rows: 1, cells: 3, gaps: 10 },
+    expectedScene: { frames: 1, tables: 1, rows: 1, cells: 3, widgets: 0, texts: 0, glyphs: 0, gaps: 23, drawable: { x: 0, y: 0, width: 1920, height: 1080 } },
+    expectedPaint: { commands: 35, diagnostics: 29 },
   },
 ] as const;
 

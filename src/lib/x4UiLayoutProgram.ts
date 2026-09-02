@@ -1812,7 +1812,7 @@ interface Resolution<T> {
 interface DirectScaleValue {
   readonly value: number;
   readonly kind: 'scaleX' | 'scaleY' | 'scaleFont';
-  /** Exact source range of the accepted Helper.scaleX/scaleY call. */
+  /** Exact source range of the accepted direct Helper.scaleX/scaleY/scaleFont call. */
   readonly source: X4UiSourceLocation;
   /** Empty for the selected root, otherwise the complete caller ancestry. */
   readonly instanceScope: string;
@@ -1884,6 +1884,26 @@ const directScaleForValue = (
     .sort((left, right) => right.instanceScope.length - left.instanceScope.length)[0];
 };
 
+const localScaleFontWrapperForValue = (
+  values: ReadonlyMap<string, DirectScaleValue> | undefined,
+  value: X4UiValue | undefined,
+  model: X4UiCallModel | undefined,
+): DirectScaleValue | undefined => {
+  const localResult = value?.localInvocationResult;
+  if (!values || !model || !localResult) return undefined;
+  const invocation = model.localInvocations.find(candidate => candidate.id === localResult.invocationId);
+  if (!invocation
+    || !sourceLocationMatchesModel(model, invocation.source, model.file.text.slice(
+      invocation.source.start.offset,
+      invocation.source.end.offset,
+    ))
+    || !locationsEqual(invocation.source, localResult.source)
+    || !sourceLocationMatchesModel(model, value.location, localResult.expression)
+    || !locationsEqual(value.location, localResult.source)) return undefined;
+  const exact = values.get(invocation.id);
+  return exact?.kind === 'scaleFont' ? exact : undefined;
+};
+
 const NUMERIC_LITERAL_EXPRESSION = /^(?:0[xX][0-9A-Fa-f]+|(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)$/;
 const NUMERIC_EXPRESSION_OPERATORS = ['+', '-', '*', '/'] as const;
 
@@ -1921,6 +1941,52 @@ const sourceLocationMatchesModel = (
     && source.end.column === end.column;
 };
 
+type HelperReceiverAliasFact = X4UiCallModel['helperReceiverAliases'][number];
+
+const modelSourceLocationIsExact = (
+  model: X4UiCallModel,
+  source: unknown,
+): source is X4UiSourceLocation => {
+  if (!isSourceLocationShape(source)
+    || !Number.isSafeInteger(source.start.offset)
+    || !Number.isSafeInteger(source.end.offset)
+    || source.start.offset < 0
+    || source.end.offset <= source.start.offset
+    || source.end.offset > model.file.text.length) return false;
+  return sourceLocationMatchesModel(
+    model,
+    source,
+    model.file.text.slice(source.start.offset, source.end.offset),
+  );
+};
+
+const activeHelperReceiverAliasAuthority = (
+  model: X4UiCallModel,
+  name: string,
+  useLocation: X4UiSourceLocation,
+  aliasSource?: X4UiSourceLocation,
+): HelperReceiverAliasFact | undefined => {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)
+    || !modelSourceLocationIsExact(model, useLocation)
+    || (aliasSource !== undefined && !modelSourceLocationIsExact(model, aliasSource))) return undefined;
+  const facts = model.helperReceiverAliases
+    .filter(alias => alias.name === name
+      && alias.targetSource.start.offset <= useLocation.start.offset
+      && locationContains(alias.context.source, useLocation))
+    .sort((left, right) => left.targetSource.start.offset - right.targetSource.start.offset);
+  const latest = facts[facts.length - 1];
+  if (!latest
+    || (latest.status !== 'bound' && latest.status !== 'preserved')
+    || !latest.callSource
+    || !sourceLocationMatchesModel(model, latest.targetSource, name)
+    || !modelSourceLocationIsExact(model, latest.callSource)) return undefined;
+  if (aliasSource !== undefined && !facts.some(alias =>
+    (alias.status === 'bound' || alias.status === 'preserved')
+      && alias.callSource
+      && locationsEqual(alias.callSource, aliasSource))) return undefined;
+  return latest;
+};
+
 const numericExpressionReceiverError = (
   value: unknown,
   model: X4UiCallModel,
@@ -1941,22 +2007,14 @@ const numericExpressionReceiverError = (
       && locationContains(alias.context.source, value.source as X4UiSourceLocation));
     return shadowed ? 'global numeric Helper receiver is shadowed by a lexical alias' : undefined;
   }
-  if (!sourceLocationMatchesModel(model, value.aliasSource, model.file.text.slice(
-    (value.aliasSource as X4UiSourceLocation | undefined)?.start.offset || 0,
-    (value.aliasSource as X4UiSourceLocation | undefined)?.end.offset || 0,
-  ))) return 'aliased numeric Helper receiver source is malformed';
+  if (!modelSourceLocationIsExact(model, value.aliasSource)) return 'aliased numeric Helper receiver source is malformed';
   const receiverSource = value.source as X4UiSourceLocation;
-  const facts = model.helperReceiverAliases
-    .filter(alias => alias.name === value.name
-      && alias.targetSource.start.offset <= receiverSource.start.offset
-      && locationContains(alias.context.source, receiverSource))
-    .sort((left, right) => left.targetSource.start.offset - right.targetSource.start.offset);
-  const latest = facts[facts.length - 1];
-  const descriptorIdentity = facts.some(alias =>
-    (alias.status === 'bound' || alias.status === 'preserved')
-      && alias.callSource
-      && locationsEqual(alias.callSource, value.aliasSource as X4UiSourceLocation));
-  if (!latest || (latest.status !== 'bound' && latest.status !== 'preserved') || !descriptorIdentity) {
+  if (!activeHelperReceiverAliasAuthority(
+    model,
+    value.name,
+    receiverSource,
+    value.aliasSource,
+  )) {
     return 'aliased numeric Helper receiver is not an active bound or preserved rawget identity';
   }
   return undefined;
@@ -1967,6 +2025,7 @@ interface NumericExpressionSourceAstNode {
   readonly range?: unknown;
   readonly operator?: unknown;
   readonly name?: unknown;
+  readonly raw?: unknown;
   readonly value?: unknown;
   readonly indexer?: unknown;
   readonly base?: unknown;
@@ -2393,6 +2452,7 @@ const resolveNumber = (
   allowedScaleKinds: readonly DirectScaleValue['kind'][] = ['scaleX', 'scaleY'],
   instanceScope = '',
   model?: X4UiCallModel,
+  localScaleFontWrapperValues?: ReadonlyMap<string, DirectScaleValue>,
 ): Resolution<number> => {
   if (value?.numericExpression !== undefined) {
     if (!model) {
@@ -2429,6 +2489,17 @@ const resolveNumber = (
   const directScale = directScaleForValue(directScaleValues, value, instanceScope, model);
   if (directScale && allowedScaleKinds.includes(directScale.kind)) {
     return { value: directScale.value, source: cloneLocation(directScale.source), provenance: 'direct-helper-scale' };
+  }
+  const localScaleFontWrapper = localScaleFontWrapperForValue(localScaleFontWrapperValues, value, model);
+  if (localScaleFontWrapper && allowedScaleKinds.includes('scaleFont')) {
+    return {
+      value: localScaleFontWrapper.value,
+      source: cloneLocation(localScaleFontWrapper.source),
+      provenance: 'direct-helper-scale',
+    };
+  }
+  if (value?.localInvocationResult && allowedScaleKinds.includes('scaleFont')) {
+    return unresolved(value, category, `${label} requires an exact source-proven local Helper.scaleFont wrapper`, fallbackSource);
   }
   if (value?.status === 'unknown' && (value.symbol?.startsWith('Helper.') || /^Helper\.[A-Za-z_][A-Za-z0-9_]*$/.test(value.expression))) {
     const symbol = value.symbol || value.expression;
@@ -3444,6 +3515,7 @@ const createPreviewSampleCatalog = (
   target: X4UiLayoutTarget,
   calls: readonly ProjectableCall[],
   resolvedDirectScaleLocations: ReadonlySet<string>,
+  resolvedLocalScaleFontInvocationIds: ReadonlySet<string> = new Set(),
   allowLocalInvocationResults = false,
 ): X4UiLayoutPreviewSampleCatalog => {
   type MutableEntry = {
@@ -3462,6 +3534,8 @@ const createPreviewSampleCatalog = (
     expectedType: X4UiLayoutScalarType,
   ): void => {
     if (!value || !isSampleableValue(value, allowLocalInvocationResults)) return;
+    if (value.localInvocationResult
+      && resolvedLocalScaleFontInvocationIds.has(value.localInvocationResult.invocationId)) return;
     const sampleSource = sampleSourceForValue(value);
     if (resolvedDirectScaleLocations.has(locationKey(sampleSource))) return;
     const id = sampleIdFor(identity, sampleSource, expectedType);
@@ -3896,6 +3970,397 @@ const callDataFlowSatisfied = (call: ProjectableCall): boolean => {
     return kind === 'cell' || kind === 'row' || kind === 'table';
   }
   return false;
+};
+
+const localAstNode = (value: unknown): NumericExpressionSourceAstNode | undefined =>
+  isObject(value) ? value as NumericExpressionSourceAstNode : undefined;
+
+const localAstNodes = (value: unknown): readonly NumericExpressionSourceAstNode[] | undefined =>
+  Array.isArray(value) && value.every(item => isObject(item))
+    ? value as readonly NumericExpressionSourceAstNode[]
+    : undefined;
+
+const localAstIdentifier = (
+  value: unknown,
+  name: string,
+  isLocal?: boolean,
+): boolean => {
+  const node = localAstNode(value);
+  return Boolean(node
+    && node.type === 'Identifier'
+    && node.name === name
+    && (isLocal === undefined || node.isLocal === isLocal));
+};
+
+const localAstSource = (
+  model: X4UiCallModel,
+  node: NumericExpressionSourceAstNode,
+): X4UiSourceLocation | undefined => {
+  const range = sourceAstRange(node);
+  if (!range || range[1] > model.file.text.length) return undefined;
+  const start = sourcePositionAtOffset(model.file.text, range[0]);
+  const end = sourcePositionAtOffset(model.file.text, range[1]);
+  return {
+    file: model.file.rel,
+    ...(model.file.sourcePath ? { sourcePath: model.file.sourcePath } : {}),
+    start: { ...start, offset: range[0] },
+    end: { ...end, offset: range[1] },
+  };
+};
+
+const localAstStringValue = (
+  model: X4UiCallModel,
+  value: unknown,
+): string | undefined => {
+  const node = localAstNode(value);
+  const range = node ? sourceAstRange(node) : undefined;
+  if (!node || node.type !== 'StringLiteral' || !range) return undefined;
+  const source = localAstSource(model, node);
+  if (!source || !sourceLocationMatchesModel(model, source, model.file.text.slice(range[0], range[1]))) {
+    return undefined;
+  }
+  if (typeof node.value === 'string') return node.value;
+  // luaparse currently exposes StringLiteral.value as null.  Decode only the
+  // AST-confirmed quoted token; this is a literal-value fallback, not Lua
+  // evaluation, and the exact AST range/model source check above remains
+  // mandatory.
+  if (node.value !== null || typeof node.raw !== 'string') return undefined;
+  const raw = node.raw;
+  if (model.file.text.slice(range[0], range[1]) !== raw) return undefined;
+  if (raw.length < 2 || (raw[0] !== '"' && raw[0] !== "'") || raw[raw.length - 1] !== raw[0]) {
+    return undefined;
+  }
+  const body = raw.slice(1, -1);
+  if (body.includes('\\')) return undefined;
+  return body;
+};
+
+const localAstExactString = (
+  model: X4UiCallModel,
+  value: unknown,
+  expected: string,
+): boolean => {
+  return localAstStringValue(model, value) === expected;
+};
+
+const localAstExactZero = (model: X4UiCallModel, value: unknown): boolean => {
+  const node = localAstNode(value);
+  const range = node ? sourceAstRange(node) : undefined;
+  const source = node && range ? localAstSource(model, node) : undefined;
+  return Boolean(node
+    && node.type === 'NumericLiteral'
+    && node.value === 0
+    && range
+    && source
+    && sourceLocationMatchesModel(model, source, model.file.text.slice(range[0], range[1])));
+};
+
+const localAstNodeAt = (
+  index: NumericExpressionSourceAstIndex,
+  source: X4UiSourceLocation,
+  type: string,
+): readonly NumericExpressionSourceAstNode[] => (index.nodesByRange.get(sourceAstRangeKey(
+  source.start.offset,
+  source.end.offset,
+)) || []).filter(node => node.type === type);
+
+type LocalScaleFontGlobalAuthority = 'pcall' | 'type' | 'Helper' | 'rawget';
+
+const localAstGlobalEnvironment = (value: unknown): boolean =>
+  localAstIdentifier(value, '_G', false) || localAstIdentifier(value, '_ENV', false);
+
+const localAstReplacesGlobalEnvironment = (value: unknown): boolean =>
+  localAstIdentifier(value, '_ENV');
+
+const localAstMayWriteGlobalAuthority = (
+  model: X4UiCallModel,
+  value: unknown,
+  name: LocalScaleFontGlobalAuthority,
+): boolean => {
+  const node = localAstNode(value);
+  if (!node) return false;
+  if (localAstIdentifier(node, name, false)) return true;
+  if (!localAstGlobalEnvironment(node.base)) return false;
+  if (node.type === 'MemberExpression' && node.indexer === '.') {
+    return localAstIdentifier(node.identifier, name);
+  }
+  if (node.type !== 'IndexExpression') return false;
+  const key = localAstStringValue(model, node.index);
+  return key === undefined || key === name;
+};
+
+const localAstRawsetMayWriteGlobalAuthority = (
+  model: X4UiCallModel,
+  value: unknown,
+  name: LocalScaleFontGlobalAuthority,
+): boolean => {
+  const node = localAstNode(value);
+  const args = node ? localAstNodes(node.arguments) : undefined;
+  if (!node
+    || node.type !== 'CallExpression'
+    || !localAstIdentifier(node.base, 'rawset', false)
+    || !args
+    || args.length !== 3
+    || !localAstGlobalEnvironment(args[0])) return false;
+  const key = localAstStringValue(model, args[1]);
+  return key === undefined || key === name;
+};
+
+const globalAuthorityAvailableAt = (
+  model: X4UiCallModel,
+  name: LocalScaleFontGlobalAuthority,
+  useLocation: X4UiSourceLocation,
+): boolean => {
+  if (!modelSourceLocationIsExact(model, useLocation)) return false;
+  const index = numericExpressionSourceAstIndex(model);
+  if (index.error) return false;
+  const seen = new Set<object>();
+  for (const nodes of index.nodesByRange.values()) {
+    for (const node of nodes) {
+      if (seen.has(node as object)) continue;
+      seen.add(node as object);
+      const range = sourceAstRange(node);
+      if (!range || range[0] >= useLocation.start.offset) continue;
+      if (node.type === 'AssignmentStatement') {
+        const variables = localAstNodes(node.variables);
+        if (variables?.some(variable => localAstReplacesGlobalEnvironment(variable)
+          || localAstMayWriteGlobalAuthority(model, variable, name))) return false;
+      } else if (node.type === 'LocalStatement') {
+        const variables = localAstNodes(node.variables);
+        if (variables?.some(localAstReplacesGlobalEnvironment)) return false;
+      } else if (node.type === 'FunctionDeclaration'
+        && node.isLocal === false
+        && localAstMayWriteGlobalAuthority(model, node.identifier, name)) {
+        return false;
+      } else if (localAstRawsetMayWriteGlobalAuthority(model, node, name)) {
+        return false;
+      }
+    }
+  }
+  return true;
+};
+
+const exactHelperReceiverIdentity = (
+  model: X4UiCallModel,
+  receiver: unknown,
+  receiverSource: X4UiSourceLocation,
+): boolean => {
+  const receiverNode = localAstNode(receiver);
+  if (!localAstIdentifier(receiverNode, 'Helper')
+    || !sourceLocationMatchesModel(model, receiverSource, 'Helper')) return false;
+  if (receiverNode?.isLocal === false) {
+    return !model.helperReceiverAliases.some(alias => alias.name === 'Helper'
+      && alias.targetSource.start.offset <= receiverSource.start.offset
+      && locationContains(alias.context.source, receiverSource));
+  }
+  if (receiverNode?.isLocal !== true) return false;
+  return activeHelperReceiverAliasAuthority(model, 'Helper', receiverSource) !== undefined;
+};
+
+const exactLocalScaleFontWrapperSource = (
+  model: X4UiCallModel,
+  declaration: X4UiLocalFunctionDeclaration,
+  consumedInvocationSource: X4UiSourceLocation,
+): X4UiSourceLocation | undefined => {
+  const index = numericExpressionSourceAstIndex(model);
+  if (index.error || !sourceLocationMatchesModel(model, declaration.source, model.file.text.slice(
+    declaration.source.start.offset,
+    declaration.source.end.offset,
+  )) || !modelSourceLocationIsExact(model, consumedInvocationSource)) return undefined;
+  const declarationNodes = localAstNodeAt(index, declaration.source, 'FunctionDeclaration');
+  if (declarationNodes.length !== 1) return undefined;
+  const functionNode = declarationNodes[0];
+  if (functionNode.isLocal !== true
+    || !localAstIdentifier(functionNode.identifier, declaration.name, true)) return undefined;
+  const parameters = localAstNodes(functionNode.parameters);
+  const body = localAstNodes(functionNode.body);
+  if (!parameters || !body || declaration.parameters.length !== 1 || parameters.length !== 1 || body.length !== 3) return undefined;
+  const parameter = declaration.parameters[0];
+  const parameterNode = parameters[0];
+  const parameterRange = sourceAstRange(parameterNode);
+  if (!parameter
+    || !localAstIdentifier(parameterNode, parameter.name, true)
+    || !parameterRange
+    || parameterRange[0] !== parameter.source.start.offset
+    || parameterRange[1] !== parameter.source.end.offset
+    || !sourceLocationMatchesModel(model, parameter.source, parameter.name)) return undefined;
+  // This matcher proves only the exact three-statement wrapper shape.  The
+  // parameter cannot reuse either declared result name because the AST does
+  // not provide a stronger lexical-binding proof for that collision.
+  if (parameter.name === 'ok' || parameter.name === 'v') return undefined;
+
+  const localStatement = localAstNode(body[0]);
+  const localVariables = localStatement ? localAstNodes(localStatement.variables) : undefined;
+  const localInitializers = localStatement ? localAstNodes(localStatement.init) : undefined;
+  if (!localStatement
+    || localStatement.type !== 'LocalStatement'
+    || !localVariables
+    || !localInitializers
+    || localVariables.length !== 2
+    || localInitializers.length !== 1
+    || !localAstIdentifier(localVariables[0], 'ok', true)
+    || !localAstIdentifier(localVariables[1], 'v', true)) return undefined;
+
+  const protectedCallStatement = localAstNode(localInitializers[0]);
+  const protectedCallArguments = protectedCallStatement ? localAstNodes(protectedCallStatement.arguments) : undefined;
+  const callback = protectedCallArguments?.length === 1 ? localAstNode(protectedCallArguments[0]) : undefined;
+  const callbackBody = callback ? localAstNodes(callback.body) : undefined;
+  const callbackReturn = callbackBody?.length === 1 ? localAstNode(callbackBody[0]) : undefined;
+  const callbackReturnArguments = callbackReturn ? localAstNodes(callbackReturn.arguments) : undefined;
+  const protectedCall = callbackReturnArguments?.length === 1 ? localAstNode(callbackReturnArguments[0]) : undefined;
+  const protectedCallBase = protectedCall ? localAstNode(protectedCall.base) : undefined;
+  const protectedCallReceiver = protectedCallBase ? localAstNode(protectedCallBase.base) : undefined;
+  const protectedCallCallee = protectedCallBase ? localAstNode(protectedCallBase.identifier) : undefined;
+  const protectedCallArgumentsExact = protectedCall ? localAstNodes(protectedCall.arguments) : undefined;
+  const protectedCallArgument = protectedCallArgumentsExact?.[1];
+  const protectedCallReceiverSource = protectedCallReceiver ? localAstSource(model, protectedCallReceiver) : undefined;
+  const protectedCallArgumentSource = protectedCallArgument ? localAstSource(model, protectedCallArgument) : undefined;
+  if (!protectedCallStatement
+    || protectedCallStatement.type !== 'CallExpression'
+    || !localAstIdentifier(protectedCallStatement.base, 'pcall', false)
+    || protectedCallStatement.isLocal !== undefined
+    || !callback
+    || callback.type !== 'FunctionDeclaration'
+    || callback.identifier !== null
+    || localAstNodes(callback.parameters)?.length !== 0
+    || !callbackReturn
+    || callbackReturn.type !== 'ReturnStatement'
+    || !protectedCall
+    || protectedCall.type !== 'CallExpression'
+    || !protectedCallBase
+    || protectedCallBase.type !== 'MemberExpression'
+    || protectedCallBase.indexer !== '.'
+    || !protectedCallReceiverSource
+    || !exactHelperReceiverIdentity(model, protectedCallReceiver, protectedCallReceiverSource)
+    || !localAstIdentifier(protectedCallCallee, 'scaleFont')
+    || !protectedCallArgumentsExact
+    || protectedCallArgumentsExact.length !== 2
+    || !localAstExactString(model, protectedCallArgumentsExact[0], 'Zekton')
+    || !localAstIdentifier(protectedCallArgument, parameter.name, true)
+    || !protectedCallArgumentSource
+    || !sourceLocationMatchesModel(model, protectedCallArgumentSource, parameter.name)) return undefined;
+  if (!globalAuthorityAvailableAt(model, 'pcall', consumedInvocationSource)
+    || !globalAuthorityAvailableAt(model, 'type', consumedInvocationSource)) return undefined;
+
+  const ifStatement = localAstNode(body[1]);
+  const clauses = ifStatement ? localAstNodes(ifStatement.clauses) : undefined;
+  const clause = clauses?.length === 1 ? localAstNode(clauses[0]) : undefined;
+  const condition = clause ? localAstNode(clause.condition) : undefined;
+  const conditionLeft = condition ? localAstNode(condition.left) : undefined;
+  const conditionRight = condition ? localAstNode(condition.right) : undefined;
+  const typeCheck = conditionLeft ? localAstNode(conditionLeft.right) : undefined;
+  const okTypeCall = typeCheck ? localAstNode(typeCheck.left) : undefined;
+  const okTypeArguments = okTypeCall ? localAstNodes(okTypeCall.arguments) : undefined;
+  const positiveGuard = conditionRight;
+  const ifBody = clause ? localAstNodes(clause.body) : undefined;
+  const guardReturn = ifBody?.length === 1 ? localAstNode(ifBody[0]) : undefined;
+  const guardReturnArguments = guardReturn ? localAstNodes(guardReturn.arguments) : undefined;
+  if (!ifStatement
+    || ifStatement.type !== 'IfStatement'
+    || ifStatement.elseBody !== undefined
+    || !clauses
+    || clauses.length !== 1
+    || !clause
+    || clause.type !== 'IfClause'
+    || !condition
+    || condition.type !== 'LogicalExpression'
+    || condition.operator !== 'and'
+    || !conditionLeft
+    || conditionLeft.type !== 'LogicalExpression'
+    || conditionLeft.operator !== 'and'
+    || !localAstIdentifier(conditionLeft.left, 'ok', true)
+    || !typeCheck
+    || typeCheck.type !== 'BinaryExpression'
+    || typeCheck.operator !== '=='
+    || !okTypeCall
+    || okTypeCall.type !== 'CallExpression'
+    || !localAstIdentifier(okTypeCall.base, 'type', false)
+    || !okTypeArguments
+    || okTypeArguments.length !== 1
+    || !localAstIdentifier(okTypeArguments[0], 'v', true)
+    || !localAstExactString(model, typeCheck.right, 'number')
+    || !positiveGuard
+    || positiveGuard.type !== 'BinaryExpression'
+    || positiveGuard.operator !== '>'
+    || !localAstIdentifier(positiveGuard.left, 'v', true)
+    || !localAstExactZero(model, positiveGuard.right)
+    || !ifBody
+    || ifBody.length !== 1
+    || !guardReturn
+    || guardReturn.type !== 'ReturnStatement'
+    || !guardReturnArguments
+    || guardReturnArguments.length !== 1
+    || !localAstIdentifier(guardReturnArguments[0], 'v', true)) return undefined;
+
+  const fallbackReturn = localAstNode(body[2]);
+  const fallbackArguments = fallbackReturn ? localAstNodes(fallbackReturn.arguments) : undefined;
+  if (!fallbackReturn
+    || fallbackReturn.type !== 'ReturnStatement'
+    || !fallbackArguments
+    || fallbackArguments.length !== 1
+    || !localAstIdentifier(fallbackArguments[0], parameter.name, true)) return undefined;
+  return localAstSource(model, protectedCall);
+};
+
+const localScaleFontWrapperValuesFor = (
+  model: X4UiCallModel,
+  profile: X4UiLayoutProjectionProfile,
+): ReadonlyMap<string, DirectScaleValue> => {
+  const result = new Map<string, DirectScaleValue>();
+  const index = numericExpressionSourceAstIndex(model);
+  if (index.error) return result;
+  const declarations = new Map((model.localFunctions || []).map(declaration => [declaration.id, declaration]));
+  for (const invocation of model.localInvocations || []) {
+    if (invocation.status !== 'supported'
+      || invocation.resolution !== 'direct'
+      || !invocation.resultConsumed
+      || !invocation.calleeDeclarationId
+      || invocation.context.reachability !== 'reachable'
+      || invocation.context.branchPath.length > 0
+      || invocation.context.loopPath.length > 0
+      || invocation.arguments.length !== 1) continue;
+    const declaration = declarations.get(invocation.calleeDeclarationId);
+    const argument = invocation.arguments[0];
+    if (!declaration
+      || !directLiteralArgument(argument)
+      || argument.type !== 'number'
+      || !isFiniteNumber(argument.value)) continue;
+    const invocationNodes = localAstNodeAt(index, invocation.source, 'CallExpression');
+    if (invocationNodes.length !== 1) continue;
+    const invocationNode = invocationNodes[0];
+    const invocationArguments = localAstNodes(invocationNode.arguments);
+    const invocationBase = localAstNode(invocationNode.base);
+    const argumentNode = invocationArguments?.length === 1 ? invocationArguments[0] : undefined;
+    const argumentRange = argumentNode ? sourceAstRange(argumentNode) : undefined;
+    if (!localAstIdentifier(invocationBase, invocation.calleeExpression, true)
+      || !invocationArguments
+      || invocationArguments.length !== 1
+      || !argumentRange
+      || argumentRange[0] !== argument.location.start.offset
+      || argumentRange[1] !== argument.location.end.offset
+      || !sourceLocationMatchesModel(model, argument.location, model.file.text.slice(
+        argument.location.start.offset,
+        argument.location.end.offset,
+      ))) continue;
+    const protectedCallSource = exactLocalScaleFontWrapperSource(model, declaration, invocation.source);
+    const helperAuthority = activeHelperReceiverAliasAuthority(model, 'Helper', invocation.source);
+    if (!protectedCallSource
+      || !helperAuthority?.callSource
+      || !globalAuthorityAvailableAt(model, 'Helper', helperAuthority.callSource)
+      || !globalAuthorityAvailableAt(model, 'rawget', helperAuthority.callSource)) continue;
+    const scaled = scaleFont('Zekton', argument.value, profile.metrics.uiScale);
+    const output = scaled.status === 'ok' && isFiniteNumber(scaled.value) && scaled.value > 0
+      ? scaled.value
+      : argument.value;
+    if (!isFiniteNumber(output)) continue;
+    result.set(invocation.id, {
+      value: output,
+      kind: 'scaleFont',
+      source: cloneLocation(protectedCallSource),
+      instanceScope: '',
+    });
+  }
+  return result;
 };
 
 const instantiateCall = (
@@ -8199,11 +8664,14 @@ export function projectX4UiLayoutProgram(
       resolvedDirectScaleLocations.add(locationKey(call.source));
     }
   }
+  const localScaleFontWrapperValues = localScaleFontWrapperValuesFor(model, profileValue);
+  const resolvedLocalScaleFontInvocationIds = new Set(localScaleFontWrapperValues.keys());
   const sampleCatalog = createPreviewSampleCatalog(
     normalizedProfile.value.sourceIdentity,
     target,
     targetCalls,
     resolvedDirectScaleLocations,
+    resolvedLocalScaleFontInvocationIds,
     Boolean(localExpansionPlan),
   );
   const normalizedSamples = normalizePreviewSamples(
@@ -8380,6 +8848,7 @@ export function projectX4UiLayoutProgram(
     allowedScaleKinds,
     activeCall?.expansionInstance?.ancestry.join('>') || '',
     model,
+    localScaleFontWrapperValues,
   );
 
   const resolveProjectedBoolean = (

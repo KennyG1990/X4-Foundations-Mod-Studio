@@ -657,6 +657,379 @@ const b119PropagatedLayerSource = [
   'end',
 ].join('\n');
 
+const b119LocalScaleFontWrapperSource = [
+  'local Helper = rawget(_G, "Helper")',
+  'local menu = { name = "B119LocalScaleFontWrapper", layer = 1 }',
+  'local function font(size)',
+  '  local ok, v = pcall(function() return Helper.scaleFont("Zekton", size) end)',
+  '  if ok and type(v) == "number" and v > 0 then return v end',
+  '  return size',
+  'end',
+  'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+  'local table = frame:addTable(2, { width = 100, reserveScrollBar = false })',
+  'local row = table:addRow(false, {})',
+  'row[1]:createText("title", { fontsize = font(18) })',
+  'row[2]:createButton({ height = 0 }):setText("CLOSE", { fontsize = font(13) })',
+  'frame:display()',
+].join('\n');
+
+const b119LocalScaleFontWrapperPostDeclarationRebindSource = [
+  'local Helper = rawget(_G, "Helper")',
+  'local Other = { scaleFont = function(_, size) return size + 1 end }',
+  'local menu = { name = "B119LocalScaleFontWrapperRebind", layer = 1 }',
+  'local function font(size)',
+  '  local ok, v = pcall(function() return Helper.scaleFont("Zekton", size) end)',
+  '  if ok and type(v) == "number" and v > 0 then return v end',
+  '  return size',
+  'end',
+  'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+  'local table = frame:addTable(2, { width = 100, reserveScrollBar = false })',
+  'local row = table:addRow(false, {})',
+  'Helper = Other',
+  'row[1]:createText("title", { fontsize = font(18) })',
+  'row[2]:createButton({ height = 0 }):setText("CLOSE", { fontsize = font(13) })',
+  'frame:display()',
+].join('\n');
+
+const b119LocalScaleFontWrapperStructuredRawgetSource = b119LocalScaleFontWrapperSource.replace(
+  'rawget(_G, "Helper")',
+  "rawget ( _G , 'Helper' )",
+);
+
+const b119LocalScaleFontWrapperCanonicalEquivalentSource = [
+  "local Helper = rawget ( _G , 'Helper' )",
+  '-- comments and whitespace do not change the accepted AST shape',
+  'local menu = { name = "B119LocalScaleFontWrapperCanonical", layer = 1 }',
+  'local function font(size)',
+  '  -- canonical equivalent literal spellings',
+  "  local ok, v = pcall( function() return Helper.scaleFont( 'Zekton' , size ) end )",
+  "  if ok and type( v ) == 'number' and v > 0.0 then return v end",
+  '  return size',
+  'end',
+  'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+  'local table = frame:addTable(2, { width = 100, reserveScrollBar = false })',
+  'local row = table:addRow(false, {})',
+  'row[1]:createText("title", { fontsize = font(18) })',
+  'row[2]:createButton({ height = 0 }):setText("CLOSE", { fontsize = font(13) })',
+  'frame:display()',
+].join('\n');
+
+const b119LocalScaleFontWrapperParameterCollisionVariants: readonly { readonly label: string; readonly source: string }[] = [
+  {
+    label: 'parameter collides with v',
+    source: b119LocalScaleFontWrapperSource
+      .replace('local function font(size)', 'local function font(v)')
+      .replace('Helper.scaleFont("Zekton", size)', 'Helper.scaleFont("Zekton", v)')
+      .replace('  return size\nend', '  return v\nend'),
+  },
+  {
+    label: 'parameter collides with ok',
+    source: b119LocalScaleFontWrapperSource
+      .replace('local function font(size)', 'local function font(ok)')
+      .replace('Helper.scaleFont("Zekton", size)', 'Helper.scaleFont("Zekton", ok)')
+      .replace('  return size\nend', '  return ok\nend'),
+  },
+];
+
+const b119LocalScaleFontWrapperGlobalRebindingVariants: readonly { readonly label: string; readonly source: string }[] = [
+  {
+    label: 'pcall rebound before wrapper declaration',
+    source: b119LocalScaleFontWrapperSource.replace(
+      'local function font(size)',
+      'pcall = function(...) return true, 99 end\nlocal function font(size)',
+    ),
+  },
+  {
+    label: 'type rebound before wrapper declaration',
+    source: b119LocalScaleFontWrapperSource.replace(
+      'local function font(size)',
+      'type = function(...) return "number" end\nlocal function font(size)',
+    ),
+  },
+  {
+    label: 'pcall rebound between declaration and invocation',
+    source: b119LocalScaleFontWrapperSource.replace(
+      'local frame =',
+      'pcall = function(...) return true, 99 end\nlocal frame =',
+    ),
+  },
+  {
+    label: 'type rebound between declaration and invocation',
+    source: b119LocalScaleFontWrapperSource.replace(
+      'local frame =',
+      'type = function(...) return "number" end\nlocal frame =',
+    ),
+  },
+];
+
+const b119LocalScaleFontWrapperPostInvocationRebindSource = b119LocalScaleFontWrapperSource.replace(
+  'row[2]:createButton',
+  'pcall = function(...) return true, 99 end\ntype = function(...) return "number" end\nrow[2]:createButton',
+);
+
+interface B119LocalScaleFontWrapperAuthorityAttackVariant {
+  readonly label: string;
+  readonly authority: 'pcall' | 'type' | 'Helper';
+  readonly mutation: '_G assignment' | '_ENV assignment' | '_G index assignment' | '_ENV index assignment'
+    | 'rawset _G' | 'rawset _ENV' | 'dynamic _G index' | 'dynamic rawset _G' | 'dynamic rawset _ENV'
+    | 'global _G replacement' | 'global _ENV replacement' | 'local _G replacement' | 'local _ENV replacement';
+  readonly receiver: 'local rawget alias' | 'global Helper';
+  readonly source: string;
+}
+
+const b119AuthorityMutationBeforeWrapper = (mutation: string): string =>
+  b119LocalScaleFontWrapperSource.replace(
+    'local function font(size)',
+    `${mutation}\nlocal function font(size)`,
+  );
+
+const b119HelperMutationBeforeAlias = (mutation: string): string =>
+  b119LocalScaleFontWrapperSource.replace(
+    'local Helper = rawget(_G, "Helper")',
+    [
+      'local Other = { scaleFont = function(_, size) return size + 99 end }',
+      mutation,
+      'local Helper = rawget(_G, "Helper")',
+    ].join('\n'),
+  );
+
+const b119GlobalHelperMutation = (mutation: string): string =>
+  b119LocalScaleFontWrapperSource.replace(
+    'local Helper = rawget(_G, "Helper")',
+    [
+      'local Other = { scaleFont = function(_, size) return size + 99 end }',
+      mutation,
+    ].join('\n'),
+  );
+
+const b119LocalScaleFontWrapperAuthorityAttackVariants: readonly B119LocalScaleFontWrapperAuthorityAttackVariant[] = [
+  {
+    label: 'pcall mutation through _G assignment',
+    authority: 'pcall',
+    mutation: '_G assignment',
+    receiver: 'local rawget alias',
+    source: b119AuthorityMutationBeforeWrapper('_G.pcall = function(...) return true, 99 end'),
+  },
+  {
+    label: 'pcall mutation through _ENV assignment',
+    authority: 'pcall',
+    mutation: '_ENV assignment',
+    receiver: 'local rawget alias',
+    source: b119AuthorityMutationBeforeWrapper('_ENV.pcall = function(...) return true, 99 end'),
+  },
+  {
+    label: 'pcall mutation through _G index assignment',
+    authority: 'pcall',
+    mutation: '_G index assignment',
+    receiver: 'local rawget alias',
+    source: b119AuthorityMutationBeforeWrapper('_G["pcall"] = function(...) return true, 99 end'),
+  },
+  {
+    label: 'pcall mutation through _ENV index assignment',
+    authority: 'pcall',
+    mutation: '_ENV index assignment',
+    receiver: 'local rawget alias',
+    source: b119AuthorityMutationBeforeWrapper('_ENV["pcall"] = function(...) return true, 99 end'),
+  },
+  {
+    label: 'pcall mutation through dynamic _G index',
+    authority: 'pcall',
+    mutation: 'dynamic _G index',
+    receiver: 'local rawget alias',
+    source: b119AuthorityMutationBeforeWrapper([
+      'local authorityKey = "pcall"',
+      '_G[authorityKey] = function(...) return true, 99 end',
+    ].join('\n')),
+  },
+  {
+    label: 'pcall mutation through global _ENV replacement',
+    authority: 'pcall',
+    mutation: 'global _ENV replacement',
+    receiver: 'local rawget alias',
+    source: b119AuthorityMutationBeforeWrapper([
+      '_ENV = {',
+      '  pcall = function(...) return true, 99 end,',
+      '  type = type,',
+      '}',
+    ].join('\n')),
+  },
+  {
+    label: 'pcall mutation through local _ENV replacement',
+    authority: 'pcall',
+    mutation: 'local _ENV replacement',
+    receiver: 'local rawget alias',
+    source: b119AuthorityMutationBeforeWrapper([
+      'local _ENV = {',
+      '  pcall = function(...) return true, 99 end,',
+      '  type = type,',
+      '}',
+    ].join('\n')),
+  },
+  {
+    label: 'pcall mutation through rawset(_G)',
+    authority: 'pcall',
+    mutation: 'rawset _G',
+    receiver: 'local rawget alias',
+    source: b119AuthorityMutationBeforeWrapper('rawset(_G, "pcall", function(...) return true, 99 end)'),
+  },
+  {
+    label: 'pcall mutation through rawset(_ENV)',
+    authority: 'pcall',
+    mutation: 'rawset _ENV',
+    receiver: 'local rawget alias',
+    source: b119AuthorityMutationBeforeWrapper('rawset(_ENV, "pcall", function(...) return true, 99 end)'),
+  },
+  {
+    label: 'type mutation through _G assignment',
+    authority: 'type',
+    mutation: '_G assignment',
+    receiver: 'local rawget alias',
+    source: b119AuthorityMutationBeforeWrapper('_G.type = function(...) return "number" end'),
+  },
+  {
+    label: 'type mutation through _ENV assignment',
+    authority: 'type',
+    mutation: '_ENV assignment',
+    receiver: 'local rawget alias',
+    source: b119AuthorityMutationBeforeWrapper('_ENV.type = function(...) return "number" end'),
+  },
+  {
+    label: 'type mutation through _G index assignment',
+    authority: 'type',
+    mutation: '_G index assignment',
+    receiver: 'local rawget alias',
+    source: b119AuthorityMutationBeforeWrapper('_G["type"] = function(...) return "number" end'),
+  },
+  {
+    label: 'type mutation through _ENV index assignment',
+    authority: 'type',
+    mutation: '_ENV index assignment',
+    receiver: 'local rawget alias',
+    source: b119AuthorityMutationBeforeWrapper('_ENV["type"] = function(...) return "number" end'),
+  },
+  {
+    label: 'type mutation through rawset(_G)',
+    authority: 'type',
+    mutation: 'rawset _G',
+    receiver: 'local rawget alias',
+    source: b119AuthorityMutationBeforeWrapper('rawset(_G, "type", function(...) return "number" end)'),
+  },
+  {
+    label: 'type mutation through rawset(_ENV)',
+    authority: 'type',
+    mutation: 'rawset _ENV',
+    receiver: 'local rawget alias',
+    source: b119AuthorityMutationBeforeWrapper('rawset(_ENV, "type", function(...) return "number" end)'),
+  },
+  {
+    label: 'type mutation through dynamic rawset(_ENV)',
+    authority: 'type',
+    mutation: 'dynamic rawset _ENV',
+    receiver: 'local rawget alias',
+    source: b119AuthorityMutationBeforeWrapper([
+      'local authorityKey = "type"',
+      'rawset(_ENV, authorityKey, function(...) return "number" end)',
+    ].join('\n')),
+  },
+  {
+    label: 'type mutation through global _ENV replacement',
+    authority: 'type',
+    mutation: 'global _ENV replacement',
+    receiver: 'local rawget alias',
+    source: b119AuthorityMutationBeforeWrapper([
+      '_ENV = {',
+      '  pcall = pcall,',
+      '  type = function(...) return "number" end,',
+      '}',
+    ].join('\n')),
+  },
+  {
+    label: 'type mutation through local _ENV replacement',
+    authority: 'type',
+    mutation: 'local _ENV replacement',
+    receiver: 'local rawget alias',
+    source: b119AuthorityMutationBeforeWrapper([
+      'local _ENV = {',
+      '  pcall = pcall,',
+      '  type = function(...) return "number" end,',
+      '}',
+    ].join('\n')),
+  },
+  ...([
+    ['Helper mutation before local alias through _G assignment', '_G assignment', '_G.Helper = Other'],
+    ['Helper mutation before local alias through _ENV assignment', '_ENV assignment', '_ENV.Helper = Other'],
+    ['Helper mutation before local alias through _G index assignment', '_G index assignment', '_G["Helper"] = Other'],
+    ['Helper mutation before local alias through _ENV index assignment', '_ENV index assignment', '_ENV["Helper"] = Other'],
+    ['Helper mutation before local alias through rawset(_G)', 'rawset _G', 'rawset(_G, "Helper", Other)'],
+    ['Helper mutation before local alias through rawset(_ENV)', 'rawset _ENV', 'rawset(_ENV, "Helper", Other)'],
+    [
+      'Helper mutation before local alias through dynamic rawset(_G)',
+      'dynamic rawset _G',
+      'local authorityKey = "Helper"\nrawset(_G, authorityKey, Other)',
+    ],
+    ['Helper rawget authority mutation through _G assignment', '_G assignment', '_G.rawget = function(...) return Other end'],
+    ['Helper rawget authority mutation through _ENV assignment', '_ENV assignment', '_ENV.rawget = function(...) return Other end'],
+    [
+      'Helper rawget authority mutation through _G index assignment',
+      '_G index assignment',
+      '_G["rawget"] = function(...) return Other end',
+    ],
+    [
+      'Helper rawget authority mutation through _ENV index assignment',
+      '_ENV index assignment',
+      '_ENV["rawget"] = function(...) return Other end',
+    ],
+    [
+      'Helper rawget authority mutation through rawset(_G)',
+      'rawset _G',
+      'rawset(_G, "rawget", function(...) return Other end)',
+    ],
+    [
+      'Helper rawget authority mutation through rawset(_ENV)',
+      'rawset _ENV',
+      'rawset(_ENV, "rawget", function(...) return Other end)',
+    ],
+    [
+      'Helper identity mutation through global _G replacement',
+      'global _G replacement',
+      '_G = { Helper = Other }',
+    ],
+    [
+      'Helper identity mutation through local _G replacement',
+      'local _G replacement',
+      'local _G = { Helper = Other }',
+    ],
+    [
+      'Helper rawget authority mutation through global _ENV replacement',
+      'global _ENV replacement',
+      '_ENV = { rawget = function(...) return Other end, _G = _G }',
+    ],
+    [
+      'Helper rawget authority mutation through local _ENV replacement',
+      'local _ENV replacement',
+      'local _ENV = { rawget = function(...) return Other end, _G = _G }',
+    ],
+  ] as const).map(([label, mutation, source]) => ({
+    label,
+    authority: 'Helper' as const,
+    mutation,
+    receiver: 'local rawget alias' as const,
+    source: b119HelperMutationBeforeAlias(source),
+  })),
+  ...([
+    ['global Helper mutation through _G assignment', '_G assignment', '_G.Helper = Other'],
+    ['global Helper mutation through _ENV assignment', '_ENV assignment', '_ENV.Helper = Other'],
+    ['global Helper mutation through rawset(_G)', 'rawset _G', 'rawset(_G, "Helper", Other)'],
+    ['global Helper mutation through rawset(_ENV)', 'rawset _ENV', 'rawset(_ENV, "Helper", Other)'],
+  ] as const).map(([label, mutation, source]) => ({
+    label,
+    authority: 'Helper' as const,
+    mutation,
+    receiver: 'global Helper' as const,
+    source: b119GlobalHelperMutation(source),
+  })),
+];
+
 const run = (): {
   readonly allPassed: boolean;
   readonly passed: number;
@@ -3916,6 +4289,510 @@ const run = (): {
       && fontCell?.kernelState?.type === 'cell'
       && scaledProgram.gaps.some(gap => gap.category === 'height' && gap.expression?.includes('Helper.scaleFont')),
     detail({ scaleFontOperation, fontCell, gaps: scaledProgram.gaps.filter(gap => gap.expression?.includes('Helper.scaleFont')) }));
+
+  const localScaleFontWrapperModel = buildX4UiCallModel(input(
+    b119LocalScaleFontWrapperSource,
+    'selftest/b119-local-scale-font-wrapper.lua',
+  ));
+  const localScaleFontWrapperTarget = topTarget(localScaleFontWrapperModel);
+  const localScaleFontWrapperProfile = profileFor(localScaleFontWrapperModel, {
+    minTextHeight: 16,
+    localExpansion: { maxDepth: 2, maxInvocations: 4 },
+  });
+  const localScaleFontWrapperResult = projectX4UiLayoutProgram(
+    localScaleFontWrapperModel,
+    localScaleFontWrapperTarget,
+    localScaleFontWrapperProfile,
+  );
+  const localScaleFontWrapperProgram = programOf(localScaleFontWrapperResult);
+  const localScaleFontWrapperAuthority = evidenceAuthorityOf(localScaleFontWrapperResult);
+  const localScaleFontWrapperDeclaration = localScaleFontWrapperModel.localFunctions.find(candidate => candidate.name === 'font');
+  const localScaleFontWrapperInvocations = localScaleFontWrapperModel.localInvocations
+    .filter(candidate => candidate.calleeExpression === 'font');
+  const localScaleFontWrapperPropertyValues = localScaleFontWrapperModel.calls
+    .flatMap(call => call.semantics.properties || [])
+    .map(property => property.value)
+    .filter(value => value?.localInvocationResult?.expression === 'font(18)'
+      || value?.localInvocationResult?.expression === 'font(13)');
+  const localScaleFontWrapperInvocationProof = Boolean(
+    localScaleFontWrapperDeclaration
+      && localScaleFontWrapperDeclaration.parameters.length === 1
+      && localScaleFontWrapperInvocations.length === 2
+      && localScaleFontWrapperPropertyValues.length === 2
+      && ['font(18)', 'font(13)'].every(expression => {
+        const invocation = localScaleFontWrapperInvocations.find(candidate =>
+          candidate.arguments[0]?.expression === expression.slice(5, -1));
+        const propertyValue = localScaleFontWrapperPropertyValues.find(candidate =>
+          candidate?.localInvocationResult?.expression === expression);
+        const argument = invocation?.arguments[0];
+        const localResult = propertyValue?.localInvocationResult;
+        return invocation?.status === 'supported'
+          && invocation.resolution === 'direct'
+          && invocation.resultConsumed
+          && invocation.calleeDeclarationId === localScaleFontWrapperDeclaration?.id
+          && invocation.arguments.length === 1
+          && argument?.status === 'static'
+          && argument.type === 'number'
+          && argument.value === Number(expression.slice(5, -1))
+          && argument.sourceLiteral !== undefined
+          && localResult !== undefined
+          && locationsSameForTest(invocation.source, localResult.source)
+          && localScaleFontWrapperModel.file.text.slice(
+            invocation.source.start.offset,
+            invocation.source.end.offset,
+          ) === expression;
+      }),
+  );
+  const localScaleFontWrapperTitle = localScaleFontWrapperProgram.cells.find(candidate =>
+    candidate.descriptorFacts.primaryContent.status === 'known'
+      && candidate.descriptorFacts.primaryContent.value === 'title');
+  const localScaleFontWrapperButton = localScaleFontWrapperProgram.cells.find(candidate =>
+    candidate.descriptorFacts.primaryContent.status === 'known'
+      && candidate.descriptorFacts.primaryContent.value === 'CLOSE');
+  check('B119 causal local Helper.scaleFont wrapper resolves exact font(18)/font(13) results and title row geometry',
+    localScaleFontWrapperResult.status !== 'refused'
+      && localScaleFontWrapperAuthority !== undefined
+      && localScaleFontWrapperInvocationProof
+      && validateX4UiLayoutEvidencePair(localScaleFontWrapperProgram, localScaleFontWrapperAuthority).valid
+      && localScaleFontWrapperProgram.rows.every(candidate => candidate.height?.status === 'known')
+      && localScaleFontWrapperTitle?.descriptorFacts.fontsize.status === 'known'
+      && localScaleFontWrapperTitle.descriptorFacts.fontsize.value === 18
+      && localScaleFontWrapperTitle.descriptorFacts.fontsize.provenance === 'direct-helper-scale'
+      && localScaleFontWrapperButton?.descriptorFacts.fontsize.status === 'known'
+      && localScaleFontWrapperButton.descriptorFacts.fontsize.value === 13
+      && localScaleFontWrapperButton.descriptorFacts.fontsize.provenance === 'direct-helper-scale',
+    detail({
+      status: localScaleFontWrapperResult.status,
+      invocationProof: localScaleFontWrapperInvocationProof,
+      title: localScaleFontWrapperTitle,
+      button: localScaleFontWrapperButton,
+      scaleFontOperations: localScaleFontWrapperProgram.operations.filter(candidate => candidate.kind === 'scaleFont'),
+      rows: localScaleFontWrapperProgram.rows,
+      gaps: localScaleFontWrapperProgram.gaps,
+      validation: localScaleFontWrapperAuthority && validateX4UiLayoutEvidencePair(localScaleFontWrapperProgram, localScaleFontWrapperAuthority),
+    }));
+  const structuredRawgetWrapperModel = buildX4UiCallModel(input(
+    b119LocalScaleFontWrapperStructuredRawgetSource,
+    'selftest/b119-local-scale-font-wrapper-structured-rawget.lua',
+  ));
+  const structuredRawgetWrapperResult = projectX4UiLayoutProgram(
+    structuredRawgetWrapperModel,
+    topTarget(structuredRawgetWrapperModel),
+    profileFor(structuredRawgetWrapperModel, {
+      minTextHeight: 16,
+      localExpansion: { maxDepth: 2, maxInvocations: 4 },
+    }),
+  );
+  const structuredRawgetWrapperProgram = programOf(structuredRawgetWrapperResult);
+  const structuredRawgetWrapperTitle = structuredRawgetWrapperProgram.cells.find(candidate =>
+    candidate.descriptorFacts.primaryContent.status === 'known'
+      && candidate.descriptorFacts.primaryContent.value === 'title');
+  const structuredRawgetWrapperButton = structuredRawgetWrapperProgram.cells.find(candidate =>
+    candidate.descriptorFacts.primaryContent.status === 'known'
+      && candidate.descriptorFacts.primaryContent.value === 'CLOSE');
+  check('B119 structurally equivalent rawget Helper binding remains accepted by the local wrapper matcher',
+    structuredRawgetWrapperResult.status !== 'refused'
+      && structuredRawgetWrapperModel.helperReceiverAliases[0]?.status === 'bound'
+      && structuredRawgetWrapperTitle?.descriptorFacts.fontsize.status === 'known'
+      && structuredRawgetWrapperTitle.descriptorFacts.fontsize.value === 18
+      && structuredRawgetWrapperButton?.descriptorFacts.fontsize.status === 'known'
+      && structuredRawgetWrapperButton.descriptorFacts.fontsize.value === 13,
+    detail({
+      status: structuredRawgetWrapperResult.status,
+      helperAliases: structuredRawgetWrapperModel.helperReceiverAliases,
+      titleFont: structuredRawgetWrapperTitle?.descriptorFacts.fontsize,
+      buttonFont: structuredRawgetWrapperButton?.descriptorFacts.fontsize,
+    }));
+  const localScaleFontWrapperScaledProfile = profileFor(localScaleFontWrapperModel, {
+    minTextHeight: 16,
+    uiScale: 1.25,
+    localExpansion: { maxDepth: 2, maxInvocations: 4 },
+  });
+  const localScaleFontWrapperScaledResult = projectX4UiLayoutProgram(
+    localScaleFontWrapperModel,
+    localScaleFontWrapperTarget,
+    localScaleFontWrapperScaledProfile,
+  );
+  const localScaleFontWrapperScaledProgram = programOf(localScaleFontWrapperScaledResult);
+  const localScaleFontWrapperScaledAuthority = evidenceAuthorityOf(localScaleFontWrapperScaledResult);
+  const localScaleFontWrapperScaledTitle = localScaleFontWrapperScaledProgram.cells.find(candidate =>
+    candidate.descriptorFacts.primaryContent.status === 'known'
+      && candidate.descriptorFacts.primaryContent.value === 'title');
+  const localScaleFontWrapperScaledButton = localScaleFontWrapperScaledProgram.cells.find(candidate =>
+    candidate.descriptorFacts.primaryContent.status === 'known'
+      && candidate.descriptorFacts.primaryContent.value === 'CLOSE');
+  check('B119 exact local Helper.scaleFont wrapper mirrors shipped non-unit double scaling',
+    localScaleFontWrapperScaledResult.status !== 'refused'
+      && localScaleFontWrapperScaledAuthority !== undefined
+      && validateX4UiLayoutEvidencePair(localScaleFontWrapperScaledProgram, localScaleFontWrapperScaledAuthority).valid
+      && localScaleFontWrapperScaledTitle?.descriptorFacts.fontsize.status === 'known'
+      && localScaleFontWrapperScaledTitle.descriptorFacts.fontsize.value === 29
+      && localScaleFontWrapperScaledTitle.descriptorFacts.fontsize.provenance === 'direct-helper-scale'
+      && localScaleFontWrapperScaledButton?.descriptorFacts.fontsize.status === 'known'
+      && localScaleFontWrapperScaledButton.descriptorFacts.fontsize.value === 22
+      && localScaleFontWrapperScaledButton.descriptorFacts.fontsize.provenance === 'direct-helper-scale'
+      && !localScaleFontWrapperScaledProgram.sampleCatalog.entries.some(candidate =>
+        candidate.expression === 'font(18)' || candidate.expression === 'font(13)'),
+    detail({
+      uiScale: 1.25,
+      wrapperResults: { font18: 23, font13: 17 },
+      finalDescriptorFontsizes: {
+        font18: localScaleFontWrapperScaledTitle?.descriptorFacts.fontsize,
+        font13: localScaleFontWrapperScaledButton?.descriptorFacts.fontsize,
+      },
+      sampleCatalog: localScaleFontWrapperScaledProgram.sampleCatalog,
+      validation: localScaleFontWrapperScaledAuthority
+        && validateX4UiLayoutEvidencePair(localScaleFontWrapperScaledProgram, localScaleFontWrapperScaledAuthority),
+    }));
+  const postDeclarationRebindModel = buildX4UiCallModel(input(
+    b119LocalScaleFontWrapperPostDeclarationRebindSource,
+    'selftest/b119-local-scale-font-wrapper-post-declaration-rebind.lua',
+  ));
+  const postDeclarationRebindResult = projectX4UiLayoutProgram(
+    postDeclarationRebindModel,
+    topTarget(postDeclarationRebindModel),
+    profileFor(postDeclarationRebindModel, {
+      minTextHeight: 16,
+      localExpansion: { maxDepth: 2, maxInvocations: 4 },
+    }),
+  );
+  const postDeclarationRebindProgram = programOf(postDeclarationRebindResult);
+  const postDeclarationRebindTitle = postDeclarationRebindProgram.cells.find(candidate =>
+    candidate.descriptorFacts.primaryContent.status === 'known'
+      && candidate.descriptorFacts.primaryContent.value === 'title');
+  const postDeclarationRebindButton = postDeclarationRebindProgram.cells.find(candidate =>
+    candidate.descriptorFacts.primaryContent.status === 'known'
+      && candidate.descriptorFacts.primaryContent.value === 'CLOSE');
+  const postDeclarationRebindWrapperGaps = postDeclarationRebindProgram.gaps.filter(gap =>
+    gap.category === 'fontsize'
+      && gap.status === 'dynamic'
+      && (gap.expression === 'font(18)' || gap.expression === 'font(13)'));
+  const postDeclarationRebindWrapperUnavailable = ['font(18)', 'font(13)'].every(expression => {
+    const gap = postDeclarationRebindWrapperGaps.find(candidate => candidate.expression === expression);
+    return gap !== undefined;
+  });
+  check('B119 causal post-declaration Helper rebind preserves created cells but refuses captured wrapper results',
+    postDeclarationRebindResult.status !== 'refused'
+      && postDeclarationRebindProgram.frames.length === 1
+      && postDeclarationRebindProgram.tables.length === 1
+      && postDeclarationRebindProgram.rows.length === 1
+      && postDeclarationRebindTitle !== undefined
+      && postDeclarationRebindButton !== undefined
+      && postDeclarationRebindTitle.descriptorFacts.fontsize.status === 'unavailable'
+      && postDeclarationRebindButton.descriptorFacts.fontsize.status === 'unavailable'
+      && postDeclarationRebindWrapperUnavailable,
+    detail({
+      status: postDeclarationRebindResult.status,
+      frames: postDeclarationRebindProgram.frames.length,
+      tables: postDeclarationRebindProgram.tables.length,
+      rows: postDeclarationRebindProgram.rows.length,
+      title: postDeclarationRebindTitle,
+      button: postDeclarationRebindButton,
+      wrapperGaps: postDeclarationRebindWrapperGaps,
+      helperAliases: postDeclarationRebindModel.helperReceiverAliases,
+    }));
+  const localScaleFontWrapperNegativeVariants: readonly { readonly label: string; readonly source: string }[] = [
+    {
+      label: 'wrong Helper receiver',
+      source: b119LocalScaleFontWrapperSource.replace('Helper.scaleFont("Zekton", size)', 'Other.scaleFont("Zekton", size)'),
+    },
+    {
+      label: 'wrong callee',
+      source: b119LocalScaleFontWrapperSource.replace('Helper.scaleFont("Zekton", size)', 'Helper.scaleX("Zekton", size)'),
+    },
+    {
+      label: 'wrong font',
+      source: b119LocalScaleFontWrapperSource.replace('Helper.scaleFont("Zekton", size)', 'Helper.scaleFont("OtherFont", size)'),
+    },
+    {
+      label: 'wrong parameter',
+      source: b119LocalScaleFontWrapperSource.replace('Helper.scaleFont("Zekton", size)', 'Helper.scaleFont("Zekton", other)'),
+    },
+    {
+      label: 'changed guard',
+      source: b119LocalScaleFontWrapperSource.replace('v > 0', 'v >= 0'),
+    },
+    {
+      label: 'changed fallback',
+      source: b119LocalScaleFontWrapperSource.replace('  return size\nend', '  return size + 0\nend'),
+    },
+    {
+      label: 'added side effect',
+      source: b119LocalScaleFontWrapperSource.replace('  return size\nend', '  print("side-effect")\n  return size\nend'),
+    },
+    {
+      label: 'dynamic argument',
+      source: b119LocalScaleFontWrapperSource.replace('font(18)', 'font(dynamic_size)').replace('font(13)', 'font(dynamic_size)'),
+    },
+    {
+      label: 'multiple arguments',
+      source: b119LocalScaleFontWrapperSource
+        .replace('font(18)', 'font(18, 19)')
+        .replace('font(13)', 'font(13, 19)'),
+    },
+    {
+      label: 'alias/rebind ambiguity',
+      source: b119LocalScaleFontWrapperSource
+        .replace('local frame =', 'local alias = font\nlocal frame =')
+        .replace('font(18)', 'alias(18)')
+        .replace('font(13)', 'alias(13)'),
+    },
+    {
+      label: 'recursive wrapper',
+      source: b119LocalScaleFontWrapperSource.replace(
+        '  return size\nend',
+        '  if size > 0 then return font(size) end\n  return size\nend',
+      ),
+    },
+    {
+      label: 'nested wrapper',
+      source: b119LocalScaleFontWrapperSource
+        .replace('local function font(size)', 'local function inner(size) return size end\nlocal function font(size)')
+        .replace('Helper.scaleFont("Zekton", size)', 'inner(size)'),
+    },
+  ];
+  const localScaleFontWrapperNegativeResults = localScaleFontWrapperNegativeVariants.map(variant => {
+    const model = buildX4UiCallModel(input(variant.source, `selftest/b119-local-scale-font-wrapper-${variant.label.replace(/[^A-Za-z0-9]+/g, '-').toLowerCase()}.lua`));
+    const result = projectX4UiLayoutProgram(
+      model,
+      topTarget(model),
+      profileFor(model, {
+        minTextHeight: 16,
+        localExpansion: { maxDepth: 2, maxInvocations: 4 },
+      }),
+    );
+    const title = result.program?.cells.find(candidate =>
+      candidate.descriptorFacts.primaryContent.status === 'known'
+        && candidate.descriptorFacts.primaryContent.value === 'title');
+    const button = result.program?.cells.find(candidate =>
+      candidate.descriptorFacts.primaryContent.status === 'known'
+        && candidate.descriptorFacts.primaryContent.value === 'CLOSE');
+    return {
+      label: variant.label,
+      status: result.status,
+      titlePresent: title !== undefined,
+      buttonPresent: button !== undefined,
+      titleFont: title?.descriptorFacts.fontsize.status,
+      buttonFont: button?.descriptorFacts.fontsize.status,
+      refused: result.status === 'refused',
+    };
+  });
+  check('B119 local Helper.scaleFont wrapper negative matrix remains unresolved or refused',
+    localScaleFontWrapperNegativeResults.length === localScaleFontWrapperNegativeVariants.length
+      && localScaleFontWrapperNegativeResults.every(candidate =>
+        candidate.refused || (
+          candidate.titlePresent
+          && candidate.buttonPresent
+          && candidate.titleFont !== 'known'
+          && candidate.buttonFont !== 'known'
+        )),
+    detail(localScaleFontWrapperNegativeResults));
+  const vacuousNegativeCandidate = {
+    refused: false,
+    titlePresent: false,
+    buttonPresent: false,
+    titleFont: undefined,
+    buttonFont: undefined,
+  };
+  const previousNegativePredicateWouldPass = vacuousNegativeCandidate.refused
+    || (vacuousNegativeCandidate.titleFont !== 'known' && vacuousNegativeCandidate.buttonFont !== 'known');
+  const strengthenedNegativePredicateRejects = vacuousNegativeCandidate.refused
+    || (
+      vacuousNegativeCandidate.titlePresent
+      && vacuousNegativeCandidate.buttonPresent
+      && vacuousNegativeCandidate.titleFont !== 'known'
+      && vacuousNegativeCandidate.buttonFont !== 'known'
+    );
+  check('B119 strengthened negative assertion rejects the prior vacuous missing-cell case',
+    previousNegativePredicateWouldPass && !strengthenedNegativePredicateRejects,
+    detail({ vacuousNegativeCandidate, previousNegativePredicateWouldPass, strengthenedNegativePredicateRejects }));
+  const forgedLocalScaleFontWrapperModel = jsonClone(localScaleFontWrapperModel);
+  const forgeFirstLocalInvocationResult = (value: unknown): boolean => {
+    if (Array.isArray(value)) return value.some(forgeFirstLocalInvocationResult);
+    if (value === null || typeof value !== 'object') return false;
+    const record = value as Record<string, unknown>;
+    const localResult = record.localInvocationResult;
+    if (localResult !== null && typeof localResult === 'object' && !Array.isArray(localResult)) {
+      const resultRecord = localResult as Record<string, unknown>;
+      const source = resultRecord.source;
+      if (source !== null && typeof source === 'object' && !Array.isArray(source)) {
+        const sourceRecord = source as Record<string, unknown>;
+        const start = sourceRecord.start;
+        if (start !== null && typeof start === 'object' && !Array.isArray(start)) {
+          const startRecord = start as Record<string, unknown>;
+          if (typeof startRecord.offset === 'number') {
+            startRecord.offset += 1;
+            return true;
+          }
+        }
+      }
+    }
+    return Object.values(record).some(forgeFirstLocalInvocationResult);
+  };
+  const forgedIdentityFound = forgeFirstLocalInvocationResult(forgedLocalScaleFontWrapperModel);
+  const forgedLocalScaleFontWrapperResult = projectX4UiLayoutProgram(
+    forgedLocalScaleFontWrapperModel,
+    topTarget(forgedLocalScaleFontWrapperModel),
+    profileFor(forgedLocalScaleFontWrapperModel, {
+      minTextHeight: 16,
+      localExpansion: { maxDepth: 2, maxInvocations: 4 },
+    }),
+  );
+  const forgedLocalScaleFontWrapperTitle = forgedLocalScaleFontWrapperResult.program?.cells.find(candidate =>
+    candidate.descriptorFacts.primaryContent.status === 'known'
+      && candidate.descriptorFacts.primaryContent.value === 'title');
+  const forgedLocalScaleFontWrapperButton = forgedLocalScaleFontWrapperResult.program?.cells.find(candidate =>
+    candidate.descriptorFacts.primaryContent.status === 'known'
+      && candidate.descriptorFacts.primaryContent.value === 'CLOSE');
+  check('B119 malformed or forged local Helper.scaleFont source identity remains unresolved',
+    forgedIdentityFound
+      && (forgedLocalScaleFontWrapperResult.status === 'refused'
+        || (
+          forgedLocalScaleFontWrapperTitle !== undefined
+          && forgedLocalScaleFontWrapperButton !== undefined
+          && forgedLocalScaleFontWrapperTitle.descriptorFacts.fontsize.status !== 'known'
+          && forgedLocalScaleFontWrapperButton.descriptorFacts.fontsize.status !== 'known'
+        )),
+    detail({
+      status: forgedLocalScaleFontWrapperResult.status,
+      titlePresent: forgedLocalScaleFontWrapperTitle !== undefined,
+      buttonPresent: forgedLocalScaleFontWrapperButton !== undefined,
+      titleFont: forgedLocalScaleFontWrapperTitle?.descriptorFacts.fontsize,
+      buttonFont: forgedLocalScaleFontWrapperButton?.descriptorFacts.fontsize,
+    }));
+
+  const canonicalEquivalentWrapperModel = buildX4UiCallModel(input(
+    b119LocalScaleFontWrapperCanonicalEquivalentSource,
+    'selftest/b119-local-scale-font-wrapper-canonical-equivalent.lua',
+  ));
+  const canonicalEquivalentWrapperResult = projectX4UiLayoutProgram(
+    canonicalEquivalentWrapperModel,
+    topTarget(canonicalEquivalentWrapperModel),
+    profileFor(canonicalEquivalentWrapperModel, {
+      minTextHeight: 16,
+      localExpansion: { maxDepth: 2, maxInvocations: 4 },
+    }),
+  );
+  const canonicalEquivalentWrapperProgram = programOf(canonicalEquivalentWrapperResult);
+  const canonicalEquivalentWrapperTitle = canonicalEquivalentWrapperProgram.cells.find(candidate =>
+    candidate.descriptorFacts.primaryContent.status === 'known'
+      && candidate.descriptorFacts.primaryContent.value === 'title');
+  const canonicalEquivalentWrapperButton = canonicalEquivalentWrapperProgram.cells.find(candidate =>
+    candidate.descriptorFacts.primaryContent.status === 'known'
+      && candidate.descriptorFacts.primaryContent.value === 'CLOSE');
+  check('B119 canonical equivalent single-quoted and 0.0 wrapper literals remain source-proven',
+    canonicalEquivalentWrapperResult.status !== 'refused'
+      && canonicalEquivalentWrapperTitle !== undefined
+      && canonicalEquivalentWrapperButton !== undefined
+      && canonicalEquivalentWrapperTitle.descriptorFacts.fontsize.status === 'known'
+      && canonicalEquivalentWrapperTitle.descriptorFacts.fontsize.value === 18
+      && canonicalEquivalentWrapperTitle.descriptorFacts.fontsize.provenance === 'direct-helper-scale'
+      && canonicalEquivalentWrapperButton.descriptorFacts.fontsize.status === 'known'
+      && canonicalEquivalentWrapperButton.descriptorFacts.fontsize.value === 13
+      && canonicalEquivalentWrapperButton.descriptorFacts.fontsize.provenance === 'direct-helper-scale',
+    detail({
+      status: canonicalEquivalentWrapperResult.status,
+      title: canonicalEquivalentWrapperTitle,
+      button: canonicalEquivalentWrapperButton,
+      gaps: canonicalEquivalentWrapperProgram.gaps,
+    }));
+
+  const projectWrapperVariant = (variant: { readonly label: string; readonly source: string }) => {
+    const model = buildX4UiCallModel(input(
+      variant.source,
+      `selftest/b119-local-scale-font-wrapper-${variant.label.replace(/[^A-Za-z0-9]+/g, '-').toLowerCase()}.lua`,
+    ));
+    const result = projectX4UiLayoutProgram(
+      model,
+      topTarget(model),
+      profileFor(model, {
+        minTextHeight: 16,
+        localExpansion: { maxDepth: 2, maxInvocations: 4 },
+      }),
+    );
+    const title = result.program?.cells.find(candidate =>
+      candidate.descriptorFacts.primaryContent.status === 'known'
+        && candidate.descriptorFacts.primaryContent.value === 'title');
+    const button = result.program?.cells.find(candidate =>
+      candidate.descriptorFacts.primaryContent.status === 'known'
+        && candidate.descriptorFacts.primaryContent.value === 'CLOSE');
+    return {
+      label: variant.label,
+      status: result.status,
+      titlePresent: title !== undefined,
+      buttonPresent: button !== undefined,
+      titleFont: title?.descriptorFacts.fontsize.status,
+      buttonFont: button?.descriptorFacts.fontsize.status,
+      titleValue: factValue(title?.descriptorFacts.fontsize),
+      buttonValue: factValue(button?.descriptorFacts.fontsize),
+      unsafeKnown: title?.descriptorFacts.fontsize.status === 'known'
+        || button?.descriptorFacts.fontsize.status === 'known',
+      fontGaps: (result.program?.gaps || [])
+        .filter(gap => gap.category === 'fontsize')
+        .map(gap => ({ expression: gap.expression, reason: gap.reason, status: gap.status })),
+      refused: result.status === 'refused',
+    };
+  };
+
+  const parameterCollisionResults = b119LocalScaleFontWrapperParameterCollisionVariants.map(projectWrapperVariant);
+  check('B119 parameter/local result-name collisions remain unresolved or refused with non-vacuous cells',
+    parameterCollisionResults.length === b119LocalScaleFontWrapperParameterCollisionVariants.length
+      && parameterCollisionResults.every(candidate =>
+        candidate.refused || (
+          candidate.titlePresent
+          && candidate.buttonPresent
+          && candidate.titleFont !== 'known'
+          && candidate.buttonFont !== 'known'
+        )),
+    detail(parameterCollisionResults));
+
+  const globalRebindingResults = b119LocalScaleFontWrapperGlobalRebindingVariants.map(projectWrapperVariant);
+  check('B119 same-file pcall/type global rebindings remain unresolved or refused with non-vacuous cells',
+    globalRebindingResults.length === b119LocalScaleFontWrapperGlobalRebindingVariants.length
+      && globalRebindingResults.every(candidate =>
+        candidate.refused || (
+          candidate.titlePresent
+          && candidate.buttonPresent
+          && candidate.titleFont !== 'known'
+          && candidate.buttonFont !== 'known'
+        )),
+    detail(globalRebindingResults));
+
+  const authorityAttackResults = b119LocalScaleFontWrapperAuthorityAttackVariants.map(variant => {
+    const projected = projectWrapperVariant(variant);
+    const classification = projected.refused
+      ? 'refused'
+      : (!projected.titlePresent || !projected.buttonPresent)
+          ? 'unsupported-model-shape'
+          : projected.unsafeKnown
+            ? 'accepted-unsafe'
+            : 'authority-unavailable';
+    return {
+      ...projected,
+      authority: variant.authority,
+      mutation: variant.mutation,
+      receiver: variant.receiver,
+      classification,
+    };
+  });
+  for (const candidate of authorityAttackResults) {
+    check(`B119 authority attack ${candidate.label} cannot establish exact local scaleFont wrapper authority`,
+      candidate.classification !== 'accepted-unsafe',
+      detail(candidate));
+  }
+
+  const postInvocationRebindVariant = projectWrapperVariant({
+    label: 'pcall-type rebound after first consumed invocation',
+    source: b119LocalScaleFontWrapperPostInvocationRebindSource,
+  });
+  check('B119 source-order global builtin validation preserves a prior invocation before later pcall/type writes',
+    postInvocationRebindVariant.status !== 'refused'
+      && postInvocationRebindVariant.titlePresent
+      && postInvocationRebindVariant.buttonPresent
+      && postInvocationRebindVariant.titleFont === 'known'
+      && postInvocationRebindVariant.titleValue === 18
+      && postInvocationRebindVariant.buttonFont !== 'known',
+    detail(postInvocationRebindVariant));
 
   const pipelineSource = [
     'local menu = { name = "pipeline_test", layer = 4 }',

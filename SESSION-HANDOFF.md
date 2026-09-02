@@ -1,89 +1,73 @@
-# Session handoff — B119 installed source materialization; visual parity active
+# Session handoff — B119 source-proven font wrapper; corrected package unmounted
 
-Date: 2026-09-01
+Date: 2026-09-02
 Project: `F:\DEV_ENV\X4_Forge`
 Status: `IN_PROGRESS / PARTIAL / Not verified in game`
 
 ## Session-start brief
 
 - Project: X4 Forge B119, the linter-first source-faithful X4 Lua UI editor. GitHub owner: #41.
-- Current bounded milestone: the reviewed 0.0.70 package is installed and mounted; registered Lua materialization is repaired and verified on a fresh read-only real-mod import. Three-menu Forge/X4 parity is not verified.
-- Eyeball queue: none requires the sleeping operator now. Later experience gates are (1) compare Forge and X4 at 2544x1353, (2) compare at 1920x1080, and (3) inspect AI Influence screen 1b with measured keep-outs. Each must retain exact deployed hashes and `Not verified in game` until the live X4 check.
-- Commit question: source checkpoint `71828d9c99383dea5da89b5c56d15575839f4f88` is committed and pushed with local, tracking, and direct-remote parity. The only remaining uncommitted B119 work is this record-close delta; preserve all unrelated dirt and stage only the three named record files.
+- Current bounded milestone: the exact local `Helper.scaleFont` wrapper port, its fail-closed global-authority repair, and a superseding isolated VSIX are locally accepted. The repaired frontend is not mounted; the earlier same-version install failed before replacement and was safely reverted to the prior installed bytes.
+- Eyeball queue: fully exit Antigravity, install the superseding `font-authority` VSIX, reopen the existing Forge, prove the served frontend hash, and inspect HUB/COMM at the retained profiles. Only then decide whether to launch X4. Later gates remain two-profile Forge/X4 comparison and AI Influence screen `1b` with measured keep-outs.
+- Commit question: baseline HEAD = `origin/main` = `305865806eaf91cb446927e599b8ffc8ad969b8a`; index is empty. Commit the exact B119 source/record paths after final graph/precommit review. Preserve every unrelated dirty path.
+- Agent Brain recall was weak: its top result was a generic reference-API conversation rather than this wrapper/install checkpoint. Current repository, package, install, and retained receipt evidence govern this handoff.
 
-## Installed host and package authority
+## Source candidate
 
-- Installed extension: `C:\Users\Moshi\.antigravity-ide\extensions\x4forge.x4-forge-studio-0.0.70`.
-- Managed sidecar: `127.0.0.1:60956`, PID `38296`, one listener, installed `app/dist/server.cjs` SHA-256 `626C651742402EC4C04FD7FEA4A2FD3190ADDC389170581C5688250165E67314`.
-- Installed package: `vscode-extension/x4-forge-studio-0.0.70-b119-source-materialization-green2-019fea10.vsix`, 26,281,393 bytes, SHA-256 `057E5193FF35112F4A1978C291C1BCE371504CC1A139EA41B672CB19FE696CDF`.
-- Package receipt: `dev-docs/b119-x4-ui-pipeline-smoke/frame-composition-runtime-20260831/records/source-materialization-green2-package/receipt.json`.
-- Antigravity visibly mounts the real HUD & Lua UI SourceEditor, configured X4 9.00 corpus, source target controls, linter, source authority, scale/profile controls, and permanent `Not verified in game` state.
-- The mounted persisted workspace predates the importer repair and still reports `missing-registered-lua` / `omitted-lua-source`. Do not confuse that stale snapshot with the fresh import oracle and do not replace the user's canvas casually.
-- Fresh read-only import of configured `F:\DEV_ENV\projects\Mods\X4Mods\x4_ai_influence` materializes `ui.xml` plus all seven registered Lua files, including 568,069-byte `aic_uix.lua`; authority is `source-owned`, `editable:true`, `shippable:true`, with no generated collision.
+- Owned executable paths:
+  - `src/lib/x4UiLayoutProgram.ts`
+  - `src/lib/x4UiLayoutProgram.selftest.ts`
+  - `src/lib/x4UiScene.selftest.ts`
+- Owned repository records:
+  - `docs/plans/2026-08-30-b119-frame-background-composition-source-port.md`
+  - `BACKLOG.md`
+  - `SESSION-HANDOFF.md`
+- Outside-repository records:
+  - `F:\StarForge\wiki\x4-modding-methods\07 UI (Lua widgets, menus, overlays)\ui-modding-gotchas-quick-reference.md` — card 19.
+  - `F:\StarForge\wiki\x4-forge\aar-log.md` — 2026-09-02 wrapper AAR.
+- Behavior: only the exact configured guarded local wrapper is resolved. It requires one parameter, active Helper identity, authoritative global `pcall`/`type`/`rawget`, exact success/type/positive guard, exact fallback, direct consumed finite literal invocation, and source/model identity. Prior `_G`/`_ENV` member/index writes, uncertain dynamic keys, `rawset` mutation, and global/local `_ENV` replacement make authority unavailable. Every near miss remains unresolved.
+- Shipped double scaling is preserved: at UI scale `1.25`, wrapper inputs `18/13` become `23/17`, then descriptor scaling produces `29/22`. HUB gains only source-reachable title/button geometry; COMM remains zero widgets because runtime-composed text still blocks exact text height; MENU is unchanged.
+- Independent review caught parameter/result collisions, global builtin rebinding, vacuous negatives, and literal-equivalence gaps. A final zero-write audit then found the environment-authority family. Twenty-nine attacks reproduced across the causal red sequence; final LayoutProgram is `705/705`, zero skips, with `39` probes classified as authority-unavailable (`33`) or unsupported model shape (`6`). The valid wrapper remains `18/13 -> 23/17 -> 29/22` at UI scale `1.25`.
 
-## Current validation
+## Current local acceptance
 
-- Detached exact-overlay precommit: PASS. Routes: `496/496`. Production build: PASS, 1,848 modules. Staged product: `16/16`. Package inspector: `13/13`; independent archive inspection: 2,107 entries.
-- Frame-composition focused matrix: `1,344/1,344`; all nineteen X4 UI entrypoints pass. Current strict configured Scene rerun: `176/176`, exit 0.
-- Exact configured census remains truthful and partial:
-  - MENU: Layout 66 operations / 27 applied; Scene 16 cells / 3 widgets / 5 texts / 7 glyphs.
-  - HUB: Layout 18 / 11; Scene 4 cells / 0 widgets / 0 texts / 0 glyphs.
-  - COMM: Layout 14 / 12; Scene 3 cells / 0 widgets / 0 texts / 0 glyphs.
-- Prior real-X4 `pipeline_test` evidence remains valid at 2544x1353 and 1920x1080, both actual UI scale 1. Buttons, editbox, close, package/deploy/recovery, and scaling were proven. It does not prove current three-menu pixel parity.
-- X4 is not running. The user authorized unattended Forge updates, Computer Use, reversible `pipeline_test` deploys, and X4 launch for this sequence. Prefer no game launch until Forge has a new visual candidate worth comparing.
+- Bundled Node `24.19.0` matrix: CallModel `93/93`; LayoutProgram `705/705`; strict configured Scene `176/176`, MENU/HUB/COMM `3/3`; PaintPlan `180/180`; CanvasRenderer `132/132`; PreviewPipeline `108/108`; SourceEdits `83/83`; integration `21/21`; configured corpus `81/81/0`, fatal `0`.
+- Typecheck, exact changed-file ESLint with zero warnings/errors, named diff hygiene, complete precommit, production build (`1,848` modules), and the prior tracked-only serial E2E `103/103` passed. Graphify refreshed after the authority repair to `10,101` nodes / `25,416` edges / `325` communities; oversized HTML visualization was skipped while the graph/report updated. Protected live state and pre-existing Git paths were unchanged.
+- Corrected browser JS: `index-BQaOS9Gd.js`, SHA-256 `93F4A3BDC45B346C00E13FBEEDAD69F150C974066C24FB9F8BC0DDE7073E6A9C`.
+- CSS: `index-C-3vqpSY.css`, SHA-256 `2E442EBF0DC7CC7381FAAC208B1F58D6716B0E18D48E941A48136CF487781F08`.
+- Server remains `626C651742402EC4C04FD7FEA4A2FD3190ADDC389170581C5688250165E67314` because this is frontend-only. Installed proof must use served browser bytes and visible behavior, not server-hash change.
 
-## Explicit source checkpoint paths
+## Superseding package
 
-Frame-composition owners:
+- VSIX: `vscode-extension/x4-forge-studio-0.0.70-b119-font-authority-019fea10.vsix`.
+- Size/hash: `26,283,699` bytes; SHA-256 `3C3F9FC16C269A43D91B5C298A3D6E48A1BD0800DDCD90A7E1AB80096E9FDE9F`.
+- Package gates: staged product `16/16`; inspector selftest `13/13`; final inspector `2,107` entries / `71,568,514` unpacked bytes; all 15 showcase images; native `better_sqlite3.node`; zero forbidden secret/state/config/log/sourcemap files.
+- Embedded browser asset is exactly `index-BQaOS9Gd.js`, `2,699,055` bytes, SHA-256 `93F4A3BDC45B346C00E13FBEEDAD69F150C974066C24FB9F8BC0DDE7073E6A9C`.
+- The prior `font-wrapper` VSIX and package receipt remain historical evidence for the safely reverted install attempt; they are superseded and must not be installed as the current candidate.
 
-- `src/lib/x4UiCallModel.ts`
-- `src/lib/x4UiCallModel.selftest.ts`
-- `src/lib/x4UiLayoutProgram.ts`
-- `src/lib/x4UiLayoutProgram.selftest.ts`
-- `src/lib/x4UiScene.ts`
-- `src/lib/x4UiScene.selftest.ts`
-- `src/lib/x4UiPaintPlan.ts`
-- `src/lib/x4UiPaintPlan.selftest.ts`
-- `src/lib/x4UiCanvasRenderer.ts`
-- `src/lib/x4UiCanvasRenderer.selftest.ts`
-- `src/lib/x4UiPreviewPipeline.selftest.ts`
+## Installed-host state — safely reverted
 
-Importer/package/tooling owners:
+- Installed root: `C:\Users\Moshi\.antigravity-ide\extensions\x4forge.x4-forge-studio-0.0.70`.
+- Complete verified backup retained: `C:\Users\Moshi\AppData\Local\Temp\x4forge-b119-font-wrapper-install-backup-20260902T070241727Z-ac8989d224a247d08515dc4da5c48c35`.
+- CLI same-version `--force` install failed before replacement after `1,099` `EPERM` rename retries because running Antigravity held the native extension payload. Two window reloads did not release the lock.
+- Current installed versus backup: 2,106/2,106 files, 71,559,305 bytes, zero content mismatches. `extensions.json` SHA `89EEA4FA...EB5A` and `.obsolete` SHA `A0C5CE81...7AA0` equal backup. Protected config 1/1 and state 13/13 have zero mismatches.
+- Current managed sidecar is PID `16248` on `127.0.0.1:57634`. HTTP serves restored old `index-BKURy_nX.js`, SHA-256 `77473900F7DD747A14A45442DFAD77A2B81B8E3EAB4EEFF9EABB49C99281E015`; superseding `index-BQaOS9Gd.js` is absent.
+- Retained screenshot: `dev-docs/b119-x4-ui-pipeline-smoke/frame-composition-runtime-20260831/records/font-wrapper-installed/antigravity-forge-panel-after-reload-original.png`; it shows the original SourceEditor and permanent `Not verified in game` state.
+- X4 is absent. Ports `3000/3001/3100/3101` are free. No mod/game/current-workspace/OpenVSX write occurred.
+- Physical Escape stopped the earlier Computer Use run after rollback proof. The user explicitly reauthorized Computer Use, IDE update, and X4 launch in the current continuation; this supersedes the stale pause for this bounded sequence.
 
-- `server.ts`
-- `scripts/route-integration.mjs`
-- `src/lib/modCompiler.ts`
-- `scripts/durable-writer-audit.mjs`
-- `config/durable-writers.json`
+## Exact next sequence
 
-Record owners:
+1. Explicitly stage only the six B119 repository paths above; commit/push the source checkpoint and prove local/tracking/direct-remote parity. Update this handoff with the exact commit.
+2. Update and read back GitHub #41, Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Drive Doc `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`; keep all `PARTIAL / Not verified in game` and state that the superseding package is unmounted.
+3. Fully terminate Antigravity, install the exact `font-authority` VSIX, restart the IDE, prove served asset `93F4A3BD...6A9C`, and inspect mounted HUB/COMM. Keep the rollback backup until this gate closes.
+4. If the mounted candidate is materially improved, run the controlled X4 comparison. Then continue MENU/HUB/COMM parity, keep-outs, AI Influence reconstruction, installed-release acceptance, and OpenVSX publish-before-commit.
 
-- `BACKLOG.md`
-- `SESSION-HANDOFF.md`
-- `docs/plans/2026-08-30-b119-frame-background-composition-source-port.md`
+## Failure shields
 
-Preserve all other tracked and untracked paths, especially Discord/data removals, W3B1 records, release wrapper changes, showcase media, screenshots, issue templates, and scratch files. Use explicit `git add -- <paths>` only.
-
-## Next exact implementation unit
-
-1. Capture one compact machine receipt grouping every MENU/HUB/COMM unapplied operation and Scene/Paint gap by source, kind, reason, and visual impact.
-2. Reconcile the largest HUB/COMM visible-content cause against exact pinned `helper.lua` and `widget_fullscreen.lua` lines plus existing pipeline owners. Do not infer behavior from the zero-count test.
-3. Document one bounded source-port contract. Route all implementation and task-level test edits through native `luna_executor`, exact `gpt-5.6-luna`, max, `fork_context=false`.
-4. Require causal fail-first, focused green, source-law review, typecheck/lint/diff, strict configured census, mounted SourceEditor inspection, and graph refresh before another source commit.
-5. Once three credible Forge menu candidates exist, compare them to real X4 screenshots at both retained profiles. Then complete keep-outs, AI Influence 1b/remaining screens, installed-release acceptance, OpenVSX publish-before-commit, and the final current-game audit.
-
-## AAR failure shields
-
-- A green exact-count census can freeze an incomplete renderer. HUB/COMM's zero visible output is baseline evidence, not parity evidence.
-- A fresh import response and the workspace currently mounted in the editor are different state objects. Never promote or replace one based on the other without an explicit state mutation and rollback.
-- A preview that renders is not proof of X4 C++ frame acceptance. Keep game truth external.
-- Generic file-size caps can silently omit registered Lua and destroy round-trip authority even when one selected file previews.
-- Preserve source exactness: property names, setter order, width/height fallback pins, and inactive texture applicability come from shipped Lua, not normalized browser conventions.
-- Avoid broad output collectors and hard-coded status counts. Filter existing reporters narrowly and compare exact path sets.
-
-## External records
-
-- GitHub #41, Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Drive Doc `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE` remain open/partial. Installed source-materialization projection readback: GitHub comment `5503331754`; Notion current section `B119 installed source-materialization checkpoint`; Drive revision `AIroW36RDRS6r8agSVm85k-cm_eTPmdWhnXT6l_qtFAUYt9t74oSmZ7bk2Z0tRsKaWgzrp1cnxcphhEmJHu-IFWzHmV9oAqsNqq6wvHSBiAW`.
-- Drive's required trusted read completed with no protected controls and one preserved native date element. Immutable manifest: `C:\Users\Moshi\.codex\visualizations\2026\08\10\019fea10-33af-7f32-8175-424ddfebda4e\b119-drive-trusted-read-20260901-r1\manifest.json`; the final readback found the new `HEADING_2`, exact source hash/status text, one GitHub checkpoint link, and two Notion-owner link occurrences.
-- UI-modding KB: `F:\StarForge\wiki\x4-modding-methods\07 UI (Lua widgets, menus, overlays)\ui-modding-gotchas-quick-reference.md`, now 18 concise cards. Card 18 records the registered-Lua materialization failure shield.
-- External projection is complete for source checkpoint `71828d9`; all three records retain `PARTIAL / Not verified in game` and the HUB/COMM zero-visible-output boundary.
+- A green exact-count census can freeze an incomplete renderer; HUB/COMM counts are evidence boundaries, not parity.
+- A source-correct VSIX is not mounted proof. Use the served frontend hash and real rendered host.
+- A window reload is not a full extension replacement when a native module is locked. Exit every IDE/extension-host process first.
+- Do not convert runtime-composed text into guessed row geometry merely to expose later controls.
+- Preview remains a layout aid. X4 C++ frame acceptance and player-visible behavior remain game truth.
+- Preserve all unrelated dirt and use `git add -- <exact paths>` only.

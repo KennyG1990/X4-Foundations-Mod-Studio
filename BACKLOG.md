@@ -224,6 +224,26 @@ tab `t.0` revision `AIroW36RDRS6r8agSVm85k-cm_eTPmdWhnXT6l_qtFAUYt9t74oSmZ7bk2Z0
 Drive's file-backed trusted read found no protected controls; the current heading/status/hash and native GitHub/Notion
 links were re-read after the revision-guarded update. No OpenVSX, game, mod, canvas, or release state changed.
 B119 remains `in_progress / PARTIAL / Not verified in game`.
+**Local `Helper.scaleFont` wrapper checkpoint 2026-09-02 — SOURCE + PACKAGE VERIFIED / INSTALLED ACCEPTANCE
+REVERTED / FULL B119 PARTIAL:** the existing LayoutProgram now carries only the exact configured guarded local wrapper
+through the shipped Helper scale law and preserves the widget descriptor's separate second scale pass. Independent
+review first forced binding-collision, builtin-rebinding, literal-equivalence, and causal-negative repairs. The final
+zero-write audit then exposed environment-authority escapes: `29` attacks reproduced across the fail-first sequence,
+including `_G`/`_ENV` member/index writes, uncertain dynamic keys, `rawset`, `rawget`, and `_ENV` replacement. The
+fail-closed repair leaves `39` probes as authority-unavailable (`33`) or explicitly unsupported model shapes (`6`),
+with no known font leakage; final LayoutProgram is `705/705`, zero skips. Strict Scene remains `176/176` with
+MENU/HUB/COMM `3/3`; corpus is `81/81/0` with zero fatal findings. Full precommit and the `1,848`-module build pass.
+Superseding exact VSIX `x4-forge-studio-0.0.70-b119-font-authority-019fea10.vsix` is `26,283,699` bytes, SHA-256
+`3C3F9FC16C269A43D91B5C298A3D6E48A1BD0800DDCD90A7E1AB80096E9FDE9F`; staged probe is `16/16`, inspector
+selftest `13/13`, final inspector `2,107` entries / `71,568,514` unpacked bytes, all `15/15` showcase assets and the
+native SQLite binding are present. The embedded browser asset is `index-BQaOS9Gd.js`, SHA-256
+`93F4A3BDC45B346C00E13FBEEDAD69F150C974066C24FB9F8BC0DDE7073E6A9C`. The earlier same-version install of the
+superseded package failed before replacement after `1,099` `EPERM` rename retries because active Antigravity processes
+held the native payload; that operation remains safely `REVERTED`. The installed `2,106`-file tree, registry, protected
+config, and protected state are byte-identical to the retained backup, and the running host still serves old browser
+asset `77473900...E015`; the new asset is unmounted. Full IDE shutdown and a reversible install/visual inspection are
+required. No OpenVSX, mod/game, or new X4 acceptance result is claimed; B119 remains
+`in_progress / PARTIAL / Not verified in game`.
 **AI Influence `1b` visual reconciliation 2026-08-19 — REPRODUCED GUIDE CONFLICT:** The source pixels were re-opened
 and immutable hashes/dimensions are frozen in the plan. Forge's existing cockpit preset projects the measured guides to
 `y=1134.72`, `y=1065.6`, and `x=1699.84` at `2560x1440`; the supplied `1b` choice/input geometry intersects all three.
