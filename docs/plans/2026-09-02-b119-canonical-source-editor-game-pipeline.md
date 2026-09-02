@@ -388,3 +388,22 @@ Status at plan time: `SPECIFIED`. No capability-map delta.
   artifact collection must resolve the known-folder location before declaring a download missing.
 - **Highest-risk evidenced weakness:** a renderer can be mathematically faithful yet mislead users through a mislabeled
   profile control. Keep user-scale and effective-scale authority explicit and inspectable.
+
+### DURABLE PROJECTION READBACK
+
+- Repository checkpoint `1799dc6145e39a35c7e6f816da793fc691b53df0` passed complete precommit directly and
+  again in the commit hook, was pushed, and matches local `HEAD`, `origin/main`, and direct remote `main` exactly.
+- GitHub #41 remains open. Comment `5514694526` was written and read back with the exact commit, current-only export,
+  installed package hash, `529 -> 663 versus ~666` comparison, and overall `IN_PROGRESS / PARTIAL` boundary.
+- Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a` was updated in place and read back as
+  `Status=In Progress / Evidence Grade=Partial`; its properties and appended checkpoint contain commit `1799dc6`,
+  GitHub comment `5514694526`, effective scale `1.252777...`, and no OpenVSX claim.
+- Google Current Status document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, was updated under the
+  prior exact revision guard and read back at revision
+  `ANLCKQnPV2tiWmIsxqdSqFY7Da7kUB6J0Vy4fh6H79AaVrF0TARj2mfS1QqH4NkY5724ZZDrMx2d5lqfuHVtVdYJUD6svM1BaIqew2yYe290`.
+  The new marker is exactly one `HEADING_2` plus eight `NORMAL_TEXT` paragraphs with the same bounded status.
+- X4 UI quick-reference card 25 records the wrong/right/why lesson for user scale versus effective `Helper.uiScale`.
+  Readback path is `F:\StarForge\wiki\x4-modding-methods\07 UI (Lua widgets, menus, overlays)\ui-modding-gotchas-quick-reference.md`,
+  lines 333-348; SHA-256 `6DF79A06976F26CC78EACECBE09F8FE5D17B2CAE43B44D7DC36F03AB2E5040DC`.
+- No capability-map delta: this corrects the profile interpretation and strengthens evidence for the existing B119
+  layout/renderer capability; it does not promote universal parity or engine acceptance.

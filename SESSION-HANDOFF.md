@@ -11,8 +11,8 @@ Status: `IN_PROGRESS / PARTIAL`; installed native export and bounded geometry ar
   large geometry discrepancy to user-scale versus effective `Helper.uiScale`, not the ported layout kernel.
 - Eyeball queue: after the semantic correction, repeat installed `2544x1353 / user scale 1` export and compare with
   X4; then continue complete widget/Helper coverage, Zekton checks, AI Influence reconstruction, and keep-out review.
-- Commit question: prior checkpoints through `7a500b74e618fc3aa9a17261edda3d1f936b4c9b` are pushed. The PNG export unit
-  is fully validated but uncommitted in the broad dirty tree; explicit-path precommit/commit/push is next.
+- Commit question: PNG export checkpoint `1799dc6145e39a35c7e6f816da793fc691b53df0` is committed and pushed with
+  exact local/tracking/direct-remote parity. The external-sync documentation delta is the next explicit commit point.
 
 ## What is proven
 
@@ -78,23 +78,25 @@ Status: `IN_PROGRESS / PARTIAL`; installed native export and bounded geometry ar
 
 ## Durable projections
 
-- GitHub #41 remains open; prior read-back comment: `5512448232`.
-- Notion owner: `3b84618e-d15b-8190-821e-c0eb96f43d5a`, `Status=In Progress`, `Evidence Grade=Partial`.
-- Google Current Status doc: `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`; prior revision
-  `ANLCKQnsxhUytocioHZoSZ9nBJM6LYlVGnu4fP12TgwXXEYIXv8VYVSmlEsZ2ONWb82TTAFecuEXEUd0mSx2inNNzbUj97FOTABQRY1qRxhw`.
-- These projections need the native-export checkpoint after repository commit/push and exact readback.
+- GitHub #41 remains open; comment `5514694526` was written and read back with commit `1799dc6`, package/export
+  identity, the scale correction, and overall partial boundary.
+- Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a` was read back as `In Progress / Partial`; properties and appended
+  checkpoint contain `1799dc6`, comment `5514694526`, and `1.252777...`.
+- Google Current Status doc `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, was revision-guarded and
+  read back at `ANLCKQnPV2tiWmIsxqdSqFY7Da7kUB6J0Vy4fh6H79AaVrF0TARj2mfS1QqH4NkY5724ZZDrMx2d5lqfuHVtVdYJUD6svM1BaIqew2yYe290`
+  with one `HEADING_2` and eight checkpoint paragraphs.
+- X4 UI quick-reference card 25 records the user/effective-scale trap; SHA-256
+  `6DF79A06976F26CC78EACECBE09F8FE5D17B2CAE43B44D7DC36F03AB2E5040DC`.
+- No capability-map delta: existing B119 geometry evidence strengthened; universal parity was not promoted.
 
 ## Exact continuation
 
-1. Run complete precommit on the main working tree, stage only the ten intended PNG-unit/record files, inspect the
-   staged diff, commit `feat(ui-editor): export current native preview PNG`, push, and prove direct-remote parity.
-2. Update/read back GitHub #41, Notion, Drive, and the X4 UI gotcha quick reference with the user-scale/effective-scale
-   lesson. Keep all projections partial.
-3. Reconcile profile readers/writers with Graphify and exact source search. Document the bounded semantic-correction
+1. Commit/push only this three-file external-sync record and prove direct-remote parity; preserve the broad dirty tree.
+2. Reconcile profile readers/writers with Graphify and exact source search. Document the bounded semantic-correction
    acceptance contract before implementation.
-4. Delegate implementation/tests to one exact native `luna_executor`; preserve `uiScale` as effective internal truth,
+3. Delegate implementation/tests to one exact native `luna_executor`; preserve `uiScale` as effective internal truth,
    add a user-scale input/derived effective display or equivalent narrow contract, and fail closed on invalid profiles.
-5. Repeat focused gates, complete precommit/package/install proof, native PNG export, and X4 comparison. Do not publish
+4. Repeat focused gates, complete precommit/package/install proof, native PNG export, and X4 comparison. Do not publish
    OpenVSX until the separate release acceptance contract is met.
 
 ## Preservation boundary

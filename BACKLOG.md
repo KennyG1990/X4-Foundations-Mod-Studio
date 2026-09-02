@@ -1795,6 +1795,14 @@ derives/displays effective scale without redefining the layout kernel, followed 
 Overall B119 and GitHub #41 remain `IN_PROGRESS / PARTIAL`; exact glyph parity, complete Helper/widget coverage,
 release acceptance, and OpenVSX remain open.
 
+Durable projection readback is complete: checkpoint `1799dc6145e39a35c7e6f816da793fc691b53df0` has exact local,
+tracking, and direct-remote parity; GitHub #41 comment `5514694526` contains the bounded verified/overall partial
+boundary; Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a` remains `In Progress / Partial` with the commit,
+comment, and `1.252777...` result; Google Current Status revision
+`ANLCKQnPV2tiWmIsxqdSqFY7Da7kUB6J0Vy4fh6H79AaVrF0TARj2mfS1QqH4NkY5724ZZDrMx2d5lqfuHVtVdYJUD6svM1BaIqew2yYe290`
+contains one `HEADING_2` plus eight exact checkpoint paragraphs. X4 UI quick-reference card 25 records the user-scale
+versus effective-scale trap; file SHA-256 is `6DF79A06976F26CC78EACECBE09F8FE5D17B2CAE43B44D7DC36F03AB2E5040DC`.
+
 ### B115 · Forge Capability Convergence `in_progress` (P0, PRIORITY OVERRIDE)
 
 Ken explicitly promoted GitHub initiative #9 and child requests #10–#21 above the active R13 close on 2026-07-31.
