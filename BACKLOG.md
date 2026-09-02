@@ -244,6 +244,12 @@ config, and protected state are byte-identical to the retained backup, and the r
 asset `77473900...E015`; the new asset is unmounted. Full IDE shutdown and a reversible install/visual inspection are
 required. No OpenVSX, mod/game, or new X4 acceptance result is claimed; B119 remains
 `in_progress / PARTIAL / Not verified in game`.
+Source checkpoint `7aa5b9d50fd91eede47ab28fd96fada0b163d936` is pushed with exact local/tracking/direct-remote
+parity. GitHub #41 comment `5507614879`, Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a` at
+`2026-09-02T09:44:45.771Z`, and Google Current Status revision
+`AIroW34DU6xn-NC50YIedCZy5EIcoGLThl-pxkEMaLd-UwQAXpF1mRISy9ICP58Fblsq2movES5ILGuMoSoq27rjQpAEc7SxbpN8e4Amy_qa`
+were written and read back. All remain `PARTIAL / Not verified in game` and identify the superseding candidate as
+unmounted; the issue remains open.
 **AI Influence `1b` visual reconciliation 2026-08-19 — REPRODUCED GUIDE CONFLICT:** The source pixels were re-opened
 and immutable hashes/dimensions are frozen in the plan. Forge's existing cockpit preset projects the measured guides to
 `y=1134.72`, `y=1065.6`, and `x=1699.84` at `2560x1440`; the supplied `1b` choice/input geometry intersects all three.
