@@ -96,8 +96,8 @@ const LUA_STANDARD_GLOBALS = new Set([
 
 const X4_ENGINE_GLOBALS = new Set([
   'AddUITriggeredEvent', 'DebugError', 'DebugText', 'GetCurTime', 'GetNPCBlackboard',
-  'GetPlayerID', 'Helper', 'IsValidWidgetElement', 'OnlineGetUserItemAmount',
-  'OnlineGetUserItems', 'RegisterEvent', 'RemoveEvent', 'SetNPCBlackboard',
+  'GetPlayerID', 'Helper', 'IsValidWidgetElement', 'OpenMenu', 'OnlineGetUserItemAmount',
+  'OnlineGetUserItems', 'RegisterEvent', 'RemoveEvent', 'RemoveScript', 'SetNPCBlackboard',
   'SetScript', 'SignalObject', 'TraceBack', 'ffi', 'json', 'widgetSystem'
 ]);
 
@@ -620,7 +620,7 @@ export function runLuaStaticAnalysisSelftest(): { pass: boolean; checks: { name:
     },
     {
       rel: 'ui/ctrl.lua',
-      text: 'local function open() if OpenMenu then OpenMenu("Good", nil, nil, true) end end\nRegisterEvent("x.open", open)\n',
+      text: 'local function open() if OpenMenu then OpenMenu("Good", nil, nil, true) end end\nRegisterEvent("x.open", open)\nRemoveScript()\n',
       source: 'loose', sourcePath: 'openmod',
       extension: { folder: 'openmod', id: 'openmod' }
     },
@@ -654,6 +654,8 @@ export function runLuaStaticAnalysisSelftest(): { pass: boolean; checks: { name:
     { name: 'restricted_x4_call_detected', pass: has('lua.restricted_online_call', f => f.rel === 'ui/bad.lua' && f.layer === 'x4' && f.severity === 'error') },
     { name: 'undefined_global_detected', pass: has('lua.undefined_global', f => f.symbol === 'MissingGlobalCall' && f.layer === 'baseline') },
     { name: 'x4_seed_global_not_flagged', pass: !result.findings.some(f => f.code === 'lua.undefined_global' && f.symbol === 'Helper') },
+    { name: 'x4_open_menu_global_not_flagged', pass: !has('lua.undefined_global', f => f.rel === 'ui/ctrl.lua' && f.symbol === 'OpenMenu') },
+    { name: 'x4_remove_script_global_not_flagged', pass: !has('lua.undefined_global', f => f.rel === 'ui/ctrl.lua' && f.symbol === 'RemoveScript') },
     { name: 'scanned_global_definition_not_flagged', pass: !result.findings.some(f => f.code === 'lua.undefined_global' && f.symbol === 'MyGlobal') },
     { name: 'djfhe_internal_require_detected', pass: has('lua.djfhe_internal_require', f => f.rel === 'ui/djfhe_bad.lua' && f.layer === 'x4' && f.severity === 'error') },
     { name: 'broad_package_path_detected', pass: has('lua.broad_package_path', f => f.rel === 'ui/djfhe_bad.lua' && f.severity === 'warning') },

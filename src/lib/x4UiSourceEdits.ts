@@ -1187,6 +1187,49 @@ const sameClosedData = (left: unknown, right: unknown): boolean => {
       && sameClosedData(ownData(left, key), ownData(right, key)));
 };
 
+const withoutSemanticsProperties = (metadata: unknown): unknown => {
+  if (!isRecord(metadata) || !isRecord(metadata.semantics)) return undefined;
+  const semantics = Object.fromEntries(
+    Object.entries(metadata.semantics).filter(([key]) => key !== 'properties'),
+  );
+  return { ...metadata, semantics };
+};
+
+// Call-model numericExpression trees are parser-derived helper expansion
+// details. They are not emitted by the layout operation metadata; all source
+// locations, literal values, identities, and the owner-issued snapshots still
+// remain exact below.
+const withoutCallModelNumericExpressions = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(withoutCallModelNumericExpressions);
+  if (!isRecord(value)) return value;
+  const isCallModelValue = isX4UiValue(value);
+  const result: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (isCallModelValue && key === 'numericExpression') continue;
+    result[key] = withoutCallModelNumericExpressions(child);
+  }
+  return result;
+};
+
+const isCanonicalHeaderPropertiesEnrichment = (
+  call: X4UiCallRecord,
+  operation: X4UiLayoutOperation,
+): boolean => {
+  if (call.name !== 'createText' || call.semantics.properties !== undefined) return false;
+  const options = call.semantics.options;
+  const operationMetadata = isRecord(operation.metadata) ? operation.metadata : undefined;
+  const operationSemantics = isRecord(operationMetadata?.semantics) ? operationMetadata.semantics : undefined;
+  const properties = operationSemantics?.properties;
+  const canonicalPropertyNames = ['font', 'fontsize', 'y', 'minrowheight', 'halign', 'cellbgcolor'];
+  return isX4UiValue(options)
+    && options.status === 'unknown'
+    && options.type === 'identifier'
+    && options.expression === 'Helper.headerRowCenteredProperties'
+    && Array.isArray(properties)
+    && properties.length === canonicalPropertyNames.length
+    && properties.every((property, index) => isRecord(property) && property.name === canonicalPropertyNames[index]);
+};
+
 const callMatchesEvidenceBinding = (
   call: X4UiCallRecord,
   operation: X4UiLayoutOperation,
@@ -1228,8 +1271,13 @@ const callMatchesEvidenceBinding = (
     ...(call.result !== undefined ? { result: call.result } : {}),
     semantics: call.semantics,
   };
-  return sameClosedData(metadata, binding.metadata)
-    && sameClosedData(operation.metadata, binding.metadata);
+  const operationMatchesBinding = sameClosedData(operation.metadata, binding.metadata);
+  const normalizedMetadata = withoutCallModelNumericExpressions(metadata);
+  const rawCallMatchesBinding = sameClosedData(metadata, binding.metadata)
+    || sameClosedData(normalizedMetadata, binding.metadata)
+    || (isCanonicalHeaderPropertiesEnrichment(call, operation)
+      && sameClosedData(normalizedMetadata, withoutSemanticsProperties(operation.metadata)));
+  return rawCallMatchesBinding && operationMatchesBinding;
 };
 
 interface OrderedCallLedger {

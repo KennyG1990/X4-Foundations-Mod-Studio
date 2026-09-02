@@ -5,6 +5,11 @@ import {
   type X4UiCallModel,
 } from './x4UiCallModel';
 import {
+  projectX4UiPreviewPipeline,
+  type X4UiPreviewPipelineInput,
+  type X4UiPreviewSelection,
+} from './x4UiPreviewPipeline';
+import {
   createX4UiLayoutTargetCatalog,
   isExactX4UiLayoutColorValue,
   isIssuedX4UiLayoutEvidencePairForModel,
@@ -20,13 +25,26 @@ import {
   X4_LAYOUT_PROVENANCE,
 } from './x4UiLayoutKernel';
 import {
+  X4_UI_CORPUS_FILE_URL,
+  X4_UI_CORPUS_MANIFEST_URL,
+  X4_UI_CORPUS_STATUS_URL,
+  X4_UI_CORPUS_9_00_CONTRACT,
   X4_UI_CORPUS_COLORS_XML_PATH,
   X4_UI_CORPUS_COLORS_XML_SHA256,
   X4_UI_CORPUS_COLORS_XML_SIZE,
   X4_UI_CORPUS_COLORS_XSD_PATH,
   X4_UI_CORPUS_COLORS_XSD_SHA256,
   X4_UI_CORPUS_COLORS_XSD_SIZE,
+  loadCanonicalX4UiCorpusAssets,
+  type X4UiCorpusCanonicalSuccess,
+  type X4UiCorpusFetchResponse,
 } from './x4UiCorpusAssets';
+import {
+  ZEKTON_DDS_HEADER_SIZE,
+  ZEKTON_DESCRIPTOR_HEADER_SIZE,
+  ZEKTON_DESCRIPTOR_TRAILING_SIZE,
+  ZEKTON_RECORD_SIZE,
+} from './x4UiFontMetrics';
 import {
   buildX4UiWorkspaceSource,
   type X4UiWorkspaceSource,
@@ -77,6 +95,212 @@ const check = (name: string, pass: boolean, detail?: string): void => {
   assert.equal(pass, true, `${name}${detail ? `: ${detail}` : ''}`);
 };
 
+const isSelftestCallModelValue = (value: unknown): boolean => {
+  const record = value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+  const location = record?.location;
+  const locationRecord = location !== null && typeof location === 'object' && !Array.isArray(location)
+    ? location as Record<string, unknown>
+    : undefined;
+  return (record?.status === 'static' || record?.status === 'dynamic' || record?.status === 'unknown')
+    && typeof record.type === 'string'
+    && typeof record.expression === 'string'
+    && locationRecord !== undefined
+    && typeof locationRecord.file === 'string';
+};
+
+const withoutSelftestCallModelNumericExpressions = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(withoutSelftestCallModelNumericExpressions);
+  if (value === null || typeof value !== 'object') return value;
+  const record = value as Record<string, unknown>;
+  const result: Record<string, unknown> = {};
+  const isCallModelValue = isSelftestCallModelValue(value);
+  for (const [key, child] of Object.entries(record)) {
+    if (isCallModelValue && key === 'numericExpression') continue;
+    result[key] = withoutSelftestCallModelNumericExpressions(child);
+  }
+  return result;
+};
+
+function responseHeaders(contentType: string): { get(name: string): string | null } {
+  return { get: name => name.toLowerCase() === 'content-type' ? contentType : null };
+}
+
+function jsonResponse(body: unknown, status = 200): X4UiCorpusFetchResponse {
+  return {
+    status,
+    headers: responseHeaders('application/json; charset=utf-8'),
+    json: async () => body,
+  };
+}
+
+function bytesResponse(bytes: Uint8Array, status = 200, contentType = 'application/octet-stream'): X4UiCorpusFetchResponse {
+  const copied = bytes.slice();
+  return {
+    status,
+    headers: responseHeaders(contentType),
+    arrayBuffer: async () => copied.buffer,
+  };
+}
+
+function makeCanonicalAbc(advance: number): Uint8Array {
+  const maxCodepoint = 127;
+  const mapBytes = (maxCodepoint + 1) * 2;
+  const recordStart = (ZEKTON_DESCRIPTOR_HEADER_SIZE + mapBytes + 3) & ~3;
+  const bytes = new Uint8Array(recordStart + ZEKTON_RECORD_SIZE + ZEKTON_DESCRIPTOR_TRAILING_SIZE);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(0, 9, true);
+  view.setFloat32(4, 16, true);
+  view.setFloat32(8, 3, true);
+  view.setFloat32(12, 3, true);
+  view.setFloat32(16, 10, true);
+  view.setInt32(20, 4, true);
+  view.setInt32(24, 6, true);
+  view.setInt32(28, 0, true);
+  view.setUint32(32, 0, true);
+  view.setUint32(36, 8, true);
+  view.setUint32(40, 10, true);
+  view.setUint32(44, maxCodepoint, true);
+  for (let codepoint = 0; codepoint <= maxCodepoint; codepoint += 1) {
+    view.setUint16(ZEKTON_DESCRIPTOR_HEADER_SIZE + codepoint * 2, 1, true);
+  }
+  view.setFloat32(recordStart, 0, true);
+  view.setFloat32(recordStart + 4, 0, true);
+  view.setFloat32(recordStart + 8, 1, true);
+  view.setFloat32(recordStart + 12, 1, true);
+  view.setInt16(recordStart + 16, 0, true);
+  view.setUint16(recordStart + 18, 8, true);
+  view.setUint16(recordStart + 20, advance, true);
+  view.setUint16(recordStart + 22, 0, true);
+  return bytes;
+}
+
+function makeCanonicalDds(): Uint8Array {
+  const bytes = new Uint8Array(ZEKTON_DDS_HEADER_SIZE + 8 * 10);
+  bytes.set([0x44, 0x44, 0x53, 0x20]);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(4, 124, true);
+  view.setUint32(8, 0x1007, true);
+  view.setUint32(12, 10, true);
+  view.setUint32(16, 8, true);
+  view.setUint32(76, 32, true);
+  view.setUint32(80, 2, true);
+  view.setUint32(88, 8, true);
+  view.setUint32(104, 0xff, true);
+  view.setUint32(108, 0x1002, true);
+  for (let index = ZEKTON_DDS_HEADER_SIZE; index < bytes.length; index += 1) bytes[index] = 255;
+  return bytes;
+}
+
+function hexDigest(hex: string): ArrayBuffer {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let index = 0; index < bytes.length; index += 1) bytes[index] = Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16);
+  return bytes.buffer;
+}
+
+async function withCanonicalPlatformHash<T>(expectedHashes: readonly string[], run: () => Promise<T>): Promise<T> {
+  const originalDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
+  const originalValue = (globalThis as unknown as { crypto?: unknown }).crypto;
+  let hashIndex = 0;
+  const fakeCrypto = {
+    subtle: {
+      digest: async (..._args: readonly unknown[]): Promise<ArrayBuffer> => {
+        const expected = expectedHashes[hashIndex++];
+        if (expected === undefined) throw new Error('source edits canonical selftest hash count mismatch');
+        return hexDigest(expected);
+      },
+    },
+  };
+  try {
+    Object.defineProperty(globalThis, 'crypto', {
+      configurable: true,
+      enumerable: originalDescriptor?.enumerable ?? true,
+      writable: true,
+      value: fakeCrypto,
+    });
+    return await run();
+  } finally {
+    if (originalDescriptor) Object.defineProperty(globalThis, 'crypto', originalDescriptor);
+    else Reflect.deleteProperty(globalThis, 'crypto');
+    check('canonical source-edits loader restores platform Web Crypto',
+      (globalThis as unknown as { crypto?: unknown }).crypto === originalValue);
+  }
+}
+
+function pathFromQuery(url: string, key: string): string {
+  const query = url.slice(url.indexOf('?') + 1).split('&');
+  const pair = query.find(part => part.startsWith(`${key}=`));
+  if (!pair) throw new Error(`missing query ${key}`);
+  return decodeURIComponent(pair.slice(key.length + 1));
+}
+
+function manifestStatus(root: string, generation: string): Record<string, unknown> {
+  return {
+    available: true,
+    state: 'ready',
+    root,
+    current: { generation, root, generatedAt: '2026-08-12T00:00:00.000Z' },
+  };
+}
+
+async function loadCanonicalSourceEditsSelftestCorpus(): Promise<X4UiCorpusCanonicalSuccess> {
+  const root = 'source-edits-canonical-selftest-root';
+  const generation = 'source-edits-canonical-selftest-generation';
+  const generatedAt = '2026-08-12T00:00:00.000Z';
+  const contract = X4_UI_CORPUS_9_00_CONTRACT;
+  const buffers = new Map<string, Uint8Array>([
+    [contract.helper.relativePath, new TextEncoder().encode('-- source edits canonical selftest helper\n')],
+    [contract.widget.relativePath, new TextEncoder().encode('-- source edits canonical selftest widget\n')],
+    [contract.regular.descriptor.relativePath, makeCanonicalAbc(8)],
+    [contract.regular.atlas.relativePath, makeCanonicalDds()],
+    [contract.bold.descriptor.relativePath, makeCanonicalAbc(8)],
+    [contract.bold.atlas.relativePath, makeCanonicalDds()],
+  ]);
+  const expectedHashes = [
+    contract.helper.sha256,
+    contract.widget.sha256,
+    contract.regular.descriptor.sha256,
+    contract.regular.atlas.sha256,
+    contract.bold.descriptor.sha256,
+    contract.bold.atlas.sha256,
+  ];
+  const status = {
+    available: true,
+    root,
+    generatedAt,
+    manifestGeneration: generation,
+    manifest: { available: true, state: 'ready', root, current: { generation, root, generatedAt } },
+  };
+  const transport = async (url: string): Promise<X4UiCorpusFetchResponse> => {
+    if (url === X4_UI_CORPUS_STATUS_URL) return jsonResponse(status);
+    if (url.startsWith(`${X4_UI_CORPUS_MANIFEST_URL}?`)) {
+      const path = pathFromQuery(url, 'q');
+      const bytes = buffers.get(path);
+      if (!bytes) throw new Error(`unknown canonical manifest path ${path}`);
+      return jsonResponse({
+        status: manifestStatus(root, generation),
+        generation,
+        total: 1,
+        limit: 500,
+        offset: 0,
+        files: [{ path, bytes: bytes.byteLength }],
+      });
+    }
+    if (url.startsWith(`${X4_UI_CORPUS_FILE_URL}?`)) {
+      const path = pathFromQuery(url, 'path');
+      const bytes = buffers.get(path);
+      if (!bytes) throw new Error(`unknown canonical file path ${path}`);
+      return bytesResponse(bytes, 200, path.endsWith('.lua') ? 'text/plain' : 'application/octet-stream');
+    }
+    throw new Error(`unexpected canonical source-edits selftest URL ${url}`);
+  };
+  const result = await withCanonicalPlatformHash(expectedHashes,
+    () => loadCanonicalX4UiCorpusAssets({ transport }));
+  if (result.ok === false) throw new Error(`canonical source-edits selftest loader failed: ${result.error.message}`);
+  return result;
+}
+
 const uiXml = '<addon><environment type="menus"><file name="ui/edit.lua"/></environment></addon>';
 
 const baseLua = [
@@ -99,6 +323,186 @@ const b119EditBoxLua = [
   'local edit = row[1]:createEditBox({ height = 0, scaling = true })',
   'edit:setHotkey("DIRECT", { displayIcon = false })',
   'frame:display()',
+  '',
+].join('\n');
+
+const exactPipelineLua = `-- Pipeline Test UI — X4 UI extension entry point
+-- Packaged at: extensions/pipeline_test/ui/pipeline_test.lua
+-- Registered by: extensions/pipeline_test/ui.xml (<environment type="menus">)
+-- Generated from the visual designer by X4 Forge. Uses the corpus-backed
+-- standalone-menu lifecycle: lazy Helper -> deferred registration -> OpenMenu
+-- -> onShowMenu -> createFrameHandle/fTable -> frame:display().
+
+local widgets = {
+    { type = "window", id = "w_win", label = "Pipeline Test Panel", x = 120, y = 120, width = 280, height = 120 },
+    { type = "header", id = "w_header", label = "B119 Pipeline Test", x = 140, y = 140, width = 380, height = 32 },
+    { type = "button", id = "w_btn", label = "My First Button", x = 150, y = 170, width = 220, height = 40 },
+    { type = "text", id = "w_status", label = "Status: source-first Forge preview", x = 140, y = 182, width = 380, height = 32 },
+    { type = "button", id = "w_btn_secondary", label = "Second Button", x = 390, y = 230, width = 160, height = 40 },
+    { type = "input", id = "w_input", label = "Operator note", x = 140, y = 286, width = 410, height = 44 },
+}
+
+local Helper = rawget(_G, "Helper")
+local function refreshHelper()
+  if not Helper then Helper = rawget(_G, "Helper") end
+  return Helper
+end
+
+local menu = {
+  name = "pipeline_test_menu",
+  layer = 4,
+  active = false,
+  widgets = widgets,
+  transcript = "",
+}
+
+local function log(message)
+  if DebugError then DebugError("[pipeline_test] " .. tostring(message)) end
+end
+
+function menu.ensureRegistered()
+  refreshHelper()
+  _G.Menus = _G.Menus or {}
+  local found = false
+  for i, existing in ipairs(_G.Menus) do
+    if existing.name == menu.name then _G.Menus[i] = menu; found = true; break end
+  end
+  if not found then table.insert(_G.Menus, menu) end
+  if Helper and Helper.registerMenu and not menu._registered then
+    local ok = pcall(Helper.registerMenu, menu)
+    menu._registered = ok
+  end
+  return menu._registered == true
+end
+
+function menu.open(context)
+  menu.context = type(context) == "table" and context or {}
+  if not menu.ensureRegistered() then
+    if SetScript then SetScript("onUpdate", menu.retryOpen) end
+    return false
+  end
+  if OpenMenu then OpenMenu(menu.name, nil, nil, true)
+  elseif menu.onShowMenu then menu.onShowMenu() end
+  return true
+end
+
+function menu.retryOpen()
+  if not menu.ensureRegistered() then return end
+  if RemoveScript then RemoveScript("onUpdate", menu.retryOpen) end
+  menu.open(menu.context)
+end
+
+function menu.onShowMenu()
+  refreshHelper()
+  menu.active = true
+  menu.createFrame()
+end
+
+function menu.emit(widgetId, payload)
+  if AddUITriggeredEvent then AddUITriggeredEvent(menu.name, widgetId, payload or {}) end
+end
+
+function menu.createFrame()
+  refreshHelper()
+  if not Helper then log("Helper unavailable; frame not built"); return end
+  if menu.frame and Helper.clearDataForRefresh then Helper.clearDataForRefresh(menu, menu.layer) end
+  local width = Helper.scaleX(530)
+  local height = Helper.scaleY(436)
+  local x = ((Helper.viewWidth or 1920) - width) / 2
+  local y = ((Helper.viewHeight or 1080) - height) / 2
+  menu.frame = Helper.createFrameHandle(menu, { x = x, y = y, width = width, height = height, layer = menu.layer, standardButtons = { close = true } })
+  local ftable = menu.frame:addTable(2, { tabOrder = 1, width = width, highlightMode = "off", reserveScrollBar = false })
+  ftable:setColWidthPercent(1, 55)
+  ftable:setColWidthPercent(2, 45)
+  local row
+  row = ftable:addRow(false, {})
+  row[1]:setColSpan(2):createText("Pipeline Test Panel", Helper.headerRowCenteredProperties)
+  row = ftable:addRow(false, {})
+  row[1]:setColSpan(2):createText("B119 Pipeline Test", Helper.headerRowCenteredProperties)
+  row = ftable:addRow(true, {})
+  row[1]:setColSpan(2):createButton({ active = true }):setText("My First Button", { halign = "center" })
+  row[1].handlers.onClick = function() menu.emit("w_btn", { widget = "w_btn" }) end
+  row = ftable:addRow(false, {})
+  row[1]:setColSpan(2):createText("Status: source-first Forge preview", { wordwrap = true })
+  row = ftable:addRow(true, {})
+  row[1]:setColSpan(2):createButton({ active = true }):setText("Second Button", { halign = "center" })
+  row[1].handlers.onClick = function() menu.emit("w_btn_secondary", { widget = "w_btn_secondary" }) end
+  row = ftable:addRow(true, {})
+  row[1]:setColSpan(2):createEditBox({ defaultText = "Type a note...", maxChars = 255, height = 44 })
+  row[1].handlers.onEditBoxDeactivated = function(_, text) menu.emit("w_input", { text = text }) end
+  menu.frame:display()
+end
+
+function menu.cleanup()
+  menu.frame = nil
+  menu.active = false
+end
+
+function menu.onCloseElement(dueToClose)
+  refreshHelper()
+  if Helper and Helper.closeMenu then Helper.closeMenu(menu, dueToClose) end
+  menu.cleanup()
+end
+
+function menu.close()
+  menu.onCloseElement("close")
+end
+
+-- Deliberate opening path for MD/companion Lua: <raise_lua_event name="'pipeline_test_menu.open'"/>.
+if RegisterEvent then RegisterEvent("pipeline_test_menu.open", function(_, context) menu.open(context) end) end
+_G["pipeline_test_menu"] = menu
+
+-- The beginner template opts into one visible first result. Ordinary authored menus do not auto-open.
+local function autoOpenWhenReady()
+  refreshHelper()
+  if not Helper then return end
+  if RemoveScript then RemoveScript("onUpdate", autoOpenWhenReady) end
+  menu.open({ source = "x4_forge_template" })
+end
+if SetScript then SetScript("onUpdate", autoOpenWhenReady) end
+
+
+return menu
+`;
+
+const exactPipelineXml = [
+  '<?xml version="1.0" encoding="utf-8"?>',
+  '<addon name="pipeline_test">',
+  '  <environment type="menus">',
+  '    <file name="ui/pipeline_test.lua" />',
+  '  </environment>',
+  '</addon>',
+  '',
+].join('\n');
+
+const selectedFunctionLua = [
+  'local menu = { name = "SelectedFunction", layer = 1 }',
+  'OpenMenu("unrelated")',
+  'function menu.before()',
+  '  local frame = Helper.createFrameHandle(menu, { width = 10, height = 10 })',
+  '  frame:addTable(1, { width = 10 })',
+  'end',
+  'function menu.createFrame()',
+  '  local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+  '  local table = frame:addTable(1, { width = 80, scaling = false })',
+  '  local row = table:addRow(false, {})',
+  '  row[1]:createText("target", {})',
+  '  frame:display()',
+  'end',
+  'function menu.after()',
+  '  local frame = Helper.createFrameHandle(menu, { width = 20, height = 20 })',
+  '  frame:display()',
+  'end',
+  '',
+].join('\n');
+
+const selectedFunctionXml = [
+  '<?xml version="1.0" encoding="utf-8"?>',
+  '<addon name="selected_function">',
+  '  <environment type="menus">',
+  '    <file name="ui/selected_function.lua" />',
+  '  </environment>',
+  '</addon>',
   '',
 ].join('\n');
 
@@ -196,6 +600,101 @@ const contextFor = (lua = baseLua, extra: Partial<ModWorkspace> = {}): SourceEdi
   if (!target) throw new Error('source fixture top-level target missing');
   const result = projectX4UiLayoutProgram(layoutModel, target, profileFor(layoutModel));
   if (result.status === 'refused' || !result.program) throw new Error(`source fixture layout refused: ${JSON.stringify(result)}`);
+  return {
+    workspace: currentWorkspace,
+    source: currentSource,
+    program: result.program,
+    evidenceAuthority: result.evidenceAuthority,
+  };
+};
+
+const exactPipelineContextFor = (corpus?: X4UiCorpusCanonicalSuccess): SourceEditFixtureContext => {
+  const currentWorkspace = workspace(exactPipelineLua, {
+    id: 'pipeline-test-source-edits-selftest',
+    name: 'Pipeline test source edits selftest',
+    passthroughFiles: [
+      passthrough('README.md', '# unchanged\n', { reason: 'unknown_domain' }),
+      passthrough('ui.xml', exactPipelineXml, { reason: 'partial', bytes: exactPipelineXml.length }),
+      passthrough('ui/pipeline_test.lua', exactPipelineLua, { reason: 'unparsed', bytes: exactPipelineLua.length }),
+    ],
+  });
+  const currentSource = buildX4UiWorkspaceSource(currentWorkspace);
+  if (!currentSource.bundle) throw new Error('exact pipeline source fixture did not build a bundle');
+  const sourceFile = currentSource.bundle.sourceFiles.find(file => file.path === 'ui/pipeline_test.lua');
+  if (!sourceFile) throw new Error('exact pipeline source fixture Lua file missing');
+  const layoutModel = normalizeX4UiSourceEditLayoutModel(sourceFile.callModel);
+  const target = createX4UiLayoutTargetCatalog(layoutModel).targets.find(candidate =>
+    candidate.kind === 'function' && candidate.name === 'menu.createFrame');
+  if (!target) throw new Error('exact pipeline function target missing');
+  if (corpus !== undefined) {
+    const selection: X4UiPreviewSelection = {
+      sourceIndex: sourceFile.index,
+      path: sourceFile.path,
+      sourceIdentity: createX4UiLayoutTargetCatalog(sourceFile.callModel).sourceIdentity,
+      target,
+    };
+    const previewResult = projectX4UiPreviewPipeline({
+      source: currentSource,
+      corpus,
+      selection,
+      profile: {
+        id: 'source-edits-exact-pipeline-profile',
+        provenance: 'B119 exact pipeline source-edits canonical selftest profile',
+        truthGrade: 'supplied',
+        source: target.sourceIdentity,
+        drawable: { width: 1920, height: 1080 },
+        uiScale: 1,
+      },
+    } satisfies X4UiPreviewPipelineInput);
+    const previewProgram = (previewResult as unknown as { program?: unknown }).program as {
+      readonly status?: unknown;
+      readonly program?: X4UiLayoutProgram;
+      readonly evidenceAuthority?: X4UiLayoutEvidenceAuthority;
+    } | undefined;
+    if (previewProgram?.status === 'refused' || previewProgram?.program === undefined || previewProgram.evidenceAuthority === undefined) {
+      throw new Error(`exact pipeline canonical preview refused: ${JSON.stringify(previewResult)}`);
+    }
+    return {
+      workspace: currentWorkspace,
+      source: currentSource,
+      program: previewProgram.program,
+      evidenceAuthority: previewProgram.evidenceAuthority,
+    };
+  }
+  const result = projectX4UiLayoutProgram(layoutModel, target, profileFor(layoutModel));
+  if (result.status === 'refused' || !result.program) {
+    throw new Error(`exact pipeline source fixture layout refused: ${JSON.stringify(result)}`);
+  }
+  return {
+    workspace: currentWorkspace,
+    source: currentSource,
+    program: result.program,
+    evidenceAuthority: result.evidenceAuthority,
+  };
+};
+
+const selectedFunctionContextFor = (): SourceEditFixtureContext => {
+  const currentWorkspace = workspace(selectedFunctionLua, {
+    id: 'selected-function-source-edits-selftest',
+    name: 'Selected function source edits selftest',
+    passthroughFiles: [
+      passthrough('README.md', '# unchanged\n', { reason: 'unknown_domain' }),
+      passthrough('ui.xml', selectedFunctionXml, { reason: 'partial', bytes: selectedFunctionXml.length }),
+      passthrough('ui/selected_function.lua', selectedFunctionLua, { reason: 'unparsed', bytes: selectedFunctionLua.length }),
+    ],
+  });
+  const currentSource = buildX4UiWorkspaceSource(currentWorkspace);
+  if (!currentSource.bundle) throw new Error('selected function source fixture did not build a bundle');
+  const sourceFile = currentSource.bundle.sourceFiles.find(file => file.path === 'ui/selected_function.lua');
+  if (!sourceFile) throw new Error('selected function source fixture Lua file missing');
+  const layoutModel = normalizeX4UiSourceEditLayoutModel(sourceFile.callModel);
+  const target = createX4UiLayoutTargetCatalog(layoutModel).targets.find(candidate =>
+    candidate.kind === 'function' && candidate.name === 'menu.createFrame');
+  if (!target) throw new Error('selected function target missing');
+  const result = projectX4UiLayoutProgram(layoutModel, target, profileFor(layoutModel));
+  if (result.status === 'refused' || !result.program) {
+    throw new Error(`selected function source fixture layout refused: ${JSON.stringify(result)}`);
+  }
   return {
     workspace: currentWorkspace,
     source: currentSource,
@@ -687,12 +1186,13 @@ const structuralResultReason = (result: ReturnType<typeof applyX4UiSourceStructu
 const structuralResultDetail = (result: ReturnType<typeof applyX4UiSourceStructuralEdit>): string | undefined =>
   result.accepted === false ? result.detail : undefined;
 
-const contextWithCallModel = (
+const contextWithSourceFileCallModel = (
   context: SourceEditFixtureContext,
+  path: string,
   callModel: X4UiCallModel,
 ): SourceEditFixtureContext => {
   if (!context.source.bundle) throw new Error('source fixture bundle missing');
-  const sourceFiles = context.source.bundle.sourceFiles.map(file => file.path === 'ui/edit.lua'
+  const sourceFiles = context.source.bundle.sourceFiles.map(file => file.path === path
     ? { ...file, callModel }
     : file);
   return {
@@ -706,6 +1206,11 @@ const contextWithCallModel = (
     },
   };
 };
+
+const contextWithCallModel = (
+  context: SourceEditFixtureContext,
+  callModel: X4UiCallModel,
+): SourceEditFixtureContext => contextWithSourceFileCallModel(context, 'ui/edit.lua', callModel);
 
 const invokePublic = <T>(call: () => T): PublicCallOutcome<T> => {
   try {
@@ -832,9 +1337,259 @@ const normalizationMessage = (model: X4UiCallModel): string => {
   }
 };
 
-const run = (): void => {
+const run = async (): Promise<void> => {
+  const canonicalCorpus = await loadCanonicalSourceEditsSelftestCorpus();
   const initial = contextFor();
   const initialCatalog = catalogFor(initial);
+  const selectedFunction = selectedFunctionContextFor();
+  const selectedFunctionCatalog = catalogFor(selectedFunction);
+  const selectedFunctionFile = selectedFunction.source.bundle?.sourceFiles.find(file => file.path === 'ui/selected_function.lua');
+  const selectedFunctionRegression = {
+    modelCalls: selectedFunctionFile?.callModel.calls.length,
+    programStatus: selectedFunction.program.status,
+    programOperations: selectedFunction.program.operations.length,
+    authorityCalls: selectedFunction.evidenceAuthority.calls.length,
+    catalogStatus: selectedFunctionCatalog.status,
+    catalogReason: selectedFunctionCatalog.reason,
+    catalogDetail: selectedFunctionCatalog.detail,
+    editableEntries: selectedFunctionCatalog.editableEntries.length,
+  };
+  console.log(`x4UiSourceEdits selected-function isolation: ${JSON.stringify(selectedFunctionRegression)}`);
+  check('selected function operations ignore legitimate calls outside the target',
+    selectedFunction.program.status === 'projected'
+      && selectedFunctionCatalog.status === 'ready'
+      && selectedFunctionCatalog.editableEntries.length > 0,
+    JSON.stringify(selectedFunctionRegression));
+  const exactPipelineNoCorpus = exactPipelineContextFor();
+  const exactPipelineNoCorpusCatalog = catalogFor(exactPipelineNoCorpus);
+  const exactPipelineNoCorpusRegression = {
+    programStatus: exactPipelineNoCorpus.program.status,
+    unresolvedOperations: exactPipelineNoCorpus.program.operations
+      .filter(operation => operation.status !== 'applied')
+      .map(operation => ({ kind: operation.kind, modelOrder: operation.modelOrder, status: operation.status })),
+    catalogStatus: exactPipelineNoCorpusCatalog.status,
+    catalogReason: exactPipelineNoCorpusCatalog.reason,
+    catalogDetail: exactPipelineNoCorpusCatalog.detail,
+    editableEntries: exactPipelineNoCorpusCatalog.editableEntries.length,
+  };
+  console.log(`x4UiSourceEdits B119 exact pipeline no-corpus negative: ${JSON.stringify(exactPipelineNoCorpusRegression)}`);
+  check('B119 exact pipeline without canonical corpus remains operation-not-applied',
+    exactPipelineNoCorpus.program.status === 'partial'
+      && exactPipelineNoCorpusRegression.unresolvedOperations.length > 0
+      && exactPipelineNoCorpusCatalog.status === 'locked'
+      && exactPipelineNoCorpusCatalog.reason === 'operation-not-applied'
+      && exactPipelineNoCorpusCatalog.editableEntries.length === 0,
+    JSON.stringify(exactPipelineNoCorpusRegression));
+  const exactPipeline = exactPipelineContextFor(canonicalCorpus);
+  const exactPipelineCatalog = catalogFor(exactPipeline);
+  const exactPipelineFile = exactPipeline.source.bundle?.sourceFiles.find(file => file.path === 'ui/pipeline_test.lua');
+  const exactPipelineModel = exactPipelineFile === undefined
+    ? undefined
+    : normalizeX4UiSourceEditLayoutModel(exactPipelineFile.callModel);
+  const canonicalMetadataMismatches = exactPipeline.program.operations
+    .map(operation => {
+      const call = exactPipelineModel?.calls.find(candidate => candidate.order === operation.modelOrder);
+      const binding = exactPipeline.evidenceAuthority.sourceBindings.find(candidate => candidate.operationId === operation.id);
+      const callMetadata = call === undefined ? undefined : {
+        arguments: call.arguments,
+        ...(call.receiver !== undefined ? { receiver: call.receiver } : {}),
+        ...(call.result !== undefined ? { result: call.result } : {}),
+        semantics: call.semantics,
+      };
+      const operationMetadata = asRecord(operation.metadata);
+      const operationSemantics = asRecord(operationMetadata?.semantics);
+      const omittedProperties = operationMetadata === undefined || operationSemantics === undefined
+        ? undefined
+        : {
+          ...operationMetadata,
+          semantics: Object.fromEntries(Object.entries(operationSemantics).filter(([key]) => key !== 'properties')),
+        };
+      const normalizedCallMetadata = callMetadata === undefined
+        ? undefined
+        : withoutSelftestCallModelNumericExpressions(callMetadata);
+      const options = asRecord(asRecord(call?.semantics)?.options);
+      const row = {
+        modelOrder: operation.modelOrder,
+        callName: call?.name,
+        rawOptionsExpression: options?.expression,
+        rawPropertyNames: call?.semantics.properties?.map(property => property.name),
+        rawVsEnriched: callMetadata !== undefined && JSON.stringify(callMetadata) === JSON.stringify(operation.metadata),
+        rawVsEnrichedAfterDerivedNormalization: normalizedCallMetadata !== undefined
+          && JSON.stringify(normalizedCallMetadata) === JSON.stringify(operation.metadata),
+        rawVsEnrichedAfterDerivedNormalizationWithoutHeaderProperties: normalizedCallMetadata !== undefined
+          && omittedProperties !== undefined
+          && JSON.stringify(normalizedCallMetadata) === JSON.stringify(omittedProperties),
+        enrichedVsBinding: binding !== undefined && JSON.stringify(operation.metadata) === JSON.stringify(binding.metadata),
+        enrichedPropertyNames: Array.isArray(operationSemantics?.properties)
+          ? operationSemantics.properties.map(property => asRecord(property)?.name)
+          : undefined,
+      };
+      return row.rawVsEnriched ? undefined : row;
+    })
+    .filter((row): row is NonNullable<typeof row> => row !== undefined);
+  console.log(`x4UiSourceEdits B119 canonical metadata mismatch: ${JSON.stringify(canonicalMetadataMismatches)}`);
+  const canonicalMetadataByOrder = new Map(canonicalMetadataMismatches.map(row => [row.modelOrder, row]));
+  check('B119 canonical enrichment mismatch is limited to derived numeric expressions and header properties',
+    canonicalMetadataMismatches.length === 4
+      && canonicalMetadataByOrder.get(48)?.rawVsEnrichedAfterDerivedNormalization === true
+      && canonicalMetadataByOrder.get(56)?.rawVsEnrichedAfterDerivedNormalization === true
+      && canonicalMetadataByOrder.get(67)?.rawVsEnrichedAfterDerivedNormalization === false
+      && canonicalMetadataByOrder.get(67)?.rawVsEnrichedAfterDerivedNormalizationWithoutHeaderProperties === true
+      && canonicalMetadataByOrder.get(71)?.rawVsEnrichedAfterDerivedNormalization === false
+      && canonicalMetadataByOrder.get(71)?.rawVsEnrichedAfterDerivedNormalizationWithoutHeaderProperties === true
+      && canonicalMetadataByOrder.get(67)?.rawOptionsExpression === 'Helper.headerRowCenteredProperties'
+      && canonicalMetadataByOrder.get(71)?.rawOptionsExpression === 'Helper.headerRowCenteredProperties'
+      && canonicalMetadataMismatches.every(row => row.enrichedVsBinding === true),
+    JSON.stringify(canonicalMetadataMismatches));
+  const exactPipelineRegression = {
+    sourceSha256: exactPipeline.program.target.sourceIdentity.sha256,
+    expectedSourceSha256: 'C1D9CD8580C6175E95C543259A2AB19F8B463282BF48B2229EB6013D6052718E',
+    target: {
+      kind: exactPipeline.program.target.kind,
+      name: exactPipeline.program.target.name,
+    },
+    modelCalls: exactPipelineFile?.callModel.calls.length,
+    programOperations: exactPipeline.program.operations.length,
+    programStatus: exactPipeline.program.status,
+    allOperationsApplied: exactPipeline.program.operations.every(operation => operation.status === 'applied'),
+    canonicalMetadataMismatches,
+    authorityCalls: exactPipeline.evidenceAuthority.calls.length,
+    authorityOperations: exactPipeline.evidenceAuthority.operations.length,
+    authorityBindings: exactPipeline.evidenceAuthority.sourceBindings.length,
+    authorityCallOrders: exactPipeline.evidenceAuthority.calls.map(call => call.modelOrder),
+    authorityCallStreamIndexes: exactPipeline.evidenceAuthority.calls.map(call => call.streamIndex),
+    authorityOperationStreamIndexes: exactPipeline.evidenceAuthority.operations.map(operation => operation.streamIndex),
+    authorityBindingStreamIndexes: exactPipeline.evidenceAuthority.sourceBindings.map(binding => binding.streamIndex),
+    catalogStatus: exactPipelineCatalog.status,
+    catalogReason: exactPipelineCatalog.reason,
+    catalogDetail: exactPipelineCatalog.detail,
+    editableEntries: exactPipelineCatalog.editableEntries.length,
+    lockedEntries: exactPipelineCatalog.lockedEntries.length,
+    lockedReasons: exactPipelineCatalog.lockedEntries.map(entry => entry.reason),
+  };
+  console.log(`x4UiSourceEdits B119 exact pipeline regression: ${JSON.stringify(exactPipelineRegression)}`);
+  check('B119 exact pipeline_test menu.createFrame source edit catalog is ready',
+    exactPipelineRegression.sourceSha256 === exactPipelineRegression.expectedSourceSha256
+      && exactPipelineRegression.target.kind === 'function'
+      && exactPipelineRegression.target.name === 'menu.createFrame'
+      && exactPipelineRegression.allOperationsApplied
+      && exactPipelineCatalog.status === 'ready'
+      && exactPipelineCatalog.reason === undefined
+      && exactPipelineCatalog.editableEntries.length > 0
+      && !exactPipelineCatalog.lockedEntries.some(entry => entry.reason === 'provenance-drift'),
+    JSON.stringify(exactPipelineRegression));
+  const canonicalRawAttackRows = [
+    {
+      name: 'raw selected call identity drift',
+      mutate: (model: X4UiCallModel): void => {
+        const call = model.calls.find(candidate => candidate.order === 67);
+        if (!call) throw new Error('canonical raw identity attack call missing');
+        (call as unknown as { name: string }).name = 'setText';
+      },
+    },
+    {
+      name: 'raw selected call order drift',
+      mutate: (model: X4UiCallModel): void => {
+        const call = model.calls.find(candidate => candidate.order === 67);
+        if (!call) throw new Error('canonical raw order attack call missing');
+        (call as unknown as { order: number }).order += 1;
+      },
+    },
+    {
+      name: 'raw selected call source drift',
+      mutate: (model: X4UiCallModel): void => {
+        const call = model.calls.find(candidate => candidate.order === 67);
+        if (!call) throw new Error('canonical raw source attack call missing');
+        const source = structuredClone(call.source) as { start: { column: number; offset: number } };
+        source.start = { ...source.start, column: source.start.column + 1, offset: source.start.offset + 1 };
+        (call as unknown as { source: unknown }).source = source;
+      },
+    },
+    {
+      name: 'raw canonical helper binding drift',
+      mutate: (model: X4UiCallModel): void => {
+        const call = model.calls.find(candidate => candidate.order === 67);
+        if (!call) throw new Error('canonical raw helper attack call missing');
+        const options = structuredClone(call.semantics.options) as { expression: string };
+        options.expression = 'Helper.otherProperties';
+        (call.semantics as unknown as { options: unknown }).options = options;
+      },
+    },
+  ].map(attack => {
+    const attackModel = structuredClone(exactPipelineModel) as X4UiCallModel;
+    attack.mutate(attackModel);
+    const attackContext = contextWithSourceFileCallModel(exactPipeline, 'ui/pipeline_test.lua', attackModel);
+    const outcome = invokePublic(() => catalogFor(attackContext));
+    return {
+      name: attack.name,
+      threw: outcome.threw,
+      status: outcome.value?.status,
+      reason: outcome.value?.reason,
+      editableEntries: outcome.value?.editableEntries.length,
+      detail: outcome.value?.detail,
+    };
+  });
+  const canonicalProgramMetadataAttack = structuredClone(exactPipeline.program) as X4UiLayoutProgram;
+  const canonicalProgramMetadataOperation = canonicalProgramMetadataAttack.operations.find(operation => operation.modelOrder === 67);
+  if (!canonicalProgramMetadataOperation) throw new Error('canonical operation metadata attack operation missing');
+  (canonicalProgramMetadataOperation as unknown as { metadata: unknown }).metadata = {
+    ...asRecord(canonicalProgramMetadataOperation.metadata),
+    __canonicalAttack: true,
+  };
+  const canonicalBindingMetadataAttack = structuredClone(exactPipeline.evidenceAuthority) as X4UiLayoutEvidenceAuthority;
+  const canonicalBindingMetadata = canonicalBindingMetadataAttack.sourceBindings.find(binding => binding.streamIndex === 0);
+  if (!canonicalBindingMetadata) throw new Error('canonical binding metadata attack binding missing');
+  (canonicalBindingMetadata as unknown as { metadata: unknown }).metadata = {
+    ...asRecord(canonicalBindingMetadata.metadata),
+    __canonicalAttack: true,
+  };
+  const canonicalReorderedProgramAttack = structuredClone(exactPipeline.program) as X4UiLayoutProgram;
+  (canonicalReorderedProgramAttack.operations as X4UiLayoutOperation[]).reverse();
+  const canonicalAuthorityAttackRows = [
+    {
+      name: 'enriched operation metadata drift',
+      context: { ...exactPipeline, program: canonicalProgramMetadataAttack },
+    },
+    {
+      name: 'evidence binding metadata drift',
+      context: { ...exactPipeline, evidenceAuthority: canonicalBindingMetadataAttack },
+    },
+    {
+      name: 'issued operation order drift',
+      context: { ...exactPipeline, program: canonicalReorderedProgramAttack },
+    },
+    {
+      name: 'unissued cloned program and evidence',
+      context: {
+        ...exactPipeline,
+        program: structuredClone(exactPipeline.program) as X4UiLayoutProgram,
+        evidenceAuthority: structuredClone(exactPipeline.evidenceAuthority) as X4UiLayoutEvidenceAuthority,
+      },
+    },
+  ].map(attack => {
+    const outcome = invokePublic(() => catalogFor(attack.context));
+    return {
+      name: attack.name,
+      threw: outcome.threw,
+      status: outcome.value?.status,
+      reason: outcome.value?.reason,
+      editableEntries: outcome.value?.editableEntries.length,
+      detail: outcome.value?.detail,
+    };
+  });
+  console.log(`x4UiSourceEdits B119 canonical authority attacks: ${JSON.stringify({ raw: canonicalRawAttackRows, issued: canonicalAuthorityAttackRows })}`);
+  check('B119 canonical selected-operation raw identity/order/source attacks remain locked',
+    canonicalRawAttackRows.every(row => row.threw === false
+      && row.status === 'locked'
+      && (row.reason === 'unsupported-provenance' || row.reason === 'provenance-drift')
+      && row.editableEntries === 0),
+    JSON.stringify(canonicalRawAttackRows));
+  check('B119 canonical enriched metadata/binding/order/issuance attacks remain locked',
+    canonicalAuthorityAttackRows.every(row => row.threw === false
+      && row.status === 'locked'
+      && (row.reason === 'unsupported-provenance' || row.reason === 'provenance-drift')
+      && row.editableEntries === 0),
+    JSON.stringify(canonicalAuthorityAttackRows));
   const positionalCatalogOutcome = invokePublic(() => discoverX4UiSourceEdits(
     initial.workspace,
     initial.source,
@@ -9415,4 +10170,7 @@ const run = (): void => {
   console.log(`x4UiSourceEdits selftest: PASS (${checks.length}/${checks.length})`);
 };
 
-run();
+run().catch(error => {
+  console.error(error);
+  process.exitCode = 1;
+});

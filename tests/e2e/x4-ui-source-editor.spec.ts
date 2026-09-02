@@ -198,14 +198,17 @@ test('SourceEditor reload and unmount ignore late or aborted corpus generations'
       return originalFetch(input, init);
     }) as typeof window.fetch;
   });
+  await page.route('**/api/agent/health-card**', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ verdict: 'ready', summary: 'E2E fixture ready.', rows: [] }),
+  }));
   await seedServerWorkspace(sourceEditorWorkspace);
 
   const pageErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.message));
   await page.goto('/');
   await expect(page.getByTestId('studio-workspace')).toBeVisible();
-  const healthCard = page.getByTestId('health-card');
-  if (await healthCard.isVisible().catch(() => false)) await page.getByTestId('health-card-dismiss').click();
 
   const uiDesigner = page.locator('[data-workspace-view="ui-designer"]');
   await expect(uiDesigner).toBeVisible();
@@ -228,6 +231,7 @@ test('SourceEditor reload and unmount ignore late or aborted corpus generations'
   await expect(colorDetail).toBeVisible();
   await expect.poll(() => pendingFor(1).length).toBeGreaterThanOrEqual(2);
   expect(new Set(pendingFor(1).map(request => new URL(request.url).pathname))).toEqual(new Set(['/api/reference/status']));
+  await expect(page.getByTestId('health-card')).toHaveCount(0);
 
   activeGeneration = 2;
   await page.evaluate(() => {
