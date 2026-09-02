@@ -2411,6 +2411,75 @@ const rawSceneProjection = (sourceText: string, sourcePath: string): { readonly 
   };
 };
 
+const refusalHasNoScene = (result: X4UiSceneResult): boolean =>
+  result.status === 'refused' && !('scene' in result);
+
+test('B119 public Scene accepts all three frame texture setters with frame-only ownership', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "FrameSetterScene", layer = 4 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'frame:setBackground("background", {})',
+    'frame:setBackground2("background2", {})',
+    'frame:setOverlay("overlay", {})',
+    'frame:display()',
+  ].join('\n'), 'selftest/b119-frame-setters-scene.lua');
+  assert(projected.result !== undefined && 'program' in projected.result && projected.program !== undefined && projected.profile !== undefined, 'frame setter Scene fixture must produce a producer result');
+  const result = buildX4UiScene(projected.result as X4UiLayoutProgramResult, corpus, projected.profile);
+  const frame = result.status === 'refused' ? undefined : result.scene.frames[0];
+  const setters = projected.program.operations.filter(operation => ['setBackground', 'setBackground2', 'setOverlay'].includes(operation.kind));
+  assert(setters.length === 3 && result.status !== 'refused', `all three frame texture setters must cross the public Scene boundary: ${JSON.stringify({ result, setters })}`);
+  assert(frame?.frameTextureLayers?.length === 3
+    && frame.frameTextureLayers.every(layer => layer.operationIds.some(operationId => setters.some(operation => operation.id === operationId))),
+  `frame texture layer ledgers must retain all three accepted setter operations: ${JSON.stringify(frame?.frameTextureLayers)}`);
+});
+
+test('B119 Scene rejects frame texture setters with wrong table, cell, frame, malformed, or forged ownership', () => {
+  const projected = rawProjectionFor([
+    'local menu = { name = "FrameSetterOwners", layer = 4 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'frame:setBackground("background", {})',
+    'frame:setBackground2("background2", {})',
+    'frame:setOverlay("overlay", {})',
+    'frame:display()',
+    'local otherFrame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'otherFrame:display()',
+  ].join('\n'), 'selftest/b119-frame-setter-owners.lua');
+  assert(projected.result !== undefined && 'program' in projected.result && projected.program !== undefined && projected.profile !== undefined, 'frame setter owner fixture must produce a producer result');
+  const sourceResult = projected.result as X4UiLayoutProgramResult;
+  const setter = projected.program.operations.find(operation => operation.kind === 'setBackground');
+  const otherFrame = projected.program.frames.find(frame => frame.id !== projected.program.frames[0]?.id);
+  const table = projected.program.tables[0];
+  assert(setter !== undefined && otherFrame !== undefined, 'frame setter owner fixture must expose a setter and second frame');
+  const expectRefusal = (label: string, mutate: (operation: X4UiLayoutOperation, program: X4UiLayoutProgram) => void): void => {
+    const hostileProgram = cloneProgram(projected.program);
+    const hostileSetter = hostileProgram.operations.find(operation => operation.id === setter.id);
+    assert(hostileSetter !== undefined, `${label} must retain the setter`);
+    mutate(hostileSetter, hostileProgram);
+    const hostileAuthority = synchronizedAuthority(producerAuthority(sourceResult), hostileProgram);
+    freezeFixtureGraph(hostileProgram);
+    freezeFixtureGraph(hostileAuthority);
+    const result = buildX4UiScene({ ...sourceResult, program: hostileProgram, evidenceAuthority: hostileAuthority }, corpus, projected.profile);
+    assert(refusalHasNoScene(result), `${label} escaped the Scene structure boundary: ${JSON.stringify(result)}`);
+  };
+  expectRefusal('wrong table owner', (operation) => {
+    (operation as unknown as Record<string, unknown>).tableId = table?.id || 'forged-table';
+  });
+  expectRefusal('wrong cell owner', (operation) => {
+    (operation as unknown as Record<string, unknown>).cellId = 'forged-cell';
+  });
+  expectRefusal('wrong frame owner', (operation) => {
+    (operation as unknown as Record<string, unknown>).frameId = otherFrame.id;
+  });
+  expectRefusal('malformed operation kind', (operation) => {
+    (operation as unknown as Record<string, unknown>).kind = 'setBackgroundForged';
+  });
+  expectRefusal('forged operation ledger', (_operation, program) => {
+    const forged = JSON.parse(JSON.stringify(setter)) as X4UiLayoutOperation;
+    (forged as unknown as Record<string, unknown>).id = 'op:forged-frame-setter';
+    (program.operations as X4UiLayoutOperation[]).push(forged);
+  });
+});
+
 const rawTextScene = (
   name: string,
   content: string,
@@ -2535,9 +2604,6 @@ const sceneWithFinalizedColumns = (
   refreshProgramKernelProjection(program);
   return sceneOf(sceneFor(fixture, program));
 };
-
-const refusalHasNoScene = (result: X4UiSceneResult): boolean =>
-  result.status === 'refused' && !('scene' in result);
 
 const makeDiscreteOverflowProgram = (fixture: Fixture): X4UiLayoutProgram => {
   const program = cloneProgram(fixture.program);
@@ -8400,8 +8466,8 @@ const b119ConfiguredSourceSpecs = [
     sourceSha256: '657476EAD08229977E1F2A69079FFDCAB56D908B72AF5C87BD4F4734DCCB8C4F',
     consumerNumbers: { vw: 1920, vh: 1080, x: 27, my: 27, w: 1866, '#TABS': 2, y: 62, i: 1 },
     expectedLayout: { samples: 9, consumed: 7, notConsumed: 2, operations: 18, applied: 11, frames: 1, tables: 2, rows: 2, cells: 4, gaps: 16 },
-    expectedScene: { frames: 1, tables: 2, rows: 2, cells: 4, widgets: 0, texts: 0, glyphs: 0, gaps: 31, drawable: { x: 0, y: 0, width: 1920, height: 1080 } },
-    expectedPaint: { commands: 46, diagnostics: 37 },
+    expectedScene: { frames: 1, tables: 2, rows: 2, cells: 4, widgets: 0, texts: 0, glyphs: 0, gaps: 32, drawable: { x: 0, y: 0, width: 1920, height: 1080 } },
+    expectedPaint: { commands: 47, diagnostics: 38 },
   },
   {
     label: 'COMM',
@@ -8411,8 +8477,8 @@ const b119ConfiguredSourceSpecs = [
     sourceSha256: '88FAB05A79EF33CB28E098081EA6A5E29E8F3B7C4150C39BF38913C51C063511',
     consumerNumbers: { vw: 1920, vh: 1080, mx: 27, my: 27, 'vw - mx * 2': 1866 },
     expectedLayout: { samples: 3, consumed: 3, notConsumed: 0, operations: 14, applied: 12, frames: 1, tables: 1, rows: 1, cells: 3, gaps: 11 },
-    expectedScene: { frames: 1, tables: 1, rows: 1, cells: 3, widgets: 0, texts: 0, glyphs: 0, gaps: 23, drawable: { x: 0, y: 0, width: 1920, height: 1080 } },
-    expectedPaint: { commands: 35, diagnostics: 29 },
+    expectedScene: { frames: 1, tables: 1, rows: 1, cells: 3, widgets: 0, texts: 0, glyphs: 0, gaps: 24, drawable: { x: 0, y: 0, width: 1920, height: 1080 } },
+    expectedPaint: { commands: 36, diagnostics: 30 },
   },
 ] as const;
 

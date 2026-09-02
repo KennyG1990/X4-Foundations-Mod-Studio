@@ -242,6 +242,7 @@ interface DetachedDiagnosticCommand extends DetachedCommandBase {
   readonly kind: 'selection' | 'gap' | 'unsupported-runtime-paint' | 'unavailable-node' | 'empty-clip' | 'invalid-raster-candidate';
   readonly geometry?: Rect;
   readonly color: string;
+  readonly sourceComposition: 'visual' | 'diagnostic-only';
 }
 
 type DetachedKeepOutGeometry =
@@ -1387,9 +1388,11 @@ const validateCommand = (
   }
   if (expectedLayer === 'diagnostics') {
     if (typeof kind !== 'string' || !DIAGNOSTIC_KINDS.has(kind)) return refusal('unsupported-command', 'diagnostics layer contains an unsupported command kind');
-    const valid = baseResult(['reason'], ['geometry', 'category', 'status', 'operationId']);
+    const valid = baseResult(['reason', 'sourceComposition'], ['geometry', 'category', 'status', 'operationId']);
     if (isValidationFailure(valid)) return { ok: false, refusal: valid.refusal };
     if (!nonEmptyString(fieldValue(value, 'reason'))) return refusal('invalid-command', 'diagnostic reason is empty');
+    const sourceComposition = fieldValue(value, 'sourceComposition');
+    if (sourceComposition !== 'visual' && sourceComposition !== 'diagnostic-only') return refusal('invalid-command', 'diagnostic source-composition classification is invalid');
     const geometry = fieldValue(value, 'geometry');
     if (geometry !== undefined && !validRect(geometry, drawable, true)) return refusal('invalid-geometry', 'diagnostic geometry is unsafe or outside the drawable');
     for (const key of ['category', 'status', 'operationId']) {
@@ -1402,6 +1405,7 @@ const validateCommand = (
         kind: kind as DetachedDiagnosticCommand['kind'],
         ...(geometry === undefined ? {} : { geometry: copyValidatedRect(geometry) }),
         color: diagnosticColor(kind),
+        sourceComposition,
       },
     };
   }
@@ -1936,6 +1940,7 @@ const buildOperations = (
               withClip(api, clip, () => { api.fillRect(geometry.x, geometry.y, geometry.width, geometry.height); });
               return;
             }
+            if (item.sourceComposition === 'diagnostic-only') return;
             api.setStrokeStyle(color);
             if (geometry === undefined) return;
             const visibleGeometry = intersectRectangles(geometry, clip);

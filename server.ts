@@ -7566,7 +7566,8 @@ function importModFolder(absDir: string): { workspace: ModWorkspace; report: any
   // renderer chokes (the all-or-nothing white-screen on a mod that carries a runtime
   // DB or a packed CAT/DAT archive). Oversized / over-budget files are TRACKED but
   // their content is NOT loaded; they stay on disk and are preserved by the deploy guard.
-  const MAX_INLINE_BYTES = 256 * 1024;             // per-file cap
+  const MAX_INLINE_BYTES = 256 * 1024;             // generic per-file cap for binary/unrelated passthrough
+  const MAX_UI_TEXT_INLINE_BYTES = 4 * 1024 * 1024; // bounded allowance for extension-root ui.xml and ui/**/*.lua text
   const MAX_TOTAL_INLINE_BYTES = 6 * 1024 * 1024;  // whole-import budget
   let inlinedBytes = 0;
 
@@ -7588,8 +7589,8 @@ function importModFolder(absDir: string): { workspace: ModWorkspace; report: any
     const absPath = path.join(absDir, rel);
     let bytes = 0; try { bytes = fs.statSync(absPath).size; } catch {}
     const kb = Math.round(bytes / 1024);
-    const overBudget = bytes > MAX_INLINE_BYTES || (inlinedBytes + bytes) > MAX_TOTAL_INLINE_BYTES;
     if (!ROUND_TRIP_TEXT_EXTS.has(ext)) {
+      const overBudget = bytes > MAX_INLINE_BYTES || (inlinedBytes + bytes) > MAX_TOTAL_INLINE_BYTES;
       if (overBudget) {
         passthroughFiles.push({ path: rel, reason: 'binary', omitted: true, bytes });
         classification.push({ path: rel, class: 'binary', note: `binary, ${kb} KB — tracked, not loaded (preserved on disk)` });
@@ -7602,6 +7603,9 @@ function importModFolder(absDir: string): { workspace: ModWorkspace; report: any
       classification.push({ path: rel, class: 'binary', note: 'binary file, preserved verbatim via base64 encoding' });
       continue;
     }
+    const isUiTextSource = lower === 'ui.xml' || /^ui\/.+\.lua$/i.test(lower);
+    const perFileInlineBytes = isUiTextSource ? MAX_UI_TEXT_INLINE_BYTES : MAX_INLINE_BYTES;
+    const overBudget = bytes > perFileInlineBytes || (inlinedBytes + bytes) > MAX_TOTAL_INLINE_BYTES;
     if (overBudget) {
       passthroughFiles.push({ path: rel, reason: 'too_large', omitted: true, bytes });
       classification.push({ path: rel, class: 'passthrough', note: `large file, ${kb} KB — tracked, not loaded (preserved on disk)` });

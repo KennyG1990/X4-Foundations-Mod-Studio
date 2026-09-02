@@ -46,6 +46,11 @@ import {
   type X4UiPaintPlanInput,
   type X4UiPaintPlanResult,
 } from './x4UiPaintPlan';
+import {
+  X4_UI_CANVAS_DIAGNOSTIC_PALETTE,
+  renderX4UiPaintPlanToCanvas,
+  type X4UiCanvasSurfaceFactory,
+} from './x4UiCanvasRenderer';
 import type { X4UiScene } from './x4UiScene';
 
 type Check = { readonly name: string; readonly pass: boolean; readonly detail?: unknown };
@@ -165,6 +170,62 @@ let issuedPreviewAuthority: X4UiPreviewPipelineResult | undefined;
 
 function asRecord(value: unknown): JsonRecord | undefined {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : undefined;
+}
+
+type FrameTextureCanvasTraceEntry = { readonly name: string; readonly args: readonly unknown[] };
+
+function frameTextureCanvasFactory(trace: FrameTextureCanvasTraceEntry[]): X4UiCanvasSurfaceFactory {
+  return (width, height, role) => {
+    const recordOperation = (name: string, args: readonly unknown[]): void => {
+      trace.push({ name, args });
+    };
+    let fillStyle = '';
+    let strokeStyle = '';
+    const context: JsonRecord = {
+      save: (...args: unknown[]) => recordOperation('save', args),
+      restore: (...args: unknown[]) => recordOperation('restore', args),
+      beginPath: (...args: unknown[]) => recordOperation('beginPath', args),
+      rect: (...args: unknown[]) => recordOperation('rect', args),
+      clip: (...args: unknown[]) => recordOperation('clip', args),
+      fillRect: (...args: unknown[]) => recordOperation('fillRect', args),
+      moveTo: (...args: unknown[]) => recordOperation('moveTo', args),
+      lineTo: (...args: unknown[]) => recordOperation('lineTo', args),
+      closePath: (...args: unknown[]) => recordOperation('closePath', args),
+      stroke: (...args: unknown[]) => recordOperation('stroke', args),
+      drawImage: (...args: unknown[]) => recordOperation('drawImage', [asRecord(args[0])?.role ?? 'surface', ...args.slice(1)]),
+      createImageData: (imageWidth: unknown, imageHeight: unknown) => {
+        recordOperation('createImageData', [imageWidth, imageHeight]);
+        return { data: new Uint8ClampedArray(Number(imageWidth) * Number(imageHeight) * 4) };
+      },
+      putImageData: (...args: unknown[]) => recordOperation('putImageData', args),
+    };
+    Object.defineProperties(context, {
+      fillStyle: {
+        configurable: true,
+        enumerable: true,
+        get: () => fillStyle,
+        set: (value: unknown) => {
+          fillStyle = String(value);
+          recordOperation('setFillStyle', [value]);
+        },
+      },
+      strokeStyle: {
+        configurable: true,
+        enumerable: true,
+        get: () => strokeStyle,
+        set: (value: unknown) => {
+          strokeStyle = String(value);
+          recordOperation('setStrokeStyle', [value]);
+        },
+      },
+    });
+    return {
+      role,
+      width,
+      height,
+      getContext: (_kind: '2d') => context as unknown as CanvasRenderingContext2D,
+    };
+  };
 }
 
 const COLOR_FACT_FIELDS = ['field', 'slot', 'value', 'domain', 'provenance', 'expression', 'source', 'sourcePin', 'sampleId', 'gameVerification'] as const;
@@ -483,6 +544,41 @@ function sourceFixture(): X4UiWorkspaceSource {
       '',
     ].join('\n')),
     passthrough('ui/canonical.lua', lua, { reason: 'unparsed' }),
+  ]));
+}
+
+function frameTextureSourceFixture(
+  blurBackground: boolean,
+  unresolvedNonEmptyTexture = false,
+  includeVisualCause = false,
+): X4UiWorkspaceSource {
+  const backgroundIcon = unresolvedNonEmptyTexture ? 'getRuntimeIcon()' : '""';
+  const lua = [
+    'local Helper = rawget(_G, "Helper")',
+    'local menu = { name = "FrameTexturePaint", layer = 1 }',
+    `local frame = Helper.createFrameHandle(menu, { width = 100, height = 80, blurBackground = ${blurBackground ? 'true' : 'false'} })`,
+    `frame:setBackground(${backgroundIcon}, {})`,
+    'frame:setBackground2("", {})',
+    'frame:setOverlay("", {})',
+    'local table = frame:addTable(1, { width = 80, reserveScrollBar = false, scaling = false })',
+    'table:setColWidth(1, 80, false)',
+    'local row = table:addRow(false, {})',
+    'row[1]:createText("content", { height = 10 })',
+    'frame:display()',
+    ...(includeVisualCause ? ['frame:setBackground("post-display", {})'] : []),
+    '',
+  ].join('\n');
+  return buildX4UiWorkspaceSource(workspace([
+    passthrough('ui.xml', [
+      '<?xml version="1.0" encoding="utf-8"?>',
+      '<addon name="frame-texture-paint-fixture">',
+      '  <environment type="menus">',
+      '    <file name="ui/frame-texture-paint.lua" />',
+      '  </environment>',
+      '</addon>',
+      '',
+    ].join('\n')),
+    passthrough('ui/frame-texture-paint.lua', lua, { reason: 'unparsed' }),
   ]));
 }
 
@@ -1162,6 +1258,210 @@ async function main(): Promise<void> {
       : undefined;
     baseInput = scene === undefined ? undefined : { scene, corpus: canonical };
     check('loader-issued canonical corpus and source-backed Scene fixture', canonical !== undefined && scene !== undefined, { pipelineStatus: pipeline.status, sceneStatus: pipeline.scene?.status, sceneRefusal: pipeline.scene && pipeline.scene.status === 'refused' ? pipeline.scene.refusal : undefined, programStatus: pipeline.program?.status, operationCount: pipeline.program && 'program' in pipeline.program ? pipeline.program.program.operations.length : undefined, gaps: pipeline.gaps, selection: pipeline.selection, source: pipeline.source.status, corpus: pipeline.corpus.status });
+
+    const frameTexturePaintCase = (blurBackground: boolean, unresolvedNonEmptyTexture = false, includeVisualCause = false) => {
+      const frameTextureSource = frameTextureSourceFixture(blurBackground, unresolvedNonEmptyTexture, includeVisualCause);
+      const frameTextureSelection = selectionFor(frameTextureSource, 'ui/frame-texture-paint.lua');
+      const frameTexturePipeline = projectX4UiPreviewPipeline({
+        source: frameTextureSource,
+        corpus: canonical,
+        profile: {
+          id: `frame-texture-paint-${blurBackground ? 'blur' : 'no-blur'}-${unresolvedNonEmptyTexture ? 'unresolved' : 'inactive'}`,
+          provenance: 'B119 source-backed frame texture Paint regression',
+          truthGrade: 'supplied',
+          source: frameTextureSelection.sourceIdentity,
+          drawable: { width: 100, height: 80 },
+          uiScale: 1,
+          minTextHeight: 10,
+        },
+        selection: frameTextureSelection,
+      });
+      const frameTextureScene = frameTexturePipeline.scene !== undefined
+        && (frameTexturePipeline.scene.status === 'projected' || frameTexturePipeline.scene.status === 'partial')
+        ? frameTexturePipeline.scene.scene
+        : undefined;
+      const frameTexturePaint = frameTextureScene === undefined
+        ? undefined
+        : projectX4UiPaintPlanDirect({ scene: frameTextureScene, corpus: canonical, previewAuthority: frameTexturePipeline });
+      const frame = frameTextureScene?.frames[0];
+      const diagnostics = frameTexturePaint?.status === 'refused'
+        ? []
+        : frameTexturePaint?.plan.diagnostics.filter(diagnostic => diagnostic.nodeId === frame?.id) || [];
+      const allDiagnostics = frameTexturePaint?.status === 'refused'
+        ? []
+        : frameTexturePaint?.plan.diagnostics || [];
+      return { pipeline: frameTexturePipeline, scene: frameTextureScene, paint: frameTexturePaint, frame, diagnostics, allDiagnostics };
+    };
+    const frameTextureBlur = frameTexturePaintCase(true);
+    const frameTextureNoBlur = frameTexturePaintCase(false);
+    const frameTextureVisualCause = frameTexturePaintCase(false, false, true);
+    const frameTextureUnresolved = frameTexturePaintCase(true, true);
+    const diagnostic = (caseValue: typeof frameTextureBlur, kind: string, category?: string) =>
+      caseValue.diagnostics.find(candidate => candidate.kind === kind && (category === undefined || candidate.category === category));
+    const allDiagnostic = (caseValue: typeof frameTextureBlur, kind: string, category?: string) =>
+      caseValue.allDiagnostics.find(candidate => candidate.kind === kind && (category === undefined || candidate.category === category));
+    const helperAvailabilityReason = 'rawget Helper alias proves preview receiver identity only; runtime non-nil availability remains unverified';
+    const helperAvailabilityGap = (caseValue: typeof frameTextureBlur) =>
+      caseValue.scene?.gaps.find(gap => caseValue.frame?.diagnosticLinks.includes(gap.id)
+        && gap.category === 'data-flow'
+        && gap.status === 'incomplete'
+        && gap.reason === helperAvailabilityReason);
+    const helperAvailabilityDiagnostic = (caseValue: typeof frameTextureBlur) =>
+      caseValue.allDiagnostics.find(candidate => candidate.kind === 'gap'
+        && candidate.category === 'data-flow'
+        && candidate.reason === helperAvailabilityReason);
+    const postDisplayDataFlowDiagnostic = (caseValue: typeof frameTextureBlur) =>
+      allDiagnostic(caseValue, 'gap', 'data-flow')?.reason.includes('after frame:display') === true
+        ? allDiagnostic(caseValue, 'gap', 'data-flow')
+        : caseValue.allDiagnostics.find(candidate => candidate.kind === 'gap'
+          && candidate.category === 'data-flow'
+          && candidate.reason.includes('after frame:display'));
+    const frameTextureCanvasCase = (caseValue: typeof frameTextureBlur) => {
+      const sourceTrace: FrameTextureCanvasTraceEntry[] = [];
+      const diagnosticMapTrace: FrameTextureCanvasTraceEntry[] = [];
+      const paint = caseValue.paint;
+      const sourceComposition = canonical === undefined || paint === undefined || paint.status === 'refused'
+        ? undefined
+        : renderX4UiPaintPlanToCanvas(paint, canonical, {
+          surfaceFactory: frameTextureCanvasFactory(sourceTrace),
+          presentation: 'source-composition',
+        });
+      const diagnosticMap = canonical === undefined || paint === undefined || paint.status === 'refused'
+        ? undefined
+        : renderX4UiPaintPlanToCanvas(paint, canonical, {
+          surfaceFactory: frameTextureCanvasFactory(diagnosticMapTrace),
+          presentation: 'diagnostic-map',
+        });
+      const frameRect = caseValue.frame?.rect;
+      let unavailableStyle = false;
+      let frameRectSeen = false;
+      let unavailableStroke = false;
+      if (frameRect !== undefined) {
+        for (const entry of sourceTrace) {
+          if (entry.name === 'setStrokeStyle') {
+            unavailableStyle = entry.args[0] === X4_UI_CANVAS_DIAGNOSTIC_PALETTE.unavailable;
+            frameRectSeen = false;
+          } else if (unavailableStyle && entry.name === 'rect'
+            && entry.args.length === 4
+            && entry.args[0] === frameRect.x
+            && entry.args[1] === frameRect.y
+            && entry.args[2] === frameRect.width
+            && entry.args[3] === frameRect.height) {
+            frameRectSeen = true;
+          } else if (unavailableStyle && frameRectSeen && entry.name === 'stroke') {
+            unavailableStroke = true;
+            break;
+          }
+        }
+      }
+      const unavailableMapFill = diagnosticMapTrace.some(entry => entry.name === 'setFillStyle'
+        && entry.args[0] === X4_UI_CANVAS_DIAGNOSTIC_PALETTE.unavailable)
+        && diagnosticMapTrace.some(entry => entry.name === 'fillRect');
+      return { sourceComposition, diagnosticMap, sourceTrace, diagnosticMapTrace, unavailableStroke, unavailableMapFill };
+    };
+    const frameTextureBlurCanvas = frameTextureCanvasCase(frameTextureBlur);
+    const frameTextureNoBlurCanvas = frameTextureCanvasCase(frameTextureNoBlur);
+    check('B119 producer-side inactive frame layers separate blur backdrop from visual frame diagnostics',
+      frameTextureBlur.scene !== undefined
+        && frameTextureNoBlur.scene !== undefined
+        && frameTextureBlur.paint?.status !== 'refused'
+        && frameTextureNoBlur.paint?.status !== 'refused'
+        && frameTextureBlur.frame?.frameTextureLayers?.length === 3
+        && frameTextureBlur.frame.frameTextureLayers.every(layer => layer.applicability === 'inactive')
+        && frameTextureBlur.frame.backdrop?.availability === 'unavailable'
+        && frameTextureNoBlur.frame.backdrop?.availability === 'disabled'
+        && helperAvailabilityGap(frameTextureBlur) !== undefined
+        && helperAvailabilityGap(frameTextureNoBlur) !== undefined
+        && helperAvailabilityDiagnostic(frameTextureBlur)?.sourceComposition === 'diagnostic-only'
+        && helperAvailabilityDiagnostic(frameTextureNoBlur)?.sourceComposition === 'diagnostic-only'
+        && diagnostic(frameTextureBlur, 'unavailable-node')?.sourceComposition === 'diagnostic-only'
+        && diagnostic(frameTextureBlur, 'gap', 'backdrop')?.sourceComposition === 'diagnostic-only'
+        && diagnostic(frameTextureNoBlur, 'unavailable-node')?.sourceComposition === 'diagnostic-only'
+        && frameTextureBlurCanvas.sourceComposition?.status === 'rendered'
+        && frameTextureNoBlurCanvas.sourceComposition?.status === 'rendered'
+        && frameTextureBlurCanvas.unavailableStroke === false
+        && frameTextureNoBlurCanvas.unavailableStroke === false
+        && frameTextureBlurCanvas.diagnosticMap?.status === 'rendered'
+        && frameTextureNoBlurCanvas.diagnosticMap?.status === 'rendered'
+        && frameTextureBlurCanvas.unavailableMapFill
+        && frameTextureNoBlurCanvas.unavailableMapFill,
+      {
+        blur: {
+          status: frameTextureBlur.paint?.status,
+          frame: frameTextureBlur.frame,
+          diagnostics: frameTextureBlur.diagnostics,
+          helperAvailabilityGap: helperAvailabilityGap(frameTextureBlur),
+          canvas: frameTextureBlurCanvas,
+        },
+        noBlur: {
+          status: frameTextureNoBlur.paint?.status,
+          frame: frameTextureNoBlur.frame,
+          diagnostics: frameTextureNoBlur.diagnostics,
+          helperAvailabilityGap: helperAvailabilityGap(frameTextureNoBlur),
+          canvas: frameTextureNoBlurCanvas,
+        },
+      });
+    const frameTextureVisualCauseCanvas = frameTextureCanvasCase(frameTextureVisualCause);
+    check('B119 frame aggregate remains visual when Helper availability shares a genuine visual cause',
+      frameTextureVisualCause.scene !== undefined
+        && frameTextureVisualCause.paint?.status !== 'refused'
+        && helperAvailabilityGap(frameTextureVisualCause) !== undefined
+        && helperAvailabilityDiagnostic(frameTextureVisualCause)?.sourceComposition === 'diagnostic-only'
+        && postDisplayDataFlowDiagnostic(frameTextureVisualCause)?.sourceComposition === 'visual'
+        && diagnostic(frameTextureVisualCause, 'unavailable-node')?.sourceComposition === 'visual'
+        && frameTextureVisualCauseCanvas.sourceComposition?.status === 'rendered'
+        && frameTextureVisualCauseCanvas.unavailableStroke
+        && frameTextureVisualCauseCanvas.diagnosticMap?.status === 'rendered'
+        && frameTextureVisualCauseCanvas.unavailableMapFill,
+      {
+        status: frameTextureVisualCause.paint?.status,
+        frame: frameTextureVisualCause.frame,
+        diagnostics: frameTextureVisualCause.diagnostics,
+        helperAvailabilityGap: helperAvailabilityGap(frameTextureVisualCause),
+        helperAvailabilityDiagnostic: helperAvailabilityDiagnostic(frameTextureVisualCause),
+        postDisplayDataFlowDiagnostic: postDisplayDataFlowDiagnostic(frameTextureVisualCause),
+        canvas: frameTextureVisualCauseCanvas,
+      });
+    check('B119 producer-side unresolved nonempty frame texture remains visibly diagnosed independent of blur',
+      frameTextureUnresolved.scene !== undefined
+        && frameTextureUnresolved.paint?.status !== 'refused'
+        && frameTextureUnresolved.frame?.frameTextureLayers?.some(layer => layer.applicability === 'active-unresolved') === true
+        && diagnostic(frameTextureUnresolved, 'gap', 'paint')?.sourceComposition === 'visual'
+        && diagnostic(frameTextureUnresolved, 'unavailable-node')?.sourceComposition === 'visual',
+      {
+        status: frameTextureUnresolved.paint?.status,
+        frame: frameTextureUnresolved.frame,
+        diagnostics: frameTextureUnresolved.diagnostics,
+      });
+
+    if (frameTextureBlur.scene !== undefined) {
+      const frameTextureInput: PaintTestInput = {
+        scene: frameTextureBlur.scene,
+        corpus: canonical,
+        previewAuthority: frameTextureBlur.pipeline,
+      };
+      phaseCSceneAttack('B119 issued frame-texture member mutation refuses before Paint acceptance', frameTextureInput, candidate => {
+        const layer = candidate.frames[0]?.frameTextureLayers?.[0];
+        const record = layer === undefined ? undefined : asRecord(layer);
+        const before = record?.applicability;
+        if (record === undefined || typeof before !== 'string') return { changed: false, before };
+        const after = before === 'inactive' ? 'active-unresolved' : 'inactive';
+        record.applicability = after;
+        return { changed: record.applicability !== before, layer: layer.name, before, after };
+      });
+      phaseCSceneAttack('B119 issued frame-texture source identity mutation refuses before Paint acceptance', frameTextureInput, candidate => {
+        const layer = candidate.frames[0]?.frameTextureLayers?.[0];
+        const source = layer === undefined ? undefined : asRecord(layer.source);
+        const before = source?.file;
+        if (source === undefined || typeof before !== 'string') return { changed: false, before };
+        const after = `${before}.forged-frame-source`;
+        source.file = after;
+        return { changed: source.file !== before, layer: layer.name, before, after };
+      });
+    } else {
+      check('B119 issued frame-texture member mutation refuses before Paint acceptance', false, { fixtureReady: false });
+      check('B119 issued frame-texture source identity mutation refuses before Paint acceptance', false, { fixtureReady: false });
+    }
 
     const wrappedSource = wrappedTextSourceFixture();
     const wrappedSelection = selectionFor(wrappedSource, 'ui/wrapped-authority.lua');

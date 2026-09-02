@@ -285,7 +285,7 @@ function run(): { allPassed: boolean; pass: boolean; passed: number; total: numb
 
   check('frame property family is exact and complete',
     JSON.stringify(propertyNames(frame)) === JSON.stringify([
-      'x', 'y', 'width', 'height', 'layer', 'standardButtons', 'backgroundID', 'backgroundColor', 'blurBackground',
+      'x', 'y', 'width', 'height', 'layer', 'standardButtons', 'blurBackground',
       'autoFrameHeight'
     ]), detail(propertyNames(frame)));
   check('table property family is exact and complete',
@@ -337,6 +337,114 @@ function run(): { allPassed: boolean; pass: boolean; passed: number; total: numb
     JSON.stringify(propertyNames(icon)) === JSON.stringify(['width', 'height', 'color', 'affectRowHeight', 'x', 'y', 'scaling'])
       && staticString(icon?.semantics.icon) === 'solid',
     detail(icon?.semantics));
+
+  const frameTextureSource = [
+    'local textureMenu = { name = "FrameTextures", layer = 1 }',
+    'local textureFrame = Helper.createFrameHandle(textureMenu, { width = 100, height = 80 })',
+    'textureFrame:setBackground("background-icon", { icon = "background-option", color = { r = 0.11, g = 0.12, b = 0.13, a = 0.14 }, width = 0, height = 0, rotationRate = 1, rotationStart = 2, rotationDuration = 3, rotationInterval = 4, initialScaleFactor = 0.5, scaleDuration = 6, glowfactor = 0.7 })',
+    'textureFrame:setBackground2("background2-icon", { icon = "", color = Color["background2"], width = 32, height = 24, rotationRate = 7, rotationStart = 8, rotationDuration = 9, rotationInterval = 10, initialScaleFactor = 1.5, scaleDuration = 11, glowfactor = 0.8 })',
+    'textureFrame:setOverlay("overlay-icon", { icon = "overlay-option", color = { r = 0.21, g = 0.22, b = 0.23, a = 0.24 }, width = 48, height = 36, rotationRate = 12, rotationStart = 13, rotationDuration = 14, rotationInterval = 15, initialScaleFactor = 0.75, scaleDuration = 16, glowfactor = 0.9 })',
+  ].join('\n');
+  const frameTextureModel = buildX4UiCallModel(input(frameTextureSource, 'selftest/frame-texture-setters.lua'));
+  const frameTextureSetterNames: readonly X4UiCallRecord['name'][] = ['setBackground', 'setBackground2', 'setOverlay'];
+  const frameTextureCalls = frameTextureSetterNames.map(name => call(frameTextureModel, name));
+  const frameTexturePropertyNames = ['icon', 'color', 'width', 'height', 'rotationRate', 'rotationStart', 'rotationDuration', 'rotationInterval', 'initialScaleFactor', 'scaleDuration', 'glowfactor'];
+  const frameTextureFrameReference = frameTextureCalls[0]?.semantics.frame?.reference;
+  check('B119 frame texture setters are tracked in exact source order with one exact frame receiver',
+    frameTextureCalls.every((candidate, index) => candidate !== undefined
+      && candidate.name === frameTextureSetterNames[index]
+      && candidate.method === ':'
+      && candidate.source.start.offset < candidate.source.end.offset
+      && frameTextureSource.slice(candidate.source.start.offset, candidate.source.end.offset).startsWith(`textureFrame:${candidate.name}`)
+      && sameReferenceIdentity(candidate.semantics.frame?.reference, frameTextureFrameReference)
+      && sameReferenceIdentity(candidate.result, frameTextureFrameReference)),
+    detail(frameTextureCalls));
+  check('B119 frame texture setters expose every shipped option field and exact icon/color evidence',
+    frameTextureCalls.every((candidate, index) => {
+      const expectedIcon = ['background-icon', 'background2-icon', 'overlay-icon'][index];
+      const expectedOptionIcon = ['background-option', '', 'overlay-option'][index];
+      const iconValue = candidate?.semantics.icon;
+      const properties = candidate?.semantics.properties || [];
+      const optionIcon = properties.find(propertyValue => propertyValue.name === 'icon');
+      const color = colorExpression(frameTextureModel, candidate, 'color');
+      const expectedColor = index === 1 ? 'Color["background2"]' : index === 0
+        ? '{ r = 0.11, g = 0.12, b = 0.13, a = 0.14 }'
+        : '{ r = 0.21, g = 0.22, b = 0.23, a = 0.24 }';
+      return staticString(iconValue) === expectedIcon
+        && JSON.stringify(properties.map(propertyValue => propertyValue.name)) === JSON.stringify(frameTexturePropertyNames)
+        && optionIcon?.value.status === 'static'
+        && optionIcon.value.value === expectedOptionIcon
+        && properties.filter(propertyValue => propertyValue.name !== 'color').every(propertyValue => propertyValue.value.status === 'static')
+        && exactLocatedText(frameTextureSource, { expression: iconValue?.expression, source: iconValue?.location }, `"${expectedIcon}"`)
+        && exactProbeSource(frameTextureSource, color, expectedColor)
+        && (index === 1 ? color?.kind === 'symbolic-reference' : color?.kind === 'literal-table');
+    }),
+    detail(frameTextureCalls.map(candidate => ({
+      name: candidate?.name,
+      icon: candidate?.semantics.icon,
+      properties: candidate?.semantics.properties,
+      color: colorExpression(frameTextureModel, candidate, 'color'),
+    }))));
+  const frameTextureExactKeySource = [
+    'local exactKeyMenu = { name = "B119FrameTextureExactKeys", layer = 4 }',
+    'local exactKeyFrame = Helper.createFrameHandle(exactKeyMenu, { width = 100, height = 80 })',
+    'exactKeyFrame:setBackground("background-positional", { Icon = "", rotation_rate = 11, ["rotation rate"] = 12, bogus = 13, width = 21, color = { r = 0.31, g = 0.32, b = 0.33, a = 0.34 } })',
+    'exactKeyFrame:setBackground2("background2-positional", { icon = "background2-exact", Width = 22, ["glow factor"] = 23, rotationRate = 24 })',
+    'exactKeyFrame:setOverlay("overlay-positional", { icon = "overlay-exact", Height = 33, rotationStart = 34, bogus = 35 })',
+  ].join('\n');
+  const frameTextureExactKeyModel = buildX4UiCallModel(input(
+    frameTextureExactKeySource,
+    'selftest/frame-texture-exact-keys.lua',
+  ));
+  const frameTextureExactKeyCalls = frameTextureSetterNames.map(name =>
+    frameTextureExactKeyModel.calls.find(candidate => candidate.name === name));
+  const frameTextureExactKeyUnsupported = frameTextureExactKeyCalls.map(candidate =>
+    candidate?.semantics.unsupportedProperties?.map(propertyValue => propertyValue.name) || []);
+  check('B119 frame texture option projection is exact-key only across all setter families',
+    JSON.stringify(frameTextureExactKeyCalls.map(candidate => propertyNames(candidate))) === JSON.stringify([
+      ['width', 'color'],
+      ['icon', 'rotationRate'],
+      ['icon', 'rotationStart'],
+    ])
+      && JSON.stringify(frameTextureExactKeyUnsupported) === JSON.stringify([
+        ['Icon', 'rotation_rate', 'rotation rate', 'bogus'],
+        ['Width', 'glow factor'],
+        ['Height', 'bogus'],
+      ])
+      && frameTextureExactKeyCalls[0]?.semantics.properties?.every(propertyValue =>
+        frameTextureExactKeySource.slice(propertyValue.source.start.offset, propertyValue.source.end.offset)
+          === propertyValue.value.expression)
+      && frameTextureExactKeyCalls.every(candidate => candidate?.semantics.unsupportedProperties?.every(propertyValue =>
+        frameTextureExactKeySource.slice(propertyValue.source.start.offset, propertyValue.source.end.offset)
+          === propertyValue.value.expression))
+      && frameTextureExactKeyCalls.every(candidate => candidate?.semantics.unsupportedProperties?.length
+        ? frameTextureExactKeyModel.verificationGaps.some(gap => gap.category === 'property'
+          && gap.status === 'unsupported'
+          && gap.reason.includes(`${candidate.name} property`))
+        : false),
+    detail({
+      properties: frameTextureExactKeyCalls.map(candidate => candidate?.semantics.properties),
+      unsupported: frameTextureExactKeyCalls.map(candidate => candidate?.semantics.unsupportedProperties),
+      gaps: frameTextureExactKeyModel.verificationGaps.filter(gap => gap.category === 'property'),
+    }));
+  check('B119 frame texture exact keys preserve positional icon semantics and canonical numeric/color positives',
+    staticString(frameTextureExactKeyCalls[0]?.semantics.icon) === 'background-positional'
+      && property(frameTextureExactKeyCalls[0], 'icon') === undefined
+      && property(frameTextureExactKeyCalls[0], 'width')?.value.value === 21
+      && property(frameTextureExactKeyCalls[0], 'color')?.value.status === 'static'
+      && colorExpression(frameTextureExactKeyModel, frameTextureExactKeyCalls[0], 'color')?.kind === 'literal-table'
+      && staticString(frameTextureExactKeyCalls[1]?.semantics.icon) === 'background2-positional'
+      && property(frameTextureExactKeyCalls[1], 'icon')?.value.value === 'background2-exact'
+      && property(frameTextureExactKeyCalls[1], 'rotationRate')?.value.value === 24
+      && staticString(frameTextureExactKeyCalls[2]?.semantics.icon) === 'overlay-positional'
+      && property(frameTextureExactKeyCalls[2], 'icon')?.value.value === 'overlay-exact'
+      && property(frameTextureExactKeyCalls[2], 'rotationStart')?.value.value === 34,
+    detail(frameTextureExactKeyCalls.map(candidate => ({
+      name: candidate?.name,
+      icon: candidate?.semantics.icon,
+      properties: candidate?.semantics.properties,
+      unsupported: candidate?.semantics.unsupportedProperties,
+    }))));
   check('setColWidth exposes optional scaling', setWidth?.semantics.scaling?.value === false, detail(setWidth?.semantics));
   check('button affectRowHeight is projected with static source identity',
     property(button, 'affectRowHeight')?.value.status === 'static'
@@ -359,7 +467,8 @@ function run(): { allPassed: boolean; pass: boolean; passed: number; total: numb
     'local flag = true',
     'local function makeColor() return { r = 0.7, g = 0.8, b = 0.9, a = 0.25 } end',
     'local colorMenu = { name = "Colors", layer = 1 }',
-    'local colorFrame = Helper.createFrameHandle(colorMenu, { backgroundColor = { r = 0.1, g = 0.2, b = 0.3, a = 0.4 } })',
+    'local colorFrame = Helper.createFrameHandle(colorMenu, {})',
+    'colorFrame:setBackground("frame-icon", { color = { r = 0.1, g = 0.2, b = 0.3, a = 0.4 } })',
     'local colorTable = colorFrame:addTable(1, { backgroundColor = Color["known.id"] })',
     'local colorRow = colorTable:addRow(true, {})',
     'colorRow[1]:createText("dynamic", { color = Color[key], cellBGColor = (flag and Color["branch.id"]) or makeColor() })',
@@ -369,7 +478,7 @@ function run(): { allPassed: boolean; pass: boolean; passed: number; total: numb
   ].join('\n');
   const colorSourceBefore = colorSource;
   const colorModel = buildX4UiCallModel(input(colorSource, 'selftest/color-expressions.lua'));
-  const literalColor = colorExpression(colorModel, call(colorModel, 'createFrameHandle'), 'backgroundColor');
+  const literalColor = colorExpression(colorModel, call(colorModel, 'setBackground'), 'color');
   const symbolicColor = colorExpression(colorModel, call(colorModel, 'addTable'), 'backgroundColor');
   const textColorCall = call(colorModel, 'createText');
   const dynamicColor = colorExpression(colorModel, textColorCall, 'color');
@@ -505,7 +614,8 @@ function run(): { allPassed: boolean; pass: boolean; passed: number; total: numb
     '}',
     'local stableAlias = TOK.button',
     'local tokMenu = { name = "AIC-shaped", layer = 1 }',
-    'local tokFrame = Helper.createFrameHandle(tokMenu, { backgroundColor = TOK.frame })',
+    'local tokFrame = Helper.createFrameHandle(tokMenu, {})',
+    'tokFrame:setBackground("frame", { color = TOK.frame })',
     'local tokTable = tokFrame:addTable(1, { backgroundColor = TOK["table"] })',
     'local tokRow = tokTable:addRow(true, {})',
     'tokRow[1]:createText("member", { color = TOK.nested.text, cellBGColor = TOK["cell"] })',
@@ -541,14 +651,14 @@ function run(): { allPassed: boolean; pass: boolean; passed: number; total: numb
     'tokRow[16]:createIcon("reassigned-color", { color = Color["frame"] })'
   ].join('\n');
   const tokModel = buildX4UiCallModel(input(tokSource, 'selftest/aic-shaped-tok.lua'));
-  const tokFrameCall = callContaining(tokModel, tokSource, 'createFrameHandle', 'backgroundColor = TOK.frame');
+  const tokFrameCall = callContaining(tokModel, tokSource, 'setBackground', 'color = TOK.frame');
   const tokTableCall = callContaining(tokModel, tokSource, 'addTable', 'backgroundColor = TOK["table"]');
   const tokTextCall = callContaining(tokModel, tokSource, 'createText', 'color = TOK.nested.text');
   const tokButtonCall = callContaining(tokModel, tokSource, 'createButton', 'bgColor = stableAlias');
   const tokEditCall = callContaining(tokModel, tokSource, 'createEditBox', 'bgColor = TOK.edit');
   const tokIconCall = callContaining(tokModel, tokSource, 'createIcon', 'color = TOK.icon');
   const tokLiteralSpecs = [
-    { callRecord: tokFrameCall, propertyName: 'backgroundColor', use: 'TOK.frame', declaration: '{ r = 0.11, g = 0.12, b = 0.13, a = 0.14 }', channels: [0.11, 0.12, 0.13, 0.14] as [number, number, number, number] },
+    { callRecord: tokFrameCall, propertyName: 'color', use: 'TOK.frame', declaration: '{ r = 0.11, g = 0.12, b = 0.13, a = 0.14 }', channels: [0.11, 0.12, 0.13, 0.14] as [number, number, number, number] },
     { callRecord: tokTableCall, propertyName: 'backgroundColor', use: 'TOK["table"]', declaration: '{ r = 0.21, g = 0.22, b = 0.23, a = 0.24 }', channels: [0.21, 0.22, 0.23, 0.24] as [number, number, number, number] },
     { callRecord: tokTextCall, propertyName: 'color', use: 'TOK.nested.text', declaration: '{ r = 0.31, g = 0.32, b = 0.33, a = 0.34 }', channels: [0.31, 0.32, 0.33, 0.34] as [number, number, number, number] },
     { callRecord: tokTextCall, propertyName: 'cellBGColor', use: 'TOK["cell"]', declaration: '{ r = 0.41, g = 0.42, b = 0.43, a = 0.44 }', channels: [0.41, 0.42, 0.43, 0.44] as [number, number, number, number] },
@@ -615,7 +725,7 @@ function run(): { allPassed: boolean; pass: boolean; passed: number; total: numb
   const colorEvidence = [literalColor, symbolicColor, dynamicColor, conditionalColor, functionColor, scalarColor, explicitGlowColor, editColor, iconColor];
   const colorSidecar = colorModel.colorExpressions;
   const repeatedColorModel = buildX4UiCallModel(input(colorSource, 'selftest/color-expressions.lua'));
-  const repeatedLiteralColor = colorExpression(repeatedColorModel, call(repeatedColorModel, 'createFrameHandle'), 'backgroundColor');
+  const repeatedLiteralColor = colorExpression(repeatedColorModel, call(repeatedColorModel, 'setBackground'), 'color');
   const colorProjections = colorModel.calls.flatMap(candidate => candidate.semantics.properties || []);
   const ownershipKeys = colorSidecar.map(entry => [
     entry.callName,
@@ -641,8 +751,10 @@ function run(): { allPassed: boolean; pass: boolean; passed: number; total: numb
           && !reflected.includes('colorExpression');
       })
       && JSON.stringify(colorSidecar) === JSON.stringify(JSON.parse(JSON.stringify(colorSidecar)))
-      && colorSidecar.some(entry => entry.propertyName === 'backgroundColor'
-        && entry.callName === 'createFrameHandle'
+      && !colorSidecar.some(entry => entry.propertyName === 'backgroundColor'
+        && entry.callName === 'createFrameHandle')
+      && colorSidecar.some(entry => entry.propertyName === 'color'
+        && entry.callName === 'setBackground'
         && entry.colorExpression.kind === 'literal-table')
       && colorSource === colorSourceBefore
       && colorModel.file.text === colorSource,

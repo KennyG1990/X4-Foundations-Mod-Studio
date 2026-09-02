@@ -1639,6 +1639,78 @@ async function main() {
   const extensionDoctorCapabilityResponse = await req('GET', '/api/agent/extension-doctor', SESSION_TOKEN);
   capabilityResponses.set('extensions.conflicts.analyze', extensionDoctorCapabilityResponse);
 
+  // B119: UI source text has a bounded per-file allowance above the generic passthrough cap,
+  // while unrelated text and UI source above that allowance remain omitted and disk-backed.
+  const b119UiPolicyName = 'b119_ui_inline_policy_fixture';
+  const b119UiPolicyRoot = path.join(safeWorkspace, b119UiPolicyName);
+  const b119InlineLua = `${'-- B119 inline UI source fixture\n'.repeat(14_000)}return {}\n`;
+  const b119ComparableText = 'B119 unrelated text fixture\n'.repeat(Math.ceil(b119InlineLua.length / 28));
+  const b119OversizedLua = `${'-- B119 oversized UI source fixture\n'.repeat(140_000)}return {}\n`;
+  const b119OversizedRegistration = '<file name="ui/b119_oversized.lua"/>';
+  const b119UiXml = `<?xml version="1.0"?><addon><environment type="menus"><file name="ui/b119_inline.lua"/>${b119OversizedRegistration}</environment></addon>`;
+  fs.mkdirSync(path.join(b119UiPolicyRoot, 'ui'), { recursive: true });
+  fs.mkdirSync(path.join(b119UiPolicyRoot, 'unrelated'), { recursive: true });
+  fs.writeFileSync(path.join(b119UiPolicyRoot, 'content.xml'), '<content id="b119_ui_inline_policy_fixture" name="B119 UI Inline Policy Fixture" version="100"/>');
+  fs.writeFileSync(path.join(b119UiPolicyRoot, 'ui.xml'), b119UiXml);
+  fs.writeFileSync(path.join(b119UiPolicyRoot, 'ui', 'b119_inline.lua'), b119InlineLua);
+  fs.writeFileSync(path.join(b119UiPolicyRoot, 'ui', 'b119_oversized.lua'), b119OversizedLua);
+  fs.writeFileSync(path.join(b119UiPolicyRoot, 'unrelated', 'b119_comparable.txt'), b119ComparableText);
+  fs.writeFileSync(path.join(b119UiPolicyRoot, 'unrelated', 'b119_binary.bin'), Buffer.alloc(Buffer.byteLength(b119InlineLua, 'utf8'), 0x42));
+  const b119UiPolicyImport = await req('POST', '/api/agent/mod-folder/import', SESSION_TOKEN, { root: 'workspace', path: b119UiPolicyName });
+  const b119UiWorkspace = b119UiPolicyImport.json?.workspace;
+  const b119InlineEntry = b119UiWorkspace?.passthroughFiles?.find(entry => entry.path === 'ui/b119_inline.lua');
+  const b119InlineClassification = b119UiPolicyImport.json?.report?.classification?.find(entry => entry.path === 'ui/b119_inline.lua');
+  ok('b119_ui_lua_above_legacy_cap_imports_byte_exactly',
+    b119UiPolicyImport.status === 200
+      && b119InlineEntry?.reason === 'partial'
+      && b119InlineEntry?.omitted !== true
+      && typeof b119InlineEntry?.content === 'string'
+      && Buffer.from(b119InlineEntry.content, 'utf8').equals(fs.readFileSync(path.join(b119UiPolicyRoot, 'ui', 'b119_inline.lua')))
+      && b119InlineClassification?.class === 'partial',
+    `status=${b119UiPolicyImport.status} bytes=${Buffer.byteLength(String(b119InlineEntry?.content || ''), 'utf8')}`);
+  const b119ComparableEntry = b119UiWorkspace?.passthroughFiles?.find(entry => entry.path === 'unrelated/b119_comparable.txt');
+  const b119ComparableClassification = b119UiPolicyImport.json?.report?.classification?.find(entry => entry.path === 'unrelated/b119_comparable.txt');
+  ok('b119_unrelated_text_keeps_generic_inline_cap',
+    b119ComparableEntry?.reason === 'too_large'
+      && b119ComparableEntry?.omitted === true
+      && b119ComparableEntry?.bytes === fs.statSync(path.join(b119UiPolicyRoot, 'unrelated', 'b119_comparable.txt')).size
+      && b119ComparableClassification?.class === 'passthrough',
+    `reason=${b119ComparableEntry?.reason} omitted=${b119ComparableEntry?.omitted}`);
+  const b119BinaryEntry = b119UiWorkspace?.passthroughFiles?.find(entry => entry.path === 'unrelated/b119_binary.bin');
+  const b119BinaryClassification = b119UiPolicyImport.json?.report?.classification?.find(entry => entry.path === 'unrelated/b119_binary.bin');
+  ok('b119_binary_keeps_generic_inline_cap',
+    b119BinaryEntry?.reason === 'binary'
+      && b119BinaryEntry?.omitted === true
+      && b119BinaryEntry?.bytes === fs.statSync(path.join(b119UiPolicyRoot, 'unrelated', 'b119_binary.bin')).size
+      && b119BinaryClassification?.class === 'binary',
+    `reason=${b119BinaryEntry?.reason} omitted=${b119BinaryEntry?.omitted}`);
+  const b119UiXmlEntry = b119UiWorkspace?.passthroughFiles?.find(entry => entry.path === 'ui.xml');
+  const b119OversizedEntry = b119UiWorkspace?.passthroughFiles?.find(entry => entry.path === 'ui/b119_oversized.lua');
+  ok('b119_ui_lua_above_bounded_allowance_stays_omitted',
+    b119UiXmlEntry?.content === b119UiXml
+      && b119UiXmlEntry.content.includes(b119OversizedRegistration)
+      && b119OversizedEntry?.reason === 'too_large'
+      && b119OversizedEntry?.omitted === true
+      && b119OversizedEntry?.bytes === fs.statSync(path.join(b119UiPolicyRoot, 'ui', 'b119_oversized.lua')).size,
+    `registered=${b119UiXmlEntry?.content?.includes(b119OversizedRegistration) === true} reason=${b119OversizedEntry?.reason} omitted=${b119OversizedEntry?.omitted}`);
+
+  const b119BudgetName = 'b119_ui_total_budget_fixture';
+  const b119BudgetRoot = path.join(safeWorkspace, b119BudgetName);
+  const b119BudgetLua = `${'-- B119 total inline budget fixture\n'.repeat(100_000)}return {}\n`;
+  fs.mkdirSync(path.join(b119BudgetRoot, 'ui'), { recursive: true });
+  fs.writeFileSync(path.join(b119BudgetRoot, 'content.xml'), '<content id="b119_ui_total_budget_fixture" name="B119 UI Total Budget Fixture" version="100"/>');
+  fs.writeFileSync(path.join(b119BudgetRoot, 'ui.xml'), '<?xml version="1.0"?><addon><environment type="menus"><file name="ui/b119_budget_a.lua"/><file name="ui/b119_budget_b.lua"/></environment></addon>');
+  fs.writeFileSync(path.join(b119BudgetRoot, 'ui', 'b119_budget_a.lua'), b119BudgetLua);
+  fs.writeFileSync(path.join(b119BudgetRoot, 'ui', 'b119_budget_b.lua'), b119BudgetLua);
+  const b119BudgetImport = await req('POST', '/api/agent/mod-folder/import', SESSION_TOKEN, { root: 'workspace', path: b119BudgetName });
+  const b119BudgetEntries = b119BudgetImport.json?.workspace?.passthroughFiles?.filter(entry => /^ui\/b119_budget_[ab]\.lua$/.test(entry.path)) || [];
+  ok('b119_ui_total_inline_budget_remains_bounded',
+    b119BudgetImport.status === 200
+      && b119BudgetEntries.length === 2
+      && b119BudgetEntries.some(entry => entry.reason === 'partial' && entry.omitted !== true)
+      && b119BudgetEntries.some(entry => entry.reason === 'too_large' && entry.omitted === true),
+    JSON.stringify(b119BudgetEntries.map(entry => ({ path: entry.path, reason: entry.reason, omitted: entry.omitted, bytes: entry.bytes }))));
+
   const patchModRoot = path.join(safeWorkspace, 'patch_capability');
   const patchOldRoot = path.join(tmp, 'patch-old');
   const patchNewRoot = path.join(tmp, 'patch-new');

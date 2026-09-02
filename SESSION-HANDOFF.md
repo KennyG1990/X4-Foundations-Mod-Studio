@@ -1,109 +1,88 @@
-# Session handoff — B119 editbox descriptor-height source port
+# Session handoff — B119 installed source materialization; visual parity active
 
-Date: 2026-08-30
+Date: 2026-09-01
 Project: `F:\DEV_ENV\X4_Forge`
-Status: bounded editbox source port `VERIFIED`, committed, pushed, and synchronized across durable owners; overall B119 `IN_PROGRESS / PARTIAL`
+Status: `IN_PROGRESS / PARTIAL / Not verified in game`
 
-## Current repository state
+## Session-start brief
 
-- Source checkpoint `2443399ffdb46dbaca4eef784396cce4e68bcd02`
-  (`feat(ui-editor): port editbox descriptor height semantics`) is pushed with exact local `HEAD`, `origin/main`,
-  and direct remote `main` parity. Its index is empty.
-- B119 implementation/test ownership is exactly these 15 paths:
-  - `src/lib/luaStaticAnalysis.ts`
-  - `src/lib/x4UiCallModel.ts` and `.selftest.ts`
-  - `src/lib/x4UiLayoutKernel.ts` and `.selftest.ts`
-  - `src/lib/x4UiLayoutProgram.ts` and `.selftest.ts`
-  - `src/lib/x4UiLint.ts` and `.selftest.ts`
-  - `src/lib/x4UiPreviewPipeline.selftest.ts`
-  - `src/lib/x4UiScene.ts` and `.selftest.ts`
-  - `src/lib/x4UiSourceEdits.ts` and `.selftest.ts`
-  - `src/server/x4UiIntegration.selftest.ts`
-- B119 record-close ownership is exactly `BACKLOG.md`, this handoff, and
-  `docs/plans/2026-08-29-b119-editbox-descriptor-height-source-port.md`.
-- Preserve every other dirty/untracked path. Continue explicit-path validation, staging, and commit only. In particular, do not absorb deleted Discord/data scripts, VS Code release work, W3B1 records, screenshots/media, issue templates, `REFACTOR-PLAN.md`, `pnpm-workspace.yaml`, or `target.name`.
-- The exact native `gpt-5.6-luna` implementation worker is terminal and closed. No spawned worker remains open.
+- Project: X4 Forge B119, the linter-first source-faithful X4 Lua UI editor. GitHub owner: #41.
+- Current bounded milestone: the reviewed 0.0.70 package is installed and mounted; registered Lua materialization is repaired and verified on a fresh read-only real-mod import. Three-menu Forge/X4 parity is not verified.
+- Eyeball queue: none requires the sleeping operator now. Later experience gates are (1) compare Forge and X4 at 2544x1353, (2) compare at 1920x1080, and (3) inspect AI Influence screen 1b with measured keep-outs. Each must retain exact deployed hashes and `Not verified in game` until the live X4 check.
+- Commit question: current B119 implementation is still based on HEAD `bd38ec6ca52fedc0db9e98be8e27be5c07b00b47` and is uncommitted. Commit the explicit B119/tooling paths after the recorded precommit proof; preserve all unrelated dirt.
 
-## Bounded capability now implemented
+## Installed host and package authority
 
-- The existing ordered call model recognizes source-located `table:setDefaultCellProperties("editbox", ...)`, `table:setDefaultComplexCellProperties("editbox", "hotkey", ...)`, and cell `setHotkey(...)` calls without executing arbitrary Lua.
-- Layout replay follows shipped `helper.lua` ordering: simple defaults, complex defaults, then call-specific properties. A later default cannot mutate an existing cell; call-specific values override defaults.
-- Direct `editbox:setHotkey(argument, properties)` now follows shipped assignment order: the first argument is applied, then a static `properties.hotkey` may override it. Valid but unported `x`/`y` properties retain exact source evidence and make the program/preview partial instead of disappearing.
-- Effective editbox height applies shipped `Helper.editboxMinHeight = 23` only when the effective hotkey is non-empty and `displayIcon=true`; empty/hidden hotkeys retain base height.
-- Source-proven button hotkey chains may include only colon-called `setText`, `setText2`, `setIcon`, and `setIcon2` between an exact earlier `createButton` and `setHotkey` in the same statement. Row binding, static cell index, and button identity are required.
-- Generic `setIcon`/`setIcon2` receiver preservation now requires an already tracked button. Invalid editbox icon chains, ambiguous branches, wrong tables/cells, arbitrary indexed values, dot calls, unknown methods, and forged evidence fail closed.
-- Scene producer transitions now require closed descriptor keys plus reciprocal own-key/static-source-property evidence. Omitted, dynamic, unavailable, arbitrary-extra, and coherently replayed forged facts are rejected; explicit `0`, `false`, and `""` remain present source values.
-- The same authority reaches linter findings, Scene transition validation, source-edit closed schemas, project/package validation, and IDE Problems. Every preview remains `Not verified in game`.
+- Installed extension: `C:\Users\Moshi\.antigravity-ide\extensions\x4forge.x4-forge-studio-0.0.70`.
+- Managed sidecar: `127.0.0.1:60956`, PID `38296`, one listener, installed `app/dist/server.cjs` SHA-256 `626C651742402EC4C04FD7FEA4A2FD3190ADDC389170581C5688250165E67314`.
+- Installed package: `vscode-extension/x4-forge-studio-0.0.70-b119-source-materialization-green2-019fea10.vsix`, 26,281,393 bytes, SHA-256 `057E5193FF35112F4A1978C291C1BCE371504CC1A139EA41B672CB19FE696CDF`.
+- Package receipt: `dev-docs/b119-x4-ui-pipeline-smoke/frame-composition-runtime-20260831/records/source-materialization-green2-package/receipt.json`.
+- Antigravity visibly mounts the real HUD & Lua UI SourceEditor, configured X4 9.00 corpus, source target controls, linter, source authority, scale/profile controls, and permanent `Not verified in game` state.
+- The mounted persisted workspace predates the importer repair and still reports `missing-registered-lua` / `omitted-lua-source`. Do not confuse that stale snapshot with the fresh import oracle and do not replace the user's canvas casually.
+- Fresh read-only import of configured `F:\DEV_ENV\projects\Mods\X4Mods\x4_ai_influence` materializes `ui.xml` plus all seven registered Lua files, including 568,069-byte `aic_uix.lua`; authority is `source-owned`, `editable:true`, `shippable:true`, with no generated collision.
 
-## Exact validation authority at source checkpoint `2443399`
+## Current validation
 
-- Focused selftests all pass: CallModel `89/89`; LayoutKernel `34/34`; LayoutProgram `648/648`; Lint `140/140`; Scene `174/174`; SourceEdits `83/83`; integration `21/21`; aggregate `1,189/1,189`.
-- Downstream independent checks also pass at the same revision: PreviewPipeline `105/105`, PaintPlan `175/175`, CanvasRenderer `129/129`, EditorSession, SourceBundle, and the complete X4 UI source-editor matrices.
-- `npm run typecheck` passes.
-- Exact 15-file ESLint passes with zero errors and eight pre-existing `luaStaticAnalysis.ts` `no-explicit-any` warnings.
-- Exact 15-file `git diff --check` passes.
-- Final configured official X4 9.00 census passes twice at the current source-law revision with the same ready manifest: `81/81/0`, `7,669,552` bytes, applicable fatal `0`, warnings `29`, unverified files `70`, truncated files `26`, verification gaps `13,681`, exit `0`. Six restricted-online-call errors remain visible and are non-applicable only for this trusted official-source census.
-- The planned `26` warnings was a wrong forecast, not an acceptance target. Five displayed-hotkey omissions become clean; faithful button/editbox attribution restores three legitimate omitted-editbox warnings; net `31 -> 29` with all other census invariants unchanged.
-- Coordinator review forced the original five causal corrections plus the later source-law closure: shipped `button:setIcon2` was initially omitted; generic cell `setIcon`/`setIcon2` preservation could falsely clean invalid editboxes; Scene accepted coherent facts for omitted properties; dynamic source properties could be materialized as static transitions; unavailable/arbitrary-extra facts could forge provenance; unsupported hotkey properties were dropped; `properties.hotkey` was rejected instead of overriding the argument; later exact overrides left stale lint uncertainty; producer replay could retain the wrong `displayIcon`; and Scene normalized underscore/hyphen/space property names differently from CallModel. All now have causal tests.
-- Isolated oracles pass `134/134`. Exact Git-tracked serial E2E passes `103/103` with structured discovery/terminal
-  parity, `ownershipComplete=true`, `treeGone=true`, and zero remaining PIDs. Complete precommit and the
-  `1,848`-module production build pass. Graphify is refreshed to `10,029` nodes / `25,198` edges / `317`
-  communities.
-- Exact protected-root comparison proves `.studio-state`, `data`, repository `config.json`, and the installed
-  Antigravity Forge config unchanged. Ports `3000/3001/3100/3101/52061/8972` are clear and X4 is absent.
+- Detached exact-overlay precommit: PASS. Routes: `496/496`. Production build: PASS, 1,848 modules. Staged product: `16/16`. Package inspector: `13/13`; independent archive inspection: 2,107 entries.
+- Frame-composition focused matrix: `1,344/1,344`; all nineteen X4 UI entrypoints pass. Current strict configured Scene rerun: `176/176`, exit 0.
+- Exact configured census remains truthful and partial:
+  - MENU: Layout 66 operations / 27 applied; Scene 16 cells / 3 widgets / 5 texts / 7 glyphs.
+  - HUB: Layout 18 / 11; Scene 4 cells / 0 widgets / 0 texts / 0 glyphs.
+  - COMM: Layout 14 / 12; Scene 3 cells / 0 widgets / 0 texts / 0 glyphs.
+- Prior real-X4 `pipeline_test` evidence remains valid at 2544x1353 and 1920x1080, both actual UI scale 1. Buttons, editbox, close, package/deploy/recovery, and scaling were proven. It does not prove current three-menu pixel parity.
+- X4 is not running. The user authorized unattended Forge updates, Computer Use, reversible `pipeline_test` deploys, and X4 launch for this sequence. Prefer no game launch until Forge has a new visual candidate worth comparing.
 
-## Machine and containment state
+## Explicit source checkpoint paths
 
-- The configured corpus remains `F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00`, pinned by the plan's Helper/widget hashes.
-- A controlled retry proved volume `F:` online and healthy. The installed Forge sidecar loaded manifest generation `1785035333079-2178b4c31f`; the earlier timeout was startup readiness timing, not a storage disconnect.
-- The installed 0.0.70 sidecar was started directly only for the read-only census, reached `/api/agent/schema`, and was stopped after two identical current-revision passes. Port `52061` has no listener, no matching server process remains, and its discovery file cleaned itself up.
-- The operator supplied `go — Antigravity open; X4 not running; machine quiet` on 2026-08-30. Broad gates then ran
-  serially. Final containment observes Antigravity open, `X4.exe` absent, the configured corpus reachable, all scoped
-  ports clear, and no owned validation process remaining.
+Frame-composition owners:
 
-## External and durable record state
+- `src/lib/x4UiCallModel.ts`
+- `src/lib/x4UiCallModel.selftest.ts`
+- `src/lib/x4UiLayoutProgram.ts`
+- `src/lib/x4UiLayoutProgram.selftest.ts`
+- `src/lib/x4UiScene.ts`
+- `src/lib/x4UiScene.selftest.ts`
+- `src/lib/x4UiPaintPlan.ts`
+- `src/lib/x4UiPaintPlan.selftest.ts`
+- `src/lib/x4UiCanvasRenderer.ts`
+- `src/lib/x4UiCanvasRenderer.selftest.ts`
+- `src/lib/x4UiPreviewPipeline.selftest.ts`
 
-- GitHub #41 remains open with 78 comments. Comment `5469712047` names source commit `2443399...`, corrected
-  corpus warnings `29`, focused `1,189/1,189`, serial host gates, and the remaining B119 boundary; its exact body was
-  read back.
-- Notion owner page `3b84618e-d15b-8190-821e-c0eb96f43d5a` remains `Status=In Progress`,
-  `Evidence Grade=Partial`; its properties and appended 2026-08-30 checkpoint were read back with commit
-  `2443399...` and GitHub comment `5469712047`.
-- Google Doc `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, was revision-locked and appended at
-  `HEADING_2`. New revision
-  `AIroW34i2k73hJ1YmnKtELjTFYTbDYMJBeWky7pZhoZnk8ti3ebnd1g4dUZYbAskwjckN61_0wEJUNpe09v8CsFimJDC-PMiFIDcxdH_okmc`
-  and all eight inserted paragraphs were read back.
-- StarForge capability-map and project/global AAR deltas record the same bounded close and false-green lifecycle
-  failure shield.
+Importer/package/tooling owners:
 
-## Next exact parent-B119 unit
+- `server.ts`
+- `scripts/route-integration.mjs`
+- `src/lib/modCompiler.ts`
+- `scripts/durable-writer-audit.mjs`
+- `config/durable-writers.json`
 
-1. Reconcile the large Forge frame outline and missing X4 background/alpha composition against exact shipped
-   `helper.lua` / `widget_fullscreen.lua` paint ownership and the retained Forge/X4 screenshots.
-2. Document one bounded source-port acceptance contract; keep arbitrary C++ acceptance and global pixel parity out of
-   scope.
-3. Route implementation/test edits through exact native `gpt-5.6-luna`; preserve unrelated dirty paths.
-4. Validate focused source authority, both retained profiles, mounted rendered-host output, canonical corpus, serial
-   host gates, and exact containment before another commit.
-5. Continue with measured keep-outs, AI Influence visual reconstruction, installed-extension proof, OpenVSX
-   publication, and final game comparison only as separately evidenced units.
+Record owners:
 
-## Remaining parent-B119 product units
+- `BACKLOG.md`
+- `SESSION-HANDOFF.md`
+- `docs/plans/2026-08-30-b119-frame-background-composition-source-port.md`
 
-- Explain and port the large frame outline plus X4 background/alpha composition from shipped source.
-- Finish measured keep-out overlays and mounted MENU/HUB/COMM visual interaction proof.
-- Visually reconstruct supplied AI Influence screen `1b` and remaining screens from inspected references using real emitted X4 Lua.
-- Compare exact Forge/X4 pixels at both retained profiles, then run installed-extension proof, OpenVSX publish workflow, and final current-game audit.
-- Preview is for layout; game is truth. Do not claim C++ acceptance, global 1:1 parity, or release completion before those gates close.
+Preserve all other tracked and untracked paths, especially Discord/data removals, W3B1 records, release wrapper changes, showcase media, screenshots, issue templates, and scratch files. Use explicit `git add -- <paths>` only.
 
-## Triggered AAR failure shields
+## Next exact implementation unit
 
-- Do not turn a forecast count into a target; canonical source semantics decide the census.
-- Button and editbox fluent calls share method names. Preserve identity only when widget type is source-proven, with cross-widget negatives.
-- Sidecar connection timeout during startup is not storage evidence. Check volume health and wait for readiness before diagnosing I/O.
-- Use literal-safe Windows paths when JavaScript composes PowerShell; the first retry command was rejected before launch after backslashes were consumed as JavaScript escapes.
-- Scene source authority requires both value equality and reciprocal fact-key/source-key presence; unavailable facts are not equivalent to omitted facts.
-- A green browser assertion count is not a green E2E receipt when root ownership or teardown is unavailable. Current
-  Windows lacks `wmic.exe`; use the tested PowerShell/CIM adapter and retain the strict fail-closed parser.
-- Isolated server owners must start only required services and fail when either owned temporary root cannot be removed.
-- Focused green tests do not close B119 or authorize release. Require canonical corpus, serial host gates, rendered-host proof, installed package, and game evidence at the scope claimed.
+1. Capture one compact machine receipt grouping every MENU/HUB/COMM unapplied operation and Scene/Paint gap by source, kind, reason, and visual impact.
+2. Reconcile the largest HUB/COMM visible-content cause against exact pinned `helper.lua` and `widget_fullscreen.lua` lines plus existing pipeline owners. Do not infer behavior from the zero-count test.
+3. Document one bounded source-port contract. Route all implementation and task-level test edits through native `luna_executor`, exact `gpt-5.6-luna`, max, `fork_context=false`.
+4. Require causal fail-first, focused green, source-law review, typecheck/lint/diff, strict configured census, mounted SourceEditor inspection, and graph refresh before another source commit.
+5. Once three credible Forge menu candidates exist, compare them to real X4 screenshots at both retained profiles. Then complete keep-outs, AI Influence 1b/remaining screens, installed-release acceptance, OpenVSX publish-before-commit, and the final current-game audit.
+
+## AAR failure shields
+
+- A green exact-count census can freeze an incomplete renderer. HUB/COMM's zero visible output is baseline evidence, not parity evidence.
+- A fresh import response and the workspace currently mounted in the editor are different state objects. Never promote or replace one based on the other without an explicit state mutation and rollback.
+- A preview that renders is not proof of X4 C++ frame acceptance. Keep game truth external.
+- Generic file-size caps can silently omit registered Lua and destroy round-trip authority even when one selected file previews.
+- Preserve source exactness: property names, setter order, width/height fallback pins, and inactive texture applicability come from shipped Lua, not normalized browser conventions.
+- Avoid broad output collectors and hard-coded status counts. Filter existing reporters narrowly and compare exact path sets.
+
+## External records
+
+- GitHub #41, Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Drive Doc `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE` remain open/partial. Last pre-install projection: GitHub comment `5490501378`; Drive revision `ANLCKQlnw-0h1u2Pv_Hony7A8gbnTUV9UxLzUKvdJ7RWeVbBgxaFeeIfYE4OISquE74UGWKb9XJ5QQ78828MdNiK3rWSpt99DwgMzixkAvC_`.
+- UI-modding KB: `F:\StarForge\wiki\x4-modding-methods\07 UI (Lua widgets, menus, overlays)\ui-modding-gotchas-quick-reference.md`, now 18 concise cards. Card 18 records the registered-Lua materialization failure shield.
+- Update GitHub/Notion/Drive only after the source commit IDs exist; all projections must retain `PARTIAL / Not verified in game` and the HUB/COMM zero-visible-output boundary.

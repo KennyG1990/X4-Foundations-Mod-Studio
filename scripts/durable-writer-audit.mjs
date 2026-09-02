@@ -93,6 +93,37 @@ function countMatches(text, pattern) {
   return count;
 }
 
+function fingerprintForParts(parts) {
+  return crypto.createHash("sha256").update(parts.sort().join("\n")).digest("hex");
+}
+
+function canonicalizeEol(text) {
+  return text.replace(/\r\n?/g, "\n");
+}
+
+function collectSourceMatches(file, text, patterns, fingerprintParts) {
+  const calls = {};
+  for (const [name, pattern] of Object.entries(patterns)) {
+    const count = countMatches(text, pattern);
+    if (count) calls[name] = count;
+    pattern.lastIndex = 0;
+    let match;
+    while ((match = pattern.exec(text))) {
+      fingerprintParts.push(`${relative(file)}:${name}:${text.slice(Math.max(0, match.index - 40), Math.min(text.length, match.index + 240)).replace(/\s+/g, " ")}`);
+    }
+  }
+  return calls;
+}
+
+function scanSourceText(file, rawText) {
+  const text = canonicalizeEol(rawText);
+  const fingerprintParts = [];
+  const calls = collectSourceMatches(file, text, CALL_PATTERNS, fingerprintParts);
+  const hostCalls = collectSourceMatches(file, text, HOST_STORE_PATTERNS, fingerprintParts);
+  const browserCalls = collectSourceMatches(file, text, BROWSER_OUTPUT_PATTERNS, fingerprintParts);
+  return { calls, hostCalls, browserCalls, fingerprintParts };
+}
+
 export function scanSources() {
   const files = [...topLevelSources, ...sourceRoots.flatMap(dir => walk(dir, []))];
   const writers = [];
@@ -100,43 +131,15 @@ export function scanSources() {
   const browserOutputs = [];
   const fingerprintParts = [];
   for (const file of files) {
-    const text = fs.readFileSync(file, "utf8");
-    const calls = {};
-    for (const [name, pattern] of Object.entries(CALL_PATTERNS)) {
-      const count = countMatches(text, pattern);
-      if (count) calls[name] = count;
-      pattern.lastIndex = 0;
-      let match;
-      while ((match = pattern.exec(text))) {
-        fingerprintParts.push(`${relative(file)}:${name}:${text.slice(Math.max(0, match.index - 40), Math.min(text.length, match.index + 240)).replace(/\s+/g, " ")}`);
-      }
-    }
+    const scanned = scanSourceText(file, fs.readFileSync(file, "utf8"));
+    fingerprintParts.push(...scanned.fingerprintParts);
+    const { calls, hostCalls, browserCalls } = scanned;
     if (Object.keys(calls).length) writers.push({ file: relative(file), calls });
-    const hostCalls = {};
-    for (const [name, pattern] of Object.entries(HOST_STORE_PATTERNS)) {
-      const count = countMatches(text, pattern);
-      if (count) hostCalls[name] = count;
-      pattern.lastIndex = 0;
-      let match;
-      while ((match = pattern.exec(text))) {
-        fingerprintParts.push(`${relative(file)}:${name}:${text.slice(Math.max(0, match.index - 40), Math.min(text.length, match.index + 240)).replace(/\s+/g, " ")}`);
-      }
-    }
     if (Object.keys(hostCalls).length) hostStores.push({ file: relative(file), calls: hostCalls });
-    const browserCalls = {};
-    for (const [name, pattern] of Object.entries(BROWSER_OUTPUT_PATTERNS)) {
-      const count = countMatches(text, pattern);
-      if (count) browserCalls[name] = count;
-      pattern.lastIndex = 0;
-      let match;
-      while ((match = pattern.exec(text))) {
-        fingerprintParts.push(`${relative(file)}:${name}:${text.slice(Math.max(0, match.index - 40), Math.min(text.length, match.index + 240)).replace(/\s+/g, " ")}`);
-      }
-    }
     if (Object.keys(browserCalls).length) browserOutputs.push({ file: relative(file), calls: browserCalls });
   }
   const dbFile = path.join(root, "src", "lib", "db.ts");
-  const dbText = fs.readFileSync(dbFile, "utf8");
+  const dbText = canonicalizeEol(fs.readFileSync(dbFile, "utf8"));
   const database = {
     file: relative(dbFile),
     mutationStatements: countMatches(dbText, /\b(?:INSERT(?:\s+OR\s+IGNORE)?\s+INTO|UPDATE|DELETE\s+FROM|DROP\s+TABLE|CREATE\s+TABLE|VACUUM)\b/gi),
@@ -146,7 +149,7 @@ export function scanSources() {
     pragmaCalls: countMatches(dbText, /\.pragma\s*\(/g),
   };
   return {
-    sourceFingerprint: crypto.createHash("sha256").update(fingerprintParts.sort().join("\n")).digest("hex"),
+    sourceFingerprint: fingerprintForParts(fingerprintParts),
     writers: writers.sort((a, b) => a.file.localeCompare(b.file)),
     hostStores: hostStores.sort((a, b) => a.file.localeCompare(b.file)),
     browserOutputs: browserOutputs.sort((a, b) => a.file.localeCompare(b.file)),
@@ -272,6 +275,29 @@ function selftest() {
   ok("browser_output_delta_rejected", auditManifest(base, { ...current, browserOutputs: [{ file: "export.ts", calls: { anchorDownload: 2 } }] }).some(error => error.includes("browser-output call counts changed")));
   ok("stale_browser_output_rejected", auditManifest({ ...base, browserOutputs: [...base.browserOutputs, { ...base.browserOutputs[0], file: "gone-export.ts" }] }, current).some(error => error.includes("stale browser-output")));
   ok("database_delta_rejected", auditManifest(base, { ...current, database: { ...current.database, transactionCalls: 2 } }).some(error => error.includes("database transactionCalls changed")));
+  const fixtureFile = path.join(root, "synthetic-durable-writer-eol-fixture.ts");
+  const fixtureLf = [
+    "const prefix = '0123456789012345678901234567890123456789';",
+    "const target = 'out';",
+    "fs.writeFileSync(target, 'payload');",
+    ...Array.from({ length: 24 }, (_, index) => `const suffix${index} = '${"x".repeat(32)}';`),
+  ].join("\n");
+  const fixtureCrlf = fixtureLf.replace(/\n/g, "\r\n");
+  const fixtureCr = fixtureLf.replace(/\n/g, "\r");
+  const lfFingerprint = fingerprintForParts(scanSourceText(fixtureFile, fixtureLf).fingerprintParts);
+  const crlfFingerprint = fingerprintForParts(scanSourceText(fixtureFile, fixtureCrlf).fingerprintParts);
+  const crFingerprint = fingerprintForParts(scanSourceText(fixtureFile, fixtureCr).fingerprintParts);
+  const currentFiles = [...topLevelSources, ...sourceRoots.flatMap(dir => walk(dir, []))];
+  const currentLfParts = [];
+  const currentCrlfParts = [];
+  for (const file of currentFiles) {
+    const rawText = fs.readFileSync(file, "utf8");
+    currentLfParts.push(...scanSourceText(file, rawText).fingerprintParts);
+    currentCrlfParts.push(...scanSourceText(file, rawText.replace(/\r\n?|\n/g, "\r\n")).fingerprintParts);
+  }
+  const currentLfFingerprint = fingerprintForParts(currentLfParts);
+  const currentCrlfFingerprint = fingerprintForParts(currentCrlfParts);
+  ok("lf_crlf_fingerprint_invariance", lfFingerprint === crlfFingerprint && lfFingerprint === crFingerprint && currentLfFingerprint === currentCrlfFingerprint, `syntheticLf=${lfFingerprint} syntheticCrlf=${crlfFingerprint} syntheticLoneCr=${crFingerprint} currentLf=${currentLfFingerprint} currentCrlf=${currentCrlfFingerprint}`);
   return { pass: checks.every(check => check.pass), checks };
 }
 

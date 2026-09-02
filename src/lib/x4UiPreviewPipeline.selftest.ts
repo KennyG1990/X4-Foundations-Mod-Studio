@@ -46,6 +46,14 @@ import {
   type X4UiPreviewSelection,
 } from './x4UiPreviewPipeline';
 import * as PreviewPipelineExports from './x4UiPreviewPipeline';
+import {
+  projectX4UiPaintPlan,
+} from './x4UiPaintPlan';
+import {
+  renderX4UiPaintPlanToCanvas,
+  type X4UiCanvasSurface,
+  type X4UiCanvasSurfaceFactory,
+} from './x4UiCanvasRenderer';
 import type { X4UiSceneTableViewState } from './x4UiScene';
 
 type Check = { readonly name: string; readonly pass: boolean; readonly detail?: unknown };
@@ -87,6 +95,62 @@ function asRecord(value: unknown): JsonRecord | undefined {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? value as JsonRecord
     : undefined;
+}
+
+type ExactPipelineTraceEntry = { readonly role: string; readonly name: string; readonly args: readonly unknown[] };
+
+function exactPipelineCanvasFactory(trace: ExactPipelineTraceEntry[]): X4UiCanvasSurfaceFactory {
+  return (width, height, role) => {
+    const recordOperation = (name: string, args: readonly unknown[]): void => {
+      trace.push({ role, name, args });
+    };
+    let fillStyle = '';
+    let strokeStyle = '';
+    const context: JsonRecord = {
+      save: (...args: unknown[]) => recordOperation('save', args),
+      restore: (...args: unknown[]) => recordOperation('restore', args),
+      beginPath: (...args: unknown[]) => recordOperation('beginPath', args),
+      rect: (...args: unknown[]) => recordOperation('rect', args),
+      clip: (...args: unknown[]) => recordOperation('clip', args),
+      fillRect: (...args: unknown[]) => recordOperation('fillRect', args),
+      moveTo: (...args: unknown[]) => recordOperation('moveTo', args),
+      lineTo: (...args: unknown[]) => recordOperation('lineTo', args),
+      closePath: (...args: unknown[]) => recordOperation('closePath', args),
+      stroke: (...args: unknown[]) => recordOperation('stroke', args),
+      drawImage: (...args: unknown[]) => recordOperation('drawImage', [asRecord(args[0])?.role ?? 'surface', ...args.slice(1)]),
+      createImageData: (imageWidth: unknown, imageHeight: unknown) => {
+        recordOperation('createImageData', [imageWidth, imageHeight]);
+        return { data: new Uint8ClampedArray(Number(imageWidth) * Number(imageHeight) * 4) };
+      },
+      putImageData: (...args: unknown[]) => recordOperation('putImageData', args),
+    };
+    Object.defineProperties(context, {
+      fillStyle: {
+        configurable: true,
+        enumerable: true,
+        get: () => fillStyle,
+        set: (value: unknown) => {
+          fillStyle = String(value);
+          recordOperation('setFillStyle', [value]);
+        },
+      },
+      strokeStyle: {
+        configurable: true,
+        enumerable: true,
+        get: () => strokeStyle,
+        set: (value: unknown) => {
+          strokeStyle = String(value);
+          recordOperation('setStrokeStyle', [value]);
+        },
+      },
+    });
+    return {
+      role,
+      width,
+      height,
+      getContext: (_kind: '2d') => context as unknown as CanvasRenderingContext2D,
+    } as unknown as X4UiCanvasSurface;
+  };
 }
 
 function sameJson(left: unknown, right: unknown): boolean {
@@ -1179,6 +1243,31 @@ const hotkeyPositionLua = [
   '',
 ].join('\n');
 
+const frameTextureExactKeyXml = [
+  '<?xml version="1.0" encoding="utf-8"?>',
+  '<addon name="frame-texture-exact-key">',
+  '  <environment type="menus">',
+  '    <file name="ui/frame-texture-exact-key.lua" />',
+  '  </environment>',
+  '</addon>',
+  '',
+].join('\n');
+
+const frameTextureExactKeyLua = [
+  'local menu = { name = "B119FrameTextureExactKeyPreview", layer = 4 }',
+  'function menu.createWrongCase()',
+  '  local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+  '  frame:setBackground("positional-icon", { Icon = "" })',
+  '  frame:display()',
+  'end',
+  'function menu.createExactCase()',
+  '  local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+  '  frame:setBackground("positional-icon", { icon = "" })',
+  '  frame:display()',
+  'end',
+  '',
+].join('\n');
+
 const lintLua = [
   'local frame = Menus.createFrameHandle()',
   'frame:addTable(24)',
@@ -1995,6 +2084,23 @@ return menu
       drawable: { width: 2544, height: 1353 },
       uiScale: 1.25,
     }, colorAuthority);
+  // The retained in-game receipt binds this same source/content to two
+  // drawable resolutions at the default UI scale. Keep this pair separate
+  // from the synthetic 1.25 UI-scale regression above.
+  const exactPipelineActualReferenceAtOne = canonical === undefined || !colorAuthorityReady
+    ? undefined
+    : pipeline(exactPipelineSource, exactPipelineSelection, canonical, {}, {
+      truthGrade: 'supplied',
+      drawable: { width: 2544, height: 1353 },
+      uiScale: 1,
+    }, colorAuthority);
+  const exactPipelineActualSecondAtOne = canonical === undefined || !colorAuthorityReady
+    ? undefined
+    : pipeline(exactPipelineSource, exactPipelineSelection, canonical, {}, {
+      truthGrade: 'supplied',
+      drawable: { width: 1920, height: 1080 },
+      uiScale: 1,
+    }, colorAuthority);
   const exactPipelineProgram = (result: typeof exactPipelineAtOne) =>
     result?.program !== undefined && 'program' in result.program ? result.program.program : undefined;
   const exactPipelineScene = (result: typeof exactPipelineAtOne) =>
@@ -2181,8 +2287,8 @@ return menu
       && exactPipeline125Program?.tables[0]?.height?.value === 202
       && exactPipelineTextEvidenceMatches(exactPipelineOneProgram, 2, 9, 18, 16)
       && exactPipelineTextEvidenceMatches(exactPipeline125Program, 3, 12, 22, 20)
-      && JSON.stringify(exactPipelineSceneGeometry(exactPipelineOneScene)) === JSON.stringify({ frames: 1, tables: 1, rows: 6, cells: 12, widgets: 6, texts: 8, glyphs: 99, gaps: 56 })
-      && JSON.stringify(exactPipelineSceneGeometry(exactPipeline125Scene)) === JSON.stringify({ frames: 1, tables: 1, rows: 6, cells: 12, widgets: 6, texts: 8, glyphs: 99, gaps: 56 })
+      && JSON.stringify(exactPipelineSceneGeometry(exactPipelineOneScene)) === JSON.stringify({ frames: 1, tables: 1, rows: 6, cells: 12, widgets: 6, texts: 8, glyphs: 99, gaps: 57 })
+      && JSON.stringify(exactPipelineSceneGeometry(exactPipeline125Scene)) === JSON.stringify({ frames: 1, tables: 1, rows: 6, cells: 12, widgets: 6, texts: 8, glyphs: 99, gaps: 57 })
       && exactPipelineSceneFiniteGeometry(exactPipelineOneScene)
       && exactPipelineSceneFiniteGeometry(exactPipeline125Scene)
       && exactPipelinePaintAuthority(exactPipelineAtOne, exactPipelineOneScene)
@@ -2239,6 +2345,525 @@ return menu
         paintAuthority: exactPipelinePaintAuthority(exactPipelineAt125, exactPipeline125Scene),
       },
     });
+  const exactPipelineFrameSurface = (scene: typeof exactPipelineOneScene): {
+    readonly layers: readonly JsonRecord[];
+    readonly backdrop?: JsonRecord;
+    readonly allInactive: boolean;
+    readonly blurBackground?: unknown;
+  } | undefined => {
+    const frame = scene?.frames[0];
+    const frameRecord = asRecord(frame);
+    const layers = Array.isArray(frameRecord?.frameTextureLayers)
+      ? frameRecord.frameTextureLayers.map(layer => asRecord(layer)).filter((layer): layer is JsonRecord => layer !== undefined)
+      : [];
+    const backdrop = asRecord(frameRecord?.backdrop);
+    return frameRecord === undefined ? undefined : {
+      layers,
+      ...(backdrop === undefined ? {} : { backdrop }),
+      allInactive: layers.length === 3
+        && JSON.stringify(layers.map(layer => layer.name)) === JSON.stringify(['background', 'background2', 'overlay'])
+        && layers.every(layer => layer.applicability === 'inactive'),
+      blurBackground: backdrop?.blurBackground,
+    };
+  };
+  const exactPipelineOneFrameSurface = exactPipelineFrameSurface(exactPipelineOneScene);
+  const exactPipeline125FrameSurface = exactPipelineFrameSurface(exactPipeline125Scene);
+  const exactPipelineFrameFallbackMetadata = (
+    scene: typeof exactPipelineOneScene,
+    surface: typeof exactPipelineOneFrameSurface,
+  ): boolean => {
+    const frame = scene?.frames[0];
+    const frameRect = frame?.rect;
+    return frameRect !== undefined
+      && surface !== undefined
+      && surface.layers.every(layer => {
+        const widthFallback = Array.isArray(layer.provenanceLinks) && layer.provenanceLinks.some(link => {
+          const sourcePin = asRecord(link.sourcePin);
+          return link.kind === 'source-pin'
+            && link.expression === 'frameElement.width'
+            && sourcePin?.sourcePath === WIDGET_SOURCE_PATH
+            && sourcePin.lineStart === 16977
+            && sourcePin.lineEnd === 16977;
+        });
+        const heightFallback = Array.isArray(layer.provenanceLinks) && layer.provenanceLinks.some(link => {
+          const sourcePin = asRecord(link.sourcePin);
+          return link.kind === 'source-pin'
+            && link.expression === 'frameElement.height'
+            && sourcePin?.sourcePath === WIDGET_SOURCE_PATH
+            && sourcePin.lineStart === 16978
+            && sourcePin.lineEnd === 16978;
+        });
+        const widthFact = exactPipelineFact(layer.descriptorFacts, 'width');
+        const heightFact = exactPipelineFact(layer.descriptorFacts, 'height');
+        return layer.effectiveWidth === frameRect.width
+          && layer.effectiveHeight === frameRect.height
+          && widthFact?.status === 'known'
+          && widthFact.value === 0
+          && heightFact?.status === 'known'
+          && heightFact.value === 0
+          && widthFallback
+          && heightFallback;
+      });
+  };
+  const exactPipelineOneFrameFallbackMetadata = exactPipelineFrameFallbackMetadata(exactPipelineOneScene, exactPipelineOneFrameSurface);
+  const exactPipeline125FrameFallbackMetadata = exactPipelineFrameFallbackMetadata(exactPipeline125Scene, exactPipeline125FrameSurface);
+  const exactPipelinePaintResult = canonical === undefined || exactPipelineAtOne === undefined || exactPipelineOneScene === undefined
+    ? undefined
+    : projectX4UiPaintPlan({ scene: exactPipelineOneScene, corpus: canonical, previewAuthority: exactPipelineAtOne });
+  const exactPipeline125PaintResult = canonical === undefined || exactPipelineAt125 === undefined || exactPipeline125Scene === undefined
+    ? undefined
+    : projectX4UiPaintPlan({ scene: exactPipeline125Scene, corpus: canonical, previewAuthority: exactPipelineAt125 });
+  const exactPipelineCanvasTrace: ExactPipelineTraceEntry[] = [];
+  const exactPipelineCanvasResult = exactPipelinePaintResult === undefined
+    || exactPipelinePaintResult.status === 'refused'
+    || canonical === undefined
+    ? undefined
+    : renderX4UiPaintPlanToCanvas(exactPipelinePaintResult, canonical, {
+      surfaceFactory: exactPipelineCanvasFactory(exactPipelineCanvasTrace),
+      presentation: 'source-composition',
+    });
+  const exactPipelineCanvas125Trace: ExactPipelineTraceEntry[] = [];
+  const exactPipelineCanvas125Result = exactPipeline125PaintResult === undefined
+    || exactPipeline125PaintResult.status === 'refused'
+    || canonical === undefined
+    ? undefined
+    : renderX4UiPaintPlanToCanvas(exactPipeline125PaintResult, canonical, {
+      surfaceFactory: exactPipelineCanvasFactory(exactPipelineCanvas125Trace),
+      presentation: 'source-composition',
+    });
+  const exactPipelineDiagnosticMapTrace: ExactPipelineTraceEntry[] = [];
+  const exactPipelineDiagnosticMapResult = exactPipelinePaintResult === undefined
+    || exactPipelinePaintResult.status === 'refused'
+    || canonical === undefined
+    ? undefined
+    : renderX4UiPaintPlanToCanvas(exactPipelinePaintResult, canonical, {
+      surfaceFactory: exactPipelineCanvasFactory(exactPipelineDiagnosticMapTrace),
+      presentation: 'diagnostic-map',
+    });
+  const exactPipelineDiagnosticMap125Trace: ExactPipelineTraceEntry[] = [];
+  const exactPipelineDiagnosticMap125Result = exactPipeline125PaintResult === undefined
+    || exactPipeline125PaintResult.status === 'refused'
+    || canonical === undefined
+    ? undefined
+    : renderX4UiPaintPlanToCanvas(exactPipeline125PaintResult, canonical, {
+      surfaceFactory: exactPipelineCanvasFactory(exactPipelineDiagnosticMap125Trace),
+      presentation: 'diagnostic-map',
+    });
+  const exactPipelineActualReferenceScene = exactPipelineScene(exactPipelineActualReferenceAtOne);
+  const exactPipelineActualSecondScene = exactPipelineScene(exactPipelineActualSecondAtOne);
+  const exactPipelineActualReferencePaintResult = canonical === undefined
+    || exactPipelineActualReferenceAtOne === undefined
+    || exactPipelineActualReferenceScene === undefined
+    ? undefined
+    : projectX4UiPaintPlan({
+      scene: exactPipelineActualReferenceScene,
+      corpus: canonical,
+      previewAuthority: exactPipelineActualReferenceAtOne,
+    });
+  const exactPipelineActualSecondPaintResult = canonical === undefined
+    || exactPipelineActualSecondAtOne === undefined
+    || exactPipelineActualSecondScene === undefined
+    ? undefined
+    : projectX4UiPaintPlan({
+      scene: exactPipelineActualSecondScene,
+      corpus: canonical,
+      previewAuthority: exactPipelineActualSecondAtOne,
+    });
+  const exactPipelineActualReferenceTrace: ExactPipelineTraceEntry[] = [];
+  const exactPipelineActualReferenceCanvasResult = exactPipelineActualReferencePaintResult === undefined
+    || exactPipelineActualReferencePaintResult.status === 'refused'
+    || canonical === undefined
+    ? undefined
+    : renderX4UiPaintPlanToCanvas(exactPipelineActualReferencePaintResult, canonical, {
+      surfaceFactory: exactPipelineCanvasFactory(exactPipelineActualReferenceTrace),
+      presentation: 'source-composition',
+    });
+  const exactPipelineActualSecondTrace: ExactPipelineTraceEntry[] = [];
+  const exactPipelineActualSecondCanvasResult = exactPipelineActualSecondPaintResult === undefined
+    || exactPipelineActualSecondPaintResult.status === 'refused'
+    || canonical === undefined
+    ? undefined
+    : renderX4UiPaintPlanToCanvas(exactPipelineActualSecondPaintResult, canonical, {
+      surfaceFactory: exactPipelineCanvasFactory(exactPipelineActualSecondTrace),
+      presentation: 'source-composition',
+    });
+  const exactPipelineActualReferenceDiagnosticTrace: ExactPipelineTraceEntry[] = [];
+  const exactPipelineActualReferenceDiagnosticMapResult = exactPipelineActualReferencePaintResult === undefined
+    || exactPipelineActualReferencePaintResult.status === 'refused'
+    || canonical === undefined
+    ? undefined
+    : renderX4UiPaintPlanToCanvas(exactPipelineActualReferencePaintResult, canonical, {
+      surfaceFactory: exactPipelineCanvasFactory(exactPipelineActualReferenceDiagnosticTrace),
+      presentation: 'diagnostic-map',
+    });
+  const exactPipelineActualSecondDiagnosticTrace: ExactPipelineTraceEntry[] = [];
+  const exactPipelineActualSecondDiagnosticMapResult = exactPipelineActualSecondPaintResult === undefined
+    || exactPipelineActualSecondPaintResult.status === 'refused'
+    || canonical === undefined
+    ? undefined
+    : renderX4UiPaintPlanToCanvas(exactPipelineActualSecondPaintResult, canonical, {
+      surfaceFactory: exactPipelineCanvasFactory(exactPipelineActualSecondDiagnosticTrace),
+      presentation: 'diagnostic-map',
+    });
+  type ExactPipelineRect = { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+  const exactPipelineFrameTracePath = (
+    trace: readonly ExactPipelineTraceEntry[],
+    frameRect: ExactPipelineRect | undefined,
+  ): readonly ExactPipelineTraceEntry[] => {
+    if (frameRect === undefined) return [];
+    const args = [frameRect.x, frameRect.y, frameRect.width, frameRect.height];
+    const matchingIndices: number[] = [];
+    trace.forEach((entry, index) => {
+      if (entry.name === 'rect' && JSON.stringify(entry.args) === JSON.stringify(args)) matchingIndices.push(index);
+    });
+    const paths: ExactPipelineTraceEntry[] = [];
+    for (const matchingIndex of matchingIndices) {
+      let start = matchingIndex;
+      while (start > 0 && trace[start - 1]?.name !== 'restore') start -= 1;
+      let end = matchingIndex;
+      while (end < trace.length && trace[end]?.name !== 'restore') end += 1;
+      paths.push(...trace.slice(start, end < trace.length ? end + 1 : end));
+    }
+    return paths;
+  };
+  const exactPipelineHasFullFrameStroke = (
+    trace: readonly ExactPipelineTraceEntry[],
+    frameRect: ExactPipelineRect | undefined,
+  ): boolean => exactPipelineFrameTracePath(trace, frameRect).length > 0
+    && exactPipelineFrameTracePath(trace, frameRect).some(entry => entry.name === 'stroke');
+  const exactPipelineFullFramePaintCount = (
+    trace: readonly ExactPipelineTraceEntry[],
+    frameRect: ExactPipelineRect | undefined,
+  ): number => {
+    if (frameRect === undefined) return 0;
+    const args = [frameRect.x, frameRect.y, frameRect.width, frameRect.height];
+    return trace.filter(entry => (entry.name === 'rect' || entry.name === 'fillRect')
+      && JSON.stringify(entry.args) === JSON.stringify(args)).length;
+  };
+  const exactPipelineFrameRect = exactPipelineOneScene?.frames[0]?.rect;
+  const exactPipeline125FrameRect = exactPipeline125Scene?.frames[0]?.rect;
+  const exactPipelineFrameRectPath = exactPipelineFrameTracePath(exactPipelineCanvasTrace, exactPipelineFrameRect);
+  const exactPipeline125FrameRectPath = exactPipelineFrameTracePath(exactPipelineCanvas125Trace, exactPipeline125FrameRect);
+  const exactPipelineContentEvidence = (
+    scene: typeof exactPipelineOneScene,
+    paint: typeof exactPipelinePaintResult,
+    trace: readonly ExactPipelineTraceEntry[],
+  ): JsonRecord => {
+    if (scene === undefined || paint === undefined || paint.status === 'refused') return { ready: false };
+    const tableIds = new Set(scene.tables.map(table => table.id));
+    const buttonIds = new Set(scene.widgets.filter(widget => widget.kind === 'button').map(widget => widget.id));
+    const editboxIds = new Set(scene.widgets.filter(widget => widget.kind === 'editbox').map(widget => widget.id));
+    const textIds = new Set(scene.texts.map(text => text.id));
+    const backgroundCommands = paint.plan.layers[0]?.commands || [];
+    const glyphCommands = paint.plan.layers[1]?.commands || [];
+    return {
+      ready: true,
+      tableGeometry: [...tableIds].some(id => backgroundCommands.some(command => command.nodeId === id)),
+      buttonGeometry: [...buttonIds].some(id => backgroundCommands.some(command => command.nodeId === id)),
+      editboxGeometry: [...editboxIds].some(id => backgroundCommands.some(command => command.nodeId === id)),
+      glyphContent: glyphCommands.some(command => command.kind === 'glyph-alpha-blit' && textIds.has(command.textId)),
+      canvasGlyphBlits: trace.some(entry => entry.name === 'drawImage'
+        && (entry.args[0] === 'regular-atlas' || entry.args[0] === 'bold-atlas')),
+      canvasGeometryFills: trace.some(entry => entry.name === 'fillRect'),
+    };
+  };
+  const exactPipelineOneContentEvidence = exactPipelineContentEvidence(exactPipelineOneScene, exactPipelinePaintResult, exactPipelineCanvasTrace);
+  const exactPipeline125ContentEvidence = exactPipelineContentEvidence(exactPipeline125Scene, exactPipeline125PaintResult, exactPipelineCanvas125Trace);
+  const frameTextureExactKeySource = sourceFor([
+    passthrough('ui.xml', frameTextureExactKeyXml),
+    passthrough('ui/frame-texture-exact-key.lua', frameTextureExactKeyLua, { reason: 'unparsed' }),
+  ]);
+  const frameTextureExactKeyWrongSelection = selectionFor(
+    frameTextureExactKeySource,
+    'ui/frame-texture-exact-key.lua',
+    'function',
+    'menu.createWrongCase',
+  );
+  const frameTextureExactKeyExactSelection = selectionFor(
+    frameTextureExactKeySource,
+    'ui/frame-texture-exact-key.lua',
+    'function',
+    'menu.createExactCase',
+  );
+  const frameTextureExactKeyWrongResult = canonical === undefined || !colorAuthorityReady
+    ? undefined
+    : pipeline(frameTextureExactKeySource, frameTextureExactKeyWrongSelection, canonical, {}, {
+      truthGrade: 'supplied',
+      drawable: { width: 100, height: 80 },
+      uiScale: 1,
+    }, colorAuthority);
+  const frameTextureExactKeyExactResult = canonical === undefined || !colorAuthorityReady
+    ? undefined
+    : pipeline(frameTextureExactKeySource, frameTextureExactKeyExactSelection, canonical, {}, {
+      truthGrade: 'supplied',
+      drawable: { width: 100, height: 80 },
+      uiScale: 1,
+    }, colorAuthority);
+  const frameTextureExactKeyWrongScene = frameTextureExactKeyWrongResult?.scene !== undefined
+    && 'scene' in frameTextureExactKeyWrongResult.scene
+    ? frameTextureExactKeyWrongResult.scene.scene
+    : undefined;
+  const frameTextureExactKeyExactScene = frameTextureExactKeyExactResult?.scene !== undefined
+    && 'scene' in frameTextureExactKeyExactResult.scene
+    ? frameTextureExactKeyExactResult.scene.scene
+    : undefined;
+  const frameTextureExactKeySurface = (scene: typeof frameTextureExactKeyWrongScene) => {
+    const frame = scene?.frames[0];
+    const frameRecord = asRecord(frame);
+    const layers = Array.isArray(frameRecord?.frameTextureLayers)
+      ? frameRecord.frameTextureLayers.map(layer => asRecord(layer)).filter((layer): layer is JsonRecord => layer !== undefined)
+      : [];
+    return frameRecord === undefined ? undefined : { layers };
+  };
+  const frameTextureExactKeyWrongSurface = frameTextureExactKeySurface(frameTextureExactKeyWrongScene);
+  const frameTextureExactKeyExactSurface = frameTextureExactKeySurface(frameTextureExactKeyExactScene);
+  const frameTextureExactKeyWrongPaint = canonical === undefined
+    || frameTextureExactKeyWrongResult === undefined
+    || frameTextureExactKeyWrongScene === undefined
+    ? undefined
+    : projectX4UiPaintPlan({
+      scene: frameTextureExactKeyWrongScene,
+      corpus: canonical,
+      previewAuthority: frameTextureExactKeyWrongResult,
+    });
+  const frameTextureExactKeyExactPaint = canonical === undefined
+    || frameTextureExactKeyExactResult === undefined
+    || frameTextureExactKeyExactScene === undefined
+    ? undefined
+    : projectX4UiPaintPlan({
+      scene: frameTextureExactKeyExactScene,
+      corpus: canonical,
+      previewAuthority: frameTextureExactKeyExactResult,
+    });
+  const frameTextureExactKeyWrongTrace: ExactPipelineTraceEntry[] = [];
+  const frameTextureExactKeyWrongCanvas = frameTextureExactKeyWrongPaint === undefined
+    || frameTextureExactKeyWrongPaint.status === 'refused'
+    || canonical === undefined
+    ? undefined
+    : renderX4UiPaintPlanToCanvas(frameTextureExactKeyWrongPaint, canonical, {
+      surfaceFactory: exactPipelineCanvasFactory(frameTextureExactKeyWrongTrace),
+      presentation: 'source-composition',
+    });
+  const frameTextureExactKeyExactTrace: ExactPipelineTraceEntry[] = [];
+  const frameTextureExactKeyExactCanvas = frameTextureExactKeyExactPaint === undefined
+    || frameTextureExactKeyExactPaint.status === 'refused'
+    || canonical === undefined
+    ? undefined
+    : renderX4UiPaintPlanToCanvas(frameTextureExactKeyExactPaint, canonical, {
+      surfaceFactory: exactPipelineCanvasFactory(frameTextureExactKeyExactTrace),
+      presentation: 'source-composition',
+    });
+  const frameTextureExactKeySourceFile = frameTextureExactKeySource.bundle?.sourceFiles.find(file =>
+    file.path === 'ui/frame-texture-exact-key.lua');
+  const frameTextureExactKeyWrongCall = frameTextureExactKeySourceFile?.callModel.calls.find(call =>
+    call.name === 'setBackground'
+      && frameTextureExactKeyLua.slice(call.source.start.offset, call.source.end.offset).includes('Icon = ""'));
+  const frameTextureExactKeyExactCall = frameTextureExactKeySourceFile?.callModel.calls.find(call =>
+    call.name === 'setBackground'
+      && frameTextureExactKeyLua.slice(call.source.start.offset, call.source.end.offset).includes('icon = ""'));
+  const frameTextureExactKeyWrongRect = frameTextureExactKeyWrongScene?.frames[0]?.rect;
+  const frameTextureExactKeyExactRect = frameTextureExactKeyExactScene?.frames[0]?.rect;
+  check('B119 Preview wrong-case Icon preserves an active unresolved texture/frame boundary',
+    frameTextureExactKeyWrongCall?.semantics.icon?.value === 'positional-icon'
+      && frameTextureExactKeyWrongCall.semantics.properties?.some(property => property.name === 'Icon') !== true
+      && frameTextureExactKeyWrongCall.semantics.unsupportedProperties?.some(property => property.name === 'Icon') === true
+      && frameTextureExactKeyWrongResult?.status === 'partial'
+      && frameTextureExactKeyWrongSurface?.layers.find(layer => layer.name === 'background')?.applicability === 'active-unresolved'
+      && frameTextureExactKeyWrongCanvas?.status === 'rendered'
+      && frameTextureExactKeyWrongCanvas.receipt.gameTruth === 'Not verified in game'
+      && exactPipelineHasFullFrameStroke(frameTextureExactKeyWrongTrace, frameTextureExactKeyWrongRect)
+      && frameTextureExactKeyExactCall?.semantics.properties?.some(property => property.name === 'icon') === true
+      && frameTextureExactKeyExactSurface?.layers.find(layer => layer.name === 'background')?.applicability === 'inactive'
+      && frameTextureExactKeyExactCanvas?.status === 'rendered'
+      && !exactPipelineHasFullFrameStroke(frameTextureExactKeyExactTrace, frameTextureExactKeyExactRect), {
+    wrong: {
+      call: frameTextureExactKeyWrongCall,
+      resultStatus: frameTextureExactKeyWrongResult?.status,
+      surface: frameTextureExactKeyWrongSurface,
+      paintStatus: frameTextureExactKeyWrongPaint?.status,
+      canvasStatus: frameTextureExactKeyWrongCanvas?.status,
+      trace: frameTextureExactKeyWrongTrace,
+    },
+    exact: {
+      call: frameTextureExactKeyExactCall,
+      resultStatus: frameTextureExactKeyExactResult?.status,
+      surface: frameTextureExactKeyExactSurface,
+      paintStatus: frameTextureExactKeyExactPaint?.status,
+      canvasStatus: frameTextureExactKeyExactCanvas?.status,
+      trace: frameTextureExactKeyExactTrace,
+    },
+  });
+  const exactPipelineActualReferenceFrameSurface = exactPipelineFrameSurface(exactPipelineActualReferenceScene);
+  const exactPipelineActualSecondFrameSurface = exactPipelineFrameSurface(exactPipelineActualSecondScene);
+  const exactPipelineActualReferenceFrameFallbackMetadata = exactPipelineFrameFallbackMetadata(
+    exactPipelineActualReferenceScene,
+    exactPipelineActualReferenceFrameSurface,
+  );
+  const exactPipelineActualSecondFrameFallbackMetadata = exactPipelineFrameFallbackMetadata(
+    exactPipelineActualSecondScene,
+    exactPipelineActualSecondFrameSurface,
+  );
+  const exactPipelineActualReferenceFrameRect = exactPipelineActualReferenceScene?.frames[0]?.rect;
+  const exactPipelineActualSecondFrameRect = exactPipelineActualSecondScene?.frames[0]?.rect;
+  const exactPipelineActualReferenceFrameRectPath = exactPipelineFrameTracePath(
+    exactPipelineActualReferenceTrace,
+    exactPipelineActualReferenceFrameRect,
+  );
+  const exactPipelineActualSecondFrameRectPath = exactPipelineFrameTracePath(
+    exactPipelineActualSecondTrace,
+    exactPipelineActualSecondFrameRect,
+  );
+  const exactPipelineActualReferenceContentEvidence = exactPipelineContentEvidence(
+    exactPipelineActualReferenceScene,
+    exactPipelineActualReferencePaintResult,
+    exactPipelineActualReferenceTrace,
+  );
+  const exactPipelineActualSecondContentEvidence = exactPipelineContentEvidence(
+    exactPipelineActualSecondScene,
+    exactPipelineActualSecondPaintResult,
+    exactPipelineActualSecondTrace,
+  );
+  check('B119 exact pipeline source-composition keeps inactive frame textures/backdrop diagnostic-only while retaining content paint',
+    exactPipelineOneFrameSurface?.allInactive === true
+      && exactPipeline125FrameSurface?.allInactive === true
+      && exactPipelineOneFrameSurface.blurBackground === true
+      && exactPipeline125FrameSurface.blurBackground === true
+      && exactPipelineOneFrameFallbackMetadata
+      && exactPipeline125FrameFallbackMetadata
+      && exactPipelineOneFrameSurface.backdrop?.availability === 'unavailable'
+      && exactPipeline125FrameSurface.backdrop?.availability === 'unavailable'
+      && exactPipelineCanvasResult?.status === 'rendered'
+      && exactPipelineCanvas125Result?.status === 'rendered'
+      && exactPipelineCanvasResult.receipt.gameTruth === 'Not verified in game'
+      && exactPipelineCanvasResult.receipt.gameVerified === false
+      && exactPipelineCanvas125Result.receipt.gameTruth === 'Not verified in game'
+      && exactPipelineCanvas125Result.receipt.gameVerified === false
+      && !exactPipelineHasFullFrameStroke(exactPipelineCanvasTrace, exactPipelineFrameRect)
+      && !exactPipelineHasFullFrameStroke(exactPipelineCanvas125Trace, exactPipeline125FrameRect)
+      && exactPipelineFullFramePaintCount(exactPipelineCanvasTrace, exactPipelineFrameRect) === 0
+      && exactPipelineFullFramePaintCount(exactPipelineCanvas125Trace, exactPipeline125FrameRect) === 0
+      && exactPipelineOneContentEvidence.ready === true
+      && exactPipelineOneContentEvidence.tableGeometry === true
+      && exactPipelineOneContentEvidence.buttonGeometry === true
+      && exactPipelineOneContentEvidence.editboxGeometry === true
+      && exactPipelineOneContentEvidence.glyphContent === true
+      && exactPipelineOneContentEvidence.canvasGlyphBlits === true
+      && exactPipelineOneContentEvidence.canvasGeometryFills === true
+      && exactPipeline125ContentEvidence.ready === true
+      && exactPipeline125ContentEvidence.tableGeometry === true
+      && exactPipeline125ContentEvidence.buttonGeometry === true
+      && exactPipeline125ContentEvidence.editboxGeometry === true
+      && exactPipeline125ContentEvidence.glyphContent === true
+      && exactPipeline125ContentEvidence.canvasGlyphBlits === true
+      && exactPipeline125ContentEvidence.canvasGeometryFills === true
+      && exactPipelineDiagnosticMapResult?.status === 'rendered'
+      && exactPipelineDiagnosticMap125Result?.status === 'rendered'
+      && exactPipelineDiagnosticMapTrace.some(entry => entry.name === 'fillRect')
+      && exactPipelineDiagnosticMap125Trace.some(entry => entry.name === 'fillRect'), {
+    atOne: {
+      surface: exactPipelineOneFrameSurface,
+      layers: exactPipelineOneFrameSurface?.layers,
+    },
+    at125: {
+      surface: exactPipeline125FrameSurface,
+      layers: exactPipeline125FrameSurface?.layers,
+    },
+    paintStatus: exactPipelinePaintResult?.status,
+    paint125Status: exactPipeline125PaintResult?.status,
+    canvasStatus: exactPipelineCanvasResult?.status,
+    canvas125Status: exactPipelineCanvas125Result?.status,
+    receipt: exactPipelineCanvasResult?.status === 'rendered' ? exactPipelineCanvasResult.receipt : undefined,
+    receipt125: exactPipelineCanvas125Result?.status === 'rendered' ? exactPipelineCanvas125Result.receipt : undefined,
+    frameRect: exactPipelineFrameRect,
+    frameRectPath: exactPipelineFrameRectPath,
+    frameRectPathLength: exactPipelineFrameRectPath.length,
+    fullFramePaintCount: exactPipelineFullFramePaintCount(exactPipelineCanvasTrace, exactPipelineFrameRect),
+    frame125Rect: exactPipeline125FrameRect,
+    frame125RectPath: exactPipeline125FrameRectPath,
+    frame125RectPathLength: exactPipeline125FrameRectPath.length,
+    fullFramePaintCount125: exactPipelineFullFramePaintCount(exactPipelineCanvas125Trace, exactPipeline125FrameRect),
+    hasFullFrameStroke: exactPipelineHasFullFrameStroke(exactPipelineCanvasTrace, exactPipelineFrameRect),
+    hasFullFrameStroke125: exactPipelineHasFullFrameStroke(exactPipelineCanvas125Trace, exactPipeline125FrameRect),
+    contentAtOne: exactPipelineOneContentEvidence,
+    contentAt125: exactPipeline125ContentEvidence,
+    diagnosticMapStatus: exactPipelineDiagnosticMapResult?.status,
+    diagnosticMap125Status: exactPipelineDiagnosticMap125Result?.status,
+    trace: exactPipelineCanvasTrace.filter(entry => ['rect', 'stroke', 'fillRect', 'drawImage', 'setStrokeStyle', 'setFillStyle'].includes(entry.name)),
+    trace125: exactPipelineCanvas125Trace.filter(entry => ['rect', 'stroke', 'fillRect', 'drawImage', 'setStrokeStyle', 'setFillStyle'].includes(entry.name)),
+  });
+  check('B119 retained in-game drawable pair runs both profiles through public Preview Scene Paint Canvas with content and no false frame outline',
+    exactPipelineActualReferenceAtOne?.status === 'partial'
+      && exactPipelineActualSecondAtOne?.status === 'partial'
+      && exactPipelineActualReferenceScene?.profile.drawable.width === 2544
+      && exactPipelineActualReferenceScene?.profile.drawable.height === 1353
+      && exactPipelineActualReferenceAtOne?.profile.layout?.metrics.uiScale === 1
+      && exactPipelineActualSecondScene?.profile.drawable.width === 1920
+      && exactPipelineActualSecondScene?.profile.drawable.height === 1080
+      && exactPipelineActualSecondAtOne?.profile.layout?.metrics.uiScale === 1
+      && exactPipelineActualReferenceFrameSurface?.allInactive === true
+      && exactPipelineActualSecondFrameSurface?.allInactive === true
+      && exactPipelineActualReferenceFrameSurface.backdrop?.availability === 'unavailable'
+      && exactPipelineActualSecondFrameSurface.backdrop?.availability === 'unavailable'
+      && exactPipelineActualReferenceFrameFallbackMetadata
+      && exactPipelineActualSecondFrameFallbackMetadata
+      && exactPipelineActualReferenceCanvasResult?.status === 'rendered'
+      && exactPipelineActualSecondCanvasResult?.status === 'rendered'
+      && exactPipelineActualReferenceCanvasResult.receipt.gameTruth === 'Not verified in game'
+      && exactPipelineActualSecondCanvasResult.receipt.gameTruth === 'Not verified in game'
+      && exactPipelineActualReferenceCanvasResult.receipt.gameVerified === false
+      && exactPipelineActualSecondCanvasResult.receipt.gameVerified === false
+      && !exactPipelineHasFullFrameStroke(exactPipelineActualReferenceTrace, exactPipelineActualReferenceFrameRect)
+      && !exactPipelineHasFullFrameStroke(exactPipelineActualSecondTrace, exactPipelineActualSecondFrameRect)
+      && exactPipelineFullFramePaintCount(exactPipelineActualReferenceTrace, exactPipelineActualReferenceFrameRect) === 0
+      && exactPipelineFullFramePaintCount(exactPipelineActualSecondTrace, exactPipelineActualSecondFrameRect) === 0
+      && exactPipelineActualReferenceContentEvidence.ready === true
+      && exactPipelineActualReferenceContentEvidence.tableGeometry === true
+      && exactPipelineActualReferenceContentEvidence.buttonGeometry === true
+      && exactPipelineActualReferenceContentEvidence.editboxGeometry === true
+      && exactPipelineActualReferenceContentEvidence.glyphContent === true
+      && exactPipelineActualReferenceContentEvidence.canvasGlyphBlits === true
+      && exactPipelineActualReferenceContentEvidence.canvasGeometryFills === true
+      && exactPipelineActualSecondContentEvidence.ready === true
+      && exactPipelineActualSecondContentEvidence.tableGeometry === true
+      && exactPipelineActualSecondContentEvidence.buttonGeometry === true
+      && exactPipelineActualSecondContentEvidence.editboxGeometry === true
+      && exactPipelineActualSecondContentEvidence.glyphContent === true
+      && exactPipelineActualSecondContentEvidence.canvasGlyphBlits === true
+      && exactPipelineActualSecondContentEvidence.canvasGeometryFills === true
+      && exactPipelineActualReferenceDiagnosticMapResult?.status === 'rendered'
+      && exactPipelineActualSecondDiagnosticMapResult?.status === 'rendered'
+      && exactPipelineActualReferenceDiagnosticTrace.some(entry => entry.name === 'fillRect')
+      && exactPipelineActualSecondDiagnosticTrace.some(entry => entry.name === 'fillRect'), {
+    retainedEvidence: {
+      reference: { drawable: '2544x1353', uiScale: 1 },
+      second: { drawable: '1920x1080', uiScale: 1 },
+      ratioIsDrawableHeight: true,
+    },
+    reference: {
+      previewStatus: exactPipelineActualReferenceAtOne?.status,
+      sceneStatus: exactPipelineActualReferenceScene?.status,
+      paintStatus: exactPipelineActualReferencePaintResult?.status,
+      canvasStatus: exactPipelineActualReferenceCanvasResult?.status,
+      frameRect: exactPipelineActualReferenceFrameRect,
+      frameRectPathLength: exactPipelineActualReferenceFrameRectPath.length,
+      fullFramePaintCount: exactPipelineFullFramePaintCount(exactPipelineActualReferenceTrace, exactPipelineActualReferenceFrameRect),
+      hasFullFrameStroke: exactPipelineHasFullFrameStroke(exactPipelineActualReferenceTrace, exactPipelineActualReferenceFrameRect),
+      content: exactPipelineActualReferenceContentEvidence,
+      diagnosticMapStatus: exactPipelineActualReferenceDiagnosticMapResult?.status,
+    },
+    second: {
+      previewStatus: exactPipelineActualSecondAtOne?.status,
+      sceneStatus: exactPipelineActualSecondScene?.status,
+      paintStatus: exactPipelineActualSecondPaintResult?.status,
+      canvasStatus: exactPipelineActualSecondCanvasResult?.status,
+      frameRect: exactPipelineActualSecondFrameRect,
+      frameRectPathLength: exactPipelineActualSecondFrameRectPath.length,
+      fullFramePaintCount: exactPipelineFullFramePaintCount(exactPipelineActualSecondTrace, exactPipelineActualSecondFrameRect),
+      hasFullFrameStroke: exactPipelineHasFullFrameStroke(exactPipelineActualSecondTrace, exactPipelineActualSecondFrameRect),
+      content: exactPipelineActualSecondContentEvidence,
+      diagnosticMapStatus: exactPipelineActualSecondDiagnosticMapResult?.status,
+    },
+  });
   const colorPipeline = (evidence?: unknown) => canonical === undefined
     ? undefined
     : pipeline(previewColorSource, previewColorSelection, canonical, {}, {

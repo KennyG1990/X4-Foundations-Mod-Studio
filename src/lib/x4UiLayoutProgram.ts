@@ -633,10 +633,24 @@ export interface X4UiLayoutFrameNode {
   readonly height?: number;
   readonly widthSource?: X4UiSourceLocation;
   readonly heightSource?: X4UiSourceLocation;
+  /** Exact shipped frametextureproperty descriptor projection, in source order. */
+  readonly frameTextureLayers?: readonly X4UiLayoutFrameTextureLayer[];
+  /** Shipped Helper blurBackground requirement; this is not a drawable surface. */
+  readonly blurBackground?: X4UiLayoutDescriptorFact;
   readonly tableIds: readonly string[];
   readonly operationIds: readonly string[];
   readonly descriptorFacts: X4UiLayoutDescriptorFacts;
   readonly status: X4UiLayoutProjectionStatus | X4UiLayoutOperationStatus;
+}
+
+export type X4UiLayoutFrameTextureLayerName = 'background' | 'background2' | 'overlay';
+
+export interface X4UiLayoutFrameTextureLayer {
+  readonly name: X4UiLayoutFrameTextureLayerName;
+  readonly source: X4UiSourceLocation;
+  readonly sourceOrder: number;
+  readonly operationIds: readonly string[];
+  readonly descriptorFacts: X4UiLayoutDescriptorFacts;
 }
 
 export interface X4UiLayoutTableNode {
@@ -829,6 +843,7 @@ const WIDGET_DEFAULT_PINS = Object.freeze({
   editBoxTextBorder: widgetPin(848, 860),
   editBoxBlackInset: widgetPin(8702, 8727),
   editBoxInitialInputActive: widgetPin(6325, 6332),
+  frameTextureActivation: widgetPin(16945, 17024),
 });
 
 const HELPER_DEFAULT_PINS = Object.freeze({
@@ -848,6 +863,17 @@ const HELPER_DEFAULT_PINS = Object.freeze({
   frameLayer: helperPin(3121),
   frameAutoHeight: helperPin(3128),
   frameBlurBackground: helperPin(3133),
+  frameTextureIcon: helperPin(3447),
+  frameTextureColor: helperPin(3448),
+  frameTextureWidth: helperPin(3449),
+  frameTextureHeight: helperPin(3450),
+  frameTextureRotationRate: helperPin(3451),
+  frameTextureRotationStart: helperPin(3452),
+  frameTextureRotationDuration: helperPin(3453),
+  frameTextureRotationInterval: helperPin(3454),
+  frameTextureInitialScaleFactor: helperPin(3455),
+  frameTextureScaleDuration: helperPin(3456),
+  frameTextureGlowfactor: helperPin(3457),
   tableTabOrder: helperPin(3165),
   tableMaxVisibleHeight: helperPin(3169),
   tableReserveScrollBar: helperPin(3170),
@@ -1635,8 +1661,14 @@ const gapFromModel = (gap: X4UiVerificationGap): X4UiLayoutGap => ({
   source: cloneLocation(gap.source),
 });
 
+const isFrameTextureSetter = (callName: X4UiRelevantCallName): boolean =>
+  callName === 'setBackground' || callName === 'setBackground2' || callName === 'setOverlay';
+
 const property = (call: X4UiCallRecord, name: string): X4UiCallPropertyProjection | undefined =>
-  call.semantics.properties?.find(candidate => candidate.normalizedName === name.toLowerCase());
+  call.semantics.properties?.find(candidate =>
+    isFrameTextureSetter(call.name)
+      ? candidate.name === name
+      : candidate.normalizedName === name.toLowerCase());
 
 const optionMode = (call: X4UiCallRecord): 'omitted' | 'known' | 'unresolved' => {
   const options = call.semantics.options;
@@ -2991,6 +3023,110 @@ const resolveColorFact = (
     : resolveSourceLiteralColor(record.colorExpression, sourcePin, category);
 };
 
+const FRAME_TEXTURE_LAYER_NAMES: readonly X4UiLayoutFrameTextureLayerName[] = Object.freeze([
+  'background',
+  'background2',
+  'overlay',
+]);
+
+const FRAME_TEXTURE_PROPERTY_TYPES: Readonly<Record<string, X4UiLayoutScalarType | 'color-object'>> = Object.freeze({
+  icon: 'string',
+  color: 'color-object',
+  width: 'number',
+  height: 'number',
+  rotationRate: 'number',
+  rotationStart: 'number',
+  rotationDuration: 'number',
+  rotationInterval: 'number',
+  initialScaleFactor: 'number',
+  scaleDuration: 'number',
+  glowfactor: 'number',
+});
+
+const FRAME_TEXTURE_OPTION_PROPERTIES: readonly string[] = Object.freeze([
+  'color',
+  'width',
+  'height',
+  'rotationRate',
+  'rotationStart',
+  'rotationDuration',
+  'rotationInterval',
+  'initialScaleFactor',
+  'scaleDuration',
+  'glowfactor',
+]);
+
+interface FrameTextureDefaultProjection {
+  readonly facts: Readonly<Record<string, X4UiLayoutDescriptorFact>>;
+}
+
+const frameTextureDefaultProjection = (
+  call: X4UiCallRecord,
+  colorEvidence: X4UiCorpusCanonicalColorSuccess | undefined,
+  colorExpressions: readonly X4UiCallColorExpression[] | undefined,
+): FrameTextureDefaultProjection => {
+  const color = resolveColorFact(
+    colorExpressions,
+    call,
+    'color',
+    undefined,
+    colorEvidence,
+    'frame_background_default',
+    call.source,
+    HELPER_DEFAULT_PINS.frameTextureColor,
+    'frame',
+    'runtime Color table is not projected as RGBA',
+    'Color["frame_background_default"]',
+  );
+  const glow = color.fact.status === 'known' && color.fact.expectedType === 'color-object'
+    ? knownDefaultFact(
+      color.fact.value.glow,
+      'number',
+      call.source,
+      HELPER_DEFAULT_PINS.frameTextureGlowfactor,
+      'Color["frame_background_default"].glow',
+    )
+    : unavailableFact(
+      'number',
+      'frame texture default glowfactor depends on unavailable frame background color',
+      call.source,
+      'Color["frame_background_default"].glow',
+      HELPER_DEFAULT_PINS.frameTextureGlowfactor,
+    );
+  return {
+    facts: {
+      icon: knownDefaultFact('', 'string', call.source, HELPER_DEFAULT_PINS.frameTextureIcon, '""'),
+      color: color.fact,
+      width: knownDefaultFact(0, 'number', call.source, HELPER_DEFAULT_PINS.frameTextureWidth, '0'),
+      height: knownDefaultFact(0, 'number', call.source, HELPER_DEFAULT_PINS.frameTextureHeight, '0'),
+      rotationRate: knownDefaultFact(0, 'number', call.source, HELPER_DEFAULT_PINS.frameTextureRotationRate, '0'),
+      rotationStart: knownDefaultFact(0, 'number', call.source, HELPER_DEFAULT_PINS.frameTextureRotationStart, '0'),
+      rotationDuration: knownDefaultFact(0, 'number', call.source, HELPER_DEFAULT_PINS.frameTextureRotationDuration, '0'),
+      rotationInterval: knownDefaultFact(0, 'number', call.source, HELPER_DEFAULT_PINS.frameTextureRotationInterval, '0'),
+      initialScaleFactor: knownDefaultFact(1, 'number', call.source, HELPER_DEFAULT_PINS.frameTextureInitialScaleFactor, '1'),
+      scaleDuration: knownDefaultFact(0, 'number', call.source, HELPER_DEFAULT_PINS.frameTextureScaleDuration, '0'),
+      glowfactor: glow,
+    },
+  };
+};
+
+const frameTextureLayersFor = (
+  call: X4UiCallRecord,
+  colorEvidence: X4UiCorpusCanonicalColorSuccess | undefined,
+  colorExpressions: readonly X4UiCallColorExpression[] | undefined,
+): { readonly layers: MutableFrameTextureLayer[] } => {
+  const defaults = frameTextureDefaultProjection(call, colorEvidence, colorExpressions);
+  return {
+    layers: FRAME_TEXTURE_LAYER_NAMES.map(name => ({
+      name,
+      source: cloneLocation(call.source),
+      sourceOrder: call.source.start.offset,
+      operationIds: [],
+      descriptorFacts: cloneDeep(defaults.facts) as Record<string, X4UiLayoutDescriptorFact>,
+    })),
+  };
+};
+
 const withKnownFactValue = (
   fact: X4UiLayoutDescriptorFact,
   value: X4UiLayoutScalar,
@@ -3050,10 +3186,17 @@ const isCallReachabilityBlocked = (call: ProjectableCall): X4UiLayoutOperationSt
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 
-interface MutableFrame extends Mutable<Omit<X4UiLayoutFrameNode, 'tableIds' | 'operationIds' | 'descriptorFacts' | 'status'>> {
+interface MutableFrameTextureLayer extends Mutable<Omit<X4UiLayoutFrameTextureLayer, 'operationIds' | 'descriptorFacts'>> {
+  operationIds: string[];
+  descriptorFacts: Record<string, X4UiLayoutDescriptorFact>;
+}
+
+interface MutableFrame extends Mutable<Omit<X4UiLayoutFrameNode, 'tableIds' | 'operationIds' | 'descriptorFacts' | 'status' | 'frameTextureLayers' | 'blurBackground'>> {
   tableIds: string[];
   operationIds: string[];
   descriptorFacts: Record<string, X4UiLayoutDescriptorFact>;
+  frameTextureLayers: MutableFrameTextureLayer[];
+  blurBackground: X4UiLayoutDescriptorFact;
   status: X4UiLayoutFrameNode['status'];
   hadGap: boolean;
   hadRefusal: boolean;
@@ -3196,6 +3339,9 @@ const EVIDENCE_RELEVANT_CALL_NAMES: readonly X4UiRelevantCallName[] = Object.fre
   'createEditBox',
   'setHotkey',
   'createIcon',
+  'setBackground',
+  'setBackground2',
+  'setOverlay',
   'setText',
   'setText2',
   'scaleX',
@@ -3236,6 +3382,14 @@ const PROPERTY_SAMPLE_TYPES: Readonly<Record<string, X4UiLayoutScalarType | unde
   y: 'number',
   width: 'number',
   height: 'number',
+  icon: 'string',
+  rotationrate: 'number',
+  rotationstart: 'number',
+  rotationduration: 'number',
+  rotationinterval: 'number',
+  initialscalefactor: 'number',
+  scaleduration: 'number',
+  glowfactor: 'number',
   layer: 'number',
   taborder: 'number',
   maxvisibleheight: 'number',
@@ -3352,7 +3506,7 @@ const createPreviewSampleCatalog = (
       collect(call, 'span', call.semantics.span, 'number');
     } else if (call.name === 'createText' || call.name === 'setText' || call.name === 'setText2') {
       collect(call, call.name === 'setText2' ? 'text2' : 'text', call.semantics.text, 'string');
-    } else if (call.name === 'createIcon') {
+    } else if (call.name === 'createIcon' || call.name === 'setBackground' || call.name === 'setBackground2' || call.name === 'setOverlay') {
       collect(call, 'icon', call.semantics.icon, 'string');
     }
     for (const projected of call.semantics.properties || []) {
@@ -3735,7 +3889,8 @@ const callDataFlowSatisfied = (call: ProjectableCall): boolean => {
   if (call.name === 'createFrameHandle' || call.name === 'scaleX' || call.name === 'scaleY' || call.name === 'scaleFont') {
     return kind === 'global' && dataFlow.reference?.path === 'Helper';
   }
-  if (call.name === 'addTable' || call.name === 'display') return kind === 'frame';
+  if (call.name === 'addTable' || call.name === 'display'
+    || call.name === 'setBackground' || call.name === 'setBackground2' || call.name === 'setOverlay') return kind === 'frame';
   if (call.name === 'setColWidth' || call.name === 'setColWidthPercent' || call.name === 'addRow') return kind === 'table';
   if (['setColSpan', 'createText', 'createButton', 'createEditBox', 'createIcon', 'setText', 'setText2'].includes(call.name)) {
     return kind === 'cell' || kind === 'row' || kind === 'table';
@@ -4494,6 +4649,8 @@ const finishProgram = (
     ...(frame.height !== undefined ? { height: frame.height } : {}),
     ...(frame.widthSource ? { widthSource: frame.widthSource } : {}),
     ...(frame.heightSource ? { heightSource: frame.heightSource } : {}),
+    frameTextureLayers: frame.frameTextureLayers,
+    blurBackground: frame.blurBackground,
     tableIds: frame.tableIds,
     operationIds: frame.operationIds,
     descriptorFacts: frame.descriptorFacts,
@@ -5879,6 +6036,9 @@ const OPERATION_OWNER_SHAPES: Readonly<Record<string, readonly OperationOwnerKey
   scaleFont: [],
   OpenMenu: [],
   createFrameHandle: ['frameId'],
+  setBackground: ['frameId'],
+  setBackground2: ['frameId'],
+  setOverlay: ['frameId'],
   display: ['frameId'],
   addTable: ['tableId'],
   setDefaultCellProperties: ['tableId'],
@@ -6095,6 +6255,34 @@ const schemaIdArray = (value: unknown, path: string): ClosedSchemaError => {
   return undefined;
 };
 
+const schemaFrameTextureLayer = (value: unknown, path: string): ClosedSchemaError => {
+  const objectError = schemaObject(value, path, [
+    'name', 'source', 'sourceOrder', 'operationIds', 'descriptorFacts',
+  ]);
+  if (objectError) return objectError;
+  const layer = value as Record<string, unknown>;
+  return schemaEnum(layer.name, `${path}.name`, ['background', 'background2', 'overlay'])
+    || schemaSource(layer.source, `${path}.source`)
+    || schemaIndex(layer.sourceOrder, `${path}.sourceOrder`)
+    || schemaIdArray(layer.operationIds, `${path}.operationIds`)
+    || schemaDescriptorFacts(layer.descriptorFacts, `${path}.descriptorFacts`);
+};
+
+const schemaFrameTextureLayers = (value: unknown, path: string): ClosedSchemaError => {
+  const arrayError = schemaArray(value, path);
+  if (arrayError) return arrayError;
+  const layers = value as readonly unknown[];
+  if (layers.length !== FRAME_TEXTURE_LAYER_NAMES.length) return `${path} must contain exactly one background, background2, and overlay layer`;
+  for (const [index, layer] of layers.entries()) {
+    const error = schemaFrameTextureLayer(layer, `${path}[${index}]`);
+    if (error) return error;
+  }
+  if (layers.some((layer, index) => !isObject(layer) || layer.name !== FRAME_TEXTURE_LAYER_NAMES[index])) {
+    return `${path} must preserve shipped background layer source order`;
+  }
+  return undefined;
+};
+
 const schemaNode = (value: unknown, kind: 'frame' | 'table' | 'row' | 'cell', path: string): ClosedSchemaError => {
   const common = ['id', 'source', 'operationIds', 'descriptorFacts', 'status'];
   const required = kind === 'frame'
@@ -6105,7 +6293,7 @@ const schemaNode = (value: unknown, kind: 'frame' | 'table' | 'row' | 'cell', pa
         ? [...common, 'cellIds']
         : [...common, 'metadataOperationIds', 'column'];
   const optional = kind === 'frame'
-    ? ['identity', 'width', 'height', 'widthSource', 'heightSource']
+    ? ['identity', 'width', 'height', 'widthSource', 'heightSource', 'frameTextureLayers', 'blurBackground']
     : kind === 'table'
       ? ['identity', 'frameId', 'frameWidth', 'numColumns', 'requestedWidth', 'kernelState', 'height']
       : kind === 'row'
@@ -6134,7 +6322,9 @@ const schemaNode = (value: unknown, kind: 'frame' | 'table' | 'row' | 'cell', pa
       || schemaOptional(node, 'width', schemaNumber, path)
       || schemaOptional(node, 'height', schemaNumber, path)
       || schemaOptional(node, 'widthSource', schemaSource, path)
-      || schemaOptional(node, 'heightSource', schemaSource, path);
+      || schemaOptional(node, 'heightSource', schemaSource, path)
+      || schemaOptional(node, 'frameTextureLayers', schemaFrameTextureLayers, path)
+      || schemaOptional(node, 'blurBackground', schemaDescriptorFact, path);
   }
   const commonOptional = schemaOptional(node, 'identity', schemaReference, path)
     || schemaOptional(node, 'frameId', (child, childPath) => schemaString(child, childPath, true), path)
@@ -8220,6 +8410,27 @@ export function projectX4UiLayoutProgram(
     consumedSamples,
   );
 
+  const frameTextureLayerNameForCall = (
+    call: ProjectableCall,
+  ): X4UiLayoutFrameTextureLayerName | undefined => {
+    if (call.name === 'setBackground') return 'background';
+    if (call.name === 'setBackground2') return 'background2';
+    if (call.name === 'setOverlay') return 'overlay';
+    return undefined;
+  };
+
+  const unavailableFrameTextureFact = (
+    propertyName: string,
+    reason: string,
+    source: X4UiSourceLocation,
+    expression?: string,
+  ): X4UiLayoutDescriptorFact => unavailableFact(
+    FRAME_TEXTURE_PROPERTY_TYPES[propertyName],
+    reason,
+    source,
+    expression,
+  );
+
   const markTableGap = (table: MutableTable | undefined, refusal = false): void => {
     if (!table) return;
     table.hadGap = true;
@@ -8375,16 +8586,27 @@ export function projectX4UiLayoutProgram(
     return resolved;
   };
 
+  const displayedFrameIds = new Set<string>();
   for (const call of targetCalls) {
     activeCall = call;
     const blocked = isCallReachabilityBlocked(call);
     if (call.name === 'createFrameHandle') {
       const reference = call.result;
       const identity = referenceKey(reference) || `${call.source.start.offset}`;
+      const frameTextureDefaults = frameTextureLayersFor(call, colorEvidenceInput, modelColorExpressions);
+      const blurBackgroundDefault = knownDefaultFact(
+        true,
+        'boolean',
+        call.source,
+        HELPER_DEFAULT_PINS.frameBlurBackground,
+        'true',
+      );
       const frame: MutableFrame = {
         id: programId('frame', identity),
         source: cloneLocation(call.source),
         ...(reference ? { identity: cloneReference(reference) } : {}),
+        frameTextureLayers: frameTextureDefaults.layers,
+        blurBackground: blurBackgroundDefault,
         tableIds: [],
         operationIds: [],
         descriptorFacts: {
@@ -8394,6 +8616,7 @@ export function projectX4UiLayoutProgram(
           height: knownDefaultFact(profileValue.frame.height, 'number', call.source, profileValue.helper.constants.viewHeight.source, 'Helper.viewHeight'),
           layer: knownDefaultFact(4, 'number', call.source, HELPER_DEFAULT_PINS.frameLayer, '4'),
           autoFrameHeight: knownDefaultFact(false, 'boolean', call.source, HELPER_DEFAULT_PINS.frameAutoHeight, 'false'),
+          blurBackground: blurBackgroundDefault,
         },
         status: blocked || 'partial',
         hadGap: false,
@@ -8406,6 +8629,7 @@ export function projectX4UiLayoutProgram(
       setOperationLinks(operation, { frameId: frame.id });
       appendNodeOperation('frame', frame, operation.id);
       appendOperation(operation);
+      for (const layer of frame.frameTextureLayers) layer.operationIds.push(operation.id);
       if (blocked) {
         operation.reason = blocked === 'unreachable' ? 'unreachable source operation was recorded but not applied' : 'conditional or looped source operation was recorded but not applied';
         frame.hadGap = true;
@@ -8423,6 +8647,7 @@ export function projectX4UiLayoutProgram(
         operation.reason = 'createFrameHandle options are dynamic or unknown; source defaults were not substituted';
         frame.hadGap = true;
         invalidateDescriptorDefaultsForDynamicOptions(operation, frame.descriptorFacts, call.semantics.options, call.source);
+        frame.blurBackground = frame.descriptorFacts.blurBackground;
         addOperationGap(gaps, operation, 'options', 'dynamic', operation.reason, call.semantics.options?.location || call.source, call.semantics.options?.expression, frame.id);
         continue;
       }
@@ -8432,6 +8657,7 @@ export function projectX4UiLayoutProgram(
       const frameYValue = propertyValue(call, 'y');
       const layerValue = propertyValue(call, 'layer');
       const autoHeightValue = propertyValue(call, 'autoframeheight');
+      const blurBackgroundValue = propertyValue(call, 'blurbackground');
       const frameX = frameXValue
         ? resolveProjectedNumber(frameXValue, 'frame', 'frame x', call.source, ['scaleX'])
         : { value: 0, source: cloneLocation(call.source), provenance: 'source-pinned-default' as const, sourcePin: HELPER_DEFAULT_PINS.frameX };
@@ -8444,7 +8670,10 @@ export function projectX4UiLayoutProgram(
       const autoHeight = autoHeightValue
         ? resolveProjectedBoolean(autoHeightValue, 'frame', 'frame autoFrameHeight', call.source)
         : { value: false, source: cloneLocation(call.source), provenance: 'source-pinned-default' as const, sourcePin: HELPER_DEFAULT_PINS.frameAutoHeight };
-      for (const resolution of [frameX, frameY, layer, autoHeight]) appendGapForResolution(operation, resolution, frame.id);
+      const blurBackground = blurBackgroundValue
+        ? resolveProjectedBoolean(blurBackgroundValue, 'frame', 'frame blurBackground', call.source)
+        : { value: true, source: cloneLocation(call.source), provenance: 'source-pinned-default' as const, sourcePin: HELPER_DEFAULT_PINS.frameBlurBackground };
+      for (const resolution of [frameX, frameY, layer, autoHeight, blurBackground]) appendGapForResolution(operation, resolution, frame.id);
       recordDescriptorFact(operation, frame.descriptorFacts, 'x', frameXValue
         ? factFromResolution(frameXValue, frameX, 'number', call.source, 'frame x')
         : knownDefaultFact(0, 'number', call.source, HELPER_DEFAULT_PINS.frameX, '0'));
@@ -8459,6 +8688,10 @@ export function projectX4UiLayoutProgram(
       recordDescriptorFact(operation, frame.descriptorFacts, 'autoFrameHeight', autoHeightValue
         ? factFromResolution(autoHeightValue, autoHeight, 'boolean', call.source, 'frame autoFrameHeight')
         : knownDefaultFact(false, 'boolean', call.source, HELPER_DEFAULT_PINS.frameAutoHeight, 'false'));
+      recordDescriptorFact(operation, frame.descriptorFacts, 'blurBackground', blurBackgroundValue
+        ? factFromResolution(blurBackgroundValue, blurBackground, 'boolean', call.source, 'frame blurBackground')
+        : knownDefaultFact(true, 'boolean', call.source, HELPER_DEFAULT_PINS.frameBlurBackground, 'true'));
+      frame.blurBackground = frame.descriptorFacts.blurBackground;
       if (width.value !== undefined && !width.gap) {
         frame.width = width.value;
         frame.widthSource = width.source;
@@ -8479,8 +8712,177 @@ export function projectX4UiLayoutProgram(
         frame.hadGap = true;
         continue;
       }
+      if (blurBackground.value === undefined || blurBackground.gap) {
+        operation.status = 'unresolved';
+        operation.reason = 'frame blurBackground is not completely source-resolved';
+        frame.hadGap = true;
+        continue;
+      }
       operation.status = 'applied';
       frame.status = 'projected';
+      continue;
+    }
+
+    const frameTextureLayerName = frameTextureLayerNameForCall(call);
+    if (frameTextureLayerName !== undefined) {
+      const operation = makeOperation(call, blocked || 'unresolved');
+      const frameReferenceValue = frameReference(call);
+      const frame = frameReferenceValue?.kind === 'frame'
+        ? frameByReference.get(referenceKey(frameReferenceValue) || '')
+        : undefined;
+      setOperationLinks(operation, { frameId: frame?.id });
+      appendNodeOperation('frame', frame, operation.id);
+      appendOperation(operation);
+      if (blocked) {
+        operation.reason = blocked === 'unreachable'
+          ? 'unreachable source operation was recorded but not applied'
+          : 'conditional or looped source operation was recorded but not applied';
+        if (frame) frame.hadGap = true;
+        continue;
+      }
+      if (call.method !== ':' || !frame || frame.width === undefined || frame.height === undefined) {
+        operation.reason = call.method !== ':'
+          ? `${call.name} uses an unsupported receiver/method shape`
+          : !frame
+            ? `${call.name} receiver is not an applied frame identity`
+            : `${call.name} owner frame geometry is not an applied source identity`;
+        addOperationGap(
+          gaps,
+          operation,
+          'data-flow',
+          call.method !== ':' ? 'unsupported' : 'unknown',
+          operation.reason,
+          call.source,
+          call.receiver?.expression || call.semantics.frame?.expression,
+          frame?.id,
+        );
+        if (frame) frame.hadGap = true;
+        continue;
+      }
+      if (displayedFrameIds.has(frame.id)) {
+        operation.reason = `${call.name} occurs after frame:display and is not applied by source-order projection`;
+        addOperationGap(gaps, operation, 'data-flow', 'unsupported', operation.reason, call.source, call.receiver?.expression, frame.id);
+        frame.hadGap = true;
+        continue;
+      }
+      const layer = frame.frameTextureLayers.find(candidate => candidate.name === frameTextureLayerName);
+      if (!layer) {
+        operation.reason = `${call.name} frame texture layer ledger is unavailable`;
+        addOperationGap(gaps, operation, 'frame', 'incomplete', operation.reason, call.source, undefined, frame.id);
+        frame.hadGap = true;
+        continue;
+      }
+      const optionModeValue = optionMode(call);
+      let hasGap = false;
+      const setLayerFact = (propertyName: string, fact: X4UiLayoutDescriptorFact): void => {
+        layer.descriptorFacts[propertyName] = fact;
+        operation.descriptorFacts[propertyName] = fact;
+      };
+      const iconValue = optionModeValue === 'unresolved'
+        ? call.semantics.options
+        : propertyValue(call, 'icon') || call.semantics.icon;
+      const icon = optionModeValue === 'unresolved'
+        ? unresolved<string>(
+          iconValue,
+          'options',
+          `${call.name} options are dynamic or unknown; effective frame texture icon was not substituted`,
+          call.source,
+        )
+        : resolveProjectedString(iconValue, 'data-flow', `${call.name} icon`, call.source);
+      appendGapForResolution(operation, icon, frame.id);
+      if (icon.gap) hasGap = true;
+      setLayerFact('icon', factFromResolution(iconValue, icon, 'string', call.source, `${call.name} icon`));
+
+      if (optionModeValue === 'unresolved') {
+        const reason = `${call.name} options are dynamic or unknown; frame texture defaults and overrides were not substituted`;
+        addOperationGap(
+          gaps,
+          operation,
+          'options',
+          'dynamic',
+          reason,
+          call.semantics.options?.location || call.source,
+          call.semantics.options?.expression,
+          frame.id,
+        );
+        for (const propertyName of FRAME_TEXTURE_OPTION_PROPERTIES) {
+          setLayerFact(
+            propertyName,
+            unavailableFrameTextureFact(
+              propertyName,
+              'dynamic frame texture option table prevents source-pinned default substitution',
+              call.semantics.options?.location || call.source,
+              call.semantics.options?.expression,
+            ),
+          );
+        }
+        hasGap = true;
+      } else {
+        for (const propertyName of FRAME_TEXTURE_OPTION_PROPERTIES) {
+          const value = propertyValue(call, propertyName);
+          if (!value) continue;
+          if (propertyName === 'color') {
+            const projection = property(call, 'color');
+            const color = resolveColorFact(
+              modelColorExpressions,
+              call,
+              'color',
+              projection,
+              colorEvidenceInput,
+              undefined,
+              call.source,
+              undefined,
+              'frame',
+              'frame texture color remains unavailable without exact source color evidence',
+              'frame texture color expression',
+            );
+            setLayerFact(propertyName, color.fact);
+            if (color.gap) {
+              addOperationGap(gaps, operation, color.gap.category, color.gap.status, color.gap.reason, color.gap.source, color.gap.expression, frame.id);
+              hasGap = true;
+            }
+          } else {
+            const resolution = resolveProjectedNumber(value, 'property', `${call.name} ${propertyName}`, call.source);
+            appendGapForResolution(operation, resolution, frame.id);
+            if (resolution.gap) hasGap = true;
+            setLayerFact(propertyName, factFromResolution(value, resolution, 'number', call.source, `${call.name} ${propertyName}`));
+          }
+        }
+        const recognizedFrameTextureProperties = new Set(['icon', ...FRAME_TEXTURE_OPTION_PROPERTIES]);
+        const invalidProjectedProperties = (call.semantics.properties || [])
+          .filter(projected => !recognizedFrameTextureProperties.has(projected.name));
+        const unsupportedProperties = [
+          ...(call.semantics.unsupportedProperties || []),
+          ...invalidProjectedProperties,
+        ].filter((candidate, index, all) => all.findIndex(existing =>
+          existing.name === candidate.name
+            && locationsEqual(existing.source, candidate.source)) === index);
+        for (const unsupported of unsupportedProperties) {
+          addOperationGap(
+            gaps,
+            operation,
+            'property',
+            'unsupported',
+            `${call.name} property ${unsupported.name} is retained as source evidence but not applied by bounded frame-texture projection`,
+            unsupported.source,
+            unsupported.value.expression,
+            frame.id,
+          );
+          hasGap = true;
+        }
+      }
+      layer.source = cloneLocation(call.source);
+      layer.sourceOrder = call.source.start.offset;
+      if (!layer.operationIds.includes(operation.id)) layer.operationIds.push(operation.id);
+      if (hasGap) {
+        operation.status = 'unresolved';
+        operation.reason = optionModeValue === 'unresolved'
+          ? `${call.name} frame texture options are not completely source-resolved`
+          : `${call.name} frame texture properties are not completely source-resolved`;
+        frame.hadGap = true;
+      } else {
+        operation.status = 'applied';
+      }
       continue;
     }
 
@@ -10386,6 +10788,7 @@ export function projectX4UiLayoutProgram(
         if (frame) frame.hadGap = true;
       } else if (frame) {
         operation.status = 'applied';
+        displayedFrameIds.add(frame.id);
       } else {
         operation.reason = 'display receiver is not an applied frame identity';
         addOperationGap(gaps, operation, 'data-flow', 'unknown', operation.reason, call.source, frameReferenceValue?.path);
@@ -10628,6 +11031,9 @@ export function projectX4UiLayoutProgram(
       - (operationOrder.get(right) ?? Number.MAX_SAFE_INTEGER));
   };
   for (const frame of frames) orderedOperationIds(frame.operationIds);
+  for (const frame of frames) {
+    for (const layer of frame.frameTextureLayers) orderedOperationIds(layer.operationIds);
+  }
   for (const table of tables) orderedOperationIds(table.operationIds);
   for (const row of rows) orderedOperationIds(row.operationIds);
   for (const cell of cells) {

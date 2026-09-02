@@ -17,6 +17,8 @@ import {
   type X4UiLayoutDescriptorFact,
   type X4UiLayoutDescriptorFacts,
   type X4UiLayoutFrameNode,
+  type X4UiLayoutFrameTextureLayer,
+  type X4UiLayoutFrameTextureLayerName,
   type X4UiLayoutModelIdentity,
   type X4UiLayoutOperation,
   type X4UiLayoutProgram,
@@ -107,6 +109,12 @@ const EDITBOX_SOURCE_PINS = Object.freeze({
   textBorder: Object.freeze({ sourcePath: WIDGET_SOURCE_PATH, lineStart: 848, lineEnd: 860 }),
   blackInset: Object.freeze({ sourcePath: WIDGET_SOURCE_PATH, lineStart: 8702, lineEnd: 8727 }),
   initialInputActive: Object.freeze({ sourcePath: WIDGET_SOURCE_PATH, lineStart: 6325, lineEnd: 6332 }),
+});
+
+const FRAME_TEXTURE_SOURCE_PINS = Object.freeze({
+  blurBackground: Object.freeze({ sourcePath: X4_LAYOUT_PROVENANCE.helperSourcePath, lineStart: 3133, lineEnd: 3133 }),
+  widthFallback: Object.freeze({ sourcePath: WIDGET_SOURCE_PATH, lineStart: 16977, lineEnd: 16977 }),
+  heightFallback: Object.freeze({ sourcePath: WIDGET_SOURCE_PATH, lineStart: 16978, lineEnd: 16978 }),
 });
 
 export type X4UiSceneStatus = 'projected' | 'partial' | 'refused';
@@ -256,6 +264,37 @@ export interface X4UiSceneFrameNode extends X4UiSceneNodeBase {
   readonly kind: 'frame';
   readonly tableIds: readonly string[];
   readonly layer?: number;
+  readonly frameTextureLayers?: readonly X4UiSceneFrameTextureLayer[];
+  readonly backdrop?: X4UiSceneFrameBackdrop;
+}
+
+export type X4UiSceneFrameTextureApplicability = 'inactive' | 'active-unresolved' | 'active-source-known';
+
+export interface X4UiSceneFrameTextureLayer {
+  readonly name: X4UiLayoutFrameTextureLayerName;
+  readonly source: X4UiSceneSourceLocation;
+  readonly sourceOrder: number;
+  readonly operationIds: readonly string[];
+  readonly descriptorFacts: X4UiLayoutDescriptorFacts;
+  readonly applicability: X4UiSceneFrameTextureApplicability;
+  readonly icon?: string;
+  readonly effectiveWidth?: number;
+  readonly effectiveHeight?: number;
+  readonly provenanceLinks: readonly X4UiSceneProvenanceLink[];
+  readonly diagnosticLinks: readonly string[];
+  readonly gameVerification: typeof X4_UI_SCENE_GAME_TRUTH;
+  readonly reason?: string;
+}
+
+export interface X4UiSceneFrameBackdrop {
+  readonly blurBackground?: boolean;
+  readonly blurBackgroundFact: X4UiLayoutDescriptorFact;
+  readonly availability: 'unavailable' | 'disabled';
+  readonly reason: string;
+  readonly source: X4UiSceneSourceLocation;
+  readonly provenanceLinks: readonly X4UiSceneProvenanceLink[];
+  readonly diagnosticLinks: readonly string[];
+  readonly gameVerification: typeof X4_UI_SCENE_GAME_TRUTH;
 }
 
 export interface X4UiSceneColumn {
@@ -890,9 +929,24 @@ const canonicalizeSceneGapGraph = (
       diagnosticLinks: remapGapLinks(line.diagnosticLinks, ids),
     })),
   }));
+  const canonicalFrames = frames.map(frame => ({
+    ...remapNode(frame),
+    ...(frame.frameTextureLayers === undefined ? {} : {
+      frameTextureLayers: frame.frameTextureLayers.map(layer => ({
+        ...layer,
+        diagnosticLinks: remapGapLinks(layer.diagnosticLinks, ids),
+      })),
+    }),
+    ...(frame.backdrop === undefined ? {} : {
+      backdrop: {
+        ...frame.backdrop,
+        diagnosticLinks: remapGapLinks(frame.backdrop.diagnosticLinks, ids),
+      },
+    }),
+  }));
   return {
     gaps: canonicalGaps,
-    frames: frames.map(remapNode),
+    frames: canonicalFrames,
     tables: tables.map(remapNode),
     rows: rows.map(remapNode),
     cells: cells.map(remapNode),
@@ -1498,6 +1552,130 @@ const makeSourceLink = (
 const tableViewFor = (profile: X4UiSceneProfile, tableId: string): X4UiSceneTableViewState | undefined =>
   profile.tableView?.[tableId];
 
+const FRAME_TEXTURE_DESCRIPTOR_FIELDS = Object.freeze([
+  'icon',
+  'color',
+  'width',
+  'height',
+  'rotationRate',
+  'rotationStart',
+  'rotationDuration',
+  'rotationInterval',
+  'initialScaleFactor',
+  'scaleDuration',
+  'glowfactor',
+]);
+
+const frameTextureSurfaceFor = (
+  context: BuildContext,
+  frame: X4UiLayoutFrameNode,
+  frameRect: X4UiSceneRect | undefined,
+  frameLinks: readonly string[],
+): {
+  readonly frameTextureLayers?: readonly X4UiSceneFrameTextureLayer[];
+  readonly backdrop?: X4UiSceneFrameBackdrop;
+} => {
+  const layers = frame.frameTextureLayers?.map(layer => {
+    const provenanceLinks = [
+      ...factLinks(layer.descriptorFacts, FRAME_TEXTURE_DESCRIPTOR_FIELDS),
+    ];
+    const diagnosticLinks = [...frameLinks];
+    const iconValue = knownValue(layer.descriptorFacts.icon, 'string');
+    const icon = iconValue?.value as string | undefined;
+    const inactive = icon === '';
+    const applicability: X4UiSceneFrameTextureApplicability = inactive
+      ? 'inactive'
+      : 'active-unresolved';
+    const effectiveWidthFact = knownValue(layer.descriptorFacts.width, 'number');
+    const effectiveHeightFact = knownValue(layer.descriptorFacts.height, 'number');
+    const effectiveWidthValue = effectiveWidthFact?.value;
+    const effectiveHeightValue = effectiveHeightFact?.value;
+    const effectiveWidth = typeof effectiveWidthValue === 'number'
+      ? effectiveWidthValue > 0 ? effectiveWidthValue : frameRect?.width
+      : undefined;
+    const effectiveHeight = typeof effectiveHeightValue === 'number'
+      ? effectiveHeightValue > 0 ? effectiveHeightValue : frameRect?.height
+      : undefined;
+    if (effectiveWidthFact?.value === 0 && frameRect) {
+      provenanceLinks.push(makeSourceLink('source-pin', layer.source, FRAME_TEXTURE_SOURCE_PINS.widthFallback, 'frameElement.width'));
+    }
+    if (effectiveHeightFact?.value === 0 && frameRect) {
+      provenanceLinks.push(makeSourceLink('source-pin', layer.source, FRAME_TEXTURE_SOURCE_PINS.heightFallback, 'frameElement.height'));
+    }
+    const reason = inactive
+      ? undefined
+      : 'non-empty frame texture icon remains unresolved because no exact accepted X4 9.00 texture/material asset is available to the source preview';
+    if (!inactive) {
+      const id = addGap(context, {
+        category: 'paint',
+        status: 'unsupported',
+        reason: reason!,
+        source: sourceCopy(layer.source),
+        ...(iconValue ? { expression: iconValue.fact.expression } : {}),
+        nodeId: `scene:${frame.id}`,
+      });
+      diagnosticLinks.push(id);
+    }
+    return {
+      name: layer.name,
+      source: sourceCopy(layer.source),
+      sourceOrder: layer.sourceOrder,
+      operationIds: [...layer.operationIds],
+      descriptorFacts: cloneData(layer.descriptorFacts) as X4UiLayoutDescriptorFacts,
+      applicability,
+      ...(icon === undefined ? {} : { icon }),
+      ...(effectiveWidth === undefined ? {} : { effectiveWidth }),
+      ...(effectiveHeight === undefined ? {} : { effectiveHeight }),
+      provenanceLinks,
+      diagnosticLinks: [...new Set(diagnosticLinks)],
+      gameVerification: X4_UI_SCENE_GAME_TRUTH,
+      ...(reason ? { reason } : {}),
+    };
+  });
+  const blurFact = frame.blurBackground || frame.descriptorFacts.blurBackground;
+  const backdrop = frame.frameTextureLayers === undefined && blurFact === undefined
+    ? undefined
+    : (() => {
+      const knownBlur = knownValue(blurFact, 'boolean');
+      const blurBackground = knownBlur?.value as boolean | undefined;
+      const provenanceLinks = [
+        ...(blurFact && blurFact.status === 'known' ? [factProvenanceLink('blurBackground', blurFact)] : []),
+      ];
+      const diagnosticLinks = [...frameLinks];
+      const unavailable = blurBackground !== false;
+      const reason = unavailable
+        ? 'live-game blur rasterization is unavailable; blurBackground is a compositor/backdrop requirement only'
+        : 'source disables blurBackground; no live-game backdrop is required';
+      if (unavailable) {
+        const sceneFrameId = `scene:${frame.id}`;
+        const existing = context.gaps.find(gap => gap.nodeId === sceneFrameId && gap.reason === reason);
+        const id = existing?.id || addGap(context, {
+          category: 'backdrop',
+          status: 'unknown',
+          reason,
+          source: sourceCopy(blurFact?.source || frame.source),
+          ...(blurFact?.sourcePin ? { sourcePin: sourcePinCopy(blurFact.sourcePin) } : {}),
+          nodeId: sceneFrameId,
+        });
+        diagnosticLinks.push(id);
+      }
+      return {
+        ...(blurBackground === undefined ? {} : { blurBackground }),
+        blurBackgroundFact: cloneData(blurFact) as X4UiLayoutDescriptorFact,
+        availability: unavailable ? 'unavailable' as const : 'disabled' as const,
+        reason,
+        source: sourceCopy(blurFact?.source || frame.source),
+        provenanceLinks,
+        diagnosticLinks: [...new Set(diagnosticLinks)],
+        gameVerification: X4_UI_SCENE_GAME_TRUTH,
+      };
+    })();
+  return {
+    ...(layers ? { frameTextureLayers: layers } : {}),
+    ...(backdrop ? { backdrop } : {}),
+  };
+};
+
 const buildFrameNodes = (
   context: BuildContext,
   framesById: ReadonlyMap<string, X4UiLayoutFrameNode>,
@@ -1523,6 +1701,7 @@ const buildFrameNodes = (
       ...factLinks(frame.descriptorFacts, ['x', 'y', 'width', 'height', 'layer']),
       makeSourceLink('source-pin', frame.source),
     ];
+    const frameSurface = frameTextureSurfaceFor(context, frame, frameRect, links);
     const completeness: X4UiSceneCompleteness = frameRect ? (links.length === 0 ? 'complete' : 'partial') : 'unavailable';
     frames.push({
       id: `scene:${frame.id}`,
@@ -1537,6 +1716,7 @@ const buildFrameNodes = (
       diagnosticLinks: links,
       diagnosticStyle: diagnosticStyleForGeometry(Boolean(frameRect)),
       tableIds: frame.tableIds.map(id => `scene:${id}`),
+      ...frameSurface,
     });
   }
   return { frames, frameRects, frameClips };
@@ -3372,6 +3552,9 @@ const SUPPORTED_OPERATION_KINDS = new Set([
   'scaleX',
   'scaleY',
   'scaleFont',
+  'setBackground',
+  'setBackground2',
+  'setOverlay',
 ]);
 
 const KERNEL_PRODUCER_KINDS = new Set([
@@ -3433,6 +3616,33 @@ const operationHasOwnerShape = (
   const row = operationRowFor(program, operation);
   const cell = operationCellFor(program, operation);
   const table = operationTableFor(program, operation);
+  const frameTextureLayerName = kind === 'setBackground'
+    ? 'background'
+    : kind === 'setBackground2'
+      ? 'background2'
+      : kind === 'setOverlay'
+        ? 'overlay'
+        : undefined;
+  if (frameTextureLayerName !== undefined) {
+    const frame = operation.frameId === undefined
+      ? undefined
+      : program.frames.find(candidate => candidate.id === operation.frameId);
+    const layer = frame?.frameTextureLayers?.find(candidate => candidate.name === frameTextureLayerName);
+    const receiver = operation.metadata.receiver?.reference;
+    const semanticFrame = operation.metadata.semantics.frame?.reference;
+    return operation.frameId !== undefined
+      && operation.tableId === undefined
+      && operation.rowId === undefined
+      && operation.cellId === undefined
+      && frame !== undefined
+      && layer !== undefined
+      && layer.operationIds.includes(operation.id)
+      && frame.identity !== undefined
+      && receiver !== undefined
+      && semanticFrame !== undefined
+      && sameStructuralValue(receiver, frame.identity)
+      && sameStructuralValue(semanticFrame, frame.identity);
+  }
   if (kind === 'createFrameHandle') {
     return operation.frameId !== undefined && operation.tableId === undefined && operation.rowId === undefined && operation.cellId === undefined;
   }
@@ -4740,6 +4950,28 @@ const validateGeneratedSceneIds = (program: X4UiLayoutProgram): boolean => {
   return textIds.every(textId => allIds.every(id => !isGeneratedGlyphIdFor(id, textId)));
 };
 
+const validateFrameTextureLayerStructure = (
+  frame: X4UiLayoutFrameNode,
+  layers: unknown,
+): layers is readonly X4UiLayoutFrameTextureLayer[] => {
+  if (!Array.isArray(layers) || layers.length !== 3) return false;
+  return layers.every((candidate, index) => {
+    if (!isRecord(candidate)
+      || !exactKeys(candidate, ['name', 'source', 'sourceOrder', 'operationIds', 'descriptorFacts'])
+      || candidate.name !== ['background', 'background2', 'overlay'][index]
+      || !sourceIsValid(candidate.source)
+      || candidate.source.file !== frame.source.file
+      || candidate.source.sourcePath !== frame.source.sourcePath
+      || !isSafeIntegerAtLeast(candidate.sourceOrder, 0)
+      || candidate.sourceOrder !== (candidate.source as X4UiSceneSourceLocation).start.offset
+      || !uniqueStringArray(candidate.operationIds)
+      || !validateFacts(candidate.descriptorFacts)) return false;
+    const factKeys = Object.keys(candidate.descriptorFacts as Record<string, unknown>).sort();
+    return JSON.stringify(factKeys) === JSON.stringify([...FRAME_TEXTURE_DESCRIPTOR_FIELDS].sort())
+      && FRAME_TEXTURE_DESCRIPTOR_FIELDS.every(field => validateFact((candidate.descriptorFacts as Record<string, unknown>)[field]));
+  });
+};
+
 const validateProgramStructure = (
   program: unknown,
   evidenceAuthority: X4UiLayoutEvidenceAuthority,
@@ -4765,14 +4997,17 @@ const validateProgramStructure = (
     ids.add(node.id);
     return true;
   };
-  if (!program.frames.every(node => checkNode(node, ['id', 'source', 'tableIds', 'operationIds', 'descriptorFacts', 'status'], ['identity', 'width', 'height', 'widthSource', 'heightSource']))
+  if (!program.frames.every(node => checkNode(node, ['id', 'source', 'tableIds', 'operationIds', 'descriptorFacts', 'status'], ['identity', 'width', 'height', 'widthSource', 'heightSource', 'frameTextureLayers', 'blurBackground']))
     || !program.tables.every(node => checkNode(node, ['id', 'source', 'rowIds', 'operationIds', 'descriptorFacts', 'status'], ['identity', 'frameId', 'frameWidth', 'numColumns', 'requestedWidth', 'kernelState', 'height']))
     || !program.rows.every(node => checkNode(node, ['id', 'source', 'cellIds', 'operationIds', 'descriptorFacts', 'status'], ['identity', 'tableId', 'rowIndex', 'kernelState', 'height']))
      || !program.cells.every(node => checkNode(node, ['id', 'source', 'column', 'operationIds', 'metadataOperationIds', 'descriptorFacts', 'status'], ['identity', 'tableId', 'rowId', 'rowIndex', 'kernelState', 'spanWidth', 'height']))) return refuseStructure('nodes');
   if (!program.frames.every(frame =>
     (frame.identity === undefined || validateValueReference(frame.identity))
     && (frame.widthSource === undefined || sourceIsValid(frame.widthSource))
-    && (frame.heightSource === undefined || sourceIsValid(frame.heightSource)))
+    && (frame.heightSource === undefined || sourceIsValid(frame.heightSource))
+    && (frame.frameTextureLayers === undefined || validateFrameTextureLayerStructure(frame, frame.frameTextureLayers))
+    && (frame.blurBackground === undefined || validateFact(frame.blurBackground))
+    && (frame.blurBackground === undefined || sameStructuralValue(frame.blurBackground, frame.descriptorFacts.blurBackground)))
     || !program.tables.every(table => table.identity === undefined || validateValueReference(table.identity))
     || !program.rows.every(row => row.identity === undefined || validateValueReference(row.identity))
      || !program.cells.every(cell => cell.identity === undefined || validateValueReference(cell.identity))) return refuseStructure('node-optionals');
@@ -4942,6 +5177,27 @@ const validateProgramStructure = (
     if (frame.width !== undefined && !isFiniteDimension(frame.width)) return refuseStructure(`frame-width:${frame.id}`);
     if (frame.height !== undefined && !isFiniteDimension(frame.height)) return refuseStructure(`frame-height:${frame.id}`);
     if (!validateConsumedFactDomains(frame.descriptorFacts, ['width', 'height'], ['x', 'y', 'layer'], [], [])) return refuseStructure(`frame-facts:${frame.id}`);
+    if (frame.frameTextureLayers !== undefined) {
+      for (const layer of frame.frameTextureLayers) {
+        if (layer.operationIds.some(operationId => !frame.operationIds.includes(operationId))) return refuseStructure(`frame-texture-owner:${frame.id}:${layer.name}`);
+        const layerOperations = layer.operationIds
+          .map(operationId => typedProgram.operations.find(operation => operation.id === operationId))
+          .filter((operation): operation is X4UiLayoutOperation => operation !== undefined);
+        const acceptedOperationKinds = layer.name === 'background'
+          ? ['createFrameHandle', 'setBackground']
+          : layer.name === 'background2'
+            ? ['createFrameHandle', 'setBackground2']
+            : ['createFrameHandle', 'setOverlay'];
+        if (layerOperations.length !== layer.operationIds.length
+          || layerOperations.length === 0
+          || layerOperations.some(operation => operation.frameId !== frame.id
+            || !acceptedOperationKinds.includes(operation.kind)
+            || (operation.kind !== 'createFrameHandle'
+              && !operationHasOwnerShape(program as unknown as X4UiLayoutProgram, operation, operation.kind)))) return refuseStructure(`frame-texture-operation:${frame.id}:${layer.name}`);
+        const lastOperation = layerOperations[layerOperations.length - 1];
+        if (lastOperation.sourceOrder !== layer.sourceOrder || !sameStructuralValue(lastOperation.source, layer.source)) return refuseStructure(`frame-texture-source:${frame.id}:${layer.name}`);
+      }
+    }
   }
   for (const table of program.tables) {
     if (!uniqueStringArray(table.rowIds) || !uniqueStringArray(table.operationIds)) return refuseStructure(`table-arrays:${table.id}`);

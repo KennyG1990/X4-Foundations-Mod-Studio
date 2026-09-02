@@ -1296,6 +1296,13 @@ const CANONICAL_COMPOSITE_TRACE: readonly TraceEntry[] = [
   traceEntry('composite', "setFillStyle", "#ef4444"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
+  traceEntry('composite', "rect", 0, 0, 100, 80),
+  traceEntry('composite', "clip"),
+  traceEntry('composite', "fillRect", 0, 0, 100, 80),
+  traceEntry('composite', "restore"),
+  traceEntry('composite', "setFillStyle", "#ef4444"),
+  traceEntry('composite', "save"),
+  traceEntry('composite', "beginPath"),
   traceEntry('composite', "rect", 0, 0, 86, 14),
   traceEntry('composite', "clip"),
   traceEntry('composite', "fillRect", 0, 0, 86, 14),
@@ -1322,6 +1329,13 @@ const CANONICAL_COMPOSITE_TRACE: readonly TraceEntry[] = [
   traceEntry('composite', "setFillStyle", "#ef4444"),
   traceEntry('composite', "setFillStyle", "#ef4444"),
   traceEntry('composite', "setFillStyle", "#ef4444"),
+  traceEntry('composite', "setFillStyle", "#ef4444"),
+  traceEntry('composite', "save"),
+  traceEntry('composite', "beginPath"),
+  traceEntry('composite', "rect", 0, 0, 100, 80),
+  traceEntry('composite', "clip"),
+  traceEntry('composite', "fillRect", 0, 0, 100, 80),
+  traceEntry('composite', "restore"),
   traceEntry('composite', "setFillStyle", "#ef4444"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
@@ -1716,6 +1730,13 @@ const CANONICAL_POLYGON_COMPOSITE_TRACE: readonly TraceEntry[] = [
   traceEntry('composite', "setFillStyle", "#ef4444"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
+  traceEntry('composite', "rect", 0, 0, 100, 80),
+  traceEntry('composite', "clip"),
+  traceEntry('composite', "fillRect", 0, 0, 100, 80),
+  traceEntry('composite', "restore"),
+  traceEntry('composite', "setFillStyle", "#ef4444"),
+  traceEntry('composite', "save"),
+  traceEntry('composite', "beginPath"),
   traceEntry('composite', "rect", 0, 0, 86, 14),
   traceEntry('composite', "clip"),
   traceEntry('composite', "fillRect", 0, 0, 86, 14),
@@ -1742,6 +1763,13 @@ const CANONICAL_POLYGON_COMPOSITE_TRACE: readonly TraceEntry[] = [
   traceEntry('composite', "setFillStyle", "#ef4444"),
   traceEntry('composite', "setFillStyle", "#ef4444"),
   traceEntry('composite', "setFillStyle", "#ef4444"),
+  traceEntry('composite', "setFillStyle", "#ef4444"),
+  traceEntry('composite', "save"),
+  traceEntry('composite', "beginPath"),
+  traceEntry('composite', "rect", 0, 0, 100, 80),
+  traceEntry('composite', "clip"),
+  traceEntry('composite', "fillRect", 0, 0, 100, 80),
+  traceEntry('composite', "restore"),
   traceEntry('composite', "setFillStyle", "#ef4444"),
   traceEntry('composite', "save"),
   traceEntry('composite', "beginPath"),
@@ -3413,6 +3441,133 @@ async function main(): Promise<void> {
       buttonBorderStroke: boundedButtonBorderStroke,
       trace: boundedNoKeepOutTrace.filter(entry => entry.name === 'setFillStyle' || entry.name === 'setStrokeStyle' || entry.name === 'stroke'),
     });
+    const sourceCompositionMarkerPlan = boundedNoKeepOut === undefined
+      ? undefined
+      : forgedResult(boundedNoKeepOut, (_plan, layers) => {
+        for (const command of layers[2]?.commands ?? []) {
+          if (command.kind === 'unavailable-node') command.sourceComposition = 'diagnostic-only';
+        }
+      });
+    const sourceCompositionMarkerTrace: TraceEntry[] = [];
+    const sourceCompositionBaselineMapTrace: TraceEntry[] = [];
+    const sourceCompositionMarkerMapTrace: TraceEntry[] = [];
+    const sourceCompositionBaselineMapResult = boundedNoKeepOut === undefined
+      ? undefined
+      : attemptRenderWithOptions(boundedNoKeepOut, corpus, {
+        surfaceFactory: makeFactory(sourceCompositionBaselineMapTrace),
+        presentation: 'diagnostic-map',
+      });
+    const sourceCompositionMarkerResult = sourceCompositionMarkerPlan === undefined
+      ? undefined
+      : attemptRenderWithOptions(sourceCompositionMarkerPlan, corpus, {
+        surfaceFactory: makeFactory(sourceCompositionMarkerTrace),
+        presentation: 'source-composition',
+      });
+    const sourceCompositionMarkerMapResult = sourceCompositionMarkerPlan === undefined
+      ? undefined
+      : attemptRenderWithOptions(sourceCompositionMarkerPlan, corpus, {
+        surfaceFactory: makeFactory(sourceCompositionMarkerMapTrace),
+        presentation: 'diagnostic-map',
+      });
+    const sourceCompositionMarkerRendered = completedResult(sourceCompositionMarkerResult)?.status === 'rendered';
+    const sourceCompositionBaselineMapRendered = completedResult(sourceCompositionBaselineMapResult)?.status === 'rendered';
+    const sourceCompositionMarkerMapRendered = completedResult(sourceCompositionMarkerMapResult)?.status === 'rendered';
+    const sourceCompositionMarkerSuppressed = sourceCompositionMarkerRendered
+      && !sourceCompositionMarkerTrace.some(entry => entry.name === 'setStrokeStyle' && entry.args[0] === X4_UI_CANVAS_DIAGNOSTIC_PALETTE.unavailable);
+    const sourceCompositionMarkerRetainedInMap = sourceCompositionMarkerMapRendered
+      && sourceCompositionMarkerMapTrace.some(entry => entry.name === 'setFillStyle' && entry.args[0] === X4_UI_CANVAS_DIAGNOSTIC_PALETTE.unavailable)
+      && sourceCompositionMarkerMapTrace.some(entry => entry.name === 'fillRect');
+    const sourceCompositionMarkerMapUnchanged = sourceCompositionBaselineMapRendered
+      && sourceCompositionMarkerMapRendered
+      && traceEquals(sourceCompositionBaselineMapTrace, sourceCompositionMarkerMapTrace);
+    familyCheck('stage-b-causal', 'B119 diagnostic-only source-composition marker suppresses unavailable frame paint without hiding diagnostic-map output',
+      sourceCompositionMarkerRendered
+      && sourceCompositionMarkerSuppressed
+      && sourceCompositionMarkerMapRendered
+      && sourceCompositionMarkerRetainedInMap
+      && sourceCompositionMarkerMapUnchanged, {
+      sourceCompositionMarkerResult: completedResult(sourceCompositionMarkerResult) === undefined
+        ? undefined
+        : receiptSummary(completedResult(sourceCompositionMarkerResult)?.receipt),
+      sourceCompositionMarkerMapResult: completedResult(sourceCompositionMarkerMapResult) === undefined
+        ? undefined
+        : receiptSummary(completedResult(sourceCompositionMarkerMapResult)?.receipt),
+      markedUnavailableNodeCount: sourceCompositionMarkerPlan === undefined
+        ? 0
+        : commandList(sourceCompositionMarkerPlan.plan).filter(command => command.kind === 'unavailable-node' && command.sourceComposition === 'diagnostic-only').length,
+      sourceCompositionMarkerSuppressed,
+      sourceCompositionMarkerRetainedInMap,
+      sourceCompositionMarkerMapUnchanged,
+      sourceTrace: sourceCompositionMarkerTrace.filter(entry => entry.name === 'setFillStyle' || entry.name === 'setStrokeStyle' || entry.name === 'stroke'),
+        mapTrace: sourceCompositionMarkerMapTrace.filter(entry => entry.name === 'setFillStyle' || entry.name === 'fillRect'),
+      });
+
+    const malformedSourceCompositionMarkerPlan = sourceCompositionMarkerPlan === undefined
+      ? undefined
+      : forgedResult(sourceCompositionMarkerPlan, (_plan, layers) => {
+        const marker = layers[2]?.commands.find(command => command.kind === 'unavailable-node') as unknown as JsonRecord | undefined;
+        if (marker !== undefined) marker.sourceComposition = 'forged';
+      });
+    if (malformedSourceCompositionMarkerPlan === undefined) {
+      familyCheck('pre-allocation', 'B119 malformed diagnostic marker refuses before Canvas allocation', false, { fixtureReady: false });
+    } else {
+      const malformedMarker = malformedSourceCompositionMarkerPlan.plan.layers[2]?.commands.find(command => command.kind === 'unavailable-node') as unknown as JsonRecord | undefined;
+      preAllocationFamilyCase(
+        'B119 malformed diagnostic marker refuses before Canvas allocation',
+        malformedSourceCompositionMarkerPlan,
+        corpus,
+        'invalid-command',
+        malformedMarker?.sourceComposition === 'forged',
+        { marker: malformedMarker },
+      );
+    }
+
+    const markerMutationActivity = emptyActivityLedger();
+    let markerMutationReached = false;
+    let markerSourceChanged = false;
+    const markerForMutation = sourceCompositionMarkerPlan?.plan.layers[2]?.commands.find(command => command.kind === 'unavailable-node') as unknown as JsonRecord | undefined;
+    const markerSource = asRecord(markerForMutation?.source);
+    const markerSourceBefore = markerSource?.file;
+    const markerMutationAttempt = sourceCompositionMarkerPlan === undefined
+      ? undefined
+      : attemptRenderWithOptions(sourceCompositionMarkerPlan, corpus, {
+        surfaceFactory: makeObservedFactory(markerMutationActivity, {
+          contextHooks: role => role === 'composite' ? {
+            afterOperation: (_operationRole, name) => {
+              if (markerMutationReached || (name !== 'setFillStyle' && name !== 'fillRect' && name !== 'drawImage')) return;
+              markerMutationReached = true;
+              if (markerSource !== undefined && typeof markerSourceBefore === 'string') {
+                markerSource.file = `${markerSourceBefore}.forged-after-issuance`;
+                markerSourceChanged = markerSource.file !== markerSourceBefore;
+              }
+            },
+          } : {},
+        }),
+        presentation: 'source-composition',
+      });
+    const markerMutationResult = markerMutationAttempt === undefined ? undefined : completedResult(markerMutationAttempt);
+    familyCheck(
+      'callback-isolation',
+      'B119 diagnostic marker source identity mutation after issuance refuses with no returned surface',
+      sourceCompositionMarkerPlan !== undefined
+        && markerForMutation !== undefined
+        && typeof markerSourceBefore === 'string'
+        && markerMutationReached
+        && markerSourceChanged
+        && markerMutationResult?.status === 'refused'
+        && markerMutationResult.receipt.refusal.code === 'post-validation-mutation'
+        && refusalBoundaryIsComplete(markerMutationResult),
+      {
+        fixtureReady: sourceCompositionMarkerPlan !== undefined && markerForMutation !== undefined && typeof markerSourceBefore === 'string',
+        markerMutationReached,
+        markerSourceChanged,
+        markerSourceBefore,
+        markerSourceAfter: markerSource?.file,
+        threw: markerMutationAttempt?.threw,
+        receipt: receiptSummary(markerMutationResult?.receipt),
+        activity: activitySignature(markerMutationActivity),
+      },
+    );
   } catch (error) {
     familyCheck('stage-b-causal', 'loader-issued color evidence reaches top-level Preview and exact public Paint owner census', false, { error: error instanceof Error ? error.message : String(error) });
   }
@@ -3734,8 +3889,8 @@ async function main(): Promise<void> {
     const lastDiagnosticOrder = Math.max(...commands.map(command => Number(command.order)));
     const firstInsertedOrder = lastDiagnosticOrder + 1;
     for (const command of keepOutCommands) command.order = Number(command.order) + 2;
-    commands.push({ id: 'selftest:empty-clip', layer: 'diagnostics', order: firstInsertedOrder, kind: 'empty-clip', reason: 'selftest empty clip', clipRect: { x: 0, y: 0, width: 100, height: 80 }, gameTruth: 'Not verified in game', gameVerified: false });
-    commands.push({ id: 'selftest:invalid-raster', layer: 'diagnostics', order: firstInsertedOrder + 1, kind: 'invalid-raster-candidate', reason: 'selftest invalid raster', geometry: { x: 1, y: 1, width: 2, height: 2 }, gameTruth: 'Not verified in game', gameVerified: false });
+    commands.push({ id: 'selftest:empty-clip', layer: 'diagnostics', order: firstInsertedOrder, kind: 'empty-clip', sourceComposition: 'visual', reason: 'selftest empty clip', clipRect: { x: 0, y: 0, width: 100, height: 80 }, gameTruth: 'Not verified in game', gameVerified: false });
+    commands.push({ id: 'selftest:invalid-raster', layer: 'diagnostics', order: firstInsertedOrder + 1, kind: 'invalid-raster-candidate', sourceComposition: 'visual', reason: 'selftest invalid raster', geometry: { x: 1, y: 1, width: 2, height: 2 }, gameTruth: 'Not verified in game', gameVerified: false });
   });
   const diagnosticTrace: TraceEntry[] = [];
   const diagnosticResult = renderX4UiPaintPlanToCanvas(diagnosticPlan, corpus, { surfaceFactory: makeFactory(diagnosticTrace) });

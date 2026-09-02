@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { resolve as resolvePath } from 'node:path';
 import type { ModWorkspace, PassthroughFile } from '../types';
 import {
   buildX4UiCallModel,
@@ -40,6 +43,7 @@ import {
   X4_UI_CORPUS_COLORS_XSD_PATH,
   X4_UI_CORPUS_COLORS_XSD_SHA256,
   X4_UI_CORPUS_COLORS_XSD_SIZE,
+  X4_UI_CORPUS_9_00_CONTRACT,
   X4_UI_CORPUS_FILE_URL,
   X4_UI_CORPUS_MANIFEST_URL,
   X4_UI_CORPUS_STATUS_URL,
@@ -53,6 +57,7 @@ import {
 interface Check {
   readonly name: string;
   readonly pass: boolean;
+  readonly skipped?: boolean;
   readonly detail?: string;
 }
 
@@ -78,6 +83,10 @@ const checks: Check[] = [];
 
 const check = (name: string, pass: boolean, detail?: string): void => {
   checks.push({ name, pass, detail });
+};
+
+const checkSkipped = (name: string, detailValue: unknown): void => {
+  checks.push({ name, pass: true, skipped: true, detail: detail(detailValue) });
 };
 
 const input = (text: string, rel = 'selftest/b119-layout-program.lua') => ({
@@ -606,6 +615,23 @@ const positiveSource = [
   'function duplicate() local menuTwo = { name = "two", layer = 1 }; local frameTwo = Helper.createFrameHandle(menuTwo, { width = 50, height = 30 }); local tableTwo = frameTwo:addTable(2, { width = 50 }); tableTwo:addRow(false, {}) end',
 ].join('\n');
 
+const b119FrameTextureSource = [
+  'local menu = { name = "B119FrameTextures", layer = 4 }',
+  'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+  'frame:setBackground("background", { icon = "background-option", color = { r = 0.1, g = 0.2, b = 0.3, a = 0.4 }, width = 0, height = 0, rotationRate = 1, rotationStart = 2, rotationDuration = 3, rotationInterval = 4, initialScaleFactor = 0.5, scaleDuration = 6, glowfactor = 0.7 })',
+  'frame:setBackground2("background2", { icon = "", color = Color["unknown"], width = 32, height = 24 })',
+  'frame:setOverlay("overlay", { icon = "overlay-option" })',
+  'frame:display()',
+  'frame:setBackground("late", { width = 99 })',
+].join('\n');
+
+const b119FrameTextureFallbackSource = [
+  'local menu = { name = "B119FrameTextureFallback", layer = 4 }',
+  'local frame = Helper.createFrameHandle(menu, {})',
+  'frame:setBackground("", { icon = "" })',
+  'frame:display()',
+].join('\n');
+
 // These are deliberately source-shaped reductions of the reproduced shipping-menu
 // evidence. They travel through the real call model, target catalog, projector, and
 // producer self-validator; they are not hand-built validator fixtures.
@@ -631,7 +657,13 @@ const b119PropagatedLayerSource = [
   'end',
 ].join('\n');
 
-const run = (): { readonly allPassed: boolean; readonly passed: number; readonly total: number; readonly checks: readonly Check[] } => {
+const run = (): {
+  readonly allPassed: boolean;
+  readonly passed: number;
+  readonly skipped: number;
+  readonly total: number;
+  readonly checks: readonly Check[];
+} => {
   const model = buildX4UiCallModel(input(positiveSource));
   const catalog = createX4UiLayoutTargetCatalog(model);
   const profile = profileFor(model, { minTextHeight: 7 });
@@ -676,6 +708,282 @@ const run = (): { readonly allPassed: boolean; readonly passed: number; readonly
     detail({
       status: b119PropagatedLayerResult.status,
       refusal: refusalCode(b119PropagatedLayerResult),
+    }));
+
+  const b119FrameTextureModel = buildX4UiCallModel(input(
+    b119FrameTextureSource,
+    'selftest/b119-frame-texture-layers.lua',
+  ));
+  const b119FrameTextureResult = projectX4UiLayoutProgram(
+    b119FrameTextureModel,
+    topTarget(b119FrameTextureModel),
+    profileFor(b119FrameTextureModel),
+  );
+  const b119FrameTextureProgram = programOf(b119FrameTextureResult);
+  const b119FrameTextureAuthority = evidenceAuthorityOf(b119FrameTextureResult);
+  const b119FrameTextureFrame = b119FrameTextureProgram.frames[0];
+  const b119FrameTextureLayers = b119FrameTextureFrame?.frameTextureLayers || [];
+  const b119FrameTextureFallbackModel = buildX4UiCallModel(input(
+    b119FrameTextureFallbackSource,
+    'selftest/b119-frame-texture-fallback.lua',
+  ));
+  const b119FrameTextureFallbackResult = projectX4UiLayoutProgram(
+    b119FrameTextureFallbackModel,
+    topTarget(b119FrameTextureFallbackModel),
+    profileFor(b119FrameTextureFallbackModel),
+  );
+  const b119FrameTextureFallbackFrame = programOf(b119FrameTextureFallbackResult).frames[0];
+  const b119FrameTextureOperations = b119FrameTextureProgram.operations.filter(operation =>
+    ['createFrameHandle', 'setBackground', 'setBackground2', 'setOverlay', 'display'].includes(operation.kind));
+  const b119FrameTexturePostDisplay = b119FrameTextureOperations.find(operation =>
+    operation.kind === 'setBackground' && operation.source.start.offset > (b119FrameTextureOperations.find(candidate => candidate.kind === 'display')?.source.start.offset ?? -1));
+  check('B119 frame texture defaults and three setter layers retain exact source order and descriptor values',
+    b119FrameTextureResult.status === 'partial'
+      && b119FrameTextureAuthority !== undefined
+      && validateX4UiLayoutEvidencePair(b119FrameTextureProgram, b119FrameTextureAuthority).valid
+      && b119FrameTextureLayers.length === 3
+      && JSON.stringify(b119FrameTextureLayers.map(layer => layer.name)) === JSON.stringify(['background', 'background2', 'overlay'])
+      && b119FrameTextureLayers.every(layer => layer.operationIds.length >= 2)
+      && b119FrameTextureLayers[0]?.descriptorFacts.icon?.status === 'known'
+      && factValue(b119FrameTextureLayers[0]?.descriptorFacts.icon) === 'background-option'
+      && factValue(b119FrameTextureLayers[0]?.descriptorFacts.width) === 0
+      && factValue(b119FrameTextureLayers[0]?.descriptorFacts.height) === 0
+      && factValue(b119FrameTextureLayers[0]?.descriptorFacts.rotationRate) === 1
+      && factValue(b119FrameTextureLayers[0]?.descriptorFacts.rotationStart) === 2
+      && factValue(b119FrameTextureLayers[0]?.descriptorFacts.rotationDuration) === 3
+      && factValue(b119FrameTextureLayers[0]?.descriptorFacts.rotationInterval) === 4
+      && factValue(b119FrameTextureLayers[0]?.descriptorFacts.initialScaleFactor) === 0.5
+      && factValue(b119FrameTextureLayers[0]?.descriptorFacts.scaleDuration) === 6
+      && factValue(b119FrameTextureLayers[0]?.descriptorFacts.glowfactor) === 0.7
+      && factValue(b119FrameTextureLayers[1]?.descriptorFacts.icon) === ''
+      && factValue(b119FrameTextureLayers[2]?.descriptorFacts.icon) === 'overlay-option'
+      && factValue(b119FrameTextureLayers[1]?.descriptorFacts.width) === 32
+      && factValue(b119FrameTextureLayers[1]?.descriptorFacts.height) === 24
+      && b119FrameTextureFrame?.blurBackground?.status === 'known'
+      && b119FrameTextureFrame.blurBackground.value === true,
+    detail({
+      status: b119FrameTextureResult.status,
+      layers: b119FrameTextureLayers,
+      pair: b119FrameTextureAuthority === undefined ? undefined : validateX4UiLayoutEvidencePair(b119FrameTextureProgram, b119FrameTextureAuthority),
+    }));
+  check('B119 frame texture post-display mutation remains an explicit source gap and cannot replace the applied layer',
+    b119FrameTexturePostDisplay?.status === 'unresolved'
+      && b119FrameTexturePostDisplay.reason.includes('after frame:display')
+      && b119FrameTextureProgram.gaps.some(gap => gap.operationId === b119FrameTexturePostDisplay.id && gap.category === 'data-flow')
+      && b119FrameTextureLayers[0]?.source.start.offset !== b119FrameTexturePostDisplay.source.start.offset,
+    detail({ operation: b119FrameTexturePostDisplay, layers: b119FrameTextureLayers }));
+
+  const configuredWidgetSource = X4_UI_CORPUS_9_00_CONTRACT.widget;
+  const fallbackPinEvidence = {
+    width: b119FrameTextureFallbackFrame?.descriptorFacts.width?.sourcePin,
+    height: b119FrameTextureFallbackFrame?.descriptorFacts.height?.sourcePin,
+  };
+  const fallbackWidthLine = Number(fallbackPinEvidence.width?.lineStart);
+  const fallbackHeightLine = Number(fallbackPinEvidence.height?.lineStart);
+  check('B119 normal frame dimension fallbacks retain Helper viewWidth/viewHeight provenance',
+    b119FrameTextureFallbackResult.status === 'projected'
+      && fallbackPinEvidence.width?.sourcePath === X4_LAYOUT_PROVENANCE.helperSourcePath
+      && fallbackPinEvidence.width.lineStart === 707
+      && fallbackPinEvidence.width.lineEnd === 707
+      && fallbackPinEvidence.height?.sourcePath === X4_LAYOUT_PROVENANCE.helperSourcePath
+      && fallbackPinEvidence.height.lineStart === 708
+      && fallbackPinEvidence.height.lineEnd === 708
+      && fallbackWidthLine !== 16977
+      && fallbackHeightLine !== 16978
+      && fallbackWidthLine !== 16992
+      && fallbackHeightLine !== 16993,
+    detail({
+      source: {
+        helperSourcePath: X4_LAYOUT_PROVENANCE.helperSourcePath,
+        widthFallbackLine: 707,
+        heightFallbackLine: 708,
+      },
+      provenance: {
+        sourcePath: X4_LAYOUT_PROVENANCE.helperSourcePath,
+        widthFallbackLine: 707,
+        heightFallbackLine: 708,
+      },
+      fallbackPinEvidence,
+      textureFallbackOracle: 'Scene.frameTextureSurfaceFor; separate configured-source check below; parent live census remains required',
+    }));
+  const configuredReferenceRoot = process.env.X4_REFERENCE_ROOT?.trim();
+  const actualWidgetSourceCheck = (() => {
+    if (!configuredReferenceRoot) {
+      return {
+        status: 'skipped' as const,
+        reason: 'X4_REFERENCE_ROOT is not configured; portable selftest cannot inspect the authoritative unpacked widget source',
+        requiredFollowUp: 'Run this named source-bound check with X4_REFERENCE_ROOT set to the saved configured unpacked corpus root.',
+      };
+    }
+    const sourcePath = resolvePath(configuredReferenceRoot, ...configuredWidgetSource.relativePath.split('/'));
+    let bytes: Buffer;
+    try {
+      bytes = readFileSync(sourcePath);
+    } catch (error) {
+      return {
+        status: 'unavailable' as const,
+        sourcePath,
+        reason: String(error),
+        requiredFollowUp: 'Run the configured source-bound check after restoring the authoritative unpacked corpus file.',
+      };
+    }
+    const sha256 = createHash('sha256').update(bytes).digest('hex').toUpperCase();
+    const lines = bytes.toString('utf8').split(/\r?\n/);
+    const widthExpression = lines[16977 - 1]?.trim();
+    const heightExpression = lines[16978 - 1]?.trim();
+    const expectedWidthExpression = 'local width = (info.width > 0) and info.width or frameElement.width';
+    const expectedHeightExpression = 'local height = (info.height > 0) and info.height or frameElement.height';
+    return {
+      status: 'checked' as const,
+      sourcePath,
+      sha256,
+      expectedSha256: configuredWidgetSource.sha256,
+      width: { line: 16977, actual: widthExpression, expected: expectedWidthExpression },
+      height: { line: 16978, actual: heightExpression, expected: expectedHeightExpression },
+      valid: sha256 === configuredWidgetSource.sha256
+        && widthExpression === expectedWidthExpression
+        && heightExpression === expectedHeightExpression,
+    };
+  })();
+  if (actualWidgetSourceCheck.status === 'skipped') {
+    checkSkipped('B119 actual configured widget source hash and 16977/16978 fallback expressions', actualWidgetSourceCheck);
+  } else {
+    check(
+      'B119 actual configured widget source hash and 16977/16978 fallback expressions',
+      actualWidgetSourceCheck.valid,
+      detail(actualWidgetSourceCheck),
+    );
+  }
+
+  const b119FrameTextureEdgeSource = [
+    'local menu = { name = "B119FrameTextureEdge", layer = 4 }',
+    'local dynamicIcon = getIcon()',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'frame:setBackground("first", { icon = "first-option" })',
+    'frame:setBackground("second", { icon = "second-option" })',
+    'frame:setBackground2("positional-background2", { icon = "" })',
+    'frame:setOverlay("positional-overlay", { icon = dynamicIcon })',
+    'frame:display()',
+    'local malformedFrame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'malformedFrame:setOverlay("malformed-positional", { icon = {} })',
+    'malformedFrame:display()',
+  ].join('\n');
+  const b119FrameTextureEdgeModel = buildX4UiCallModel(input(
+    b119FrameTextureEdgeSource,
+    'selftest/b119-frame-texture-icon-edges.lua',
+  ));
+  const b119FrameTextureEdgeResult = projectX4UiLayoutProgram(
+    b119FrameTextureEdgeModel,
+    topTarget(b119FrameTextureEdgeModel),
+    profileFor(b119FrameTextureEdgeModel),
+  );
+  const b119FrameTextureEdgeProgram = programOf(b119FrameTextureEdgeResult);
+  const b119FrameTextureEdgeLayers = b119FrameTextureEdgeProgram.frames.flatMap(frame => frame.frameTextureLayers || []);
+  const b119FrameTextureEdgeCalls = b119FrameTextureEdgeModel.calls.filter(call =>
+    ['setBackground', 'setBackground2', 'setOverlay'].includes(call.name));
+  const b119FrameTextureEdgePropertyEvidence = b119FrameTextureEdgeCalls.every(call => {
+    const propertyProjection = call.semantics.properties?.find(propertyValue => propertyValue.normalizedName === 'icon');
+    return propertyProjection !== undefined
+      && b119FrameTextureEdgeSource.slice(propertyProjection.source.start.offset, propertyProjection.source.end.offset)
+        === propertyProjection.value.expression
+      && propertyProjection.source.start.offset === propertyProjection.value.location.start.offset
+      && propertyProjection.source.end.offset === propertyProjection.value.location.end.offset;
+  });
+  const b119FrameTextureEdgeLayer = (frameIndex: number, name: 'background' | 'background2' | 'overlay') =>
+    b119FrameTextureEdgeProgram.frames[frameIndex]?.frameTextureLayers?.find(layer => layer.name === name);
+  const b119FrameTextureDynamicLayer = b119FrameTextureEdgeLayer(0, 'overlay');
+  const b119FrameTextureMalformedLayer = b119FrameTextureEdgeLayer(1, 'overlay');
+  check('B119 frame texture icon precedence keeps source property ranges and final pre-display replacement authoritative',
+    b119FrameTextureEdgeResult.status === 'partial'
+      && b119FrameTextureEdgePropertyEvidence
+      && factValue(b119FrameTextureEdgeLayer(0, 'background')?.descriptorFacts.icon) === 'second-option'
+      && factValue(b119FrameTextureEdgeLayer(0, 'background2')?.descriptorFacts.icon) === ''
+      && b119FrameTextureEdgeLayer(0, 'background')?.source.start.offset === b119FrameTextureEdgeCalls[1]?.source.start.offset
+      && b119FrameTextureEdgeLayer(0, 'background2')?.source.start.offset === b119FrameTextureEdgeCalls[2]?.source.start.offset,
+    detail({
+      status: b119FrameTextureEdgeResult.status,
+      properties: b119FrameTextureEdgeCalls.map(call => ({
+        name: call.name,
+        icon: call.semantics.icon,
+        property: call.semantics.properties?.find(propertyValue => propertyValue.normalizedName === 'icon'),
+      })),
+      layers: b119FrameTextureEdgeLayers,
+    }));
+  check('B119 dynamic and malformed icon properties cannot launder a positional icon fact or gap',
+    b119FrameTextureDynamicLayer?.descriptorFacts.icon?.status === 'unavailable'
+      && b119FrameTextureMalformedLayer?.descriptorFacts.icon?.status === 'unavailable'
+      && b119FrameTextureEdgeProgram.operations
+        .filter(operation => operation.kind === 'setOverlay')
+        .every(operation => operation.status === 'unresolved'
+          && operation.descriptorFacts.icon?.status === 'unavailable'
+          && b119FrameTextureEdgeProgram.gaps.some(gap => gap.operationId === operation.id && gap.category === 'data-flow')),
+    detail({
+      dynamic: b119FrameTextureDynamicLayer,
+      malformed: b119FrameTextureMalformedLayer,
+      overlayOperations: b119FrameTextureEdgeProgram.operations.filter(operation => operation.kind === 'setOverlay'),
+      gaps: b119FrameTextureEdgeProgram.gaps.filter(gap => gap.operationId !== undefined),
+    }));
+
+  const b119FrameTextureExactKeySource = [
+    'local menu = { name = "B119FrameTextureExactKeys", layer = 4 }',
+    'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    'frame:setBackground("background-positional", { Icon = "", rotation_rate = 11, ["rotation rate"] = 12, bogus = 13, width = 21, rotationRate = 22 })',
+    'frame:setBackground2("background2-positional", { icon = "background2-exact", Width = 23, ["glow factor"] = 24, rotationStart = 25 })',
+    'frame:setOverlay("overlay-positional", { icon = "overlay-exact", Height = 26, rotationDuration = 27, bogus = 28 })',
+    'frame:display()',
+  ].join('\n');
+  const b119FrameTextureExactKeyModel = buildX4UiCallModel(input(
+    b119FrameTextureExactKeySource,
+    'selftest/b119-frame-texture-exact-keys.lua',
+  ));
+  const b119FrameTextureExactKeyResult = projectX4UiLayoutProgram(
+    b119FrameTextureExactKeyModel,
+    topTarget(b119FrameTextureExactKeyModel),
+    profileFor(b119FrameTextureExactKeyModel),
+  );
+  const b119FrameTextureExactKeyProgram = programOf(b119FrameTextureExactKeyResult);
+  const b119FrameTextureExactKeyFrame = b119FrameTextureExactKeyProgram.frames[0];
+  const b119FrameTextureExactKeyLayers = b119FrameTextureExactKeyFrame?.frameTextureLayers || [];
+  const b119FrameTextureExactKeyOperation = (name: 'setBackground' | 'setBackground2' | 'setOverlay') =>
+    b119FrameTextureExactKeyProgram.operations.find(operation => operation.kind === name);
+  const b119FrameTextureExactKeyLayer = (name: 'background' | 'background2' | 'overlay') =>
+    b119FrameTextureExactKeyLayers.find(layer => layer.name === name);
+  const b119FrameTextureExactKeyUnsupportedNames = b119FrameTextureExactKeyModel.calls
+    .filter(candidate => ['setBackground', 'setBackground2', 'setOverlay'].includes(candidate.name))
+    .map(candidate => candidate.semantics.unsupportedProperties?.map(propertyValue => propertyValue.name) || []);
+  const b119FrameTextureExactKeyPropertyGaps = b119FrameTextureExactKeyProgram.gaps
+    .filter(gap => gap.category === 'property');
+  const b119FrameTextureExactKeyOperationPropertyGaps = b119FrameTextureExactKeyPropertyGaps
+    .filter(gap => gap.operationId !== undefined);
+  check('B119 LayoutProgram rejects frame aliases while preserving exact valid facts and positional icon precedence',
+    b119FrameTextureExactKeyResult.status === 'partial'
+      && JSON.stringify(b119FrameTextureExactKeyUnsupportedNames) === JSON.stringify([
+        ['Icon', 'rotation_rate', 'rotation rate', 'bogus'],
+        ['Width', 'glow factor'],
+        ['Height', 'bogus'],
+      ])
+      && factValue(b119FrameTextureExactKeyLayer('background')?.descriptorFacts.icon) === 'background-positional'
+      && factValue(b119FrameTextureExactKeyLayer('background')?.descriptorFacts.width) === 21
+      && factValue(b119FrameTextureExactKeyLayer('background')?.descriptorFacts.rotationRate) === 22
+      && factValue(b119FrameTextureExactKeyLayer('background2')?.descriptorFacts.icon) === 'background2-exact'
+      && factValue(b119FrameTextureExactKeyLayer('background2')?.descriptorFacts.rotationStart) === 25
+      && factValue(b119FrameTextureExactKeyLayer('overlay')?.descriptorFacts.icon) === 'overlay-exact'
+      && factValue(b119FrameTextureExactKeyLayer('overlay')?.descriptorFacts.rotationDuration) === 27
+      && b119FrameTextureExactKeyOperation('setBackground')?.status === 'unresolved'
+      && b119FrameTextureExactKeyOperation('setBackground2')?.status === 'unresolved'
+      && b119FrameTextureExactKeyOperation('setOverlay')?.status === 'unresolved'
+      && factValue(b119FrameTextureExactKeyOperation('setBackground')?.descriptorFacts.icon) === 'background-positional'
+      && b119FrameTextureExactKeyOperationPropertyGaps.length === 8
+      && b119FrameTextureExactKeyPropertyGaps.length >= b119FrameTextureExactKeyOperationPropertyGaps.length
+      && b119FrameTextureExactKeyOperationPropertyGaps.every(gap =>
+        gap.status === 'unsupported' && gap.reason.includes('retained as source evidence')),
+    detail({
+      status: b119FrameTextureExactKeyResult.status,
+      unsupported: b119FrameTextureExactKeyUnsupportedNames,
+      layers: b119FrameTextureExactKeyLayers,
+      operations: b119FrameTextureExactKeyProgram.operations.filter(operation =>
+        ['setBackground', 'setBackground2', 'setOverlay'].includes(operation.kind)),
+      gaps: b119FrameTextureExactKeyPropertyGaps,
     }));
 
   const b119EditBoxHeightSource = [
@@ -13497,8 +13805,9 @@ const run = (): { readonly allPassed: boolean; readonly passed: number; readonly
       detail(attack));
   }
 
-  const passed = checks.filter(candidate => candidate.pass).length;
-  return { allPassed: passed === checks.length, passed, total: checks.length, checks };
+  const passed = checks.filter(candidate => candidate.pass && !candidate.skipped).length;
+  const skipped = checks.filter(candidate => candidate.skipped).length;
+  return { allPassed: checks.every(candidate => candidate.pass), passed, skipped, total: checks.length, checks };
 };
 
 const runP3ColorChecks = async (): Promise<Check[]> => {
@@ -15623,6 +15932,7 @@ const result = {
   ...baseResult,
   allPassed: baseResult.allPassed && p3Result.every(candidate => candidate.pass),
   passed: baseResult.passed + p3Result.filter(candidate => candidate.pass).length,
+  skipped: baseResult.skipped,
   total: baseResult.total + p3Result.length,
   checks: [...baseResult.checks, ...p3Result],
 };
@@ -15703,6 +16013,7 @@ const phase3JHistoricalChecks = result.checks.filter(candidate =>
 console.log(JSON.stringify({
   allPassed: result.allPassed,
   passed: result.passed,
+  skipped: result.skipped,
   total: result.total,
   phase3D: {
     total: phase3DChecks.length,

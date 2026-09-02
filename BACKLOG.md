@@ -159,6 +159,65 @@ were written and read back with the issue open. Record:
 `docs/plans/2026-08-29-b119-editbox-descriptor-height-source-port.md`. Frame/background parity, keep-outs, AI Influence
 reconstruction, installed-extension proof, OpenVSX publication, and final two-profile Forge/X4 comparison remain open;
 overall B119 stays `in_progress / PARTIAL` and preview remains `Not verified in game`.
+**Frame background-composition source port 2026-08-30 — SPECIFIED / IN PROGRESS:** retained X4 and Forge images plus
+the exact deployed `pipeline_test.lua` reproduce the remaining large-outline mismatch. Shipped `helper.lua` proves the
+frame owns three complex texture layers (`background`, `background2`, `overlay`) whose empty icon deactivates paint;
+`blurBackground` is a separate game-compositor request. `pipeline_test` calls none of the texture setters, so its three
+layers are exactly inactive. Forge currently turns a nonvisual Helper-runtime availability gap into a full-frame
+`unavailable-node` boundary. The bounded port will carry the exact layer/default/backdrop facts through the existing
+CallModel -> LayoutProgram -> Scene -> PaintPlan -> Canvas path, retain all machine-readable diagnostics, preserve
+diagnostic-map behavior, and remove only the invented source-composition boundary. Baseline focused suites are
+`1,320/1,320`. The ten-file candidate reached `1,326/1,326` but the independent 2026-08-31 audit rejected it:
+Scene rejects new setters, `properties.icon` overrides are dropped, blur=false restores the false outline, two widget
+source pins are wrong, and the second-profile/content trace checks are incomplete. Both prior workers are closed;
+the first corrective batch passed `1,340/1,340` but a second review found F-6: normalized/unknown frame option keys
+could deactivate a texture that Helper would retain. F-6 is now independently reviewed and reproduced at focused
+`1,344/1,344` plus all 19 existing UI entrypoints, including the configured widget-source check with zero skips.
+All workers are closed. Current-snapshot corpus (`81/81/0`), oracles (`134/134`), typecheck/lint/precommit/build, and
+structured serial E2E (`103/103`, complete ownership/teardown) pass. Workspace/state/config and retained Lua hashes
+are unchanged, but the broader installed-data checksum is non-clean while a runtime-debug snapshot keeps updating;
+full installed-data parity is not claimed. Operator correction/readback on 2026-08-31 confirms Forge is already mounted
+on `52900`; a second preview server is not inherently required. That process serves installed extension `0.0.70`
+(`D27EDFA...3437`), while the reviewed candidate build is `124459D...F27B`, so the existing pixels prove the installed
+baseline rather than the candidate. Next acceptance step is a reversible candidate install/reload into the existing
+Forge host, then mounted visual inspection. No parallel-launch workaround or visual acceptance is claimed. HEAD remains
+`bd38ec6` with an empty index. The first clean detached-worktree package,
+`vscode-extension/x4-forge-studio-0.0.70-b119-019fea10.vsix` (`32746D...E789C`), passed its package gates but omitted the
+installed release-showcase surface and is superseded for installation. The release-surface-preserving candidate is
+`vscode-extension/x4-forge-studio-0.0.70-b119-release-surface-019fea10.vsix`: final-byte inspection passed `2,107` entries /
+`71,561,839` unpacked bytes / `26,281,304` archive bytes, SHA-256
+`19C547BE9633F102444113F805351764D6CCD7CC7635A6F2FABCA7E37E4E1D09`, with embedded reviewed server `124459D...F27B`.
+Its staged-product probe is `16/16`, inspector negative matrix `13/13`, all `2,081` application files match the reviewed
+candidate, and all `15/15` showcase assets match installed. The disposable worktree is removed and the running `52900`
+host is unchanged. The artifact is not installed or published; explicit installed-extension write/reload authorization
+remains the next gate. The earlier package
+checkpoint was written/read back as GitHub #41 comment `5489961230`, in the existing Notion owner, and in Google Current
+Status tab `t.0` at revision `AIroW36mAKtRPswKCXzEXeCA0CjLqXJBm2EKPdzV2umkk8z0PRJEMQJy4dNrv5VWOdzoNFLG1_weadJ5tI7Bc3QiZHkeu9ZhcJ-CWs6At1Z2`;
+all three remain explicitly `PARTIAL / Not verified in game`. Plan:
+`docs/plans/2026-08-30-b119-frame-background-composition-source-port.md`. No game/mod/config/corpus write or parity claim
+is authorized. Read-only install preflight found that the superseded scoped VSIX was a whole-extension replacement: `1,987`
+payload files matched, `103` differed or were missing, and `18` installed extras were absent. The release-surface candidate
+preserves the fifteen showcase assets and matching manifest, but still has `98` byte-different same-path files plus three
+paths on each side. A temporary acceptance install therefore still requires a complete extension-folder plus registry backup
+and cannot be the OpenVSX release artifact. Evidence is
+`dev-docs/b119-x4-ui-pipeline-smoke/frame-composition-runtime-20260831/records/release-surface-package/receipt.json`. This
+correction is read back as GitHub #41 comment `5490092216`, in the existing Notion owner, and in Drive tab `t.0` revision
+`AIroW37d-IsKbJ6-mkmA1InI3tzjZWXoX8rSU0OZlVP8hNdUYr4lagkHtsJ4kPNv6twFuSa9ngEJU0SifYbgH41ISTygPWjQ1y_tJ3FHsVWv`.
+The superseding release-surface checkpoint is read back as GitHub #41 comment `5490501378`, Notion edit
+`2026-09-01T07:33:38.746Z`, and Drive tab `t.0` revision
+`ANLCKQlnw-0h1u2Pv_Hony7A8gbnTUV9UxLzUKvdJ7RWeVbBgxaFeeIfYE4OISquE74UGWKb9XJ5QQ78828MdNiK3rWSpt99DwgMzixkAvC_`;
+the three updated paragraphs, four native links, and existing date chip were verified. All records remain PARTIAL.
+**Installed green2/source-materialization checkpoint 2026-09-01 — BOUNDED VERIFIED / FULL B119 PARTIAL:** exact package
+`x4-forge-studio-0.0.70-b119-source-materialization-green2-019fea10.vsix` is installed and mounted through the single
+managed sidecar on `60956` / PID `38296`; installed server SHA-256 `626C6517...67314` matches the inspected package.
+Fresh read-only import of configured `x4_ai_influence` materializes `ui.xml` and all seven registered Lua sources,
+including 568,069-byte `aic_uix.lua`, and returns `source-owned`, editable, shippable authority. The old persisted
+workspace remains intentionally untouched and therefore still shows its historical omission. Strict configured Scene
+census passes `176/176`, but it exposes the remaining fidelity gap: MENU produces 3 widgets / 5 texts / 7 glyphs,
+HUB and COMM produce zero widgets and zero texts. This is installed pipeline and source-round-trip progress, not
+three-menu pixel parity or game proof. Next is a causal visible-operation gap receipt and one shipped-source port;
+OpenVSX, AI Influence reconstruction, keep-outs, and final X4 comparison remain open.
+B119 remains `in_progress / PARTIAL / Not verified in game`.
 **AI Influence `1b` visual reconciliation 2026-08-19 — REPRODUCED GUIDE CONFLICT:** The source pixels were re-opened
 and immutable hashes/dimensions are frozen in the plan. Forge's existing cockpit preset projects the measured guides to
 `y=1134.72`, `y=1065.6`, and `x=1699.84` at `2560x1440`; the supplied `1b` choice/input geometry intersects all three.

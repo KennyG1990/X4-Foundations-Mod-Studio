@@ -30,6 +30,9 @@ const RELEVANT_CALL_NAMES = new Set<X4UiRelevantCallName>([
   'setHotkey',
   'createButton',
   'createIcon',
+  'setBackground',
+  'setBackground2',
+  'setOverlay',
   'scaleX',
   'scaleY',
   'scaleFont'
@@ -53,8 +56,7 @@ const KNOWN_HELPER_CONSTANTS = new Set([
 
 const V1_PROPERTY_NAMES_BY_CALL: Readonly<Record<string, readonly string[]>> = {
   createFrameHandle: [
-    'x', 'y', 'width', 'height', 'layer', 'standardButtons', 'backgroundID',
-    'backgroundColor', 'blurBackground', 'autoFrameHeight'
+    'x', 'y', 'width', 'height', 'layer', 'standardButtons', 'blurBackground', 'autoFrameHeight'
   ],
   addTable: [
     'x', 'y', 'width', 'tabOrder', 'backgroundID', 'backgroundColor', 'highlightMode',
@@ -81,7 +83,10 @@ const V1_PROPERTY_NAMES_BY_CALL: Readonly<Record<string, readonly string[]>> = {
     'x', 'y', 'width', 'height', 'defaultText', 'description', 'maxChars', 'selectTextOnActivation',
     'active', 'bgColor', 'scaling'
   ],
-  createIcon: ['width', 'height', 'color', 'affectRowHeight', 'x', 'y', 'scaling']
+  createIcon: ['width', 'height', 'color', 'affectRowHeight', 'x', 'y', 'scaling'],
+  setBackground: ['icon', 'color', 'width', 'height', 'rotationRate', 'rotationStart', 'rotationDuration', 'rotationInterval', 'initialScaleFactor', 'scaleDuration', 'glowfactor'],
+  setBackground2: ['icon', 'color', 'width', 'height', 'rotationRate', 'rotationStart', 'rotationDuration', 'rotationInterval', 'initialScaleFactor', 'scaleDuration', 'glowfactor'],
+  setOverlay: ['icon', 'color', 'width', 'height', 'rotationRate', 'rotationStart', 'rotationDuration', 'rotationInterval', 'initialScaleFactor', 'scaleDuration', 'glowfactor']
 };
 
 const COLOR_PROPERTY_NAMES = new Set([
@@ -92,6 +97,9 @@ const COLOR_PROPERTY_NAMES = new Set([
   'backgroundcolor',
   'cellbgcolor'
 ]);
+
+const isFrameTextureSetter = (callName: X4UiRelevantCallName): boolean =>
+  callName === 'setBackground' || callName === 'setBackground2' || callName === 'setOverlay';
 
 type LuaNode = {
   type?: string;
@@ -282,6 +290,9 @@ export type X4UiRelevantCallName =
   | 'setHotkey'
   | 'createButton'
   | 'createIcon'
+  | 'setBackground'
+  | 'setBackground2'
+  | 'setOverlay'
   | 'scaleX'
   | 'scaleY'
   | 'scaleFont';
@@ -2281,6 +2292,16 @@ class X4UiCallModelBuilder {
         this.copyOptionFields(frame, options);
         return frame;
       }
+      case 'setBackground':
+      case 'setBackground2':
+      case 'setOverlay': {
+        const icon = this.requiredArgument(args, 0, 'data-flow', `${name} icon name`, node);
+        semantics.icon = icon.publicValue;
+        const options = args[1];
+        this.setOptionProjection(semantics, options, name, node);
+        this.attachExactReceiver(semantics, receiver, 'frame', node, `frame used for ${name}`);
+        return receiver?.object;
+      }
       case 'addTable': {
         const count = this.requiredArgument(args, 0, 'count', 'table column count', node);
         semantics.count = count.publicValue;
@@ -2849,8 +2870,12 @@ class X4UiCallModelBuilder {
     const propertyNames = V1_PROPERTY_NAMES_BY_CALL[callName];
     if (options.object?.known && propertyNames) {
       const wanted = new Set(propertyNames.map(normalizePropertyName));
+      const exactFrameTextureSetter = isFrameTextureSetter(callName);
       const project = ([name, value]: [string, InternalValue]): X4UiCallPropertyProjection => {
-        const colorExpression = this.isColorProperty(name) ? this.colorExpression(value) : undefined;
+        const colorExpression = this.isColorProperty(name)
+          && (!exactFrameTextureSetter || propertyNames.includes(name))
+          ? this.colorExpression(value)
+          : undefined;
         if (colorExpression) {
           this.colorExpressions.push({
             callName,
@@ -2870,21 +2895,25 @@ class X4UiCallModelBuilder {
         return projection;
       };
       const fields = [...options.object.fields.entries()];
-      semantics.properties = fields.filter(([name]) => wanted.has(normalizePropertyName(name))).map(project);
+      const isSupported = (name: string): boolean => exactFrameTextureSetter
+        ? propertyNames.includes(name)
+        : wanted.has(normalizePropertyName(name));
+      semantics.properties = fields.filter(([name]) => isSupported(name)).map(project);
       if (callName === 'setText' || callName === 'setText2'
         || callName === 'setDefaultCellProperties'
         || callName === 'setDefaultComplexCellProperties'
-        || callName === 'setHotkey') {
-        const unsupported = fields.filter(([name]) => !wanted.has(normalizePropertyName(name))).map(project);
+        || callName === 'setHotkey'
+        || exactFrameTextureSetter) {
+        const unsupported = fields.filter(([name]) => !isSupported(name)).map(project);
         if (unsupported.length > 0) {
           semantics.unsupportedProperties = unsupported;
-          if (callName === 'setText' || callName === 'setText2') {
+          if (callName === 'setText' || callName === 'setText2' || exactFrameTextureSetter) {
             for (const projected of unsupported) {
               this.addGap(
                 'property',
                 'unsupported',
                 projected.source,
-                `${callName} property ${projected.name} is not part of shipped textproperty`,
+                `${callName} property ${projected.name} is not part of shipped ${exactFrameTextureSetter ? 'frametextureproperty' : 'textproperty'}`,
                 projected.value.expression
               );
             }
@@ -3028,7 +3057,7 @@ class X4UiCallModelBuilder {
   private attachExactReceiver(
     semantics: X4UiCallSemantics,
     receiver: InternalValue | undefined,
-    expected: 'table' | 'cell',
+    expected: 'frame' | 'table' | 'cell',
     node: LuaNode,
     label: string
   ): void {
@@ -3063,7 +3092,8 @@ class X4UiCallModelBuilder {
       'taborder', 'highlightmode', 'maxvisibleheight', 'reservescrollbar', 'scaling', 'paddingtop',
       'paddingbottom', 'borderbelow', 'fixed', 'color', 'halign', 'wordwrap', 'font', 'cellbgcolor',
       'active', 'bgcolor', 'highlightcolor', 'bordercolor', 'affectrowheight', 'defaulttext',
-      'maxchars', 'selecttextonactivation'
+      'maxchars', 'selecttextonactivation', 'icon', 'rotationrate', 'rotationstart', 'rotationduration',
+      'rotationinterval', 'initialscalefactor', 'scaleduration', 'glowfactor'
     ].includes(normalizePropertyName(name));
   }
 

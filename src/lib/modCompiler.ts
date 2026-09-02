@@ -561,11 +561,13 @@ export function runPackageReadinessParitySelftest() {
     name: 'Parity Warning',
     customLua: [
       'local menu = { name = "sample" }',
-      'menu.frame = Helper.createFrameHandle(menu)',
+      'local frame = Helper.createFrameHandle(menu, { width = 100, height = 100 })',
+      'menu.frame = frame',
       'Helper.registerMenu(menu)',
       'OpenMenu(menu.name)',
-      'local table = menu.frame:addTable(2, { width = 100, height = 100 })',
-      'table:addRow({{ text = "a" }, { text = "b" }}, { height = 200 })',
+      'local table = frame:addTable(2, { width = 2, height = 100, scaling = false })',
+      'local row = table:addRow(nil, { borderBelow = false })',
+      'row[1]:createText("a", { height = 200 })',
     ].join('\n'),
   });
   const warningFinding = warning.find(finding => finding.code === 'x4-ui.row-height-budget');
@@ -574,7 +576,7 @@ export function runPackageReadinessParitySelftest() {
     warningFinding?.severity === 'warning'
       && warningFinding.filePath === 'ui/parity_warning_custom.lua'
       && warningFinding.domain === 'ui_layout'
-      && warningFinding.message.includes('Literal row heights sum to 200')
+      && warningFinding.message.includes('Source-derived row height 200')
       && !warning.some(finding => finding.severity === 'error'),
     warningFinding,
   );

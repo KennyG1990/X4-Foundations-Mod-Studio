@@ -39,6 +39,7 @@ import {
   type X4UiSceneRect,
   type X4UiSceneResult,
   type X4UiSceneColorFact,
+  type X4UiSceneGap,
   type X4UiSceneSourceLocation,
   type X4UiSceneTextNode,
 } from './x4UiScene';
@@ -167,6 +168,8 @@ export interface X4UiPaintGlyphCommand extends PaintCommandBase {
 
 export interface X4UiPaintDiagnosticCommand extends PaintCommandBase {
   readonly kind: Exclude<X4UiPaintDiagnosticKind, 'node-geometry'>;
+  /** Whether this diagnostic is a source-composition surface or diagnostic-map only. */
+  readonly sourceComposition: 'visual' | 'diagnostic-only';
   readonly reason: string;
   readonly geometry?: X4UiSceneRect;
   readonly category?: string;
@@ -263,6 +266,9 @@ export type X4UiPaintPlanResult =
 
 type JsonRecord = Record<string, unknown>;
 type Node = X4UiSceneNodeBase & { readonly kind?: string };
+
+const HELPER_RUNTIME_AVAILABILITY_GAP_REASON = 'rawget Helper alias proves preview receiver identity only; runtime non-nil availability remains unverified';
+const BLUR_BACKDROP_UNAVAILABLE_REASON = 'live-game blur rasterization is unavailable; blurBackground is a compositor/backdrop requirement only';
 
 const VERIFICATION = Object.freeze({
   game: X4_UI_PAINT_GAME_TRUTH,
@@ -921,6 +927,47 @@ const sceneViewStateValid = (value: unknown): boolean =>
   && (value.scrollOffset === undefined || isDimension(value.scrollOffset))
   && (value.selectedRow === undefined || isSafeInteger(value.selectedRow, 0));
 
+const frameTextureLayerValid = (value: unknown, index: number): boolean => {
+  if (!isRecord(value)
+    || !exactKeys(value, [
+      'name', 'source', 'sourceOrder', 'operationIds', 'descriptorFacts', 'applicability',
+      'provenanceLinks', 'diagnosticLinks', 'gameVerification',
+    ], ['icon', 'effectiveWidth', 'effectiveHeight', 'reason'])) return false;
+  const expectedName = ['background', 'background2', 'overlay'][index];
+  return value.name === expectedName
+    && sourceValid(value.source)
+    && value.sourceOrder === (((value.source as unknown as JsonRecord).start as JsonRecord).offset)
+      && isSafeInteger(value.sourceOrder)
+    && stringArrayValid(value.operationIds)
+    && isRecord(value.descriptorFacts)
+    && ['inactive', 'active-unresolved', 'active-source-known'].includes(String(value.applicability))
+    && (value.icon === undefined || typeof value.icon === 'string')
+    && (value.effectiveWidth === undefined || isDimension(value.effectiveWidth))
+    && (value.effectiveHeight === undefined || isDimension(value.effectiveHeight))
+    && Array.isArray(value.provenanceLinks) && value.provenanceLinks.every(provenanceLinkValid)
+    && stringArrayValid(value.diagnosticLinks)
+    && value.gameVerification === X4_UI_SCENE_GAME_TRUTH
+    && (value.reason === undefined || typeof value.reason === 'string');
+};
+
+const frameTextureLayersValid = (value: unknown): boolean =>
+  Array.isArray(value) && value.length === 3 && value.every(frameTextureLayerValid);
+
+const frameBackdropValid = (value: unknown): boolean => {
+  if (!isRecord(value)
+    || !exactKeys(value, [
+      'blurBackgroundFact', 'availability', 'reason', 'source', 'provenanceLinks', 'diagnosticLinks', 'gameVerification',
+    ], ['blurBackground'])) return false;
+  return (value.blurBackground === undefined || typeof value.blurBackground === 'boolean')
+    && isRecord(value.blurBackgroundFact)
+    && ['unavailable', 'disabled'].includes(String(value.availability))
+    && typeof value.reason === 'string'
+    && sourceValid(value.source)
+    && Array.isArray(value.provenanceLinks) && value.provenanceLinks.every(provenanceLinkValid)
+    && stringArrayValid(value.diagnosticLinks)
+    && value.gameVerification === X4_UI_SCENE_GAME_TRUTH;
+};
+
 const sceneProfileValid = (profile: unknown): boolean => {
   if (!isRecord(profile) || !exactKeys(profile, ['id', 'provenance', 'source', 'helper', 'widget', 'fonts', 'drawable', 'textPolicy'], ['tableView'])
     || typeof profile.id !== 'string' || profile.id.length === 0 || typeof profile.provenance !== 'string' || profile.provenance.length === 0
@@ -968,7 +1015,11 @@ const sceneNodeShapeValid = (node: unknown): node is Node => {
     && (node.editboxPreviewInputState === undefined || node.kind === 'editbox' && ['source-initial-inactive', 'runtime-unknown'].includes(String(node.editboxPreviewInputState)));
   switch (node.kind) {
     case 'frame':
-      return exactKeys(node, [...baseRequired, 'tableIds'], [...baseOptional, 'layer']) && stringArrayValid(node.tableIds) && (node.layer === undefined || isFiniteSafe(node.layer));
+      return exactKeys(node, [...baseRequired, 'tableIds'], [...baseOptional, 'layer', 'frameTextureLayers', 'backdrop'])
+        && stringArrayValid(node.tableIds)
+        && (node.layer === undefined || isFiniteSafe(node.layer))
+        && (node.frameTextureLayers === undefined || frameTextureLayersValid(node.frameTextureLayers))
+        && (node.backdrop === undefined || frameBackdropValid(node.backdrop));
     case 'table':
       {
         const backgroundId = ownDataField(node, 'backgroundId');
@@ -1019,7 +1070,7 @@ const sceneNodeShapeValid = (node: unknown): node is Node => {
   }
 };
 
-const SCENE_GAP_CATEGORIES = new Set(['profile', 'target', 'source', 'analysis', 'data-flow', 'frame', 'table', 'row', 'cell', 'count', 'index', 'span', 'width', 'percentage', 'height', 'options', 'constant', 'scale', 'sample', 'local-expansion', 'preview-path', 'text', 'parse', 'unsupported', 'layer', 'menu', 'edit-box', 'fontsize', 'property', 'number', 'geometry', 'fixed-section', 'clip', 'scrollbar', 'font', 'paint', 'texture', 'state', 'widget', 'program-node', 'operation', 'kernel']);
+const SCENE_GAP_CATEGORIES = new Set(['profile', 'target', 'source', 'analysis', 'data-flow', 'frame', 'table', 'row', 'cell', 'count', 'index', 'span', 'width', 'percentage', 'height', 'options', 'constant', 'scale', 'sample', 'local-expansion', 'preview-path', 'text', 'parse', 'unsupported', 'layer', 'menu', 'edit-box', 'fontsize', 'property', 'number', 'geometry', 'fixed-section', 'clip', 'scrollbar', 'font', 'paint', 'texture', 'state', 'widget', 'program-node', 'operation', 'kernel', 'backdrop']);
 
 const sceneGapValid = (value: unknown): boolean =>
   isRecord(value) && exactKeys(value, ['id', 'category', 'status', 'reason', 'source'], ['expression', 'sourcePin', 'operationId', 'nodeId', 'previewOnly', 'textRange', 'lineIndex'])
@@ -1279,6 +1330,55 @@ const diagnosticBase = (id: string, layer: X4UiPaintLayerKind, order: number, no
   gameVerified: false,
 });
 
+const helperRuntimeAvailabilityGap = (gap: X4UiSceneGap | undefined): boolean => gap !== undefined
+  && gap.category === 'data-flow'
+  && gap.status === 'incomplete'
+  && gap.reason === HELPER_RUNTIME_AVAILABILITY_GAP_REASON
+  && gap.operationId !== undefined
+  && gap.nodeId === undefined;
+
+const nonvisualFrameGap = (gap: X4UiSceneGap, blurBackdropUnavailable: boolean): boolean =>
+  helperRuntimeAvailabilityGap(gap)
+  || blurBackdropUnavailable
+    && gap.category === 'backdrop'
+    && gap.status === 'unknown'
+    && gap.reason === BLUR_BACKDROP_UNAVAILABLE_REASON;
+
+const diagnosticSourceComposition = (
+  scene: X4UiScene,
+  node: Node | undefined,
+  kind: X4UiPaintDiagnosticKind,
+  gap?: X4UiSceneGap,
+): 'visual' | 'diagnostic-only' => {
+  if (kind === 'gap' && helperRuntimeAvailabilityGap(gap)) return 'diagnostic-only';
+  if (node?.kind !== 'frame' || (kind !== 'gap' && kind !== 'unavailable-node')) return 'visual';
+  const frame = node as unknown as JsonRecord;
+  const layers = frame.frameTextureLayers;
+  const backdrop = frame.backdrop;
+  const allLayersInactive = Array.isArray(layers)
+    && layers.length === 3
+    && layers.every(layer => isRecord(layer) && layer.applicability === 'inactive' && layer.icon === '');
+  const blurBackdropUnavailable = isRecord(backdrop)
+    && backdrop.blurBackground === true
+    && backdrop.availability === 'unavailable';
+  if (!allLayersInactive) return 'visual';
+  if (kind === 'gap') {
+    if (gap !== undefined && nonvisualFrameGap(gap, blurBackdropUnavailable)) return 'diagnostic-only';
+    return 'visual';
+  }
+  if (kind === 'unavailable-node' && frame.rect !== undefined) {
+    const diagnosticLinks = frame.diagnosticLinks;
+    const linkedGaps = Array.isArray(diagnosticLinks)
+      ? scene.gaps.filter(candidate => diagnosticLinks.includes(candidate.id))
+      : [];
+    if (Array.isArray(diagnosticLinks)
+      && linkedGaps.length === diagnosticLinks.length
+      && linkedGaps.length > 0
+      && linkedGaps.every(candidate => nonvisualFrameGap(candidate, blurBackdropUnavailable))) return 'diagnostic-only';
+  }
+  return 'visual';
+};
+
 const atlasBounds = (glyph: X4UiSceneGlyphNode, font: ZektonFontAssets): X4UiSceneRect | undefined => {
   const descriptor = font.descriptor;
   const record = descriptor.glyphRecords[glyph.glyphIndex - 1];
@@ -1488,13 +1588,13 @@ export function projectX4UiPaintPlan(input: X4UiPaintPlanInput): X4UiPaintPlanRe
         style: geometry === undefined ? 'unavailable' : 'source-derived',
       });
       if (geometry !== undefined && drawableGeometry === undefined) {
-        diagnostics.push({ ...diagnosticBase(`empty-clip:geometry:${node.id}`, 'diagnostics', order++, node, frameId), clipRect: rectCopy(clip), kind: 'empty-clip', reason: 'node geometry has no drawable intersection with its accepted clip hierarchy' });
+        diagnostics.push({ ...diagnosticBase(`empty-clip:geometry:${node.id}`, 'diagnostics', order++, node, frameId), clipRect: rectCopy(clip), kind: 'empty-clip', sourceComposition: diagnosticSourceComposition(scene, node, 'empty-clip'), reason: 'node geometry has no drawable intersection with its accepted clip hierarchy' });
       }
       if (node.completeness !== 'complete' || geometry === undefined) {
-        diagnostics.push({ ...diagnosticBase(`unavailable:${node.id}`, 'diagnostics', order++, node, frameId), ...(drawableGeometry === undefined ? {} : { clipRect: rectCopy(clip), geometry: rectCopy(drawableGeometry) }), kind: 'unavailable-node', reason: geometry === undefined ? 'node geometry unavailable' : `node completeness is ${node.completeness}` });
+        diagnostics.push({ ...diagnosticBase(`unavailable:${node.id}`, 'diagnostics', order++, node, frameId), ...(drawableGeometry === undefined ? {} : { clipRect: rectCopy(clip), geometry: rectCopy(drawableGeometry) }), kind: 'unavailable-node', sourceComposition: diagnosticSourceComposition(scene, node, 'unavailable-node'), reason: geometry === undefined ? 'node geometry unavailable' : `node completeness is ${node.completeness}` });
       }
       if (node.kind === 'button' || node.kind === 'editbox' || node.kind === 'icon') {
-        diagnostics.push({ ...diagnosticBase(`runtime-paint:${node.id}`, 'diagnostics', order++, node, frameId), ...(drawableGeometry === undefined ? {} : { clipRect: rectCopy(clip), geometry: rectCopy(drawableGeometry) }), kind: 'unsupported-runtime-paint', reason: 'runtime widget paint, texture, and interaction state are unavailable' });
+        diagnostics.push({ ...diagnosticBase(`runtime-paint:${node.id}`, 'diagnostics', order++, node, frameId), ...(drawableGeometry === undefined ? {} : { clipRect: rectCopy(clip), geometry: rectCopy(drawableGeometry) }), kind: 'unsupported-runtime-paint', sourceComposition: diagnosticSourceComposition(scene, node, 'unsupported-runtime-paint'), reason: 'runtime widget paint, texture, and interaction state are unavailable' });
       }
     }
     for (const glyph of orderedGlyphs(scene, byId)) {
@@ -1505,7 +1605,7 @@ export function projectX4UiPaintPlan(input: X4UiPaintPlanInput): X4UiPaintPlanRe
       if (clip === undefined) return refuse('invalid-clip', `glyph ${glyph.id} has a cyclic or invalid clip hierarchy`);
       const fontName = fontNameForText(text);
       if (fontName === undefined) {
-        diagnostics.push({ ...diagnosticBase(`raster-font:${glyph.id}`, 'diagnostics', order++, node, frameIdFor(node, byId)), kind: 'invalid-raster-candidate', reason: 'text font evidence is unavailable' });
+        diagnostics.push({ ...diagnosticBase(`raster-font:${glyph.id}`, 'diagnostics', order++, node, frameIdFor(node, byId)), kind: 'invalid-raster-candidate', sourceComposition: diagnosticSourceComposition(scene, node, 'invalid-raster-candidate'), reason: 'text font evidence is unavailable' });
         continue;
       }
       const font = fontName === 'Zekton' ? corpus.fonts.regular : corpus.fonts.bold;
@@ -1513,7 +1613,7 @@ export function projectX4UiPaintPlan(input: X4UiPaintPlanInput): X4UiPaintPlanRe
       if (source === undefined) return refuse('invalid-atlas', `glyph ${glyph.id} does not match the canonical descriptor atlas bounds`);
       const clipped = clippedSource(glyph, clip, source);
       if (clipped === undefined) {
-        diagnostics.push({ ...diagnosticBase(`empty-clip:${glyph.id}`, 'diagnostics', order++, node, frameIdFor(node, byId)), kind: 'empty-clip', reason: 'glyph has no drawable intersection with its accepted clip hierarchy', clipRect: rectCopy(clip) });
+        diagnostics.push({ ...diagnosticBase(`empty-clip:${glyph.id}`, 'diagnostics', order++, node, frameIdFor(node, byId)), kind: 'empty-clip', sourceComposition: diagnosticSourceComposition(scene, node, 'empty-clip'), reason: 'glyph has no drawable intersection with its accepted clip hierarchy', clipRect: rectCopy(clip) });
         continue;
       }
       const frameId = frameIdFor(node, byId);
@@ -1529,8 +1629,8 @@ export function projectX4UiPaintPlan(input: X4UiPaintPlanInput): X4UiPaintPlanRe
       if (node !== undefined && clip === undefined) return refuse('invalid-clip', `gap ${gap.id} has a cyclic or invalid clip hierarchy`);
       const clippedGeometry = geometry === undefined || clip === undefined ? undefined : intersect(geometry, clip);
       const drawableGeometry = clippedGeometry !== undefined && hasArea(clippedGeometry) ? clippedGeometry : undefined;
-      diagnostics.push({ ...diagnosticBase(`gap:${gap.id}`, 'diagnostics', order++, node, node === undefined ? undefined : frameIdFor(node, byId)), source: cloneSource(gap.source), ...(drawableGeometry === undefined || clip === undefined ? {} : { clipRect: rectCopy(clip), geometry: rectCopy(drawableGeometry) }), kind: 'gap', reason: gap.reason, category: gap.category, status: gap.status, ...(gap.operationId === undefined ? {} : { operationId: gap.operationId }) });
-      if (geometry !== undefined && drawableGeometry === undefined && clip !== undefined) diagnostics.push({ ...diagnosticBase(`empty-clip:gap:${gap.id}`, 'diagnostics', order++, node, frameIdFor(node, byId)), clipRect: rectCopy(clip), kind: 'empty-clip', reason: `gap ${gap.id} has no drawable geometry within its accepted clip hierarchy` });
+      diagnostics.push({ ...diagnosticBase(`gap:${gap.id}`, 'diagnostics', order++, node, node === undefined ? undefined : frameIdFor(node, byId)), source: cloneSource(gap.source), ...(drawableGeometry === undefined || clip === undefined ? {} : { clipRect: rectCopy(clip), geometry: rectCopy(drawableGeometry) }), kind: 'gap', sourceComposition: diagnosticSourceComposition(scene, node, 'gap', gap), reason: gap.reason, category: gap.category, status: gap.status, ...(gap.operationId === undefined ? {} : { operationId: gap.operationId }) });
+      if (geometry !== undefined && drawableGeometry === undefined && clip !== undefined) diagnostics.push({ ...diagnosticBase(`empty-clip:gap:${gap.id}`, 'diagnostics', order++, node, frameIdFor(node, byId)), clipRect: rectCopy(clip), kind: 'empty-clip', sourceComposition: diagnosticSourceComposition(scene, node, 'empty-clip'), reason: `gap ${gap.id} has no drawable geometry within its accepted clip hierarchy` });
     }
     for (const nodeId of selectedNodeIds) {
       const node = byId.get(nodeId);
@@ -1540,8 +1640,8 @@ export function projectX4UiPaintPlan(input: X4UiPaintPlanInput): X4UiPaintPlanRe
         if (clip === undefined) return refuse('invalid-clip', `selection ${nodeId} has a cyclic or invalid clip hierarchy`);
         const clippedGeometry = geometry === undefined ? undefined : intersect(geometry, clip);
         const drawableGeometry = clippedGeometry !== undefined && hasArea(clippedGeometry) ? clippedGeometry : undefined;
-        diagnostics.push({ ...diagnosticBase(`selection:${nodeId}`, 'diagnostics', order++, node, frameIdFor(node, byId)), ...(drawableGeometry === undefined ? {} : { clipRect: rectCopy(clip), geometry: rectCopy(drawableGeometry) }), kind: 'selection', reason: 'selected source-backed Scene node' });
-        if (geometry !== undefined && drawableGeometry === undefined) diagnostics.push({ ...diagnosticBase(`empty-clip:selection:${nodeId}`, 'diagnostics', order++, node, frameIdFor(node, byId)), clipRect: rectCopy(clip), kind: 'empty-clip', reason: `selection ${nodeId} has no drawable geometry within its accepted clip hierarchy` });
+        diagnostics.push({ ...diagnosticBase(`selection:${nodeId}`, 'diagnostics', order++, node, frameIdFor(node, byId)), ...(drawableGeometry === undefined ? {} : { clipRect: rectCopy(clip), geometry: rectCopy(drawableGeometry) }), kind: 'selection', sourceComposition: diagnosticSourceComposition(scene, node, 'selection'), reason: 'selected source-backed Scene node' });
+        if (geometry !== undefined && drawableGeometry === undefined) diagnostics.push({ ...diagnosticBase(`empty-clip:selection:${nodeId}`, 'diagnostics', order++, node, frameIdFor(node, byId)), clipRect: rectCopy(clip), kind: 'empty-clip', sourceComposition: diagnosticSourceComposition(scene, node, 'empty-clip'), reason: `selection ${nodeId} has no drawable geometry within its accepted clip hierarchy` });
       }
     }
     const keepOutEntryIds = new Set<string>();
