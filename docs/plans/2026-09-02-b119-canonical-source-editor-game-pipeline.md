@@ -167,3 +167,83 @@ Status: `BOUNDED VERIFIED / OVERALL B119 IN_PROGRESS / PARTIAL`
   differences and retains raw/enriched/issued attack matrices.
 - **Project lessons banked:** concise cards in the X4 UI quick reference; delta in the X4 Forge capability map; this
   triggered AAR in the project ledger.
+
+## 2026-09-02 CONTINUATION — mounted canvas reconciliation
+
+### PLAN
+
+- **Bounded unit:** repair the mounted Source Editor transition from its initial no-selection refusal to the exact
+  renderable `ui/pipeline_test.lua -> menu.createFrame` canvas, then capture native bitmap dimensions at the configured
+  X4 `2544x1353 / UI scale 1` profile.
+- **Baseline:** `HEAD == origin/main == 0cff4627a87cb754cea50440a7f8eefd98c2dea0`; the index is empty and the broad
+  unrelated worktree remains preserved. A fresh sidecar browser selected the exact source and target but retained
+  `canvas status: refused`, the initial missing-identity detail, and zero canvas children. Reselecting another exact
+  target and returning to `menu.createFrame` reproduced the same result with no browser warning or error.
+- **Reconciliation:** the current pure owners, run against the retained Pipeline Test workspace snapshot and the live
+  configured corpus, return exact selected source/target authority, `status: partial`, `Scene: partial`, `Paint:
+  partial`, `canRender: true`, and `preview and paint accepted; Not verified in game`. The failure is therefore bounded
+  to mounted canvas lifecycle/commit behavior; no new parser, renderer, corpus loader, or editor product is authorized.
+- **In scope:** the existing Source Editor mount/commit owner plus causal component/E2E regressions; native canvas
+  width/height evidence; permanent `Not verified in game` truth text.
+- **Out of scope:** changing Lua or the deployed mod, relaxing source/corpus authority, hiding partial geometry gaps,
+  universal frame acceptance, AI Influence reconstruction, and OpenVSX.
+- **Rollback:** revert only the exact bounded component/test paths; the mod, deployment target, installed extension,
+  workspace, and prior evidence remain unchanged until a reviewed package is deliberately installed.
+- **Acceptance:** a mounted editor must begin refused without selection, transition to a current non-stale canvas after
+  exact source/target selection and canonical corpus acceptance, replace rather than accumulate surfaces across profile
+  changes, expose the native bitmap dimensions through the existing canvas element, preserve fail-closed no-corpus and
+  stale-result behavior, and never change `Not verified in game`.
+- **Validation:** causal fail-first test; focused Source Editor/session/Paint/Canvas tests; TypeScript; exact lint; mounted
+  serial E2E with zero page/console errors; production build; installed-host inspection; same-profile Forge/X4 geometry
+  comparison. The negative path is missing selection or corpus producing no current canvas and no false success.
+- **Evidence:** `dev-docs/b119-x4-ui-pipeline-smoke/source-editor-ingame-20260902/`; GitHub #41 and the existing B119
+  Notion/Drive owners remain the external projections.
+
+### RECONCILE REVISION
+
+- The initial direct-sidecar refusal did not survive reconciliation as an installed-product defect. The supported
+  Antigravity host visibly retained one `Rendered/current` bitmap at exact `ui/pipeline_test.lua -> menu.createFrame`,
+  canonical core/color authority, and `2544x1353 / scale 1`.
+- A causal mounted diagnostic against the unchanged production component transitioned from no selection to exactly one
+  canvas and replaced it on profile change. The native attributes were `2560x1440` for that test's default profile and
+  `1800x900` after replacement. Its only initial red was the test's incorrect `2544` expectation.
+- The direct sidecar browser still retained the initial refusal after explicit blank/reselect. Current evidence assigns
+  about 90% likelihood to client-state/corpus-readiness divergence and 10% to an uncovered product edge. That surface
+  is not sufficient authority for a production patch while the installed host and mounted diagnostic are green.
+- A portable ephemeral-corpus variant remained unavailable while the fresh manifest was `idle` for the bounded
+  30-second window. The temporary hardcoded `127.0.0.1:50239` proxy and every experimental test change were removed.
+  No implementation or test file remains changed.
+
+### VALIDATE / REVIEW / CLOSE
+
+- Installed-host visual inspection: exact selected source/target, profile `2544x1353 / scale 1`, canonical core/color,
+  one visible panel bitmap, and permanent `Not verified in game` boundary.
+- Same-profile X4 run: exact four-file package rendered; both buttons responded; the edit box accepted native key `a`;
+  standard close removed the panel; X4 exited cleanly; zero owned runtime/view-setup errors.
+- Screenshot-space comparison: Forge and X4 panel/button/editbox geometry agree after the Forge host's approximately
+  `1.515x` display resampling. Exact native pixels and Zekton glyph positions remain unproven.
+- Restored-tree validation: Source Editor selftest passed all reported matrices including P7 `12/12`; UI integration
+  passed `21/21`; TypeScript and exact owned-path ESLint passed; serial Source Editor E2E passed `1/1` with
+  `treeGone=true`; ephemeral ports `3100/3101` stopped.
+- Parent close rerun reproduced those gates on the restored tree: UI integration `21/21`, Source Editor P7 `12/12`,
+  TypeScript, exact owned-path ESLint, and focused mounted E2E `1/1`. The E2E process tree is gone and neither
+  `3100` nor `3101` has a listener. Its inert per-run state directory
+  `%TEMP%\\x4forge-e2e-state-27916` remained after the wrapper exited; an exact path-validated cleanup command was
+  rejected by host policy, so the directory is retained and not disguised as clean teardown.
+- Requirement review: mounted installed preview, same-profile game acceptance, interaction, close, and proportional
+  geometry are done and evidenced. Native bitmap extraction, pixel equality, complete Helper/widget coverage, full
+  keep-out context coverage, AI Influence reconstruction, release acceptance, and OpenVSX remain open.
+- **Bounded status:** `VERIFIED` for the same-source/same-profile pipeline and proportional geometry comparison.
+  **Pixel-parity status:** `PARTIAL`. **Overall B119:** `IN_PROGRESS / PARTIAL`. No OpenVSX release is claimed.
+
+### AAR DELTA
+
+- **Sustain:** require the supported installed host and causal mounted test to agree before changing production.
+- **Improve work/approach:** the first direct-sidecar symptom was prematurely localized to the canvas lifecycle. The
+  stronger installed-host observation and baseline mounted test disproved that diagnosis before source changed.
+- **Improve tools:** the fresh ephemeral corpus can remain manifest-idle beyond one standard E2E window, while a live
+  sidecar is canonical. Default E2E must not hardcode that sidecar; retain host-specific probes as evidence only. The
+  focused wrapper's `treeGone=true` proves process-tree termination, not deletion of its state directory; inspect and
+  record both surfaces separately.
+- **Highest-risk evidenced weakness:** a convincing automation surface can diverge from the supported host. Patching to
+  that surface would create an uncaused repair. Reproduce in the installed host or a portable causal test first.

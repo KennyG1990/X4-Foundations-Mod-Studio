@@ -1745,6 +1745,29 @@ official owner then passed `134/134`, so this is recorded as harness-invocation 
 materialization, deploy-verify dry-run/apply, exact-byte containment, and X4 truth. Overall B119 remains
 `IN_PROGRESS / PARTIAL / Not verified in game` until the game supplies visible acceptance.**
 
+**B119 same-profile Forge/X4 checkpoint 2026-09-02 — BOUNDED VERIFIED / PIXEL PARITY PARTIAL:** The installed
+Antigravity host visibly renders one current bitmap for exact `ui/pipeline_test.lua -> menu.createFrame` at canonical
+core/color authority and profile `2544x1353 / scale 1`. The exact four-file package independently renders in X4 9.00
+at the same drawable profile; both buttons respond, the edit box accepts native key `a`, standard close removes the
+panel, and the scoped log contains zero owned runtime or view-setup errors. Screenshot-space frame, button, row, and
+edit-box geometry agrees after the Forge host's approximately `1.515x` display resampling, including `54.49` predicted
+versus approximately `55` observed edit-box pixels. This corroborates proportional layout, not native pixel equality
+or Zekton glyph parity.
+
+The direct sidecar browser retained an initial refusal after exact reselection, but the supported installed host and a
+causal mounted diagnostic both rendered and replaced exactly one canvas. No production lifecycle defect was reproduced
+and no implementation/test change was retained. A temporary hardcoded `127.0.0.1:50239` test proxy was rejected; the
+portable ephemeral variant remained unavailable while its fresh corpus manifest stayed `idle` for 30 seconds, then all
+experimental edits were removed. Restored-tree gates pass: Source Editor P7 `12/12`, UI integration `21/21`,
+TypeScript, exact ESLint, serial E2E `1/1`, `treeGone=true`, and ports `3100/3101` stopped. Full receipt:
+`dev-docs/b119-x4-ui-pipeline-smoke/source-editor-ingame-20260902/same-profile-comparison.md`. Native installed-canvas
+attributes/export, exact pixel comparison, complete Helper/widget coverage, AI Influence reconstruction, release
+acceptance, and OpenVSX remain open; B119 and GitHub #41 stay `IN_PROGRESS / PARTIAL`.
+
+The parent close rerun independently passed integration `21/21`, Source Editor P7 `12/12`, TypeScript, exact lint, and
+mounted E2E `1/1`. No E2E listener remains; inert `%TEMP%\\x4forge-e2e-state-27916` was retained after exact cleanup
+was rejected by host policy. No implementation, installed extension, mod, game, or release byte changed.
+
 ### B115 · Forge Capability Convergence `in_progress` (P0, PRIORITY OVERRIDE)
 
 Ken explicitly promoted GitHub initiative #9 and child requests #10–#21 above the active R13 close on 2026-07-31.

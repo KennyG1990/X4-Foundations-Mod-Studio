@@ -11580,3 +11580,30 @@ Status: `BOUNDED VERIFIED / OVERALL B119 IN_PROGRESS / PARTIAL`. Full task recor
   revision `ANLCKQnNd6iVCfBusgAjOMlguoEO653tWFSs8Q3fX6V7orjHuejYVMNMMkDikxHbKrmiDnRYQryRXfi6PjNVXbETgO6-UZDapHeYBUSN6Rsh`
   were written and read back with the issue open and B119 `IN_PROGRESS / PARTIAL`. The commit-hook Graphify refresh
   completed at `10,122` nodes / `25,488` edges / `312` communities with no lingering process.
+
+## 2026-09-02 — Same-profile Forge/X4 Geometry Reconciliation
+
+Status: `BOUNDED VERIFIED / PIXEL PARITY PARTIAL / OVERALL B119 IN_PROGRESS`. Detailed receipt:
+`dev-docs/b119-x4-ui-pipeline-smoke/source-editor-ingame-20260902/same-profile-comparison.md`.
+
+- The installed Antigravity host visibly carries exact `ui/pipeline_test.lua -> menu.createFrame`, canonical core and
+  color authority, profile `2544x1353 / scale 1`, one rendered/current panel bitmap, and permanent
+  `Not verified in game` truth.
+- X4 9.00 rendered the exact deployed four-file package at the same drawable profile. Both buttons responded, the edit
+  box accepted native key `a`, standard close removed the panel, X4 exited cleanly, and the scoped log has zero owned
+  runtime or view-setup failures.
+- Screenshot-space panel, button, spacing, and edit-box geometry agrees after the Forge host's approximately `1.515x`
+  display resampling. The strongest edit-box boundary predicts `54.49` pixels versus about `55` observed in X4.
+  Native bitmap equality and Zekton glyph parity remain unproven.
+- A direct sidecar browser retained an initial missing-selection refusal, while the supported installed host and a
+  causal mounted diagnostic both rendered and replaced one canvas. The evidence favors client-state/corpus-readiness
+  divergence at about 90%; no production patch was justified.
+- A host-specific hardcoded sidecar test was rejected and removed. The portable ephemeral variant stayed unavailable
+  while its fresh corpus manifest remained `idle` for 30 seconds. Restored-tree Source Editor P7 `12/12`, integration
+  `21/21`, TypeScript, exact lint, serial E2E `1/1`, teardown, and port containment pass.
+- The parent close rerun independently passed the same focused gates. No listener remains on `3100/3101`; the inert
+  per-run state root `%TEMP%\\x4forge-e2e-state-27916` remains because an exact path-validated cleanup command was
+  rejected by host policy. This is retained cleanup evidence, not a running process or product failure.
+- No implementation, test, installed package, mod, game byte, or OpenVSX state changed. Complete Helper/widget and
+  context coverage, native installed-canvas export, exact pixel comparison, AI Influence reconstruction, and release
+  acceptance remain open.
