@@ -263,3 +263,128 @@ Status: `BOUNDED VERIFIED / OVERALL B119 IN_PROGRESS / PARTIAL`
 - The first Docs append inserted before the previous terminal period, leaving the old paragraph unpunctuated and the
   new final paragraph double-punctuated. A second revision-guarded delete/insert repaired both; final readback is clean.
   This formatting retry is an AAR trigger, not a product failure.
+
+## 2026-09-02 CONTINUATION — native preview bitmap evidence export
+
+### PLAN
+
+- **Bounded unit:** extend the existing Source Editor canvas mount with a current-only native PNG export and exact
+  bitmap/source/target/profile identity. This produces an inspectable Forge evidence artifact for the next pixel/font
+  comparison; it does not change or duplicate renderer, layout, corpus, source-edit, deploy, or game-truth authority.
+- **Baseline:** `HEAD == origin/main == direct remote == 7a500b74e618fc3aa9a17261edda3d1f936b4c9b`; the broad
+  unrelated worktree remains preserved and the index is empty. Installed Antigravity visibly holds one current
+  `ui/pipeline_test.lua -> menu.createFrame` canvas at `2544x1353 / scale 1`. X4 is absent. The direct sidecar client
+  remains non-authoritative for this installed-host comparison.
+- **Reconciliation:** `renderX4UiPaintPlanToCanvas` already allocates the composite through the existing surface
+  factory; the browser factory returns an `HTMLCanvasElement`; `X4UiEditorCanvasState` already retains the exact
+  current surface and immutable rendered receipt; and the Source Editor directly mounts that surface. No export owner
+  or download control exists. Reuse these resources rather than creating another bitmap or rendering path.
+- **In scope:** `src/components/X4UiSourceEditor.tsx`, its selftest, and the focused Source Editor E2E only. A pure
+  current-export classification/helper may live in that component; no backend route or persistent store is authorized.
+- **Out of scope:** changing paint pixels, adding an image encoder, accepting non-DOM test surfaces as product PNGs,
+  changing preview/game truth, comparing against X4 in this first unit, installing a package before source gates pass,
+  changing the deployed mod, or publishing OpenVSX.
+- **Risks:** a stale surface could be exported under current source/profile labels; a DOM serialization error could be
+  presented as success; a hostile filename could escape intended naming; a download action could accidentally imply
+  engine verification. Fail closed and keep `Not verified in game` adjacent to the control.
+- **Rollback:** revert only the exact component/selftest/E2E paths. The installed extension, workspace, mod, game,
+  prior screenshots, external records, and deployed package remain unchanged until a separately reviewed install gate.
+- **Acceptance:** (1) empty/refused/stale/non-DOM states cannot export; (2) current receipt dimensions must equal the
+  mounted canvas attributes; (3) metadata shows exact source file, target, drawable profile, UI scale, and native bitmap
+  size; (4) export uses the already-mounted current canvas and creates one `image/png` download with a deterministic
+  sanitized filename; (5) missing/throwing/empty serialization leaves a visible refusal and no download; (6) profile or
+  selection replacement invalidates old export identity; (7) permanent `Not verified in game` remains literal.
+- **Validation:** causal helper/component negatives; existing Source Editor selftest including P7; TypeScript; exact
+  ESLint; focused mounted E2E proving no control before a current surface, one current canvas/export after canonical
+  selection, exact `2560x1440 -> 1800x900` replacement identity, one PNG download, no stale export, zero page/console
+  errors, complete lifecycle, no `3100/3101` listeners, and unchanged live workspace. Installed-host packaging/export
+  is a later gate after source review.
+- **Evidence:** this plan; focused test receipts; eventual installed export under
+  `dev-docs/b119-x4-ui-pipeline-smoke/source-editor-ingame-20260902/`.
+
+Status at plan time: `SPECIFIED`. No capability-map delta.
+
+### IMPLEMENT / VALIDATE / REVIEW CHECKPOINT
+
+- The existing mounted-canvas owner now exposes a current-only PNG evidence export. It serializes the already-mounted
+  `HTMLCanvasElement`; it does not rerender, add an encoder, add a backend route, or persist a second bitmap.
+- Exact adjacent metadata reports source file and digest, selected target, normalized drawable profile, UI scale, and
+  native bitmap dimensions. The control and success/refusal text retain literal `Not verified in game`.
+- Empty, refused, stale, non-DOM, malformed-receipt, dimension-mismatch, superseded-identity, missing/throwing/empty
+  serialization, and stale-selection paths fail closed with no successful download receipt.
+- The first causal red proved the classifier/control/metadata were absent. The implementation then passed the complete
+  Source Editor selftest, P7 canonical-color matrix `12/12`, TypeScript, exact three-file ESLint, and the exact focused
+  E2E `2/2` with zero failed/flaky/bad-result and `child-close, treeGone=true`.
+- Fresh-eyes review reproduced one medium stale-callback defect: two distinct source identities can sanitize to one
+  filename, so filename plus a reused canvas object was not exact completion authority. The causal red observed equal
+  filenames and missing identity keys. The minimal correction carries the canonical identity key and compares it again
+  when `toBlob` completes.
+- Coordinator post-correction reruns pass: selftest including P7 `12/12`; whole-repository TypeScript; exact three-file
+  ESLint; focused E2E `2/2`; no listener remains on `3100/3101`; the installed live Forge sidecar remained running.
+- **Bounded source status:** `VERIFIED`. **Installed-host/export status:** `PENDING`. **Overall B119:**
+  `IN_PROGRESS / PARTIAL`; preview remains `Not verified in game` and OpenVSX remains out of scope.
+
+### AAR DELTA
+
+- **Sustain:** bind asynchronous evidence completion to exact source/target/profile authority, not a display label or
+  sanitized filename; retain causal red-to-green proof and rerun the ordered full spec after isolated tests.
+- **Improve work/approach:** the first candidate checked current canvas, current classification, and filename, but did
+  not separately preserve the issued identity key across asynchronous completion. Fresh-eyes race review found it.
+- **Improve tools:** the focused E2E required a bounded ready-manifest fixture because the ephemeral scanner can remain
+  `idle/scanning`; early fixture attempts and one transient port collision failed before the final exact two-test pass.
+- **Highest-risk evidenced weakness:** a convincing PNG can be stale while its safe filename appears unchanged. Exact
+  identity-key comparison now closes that path; installed Antigravity download behavior remains the next authority.
+
+### INSTALLED-HOST / NATIVE-PIXEL VALIDATION
+
+- Complete isolated-worktree precommit passed. Production and extension builds passed; stage/probe passed `16/16`.
+  Reviewed package `x4-forge-studio-0.0.70-b119-native-png-019fea10.vsix` contains `2,092` entries, is
+  `18,600,594` bytes, and has SHA-256 `377B555B6CF8FFD9A24B3A2D1EAAA2C582C4E4A5EAEBCB7F6BA9E25A07835A21`.
+- The installed `0.0.70` extension was backed up to
+  `C:\Users\Moshi\AppData\Local\Temp\x4forge-b119-install-backup-20260902-140638`, replaced reversibly, and checked
+  byte-for-byte against the reviewed package for the extension host, sidecar, server, HTML, CSS, and frontend bundle.
+  The only package-directory delta was the IDE installer's expected `__metadata` field.
+- In installed Antigravity, the exact canonical source `ui/pipeline_test.lua` at SHA-256
+  `C1D9CD8580C6175E95C543259A2AB19F8B463282BF48B2229EB6013D6052718E` and target `menu.createFrame` produced one
+  current mounted canvas. The export control retained `Preview evidence only · Not verified in game` and saved one
+  PNG with native bitmap dimensions `2544x1353`.
+- Entered scale `1` artifact:
+  `dev-docs/b119-x4-ui-pipeline-smoke/source-editor-ingame-20260902/forge-native-preview-export-2544x1353-scale1-20260902.png`;
+  `84,189` bytes; SHA-256 `473173A568D1BA5B7405AE1314471FB8FD012E959E3BC597B5B28E3C7D4A076B`;
+  non-black panel bounds `x=1007..1535`, `y=458..618`, `529x161`.
+- The corresponding X4 capture is approximately `666` pixels wide at `x=939..1604`. Native pixels therefore reject
+  the earlier claim that entered Forge scale `1` and X4's user scale setting `1` are the same effective profile.
+
+### RECONCILIATION REVISION — USER SCALE IS NOT `Helper.uiScale`
+
+- Shipped `helper.lua` assigns `Helper.uiScale = C.GetUIScale(false)` and `scaleX` / `scaleY` multiply by that value.
+  Shipped `targetsystem.lua` states that `C.GetUIScale(false)` practically equals the user UI-scale factor multiplied
+  by a resolution factor and shows `resolutionFactor = screenHeight / 1080`.
+- At drawable height `1353`, that factor is `1353 / 1080 = 1.25277777777778`. Re-entering this as the current Forge
+  profile's effective scale produced an installed-host PNG exactly `2544x1353`, `90,917` bytes, at:
+  `dev-docs/b119-x4-ui-pipeline-smoke/source-editor-ingame-20260902/forge-native-preview-export-2544x1353-effective-scale-1.252777778-20260902.png`.
+- The corrected artifact's non-black/blue bounds are `x=940..1602`, `y=403..605`, `663x203`. Against X4's
+  approximately `666`-pixel panel at `x=939..1604`, width differs by `3` pixels (`0.45%`) and center differs by less
+  than one pixel. Full panel height is also approximately aligned; JPEG/background composition prevents treating the
+  X4 screenshot's threshold mask as an exact alpha oracle.
+- **Reproduced defect:** the layout kernel consumes an effective `Helper.uiScale`, but the Source Editor labels its
+  direct input `UI scale`, inviting users to enter the game's user-scale option. The renderer port itself is strongly
+  corroborated at this bounded frame; the profile contract is misleading.
+- **Revised next bounded unit:** preserve the kernel's effective-scale input and all existing internal receipts; expose
+  user UI scale separately and derive/display the effective value from drawable height and the shipped 1080 baseline.
+  Add causal unit/component/E2E coverage for the derived profile, explicit/custom-effective fallback, invalid inputs,
+  and permanent `Not verified in game`; then repeat installed export and X4 comparison.
+- **Status:** native PNG export `VERIFIED`; pixel geometry for this frame `BOUNDED VERIFIED` within screenshot/JPEG
+  tolerance; profile-control semantics `FAILED / REPRODUCED`; overall B119 `IN_PROGRESS / PARTIAL`. Exact Zekton
+  metrics, complete Helper/widget coverage, release acceptance, and OpenVSX remain open.
+
+### AAR DELTA — NATIVE PROFILE TRUTH
+
+- **Sustain:** export and measure native bitmaps before interpreting resampled host screenshots; ground scale semantics
+  in shipped X4 source comments and helper assignments.
+- **Improve work/approach:** the prior same-profile claim equated X4's user setting with `Helper.uiScale`. Native pixels
+  disproved it; the corrected effective scale explains essentially the entire width delta.
+- **Improve tools:** Windows' Downloads known folder resolves to `F:\Downskies`, not the literal user-profile folder;
+  artifact collection must resolve the known-folder location before declaring a download missing.
+- **Highest-risk evidenced weakness:** a renderer can be mathematically faithful yet mislead users through a mislabeled
+  profile control. Keep user-scale and effective-scale authority explicit and inspectable.

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "sourceFingerprint": "048363c26377139f0a1849c9c35318ddb54d69eac05e7e15c811c197e7ab227b",
+  "sourceFingerprint": "619d094ae6fb0af1dbad963ca9086307f50ff0dc2962dca62a546475aa074ae0",
   "policy": "Every raw production filesystem mutation source is count-pinned here. Authoritative files use atomic sibling promotion; stronger tree, archive, append-log, SQLite, retention, ephemeral, and fixture contracts remain explicit exceptions.",
   "writers": [
     {
@@ -455,6 +455,14 @@
       "owners": ["verified Nexus and Steam artifact export"],
       "rationale": "Exports only server-prepared artifacts whose size and SHA-256 match the release receipt; the File System Access path reopens and reverifies saved bytes while the fallback is explicitly an unreceipted browser handoff.",
       "failureContract": "Picker cancellation or write/hash failure preserves the verified internal artifact and reports no successful export; browser-download fallback states that the final destination cannot be reopened or receipted."
+    },
+    {
+      "file": "src/components/X4UiSourceEditor.tsx",
+      "calls": { "anchorDownload": 1 },
+      "categories": ["browser-file-output"],
+      "owners": ["native UI preview PNG download"],
+      "rationale": "Downloads the native preview PNG through the browser only after an explicit user action; the PNG is a non-authoritative visual output and does not become source or deployment state.",
+      "failureContract": "Download failure reports no successful export and cannot mutate Lua source, preview state, deployment/game files, or credentials, and cannot falsely claim in-game verification."
     }
   ],
   "database": {

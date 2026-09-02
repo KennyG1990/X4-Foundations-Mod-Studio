@@ -358,3 +358,214 @@ test('SourceEditor reload and unmount ignore late or aborted corpus generations'
   expect(routeOutcomes.filter(outcome => outcome.startsWith('3:')).length).toBeGreaterThan(0);
   expect(pageErrors).toEqual([]);
 });
+
+test('SourceEditor exports only the current mounted PNG evidence', async ({ page, request }) => {
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  const downloads: unknown[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', message => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+  page.on('download', download => downloads.push(download));
+  await page.addInitScript(() => {
+    localStorage.setItem('x4_forge_experience_mode', 'expert');
+    localStorage.removeItem('x4_mod_studio_workspace');
+    localStorage.removeItem('x4_mod_studio_version');
+  });
+  await page.route('**/api/agent/health-card**', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ verdict: 'ready', summary: 'E2E export fixture ready.', rows: [] }),
+  }));
+  const referenceRoot = 'source-editor-p7-e2e-canonical-root';
+  const referenceGeneration = 'source-editor-p7-e2e-generation';
+  const referenceGeneratedAt = '2026-09-02T00:00:00.000Z';
+  await page.route('**/api/reference/status', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      available: true,
+      root: referenceRoot,
+      generatedAt: referenceGeneratedAt,
+      manifestGeneration: referenceGeneration,
+      manifest: {
+        available: true,
+        state: 'ready',
+        root: referenceRoot,
+        current: { generation: referenceGeneration, root: referenceRoot, generatedAt: referenceGeneratedAt },
+      },
+    }),
+  }));
+  await page.route('**/api/reference/manifest**', async route => {
+    const requestUrl = new URL(route.request().url());
+    const path = requestUrl.searchParams.get('q');
+    const fileBytes = path === null ? undefined : await (async () => {
+      const fileUrl = new URL('/api/reference/file', requestUrl.origin);
+      fileUrl.searchParams.set('path', path);
+      const fileResponse = await request.get(fileUrl.toString());
+      if (!fileResponse.ok()) throw new Error(`SourceEditor export fixture file request failed: ${fileResponse.status()}`);
+      const fileBody = await fileResponse.body();
+      const contentLength = Number(fileResponse.headers()['content-length']);
+      return Number.isSafeInteger(contentLength) && contentLength >= 0 ? contentLength : fileBody.byteLength;
+    })();
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: {
+          available: true,
+          state: 'ready',
+          root: referenceRoot,
+          current: {
+            generation: referenceGeneration,
+            root: referenceRoot,
+            generatedAt: referenceGeneratedAt,
+          },
+        },
+        generation: referenceGeneration,
+        total: path === null ? 0 : 1,
+        limit: 500,
+        offset: 0,
+        files: path === null || fileBytes === undefined ? [] : [{ path, bytes: fileBytes }],
+      }),
+    });
+  });
+  await seedServerWorkspace(sourceEditorWorkspace);
+  await page.goto('/');
+  await expect(page.getByTestId('studio-workspace')).toBeVisible();
+
+  const uiDesigner = page.locator('[data-workspace-view="ui-designer"]');
+  await uiDesigner.click();
+  await expect(uiDesigner).toHaveAttribute('aria-current', 'page');
+  const editor = page.getByTestId('x4-ui-source-editor');
+  await expect(editor).toBeVisible();
+
+  const exportButton = page.getByTestId('x4-ui-canvas-export');
+  const exportStatus = page.getByTestId('x4-ui-canvas-export-status');
+  const canvasHost = page.getByTestId('x4-ui-canvas-host');
+  const canvas = canvasHost.locator('canvas');
+  const sourceSelector = page.getByTestId('x4-ui-source-selector');
+  const targetSelector = page.getByTestId('x4-ui-target-selector');
+  const gameTruth = page.getByTestId('x4-ui-game-truth');
+  await expect(exportButton).toBeDisabled();
+  await expect(canvas).toHaveCount(0);
+  await expect(gameTruth).toHaveText(/^Not verified in game$/);
+  await expect(page.getByTestId('x4-ui-corpus-status')).toHaveText(/^canonical$/i);
+
+  const sourceOption = sourceSelector.locator('option').filter({ hasText: 'ui/x4-ui-source-editor-p7-e2e.lua' }).first();
+  await expect(sourceOption).toHaveCount(1);
+  const sourceValue = await sourceOption.getAttribute('value');
+  if (sourceValue === null) throw new Error('SourceEditor export fixture source option has no value');
+  await sourceSelector.selectOption(sourceValue);
+  const targetOption = targetSelector.locator('option').nth(1);
+  await expect(targetOption).toHaveCount(1);
+  const targetLabel = (await targetOption.textContent())?.trim();
+  if (targetLabel === undefined || targetLabel.length === 0) throw new Error('SourceEditor export fixture target option has no label');
+  const targetValue = await targetOption.getAttribute('value');
+  if (targetValue === null) throw new Error('SourceEditor export fixture target option has no value');
+  await targetSelector.selectOption(targetValue);
+
+  await expect(canvas).toHaveCount(1);
+  await expect(canvas).toHaveAttribute('width', '2560');
+  await expect(canvas).toHaveAttribute('height', '1440');
+  await expect(exportButton).toBeEnabled();
+  await expect(page.getByTestId('x4-ui-canvas-export-source')).toContainText('ui/x4-ui-source-editor-p7-e2e.lua');
+  await expect(page.getByTestId('x4-ui-canvas-export-target')).toContainText(targetLabel);
+  await expect(page.getByTestId('x4-ui-canvas-export-profile')).toContainText('2560 × 1440');
+  await expect(page.getByTestId('x4-ui-canvas-export-profile')).toContainText('UI scale 1.4');
+  await expect(page.getByTestId('x4-ui-canvas-export-native-width')).toHaveText('2560');
+  await expect(page.getByTestId('x4-ui-canvas-export-native-height')).toHaveText('1440');
+  await expect(page.getByTestId('x4-ui-canvas-export-boundary')).toHaveText(/^Preview evidence only · Not verified in game$/);
+
+  await page.evaluate(() => {
+    const host = document.querySelector('[data-testid="x4-ui-canvas-host"]');
+    const current = host?.firstElementChild;
+    if (!(current instanceof HTMLCanvasElement)) throw new Error('SourceEditor export fixture did not mount an HTMLCanvasElement');
+    (window as unknown as { __x4UiExportCanvasBefore?: Element }).__x4UiExportCanvasBefore = current;
+  });
+  const firstDownloadPromise = page.waitForEvent('download');
+  await exportButton.click();
+  const firstDownload = await firstDownloadPromise;
+  await expect.poll(() => downloads.length).toBe(1);
+  const firstFilename = firstDownload.suggestedFilename();
+  expect(firstFilename).toMatch(/^x4-ui-[A-Za-z0-9._-]+-[A-Za-z0-9._-]+-2560x1440-scale-1\.4\.png$/);
+  await expect(exportStatus).toHaveText(/exported one image\/png/);
+  await expect(exportStatus).toContainText('Not verified in game');
+  const sameMountedCanvasAfterExport = await page.evaluate(() => {
+    const host = document.querySelector('[data-testid="x4-ui-canvas-host"]');
+    const before = (window as unknown as { __x4UiExportCanvasBefore?: Element }).__x4UiExportCanvasBefore;
+    return host?.firstElementChild === before;
+  });
+  expect(sameMountedCanvasAfterExport).toBe(true);
+  await expect(gameTruth).toHaveText(/^Not verified in game$/);
+
+  await sourceSelector.selectOption('');
+  await expect(exportButton).toBeDisabled();
+  await expect(targetSelector).toHaveValue('');
+  await expect(canvas).toHaveCount(1);
+  await expect(page.getByTestId('x4-ui-canvas-status')).toHaveText(/stale|refused/);
+  await expect(gameTruth).toHaveText(/^Not verified in game$/);
+
+  await sourceSelector.selectOption(sourceValue);
+  await targetSelector.selectOption(targetValue);
+  await expect(canvas).toHaveAttribute('width', '2560');
+  await expect(canvas).toHaveAttribute('height', '1440');
+  await expect(exportButton).toBeEnabled();
+
+  await page.getByTestId('x4-ui-profile-width').fill('1800');
+  await expect(canvas).toHaveAttribute('width', '1800');
+  await expect(canvas).toHaveAttribute('height', '1440');
+  await expect(exportButton).toBeEnabled();
+  await page.getByTestId('x4-ui-profile-height').fill('900');
+  await expect(canvas).toHaveAttribute('width', '1800');
+  await expect(canvas).toHaveAttribute('height', '900');
+  await expect(exportButton).toBeEnabled();
+  await expect(page.getByTestId('x4-ui-canvas-export-profile')).toContainText('1800 × 900');
+  await expect(page.getByTestId('x4-ui-canvas-export-native-width')).toHaveText('1800');
+  await expect(page.getByTestId('x4-ui-canvas-export-native-height')).toHaveText('900');
+  const replacedMountedCanvas = await page.evaluate(() => {
+    const host = document.querySelector('[data-testid="x4-ui-canvas-host"]');
+    const before = (window as unknown as { __x4UiExportCanvasBefore?: Element }).__x4UiExportCanvasBefore;
+    return host?.firstElementChild !== before;
+  });
+  expect(replacedMountedCanvas).toBe(true);
+  const secondDownloadPromise = page.waitForEvent('download');
+  await exportButton.click();
+  const secondDownload = await secondDownloadPromise;
+  await expect.poll(() => downloads.length).toBe(2);
+  expect(secondDownload.suggestedFilename()).toMatch(/-1800x900-scale-1\.4\.png$/);
+  await expect(exportStatus).toHaveText(/exported one image\/png/);
+
+  const downloadCountBeforeSerializationNegatives = downloads.length;
+  const serializationNegative = async (mode: 'missing' | 'throw' | 'empty', expected: RegExp): Promise<void> => {
+    await page.evaluate((selectedMode: 'missing' | 'throw' | 'empty') => {
+      const host = document.querySelector('[data-testid="x4-ui-canvas-host"]');
+      const current = host?.firstElementChild;
+      if (!(current instanceof HTMLCanvasElement)) throw new Error('SourceEditor export fixture canvas disappeared');
+      Object.defineProperty(current, 'toBlob', {
+        configurable: true,
+        value: selectedMode === 'missing'
+          ? undefined
+          : selectedMode === 'throw'
+            ? () => { throw new Error('fixture serialization throw'); }
+            : (callback: BlobCallback) => callback(new Blob([], { type: 'image/png' })),
+      });
+    }, mode);
+    await exportButton.click();
+    await expect(exportStatus).toHaveText(expected);
+    await page.evaluate(() => {
+      const host = document.querySelector('[data-testid="x4-ui-canvas-host"]');
+      const current = host?.firstElementChild;
+      if (current instanceof HTMLCanvasElement) delete (current as unknown as { toBlob?: unknown }).toBlob;
+    });
+    await expect.poll(() => downloads.length).toBe(downloadCountBeforeSerializationNegatives);
+  };
+  await serializationNegative('missing', /refused: native PNG serialization is unavailable/);
+  await serializationNegative('throw', /refused: native PNG serialization threw before producing a blob/);
+  await serializationNegative('empty', /refused: native PNG serialization returned an empty or non-PNG blob/);
+
+  await expect(gameTruth).toHaveText(/^Not verified in game$/);
+  expect(pageErrors).toEqual([]);
+  expect(consoleErrors).toEqual([]);
+});

@@ -2120,6 +2120,23 @@
       ]
     },
     {
+      "id": "browser-output:src/components/X4UiSourceEditor.tsx",
+      "kind": "browser-output",
+      "owner": "native UI preview PNG download",
+      "sourceRef": "config/durable-writers.json#/browserOutputs/2",
+      "integrationBatch": "W3B2",
+      "semanticClass": "external-publish",
+      "policy": "receipt-required",
+      "effects": [
+        "publish"
+      ],
+      "authorityScopes": [
+        "global",
+        "profile",
+        "workspace"
+      ]
+    },
+    {
       "id": "filesystem-writer:server.ts",
       "kind": "filesystem-writer",
       "owner": "writeWorkspaceFileGuarded and fs/create | snapshot create/prune/delete/restore | copyRegularTree and synchronizeRegularTree | replaceValidatedDeployment and recovery | compileWorkspaceToFolder scratch cleanup | replaceReleaseDirectory | Nexus and Steam release handlers | embedded route/artifact/workspace API selftests | route-integration caller-key provider-dispatch marker",

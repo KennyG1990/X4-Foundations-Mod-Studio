@@ -1,89 +1,106 @@
-# Session handoff — B119 same-profile Forge/X4 pipeline proven; pixel oracle remains
+# Session handoff — B119 native export verified; effective-scale semantics correction next
 
 Date: 2026-09-02
 Project: `F:\DEV_ENV\X4_Forge`
-Status: `IN_PROGRESS / PARTIAL`; same-source/same-profile pipeline and proportional geometry are bounded `VERIFIED`
+Status: `IN_PROGRESS / PARTIAL`; installed native export and bounded geometry are `VERIFIED`, profile semantics failed
 
 ## Session-start brief
 
 - Project: X4 Forge B119, the linter-first source-faithful X4 Lua UI editor. GitHub owner: #41.
-- Current milestone: exact `pipeline_test` source is editable and rendered in the installed Forge, deployed as an
-  exact four-file UI-only mod, and accepted by X4 9.00 at the same `2544x1353 / UI scale 1` profile.
-- Eyeball queue: native installed-canvas export and exact pixel/font comparison; then the supplied AI Influence screen
-  reconstruction and measured conversation keep-outs. Complete Helper/widget coverage and release acceptance remain.
-- Commit question: implementation checkpoint `bc686eb47cad5dc42243dedf482f85b57bfcc5c7` and same-profile record
-  checkpoint `27c1470ecd5179e8e40f9184e89c2df320ce698b` are pushed with direct-remote parity. External owners are read back;
-  commit this final receipt sync with explicit path staging only.
+- Current milestone: installed Forge exports the exact current native canvas; native comparison isolated the remaining
+  large geometry discrepancy to user-scale versus effective `Helper.uiScale`, not the ported layout kernel.
+- Eyeball queue: after the semantic correction, repeat installed `2544x1353 / user scale 1` export and compare with
+  X4; then continue complete widget/Helper coverage, Zekton checks, AI Influence reconstruction, and keep-out review.
+- Commit question: prior checkpoints through `7a500b74e618fc3aa9a17261edda3d1f936b4c9b` are pushed. The PNG export unit
+  is fully validated but uncommitted in the broad dirty tree; explicit-path precommit/commit/push is next.
 
 ## What is proven
 
-- The existing source-first owners remain intact: ordered real X4 call model, linter, source-preserving edits, layout,
-  Scene/Paint authority, Canvas renderer, canonical corpus assets, and permanent `Not verified in game` preview truth.
-- Installed Antigravity renders exactly `ui/pipeline_test.lua -> menu.createFrame` with canonical core/color authority
-  at `2544x1353 / scale 1`.
-- The exact deployed package renders in X4 9.00 at that profile. Both buttons respond, the edit box accepts native
-  input, standard close removes the panel, X4 stays responsive and exits cleanly, and the scoped log contains zero
-  owned runtime or view-setup errors.
-- Screenshot-space panel, button, spacing, and edit-box geometry agrees after the Forge host's approximately `1.515x`
-  display resampling. The strongest edit-box boundary predicts `54.49` pixels versus about `55` observed in X4.
-- This proves proportional translation, not native bitmap equality, Zekton glyph parity, or universal frame acceptance.
+- The current Source Editor exports only its already-mounted `HTMLCanvasElement`; it does not rerender, encode through
+  a second owner, add a backend route, or persist a duplicate bitmap.
+- Export metadata binds exact source path/SHA, target identity, normalized drawable profile, effective scale, native
+  dimensions, and the permanent `Preview evidence only · Not verified in game` boundary.
+- Empty, refused, stale, non-DOM, malformed, dimension-mismatched, superseded, throwing, and empty-serialization cases
+  refuse without false success. Async completion rechecks the exact issued identity key.
+- The exact four-file `pipeline_test` package renders in X4 9.00; both buttons respond, the edit box accepts native
+  input, standard close removes the panel, and the owned log has zero runtime/view-setup errors.
+- Native Forge geometry at effective scale `1353/1080` is `663` pixels wide versus approximately `666` in X4, centered
+  to less than one pixel. The `3`-pixel residual is `0.45%` and is within the current screenshot/JPEG comparison limit.
 
-## Mounted-client reconciliation
+## Reproduced semantic defect
 
-- The direct sidecar browser retained an initial refusal after exact source/target reselection.
-- The supported installed host remained rendered/current, and a causal mounted diagnostic using unchanged production
-  transitioned from no selection to exactly one canvas and replaced it across `2560x1440 -> 1800x900`.
-- No production defect was reproduced. A hardcoded live-sidecar test was rejected and removed; the portable variant
-  remained unavailable while its fresh corpus manifest stayed `idle` for 30 seconds.
-- Current confidence: about 90% client/session/corpus-readiness divergence, 10% uncovered edge. Do not patch production
-  unless the supported host or a portable causal test reproduces it.
+- `helper.lua` uses `Helper.uiScale = C.GetUIScale(false)` and scales X/Y by that value.
+- `targetsystem.lua` documents that `C.GetUIScale(false)` practically combines the user scale factor with resolution
+  scaling and shows `resolutionFactor = screenHeight / 1080`.
+- Forge currently consumes its profile `uiScale` directly as the effective kernel scale while labeling the control
+  merely `UI scale`. Entering X4's user setting `1` at height `1353` produced a `529`-pixel panel, not X4's `666`.
+- Entering effective scale `1.25277777777778` produced `663` pixels. This explains essentially the full discrepancy.
+- Next correction must preserve internal effective-scale receipts and distinguish/derive user scale explicitly rather
+  than redefining the layout kernel.
 
-## Identity and evidence
+## Identity, package, and rollback
 
+- Baseline: `HEAD == origin/main == direct remote == 7a500b74e618fc3aa9a17261edda3d1f936b4c9b` before this unit.
+- Isolated worktree: `C:\Users\Moshi\AppData\Local\Temp\x4forge-b119-png-8e0c3689772c469ca41d4fa31bb16b77`.
+- VSIX: `vscode-extension/x4-forge-studio-0.0.70-b119-native-png-019fea10.vsix`; `2,092` entries;
+  `18,600,594` bytes; SHA-256 `377B555B6CF8FFD9A24B3A2D1EAAA2C582C4E4A5EAEBCB7F6BA9E25A07835A21`.
 - Installed extension: `C:\Users\Moshi\.antigravity-ide\extensions\x4forge.x4-forge-studio-0.0.70`.
-- VSIX: `vscode-extension/x4-forge-studio-0.0.70-b119-linter-source-edits-019fea10.vsix`.
-- VSIX SHA-256: `2187C3FD6B6B4BB839385B97B0861EFF3B00B1A59F075B82B5CA1C3FA015E460`.
-- Served frontend SHA-256: `AA930AAE011DA57B185FB570857EEEC8902FAFAD116C1F6EE773663762482BD2`.
-- Installed backend SHA-256: `8E1E4B14752F4C5C39D8049922135922F55C6760E407ECE8DD5A2219583942F5`.
+- Backup/rollback: `C:\Users\Moshi\AppData\Local\Temp\x4forge-b119-install-backup-20260902-140638`.
+- Installed extension host, supervisor, server, HTML, CSS, and frontend bytes match the reviewed package; installer-added
+  package `__metadata` is the only expected semantic delta.
 - Workspace: `ws_f61166c42849c757cf219c37`; deployed target:
   `G:\SteamLibrary\steamapps\common\X4 Foundations\extensions\pipeline_test`.
-- Evidence: `dev-docs/b119-x4-ui-pipeline-smoke/source-editor-ingame-20260902/`.
+
+## Evidence
+
+- Evidence root: `dev-docs/b119-x4-ui-pipeline-smoke/source-editor-ingame-20260902/`.
+- Entered-scale-1 PNG: `forge-native-preview-export-2544x1353-scale1-20260902.png`; `84,189` bytes;
+  SHA-256 `473173A568D1BA5B7405AE1314471FB8FD012E959E3BC597B5B28E3C7D4A076B`; bounds `529x161`.
+- Corrected-effective-scale PNG: `forge-native-preview-export-2544x1353-effective-scale-1.252777778-20260902.png`;
+  `90,917` bytes; bounds `663x203` at `x=940..1602`, `y=403..605`.
+- X4 reference: `x4-panel-2544x1353-scale1-20260902.jpg`; panel approximately `666` pixels wide at `x=939..1604`.
+- Installed Forge screenshot: `forge-native-preview-export-ui-2544x1353-scale1-20260902.jpg`.
 - Full record: `docs/plans/2026-09-02-b119-canonical-source-editor-game-pipeline.md`.
 
-## Validation at this handoff
+## Validation
 
-- Existing bounded inventory: linter `33/33`; source edits `90/90`; preview `108/108`; integration `21/21`;
-  oracles `134/134`; exact serial E2E shards `52/52 + 52/52`; production build and complete precommit passed.
-- Parent continuation rerun: TypeScript pass; integration `21/21`; Source Editor P7 `12/12`; exact owned-path ESLint
-  pass; mounted Source Editor E2E `1/1` with structured PASS and process `treeGone=true`.
-- X4 process count is zero. No listener remains on `3100` or `3101`.
-- The inert per-run state directory `%TEMP%\\x4forge-e2e-state-27916` remains after the E2E. Exact path validation
-  succeeded, but the cleanup command was rejected by host policy. It is retained evidence, not a live process.
-- The unsharded Windows E2E receipt remains honestly incomplete at `0xC0000409`; bounded serial evidence is green.
+- Source Editor selftest/P7 `12/12`; whole-repository TypeScript; exact three-file ESLint; focused E2E `2/2`, zero
+  failed/flaky/bad-result, `child-close`, `treeGone=true`; ports `3100/3101` stopped.
+- Durable authority: audit `15/15`, fingerprint
+  `619d094ae6fb0af1dbad963ca9086307f50ff0dc2962dca62a546475aa074ae0`; policy bundle `18/18` at `57` surfaces;
+  candidate `57/57`; promotion `23/23`; coverage routes `82`, surfaces `57`.
+- Isolated complete precommit passed; production build and extension build passed; package inspection passed; stage/probe
+  `16/16` passed.
+- Installed-host export passed twice. The second artifact proves the shipped-source resolution factor closes native
+  width from `529` to `663` against X4's approximately `666`.
+- Overall B119 remains `PARTIAL`: this is one accepted frame, not universal C++ acceptance, complete widget coverage,
+  exact Zekton glyph parity, AI Influence completion, or release acceptance.
 
 ## Durable projections
 
-- GitHub #41 remains open. Comment `5512448232` was written and read back exactly:
-  `https://github.com/KennyG1990/X4_Forge/issues/41#issuecomment-5512448232`.
-- Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a` was updated in place and read back with
-  `Status=In Progress`, `Evidence Grade=Partial`, commit `27c1470`, and GitHub comment `5512448232`.
-- Google Current Status doc `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, was protected-read,
-  revision-guarded, and read back at
+- GitHub #41 remains open; prior read-back comment: `5512448232`.
+- Notion owner: `3b84618e-d15b-8190-821e-c0eb96f43d5a`, `Status=In Progress`, `Evidence Grade=Partial`.
+- Google Current Status doc: `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`; prior revision
   `ANLCKQnsxhUytocioHZoSZ9nBJM6LYlVGnu4fP12TgwXXEYIXv8VYVSmlEsZ2ONWb82TTAFecuEXEUd0mSx2inNNzbUj97FOTABQRY1qRxhw`.
-  The marker is one `HEADING_2` followed by eight `NORMAL_TEXT` paragraphs; commit and GitHub IDs are present.
-- UI quick-reference card 24 records the unsupported-client lesson; project AAR records the non-clean reconciliation.
-- No capability-map delta: this strengthens existing B119 evidence without promoting a new capability.
+- These projections need the native-export checkpoint after repository commit/push and exact readback.
 
 ## Exact continuation
 
-1. Commit and push this final receipt sync with explicit paths; prove `HEAD == origin/main == direct remote`.
-2. Resume the product with native installed-canvas export and exact bitmap/font parity.
-3. Then reconstruct the supplied AI Influence screen against inspected reference images and measured keep-outs.
-4. Keep overall B119 `PARTIAL` until complete Helper/widget coverage and release acceptance pass; do not publish OpenVSX.
+1. Run complete precommit on the main working tree, stage only the ten intended PNG-unit/record files, inspect the
+   staged diff, commit `feat(ui-editor): export current native preview PNG`, push, and prove direct-remote parity.
+2. Update/read back GitHub #41, Notion, Drive, and the X4 UI gotcha quick reference with the user-scale/effective-scale
+   lesson. Keep all projections partial.
+3. Reconcile profile readers/writers with Graphify and exact source search. Document the bounded semantic-correction
+   acceptance contract before implementation.
+4. Delegate implementation/tests to one exact native `luna_executor`; preserve `uiScale` as effective internal truth,
+   add a user-scale input/derived effective display or equivalent narrow contract, and fail closed on invalid profiles.
+5. Repeat focused gates, complete precommit/package/install proof, native PNG export, and X4 comparison. Do not publish
+   OpenVSX until the separate release acceptance contract is met.
 
 ## Preservation boundary
 
 - Preserve every unrelated modified, deleted, and untracked file in the broad working tree.
-- Do not stage `test-results/.last-run.json`, screenshots, release metadata, showcase files, or neighboring plans.
-- Do not mutate the installed extension, deployed mod, game files, or OpenVSX during this record close.
-- No active Luna worker remains; the completed diagnostic worker was closed.
+- Do not stage `test-results/.last-run.json`, `vscode-extension/package.json`, screenshots, release metadata, showcase
+  files, neighboring plans, or any unrelated deletion.
+- Current evidence PNG/JPG files are ignored and remain local receipts unless a later plan explicitly promotes them.
+- X4 is absent; Antigravity and its managed sidecar are running. No active Luna worker remains.

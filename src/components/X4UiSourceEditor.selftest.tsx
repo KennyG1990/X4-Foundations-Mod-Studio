@@ -125,6 +125,18 @@ assert.match(sourceMarkup, /Imported-source linter/);
 assert.match(sourceMarkup, /Preview geometry diagnostics/);
 assert.match(sourceMarkup, /Layout evidence only · Not verified in game/);
 
+const canvasExportFailFirstApi = X4UiSourceEditorApiModule as unknown as Record<string, unknown>;
+const canvasExportFailFirstMissing = [
+  ['current-only canvas export classifier is absent', typeof canvasExportFailFirstApi.classifyX4UiCanvasExport === 'function'],
+  ['current canvas export control is absent', /data-testid="x4-ui-canvas-export"/.test(sourceMarkup)],
+  ['current canvas export metadata is absent', /data-testid="x4-ui-canvas-export-metadata"/.test(sourceMarkup)],
+].filter(([, pass]) => !pass).map(([name]) => name);
+assert.deepEqual(
+  canvasExportFailFirstMissing,
+  [],
+  `NATIVE_PNG_CANVAS_EXPORT causal fail-first red assertions: ${canvasExportFailFirstMissing.join(', ')}`,
+);
+
 const sourceEditorApiFailFirst = X4UiSourceEditorApiModule as unknown as Record<string, unknown>;
 const previewGeometryFailFirstMissing = [
   ['source-linked preview geometry inspector is absent', typeof sourceEditorApiFailFirst.inspectX4UiPreviewGeometry === 'function'],
@@ -935,6 +947,143 @@ const malformedEmptyDecision = classifyX4UiCanvasCommit(initialCanvasState, {
 assert.equal(malformedEmptyDecision.replaceSurface, undefined);
 assert.equal(malformedEmptyDecision.discardSurface, freshSurface);
 assert.equal(malformedEmptyDecision.nextState.status, 'refused');
+
+type CanvasExportClassificationFixture = {
+  readonly status: 'available' | 'refused';
+  readonly detail: string;
+  readonly filename?: string;
+  readonly identityKey?: string;
+  readonly width?: number;
+  readonly height?: number;
+};
+type CanvasExportClassifierFixture = (input: {
+  readonly state: unknown;
+  readonly mountedCanvas: unknown;
+  readonly currentIdentity: unknown;
+  readonly committedIdentity: unknown;
+}) => CanvasExportClassificationFixture;
+const classifyCanvasExport = canvasExportFailFirstApi.classifyX4UiCanvasExport as CanvasExportClassifierFixture;
+class CanvasExportFixture {
+  width: number;
+  height: number;
+
+  constructor(width: number, height: number) {
+    this.width = width;
+    this.height = height;
+  }
+}
+const globalFixture = globalThis as unknown as Record<string, unknown>;
+const hadCanvasConstructor = Object.prototype.hasOwnProperty.call(globalFixture, 'HTMLCanvasElement');
+const previousCanvasConstructor = globalFixture.HTMLCanvasElement;
+Object.defineProperty(globalThis, 'HTMLCanvasElement', {
+  configurable: true,
+  writable: true,
+  value: CanvasExportFixture,
+});
+try {
+  const exportSourceIdentity = {
+    file: 'ui/pipeline test/evil?.lua',
+    sourcePath: 'selftest/ui/pipeline test/evil?.lua',
+    sha256: 'a'.repeat(64),
+  };
+  const exportIdentity = {
+    sourceIdentity: exportSourceIdentity,
+    targetIdentity: { id: 'menu/createFrame<>', kind: 'function' },
+    normalizedProfile: {
+      id: 'unverified-default',
+      source: exportSourceIdentity,
+      drawable: { width: 2560, height: 1440 },
+      uiScale: 1.4,
+    },
+  };
+  const exportReceipt = { ...renderedResult.receipt, width: 2560, height: 1440 };
+  const exportCanvas = new CanvasExportFixture(2560, 1440);
+  const exportState = {
+    status: 'current',
+    surface: exportCanvas,
+    receipt: exportReceipt,
+    stale: false,
+    gameTruth: 'Not verified in game',
+    gameVerified: false,
+  };
+  const classifyExport = (overrides: Partial<Parameters<CanvasExportClassifierFixture>[0]> = {}) => classifyCanvasExport({
+    state: exportState,
+    mountedCanvas: exportCanvas,
+    currentIdentity: exportIdentity,
+    committedIdentity: exportIdentity,
+    ...overrides,
+  });
+  const exportAvailable = classifyExport();
+  assert.equal(exportAvailable.status, 'available', 'current DOM canvas and exact identity are exportable');
+  assert.equal(exportAvailable.width, 2560);
+  assert.equal(exportAvailable.height, 1440);
+  assert.match(exportAvailable.filename ?? '', /^x4-ui-/);
+  assert.match(exportAvailable.filename ?? '', /\.png$/);
+  assert.doesNotMatch(exportAvailable.filename ?? '', /[\\/:*?"<>|]/, 'export filename removes path and reserved characters');
+  assert.equal(classifyExport().filename, exportAvailable.filename, 'safe export filename is deterministic');
+  const changedSourceDigestIdentity = {
+    ...exportIdentity,
+    sourceIdentity: { ...exportSourceIdentity, sha256: 'b'.repeat(64) },
+    normalizedProfile: {
+      ...exportIdentity.normalizedProfile,
+      source: { ...exportSourceIdentity, sha256: 'b'.repeat(64) },
+    },
+  };
+  const changedSourceDigest = classifyCanvasExport({
+    state: exportState,
+    mountedCanvas: exportCanvas,
+    currentIdentity: changedSourceDigestIdentity,
+    committedIdentity: changedSourceDigestIdentity,
+  });
+  assert.equal(changedSourceDigest.status, 'available');
+  assert.equal(changedSourceDigest.filename, exportAvailable.filename, 'safe filenames may remain stable across source digest changes');
+  assert.notEqual(changedSourceDigest.identityKey, exportAvailable.identityKey, 'pending completion must compare exact identity beyond the safe filename');
+  const refusalCases: readonly [string, Partial<Parameters<CanvasExportClassifierFixture>[0]>][] = [
+    ['empty state', { state: initialCanvasState }],
+    ['refused state', { state: { ...exportState, status: 'refused', surface: null, receipt: null } }],
+    ['stale state', { state: { ...exportState, status: 'stale', stale: true } }],
+    ['malformed receipt', { state: { ...exportState, receipt: { status: 'rendered', width: 2560, height: 1440 } } }],
+    ['mismatched receipt dimensions', { state: { ...exportState, receipt: { ...exportReceipt, width: 1800, height: 900 } } }],
+    ['non-DOM surface', { state: { ...exportState, surface: { width: 2560, height: 1440 } }, mountedCanvas: { width: 2560, height: 1440 } }],
+    ['different mounted canvas', { mountedCanvas: new CanvasExportFixture(2560, 1440) }],
+    ['missing current identity', { currentIdentity: null }],
+    ['superseded identity', { committedIdentity: { ...exportIdentity, targetIdentity: { id: 'menu/otherTarget' } } }],
+    ['profile dimension mismatch', { currentIdentity: { ...exportIdentity, normalizedProfile: { ...exportIdentity.normalizedProfile, drawable: { width: 1800, height: 900 } } } }],
+  ];
+  for (const [name, overrides] of refusalCases) {
+    assert.equal(classifyExport(overrides).status, 'refused', `${name} must fail closed`);
+  }
+  const replacementIdentity = {
+    ...exportIdentity,
+    normalizedProfile: { ...exportIdentity.normalizedProfile, drawable: { width: 1800, height: 900 } },
+  };
+  const replacementCanvas = new CanvasExportFixture(1800, 900);
+  const replacementState = { ...exportState, surface: replacementCanvas, receipt: { ...exportReceipt, width: 1800, height: 900 } };
+  assert.equal(classifyCanvasExport({
+    state: replacementState,
+    mountedCanvas: replacementCanvas,
+    currentIdentity: replacementIdentity,
+    committedIdentity: exportIdentity,
+  }).status, 'refused', 'profile replacement cannot export with the prior identity');
+  assert.equal(classifyCanvasExport({
+    state: replacementState,
+    mountedCanvas: replacementCanvas,
+    currentIdentity: replacementIdentity,
+    committedIdentity: replacementIdentity,
+  }).status, 'available', 'profile replacement becomes exportable only after current commit');
+  const selectionReplacementIdentity = {
+    ...exportIdentity,
+    sourceIdentity: { ...exportSourceIdentity, file: 'ui/other.lua' },
+    normalizedProfile: { ...exportIdentity.normalizedProfile, source: { ...exportSourceIdentity, file: 'ui/other.lua' } },
+  };
+  assert.equal(classifyExport({ currentIdentity: selectionReplacementIdentity }).status, 'refused', 'selection replacement cannot export the prior canvas identity');
+} finally {
+  if (hadCanvasConstructor) {
+    globalFixture.HTMLCanvasElement = previousCanvasConstructor;
+  } else {
+    delete globalFixture.HTMLCanvasElement;
+  }
+}
 const sharedKeepOutPresets = [
   { id: 'cockpit-conversation', members: [{ entryId: 'conversation-back-row' }] },
   { id: 'map-open', members: [{ entryId: 'conversation-back-row' }] },
@@ -1800,7 +1949,7 @@ const compileActualSourceEditApply = (
   environment: Readonly<Record<string, unknown>>,
 ): ((entryId: string) => void) => {
   const startMarker = '  const applySourceEdit = ';
-  const endMarker = '\n\n  const width = ';
+  const endMarker = '\n\n  const selectedTargetIdentity = ';
   const startOffset = sourceText.indexOf(startMarker);
   const endOffset = sourceText.indexOf(endMarker, startOffset);
   if (startOffset < 0 || endOffset < 0) throw new Error('could not locate the actual X4UiSourceEditor apply callback');

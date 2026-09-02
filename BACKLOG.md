@@ -1772,6 +1772,29 @@ Durable sync is read back: repository checkpoint `27c1470ecd5179e8e40f9184e89c2d
 comment `5512448232`; Notion owner still `In Progress / Partial`; Google Current Status revision
 `ANLCKQnsxhUytocioHZoSZ9nBJM6LYlVGnu4fP12TgwXXEYIXv8VYVSmlEsZ2ONWb82TTAFecuEXEUd0mSx2inNNzbUj97FOTABQRY1qRxhw`.
 
+**B119 native preview PNG checkpoint 2026-09-02 — VERIFIED INSTALLED EXPORT / PROFILE-SEMANTICS DEFECT
+REPRODUCED:** The Source Editor exports only its already-mounted current `HTMLCanvasElement` as one deterministic
+`image/png` and displays exact source digest, target, profile, effective UI scale, native dimensions, and literal
+`Not verified in game`. Empty/refused/stale/non-DOM/malformed/mismatched/superseded and serialization-failure paths
+refuse without false success. Fresh-eyes review reproduced and fixed a medium asynchronous race where distinct source
+identities could share one sanitized filename on a reused canvas: callback completion now compares the exact issued
+identity key. Source Editor selftest and P7 `12/12`, whole-repository TypeScript, exact three-file ESLint, focused E2E
+`2/2`, durable-authority promotion, complete isolated precommit, production build, extension build, package inspection,
+and probe `16/16` pass. Reversible Antigravity install is byte-matched to reviewed VSIX
+`377B555B...35A21`; its current-only export is exactly `2544x1353`, `84,189` bytes, SHA-256
+`473173A5...A076B` at entered scale `1`.
+
+Native comparison disproved the prior same-profile assumption: that Forge image is `529` pixels wide while X4 is
+`666`. Shipped `targetsystem.lua` states that `C.GetUIScale(false)` practically combines the user scale with the
+resolution factor; for height `1353`, `1353/1080 = 1.252777...`. Re-entering that effective scale produced a second
+installed-host PNG exactly `2544x1353`, `90,917` bytes, whose non-black panel is `663x203` at `x=940..1602`; X4 is
+approximately `666` pixels wide and centered at `x=939..1604`. The residual width error is `3` pixels (`0.45%`). This
+strongly validates the ported geometry and isolates a misleading profile-control contract: Forge consumes effective
+`Helper.uiScale` while the UI presents it like X4's user scale option. Next is a bounded semantic correction that
+derives/displays effective scale without redefining the layout kernel, followed by fresh installed/X4 comparison.
+Overall B119 and GitHub #41 remain `IN_PROGRESS / PARTIAL`; exact glyph parity, complete Helper/widget coverage,
+release acceptance, and OpenVSX remain open.
+
 ### B115 · Forge Capability Convergence `in_progress` (P0, PRIORITY OVERRIDE)
 
 Ken explicitly promoted GitHub initiative #9 and child requests #10–#21 above the active R13 close on 2026-07-31.

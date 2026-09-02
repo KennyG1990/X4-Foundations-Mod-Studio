@@ -1479,6 +1479,198 @@ export const classifyX4UiCanvasCommit = (
   return { nextState, replaceSurface: result.surface };
 };
 
+export interface X4UiCanvasExportInput {
+  readonly state: unknown;
+  readonly mountedCanvas: unknown;
+  readonly currentIdentity: unknown;
+  readonly committedIdentity: unknown;
+}
+
+export interface X4UiCanvasExportClassification {
+  readonly status: 'available' | 'refused';
+  readonly detail: string;
+  readonly filename?: string;
+  readonly identityKey?: string;
+  readonly width?: number;
+  readonly height?: number;
+}
+
+const canvasExportRefusal = (detail: string): X4UiCanvasExportClassification => ({
+  status: 'refused',
+  detail,
+});
+
+const safePositiveInteger = (value: unknown): number | null => (
+  typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : null
+);
+
+const canvasExportIdentityFor = (value: unknown): X4UiGameVerificationCurrentSnapshot | null => {
+  const record = asRecord(value);
+  if (record === null) return null;
+  const sourceIdentity = ownEnumerableDataField(record, 'sourceIdentity');
+  const targetIdentity = ownEnumerableDataField(record, 'targetIdentity');
+  const normalizedProfile = ownEnumerableDataField(record, 'normalizedProfile');
+  if (!sourceIdentity.present || !sourceIdentity.valid
+    || !targetIdentity.present || !targetIdentity.valid
+    || !normalizedProfile.present || !normalizedProfile.valid) return null;
+  return buildX4UiGameVerificationCurrentSnapshot({
+    sourceIdentity: sourceIdentity.value,
+    targetIdentity: targetIdentity.value,
+    normalizedProfile: normalizedProfile.value,
+  });
+};
+
+const canvasExportIdentityKey = (value: X4UiGameVerificationCurrentSnapshot): string | null => {
+  try {
+    const serialized = JSON.stringify(value);
+    return typeof serialized === 'string' ? serialized : null;
+  } catch {
+    return null;
+  }
+};
+
+const canvasExportToken = (value: string, fallback: string): string => {
+  let normalized = value;
+  try {
+    normalized = value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+  } catch {
+    normalized = value;
+  }
+  const token = normalized
+    .replace(/[^A-Za-z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[.-]+|[.-]+$/g, '')
+    .slice(0, 96);
+  return token.length > 0 ? token : fallback;
+};
+
+const canvasExportFilenameFor = (identity: X4UiGameVerificationCurrentSnapshot): string | null => {
+  try {
+    const sourceFile = canvasExportToken(identity.sourceIdentity.file, 'source');
+    const targetRecord = asRecord(identity.targetIdentity);
+    const targetId = targetRecord === null ? undefined : targetRecord.id;
+    if (typeof targetId !== 'string' || targetId.length === 0) return null;
+    const profile = asRecord(identity.normalizedProfile);
+    const drawable = asRecord(profile?.drawable);
+    const width = safePositiveInteger(drawable?.width);
+    const height = safePositiveInteger(drawable?.height);
+    const uiScale = finiteValue(profile?.uiScale);
+    if (width === null || height === null || uiScale === null || uiScale <= 0) return null;
+    return `x4-ui-${sourceFile}-${canvasExportToken(targetId, 'target')}-${width}x${height}-scale-${canvasExportToken(String(uiScale), 'scale')}.png`;
+  } catch {
+    return null;
+  }
+};
+
+const renderedCanvasReceiptFor = (
+  value: unknown,
+): { readonly width: number; readonly height: number } | null => {
+  const receipt = asRecord(value);
+  if (receipt === null) return null;
+  const required = [
+    'format',
+    'version',
+    'status',
+    'gameTruth',
+    'gameVerified',
+    'verification',
+    'width',
+    'height',
+    'layers',
+    'commandIds',
+    'commandCount',
+    'atlasRoles',
+    'palette',
+  ];
+  try {
+    const keys = Reflect.ownKeys(receipt);
+    if (keys.length !== required.length || required.some(key => !keys.includes(key))) return null;
+    if (receipt.format !== X4_UI_CANVAS_RENDERER_FORMAT
+      || receipt.version !== X4_UI_CANVAS_RENDERER_VERSION
+      || receipt.status !== 'rendered'
+      || receipt.gameTruth !== X4_UI_EDITOR_SESSION_GAME_TRUTH
+      || receipt.gameVerified !== false) return null;
+    const verification = asRecord(receipt.verification);
+    if (verification === null || verification.game !== X4_UI_EDITOR_SESSION_GAME_TRUTH || verification.gameVerified !== false) return null;
+    const width = safePositiveInteger(receipt.width);
+    const height = safePositiveInteger(receipt.height);
+    if (width === null || height === null) return null;
+    if (!Array.isArray(receipt.layers)
+      || receipt.layers.length !== 4
+      || receipt.layers.some((layer, index) => layer !== ['diagnostic-background', 'glyph-alpha-blits', 'diagnostics', 'keep-out-overlays'][index])) return null;
+    if (!Array.isArray(receipt.commandIds)
+      || receipt.commandIds.some(commandId => typeof commandId !== 'string')
+      || receipt.commandCount !== receipt.commandIds.length) return null;
+    if (!Array.isArray(receipt.atlasRoles)
+      || receipt.atlasRoles.some(role => role !== 'regular' && role !== 'bold')) return null;
+    const palette = asRecord(receipt.palette);
+    if (palette === null || palette.id !== 'diagnostic-only' || palette.diagnosticOnly !== true) return null;
+    return { width, height };
+  } catch {
+    return null;
+  }
+};
+
+export const classifyX4UiCanvasExport = (
+  input: X4UiCanvasExportInput,
+): X4UiCanvasExportClassification => {
+  try {
+    const state = asRecord(input.state);
+    if (state === null
+      || state.status !== 'current'
+      || state.stale !== false
+      || state.gameTruth !== X4_UI_EDITOR_SESSION_GAME_TRUTH
+      || state.gameVerified !== false
+      || Object.prototype.hasOwnProperty.call(state, 'refusal')) {
+      return canvasExportRefusal('Current rendered canvas evidence is unavailable or stale.');
+    }
+    const surface = state.surface;
+    const canvasConstructor = typeof HTMLCanvasElement === 'undefined' ? null : HTMLCanvasElement;
+    if (canvasConstructor === null || !(input.mountedCanvas instanceof canvasConstructor)) {
+      return canvasExportRefusal('The current mounted surface is not an HTMLCanvasElement.');
+    }
+    if (surface === null || surface !== input.mountedCanvas) {
+      return canvasExportRefusal('The mounted canvas is not the current renderer surface.');
+    }
+    const receipt = renderedCanvasReceiptFor(state.receipt);
+    if (receipt === null) return canvasExportRefusal('The current renderer receipt is malformed or refused.');
+    const canvasWidth = safePositiveInteger(input.mountedCanvas.width);
+    const canvasHeight = safePositiveInteger(input.mountedCanvas.height);
+    if (canvasWidth === null || canvasHeight === null || canvasWidth !== receipt.width || canvasHeight !== receipt.height) {
+      return canvasExportRefusal('Mounted canvas dimensions do not match the current renderer receipt.');
+    }
+    const currentIdentity = canvasExportIdentityFor(input.currentIdentity);
+    const committedIdentity = canvasExportIdentityFor(input.committedIdentity);
+    if (currentIdentity === null || committedIdentity === null) {
+      return canvasExportRefusal('Current source, target, or profile identity is unavailable.');
+    }
+    const currentKey = canvasExportIdentityKey(currentIdentity);
+    const committedKey = canvasExportIdentityKey(committedIdentity);
+    if (currentKey === null || committedKey === null || currentKey !== committedKey) {
+      return canvasExportRefusal('Current source, target, or profile identity superseded the mounted canvas.');
+    }
+    const profile = asRecord(currentIdentity.normalizedProfile);
+    const drawable = asRecord(profile?.drawable);
+    const profileWidth = safePositiveInteger(drawable?.width);
+    const profileHeight = safePositiveInteger(drawable?.height);
+    if (profileWidth === null || profileHeight === null || profileWidth !== receipt.width || profileHeight !== receipt.height) {
+      return canvasExportRefusal('Current profile dimensions do not match the mounted renderer receipt.');
+    }
+    const filename = canvasExportFilenameFor(currentIdentity);
+    if (filename === null) return canvasExportRefusal('Current source, target, or profile cannot produce a safe filename.');
+    return {
+      status: 'available',
+      detail: 'Current rendered canvas is eligible for native PNG export.',
+      filename,
+      identityKey: currentKey,
+      width: receipt.width,
+      height: receipt.height,
+    };
+  } catch {
+    return canvasExportRefusal('Current canvas export evidence was malformed and was refused.');
+  }
+};
+
 const setCompletedBitmapStyle = (surface: X4UiCanvasSurface): void => {
   if (!(surface instanceof HTMLElement)) return;
   surface.style.maxWidth = '100%';
@@ -2223,6 +2415,7 @@ export default function X4UiSourceEditor({
   const [corpusState, setCorpusState] = useState<CorpusLoadState>(EMPTY_CORPUS_STATE);
   const [corpusGeneration, setCorpusGeneration] = useState(0);
   const [canvasState, setCanvasState] = useState<X4UiEditorCanvasState>(() => X4_UI_EDITOR_EMPTY_CANVAS_STATE);
+  const [canvasExportFeedback, setCanvasExportFeedback] = useState<string | undefined>(undefined);
   const [sourceEditDraft, setSourceEditDraft] = useState<X4UiSourceEditDraftState>(() => ({
     context: null,
     staged: {},
@@ -2231,6 +2424,9 @@ export default function X4UiSourceEditor({
   const sourceEditDraftRef = useRef(sourceEditDraft);
   const canvasStateRef = useRef(canvasState);
   const canvasHostRef = useRef<HTMLDivElement | null>(null);
+  const currentVerificationSnapshotRef = useRef<X4UiGameVerificationCurrentSnapshot | null>(null);
+  const canvasExportIdentityRef = useRef<X4UiGameVerificationCurrentSnapshot | null>(null);
+  const canvasExportInFlightRef = useRef(false);
 
   const resolvedCorpusLoader = useMemo(() => corpusLoader ?? defaultCorpusLoader, [corpusLoader]);
   const resolvedSurfaceFactory = useMemo(() => surfaceFactory ?? defaultSurfaceFactory, [surfaceFactory]);
@@ -2397,6 +2593,7 @@ export default function X4UiSourceEditor({
     }),
     [projectionView.normalizedProfile, selection.selection],
   );
+  currentVerificationSnapshotRef.current = currentVerificationSnapshot;
 
   useLayoutEffect(() => {
     if (onVerificationSnapshotChange === undefined) return;
@@ -2472,6 +2669,10 @@ export default function X4UiSourceEditor({
   }, [selection.reconciled.sourceSelector, selection.reconciled.targetSelector, sourceSelector, targetSelector]);
 
   useEffect(() => {
+    setCanvasExportFeedback(undefined);
+  }, [currentVerificationSnapshot]);
+
+  useEffect(() => {
     let active = true;
     const host = canvasHostRef.current;
     const reason = stringValue(projectionView.reason, `session status is ${stringValue(projectionView.status, 'unavailable')}`);
@@ -2483,15 +2684,18 @@ export default function X4UiSourceEditor({
       canvasStateRef.current = decision.nextState;
       setCanvasState(decision.nextState);
       if (decision.replaceSurface === undefined) {
+        canvasExportIdentityRef.current = null;
         if (decision.discardSurface !== undefined) disposeSurface(decision.discardSurface);
         return;
       }
       if (!active || host === null) {
+        canvasExportIdentityRef.current = null;
         disposeSurface(decision.replaceSurface);
         return;
       }
       setCompletedBitmapStyle(decision.replaceSurface);
       host.replaceChildren(decision.replaceSurface as unknown as Node);
+      canvasExportIdentityRef.current = currentVerificationSnapshot;
     };
 
     if (!canRender || canonicalCorpus === null || projectionView.paint === null || projectionView.paint === undefined) {
@@ -2510,7 +2714,7 @@ export default function X4UiSourceEditor({
     return () => {
       active = false;
     };
-  }, [canRender, canonicalCorpus, projectionView.paint, projectionView.reason, projectionView.status, resolvedSurfaceFactory]);
+  }, [canRender, canonicalCorpus, currentVerificationSnapshot, projectionView.paint, projectionView.reason, projectionView.status, resolvedSurfaceFactory]);
 
   const updateProfileDimension = (field: 'width' | 'height' | 'uiScale', raw: string): void => {
     const value = Number(raw);
@@ -2761,6 +2965,152 @@ export default function X4UiSourceEditor({
         });
       },
     );
+  };
+
+  const selectedTargetIdentity = asRecord(selection.selection?.target);
+  const selectedTargetId = stringValue(selectedTargetIdentity?.id, 'unavailable');
+  const selectedTargetName = stringValue(selectedTargetIdentity?.name, selectedTargetId);
+  const selectedTargetKind = stringValue(selectedTargetIdentity?.kind, 'unavailable');
+  const normalizedProfileRecord = asRecord(projectionView.normalizedProfile);
+  const normalizedDrawable = asRecord(normalizedProfileRecord?.drawable);
+  const exportProfileId = stringValue(normalizedProfileRecord?.id, 'unavailable');
+  const exportProfileWidth = formatNumber(normalizedDrawable?.width);
+  const exportProfileHeight = formatNumber(normalizedDrawable?.height);
+  const exportUiScale = formatNumber(normalizedProfileRecord?.uiScale);
+  const mountedCanvas = canvasHostRef.current?.firstElementChild;
+  const canvasExportClassification = classifyX4UiCanvasExport({
+    state: canvasState,
+    mountedCanvas,
+    currentIdentity: currentVerificationSnapshot,
+    committedIdentity: canvasExportIdentityRef.current,
+  });
+  const canvasExportReady = canvasExportClassification.status === 'available';
+  const canvasExportStatusText = canvasExportFeedback
+    ?? (canvasExportReady
+      ? 'ready · native PNG export uses the mounted current canvas'
+      : `unavailable · ${canvasExportClassification.detail}`);
+  const nativeBitmapWidth = canvasExportReady ? formatNumber(canvasExportClassification.width) : 'unavailable';
+  const nativeBitmapHeight = canvasExportReady ? formatNumber(canvasExportClassification.height) : 'unavailable';
+
+  const handleCanvasExport = (): void => {
+    if (canvasExportInFlightRef.current) return;
+    const currentMountedCanvas = canvasHostRef.current?.firstElementChild;
+    const classification = classifyX4UiCanvasExport({
+      state: canvasStateRef.current,
+      mountedCanvas: currentMountedCanvas,
+      currentIdentity: currentVerificationSnapshotRef.current,
+      committedIdentity: canvasExportIdentityRef.current,
+    });
+    if (classification.status !== 'available' || classification.filename === undefined) {
+      setCanvasExportFeedback(`refused: ${classification.detail}`);
+      return;
+    }
+    const canvasConstructor = typeof HTMLCanvasElement === 'undefined' ? null : HTMLCanvasElement;
+    if (canvasConstructor === null || !(currentMountedCanvas instanceof canvasConstructor)) {
+      setCanvasExportFeedback('refused: the current mounted surface is not an HTMLCanvasElement.');
+      return;
+    }
+    const canvas = currentMountedCanvas;
+    const filename = classification.filename;
+    const identityKey = classification.identityKey;
+    canvasExportInFlightRef.current = true;
+    setCanvasExportFeedback('serializing current canvas as image/png…');
+    let callbackSettled = false;
+    const refuse = (detail: string): void => {
+      canvasExportInFlightRef.current = false;
+      if (canvasHostRef.current !== null) setCanvasExportFeedback(`refused: ${detail}`);
+    };
+    try {
+      const toBlob = canvas.toBlob;
+      if (typeof toBlob !== 'function') {
+        callbackSettled = true;
+        refuse('native PNG serialization is unavailable.');
+        return;
+      }
+      toBlob.call(canvas, blob => {
+        if (callbackSettled) return;
+        callbackSettled = true;
+        const liveMountedCanvas = canvasHostRef.current?.firstElementChild;
+        const liveClassification = classifyX4UiCanvasExport({
+          state: canvasStateRef.current,
+          mountedCanvas: liveMountedCanvas,
+          currentIdentity: currentVerificationSnapshotRef.current,
+          committedIdentity: canvasExportIdentityRef.current,
+        });
+        if (liveMountedCanvas !== canvas
+          || liveClassification.status !== 'available'
+          || liveClassification.filename !== filename
+          || liveClassification.identityKey !== identityKey) {
+          refuse('the current source, target, profile, or mounted canvas changed before serialization completed.');
+          return;
+        }
+        const blobConstructor = typeof Blob === 'undefined' ? null : Blob;
+        let blobType = '';
+        let blobSize = 0;
+        try {
+          blobType = typeof blob?.type === 'string' ? blob.type.toLowerCase() : '';
+          blobSize = typeof blob?.size === 'number' ? blob.size : 0;
+        } catch {
+          refuse('native PNG serialization returned an unreadable blob.');
+          return;
+        }
+        if (blobConstructor === null || !(blob instanceof blobConstructor) || blobSize <= 0 || blobType !== 'image/png') {
+          refuse('native PNG serialization returned an empty or non-PNG blob.');
+          return;
+        }
+        let objectUrl: string | undefined;
+        let downloaded = false;
+        let cleanupFailed = false;
+        let failureDetail = 'native PNG download could not be created.';
+        try {
+          if (typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function' || typeof URL.revokeObjectURL !== 'function') {
+            failureDetail = 'object URL support is unavailable for the native PNG download.';
+            throw new Error(failureDetail);
+          }
+          if (typeof document === 'undefined' || document.body === null) {
+            failureDetail = 'the document download host is unavailable.';
+            throw new Error(failureDetail);
+          }
+          objectUrl = URL.createObjectURL(blob);
+          const anchor = document.createElement('a');
+          anchor.href = objectUrl;
+          anchor.download = filename;
+          anchor.style.display = 'none';
+          document.body.appendChild(anchor);
+          try {
+            anchor.click();
+            downloaded = true;
+          } finally {
+            anchor.remove();
+          }
+        } catch {
+          downloaded = false;
+        } finally {
+          if (objectUrl !== undefined) {
+            try {
+              URL.revokeObjectURL(objectUrl);
+            } catch {
+              cleanupFailed = true;
+            }
+          }
+        }
+        if (cleanupFailed) {
+          refuse('native PNG object URL cleanup failed.');
+          return;
+        }
+        if (!downloaded) {
+          refuse(failureDetail);
+          return;
+        }
+        canvasExportInFlightRef.current = false;
+        if (canvasHostRef.current !== null) setCanvasExportFeedback(`exported one image/png · ${filename} · ${X4_UI_EDITOR_SESSION_GAME_TRUTH}`);
+      }, 'image/png');
+    } catch {
+      if (!callbackSettled) {
+        callbackSettled = true;
+        refuse('native PNG serialization threw before producing a blob.');
+      }
+    }
   };
 
   const width = positiveValue(asRecord(profileValue)?.width);
@@ -3016,6 +3366,20 @@ export default function X4UiSourceEditor({
           <h2 className="text-[10px] font-bold uppercase tracking-wider text-cyan-300">Source preview canvas</h2>
           <span data-testid="x4-ui-canvas-status" className={canvasDescription.status === 'current' ? 'text-slate-300' : 'text-amber-300'}>{canvasDescription.label}</span>
         </div>
+        <section data-testid="x4-ui-canvas-export-region" className="mt-2 rounded border border-emerald-500/30 bg-emerald-950/10 p-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-[10px] font-bold uppercase tracking-wider text-emerald-300">Current PNG evidence export</h3>
+            <button type="button" data-testid="x4-ui-canvas-export" disabled={!canvasExportReady || canvasExportInFlightRef.current} onClick={handleCanvasExport} className="rounded border border-emerald-500/40 px-2 py-1 text-[9px] font-bold uppercase text-emerald-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:text-slate-600">Export current PNG</button>
+          </div>
+          <div data-testid="x4-ui-canvas-export-status" className="mt-2 break-words text-amber-200">{canvasExportStatusText}</div>
+          <div data-testid="x4-ui-canvas-export-metadata" className="mt-2 grid grid-cols-1 gap-1 text-slate-400 lg:grid-cols-2">
+            <div data-testid="x4-ui-canvas-export-source">Source file: <span className="break-all text-slate-200">{selectedSourceFile} · sha256 {selectedSourceHash}</span></div>
+            <div data-testid="x4-ui-canvas-export-target">Target: <span className="break-all text-slate-200">{selectedTargetName} · id {selectedTargetId} · kind {selectedTargetKind}</span></div>
+            <div data-testid="x4-ui-canvas-export-profile">Profile: <span className="text-slate-200">{exportProfileId} · drawable {exportProfileWidth} × {exportProfileHeight} · UI scale {exportUiScale}</span></div>
+            <div data-testid="x4-ui-canvas-export-native-bitmap">Native bitmap: <span data-testid="x4-ui-canvas-export-native-width" className="text-slate-200">{nativeBitmapWidth}</span> × <span data-testid="x4-ui-canvas-export-native-height" className="text-slate-200">{nativeBitmapHeight}</span></div>
+          </div>
+          <div data-testid="x4-ui-canvas-export-boundary" className="mt-2 font-bold text-amber-300">Preview evidence only · {X4_UI_EDITOR_SESSION_GAME_TRUTH}</div>
+        </section>
         <div data-testid="x4-ui-canvas-host" ref={canvasHostRef} className="mt-2 flex min-h-24 max-h-[70vh] items-start justify-start overflow-auto rounded border border-white/10 bg-black/40 p-2" />
         <div data-testid="x4-ui-canvas-detail" className="mt-2 text-slate-500">{canvasDescription.detail} · {X4_UI_EDITOR_SESSION_GAME_TRUTH}</div>
       </section>
