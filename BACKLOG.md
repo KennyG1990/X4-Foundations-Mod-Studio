@@ -1803,6 +1803,23 @@ comment, and `1.252777...` result; Google Current Status revision
 contains one `HEADING_2` plus eight exact checkpoint paragraphs. X4 UI quick-reference card 25 records the user-scale
 versus effective-scale trap; file SHA-256 is `6DF79A06976F26CC78EACECBE09F8FE5D17B2CAE43B44D7DC36F03AB2E5040DC`.
 
+**B119 scale-control correction 2026-09-02 — SPECIFIED:** Exact source and Graphify reconciliation found no reason to
+change the downstream profile contract: `profile.uiScale` remains effective `Helper.uiScale`. The bounded Source Editor
+unit will expose derived user scale × drawable height / 1080 plus an explicit custom-effective fallback, relabel PNG
+metadata/identity, and add causal pure/component/E2E negatives. It must preserve `Not verified in game`, then pass
+package/install/native export and fresh X4 comparison before close. Full contract is appended to
+`docs/plans/2026-09-02-b119-canonical-source-editor-game-pipeline.md`; overall B119 remains `IN_PROGRESS / PARTIAL`.
+
+**B119 scale/cache checkpoint 2026-09-02 — IMPLEMENTED / FOCUSED PARTIAL:** The Source Editor now distinguishes X4
+user scale from effective `Helper.uiScale`, derives the latter from drawable height, and exports deterministic
+`effective-scale` evidence. A private renderer session retains at most eight detached canonical Zekton RGBA expansions
+while still allocating fresh Canvas surfaces/ImageData. Canvas is `140/140`; Session is `8/8`; Source Editor/P7,
+TypeScript, exact lint, Graphify, and complete precommit are green. The original repeated-render timeout is repaired:
+the unchanged scale scenario passes `1/1` in `53.6 s`. One complete `3/3` browser receipt remains unavailable because
+the Windows child exited `0xC0000409` after two passing scenarios and before the third result; no timeout/assertion was
+weakened. Next is reversible package/install proof and a fresh `2544x1353 / user scale 1` Forge-to-X4 comparison.
+Overall B119 and GitHub #41 remain `IN_PROGRESS / PARTIAL`; OpenVSX remains blocked.
+
 ### B115 · Forge Capability Convergence `in_progress` (P0, PRIORITY OVERRIDE)
 
 Ken explicitly promoted GitHub initiative #9 and child requests #10–#21 above the active R13 close on 2026-07-31.

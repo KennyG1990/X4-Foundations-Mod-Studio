@@ -1984,6 +1984,61 @@ async function run(): Promise<void> {
   const sampleExactCatalogAuthority = sampleExactUnprojected.sampleCatalogAuthority;
   assert.ok(sampleBinding, 'unprojected sample session must issue an editor-only binding');
   assert.ok(sampleExactCatalogAuthority, 'exact sample session must issue a catalog authority');
+
+  recordSessionCausal(
+    'causal-sampleless-preview-is-value-equivalent-and-accepted-samples-reproject',
+    sampleBinding !== undefined && sampleExactCatalogAuthority !== undefined,
+    'sampleless output remains value-equivalent to the accepted catalog preview while accepted sample values remain consumed by the sampled projection',
+    markSeamReached => {
+      markSeamReached();
+      const sampleless = projectX4UiEditorSession({
+        workspace: sampleWorkspaceValue,
+        corpus: canonical,
+        profile: sampleExactProfile,
+        selection: sampleSelection,
+      });
+      const sampled = projectX4UiEditorSession({
+        workspace: sampleWorkspaceValue,
+        corpus: canonical,
+        profile: sampleExactProfile,
+        selection: sampleSelection,
+        samples: sampleState,
+        sampleBinding,
+        sampleCatalogAuthority: sampleExactCatalogAuthority,
+      });
+      const samplelessProgram = sampleless.preview.program;
+      const sampledProgram = sampled.preview.program;
+      const sampledBindingsConsumed = sampledProgram !== undefined && sampledProgram.status !== 'refused'
+        && sampledProgram.program.previewSampleBindings.length > 0
+        && sampledProgram.program.previewSampleBindings.every(binding => binding.status === 'consumed');
+      const samplelessWidth = samplelessProgram !== undefined && samplelessProgram.status !== 'refused'
+        ? samplelessProgram.program.tables[0]?.requestedWidth
+        : undefined;
+      const sampledWidth = sampledProgram !== undefined && sampledProgram.status !== 'refused'
+        ? sampledProgram.program.tables[0]?.requestedWidth
+        : undefined;
+      return {
+        samplelessPreviewValueEquivalent: JSON.stringify(sampleless.preview) === JSON.stringify(sampleExactUnprojected.preview),
+        samplelessSamplesUndefined: sampleless.samples === undefined,
+        sampledAccepted: sampled.sampleReconciliation.status === 'accepted' && sampled.samples === sampleState,
+        sampledBindingsConsumed,
+        sampledWidth,
+        samplelessWidth,
+        sampledPreviewDiffers: JSON.stringify(sampled.preview) !== JSON.stringify(sampleless.preview),
+      };
+    },
+    observed => {
+      if (observed === null || typeof observed !== 'object') return false;
+      const value = observed as JsonRecord;
+      return value.samplelessPreviewValueEquivalent === true
+        && value.samplelessSamplesUndefined === true
+        && value.sampledAccepted === true
+        && value.sampledBindingsConsumed === true
+        && value.sampledWidth === 80
+        && value.samplelessWidth !== value.sampledWidth
+        && value.sampledPreviewDiffers === true;
+    },
+  );
   const reconcileWithTwoArguments = reconcileX4UiEditorSampleState as unknown as (
     samples: unknown,
     catalog: unknown,

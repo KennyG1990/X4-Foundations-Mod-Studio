@@ -1374,7 +1374,9 @@ export function projectX4UiEditorSession(input: X4UiEditorSessionInput): X4UiEdi
     const samples = sampleReconciliation.status === 'accepted'
       ? sampleReconciliation.samples
       : undefined;
-    const preview = previewFor(source, corpus, normalized.profile, normalized.selection, samples, normalized.colorEvidence);
+    const preview = samples === undefined
+      ? catalogPreview
+      : previewFor(source, corpus, normalized.profile, normalized.selection, samples, normalized.colorEvidence);
     const sessionIssues = sampleReconciliation.status === 'refused'
       ? [...normalized.issues, sampleReconciliation.message]
       : normalized.issues;

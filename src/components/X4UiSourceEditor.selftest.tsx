@@ -57,6 +57,8 @@ import X4UiSourceEditor, {
   classifyX4UiLintState,
   createX4UiManualCalibrationDraft,
   createX4UiManualCalibrationState,
+  deriveX4UiEffectiveScale,
+  deriveX4UiUserScale,
   inspectX4UiLint,
   inspectX4UiPreviewGeometry,
   isBlockingX4UiAddTableFinding,
@@ -181,7 +183,55 @@ assert.match(sourceMarkup, /Select target/);
 assert.match(sourceMarkup, /No source analyzed|Static checks incomplete/);
 assert.doesNotMatch(sourceMarkup, /No known static rule violated/);
 assert.doesNotMatch(sourceMarkup, /game accurate|render accurate|engine proof|game-proof/i);
+assert.match(sourceMarkup, /data-testid="x4-ui-profile-scale-mode"/);
+assert.match(sourceMarkup, /Derived from X4 user scale/);
+assert.match(sourceMarkup, /Custom effective Helper scale/);
+assert.match(sourceMarkup, /data-testid="x4-ui-profile-user-scale"/);
+assert.match(sourceMarkup, /data-testid="x4-ui-profile-scale"[^>]*disabled/);
+assert.match(sourceMarkup, /Derived effective Helper scale = X4 user scale .*1080/);
+assert.match(sourceMarkup, /Effective Helper scale/);
+assert.doesNotMatch(sourceMarkup, /UI scale/);
+assert.match(sourceMarkup, /value="1\.05"/);
 assert.equal((sourceMarkup.match(/value="[^"]+"/g) ?? []).some(value => value.includes('source 1') || value.includes('target 1')), false, 'selectors must not auto-select a candidate');
+
+assert.equal(deriveX4UiEffectiveScale(1, 1353), 1353 / 1080, 'effective scale must use the exact 1080-height derivation');
+const reverse1353 = deriveX4UiUserScale(deriveX4UiEffectiveScale(1, 1353), 1353);
+assert.ok(reverse1353 !== null && Math.abs(reverse1353 - 1) <= 1e-12, 'reverse derivation must recover the user factor within tolerance');
+const compatibilityUserScale = deriveX4UiUserScale(1.4, 1440);
+assert.ok(compatibilityUserScale !== null && Math.abs(compatibilityUserScale - 1.05) <= 1e-12, '1440/1.4 compatibility must retain the 1.05 user factor');
+const compatibilityEffectiveScale = deriveX4UiEffectiveScale(1.05, 1440);
+assert.ok(compatibilityEffectiveScale !== null && Math.abs(compatibilityEffectiveScale - 1.4) <= 1e-12, '1440/1.05 must preserve the unverified 1.4 effective default');
+const invalidEffectiveScaleInputs: readonly [unknown, unknown][] = [
+  [0, 1440],
+  [-1, 1440],
+  [Infinity, 1440],
+  [NaN, 1440],
+  ['1', 1440],
+  [1, 0],
+  [1, -1],
+  [1, Infinity],
+  [1, NaN],
+  [Number.MAX_VALUE, Number.MAX_VALUE],
+  [Number.MIN_VALUE, Number.MIN_VALUE],
+];
+for (const [userScale, drawableHeight] of invalidEffectiveScaleInputs) {
+  assert.equal(deriveX4UiEffectiveScale(userScale, drawableHeight), null, 'invalid or overflowing effective derivation must fail closed');
+}
+const invalidUserScaleInputs: readonly [unknown, unknown][] = [
+  [0, 1440],
+  [-1, 1440],
+  [Infinity, 1440],
+  [NaN, 1440],
+  ['1', 1440],
+  [1, 0],
+  [1, -1],
+  [1, Infinity],
+  [1, NaN],
+  [Number.MAX_VALUE, Number.MIN_VALUE],
+];
+for (const [effectiveScale, drawableHeight] of invalidUserScaleInputs) {
+  assert.equal(deriveX4UiUserScale(effectiveScale, drawableHeight), null, 'invalid or overflowing user derivation must fail closed');
+}
 
 const sampleLocation = {
   file: 'ui/samples.lua',
@@ -1018,7 +1068,7 @@ try {
   assert.equal(exportAvailable.width, 2560);
   assert.equal(exportAvailable.height, 1440);
   assert.match(exportAvailable.filename ?? '', /^x4-ui-/);
-  assert.match(exportAvailable.filename ?? '', /\.png$/);
+  assert.match(exportAvailable.filename ?? '', /-2560x1440-effective-scale-1\.4\.png$/);
   assert.doesNotMatch(exportAvailable.filename ?? '', /[\\/:*?"<>|]/, 'export filename removes path and reserved characters');
   assert.equal(classifyExport().filename, exportAvailable.filename, 'safe export filename is deterministic');
   const changedSourceDigestIdentity = {
@@ -1226,6 +1276,9 @@ for (const forbidden of [
 assert.match(sourceText, /loadConfiguredX4UiCorpusAssets/);
 assert.match(sourceText, /isX4UiCorpusCanonicalSuccess/);
 assert.match(sourceText, /renderX4UiPaintPlanToCanvas\(/);
+assert.match(sourceText, /createX4UiCanvasRenderSession/);
+assert.match(sourceText, /const \[rendererSession\] = useState<X4UiCanvasRenderSession>\(\(\) => createX4UiCanvasRenderSession\(\)\);/);
+assert.match(sourceText, /session:\s*rendererSession/);
 // Fail-first B119 presentation contract: Source Preview must select source composition explicitly.
 assert.match(sourceText, /presentation:\s*['"]source-composition['"]/);
 assert.match(sourceText, /<X4UiSourceEditorPreviewGeometry scene=\{projection\.preview\.scene\} \/>/);

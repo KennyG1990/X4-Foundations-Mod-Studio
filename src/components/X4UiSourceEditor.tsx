@@ -52,8 +52,10 @@ import {
 import {
   X4_UI_CANVAS_RENDERER_FORMAT,
   X4_UI_CANVAS_RENDERER_VERSION,
+  createX4UiCanvasRenderSession,
   renderX4UiPaintPlanToCanvas,
   type X4UiCanvasRenderResult,
+  type X4UiCanvasRenderSession,
   type X4UiCanvasSurface,
   type X4UiCanvasSurfaceFactory,
 } from '../lib/x4UiCanvasRenderer';
@@ -287,6 +289,45 @@ const finiteValue = (value: unknown): number | null => (
 const positiveValue = (value: unknown): number | null => {
   const number = finiteValue(value);
   return number !== null && number > 0 ? number : null;
+};
+
+export type X4UiSourceEditorScaleMode =
+  | 'derived-from-x4-user-scale'
+  | 'custom-effective-helper-scale';
+
+export const X4_UI_SOURCE_EDITOR_SCALE_MODE_DERIVED: X4UiSourceEditorScaleMode = 'derived-from-x4-user-scale';
+export const X4_UI_SOURCE_EDITOR_SCALE_MODE_CUSTOM: X4UiSourceEditorScaleMode = 'custom-effective-helper-scale';
+export const X4_UI_SOURCE_EDITOR_DEFAULT_USER_SCALE = 1.05;
+
+const X4_UI_SOURCE_EDITOR_REFERENCE_HEIGHT = 1080;
+
+const positiveScaleResult = (value: number): number | null => (
+  Number.isFinite(value) && value > 0 ? value : null
+);
+
+export const deriveX4UiEffectiveScale = (
+  userScale: unknown,
+  drawableHeight: unknown,
+): number | null => {
+  const user = positiveValue(userScale);
+  const height = positiveValue(drawableHeight);
+  if (user === null || height === null) return null;
+  const directResult = (user * height) / X4_UI_SOURCE_EDITOR_REFERENCE_HEIGHT;
+  if (Number.isFinite(directResult)) return positiveScaleResult(directResult);
+  return positiveScaleResult(user * (height / X4_UI_SOURCE_EDITOR_REFERENCE_HEIGHT));
+};
+
+export const deriveX4UiUserScale = (
+  effectiveScale: unknown,
+  drawableHeight: unknown,
+): number | null => {
+  const effective = positiveValue(effectiveScale);
+  const height = positiveValue(drawableHeight);
+  if (effective === null || height === null) return null;
+  const directResult = (effective * X4_UI_SOURCE_EDITOR_REFERENCE_HEIGHT) / height;
+  if (Number.isFinite(directResult)) return positiveScaleResult(directResult);
+  const result = (effective / height) * X4_UI_SOURCE_EDITOR_REFERENCE_HEIGHT;
+  return positiveScaleResult(result);
 };
 
 const boolValue = (value: unknown): boolean => value === true;
@@ -1556,7 +1597,7 @@ const canvasExportFilenameFor = (identity: X4UiGameVerificationCurrentSnapshot):
     const height = safePositiveInteger(drawable?.height);
     const uiScale = finiteValue(profile?.uiScale);
     if (width === null || height === null || uiScale === null || uiScale <= 0) return null;
-    return `x4-ui-${sourceFile}-${canvasExportToken(targetId, 'target')}-${width}x${height}-scale-${canvasExportToken(String(uiScale), 'scale')}.png`;
+    return `x4-ui-${sourceFile}-${canvasExportToken(targetId, 'target')}-${width}x${height}-effective-scale-${canvasExportToken(String(uiScale), 'scale')}.png`;
   } catch {
     return null;
   }
@@ -2403,6 +2444,8 @@ export default function X4UiSourceEditor({
     height: X4_UI_EDITOR_DEFAULT_PROFILE.drawable.height,
     uiScale: X4_UI_EDITOR_DEFAULT_PROFILE.uiScale,
   }));
+  const [scaleMode, setScaleMode] = useState<X4UiSourceEditorScaleMode>(X4_UI_SOURCE_EDITOR_SCALE_MODE_DERIVED);
+  const [userScale, setUserScale] = useState(X4_UI_SOURCE_EDITOR_DEFAULT_USER_SCALE);
   const [sourceSelector, setSourceSelector] = useState('');
   const [targetSelector, setTargetSelector] = useState('');
   const [sampleInput, setSampleInput] = useState<X4UiEditorSampleState>(undefined);
@@ -2427,6 +2470,7 @@ export default function X4UiSourceEditor({
   const currentVerificationSnapshotRef = useRef<X4UiGameVerificationCurrentSnapshot | null>(null);
   const canvasExportIdentityRef = useRef<X4UiGameVerificationCurrentSnapshot | null>(null);
   const canvasExportInFlightRef = useRef(false);
+  const [rendererSession] = useState<X4UiCanvasRenderSession>(() => createX4UiCanvasRenderSession());
 
   const resolvedCorpusLoader = useMemo(() => corpusLoader ?? defaultCorpusLoader, [corpusLoader]);
   const resolvedSurfaceFactory = useMemo(() => surfaceFactory ?? defaultSurfaceFactory, [surfaceFactory]);
@@ -2708,24 +2752,63 @@ export default function X4UiSourceEditor({
     const result = renderX4UiPaintPlanToCanvas(
       projectionView.paint as Parameters<typeof renderX4UiPaintPlanToCanvas>[0],
       canonicalCorpus,
-      { surfaceFactory: resolvedSurfaceFactory, presentation: 'source-composition' },
+      { surfaceFactory: resolvedSurfaceFactory, presentation: 'source-composition', session: rendererSession },
     );
     if (active) adopt(result);
     return () => {
       active = false;
     };
-  }, [canRender, canonicalCorpus, currentVerificationSnapshot, projectionView.paint, projectionView.reason, projectionView.status, resolvedSurfaceFactory]);
+  }, [canRender, canonicalCorpus, currentVerificationSnapshot, projectionView.paint, projectionView.reason, projectionView.status, rendererSession, resolvedSurfaceFactory]);
 
   const updateProfileDimension = (field: 'width' | 'height' | 'uiScale', raw: string): void => {
     const value = Number(raw);
     if (!Number.isFinite(value) || value <= 0) return;
     setProfile(previous => {
-    if (field === 'uiScale') return { ...previous, uiScale: value };
+      if (field === 'uiScale') {
+        return scaleMode === X4_UI_SOURCE_EDITOR_SCALE_MODE_CUSTOM
+          ? { ...previous, uiScale: value }
+          : previous;
+      }
+      if (field !== 'height' || scaleMode !== X4_UI_SOURCE_EDITOR_SCALE_MODE_DERIVED) {
+        return {
+          ...previous,
+          [field]: value,
+        };
+      }
+      const effectiveScale = deriveX4UiEffectiveScale(userScale, value);
+      if (effectiveScale === null) return previous;
       return {
         ...previous,
-        [field]: value,
+        height: value,
+        uiScale: effectiveScale,
       };
     });
+  };
+
+  const updateUserScale = (raw: string): void => {
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value <= 0) return;
+    if (scaleMode === X4_UI_SOURCE_EDITOR_SCALE_MODE_DERIVED
+      && deriveX4UiEffectiveScale(value, profile.height) === null) return;
+    setUserScale(value);
+    if (scaleMode !== X4_UI_SOURCE_EDITOR_SCALE_MODE_DERIVED) return;
+    setProfile(previous => {
+      const effectiveScale = deriveX4UiEffectiveScale(value, previous.height);
+      return effectiveScale === null ? previous : { ...previous, uiScale: effectiveScale };
+    });
+  };
+
+  const updateScaleMode = (value: string): void => {
+    if (value !== X4_UI_SOURCE_EDITOR_SCALE_MODE_DERIVED && value !== X4_UI_SOURCE_EDITOR_SCALE_MODE_CUSTOM) return;
+    if (value === X4_UI_SOURCE_EDITOR_SCALE_MODE_DERIVED) {
+      const effectiveScale = deriveX4UiEffectiveScale(userScale, profile.height);
+      if (effectiveScale === null) return;
+      setProfile(previous => {
+        const currentEffectiveScale = deriveX4UiEffectiveScale(userScale, previous.height);
+        return currentEffectiveScale === null ? previous : { ...previous, uiScale: currentEffectiveScale };
+      });
+    }
+    setScaleMode(value);
   };
 
   const selectSource = (value: string): void => {
@@ -2976,7 +3059,7 @@ export default function X4UiSourceEditor({
   const exportProfileId = stringValue(normalizedProfileRecord?.id, 'unavailable');
   const exportProfileWidth = formatNumber(normalizedDrawable?.width);
   const exportProfileHeight = formatNumber(normalizedDrawable?.height);
-  const exportUiScale = formatNumber(normalizedProfileRecord?.uiScale);
+  const exportEffectiveScale = formatNumber(normalizedProfileRecord?.uiScale);
   const mountedCanvas = canvasHostRef.current?.firstElementChild;
   const canvasExportClassification = classifyX4UiCanvasExport({
     state: canvasState,
@@ -3128,22 +3211,36 @@ export default function X4UiSourceEditor({
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         <section data-testid="x4-ui-profile-region" className="rounded border border-white/10 bg-black/20 p-3">
           <h2 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-cyan-300">Profile controls</h2>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <label className="flex flex-col gap-1 text-slate-500">
-              Width
+              Drawable width
               <input data-testid="x4-ui-profile-width" type="number" min="0.000001" step="any" value={width === null ? '' : width} onChange={event => updateProfileDimension('width', event.target.value)} className="rounded border border-white/10 bg-black/40 px-2 py-1 text-slate-200" />
             </label>
             <label className="flex flex-col gap-1 text-slate-500">
-              Height
+              Drawable height
               <input data-testid="x4-ui-profile-height" type="number" min="0.000001" step="any" value={height === null ? '' : height} onChange={event => updateProfileDimension('height', event.target.value)} className="rounded border border-white/10 bg-black/40 px-2 py-1 text-slate-200" />
             </label>
+          </div>
+          <div className="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-3">
             <label className="flex flex-col gap-1 text-slate-500">
-              UI scale
-              <input data-testid="x4-ui-profile-scale" type="number" min="0.000001" step="any" value={uiScale === null ? '' : uiScale} onChange={event => updateProfileDimension('uiScale', event.target.value)} className="rounded border border-white/10 bg-black/40 px-2 py-1 text-slate-200" />
+              Source Editor scale mode
+              <select data-testid="x4-ui-profile-scale-mode" value={scaleMode} onChange={event => updateScaleMode(event.target.value)} className="rounded border border-white/10 bg-black/40 px-2 py-1 text-slate-200">
+                <option value={X4_UI_SOURCE_EDITOR_SCALE_MODE_DERIVED}>Derived from X4 user scale</option>
+                <option value={X4_UI_SOURCE_EDITOR_SCALE_MODE_CUSTOM}>Custom effective Helper scale</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-slate-500">
+              X4 user scale factor
+              <input data-testid="x4-ui-profile-user-scale" type="number" min="0.000001" step="any" value={userScale} onChange={event => updateUserScale(event.target.value)} className="rounded border border-white/10 bg-black/40 px-2 py-1 text-slate-200" />
+            </label>
+            <label className="flex flex-col gap-1 text-slate-500">
+              Effective Helper scale
+              <input data-testid="x4-ui-profile-scale" type="number" min="0.000001" step="any" value={uiScale === null ? '' : uiScale} disabled={scaleMode !== X4_UI_SOURCE_EDITOR_SCALE_MODE_CUSTOM} onChange={event => updateProfileDimension('uiScale', event.target.value)} className="rounded border border-white/10 bg-black/40 px-2 py-1 text-slate-200" />
             </label>
           </div>
+          <div data-testid="x4-ui-profile-scale-derivation" className="mt-2 text-slate-500">Derived effective Helper scale = X4 user scale × drawable height ÷ 1080. Drawable width does not affect the derived value. Custom mode retains its effective value across height changes.</div>
           <div className="mt-2 text-slate-500">Truth grade: <span data-testid="x4-ui-profile-truth" className="text-amber-300">{stringValue(normalizedProfile?.truthGrade, 'unverified-default')}</span></div>
-          <div className="text-slate-500">Profile: <span>{stringValue(normalizedProfile?.id, 'x4-ui-editor-default')}</span> · drawable {formatNumber(width)} × {formatNumber(height)} · scale {formatNumber(uiScale)}</div>
+          <div className="text-slate-500">Profile: <span>{stringValue(normalizedProfile?.id, 'x4-ui-editor-default')}</span> · drawable {formatNumber(width)} × {formatNumber(height)} · effective Helper scale {formatNumber(uiScale)} · {X4_UI_EDITOR_SESSION_GAME_TRUTH}</div>
         </section>
 
         <section data-testid="x4-ui-corpus-region" className="rounded border border-white/10 bg-black/20 p-3">
@@ -3375,7 +3472,7 @@ export default function X4UiSourceEditor({
           <div data-testid="x4-ui-canvas-export-metadata" className="mt-2 grid grid-cols-1 gap-1 text-slate-400 lg:grid-cols-2">
             <div data-testid="x4-ui-canvas-export-source">Source file: <span className="break-all text-slate-200">{selectedSourceFile} · sha256 {selectedSourceHash}</span></div>
             <div data-testid="x4-ui-canvas-export-target">Target: <span className="break-all text-slate-200">{selectedTargetName} · id {selectedTargetId} · kind {selectedTargetKind}</span></div>
-            <div data-testid="x4-ui-canvas-export-profile">Profile: <span className="text-slate-200">{exportProfileId} · drawable {exportProfileWidth} × {exportProfileHeight} · UI scale {exportUiScale}</span></div>
+            <div data-testid="x4-ui-canvas-export-profile">Profile: <span className="text-slate-200">{exportProfileId} · drawable {exportProfileWidth} × {exportProfileHeight} · Effective Helper scale {exportEffectiveScale}</span></div>
             <div data-testid="x4-ui-canvas-export-native-bitmap">Native bitmap: <span data-testid="x4-ui-canvas-export-native-width" className="text-slate-200">{nativeBitmapWidth}</span> × <span data-testid="x4-ui-canvas-export-native-height" className="text-slate-200">{nativeBitmapHeight}</span></div>
           </div>
           <div data-testid="x4-ui-canvas-export-boundary" className="mt-2 font-bold text-amber-300">Preview evidence only · {X4_UI_EDITOR_SESSION_GAME_TRUTH}</div>

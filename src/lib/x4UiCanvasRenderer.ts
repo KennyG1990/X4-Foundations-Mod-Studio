@@ -59,10 +59,16 @@ export type X4UiCanvasSurfaceFactory = (
   role: X4UiCanvasSurfaceRole,
 ) => X4UiCanvasSurface | null | undefined;
 
+declare const x4UiCanvasRenderSessionBrand: unique symbol;
+export type X4UiCanvasRenderSession = {
+  readonly [x4UiCanvasRenderSessionBrand]: 'x4-ui-canvas-render-session';
+};
+
 /** Renderer options select the owned allocator and the explicit presentation contract. */
 export interface X4UiCanvasRenderOptions {
   readonly surfaceFactory?: X4UiCanvasSurfaceFactory;
   readonly presentation?: X4UiCanvasPresentation;
+  readonly session?: X4UiCanvasRenderSession;
 }
 
 export type X4UiCanvasRenderRefusalCode =
@@ -328,8 +334,25 @@ const KEEP_OUT_PRODUCTION_RULES = new Map<string, {
 const EVIDENCE_GRADES = new Set(['measured-guide', 'calibrated', 'reference-unmeasured']);
 const MAX_DRAWABLE_DIMENSION = 1_000_000;
 const MAX_COMMANDS = 100_000;
+const MAX_SESSION_CACHE_ENTRIES = 8;
 
 const isObject = (value: unknown): value is object => value !== null && typeof value === 'object';
+
+interface CorpusAtlasByteCache {
+  readonly entries: Map<string, Uint8ClampedArray>;
+}
+
+interface RendererSessionState {
+  readonly corpusCaches: WeakMap<object, CorpusAtlasByteCache>;
+}
+
+const rendererSessionStates = new WeakMap<object, RendererSessionState>();
+
+export const createX4UiCanvasRenderSession = (): X4UiCanvasRenderSession => {
+  const token = Object.freeze(Object.create(null) as object);
+  rendererSessionStates.set(token, { corpusCaches: new WeakMap<object, CorpusAtlasByteCache>() });
+  return token as X4UiCanvasRenderSession;
+};
 
 const ownField = (value: object, key: string): { readonly present: boolean; readonly valid: boolean; readonly value?: unknown } => {
   try {
@@ -1677,13 +1700,30 @@ const surfaceFactoryDefault: X4UiCanvasSurfaceFactory = (_width, _height): X4UiC
 interface ValidatedRenderOptions {
   readonly factory: X4UiCanvasSurfaceFactory;
   readonly presentation: X4UiCanvasPresentation;
+  readonly session?: RendererSessionState;
 }
+
+const validatedSession = (value: unknown): Validation<RendererSessionState | undefined> => {
+  if (value === undefined) return { ok: true, value: undefined };
+  if (!isObject(value)) return refusal('invalid-input', 'renderer session is malformed');
+  try {
+    if (Object.getPrototypeOf(value) !== null || Reflect.ownKeys(value).length !== 0) return refusal('invalid-input', 'renderer session is not an opaque renderer-issued token');
+    const state = rendererSessionStates.get(value);
+    return state === undefined
+      ? refusal('invalid-input', 'renderer session was not issued by this renderer')
+      : { ok: true, value: state };
+  } catch {
+    return refusal('invalid-input', 'renderer session authenticity could not be established');
+  }
+};
 
 const validatedOptions = (options: unknown): Validation<ValidatedRenderOptions> => {
   if (options === undefined) return { ok: true, value: { factory: surfaceFactoryDefault, presentation: 'diagnostic-map' } };
-  if (!exactRecord(options, [], ['surfaceFactory', 'presentation'])) return refusal('invalid-input', 'renderer options are malformed');
+  if (!exactRecord(options, [], ['surfaceFactory', 'presentation', 'session'])) return refusal('invalid-input', 'renderer options are malformed');
   const candidate = fieldValue(options, 'surfaceFactory');
   const presentation = fieldValue(options, 'presentation');
+  const session = validatedSession(fieldValue(options, 'session'));
+  if (isValidationFailure(session)) return session;
   if (candidate !== undefined && typeof candidate !== 'function') return refusal('invalid-input', 'surfaceFactory must be callable');
   if (presentation !== undefined && presentation !== 'diagnostic-map' && presentation !== 'source-composition') return refusal('invalid-input', 'presentation must be diagnostic-map or source-composition');
   return {
@@ -1691,6 +1731,7 @@ const validatedOptions = (options: unknown): Validation<ValidatedRenderOptions> 
     value: {
       factory: candidate === undefined ? surfaceFactoryDefault : candidate as X4UiCanvasSurfaceFactory,
       presentation: presentation === 'source-composition' ? 'source-composition' : 'diagnostic-map',
+      ...(session.value === undefined ? {} : { session: session.value }),
     },
   };
 };
@@ -1721,6 +1762,18 @@ const allocateSurface = (
 
 const tintByte = (value: number): number => Math.round(value);
 
+const atlasSurfaceKey = (role: 'regular' | 'bold', tint?: ValidatedTint): string => `${role}|${tint?.drawableKey ?? 'diagnostic'}`;
+
+const rememberAtlasBytes = (cache: CorpusAtlasByteCache, key: string, bytes: Uint8ClampedArray): void => {
+  cache.entries.delete(key);
+  cache.entries.set(key, bytes);
+  while (cache.entries.size > MAX_SESSION_CACHE_ENTRIES) {
+    const oldest = cache.entries.keys().next();
+    if (oldest.done === true) return;
+    cache.entries.delete(oldest.value);
+  }
+};
+
 /**
  * Stage detached raw A8 bytes through the shipped Zekton SDF transfer before
  * applying caller alpha. Canvas resampling is still browser-preview behavior,
@@ -1730,25 +1783,38 @@ const stageAtlas = (
   factory: X4UiCanvasSurfaceFactory,
   binding: AtlasSnapshot,
   tint?: ValidatedTint,
+  cache?: CorpusAtlasByteCache,
 ): Validation<{ readonly surface: X4UiCanvasSurface; readonly api: PaintApi }> => {
   const allocated = allocateSurface(factory, binding.width, binding.height, `${binding.role}-atlas`, true);
   if (isValidationFailure(allocated)) return { ok: false, refusal: allocated.refusal };
   const api = allocated.value.api as AtlasApi;
+  const cacheKey = atlasSurfaceKey(binding.role, tint);
+  const cachedBytes = cache?.entries.get(cacheKey);
   try {
-    const rawAlphaBytes = binding.alphaBytes.slice();
     const imageData = api.createImageData(binding.width, binding.height);
     if (!isObject(imageData)) return refusal('allocation-failure', `${binding.role} atlas image-data allocation failed`);
     const data = (imageData as UnknownRecord).data;
-    if (!(data instanceof Uint8ClampedArray) || data.length !== rawAlphaBytes.length * 4) return refusal('allocation-failure', `${binding.role} atlas image-data has unsafe dimensions`);
-    for (let index = 0; index < rawAlphaBytes.length; index += 1) {
-      const offset = index * 4;
-      data[offset] = tint === undefined ? 229 : tintByte(tint.red);
-      data[offset + 1] = tint === undefined ? 231 : tintByte(tint.green);
-      data[offset + 2] = tint === undefined ? 235 : tintByte(tint.blue);
-      // Typed tint RGB and SDF/caller alpha use one deterministic positive-value half-up byte rule; CSS keeps raw tint values.
-      data[offset + 3] = applyZektonSdfAlpha(rawAlphaBytes[index] as number, tint?.alphaScale ?? 1);
+    if (!(data instanceof Uint8ClampedArray) || data.length !== binding.alphaBytes.length * 4) return refusal('allocation-failure', `${binding.role} atlas image-data has unsafe dimensions`);
+    if (cachedBytes !== undefined) {
+      if (cachedBytes.length !== data.length) return refusal('allocation-failure', `${binding.role} cached atlas bytes have unsafe dimensions`);
+      Uint8ClampedArray.prototype.set.call(data, cachedBytes);
+    } else {
+      const rawAlphaBytes = binding.alphaBytes.slice();
+      for (let index = 0; index < rawAlphaBytes.length; index += 1) {
+        const offset = index * 4;
+        data[offset] = tint === undefined ? 229 : tintByte(tint.red);
+        data[offset + 1] = tint === undefined ? 231 : tintByte(tint.green);
+        data[offset + 2] = tint === undefined ? 235 : tintByte(tint.blue);
+        // Typed tint RGB and SDF/caller alpha use one deterministic positive-value half-up byte rule; CSS keeps raw tint values.
+        data[offset + 3] = applyZektonSdfAlpha(rawAlphaBytes[index] as number, tint?.alphaScale ?? 1);
+      }
     }
+    const detachedRgbaBytes = cachedBytes === undefined ? new Uint8ClampedArray(data) : undefined;
     api.putImageData(imageData, 0, 0);
+    if (cache !== undefined) {
+      if (detachedRgbaBytes !== undefined) rememberAtlasBytes(cache, cacheKey, detachedRgbaBytes);
+      else rememberAtlasBytes(cache, cacheKey, cachedBytes as Uint8ClampedArray);
+    }
     return { ok: true, value: { surface: allocated.value.surface, api } };
   } catch {
     return refusal('allocation-failure', `${binding.role} atlas image-data staging failed`);
@@ -1756,8 +1822,6 @@ const stageAtlas = (
 };
 
 const tintStyle = (tint: ValidatedTint): string => `rgba(${String(tint.red)}, ${String(tint.green)}, ${String(tint.blue)}, ${String(tint.alphaScale)})`;
-
-const atlasSurfaceKey = (role: 'regular' | 'bold', tint?: ValidatedTint): string => `${role}|${tint?.drawableKey ?? 'diagnostic'}`;
 
 const withClip = (api: PaintApi, clip: Rect | undefined, draw: () => void): void => {
   if (clip === undefined) {
@@ -1977,6 +2041,9 @@ export function renderX4UiPaintPlanToCanvas(
     if (isValidationFailure(corpusValidation)) return makeRefusalResult({ ok: false, refusal: corpusValidation.refusal });
     const planValidation = validatePlan(resultValidation.value.plan, resultValidation.value.status, corpusValidation.value);
     if (isValidationFailure(planValidation)) return makeRefusalResult({ ok: false, refusal: planValidation.refusal });
+    const optionsValidation = validatedOptions(options);
+    if (isValidationFailure(optionsValidation)) return makeRefusalResult({ ok: false, refusal: optionsValidation.refusal });
+    const { factory, presentation, session } = optionsValidation.value;
     const acceptedResultFingerprint = structuralFingerprint(result);
     if (acceptedResultFingerprint === undefined) return makeRefusalResult(refusal('invalid-result', 'paint result cannot be fingerprinted as exact own data'));
     const atlasSnapshots: { readonly regular: AtlasSnapshot; readonly bold: AtlasSnapshot } = {
@@ -1993,9 +2060,13 @@ export function renderX4UiPaintPlanToCanvas(
         alphaBytes: corpusValidation.value.bold.alphaBytes.slice(),
       },
     };
-    const optionsValidation = validatedOptions(options);
-    if (isValidationFailure(optionsValidation)) return makeRefusalResult({ ok: false, refusal: optionsValidation.refusal });
-    const { factory, presentation } = optionsValidation.value;
+    const corpusCache = session === undefined
+      ? undefined
+      : session.corpusCaches.get(corpus as unknown as object) ?? (() => {
+        const created: CorpusAtlasByteCache = { entries: new Map<string, Uint8ClampedArray>() };
+        session.corpusCaches.set(corpus as unknown as object, created);
+        return created;
+      })();
 
     const atlasSurfaces = new Map<string, X4UiCanvasSurface>();
     for (const item of planValidation.value.flattened) {
@@ -2003,7 +2074,7 @@ export function renderX4UiPaintPlanToCanvas(
       const key = atlasSurfaceKey(item.role, item.tint);
       if (atlasSurfaces.has(key)) continue;
       const binding = atlasSnapshots[item.role];
-      const staged = stageAtlas(factory, binding, item.tint);
+      const staged = stageAtlas(factory, binding, item.tint, corpusCache);
       if (isValidationFailure(staged)) return makeRefusalResult({ ok: false, refusal: staged.refusal });
       atlasSurfaces.set(key, staged.value.surface);
     }

@@ -44,10 +44,12 @@ import { buildX4UiWorkspaceSource, type X4UiWorkspaceSource } from './x4UiWorksp
 import type { X4UiScene } from './x4UiScene';
 import {
   X4_UI_CANVAS_DIAGNOSTIC_PALETTE,
+  createX4UiCanvasRenderSession,
   renderX4UiPaintPlanToCanvas,
   type X4UiCanvasRenderOptions,
   type X4UiCanvasRenderReceipt,
   type X4UiCanvasRenderResult,
+  type X4UiCanvasRenderSession,
   type X4UiCanvasSurface,
   type X4UiCanvasSurfaceFactory,
 } from './x4UiCanvasRenderer';
@@ -201,7 +203,7 @@ function pathFromQuery(url: string, key: string): string {
   return decodeURIComponent(pair.slice(key.length + 1));
 }
 
-async function loadCanonicalFixture(): Promise<X4UiCorpusCanonicalSuccess> {
+async function loadCanonicalFixture(recordRestoreCheck = true): Promise<X4UiCorpusCanonicalSuccess> {
   const root = 'canvas-renderer-canonical-root';
   const generation = 'canvas-renderer-canonical-generation';
   const contract = X4_UI_CORPUS_9_00_CONTRACT;
@@ -244,7 +246,7 @@ async function loadCanonicalFixture(): Promise<X4UiCorpusCanonicalSuccess> {
     contract.bold.descriptor.sha256,
     contract.bold.atlas.sha256,
   ];
-  const result = await withCanonicalPlatformHash(expectedHashes, () => loadCanonicalX4UiCorpusAssets({ transport }));
+  const result = await withCanonicalPlatformHash(expectedHashes, () => loadCanonicalX4UiCorpusAssets({ transport }), recordRestoreCheck);
   if (!isX4UiCorpusCanonicalSuccess(result)) throw new Error(`canonical loader did not issue canonical success: ${JSON.stringify(result)}`);
   return result;
 }
@@ -451,7 +453,9 @@ type TraceEntry = { readonly role: string; readonly name: string; readonly args:
 interface TraceContextHooks {
   readonly beforeCreateImageData?: () => void;
   readonly captureImageData?: (data: Uint8ClampedArray) => void;
+  readonly decorateImageData?: (imageData: JsonRecord) => void;
   readonly failDrawImage?: boolean;
+  readonly failPutImageData?: boolean;
   readonly afterOperation?: (role: string, name: string, args: readonly unknown[]) => void;
 }
 
@@ -504,23 +508,32 @@ function makeTraceContext(trace: TraceEntry[], role: string, allowImageData: boo
       recordOperation('createImageData', [width, height]);
       if (failImageData) return null;
       hooks.beforeCreateImageData?.();
-      return { data: new Uint8ClampedArray(Number(width) * Number(height) * 4) };
+      const imageData = { data: new Uint8ClampedArray(Number(width) * Number(height) * 4) };
+      hooks.decorateImageData?.(imageData);
+      return imageData;
     };
     record.putImageData = (...args: unknown[]) => {
       const imageData = args[0] as JsonRecord | undefined;
       const pixels = imageData?.data instanceof Uint8ClampedArray ? Array.from(imageData.data) : undefined;
       recordOperation('putImageData', [args[1], args[2], pixels]);
+      if (hooks.failPutImageData === true) throw new Error('selftest putImageData failure');
       if (imageData?.data instanceof Uint8ClampedArray) hooks.captureImageData?.(imageData.data);
     };
   }
   return record;
 }
 
-function makeFactory(traces: TraceEntry[], allowImageData = true, failRole?: string, failImageData = false): X4UiCanvasSurfaceFactory {
+function makeFactory(
+  traces: TraceEntry[],
+  allowImageData = true,
+  failRole?: string,
+  failImageData = false,
+  contextHooks: (role: string) => TraceContextHooks = () => ({}),
+): X4UiCanvasSurfaceFactory {
   return (width, height, role) => {
     if (role === failRole) return null;
     const localTrace = traces;
-    const context = makeTraceContext(localTrace, role, allowImageData, failImageData);
+    const context = makeTraceContext(localTrace, role, allowImageData, failImageData, contextHooks(role));
     const surface: JsonRecord & X4UiCanvasSurface = {
       role,
       width,
@@ -684,6 +697,7 @@ interface ActivityLedger {
 
 interface ObservedFactoryHooks {
   readonly afterFactory?: (role: string) => void;
+  readonly afterFactorySurface?: (role: string, surface: X4UiCanvasSurface) => void;
   readonly afterDimensionWrite?: (role: string, dimension: 'width' | 'height', value: number) => void;
   readonly afterDimensionRead?: (role: string, dimension: 'width' | 'height', value: number) => void;
   readonly afterGetContext?: (role: string) => void;
@@ -743,6 +757,7 @@ function makeObservedFactory(activity: ActivityLedger, hooks: ObservedFactoryHoo
         },
       },
     });
+    hooks.afterFactorySurface?.(role, surface);
     return surface;
   };
 }
@@ -1983,6 +1998,8 @@ async function main(): Promise<void> {
   if (fixture === undefined) throw new Error('fixture setup failed');
 
   const { corpus, paint } = fixture;
+  const sessionCachePaint: Extract<X4UiPaintPlanResult, { readonly status: 'projected' | 'partial' }> | undefined = paint;
+  let sessionCacheTintSeed: JsonRecord | undefined;
   try {
     const colorEvidence = await loadCanonicalColorFixture();
     const colorSource = colorSourceFixture();
@@ -2187,6 +2204,7 @@ async function main(): Promise<void> {
     );
     if (publicColorReady && colorPaint !== undefined) {
       const acceptedColorPaint = colorPaint as Extract<X4UiPaintPlanResult, { readonly status: 'projected' | 'partial' }>;
+      sessionCacheTintSeed = colorTints.map(tint => asRecord(tint)).find((tint): tint is JsonRecord => tint !== undefined && (tint.field === 'color' || tint.field === 'defaultTextColor'));
       const tintValue = (tint: unknown): JsonRecord | undefined => {
         const record = asRecord(tint);
         return record === undefined ? undefined : asRecord(record.value);
@@ -4577,6 +4595,443 @@ async function main(): Promise<void> {
     {
       mutablePaletteDetected: !successfulBoundaryIsComplete(nestedMutableSuccess),
       mutableVerificationDetected: nestedMutableRefusal === undefined ? false : !refusalBoundaryIsComplete(nestedMutableRefusal),
+    },
+  );
+
+  const sessionCreator = typeof createX4UiCanvasRenderSession === 'function'
+    ? createX4UiCanvasRenderSession
+    : undefined;
+  const cachePaint = sessionCachePaint;
+  const cacheTintSeed = sessionCacheTintSeed;
+  const cacheTintFor = (index: number): JsonRecord | undefined => {
+    if (cacheTintSeed === undefined) return undefined;
+    const tint = JSON.parse(JSON.stringify(cacheTintSeed)) as JsonRecord;
+    tint.field = 'color';
+    tint.slot = index % 2 === 0 ? 'primary-text' : 'secondary-text';
+    const color = asRecord(tint.value);
+    if (color === undefined || (color.domain !== 'source-literal-percent-alpha' && color.domain !== 'canonical-xml-byte-alpha')) return undefined;
+    const channels = asRecord(color.channels);
+    const values = {
+      r: (11 + index * 31) % 256,
+      g: (23 + index * 37) % 256,
+      b: (47 + index * 41) % 256,
+      a: color.domain === 'source-literal-percent-alpha' ? 17 + index * 13 : 29 + index * 31,
+    };
+    for (const channel of ['r', 'g', 'b', 'a'] as const) color[channel] = values[channel];
+    if (color.domain === 'source-literal-percent-alpha') {
+      if (channels === undefined) return undefined;
+      for (const channel of ['r', 'g', 'b', 'a'] as const) {
+        const channelEvidence = asRecord(channels[channel]);
+        if (channelEvidence === undefined) return undefined;
+        channelEvidence.value = values[channel];
+      }
+    }
+    return tint;
+  };
+  const cacheTints = Array.from({ length: 5 }, (_unused, index) => cacheTintFor(index));
+  const regularDescriptorPath = corpus.fonts.regular.descriptorIdentity.relativePath;
+  const boldDescriptorPath = corpus.fonts.bold.descriptorIdentity.relativePath;
+  const glyphRoleFor = (command: JsonRecord): 'regular' | 'bold' | undefined => {
+    const descriptor = asRecord(command.descriptor);
+    if (descriptor?.relativePath === regularDescriptorPath) return 'regular';
+    if (descriptor?.relativePath === boldDescriptorPath) return 'bold';
+    return undefined;
+  };
+  const cacheRoles = cachePaint === undefined
+    ? [] as ('regular' | 'bold')[]
+    : [...new Set(commandList(cachePaint.plan).filter(command => command.kind === 'glyph-alpha-blit').map(glyphRoleFor).filter((role): role is 'regular' | 'bold' => role !== undefined))];
+  const cachePaintFor = (role: 'regular' | 'bold', tint: JsonRecord | undefined): Extract<X4UiPaintPlanResult, { readonly status: 'projected' | 'partial' }> | undefined => {
+    if (cachePaint === undefined || tint === undefined || !cacheRoles.includes(role)) return undefined;
+    return forgedResult(cachePaint, (_plan, layers) => {
+      const glyphCommands = layers[1]?.commands;
+      const retained = glyphCommands?.find(command => command.kind === 'glyph-alpha-blit' && glyphRoleFor(command) === role);
+      if (glyphCommands !== undefined) glyphCommands.splice(0, glyphCommands.length, ...(retained === undefined ? [] : [retained]));
+      let nextOrder = 0;
+      for (const command of layers.flatMap(layer => layer.commands)) {
+        command.order = nextOrder;
+        nextOrder += 1;
+        if (command.kind === 'glyph-alpha-blit') command.basePreviewTints = [JSON.parse(JSON.stringify(tint)) as JsonRecord];
+        else Reflect.deleteProperty(command, 'basePreviewTints');
+      }
+    });
+  };
+  const typedArraysEqual = (left: Uint8ClampedArray | undefined, right: Uint8ClampedArray | undefined): boolean => {
+    if (left === undefined || right === undefined || left.length !== right.length) return false;
+    for (let index = 0; index < left.length; index += 1) if (left[index] !== right[index]) return false;
+    return true;
+  };
+  const countIntrinsicTypedArraySets = (run: () => void, onSet?: () => void): number | undefined => {
+    let descriptorOwner: object | null = Uint8ClampedArray.prototype;
+    let descriptor: PropertyDescriptor | undefined;
+    while (descriptorOwner !== null && descriptor === undefined) {
+      descriptor = Object.getOwnPropertyDescriptor(descriptorOwner, 'set');
+      if (descriptor === undefined) descriptorOwner = Object.getPrototypeOf(descriptorOwner) as object | null;
+    }
+    const originalSet = descriptor?.value;
+    if (descriptorOwner === null || descriptor === undefined || typeof originalSet !== 'function') return undefined;
+    let calls = 0;
+    try {
+      Object.defineProperty(descriptorOwner, 'set', {
+        ...descriptor,
+        value: function (this: Uint8ClampedArray, source: ArrayLike<number>, offset?: number): void {
+          calls += 1;
+          onSet?.();
+          originalSet.call(this, source, offset);
+        },
+      });
+      run();
+      return calls;
+    } finally {
+      Object.defineProperty(descriptorOwner, 'set', descriptor);
+    }
+  };
+  const sessionShape = (session: X4UiCanvasRenderSession | undefined): boolean => {
+    if (session === undefined) return false;
+    try {
+      return Object.isFrozen(session)
+        && Object.getPrototypeOf(session) === null
+        && Reflect.ownKeys(session).length === 0;
+    } catch {
+      return false;
+    }
+  };
+  const cacheFixtureReady = sessionCreator !== undefined
+    && cachePaint !== undefined
+    && cacheTints.every((tint): tint is JsonRecord => tint !== undefined)
+    && cacheRoles.length === 2;
+  const authenticSession = cacheFixtureReady ? sessionCreator!() : undefined;
+  familyCheck('stage-b-causal', 'renderer session creator issues one authentic opaque token', sessionShape(authenticSession), {
+    creatorAvailable: sessionCreator !== undefined,
+    cacheFixtureReady,
+    ownKeys: authenticSession === undefined ? undefined : Reflect.ownKeys(authenticSession),
+  });
+
+  const authenticPaint = cachePaintFor('regular', cacheTints[0]);
+  const authenticFirstActivity = emptyActivityLedger();
+  const authenticSecondActivity = emptyActivityLedger();
+  const authenticFirstAtlasSurfaces: X4UiCanvasSurface[] = [];
+  const authenticSecondAtlasSurfaces: X4UiCanvasSurface[] = [];
+  let authenticFirstComposite: X4UiCanvasSurface | undefined;
+  let authenticSecondComposite: X4UiCanvasSurface | undefined;
+  const authenticFirstBytes: Uint8ClampedArray[] = [];
+  const authenticSecondBytes: Uint8ClampedArray[] = [];
+  let authenticFirstAttempt: RenderAttempt | undefined;
+  let authenticSecondAttempt: RenderAttempt | undefined;
+  let intrinsicGuardSetCalls = 0;
+  const authenticSetCalls = authenticSession === undefined || authenticPaint === undefined
+    ? undefined
+    : countIntrinsicTypedArraySets(() => {
+      authenticFirstAttempt = attemptRenderWithOptions(authenticPaint, corpus, {
+        session: authenticSession,
+        surfaceFactory: makeObservedFactory(authenticFirstActivity, {
+          afterFactorySurface: (role, surface) => {
+            if (role === 'regular-atlas') authenticFirstAtlasSurfaces.push(surface);
+            if (role === 'composite') authenticFirstComposite = surface;
+          },
+          contextHooks: role => role === 'regular-atlas' ? { captureImageData: data => authenticFirstBytes.push(data.slice()) } : {},
+        }),
+      });
+      authenticSecondAttempt = attemptRenderWithOptions(authenticPaint, corpus, {
+        session: authenticSession,
+        surfaceFactory: makeObservedFactory(authenticSecondActivity, {
+          afterFactorySurface: (role, surface) => {
+            if (role === 'regular-atlas') authenticSecondAtlasSurfaces.push(surface);
+            if (role === 'composite') authenticSecondComposite = surface;
+          },
+          contextHooks: role => role === 'regular-atlas' ? {
+            captureImageData: data => authenticSecondBytes.push(data.slice()),
+            decorateImageData: imageData => {
+              const data = imageData.data;
+              if (!(data instanceof Uint8ClampedArray)) return;
+              Object.defineProperty(data, 'set', {
+                configurable: true,
+                value: () => {
+                  intrinsicGuardSetCalls += 1;
+                  throw new Error('selftest expected intrinsic typed-array copy');
+                },
+              });
+            },
+          } : {},
+        }),
+      });
+    });
+  const authenticFirstResult = completedResult(authenticFirstAttempt);
+  const authenticSecondResult = completedResult(authenticSecondAttempt);
+  familyCheck(
+    'stage-b-causal',
+    'authentic session cache hit reuses detached RGBA bytes while allocating fresh atlas, ImageData, and composite surfaces',
+    authenticFirstResult?.status === 'rendered'
+      && authenticSecondResult?.status === 'rendered'
+      && authenticSetCalls === 1
+      && intrinsicGuardSetCalls === 0
+      && typedArraysEqual(authenticFirstBytes[0], authenticSecondBytes[0])
+      && authenticFirstBytes[0] !== authenticSecondBytes[0]
+      && authenticFirstResult.surface !== authenticSecondResult.surface
+      && authenticFirstAtlasSurfaces.length === 1
+      && authenticSecondAtlasSurfaces.length === 1
+      && authenticFirstAtlasSurfaces[0] !== authenticSecondAtlasSurfaces[0]
+      && authenticFirstComposite !== undefined
+      && authenticSecondComposite !== undefined
+      && authenticFirstComposite !== authenticSecondComposite
+      && traceSignature(authenticFirstActivity.paint) === traceSignature(authenticSecondActivity.paint),
+    {
+      creatorAvailable: sessionCreator !== undefined,
+      cacheFixtureReady,
+      first: receiptSummary(authenticFirstResult?.receipt),
+      second: receiptSummary(authenticSecondResult?.receipt),
+      intrinsicSetCalls: authenticSetCalls,
+      ownSetCalls: intrinsicGuardSetCalls,
+      firstBytes: authenticFirstBytes.length,
+      secondBytes: authenticSecondBytes.length,
+      firstActivity: activitySignature(authenticFirstActivity),
+      secondActivity: activitySignature(authenticSecondActivity),
+    },
+  );
+
+  const omittedFirstTrace: TraceEntry[] = [];
+  const omittedSecondTrace: TraceEntry[] = [];
+  const omittedPaint = cachePaintFor('regular', cacheTints[0]);
+  const omittedFirst = omittedPaint === undefined ? undefined : attemptRenderWithOptions(omittedPaint, corpus, { surfaceFactory: makeFactory(omittedFirstTrace) });
+  const omittedSecond = omittedPaint === undefined ? undefined : attemptRenderWithOptions(omittedPaint, corpus, { surfaceFactory: makeFactory(omittedSecondTrace) });
+  const omittedFirstResult = completedResult(omittedFirst);
+  const omittedSecondResult = completedResult(omittedSecond);
+  familyCheck(
+    'stage-b-causal',
+    'omitted renderer session preserves independent one-call staging semantics',
+    omittedFirst?.threw === false
+      && omittedSecond?.threw === false
+      && omittedFirstResult?.status === 'rendered'
+      && omittedSecondResult?.status === 'rendered'
+      && traceSignature(omittedFirstTrace) === traceSignature(omittedSecondTrace)
+      && omittedFirstResult.surface !== omittedSecondResult.surface,
+    {
+      first: receiptSummary(completedResult(omittedFirst)?.receipt),
+      second: receiptSummary(completedResult(omittedSecond)?.receipt),
+      traceEqual: traceSignature(omittedFirstTrace) === traceSignature(omittedSecondTrace),
+    },
+  );
+
+  const forgedSession = authenticSession === undefined ? {} : { ...(authenticSession as unknown as JsonRecord) };
+  let accessorSessionReads = 0;
+  const accessorSession: JsonRecord = {};
+  Object.defineProperty(accessorSession, 'cache', {
+    configurable: true,
+    enumerable: true,
+    get: () => {
+      accessorSessionReads += 1;
+      return authenticSession;
+    },
+  });
+  const malformedSession = { malformed: true };
+  const hostileSessions = [
+    { name: 'structural clone', value: forgedSession as unknown as X4UiCanvasRenderSession },
+    { name: 'accessor-bearing', value: accessorSession as unknown as X4UiCanvasRenderSession },
+    { name: 'malformed', value: malformedSession as unknown as X4UiCanvasRenderSession },
+  ];
+  const hostileSessionRows = hostileSessions.map(candidate => {
+    const activity = emptyActivityLedger();
+    const attempt = authenticPaint === undefined
+      ? undefined
+      : attemptRenderWithOptions(authenticPaint, corpus, { session: candidate.value, surfaceFactory: makeObservedFactory(activity) });
+    const result = completedResult(attempt);
+    return {
+      name: candidate.name,
+      attempt,
+      result,
+      activity,
+    };
+  });
+  familyCheck(
+    'pre-allocation',
+    'forged, malformed, and accessor-bearing sessions refuse before renderer allocation',
+    hostileSessionRows.length === 3
+      && hostileSessionRows.every(row => row.attempt?.threw === false
+        && row.result?.status === 'refused'
+        && row.result.receipt.refusal.code === 'invalid-input'
+        && refusalBoundaryIsComplete(row.result)
+        && activityIsZero(row.activity))
+      && accessorSessionReads === 0,
+    {
+      creatorAvailable: sessionCreator !== undefined,
+      rows: hostileSessionRows.map(row => ({ name: row.name, result: receiptSummary(row.result?.receipt), activity: activitySignature(row.activity) })),
+      accessorSessionReads,
+    },
+  );
+
+  const roleTintCases = [
+    { role: 'regular' as const, tint: 0 },
+    { role: 'regular' as const, tint: 1 },
+    { role: 'bold' as const, tint: 0 },
+    { role: 'bold' as const, tint: 1 },
+  ];
+  const roleTintSession = cacheFixtureReady ? sessionCreator!() : undefined;
+  const roleTintAttempts: RenderAttempt[] = [];
+  let roleTintRepeatRegular: RenderAttempt | undefined;
+  let roleTintRepeatBold: RenderAttempt | undefined;
+  const roleTintSetCalls = roleTintSession === undefined
+    ? undefined
+    : countIntrinsicTypedArraySets(() => {
+      for (const candidate of roleTintCases) {
+        const candidatePaint = cachePaintFor(candidate.role, cacheTints[candidate.tint]);
+        if (candidatePaint === undefined) continue;
+        roleTintAttempts.push(attemptRenderWithOptions(candidatePaint, corpus, { session: roleTintSession, surfaceFactory: makeFactory([]) }));
+      }
+      const repeatRegular = cachePaintFor('regular', cacheTints[0]);
+      const repeatBold = cachePaintFor('bold', cacheTints[0]);
+      if (repeatRegular !== undefined) roleTintRepeatRegular = attemptRenderWithOptions(repeatRegular, corpus, { session: roleTintSession, surfaceFactory: makeFactory([]) });
+      if (repeatBold !== undefined) roleTintRepeatBold = attemptRenderWithOptions(repeatBold, corpus, { session: roleTintSession, surfaceFactory: makeFactory([]) });
+    });
+  familyCheck(
+    'stage-b-causal',
+    'different role and drawable tint keys never alias within one authentic session',
+    roleTintAttempts.length === roleTintCases.length
+      && roleTintAttempts.every(attempt => attempt.threw === false && completedResult(attempt)?.status === 'rendered')
+      && roleTintRepeatRegular?.threw === false
+      && roleTintRepeatBold?.threw === false
+      && completedResult(roleTintRepeatRegular)?.status === 'rendered'
+      && completedResult(roleTintRepeatBold)?.status === 'rendered'
+      && roleTintSetCalls === 2,
+    {
+      cases: roleTintCases,
+      attempts: roleTintAttempts.map(attempt => receiptSummary(completedResult(attempt)?.receipt)),
+      repeats: [receiptSummary(completedResult(roleTintRepeatRegular)?.receipt), receiptSummary(completedResult(roleTintRepeatBold)?.receipt)],
+      intrinsicSetCalls: roleTintSetCalls,
+    },
+  );
+
+  const secondCorpusFixture = cacheFixtureReady ? acceptedPlan(await loadCanonicalFixture(false)) : undefined;
+  const secondCorpus = secondCorpusFixture?.corpus;
+  const corpusSession = secondCorpus === undefined ? undefined : sessionCreator!();
+  const corpusPaint = cachePaintFor('regular', cacheTints[0]);
+  let corpusFirst: RenderAttempt | undefined;
+  let corpusSecond: RenderAttempt | undefined;
+  let corpusThird: RenderAttempt | undefined;
+  const corpusSetCalls = corpusSession === undefined || corpusPaint === undefined
+    ? undefined
+    : countIntrinsicTypedArraySets(() => {
+      corpusFirst = attemptRenderWithOptions(corpusPaint, corpus, { session: corpusSession, surfaceFactory: makeFactory([]) });
+      corpusSecond = attemptRenderWithOptions(corpusPaint, secondCorpus!, { session: corpusSession, surfaceFactory: makeFactory([]) });
+      corpusThird = attemptRenderWithOptions(corpusPaint, secondCorpus!, { session: corpusSession, surfaceFactory: makeFactory([]) });
+    });
+  familyCheck(
+    'stage-b-causal',
+    'distinct loader-issued canonical corpus objects never share session cache bytes',
+    secondCorpus !== undefined
+      && secondCorpus !== corpus
+      && corpusFirst?.threw === false
+      && corpusSecond?.threw === false
+      && corpusThird?.threw === false
+      && completedResult(corpusFirst)?.status === 'rendered'
+      && completedResult(corpusSecond)?.status === 'rendered'
+      && completedResult(corpusThird)?.status === 'rendered'
+      && corpusSetCalls === 1,
+    {
+      distinctCorpus: secondCorpus !== undefined && secondCorpus !== corpus,
+      first: receiptSummary(completedResult(corpusFirst)?.receipt),
+      second: receiptSummary(completedResult(corpusSecond)?.receipt),
+      third: receiptSummary(completedResult(corpusThird)?.receipt),
+      intrinsicSetCalls: corpusSetCalls,
+    },
+  );
+
+  const lruKeys = [
+    ...(['regular', 'bold'] as const).flatMap(role => [0, 1, 2, 3].map(tint => ({ role, tint }))),
+  ];
+  const lruSession = cacheFixtureReady ? sessionCreator!() : undefined;
+  const lruFillAttempts: RenderAttempt[] = [];
+  const lruHitAttempts: RenderAttempt[] = [];
+  let lruNinth: RenderAttempt | undefined;
+  let lruEvicted: RenderAttempt | undefined;
+  let lruRetained: RenderAttempt | undefined;
+  const lruSetCalls = lruSession === undefined
+    ? undefined
+    : countIntrinsicTypedArraySets(() => {
+      for (const key of lruKeys) {
+        const candidatePaint = cachePaintFor(key.role, cacheTints[key.tint]);
+        if (candidatePaint !== undefined) lruFillAttempts.push(attemptRenderWithOptions(candidatePaint, corpus, { session: lruSession, surfaceFactory: makeFactory([]) }));
+      }
+      const promotedPaint = cachePaintFor(lruKeys[0]!.role, cacheTints[lruKeys[0]!.tint]);
+      if (promotedPaint !== undefined) lruHitAttempts.push(attemptRenderWithOptions(promotedPaint, corpus, { session: lruSession, surfaceFactory: makeFactory([]) }));
+      const ninthPaint = cachePaintFor('regular', cacheTints[4]);
+      const evictedPaint = cachePaintFor('regular', cacheTints[1]);
+      const retainedPaint = cachePaintFor('regular', cacheTints[0]);
+      if (ninthPaint !== undefined) lruNinth = attemptRenderWithOptions(ninthPaint, corpus, { session: lruSession, surfaceFactory: makeFactory([]) });
+      if (evictedPaint !== undefined) lruEvicted = attemptRenderWithOptions(evictedPaint, corpus, { session: lruSession, surfaceFactory: makeFactory([]) });
+      if (retainedPaint !== undefined) lruRetained = attemptRenderWithOptions(retainedPaint, corpus, { session: lruSession, surfaceFactory: makeFactory([]) });
+    });
+  familyCheck(
+    'stage-b-causal',
+    'session cache retains exactly eight role/tint entries with deterministic least-recently-used eviction',
+    lruFillAttempts.length === 8
+      && lruHitAttempts.length === 1
+      && lruFillAttempts.every(attempt => attempt.threw === false && completedResult(attempt)?.status === 'rendered')
+      && lruHitAttempts.every(attempt => attempt.threw === false && completedResult(attempt)?.status === 'rendered')
+      && lruNinth?.threw === false
+      && lruEvicted?.threw === false
+      && lruRetained?.threw === false
+      && completedResult(lruNinth)?.status === 'rendered'
+      && completedResult(lruEvicted)?.status === 'rendered'
+      && completedResult(lruRetained)?.status === 'rendered'
+      && lruSetCalls === 2,
+    {
+      fillCount: lruFillAttempts.length,
+      hitCount: lruHitAttempts.length,
+      ninth: receiptSummary(completedResult(lruNinth)?.receipt),
+      evicted: receiptSummary(completedResult(lruEvicted)?.receipt),
+      retained: receiptSummary(completedResult(lruRetained)?.receipt),
+      intrinsicSetCalls: lruSetCalls,
+    },
+  );
+
+  const failurePaint = cachePaintFor('regular', cacheTints[0]);
+  const failureKinds = [
+    {
+      name: 'allocation',
+      session: cacheFixtureReady ? sessionCreator!() : undefined,
+      failingFactory: () => makeFactory([], true, 'regular-atlas'),
+    },
+    {
+      name: 'image-data',
+      session: cacheFixtureReady ? sessionCreator!() : undefined,
+      failingFactory: () => makeFactory([], true, undefined, true),
+    },
+    {
+      name: 'put-image-data',
+      session: cacheFixtureReady ? sessionCreator!() : undefined,
+      failingFactory: () => makeFactory([], true, undefined, false, role => role === 'regular-atlas' ? { failPutImageData: true } : {}),
+    },
+  ];
+  const failureRows: Array<{ readonly name: string; readonly failed?: RenderAttempt; readonly recovered?: RenderAttempt }> = [];
+  const failureSetCalls = cacheFixtureReady && failurePaint !== undefined
+    ? countIntrinsicTypedArraySets(() => {
+      for (const candidate of failureKinds) {
+        const failed = candidate.session === undefined
+          ? undefined
+          : attemptRenderWithOptions(failurePaint, corpus, { session: candidate.session, surfaceFactory: candidate.failingFactory() });
+        const recovered = candidate.session === undefined
+          ? undefined
+          : attemptRenderWithOptions(failurePaint, corpus, { session: candidate.session, surfaceFactory: makeFactory([]) });
+        failureRows.push({ name: candidate.name, failed, recovered });
+      }
+    })
+    : undefined;
+  familyCheck(
+    'stage-b-causal',
+    'allocation, ImageData, and putImageData failures do not poison a later cache render',
+    failureRows.length === 3
+      && failureRows.every(row => {
+        const failedResult = completedResult(row.failed);
+        const recoveredResult = completedResult(row.recovered);
+        return row.failed?.threw === false
+          && failedResult?.status === 'refused'
+          && failedResult.receipt.refusal.code === 'allocation-failure'
+          && row.recovered?.threw === false
+          && recoveredResult?.status === 'rendered';
+      })
+      && failureSetCalls === 0,
+    {
+      rows: failureRows.map(row => ({ name: row.name, failed: receiptSummary(completedResult(row.failed)?.receipt), recovered: receiptSummary(completedResult(row.recovered)?.receipt) })),
+      failureSetCalls,
     },
   );
 

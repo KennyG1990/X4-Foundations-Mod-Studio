@@ -447,10 +447,20 @@ test('SourceEditor exports only the current mounted PNG evidence', async ({ page
   const canvas = canvasHost.locator('canvas');
   const sourceSelector = page.getByTestId('x4-ui-source-selector');
   const targetSelector = page.getByTestId('x4-ui-target-selector');
+  const scaleMode = page.getByTestId('x4-ui-profile-scale-mode');
+  const userScale = page.getByTestId('x4-ui-profile-user-scale');
+  const effectiveScale = page.getByTestId('x4-ui-profile-scale');
   const gameTruth = page.getByTestId('x4-ui-game-truth');
   await expect(exportButton).toBeDisabled();
   await expect(canvas).toHaveCount(0);
   await expect(gameTruth).toHaveText(/^Not verified in game$/);
+  await expect(scaleMode).toHaveValue('derived-from-x4-user-scale');
+  await expect(userScale).toHaveValue('1.05');
+  await expect(effectiveScale).toHaveValue('1.4');
+  await expect(effectiveScale).toBeDisabled();
+  await expect(page.getByTestId('x4-ui-profile-scale-derivation')).toContainText('drawable height');
+  await expect(page.getByTestId('x4-ui-profile-scale-derivation')).toContainText('1080');
+  await expect(page.getByTestId('x4-ui-profile-scale-derivation')).toContainText('Drawable width does not affect');
   await expect(page.getByTestId('x4-ui-corpus-status')).toHaveText(/^canonical$/i);
 
   const sourceOption = sourceSelector.locator('option').filter({ hasText: 'ui/x4-ui-source-editor-p7-e2e.lua' }).first();
@@ -473,7 +483,7 @@ test('SourceEditor exports only the current mounted PNG evidence', async ({ page
   await expect(page.getByTestId('x4-ui-canvas-export-source')).toContainText('ui/x4-ui-source-editor-p7-e2e.lua');
   await expect(page.getByTestId('x4-ui-canvas-export-target')).toContainText(targetLabel);
   await expect(page.getByTestId('x4-ui-canvas-export-profile')).toContainText('2560 × 1440');
-  await expect(page.getByTestId('x4-ui-canvas-export-profile')).toContainText('UI scale 1.4');
+  await expect(page.getByTestId('x4-ui-canvas-export-profile')).toContainText('Effective Helper scale 1.4');
   await expect(page.getByTestId('x4-ui-canvas-export-native-width')).toHaveText('2560');
   await expect(page.getByTestId('x4-ui-canvas-export-native-height')).toHaveText('1440');
   await expect(page.getByTestId('x4-ui-canvas-export-boundary')).toHaveText(/^Preview evidence only · Not verified in game$/);
@@ -489,7 +499,7 @@ test('SourceEditor exports only the current mounted PNG evidence', async ({ page
   const firstDownload = await firstDownloadPromise;
   await expect.poll(() => downloads.length).toBe(1);
   const firstFilename = firstDownload.suggestedFilename();
-  expect(firstFilename).toMatch(/^x4-ui-[A-Za-z0-9._-]+-[A-Za-z0-9._-]+-2560x1440-scale-1\.4\.png$/);
+  expect(firstFilename).toMatch(/^x4-ui-[A-Za-z0-9._-]+-[A-Za-z0-9._-]+-2560x1440-effective-scale-1\.4\.png$/);
   await expect(exportStatus).toHaveText(/exported one image\/png/);
   await expect(exportStatus).toContainText('Not verified in game');
   const sameMountedCanvasAfterExport = await page.evaluate(() => {
@@ -522,19 +532,15 @@ test('SourceEditor exports only the current mounted PNG evidence', async ({ page
   await expect(canvas).toHaveAttribute('height', '900');
   await expect(exportButton).toBeEnabled();
   await expect(page.getByTestId('x4-ui-canvas-export-profile')).toContainText('1800 × 900');
+  await expect(page.getByTestId('x4-ui-canvas-export-profile')).toContainText('Effective Helper scale 0.875');
   await expect(page.getByTestId('x4-ui-canvas-export-native-width')).toHaveText('1800');
   await expect(page.getByTestId('x4-ui-canvas-export-native-height')).toHaveText('900');
-  const replacedMountedCanvas = await page.evaluate(() => {
-    const host = document.querySelector('[data-testid="x4-ui-canvas-host"]');
-    const before = (window as unknown as { __x4UiExportCanvasBefore?: Element }).__x4UiExportCanvasBefore;
-    return host?.firstElementChild !== before;
-  });
-  expect(replacedMountedCanvas).toBe(true);
+  await expect(effectiveScale).toHaveValue('0.875');
   const secondDownloadPromise = page.waitForEvent('download');
   await exportButton.click();
   const secondDownload = await secondDownloadPromise;
   await expect.poll(() => downloads.length).toBe(2);
-  expect(secondDownload.suggestedFilename()).toMatch(/-1800x900-scale-1\.4\.png$/);
+  expect(secondDownload.suggestedFilename()).toMatch(/-1800x900-effective-scale-0\.875\.png$/);
   await expect(exportStatus).toHaveText(/exported one image\/png/);
 
   const downloadCountBeforeSerializationNegatives = downloads.length;
@@ -566,6 +572,184 @@ test('SourceEditor exports only the current mounted PNG evidence', async ({ page
   await serializationNegative('empty', /refused: native PNG serialization returned an empty or non-PNG blob/);
 
   await expect(gameTruth).toHaveText(/^Not verified in game$/);
+  expect(pageErrors).toEqual([]);
+  expect(consoleErrors).toEqual([]);
+});
+
+test('SourceEditor scale mode causally tracks drawable height and custom retention', async ({ page, request }) => {
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', message => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+  await page.addInitScript(() => {
+    localStorage.setItem('x4_forge_experience_mode', 'expert');
+    localStorage.removeItem('x4_mod_studio_workspace');
+    localStorage.removeItem('x4_mod_studio_version');
+  });
+  await page.route('**/api/agent/health-card**', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ verdict: 'ready', summary: 'E2E scale fixture ready.', rows: [] }),
+  }));
+  const referenceRoot = 'source-editor-p7-e2e-canonical-root';
+  const referenceGeneration = 'source-editor-p7-e2e-generation';
+  const referenceGeneratedAt = '2026-09-02T00:00:00.000Z';
+  await page.route('**/api/reference/status', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      available: true,
+      root: referenceRoot,
+      generatedAt: referenceGeneratedAt,
+      manifestGeneration: referenceGeneration,
+      manifest: {
+        available: true,
+        state: 'ready',
+        root: referenceRoot,
+        current: { generation: referenceGeneration, root: referenceRoot, generatedAt: referenceGeneratedAt },
+      },
+    }),
+  }));
+  await page.route('**/api/reference/manifest**', async route => {
+    const requestUrl = new URL(route.request().url());
+    const path = requestUrl.searchParams.get('q');
+    const fileBytes = path === null ? undefined : await (async () => {
+      const fileUrl = new URL('/api/reference/file', requestUrl.origin);
+      fileUrl.searchParams.set('path', path);
+      const fileResponse = await request.get(fileUrl.toString());
+      if (!fileResponse.ok()) throw new Error(`SourceEditor scale fixture file request failed: ${fileResponse.status()}`);
+      const fileBody = await fileResponse.body();
+      const contentLength = Number(fileResponse.headers()['content-length']);
+      return Number.isSafeInteger(contentLength) && contentLength >= 0 ? contentLength : fileBody.byteLength;
+    })();
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: {
+          available: true,
+          state: 'ready',
+          root: referenceRoot,
+          current: {
+            generation: referenceGeneration,
+            root: referenceRoot,
+            generatedAt: referenceGeneratedAt,
+          },
+        },
+        generation: referenceGeneration,
+        total: path === null ? 0 : 1,
+        limit: 500,
+        offset: 0,
+        files: path === null || fileBytes === undefined ? [] : [{ path, bytes: fileBytes }],
+      }),
+    });
+  });
+  await seedServerWorkspace(sourceEditorWorkspace);
+  await page.goto('/');
+  await expect(page.getByTestId('studio-workspace')).toBeVisible();
+
+  const uiDesigner = page.locator('[data-workspace-view="ui-designer"]');
+  await uiDesigner.click();
+  await expect(uiDesigner).toHaveAttribute('aria-current', 'page');
+  const editor = page.getByTestId('x4-ui-source-editor');
+  await expect(editor).toBeVisible();
+
+  const canvasHost = page.getByTestId('x4-ui-canvas-host');
+  const canvas = canvasHost.locator('canvas');
+  const sourceSelector = page.getByTestId('x4-ui-source-selector');
+  const targetSelector = page.getByTestId('x4-ui-target-selector');
+  const scaleMode = page.getByTestId('x4-ui-profile-scale-mode');
+  const userScale = page.getByTestId('x4-ui-profile-user-scale');
+  const effectiveScale = page.getByTestId('x4-ui-profile-scale');
+  const width = page.getByTestId('x4-ui-profile-width');
+  const height = page.getByTestId('x4-ui-profile-height');
+  const canvasStatus = page.getByTestId('x4-ui-canvas-status');
+  const gameTruth = page.getByTestId('x4-ui-game-truth');
+
+  await expect(scaleMode).toHaveValue('derived-from-x4-user-scale');
+  await expect(effectiveScale).toBeDisabled();
+  await width.fill('320');
+  await height.fill('360');
+  await userScale.fill('1.2');
+  await expect(width).toHaveValue('320');
+  await expect(height).toHaveValue('360');
+  await expect(userScale).toHaveValue('1.2');
+  await expect(effectiveScale).toHaveValue('0.4');
+  await expect(canvas).toHaveCount(0);
+
+  const sourceOption = sourceSelector.locator('option').filter({ hasText: 'ui/x4-ui-source-editor-p7-e2e.lua' }).first();
+  await expect(sourceOption).toHaveCount(1);
+  const sourceValue = await sourceOption.getAttribute('value');
+  if (sourceValue === null) throw new Error('SourceEditor scale fixture source option has no value');
+  await sourceSelector.selectOption(sourceValue);
+  const targetOption = targetSelector.locator('option').nth(1);
+  await expect(targetOption).toHaveCount(1);
+  const targetValue = await targetOption.getAttribute('value');
+  if (targetValue === null) throw new Error('SourceEditor scale fixture target option has no value');
+  await targetSelector.selectOption(targetValue);
+
+  const expectDerivedScale = async (drawableHeight: number, expected: string): Promise<void> => {
+    await expect(effectiveScale).toHaveValue(expected);
+    expect(Number(await effectiveScale.inputValue())).toBeCloseTo(
+      Number(await userScale.inputValue()) * drawableHeight / 1080,
+      6,
+    );
+    await expect(canvasStatus).toHaveText(/rendered\/current/);
+    await expect(gameTruth).toHaveText(/^Not verified in game$/);
+  };
+  const expectCurrentCanvas = async (): Promise<void> => {
+    await expect(canvasStatus).toHaveText(/rendered\/current/);
+    await expect(gameTruth).toHaveText(/^Not verified in game$/);
+  };
+
+  await expect(canvas).toHaveCount(1);
+  await expect(canvas).toHaveAttribute('width', '320');
+  await expect(canvas).toHaveAttribute('height', '360');
+  await expect(scaleMode).toHaveValue('derived-from-x4-user-scale');
+  await expectDerivedScale(360, '0.4');
+
+  await height.fill('540');
+  await expect(canvas).toHaveAttribute('width', '320');
+  await expect(canvas).toHaveAttribute('height', '540');
+  await expectDerivedScale(540, '0.6');
+
+  await width.fill('480');
+  await expect(canvas).toHaveAttribute('width', '480');
+  await expect(canvas).toHaveAttribute('height', '540');
+  await expect(effectiveScale).toHaveValue('0.6');
+  await expectCurrentCanvas();
+
+  await scaleMode.selectOption('custom-effective-helper-scale');
+  await expect(scaleMode).toHaveValue('custom-effective-helper-scale');
+  await expect(effectiveScale).toBeEnabled();
+  await expectCurrentCanvas();
+  await effectiveScale.fill('0.75');
+  await expect(effectiveScale).toHaveValue('0.75');
+  await expectCurrentCanvas();
+
+  await height.fill('360');
+  await expect(canvas).toHaveAttribute('width', '480');
+  await expect(canvas).toHaveAttribute('height', '360');
+  await expect(effectiveScale).toHaveValue('0.75');
+  await expect(userScale).toHaveValue('1.2');
+  await expectCurrentCanvas();
+
+  await width.fill('640');
+  await expect(canvas).toHaveAttribute('width', '640');
+  await expect(canvas).toHaveAttribute('height', '360');
+  await expect(effectiveScale).toHaveValue('0.75');
+  await expect(userScale).toHaveValue('1.2');
+  await expectCurrentCanvas();
+
+  await scaleMode.selectOption('derived-from-x4-user-scale');
+  await expect(scaleMode).toHaveValue('derived-from-x4-user-scale');
+  await expect(effectiveScale).toBeDisabled();
+  await expect(canvas).toHaveAttribute('width', '640');
+  await expect(canvas).toHaveAttribute('height', '360');
+  await expectDerivedScale(360, '0.4');
+  await expect(userScale).toHaveValue('1.2');
   expect(pageErrors).toEqual([]);
   expect(consoleErrors).toEqual([]);
 });

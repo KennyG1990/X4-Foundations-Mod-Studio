@@ -407,3 +407,192 @@ Status at plan time: `SPECIFIED`. No capability-map delta.
   lines 333-348; SHA-256 `6DF79A06976F26CC78EACECBE09F8FE5D17B2CAE43B44D7DC36F03AB2E5040DC`.
 - No capability-map delta: this corrects the profile interpretation and strengthens evidence for the existing B119
   layout/renderer capability; it does not promote universal parity or engine acceptance.
+
+### BOUNDED UNIT — SOURCE-FAITHFUL USER/EFFECTIVE SCALE CONTROLS (`SPECIFIED`)
+
+**PLAN**
+
+- **Bounded unit:** correct only the canonical Source Editor's scale controls while retaining normalized
+  `profile.uiScale` as the effective `Helper.uiScale` consumed by the existing Session, preview, layout, Scene, Paint,
+  canvas, verification, and export owners.
+- **Authoritative source:** configured X4 9.00 `helper.lua` lines 735 and 832-842; `targetsystem.lua` lines 945-950;
+  current profile owner `src/lib/x4UiEditorSession.ts`; current control/export owner
+  `src/components/X4UiSourceEditor.tsx`.
+- **In scope:** derived mode `effective = userScale * drawableHeight / 1080`; an explicit custom-effective fallback;
+  unambiguous user/effective labels and export filename/metadata; causal pure/component/E2E tests; permanent
+  `Not verified in game` state.
+- **Out of scope:** changing the normalized profile schema or kernel meaning, reading X4 settings automatically,
+  HUD scale, width-derived scaling, arbitrary C++ behavior, renderer expansion, game confirmation, release acceptance,
+  or OpenVSX publication.
+- **Compatibility:** the existing unverified default remains effective scale `1.4` at `2560x1440`; derived mode exposes
+  the corresponding user factor `1.05`. This preserves existing internal receipts without claiming that the default is
+  captured game truth. Changing user scale or drawable height recomputes the effective value; custom-effective mode
+  preserves its explicit effective value across height changes.
+- **Risk:** stale canvases or ambiguous evidence if user and effective values diverge. Rollback is the bounded source
+  commit; current pushed checkpoint `47ce998bea73fc2a0ecf3645663c00141b93b72b` is the recovery target.
+
+**ACCEPTANCE CONTRACT**
+
+1. Exact finite positive inputs derive `1 * 1353 / 1080 = 1.252777777777...`; reverse derivation recovers `1` within
+   floating-point tolerance. Zero, negative, non-finite, and malformed inputs fail closed without entering a profile.
+2. Derived mode is explicit, changing height reprojects with the current user factor, and changing width does not alter
+   effective scale. Custom-effective mode permits a positive effective value and does not silently recompute it.
+3. Existing downstream profile and verification receipts still carry one effective `uiScale`; no second renderer,
+   profile schema, persistence owner, backend route, or deploy authority is introduced.
+4. Export metadata says `Effective Helper scale`; the deterministic PNG filename identifies `effective-scale`; stale,
+   superseded, malformed, and serialization-negative behavior remains refusal-only.
+5. Focused Source Editor selftest, exact ESLint, TypeScript, and focused browser tests pass, including derived/custom
+   mode transitions and the unchanged permanent `Not verified in game` boundary.
+6. After package/install proof, installed Antigravity at `2544x1353 / user scale 1` exports a native bitmap whose
+   effective value is `1353/1080`; a fresh X4 comparison is required before this unit can close `VERIFIED`.
+
+**BASELINE / RECONCILE**
+
+- Baseline is `HEAD == origin/main == 47ce998bea73fc2a0ecf3645663c00141b93b72b`; the broad unrelated dirty tree is
+  preserved. Antigravity is open, X4 is absent, and the operator reported the machine quiet.
+- Graphify confirms `X4UiSourceEditor` owns the control boundary; exact search shows all downstream readers treat
+  `uiScale` as the effective multiplier. No ADR contradicts the correction. No capability-map delta is warranted until
+  runtime validation strengthens the existing B119 capability claim.
+
+**IMPLEMENT / VALIDATE CHECKPOINT — 2026-09-02**
+
+- One exact native `luna_executor` changed only `src/components/X4UiSourceEditor.tsx`, its selftest, and the focused
+  Source Editor E2E spec. The component now derives the effective scale without rounding, retains a custom-effective
+  mode, labels evidence unambiguously, and emits `effective-scale` PNG identity.
+- Deterministic evidence is green: Source Editor selftest exit `0`, whole-repository TypeScript exit `0`, exact
+  three-file ESLint exit `0`, and scoped `git diff --check` exit `0`.
+- `[REPRODUCED]` The required focused E2E remains red. Repeated one-minute attempts reached valid React state
+  (`profile.uiScale = 1.2`, derived effective control disabled as intended), then timed out while Playwright attempted
+  a subsequent ordinary profile input edit. Ports `3100/3101` stopped and no matching E2E process remained.
+- `[HYPOTHESIS]` Existing synchronous canvas work monopolizes the browser after several rapid high-cost profile
+  transitions. This is not evidence that the scale math or React state is wrong, but it is a real renderer-performance
+  risk and prevents this checkpoint from closing.
+
+**REVIEW CORRECTION — CAUSAL E2E BOUNDARY**
+
+- The new transition matrix was inserted into the existing export/serialization-negative scenario after a
+  `2560x1440` render. That couples scale semantics to accumulated renderer cost and obscures which contract failed.
+- Corrective unit: restore the prior proven export scenario's single width/height replacement while retaining the new
+  `Effective Helper scale` metadata and filename assertions. Add an independent scale-mode scenario that configures a
+  small positive drawable profile and user factor before selecting a source/target, then proves height dependency,
+  width independence, custom-effective retention, switch-back derivation, and permanent `Not verified in game`.
+- The correction may edit only `tests/e2e/x4-ui-source-editor.spec.ts`. It must not weaken export refusal assertions,
+  change production behavior, raise the timeout, skip rendering, or hide the repeated red evidence. Acceptance is the
+  complete focused Source Editor spec green under the normal 60-second test timeout, followed by exact lint and diff
+  hygiene. If the independent small-profile case still stalls, stop with `FAILED` and retain the renderer-performance
+  defect as the next production unit.
+
+**CAUSAL E2E RESULT — `FAILED`**
+
+- The independent test-only split ran the complete focused spec once: `1 passed / 2 failed`, exit `1`. Exact test-file
+  ESLint and diff hygiene passed; ports `3100/3101` and matching E2E processes were absent afterward.
+- The restored export case exposed one stale expected value: derived mode correctly changed effective scale to `0.875`
+  after height changed from `1440` to `900`, while the test still expected the former fixed `1.4` filename.
+- The independent `320x360` scale case still timed out on the final custom-to-derived transition. Small composite
+  dimensions therefore do not remove the repeated-render stall; test structure alone is not the production fix.
+
+### BOUNDED UNIT — RENDERER-OWNED ZEKTON ATLAS BYTE CACHE (`SPECIFIED`)
+
+**PLAN / RECONCILE**
+
+- **Observed cost:** the configured canonical regular and bold Zekton atlases are each `1024x2048`, or `2,097,152`
+  A8 bytes. `renderX4UiPaintPlanToCanvas()` currently calls `stageAtlas()` on every render; every distinct role/tint
+  expands those invariant bytes into a new `8,388,608`-byte RGBA image with a JavaScript per-pixel SDF/tint loop.
+  Profile width, height, and effective-scale edits change destinations and the composite, not canonical atlas bytes or
+  accepted tint identities.
+- **Existing owner reused:** `x4UiCanvasRenderer.ts` already owns detached A8 snapshots, exact tint keys, per-render
+  identical-tint reuse, allocation/refusal policy, and post-callback mutation checks. No parallel renderer, worker,
+  backend route, browser-font path, or caller-owned surface is needed.
+- **Bounded change:** add an opt-in opaque renderer session whose private, bounded cache retains detached RGBA byte
+  expansions by loader-issued canonical corpus object plus exact role/tint key. Every render still allocates a fresh
+  atlas surface and composite; a hit copies private bytes into fresh `ImageData` with the intrinsic typed-array copy,
+  then executes the existing `putImageData`/draw path. The Source Editor owns one session for its mounted lifetime.
+- **Bound:** retain at most eight role/tint byte entries per corpus/session with deterministic least-recently-used
+  eviction. At `1024x2048`, the upper bound is 64 MiB per live Source Editor session before ordinary transient surfaces;
+  unmounting or losing the canonical corpus key makes the private cache collectible.
+- **Non-goals:** no cross-process or persistent cache, no cached Canvas surface, no change to SDF/tint math, no change
+  to Paint/Scene/layout receipts, no timeout increase, no asynchronous/worker renderer redesign, and no claim of X4
+  runtime parity or frame acceptance.
+- **Rollback:** targeted revert of the renderer session/cache, Source Editor wiring, and causal tests; recovery remains
+  pushed commit `47ce998bea73fc2a0ecf3645663c00141b93b72b` plus the uncommitted scale-control checkpoint.
+
+**ACCEPTANCE CONTRACT**
+
+1. Tests first produce a causal red for two renders in one authentic session: identical canonical corpus plus exact
+   role/tint must reuse private RGBA bytes, while every call still allocates fresh renderer-owned surfaces/composite.
+2. Omitted sessions preserve existing one-call semantics. Forged/malformed sessions refuse before allocation. Different
+   corpus objects and role/tint keys never alias. Failed allocation/image-data/put paths do not poison a later render.
+3. LRU capacity is exactly eight entries and eviction is deterministic; no cache byte array or atlas surface is exposed
+   to callers. Existing raw DDS immutability, tint-domain, clipping, mutation, and permanent truth-boundary tests remain
+   green.
+4. The Source Editor uses one opaque session without changing normalized profile, canvas commit, export identity, or
+   external custom-surface behavior. SSR/selftests retain the `Not verified in game` state.
+5. The export test expects derived effective scale `0.875` after `1800x900`; the independent scale test remains causal.
+   The complete focused Source Editor spec must pass `3/3` under the existing 60-second per-test timeout.
+6. Focused Canvas and Source Editor selftests, TypeScript, exact-file ESLint, diff hygiene, graph refresh, full precommit,
+   build/package/install, installed-host transitions, and fresh X4 comparison all pass before promotion.
+
+**CACHE VALIDATION CHECKPOINT — `PARTIAL`**
+
+- Tests-first produced the exact missing-export red for `createX4UiCanvasRenderSession`. The diagnostic-free implementation
+  then passed Canvas `140/140`, the complete Source Editor selftest matrix, whole-repository TypeScript, exact five-file
+  ESLint, and scoped diff hygiene.
+- The complete focused browser spec remained red at `2 passed / 1 failed`. The scale scenario reached the custom
+  `640x360` state but exceeded the unchanged 60-second test timeout before its remaining assertions completed. Harness
+  teardown removed the ephemeral stack; ports `3100/3101` and matching E2E processes were absent.
+- `[REPRODUCED]` The full fixture uses exactly one atlas cache key, `regular|255|255|255|1`: the first render misses and
+  every subsequent render hits with cache size one. Renderer calls measured approximately `0.45-0.57 s`; there is no
+  eight-entry LRU churn.
+- `[REPRODUCED]` `projectX4UiEditorSession()` measured approximately `1.4-1.6 s` per invocation in the browser fixture
+  and executes twice per Source Editor state update. Inspection shows that each invocation always calls the complete
+  preview pipeline once for sample-catalog derivation and again for the final preview, even when reconciliation yields
+  no sample values. The remaining failure is cumulative projection/browser scheduling cost, not the atlas cache.
+
+### BOUNDED UNIT — SAMPLELESS SESSION PREVIEW REUSE (`SPECIFIED`)
+
+**PLAN / RECONCILE**
+
+- **Existing owner reused:** `projectX4UiEditorSession()` in `src/lib/x4UiEditorSession.ts` already owns both the
+  catalog-preview and final-preview calls. No Source Editor cache, second session owner, worker, persistence layer, or
+  weakened browser assertion is needed for the first correction.
+- **Bounded change:** when sample reconciliation produces `samples === undefined`, reuse the already accepted
+  `catalogPreview` as the final preview instead of invoking the identical preview pipeline again. When accepted sample
+  values exist, retain the second projection exactly as today.
+- **Non-goals:** no memoization across calls, no mutation or identity contract added to public receipts, no change to
+  source/target reconciliation, normalized profiles, sample bindings/authorities, Paint/Scene/layout semantics, cache
+  capacity, browser timeout, or permanent `Not verified in game` state.
+- **Rollback:** targeted revert of this conditional preview reuse and its tests; the renderer cache remains independently
+  removable through the prior bounded unit.
+
+**ACCEPTANCE CONTRACT**
+
+1. Fail-first evidence remains the diagnostic-free focused browser result `2/3` with the scale scenario timing out.
+2. Existing sampled, stale-sample, refused-sample, no-selection, malformed, keep-out, source-authority, and paint/session
+   selftests remain green; a new causal row proves sampleless output is value-equivalent while accepted samples still
+   take the sampled projection path.
+3. No public receipt or truth field changes, and no timeout, retry, fixture, or assertion is weakened.
+4. Session, Source Editor, Canvas, TypeScript, exact-file ESLint, and diff hygiene pass before one serial run of the
+   complete focused Source Editor spec. Acceptance requires `3/3` under the existing 60-second timeout plus clean
+   ephemeral teardown.
+5. If this bounded reuse is insufficient, stop and reconcile the Source Editor's separate provisional-selection
+   projection as a new unit rather than silently broadening this one.
+
+**IMPLEMENT / VALIDATE RESULT — `PARTIAL`**
+
+- The bounded production delta is one branch in `projectX4UiEditorSession()`: reconciled `samples === undefined` reuses
+  `catalogPreview`; accepted samples retain the existing second `previewFor(...)` path. No public shape, cross-call
+  memoization, mutable state, timeout, fixture, assertion, or truth field changed.
+- The new session causal row is green. Parent reruns pass Session `8/8`, Canvas `140/140`, the complete Source Editor
+  selftest including P7 `12/12`, whole-repository TypeScript, exact seven-file ESLint, and scoped diff hygiene.
+- The first complete post-change focused E2E run produced valid passes for scenario 1 (`9.9 s`) and scenario 2
+  (`42.1 s`), then Windows terminated the child with `0xC0000409` before scenario 3 emitted a result. The structured
+  report was incomplete and therefore red; `treeGone=true`. The exact unchanged scale scenario then passed `1/1` in
+  `53.6 s` with a complete structured PASS and clean teardown. A parent replay of scenario 1 hit the same Windows child
+  termination before any result, so it adds no product verdict and was not retried blindly.
+- Graphify refreshed and resolves the changed session owner. Complete `npm run precommit:check` exits `0`: tripwires,
+  canon mirrors, E2E verdict `55/55`, Vite lifecycle, product copy, durable writers `15/15 + 8/8`, capability contract
+  `12 / 297 / 1 / 11`, MCP capabilities, action receipts `82` routes / `57` surfaces, TypeScript, and final `OK`.
+- **Review:** all three unchanged scenarios have positive evidence in this checkpoint, and the original scale timeout is
+  repaired. The bounded unit remains formally `PARTIAL` because the declared single complete `3/3` receipt is absent;
+  the remaining red is the known Windows E2E child-lifecycle owner, not evidence of a Source Editor assertion failure.
+  Installed-host and X4 validation may proceed, but release acceptance and OpenVSX remain blocked.
