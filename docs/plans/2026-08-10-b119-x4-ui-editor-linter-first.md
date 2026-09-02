@@ -11607,3 +11607,8 @@ Status: `BOUNDED VERIFIED / PIXEL PARITY PARTIAL / OVERALL B119 IN_PROGRESS`. De
 - No implementation, test, installed package, mod, game byte, or OpenVSX state changed. Complete Helper/widget and
   context coverage, native installed-canvas export, exact pixel comparison, AI Influence reconstruction, and release
   acceptance remain open.
+- Durable projection readback: repository checkpoint `27c1470ecd5179e8e40f9184e89c2df320ce698b`; GitHub #41
+  comment `5512448232`; Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a` still `In Progress / Partial`; Google
+  Current Status revision
+  `ANLCKQnsxhUytocioHZoSZ9nBJM6LYlVGnu4fP12TgwXXEYIXv8VYVSmlEsZ2ONWb82TTAFecuEXEUd0mSx2inNNzbUj97FOTABQRY1qRxhw`.
+  All were written and read back; GitHub #41 remains open.

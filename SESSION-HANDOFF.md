@@ -11,8 +11,9 @@ Status: `IN_PROGRESS / PARTIAL`; same-source/same-profile pipeline and proportio
   exact four-file UI-only mod, and accepted by X4 9.00 at the same `2544x1353 / UI scale 1` profile.
 - Eyeball queue: native installed-canvas export and exact pixel/font comparison; then the supplied AI Influence screen
   reconstruction and measured conversation keep-outs. Complete Helper/widget coverage and release acceptance remain.
-- Commit question: implementation checkpoint `bc686eb47cad5dc42243dedf482f85b57bfcc5c7` and prior record checkpoint
-  `0cff4627a87cb754cea50440a7f8eefd98c2dea0` are pushed. Commit this continuation with explicit path staging only.
+- Commit question: implementation checkpoint `bc686eb47cad5dc42243dedf482f85b57bfcc5c7` and same-profile record
+  checkpoint `27c1470ecd5179e8e40f9184e89c2df320ce698b` are pushed with direct-remote parity. External owners are read back;
+  commit this final receipt sync with explicit path staging only.
 
 ## What is proven
 
@@ -62,22 +63,23 @@ Status: `IN_PROGRESS / PARTIAL`; same-source/same-profile pipeline and proportio
 
 ## Durable projections
 
-- GitHub #41 is open; latest prior comment is `5510457342`.
-- Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a` remains `In Progress / Partial`.
-- Google Current Status doc `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, prior revision is
-  `ANLCKQnNd6iVCfBusgAjOMlguoEO653tWFSs8Q3fX6V7orjHuejYVMNMMkDikxHbKrmiDnRYQryRXfi6PjNVXbETgO6-UZDapHeYBUSN6Rsh`.
-- Update all three after this continuation's commit, then replace these prior IDs with exact readback receipts.
+- GitHub #41 remains open. Comment `5512448232` was written and read back exactly:
+  `https://github.com/KennyG1990/X4_Forge/issues/41#issuecomment-5512448232`.
+- Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a` was updated in place and read back with
+  `Status=In Progress`, `Evidence Grade=Partial`, commit `27c1470`, and GitHub comment `5512448232`.
+- Google Current Status doc `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, was protected-read,
+  revision-guarded, and read back at
+  `ANLCKQnsxhUytocioHZoSZ9nBJM6LYlVGnu4fP12TgwXXEYIXv8VYVSmlEsZ2ONWb82TTAFecuEXEUd0mSx2inNNzbUj97FOTABQRY1qRxhw`.
+  The marker is one `HEADING_2` followed by eight `NORMAL_TEXT` paragraphs; commit and GitHub IDs are present.
 - UI quick-reference card 24 records the unsupported-client lesson; project AAR records the non-clean reconciliation.
 - No capability-map delta: this strengthens existing B119 evidence without promoting a new capability.
 
 ## Exact continuation
 
-1. Run complete `npm run precommit:check` on the documented tree.
-2. Stage only `BACKLOG.md`, `SESSION-HANDOFF.md`, and the two B119 plan files; commit and push; prove
-   `HEAD == origin/main == direct remote`.
-3. Update and read back GitHub #41, Notion, and Google Drive against the exact commit.
-4. Refresh this handoff with the new external receipts and make one final explicit-path documentation commit/push.
-5. Resume the product with native installed-canvas export and exact bitmap/font parity. Keep overall B119 `PARTIAL`.
+1. Commit and push this final receipt sync with explicit paths; prove `HEAD == origin/main == direct remote`.
+2. Resume the product with native installed-canvas export and exact bitmap/font parity.
+3. Then reconstruct the supplied AI Influence screen against inspected reference images and measured keep-outs.
+4. Keep overall B119 `PARTIAL` until complete Helper/widget coverage and release acceptance pass; do not publish OpenVSX.
 
 ## Preservation boundary
 

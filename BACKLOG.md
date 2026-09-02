@@ -1768,6 +1768,10 @@ The parent close rerun independently passed integration `21/21`, Source Editor P
 mounted E2E `1/1`. No E2E listener remains; inert `%TEMP%\\x4forge-e2e-state-27916` was retained after exact cleanup
 was rejected by host policy. No implementation, installed extension, mod, game, or release byte changed.
 
+Durable sync is read back: repository checkpoint `27c1470ecd5179e8e40f9184e89c2df320ce698b`; open GitHub #41
+comment `5512448232`; Notion owner still `In Progress / Partial`; Google Current Status revision
+`ANLCKQnsxhUytocioHZoSZ9nBJM6LYlVGnu4fP12TgwXXEYIXv8VYVSmlEsZ2ONWb82TTAFecuEXEUd0mSx2inNNzbUj97FOTABQRY1qRxhw`.
+
 ### B115 · Forge Capability Convergence `in_progress` (P0, PRIORITY OVERRIDE)
 
 Ken explicitly promoted GitHub initiative #9 and child requests #10–#21 above the active R13 close on 2026-07-31.

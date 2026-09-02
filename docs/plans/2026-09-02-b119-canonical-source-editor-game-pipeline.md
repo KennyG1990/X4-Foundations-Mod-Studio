@@ -247,3 +247,19 @@ Status: `BOUNDED VERIFIED / OVERALL B119 IN_PROGRESS / PARTIAL`
   record both surfaces separately.
 - **Highest-risk evidenced weakness:** a convincing automation surface can diverge from the supported host. Patching to
   that surface would create an uncaused repair. Reproduce in the installed host or a portable causal test first.
+
+### DURABLE PROJECTION READBACK
+
+- Repository checkpoint `27c1470ecd5179e8e40f9184e89c2df320ce698b` passed complete precommit directly and in
+  the commit hook, was pushed, and matched local `HEAD`, `origin/main`, and direct remote `main` exactly.
+- GitHub #41 remains open; comment `5512448232` was written and read back with the bounded verified/overall partial
+  boundary intact.
+- Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a` was updated in place and read back as
+  `Status=In Progress / Evidence Grade=Partial`, with the exact commit and GitHub comment present.
+- Google Current Status document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, was updated under an
+  exact revision guard and read back at revision
+  `ANLCKQnsxhUytocioHZoSZ9nBJM6LYlVGnu4fP12TgwXXEYIXv8VYVSmlEsZ2ONWb82TTAFecuEXEUd0mSx2inNNzbUj97FOTABQRY1qRxhw`.
+  Its new marker is exactly one `HEADING_2` followed by eight `NORMAL_TEXT` paragraphs.
+- The first Docs append inserted before the previous terminal period, leaving the old paragraph unpunctuated and the
+  new final paragraph double-punctuated. A second revision-guarded delete/insert repaired both; final readback is clean.
+  This formatting retry is an AAR trigger, not a product failure.
