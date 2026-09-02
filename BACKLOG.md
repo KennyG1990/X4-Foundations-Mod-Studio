@@ -250,6 +250,26 @@ parity. GitHub #41 comment `5507614879`, Notion page `3b84618e-d15b-8190-821e-c0
 `AIroW34DU6xn-NC50YIedCZy5EIcoGLThl-pxkEMaLd-UwQAXpF1mRISy9ICP58Fblsq2movES5ILGuMoSoq27rjQpAEc7SxbpN8e4Amy_qa`
 were written and read back. All remain `PARTIAL / Not verified in game` and identify the superseding candidate as
 unmounted; the issue remains open.
+**Canonical Source Editor + live UI-only pipeline checkpoint 2026-09-02 — BOUNDED VERIFIED / FULL B119 PARTIAL:**
+installed Antigravity `0.0.70` now serves reviewed frontend SHA-256
+`AA930AAE011DA57B185FB570857EEEC8902FAFAD116C1F6EE773663762482BD2`. The exact
+`ui/pipeline_test.lua -> menu.createFrame` target is source-owned, editable, and shippable with 36 canonical entries;
+no-corpus and forged raw/enriched/issued provenance remain locked. `OpenMenu` and `RemoveScript` are recognized X4
+globals, while only parser-derived numeric-expression omission and exact shipped
+`Helper.headerRowCenteredProperties` enrichment may reconcile. Forge previews at `1280x720 / scale 1` and
+`2560x1440 / scale 1.4` retain `Not verified in game`. Exact dry-run/apply deployed the four-file UI-only mod with
+workspace/staging/game hashes equal. X4 9.00 rendered the same 5,488-byte Lua at configured windowed `2544x1353`;
+both buttons responded, native edit-box input worked, standard close removed the panel, and X4 exited cleanly. Scoped
+fixture errors and view-setup failures are zero; the watcher remains `not_seen` because the silent fixture has no boot
+marker. Focused suites, `134/134` oracles, build, two exact E2E shards `52/52 + 52/52`, and complete precommit pass;
+the unsharded Windows `0xC0000409` receipt stays red. Source commit
+`bc686eb47cad5dc42243dedf482f85b57bfcc5c7` is pushed with exact local/tracking/direct-remote parity. Record:
+`docs/plans/2026-09-02-b119-canonical-source-editor-game-pipeline.md`. GitHub #41 comment `5510457342`, Notion owner
+`3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Drive revision
+`ANLCKQnNd6iVCfBusgAjOMlguoEO653tWFSs8Q3fX6V7orjHuejYVMNMMkDikxHbKrmiDnRYQryRXfi6PjNVXbETgO6-UZDapHeYBUSN6Rsh`
+were written and read back; Graphify completed at `10,122 / 25,488 / 312`. Exact same-profile pixel parity, complete
+Helper/widget and keep-out coverage, AI Influence reconstruction, release acceptance, and OpenVSX remain open, so
+B119 and GitHub #41 stay `in_progress / PARTIAL`.
 **AI Influence `1b` visual reconciliation 2026-08-19 — REPRODUCED GUIDE CONFLICT:** The source pixels were re-opened
 and immutable hashes/dimensions are frozen in the plan. Forge's existing cockpit preset projects the measured guides to
 `y=1134.72`, `y=1065.6`, and `x=1699.84` at `2560x1440`; the supplied `1b` choice/input geometry intersects all three.

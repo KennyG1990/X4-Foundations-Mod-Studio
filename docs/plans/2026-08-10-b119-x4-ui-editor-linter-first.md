@@ -11550,3 +11550,33 @@ Task record: `docs/plans/2026-08-28-b119-exact-deploy-confirmation-second-profil
 - Highest-risk weakness: a persisted human confirmation becomes a convincing liar when source, target, deploy, or
   display identity drifts. The pure classifier refuses each known drift and the second-profile experience gate is now
   closed; live target-tree recomputation remains open.
+
+## 2026-09-02 — Canonical Source Editor and Live Game Pipeline Checkpoint
+
+Status: `BOUNDED VERIFIED / OVERALL B119 IN_PROGRESS / PARTIAL`. Full task record:
+`docs/plans/2026-09-02-b119-canonical-source-editor-game-pipeline.md`.
+
+- The installed Antigravity `0.0.70` host now serves the reviewed browser asset
+  `AA930AAE011DA57B185FB570857EEEC8902FAFAD116C1F6EE773663762482BD2`. The Source Editor binds exact
+  `ui/pipeline_test.lua -> menu.createFrame`, exposes 36 canonical editable entries, and keeps no-corpus plus forged
+  raw/enriched/issued provenance locked.
+- `OpenMenu` and `RemoveScript` are now recognized as X4 engine globals. Canonical parser-derived numeric-expression
+  omission and exact shipped `Helper.headerRowCenteredProperties` enrichment no longer create a false provenance lock;
+  source identity/order/ranges, Helper identity, metadata, binding, and issuance remain exact.
+- Mounted Forge preview is visibly accepted at `1280x720 / scale 1` and `2560x1440 / scale 1.4`, with permanent
+  `Not verified in game`. Forge dry-run/apply deployed only the exact four-file UI-only package; workspace, staging
+  content, and game target hashes agree.
+- X4 9.00 rendered the same source at configured windowed `2544x1353`; both buttons responded, the edit box accepted a
+  native key, standard close removed the panel, and X4 exited cleanly. The scoped log has zero owned fixture errors and
+  zero frame/view setup failure. The watcher remains honestly `not_seen` because this silent fixture has no positive
+  boot marker.
+- Focused linter/source/preview/integration, TypeScript, lint, `134/134` oracles, build, installed-byte checks, two exact
+  `52/52` E2E shards, and complete precommit pass. The single unsharded Windows run retains incomplete
+  `0xC0000409` evidence and is not relabeled green.
+- Source commit `bc686eb47cad5dc42243dedf482f85b57bfcc5c7` is pushed with exact local/tracking/direct-remote parity.
+  Pixel equality at one identical Forge/X4 profile, complete Helper/widget coverage, keep-out/game-context coverage,
+  AI Influence reconstruction, release acceptance, and OpenVSX remain open.
+- GitHub #41 comment `5510457342`, Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Google Current Status
+  revision `ANLCKQnNd6iVCfBusgAjOMlguoEO653tWFSs8Q3fX6V7orjHuejYVMNMMkDikxHbKrmiDnRYQryRXfi6PjNVXbETgO6-UZDapHeYBUSN6Rsh`
+  were written and read back with the issue open and B119 `IN_PROGRESS / PARTIAL`. The commit-hook Graphify refresh
+  completed at `10,122` nodes / `25,488` edges / `312` communities with no lingering process.
