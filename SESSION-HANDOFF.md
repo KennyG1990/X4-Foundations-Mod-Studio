@@ -9,7 +9,7 @@ Status: `IN_PROGRESS / PARTIAL / Not verified in game`
 - Project: X4 Forge B119, the linter-first source-faithful X4 Lua UI editor. GitHub owner: #41.
 - Current bounded milestone: the reviewed 0.0.70 package is installed and mounted; registered Lua materialization is repaired and verified on a fresh read-only real-mod import. Three-menu Forge/X4 parity is not verified.
 - Eyeball queue: none requires the sleeping operator now. Later experience gates are (1) compare Forge and X4 at 2544x1353, (2) compare at 1920x1080, and (3) inspect AI Influence screen 1b with measured keep-outs. Each must retain exact deployed hashes and `Not verified in game` until the live X4 check.
-- Commit question: current B119 implementation is still based on HEAD `bd38ec6ca52fedc0db9e98be8e27be5c07b00b47` and is uncommitted. Commit the explicit B119/tooling paths after the recorded precommit proof; preserve all unrelated dirt.
+- Commit question: source checkpoint `71828d9c99383dea5da89b5c56d15575839f4f88` is committed and pushed with local, tracking, and direct-remote parity. The only remaining uncommitted B119 work is this record-close delta; preserve all unrelated dirt and stage only the three named record files.
 
 ## Installed host and package authority
 
@@ -83,6 +83,7 @@ Preserve all other tracked and untracked paths, especially Discord/data removals
 
 ## External records
 
-- GitHub #41, Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Drive Doc `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE` remain open/partial. Last pre-install projection: GitHub comment `5490501378`; Drive revision `ANLCKQlnw-0h1u2Pv_Hony7A8gbnTUV9UxLzUKvdJ7RWeVbBgxaFeeIfYE4OISquE74UGWKb9XJ5QQ78828MdNiK3rWSpt99DwgMzixkAvC_`.
+- GitHub #41, Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Drive Doc `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE` remain open/partial. Installed source-materialization projection readback: GitHub comment `5503331754`; Notion current section `B119 installed source-materialization checkpoint`; Drive revision `AIroW36RDRS6r8agSVm85k-cm_eTPmdWhnXT6l_qtFAUYt9t74oSmZ7bk2Z0tRsKaWgzrp1cnxcphhEmJHu-IFWzHmV9oAqsNqq6wvHSBiAW`.
+- Drive's required trusted read completed with no protected controls and one preserved native date element. Immutable manifest: `C:\Users\Moshi\.codex\visualizations\2026\08\10\019fea10-33af-7f32-8175-424ddfebda4e\b119-drive-trusted-read-20260901-r1\manifest.json`; the final readback found the new `HEADING_2`, exact source hash/status text, one GitHub checkpoint link, and two Notion-owner link occurrences.
 - UI-modding KB: `F:\StarForge\wiki\x4-modding-methods\07 UI (Lua widgets, menus, overlays)\ui-modding-gotchas-quick-reference.md`, now 18 concise cards. Card 18 records the registered-Lua materialization failure shield.
-- Update GitHub/Notion/Drive only after the source commit IDs exist; all projections must retain `PARTIAL / Not verified in game` and the HUB/COMM zero-visible-output boundary.
+- External projection is complete for source checkpoint `71828d9`; all three records retain `PARTIAL / Not verified in game` and the HUB/COMM zero-visible-output boundary.

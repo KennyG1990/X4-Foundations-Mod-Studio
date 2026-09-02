@@ -217,6 +217,12 @@ census passes `176/176`, but it exposes the remaining fidelity gap: MENU produce
 HUB and COMM produce zero widgets and zero texts. This is installed pipeline and source-round-trip progress, not
 three-menu pixel parity or game proof. Next is a causal visible-operation gap receipt and one shipped-source port;
 OpenVSX, AI Influence reconstruction, keep-outs, and final X4 comparison remain open.
+The exact source checkpoint is committed and pushed at `71828d9c99383dea5da89b5c56d15575839f4f88`; local HEAD,
+`origin/main`, and direct remote `main` matched at readback. The partial projection is synchronized and read back at
+GitHub #41 comment `5503331754`, the existing Notion owner page's installed source-materialization section, and Drive
+tab `t.0` revision `AIroW36RDRS6r8agSVm85k-cm_eTPmdWhnXT6l_qtFAUYt9t74oSmZ7bk2Z0tRsKaWgzrp1cnxcphhEmJHu-IFWzHmV9oAqsNqq6wvHSBiAW`.
+Drive's file-backed trusted read found no protected controls; the current heading/status/hash and native GitHub/Notion
+links were re-read after the revision-guarded update. No OpenVSX, game, mod, canvas, or release state changed.
 B119 remains `in_progress / PARTIAL / Not verified in game`.
 **AI Influence `1b` visual reconciliation 2026-08-19 — REPRODUCED GUIDE CONFLICT:** The source pixels were re-opened
 and immutable hashes/dimensions are frozen in the plan. Forge's existing cockpit preset projects the measured guides to
