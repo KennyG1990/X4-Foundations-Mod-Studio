@@ -22,14 +22,18 @@ bundle. All twelve reference images (`00` plus `1a`-`1j`) must be visually inspe
 the real X4 Lua rather than porting the HTML/CSS prototype. Build recommended screen `1b` first, then the remaining
 comm-link, confirmation-gate, and hub screens. Compare Forge output to the 2560x1440 references, preserve the measured
 conversation-wheel/NPC keep-outs, and require deployed X4 screenshots before any 1:1 claim.
-**Original-brief audit 2026-09-03 — 3/6 VERIFIED / 3/6 PARTIAL:** exact hand-written Lua round-trip, all eleven
-linter trap families including pre-export `addTable(24)` rejection, and deploy-bound `Not verified in game` state are
-`VERIFIED`. Three complete-menu column/row/wrap/truncation comparisons, a fixed-drawable X4 user-scale option
-comparison, and actual projected geometry for all four toggleable keep-out contexts remain `PARTIAL`. Current focused
-receipts are CallModel `93/93`, SourceEdits base `90/90` plus all retained causal matrices, KeepOuts `17/17`, PaintPlan
-`180/180`, and passing SourceBundle, EditorSession, SourceEditor/UIBuilder, and GameVerification. Full matrix and AAR:
-`docs/plans/2026-08-10-b119-x4-ui-editor-linter-first.md`. Next unit is the direct X4 user-scale comparison with exact
-backup/restore, followed by missing keep-out calibration or the first complete-menu census. No release is claimed.
+**Original-brief audit 2026-09-03 — 4/6 VERIFIED / 2/6 PARTIAL:** exact hand-written Lua round-trip, all eleven
+linter trap families including pre-export `addTable(24)` rejection, deploy-bound `Not verified in game` truth, and the
+fixed-drawable X4 user-scale contract are `VERIFIED`. At unchanged drawable `2544x1353`, Forge width changed
+`663 -> 729` (`1.09955x`) while three X4 controls changed `659 -> 723`, `654 -> 721`, and `656 -> 723`; ratio disagreement
+is only `0.22-0.26%`, and corresponding edges are within `4x3` pixels. X4 and Forge were restored to scale `1.0`, exact
+workspace/deployed fixture hashes remain equal, and current owned frame/Lua failure signatures are zero. Three complete-
+menu column/row/wrap/truncation comparisons and actual projected geometry for all four toggleable keep-out contexts
+remain `PARTIAL`. Full matrix, receipt, and AAR:
+`docs/plans/2026-08-10-b119-x4-ui-editor-linter-first.md` and
+`docs/plans/2026-09-03-b119-fixed-drawable-user-scale.md`. The installed export status can announce success before
+native Save As/file completion; repair that false-success wording before release. Next unit is missing keep-out
+calibration or the first complete-menu census. No release is claimed.
 **UI-only end-to-end smoke 2026-08-28 — ONE-PROFILE X4 VERIFIED / FULL B119 PARTIAL:** Forge compiled,
 linted, project-validated, guarded-wrote, dry-deployed, and actually deployed the dedicated four-file `pipeline_test`
 mod. X4 9.00 visibly rendered the generated frame at the configured `2544x1353` drawable profile; both buttons were

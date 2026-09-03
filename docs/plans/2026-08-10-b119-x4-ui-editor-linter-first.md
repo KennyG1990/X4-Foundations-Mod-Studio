@@ -11661,3 +11661,48 @@ changed after checkpoint `0770a269`.
   measured geometry, applicability, projection status, and visible paint as separate acceptance facts.
 - No capability-map delta: this audit changes confidence and remaining scope, not product capability.
 - Suggested commit title: `docs(ui-editor): audit original brief acceptance`.
+
+## 2026-09-03 — Fixed-Drawable X4 User-Scale Equivalence
+
+Status: `BOUNDED VERIFIED / ORIGINAL BRIEF 4/6 VERIFIED / 2/6 PARTIAL / OVERALL B119 IN_PROGRESS`.
+
+### PLAN / BASELINE / RECONCILE
+
+- The bounded unit held the X4 drawable at `2544x1353`, observed the real baseline user-scale setting, changed only
+  that setting by one shipped `0.1` step, captured the unchanged `pipeline_test` fixture in X4 and Forge, and restored
+  both surfaces. Exact task record:
+  `docs/plans/2026-09-03-b119-fixed-drawable-user-scale.md`.
+- Shipped `gameoptions.lua` is the setting authority: `C.GetUIScaleFactorRange`, `C.GetUIScaleFactor`, `0.1` step, and
+  `C.SetUIScaleFactor`. Existing profile controls and source/deploy identity owners were reused. No product, test,
+  fixture, game-source, resolution, or release byte changed; no capability-map delta.
+- Baseline repository checkpoint `0534c3e61f39ad1e29c7711979b6047fc010fbbd` had exact local/tracking/direct-
+  remote parity. Profile backup and hashes were captured before X4 mutation; unrelated dirty paths remained outside
+  the unit.
+
+### VALIDATE / REVIEW
+
+- X4 visibly read `1.0`, accepted exactly `1.1`, rendered the same fixture, then visibly returned to `1.0`. Forge
+  exported the same exact Lua at matching values and was also restored to `1.0`; effective Helper scale read
+  `1.2527777777777778` and `1.3780555555555558`.
+- Forge panel width changed `663 -> 729` (`1.099547511x`). X4 primary button, secondary button, and input widths
+  changed `659 -> 723`, `654 -> 721`, and `656 -> 723` (`1.097116844x`, `1.102446483x`, `1.102134146x`). Forge/X4
+  ratio disagreement is `0.221061%` to `0.263651%`, below the declared `1%` limit.
+- After window-chrome normalization, corresponding control edges differ by at most four horizontal and three vertical
+  pixels. Workspace and deployed Lua remain `5,488` bytes / `C1D9CD...718E`; manifests remain `367` bytes /
+  `23A7E9...5034`; X4 process count is zero; scoped frame/view/Lua/owned-fixture failure signatures are zero.
+- Receipt:
+  `dev-docs/b119-x4-ui-pipeline-smoke/user-scale-20260903/fixed-drawable-user-scale-receipt.json` with eight retained
+  PNGs. This directly promotes brief row 3 to `VERIFIED`; rows 2 and 5 remain `PARTIAL`.
+
+### CLOSE / AAR
+
+- The first X4 track click staged but did not confirm scale `1.8`; the inner arrow produced the intended one-step
+  `1.1`, which was read back before capture. Fixed drawable plus exact setting readback is now the required isolation
+  pattern.
+- Forge's export status can say `exported one image/png` when the handler is invoked before native Save As completion
+  or file existence. Only the two physically completed, hash-verified PNGs count as evidence. Repair this false-
+  success status before release; it did not invalidate the files actually saved and checked here.
+- Highest-risk retained boundary: one source/profile scale equivalence does not establish complete widget, menu,
+  keep-out, or universal engine parity. Overall B119 stays `IN_PROGRESS / PARTIAL`; next work targets brief row 5 or
+  the first complete row-2 menu census without invented geometry.
+- Suggested commit title: `docs(ui-editor): verify fixed-drawable UI scaling`.
