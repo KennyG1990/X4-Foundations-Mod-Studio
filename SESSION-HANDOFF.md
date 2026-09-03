@@ -11,8 +11,9 @@ Status: bounded native pen-advance unit `VERIFIED`; overall B119 `IN_PROGRESS / 
   installed-Forge PNG plus fresh X4 run agree on the repaired button-label extents within `0-2` raster pixels.
 - Eyeball queue: no operator check is blocking this checkpoint. A later release candidate still needs explicit full
   original-brief review, AI Influence reference reconstruction, and OpenVSX acceptance.
-- Commit question: pushed baseline is `be34a96f817290c95fc29b2acc87eb119a120c76`. The four pen-advance source/test
-  paths plus B119 records are ready for an explicit-path commit and push; preserve all unrelated dirty files.
+- Commit question: source checkpoint `0194d62e811305797bf8c18ac68158f035adc8d6` is pushed with exact
+  local/tracking/direct-remote parity. Commit and push only the final receipt-bearing plan/backlog/handoff delta next;
+  preserve all unrelated dirty files.
 
 ## What changed
 
@@ -72,17 +73,17 @@ Status: bounded native pen-advance unit `VERIFIED`; overall B119 `IN_PROGRESS / 
 - BACKLOG B119 remains open and now records the bounded verified pen-advance checkpoint.
 - X4 UI quick-reference card 26 records the `.abc` advance trap at
   `F:\StarForge\wiki\x4-modding-methods\07 UI (Lua widgets, menus, overlays)\ui-modding-gotchas-quick-reference.md`.
-- Capability-map and project AAR deltas must be appended before external synchronization.
-- Existing external owners to update after the source commit: GitHub #41; Notion
-  `3b84618e-d15b-8190-821e-c0eb96f43d5a`; Drive doc `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`.
+- Capability-map delta, project AAR, and UI quick-reference card 26 are written.
+- External readback is complete: GitHub #41 comment `5518404390`; Notion
+  `3b84618e-d15b-8190-821e-c0eb96f43d5a` is `In Progress / Partial`; Drive doc
+  `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, revision
+  `ANLCKQnz-cGm-CH7Hg9hWcOGNdURH9xZ03PCCFwYQWPASmiyEr0CVP705Ov9ur9vngPDMFleaJ9yW8FeUTW2j7MKMRekmuhQywOOIqpiXzde`.
 
 ## Exact continuation
 
-1. Append the capability-map and project AAR deltas.
-2. Run diff hygiene, explicit-path stage, commit, push, and assert local/tracking/direct-remote parity.
-3. Update and read back GitHub #41, Notion, and Drive with the exact source commit and bounded/full status boundary.
-4. Overwrite this handoff with external receipt IDs, create the record-close commit, push, and re-prove parity.
-5. Review the original brief line by line before selecting the next B119 unit. Do not publish OpenVSX until release
+1. Run diff hygiene, explicitly stage only this plan, `BACKLOG.md`, and `SESSION-HANDOFF.md`, commit the record close,
+   push, and assert local/tracking/direct-remote parity.
+2. Review the original brief line by line before selecting the next B119 unit. Do not publish OpenVSX until release
    acceptance explicitly passes.
 
 ## Preservation boundary

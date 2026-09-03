@@ -1843,6 +1843,13 @@ acceptance without erasing it. Full evidence is in
 reconstruction, release acceptance, and OpenVSX remain open. Preview still says `Not verified in game`; B119 and
 GitHub #41 remain `IN_PROGRESS / PARTIAL`.
 
+Durable readback is complete: source checkpoint `0194d62e811305797bf8c18ac68158f035adc8d6` has exact local,
+tracking, and direct-remote parity; GitHub #41 comment `5518404390`; Notion owner
+`3b84618e-d15b-8190-821e-c0eb96f43d5a` remains `In Progress / Partial`; and Google Current Status revision
+`ANLCKQnz-cGm-CH7Hg9hWcOGNdURH9xZ03PCCFwYQWPASmiyEr0CVP705Ov9ur9vngPDMFleaJ9yW8FeUTW2j7MKMRekmuhQywOOIqpiXzde`
+contains the exact bounded/full boundary. UI quick-reference card 26, the capability-map delta, and the project AAR
+record the native `.abc` pen-advance lesson.
+
 ### B115 · Forge Capability Convergence `in_progress` (P0, PRIORITY OVERRIDE)
 
 Ken explicitly promoted GitHub initiative #9 and child requests #10–#21 above the active R13 close on 2026-07-31.

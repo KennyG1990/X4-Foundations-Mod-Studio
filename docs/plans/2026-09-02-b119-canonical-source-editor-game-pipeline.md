@@ -777,3 +777,16 @@ Status at plan time: `SPECIFIED`. No capability-map delta.
 - **Highest-risk evidenced weakness:** readable binary-field names can still invite a convincing but false semantic
   assumption. Keep raw fields source-labeled, derive game behavior in a separately named function, and require native
   oracle vectors plus rendered-host/X4 evidence before promoting fidelity.
+
+**DURABLE SYNC**
+
+- Source checkpoint `0194d62e811305797bf8c18ac68158f035adc8d6` is pushed with exact local, tracking, and direct-remote
+  parity. The commit contains exactly the four implementation/test paths plus this plan, `BACKLOG.md`, and
+  `SESSION-HANDOFF.md`.
+- GitHub #41 comment `5518404390` was written and read back; the issue remains open with bounded `VERIFIED` and overall
+  `PARTIAL` separated.
+- Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a` was updated and read back as `In Progress / Partial`, with the
+  exact commit, native/E2E/package evidence, remaining boundaries, and no OpenVSX claim.
+- Google Drive Current Status document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, was appended and
+  read back with one `HEADING_2` plus seven exact checkpoint paragraphs at revision
+  `ANLCKQnz-cGm-CH7Hg9hWcOGNdURH9xZ03PCCFwYQWPASmiyEr0CVP705Ov9ur9vngPDMFleaJ9yW8FeUTW2j7MKMRekmuhQywOOIqpiXzde`.
