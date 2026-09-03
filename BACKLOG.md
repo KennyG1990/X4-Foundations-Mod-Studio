@@ -1820,6 +1820,29 @@ the Windows child exited `0xC0000409` after two passing scenarios and before the
 weakened. Next is reversible package/install proof and a fresh `2544x1353 / user scale 1` Forge-to-X4 comparison.
 Overall B119 and GitHub #41 remain `IN_PROGRESS / PARTIAL`; OpenVSX remains blocked.
 
+**B119 native Zekton pen-advance checkpoint 2026-09-02 — BOUNDED VERIFIED / FULL B119 PARTIAL:** A guarded native X4
+oracle proved all `36/36` width/height vectors and identified the prior compressed text cause: for the pinned shipped
+Zekton 9.00 corpus, native pen width is `sum(horizontalBearing + advance) * size / 32`, while unwrapped height remains
+`lineMetrics.outer * size / 32`. The existing FontMetrics/TextLayout chain now derives that width once, preserves both
+raw fields, applies bearing once to bitmap placement, and refuses impossible composite geometry. FontMetrics `15/15`,
+TextLayout `12/12`, every downstream UI entrypoint, TypeScript, exact lint, Graphify, complete precommit, production
+build, extension stage/build/package inspection, and probe `16/16` pass.
+
+The reviewed `26,288,585`-byte VSIX (`55031D...938F`) is installed in Antigravity with exact critical-byte parity and
+a complete rollback backup. Its exact current `2544x1353 / user scale 1 / effective scale 1.252777...` PNG moves the
+first button-label extent from `97-98` to `108-109` pixels versus fresh X4 `108-109`; the second moves from `95-96` to
+`104-105` versus X4 `106`. Fresh X4 accepted both buttons, native edit-box input/focus retention, standard close, and
+clean exit with zero owned runtime/view/Lua failures. All four final Lua copies remain `5,488` bytes /
+`C1D9CD...2718E`, with no probe marker and X4 stopped.
+
+The complete unchanged Source Editor browser suite now passes `3/3` in `1.9m`, child exit `0`, structured receipt
+complete, `treeGone=true`, and clear ports `3100/3101`; this supersedes the earlier incomplete `2/3` receipt for current
+acceptance without erasing it. Full evidence is in
+`dev-docs/b119-x4-ui-pipeline-smoke/source-editor-ingame-20260902/`. Universal C++ frame acceptance, full
+`helper.lua`/`widget_fullscreen.lua` and keep-out coverage, exact shader/alpha identity, arbitrary Lua, AI Influence
+reconstruction, release acceptance, and OpenVSX remain open. Preview still says `Not verified in game`; B119 and
+GitHub #41 remain `IN_PROGRESS / PARTIAL`.
+
 ### B115 · Forge Capability Convergence `in_progress` (P0, PRIORITY OVERRIDE)
 
 Ken explicitly promoted GitHub initiative #9 and child requests #10–#21 above the active R13 close on 2026-07-31.

@@ -3,6 +3,7 @@ import {
   MAX_UNICODE_CODE_POINT,
   ZEKTON_CORPUS_ASSETS,
   ZEKTON_EVIDENCE_STATE,
+  deriveZektonNativePenAdvance,
   lookupZektonGlyph,
 } from './x4UiFontMetrics';
 import type {
@@ -731,9 +732,22 @@ function tokenizeText(
     if (glyph !== undefined && glyph.ok) {
       glyphMetrics = glyph.glyph;
       glyphIndex = glyph.glyphIndex;
-      advance = glyphMetrics.advance;
-      width = glyphMetrics.advance * scale;
-      if (!Number.isFinite(width) || width < 0 || width > Number.MAX_SAFE_INTEGER) {
+      const nativePenAdvance = deriveZektonNativePenAdvance(glyphMetrics);
+      if (nativePenAdvance.ok === false) {
+        sourceGap = {
+          reason: 'overflow',
+          codePoint,
+          message: nativePenAdvance.error.message,
+        };
+        advance = 0;
+        width = 0;
+        glyphMetrics = undefined;
+        glyphIndex = undefined;
+      } else {
+        advance = nativePenAdvance.value;
+        width = nativePenAdvance.value * scale;
+      }
+      if (sourceGap === undefined && (!Number.isFinite(width) || width < 0 || width > Number.MAX_SAFE_INTEGER)) {
         sourceGap = { reason: 'overflow', codePoint, message: 'Scaled glyph advance exceeded finite numeric bounds.' };
         advance = 0;
         width = 0;

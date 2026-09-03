@@ -4,6 +4,7 @@ import {
   decodeZektonA8Dds,
   decodeZektonAbc,
   decodeZektonFontAssets,
+  deriveZektonNativePenAdvance,
   lookupZektonGlyph,
   measureZektonGlyphRun,
 } from './x4UiFontMetrics';
@@ -352,6 +353,12 @@ const tests: readonly [string, () => void][] = [
       assertEqual(a.glyph.pixelBounds.top, 0, 'A pixel top');
       assertEqual(a.glyph.pixelBounds.bottom, 4, 'A pixel bottom');
       assertEqual(boldA.glyph.advance, 7, 'bold A uses the shared synthetic A record');
+      const aNativePenAdvance = deriveZektonNativePenAdvance(a.glyph);
+      expectSuccess(aNativePenAdvance);
+      assertCondition(aNativePenAdvance.ok, 'A native pen advance should be explicit');
+      assertEqual(aNativePenAdvance.value, 8, 'A native pen advance');
+      assertEqual(a.glyph.horizontalBearing, 1, 'A raw horizontal bearing remains separate');
+      assertEqual(a.glyph.advance, 7, 'A raw advance remains separate');
       const boldI = lookupZektonGlyph(bold.value, 105);
       assertCondition(boldI.ok, 'bold i-like glyph should look up');
       assertEqual(boldI.glyph.advance, 4, 'bold i-like metric distinction');
@@ -439,6 +446,70 @@ const tests: readonly [string, () => void][] = [
       const surrogate = lookupZektonGlyph(descriptor.value, 0xd800);
       assertEqual(control.ok, false, 'control code is a gap');
       assertEqual(surrogate.ok, false, 'surrogate code point is a gap');
+    },
+  ],
+  [
+    'native pen advance fail-first: positive nonzero bearing is included',
+    () => {
+      const descriptor = decodeZektonAbc(regularAbc.bytes, regularIdentity);
+      assertCondition(descriptor.ok, 'descriptor should decode for native pen-advance fail-first test');
+      const result = measureZektonGlyphRun(descriptor.value, 'A', 1);
+      assertCondition(result.ok, 'known glyph should measure for native pen-advance fail-first test');
+      assertEqual(result.value.rawAdvance, 8, 'A raw native pen advance includes horizontal bearing');
+      assertEqual(result.value.scaledAdvance, 8, 'A scaled native pen advance includes horizontal bearing');
+      assertEqual(result.value.totalAdvance, 8, 'A total native pen advance includes horizontal bearing');
+      assertEqual(result.value.glyphs[0]?.rawAdvance, 8, 'A measured glyph raw native pen advance');
+      assertEqual(result.value.glyphs[0]?.scaledAdvance, 8, 'A measured glyph scaled native pen advance');
+    },
+  ],
+  [
+    'native pen advance fail-first: negative bearing is included',
+    () => {
+      const descriptor = decodeZektonAbc(regularAbc.bytes, regularIdentity);
+      assertCondition(descriptor.ok, 'descriptor should decode for negative-bearing fail-first test');
+      const result = measureZektonGlyphRun(descriptor.value, ' ', 1);
+      assertCondition(result.ok, 'space should measure for negative-bearing fail-first test');
+      assertEqual(result.value.rawAdvance, 3, 'space raw native pen advance includes negative bearing');
+      assertEqual(result.value.scaledAdvance, 3, 'space scaled native pen advance includes negative bearing');
+      assertEqual(result.value.totalAdvance, 3, 'space total native pen advance includes negative bearing');
+    },
+  ],
+  [
+    'native pen advance fail-first: impossible negative derived advance refuses geometry',
+    () => {
+      const impossiblePenAbc = makeAbc(
+        [{ ...regularRecords[0], bearing: -5, advance: 3 }],
+        { 65: 1 },
+      );
+      const descriptor = decodeZektonAbc(impossiblePenAbc.bytes, regularIdentity);
+      assertCondition(descriptor.ok, 'impossible derived-advance descriptor should retain raw fields');
+      const result = measureZektonGlyphRun(descriptor.value, 'A', 1);
+      assertEqual(result.ok, false, 'negative derived native pen advance must not return partial geometry');
+      if (result.ok === false && result.kind === 'refusal') {
+        assertEqual(result.error.code, 'invalid-metric', 'negative derived native pen advance refusal code');
+      } else {
+        throw new Error('negative derived native pen advance must return a typed refusal result');
+      }
+      const nonfinite = deriveZektonNativePenAdvance({ horizontalBearing: Number.NaN, advance: 3 });
+      expectRefusal(nonfinite, 'invalid-metric');
+      const overflowing = deriveZektonNativePenAdvance({ horizontalBearing: Number.MAX_SAFE_INTEGER, advance: 1 });
+      expectRefusal(overflowing, 'invalid-metric');
+      const impossibleDerived = deriveZektonNativePenAdvance({ horizontalBearing: -5, advance: 3 });
+      expectRefusal(impossibleDerived, 'invalid-metric');
+      const zeroBearing = deriveZektonNativePenAdvance({ horizontalBearing: 0, advance: 8 });
+      expectSuccess(zeroBearing);
+      assertCondition(zeroBearing.ok, 'zero-bearing native pen advance should be explicit');
+      assertEqual(zeroBearing.value, 8, 'zero-bearing native pen advance remains value-identical');
+    },
+  ],
+  [
+    'native pen advance refuses derived values beyond the per-glyph cap',
+    () => {
+      const overCap = deriveZektonNativePenAdvance({
+        horizontalBearing: fontSemantics.MAX_SAFE_GLYPH_ADVANCE,
+        advance: fontSemantics.MAX_SAFE_GLYPH_ADVANCE,
+      });
+      expectRefusal(overCap, 'invalid-metric');
     },
   ],
   [
@@ -661,6 +732,8 @@ const tests: readonly [string, () => void][] = [
       assertEqual(invalidScale.ok, false, 'NaN scale is a typed refusal');
       const negativeScale = measureZektonGlyphRun(descriptorFirst.value, 'A', -1);
       assertEqual(negativeScale.ok, false, 'negative scale is a typed refusal');
+      const overflowingScale = measureZektonGlyphRun(descriptorFirst.value, 'A', Number.MAX_VALUE);
+      expectRefusal(overflowingScale, 'measurement-overflow');
     },
   ],
 ];

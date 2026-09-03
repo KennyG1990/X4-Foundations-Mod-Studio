@@ -596,3 +596,184 @@ Status at plan time: `SPECIFIED`. No capability-map delta.
   repaired. The bounded unit remains formally `PARTIAL` because the declared single complete `3/3` receipt is absent;
   the remaining red is the known Windows E2E child-lifecycle owner, not evidence of a Source Editor assertion failure.
   Installed-host and X4 validation may proceed, but release acceptance and OpenVSX remain blocked.
+
+### BOUNDED UNIT — NATIVE X4 TEXT-METRIC ORACLE (`SPECIFIED`)
+
+**PLAN / RECONCILE**
+
+- **Reproduced defect:** the installed Forge native PNG and a fresh exact-drawable X4 capture agree on panel and button
+  geometry to approximately one raster pixel, but thresholded native glyph bounds are materially different: Forge
+  renders `My First Button` about `97` pixels wide while X4 renders about `109`, and `Second Button` about `96` versus
+  `106`. This is a text-raster fidelity defect, not evidence that frame geometry or the source-to-game pipeline failed.
+- **Ruled out:** shipped `helper.lua` lines 846-858 and the current layout kernel both implement
+  `ceil(fontsize * Helper.uiScale)`; shipped `libraries/fonts.xml` explicitly declares Zekton and Zekton Bold at design
+  size `32`. The remaining unknown is the native C++ `GetTextWidth`/font-raster interpretation of the exact `.abc` and
+  `.dds` data, not the Lua scaling law or nominal design-size declaration.
+- **Existing owners reused:** the unchanged `pipeline_test` UI-only fixture, Forge guarded deploy authority, X4's
+  shipped FFI `GetTextWidth`, `GetTextHeight`, and `GetUIScale`, the current Zekton decoder/text layout/Scene/Paint/
+  Canvas owners, and the existing same-profile evidence directory. No parallel renderer, browser font, guessed
+  multiplier, or end-user diagnostic product is introduced.
+- **Bounded diagnostic:** temporarily add one guarded, one-shot native metric probe to only
+  `dev-docs/b119-x4-ui-pipeline-smoke/package/pipeline_test/ui/pipeline_test.lua`; deploy only the matching isolated
+  `pipeline_test` target; launch X4 without loading a save; capture exact regular/bold widths and heights across the
+  source strings and relevant font sizes; then restore and redeploy the original `5,488`-byte
+  `C1D9CD8580C6175E95C543259A2AB19F8B463282BF48B2229EB6013D6052718E` source.
+- **Risks / rollback:** a malformed FFI probe can refuse the fixture or produce a Lua log error. It cannot touch a save
+  or gameplay state. Rollback is the retained original four-file package and exact guarded Forge redeploy; final target
+  bytes must match the pre-probe hash census. The operator's 2026-09-02 unattended `go` explicitly authorizes this
+  isolated package/game-target write and X4 launch.
+
+**ACCEPTANCE CONTRACT**
+
+1. The diagnostic source remains fail-safe when Helper/FFI authority is unavailable, emits at most one uniquely scoped
+   metric set, and does not change the panel's table/widget calls or interaction behavior.
+2. The logged receipt includes both `GetUIScale(false)` and `GetUIScale(true)`, regular and bold Zekton, relevant
+   integer font sizes including the effective button size, and exact widths for `My First Button`, `Second Button`, and
+   at least one single-glyph/control string. Values must be finite, positive, and read back from a fresh run.
+3. Before launch, Forge validation/deploy authority accepts only the isolated package. After collection, X4 exits and
+   the exact original source is restored through the same authority; workspace/staging/game hashes agree and no
+   matching probe marker remains in the deployed Lua.
+4. Product correction is authorized only from the native metric receipt plus shipped corpus evidence. Screenshot-only
+   tuning, CSS/browser-font substitution, arbitrary stretch constants, timeout increases, and weakened truth labels are
+   forbidden.
+5. Any production repair must be tests-first in the existing FontMetrics/TextLayout/Scene/Paint/Canvas chain, retain
+   exact corpus identities and `Not verified in game`, pass focused tests, TypeScript, exact lint, graph refresh,
+   precommit/build/package/install, and produce a fresh native PNG/X4 comparison before promotion.
+6. Negative paths include unavailable FFI authority, non-finite native returns, duplicate probe execution, stale source
+   identity, deploy mismatch, and failed restoration. Any failed restoration leaves this unit `FAILED`, not partial.
+
+**EVIDENCE LOCATIONS**
+
+- Native Forge/X4 captures and metric log excerpts:
+  `dev-docs/b119-x4-ui-pipeline-smoke/source-editor-ingame-20260902/`.
+- Comparison and close receipt:
+  `dev-docs/b119-x4-ui-pipeline-smoke/source-editor-ingame-20260902/same-profile-comparison.md`.
+
+**NATIVE ORACLE RESULT — `VERIFIED`**
+
+- The isolated probe was accepted by Forge's dry-run and deploy gates, rendered the unchanged panel in a fresh X4
+  process, and emitted exactly `53` scoped rows: one start, three scale values, twelve `Helper.scaleFont` values,
+  thirty-six successful width/height samples, and one complete row with `success=36 failure=0`.
+- X4 reported `Helper.uiScale=1.2527778148651`, `GetUIScale(false)=1.2527778148651`, and
+  `GetUIScale(true)=1`. No `DisplayView(): Failed to set up the view`, Lua error, or traceback occurred.
+- Reconciliation against the exact regular and bold `.abc` records produced zero error for every native width:
+  `GetTextWidth(text, font, size) = sum(record.advance + record.horizontalBearing) * size / 32`.
+  The current Forge path sums only `record.advance`, which is the reproduced cause of its compressed glyph run.
+- Native height also matched all thirty-six samples with zero error:
+  `GetTextHeight(text, font, size, 0) = descriptor.lineMetrics.outer * size / 32` for the unwrapped probe strings.
+  No height correction is authorized by this receipt.
+- X4 was closed, then the exact original `5,488`-byte Lua was restored through Forge. Fixture, Mod Workspace,
+  staging, and game target all returned to SHA-256
+  `C1D9CD8580C6175E95C543259A2AB19F8B463282BF48B2229EB6013D6052718E`, with zero probe markers.
+
+### BOUNDED UNIT — NATIVE ABC PEN-ADVANCE PARITY (`SPECIFIED`)
+
+**PLAN / RECONCILE**
+
+- **Existing owners reused:** `x4UiFontMetrics.ts` decodes the exact signed field at record offset `16` and the
+  unsigned advance field at offset `20`; `x4UiTextLayout.ts` owns token widths, wrapping, pen progression, and glyph
+  quads. The Scene/Paint/Canvas chain consumes this output and is not a second metric authority.
+- **Bounded correction:** preserve every decoded raw field and public truth label, add one evidence-named native
+  pen-advance helper in FontMetrics, and use its `horizontalBearing + advance` result in glyph-run measurement and
+  TextLayout token/pen widths. Continue positioning each bitmap quad from its exact horizontal-bearing field.
+- **Non-goals:** no guessed multiplier, CSS/browser font, atlas/SDF threshold change, line-height change, source/API
+  model change, wrap-policy redesign, public verification upgrade, or removal of `Not verified in game`.
+- **Affected code/test boundary:** `x4UiFontMetrics.ts` and its selftest, `x4UiTextLayout.ts` and its selftest, plus only
+  causally broken downstream Scene/Paint/Canvas assertions. No fixture, timeout, or oracle weakening is allowed.
+- **Rollback:** targeted revert of this bounded helper and its call sites. Exact pre-change source remains at
+  `be34a96f817290c95fc29b2acc87eb119a120c76`; the diagnostic mod is already restored independently.
+
+**ACCEPTANCE CONTRACT**
+
+1. Tests fail first on a synthetic nonzero-bearing glyph because both raw measurement and TextLayout still omit the
+   native contribution; the test must distinguish the raw stored fields from the derived native pen advance.
+2. The helper rejects or safely propagates impossible negative/non-finite/overflow geometry without partial success.
+   Zero-bearing fixtures remain value-identical.
+3. Canonical regular and bold tests encode the native oracle vectors: at design size `32`, widths are regular
+   `298/286/38` and bold `309/295/38` for `My First Button` / `Second Button` / `M`; scaled sizes retain exact linear
+   parity. Height remains `52` at design size and is not altered.
+4. Wrapping, truncation, horizontal alignment, glyph pen positions, and `scaledAdvance` use the same derived native
+   advance. Raw `advance`, `bearingX`, bitmap bounds, UVs, corpus hashes, and authority/provenance remain exact.
+5. FontMetrics, TextLayout, Scene, Paint, Canvas, Source Editor, and session selftests pass, followed by TypeScript,
+   exact-file ESLint, diff hygiene, graph refresh, full precommit, production build, extension package/install, and
+   an installed native PNG generated from the same source/profile.
+6. Release acceptance additionally requires a fresh X4 screenshot comparison showing the corrected glyph extent while
+   panel/button geometry and interactions remain stable. Until that passes, this bounded unit is `PARTIAL` and
+   OpenVSX remains blocked.
+
+**IMPLEMENT**
+
+- `x4UiFontMetrics.ts` now derives one explicit native pen advance from the preserved raw ABC fields:
+  `horizontalBearing + advance`. The helper refuses non-finite, unsafe, nonpositive, or over-cap results before any
+  partial measurement can escape.
+- `measureZektonGlyphRun()` and `x4UiTextLayout.ts` use that same value for run width, wrapping, truncation, alignment,
+  and pen progression. Bitmap placement still applies the raw bearing once; raw descriptor fields, atlas geometry,
+  corpus hashes, height law, and authority labels are unchanged.
+- Tests retain the fail-first distinction between raw fields and derived native advance, cover positive/negative/zero
+  bearings and impossible geometry, and pin the regular/bold canonical oracle vectors.
+
+**VALIDATE**
+
+- Native X4 oracle: `36/36` width/height samples succeeded. All widths exactly equal
+  `sum(horizontalBearing + advance) * size / 32`; all unwrapped heights exactly equal
+  `lineMetrics.outer * size / 32`.
+- Focused product gates: FontMetrics `15/15`, TextLayout `12/12`, Integration `21/21`, Canvas `140/140`,
+  LayoutKernel `34/34`, KeepOut `17/17`, Paint `180/180`, Scene `176/176`, Preview `108/108`, CorpusAssets `39/39`,
+  SourceEdits `90/90`, Source Editor P7 `12/12`, plus the remaining eight UI entrypoints, whole-repository TypeScript,
+  exact-file ESLint, diff hygiene, and Graphify refresh all pass.
+- Complete `npm run precommit:check` exits `0`; production build, extension stage/build, package inspection, and probe
+  `16/16` pass. Reviewed VSIX:
+  `vscode-extension/x4-forge-studio-0.0.70-b119-pen-advance-019fea10.vsix`, `26,288,585` bytes, SHA-256
+  `55031D0626F840B4CFEA8572B85FFF21C1B6D618E91B1EC82C9DB6F1D26C938F`.
+- The candidate replaced only the existing Antigravity `0.0.70` extension after a complete backup at
+  `C:\Users\Moshi\AppData\Local\Temp\x4forge-b119-pen-advance-backup-20260902-193500`; installed critical bytes and
+  staged package bytes match. The installed Source Editor bound exact `ui/pipeline_test.lua -> menu.createFrame`,
+  derived effective scale `1.2527777777777778` from `2544x1353 / user scale 1`, exported one current native PNG, and
+  retained `Preview evidence only · Not verified in game`.
+- The corrected Forge PNG is `2544x1353`, `91,675` bytes, SHA-256
+  `521F647DC1B6FB46E701166482137D63E1AD8983346DED7172204E2E52C440EE`. Across neutral-white thresholds, the old
+  first-button glyph extent was `97-98` pixels, corrected Forge is `108-109`, and fresh X4 is `108-109`; the second
+  label is old `95-96`, corrected `104-105`, and X4 `106`. The status text moved from `219` to `244` pixels versus
+  X4 `243-245`. This verifies the targeted pen-width repair within `0-2` raster pixels without asserting identical
+  antialiasing, frame decoration, or every widget.
+- Fresh X4 9.00 rendered the unchanged exact package at the same profile. Both buttons highlighted, the edit box
+  accepted native input and retained it through focus change, standard close removed the panel, and X4 exited. The
+  fresh screenshot is `407,029` bytes / SHA-256
+  `0045715651BDEC6CFC9A5371ED5BFF6A058E41F6448EB1AF55F015E472452C5D`; the scoped debuglog has zero
+  `pipeline_test` runtime errors, zero view-setup failures, and zero Lua traceback matches.
+- The complete serial Source Editor browser suite now passes `3/3` in `1.9m` with child exit `0`, complete structured
+  report, and `treeGone=true`. Receipt SHA-256:
+  `54E178115CAD3F3BC4814A35218CC4E9E1CB4D7F4EDC5DC71AC2657615837A06`. Ports `3100/3101` and matching Node
+  processes are absent; the per-run state directory remains inert. The live Antigravity discovery hash and protected
+  mod/game Lua hashes did not change.
+- Final rollback census: repository fixture, Mod Workspace, Forge loose staging, and game target are each `5,488`
+  bytes / `C1D9CD8580C6175E95C543259A2AB19F8B463282BF48B2229EB6013D6052718E`, with no probe marker; X4 process count is
+  zero.
+
+**REVIEW / CLOSE — BOUNDED UNIT `VERIFIED`; OVERALL B119 `IN_PROGRESS / PARTIAL`**
+
+- Acceptance rows 1-6 are done and evidenced for this exact corpus/source/profile: raw-versus-derived tests, invalid
+  geometry refusal, canonical vectors, shared layout consumption, full static/package/installed-host gates, corrected
+  native PNG, and fresh X4 rendering/interaction all passed.
+- The earlier incomplete `2/3` Windows child receipt remains historical red evidence, but it is superseded for current
+  product acceptance by the complete unchanged `3/3` receipt above; no timeout, retry policy, fixture, or assertion was
+  weakened.
+- This closes the reproduced Zekton pen-advance defect and strengthens the existing source-faithful renderer capability.
+  It does not prove universal C++ frame acceptance, every `helper.lua`/`widget_fullscreen.lua` path, exact shader/alpha
+  raster identity, all keep-out variants, arbitrary Lua, the full AI Influence reference reconstruction, or release /
+  OpenVSX acceptance. Every preview continues to say `Not verified in game`, and GitHub #41 remains open.
+
+**AAR**
+
+- **Sustain:** use shipped descriptors plus direct native `C.GetTextWidth`/`GetTextHeight` probes to settle ambiguous
+  field semantics, then bind the smallest correction through one shared measurement/layout owner.
+- **Improve work/approach:** the original advance-only interpretation was plausible but wrong and survived broad green
+  tests. Canonical single-field fixtures were not causal enough; nonzero-bearing corpus vectors and native values must
+  be present before font parity is claimed.
+- **Improve tools:** the first extension-backup command failed safely because `Copy-Item -LiteralPath` does not expand
+  `*`; two PowerShell collection pipelines needed syntax correction; the Computer Use save dialog required current
+  coordinate inspection; and bulk text injection did not reach X4 while native key input did. None altered product or
+  protected bytes.
+- **Highest-risk evidenced weakness:** readable binary-field names can still invite a convincing but false semantic
+  assumption. Keep raw fields source-labeled, derive game behavior in a separately named function, and require native
+  oracle vectors plus rendered-host/X4 evidence before promoting fidelity.

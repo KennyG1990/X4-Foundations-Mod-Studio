@@ -216,6 +216,15 @@ export interface ZektonGlyphMetrics {
 }
 
 /**
+ * The 2026-09-02 C.GetTextWidth oracle proves that native ABC pen advance is
+ * horizontalBearing + advance. Raw descriptor fields remain separate; this
+ * result is the explicit derived value used by measurement and layout.
+ */
+export type ZektonNativePenAdvanceResult =
+  | { readonly ok: true; readonly value: number }
+  | { readonly ok: false; readonly error: ZektonDecodeError };
+
+/**
  * Source-backed vertical ABC fields. The split names stay offset-based: the
  * shipped files show an integer split, but do not prove a more specific role.
  */
@@ -334,6 +343,7 @@ export type ZektonGlyphLookup =
 export interface ZektonMeasuredGlyph {
   readonly codePoint: number;
   readonly glyphIndex: number;
+  /** Derived native ABC pen advance; the descriptor glyph.advance stays raw. */
   readonly rawAdvance: number;
   readonly scaledAdvance: number;
 }
@@ -342,7 +352,7 @@ export interface ZektonGlyphRunMeasurement {
   readonly kind: 'measurement';
   readonly textLength: number;
   readonly scale: number;
-  /** Sum of the inferred raw advance fields before caller scaling. */
+  /** Sum of native ABC pen advances before caller scaling. */
   readonly rawAdvance: number;
   /** rawAdvance multiplied by the explicit caller scale. */
   readonly scaledAdvance: number;
@@ -410,6 +420,53 @@ function refusal(
       ? freezeRecord({ code, message })
       : freezeRecord({ code, message, offset });
   return freezeRecord({ ok: false as const, error });
+}
+
+/**
+ * Derive the native X4 ABC pen advance proven by the C.GetTextWidth oracle.
+ * Invalid derived values are typed failures so callers cannot emit partial
+ * geometry while retaining the raw descriptor fields unchanged.
+ */
+export function deriveZektonNativePenAdvance(
+  glyph: Pick<ZektonGlyphMetrics, 'horizontalBearing' | 'advance'>,
+): ZektonNativePenAdvanceResult {
+  if (glyph === null || typeof glyph !== 'object') {
+    return freezeRecord({
+      ok: false as const,
+      error: freezeRecord({
+        code: 'invalid-metric' as const,
+        message: 'Native ABC pen advance requires a glyph metric object.',
+      }),
+    });
+  }
+  const { horizontalBearing, advance } = glyph;
+  if (
+    !Number.isSafeInteger(horizontalBearing) ||
+    Math.abs(horizontalBearing) > MAX_SAFE_HORIZONTAL_BEARING ||
+    !Number.isSafeInteger(advance) ||
+    advance <= 0 ||
+    advance > MAX_SAFE_GLYPH_ADVANCE
+  ) {
+    return freezeRecord({
+      ok: false as const,
+      error: freezeRecord({
+        code: 'invalid-metric' as const,
+        message: 'Native ABC pen advance requires finite, safe raw bearing and advance fields.',
+      }),
+    });
+  }
+
+  const value = horizontalBearing + advance;
+  if (!Number.isSafeInteger(value) || value <= 0 || value > MAX_SAFE_GLYPH_ADVANCE) {
+    return freezeRecord({
+      ok: false as const,
+      error: freezeRecord({
+        code: 'invalid-metric' as const,
+        message: 'Native ABC pen advance must be finite, safe, and strictly positive.',
+      }),
+    });
+  }
+  return freezeRecord({ ok: true as const, value });
 }
 
 function isDecodeFailure(value: unknown): value is ZektonDecodeFailure {
@@ -1166,8 +1223,12 @@ export function measureZektonGlyphRun(
       continue;
     }
 
-    const nextRawAdvance = safeSum(rawAdvance, lookup.glyph.advance, Number.MAX_SAFE_INTEGER);
-    const scaledContribution = lookup.glyph.advance * scale;
+    const nativePenAdvance = deriveZektonNativePenAdvance(lookup.glyph);
+    if (nativePenAdvance.ok === false) {
+      return measurementRefusal(descriptor, nativePenAdvance.error);
+    }
+    const nextRawAdvance = safeSum(rawAdvance, nativePenAdvance.value, Number.MAX_SAFE_INTEGER);
+    const scaledContribution = nativePenAdvance.value * scale;
     if (
       nextRawAdvance === undefined ||
       !Number.isFinite(scaledContribution) ||
@@ -1184,7 +1245,7 @@ export function measureZektonGlyphRun(
       freezeRecord({
         codePoint,
         glyphIndex: lookup.glyphIndex,
-        rawAdvance: lookup.glyph.advance,
+        rawAdvance: nativePenAdvance.value,
         scaledAdvance: scaledContribution,
       }),
     );

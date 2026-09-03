@@ -1,100 +1,94 @@
-# Session handoff — B119 scale/cache implementation ready for installed validation
+# Session handoff — B119 native Zekton pen advance verified; overall renderer partial
 
 Date: 2026-09-02
 Project: `F:\DEV_ENV\X4_Forge`
-Status: `IN_PROGRESS / PARTIAL`; implementation and precommit are green, combined focused E2E receipt is incomplete
+Status: bounded native pen-advance unit `VERIFIED`; overall B119 `IN_PROGRESS / PARTIAL`
 
 ## Session-start brief
 
 - Project: X4 Forge B119, the linter-first source-faithful X4 Lua UI editor. GitHub owner: #41.
-- Current milestone: user scale and effective `Helper.uiScale` are distinct in the Source Editor; canonical Zekton RGBA
-  expansion is retained in a private bounded renderer session; sampleless session projection no longer performs its
-  identical second preview projection.
-- Eyeball queue: install the reviewed candidate, exercise derived/custom transitions and native PNG export at
-  `2544x1353 / X4 user scale 1`, then launch X4 and compare the unchanged `pipeline_test` at the same profile.
-- Commit question: prior source/docs checkpoints `1799dc6145e39a35c7e6f816da793fc691b53df0` and
-  `47ce998bea73fc2a0ecf3645663c00141b93b72b` are pushed with three-way parity. Commit/push the current bounded source
-  checkpoint before replacing the installed extension.
+- Biggest closed milestone: exact X4 C++ text metrics now drive Forge's pinned Zekton 9.00 pen widths, and a fresh
+  installed-Forge PNG plus fresh X4 run agree on the repaired button-label extents within `0-2` raster pixels.
+- Eyeball queue: no operator check is blocking this checkpoint. A later release candidate still needs explicit full
+  original-brief review, AI Influence reference reconstruction, and OpenVSX acceptance.
+- Commit question: pushed baseline is `be34a96f817290c95fc29b2acc87eb119a120c76`. The four pen-advance source/test
+  paths plus B119 records are ready for an explicit-path commit and push; preserve all unrelated dirty files.
 
-## Current bounded implementation
+## What changed
 
-- `src/components/X4UiSourceEditor.tsx` exposes explicit derived-user and custom-effective modes. Derived law is
-  `effective Helper scale = X4 user scale * drawable height / 1080`; width does not affect it. Downstream
-  `profile.uiScale` remains the effective multiplier.
-- PNG metadata and deterministic filenames say `Effective Helper scale` / `effective-scale`. The permanent state is
-  still `Preview evidence only · Not verified in game`.
-- `src/lib/x4UiCanvasRenderer.ts` issues an opaque renderer session backed by private weak ownership. Per canonical
-  corpus it retains at most eight detached role/tint RGBA byte expansions with deterministic LRU; callers receive no
-  bytes, ImageData, surface, or mutable cache. Every render still allocates fresh atlas/composite surfaces and fresh
-  ImageData and executes the existing put/draw path.
-- `src/lib/x4UiEditorSession.ts` reuses `catalogPreview` only when reconciled samples are absent. Accepted sample values
-  retain the existing sampled second projection. No cross-call memoization or public receipt changed.
+- `src/lib/x4UiFontMetrics.ts` adds `deriveZektonNativePenAdvance()` from the exact native oracle law
+  `horizontalBearing + advance`, while preserving raw ABC fields and refusing invalid composite geometry.
+- `src/lib/x4UiTextLayout.ts` uses the same derived value for token width, wrapping, truncation, alignment, and pen
+  progression. Raw bearing still positions each bitmap once; height and atlas semantics are unchanged.
+- Focused tests cover positive, negative, and zero bearings; impossible/non-finite/over-cap results; canonical regular
+  and bold vectors; wrap/truncation; and raw-versus-derived field identity.
 
-## Reproduced performance evidence
+## Native authority and rollback
 
-- Before the cache, the independent scale scenario exceeded the unchanged 60-second timeout after repeated renders.
-- Full-fixture diagnostics used exactly one key, `regular|255|255|255|1`: one miss followed by hits; no eight-entry LRU
-  thrash. Renderer calls measured about `0.45-0.57 s`.
-- Session projection measured about `1.4-1.6 s` and ran twice per state update. The sampleless reuse removes one
-  identical preview-pipeline call per session projection.
-- Post-change unchanged scale scenario is a complete structured PASS: `1/1`, `53.6 s`, all derived/custom/current/game
-  boundary assertions green.
+- Guarded one-shot X4 probe emitted `53` scoped rows and completed `36/36` samples with zero native formula error.
+- Width law: `sum(horizontalBearing + advance) * size / 32`.
+- Unwrapped height law: `lineMetrics.outer * size / 32`.
+- Native scale at drawable `2544x1353`, default user scale: `Helper.uiScale = C.GetUIScale(false) =
+  1.2527778148651`; `C.GetUIScale(true) = 1`.
+- Probe rollback is exact across repository fixture, Mod Workspace, Forge loose staging, and game target: each Lua is
+  `5,488` bytes, SHA-256 `C1D9CD8580C6175E95C543259A2AB19F8B463282BF48B2229EB6013D6052718E`, with no
+  `B119_METRIC_PROBE` marker. X4 process count is zero.
 
-## Validation
+## Validation now green
 
-- Parent focused gates: Editor Session `8/8`; Canvas `140/140`; Source Editor complete matrix including P7 `12/12`;
-  whole-repository TypeScript; exact seven-file ESLint; scoped diff hygiene — all exit `0`.
-- Complete precommit exits `0`: tripwires; canon mirrors; E2E verdict selftest `55/55`; Vite lifecycle; product copy;
-  durable writers `15/15 + 8/8`; capability contract `12 capabilities / 297 disposed routes / 1 dynamic registrar /
-  11 aliases`; MCP capabilities; action receipts `82` routes / `57` surfaces; TypeScript; final `OK`.
-- Graphify refreshed and resolves `projectX4UiEditorSession()` with degree `27`, community `63`.
-- Combined focused E2E is formally incomplete: scenarios 1 and 2 passed (`9.9 s`, `42.1 s`), then Windows terminated
-  the child with known class `0xC0000409` before scenario 3 reported. Structured report was incomplete/red and
-  `treeGone=true`. A later parent test-1 replay also died before any result. No blind retry, timeout increase, fixture,
-  or assertion weakening was retained.
-- Ports `3100/3101` and matching E2E processes are absent. X4 is absent. Antigravity and the installed managed Forge
-  remain running.
+- FontMetrics `15/15`; TextLayout `12/12`; Integration `21/21`; Canvas `140/140`; LayoutKernel `34/34`; KeepOut
+  `17/17`; Paint `180/180`; Scene `176/176`; Preview `108/108`; CorpusAssets `39/39`; SourceEdits `90/90`; Source
+  Editor P7 `12/12`; all remaining UI entrypoints, TypeScript, exact lint, diff hygiene, and Graphify pass.
+- Complete `npm run precommit:check` exits `0`; production build, extension stage/build, package inspection, and probe
+  `16/16` pass.
+- The complete serial Source Editor browser suite now passes `3/3` in `1.9m`; child exit `0`, JSON report complete,
+  `treeGone=true`, ports `3100/3101` clear, and no matching E2E Node process remains. Receipt SHA-256:
+  `54E178115CAD3F3BC4814A35218CC4E9E1CB4D7F4EDC5DC71AC2657615837A06`.
+- The per-run `%TEMP%\x4forge-e2e-state-36196` directory remains inert; process ownership is fully closed. The live
+  Antigravity discovery file and protected mod/game hashes stayed unchanged.
 
-## Baseline, package, and rollback
+## Installed Forge and X4 evidence
 
-- Current pushed baseline before this source checkpoint:
-  `HEAD == origin/main == direct remote == 47ce998bea73fc2a0ecf3645663c00141b93b72b`.
-- Existing installed extension: `C:\Users\Moshi\.antigravity-ide\extensions\x4forge.x4-forge-studio-0.0.70`.
-- Existing prior rollback backup:
-  `C:\Users\Moshi\AppData\Local\Temp\x4forge-b119-install-backup-20260902-140638`.
-- Prior reviewed VSIX:
-  `vscode-extension/x4-forge-studio-0.0.70-b119-native-png-019fea10.vsix`, SHA-256
-  `377B555B6CF8FFD9A24B3A2D1EAAA2C582C4E4A5EAEBCB7F6BA9E25A07835A21`.
-- Before replacing the installed directory, create a fresh exact backup and retain its path/hash census. Rollback is
-  stop managed host, restore that whole directory, restart Antigravity extension host, and verify installed hashes.
+- Reviewed VSIX: `vscode-extension/x4-forge-studio-0.0.70-b119-pen-advance-019fea10.vsix`, `26,288,585` bytes,
+  SHA-256 `55031D0626F840B4CFEA8572B85FFF21C1B6D618E91B1EC82C9DB6F1D26C938F`.
+- Rollback backup: `C:\Users\Moshi\AppData\Local\Temp\x4forge-b119-pen-advance-backup-20260902-193500`.
+- Installed Antigravity critical bytes match the staged package. Exact source selection is
+  `ui/pipeline_test.lua -> menu.createFrame`; profile is `2544x1353 / X4 user scale 1 / effective Helper scale
+  1.2527777777777778`; the current-canvas footer still says `Not verified in game`.
+- Corrected native Forge PNG: `91,675` bytes / SHA-256
+  `521F647DC1B6FB46E701166482137D63E1AD8983346DED7172204E2E52C440EE`.
+- Fresh X4 screenshot: `407,029` bytes / SHA-256
+  `0045715651BDEC6CFC9A5371ED5BFF6A058E41F6448EB1AF55F015E472452C5D`.
+- First button-label extent: old Forge `97-98`, corrected Forge `108-109`, X4 `108-109`. Second: old `95-96`,
+  corrected `104-105`, X4 `106`. Status: old `219`, corrected `244`, X4 `243-245`.
+- X4 accepted both buttons, native edit-box input, focus retention, standard close, and clean exit. Scoped debuglog has
+  zero `pipeline_test` runtime errors, zero view-setup failures, and zero Lua tracebacks.
 
 ## Durable records
 
 - Canonical plan: `docs/plans/2026-09-02-b119-canonical-source-editor-game-pipeline.md`.
-- BACKLOG B119 remains `in_progress / PARTIAL`.
-- Existing external readback: GitHub #41 comment `5514694526`; Notion owner
-  `3b84618e-d15b-8190-821e-c0eb96f43d5a`; Drive doc `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, revision
-  `ANLCKQnPV2tiWmIsxqdSqFY7Da7kUB6J0Vy4fh6H79AaVrF0TARj2mfS1QqH4NkY5724ZZDrMx2d5lqfuHVtVdYJUD6svM1BaIqew2yYe290`.
-- X4 UI quick-reference card 25 records the user/effective-scale trap. Add the bounded renderer-byte-cache lesson only
-  after installed-host validation succeeds.
-- No capability-map delta yet: source behavior is stronger, but installed/game evidence has not been refreshed.
+- Comparison/evidence: `dev-docs/b119-x4-ui-pipeline-smoke/source-editor-ingame-20260902/` (ignored evidence; do not
+  force-add unless the release record explicitly chooses to version binary evidence).
+- BACKLOG B119 remains open and now records the bounded verified pen-advance checkpoint.
+- X4 UI quick-reference card 26 records the `.abc` advance trap at
+  `F:\StarForge\wiki\x4-modding-methods\07 UI (Lua widgets, menus, overlays)\ui-modding-gotchas-quick-reference.md`.
+- Capability-map and project AAR deltas must be appended before external synchronization.
+- Existing external owners to update after the source commit: GitHub #41; Notion
+  `3b84618e-d15b-8190-821e-c0eb96f43d5a`; Drive doc `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`.
 
 ## Exact continuation
 
-1. Stage only the ten bounded source/test/record paths, commit, push, and assert local/tracking/direct-remote parity.
-2. Build production plus extension, stage/probe, package a distinct B119 scale/cache VSIX, inspect its entries and hash.
-3. Before installation, state exact target/risk/rollback and create a fresh whole-extension backup. Replace only the
-   existing `0.0.70` extension, restart its managed host, and verify installed bytes against the reviewed package.
-4. In installed Antigravity, bind exact `ui/pipeline_test.lua -> menu.createFrame`; enter width `2544`, height `1353`,
-   X4 user scale `1`; verify derived effective `1.252777777777...`, current canvas, repeated transitions, and native PNG.
-5. Launch X4 at the same drawable/user-scale profile; verify buttons, editbox, close, owned log, and compare fresh bounds.
-6. Update plan/BACKLOG/handoff/AAR, UI KB, capability-map delta if warranted, GitHub #41, Notion, and Drive. Commit/push
-   exact record paths. Do not publish OpenVSX until separate release acceptance passes.
+1. Append the capability-map and project AAR deltas.
+2. Run diff hygiene, explicit-path stage, commit, push, and assert local/tracking/direct-remote parity.
+3. Update and read back GitHub #41, Notion, and Drive with the exact source commit and bounded/full status boundary.
+4. Overwrite this handoff with external receipt IDs, create the record-close commit, push, and re-prove parity.
+5. Review the original brief line by line before selecting the next B119 unit. Do not publish OpenVSX until release
+   acceptance explicitly passes.
 
 ## Preservation boundary
 
 - Preserve every unrelated modified, deleted, and untracked path in the broad working tree.
 - Never stage `test-results/.last-run.json`, unrelated docs/plans, deleted scripts/data, screenshots/showcase assets,
   release metadata, `vscode-extension/package.json`, or existing user files.
-- Overall B119 remains `PARTIAL`: arbitrary C++ frame acceptance, exact Zekton glyph parity, full Helper/widget/keep-out
-  coverage, AI Influence reconstruction, one complete `3/3` browser receipt, and release/OpenVSX acceptance remain open.
+- Overall B119 remains `PARTIAL`: universal C++ frame acceptance, complete Helper/widget/keep-out coverage, exact
+  shader/alpha identity, arbitrary Lua, full AI Influence reconstruction, release acceptance, and OpenVSX remain open.

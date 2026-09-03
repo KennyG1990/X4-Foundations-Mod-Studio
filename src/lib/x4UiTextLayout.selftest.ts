@@ -217,14 +217,24 @@ const decodedCrossPair = decodeZektonFontAssets(
   atlasBytes,
   boldAtlasIdentity,
 );
+const decodedInvalidNativePen = decodeZektonFontAssets(
+  makeAbc(
+    [{ ...regularRecords[1], bearing: -8 }],
+    { 65: 1 },
+  ),
+  regularIdentity,
+  atlasBytes,
+  regularAtlasIdentity,
+);
 assertCondition(
-  decodedRegular.ok && decodedBold.ok && decodedUnpinned.ok && decodedCrossPair.ok,
+  decodedRegular.ok && decodedBold.ok && decodedUnpinned.ok && decodedCrossPair.ok && decodedInvalidNativePen.ok,
   'layout font-pair fixtures must decode',
 );
 const regularFont = decodedRegular.value;
 const boldFont = decodedBold.value;
 const unpinnedFont = decodedUnpinned.value;
 const crossPairFont = decodedCrossPair.value;
+const invalidNativePenFont = decodedInvalidNativePen.value;
 const scale = 9 / 32;
 
 const tests: readonly [string, () => void][] = [
@@ -241,7 +251,7 @@ const tests: readonly [string, () => void][] = [
       assertApprox(layout.lines[0].lineBox.height, 52 * scale, 'line box height');
       const quad = layout.lines[0].glyphQuads[0];
       assertCondition(quad !== undefined, 'A quad should be emitted');
-      assertApprox(quad.scaledAdvance, 7 * scale, 'scaled A advance');
+      assertApprox(quad.scaledAdvance, 8 * scale, 'scaled A native pen advance');
       assertApprox(quad.x, 1 * scale, 'bearing-aware A x');
       assertApprox(quad.width, 4 * scale, 'bitmap width scaling');
       assertApprox(quad.height, 52 * scale, 'typed line-box height scaling');
@@ -258,6 +268,50 @@ const tests: readonly [string, () => void][] = [
     },
   ],
   [
+    'native pen advance fail-first: nonzero bearing changes line width and scaled advance',
+    () => {
+      const layout = expectSuccess(layoutZektonText(
+        regularFont,
+        'A',
+        makeProfile(regularIdentity, regularAtlasIdentity, 50),
+      ));
+      const quad = layout.lines[0].glyphQuads[0];
+      assertCondition(quad !== undefined, 'A quad should be emitted for native pen-advance fail-first test');
+      assertApprox(layout.lines[0].width, 8 * scale, 'A line width includes horizontal bearing');
+      assertApprox(quad.scaledAdvance, 8 * scale, 'A scaled advance includes horizontal bearing');
+    },
+  ],
+  [
+    'native pen advance fail-first: negative bearing changes following pen position',
+    () => {
+      const layout = expectSuccess(layoutZektonText(
+        regularFont,
+        ' A',
+        makeProfile(regularIdentity, regularAtlasIdentity, 50),
+      ));
+      const quad = layout.lines[0].glyphQuads[1];
+      assertCondition(quad !== undefined, 'A following-space quad should be emitted for native pen-advance fail-first test');
+      assertApprox(quad.x, 4 * scale, 'A x uses the negative-bearing space pen advance exactly once');
+    },
+  ],
+  [
+    'native pen advance rejects nonpositive derived geometry as a displayed gap without partial width',
+    () => {
+      const layout = expectSuccess(layoutZektonText(
+        invalidNativePenFont,
+        'A',
+        makeProfile(regularIdentity, regularAtlasIdentity, 50),
+      ));
+      assertEqual(layout.lines[0].displayedText, 'A', 'invalid native advance remains source-indexed display text');
+      assertEqual(layout.lines[0].width, 0, 'invalid native advance contributes no partial line width');
+      assertEqual(layout.lines[0].glyphQuads.length, 0, 'invalid native advance emits no partial glyph quad');
+      assertEqual(layout.lines[0].gaps.length, 1, 'invalid native advance emits one typed displayed gap');
+      assertEqual(layout.lines[0].gaps[0]?.reason, 'overflow', 'invalid native advance gap reason');
+      assertEqual(layout.lines[0].gaps[0]?.displayed, true, 'invalid native advance gap is displayed');
+      assertEqual(layout.overflow, true, 'invalid native advance marks layout overflow');
+    },
+  ],
+  [
     'regular and bold retain exact advances at explicit scale',
     () => {
       const regular = expectSuccess(layoutZektonText(
@@ -270,8 +324,8 @@ const tests: readonly [string, () => void][] = [
         'B',
         makeProfile(boldIdentity, boldAtlasIdentity, 50) as ZektonTextLayoutProfile,
       ));
-      assertApprox(regular.lines[0].glyphQuads[0].scaledAdvance, 9 * scale, 'regular B advance');
-      assertApprox(bold.lines[0].glyphQuads[0].scaledAdvance, 10 * scale, 'bold B advance');
+      assertApprox(regular.lines[0].glyphQuads[0].scaledAdvance, 11 * scale, 'regular B native pen advance');
+      assertApprox(bold.lines[0].glyphQuads[0].scaledAdvance, 12 * scale, 'bold B native pen advance');
       assertEqual(bold.atlasIdentity.sha256, boldAtlasIdentity.sha256, 'bold atlas identity');
     },
   ],
@@ -377,15 +431,25 @@ const tests: readonly [string, () => void][] = [
       assertEqual(layout.lines[0].glyphQuads[1].isEllipsis, true, 'ellipsis quad provenance');
       assertEqual(layout.lines[0].glyphQuads[1].sourceRange.start, 2, 'ellipsis has no source span');
       assertEqual(layout.lines[0].glyphQuads[1].sourceRange.end, 2, 'ellipsis source end is original end');
-      const overwideEllipsis = expectSuccess(layoutZektonText(
+      const exactFitEllipsis = expectSuccess(layoutZektonText(
         regularFont,
         'AB',
         makeProfile(regularIdentity, regularAtlasIdentity, 2 * scale, { truncationMode: 'ellipsis' }),
       ));
+      assertEqual(exactFitEllipsis.lines[0].displayedText, '.', 'exact-fit ellipsis remains explicit');
+      assertEqual(exactFitEllipsis.lines[0].overflow, false, 'exact-fit ellipsis overflow state');
+      assertEqual(exactFitEllipsis.overflow, false, 'layout overflow state');
+      assertApprox(exactFitEllipsis.lines[0].width, 2 * scale, 'exact-fit ellipsis width evidence');
+      assertEqual(exactFitEllipsis.gaps.some(gap => gap.reason === 'overflow'), false, 'exact-fit ellipsis has no overflow gap');
+      const overwideEllipsis = expectSuccess(layoutZektonText(
+        regularFont,
+        'AB',
+        makeProfile(regularIdentity, regularAtlasIdentity, 1 * scale, { truncationMode: 'ellipsis' }),
+      ));
       assertEqual(overwideEllipsis.lines[0].displayedText, '.', 'overwide ellipsis remains explicit');
       assertEqual(overwideEllipsis.lines[0].overflow, true, 'overwide ellipsis overflow state');
-      assertEqual(overwideEllipsis.overflow, true, 'layout overflow state');
-      assertApprox(overwideEllipsis.lines[0].width, 3 * scale, 'overwide ellipsis width evidence');
+      assertEqual(overwideEllipsis.overflow, true, 'layout overflow state for overwide ellipsis');
+      assertApprox(overwideEllipsis.lines[0].width, 2 * scale, 'overwide ellipsis width evidence');
       assertEqual(overwideEllipsis.gaps.some(gap => gap.reason === 'overflow'), true, 'overwide ellipsis gap');
     },
   ],
@@ -438,6 +502,7 @@ const tests: readonly [string, () => void][] = [
       assertEqual(supplementary.lines[0].glyphQuads[0].sourceRange.start, 0, 'supplementary source start');
       assertEqual(supplementary.lines[0].glyphQuads[0].sourceRange.end, 2, 'supplementary source end');
       assertEqual(supplementary.lines[0].glyphQuads[0].sourceCodePointRange.end, 1, 'supplementary code-point end');
+      assertApprox(supplementary.lines[0].glyphQuads[0].scaledAdvance, 8 * scale, 'zero-bearing M keeps its advance value');
       const gaps = expectSuccess(layoutZektonText(
         regularFont,
         'A?\u0001\u001b',
