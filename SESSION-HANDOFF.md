@@ -11,8 +11,9 @@ Status: literal brief `4/6 VERIFIED / 2/6 PARTIAL`; overall B119 `IN_PROGRESS / 
   fixed `2544x1353` drawable. This directly closes original brief row 3 without conflating resolution scaling.
 - Eyeball queue: none for the completed scale unit. Remaining visible acceptance is three complete real-menu
   column/row/wrap/truncation comparisons and context-grounded rendering for all four keep-out presets.
-- Commit question: acceptance-audit checkpoint `0534c3e61f39ad1e29c7711979b6047fc010fbbd` is pushed. Commit the completed
-  scale record next as `docs(ui-editor): verify fixed-drawable UI scaling`, with exact path staging only.
+- Commit question: scale checkpoint `3367c6846431b0ac85b1ab8081ce8a9657ded45d` is pushed with exact local,
+  tracking, and direct-remote parity. Commit this projection/readback close next as
+  `docs(ui-editor): record scale checkpoint projections`, with exact path staging only.
 
 ## Current bounded result
 
@@ -55,12 +56,24 @@ Status: literal brief `4/6 VERIFIED / 2/6 PARTIAL`; overall B119 `IN_PROGRESS / 
 - X4 slider-track activation can stage an extreme value (`1.8` here). It was never confirmed. Use the inner arrow for
   one-step tests and visibly read back the value before capture.
 
+## Durable projection readback
+
+- Repository source checkpoint: `3367c6846431b0ac85b1ab8081ce8a9657ded45d`; complete precommit passed and local,
+  tracking, and direct-remote `main` were equal after push.
+- GitHub owner #41 remains open. Comment `5525209644` was written and read back with the exact scale result, `4/6`
+  original-brief boundary, and two remaining rows.
+- Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a` was read back at `Status=In Progress` and
+  `Evidence Grade=Partial`, with the commit/comment and fixed-drawable heading present.
+- Google Current Status document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, was revision-guarded
+  and read back at revision
+  `ANLCKQne8OZbPRb6PHRufzwKLfOLH_yusLOGNaGOZWrm2Mz1LvS0zORn0mWt1LL1aiEtm0C9T448JOcLMBrxp3lttyQAiHPnSCID-JbAycdV`.
+- The first Drive append placed the new heading on the preceding paragraph and styled both as `HEADING_2`. An exact
+  index repair inserted the missing paragraph boundary, restored the preceding paragraph to `NORMAL_TEXT`, and was
+  read back before acceptance.
+
 ## Next bounded unit
 
-1. Finish the current docs/cloud checkpoint: validate the receipt/records, run complete precommit, exact-stage only
-   `BACKLOG.md`, `SESSION-HANDOFF.md`, the main B119 plan, and the fixed-scale plan; commit/push and prove three-way
-   parity. Update/read back GitHub #41, Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Google Current Status
-   document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`.
+1. Commit/push this four-file projection/readback close with exact staging and prove local/tracking/direct-remote parity.
 2. Reconcile `src/lib/x4UiKeepOuts.ts`, its paint consumer, four presets, shipped UI owners, and retained X4 screenshots.
    Calibrate only geometry supported by shipped source or new screenshots; never convert an unavailable placeholder
    into a measured overlay. Close row 5 only when all four context presets visibly paint and toggle per canvas.

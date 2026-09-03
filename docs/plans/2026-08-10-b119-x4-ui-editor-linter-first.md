@@ -11706,3 +11706,18 @@ Status: `BOUNDED VERIFIED / ORIGINAL BRIEF 4/6 VERIFIED / 2/6 PARTIAL / OVERALL 
   keep-out, or universal engine parity. Overall B119 stays `IN_PROGRESS / PARTIAL`; next work targets brief row 5 or
   the first complete row-2 menu census without invented geometry.
 - Suggested commit title: `docs(ui-editor): verify fixed-drawable UI scaling`.
+
+### DURABLE PROJECTION READBACK
+
+- Source checkpoint `3367c6846431b0ac85b1ab8081ce8a9657ded45d` passed complete precommit and has exact
+  local/tracking/direct-remote parity.
+- GitHub owner issue #41 remains open. Comment `5525209644` was written and read back with the exact measurements,
+  `4/6 VERIFIED / 2/6 PARTIAL` boundary, and remaining keep-out/three-menu work.
+- Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a` was read back at `In Progress / Partial`; its summary,
+  reverse-sync field, and fixed-drawable checkpoint heading identify the commit and GitHub comment.
+- Google Current Status document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, was revision-guarded
+  and read back at
+  `ANLCKQne8OZbPRb6PHRufzwKLfOLH_yusLOGNaGOZWrm2Mz1LvS0zORn0mWt1LL1aiEtm0C9T448JOcLMBrxp3lttyQAiHPnSCID-JbAycdV`.
+  The first append joined the new heading to the preceding paragraph and styled the combined paragraph as
+  `HEADING_2`; an exact-index newline/style repair restored the prior paragraph to `NORMAL_TEXT` and produced one
+  separate heading. Fresh structural readback, not the initial connector success, is the accepted evidence.

@@ -114,6 +114,20 @@ Status: `VERIFIED`
   new product capability.
 - **Suggested commit title:** `docs(ui-editor): verify fixed-drawable UI scaling`.
 
+### Durable projection
+
+- Source checkpoint `3367c6846431b0ac85b1ab8081ce8a9657ded45d` passed complete precommit, was pushed,
+  and was read back equal from local `HEAD`, tracking `origin/main`, and direct remote `refs/heads/main`.
+- GitHub owner issue #41 remains open. Comment `5525209644` was written and read back with the exact fixed-drawable
+  measurements, `4/6 VERIFIED / 2/6 PARTIAL` boundary, and two remaining acceptance rows.
+- Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a` was updated and read back at `Status=In Progress` and
+  `Evidence Grade=Partial`; its summary/reverse-sync fields and new checkpoint heading identify the commit and comment.
+- Google Current Status document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, was revision-guarded
+  and read back at
+  `ANLCKQne8OZbPRb6PHRufzwKLfOLH_yusLOGNaGOZWrm2Mz1LvS0zORn0mWt1LL1aiEtm0C9T448JOcLMBrxp3lttyQAiHPnSCID-JbAycdV`.
+  The accepted structure has the preceding checkpoint text as `NORMAL_TEXT`, one separate fixed-drawable
+  `HEADING_2`, and the complete body below it.
+
 ## AAR
 
 - **Sustain:** isolate one factor at a time, retain exact source/profile hashes, compare multiple independent controls,
@@ -123,5 +137,8 @@ Status: `VERIFIED`
 - **Improve tools:** the installed Forge export handler displayed `exported one image/png` when accessibility invocation
   ran even though no native Save As completion or file existed. Physical activation plus exact file/hash readback was
   required. This is a real false-success product gap and is not treated as successful export evidence by itself.
+- **Projection tool trigger:** the first Google Docs append omitted a paragraph boundary and promoted the preceding
+  paragraph plus new heading to one `HEADING_2`. Exact index inspection, a revision-locked newline insertion, style
+  restoration, and fresh readback repaired the document; connector success alone was not accepted as layout proof.
 - **Highest-risk evidenced weakness:** a scale comparison that changes drawable and user scale together cannot identify
   which factor is correct. Fixed-drawable paired captures are now the required pattern.

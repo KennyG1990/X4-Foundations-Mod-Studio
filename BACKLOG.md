@@ -34,6 +34,11 @@ remain `PARTIAL`. Full matrix, receipt, and AAR:
 `docs/plans/2026-09-03-b119-fixed-drawable-user-scale.md`. The installed export status can announce success before
 native Save As/file completion; repair that false-success wording before release. Next unit is missing keep-out
 calibration or the first complete-menu census. No release is claimed.
+Scale checkpoint `3367c6846431b0ac85b1ab8081ce8a9657ded45d` has exact local/tracking/direct-remote parity. GitHub #41
+comment `5525209644`, Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Google Current Status revision
+`ANLCKQne8OZbPRb6PHRufzwKLfOLH_yusLOGNaGOZWrm2Mz1LvS0zORn0mWt1LL1aiEtm0C9T448JOcLMBrxp3lttyQAiHPnSCID-JbAycdV`
+were written and read back. The first Drive append crossed a paragraph boundary incorrectly; the accepted revision
+contains a separate `HEADING_2` and restored preceding `NORMAL_TEXT` paragraph.
 **UI-only end-to-end smoke 2026-08-28 — ONE-PROFILE X4 VERIFIED / FULL B119 PARTIAL:** Forge compiled,
 linted, project-validated, guarded-wrote, dry-deployed, and actually deployed the dedicated four-file `pipeline_test`
 mod. X4 9.00 visibly rendered the generated frame at the configured `2544x1353` drawable profile; both buttons were
