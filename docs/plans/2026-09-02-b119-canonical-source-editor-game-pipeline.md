@@ -926,3 +926,18 @@ Status at plan time: `SPECIFIED`. No capability-map delta.
   fetch race, one incomplete combined probe, one PowerShell alias collision, and one `.git`-inclusive false census;
   all failed evidence is retained. Highest risk was silent extension/tab authority divergence, now contained by one
   copied-header helper, fail-closed response checks, immutable key binding, and installed cross-target evidence.
+
+**DURABLE SYNC**
+
+- Source checkpoint `104fa24ee21c9be135014f77f10bbff87452b789` is pushed with exact local `HEAD`,
+  `origin/main`, and direct-remote parity; the six owned implementation/record paths are clean.
+- GitHub #41 remains open. Comment `5519542967` was written and read back with the bounded `VERIFIED` / overall
+  `PARTIAL` boundary, next paired-CAS import, and no OpenVSX claim intact.
+- Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a` was updated in place and read back at
+  `2026-09-03T02:45:26.111Z` as `Status=In Progress / Evidence Grade=Partial`; its summary, reverse-sync receipt,
+  checkpoint section, commit, and GitHub comment agree.
+- Google Current Status document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, passed the
+  file-backed protected-control scan with zero protected controls, then accepted one revision-guarded section at
+  revision `AIroW357C_UGd302aKKSXBH8TxCjQtwshU69T33JkZOtN2vnczFFByE5KSL_n2YXQmhArdAS1D26Inu5HqxrZOkp8hfrotvx2E6seWQ-k7uD`.
+  Readback proves exactly one peer `HEADING_2`, eight `NORMAL_TEXT` paragraphs, the intended terminal empty paragraph,
+  and no unrelated tab or structure change.

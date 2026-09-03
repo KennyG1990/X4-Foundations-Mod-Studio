@@ -1865,6 +1865,11 @@ tab. Both workspace JSONs and the exact Mod Workspace/loose-build/game trees rem
 The current persisted AI workspace is still historical source, so next is a backed-up paired-CAS import of the current
 configured mod and a new three-menu gap census. Three-menu fidelity, AI reconstruction, final Forge/X4 comparison,
 release acceptance, and OpenVSX remain open; B119 and GitHub #41 stay `IN_PROGRESS / PARTIAL`.
+Durable projection readback is complete: checkpoint `104fa24ee21c9be135014f77f10bbff87452b789` has exact
+local/tracking/direct-remote parity; GitHub #41 comment `5519542967`; Notion owner
+`3b84618e-d15b-8190-821e-c0eb96f43d5a` remains `In Progress / Partial`; and Google Current Status tab `t.0` is at
+revision `AIroW357C_UGd302aKKSXBH8TxCjQtwshU69T33JkZOtN2vnczFFByE5KSL_n2YXQmhArdAS1D26Inu5HqxrZOkp8hfrotvx2E6seWQ-k7uD`.
+The Drive trusted read found zero protected controls and final readback shows one peer heading plus eight body paragraphs.
 
 ### B115 · Forge Capability Convergence `in_progress` (P0, PRIORITY OVERRIDE)
 

@@ -1,4 +1,4 @@
-# Session handoff — B119 installed workspace authority verified; current-source import next
+# Session handoff — B119 workspace-authority records synchronized; current-source import next
 
 Date: 2026-09-02
 Project: `F:\DEV_ENV\X4_Forge`
@@ -11,8 +11,8 @@ Status: bounded installed workspace-authority repair `VERIFIED`; overall B119 `I
   converge on one target instead of rejecting a valid switch with `WORKSPACE_ID_CONFLICT`.
 - Eyeball queue: no operator check blocks the next API/source census. A later release candidate still needs the full
   original-brief review, AI Influence reference reconstruction, final Forge/X4 comparison, and OpenVSX acceptance.
-- Commit question: this workspace-authority implementation and its receipt-bearing records are ready for one explicit
-  path commit/push. Preserve the broad unrelated dirty tree.
+- Commit question: implementation checkpoint `104fa24` is committed, pushed, and mirrored externally. The small
+  records-only sync is the next explicit path commit; preserve the broad unrelated dirty tree.
 
 ## Implemented bounded unit
 
@@ -63,17 +63,26 @@ Status: bounded installed workspace-authority repair `VERIFIED`; overall B119 `I
 - All equal baseline; X4 process count is zero. A temporary 287-file alarm was a rejected census error that included
   the source mod's existing 160-file `.git`; the mod worktree itself is clean at `4c0a422...`.
 
+## Durable projection readback
+
+- Implementation checkpoint `104fa24ee21c9be135014f77f10bbff87452b789` has exact local, tracking, and direct-remote
+  parity; its six owned paths are clean.
+- GitHub #41 comment `5519542967` was written and read back; the issue remains open.
+- Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a` was read back at `2026-09-03T02:45:26.111Z` as
+  `In Progress / Partial`, with checkpoint `104fa24`, comment `5519542967`, and no OpenVSX claim.
+- Google Current Status `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, passed a file-backed scan
+  with zero protected controls. Its revision-guarded append is read back at
+  `AIroW357C_UGd302aKKSXBH8TxCjQtwshU69T33JkZOtN2vnczFFByE5KSL_n2YXQmhArdAS1D26Inu5HqxrZOkp8hfrotvx2E6seWQ-k7uD`
+  as one `HEADING_2`, eight `NORMAL_TEXT` paragraphs, and the unchanged terminal empty paragraph.
+
 ## Exact continuation
 
-1. Run final diff hygiene, explicitly stage only the workspace-authority source/selftest, canonical plan,
-   `BACKLOG.md`, and this handoff. Commit `fix(extension): keep Studio workspace authority in sync`, push, and assert
-   `HEAD == origin/main == ls-remote main`.
-2. Synchronize and read back GitHub #41, Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Drive Current Status
-   doc `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`.
-3. Start a new documented bounded unit: back up AI workspace state, read paired `workspaceHash/snapshotHash`, import
+1. Run diff hygiene, explicitly stage only this handoff, `BACKLOG.md`, and the canonical plan, commit
+   `docs(ui-editor): record workspace authority checkpoint`, push, and assert three-way parity.
+2. Start a new documented bounded unit: back up AI workspace state, read paired `workspaceHash/snapshotHash`, import
    configured `x4_ai_influence` from the Mod Workspace through `/api/agent/mod-folder/import`, and commit it only with
    paired CAS. Do not alter source, loose build, or game target.
-4. Re-run strict MENU/HUB/COMM census from the imported current source, identify the first causal visible-operation gap,
+3. Re-run strict MENU/HUB/COMM census from the imported current source, identify the first causal visible-operation gap,
    and route any code repair to exact native Luna. Do not publish OpenVSX until release acceptance explicitly passes.
 
 ## Preservation boundary
