@@ -1,23 +1,31 @@
-# Session handoff — B119 current COMM pipeline verified; original-brief audit next
+# Session handoff — B119 original-brief audit 3/6; direct UI-scale proof next
 
 Date: 2026-09-03
 Project: `F:\DEV_ENV\X4_Forge`
-Status: current-COMM installed preview/deploy/X4 unit `VERIFIED`; overall B119 `IN_PROGRESS / PARTIAL`
+Status: original-brief audit `VERIFIED`; literal acceptance `3/6 VERIFIED / 3/6 PARTIAL`; overall B119 `IN_PROGRESS`
 
 ## Session-start brief
 
 - Project: X4 Forge B119, the linter-first source-faithful X4 Lua UI editor. GitHub owner: #41.
-- Biggest milestone: the current configured AI Influence `aic_comm.lua -> comm.display` now has one exact
-  installed-Forge native preview and a separate exact-source X4 acceptance run. Shared static title/button geometry is
-  within `5` horizontal and `2` vertical pixels at the same `2544x1353` drawable.
+- Biggest milestone: the original brief is now audited line by line. Exact Lua round-trip, all eleven linter rules, and
+  deploy-bound verification truth are closed; no placeholder context or static-header evidence was promoted into a
+  full renderer claim.
 - Eyeball queue: none for this bounded unit. X4 screenshots already retain compact COMM, expanded COMM, DOSSIER/hub,
   and return-to-game evidence. Remaining experience work is the brief's three complete real-menu comparisons and the
   supplied AI Influence visual reconstruction.
-- Commit question: source checkpoint `817490d9234305b86754ecedb08eea0cd149d5e7` and package/install record
-  `667514ffd5a7348fe19d596b2d0944213217d51b` are pushed. The current runtime record must be committed as
-  `docs(ui-editor): record current COMM game checkpoint` after precommit; stage only the exact repository records.
+- Commit question: current runtime checkpoint `0770a269a60f72c13d126a1e38df4ef431ec37d6` is pushed. The acceptance-audit
+  record is the next explicit-path commit after validation, titled `docs(ui-editor): audit original brief acceptance`.
 
 ## Current bounded result
+
+- Literal brief matrix: rows 1, 4, and 6 `VERIFIED`; rows 2, 3, and 5 `PARTIAL`.
+- Fresh focused evidence: CallModel `93/93`; SourceEdits base `90/90` with all causal matrices green; KeepOuts `17/17`;
+  PaintPlan `180/180`; and passing SourceBundle, EditorSession, SourceEditor/UIBuilder, and GameVerification.
+- Row 2 remains open because complete three-menu column/row/wrap/truncation comparisons do not exist.
+- Row 3 remains open because existing X4 evidence changed drawable resolution, not X4's user UI-scale option at a
+  fixed drawable. Shipped `gameoptions.lua` confirms the real owner is `C.Get/SetUIScaleFactor` with `0.1` steps.
+- Row 5 remains open because four preset IDs and toggles exist but mission ticker/top HUD geometry is unmeasured and
+  map/fullscreen/first-person applicability is not established. An unavailable Paint command is not rendered geometry.
 
 - Installed Forge sidecar PID `47500` is live at `127.0.0.1:52236`; ports `3100/3101` are stopped; X4 is stopped.
 - Workspace `ws_bca860d02b9ea61f6028bfb4` (`x4 AiLive`) selected exact
@@ -69,14 +77,15 @@ Status: current-COMM installed preview/deploy/X4 unit `VERIFIED`; overall B119 `
 
 ## Next bounded unit
 
-1. Run complete precommit, stage only `BACKLOG.md`, this handoff, and the canonical plan, then commit/push and prove
-   local/tracking/direct-remote parity. The ignored evidence directory remains untracked by policy.
-2. Update/read back GitHub #41, Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Google Current Status tab
-   `t.0` with the exact bounded-verified/overall-partial boundary.
-3. Audit the original brief line by line, starting with the user-prioritized linter table. Re-run the complete linter
-   rule matrix; repair only a reproduced missing rule/test. If all eleven trap families remain covered, document that
-   acceptance row and select the first remaining complete-menu or keep-out gap.
-4. OpenVSX remains deferred until explicit release acceptance and publish-before-commit preparation.
+1. Preserve the current X4 configuration/profile, launch X4 at the same drawable, change the actual Game Settings UI
+   scale by one supported `0.1` step, capture the same fixture and game-reported scale, then restore and verify the
+   original setting/config bytes or value.
+2. Drive the Forge user-scale control to the matching value through the existing installed host and compare geometry;
+   record row 3 `VERIFIED` only if the scale ratio agrees at the fixed drawable.
+3. Commit/push the acceptance audit with exact path staging and update/read back GitHub #41, Notion owner
+   `3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Google Current Status tab `t.0`.
+4. Continue with missing keep-out calibration or the first complete-menu census. OpenVSX remains deferred until
+   explicit release acceptance and publish-before-commit preparation.
 
 ## Preservation and credential boundary
 

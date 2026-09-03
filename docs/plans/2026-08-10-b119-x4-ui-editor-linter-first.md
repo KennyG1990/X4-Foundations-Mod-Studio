@@ -11612,3 +11612,52 @@ Status: `BOUNDED VERIFIED / PIXEL PARITY PARTIAL / OVERALL B119 IN_PROGRESS`. De
   Current Status revision
   `ANLCKQnsxhUytocioHZoSZ9nBJM6LYlVGnu4fP12TgwXXEYIXv8VYVSmlEsZ2ONWb82TTAFecuEXEUd0mSx2inNNzbUj97FOTABQRY1qRxhw`.
   All were written and read back; GitHub #41 remains open.
+
+## 2026-09-03 — Original-Brief Acceptance Audit
+
+Status: `3/6 VERIFIED / 3/6 PARTIAL / OVERALL B119 IN_PROGRESS`.
+
+### PLAN / BASELINE / RECONCILE
+
+- **Bounded unit:** re-read the supplied brief's six acceptance rows, rerun the source, linter, keep-out, paint,
+  editor, and game-verification contracts, and classify each row from current evidence before choosing more work.
+- **Baseline:** `HEAD == origin/main == 0770a269a60f72c13d126a1e38df4ef431ec37d6`; X4 was stopped; installed
+  Forge sidecar PID `47500` remained live on `127.0.0.1:52236`; the broad unrelated dirty tree was preserved.
+- **Reconciled owners:** exact source-bundle projection, ordered call model, source-preserving CAS edits, the existing
+  eleven-rule linter, package readiness, four named keep-out presets, issued Scene/Paint pipeline, mounted Source
+  Editor, and deploy-bound external game-verification classifier. No implementation or test code changed.
+- **Acceptance contract:** a row is `VERIFIED` only when the literal brief requirement has direct current evidence.
+  Structural context identifiers do not count as rendered keep-out geometry, resolution-derived scale does not count
+  as changing X4's user-scale option, and one static header does not count as three complete menu comparisons.
+
+### VALIDATE / REVIEW
+
+| Brief row | Result | Current evidence and exact remaining gap |
+|---|---|---|
+| 1. Hand-written shipping Lua imports and re-exports with the same calls and values | `VERIFIED` | SourceBundle preserves `ui.xml` and every Lua string byte-exactly, including BOM/CRLF; CallModel passed `93/93`; SourceEdits passed its `90/90` base plus `48/48`, `12/12`, `31/31`, `95/95`, `97/97`, `125/125`, `10/10`, `63/63`, and retained-payload `43/43` matrices. The current shipping `aic_comm.lua` also remained exact at `27,481` bytes / `88FAB05A...63511` through workspace, export authority, deploy, and X4. |
+| 2. Three real menus match game screenshots within a few pixels for columns, rows, wrap, and truncation | `PARTIAL` | `pipeline_test` has same-profile widget geometry evidence and current COMM has static title/button edges within `5x2` pixels. Neither is a complete three-menu census, and the runtime-built COMM body, wrap points, and truncation positions remain unmeasured. |
+| 3. Forge UI-scale control behaves like X4's UI-scale option | `PARTIAL` | Forge projects different scales and X4's shipped game-options code proves `C.GetUIScaleFactorRange` / `C.SetUIScaleFactor` in `0.1` steps. Existing game captures changed drawable resolution, not the user-scale slider at one drawable, so the required direct comparison is still open. |
+| 4. Every tabled linter trap trips; `addTable(24)` is blocked before export | `VERIFIED` | Linter passed `140/140` across all eleven brief families; server integration passed `21/21`; package-readiness and project-orchestration negatives reject the fatal 24-column fixture before export/package; configured X4 9.00 corpus and its harness passed. |
+| 5. Four listed keep-out contexts render and are toggleable per canvas | `PARTIAL` | All four preset IDs and per-canvas controls exist; KeepOuts passed `17/17`; PaintPlan passed `180/180` and retains all four context identities. Only cockpit-conversation has context-evidenced measured guides. Mission ticker and top HUD remain `reference-unmeasured`, while map/fullscreen/first-person applicability is not established; an `unavailable` command is not rendered overlay geometry. |
+| 6. Preview says not verified until deploy-and-confirm clears it | `VERIFIED` | Source Editor keeps the layout-only warning, while the external verification card starts `Not verified in game`, enables confirmation only for an exact clean deploy, becomes `Externally verified in game` after confirmation, and returns to not-verified on source/target/profile/deployed-fingerprint drift. GameVerification and SourceEditor/UIBuilder selftests passed. |
+
+Focused current commands all exited `0`: GameVerification; EditorSession; KeepOuts `17/17`; PaintPlan `180/180`;
+SourceEditor/UIBuilder; SourceBundle; SourceEdits; and CallModel `93/93`. The earlier complete linter, integration,
+orchestration, package-readiness, corpus, corpus-harness, and precommit receipts remain current because no product byte
+changed after checkpoint `0770a269`.
+
+### CLOSE / AAR
+
+- **Bounded status:** `VERIFIED` audit. **Overall B119:** `IN_PROGRESS / PARTIAL` at exactly `3/6` literal brief rows.
+- **Next bounded unit:** prove row 3 by changing X4's actual user UI-scale option at a fixed drawable, capturing the
+  same UI in X4 and Forge, then restoring the original value. After that, capture/calibrate missing keep-out contexts
+  or select the first complete-menu parity fixture according to which evidence is obtainable without invention.
+- **Negative result retained:** four context labels passing through Paint is not evidence that four overlays render;
+  unavailable/unmeasured geometry remains visibly partial.
+- **AAR trigger:** the first ad-hoc linter report reader used a nonexistent `.passed` field instead of the row's `.pass`
+  field and falsely printed red rows despite `allPassed=true`. The report was discarded and rerun with the correct
+  schema before classification. Sustain literal acceptance-row auditing and fail closed on evidence-shape mismatch.
+- **Highest-risk evidenced weakness:** structural tests can make placeholder context coverage look complete. Keep
+  measured geometry, applicability, projection status, and visible paint as separate acceptance facts.
+- No capability-map delta: this audit changes confidence and remaining scope, not product capability.
+- Suggested commit title: `docs(ui-editor): audit original brief acceptance`.
