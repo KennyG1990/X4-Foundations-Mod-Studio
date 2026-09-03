@@ -941,3 +941,185 @@ Status at plan time: `SPECIFIED`. No capability-map delta.
   revision `AIroW357C_UGd302aKKSXBH8TxCjQtwshU69T33JkZOtN2vnczFFByE5KSL_n2YXQmhArdAS1D26Inu5HqxrZOkp8hfrotvx2E6seWQ-k7uD`.
   Readback proves exactly one peer `HEADING_2`, eight `NORMAL_TEXT` paragraphs, the intended terminal empty paragraph,
   and no unrelated tab or structure change.
+
+### BOUNDED UNIT — CURRENT AI WORKSPACE PAIRED-CAS IMPORT (`SPECIFIED`)
+
+**PLAN**
+
+- **Bounded unit:** refresh only persisted Forge workspace `ws_bca860d02b9ea61f6028bfb4` (`x4 AiLive`) from the
+  configured Mod Workspace folder `x4_ai_influence`, using the existing read-only folder importer and guarded
+  workspace mutation contract. Then run the strict MENU/HUB/COMM source-to-scene census against the refreshed state
+  and identify the first causal visible-operation gap.
+- **Assumptions / unresolved facts:** the filesystem source is newer than the persisted August workspace snapshot;
+  import may expose additional source calls without making all three menus visible. The exact first gap is unknown
+  until the refreshed state passes strict execution. No preview/game parity claim follows merely from import success.
+- **Authoritative references:** configured Mod Workspace root; `content.xml` and current Lua files under
+  `F:\DEV_ENV\projects\Mods\X4Mods\x4_ai_influence`; `importModFolder()`; `GET /api/agent/workspace`;
+  `POST /api/agent/workspace`; `WorkspaceRegistry`; and the existing strict three-menu census.
+- **In scope:** byte-exact workspace backup; authenticated explicit-target import; one same-read
+  `workspaceHash`/`snapshotHash` pair; dry-run and no-force guarded persistence; receipt/hash/version readback; current
+  source-pin verification; immutable protected-path census; and strict MENU/HUB/COMM execution/paint diagnostics.
+- **Out of scope:** source-mod edits, loose-build or game-extension writes, deployment, X4 launch, renderer repairs,
+  OpenVSX publication, Pipeline Test workspace mutation, or a claim that the refreshed preview is verified in game.
+- **Risks / authorization:** selecting or persisting the wrong workspace could overwrite Forge design state. The user
+  explicitly authorized the existing Forge and unattended state work. The exact workspace JSON is copied before any
+  mutation; all writes use explicit target identity, caller-owned operation identity, paired CAS, and no `force`.
+- **Rollback:** restore the byte-exact backed-up AI workspace JSON while Forge is stopped, or use the mutation
+  receipt/recovery contract if supported by the resulting receipt. No source, build, or deployed game bytes are part
+  of the rollback surface.
+
+**BASELINE / RECONCILE**
+
+- Repository baseline is `HEAD == origin/main == aa34be12999f55faaccbea41386da39793529c2b`; the unrelated dirty tree is
+  preserved. Installed sidecar `http://127.0.0.1:61112` is alive, and X4 process count is zero.
+- AI workspace JSON is `11,953,625` bytes / SHA-256
+  `79A7738581FA7C09A3704204F54A08B92375BA3A574BBC7AE8DCF432CB2BE520`; Pipeline Test workspace JSON is `8,477`
+  bytes / `18A3C6507C33967F77A723CA8854D6F855192FD61AC657D71D3DA3353DC69FBC`.
+- Protected current baselines remain Mod Workspace `127 / 11,262,724 / CC3B7E98...CBBB`, loose build
+  `155 / 537,684,179 / 70C6DECC...0A97`, and game target `126 / 11,262,072 / 636CFAB9...862B7`.
+- Reconciliation found no need for a parallel importer or persistence path: `/api/agent/mod-folder/import` returns an
+  imported workspace without persisting it, while `/api/agent/workspace` already owns paired content/snapshot CAS,
+  dry-run preview, immutable registry commit, and action receipts. No capability-map delta is expected unless runtime
+  evidence changes that contract.
+
+**ACCEPTANCE CONTRACT**
+
+1. A unique backup must match the pre-mutation AI workspace byte count and SHA-256 exactly.
+2. Import must resolve the configured `workspace` root and exact `x4_ai_influence` folder, find `content.xml`, return a
+   nondegenerate workspace/report, and leave every persisted/protected path unchanged.
+3. One current `GET /api/agent/workspace` must supply `version`, `workspaceHash`, and `snapshotHash` from the same read.
+   Dry-run persistence with that exact pair must report the proposed result without changing the state-file hash,
+   version, or current hashes.
+4. Actual persistence must target only `ws_bca860d02b9ea61f6028bfb4`, reuse the unchanged paired baseline, use a valid
+   unique operation ID, omit `force`, and return a successful receipt plus new exact version/content/snapshot hashes.
+   Any conflict or target mismatch fails closed and leaves the backup authoritative.
+5. Post-read workspace state must contain current filesystem source pins/materialization. Pipeline Test workspace,
+   Mod Workspace, loose build, and deployed game extension must equal baseline; X4 remains absent.
+6. The strict configured MENU/HUB/COMM census must execute all three current sources and produce an honest per-menu
+   call/paint/diagnostic census. Any zero-visible-output menu remains `PARTIAL`, with the first causal missing or
+   unsupported operation named; preview remains `Not verified in game`.
+
+**REQUIRED VALIDATION / NEGATIVE PATH / EVIDENCE**
+
+- Authenticated import and paired-CAS dry-run/commit response summaries with secrets redacted.
+- Pre/post workspace file hashes, API version/content/snapshot hashes, receipt identity, current source hashes, and
+  protected-path equality census.
+- Existing causal CAS rejection tests remain the negative-path oracle; the live run must additionally prove no-force
+  dry-run immutability. No intentionally stale write is sent to the real workspace merely to manufacture a failure.
+- Strict three-menu selftest/corpus output and the first causal rendering-gap receipt. This unit cannot close above
+  `PARTIAL` for overall B119 without native preview and in-game evidence.
+
+**IMPLEMENT / VALIDATE**
+
+- A byte-exact rollback copy was written before mutation at
+  `C:\\Users\\Moshi\\AppData\\Local\\Temp\\x4forge-b119-ai-current-import-backup-20260902-231826\\ws_bca860d02b9ea61f6028bfb4.json`:
+  `11,953,625` bytes / SHA-256
+  `79A7738581FA7C09A3704204F54A08B92375BA3A574BBC7AE8DCF432CB2BE520`, exactly matching the baseline AI workspace.
+- Read-only import selected exactly `F:\\DEV_ENV\\projects\\Mods\\X4Mods\\x4_ai_influence`, found `content.xml`, and
+  returned version `201`, `127` files, `2,930` nodes, `2,824` links, `15/17` graph-editable MD files, zero
+  non-regenerable MD files, and summary `editable:16 / generated:2 / partial:12 / passthrough:52 / binary:45`.
+  The imported source stamp is `3986863d2ea3e970:125`; `compileSettings.ui` remains `false`, so this operation refreshes
+  source truth without pretending that the graph compiler owns the Lua.
+- One same-read guard captured version `1786230857366`, `workspaceHash=53a0600ee0b000a7`, and
+  `snapshotHash=dbf65b6162ced511`. Dry-run operation `b119.ai-current-import.dryrun.20260903t0319z` succeeded with
+  `applied=false`, `0` errors, `11` warnings, and `31` information diagnostics. State-file bytes/hash and all three
+  guard heads remained unchanged, proving the live negative path without issuing an intentionally stale write.
+- Actual operation `b119.ai-current-import.commit.20260903t0319z` reused that unchanged paired guard, omitted `force`,
+  targeted only `ws_bca860d02b9ea61f6028bfb4`, and committed. Post-read is version `1788405630271`,
+  `workspaceHash=2bedad775ec33294`, `snapshotHash=dc8771c3a0bce095`; the persisted JSON is `12,774,311` bytes /
+  SHA-256 `D2E3E6570D61C376F70808880AAF7220AC3EFC42405AA5BC1847D97D437F5E05`.
+- Durable receipt/recovery reference is
+  `ar_c554bd122712fed927e34f59cf9b8839b54d082a08811ade869348184376cf2f`; its file is `2,626` bytes / SHA-256
+  `22E6863A0DF8696EC31E58E0F541A1685DED56EE6D2F83FB321BD71A4B140CB4`, status `committed`, rollback available,
+  internal receipt hash `390095f545e6200edc56f1ec40bf6b6b91f6aba3d12c5ac7b8b4de8b5cd11817`, and validation `workspace-cas` passed.
+- Persisted Lua text now exactly equals disk for MENU (`87,366` bytes /
+  `4253D9BD9DE4113D4DE0B881DBF5A1E90CAA7B30F735BA925403EBEF7EC47DD7`), HUB (`42,000` /
+  `657476EAD08229977E1F2A69079FFDCAB56D908B72AF5C87BD4F4734DCCB8C4F`), and COMM (`27,481` /
+  `88FAB05A79EF33CB28E098081EA6A5E29E8F3B7C4150C39BF38913C51C063511`). Pipeline Test JSON remains exactly
+  `18A3C6507C33967F77A723CA8854D6F855192FD61AC657D71D3DA3353DC69FBC`; X4 remains absent.
+- The source mod remains Git-clean at `4c0a422b7e3d0f492b572b9da8d2d7ea19a2b453`. A server-equivalent sorted
+  regular-tree read reports source `127 files / 19 directories / 11,262,724 bytes /
+  9B1A0021A22927D55168A8904C255CEDC630853DB02B07389A64742E269C0BEC`, loose build
+  `155 / 19 / 537,684,179 / 1808F251BF466545EE8B57E352289081453B8B71989DC915A47E160427E2D758`, and game target
+  `126 / 18 / 11,262,072 / A9046192C83C8B5C0A1304AF96D64A43A203F5EE8EF5E34987583752884EB295`. These hashes use
+  `regularTreeFingerprint()` framing and are not byte-comparable to the earlier abbreviated aggregate fingerprints;
+  no source/build/deploy writer ran, and the tracked source owner remained exactly clean.
+- Strict configured Scene exits `0` at `176/176` and executes MENU/HUB/COMM `3/3`. MENU remains
+  `66 operations / 27 applied / 209 paint commands / 171 diagnostics`; HUB is `18/11/70/39`; COMM is
+  `14/12/35/29` and still emits `0` widgets, `0` texts, and `0` glyphs. Every chain remains
+  `Not verified in game`.
+
+**CAUSAL RECEIPT / REVIEW / CLOSE / AAR**
+
+- `[REPRODUCED]` The first COMM visibility failure is its line `505-506` title expression:
+  `"COMM CHANNEL    " .. ascii("encrypted - " .. tostring(...))`. The existing sample catalog issues only `mx`, `my`,
+  and `vw - mx * 2`; `isSampleableValue()` rejects every call-shaped expression, so the renderer has no title text,
+  cannot derive canonical Zekton height for the zero-height text cell, cannot finalize row/table geometry, and
+  deliberately withholds both otherwise-known buttons.
+- A read-only live-corpus diagnostic projected the exact disk source at `1920x1080 / effective scale 1` and reproduced
+  `0` widgets / `0` texts / `0` glyphs with height gaps at line `505`. Replacing only that title expression **in
+  memory** with the equivalent static string produced `3` widgets (title plus two buttons), `5` text nodes, `52`
+  glyphs, `104` paint commands, and no layout height gap. The title rect was `1298x22 @ 32,27`; the buttons were
+  `279x25 @ 1332,27` and `279x25 @ 1613,27`. Disk SHA remained
+  `88FAB05A79EF33CB28E098081EA6A5E29E8F3B7C4150C39BF38913C51C063511` before and after.
+- Supplying `minTextHeight:16` through the public Source Editor control-shaped profile did not change the zero-widget
+  result; this confirms that a hidden/global floor is neither presently exposed nor a faithful substitute for the
+  missing composed string. Secondary COMM gaps remain (notably 100%-allocated columns with default scrollbar reserve
+  and unresolved `TOK` colors), but they are not the first cause of the zero-widget output.
+- **Bounded-unit status: `VERIFIED`.** The current configured source is now the persisted Forge authority, with guarded
+  rollback, paired-CAS receipt, exact source pins, protected-path evidence, strict three-menu execution, and a causal
+  next gap. Overall B119 remains `IN_PROGRESS / PARTIAL / Not verified in game` because current COMM source still has
+  no preview-issued value for the dynamic title and no new native Forge/X4 comparison has occurred.
+- **AAR:** sustain paired same-read CAS plus an immutable backup before workspace mutation. Improve diagnostics by
+  using the public editor-session path first; an initial raw malformed-profile attempt and one incorrect corpus-shape
+  introspection both failed without writes. Highest-risk observed weakness is that a safe preview-only string could
+  unblock exact font geometry, yet the blanket call-expression rejection currently hides it with a much larger
+  downstream failure. The next unit must widen only evidence issuance, never evaluate Lua or weaken source authority.
+
+### BOUNDED UNIT — OPAQUE CALL-SHAPED TEXT SAMPLES (`SPECIFIED`)
+
+**PLAN / RECONCILE**
+
+- **Bounded unit:** allow the existing preview-only sample catalog to issue a string entry for a dynamic
+  `createText`/`setText`/`setText2` expression even when its syntax contains ordinary function calls, then prove that a
+  user-supplied opaque string unlocks the current COMM title/button geometry. The expression is displayed as provenance
+  only; Forge does not parse further, invoke a function, evaluate Lua, or infer game truth from the sample.
+- **Existing infrastructure reused:** exact source/range/type-derived sample IDs, session-issued catalog authority,
+  source/target/profile binding, strict scalar parsing, immutable sample state, consumer-specific application,
+  preview-only provenance, stale/tamper rejection, generic text input in `X4UiSourceEditorSamples`, canonical Zekton
+  measurement, and the strict current-source three-menu census. The component already renders string controls, so no
+  parallel UI or new persistence path is expected.
+- **Likely owned paths:** `src/lib/x4UiLayoutProgram.ts`, `src/lib/x4UiLayoutProgram.selftest.ts`, and
+  `src/lib/x4UiScene.selftest.ts`; add `src/lib/x4UiEditorSession.selftest.ts` only if the public authority boundary
+  needs a new causal assertion. `src/components/X4UiSourceEditor.tsx` should remain unchanged unless reconciliation
+  proves the generic string control is insufficient. All other paths are forbidden.
+- **Out of scope:** automatic Lua execution, C++/`C.*` or `Helper.*` sampling, numeric/boolean call-result sampling,
+  expression evaluation, source mutation, sample persistence into the mod/workspace/export, global `minTextHeight`,
+  secondary COMM scrollbar/color repair, deploy/game writes, X4 launch, OpenVSX, or pixel-parity claims.
+- **Risk / rollback:** over-broad sampling could turn unknown execution into fake authority. Rollback is the explicit
+  owned-path Git diff; the source mod, persisted workspaces, installed extension, loose build, and game target are not
+  mutation surfaces for this unit.
+
+**ACCEPTANCE CONTRACT**
+
+1. Catalog issuance may cross the call-shape guard only when the requested consumer type is exactly `string`, the
+   value is dynamic and scalar-compatible, and the expression contains neither `C.*` nor `Helper.*`. Existing static,
+   nil, table, function, reference, receiver-identity, resolved-scale, and empty-expression exclusions remain intact.
+2. Numeric and boolean calls remain absent from the catalog. `C.Get*`, `Helper.*`, forged/unissued IDs, wrong scalar
+   types, wrong source identity/range, stale catalog/binding/profile/selection, conditional/non-applied consumers, and
+   authority mutation all continue to fail closed.
+3. The current unprovided COMM projection remains honest and geometry-incomplete. Its issued catalog gains exactly one
+   opaque string entry bound to lines `505-506`; supplying a sample such as
+   `COMM CHANNEL    encrypted - sampled sector` consumes only that entry and yields the title plus both buttons with
+   canonical live-corpus Zekton geometry. Source bytes, export bytes, linter truth, and every `Not verified in game`
+   marker remain unchanged.
+4. MENU and HUB current-source receipts remain unchanged except for mechanically updated totals if a newly eligible
+   opaque string appears there and is explicitly accounted for. The strict census must execute all three and assert
+   the supplied COMM sample's layout, Scene, Paint, provenance, and no-height-gap result.
+5. Required validation: focused LayoutProgram, EditorSession (if touched), Scene strict configured census, affected UI
+   component tests if touched, TypeScript, exact-path ESLint, diff hygiene, Graphify, and complete precommit. At least
+   one negative fixture must prove a call-shaped numeric value is still unavailable and one must prove `C.*`/`Helper.*`
+   string expressions are not issued.
+
+Status at plan time: `SPECIFIED`. No capability-map delta: this extends the existing preview-sample authority rather
+than introducing a new capability. Overall B119 remains `PARTIAL`; native preview and X4 are later acceptance layers.

@@ -1871,6 +1871,18 @@ local/tracking/direct-remote parity; GitHub #41 comment `5519542967`; Notion own
 revision `AIroW357C_UGd302aKKSXBH8TxCjQtwshU69T33JkZOtN2vnczFFByE5KSL_n2YXQmhArdAS1D26Inu5HqxrZOkp8hfrotvx2E6seWQ-k7uD`.
 The Drive trusted read found zero protected controls and final readback shows one peer heading plus eight body paragraphs.
 
+**B119 current AI workspace import checkpoint 2026-09-03 — BOUNDED VERIFIED / DYNAMIC-TEXT UNIT SPECIFIED:** The
+configured `x4_ai_influence` source is now persisted in `x4 AiLive` through one byte-exact backup, read-only import,
+same-read content/snapshot CAS, immutable dry-run, committed guarded write, and durable recovery receipt
+`ar_c554bd122712fed927e34f59cf9b8839b54d082a08811ade869348184376cf2f`. MENU/HUB/COMM source pins exactly match
+disk; Pipeline Test, source mod, loose build, and game target remain outside the write surface; X4 is absent. Strict
+Scene is `176/176` and executes all `3/3` current sources. A live-corpus in-memory causal test reproduced COMM at
+`0` widgets and proved that replacing only its dynamic title expression yields the title plus both buttons (`3`
+widgets / `52` glyphs) while the real Lua SHA remains unchanged. The next documented unit narrowly permits opaque
+preview-only **string** samples for ordinary call-shaped text, while retaining hard rejection for C++/Helper and all
+numeric/boolean calls. Overall B119 and GitHub #41 remain `IN_PROGRESS / PARTIAL / Not verified in game`; no OpenVSX
+publish is authorized by this checkpoint.
+
 ### B115 · Forge Capability Convergence `in_progress` (P0, PRIORITY OVERRIDE)
 
 Ken explicitly promoted GitHub initiative #9 and child requests #10–#21 above the active R13 close on 2026-07-31.
