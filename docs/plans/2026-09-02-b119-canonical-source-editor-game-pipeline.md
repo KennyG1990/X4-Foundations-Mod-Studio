@@ -1339,3 +1339,95 @@ and temporary backup are rollback/evidence artifacts and remain untracked.
 - AAR triggers: package read failure, surprise removal, one invalid archive, one false-success installer path, one
   PowerShell probe syntax correction, and one initial relaunch that ended before HTTP capture. No capability-map delta.
   Suggested commit title: `docs(ui-editor): record installed opaque preview candidate`.
+
+## 2026-09-03 CONTINUATION — current COMM source through Forge and X4
+
+### PLAN / BASELINE / RECONCILE
+
+- **Bounded unit:** use the installed `817490d` renderer candidate against the current configured AI Influence COMM
+  source, supply only its owner-issued opaque title sample, export the mounted native Forge bitmap at the exact X4
+  drawable/effective-scale profile, deploy the unchanged source through Forge, and compare the shared static controls
+  with the same source visibly running in X4.
+- **Baseline:** repository `HEAD == origin/main == 667514ffd5a7348fe19d596b2d0944213217d51b`; the broad unrelated dirty
+  tree and empty index were preserved. Installed Antigravity sidecar PID `47500` served the reviewed package on
+  `127.0.0.1:52236`; X4 was absent. Current source and game-target `aic_comm.lua` were both `27,481` bytes / SHA-256
+  `88FAB05A79EF33CB28E098081EA6A5E29E8F3B7C4150C39BF38913C51C063511`.
+- **Existing owners reused:** installed Source Editor selection/sample/profile authority, canonical Helper/widget/Zekton
+  corpus, current-only PNG export, guarded Forge deploy/recovery, X4's real menu lifecycle, and the scoped debug log.
+  No renderer, linter, parser, source, workspace, mod, or game code changed.
+- **In scope:** exact installed-host source/target/profile identity, current PNG export, one guarded deploy of
+  `x4_ai_influence`, native COMM open/expand/DOSSIER/close interaction, screenshot/hash retention, scoped failure
+  search, and shared title/button geometry comparison.
+- **Out of scope:** evaluating Lua in Forge, reconstructing runtime-generated COMM body rows, arbitrary frame
+  acceptance, three-menu pixel parity, complete Helper/widget or keep-out coverage, AI Influence redesign, release
+  acceptance, and OpenVSX.
+- **Risk / rollback:** the game target was copied first to
+  `C:\Users\Moshi\AppData\Local\Temp\x4_ai_influence-pre-b119-deploy-20260903-0800` (`126` files /
+  `11,262,072` bytes). Forge recovery `deploy-mtl7qza7-20dfdc68d3e531ff` remains ready until
+  `2026-09-10T07:38:23.647Z`; its before and expected-current fingerprint are both
+  `a9046192c83c8b5c0a1304af96d64a43a203f5ee8ef5e34987583752884eb295`.
+- **Acceptance:** the installed host must show exact current source/target/corpus/profile and `rendered/current`; PNG
+  export must use that mounted canvas at `2544x1353`; Forge and game `aic_comm.lua` must remain byte-identical; X4 must
+  render and accept a state transition plus close; owned frame/Lua failures must be zero; shared static control bounds
+  must be measured without promoting the dynamic body or universal parity.
+
+### VALIDATE
+
+- Installed Antigravity selected exact
+  `ui/addons/ai_influence_chat/aic_comm.lua -> comm.display`, source SHA-256 `88FAB05A...63511`, and supplied only
+  `COMM CHANNEL    encrypted - Argon Prime` for the issued lines `505-506` opaque string. The Source Editor reported
+  canonical corpus authority, profile `2544x1353 / user scale 1 / Effective Helper scale 1.2527777777777778`, native
+  bitmap `2544x1353`, `rendered/current`, and permanent `Not verified in game`.
+- `EXPORT CURRENT PNG` serialized the mounted current canvas to
+  `dev-docs/b119-x4-ui-pipeline-smoke/source-editor-ingame-20260903/forge-current-comm-2544x1353-effective-scale-1.2527777777777778.png`:
+  `96,514` bytes / SHA-256 `263A8F6AAC56C24B085288E84FBA6A0A362327F3207732DE36D18334B2BDC9CD`.
+  It contains the source-static title, DOSSIER, and END controls; it does not invent the runtime-built body.
+- Forge deploy operation `b119-deploy-1788421088734` targeted only the configured
+  `G:\SteamLibrary\steamapps\common\X4 Foundations\extensions\x4_ai_influence`. History records `124` overwritten,
+  `0` added, `0` deleted, `6` preserved, and a ready whole-tree recovery. Source and target COMM files remain exact at
+  `27,481` / `88FAB05A...63511`; the source mod remains clean at `4c0a422b7e3d0f492b572b9da8d2d7ea19a2b453`.
+- Fresh X4 9.00 used the vanilla conversation action `Speak to AI`, rendered the compact panel, expanded the exact
+  COMM menu, accepted DOSSIER and transitioned to the hub, then accepted standard close and returned to gameplay. X4
+  exited cleanly and its final process count is zero.
+- Current debuglog contains two `onOpenCommLink` rows, one MENU `display DONE`, three COMM `ensureRegistered` rows,
+  and one COMM `display DONE cite=nil`. Exact searches return zero `DisplayView(): Failed to set up the view`,
+  `COMM FAILED`, `Lua traceback`, `Lua Error`, or `stack traceback`. X4 labels the mod's normal diagnostic writes
+  `[=ERROR=]`; that prefix alone is not an owned failure.
+- Retained X4 evidence:
+  - baseline `241,572` / `EDFECA86DFE200D405560259DF8BEFF0C6BF92201A4DE2E3618B3635F8A392FA`
+  - compact COMM `246,247` / `DF6ACEA4326DC4893A5A686218B67024A7A7B58EA4D8F707ADD009B58A89E475`
+  - expanded COMM `220,033` / `E34DA6C63B2189BE1AF60960E04F14E6F8C1AA7A7AD86FFB0C527954A0D7500B`
+  - DOSSIER/hub `313,121` / `45AC2DBA9CD174BB4889A1FF87FF75D9EF76A0F92FAC2208B081671B990F5649`
+- The X4 window is `2546x1385`; removing its one-pixel side borders and 32-pixel title bar yields the exact
+  `2544x1353` drawable. Forge title glyph bounds are `x=44..630, y=39..67`; X4 drawable bounds are approximately
+  `x=39..628, y=37..65`. Forge button interiors are `x=1765..2134 / 2138..2507, y=33..63`; X4 is approximately
+  `x=1769..2135 / 2142..2510, y=32..61`. Shared edges differ by at most `5` horizontal and `2` vertical pixels.
+  Forge idle blue is RGB `[0,60,102]`; X4 idle blue is approximately `[0,57,102]`. X4's selected DOSSIER state is
+  intentionally brighter and is not a color-parity failure.
+- Focused mounted export E2E passed `1/1` in `1.3m` with the exact structured PASS receipt and lifecycle teardown.
+  Ports `3100/3101` are stopped; installed sidecar `52236` remains live. Two fresh direct browser contexts correctly
+  lacked the installed Studio workspace authority and were rejected as comparison clients; they did not change source.
+
+### REVIEW / CLOSE / AAR
+
+- **Done and evidenced:** installed current-source preview, exact native export, unchanged-source Forge deploy, real
+  X4 frame acceptance, visible state transition and close, scoped zero-failure searches, and same-drawable static
+  title/button geometry within the brief's few-pixel tolerance.
+- **Partial:** the current COMM body is assembled from runtime values and branches that were not issued to the preview,
+  so this is not a whole-menu pixel match. MENU/HUB/COMM three-menu wrap/truncation acceptance, complete vocabulary,
+  all four keep-out contexts, AI Influence reference reconstruction, release acceptance, and OpenVSX remain open.
+- **Status:** this bounded current-COMM source-to-game unit is `VERIFIED`; overall B119 remains
+  `IN_PROGRESS / PARTIAL`. The preview continues to say `Not verified in game`; game evidence remains a separate
+  deploy-bound authority.
+- **AAR:** sustain exact current source/profile identity, one owner-issued sample, mounted native export, deploy hash,
+  visible X4 interaction, and failure-signature search as separate evidence layers. Improve automation by using the
+  trusted installed Studio client for workspace-bound comparisons; a fresh browser context is not equivalent. Tool
+  retries included two rejected untrusted browser contexts, the Downloads known-folder lookup, one image-analysis
+  shape error, and PowerShell collection/directory syntax corrections; none changed product or protected source.
+- **Highest-risk evidenced weakness:** a faithful static header can look like proof of the dynamic menu. Keep missing
+  runtime branches visibly absent, retain sample provenance, and require the running game for every experience claim.
+  No capability-map delta: this strengthens the existing B119 source-preview/deploy capability.
+- A temporary deploy credential is scoped to AI workspace deploy and expires after seven days. Its
+  plaintext exists only in the temporary operator artifact used for this run; revocation/deletion remains a separately
+  confirmed credential action rather than being hidden in document close.
+- Suggested commit title: `docs(ui-editor): record current COMM game checkpoint`.

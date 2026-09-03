@@ -1916,6 +1916,19 @@ inspection, deploy identity, native X4 comparison, original-brief audit, release
 B119 and GitHub #41 stay `IN_PROGRESS / PARTIAL / Not verified in game`.
 with the exact checkpoint heading and body read back.
 
+**B119 current COMM Forge/X4 checkpoint 2026-09-03 — BOUNDED VERIFIED / FULL B119 PARTIAL:** The installed
+`817490d` Source Editor selected exact current `aic_comm.lua -> comm.display` at SHA-256 `88FAB05A...63511`, accepted
+only its issued opaque title sample, and exported the mounted `2544x1353 / user 1 / effective 1.252777...` canvas as
+`96,514` bytes / `263A8F6A...C9CD`. Forge deployed the unchanged configured AI Influence tree with a ready whole-tree
+recovery; source and game COMM remain `27,481` bytes / `88FAB05A...63511`. Fresh X4 opened the compact panel through
+`Speak to AI`, expanded the exact COMM, transitioned through DOSSIER, closed normally, and exited with zero
+view-setup, COMM-failure, or Lua-traceback signatures. Against the exact drawable crop, shared title/button bounds are
+within `5` horizontal and `2` vertical pixels; idle blue is `[0,60,102]` in Forge versus approximately `[0,57,102]`
+in X4. This verifies the current-source static header path and real engine acceptance, not the runtime-built COMM body,
+three-menu wrap/truncation parity, complete Helper/widget/keep-out coverage, AI Influence reconstruction, release
+acceptance, or OpenVSX. Overall B119 and GitHub #41 remain `IN_PROGRESS / PARTIAL`; preview remains
+`Not verified in game`. Evidence: `dev-docs/b119-x4-ui-pipeline-smoke/source-editor-ingame-20260903/`.
+
 ### B115 · Forge Capability Convergence `in_progress` (P0, PRIORITY OVERRIDE)
 
 Ken explicitly promoted GitHub initiative #9 and child requests #10–#21 above the active R13 close on 2026-07-31.

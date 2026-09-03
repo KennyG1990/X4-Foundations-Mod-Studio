@@ -1,110 +1,92 @@
-# Session handoff — B119 opaque candidate installed; current preview next
+# Session handoff — B119 current COMM pipeline verified; original-brief audit next
 
 Date: 2026-09-03
 Project: `F:\DEV_ENV\X4_Forge`
-Status: opaque call-shaped string-sample and package/install units `VERIFIED`; overall B119 `IN_PROGRESS / PARTIAL / Not verified in game`
+Status: current-COMM installed preview/deploy/X4 unit `VERIFIED`; overall B119 `IN_PROGRESS / PARTIAL`
 
 ## Session-start brief
 
 - Project: X4 Forge B119, the linter-first source-faithful X4 Lua UI editor. GitHub owner: #41.
-- Biggest new milestone: source checkpoint `817490d` is now packaged, fail-closed inspected, backed up, byte-for-byte
-  installed in Antigravity, and served by a fresh managed sidecar with exact frontend hashes.
-- Eyeball queue: first, confirm the current COMM sample control/canvas in the installed Antigravity Source Editor.
-  Then run the separately controlled deploy/X4 comparison. Exact reference reconstruction, remaining
-  menu gaps, final original-brief review, release acceptance, and OpenVSX stay open.
-- Commit question: source checkpoint `817490d9234305b86754ecedb08eea0cd149d5e7` and records checkpoint
-  `bb68a349fbf58f986d706335dc8ade2210dea3c8` are committed and pushed with exact parity. Commit the package/install
-  close under `docs(ui-editor): record installed opaque preview candidate` after precommit; stage only its three records.
+- Biggest milestone: the current configured AI Influence `aic_comm.lua -> comm.display` now has one exact
+  installed-Forge native preview and a separate exact-source X4 acceptance run. Shared static title/button geometry is
+  within `5` horizontal and `2` vertical pixels at the same `2544x1353` drawable.
+- Eyeball queue: none for this bounded unit. X4 screenshots already retain compact COMM, expanded COMM, DOSSIER/hub,
+  and return-to-game evidence. Remaining experience work is the brief's three complete real-menu comparisons and the
+  supplied AI Influence visual reconstruction.
+- Commit question: source checkpoint `817490d9234305b86754ecedb08eea0cd149d5e7` and package/install record
+  `667514ffd5a7348fe19d596b2d0944213217d51b` are pushed. The current runtime record must be committed as
+  `docs(ui-editor): record current COMM game checkpoint` after precommit; stage only the exact repository records.
 
-## Verified bounded implementation
+## Current bounded result
 
-- Production change: `src/lib/x4UiLayoutProgram.ts` passes the requested scalar type into `isSampleableValue()`.
-  Ordinary call-shaped values cross the old blanket guard only when requested as `string` and marked
-  `dynamic|unknown`. Forge accepts only an opaque user-supplied preview value and never expands, invokes, or evaluates
-  the call.
-- Existing exclusions remain: numeric expressions; static/nil/table/function/reference values; empty expressions;
-  resolved scale authority; direct `C.*`; direct `Helper.*`; and every non-string call-shaped value.
-- Tests added only in `src/lib/x4UiLayoutProgram.selftest.ts` and `src/lib/x4UiScene.selftest.ts`.
-  `createText`, `setText`, and `setText2` accept issued strings; number, boolean, `C.*`, and `Helper.*` negatives stay
-  absent. Unprovided exact COMM remains `0` widgets; supplied exact COMM produces title plus DOSSIER and END.
-- The existing generic Source Editor string input is reused. No component, linter, emitter, workspace, source mod,
-  build, deploy, game, release, or OpenVSX surface changed.
+- Installed Forge sidecar PID `47500` is live at `127.0.0.1:52236`; ports `3100/3101` are stopped; X4 is stopped.
+- Workspace `ws_bca860d02b9ea61f6028bfb4` (`x4 AiLive`) selected exact
+  `ui/addons/ai_influence_chat/aic_comm.lua -> comm.display` at SHA-256
+  `88FAB05A79EF33CB28E098081EA6A5E29E8F3B7C4150C39BF38913C51C063511`.
+- The only supplied preview value was the owner-issued lines `505-506` title:
+  `COMM CHANNEL    encrypted - Argon Prime`. Forge remained explicit that it did not execute Lua.
+- Installed canvas state was `rendered/current`, canonical corpus, drawable `2544x1353`, user scale `1`, effective
+  `Helper.uiScale=1.2527777777777778`, native bitmap `2544x1353`, and permanent `Not verified in game`.
+- Current PNG:
+  `dev-docs/b119-x4-ui-pipeline-smoke/source-editor-ingame-20260903/forge-current-comm-2544x1353-effective-scale-1.2527777777777778.png`,
+  `96,514` bytes / `263A8F6AAC56C24B085288E84FBA6A0A362327F3207732DE36D18334B2BDC9CD`.
 
-## Exact validation receipts
+## Deploy and X4 truth
 
-- Configured Layout: `X4_REFERENCE_ROOT=F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00` -> `706/706`, zero skipped.
-- EditorSession: `8/8`; canonical color matrix: `7/7`.
-- Strict configured Scene: `176/176`; MENU/HUB/COMM executed `3/3`.
-  - MENU: `22` supplied / `10` consumed / `12` not consumed; `66/27` operations; `207/169` paint/diagnostics.
-  - HUB: `9/7/2`; `18/11`; `70/39`.
-  - COMM: `4/4/0`; `14/12`; `3` widgets / `5` texts / `52` glyphs; `104/38`; no Layout height gap.
-- The Scene selftest's deterministic descriptor uses `outer=16` and asserts title `1298x16 @ 32,27`. A separate
-  read-only diagnostic loaded actual configured Zekton `outer=52` and proved title `1298x22 @ 32,27`, DOSSIER
-  `279x25 @ 1332,27`, and END `279x25 @ 1613,27`. This is an explained fixture-versus-corpus difference.
-- Configured corpus generation `1785035333079-2178b4c31f`: Helper `D24A08B8...D4DF2`, widget
-  `420AFBA3...A72ED1`, regular descriptor `2E7D49EE...F7598`.
-- Exact-path ESLint, whole-repository TypeScript, and changed-path diff hygiene pass.
-- Graphify rebuilt: `10,172` nodes / `25,586` edges / `329` communities. Its direct private-helper reverse lookup has
-  no useful edge; explicit caller inspection and behavior suites own the blast proof.
-- Complete `npm run precommit:check` exits `0`: verdict `55/55`, writer `15/15 + 8/8`, capability `12/297/11`, MCP,
-  action receipts `82/57`, TypeScript, final `[precommit] OK`.
-- COMM source remains SHA-256 `88FAB05A79EF33CB28E098081EA6A5E29E8F3B7C4150C39BF38913C51C063511`;
-  source mod remains clean at `4c0a422b7e3d0f492b572b9da8d2d7ea19a2b453`; X4 is absent.
+- Pre-deploy copy:
+  `C:\Users\Moshi\AppData\Local\Temp\x4_ai_influence-pre-b119-deploy-20260903-0800`, `126` files /
+  `11,262,072` bytes.
+- Forge operation `b119-deploy-1788421088734` targeted only
+  `G:\SteamLibrary\steamapps\common\X4 Foundations\extensions\x4_ai_influence`; history records `124` overwritten,
+  `0` added, `0` deleted, and `6` preserved. Whole-tree recovery `deploy-mtl7qza7-20dfdc68d3e531ff` is ready until
+  `2026-09-10T07:38:23.647Z`.
+- Source and target COMM remain `27,481` bytes / `88FAB05A...63511`; source mod is clean at
+  `4c0a422b7e3d0f492b572b9da8d2d7ea19a2b453`.
+- X4 9.00 used `Speak to AI`, rendered compact COMM, expanded `comm.display`, accepted DOSSIER and transitioned to the
+  hub, then accepted standard close. X4 exited cleanly.
+- Current log: `onOpenCommLink` `2`; MENU `display DONE` `1`; COMM `ensureRegistered` `3`; COMM `display DONE` `1`;
+  exact view-setup, COMM-failure, Lua-error, and traceback signatures `0`.
 
-## Durable records and prior workspace authority
+## Pixel evidence and limits
 
-- Canonical plan: `docs/plans/2026-09-02-b119-canonical-source-editor-game-pipeline.md`, section
-  `BOUNDED UNIT — OPAQUE CALL-SHAPED TEXT SAMPLES`, now includes IMPLEMENT/VALIDATE/REVIEW/CLOSE/AAR.
-- UI quick-reference card 27 is banked at
-  `F:\StarForge\wiki\x4-modding-methods\07 UI (Lua widgets, menus, overlays)\ui-modding-gotchas-quick-reference.md`,
-  SHA-256 `29FA2A9EC7F1C2F577686490A5EF586197D911604A76BE70D10F0237AA56A86D`.
-- Current AI workspace import remains recoverable through backup
-  `C:\Users\Moshi\AppData\Local\Temp\x4forge-b119-ai-current-import-backup-20260902-231826\ws_bca860d02b9ea61f6028bfb4.json`
-  and receipt `ar_c554bd122712fed927e34f59cf9b8839b54d082a08811ade869348184376cf2f`.
-- Source checkpoint `817490d9234305b86754ecedb08eea0cd149d5e7` has exact remote parity. GitHub #41 comment
-  `5521085100` was written and read back while the issue remained open. Notion page
-  `3b84618e-d15b-8190-821e-c0eb96f43d5a` was updated and read back at `In Progress / Partial` with the exact
-  checkpoint section. Google Current Status tab `t.0` was revision-guarded, appended, styled as exactly one
-  `HEADING_2` plus seven `NORMAL_TEXT` paragraphs, and read back at revision
-  `ANLCKQlD-Zec95PyKUeZzzv92wc_HokmnRBmXgZ3FQrC5iXutq3uRlOu477v3JMUURoZgVWazRF8XGKfwndWAfjB8RiXkeMBYKJW1RfA_zLa`.
+- X4 capture `2546x1385` contains one-pixel side borders and a 32-pixel title bar; drawable crop is exactly
+  `2544x1353`, matching the Forge PNG.
+- Forge title bounds `x=44..630, y=39..67`; X4 approximately `x=39..628, y=37..65`.
+- Forge button interiors `x=1765..2134 / 2138..2507, y=33..63`; X4 approximately
+  `x=1769..2135 / 2142..2510, y=32..61`.
+- Maximum shared-edge difference is `5` horizontal / `2` vertical pixels. Forge/X4 idle blue is
+  `[0,60,102]` versus approximately `[0,57,102]`.
+- The Forge artifact includes only the source-static title/buttons. X4's body is runtime-built; this checkpoint does
+  not claim full COMM parity, three-menu wrap/truncation parity, or universal engine acceptance.
 
-## Verified package/install checkpoint
+## Retained evidence
 
-- Accepted recovery candidate:
-  `C:\Users\Moshi\AppData\Local\Temp\x4forge-b119-recovery-bb68a34-20260903-0230\vscode-extension\x4-forge-studio-0.0.70-b119-opaque-text-bb68a34.vsix`,
-  `26,288,744` bytes / `B4CB6BAE032BDBAEFA9CE4451A35EDF3293015C99CF46DF4E66DFF7B7FE19C98`.
-  Build/stage pass; configured staged probe `16/16`; inspector selftest `13/13`; package inspection passes with
-  `2,107` entries / `71,587,579` unpacked bytes.
-- Rollback backup:
-  `C:\Users\Moshi\AppData\Local\Temp\x4forge-b119-opaque-install-backup-20260903-0240`, exact pre-install
-  `2,106` files / `71,583,645` bytes / manifest `AA79D995...75578`.
-- Actual same-version replacement used Antigravity's Electron CLI owner. The GUI executable's normal
-  `--install-extension --force` invocation returned exit `0` but only relaunched the app and left old bytes; retain it
-  as a false-success negative. Installed payload has zero package mismatches except IDE-owned `.vsixmanifest` and the
-  expected package `__metadata` field.
-- Visible Antigravity PID `54088` and installed sidecar PID `47500` are live on `127.0.0.1:52236`. Root and configured
-  reference endpoints return `200`; protected config without auth returns `401`; served
-  `index-BHH_yS9y.js` / `index-C-3vqpSY.css` exactly match the inspected package.
-- Persisted AI workspace remains `D2E3E657...5E05`; Pipeline workspace remains `18A3C650...9FBC`; X4 is absent.
-- Reproduced storage hazard: the first `F:` package read left a rejected truncated VSIX and coincided with Disk 1
-  surprise removal, I/O retries, paging errors, and an NTFS transaction-log flush failure. The valid candidate,
-  backup, and build environment are therefore on `C:`; remote source checkpoint `bb68a34` is safe.
+- Directory: `dev-docs/b119-x4-ui-pipeline-smoke/source-editor-ingame-20260903/`.
+- Canonical record: `docs/plans/2026-09-02-b119-canonical-source-editor-game-pipeline.md`, final continuation.
+- Focused mounted current-export E2E passed `1/1` in `1.3m`; ephemeral ports stopped and live sidecar stayed intact.
+- Two fresh direct-browser attempts were rejected because they lacked installed Studio workspace authority. This is a
+  client-authority negative, not a renderer failure; use the trusted installed host for runtime comparisons.
 
 ## Next bounded unit
 
-1. Run precommit, stage only this plan, `BACKLOG.md`, and `SESSION-HANDOFF.md`, then commit/push the package/install
-   receipt and prove local/tracking/direct-remote parity.
-2. In the real Antigravity Source Editor, select exact current COMM, supply the issued lines-505/506 string, inspect
-   the rendered title/buttons/canvas and retain screenshot/DOM evidence. Keep `Not verified in game` visible.
-3. Only after installed visual proof, perform a separately backed-up deploy/X4 comparison. OpenVSX remains deferred until
-   explicit release acceptance.
+1. Run complete precommit, stage only `BACKLOG.md`, this handoff, and the canonical plan, then commit/push and prove
+   local/tracking/direct-remote parity. The ignored evidence directory remains untracked by policy.
+2. Update/read back GitHub #41, Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Google Current Status tab
+   `t.0` with the exact bounded-verified/overall-partial boundary.
+3. Audit the original brief line by line, starting with the user-prioritized linter table. Re-run the complete linter
+   rule matrix; repair only a reproduced missing rule/test. If all eleven trap families remain covered, document that
+   acceptance row and select the first remaining complete-menu or keep-out gap.
+4. OpenVSX remains deferred until explicit release acceptance and publish-before-commit preparation.
 
-## Preservation boundary
+## Preservation and credential boundary
 
 - Preserve every unrelated modified, deleted, and untracked repository path. Never stage by broad glob or `git add .`.
-- Do not stage screenshots, VSIX files, `test-results/.last-run.json`, release metadata, package files, deleted
-  scripts/data, showcase assets, unrelated plans, or user work.
-- No native Luna worker remains open. Keep validation single-threaded; prior machine-pressure concerns make mass
-  subagent or parallel heavy-process use unacceptable.
-- Overall B119 remains `PARTIAL` until installed current-source preview, controlled deploy-byte identity, native X4
-  rendering/interaction, and original-brief/release acceptance all pass.
+- Do not stage screenshots, VSIX files, `test-results/.last-run.json`, release metadata, deleted scripts/data,
+  showcase assets, unrelated plans, or user work.
+- No native Luna worker remains open. Keep heavyweight validation serial and use at most one coding worker if the audit
+  reproduces a code defect.
+- A temporary deploy credential is scoped to the AI workspace and expires after seven days. Plaintext is
+  retained only in `C:\Users\Moshi\AppData\Local\Temp\codex-b119-runtime-20260903.key`. Revocation/deletion is an
+  explicit credential action and was not silently performed while the user slept.
+- Overall B119 stays `PARTIAL` until the original brief's three real-menu visual comparisons, complete selected scope,
+  keep-out acceptance, AI Influence reconstruction, and release decision are honestly resolved.
