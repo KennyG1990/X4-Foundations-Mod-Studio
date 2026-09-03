@@ -7754,9 +7754,9 @@ test('B119 repaired: portable consumer-aware MENU/HUB/COMM owner shapes cross Sc
     COMM: '88FAB05A79EF33CB28E098081EA6A5E29E8F3B7C4150C39BF38913C51C063511',
   });
   const configuredSessionReceiptConstants = Object.freeze([
-    { label: 'MENU', sourceSha256: configuredSourceHashes.MENU, samples: 14, consumed: 9, notConsumed: 5, operations: 66, appliedOperations: 27, cells: 88, gaps: 97 },
-    { label: 'HUB', sourceSha256: configuredSourceHashes.HUB, samples: 9, consumed: 7, notConsumed: 2, operations: 18, appliedOperations: 11, cells: 4, gaps: 16 },
-    { label: 'COMM', sourceSha256: configuredSourceHashes.COMM, samples: 3, consumed: 3, notConsumed: 0, operations: 14, appliedOperations: 12, cells: 3, gaps: 11 },
+    { label: 'MENU', sourceSha256: configuredSourceHashes.MENU, samples: 22, consumed: 10, notConsumed: 12, operations: 66, appliedOperations: 27, cells: 88, gaps: 99 },
+    { label: 'HUB', sourceSha256: configuredSourceHashes.HUB, samples: 9, consumed: 7, notConsumed: 2, operations: 18, appliedOperations: 11, cells: 4, gaps: 12 },
+    { label: 'COMM', sourceSha256: configuredSourceHashes.COMM, samples: 4, consumed: 4, notConsumed: 0, operations: 14, appliedOperations: 12, cells: 3, gaps: 6 },
   ] as const);
   assert(configuredSessionReceiptConstants.length === 3 && configuredSessionReceiptConstants.every(entry => /^[A-F0-9]{64}$/.test(entry.sourceSha256)), 'B119 configured source receipt constants must retain all three source hashes');
   console.log(`B119 configured-session receipt constants only: ${JSON.stringify(configuredSessionReceiptConstants)}`);
@@ -8434,6 +8434,7 @@ test('B119 cell outer-height relation rejects synchronized one-field semantic dr
 });
 
 const B119_STRICT_CONFIGURED_CENSUS_ENV = 'X4_UI_SCENE_SELFTEST_STRICT_CONFIGURED_CENSUS';
+const B119_COMM_OPAQUE_SAMPLE = 'COMM CHANNEL    encrypted - sampled sector';
 const b119ConfiguredSourceSpecs = [
   {
     label: 'MENU',
@@ -8454,9 +8455,9 @@ const b119ConfiguredSourceSpecs = [
       _choiceY: 734,
       _readSpan: 6,
     },
-    expectedLayout: { samples: 14, consumed: 9, notConsumed: 5, operations: 66, applied: 27, frames: 1, tables: 4, rows: 9, cells: 88, gaps: 97 },
-    expectedScene: { frames: 1, tables: 4, rows: 2, cells: 16, widgets: 3, texts: 5, glyphs: 7, gaps: 143, drawable: { x: 0, y: 0, width: 1920, height: 1080 } },
-    expectedPaint: { commands: 209, diagnostics: 171 },
+    expectedLayout: { samples: 22, consumed: 10, notConsumed: 12, operations: 66, applied: 27, frames: 1, tables: 4, rows: 9, cells: 88, gaps: 99 },
+    expectedScene: { frames: 1, tables: 4, rows: 2, cells: 16, widgets: 3, texts: 5, glyphs: 7, gaps: 141, drawable: { x: 0, y: 0, width: 1920, height: 1080 } },
+    expectedPaint: { commands: 207, diagnostics: 169 },
   },
   {
     label: 'HUB',
@@ -8476,9 +8477,9 @@ const b119ConfiguredSourceSpecs = [
     targetName: 'comm.display',
     sourceSha256: '88FAB05A79EF33CB28E098081EA6A5E29E8F3B7C4150C39BF38913C51C063511',
     consumerNumbers: { vw: 1920, vh: 1080, mx: 27, my: 27, 'vw - mx * 2': 1866 },
-    expectedLayout: { samples: 3, consumed: 3, notConsumed: 0, operations: 14, applied: 12, frames: 1, tables: 1, rows: 1, cells: 3, gaps: 10 },
-    expectedScene: { frames: 1, tables: 1, rows: 1, cells: 3, widgets: 0, texts: 0, glyphs: 0, gaps: 23, drawable: { x: 0, y: 0, width: 1920, height: 1080 } },
-    expectedPaint: { commands: 35, diagnostics: 29 },
+    expectedLayout: { samples: 4, consumed: 4, notConsumed: 0, operations: 14, applied: 12, frames: 1, tables: 1, rows: 1, cells: 3, gaps: 6 },
+    expectedScene: { frames: 1, tables: 1, rows: 1, cells: 3, widgets: 3, texts: 5, glyphs: 52, gaps: 27, drawable: { x: 0, y: 0, width: 1920, height: 1080 } },
+    expectedPaint: { commands: 104, diagnostics: 38 },
   },
 ] as const;
 
@@ -8651,12 +8652,56 @@ if (b119ConfiguredCensus.status === 'unavailable') {
       : source.label === 'COMM'
         ? entry.expression !== 'font(13)'
         : true);
+    const commOpaqueEntries = source.label === 'COMM'
+      ? selectedEntries.filter(entry => entry.expectedType === 'string'
+        && entry.expression.includes('"COMM CHANNEL    "')
+        && entry.expression.includes('ascii("encrypted - "'))
+      : [];
+    const commCallEntries = source.label === 'COMM'
+      ? selectedEntries.filter(entry => /[A-Za-z_][A-Za-z0-9_.:]*\s*\(/.test(entry.expression))
+      : [];
+    if (source.label === 'COMM') {
+      assert(selectedEntries.length === 4
+        && commOpaqueEntries.length === 1
+        && commCallEntries.length === 1
+        && commCallEntries[0]?.id === commOpaqueEntries[0]?.id, 'COMM exact catalog must issue four selected samples including exactly one opaque title entry: ' + JSON.stringify({ selected: selectedEntries.length, opaque: commOpaqueEntries.length, callShaped: commCallEntries.length }));
+      const commOpaqueEntry = commOpaqueEntries[0];
+      assert(commOpaqueEntry.source.start.line === 505 && commOpaqueEntry.source.end.line === 506, 'COMM opaque title entry must bind source lines 505-506: ' + JSON.stringify(commOpaqueEntry.source));
+      const unprovidedSceneResult = unsampled.preview.scene;
+      assert(unprovidedSceneResult !== null && unprovidedSceneResult.status !== 'refused', 'COMM exact unprovided session must retain its incomplete Scene projection: ' + JSON.stringify(unsampled.preview));
+      const unprovidedScene = unprovidedSceneResult.scene;
+      const unprovidedSceneGeometry = {
+        frames: unprovidedScene.frames.length,
+        tables: unprovidedScene.tables.length,
+        rows: unprovidedScene.rows.length,
+        cells: unprovidedScene.cells.length,
+        widgets: unprovidedScene.widgets.length,
+        texts: unprovidedScene.texts.length,
+        glyphs: unprovidedScene.glyphs.length,
+        gaps: unprovidedScene.gaps.length,
+        drawable: unprovidedScene.drawableRect,
+      };
+      assert(JSON.stringify(unprovidedSceneGeometry) === JSON.stringify({
+        frames: 1,
+        tables: 1,
+        rows: 0,
+        cells: 0,
+        widgets: 0,
+        texts: 0,
+        glyphs: 0,
+        gaps: 23,
+        drawable: { x: 0, y: 0, width: 1920, height: 1080 },
+      }), 'COMM exact unprovided Scene must remain the zero-widget incomplete result: ' + JSON.stringify(unprovidedSceneGeometry));
+      assert(unsampled.preview.status === 'partial' && unprovidedSceneResult.status === 'partial', 'COMM exact unprovided session must remain incomplete before its opaque title is supplied: ' + JSON.stringify({ previewStatus: unsampled.preview.status, sceneStatus: unprovidedSceneResult.status, previewGaps: unsampled.preview.gaps.length, canRender: unsampled.canRender }));
+    }
     const values = selectedEntries.map(entry => ({
       id: entry.id,
       value: entry.expectedType === 'boolean'
         ? false
         : entry.expectedType === 'string'
-          ? 'sampled'
+          ? commOpaqueEntries.includes(entry)
+            ? B119_COMM_OPAQUE_SAMPLE
+            : 'sampled'
           : source.consumerNumbers[entry.expression as keyof typeof source.consumerNumbers] ?? 80,
     }));
     const sampled = projectX4UiEditorSession({
@@ -8697,6 +8742,20 @@ if (b119ConfiguredCensus.status === 'unavailable') {
     const sceneResult = sampled.preview.scene;
     assert(sceneResult !== null && sceneResult.status !== 'refused', source.label + ' exact sampled session must reach non-refused Scene: ' + JSON.stringify(sceneResult));
     const scene = sceneResult.scene;
+    if (source.label === 'COMM') {
+      const titleWidget = scene.widgets.find(widget => widget.kind === 'text' && widget.primaryContent === B119_COMM_OPAQUE_SAMPLE);
+      const buttonGeometry = scene.widgets
+        .filter(widget => widget.kind === 'button')
+        .map(widget => ({ content: widget.primaryContent, outerRect: widget.outerRect }));
+      assert(titleWidget !== undefined
+        && isDeepStrictEqual(titleWidget.outerRect, { x: 32, y: 27, width: 1298, height: 16 })
+        && scene.texts.some(text => text.content === B119_COMM_OPAQUE_SAMPLE)
+        && isDeepStrictEqual(buttonGeometry, [
+          { content: 'DOSSIER', outerRect: { x: 1332, y: 27, width: 279, height: 25 } },
+          { content: 'END', outerRect: { x: 1613, y: 27, width: 279, height: 25 } },
+        ]), 'COMM exact supplied title and both button geometries must reach canonical Scene: ' + JSON.stringify({ title: titleWidget, buttons: buttonGeometry }));
+      assert(!program.gaps.some(gap => gap.category === 'height'), 'COMM exact supplied title must leave no Layout height gap: ' + JSON.stringify(program.gaps));
+    }
     const sceneGeometry = {
       frames: scene.frames.length,
       tables: scene.tables.length,

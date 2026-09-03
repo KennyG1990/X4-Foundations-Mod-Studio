@@ -1,76 +1,96 @@
-# Session handoff — B119 current source imported; opaque dynamic-text sample next
+# Session handoff — B119 opaque dynamic text verified; installed preview next
 
 Date: 2026-09-03
 Project: `F:\DEV_ENV\X4_Forge`
-Status: current AI workspace import `VERIFIED`; opaque call-shaped text-sample unit `SPECIFIED`; overall B119 `IN_PROGRESS / PARTIAL`
+Status: opaque call-shaped string-sample unit `VERIFIED`; overall B119 `IN_PROGRESS / PARTIAL / Not verified in game`
 
 ## Session-start brief
 
 - Project: X4 Forge B119, the linter-first source-faithful X4 Lua UI editor. GitHub owner: #41.
-- Biggest new milestone: the persisted `x4 AiLive` workspace now contains the current configured mod source, and a
-  live-corpus causal projection proves why COMM currently hides both buttons.
-- Eyeball queue: none blocks the next code unit. Later acceptance still needs an installed Forge preview, a fresh X4
-  comparison, full original-brief review, AI Influence reference reconstruction, release acceptance, and OpenVSX.
-- Commit question: workspace-authority implementation `104fa24` and records `aa34be1` are committed/pushed. The current
-  plan/backlog/handoff checkpoint must be explicitly committed before implementation; preserve the unrelated dirty tree.
+- Biggest new milestone: the exact current COMM title can now receive one owner-issued opaque preview string; with
+  the configured 9.00 corpus it restores the title and both buttons through Layout -> Scene -> Paint without Lua
+  execution or source mutation.
+- Eyeball queue: first, install this exact source checkpoint and confirm the current COMM sample control/canvas in
+  Antigravity. Then run the separately controlled deploy/X4 comparison. Exact reference reconstruction, remaining
+  menu gaps, final original-brief review, release acceptance, and OpenVSX stay open.
+- Commit question: implementation plus local records are fully gated but not yet committed at this handoff rewrite.
+  Commit only the six explicit owned paths below, push, and prove local/tracking/direct-remote parity.
 
-## Verified current-source import
+## Verified bounded implementation
 
-- Exact AI workspace target: `ws_bca860d02b9ea61f6028bfb4` (`x4 AiLive`). Pre-write backup:
-  `C:\Users\Moshi\AppData\Local\Temp\x4forge-b119-ai-current-import-backup-20260902-231826\ws_bca860d02b9ea61f6028bfb4.json`,
-  `11,953,625` bytes / `79A7738581FA7C09A3704204F54A08B92375BA3A574BBC7AE8DCF432CB2BE520`.
-- Import source: `F:\DEV_ENV\projects\Mods\X4Mods\x4_ai_influence`; `127` files, `2,930` nodes, `2,824` links,
-  `15/17` graph-editable MD files, zero non-regenerable MD files, source stamp `3986863d2ea3e970:125`.
-- Same-read baseline: version `1786230857366`, content `53a0600ee0b000a7`, snapshot `dbf65b6162ced511`.
-  Dry-run `b119.ai-current-import.dryrun.20260903t0319z` was immutable. Commit
-  `b119.ai-current-import.commit.20260903t0319z` reused that pair without `force` and produced version
-  `1788405630271`, content `2bedad775ec33294`, snapshot `dc8771c3a0bce095`.
-- Post-write state JSON: `12,774,311` bytes /
-  `D2E3E6570D61C376F70808880AAF7220AC3EFC42405AA5BC1847D97D437F5E05`.
-- Durable recovery receipt:
-  `ar_c554bd122712fed927e34f59cf9b8839b54d082a08811ade869348184376cf2f`; receipt-file SHA
-  `22E6863A0DF8696EC31E58E0F541A1685DED56EE6D2F83FB321BD71A4B140CB4`; committed, rollback available,
-  `workspace-cas` passed.
-- Current persisted Lua pins equal disk: MENU `4253D9BD...47DD7`, HUB `657476EA...B8C4F`, COMM
-  `88FAB05A...63511`. Pipeline workspace remains `18A3C650...69FBC`; source mod remains Git-clean at
-  `4c0a422b7e3d0f492b572b9da8d2d7ea19a2b453`; no source/build/deploy writer ran; X4 remains absent.
+- Production change: `src/lib/x4UiLayoutProgram.ts` passes the requested scalar type into `isSampleableValue()`.
+  Ordinary call-shaped values cross the old blanket guard only when requested as `string` and marked
+  `dynamic|unknown`. Forge accepts only an opaque user-supplied preview value and never expands, invokes, or evaluates
+  the call.
+- Existing exclusions remain: numeric expressions; static/nil/table/function/reference values; empty expressions;
+  resolved scale authority; direct `C.*`; direct `Helper.*`; and every non-string call-shaped value.
+- Tests added only in `src/lib/x4UiLayoutProgram.selftest.ts` and `src/lib/x4UiScene.selftest.ts`.
+  `createText`, `setText`, and `setText2` accept issued strings; number, boolean, `C.*`, and `Helper.*` negatives stay
+  absent. Unprovided exact COMM remains `0` widgets; supplied exact COMM produces title plus DOSSIER and END.
+- The existing generic Source Editor string input is reused. No component, linter, emitter, workspace, source mod,
+  build, deploy, game, release, or OpenVSX surface changed.
 
-## Causal rendering evidence
+## Exact validation receipts
 
-- Strict configured Scene exits `0` at `176/176`, executing MENU/HUB/COMM `3/3`. MENU is
-  `66 operations / 27 applied / 209 paint commands / 171 diagnostics`; HUB `18/11/70/39`; COMM
-  `14/12/35/29`, with `0` widgets, texts, or glyphs. All remain `Not verified in game`.
-- `[REPRODUCED]` COMM line `505-506` composes its title through `ascii(... tostring(...))`. The sample owner rejects
-  every call-shaped expression, so no title string reaches canonical Zekton measurement; the zero-height cell leaves
-  row/table geometry unavailable and Scene deliberately withholds both known buttons.
-- A read-only projection loaded the live configured corpus and changed only that title expression in memory. Original
-  source produced `0` widgets. The static in-memory equivalent produced `3` widgets, `5` texts, `52` glyphs, and no
-  layout height gap: title `1298x22 @ 32,27`; buttons `279x25 @ 1332,27` and `279x25 @ 1613,27`. Disk SHA remained
-  `88FAB05A79EF33CB28E098081EA6A5E29E8F3B7C4150C39BF38913C51C063511` before and after.
-- Secondary COMM gaps include 100%-allocated columns plus default scrollbar reserve and unresolved `TOK` colors.
-  They are not the first cause of the zero-widget output.
+- Configured Layout: `X4_REFERENCE_ROOT=F:\Downskies\x4unpackersuiteV1\X4 unpacked 9.00` -> `706/706`, zero skipped.
+- EditorSession: `8/8`; canonical color matrix: `7/7`.
+- Strict configured Scene: `176/176`; MENU/HUB/COMM executed `3/3`.
+  - MENU: `22` supplied / `10` consumed / `12` not consumed; `66/27` operations; `207/169` paint/diagnostics.
+  - HUB: `9/7/2`; `18/11`; `70/39`.
+  - COMM: `4/4/0`; `14/12`; `3` widgets / `5` texts / `52` glyphs; `104/38`; no Layout height gap.
+- The Scene selftest's deterministic descriptor uses `outer=16` and asserts title `1298x16 @ 32,27`. A separate
+  read-only diagnostic loaded actual configured Zekton `outer=52` and proved title `1298x22 @ 32,27`, DOSSIER
+  `279x25 @ 1332,27`, and END `279x25 @ 1613,27`. This is an explained fixture-versus-corpus difference.
+- Configured corpus generation `1785035333079-2178b4c31f`: Helper `D24A08B8...D4DF2`, widget
+  `420AFBA3...A72ED1`, regular descriptor `2E7D49EE...F7598`.
+- Exact-path ESLint, whole-repository TypeScript, and changed-path diff hygiene pass.
+- Graphify rebuilt: `10,172` nodes / `25,586` edges / `329` communities. Its direct private-helper reverse lookup has
+  no useful edge; explicit caller inspection and behavior suites own the blast proof.
+- Complete `npm run precommit:check` exits `0`: verdict `55/55`, writer `15/15 + 8/8`, capability `12/297/11`, MCP,
+  action receipts `82/57`, TypeScript, final `[precommit] OK`.
+- COMM source remains SHA-256 `88FAB05A79EF33CB28E098081EA6A5E29E8F3B7C4150C39BF38913C51C063511`;
+  source mod remains clean at `4c0a422b7e3d0f492b572b9da8d2d7ea19a2b453`; X4 is absent.
 
-## Next bounded implementation
+## Durable records and prior workspace authority
 
-- Plan authority: `docs/plans/2026-09-02-b119-canonical-source-editor-game-pipeline.md`, section
-  `BOUNDED UNIT — OPAQUE CALL-SHAPED TEXT SAMPLES`.
-- Route every code/test edit to one exact native `gpt-5.6-luna` `luna_executor`, reasoning `max`, no forked parent
-  context. Likely paths: `src/lib/x4UiLayoutProgram.ts`, its selftest, and `src/lib/x4UiScene.selftest.ts`; add the
-  EditorSession selftest only if required. The generic Source Editor string control already exists and should not be
-  changed without new evidence.
-- Permit only opaque preview-supplied **strings** for ordinary dynamic call-shaped text. Never execute Lua. Keep
-  `C.*`, `Helper.*`, numeric/boolean calls, tables/functions/references, stale IDs/ranges/sources, wrong types,
-  conditional consumers, and receiver-identity attempts fail-closed.
-- Acceptance: unprovided COMM remains incomplete; one issued line-505 string sample, when supplied, renders the title
-  and both buttons with canonical Zekton geometry and preview-only provenance; source/export/linter/game-truth bytes
-  stay unchanged. Run focused tests, strict current-source census, TypeScript, exact lint, Graphify, and precommit.
-- After reconciliation and gates, update this handoff, backlog, canonical plan, GitHub #41, Notion, and Google Current
-  Status; commit/push explicit owned paths and prove local/tracking/direct-remote parity. OpenVSX remains deferred.
+- Canonical plan: `docs/plans/2026-09-02-b119-canonical-source-editor-game-pipeline.md`, section
+  `BOUNDED UNIT — OPAQUE CALL-SHAPED TEXT SAMPLES`, now includes IMPLEMENT/VALIDATE/REVIEW/CLOSE/AAR.
+- UI quick-reference card 27 is banked at
+  `F:\StarForge\wiki\x4-modding-methods\07 UI (Lua widgets, menus, overlays)\ui-modding-gotchas-quick-reference.md`,
+  SHA-256 `29FA2A9EC7F1C2F577686490A5EF586197D911604A76BE70D10F0237AA56A86D`.
+- Current AI workspace import remains recoverable through backup
+  `C:\Users\Moshi\AppData\Local\Temp\x4forge-b119-ai-current-import-backup-20260902-231826\ws_bca860d02b9ea61f6028bfb4.json`
+  and receipt `ar_c554bd122712fed927e34f59cf9b8839b54d082a08811ade869348184376cf2f`.
+- Prior documentation checkpoint `b6f2be9d41cc367da568c533c9071742d42bcc5b` has exact remote parity.
+  GitHub #41 comment `5520171578`, Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Google Current Status
+  revision `AIroW37mol_WtZzxMvoIK0a0Lvd3aX3IpD6XMPhdb7_ceDfIGPrN8fN2sDhzOAFNIkwzHccOyk63vzRM2mwEd9ivtabZPNXgy3Q5NA8L4lfJ`
+  were read back for that import checkpoint. New implementation-close sync is still required after the source commit.
+
+## Next bounded unit
+
+1. Explicitly stage only:
+   - `src/lib/x4UiLayoutProgram.ts`
+   - `src/lib/x4UiLayoutProgram.selftest.ts`
+   - `src/lib/x4UiScene.selftest.ts`
+   - `docs/plans/2026-09-02-b119-canonical-source-editor-game-pipeline.md`
+   - `BACKLOG.md`
+   - `SESSION-HANDOFF.md`
+2. Commit/push the bounded unit and prove `HEAD == origin/main == ls-remote origin main`.
+3. Sync/read back GitHub #41, the existing Notion owner, and Google Current Status; record those identities in a
+   small records-only follow-up commit if needed.
+4. Document a new package/install acceptance contract, build and inspect a unique VSIX from that commit, replace the
+   installed candidate safely, and prove served/installed bytes.
+5. In the real Antigravity Source Editor, select exact current COMM, supply the issued lines-505/506 string, inspect
+   the rendered title/buttons/canvas and retain screenshot/DOM evidence. Keep `Not verified in game` visible.
+6. Only after installed proof, perform a separately backed-up deploy/X4 comparison. OpenVSX remains deferred until
+   explicit release acceptance.
 
 ## Preservation boundary
 
-- Preserve every unrelated modified, deleted, and untracked repository path. Stage only explicit owned paths.
+- Preserve every unrelated modified, deleted, and untracked repository path. Never stage by broad glob or `git add .`.
 - Do not stage screenshots, VSIX files, `test-results/.last-run.json`, release metadata, package files, deleted
-  scripts/data, showcase assets, unrelated plans, or any user work.
-- No installed extension, persisted workspace, mod source, loose build, game target, or X4 process is part of the next
-  code unit. Overall B119 remains `PARTIAL` until current-source native Forge/X4 evidence and release acceptance pass.
+  scripts/data, showcase assets, unrelated plans, or user work.
+- No native Luna worker remains open. Keep validation single-threaded; prior machine-pressure concerns make mass
+  subagent or parallel heavy-process use unacceptable.
+- Overall B119 remains `PARTIAL` until installed current-source preview, controlled deploy-byte identity, native X4
+  rendering/interaction, and original-brief/release acceptance all pass.

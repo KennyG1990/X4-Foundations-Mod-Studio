@@ -3488,7 +3488,11 @@ const PROPERTY_SAMPLE_TYPES: Readonly<Record<string, X4UiLayoutScalarType | unde
   description: 'string',
 });
 
-const isSampleableValue = (value: X4UiValue, allowLocalInvocationResults: boolean): boolean => {
+const isSampleableValue = (
+  value: X4UiValue,
+  expectedType: X4UiLayoutScalarType,
+  allowLocalInvocationResults: boolean,
+): boolean => {
   if (value.numericExpression) return false;
   if (value.localInvocationResult && allowLocalInvocationResults) {
     return value.status !== 'static'
@@ -3505,9 +3509,13 @@ const isSampleableValue = (value: X4UiValue, allowLocalInvocationResults: boolea
     || value.reference
     || value.symbol?.startsWith('Helper.')) return false;
   if (/\bC\./.test(value.expression) || /\bHelper\./.test(value.expression)) return false;
-  // Function calls include local helpers and C++ accessors; a sample never expands them.
-  if (/[A-Za-z_][A-Za-z0-9_.:]*\s*\(/.test(value.expression)) return false;
-  return value.expression.length > 0;
+  if (value.expression.length === 0) return false;
+  // Eligible dynamic/unknown strings are represented only by an opaque user-supplied preview value.
+  // Forge does not expand, invoke, or evaluate any call; the surrounding guards continue to exclude
+  // all non-string calls and direct C.* / Helper.* expressions.
+  if (/[A-Za-z_][A-Za-z0-9_.:]*\s*\(/.test(value.expression)
+    && !(expectedType === 'string' && (value.status === 'dynamic' || value.status === 'unknown'))) return false;
+  return true;
 };
 
 const createPreviewSampleCatalog = (
@@ -3533,7 +3541,7 @@ const createPreviewSampleCatalog = (
     value: X4UiValue | undefined,
     expectedType: X4UiLayoutScalarType,
   ): void => {
-    if (!value || !isSampleableValue(value, allowLocalInvocationResults)) return;
+    if (!value || !isSampleableValue(value, expectedType, allowLocalInvocationResults)) return;
     if (value.localInvocationResult
       && resolvedLocalScaleFontInvocationIds.has(value.localInvocationResult.invocationId)) return;
     const sampleSource = sampleSourceForValue(value);

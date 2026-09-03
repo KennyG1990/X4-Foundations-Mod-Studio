@@ -1076,6 +1076,17 @@ Status at plan time: `SPECIFIED`. No capability-map delta.
   unblock exact font geometry, yet the blanket call-expression rejection currently hides it with a much larger
   downstream failure. The next unit must widen only evidence issuance, never evaluate Lua or weaken source authority.
 
+**DURABLE SYNC**
+
+- Documentation checkpoint `b6f2be9d41cc367da568c533c9071742d42bcc5b` has exact local, tracking, and direct-remote
+  parity. GitHub #41 comment `5520171578` was written and read back; the issue remains open.
+- Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a` was read back with checkpoint `b6f2be9`, comment
+  `5520171578`, receipt `ar_c554bd...cf2f`, and unchanged `In Progress / Partial` status.
+- Google Current Status tab `t.0` was revision-guarded and read back at revision
+  `AIroW37mol_WtZzxMvoIK0a0Lvd3aX3IpD6XMPhdb7_ceDfIGPrN8fN2sDhzOAFNIkwzHccOyk63vzRM2mwEd9ivtabZPNXgy3Q5NA8L4lfJ`.
+  The appended section is exactly one `HEADING_2` plus eight `NORMAL_TEXT` paragraphs and preserves the terminal
+  paragraph.
+
 ### BOUNDED UNIT — OPAQUE CALL-SHAPED TEXT SAMPLES (`SPECIFIED`)
 
 **PLAN / RECONCILE**
@@ -1123,3 +1134,68 @@ Status at plan time: `SPECIFIED`. No capability-map delta.
 
 Status at plan time: `SPECIFIED`. No capability-map delta: this extends the existing preview-sample authority rather
 than introducing a new capability. Overall B119 remains `PARTIAL`; native preview and X4 are later acceptance layers.
+
+**IMPLEMENT**
+
+- `isSampleableValue()` now receives the requested scalar type. Its established static/nil/table/function/reference,
+  numeric-expression, resolved-scale, `C.*`, `Helper.*`, and empty-expression exclusions remain intact; only an
+  ordinary call-shaped value that is both `dynamic|unknown` and requested as `string` may now receive an issued
+  preview-sample entry. The value remains opaque: Forge does not expand, invoke, or evaluate the expression.
+- The focused Layout fixture covers `createText`, `setText`, and `setText2` with supplied opaque strings, and retains
+  negative call-shaped number, boolean, direct `C.*`, and direct `Helper.*` cases. The exact current COMM census now
+  requires one and only one newly issued call-shaped title entry at source lines `505-506`, proves the unprovided
+  zero-widget state, then proves the supplied title plus both button geometries and no Layout height gap.
+- No component, editor control, source-mod byte, persisted workspace, package, installed extension, loose build,
+  deployed game extension, linter rule, or game-truth marker changed. The existing generic string sample control is
+  reused. Exact implementation scope is three files: `x4UiLayoutProgram.ts`, its selftest, and
+  `x4UiScene.selftest.ts`.
+
+**VALIDATE**
+
+- Configured source-bound LayoutProgram: `X4_REFERENCE_ROOT=F:\\Downskies\\x4unpackersuiteV1\\X4 unpacked 9.00`
+  with `tsx src/lib/x4UiLayoutProgram.selftest.ts` exits `0`, `706/706`, zero skipped. Its named regression proves
+  exactly three string entries and consumed preview-only values while number/boolean/`C.*`/`Helper.*` calls remain
+  absent.
+- EditorSession exits `0` at `8/8`; canonical color matrix exits `0` at `7/7`. Exact-path ESLint for all three changed
+  code/test files, whole-repository TypeScript, and changed-path `git diff --check` all exit `0`.
+- Strict configured Scene exits `0` at `176/176` and executes `MENU,HUB,COMM = 3/3`. MENU explicitly accounts for its
+  newly eligible dynamic strings (`22` supplied, `10` consumed, `12` not consumed; `66/27` operations; `207` paint
+  commands / `169` diagnostics). HUB remains `9/7/2`, `18/11`, `70/39`. COMM is `4/4/0`, `14/12`, and now reaches
+  `3` widgets / `5` texts / `52` glyphs / `104` paint commands / `38` diagnostics. The deterministic font fixture has
+  `outer=16`, so its exact title rectangle is `1298x16 @ 32,27`; this is fixture evidence, not a live-font claim.
+- A separate read-only public-session diagnostic loaded the configured corpus from the installed sidecar at manifest
+  generation `1785035333079-2178b4c31f`: Helper `D24A08B8...D4DF2`, widget
+  `420AFBA3...A72ED1`, regular descriptor `2E7D49EE...F7598`, and actual Zekton `outer=52`. Against the exact COMM
+  source SHA `88FAB05A...63511`, the unprovided projection remains `0` widgets. Supplying only the issued title yields
+  `3` widgets / `5` texts / `52` glyphs, title `1298x22 @ 32,27`, DOSSIER `279x25 @ 1332,27`, and END
+  `279x25 @ 1613,27`, with no height-category gap and `Not verified in game` intact. This reconciles the apparent
+  `16` versus `22` difference as deterministic fixture metrics versus the selected shipped descriptor.
+- The source Lua remains byte-identical at `88FAB05A79EF33CB28E098081EA6A5E29E8F3B7C4150C39BF38913C51C063511`;
+  its repository remains clean at `4c0a422b7e3d0f492b572b9da8d2d7ea19a2b453`; X4 remains absent.
+- Graphify rebuilt to `10,172` nodes / `25,586` edges / `329` communities. Its private-helper reverse query returned
+  no direct affected nodes, so the accepted blast boundary comes from the explicit `collect()` caller inspection and
+  behavior suites. Optional `reviewctl`, its project ruleset, and the referenced standalone BlastRadius tool are not
+  installed; they are not project acceptance gates and were not represented as executed.
+- Complete `npm run precommit:check` exits `0`: verdict `55/55`, Vite lifecycle, product-copy guard, writer
+  `15/15 + 8/8`, capability `12 / 297 / 11`, MCP capability recovery, action receipts `82 routes / 57 surfaces`,
+  TypeScript, and final `[precommit] OK` all pass.
+
+**REVIEW / CLOSE / AAR**
+
+- Acceptance items 1-5 are done and evidenced. Fresh-eyes review required one comment-only correction to state the
+  opaque authority boundary explicitly; the same native Luna worker made it, reran ESLint/TypeScript/diff hygiene,
+  returned `VERIFIED`, and was closed with terminal status. No behavioral reimplementation was required.
+- The current COMM title and both buttons are now source-faithfully projectable through the real configured corpus,
+  but the whole menu still has secondary analysis/data-flow/table/cell gaps and no new installed-host or X4 comparison.
+  **Bounded-unit status: `VERIFIED`; overall B119: `IN_PROGRESS / PARTIAL / Not verified in game`.** No capability-map
+  delta and no OpenVSX claim. The next bounded unit is package/install/native Forge preview proof for this exact commit,
+  followed by a separately controlled deploy/X4 comparison.
+- **AAR:** sustain an unsupplied causal baseline, exact sample authority, a supplied positive projection, and a real
+  corpus replay distinct from deterministic fixtures. Improve the ad-hoc diagnostic harness: a `.cmd -e` quoting
+  attempt, a top-level-await attempt, and one stale result-shape read failed without writes before direct Node + an
+  async wrapper + `statusIdentity` produced the accepted receipt. Tooling lacks the optional review scanner and its
+  rules, while Graphify cannot derive a useful reverse edge for this private helper. Highest-risk observed weakness is
+  confusing a fixture-font rectangle with selected-corpus geometry; retain both values and their provenance instead
+  of normalizing one away. Project lesson card 27 is banked at
+  `F:\\StarForge\\wiki\\x4-modding-methods\\07 UI (Lua widgets, menus, overlays)\\ui-modding-gotchas-quick-reference.md`,
+  SHA-256 `29FA2A9EC7F1C2F577686490A5EF586197D911604A76BE70D10F0237AA56A86D`.

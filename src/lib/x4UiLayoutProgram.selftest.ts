@@ -6310,6 +6310,87 @@ const run = (): {
         && candidate.descriptorFacts.color.expectedType === 'color-object'),
     detail({ catalog: guardedProgram.sampleCatalog, gaps: guardedProgram.gaps }));
 
+  const opaqueCallSource = [
+    'local menu = { name = "OpaqueCalls", layer = 1 }',
+    'function menu.display() ',
+    '  local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    '  local table = frame:addTable(6, { width = 100, reserveScrollBar = false, scaling = false })',
+    '  local row = table:addRow(false, {})',
+    '  row[1]:createText(ascii("prefix " .. tostring(value)), { height = 12 })',
+    '  row[2]:createButton({ height = 25 }):setText(ascii("button " .. tostring(value)), {})',
+    '  row[3]:createButton({ height = 25 }):setText2(ascii("button2 " .. tostring(value)), {})',
+    '  row[4]:createText("number", { height = numberValue() })',
+    '  row[5]:createText(C.GetText(), { height = 12 })',
+    '  row[6]:createText(Helper.GetText(), { height = 12 })',
+    '  row[4]:createEditBox({ height = 25, active = booleanValue() })',
+    'end',
+  ].join('\n');
+  const opaqueCallModel = buildX4UiCallModel(input(opaqueCallSource, 'selftest/opaque-call-samples.lua'));
+  const opaqueCallTarget = namedTarget(opaqueCallModel, 'menu.display');
+  const opaqueCallProfile = profileFor(opaqueCallModel, { minTextHeight: 12 });
+  const opaqueCallUnsampled = programOf(projectX4UiLayoutProgram(
+    opaqueCallModel,
+    opaqueCallTarget,
+    opaqueCallProfile,
+  ));
+  const opaqueCallEntries = opaqueCallUnsampled.sampleCatalog.entries;
+  const opaqueCallTextEntries = opaqueCallEntries.filter(entry => entry.expectedType === 'string');
+  const opaqueCallSampleInput: X4UiLayoutPreviewSampleInput = {
+    catalogId: opaqueCallUnsampled.sampleCatalog.id,
+    source: opaqueCallUnsampled.sampleCatalog.sourceIdentity,
+    values: opaqueCallTextEntries.map((entry, index) => ({
+      id: entry.id,
+      value: ['opaque title', 'opaque button', 'opaque button2'][index] || 'opaque',
+    })),
+  };
+  const opaqueCallSampled = programOf(projectX4UiLayoutProgram(
+    opaqueCallModel,
+    opaqueCallTarget,
+    opaqueCallProfile,
+    opaqueCallSampleInput,
+  ));
+  const opaqueCallText = opaqueCallSampled.cells.find(candidate => candidate.column === 1);
+  const opaqueCallButton = opaqueCallSampled.cells.find(candidate => candidate.column === 2);
+  const opaqueCallButton2 = opaqueCallSampled.cells.find(candidate => candidate.column === 3);
+  check('opaque call-shaped string samples unlock createText/setText/setText2 while number, boolean, C, and Helper calls stay absent',
+    opaqueCallEntries.length === 3
+      && opaqueCallTextEntries.length === 3
+      && opaqueCallTextEntries.map(entry => entry.expression).join('|') === [
+        'ascii("prefix " .. tostring(value))',
+        'ascii("button " .. tostring(value))',
+        'ascii("button2 " .. tostring(value))',
+      ].join('|')
+      && !opaqueCallEntries.some(entry => entry.expectedType !== 'string')
+      && !opaqueCallEntries.some(entry => /numberValue\(|booleanValue\(|C\.GetText|Helper\.GetText/.test(entry.expression))
+      && opaqueCallUnsampled.operations.some(operationValue => operationValue.kind === 'createText'
+        && operationValue.descriptorFacts.primaryContent?.status === 'unavailable')
+      && opaqueCallSampled.previewSampleBindings.length === 3
+      && opaqueCallSampled.previewSampleBindings.every(binding => binding.status === 'consumed')
+      && opaqueCallText !== undefined
+      && opaqueCallText.descriptorFacts.primaryContent.status === 'known'
+      && opaqueCallText.descriptorFacts.primaryContent.value === 'opaque title'
+      && opaqueCallText.descriptorFacts.primaryContent.provenance === 'preview-sample'
+      && opaqueCallText.descriptorFacts.outerHeight.status === 'known'
+      && opaqueCallText.descriptorFacts.outerHeight.value === 12
+      && opaqueCallButton !== undefined
+      && opaqueCallButton.descriptorFacts.primaryContent.status === 'known'
+      && opaqueCallButton.descriptorFacts.primaryContent.value === 'opaque button'
+      && opaqueCallButton.descriptorFacts.primaryContent.provenance === 'preview-sample'
+      && opaqueCallButton.descriptorFacts.outerHeight.status === 'known'
+      && opaqueCallButton.descriptorFacts.outerHeight.value === 25
+      && opaqueCallButton2 !== undefined
+      && opaqueCallButton2.descriptorFacts.text2.status === 'known'
+      && opaqueCallButton2.descriptorFacts.text2.value === 'opaque button2'
+      && opaqueCallButton2.descriptorFacts.text2.provenance === 'preview-sample'
+      && opaqueCallButton2.descriptorFacts.outerHeight.status === 'known'
+      && opaqueCallButton2.descriptorFacts.outerHeight.value === 25,
+    detail({
+      catalog: opaqueCallEntries,
+      unsampled: opaqueCallUnsampled.operations.filter(operationValue => operationValue.kind === 'createText' || operationValue.kind === 'setText' || operationValue.kind === 'setText2'),
+      sampledBindings: opaqueCallSampled.previewSampleBindings,
+      sampledCells: [opaqueCallText, opaqueCallButton, opaqueCallButton2],
+    }));
+
   const localExpansionSource = [
     'local Helper = rawget(_G, "Helper")',
     'local function nested(cell, label, height)',

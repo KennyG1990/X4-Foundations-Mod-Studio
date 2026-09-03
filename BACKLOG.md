@@ -1883,6 +1883,21 @@ preview-only **string** samples for ordinary call-shaped text, while retaining h
 numeric/boolean calls. Overall B119 and GitHub #41 remain `IN_PROGRESS / PARTIAL / Not verified in game`; no OpenVSX
 publish is authorized by this checkpoint.
 
+Durable projection is read back: repository checkpoint `b6f2be9d41cc367da568c533c9071742d42bcc5b`; GitHub #41
+comment `5520171578`; Notion owner unchanged at `In Progress / Partial`; Google Current Status revision
+`AIroW37mol_WtZzxMvoIK0a0Lvd3aX3IpD6XMPhdb7_ceDfIGPrN8fN2sDhzOAFNIkwzHccOyk63vzRM2mwEd9ivtabZPNXgy3Q5NA8L4lfJ`.
+
+**B119 opaque dynamic-text sample checkpoint 2026-09-03 — BOUNDED VERIFIED / FULL B119 PARTIAL:** The existing
+source-bound preview catalog now issues opaque user-supplied values for ordinary call-shaped text only when the value
+is dynamic/unknown and the requested type is exactly string; Forge still does not execute Lua, and numeric/boolean,
+`C.*`, and `Helper.*` calls remain excluded. Configured Layout is `706/706` with zero skips, EditorSession is `8/8 +
+7/7`, strict Scene is `176/176` with MENU/HUB/COMM `3/3`, exact-path lint/type/diff gates pass, and full precommit ends
+`OK`. With the actual configured Zekton descriptor (`outer=52`), supplying COMM lines `505-506` restores the title at
+`1298x22 @ 32,27` plus DOSSIER/END at `279x25 @ 1332/1613,27`; the unsupplied state remains honestly zero-widget.
+Source SHA `88FAB05A...63511`, clean mod HEAD `4c0a422`, and `Not verified in game` remain unchanged. Next is an exact
+package/install/native Forge preview checkpoint, then controlled deploy/X4 comparison; OpenVSX remains deferred and
+GitHub #41 stays open.
+
 ### B115 · Forge Capability Convergence `in_progress` (P0, PRIORITY OVERRIDE)
 
 Ken explicitly promoted GitHub initiative #9 and child requests #10–#21 above the active R13 close on 2026-07-31.
