@@ -1,95 +1,86 @@
-# Session handoff — B119 native Zekton pen advance verified; overall renderer partial
+# Session handoff — B119 installed workspace authority verified; current-source import next
 
 Date: 2026-09-02
 Project: `F:\DEV_ENV\X4_Forge`
-Status: bounded native pen-advance unit `VERIFIED`; overall B119 `IN_PROGRESS / PARTIAL`
+Status: bounded installed workspace-authority repair `VERIFIED`; overall B119 `IN_PROGRESS / PARTIAL`
 
 ## Session-start brief
 
 - Project: X4 Forge B119, the linter-first source-faithful X4 Lua UI editor. GitHub owner: #41.
-- Biggest closed milestone: exact X4 C++ text metrics now drive Forge's pinned Zekton 9.00 pen widths, and a fresh
-  installed-Forge PNG plus fresh X4 run agree on the repaired button-label extents within `0-2` raster pixels.
-- Eyeball queue: no operator check is blocking this checkpoint. A later release candidate still needs explicit full
-  original-brief review, AI Influence reference reconstruction, and OpenVSX acceptance.
-- Commit question: source checkpoint `0194d62e811305797bf8c18ac68158f035adc8d6` is pushed with exact
-  local/tracking/direct-remote parity. Commit and push only the final receipt-bearing plan/backlog/handoff delta next;
-  preserve all unrelated dirty files.
+- Biggest new milestone: the installed Studio tab, extension controller, server workspace, and immutable scoped key now
+  converge on one target instead of rejecting a valid switch with `WORKSPACE_ID_CONFLICT`.
+- Eyeball queue: no operator check blocks the next API/source census. A later release candidate still needs the full
+  original-brief review, AI Influence reference reconstruction, final Forge/X4 comparison, and OpenVSX acceptance.
+- Commit question: this workspace-authority implementation and its receipt-bearing records are ready for one explicit
+  path commit/push. Preserve the broad unrelated dirty tree.
 
-## What changed
+## Implemented bounded unit
 
-- `src/lib/x4UiFontMetrics.ts` adds `deriveZektonNativePenAdvance()` from the exact native oracle law
-  `horizontalBearing + advance`, while preserving raw ABC fields and refusing invalid composite geometry.
-- `src/lib/x4UiTextLayout.ts` uses the same derived value for token width, wrapping, truncation, alignment, and pen
-  progression. Raw bearing still positions each bitmap once; height and atlas semantics are unchanged.
-- Focused tests cover positive, negative, and zero bearings; impossible/non-finite/over-cap results; canonical regular
-  and bold vectors; wrap/truncation; and raw-versus-derived field identity.
+- New pure `workspaceAuthorityHeaders()` copies headers and replaces stale `x-workspace-id` with the requested target;
+  blank fallback removes it. Authorization, client ID, content type, operation ID, and unrelated headers survive.
+- New `workspaceAuthorityResponseAcceptable()` requires an OK response, valid immutable ID, and exact nonblank target
+  echo. Startup and Studio-tab rebinding both use the helper; caller state mutates only after acceptance.
+- Server conflict policy, agent immutable binding, normal API headers, and all workspace contents remain unchanged.
 
-## Native authority and rollback
+## Validation and installed evidence
 
-- Guarded one-shot X4 probe emitted `53` scoped rows and completed `36/36` samples with zero native formula error.
-- Width law: `sum(horizontalBearing + advance) * size / 32`.
-- Unwrapped height law: `lineMetrics.outer * size / 32`.
-- Native scale at drawable `2544x1353`, default user scale: `Helper.uiScale = C.GetUIScale(false) =
-  1.2527778148651`; `C.GetUIScale(true) = 1`.
-- Probe rollback is exact across repository fixture, Mod Workspace, Forge loose staging, and game target: each Lua is
-  `5,488` bytes, SHA-256 `C1D9CD8580C6175E95C543259A2AB19F8B463282BF48B2229EB6013D6052718E`, with no
-  `B119_METRIC_PROBE` marker. X4 process count is zero.
+- Pure selftest, extension and root TypeScript, exact ESLint, diff hygiene, and Graphify pass. Graphify is
+  `10,172 nodes / 25,586 edges / 330 communities`.
+- Complete precommit exits `0`: verdict `55/55`, writers `15/15 + 8/8`, capability audit
+  `12 capabilities / 297 routes / 11 MCP aliases`, action receipts `82 routes / 57 surfaces`, final OK.
+- Production build emits `1,848` modules. Package inspector is `13/13`; isolated staged probe is `16/16`. The first
+  combined probe stopped after two checks and remains AAR evidence.
+- Strict configured Scene is `176/176`, executing MENU/HUB/COMM `3/3`. At `1920x1080`: MENU paint is `209/171`, HUB
+  `70/39`, COMM `35/29` commands/diagnostics; COMM still has zero widgets/text/glyphs. This is a current gap baseline,
+  not parity or game proof.
+- Final package:
+  `vscode-extension/x4-forge-studio-0.0.70-b119-workspace-authority-final-019fea10.vsix`, `26,288,780` bytes,
+  SHA-256 `132FB260D8CADBF90CC2120C581D1D73D22C78E097775999A4FE756927AEE04A`.
+- Final installed `out/extension.js`: `142,926` bytes,
+  SHA-256 `3DA7E84BC00E0EB2808524DE0934196117604FDE31BF7ED03E641004F819B367`, exact staged parity.
+- Rollback backup:
+  `C:\Users\Moshi\AppData\Local\Temp\x4forge-b119-workspace-authority-final-backup-20260902-215707`.
+- Installed old path reproduced `WORKSPACE_ID_CONFLICT`. Repaired installed candidate bound AI and switched to the
+  restored Pipeline tab. Its compiled 5,000-character switch-handler window is identical in the final package at
+  `1A948D0232D9E7BCFD7B10E1956CA74AE1CCF9EDFD8AD58442CC3B2B7432742F`.
+- Two final-package restarts logged successful activation, sidecar readiness, authority bind, and Studio selection.
+  Current live sidecar is dynamic port `61112`; persisted/current selection is Pipeline Test
+  `ws_f61166c42849c757cf219c37`. One first-restart `fetch failed` was retained; clean replay succeeded.
+- Final sidecar created a temporary AI-bound read key, returned HTTP `200` for `x4 AiLive`
+  `ws_bca860d02b9ea61f6028bfb4` (`2,927` nodes), retained HTTP `403 / WORKSPACE_BINDING_MISMATCH` for Pipeline, and
+  revoked both temporary keys. No plaintext key was recorded.
+- Same-version in-process install failed safely after `1,100` `EPERM` retries. Graceful `CloseMainWindow()` shutdown,
+  not raw child termination, released the native lock and enabled exact install. Raw child termination had correctly
+  triggered supervisor respawn and is not an accepted stop path.
 
-## Validation now green
+## Protected-state proof
 
-- FontMetrics `15/15`; TextLayout `12/12`; Integration `21/21`; Canvas `140/140`; LayoutKernel `34/34`; KeepOut
-  `17/17`; Paint `180/180`; Scene `176/176`; Preview `108/108`; CorpusAssets `39/39`; SourceEdits `90/90`; Source
-  Editor P7 `12/12`; all remaining UI entrypoints, TypeScript, exact lint, diff hygiene, and Graphify pass.
-- Complete `npm run precommit:check` exits `0`; production build, extension stage/build, package inspection, and probe
-  `16/16` pass.
-- The complete serial Source Editor browser suite now passes `3/3` in `1.9m`; child exit `0`, JSON report complete,
-  `treeGone=true`, ports `3100/3101` clear, and no matching E2E Node process remains. Receipt SHA-256:
-  `54E178115CAD3F3BC4814A35218CC4E9E1CB4D7F4EDC5DC71AC2657615837A06`.
-- The per-run `%TEMP%\x4forge-e2e-state-36196` directory remains inert; process ownership is fully closed. The live
-  Antigravity discovery file and protected mod/game hashes stayed unchanged.
-
-## Installed Forge and X4 evidence
-
-- Reviewed VSIX: `vscode-extension/x4-forge-studio-0.0.70-b119-pen-advance-019fea10.vsix`, `26,288,585` bytes,
-  SHA-256 `55031D0626F840B4CFEA8572B85FFF21C1B6D618E91B1EC82C9DB6F1D26C938F`.
-- Rollback backup: `C:\Users\Moshi\AppData\Local\Temp\x4forge-b119-pen-advance-backup-20260902-193500`.
-- Installed Antigravity critical bytes match the staged package. Exact source selection is
-  `ui/pipeline_test.lua -> menu.createFrame`; profile is `2544x1353 / X4 user scale 1 / effective Helper scale
-  1.2527777777777778`; the current-canvas footer still says `Not verified in game`.
-- Corrected native Forge PNG: `91,675` bytes / SHA-256
-  `521F647DC1B6FB46E701166482137D63E1AD8983346DED7172204E2E52C440EE`.
-- Fresh X4 screenshot: `407,029` bytes / SHA-256
-  `0045715651BDEC6CFC9A5371ED5BFF6A058E41F6448EB1AF55F015E472452C5D`.
-- First button-label extent: old Forge `97-98`, corrected Forge `108-109`, X4 `108-109`. Second: old `95-96`,
-  corrected `104-105`, X4 `106`. Status: old `219`, corrected `244`, X4 `243-245`.
-- X4 accepted both buttons, native edit-box input, focus retention, standard close, and clean exit. Scoped debuglog has
-  zero `pipeline_test` runtime errors, zero view-setup failures, and zero Lua tracebacks.
-
-## Durable records
-
-- Canonical plan: `docs/plans/2026-09-02-b119-canonical-source-editor-game-pipeline.md`.
-- Comparison/evidence: `dev-docs/b119-x4-ui-pipeline-smoke/source-editor-ingame-20260902/` (ignored evidence; do not
-  force-add unless the release record explicitly chooses to version binary evidence).
-- BACKLOG B119 remains open and now records the bounded verified pen-advance checkpoint.
-- X4 UI quick-reference card 26 records the `.abc` advance trap at
-  `F:\StarForge\wiki\x4-modding-methods\07 UI (Lua widgets, menus, overlays)\ui-modding-gotchas-quick-reference.md`.
-- Capability-map delta, project AAR, and UI quick-reference card 26 are written.
-- External readback is complete: GitHub #41 comment `5518404390`; Notion
-  `3b84618e-d15b-8190-821e-c0eb96f43d5a` is `In Progress / Partial`; Drive doc
-  `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, revision
-  `ANLCKQnz-cGm-CH7Hg9hWcOGNdURH9xZ03PCCFwYQWPASmiyEr0CVP705Ov9ur9vngPDMFleaJ9yW8FeUTW2j7MKMRekmuhQywOOIqpiXzde`.
+- AI workspace JSON: `11,953,625` bytes / `79A7738581FA7C09A3704204F54A08B92375BA3A574BBC7AE8DCF432CB2BE520`.
+- Pipeline workspace JSON: `8,477` bytes / `18A3C6507C33967F77A723CA8854D6F855192FD61AC657D71D3DA3353DC69FBC`.
+- Current source Mod Workspace: `127 / 11,262,724 / CC3B7E98...CBBB`.
+- Forge loose AI build: `155 / 537,684,179 / 70C6DECC...0A97`.
+- Game AI extension: `126 / 11,262,072 / 636CFAB9...862B7`.
+- All equal baseline; X4 process count is zero. A temporary 287-file alarm was a rejected census error that included
+  the source mod's existing 160-file `.git`; the mod worktree itself is clean at `4c0a422...`.
 
 ## Exact continuation
 
-1. Run diff hygiene, explicitly stage only this plan, `BACKLOG.md`, and `SESSION-HANDOFF.md`, commit the record close,
-   push, and assert local/tracking/direct-remote parity.
-2. Review the original brief line by line before selecting the next B119 unit. Do not publish OpenVSX until release
-   acceptance explicitly passes.
+1. Run final diff hygiene, explicitly stage only the workspace-authority source/selftest, canonical plan,
+   `BACKLOG.md`, and this handoff. Commit `fix(extension): keep Studio workspace authority in sync`, push, and assert
+   `HEAD == origin/main == ls-remote main`.
+2. Synchronize and read back GitHub #41, Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Drive Current Status
+   doc `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`.
+3. Start a new documented bounded unit: back up AI workspace state, read paired `workspaceHash/snapshotHash`, import
+   configured `x4_ai_influence` from the Mod Workspace through `/api/agent/mod-folder/import`, and commit it only with
+   paired CAS. Do not alter source, loose build, or game target.
+4. Re-run strict MENU/HUB/COMM census from the imported current source, identify the first causal visible-operation gap,
+   and route any code repair to exact native Luna. Do not publish OpenVSX until release acceptance explicitly passes.
 
 ## Preservation boundary
 
-- Preserve every unrelated modified, deleted, and untracked path in the broad working tree.
-- Never stage `test-results/.last-run.json`, unrelated docs/plans, deleted scripts/data, screenshots/showcase assets,
-  release metadata, `vscode-extension/package.json`, or existing user files.
+- Preserve every unrelated modified, deleted, and untracked repository path. Stage only explicit owned paths.
+- Do not stage ignored screenshots, VSIX files, `test-results/.last-run.json`, release metadata, package version files,
+  deleted scripts/data, showcase assets, or unrelated plans.
 - Overall B119 remains `PARTIAL`: universal C++ frame acceptance, complete Helper/widget/keep-out coverage, exact
-  shader/alpha identity, arbitrary Lua, full AI Influence reconstruction, release acceptance, and OpenVSX remain open.
+  shader/alpha identity, arbitrary Lua, current-source three-menu fidelity, AI Influence reconstruction, final X4
+  comparison, release acceptance, and OpenVSX remain open.

@@ -790,3 +790,139 @@ Status at plan time: `SPECIFIED`. No capability-map delta.
 - Google Drive Current Status document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, was appended and
   read back with one `HEADING_2` plus seven exact checkpoint paragraphs at revision
   `ANLCKQnz-cGm-CH7Hg9hWcOGNdURH9xZ03PCCFwYQWPASmiyEr0CVP705Ov9ur9vngPDMFleaJ9yW8FeUTW2j7MKMRekmuhQywOOIqpiXzde`.
+
+### BOUNDED UNIT — INSTALLED STUDIO WORKSPACE-AUTHORITY SWITCH (`SPECIFIED`)
+
+**PLAN**
+
+- **Bounded unit:** repair the installed extension host so a confirmed Studio-tab workspace switch changes the
+  extension's immutable workspace authority to the same target before a new scoped agent key is minted. This is a
+  prerequisite for using the existing Forge to inspect the current AI Influence workspace; it is not a renderer or
+  menu-parity claim.
+- **Assumptions / unresolved facts:** the selected Studio tab and the extension host are intended to share one
+  workspace ID after `workspace-authority-changed`. The current server conflict refusal is authoritative. No claim is
+  made yet about the three AI menus' renderability.
+- **Authoritative references:** ADR-F5 workspace authority, `requestedWorkspaceIdentity()` and
+  `/api/agent/workspaces/bootstrap` in `server.ts`, the installed `0.0.70` extension output, and the current
+  `vscode-extension/src/extension.ts` callers. The server's duplicate-identity rejection must not be weakened.
+- **In scope:** target-specific bootstrap request headers, startup fallback behavior, Studio-message rebinding,
+  causal pure selftests, extension build/package/probe/install, and an installed-host switch/key/API readback.
+- **Out of scope:** server identity-policy changes, cross-workspace agent keys, mod/game writes, X4 launch, UI menu
+  reconstruction, OpenVSX publication, or changes to any existing workspace contents.
+- **Affected paths:** `vscode-extension/src/extension.ts`; one narrowly owned pure request-header helper and selftest;
+  this plan, `BACKLOG.md`, and `SESSION-HANDOFF.md`. Existing unrelated extension release metadata stays untouched.
+- **Risks / authorization:** a bad fix could bind an agent key to the wrong workspace or strand the extension on an
+  invalid target. The user authorized existing-Forge updates and Computer Use. The repair may replace only the
+  installed X4 Forge extension after a fresh backup; it may not mutate the mod or game.
+- **Rollback:** restore the current installed extension from a byte-complete backup, or reinstall the already reviewed
+  `x4-forge-studio-0.0.70-b119-pen-advance-019fea10.vsix`. Workspace state is read-only during this unit.
+
+**BASELINE / RECONCILE**
+
+- Repository baseline is `HEAD == origin/main == db4fdc9db57fee766faea7a2b8299adbd1188a26`; the broad unrelated dirty
+  tree is preserved. The installed sidecar is `http://127.0.0.1:64929` and X4 is not running.
+- The visible Studio tab successfully restored `x4 AiLive` as `ws_bca860d02b9ea61f6028bfb4`, but the extension output
+  recorded `workspace authority change failed closed: Conflicting workspaceId values were supplied in the request.`
+  A subsequently created one-hour read key remained bound to `ws_f61166c42849c757cf219c37` (`Pipeline Test UI`).
+- Cause: `handleStudioMessage()` posts target `workspaceId` in the JSON body while `backendApiHeaders(handle, true)`
+  still emits the prior `handle.workspaceId` in `x-workspace-id`. `requestedWorkspaceIdentity()` detects both distinct
+  values and returns `WORKSPACE_ID_CONFLICT` before rebinding. Startup fallback has the same stale-header possibility.
+- Existing capability reused: tab-local restore, extension `handle.workspaceId`, server bootstrap lookup, immutable key
+  binding, and strict conflict rejection. The general API-header helper remains unchanged for normal reads/writes.
+- Capability-map delta is deferred until installed-host validation establishes that the repaired authority actually
+  follows the selected tab.
+
+**ACCEPTANCE CONTRACT**
+
+1. A target-workspace request helper must preserve authorization, client identity, content type, and operation ID while
+   replacing a stale `x-workspace-id` with the exact target. An empty bootstrap target must remove the stale header.
+   The input header object must not be mutated.
+2. Both startup bootstrap attempts and Studio-message rebinding must use the target-consistent helper. `handle.workspaceId`
+   and persisted global state update only after an OK response whose returned workspace ID exactly equals the target.
+3. Negative tests cover stale-old/new-target conflict prevention, empty fallback, malformed/blank target refusal at the
+   existing caller boundary, preserved unrelated headers, and no pre-success handle mutation. Server conflict policy,
+   agent immutable binding, and normal `backendApiHeaders()` behavior remain unchanged.
+4. The pure selftest, extension TypeScript/build, applicable root type/lint/oracle/precommit gates, package inspection,
+   and staged-app probe must pass without weakening an oracle, timeout, route policy, or assertion.
+5. Installed-host acceptance requires switching between two existing workspaces, observing a successful extension log
+   for the selected target, minting a new one-hour read key, and reading only that target through the Agent API. A
+   mismatched workspace header must still return `WORKSPACE_BINDING_MISMATCH`.
+6. No workspace, mod, staging, or game content may change. If installed-host authority remains on the old workspace,
+   the unit is `FAILED`; source/build success alone is `PARTIAL`.
+
+**REQUIRED EVIDENCE**
+
+- Pure selftest output and exact changed-file diff.
+- Extension build/package/probe hashes plus installed-byte comparison and rollback path.
+- Extension-output success line, bound-key workspace summary, and retained mismatch refusal from the live sidecar.
+- Final path census proving workspace/mod/game content hashes or snapshots were unchanged.
+
+**IMPLEMENT**
+
+- `workspaceAuthorityHeaders()` now copies the request headers, replaces a stale `x-workspace-id` with the exact
+  bootstrap target, and removes the header for the intentional default-workspace fallback. Authorization, client,
+  content-type, operation identity, and unrelated headers survive without mutating the input object.
+- `workspaceAuthorityResponseAcceptable()` requires an OK response, a valid immutable workspace ID, and exact target
+  echo for every nonblank request. Only the explicit blank fallback may accept the server-selected valid default.
+- Startup bootstrap and `workspace-authority-changed` both use the same target-consistent helper. The extension handle
+  and `globalState` still mutate only after the response passes their authority checks. Server conflict and immutable
+  agent-key enforcement were not weakened.
+
+**VALIDATE**
+
+- Pure selftest passes the causal old-header/new-body conflict, replacement, blank fallback, case-insensitive header,
+  preservation, nonmutation, invalid response, wrong response, and response-failure cases. Extension TypeScript,
+  extension build, root typecheck, exact-path ESLint, diff hygiene, and Graphify pass; Graphify is
+  `10,172 nodes / 25,586 edges / 330 communities` and shows both bootstrap callers using the helper.
+- Complete `npm run precommit:check` exits `0`: verdict selftest `55/55`, writer audits `15/15 + 8/8`, capability audit
+  `12 capabilities / 297 routes / 11 MCP aliases`, action receipts `82 routes / 57 surfaces`, and final
+  `[precommit] OK`. Production build emits `1,848` modules. The first combined stage/probe command stopped after two
+  probe assertions; the isolated rerun passes `16/16` without changing an assertion or timeout.
+- Strict configured three-menu census passes `176/176`, executing `MENU/HUB/COMM = 3/3`. At `1920x1080`, MENU is
+  partial with `209` paint commands / `171` diagnostics, HUB with `70/39`, and COMM with `35/29`; COMM still emits zero
+  widgets/text/glyphs. This is a truthful next-work baseline, not three-menu fidelity or game proof.
+- Final VSIX `x4-forge-studio-0.0.70-b119-workspace-authority-final-019fea10.vsix` is `26,288,780` bytes, SHA-256
+  `132FB260D8CADBF90CC2120C581D1D73D22C78E097775999A4FE756927AEE04A`, with `2,107` inspected entries and
+  `71,586,507` unpacked bytes. Package inspection is `13/13`; installed `out/extension.js` is `142,926` bytes,
+  SHA-256 `3DA7E84BC00E0EB2808524DE0934196117604FDE31BF7ED03E641004F819B367`, exactly matching the staged build.
+- Same-version replacement while Antigravity remained open failed safely after `1,100` native-file `EPERM` retries.
+  A byte-complete rollback copy remains at
+  `C:\\Users\\Moshi\\AppData\\Local\\Temp\\x4forge-b119-workspace-authority-final-backup-20260902-215707`.
+  `CloseMainWindow()` then closed the IDE gracefully, the CLI installed the inspected VSIX, and a fresh Antigravity
+  process launched the packaged sidecar. Raw child termination is not a stop contract: the extension respawned its
+  owned sidecar, so it was not used for the accepted replacement.
+- Installed runtime first reproduced the bug as `WORKSPACE_ID_CONFLICT`. The repaired installed candidate then bound
+  `ws_bca860d02b9ea61f6028bfb4` and successfully accepted the restored Studio tab's cross-target switch to
+  `ws_f61166c42849c757cf219c37`. The compiled 5,000-character switch-handler window is byte-identical between that
+  accepted candidate and the final package at SHA-256
+  `1A948D0232D9E7BCFD7B10E1956CA74AE1CCF9EDFD8AD58442CC3B2B7432742F`; the final package's additional change is the independently
+  tested startup-response echo guard.
+- Two clean final-package restarts logged final activation, sidecar readiness, authority bind, and successful
+  Studio-tab authority selection. The current selected tab is Pipeline Test, so the final log correctly ends at
+  `workspace authority selected by Studio tab: ws_f61166c42849c757cf219c37`. One first-restart `fetch failed` was
+  retained; the clean replay succeeded without source or state repair.
+- On the final sidecar, a temporary one-hour read key was created against AI workspace
+  `ws_bca860d02b9ea61f6028bfb4`, read `x4 AiLive` (`2,927` nodes) with HTTP `200`, and returned HTTP `403` plus
+  `WORKSPACE_BINDING_MISMATCH` against Pipeline Test. Both temporary keys were revoked; no plaintext key was recorded.
+- Final protected census exactly equals baseline: AI workspace JSON
+  `79A7738581FA7C09A3704204F54A08B92375BA3A574BBC7AE8DCF432CB2BE520`, Pipeline JSON
+  `18A3C6507C33967F77A723CA8854D6F855192FD61AC657D71D3DA3353DC69FBC`, Mod Workspace
+  `127 / 11,262,724 / CC3B7E98...CBBB`, loose build `155 / 537,684,179 / 70C6DECC...0A97`, and game target
+  `126 / 11,262,072 / 636CFAB9...862B7`; X4 process count is zero. A transient `287`-file count was correctly rejected
+  as a census mistake because it included the mod's existing 160-file `.git` directory.
+
+**REVIEW / CLOSE / AAR**
+
+- Requirements 1-4 and 6 are done with causal, package, installed-host, and immutable-census evidence. Requirement 5
+  is done by the installed cross-target switch, exact compiled-handler identity in the final package, final-package
+  bind/selection replay, target-bound key read, and retained mismatched-header refusal.
+- Fresh-eyes review forced the startup exact-echo guard before final packaging. No server policy, workspace contents,
+  mod bytes, staging bytes, game bytes, release metadata, OpenVSX state, or unrelated working-tree path changed.
+- **Status:** this bounded workspace-authority repair is `VERIFIED`; overall B119 remains
+  `IN_PROGRESS / PARTIAL / Not verified in game`. The next bounded unit is a backed-up, paired-CAS re-import of the
+  current configured AI Influence source followed by a new strict three-menu census. OpenVSX remains deferred.
+- **AAR:** sustain target-consistent duplicate authority and exact response echo. Improve installed replacement by
+  treating graceful IDE shutdown as the only accepted native-lock release. Tool friction included one transient UI
+  fetch race, one incomplete combined probe, one PowerShell alias collision, and one `.git`-inclusive false census;
+  all failed evidence is retained. Highest risk was silent extension/tab authority divergence, now contained by one
+  copied-header helper, fail-closed response checks, immutable key binding, and installed cross-target evidence.

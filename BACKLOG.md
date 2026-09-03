@@ -1850,6 +1850,22 @@ tracking, and direct-remote parity; GitHub #41 comment `5518404390`; Notion owne
 contains the exact bounded/full boundary. UI quick-reference card 26, the capability-map delta, and the project AAR
 record the native `.abc` pen-advance lesson.
 
+**B119 installed Studio workspace-authority checkpoint 2026-09-02 — BOUNDED VERIFIED / FULL B119 PARTIAL:** The
+installed extension reproduced the cross-workspace failure as `WORKSPACE_ID_CONFLICT`: the target ID was in the JSON
+body while the prior ID remained in `x-workspace-id`. One copied-header owner now replaces the stale authority (or
+removes it for default fallback), while startup additionally requires an exact valid response echo before mutating the
+extension handle/global state. Causal selftests, extension/root TypeScript, exact lint, Graphify
+`10,172/25,586/330`, strict configured Scene `176/176` with MENU/HUB/COMM `3/3`, complete precommit, the
+`1,848`-module build, package inspector `13/13`, and staged probe `16/16` pass. Final VSIX SHA-256 is
+`132FB260D8CADBF90CC2120C581D1D73D22C78E097775999A4FE756927AEE04A`; installed extension bytes match. An installed
+cross-target AI-to-Pipeline switch succeeded, its compiled handler window is identical in the final package, and the
+final sidecar accepted a temporary AI-bound read key at HTTP `200` while retaining `403 / WORKSPACE_BINDING_MISMATCH`
+for Pipeline; the keys were revoked. Two clean final-package restarts bound and accepted the current Pipeline Studio
+tab. Both workspace JSONs and the exact Mod Workspace/loose-build/game trees remain byte-identical; X4 is absent.
+The current persisted AI workspace is still historical source, so next is a backed-up paired-CAS import of the current
+configured mod and a new three-menu gap census. Three-menu fidelity, AI reconstruction, final Forge/X4 comparison,
+release acceptance, and OpenVSX remain open; B119 and GitHub #41 stay `IN_PROGRESS / PARTIAL`.
+
 ### B115 · Forge Capability Convergence `in_progress` (P0, PRIORITY OVERRIDE)
 
 Ken explicitly promoted GitHub initiative #9 and child requests #10–#21 above the active R13 close on 2026-07-31.

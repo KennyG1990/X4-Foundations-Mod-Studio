@@ -51,6 +51,10 @@ import {
   ACTION_OPERATION_ID_HEADER,
   createActionOperationId,
 } from "../../shared/actionOperationId";
+import {
+  workspaceAuthorityHeaders,
+  workspaceAuthorityResponseAcceptable,
+} from "./workspaceAuthorityHeaders";
 
 interface BackendHandle {
   baseUrl: string;
@@ -116,16 +120,25 @@ async function bindBackendWorkspace(context: vscode.ExtensionContext, handle: Ba
     // workspaceId must not share identity with the rejected request.
     const response = await fetch(`${handle.baseUrl}/api/agent/workspaces/bootstrap`, {
       method: 'POST',
-      headers: freshActionOperationHeaders(backendApiHeaders(handle, true)),
+      headers: workspaceAuthorityHeaders(
+        freshActionOperationHeaders(backendApiHeaders(handle, true)),
+        workspaceId,
+      ),
       body: JSON.stringify({ clientId: handle.clientId, ...(workspaceId ? { workspaceId } : {}) }),
     });
-    return { response, body: await response.json() as { workspaceId?: string; code?: string; error?: string } };
+    return {
+      requestedWorkspaceId: workspaceId,
+      response,
+      body: await response.json() as { workspaceId?: string; code?: string; error?: string },
+    };
   };
   let result = await attempt(saved);
   if (!result.response.ok && saved && ['WORKSPACE_NOT_FOUND', 'WORKSPACE_ID_INVALID'].includes(String(result.body.code || ''))) {
     result = await attempt('');
   }
-  if (!result.response.ok || !result.body.workspaceId) throw new Error(result.body.error || `workspace bootstrap failed (${result.response.status})`);
+  if (!workspaceAuthorityResponseAcceptable(result.response.ok, result.requestedWorkspaceId, result.body.workspaceId)) {
+    throw new Error(result.body.error || `workspace bootstrap failed (${result.response.status})`);
+  }
   handle.workspaceId = result.body.workspaceId;
   await context.globalState.update('x4forge.workspaceId', handle.workspaceId);
   log(`workspace authority bound: ${handle.workspaceId}`);
@@ -797,7 +810,10 @@ async function handleStudioMessage(context: vscode.ExtensionContext, value: unkn
       if (!handle.owned || !handle.token || !handle.clientId) return;
       const response = await fetch(`${handle.baseUrl}/api/agent/workspaces/bootstrap`, {
         method: 'POST',
-        headers: freshActionOperationHeaders(backendApiHeaders(handle, true)),
+        headers: workspaceAuthorityHeaders(
+          freshActionOperationHeaders(backendApiHeaders(handle, true)),
+          workspaceId,
+        ),
         body: JSON.stringify({ clientId: handle.clientId, workspaceId }),
       });
       const body = await response.json() as { workspaceId?: string; error?: string };
