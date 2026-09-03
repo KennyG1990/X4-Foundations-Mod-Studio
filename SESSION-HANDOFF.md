@@ -13,8 +13,9 @@ Status: opaque call-shaped string-sample unit `VERIFIED`; overall B119 `IN_PROGR
 - Eyeball queue: first, install this exact source checkpoint and confirm the current COMM sample control/canvas in
   Antigravity. Then run the separately controlled deploy/X4 comparison. Exact reference reconstruction, remaining
   menu gaps, final original-brief review, release acceptance, and OpenVSX stay open.
-- Commit question: implementation plus local records are fully gated but not yet committed at this handoff rewrite.
-  Commit only the six explicit owned paths below, push, and prove local/tracking/direct-remote parity.
+- Commit question: source checkpoint `817490d9234305b86754ecedb08eea0cd149d5e7` is committed and pushed with
+  exact local/tracking/direct-remote parity. If current `HEAD` contains GitHub receipt `5521085100`, do not create
+  another sync commit; confirm parity and continue directly to package/install.
 
 ## Verified bounded implementation
 
@@ -61,28 +62,22 @@ Status: opaque call-shaped string-sample unit `VERIFIED`; overall B119 `IN_PROGR
 - Current AI workspace import remains recoverable through backup
   `C:\Users\Moshi\AppData\Local\Temp\x4forge-b119-ai-current-import-backup-20260902-231826\ws_bca860d02b9ea61f6028bfb4.json`
   and receipt `ar_c554bd122712fed927e34f59cf9b8839b54d082a08811ade869348184376cf2f`.
-- Prior documentation checkpoint `b6f2be9d41cc367da568c533c9071742d42bcc5b` has exact remote parity.
-  GitHub #41 comment `5520171578`, Notion page `3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Google Current Status
-  revision `AIroW37mol_WtZzxMvoIK0a0Lvd3aX3IpD6XMPhdb7_ceDfIGPrN8fN2sDhzOAFNIkwzHccOyk63vzRM2mwEd9ivtabZPNXgy3Q5NA8L4lfJ`
-  were read back for that import checkpoint. New implementation-close sync is still required after the source commit.
+- Source checkpoint `817490d9234305b86754ecedb08eea0cd149d5e7` has exact remote parity. GitHub #41 comment
+  `5521085100` was written and read back while the issue remained open. Notion page
+  `3b84618e-d15b-8190-821e-c0eb96f43d5a` was updated and read back at `In Progress / Partial` with the exact
+  checkpoint section. Google Current Status tab `t.0` was revision-guarded, appended, styled as exactly one
+  `HEADING_2` plus seven `NORMAL_TEXT` paragraphs, and read back at revision
+  `ANLCKQlD-Zec95PyKUeZzzv92wc_HokmnRBmXgZ3FQrC5iXutq3uRlOu477v3JMUURoZgVWazRF8XGKfwndWAfjB8RiXkeMBYKJW1RfA_zLa`.
 
 ## Next bounded unit
 
-1. Explicitly stage only:
-   - `src/lib/x4UiLayoutProgram.ts`
-   - `src/lib/x4UiLayoutProgram.selftest.ts`
-   - `src/lib/x4UiScene.selftest.ts`
-   - `docs/plans/2026-09-02-b119-canonical-source-editor-game-pipeline.md`
-   - `BACKLOG.md`
-   - `SESSION-HANDOFF.md`
-2. Commit/push the bounded unit and prove `HEAD == origin/main == ls-remote origin main`.
-3. Sync/read back GitHub #41, the existing Notion owner, and Google Current Status; record those identities in a
-   small records-only follow-up commit if needed.
-4. Document a new package/install acceptance contract, build and inspect a unique VSIX from that commit, replace the
+1. Confirm the records-only checkpoint containing GitHub receipt `5521085100` has
+   `HEAD == origin/main == ls-remote origin main`; commit it only if it is still the current unstaged delta.
+2. Document a new package/install acceptance contract, build and inspect a unique VSIX from that commit, replace the
    installed candidate safely, and prove served/installed bytes.
-5. In the real Antigravity Source Editor, select exact current COMM, supply the issued lines-505/506 string, inspect
+3. In the real Antigravity Source Editor, select exact current COMM, supply the issued lines-505/506 string, inspect
    the rendered title/buttons/canvas and retain screenshot/DOM evidence. Keep `Not verified in game` visible.
-6. Only after installed proof, perform a separately backed-up deploy/X4 comparison. OpenVSX remains deferred until
+4. Only after installed proof, perform a separately backed-up deploy/X4 comparison. OpenVSX remains deferred until
    explicit release acceptance.
 
 ## Preservation boundary

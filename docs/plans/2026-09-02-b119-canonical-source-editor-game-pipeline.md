@@ -1199,3 +1199,14 @@ than introducing a new capability. Overall B119 remains `PARTIAL`; native previe
   of normalizing one away. Project lesson card 27 is banked at
   `F:\\StarForge\\wiki\\x4-modding-methods\\07 UI (Lua widgets, menus, overlays)\\ui-modding-gotchas-quick-reference.md`,
   SHA-256 `29FA2A9EC7F1C2F577686490A5EF586197D911604A76BE70D10F0237AA56A86D`.
+
+**DURABLE SYNC**
+
+- Source checkpoint `817490d9234305b86754ecedb08eea0cd149d5e7` has exact local, tracking, and direct-remote
+  parity. GitHub #41 comment `5521085100` was written and read back; the owner issue remains open.
+- Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a` was updated in place and read back with the exact checkpoint,
+  `Status=In Progress`, and `Evidence Grade=Partial`.
+- Google Current Status document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, was appended under a
+  required-revision guard and read back at revision
+  `ANLCKQlD-Zec95PyKUeZzzv92wc_HokmnRBmXgZ3FQrC5iXutq3uRlOu477v3JMUURoZgVWazRF8XGKfwndWAfjB8RiXkeMBYKJW1RfA_zLa`.
+  Its checkpoint is exactly one `HEADING_2` plus seven `NORMAL_TEXT` paragraphs.

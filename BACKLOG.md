@@ -1898,6 +1898,12 @@ Source SHA `88FAB05A...63511`, clean mod HEAD `4c0a422`, and `Not verified in ga
 package/install/native Forge preview checkpoint, then controlled deploy/X4 comparison; OpenVSX remains deferred and
 GitHub #41 stays open.
 
+Opaque-sample durable sync is read back: source checkpoint `817490d9234305b86754ecedb08eea0cd149d5e7` has exact
+local/tracking/direct-remote parity; GitHub #41 comment `5521085100` exists with the issue open; Notion owner
+`3b84618e-d15b-8190-821e-c0eb96f43d5a` remains `In Progress / Partial`; and Google Current Status tab `t.0` is at
+revision `ANLCKQlD-Zec95PyKUeZzzv92wc_HokmnRBmXgZ3FQrC5iXutq3uRlOu477v3JMUURoZgVWazRF8XGKfwndWAfjB8RiXkeMBYKJW1RfA_zLa`
+with the exact checkpoint heading and body read back.
+
 ### B115 · Forge Capability Convergence `in_progress` (P0, PRIORITY OVERRIDE)
 
 Ken explicitly promoted GitHub initiative #9 and child requests #10–#21 above the active R13 close on 2026-07-31.
