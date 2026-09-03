@@ -1210,3 +1210,132 @@ than introducing a new capability. Overall B119 remains `PARTIAL`; native previe
   required-revision guard and read back at revision
   `ANLCKQlD-Zec95PyKUeZzzv92wc_HokmnRBmXgZ3FQrC5iXutq3uRlOu477v3JMUURoZgVWazRF8XGKfwndWAfjB8RiXkeMBYKJW1RfA_zLa`.
   Its checkpoint is exactly one `HEADING_2` plus seven `NORMAL_TEXT` paragraphs.
+
+### BOUNDED UNIT — PACKAGE AND INSTALL OPAQUE-TEXT CANDIDATE (`VERIFIED`)
+
+**PLAN / BASELINE / RECONCILE**
+
+- **Bounded unit:** build the current Forge application, stage the existing extension owner, create and inspect one
+  uniquely named `0.0.70` VSIX containing source checkpoint `817490d`, back up the currently installed extension,
+  replace it through Antigravity's native extension installer after a graceful IDE close, and prove installed critical
+  bytes plus a fresh packaged sidecar. This unit installs the renderer change; visual current-COMM interaction is the
+  immediately following unit.
+- **Repository baseline:** `HEAD == origin/main == direct remote main ==
+  bb68a349fbf58f986d706335dc8ade2210dea3c8`. The broad unrelated dirty tree is preserved. Existing dirty extension
+  release metadata is an established immutable package input, not owned work: `package.json F9B7E29C...B50F9`,
+  `.vscodeignore 73FE7207...557AF`, `CHANGELOG.md F6B9D2CC...1CE2`, `README.md 3C116430...155A`, and
+  `release-notes.json A04841EF...2FCA7`.
+- **Runtime baseline:** Antigravity is open; X4 is absent. Installed extension
+  `C:\\Users\\Moshi\\.antigravity-ide\\extensions\\x4forge.x4-forge-studio-0.0.70` contains `2,106` files /
+  `71,583,645` bytes with local manifest SHA-256 `AA79D995...75578`. Its sidecar is PID `21300` on
+  `127.0.0.1:61112`; installed `out/extension.js` is `142,926` bytes / `3DA7E84B...B367` and
+  `app/dist/server.cjs` is `3,602,516` bytes / `868D04E9...8844`.
+- **Existing infrastructure reused:** root production build; extension `build`, `stage-app`, `probe-app`, `package`, and
+  `inspect-package` scripts; the existing `x4forge.x4-forge-studio-0.0.70` install owner; native IDE install command;
+  sidecar discovery manifest; and prior exact critical-file comparison procedure. Graphify has no useful packaging
+  owner traversal because packaging is script/manifest driven; direct script and prior receipt inspection is the
+  authoritative reconciliation path. No capability-map delta.
+- **In scope:** generated build/stage/package bytes, a uniquely named untracked VSIX, one complete temporary backup,
+  graceful Antigravity close/relaunch, native same-version replacement, installed/package critical-byte parity, and
+  read-only runtime/workspace/source checks.
+- **Out of scope:** edits or staging of release metadata, source mod/workspace/build/game content, deploy, X4 launch,
+  OpenVSX/Marketplace publication, version bump, release claim, or visual/game verification.
+- **Risk / rollback:** an interrupted same-version install could leave the Forge extension missing or partial. Close
+  Antigravity before replacement, retain a byte-complete backup, and restore that exact directory or reinstall the
+  previously reviewed workspace-authority VSIX if any install/start/parity gate fails. User editor state is left to
+  Antigravity's graceful `CloseMainWindow()` path; no force-kill is an accepted normal close.
+
+**ACCEPTANCE CONTRACT**
+
+1. Root production build, extension build, stage, staged-app probe, package inspection, and inspector selftest pass.
+   The unique candidate is named `x4-forge-studio-0.0.70-b119-opaque-text-bb68a34.vsix`; no existing VSIX is
+   overwritten and no package/release source file is modified.
+2. Record candidate byte count, SHA-256, entry count, unpacked bytes, version/publisher, and hashes for
+   `out/extension.js`, `out/sidecar-supervisor.js`, `app/dist/index.html`, `app/dist/server.cjs`, and the emitted
+   frontend JS/CSS assets. Package inspection must reject secrets, source maps, traversal, duplicates, oversized
+   entries, and embedded first-party machine paths through its existing fail-closed checks.
+3. Before replacement, copy the exact installed extension to a unique temporary backup and prove equal file count,
+   byte count, and deterministic manifest hash. Resolve both absolute paths before any recursive operation.
+4. Antigravity must close gracefully before native install. The installer must return success; a fresh IDE process and
+   sidecar must start from the installed `0.0.70` path. Installed critical files must exactly match the inspected
+   package extraction, allowing only the IDE-owned `__metadata` package-field delta already established by prior
+   receipts.
+5. Negative/containment proof: if install or startup fails, restore the backup before continuing. The persisted AI and
+   Pipeline workspace files, configured source mod, loose build, and deployed game extension remain byte-identical;
+   X4 remains absent. The unrelated repository dirty set remains unstaged and preserved.
+6. Successful package/install closes this bounded unit as `VERIFIED` only for installed byte/runtime authority. Every
+   preview remains `Not verified in game`; current-COMM rendered interaction and native X4 remain separate required
+   gates, and no OpenVSX publication is implied.
+
+Status at plan time: `SPECIFIED`. Evidence is recorded below, in `BACKLOG.md`, and in `SESSION-HANDOFF.md`; the VSIX
+and temporary backup are rollback/evidence artifacts and remain untracked.
+
+**IMPLEMENT / VALIDATE**
+
+- The first host build on `F:` completed the root production build (`1,848` modules), extension build, staging,
+  staged-app probe (`16/16`), and VSIX-inspector selftest (`13/13`). Packaging under the default Node `24.15.0`
+  then returned `UNKNOWN: unknown error, read`. The resulting `19,199,782`-byte file
+  `F:\DEV_ENV\X4_Forge\vscode-extension\x4-forge-studio-0.0.70-b119-opaque-text-bb68a34.vsix`
+  (`0EA1CB338D408B345B358DABF7C9F4703FC6BAEBF63F6A05F668C03B20DA9BD0`) is a rejected partial: the inspector
+  proves that it has no ZIP end-of-central-directory record. It was never installed or published.
+- At the same failure boundary Windows reproduced a storage-layer fault: Disk 1 `ST4000DM004-2CV104`, serial
+  `ZFN1XGQH`, was surprise-removed (System event `157`), with I/O retries (`153`), paging errors (`51`), and NTFS
+  event `140` failing to flush the `F:` transaction log because the device no longer existed. `F:` disappeared from
+  PowerShell, then returned. No further build/package write was trusted on that volume.
+- Recovery used isolated exact clone
+  `C:\Users\Moshi\AppData\Local\Temp\x4forge-b119-recovery-bb68a34-20260903-0230` at
+  `bb68a349fbf58f986d706335dc8ade2210dea3c8`. The five pre-existing dirty package/release inputs were copied with
+  the pinned hashes above; installed media supplied the unchanged sixteen media assets. Under bundled Node `24.19.0`,
+  root dependency install, extension dependency install, root production build (`1,848` modules), extension build,
+  stage, configured-corpus staged probe (`16/16`), and inspector selftest (`13/13`) all passed.
+- Controlled packaging on `C:` produced
+  `C:\Users\Moshi\AppData\Local\Temp\x4forge-b119-recovery-bb68a34-20260903-0230\vscode-extension\x4-forge-studio-0.0.70-b119-opaque-text-bb68a34.vsix`:
+  `26,288,744` bytes, SHA-256 `B4CB6BAE032BDBAEFA9CE4451A35EDF3293015C99CF46DF4E66DFF7B7FE19C98`.
+  Fail-closed inspection passes with `2,107` ZIP entries / `71,587,579` unpacked bytes and identity
+  `x4forge.x4-forge-studio@0.0.70`.
+- The installed baseline was copied to
+  `C:\Users\Moshi\AppData\Local\Temp\x4forge-b119-opaque-install-backup-20260903-0240`; source and backup each
+  contain `2,106` files / `71,583,645` bytes and deterministic manifest
+  `AA79D99569D091331174A7EBF34ABE9F1FBC2CD4A72F6D452A2CFD20DA875578`. Antigravity accepted a graceful main-window
+  close and left zero IDE/sidecar processes before replacement.
+- Calling the GUI executable with `--install-extension --force` returned exit `0` but only relaunched Antigravity and
+  left the old frontend installed. This is retained as a false-success negative. After another graceful close, the
+  IDE's actual Electron CLI owner (`resources\app\out\cli.js`, `ELECTRON_RUN_AS_NODE=1`) returned exit `0` and
+  replaced the same-version extension. Package-versus-install comparison found zero payload mismatches: the installed
+  tree has the package payload plus only IDE-owned `.vsixmanifest`, and installed `package.json` differs only by the
+  IDE-owned `__metadata` field.
+- Current installed critical receipts are exact: `out/extension.js` `142,926` /
+  `3DA7E84BC00E0EB2808524DE0934196117604FDE31BF7ED03E641004F819B367`; `out/sidecar-supervisor.js` `4,512` /
+  `436D6BC63DC72D79B8F4A811DE7C8EE8D3EA4532A6280D010504E451F714FAC9`; `app/dist/index.html` `519` /
+  `DE2083577093396F0B4D52E78FB55097E219B907C0A249A8A3B3895B5AB9C536`; `app/dist/server.cjs` `3,602,516` /
+  `868D04E91367ABE05CE68DC215E665F5AC66E98D8267D0926CC2BB0C02EB8844`; JS `2,713,326` /
+  `1D83DD88A4B90FA998C61829D1816365F2BDEFE4754F7E203DEBFE066D973CA0`; CSS `161,052` /
+  `2E442EBF0DC7CC7381FAAC208B1F58D6716B0E18D48E941A48136CF487781F08`.
+- A fresh visible Antigravity PID `54088` activated the installed extension and a managed sidecar PID `47500` from
+  the installed `0.0.70` path on `127.0.0.1:52236`. After a stability interval the root returned `200`, configured
+  reference status returned `200`, unauthenticated schema config correctly returned `401`, and served JS/CSS bytes
+  exactly matched the inspected package hashes above. The initial post-install relaunch had ended without a crash or
+  extension error after logging `sidecar ready`; a second controlled relaunch therefore owns the accepted live proof.
+- Persisted workspace containment is exact: AI workspace `12,774,311` /
+  `D2E3E6570D61C376F70808880AAF7220AC3EFC42405AA5BC1847D97D437F5E05`; Pipeline workspace `8,477` /
+  `18A3C6507C33967F77A723CA8854D6F855192FD61AC657D71D3DA3353DC69FBC`. X4 remained absent. No source mod,
+  loose build, game extension, release service, or OpenVSX surface was written.
+
+**REVIEW / CLOSE / AAR**
+
+- Requirements `1-6` are done and evidenced for packaging, rollback, installed bytes, live sidecar authority, endpoint
+  behavior, and containment. The unit closes `VERIFIED`; it does not prove the current COMM canvas, deploy identity,
+  native X4 rendering, pixel parity, full Helper/widget coverage, original-brief completion, or release acceptance.
+  Overall B119 remains `IN_PROGRESS / PARTIAL / Not verified in game`.
+- Sustain: fail-closed package inspection, exact backup manifests, and served-asset hashes prevented both the truncated
+  archive and the GUI install command's false exit-0 from becoming false success.
+- Improve work/approach: the first package attempt should have used the pinned bundled Node and a non-`F:` staging
+  volume once disk instability had been observed. Recovery did so without changing source or acceptance.
+- Improve tools: the IDE GUI executable treats extension-install arguments as a normal app launch; installed-product
+  automation must call its Electron CLI owner and then compare package payload to installed bytes.
+- Highest-risk evidenced weakness: the `F:` disk can disappear during sustained reads, including an NTFS transaction
+  log flush. Source checkpoint `bb68a34` is already on the direct remote and all package/install work is recoverable on
+  `C:`; avoid heavy build/package writes on `F:` until the storage path is independently stable.
+- AAR triggers: package read failure, surprise removal, one invalid archive, one false-success installer path, one
+  PowerShell probe syntax correction, and one initial relaunch that ended before HTTP capture. No capability-map delta.
+  Suggested commit title: `docs(ui-editor): record installed opaque preview candidate`.

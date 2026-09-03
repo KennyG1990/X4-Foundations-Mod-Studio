@@ -1,21 +1,20 @@
-# Session handoff — B119 opaque dynamic text verified; installed preview next
+# Session handoff — B119 opaque candidate installed; current preview next
 
 Date: 2026-09-03
 Project: `F:\DEV_ENV\X4_Forge`
-Status: opaque call-shaped string-sample unit `VERIFIED`; overall B119 `IN_PROGRESS / PARTIAL / Not verified in game`
+Status: opaque call-shaped string-sample and package/install units `VERIFIED`; overall B119 `IN_PROGRESS / PARTIAL / Not verified in game`
 
 ## Session-start brief
 
 - Project: X4 Forge B119, the linter-first source-faithful X4 Lua UI editor. GitHub owner: #41.
-- Biggest new milestone: the exact current COMM title can now receive one owner-issued opaque preview string; with
-  the configured 9.00 corpus it restores the title and both buttons through Layout -> Scene -> Paint without Lua
-  execution or source mutation.
-- Eyeball queue: first, install this exact source checkpoint and confirm the current COMM sample control/canvas in
-  Antigravity. Then run the separately controlled deploy/X4 comparison. Exact reference reconstruction, remaining
+- Biggest new milestone: source checkpoint `817490d` is now packaged, fail-closed inspected, backed up, byte-for-byte
+  installed in Antigravity, and served by a fresh managed sidecar with exact frontend hashes.
+- Eyeball queue: first, confirm the current COMM sample control/canvas in the installed Antigravity Source Editor.
+  Then run the separately controlled deploy/X4 comparison. Exact reference reconstruction, remaining
   menu gaps, final original-brief review, release acceptance, and OpenVSX stay open.
-- Commit question: source checkpoint `817490d9234305b86754ecedb08eea0cd149d5e7` is committed and pushed with
-  exact local/tracking/direct-remote parity. If current `HEAD` contains GitHub receipt `5521085100`, do not create
-  another sync commit; confirm parity and continue directly to package/install.
+- Commit question: source checkpoint `817490d9234305b86754ecedb08eea0cd149d5e7` and records checkpoint
+  `bb68a349fbf58f986d706335dc8ade2210dea3c8` are committed and pushed with exact parity. Commit the package/install
+  close under `docs(ui-editor): record installed opaque preview candidate` after precommit; stage only its three records.
 
 ## Verified bounded implementation
 
@@ -69,15 +68,35 @@ Status: opaque call-shaped string-sample unit `VERIFIED`; overall B119 `IN_PROGR
   `HEADING_2` plus seven `NORMAL_TEXT` paragraphs, and read back at revision
   `ANLCKQlD-Zec95PyKUeZzzv92wc_HokmnRBmXgZ3FQrC5iXutq3uRlOu477v3JMUURoZgVWazRF8XGKfwndWAfjB8RiXkeMBYKJW1RfA_zLa`.
 
+## Verified package/install checkpoint
+
+- Accepted recovery candidate:
+  `C:\Users\Moshi\AppData\Local\Temp\x4forge-b119-recovery-bb68a34-20260903-0230\vscode-extension\x4-forge-studio-0.0.70-b119-opaque-text-bb68a34.vsix`,
+  `26,288,744` bytes / `B4CB6BAE032BDBAEFA9CE4451A35EDF3293015C99CF46DF4E66DFF7B7FE19C98`.
+  Build/stage pass; configured staged probe `16/16`; inspector selftest `13/13`; package inspection passes with
+  `2,107` entries / `71,587,579` unpacked bytes.
+- Rollback backup:
+  `C:\Users\Moshi\AppData\Local\Temp\x4forge-b119-opaque-install-backup-20260903-0240`, exact pre-install
+  `2,106` files / `71,583,645` bytes / manifest `AA79D995...75578`.
+- Actual same-version replacement used Antigravity's Electron CLI owner. The GUI executable's normal
+  `--install-extension --force` invocation returned exit `0` but only relaunched the app and left old bytes; retain it
+  as a false-success negative. Installed payload has zero package mismatches except IDE-owned `.vsixmanifest` and the
+  expected package `__metadata` field.
+- Visible Antigravity PID `54088` and installed sidecar PID `47500` are live on `127.0.0.1:52236`. Root and configured
+  reference endpoints return `200`; protected config without auth returns `401`; served
+  `index-BHH_yS9y.js` / `index-C-3vqpSY.css` exactly match the inspected package.
+- Persisted AI workspace remains `D2E3E657...5E05`; Pipeline workspace remains `18A3C650...9FBC`; X4 is absent.
+- Reproduced storage hazard: the first `F:` package read left a rejected truncated VSIX and coincided with Disk 1
+  surprise removal, I/O retries, paging errors, and an NTFS transaction-log flush failure. The valid candidate,
+  backup, and build environment are therefore on `C:`; remote source checkpoint `bb68a34` is safe.
+
 ## Next bounded unit
 
-1. Confirm the records-only checkpoint containing GitHub receipt `5521085100` has
-   `HEAD == origin/main == ls-remote origin main`; commit it only if it is still the current unstaged delta.
-2. Document a new package/install acceptance contract, build and inspect a unique VSIX from that commit, replace the
-   installed candidate safely, and prove served/installed bytes.
-3. In the real Antigravity Source Editor, select exact current COMM, supply the issued lines-505/506 string, inspect
+1. Run precommit, stage only this plan, `BACKLOG.md`, and `SESSION-HANDOFF.md`, then commit/push the package/install
+   receipt and prove local/tracking/direct-remote parity.
+2. In the real Antigravity Source Editor, select exact current COMM, supply the issued lines-505/506 string, inspect
    the rendered title/buttons/canvas and retain screenshot/DOM evidence. Keep `Not verified in game` visible.
-4. Only after installed proof, perform a separately backed-up deploy/X4 comparison. OpenVSX remains deferred until
+3. Only after installed visual proof, perform a separately backed-up deploy/X4 comparison. OpenVSX remains deferred until
    explicit release acceptance.
 
 ## Preservation boundary

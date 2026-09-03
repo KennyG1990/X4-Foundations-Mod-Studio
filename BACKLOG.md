@@ -1902,6 +1902,18 @@ Opaque-sample durable sync is read back: source checkpoint `817490d9234305b86754
 local/tracking/direct-remote parity; GitHub #41 comment `5521085100` exists with the issue open; Notion owner
 `3b84618e-d15b-8190-821e-c0eb96f43d5a` remains `In Progress / Partial`; and Google Current Status tab `t.0` is at
 revision `ANLCKQlD-Zec95PyKUeZzzv92wc_HokmnRBmXgZ3FQrC5iXutq3uRlOu477v3JMUURoZgVWazRF8XGKfwndWAfjB8RiXkeMBYKJW1RfA_zLa`
+
+**B119 packaged opaque-preview install checkpoint 2026-09-03 — BOUNDED VERIFIED / FULL B119 PARTIAL:** The exact
+`bb68a34` candidate was rebuilt in an isolated `C:` clone after a first package read reproduced an `F:` disk surprise
+removal and left a fail-closed invalid ZIP. The accepted VSIX is `26,288,744` bytes /
+`B4CB6BAE032BDBAEFA9CE4451A35EDF3293015C99CF46DF4E66DFF7B7FE19C98`, passes staged probe `16/16`, inspector
+selftest `13/13`, and package inspection (`2,107` entries / `71,587,579` unpacked bytes). A byte-complete installed
+backup is retained. Antigravity's GUI-style install arguments reproduced an exit-0 no-op; its Electron CLI then
+performed the same-version replacement, with zero package/install payload mismatches. Fresh installed PID `54088` and
+sidecar PID `47500` serve exact JS/CSS hashes on `127.0.0.1:52236`; root/reference return `200`, protected unauthenticated
+config returns `401`, both persisted workspace hashes are unchanged, and X4 is absent. Installed current-COMM visual
+inspection, deploy identity, native X4 comparison, original-brief audit, release acceptance, and OpenVSX remain open;
+B119 and GitHub #41 stay `IN_PROGRESS / PARTIAL / Not verified in game`.
 with the exact checkpoint heading and body read back.
 
 ### B115 · Forge Capability Convergence `in_progress` (P0, PRIORITY OVERRIDE)
