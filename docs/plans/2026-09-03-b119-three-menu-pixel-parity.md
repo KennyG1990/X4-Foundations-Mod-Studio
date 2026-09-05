@@ -327,3 +327,21 @@ Parent: `docs/plans/2026-08-10-b119-x4-ui-editor-linter-first.md`
 - The imported source root was initially called staging because both paths contain `pipeline_test`. Graph/source
   reconciliation proved current staging lives under `.forge-builds\loose`; distinguish immutable import source,
   mutable workspace state, build staging, and installed target by owner rather than basename.
+- Google Docs append readback exposed the terminal-character index edge again: the first append moved the old final
+  period, and two positional repairs were still one character off. An exact paragraph replacement plus one measured
+  trailing-character deletion restored both paragraphs. Connector success was excluded until final text/style readback.
+
+## DURABLE PROJECTION READBACK
+
+- Source checkpoint `7263fbe6552337d52fd29784954d7239451e6d8f` is pushed; local HEAD, `origin/main`, and direct
+  GitHub remote all resolve that exact SHA.
+- GitHub owner issue #41 remains open; comment `5552639115` was written and read back with the literal `6/6 VERIFIED`
+  brief boundary and the larger release work still open.
+- Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a` was read back at `In Progress / Partial`; Summary, Reverse
+  Sync Result, review dates, and the newest content section identify commit `7263fbe` and comment `5552639115`.
+- Google Current Status document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, was revision-guarded
+  and structurally read back at revision
+  `ANLCKQnYROzvfxvwNyTirhxtKIk-ZHYjuM5e-1iu3eBF8DJ5UkCOOOLpLSitXJB2VHwkN2IrWePWhBLUVg8eVF-fOE5JXokBbNAUf9UA5Wpv`.
+  The new heading is an independent `HEADING_2`; all six body paragraphs and the restored predecessor are exact
+  `NORMAL_TEXT`.
+- Repository Markdown remains authoritative. External projections do not widen the bounded acceptance claim.

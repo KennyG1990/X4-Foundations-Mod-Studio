@@ -11838,3 +11838,18 @@ Status: `BOUNDED VERIFIED / ORIGINAL BRIEF 6/6 VERIFIED / OVERALL B119 IN_PROGRE
   Forge/X4 pixel evidence for columns, rows, wrapping, and truncation. The evidence does not widen supported Lua/widget
   vocabulary beyond the measured fixtures.
 - Commit point: `feat(ui-editor): prove three real-menu pixel parity`.
+
+### DURABLE PROJECTION READBACK
+
+- Source checkpoint `7263fbe6552337d52fd29784954d7239451e6d8f` is pushed with exact local, tracking, and
+  direct-remote parity.
+- GitHub issue #41 remains open; comment `5552639115` was written and read back with the exact `6/6` brief boundary,
+  permanent preview warning, and remaining benchmark/release work.
+- Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a` was read back at `In Progress / Partial`; its Summary,
+  Reverse Sync Result, dates, and newest progress section identify commit `7263fbe` and GitHub comment `5552639115`.
+- Google Current Status document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, was revision-guarded
+  and structurally read back at
+  `ANLCKQnYROzvfxvwNyTirhxtKIk-ZHYjuM5e-1iu3eBF8DJ5UkCOOOLpLSitXJB2VHwkN2IrWePWhBLUVg8eVF-fOE5JXokBbNAUf9UA5Wpv`.
+  Terminal-character drift in the first append and two index repairs was rejected until an exact paragraph replacement
+  and measured final deletion restored the predecessor, separate heading, and six normal body paragraphs.
+- Repository Markdown remains authoritative; GitHub/Notion/Drive remain projections of this open B119 release program.

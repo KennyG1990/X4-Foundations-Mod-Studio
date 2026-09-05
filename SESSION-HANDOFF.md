@@ -10,8 +10,10 @@ Status: literal brief `6/6 VERIFIED`; overall B119 `IN_PROGRESS`
 - Eyeball queue: no operator check blocks the completed three-menu unit. The next visual unit must inspect all twelve
   supplied references under `C:\Users\Moshi\Desktop\# AI Influence mod UI design\design_handoff_ai_influence` and
   compare the Forge-authored result with those references before release acceptance.
-- Commit question: the verified three-menu code/records are not yet committed. Complete precommit passed; stage only
-  the exact B119 paths below, commit/push, then overwrite this line with the checkpoint hash.
+- Commit question: the verified three-menu code/records are committed and pushed at
+  `7263fbe6552337d52fd29784954d7239451e6d8f`; local HEAD, `origin/main`, and direct remote matched at close. The
+  projection-readback record below is the documentation close paired with that source checkpoint; verify its own
+  checkpoint is pushed before resuming implementation.
 
 ## Current verified checkpoint
 
@@ -79,14 +81,20 @@ Do not stage ignored screenshots/receipts/VSIX files or any unrelated modified, 
 
 ## Current next units
 
-1. Run complete precommit, explicit-path stage/review, commit/push this verified checkpoint, and assert
-   `origin/main == HEAD`.
-2. Write/read back GitHub #41, Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Google Current Status
-   document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE` tab `t.0`; record the exact external IDs/revision.
-3. Inspect all twelve AI Influence reference images visually, reconcile their specification/source, and author the real
+1. Inspect all twelve AI Influence reference images visually, reconcile their specification/source, and author the real
    Lua UI through Forge as the final dogfood benchmark.
-4. Repair native Save As false-success wording, rerun release acceptance, then perform the separately required OpenVSX
+2. Repair native Save As false-success wording, rerun release acceptance, then perform the separately required OpenVSX
    publish-before-commit sequence. Public version remains `0.0.69`; installed `0.0.70` is private.
+
+## Durable projection receipt
+
+- GitHub #41 comment `5552639115` was written and read back; the issue remains open.
+- Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a` was written and read back at `In Progress / Partial` with the
+  exact commit, `6/6` brief result, permanent preview boundary, and remaining release work.
+- Google Current Status document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, was revision-guarded,
+  written, repaired after terminal-character drift, and structurally read back at
+  `ANLCKQnYROzvfxvwNyTirhxtKIk-ZHYjuM5e-1iu3eBF8DJ5UkCOOOLpLSitXJB2VHwkN2IrWePWhBLUVg8eVF-fOE5JXokBbNAUf9UA5Wpv`.
+- Capability map, project AAR, and UI gotcha card 36 were updated in `F:\StarForge\wiki\`.
 
 ## AAR and preservation
 
@@ -96,6 +104,8 @@ Do not stage ignored screenshots/receipts/VSIX files or any unrelated modified, 
   and live workspace were verified safe before one unchanged complete `106/106` retry.
 - Identify repeated folder names by owner: import source, workspace state, build staging, and installed target are
   separate authorities.
+- Google Docs insertion indexes are not a substitute for readback. The initial append and two index repairs moved a
+  terminal character; only the final exact paragraph/style readback is accepted.
 - No native Luna worker remains open. Any implementation/test edit requires one exact native `gpt-5.6-luna`
   `luna_executor`, max reasoning, bounded non-overlapping ownership.
-- External projection readback for this checkpoint is pending. Repository Markdown remains authoritative.
+- Repository Markdown remains authoritative; external projections are current through the receipt above.
