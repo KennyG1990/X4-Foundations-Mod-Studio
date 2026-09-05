@@ -1408,10 +1408,20 @@ const clippedSource = (glyph: X4UiSceneGlyphNode, clip: X4UiSceneRect, source: X
   };
 };
 
-const keepOutCommand = (input: X4UiPaintKeepOutInput, order: number, drawable: X4UiSceneRect): X4UiPaintKeepOutCommand | undefined => {
+const keepOutCommand = (
+  input: X4UiPaintKeepOutInput,
+  capturedAuthority: CapturedKeepOutAuthority,
+  order: number,
+  drawable: X4UiSceneRect,
+): X4UiPaintKeepOutCommand | undefined => {
+  if (!isIssuedKeepOutEntry(capturedAuthority.entry)
+    || !isIssuedKeepOutProjection(capturedAuthority.projection)
+    || input.context !== capturedAuthority.context
+    || !sameStructuralValue(input.entry, capturedAuthority.entry)
+    || !sameStructuralValue(input.projection, capturedAuthority.projection)) return undefined;
   const projection = input.projection;
   if (typeof input.context !== 'string' || input.context.trim().length === 0 || !isRecord(projection)) return undefined;
-  const entry = input.entry;
+  const entry = capturedAuthority.entry;
   if (!isRecord(entry)) return undefined;
   const entryContext = entry.context;
   if (typeof entryContext !== 'string' || entryContext.trim().length === 0) return undefined;
@@ -1421,17 +1431,19 @@ const keepOutCommand = (input: X4UiPaintKeepOutInput, order: number, drawable: X
   if (typeof entryId !== 'string' || entryId.trim().length === 0 || typeof source !== 'string') return undefined;
   if (source === 'production-evidence') {
     const builtIn = getBuiltInKeepOut(entryId as Parameters<typeof getBuiltInKeepOut>[0]);
-    if (builtIn === undefined || !sameStructuralValue(entry, builtIn) || !PRESET_IDS.has(input.context)) return undefined;
+    if (builtIn === undefined || builtIn !== entry || !PRESET_IDS.has(input.context)) return undefined;
     const preset = getKeepOutPreset(input.context as KeepOutContextPresetId);
-    if (preset?.members.some(candidate => candidate.entryId === entryId) !== true) return undefined;
+    if (preset?.members.some(candidate => candidate.entryId === entryId && candidate.applicability === 'applicable') !== true) return undefined;
   } else if (source === 'manual-calibration') {
     if (input.context !== entryContext) return undefined;
   } else if (source !== 'manual-calibration') {
     return undefined;
   }
 
-  const expected = projectKeepOut(entry, { width: drawable.width, height: drawable.height });
-  if (expected.status === 'refused' || !sameStructuralValue(projection, expected)) return undefined;
+  const expected = projectKeepOut(capturedAuthority.entry, { width: drawable.width, height: drawable.height });
+  if (expected.status === 'refused'
+    || !sameStructuralValue(capturedAuthority.projection, expected)
+    || !sameStructuralValue(projection, expected)) return undefined;
   if (expected.status === 'unavailable') {
     if (expected.reason !== 'reference-unmeasured') return undefined;
     return {
@@ -1516,10 +1528,12 @@ export function projectX4UiPaintPlan(input: X4UiPaintPlanInput): X4UiPaintPlanRe
     if (scene === undefined) return refuse('invalid-scene', 'paint plan requires the issued preview source authority for this Scene');
     if (!sceneValid(scene, corpus)) return refuse('invalid-scene', 'Scene evidence is malformed, stale, cyclic, or carries engine/game paint truth');
 
+    let capturedKeepOuts: readonly CapturedKeepOutAuthority[] = [];
     let keepOutInputs: readonly X4UiPaintKeepOutInput[] = [];
     if (keepOutField.present && keepOutField.value !== undefined) {
-      const capturedKeepOuts = captureKeepOutAuthority(keepOutField.value);
-      if (capturedKeepOuts === null) return refuse('invalid-keepout', 'keep-out entries require issued entry and projection authority');
+      const capturedAuthority = captureKeepOutAuthority(keepOutField.value);
+      if (capturedAuthority === null) return refuse('invalid-keepout', 'keep-out entries require issued entry and projection authority');
+      capturedKeepOuts = capturedAuthority;
       let materializedKeepOuts: unknown;
       try {
         materializedKeepOuts = freezeDeep(materializeCapturedKeepOuts(capturedKeepOuts));
@@ -1644,11 +1658,15 @@ export function projectX4UiPaintPlan(input: X4UiPaintPlanInput): X4UiPaintPlanRe
         if (geometry !== undefined && drawableGeometry === undefined) diagnostics.push({ ...diagnosticBase(`empty-clip:selection:${nodeId}`, 'diagnostics', order++, node, frameIdFor(node, byId)), clipRect: rectCopy(clip), kind: 'empty-clip', sourceComposition: diagnosticSourceComposition(scene, node, 'empty-clip'), reason: `selection ${nodeId} has no drawable geometry within its accepted clip hierarchy` });
       }
     }
+    if (capturedKeepOuts.length !== keepOutInputs.length) return refuse('invalid-keepout', 'captured and materialized keep-out authority cardinality differs');
     const keepOutEntryIds = new Set<string>();
-    for (const inputKeepOut of keepOutInputs) {
+    for (let index = 0; index < keepOutInputs.length; index += 1) {
+      const inputKeepOut = keepOutInputs[index];
+      const capturedAuthority = capturedKeepOuts[index];
+      if (inputKeepOut === undefined || capturedAuthority === undefined) return refuse('invalid-keepout', 'captured and materialized keep-out authority is misaligned');
       if (keepOutEntryIds.has(inputKeepOut.projection.entryId)) return refuse('invalid-keepout', `keep-out entry ${inputKeepOut.projection.entryId} is duplicated across contexts`);
       keepOutEntryIds.add(inputKeepOut.projection.entryId);
-      const command = keepOutCommand(inputKeepOut, order++, drawable);
+      const command = keepOutCommand(inputKeepOut, capturedAuthority, order++, drawable);
       if (command === undefined) return refuse('invalid-keepout', `keep-out ${String(inputKeepOut.context)} is stale, refused, or malformed`);
       keepOuts.push(command);
     }

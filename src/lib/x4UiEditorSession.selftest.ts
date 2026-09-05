@@ -2390,13 +2390,16 @@ async function run(): Promise<void> {
   ]);
   const ticker = presetAll.activePreset?.members.find(member => member.entryId === KEEP_OUT_IDS.missionMessagesTicker);
   const hud = presetAll.activePreset?.members.find(member => member.entryId === KEEP_OUT_IDS.topHudStrip);
-  assert.equal(ticker?.projection.status, 'unavailable');
-  assert.equal(hud?.projection.status, 'unavailable');
+  assert.equal(ticker?.projection.status, 'projected');
+  assert.equal(hud?.projection.status, 'projected');
+  assert.equal(ticker?.enabled, true);
+  assert.equal(hud?.enabled, false);
   const presetPaint = presetAll.paint;
   assert.ok(presetPaint && 'plan' in presetPaint);
   if (presetPaint && 'plan' in presetPaint) {
-    assert.equal(presetPaint.plan.keepOuts.length, 5);
+    assert.equal(presetPaint.plan.keepOuts.length, 4);
     assert.equal(new Set(presetPaint.plan.keepOuts.map(item => item.entryId)).size, presetPaint.plan.keepOuts.length);
+    assert.ok(presetPaint.plan.keepOuts.some(item => item.entryId === KEEP_OUT_IDS.missionMessagesTicker && item.geometry?.kind === 'polygon'));
   }
   const toggled = projectX4UiEditorSession({ ...exact, activePresetId: KEEP_OUT_PRESET_IDS.cockpitConversation, enabledEntryIds: [KEEP_OUT_IDS.conversationBackRow] });
   assert.ok(toggled.paint && 'plan' in toggled.paint);
@@ -2404,6 +2407,66 @@ async function run(): Promise<void> {
   const disabled = projectX4UiEditorSession({ ...exact, activePresetId: KEEP_OUT_PRESET_IDS.cockpitConversation, enabledEntryIds: [] });
   assert.ok(disabled.paint && 'plan' in disabled.paint);
   if (disabled.paint && 'plan' in disabled.paint) assert.equal(disabled.paint.plan.keepOuts.length, 0);
+
+  const calibratedDrawable = {
+    ...exact,
+    profile: { ...exact.profile, drawable: { width: 2544, height: 1353 } },
+  };
+  const fourContextCases = [
+    {
+      presetId: KEEP_OUT_PRESET_IDS.cockpitConversation,
+      expectedIds: [KEEP_OUT_IDS.conversationBackRow, KEEP_OUT_IDS.conversationOptionStackStart, KEEP_OUT_IDS.informationPanelLeftEdge, KEEP_OUT_IDS.missionMessagesTicker],
+      calibratedId: KEEP_OUT_IDS.missionMessagesTicker,
+    },
+    {
+      presetId: KEEP_OUT_PRESET_IDS.mapOpen,
+      expectedIds: [KEEP_OUT_IDS.topHudStrip],
+      calibratedId: KEEP_OUT_IDS.topHudStrip,
+    },
+    {
+      presetId: KEEP_OUT_PRESET_IDS.fullscreenMenu,
+      expectedIds: [KEEP_OUT_IDS.topHudStrip],
+      calibratedId: KEEP_OUT_IDS.topHudStrip,
+    },
+    {
+      presetId: KEEP_OUT_PRESET_IDS.firstPerson,
+      expectedIds: [KEEP_OUT_IDS.missionMessagesTicker],
+      calibratedId: KEEP_OUT_IDS.missionMessagesTicker,
+    },
+  ] as const;
+  for (const testCase of fourContextCases) {
+    const contextSession = projectX4UiEditorSession({ ...calibratedDrawable, activePresetId: testCase.presetId });
+    assert.equal(contextSession.canRender, true, `${testCase.presetId} must render at the calibrated drawable`);
+    assert.ok(contextSession.paint && 'plan' in contextSession.paint);
+    if (contextSession.paint && 'plan' in contextSession.paint) {
+      assert.deepEqual(contextSession.paint.plan.keepOuts.map(item => item.entryId), testCase.expectedIds);
+      const calibratedCommand = contextSession.paint.plan.keepOuts.find(item => item.entryId === testCase.calibratedId);
+      assert.equal(calibratedCommand?.status, 'projected');
+      assert.equal(calibratedCommand?.geometry?.kind, 'polygon');
+    }
+    const calibratedMember = contextSession.activePreset?.members.find(member => member.entryId === testCase.calibratedId);
+    assert.equal(calibratedMember?.projection.status, 'projected');
+    assert.equal(calibratedMember?.projection.geometry.kind, 'polygon');
+  }
+  const cockpitTickerOnly = projectX4UiEditorSession({ ...calibratedDrawable, activePresetId: KEEP_OUT_PRESET_IDS.cockpitConversation, enabledEntryIds: [KEEP_OUT_IDS.missionMessagesTicker] });
+  const mapTickerOnly = projectX4UiEditorSession({ ...calibratedDrawable, activePresetId: KEEP_OUT_PRESET_IDS.mapOpen, enabledEntryIds: [KEEP_OUT_IDS.missionMessagesTicker] });
+  const firstTickerOnly = projectX4UiEditorSession({ ...calibratedDrawable, activePresetId: KEEP_OUT_PRESET_IDS.firstPerson, enabledEntryIds: [KEEP_OUT_IDS.missionMessagesTicker] });
+  assert.ok(cockpitTickerOnly.paint && 'plan' in cockpitTickerOnly.paint);
+  assert.ok(mapTickerOnly.paint && 'plan' in mapTickerOnly.paint);
+  assert.ok(firstTickerOnly.paint && 'plan' in firstTickerOnly.paint);
+  if (cockpitTickerOnly.paint && 'plan' in cockpitTickerOnly.paint) assert.deepEqual(cockpitTickerOnly.paint.plan.keepOuts.map(item => item.entryId), [KEEP_OUT_IDS.missionMessagesTicker]);
+  if (mapTickerOnly.paint && 'plan' in mapTickerOnly.paint) assert.deepEqual(mapTickerOnly.paint.plan.keepOuts.map(item => item.entryId), []);
+  if (firstTickerOnly.paint && 'plan' in firstTickerOnly.paint) assert.deepEqual(firstTickerOnly.paint.plan.keepOuts.map(item => item.entryId), [KEEP_OUT_IDS.missionMessagesTicker]);
+  const emptyContext = projectX4UiEditorSession({ ...calibratedDrawable, activePresetId: KEEP_OUT_PRESET_IDS.mapOpen, enabledEntryIds: [] });
+  assert.ok(emptyContext.paint && 'plan' in emptyContext.paint);
+  if (emptyContext.paint && 'plan' in emptyContext.paint) assert.equal(emptyContext.paint.plan.keepOuts.length, 0);
+  if (cockpitTickerOnly.paint && 'plan' in cockpitTickerOnly.paint && emptyContext.paint && 'plan' in emptyContext.paint) {
+    assert.deepEqual(
+      cockpitTickerOnly.paint.plan.layers.slice(0, 3).flatMap(layer => layer.commands.map(command => ({ id: command.id, order: command.order }))),
+      emptyContext.paint.plan.layers.slice(0, 3).flatMap(layer => layer.commands.map(command => ({ id: command.id, order: command.order }))),
+      'keep-out toggles must not drift source/scene command identity or order',
+    );
+  }
 
   const manualCalibrationId = 'session-manual-polygon-1';
   const manualContext = 'manual-session-context';

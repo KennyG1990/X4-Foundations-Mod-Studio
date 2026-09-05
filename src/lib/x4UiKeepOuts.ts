@@ -467,11 +467,13 @@ function measuredGuideBase(
   };
 }
 
-function referenceUnmeasuredBase(
+function calibratedProductionBase(
   id: BuiltInKeepOutId,
   label: string,
   context: string,
   sourceNote: string,
+  screenshot: KeepOutScreenshotIdentity,
+  drawableBounds: KeepOutDrawableBounds,
 ): KeepOutEntryBase {
   return {
     id,
@@ -480,8 +482,10 @@ function referenceUnmeasuredBase(
     coordinateSpace: KEEP_OUT_COORDINATE_SPACE,
     provenance: provenance(
       "production-evidence",
-      "reference-unmeasured",
+      "calibrated",
       sourceNote,
+      screenshot,
+      drawableBounds,
     ),
     notes: [sourceNote],
   };
@@ -532,27 +536,57 @@ const BUILTIN_INFORMATION_PANEL_LEFT_EDGE = deepFreeze({
   },
 }) as VerticalGuideKeepOut;
 
+const BUILTIN_MISSION_MESSAGES_TICKER_POINTS = [
+  { x: 0.0994496855345912, y: 0.943089430894309 },
+  { x: 0.33372641509433965, y: 0.8484848484848485 },
+  { x: 0.33372641509433965, y: 0.9150036954915004 },
+  { x: 0.11006289308176101, y: 1 },
+] as const;
+
+const BUILTIN_TOP_HUD_STRIP_POINTS = [
+  { x: 0.419811320754717, y: 0.008130081300813009 },
+  { x: 0.5794025157232704, y: 0.008130081300813009 },
+  { x: 0.5794025157232704, y: 0.07982261640798226 },
+  { x: 0.419811320754717, y: 0.07982261640798226 },
+] as const;
+
 const BUILTIN_MISSION_MESSAGES_TICKER = deepFreeze({
-  ...referenceUnmeasuredBase(
+  ...calibratedProductionBase(
     KEEP_OUT_IDS.missionMessagesTicker,
     "Mission/MESSAGES ticker",
     "shared-reference",
-    "The Mission/MESSAGES ticker is a required reference entry, but its bottom-left position and drawable extent are unmeasured. No ticker geometry or safe boundary is inferred.",
+    "Screenshot-calibrated conservative Mission/MESSAGES ticker keep-out envelope from retained X4 capture 777D001A6CDF46F77AAEE76F9AC7F6E4FFF9E8CFF0F5E7C3082E93E88388DF20 with profile x4-9.00-617726-windowed-2544x1353-ui-scale-1.0-first-person and drawable bounds left=1, top=31, width=2544, height=1353. The final point is clipped at the drawable bottom; this is advisory only and Not verified in game.",
+    {
+      hash: "777D001A6CDF46F77AAEE76F9AC7F6E4FFF9E8CFF0F5E7C3082E93E88388DF20",
+      profile: "x4-9.00-617726-windowed-2544x1353-ui-scale-1.0-first-person",
+    },
+    { left: 1, top: 31, width: 2544, height: 1353 },
   ),
-  kind: "unmeasured",
-  geometry: null,
-}) as UnmeasuredKeepOut;
+  kind: "polygon",
+  geometry: {
+    kind: "polygon",
+    points: BUILTIN_MISSION_MESSAGES_TICKER_POINTS,
+  },
+}) as PolygonKeepOut;
 
 const BUILTIN_TOP_HUD_STRIP = deepFreeze({
-  ...referenceUnmeasuredBase(
+  ...calibratedProductionBase(
     KEEP_OUT_IDS.topHudStrip,
     "Top HUD strip",
     "shared-reference",
-    "The top HUD strip is a required reference entry, but its top-strip extent is unmeasured. No HUD geometry, height, or safe boundary is inferred.",
+    "Screenshot-calibrated shared top HUD/menu strip from retained X4 map-open capture 2BA6C8C065EF3563A0C2C06E814BCD226BA160BC0EE64981D07E01C01AD2ADC8 with profile x4-9.00-617726-windowed-2544x1353-ui-scale-1.0-map-open and drawable bounds left=1, top=31, width=2544, height=1353. Fullscreen corroboration capture SHA-256 BD1CAD7C69A5B11F87BEBF2BC8B5C65677654A3ECB89F9917C79BA577EC64F26 supports the same extent; the map capture remains the single primary screenshot identity. This is advisory only and Not verified in game.",
+    {
+      hash: "2BA6C8C065EF3563A0C2C06E814BCD226BA160BC0EE64981D07E01C01AD2ADC8",
+      profile: "x4-9.00-617726-windowed-2544x1353-ui-scale-1.0-map-open",
+    },
+    { left: 1, top: 31, width: 2544, height: 1353 },
   ),
-  kind: "unmeasured",
-  geometry: null,
-}) as UnmeasuredKeepOut;
+  kind: "polygon",
+  geometry: {
+    kind: "polygon",
+    points: BUILTIN_TOP_HUD_STRIP_POINTS,
+  },
+}) as PolygonKeepOut;
 
 export const BUILT_IN_KEEP_OUTS = deepFreeze([
   BUILTIN_CONVERSATION_BACK_ROW,
@@ -607,131 +641,131 @@ const COCKPIT_CONVERSATION_MEMBERS = deepFreeze([
   ),
   presetMember(
     KEEP_OUT_IDS.missionMessagesTicker,
-    "unverified",
-    "reference-unmeasured",
-    "not-established",
-    "Ticker geometry and cockpit-conversation context applicability are both unverified; its extent remains unmeasured.",
+    "applicable",
+    "calibrated",
+    "context-evidenced",
+    "Screenshot-calibrated ticker envelope is supported by retained capture evidence and is issued for cockpit-conversation.",
   ),
   presetMember(
     KEEP_OUT_IDS.topHudStrip,
-    "unverified",
-    "reference-unmeasured",
+    "not-applicable",
+    "calibrated",
     "not-established",
-    "Top-HUD geometry and cockpit-conversation context applicability are both unverified; its extent remains unmeasured.",
+    "Screenshot-calibrated top HUD strip is not issued for cockpit-conversation; retained evidence supports map-open and fullscreen-menu only.",
   ),
 ] as readonly KeepOutPresetMember[]);
 
 const MAP_OPEN_MEMBERS = deepFreeze([
   presetMember(
     KEEP_OUT_IDS.conversationBackRow,
-    "unverified",
+    "not-applicable",
     "measured-guide",
     "not-established",
-    "No map-open applicability evidence was supplied for the conversation Back-row guide.",
+    "The measured conversation Back-row guide remains limited to cockpit-conversation and is not issued for map-open.",
   ),
   presetMember(
     KEEP_OUT_IDS.conversationOptionStackStart,
-    "unverified",
+    "not-applicable",
     "measured-guide",
     "not-established",
-    "No map-open applicability evidence was supplied for the conversation option-stack guide.",
+    "The measured conversation option-stack guide remains limited to cockpit-conversation and is not issued for map-open.",
   ),
   presetMember(
     KEEP_OUT_IDS.informationPanelLeftEdge,
-    "unverified",
+    "not-applicable",
     "measured-guide",
     "not-established",
-    "No map-open applicability evidence was supplied for the INFORMATION/NPC-video edge guide.",
+    "The measured INFORMATION/NPC-video edge guide remains limited to cockpit-conversation and is not issued for map-open.",
   ),
   presetMember(
     KEEP_OUT_IDS.missionMessagesTicker,
-    "unverified",
-    "reference-unmeasured",
+    "not-applicable",
+    "calibrated",
     "not-established",
-    "Ticker geometry and map-open context applicability are both unverified; its extent remains unmeasured.",
+    "Screenshot-calibrated ticker envelope is not issued for map-open; retained evidence supports cockpit-conversation and first-person only.",
   ),
   presetMember(
     KEEP_OUT_IDS.topHudStrip,
-    "unverified",
-    "reference-unmeasured",
-    "not-established",
-    "Top-HUD geometry and map-open context applicability are both unverified; its extent remains unmeasured.",
+    "applicable",
+    "calibrated",
+    "context-evidenced",
+    "Screenshot-calibrated shared top HUD/menu strip is supported by the retained map-open capture.",
   ),
 ] as readonly KeepOutPresetMember[]);
 
 const FULLSCREEN_MENU_MEMBERS = deepFreeze([
   presetMember(
     KEEP_OUT_IDS.conversationBackRow,
-    "unverified",
+    "not-applicable",
     "measured-guide",
     "not-established",
-    "No fullscreen-menu applicability evidence was supplied for the conversation Back-row guide.",
+    "The measured conversation Back-row guide remains limited to cockpit-conversation and is not issued for fullscreen-menu.",
   ),
   presetMember(
     KEEP_OUT_IDS.conversationOptionStackStart,
-    "unverified",
+    "not-applicable",
     "measured-guide",
     "not-established",
-    "No fullscreen-menu applicability evidence was supplied for the conversation option-stack guide.",
+    "The measured conversation option-stack guide remains limited to cockpit-conversation and is not issued for fullscreen-menu.",
   ),
   presetMember(
     KEEP_OUT_IDS.informationPanelLeftEdge,
-    "unverified",
+    "not-applicable",
     "measured-guide",
     "not-established",
-    "No fullscreen-menu applicability evidence was supplied for the INFORMATION/NPC-video edge guide.",
+    "The measured INFORMATION/NPC-video edge guide remains limited to cockpit-conversation and is not issued for fullscreen-menu.",
   ),
   presetMember(
     KEEP_OUT_IDS.missionMessagesTicker,
-    "unverified",
-    "reference-unmeasured",
+    "not-applicable",
+    "calibrated",
     "not-established",
-    "Ticker geometry and fullscreen-menu context applicability are both unverified; its extent remains unmeasured.",
+    "Screenshot-calibrated ticker envelope is not issued for fullscreen-menu; retained evidence supports cockpit-conversation and first-person only.",
   ),
   presetMember(
     KEEP_OUT_IDS.topHudStrip,
-    "unverified",
-    "reference-unmeasured",
-    "not-established",
-    "Top-HUD geometry and fullscreen-menu context applicability are both unverified; its extent remains unmeasured.",
+    "applicable",
+    "calibrated",
+    "context-evidenced",
+    "Screenshot-calibrated shared top HUD/menu strip is corroborated by the retained fullscreen-menu capture.",
   ),
 ] as readonly KeepOutPresetMember[]);
 
 const FIRST_PERSON_MEMBERS = deepFreeze([
   presetMember(
     KEEP_OUT_IDS.conversationBackRow,
-    "unverified",
+    "not-applicable",
     "measured-guide",
     "not-established",
-    "No first-person applicability evidence was supplied for the conversation Back-row guide.",
+    "The measured conversation Back-row guide remains limited to cockpit-conversation and is not issued for first-person.",
   ),
   presetMember(
     KEEP_OUT_IDS.conversationOptionStackStart,
-    "unverified",
+    "not-applicable",
     "measured-guide",
     "not-established",
-    "No first-person applicability evidence was supplied for the conversation option-stack guide.",
+    "The measured conversation option-stack guide remains limited to cockpit-conversation and is not issued for first-person.",
   ),
   presetMember(
     KEEP_OUT_IDS.informationPanelLeftEdge,
-    "unverified",
+    "not-applicable",
     "measured-guide",
     "not-established",
-    "No first-person applicability evidence was supplied for the INFORMATION/NPC-video edge guide.",
+    "The measured INFORMATION/NPC-video edge guide remains limited to cockpit-conversation and is not issued for first-person.",
   ),
   presetMember(
     KEEP_OUT_IDS.missionMessagesTicker,
-    "unverified",
-    "reference-unmeasured",
-    "not-established",
-    "Ticker geometry and first-person context applicability are both unverified; its extent remains unmeasured.",
+    "applicable",
+    "calibrated",
+    "context-evidenced",
+    "Screenshot-calibrated ticker envelope is supported by the retained first-person capture.",
   ),
   presetMember(
     KEEP_OUT_IDS.topHudStrip,
-    "unverified",
-    "reference-unmeasured",
+    "not-applicable",
+    "calibrated",
     "not-established",
-    "Top-HUD geometry and first-person context applicability are both unverified; its extent remains unmeasured.",
+    "Screenshot-calibrated top HUD strip is not issued for first-person; retained evidence supports map-open and fullscreen-menu only.",
   ),
 ] as readonly KeepOutPresetMember[]);
 
@@ -879,6 +913,11 @@ function isValidProvenance(value: unknown): value is KeepOutProvenance {
       || !isValidDrawableBounds(dataField(value, "drawableBounds"))) return false;
     return true;
   }
+  if (evidenceGrade === "calibrated") {
+    return hasExactOwnDataFields(value, ["source", "evidenceGrade", "sourceNote", "screenshot", "drawableBounds"])
+      && isValidScreenshotIdentity(dataField(value, "screenshot"))
+      && isValidDrawableBounds(dataField(value, "drawableBounds"));
+  }
   return (evidenceGrade === "measured-guide" || evidenceGrade === "reference-unmeasured")
     && hasExactOwnDataFields(value, ["source", "evidenceGrade", "sourceNote"]);
 }
@@ -914,7 +953,10 @@ function isValidKeepOutEntry(value: unknown): value is X4UiKeepOutEntry {
         && isNormalizedCoordinate(dataField(geometry as AnyRecord, "x"));
     }
     if (kind === "polygon") {
-      if (source !== "manual-calibration" || evidenceGrade !== "calibrated" || Object.values(KEEP_OUT_IDS).some(builtInId => builtInId === id)) return false;
+      if (evidenceGrade !== "calibrated") return false;
+      if (source === "manual-calibration" && Object.values(KEEP_OUT_IDS).some(builtInId => builtInId === id)) return false;
+      if (source === "production-evidence" && !isIssuedKeepOutEntry(value)) return false;
+      if (source !== "manual-calibration" && source !== "production-evidence") return false;
       if (!hasExactOwnDataFields(geometry, ["kind", "points"]) || dataField(geometry as AnyRecord, "kind") !== "polygon") return false;
       const points = denseDataArray(dataField(geometry as AnyRecord, "points"));
       if (points === null || points.length < 3 || !points.every(point => isNormalizedPoint(point))) return false;

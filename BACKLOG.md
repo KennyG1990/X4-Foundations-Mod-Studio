@@ -22,23 +22,37 @@ bundle. All twelve reference images (`00` plus `1a`-`1j`) must be visually inspe
 the real X4 Lua rather than porting the HTML/CSS prototype. Build recommended screen `1b` first, then the remaining
 comm-link, confirmation-gate, and hub screens. Compare Forge output to the 2560x1440 references, preserve the measured
 conversation-wheel/NPC keep-outs, and require deployed X4 screenshots before any 1:1 claim.
-**Original-brief audit 2026-09-03 — 4/6 VERIFIED / 2/6 PARTIAL:** exact hand-written Lua round-trip, all eleven
+**Original-brief audit 2026-09-05 — 5/6 VERIFIED / 1/6 PARTIAL:** exact hand-written Lua round-trip, all eleven
 linter trap families including pre-export `addTable(24)` rejection, deploy-bound `Not verified in game` truth, and the
-fixed-drawable X4 user-scale contract are `VERIFIED`. At unchanged drawable `2544x1353`, Forge width changed
+fixed-drawable X4 user-scale contract are `VERIFIED`. All four keep-out contexts now also have installed, non-null,
+independently toggleable Canvas geometry with exact source/target/truth retention. At unchanged drawable `2544x1353`, Forge width changed
 `663 -> 729` (`1.09955x`) while three X4 controls changed `659 -> 723`, `654 -> 721`, and `656 -> 723`; ratio disagreement
 is only `0.22-0.26%`, and corresponding edges are within `4x3` pixels. X4 and Forge were restored to scale `1.0`, exact
 workspace/deployed fixture hashes remain equal, and current owned frame/Lua failure signatures are zero. Three complete-
-menu column/row/wrap/truncation comparisons and actual projected geometry for all four toggleable keep-out contexts
-remain `PARTIAL`. Full matrix, receipt, and AAR:
+menu column/row/wrap/truncation comparisons remain the sole `PARTIAL` brief row. Full matrix, receipt, and AAR:
 `docs/plans/2026-08-10-b119-x4-ui-editor-linter-first.md` and
 `docs/plans/2026-09-03-b119-fixed-drawable-user-scale.md`. The installed export status can announce success before
-native Save As/file completion; repair that false-success wording before release. Next unit is missing keep-out
-calibration or the first complete-menu census. No release is claimed.
+native Save As/file completion; repair that false-success wording before release. Next unit is the first complete-menu
+census. No release is claimed.
 Scale checkpoint `3367c6846431b0ac85b1ab8081ce8a9657ded45d` has exact local/tracking/direct-remote parity. GitHub #41
 comment `5525209644`, Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Google Current Status revision
 `ANLCKQne8OZbPRb6PHRufzwKLfOLH_yusLOGNaGOZWrm2Mz1LvS0zORn0mWt1LL1aiEtm0C9T448JOcLMBrxp3lttyQAiHPnSCID-JbAycdV`
 were written and read back. The first Drive append crossed a paragraph boundary incorrectly; the accepted revision
 contains a separate `HEADING_2` and restored preceding `NORMAL_TEXT` paragraph.
+**Four-context keep-out unit 2026-09-05 — BOUNDED VERIFIED / FULL B119 PARTIAL:** retained X4 9.00
+first-person, cockpit-conversation, map-open, and fullscreen-menu captures now back exact issued MESSAGES and shared
+top-level-strip polygons through the existing Session -> Paint -> Canvas authority. Structural clones, wrong contexts,
+stale projections, and disabled members refuse; the three measured guides remain unchanged and no INFORMATION rectangle
+was invented. Fresh-eyes review also reproduced and repaired the installed stale-parent-snapshot race: the mounted
+source -> target matrix now reaches `13/13`, `rendered/current`, with one exact Canvas/export identity. The exact private
+package `vscode-extension/x4-forge-studio-0.0.70-b119-four-context-snapshot-order-20260905.vsix` is installed with zero
+missing/mismatched payload files; SHA-256
+`737A755251BCD1B71D05C53F9040B7B631423D0BDE41F7AAD649C8B5FE40EA9E`. Installed interaction passed all four
+preset buttons and all seven applicable checkbox mutations (`4+1+1+1`), with every native Canvas hash changing on
+disable and restoring exactly on re-enable while source identity and `Not verified in game` stayed stable. Focused
+matrices, typecheck, exact lint, build/stage/probe, complete precommit, installed oracles `134/134`, and full serial e2e
+`106/106` with `treeGone=true` pass. Original-brief row 5 is `VERIFIED`; full record and twenty retained PNGs:
+`docs/plans/2026-09-03-b119-four-context-keepouts.md`.
 **UI-only end-to-end smoke 2026-08-28 — ONE-PROFILE X4 VERIFIED / FULL B119 PARTIAL:** Forge compiled,
 linted, project-validated, guarded-wrote, dry-deployed, and actually deployed the dedicated four-file `pipeline_test`
 mod. X4 9.00 visibly rendered the generated frame at the configured `2544x1353` drawable profile; both buttons were

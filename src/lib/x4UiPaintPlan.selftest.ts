@@ -2608,18 +2608,18 @@ async function main(): Promise<void> {
 
     const keepOuts: X4UiPaintPlanInput['keepOuts'] = [
       { context: KEEP_OUT_PRESET_IDS.cockpitConversation, entry: getBuiltInKeepOut(KEEP_OUT_IDS.conversationBackRow)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.conversationBackRow, viewport) },
-      { context: KEEP_OUT_PRESET_IDS.mapOpen, entry: getBuiltInKeepOut(KEEP_OUT_IDS.informationPanelLeftEdge)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.informationPanelLeftEdge, viewport) },
-      { context: KEEP_OUT_PRESET_IDS.fullscreenMenu, entry: getBuiltInKeepOut(KEEP_OUT_IDS.missionMessagesTicker)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.missionMessagesTicker, viewport) },
-      { context: KEEP_OUT_PRESET_IDS.firstPerson, entry: getBuiltInKeepOut(KEEP_OUT_IDS.topHudStrip)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.topHudStrip, viewport) },
+      { context: KEEP_OUT_PRESET_IDS.cockpitConversation, entry: getBuiltInKeepOut(KEEP_OUT_IDS.informationPanelLeftEdge)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.informationPanelLeftEdge, viewport) },
+      { context: KEEP_OUT_PRESET_IDS.mapOpen, entry: getBuiltInKeepOut(KEEP_OUT_IDS.topHudStrip)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.topHudStrip, viewport) },
+      { context: KEEP_OUT_PRESET_IDS.firstPerson, entry: getBuiltInKeepOut(KEEP_OUT_IDS.missionMessagesTicker)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.missionMessagesTicker, viewport) },
     ];
     const selectedId = scene.widgets[0]?.id;
     const withContext: PaintTestInput = { ...baseInput, keepOuts, selection: selectedId === undefined ? undefined : { nodeIds: [selectedId] } };
 
     const selectedPresetCases = [
       [KEEP_OUT_PRESET_IDS.cockpitConversation, KEEP_OUT_IDS.conversationBackRow],
-      [KEEP_OUT_PRESET_IDS.mapOpen, KEEP_OUT_IDS.informationPanelLeftEdge],
-      [KEEP_OUT_PRESET_IDS.fullscreenMenu, KEEP_OUT_IDS.missionMessagesTicker],
-      [KEEP_OUT_PRESET_IDS.firstPerson, KEEP_OUT_IDS.topHudStrip],
+      [KEEP_OUT_PRESET_IDS.mapOpen, KEEP_OUT_IDS.topHudStrip],
+      [KEEP_OUT_PRESET_IDS.fullscreenMenu, KEEP_OUT_IDS.topHudStrip],
+      [KEEP_OUT_PRESET_IDS.firstPerson, KEEP_OUT_IDS.missionMessagesTicker],
     ] as const;
     for (const [selectedPreset, entryId] of selectedPresetCases) {
       const entry = getBuiltInKeepOut(entryId);
@@ -2661,6 +2661,121 @@ async function main(): Promise<void> {
         },
       );
     }
+
+    const issuedTickerEntry = getBuiltInKeepOut(KEEP_OUT_IDS.missionMessagesTicker);
+    const issuedTickerProjection = issuedTickerEntry === undefined
+      ? undefined
+      : projectKeepOut(issuedTickerEntry, viewport);
+    const issuedTickerPaint = issuedTickerEntry === undefined || issuedTickerProjection === undefined
+      ? undefined
+      : projectX4UiPaintPlan({
+        ...baseInput,
+        keepOuts: [{
+          context: KEEP_OUT_PRESET_IDS.firstPerson,
+          entry: issuedTickerEntry,
+          projection: issuedTickerProjection,
+        }],
+      });
+    const issuedTickerCommand = issuedTickerPaint?.status === 'refused'
+      ? undefined
+      : issuedTickerPaint?.plan.keepOuts[0];
+    check('causal-issued-production-authority-survives-safe-materialization',
+      issuedTickerProjection?.status === 'projected'
+      && issuedTickerPaint !== undefined
+      && issuedTickerPaint.status !== 'refused'
+      && issuedTickerCommand?.context === KEEP_OUT_PRESET_IDS.firstPerson
+      && issuedTickerCommand.entryId === KEEP_OUT_IDS.missionMessagesTicker
+      && issuedTickerCommand.geometry?.kind === 'polygon', {
+        fixtureReady: issuedTickerEntry !== undefined && issuedTickerProjection !== undefined,
+        projection: issuedTickerProjection?.status,
+        paint: issuedTickerPaint?.status,
+        refusal: issuedTickerPaint?.status === 'refused' ? issuedTickerPaint.refusal : undefined,
+        command: issuedTickerCommand,
+      });
+
+    const clonedTickerEntry = issuedTickerEntry === undefined
+      ? undefined
+      : JSON.parse(JSON.stringify(issuedTickerEntry)) as X4UiKeepOutEntry;
+    const clonedTickerEntryPaint = clonedTickerEntry === undefined || issuedTickerProjection === undefined
+      ? undefined
+      : projectX4UiPaintPlan({
+        ...baseInput,
+        keepOuts: [{
+          context: KEEP_OUT_PRESET_IDS.firstPerson,
+          entry: clonedTickerEntry,
+          projection: issuedTickerProjection,
+        }],
+      });
+    check('causal-external-production-entry-clone-refuses-at-capture',
+      clonedTickerEntryPaint?.status === 'refused'
+      && clonedTickerEntryPaint.refusal.code === 'invalid-keepout', {
+        fixtureReady: clonedTickerEntry !== undefined && issuedTickerProjection !== undefined,
+        status: clonedTickerEntryPaint?.status,
+        refusal: clonedTickerEntryPaint?.status === 'refused' ? clonedTickerEntryPaint.refusal : undefined,
+      });
+
+    const clonedTickerProjection = issuedTickerProjection === undefined
+      ? undefined
+      : JSON.parse(JSON.stringify(issuedTickerProjection)) as NonNullable<typeof issuedTickerProjection>;
+    const clonedTickerProjectionPaint = issuedTickerEntry === undefined || clonedTickerProjection === undefined
+      ? undefined
+      : projectX4UiPaintPlan({
+        ...baseInput,
+        keepOuts: [{
+          context: KEEP_OUT_PRESET_IDS.firstPerson,
+          entry: issuedTickerEntry,
+          projection: clonedTickerProjection,
+        }],
+      });
+    check('causal-external-production-projection-clone-refuses-at-capture',
+      clonedTickerProjectionPaint?.status === 'refused'
+      && clonedTickerProjectionPaint.refusal.code === 'invalid-keepout', {
+        fixtureReady: issuedTickerEntry !== undefined && clonedTickerProjection !== undefined,
+        status: clonedTickerProjectionPaint?.status,
+        refusal: clonedTickerProjectionPaint?.status === 'refused' ? clonedTickerProjectionPaint.refusal : undefined,
+      });
+
+    const notApplicableTickerPaint = issuedTickerEntry === undefined || issuedTickerProjection === undefined
+      ? undefined
+      : projectX4UiPaintPlan({
+        ...baseInput,
+        keepOuts: [{
+          context: KEEP_OUT_PRESET_IDS.mapOpen,
+          entry: issuedTickerEntry,
+          projection: issuedTickerProjection,
+        }],
+      });
+    check('causal-not-applicable-production-preset-member-refuses-in-paint',
+      notApplicableTickerPaint?.status === 'refused'
+      && notApplicableTickerPaint.refusal.code === 'invalid-keepout', {
+        fixtureReady: issuedTickerEntry !== undefined && issuedTickerProjection !== undefined,
+        expected: { status: 'refused', code: 'invalid-keepout' },
+        observed: notApplicableTickerPaint?.status === 'refused'
+          ? { status: notApplicableTickerPaint.status, refusal: notApplicableTickerPaint.refusal }
+          : { status: notApplicableTickerPaint?.status, commands: notApplicableTickerPaint?.plan.keepOuts },
+      });
+
+    const issuedTopHudEntry = getBuiltInKeepOut(KEEP_OUT_IDS.topHudStrip);
+    const issuedTopHudProjection = issuedTopHudEntry === undefined
+      ? undefined
+      : projectKeepOut(issuedTopHudEntry, viewport);
+    const misalignedIssuedPaint = issuedTickerEntry === undefined || issuedTopHudProjection === undefined
+      ? undefined
+      : projectX4UiPaintPlan({
+        ...baseInput,
+        keepOuts: [{
+          context: KEEP_OUT_PRESET_IDS.firstPerson,
+          entry: issuedTickerEntry,
+          projection: issuedTopHudProjection,
+        }],
+      });
+    check('causal-misaligned-issued-entry-projection-refuses-without-fallback',
+      misalignedIssuedPaint?.status === 'refused'
+      && misalignedIssuedPaint.refusal.code === 'invalid-keepout', {
+        fixtureReady: issuedTickerEntry !== undefined && issuedTopHudProjection !== undefined,
+        status: misalignedIssuedPaint?.status,
+        refusal: misalignedIssuedPaint?.status === 'refused' ? misalignedIssuedPaint.refusal : undefined,
+      });
 
     let noEntrySeamReached = false;
     let noEntryThrew = false;
@@ -3430,6 +3545,24 @@ async function main(): Promise<void> {
     check('logical plan is deeply frozen and JSON serializable', first !== undefined && Object.isFrozen(first.plan) && Object.isFrozen(first.plan.layers) && first.plan.layers.every(layer => Object.isFrozen(layer) && Object.isFrozen(layer.commands)) && JSON.stringify(first).includes('Not verified in game'));
     check('source linkage, selection, and game truth are retained', first !== undefined && first.plan.source.file === scene.profile.source.file && first.plan.selectedNodeIds[0] === selectedId && first.plan.gameVerified === false && first.plan.verification.game === 'Not verified in game');
     check('keep-out guides preserve exact built-in normalized projections', first !== undefined && first.plan.keepOuts.some(item => item.entryId === KEEP_OUT_IDS.conversationBackRow && item.geometry !== null && item.geometry.kind === 'horizontal-guide' && item.geometry.y === viewport.height * 0.788) && first.plan.keepOuts.some(item => item.entryId === KEEP_OUT_IDS.informationPanelLeftEdge && item.geometry !== null && item.geometry.kind === 'vertical-guide' && item.geometry.x === viewport.width * 0.664));
+    const tickerCommand = first?.plan.keepOuts.find(item => item.entryId === KEEP_OUT_IDS.missionMessagesTicker);
+    const hudCommand = first?.plan.keepOuts.find(item => item.entryId === KEEP_OUT_IDS.topHudStrip);
+    check('screenshot-calibrated built-in polygons retain exact projected points', tickerCommand?.status === 'projected'
+      && tickerCommand.geometry.kind === 'polygon'
+      && JSON.stringify(tickerCommand.geometry.points) === JSON.stringify([
+        { x: viewport.width * 0.0994496855345912, y: viewport.height * 0.943089430894309 },
+        { x: viewport.width * 0.33372641509433965, y: viewport.height * 0.8484848484848485 },
+        { x: viewport.width * 0.33372641509433965, y: viewport.height * 0.9150036954915004 },
+        { x: viewport.width * 0.11006289308176101, y: viewport.height },
+      ])
+      && hudCommand?.status === 'projected'
+      && hudCommand.geometry.kind === 'polygon'
+      && JSON.stringify(hudCommand.geometry.points) === JSON.stringify([
+        { x: viewport.width * 0.419811320754717, y: viewport.height * 0.008130081300813009 },
+        { x: viewport.width * 0.5794025157232704, y: viewport.height * 0.008130081300813009 },
+        { x: viewport.width * 0.5794025157232704, y: viewport.height * 0.07982261640798226 },
+        { x: viewport.width * 0.419811320754717, y: viewport.height * 0.07982261640798226 },
+      ]));
     check('keep-outs do not mutate Scene geometry or ordering', JSON.stringify(scene) === beforeScene && first !== undefined && first.plan.layers[0].commands.length > 0);
     const rasterCommands = first?.plan.layers[1].commands.filter(command => command.kind === 'glyph-alpha-blit') || [];
     check('regular glyphs use canonical descriptor/atlas bounds and JSON-safe alpha commands', rasterCommands.length > 0 && rasterCommands.every(command => command.kind === 'glyph-alpha-blit' && command.atlas.width > 0 && command.atlas.height > 0 && command.sourceRect.width > 0 && command.destinationRect.width > 0 && command.atlas.relativePath.endsWith('.dds')));

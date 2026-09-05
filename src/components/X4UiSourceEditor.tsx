@@ -1088,6 +1088,11 @@ const keepOutEvidence = (member: ValueRecord | null): string => {
   const geometry = asRecord(entry?.geometry);
   if (geometry?.kind === 'horizontal-guide') return `y=${formatNumber(geometry.y)}`;
   if (geometry?.kind === 'vertical-guide') return `x=${formatNumber(geometry.x)}`;
+  if (geometry?.kind === 'polygon') {
+    const provenance = asRecord(entry?.provenance);
+    const screenshot = asRecord(provenance?.screenshot);
+    return `screenshot-calibrated polygon · ${stringValue(screenshot?.hash, 'screenshot hash unavailable')}`;
+  }
   return 'unavailable/unmeasured; no rectangle inferred';
 };
 
@@ -1102,11 +1107,12 @@ export const toggleX4UiKeepOutEntry = (
   originatingPresetId: string,
   enabledEntryIds: readonly string[],
   entryId: string,
-  presets: readonly { readonly id: string; readonly members: readonly { readonly entryId: string }[] }[],
+  presets: readonly { readonly id: string; readonly members: readonly { readonly entryId: string; readonly applicability?: string }[] }[],
 ): readonly string[] => {
   if (activePresetId === null || originatingPresetId !== activePresetId) return enabledEntryIds;
   const activePreset = presets.find(preset => preset.id === activePresetId);
-  if (activePreset === undefined || !activePreset.members.some(member => member.entryId === entryId)) return enabledEntryIds;
+  const activeMember = activePreset?.members.find(member => member.entryId === entryId);
+  if (activeMember === undefined || activeMember.applicability !== undefined && activeMember.applicability !== 'applicable') return enabledEntryIds;
   return enabledEntryIds.includes(entryId)
     ? enabledEntryIds.filter(value => value !== entryId)
     : [...enabledEntryIds, entryId];
@@ -2639,12 +2645,6 @@ export default function X4UiSourceEditor({
   );
   currentVerificationSnapshotRef.current = currentVerificationSnapshot;
 
-  useLayoutEffect(() => {
-    if (onVerificationSnapshotChange === undefined) return;
-    onVerificationSnapshotChange(currentVerificationSnapshot);
-    return () => onVerificationSnapshotChange(null);
-  }, [currentVerificationSnapshot, onVerificationSnapshotChange]);
-
   const source = projectionView.source;
   const lintInspection = lintInspectionFor(preview);
   const currentProgramResult = projection.preview.program;
@@ -2716,7 +2716,7 @@ export default function X4UiSourceEditor({
     setCanvasExportFeedback(undefined);
   }, [currentVerificationSnapshot]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     let active = true;
     const host = canvasHostRef.current;
     const reason = stringValue(projectionView.reason, `session status is ${stringValue(projectionView.status, 'unavailable')}`);
@@ -2759,6 +2759,20 @@ export default function X4UiSourceEditor({
       active = false;
     };
   }, [canRender, canonicalCorpus, currentVerificationSnapshot, projectionView.paint, projectionView.reason, projectionView.status, rendererSession, resolvedSurfaceFactory]);
+
+  useLayoutEffect(() => {
+    if (onVerificationSnapshotChange === undefined) return;
+    const mountedSurface = canvasHostRef.current?.firstElementChild as unknown as X4UiCanvasSurface | null | undefined;
+    const canvasCommitMatchesSnapshot = currentVerificationSnapshot === null
+      ? canvasState.status !== 'current'
+      : canvasState.status === 'current'
+        && canvasState.stale === false
+        && canvasState.surface === mountedSurface
+        && canvasExportIdentityRef.current === currentVerificationSnapshot;
+    if (!canvasCommitMatchesSnapshot) return;
+    onVerificationSnapshotChange(currentVerificationSnapshot);
+    return () => onVerificationSnapshotChange(null);
+  }, [canvasState, currentVerificationSnapshot, onVerificationSnapshotChange]);
 
   const updateProfileDimension = (field: 'width' | 'height' | 'uiScale', raw: string): void => {
     const value = Number(raw);
@@ -2823,7 +2837,7 @@ export default function X4UiSourceEditor({
       return;
     }
     const definition = KEEP_OUT_PRESETS.find(preset => preset.id === value);
-    setEnabledEntryIds(definition?.members.map(member => member.entryId) ?? []);
+    setEnabledEntryIds(definition?.members.filter(member => member.applicability === 'applicable').map(member => member.entryId) ?? []);
   };
 
   const toggleEntry = (originatingPresetId: string, entryId: string): void => {
@@ -3345,7 +3359,7 @@ export default function X4UiSourceEditor({
                     const presetActive = activePresetId === preset.id;
                     return (
                       <label key={member.entryId} className="flex items-start gap-2 text-slate-500">
-                        <input type="checkbox" checked={isX4UiKeepOutEntryChecked(activePresetId, preset.id, enabledEntryIds, member.entryId)} disabled={!presetActive} onChange={() => toggleEntry(preset.id, member.entryId)} />
+                        <input type="checkbox" checked={isX4UiKeepOutEntryChecked(activePresetId, preset.id, enabledEntryIds, member.entryId)} disabled={!presetActive || member.applicability !== 'applicable'} onChange={() => toggleEntry(preset.id, member.entryId)} />
                         <span><span className="text-slate-300">{label}</span> · {keepOutEvidence(sessionMemberRecord)} · {member.evidenceGrade} · {member.applicabilityEvidence}{enabled ? '' : ' · unavailable in active preset'}</span>
                       </label>
                     );
@@ -3455,7 +3469,7 @@ export default function X4UiSourceEditor({
             {manualCalibrationState.rows.length === 0 && <div data-testid="x4-ui-manual-calibration-empty" className="text-slate-500">No session-local manual calibrations have been added.</div>}
           </div>
         </div>
-        <div className="mt-2 text-slate-600">Measured guides remain advisory: y=0.788, y=0.74, x=0.664. Mission/MESSAGES ticker and Top HUD strip remain unavailable/unmeasured; no rectangle is inferred.</div>
+        <div className="mt-2 text-slate-600">Measured guides remain advisory: y=0.788, y=0.74, x=0.664. Screenshot-calibrated Mission/MESSAGES ticker and Top HUD strip polygons retain their capture evidence. All keep-outs remain Advisory only · Not verified in game; no INFORMATION rectangle is inferred.</div>
       </section>
 
       <section data-testid="x4-ui-preview-region" className="mt-3 rounded border border-white/10 bg-black/20 p-3">

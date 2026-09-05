@@ -6,7 +6,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
-import React from 'react';
+import React, { act } from 'react';
+import { flushSync } from 'react-dom';
+import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ModuleKind, ScriptTarget, transpileModule } from 'typescript';
 import { buildX4UiCallModel, type X4UiLuaFileInput } from '../lib/x4UiCallModel';
@@ -34,6 +36,7 @@ import {
   type X4UiCorpusTransport,
 } from '../lib/x4UiCorpusAssets';
 import { projectX4UiEditorSession } from '../lib/x4UiEditorSession';
+import { KEEP_OUT_IDS, KEEP_OUT_PRESET_IDS, KEEP_OUT_PRESETS } from '../lib/x4UiKeepOuts';
 import { lintX4UiCallModel } from '../lib/x4UiLint';
 import type { X4UiLayoutPreviewSampleCatalog } from '../lib/x4UiLayoutProgram';
 import { applyX4UiSourceEdit, type X4UiSourceEditCatalog } from '../lib/x4UiSourceEdits';
@@ -174,6 +177,11 @@ assert.match(sourceMarkup, /Cockpit conversation/);
 assert.match(sourceMarkup, /Map open/);
 assert.match(sourceMarkup, /Fullscreen menu/);
 assert.match(sourceMarkup, /First person/);
+assert.match(sourceMarkup, /screenshot-calibrated polygon/);
+assert.match(sourceMarkup, /777D001A6CDF46F77AAEE76F9AC7F6E4FFF9E8CFF0F5E7C3082E93E88388DF20/);
+assert.match(sourceMarkup, /2BA6C8C065EF3563A0C2C06E814BCD226BA160BC0EE64981D07E01C01AD2ADC8/);
+assert.match(sourceMarkup, /Measured guides remain advisory: y=0\.788, y=0\.74, x=0\.664/);
+assert.doesNotMatch(sourceMarkup, /Mission\/MESSAGES ticker and Top HUD strip remain unavailable\/unmeasured/);
 assert.match(sourceMarkup, /2560/);
 assert.match(sourceMarkup, /1440/);
 assert.match(sourceMarkup, /1\.4/);
@@ -1167,6 +1175,26 @@ const foreignEntryResult = toggleX4UiKeepOutEntry('cockpit-conversation', 'cockp
 assert.equal(foreignEntryResult, sharedEnabledEntryIds, 'foreign entry preserves the original array identity');
 assert.equal(isX4UiKeepOutEntryChecked('preset-a', 'preset-b', ['member-a'], 'member-a'), false, 'inactive preset members render unchecked');
 assert.equal(isX4UiKeepOutEntryChecked('preset-a', 'preset-a', ['member-a'], 'member-a'), true, 'active preset members reflect enabled IDs');
+assert.deepEqual(
+  toggleX4UiKeepOutEntry(KEEP_OUT_PRESET_IDS.cockpitConversation, KEEP_OUT_PRESET_IDS.cockpitConversation, [], KEEP_OUT_IDS.missionMessagesTicker, KEEP_OUT_PRESETS),
+  [KEEP_OUT_IDS.missionMessagesTicker],
+  'active cockpit controls must independently enable the calibrated ticker',
+);
+assert.deepEqual(
+  toggleX4UiKeepOutEntry(KEEP_OUT_PRESET_IDS.mapOpen, KEEP_OUT_PRESET_IDS.mapOpen, [], KEEP_OUT_IDS.topHudStrip, KEEP_OUT_PRESETS),
+  [KEEP_OUT_IDS.topHudStrip],
+  'active map controls must independently enable the calibrated HUD strip',
+);
+assert.deepEqual(
+  toggleX4UiKeepOutEntry(KEEP_OUT_PRESET_IDS.mapOpen, KEEP_OUT_PRESET_IDS.mapOpen, [KEEP_OUT_IDS.missionMessagesTicker], KEEP_OUT_IDS.missionMessagesTicker, KEEP_OUT_PRESETS),
+  [KEEP_OUT_IDS.missionMessagesTicker],
+  'unsupported map ticker toggle must not cross-enable a member from another preset',
+);
+assert.deepEqual(
+  toggleX4UiKeepOutEntry(KEEP_OUT_PRESET_IDS.cockpitConversation, KEEP_OUT_PRESET_IDS.cockpitConversation, [KEEP_OUT_IDS.topHudStrip], KEEP_OUT_IDS.topHudStrip, KEEP_OUT_PRESETS),
+  [KEEP_OUT_IDS.topHudStrip],
+  'unsupported cockpit HUD toggle must remain isolated from active members',
+);
 
 const uiBuilderMarkup = renderToStaticMarkup(
   <UIBuilder
@@ -4145,7 +4173,7 @@ function p7SourceReceipt(value: unknown): unknown {
   if (record === undefined) return value;
   if (typeof record.error === 'string') return { error: record.error };
   const receipt: Record<string, unknown> = {};
-  for (const key of ['status', 'accepted', 'detail', 'colorStatus', 'colorDetail', 'getterReads', 'getTrapReads', 'threw', 'dualCanonical', 'detached', 'timeout', 'statusCallCount', 'overlapBeforeEitherSettled', 'callsUseSharedSignal', 'coreCanonical', 'colorCanonical', 'canonicalCount', 'failedBranchOrdinary', 'coreLoaderStarted', 'colorLoaderStarted', 'branchStartsBeforeSettlement', 'injectedBranchRejected', 'branchSignalsUseSharedSignal']) {
+  for (const key of ['status', 'accepted', 'detail', 'colorStatus', 'colorDetail', 'getterReads', 'getTrapReads', 'threw', 'dualCanonical', 'detached', 'timeout', 'statusCallCount', 'overlapBeforeEitherSettled', 'callsUseSharedSignal', 'coreCanonical', 'colorCanonical', 'canonicalCount', 'failedBranchOrdinary', 'coreLoaderStarted', 'colorLoaderStarted', 'branchStartsBeforeSettlement', 'injectedBranchRejected', 'branchSignalsUseSharedSignal', 'initialCanvasStatus', 'initialCanvasDetail', 'parentInitialSnapshot', 'sourceOnlyCanvasStatus', 'sourceOnlyCanvasDetail', 'parentSourceOnlySnapshot', 'sourceOnlyCanvasRetained', 'currentCanvasStatus', 'currentCanvasDetail', 'currentCanvasMounted', 'currentCanvasReplaced', 'currentCanvasWidth', 'currentCanvasHeight', 'targetCommitCanvasStatus', 'parentTargetSnapshot', 'parentTargetCallbackCanvasStatus', 'parentTargetCallbackCanvasMounted', 'parentTargetCallbackExportDisabled', 'currentExportDisabled', 'currentExportStatus', 'currentExportProfile', 'currentNativeBitmapWidth', 'currentNativeBitmapHeight', 'currentSourceIdentity', 'currentTargetMetadata', 'currentSceneStatus', 'presetActive', 'presetCanvasStatus', 'presetExportDisabled', 'staleCanvasStatus', 'staleCanvasRetained', 'staleExportStatus', 'restoredCanvasStatus', 'restoredCanvasReplaced', 'restoredExportDisabled']) {
     if (Object.hasOwn(record, key)) receipt[key] = record[key];
   }
   if (Object.hasOwn(record, 'result')) receipt.result = record.result === null ? null : record.result === undefined ? undefined : 'present';
@@ -4165,6 +4193,630 @@ function p7SourceReceipt(value: unknown): unknown {
     if (Object.hasOwn(record, key)) receipt[key] = p7SourceReceipt(record[key]);
   }
   return receipt;
+}
+
+type MountedDomEventListener = (event: MountedDomEvent) => void;
+
+class MountedDomEvent {
+  readonly composed = true;
+  readonly isTrusted = false;
+  readonly timeStamp = Date.now();
+  target: MountedDomNode | null = null;
+  currentTarget: MountedDomNode | null = null;
+  eventPhase = 0;
+  defaultPrevented = false;
+  cancelBubble = false;
+
+  constructor(
+    readonly type: string,
+    options: { readonly bubbles?: boolean; readonly cancelable?: boolean } = {},
+  ) {
+    this.bubbles = options.bubbles === true;
+    this.cancelable = options.cancelable === true;
+  }
+
+  readonly bubbles: boolean;
+  readonly cancelable: boolean;
+
+  preventDefault(): void { if (this.cancelable) this.defaultPrevented = true; }
+  stopPropagation(): void { this.cancelBubble = true; }
+  stopImmediatePropagation(): void { this.cancelBubble = true; }
+
+  composedPath(): MountedDomNode[] {
+    const path: MountedDomNode[] = [];
+    for (let current = this.target; current !== null; current = current.parentNode) path.push(current);
+    return path;
+  }
+}
+
+class MountedDomNode {
+  static readonly ELEMENT_NODE = 1;
+  static readonly TEXT_NODE = 3;
+  static readonly COMMENT_NODE = 8;
+  static readonly DOCUMENT_NODE = 9;
+
+  readonly childNodes: MountedDomNode[] = [];
+  parentNode: MountedDomNode | null = null;
+  nodeValue: string | null = null;
+  private readonly listeners = new Map<string, Set<MountedDomEventListener>>();
+
+  constructor(
+    readonly nodeType: number,
+    readonly nodeName: string,
+    public ownerDocument: MountedDomDocument,
+  ) {}
+
+  get parentElement(): MountedDomElement | null {
+    return this.parentNode instanceof MountedDomElement ? this.parentNode : null;
+  }
+  get firstChild(): MountedDomNode | null { return this.childNodes[0] ?? null; }
+  get lastChild(): MountedDomNode | null { return this.childNodes[this.childNodes.length - 1] ?? null; }
+  get firstElementChild(): MountedDomElement | null {
+    return this.childNodes.find(child => child instanceof MountedDomElement) as MountedDomElement | undefined ?? null;
+  }
+  get nextSibling(): MountedDomNode | null {
+    if (this.parentNode === null) return null;
+    const index = this.parentNode.childNodes.indexOf(this);
+    return index < 0 ? null : this.parentNode.childNodes[index + 1] ?? null;
+  }
+  get textContent(): string {
+    return this.nodeType === MountedDomNode.TEXT_NODE || this.nodeType === MountedDomNode.COMMENT_NODE
+      ? this.nodeValue ?? ''
+      : this.childNodes.map(child => child.textContent).join('');
+  }
+  set textContent(value: string) {
+    this.replaceChildren(...(value === '' ? [] : [this.ownerDocument.createTextNode(value)]));
+  }
+
+  appendChild<T extends MountedDomNode>(child: T): T {
+    if (child.parentNode !== null) child.parentNode.removeChild(child);
+    child.parentNode = this;
+    child.ownerDocument = this.ownerDocument;
+    this.childNodes.push(child);
+    return child;
+  }
+  insertBefore<T extends MountedDomNode>(child: T, before: MountedDomNode | null): T {
+    if (before === null) return this.appendChild(child);
+    const index = this.childNodes.indexOf(before);
+    if (index < 0) throw new Error('mounted DOM insertBefore target is not a child');
+    if (child.parentNode !== null) child.parentNode.removeChild(child);
+    child.parentNode = this;
+    child.ownerDocument = this.ownerDocument;
+    this.childNodes.splice(index, 0, child);
+    return child;
+  }
+  removeChild<T extends MountedDomNode>(child: T): T {
+    const index = this.childNodes.indexOf(child);
+    if (index < 0) throw new Error('mounted DOM removeChild target is not a child');
+    this.childNodes.splice(index, 1);
+    child.parentNode = null;
+    return child;
+  }
+  replaceChildren(...children: MountedDomNode[]): void {
+    for (const child of [...this.childNodes]) this.removeChild(child);
+    for (const child of children) this.appendChild(child);
+  }
+  addEventListener(type: string, listener: unknown): void {
+    const callback = typeof listener === 'function'
+      ? listener as MountedDomEventListener
+      : listener !== null && typeof listener === 'object' && typeof (listener as { readonly handleEvent?: unknown }).handleEvent === 'function'
+        ? event => (listener as { readonly handleEvent: MountedDomEventListener }).handleEvent(event)
+        : undefined;
+    if (callback === undefined) return;
+    const callbacks = this.listeners.get(type) ?? new Set<MountedDomEventListener>();
+    callbacks.add(callback);
+    this.listeners.set(type, callbacks);
+  }
+  removeEventListener(type: string, listener: unknown): void {
+    if (typeof listener === 'function') this.listeners.get(type)?.delete(listener as MountedDomEventListener);
+  }
+  dispatchEvent(event: MountedDomEvent): boolean {
+    if (event.target === null) event.target = this;
+    const notify = (current: MountedDomNode, phase: number): boolean => {
+      event.currentTarget = current;
+      event.eventPhase = phase;
+      for (const listener of [...(current.listeners.get(event.type) ?? [])]) listener(event);
+      return !event.cancelBubble;
+    };
+    if (notify(this, 2) && event.bubbles) {
+      for (let current = this.parentNode; current !== null; current = current.parentNode) {
+        if (!notify(current, 3)) break;
+      }
+    }
+    event.currentTarget = null;
+    event.eventPhase = 0;
+    return !event.defaultPrevented;
+  }
+  contains(node: MountedDomNode | null): boolean {
+    return node === this || this.childNodes.some(child => child.contains(node));
+  }
+  getRootNode(): MountedDomNode {
+    if (this.parentNode === null) return this;
+    let root = this.parentNode;
+    while (root.parentNode !== null) root = root.parentNode;
+    return root;
+  }
+  remove(): void { this.parentNode?.removeChild(this); }
+}
+
+class MountedDomText extends MountedDomNode {
+  constructor(value: string, ownerDocument: MountedDomDocument) {
+    super(MountedDomNode.TEXT_NODE, '#text', ownerDocument);
+    this.nodeValue = value;
+  }
+}
+class MountedDomComment extends MountedDomNode {
+  constructor(value: string, ownerDocument: MountedDomDocument) {
+    super(MountedDomNode.COMMENT_NODE, '#comment', ownerDocument);
+    this.nodeValue = value;
+  }
+}
+
+class MountedDomStyle {
+  [property: string]: unknown;
+  cssText = '';
+  setProperty(property: string, value: string): void { this[property] = value; }
+  removeProperty(property: string): void { delete this[property]; }
+}
+
+class MountedDomElement extends MountedDomNode {
+  readonly attributes = new Map<string, string>();
+  readonly style = new MountedDomStyle();
+  readonly tagName: string;
+  readonly localName: string;
+  readonly namespaceURI: string;
+  className = '';
+  id = '';
+  value = '';
+  defaultValue = '';
+  type = '';
+  name = '';
+  checked = false;
+  defaultChecked = false;
+  disabled = false;
+  selected = false;
+  multiple = false;
+  min = '';
+  max = '';
+  step = '';
+  htmlFor = '';
+
+  constructor(tagName: string, ownerDocument: MountedDomDocument, namespaceURI = 'http://www.w3.org/1999/xhtml') {
+    super(MountedDomNode.ELEMENT_NODE, tagName.toUpperCase(), ownerDocument);
+    this.tagName = tagName.toUpperCase();
+    this.localName = tagName.toLowerCase();
+    this.namespaceURI = namespaceURI;
+  }
+
+  get options(): MountedDomElement[] {
+    return this.childNodes.filter(child => child instanceof MountedDomElement && child.localName === 'option') as MountedDomElement[];
+  }
+  setAttribute(name: string, value: string): void {
+    const key = name.toLowerCase();
+    this.attributes.set(key, String(value));
+    if (key === 'class') this.className = String(value);
+    else if (key === 'id') this.id = String(value);
+    else if (key === 'value') this.value = String(value);
+    else if (key === 'type') this.type = String(value);
+    else if (key === 'name') this.name = String(value);
+    else if (key === 'for') this.htmlFor = String(value);
+    else if (key === 'checked') this.checked = true;
+    else if (key === 'selected') this.selected = true;
+    else if (key === 'disabled') this.disabled = true;
+    else if (key === 'multiple') this.multiple = true;
+  }
+  setAttributeNS(_namespace: string | null, name: string, value: string): void { this.setAttribute(name, value); }
+  getAttribute(name: string): string | null { return this.attributes.get(name.toLowerCase()) ?? null; }
+  getAttributeNS(_namespace: string | null, name: string): string | null { return this.getAttribute(name); }
+  hasAttribute(name: string): boolean { return this.attributes.has(name.toLowerCase()); }
+  removeAttribute(name: string): void {
+    const key = name.toLowerCase();
+    this.attributes.delete(key);
+    if (key === 'checked') this.checked = false;
+    else if (key === 'selected') this.selected = false;
+    else if (key === 'disabled') this.disabled = false;
+    else if (key === 'multiple') this.multiple = false;
+  }
+  removeAttributeNS(_namespace: string | null, name: string): void { this.removeAttribute(name); }
+  getElementsByTagName(tagName: string): MountedDomElement[] {
+    const match = tagName.toLowerCase();
+    return this.childNodes.flatMap(child => child instanceof MountedDomElement
+      ? [ ...(match === '*' || child.localName === match ? [child] : []), ...child.getElementsByTagName(tagName) ]
+      : []);
+  }
+  querySelectorAll(selector: string): MountedDomElement[] {
+    const testId = selector.match(/^\[data-testid=["']([^"']+)["']\]$/)?.[1];
+    const tag = selector.match(/^[A-Za-z][A-Za-z0-9-]*$/)?.[0]?.toLowerCase();
+    return this.getElementsByTagName('*').filter(element => testId !== undefined
+      ? element.getAttribute('data-testid') === testId
+      : tag !== undefined && element.localName === tag);
+  }
+  querySelector(selector: string): MountedDomElement | null { return this.querySelectorAll(selector)[0] ?? null; }
+  focus(): void { this.ownerDocument.activeElement = this; }
+  blur(): void { if (this.ownerDocument.activeElement === this) this.ownerDocument.activeElement = null; }
+  click(): void { this.dispatchEvent(new MountedDomEvent('click', { bubbles: true, cancelable: true })); }
+  getBoundingClientRect(): { readonly top: number; readonly left: number; readonly right: number; readonly bottom: number; readonly width: number; readonly height: number } {
+    return { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 };
+  }
+}
+
+class MountedCanvasElement extends MountedDomElement {
+  width = 300;
+  height = 150;
+  private readonly context: Record<string, unknown>;
+
+  constructor(ownerDocument: MountedDomDocument, width: number, height: number) {
+    super('canvas', ownerDocument);
+    this.width = width;
+    this.height = height;
+    const noOp = (): undefined => undefined;
+    const target: Record<string, unknown> = {
+      canvas: this,
+      fillStyle: '#000000',
+      strokeStyle: '#000000',
+      measureText: () => ({ width: 0, actualBoundingBoxAscent: 0, actualBoundingBoxDescent: 0 }),
+      createImageData: (w: number, h: number) => ({ data: new Uint8ClampedArray(Math.max(0, w * h * 4)), width: w, height: h }),
+      getImageData: (left: number, top: number, w: number, h: number) => ({ data: new Uint8ClampedArray(Math.max(0, w * h * 4)), width: w, height: h, left, top }),
+    };
+    for (const method of ['save', 'restore', 'beginPath', 'rect', 'clip', 'fillRect', 'drawImage', 'moveTo', 'lineTo', 'closePath', 'stroke', 'putImageData', 'scale', 'translate', 'rotate', 'clearRect', 'fill', 'strokeRect', 'fillText', 'strokeText', 'setLineDash']) {
+      target[method] = noOp;
+    }
+    this.context = new Proxy(target, {
+      get: (value, property, receiver) => {
+        if (Reflect.has(value, property)) return Reflect.get(value, property, receiver);
+        if (typeof property === 'symbol') return undefined;
+        Reflect.set(value, property, noOp);
+        return noOp;
+      },
+    });
+  }
+
+  getContext(contextId: string): Record<string, unknown> | null { return contextId === '2d' ? this.context : null; }
+  toDataURL(): string { return 'data:image/png;base64,'; }
+  toBlob(callback: (blob: Blob | null) => void): void { callback(new Blob()); }
+}
+
+class MountedDomDocument extends MountedDomNode {
+  readonly documentElement: MountedDomElement;
+  readonly body: MountedDomElement;
+  readonly implementation = {};
+  defaultView: MountedDomWindow | null = null;
+  activeElement: MountedDomElement | null = null;
+
+  constructor() {
+    super(MountedDomNode.DOCUMENT_NODE, '#document', null as unknown as MountedDomDocument);
+    this.ownerDocument = this;
+    this.documentElement = new MountedDomElement('html', this);
+    this.body = new MountedDomElement('body', this);
+    this.appendChild(this.documentElement).appendChild(this.body);
+  }
+
+  createElement(tagName: string): MountedDomElement {
+    return tagName.toLowerCase() === 'canvas' ? new MountedCanvasElement(this, 300, 150) : new MountedDomElement(tagName, this);
+  }
+  createElementNS(namespaceURI: string, tagName: string): MountedDomElement { return new MountedDomElement(tagName, this, namespaceURI); }
+  createTextNode(value: string): MountedDomText { return new MountedDomText(value, this); }
+  createComment(value: string): MountedDomComment { return new MountedDomComment(value, this); }
+  getElementById(id: string): MountedDomElement | null { return this.documentElement.getElementsByTagName('*').find(element => element.id === id) ?? null; }
+  querySelector(selector: string): MountedDomElement | null { return this.documentElement.querySelector(selector); }
+  querySelectorAll(selector: string): MountedDomElement[] { return this.documentElement.querySelectorAll(selector); }
+  createEvent(type: string): MountedDomEvent { return new MountedDomEvent(type); }
+  hasFocus(): boolean { return true; }
+}
+
+class MountedDomWindow {
+  readonly window = this;
+  readonly self = this;
+  readonly navigator = { userAgent: 'mounted-source-editor-selftest' };
+  HTMLIFrameElement = MountedDomElement;
+  constructor(readonly document: MountedDomDocument) {}
+  addEventListener(): void {}
+  removeEventListener(): void {}
+  getComputedStyle(): Record<string, string> { return {}; }
+  getSelection(): null { return null; }
+}
+
+function installMountedDomGlobals(document: MountedDomDocument): () => void {
+  const window = new MountedDomWindow(document);
+  document.defaultView = window;
+  const values: Record<string, unknown> = {
+    window, self: window, document, navigator: window.navigator,
+    Node: MountedDomNode, Element: MountedDomElement, HTMLElement: MountedDomElement,
+    SVGElement: MountedDomElement, Text: MountedDomText, Event: MountedDomEvent,
+    EventTarget: MountedDomNode, Document: MountedDomDocument, HTMLCanvasElement: MountedCanvasElement,
+    HTMLIFrameElement: MountedDomElement, HTMLSelectElement: MountedDomElement, HTMLOptionElement: MountedDomElement,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map<string, PropertyDescriptor | undefined>();
+  for (const [key, value] of Object.entries(values)) {
+    previous.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
+    Object.defineProperty(globalThis, key, { configurable: true, enumerable: false, writable: true, value });
+  }
+  Object.assign(window, {
+    Node: MountedDomNode, Element: MountedDomElement, HTMLElement: MountedDomElement,
+    SVGElement: MountedDomElement, Text: MountedDomText, Event: MountedDomEvent,
+    EventTarget: MountedDomNode, Document: MountedDomDocument, HTMLCanvasElement: MountedCanvasElement,
+    HTMLIFrameElement: MountedDomElement, HTMLSelectElement: MountedDomElement, HTMLOptionElement: MountedDomElement,
+  });
+  return () => {
+    for (const [key, descriptor] of previous) {
+      if (descriptor === undefined) Reflect.deleteProperty(globalThis, key);
+      else Object.defineProperty(globalThis, key, descriptor);
+    }
+  };
+}
+
+function mountedElementByTestId(root: MountedDomNode, testId: string): MountedDomElement | null {
+  if (root instanceof MountedDomElement && root.getAttribute('data-testid') === testId) return root;
+  for (const child of root.childNodes) {
+    const found = mountedElementByTestId(child, testId);
+    if (found !== null) return found;
+  }
+  return null;
+}
+function mountedElementText(root: MountedDomNode, testId: string): string {
+  return mountedElementByTestId(root, testId)?.textContent ?? '';
+}
+function mountedOptionByText(select: MountedDomElement, text: string): MountedDomElement | null {
+  return select.options.find(option => option.textContent === text) ?? null;
+}
+
+type MountedSourceEditorTransitionReceipt = {
+  readonly initialCanvasStatus: string;
+  readonly initialCanvasDetail: string;
+  readonly parentInitialSnapshot: string;
+  readonly sourceOnlyCanvasStatus: string;
+  readonly sourceOnlyCanvasDetail: string;
+  readonly parentSourceOnlySnapshot: string;
+  readonly sourceOnlyCanvasRetained: boolean;
+  readonly currentCanvasStatus: string;
+  readonly currentCanvasDetail: string;
+  readonly currentCanvasMounted: boolean;
+  readonly currentCanvasReplaced: boolean;
+  readonly currentCanvasWidth: number;
+  readonly currentCanvasHeight: number;
+  readonly targetCommitCanvasStatus: string;
+  readonly parentTargetSnapshot: string;
+  readonly parentTargetCallbackCanvasStatus: string;
+  readonly parentTargetCallbackCanvasMounted: boolean;
+  readonly parentTargetCallbackExportDisabled: boolean;
+  readonly currentExportDisabled: boolean;
+  readonly currentExportStatus: string;
+  readonly currentExportProfile: string;
+  readonly currentNativeBitmapWidth: string;
+  readonly currentNativeBitmapHeight: string;
+  readonly currentSourceIdentity: string;
+  readonly currentTargetMetadata: string;
+  readonly currentSceneStatus: string;
+  readonly presetActive: boolean;
+  readonly presetCanvasStatus: string;
+  readonly presetExportDisabled: boolean;
+  readonly staleCanvasStatus: string;
+  readonly staleCanvasRetained: boolean;
+  readonly staleExportStatus: string;
+  readonly restoredCanvasStatus: string;
+  readonly restoredCanvasReplaced: boolean;
+  readonly restoredExportDisabled: boolean;
+};
+
+async function runMountedSourceEditorTransitionRegression(
+  fixture: P7SourceAuthorityFixture,
+): Promise<MountedSourceEditorTransitionReceipt> {
+  const mountedDocument = new MountedDomDocument();
+  const restoreGlobals = installMountedDomGlobals(mountedDocument);
+  const container = mountedDocument.createElement('div');
+  mountedDocument.body.appendChild(container);
+  const transitionSourceContent = "-- Pipeline Test UI — X4 UI extension entry point\n-- Packaged at: extensions/pipeline_test/ui/pipeline_test.lua\n-- Registered by: extensions/pipeline_test/ui.xml (<environment type=\"menus\">)\n-- Generated from the visual designer by X4 Forge. Uses the corpus-backed\n-- standalone-menu lifecycle: lazy Helper -> deferred registration -> OpenMenu\n-- -> onShowMenu -> createFrameHandle/fTable -> frame:display().\n\nlocal widgets = {\n    { type = \"window\", id = \"w_win\", label = \"Pipeline Test Panel\", x = 120, y = 120, width = 280, height = 120 },\n    { type = \"header\", id = \"w_header\", label = \"B119 Pipeline Test\", x = 140, y = 140, width = 380, height = 32 },\n    { type = \"button\", id = \"w_btn\", label = \"My First Button\", x = 150, y = 170, width = 220, height = 40 },\n    { type = \"text\", id = \"w_status\", label = \"Status: source-first Forge preview\", x = 140, y = 182, width = 380, height = 32 },\n    { type = \"button\", id = \"w_btn_secondary\", label = \"Second Button\", x = 390, y = 230, width = 160, height = 40 },\n    { type = \"input\", id = \"w_input\", label = \"Operator note\", x = 140, y = 286, width = 410, height = 44 },\n}\n\nlocal Helper = rawget(_G, \"Helper\")\nlocal function refreshHelper()\n  if not Helper then Helper = rawget(_G, \"Helper\") end\n  return Helper\nend\n\nlocal menu = {\n  name = \"pipeline_test_menu\",\n  layer = 4,\n  active = false,\n  widgets = widgets,\n  transcript = \"\",\n}\n\nlocal function log(message)\n  if DebugError then DebugError(\"[pipeline_test] \" .. tostring(message)) end\nend\n\nfunction menu.ensureRegistered()\n  refreshHelper()\n  _G.Menus = _G.Menus or {}\n  local found = false\n  for i, existing in ipairs(_G.Menus) do\n    if existing.name == menu.name then _G.Menus[i] = menu; found = true; break end\n  end\n  if not found then table.insert(_G.Menus, menu) end\n  if Helper and Helper.registerMenu and not menu._registered then\n    local ok = pcall(Helper.registerMenu, menu)\n    menu._registered = ok\n  end\n  return menu._registered == true\nend\n\nfunction menu.open(context)\n  menu.context = type(context) == \"table\" and context or {}\n  if not menu.ensureRegistered() then\n    if SetScript then SetScript(\"onUpdate\", menu.retryOpen) end\n    return false\n  end\n  if OpenMenu then OpenMenu(menu.name, nil, nil, true)\n  elseif menu.onShowMenu then menu.onShowMenu() end\n  return true\nend\n\nfunction menu.retryOpen()\n  if not menu.ensureRegistered() then return end\n  if RemoveScript then RemoveScript(\"onUpdate\", menu.retryOpen) end\n  menu.open(menu.context)\nend\n\nfunction menu.onShowMenu()\n  refreshHelper()\n  menu.active = true\n  menu.createFrame()\nend\n\nfunction menu.emit(widgetId, payload)\n  if AddUITriggeredEvent then AddUITriggeredEvent(menu.name, widgetId, payload or {}) end\nend\n\nfunction menu.createFrame()\n  refreshHelper()\n  if not Helper then log(\"Helper unavailable; frame not built\"); return end\n  if menu.frame and Helper.clearDataForRefresh then Helper.clearDataForRefresh(menu, menu.layer) end\n  local width = Helper.scaleX(530)\n  local height = Helper.scaleY(436)\n  local x = ((Helper.viewWidth or 1920) - width) / 2\n  local y = ((Helper.viewHeight or 1080) - height) / 2\n  menu.frame = Helper.createFrameHandle(menu, { x = x, y = y, width = width, height = height, layer = menu.layer, standardButtons = { close = true } })\n  local ftable = menu.frame:addTable(2, { tabOrder = 1, width = width, highlightMode = \"off\", reserveScrollBar = false })\n  ftable:setColWidthPercent(1, 55)\n  ftable:setColWidthPercent(2, 45)\n  local row\n  row = ftable:addRow(false, {})\n  row[1]:setColSpan(2):createText(\"Pipeline Test Panel\", Helper.headerRowCenteredProperties)\n  row = ftable:addRow(false, {})\n  row[1]:setColSpan(2):createText(\"B119 Pipeline Test\", Helper.headerRowCenteredProperties)\n  row = ftable:addRow(true, {})\n  row[1]:setColSpan(2):createButton({ active = true }):setText(\"My First Button\", { halign = \"center\" })\n  row[1].handlers.onClick = function() menu.emit(\"w_btn\", { widget = \"w_btn\" }) end\n  row = ftable:addRow(false, {})\n  row[1]:setColSpan(2):createText(\"Status: source-first Forge preview\", { wordwrap = true })\n  row = ftable:addRow(true, {})\n  row[1]:setColSpan(2):createButton({ active = true }):setText(\"Second Button\", { halign = \"center\" })\n  row[1].handlers.onClick = function() menu.emit(\"w_btn_secondary\", { widget = \"w_btn_secondary\" }) end\n  row = ftable:addRow(true, {})\n  row[1]:setColSpan(2):createEditBox({ defaultText = \"Type a note...\", maxChars = 255, height = 44 })\n  row[1].handlers.onEditBoxDeactivated = function(_, text) menu.emit(\"w_input\", { text = text }) end\n  menu.frame:display()\nend\n\nfunction menu.cleanup()\n  menu.frame = nil\n  menu.active = false\nend\n\nfunction menu.onCloseElement(dueToClose)\n  refreshHelper()\n  if Helper and Helper.closeMenu then Helper.closeMenu(menu, dueToClose) end\n  menu.cleanup()\nend\n\nfunction menu.close()\n  menu.onCloseElement(\"close\")\nend\n\n-- Deliberate opening path for MD/companion Lua: <raise_lua_event name=\"'pipeline_test_menu.open'\"/>.\nif RegisterEvent then RegisterEvent(\"pipeline_test_menu.open\", function(_, context) menu.open(context) end) end\n_G[\"pipeline_test_menu\"] = menu\n\n-- The beginner template opts into one visible first result. Ordinary authored menus do not auto-open.\nlocal function autoOpenWhenReady()\n  refreshHelper()\n  if not Helper then return end\n  if RemoveScript then RemoveScript(\"onUpdate\", autoOpenWhenReady) end\n  menu.open({ source = \"x4_forge_template\" })\nend\nif SetScript then SetScript(\"onUpdate\", autoOpenWhenReady) end\n\n\nreturn menu\n";
+  const transitionWorkspace = {
+    ...workspace,
+    id: 'x4-ui-source-editor-mounted-transition',
+    compileSettings: { ui: true },
+    passthroughFiles: [
+      {
+        path: 'ui.xml',
+        content: '<?xml version="1.0" encoding="utf-8"?>\n<addon name="pipeline_test" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../ui/core/addon.xsd">\n  <environment type="menus">\n    <file name="ui/pipeline_test.lua" />\n  </environment>\n</addon>',
+        reason: 'unknown_domain',
+      },
+      {
+        path: 'ui/pipeline_test.lua',
+        content: transitionSourceContent,
+        reason: 'partial',
+      },
+    ],
+  } as unknown as React.ComponentProps<typeof X4UiSourceEditor>['workspace'];
+  const flush = async (operation: () => void): Promise<void> => {
+    await act(async () => {
+      operation();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  };
+  const canonicalLoader = async (): Promise<{ readonly core: P7SourceAuthorityFixture['core']; readonly color: P7SourceAuthorityFixture['color'] }> => ({
+    core: fixture.core,
+    color: fixture.color,
+  });
+  const mountedSurfaceFactory = (width: number, height: number): MountedCanvasElement => new MountedCanvasElement(mountedDocument, width, height);
+  const parentSnapshotCallbacks: Array<{
+    readonly snapshot: string;
+    readonly canvasStatus: string;
+    readonly canvasMounted: boolean;
+    readonly exportDisabled: boolean;
+  }> = [];
+  let requestParentRender: (() => void) | undefined;
+  const MountedSourceEditorParent = (): React.ReactElement => {
+    const [parentVerificationSnapshot, setParentVerificationSnapshot] = React.useState<unknown>(null);
+    const [, setParentRevision] = React.useState(0);
+    requestParentRender = () => setParentRevision(previous => previous + 1);
+    const onVerificationSnapshotChange = React.useCallback((snapshot: unknown): void => {
+      const exportControl = mountedElementByTestId(container, 'x4-ui-canvas-export');
+      parentSnapshotCallbacks.push({
+        snapshot: snapshot === null ? 'null' : JSON.stringify(snapshot),
+        canvasStatus: mountedElementText(container, 'x4-ui-canvas-status'),
+        canvasMounted: (mountedElementByTestId(container, 'x4-ui-canvas-host')?.firstElementChild ?? null) !== null,
+        exportDisabled: exportControl?.disabled === true,
+      });
+      setParentVerificationSnapshot(snapshot);
+    }, []);
+    return (
+      <>
+        <div data-testid="x4-ui-parent-verification-snapshot">
+          {parentVerificationSnapshot === null ? 'null' : JSON.stringify(parentVerificationSnapshot)}
+        </div>
+        <X4UiSourceEditor
+          workspace={transitionWorkspace}
+          corpusLoader={canonicalLoader}
+          surfaceFactory={mountedSurfaceFactory}
+          onVerificationSnapshotChange={onVerificationSnapshotChange}
+        />
+      </>
+    );
+  };
+  let root: ReturnType<typeof createRoot> | undefined;
+  const requestParentRenderOnChange = (): void => requestParentRender?.();
+  container.addEventListener('change', requestParentRenderOnChange);
+  try {
+    await flush(() => {
+      root = createRoot(container as unknown as Element);
+      root.render(<React.StrictMode><MountedSourceEditorParent /></React.StrictMode>);
+    });
+    const sourceSelect = mountedElementByTestId(container, 'x4-ui-source-selector');
+    const targetSelect = mountedElementByTestId(container, 'x4-ui-target-selector');
+    if (sourceSelect === null || targetSelect === null) throw new Error('mounted SourceEditor selectors were not rendered');
+    const sourceOption = mountedOptionByText(sourceSelect, 'ui/pipeline_test.lua');
+    if (sourceOption === null) throw new Error('mounted SourceEditor did not expose ui/pipeline_test.lua');
+    const initialCanvasStatus = mountedElementText(container, 'x4-ui-canvas-status');
+    const initialCanvasDetail = mountedElementText(container, 'x4-ui-canvas-detail');
+    const parentInitialSnapshot = mountedElementText(container, 'x4-ui-parent-verification-snapshot');
+
+    let sourceOnlyCanvasStatus = '';
+    let sourceOnlyCanvasDetail = '';
+    let sourceOnlyCanvas: MountedDomElement | null = null;
+    let targetCommitCanvasStatus = '';
+    await act(async () => {
+      flushSync(() => {
+        sourceSelect.value = sourceOption.value;
+        sourceSelect.dispatchEvent(new MountedDomEvent('change', { bubbles: true, cancelable: true }));
+      });
+    });
+    const sourceOnlyTargetSelect = mountedElementByTestId(container, 'x4-ui-target-selector');
+    if (sourceOnlyTargetSelect === null) throw new Error('target selector disappeared after source selection');
+    sourceOnlyCanvasStatus = mountedElementText(container, 'x4-ui-canvas-status');
+    sourceOnlyCanvasDetail = mountedElementText(container, 'x4-ui-canvas-detail');
+    const parentSourceOnlySnapshot = mountedElementText(container, 'x4-ui-parent-verification-snapshot');
+    const sourceOnlyHost = mountedElementByTestId(container, 'x4-ui-canvas-host');
+    sourceOnlyCanvas = sourceOnlyHost?.firstElementChild ?? null;
+    const targetOption = mountedOptionByText(sourceOnlyTargetSelect, 'menu.createFrame');
+    if (targetOption === null) throw new Error('mounted SourceEditor did not expose menu.createFrame');
+    await act(async () => {
+      flushSync(() => {
+        targetSelect.value = targetOption.value;
+        targetSelect.dispatchEvent(new MountedDomEvent('change', { bubbles: true, cancelable: true }));
+      });
+      targetCommitCanvasStatus = mountedElementText(container, 'x4-ui-canvas-status');
+    });
+    const parentTargetSnapshot = mountedElementText(container, 'x4-ui-parent-verification-snapshot');
+    const parentTargetCallback = parentSnapshotCallbacks
+      .find(callback => callback.snapshot.includes('ui/pipeline_test.lua') && callback.snapshot.includes('menu.createFrame'));
+    const currentHost = mountedElementByTestId(container, 'x4-ui-canvas-host');
+    const currentCanvas = currentHost?.firstElementChild;
+    const currentExport = mountedElementByTestId(container, 'x4-ui-canvas-export');
+    const currentCanvasStatus = mountedElementText(container, 'x4-ui-canvas-status');
+    const currentCanvasDetail = mountedElementText(container, 'x4-ui-canvas-detail');
+    const currentSourceIdentity = mountedElementText(container, 'x4-ui-selected-source-identity');
+    const currentTargetMetadata = mountedElementText(container, 'x4-ui-canvas-export-target');
+    const currentSceneStatus = mountedElementText(container, 'x4-ui-preview-geometry-scene-status');
+    const currentExportStatus = mountedElementText(container, 'x4-ui-canvas-export-status');
+    const currentExportProfile = mountedElementText(container, 'x4-ui-canvas-export-profile');
+    const currentNativeBitmapWidth = mountedElementText(container, 'x4-ui-canvas-export-native-width');
+    const currentNativeBitmapHeight = mountedElementText(container, 'x4-ui-canvas-export-native-height');
+    if (currentCanvas === null) {
+      throw new Error(`current transition did not mount a canvas: status=${currentCanvasStatus}, detail=${currentCanvasDetail}, exportDisabled=${String(currentExport?.disabled)}`);
+    }
+
+    const preset = KEEP_OUT_PRESETS.find(candidate => candidate.members.some(member => member.applicability === 'applicable')) ?? KEEP_OUT_PRESETS[0];
+    if (preset === undefined) throw new Error('mounted SourceEditor has no keep-out preset fixture');
+    const presetButton = mountedElementByTestId(container, `x4-ui-keepout-preset-${preset.id}`);
+    if (presetButton === null) throw new Error(`mounted SourceEditor did not expose keep-out preset ${preset.id}`);
+    await flush(() => presetButton.click());
+    const activePresetButton = mountedElementByTestId(container, `x4-ui-keepout-preset-${preset.id}`);
+    const offButton = mountedElementByTestId(container, 'x4-ui-keepout-off');
+    const presetExport = mountedElementByTestId(container, 'x4-ui-canvas-export');
+    const presetCanvasStatus = mountedElementText(container, 'x4-ui-canvas-status');
+    const presetActive = activePresetButton?.className.includes('border-cyan-400') === true
+      && offButton?.className.includes('border-cyan-400') !== true;
+    await flush(() => offButton?.click());
+    const committedCanvasBeforeStale = mountedElementByTestId(container, 'x4-ui-canvas-host')?.firstElementChild ?? null;
+
+    const currentTargetSelect = mountedElementByTestId(container, 'x4-ui-target-selector');
+    if (currentTargetSelect === null) throw new Error('target selector disappeared after exact target commit');
+    await flush(() => {
+      currentTargetSelect.value = '';
+      currentTargetSelect.dispatchEvent(new MountedDomEvent('change', { bubbles: true, cancelable: true }));
+    });
+    const staleHost = mountedElementByTestId(container, 'x4-ui-canvas-host');
+    const staleCanvas = staleHost?.firstElementChild;
+    const staleCanvasStatus = mountedElementText(container, 'x4-ui-canvas-status');
+    const staleExportStatus = mountedElementText(container, 'x4-ui-canvas-export-status');
+
+    const restoredTargetSelect = mountedElementByTestId(container, 'x4-ui-target-selector');
+    if (restoredTargetSelect === null) throw new Error('target selector disappeared while restoring exact selection');
+    const restoredTargetOption = mountedOptionByText(restoredTargetSelect, 'menu.createFrame');
+    if (restoredTargetOption === null) throw new Error('menu.createFrame disappeared while restoring exact selection');
+    await flush(() => {
+      restoredTargetSelect.value = restoredTargetOption.value;
+      restoredTargetSelect.dispatchEvent(new MountedDomEvent('change', { bubbles: true, cancelable: true }));
+    });
+    const restoredHost = mountedElementByTestId(container, 'x4-ui-canvas-host');
+    const restoredCanvas = restoredHost?.firstElementChild;
+    const restoredExport = mountedElementByTestId(container, 'x4-ui-canvas-export');
+    const restoredCanvasStatus = mountedElementText(container, 'x4-ui-canvas-status');
+    return {
+      initialCanvasStatus,
+      initialCanvasDetail,
+      parentInitialSnapshot,
+      sourceOnlyCanvasStatus,
+      sourceOnlyCanvasDetail,
+      parentSourceOnlySnapshot,
+      sourceOnlyCanvasRetained: sourceOnlyCanvas === null,
+      currentCanvasStatus,
+      currentCanvasDetail,
+      currentCanvasMounted: currentCanvas instanceof MountedCanvasElement,
+      currentCanvasReplaced: currentCanvas !== sourceOnlyCanvas,
+      currentCanvasWidth: currentCanvas instanceof MountedCanvasElement ? currentCanvas.width : 0,
+      currentCanvasHeight: currentCanvas instanceof MountedCanvasElement ? currentCanvas.height : 0,
+      targetCommitCanvasStatus,
+      parentTargetSnapshot,
+      parentTargetCallbackCanvasStatus: parentTargetCallback?.canvasStatus ?? '',
+      parentTargetCallbackCanvasMounted: parentTargetCallback?.canvasMounted === true,
+      parentTargetCallbackExportDisabled: parentTargetCallback?.exportDisabled === true,
+      currentExportDisabled: currentExport?.disabled === true,
+      currentExportStatus,
+      currentExportProfile,
+      currentNativeBitmapWidth,
+      currentNativeBitmapHeight,
+      currentSourceIdentity,
+      currentTargetMetadata,
+      currentSceneStatus,
+      presetActive,
+      presetCanvasStatus,
+      presetExportDisabled: presetExport?.disabled === true,
+      staleCanvasStatus,
+      staleCanvasRetained: staleCanvas === committedCanvasBeforeStale,
+      staleExportStatus,
+      restoredCanvasStatus,
+      restoredCanvasReplaced: restoredCanvas !== committedCanvasBeforeStale,
+      restoredExportDisabled: restoredExport?.disabled === true,
+    };
+  } finally {
+    if (root !== undefined) {
+      await act(async () => {
+        root?.unmount();
+        await Promise.resolve();
+      });
+    }
+    restoreGlobals();
+    container.removeEventListener('change', requestParentRenderOnChange);
+  }
 }
 
 async function recordP7SourceRow(
@@ -4196,6 +4848,63 @@ async function runP7SourceEditorCanonicalColorMatrix(): Promise<void> {
   const core = fixture?.core;
   const color = fixture?.color;
   const fixtureReady = fixture !== undefined;
+
+  await recordP7SourceRow(
+    'P8 mounted SourceEditor source-then-target transition replaces the prior refusal and preserves stale-result semantics',
+    fixtureReady,
+    'the actual mounted React source selector first refuses without a target, an exact menu.createFrame target commits a current canvas and enables export, source-only transition retains the prior canvas as stale, and restoring the target commits a replacement current canvas',
+    async () => {
+      if (fixture === undefined) throw new Error(fixtureError ?? 'SourceEditor P8 canonical fixture unavailable');
+      return runMountedSourceEditorTransitionRegression(fixture);
+    },
+    observed => {
+      const receipt = p7SourceRecord(observed);
+      return receipt?.initialCanvasStatus === 'refused'
+        && typeof receipt.initialCanvasDetail === 'string'
+        && receipt.initialCanvasDetail.includes('exact source index/path/identity and target ID/range are required')
+        && receipt.parentInitialSnapshot === 'null'
+        && receipt.sourceOnlyCanvasStatus === 'refused'
+        && typeof receipt.sourceOnlyCanvasDetail === 'string'
+        && receipt.sourceOnlyCanvasDetail.includes('exact source index/path/identity and target ID/range are required')
+        && receipt.parentSourceOnlySnapshot === 'null'
+        && receipt.sourceOnlyCanvasRetained === true
+        && receipt.currentCanvasStatus === 'rendered/current'
+        && receipt.targetCommitCanvasStatus === 'rendered/current'
+        && typeof receipt.currentCanvasDetail === 'string'
+        && !receipt.currentCanvasDetail.includes('exact source index/path/identity and target ID/range are required')
+        && receipt.currentCanvasMounted === true
+        && receipt.currentCanvasReplaced === true
+        && receipt.currentCanvasWidth === 2560
+        && receipt.currentCanvasHeight === 1440
+        && receipt.currentExportDisabled === false
+        && receipt.currentExportStatus === 'ready · native PNG export uses the mounted current canvas'
+        && typeof receipt.currentExportProfile === 'string'
+        && receipt.currentExportProfile.includes('drawable 2560 × 1440')
+        && receipt.currentExportProfile.includes('Effective Helper scale 1.4')
+        && receipt.currentNativeBitmapWidth === '2560'
+        && receipt.currentNativeBitmapHeight === '1440'
+        && typeof receipt.parentTargetSnapshot === 'string'
+        && receipt.parentTargetSnapshot.includes('ui/pipeline_test.lua')
+        && receipt.parentTargetSnapshot.includes('menu.createFrame')
+        && receipt.parentTargetCallbackCanvasStatus === 'rendered/current'
+        && receipt.parentTargetCallbackCanvasMounted === true
+        && receipt.parentTargetCallbackExportDisabled === false
+        && typeof receipt.currentSourceIdentity === 'string'
+        && receipt.currentSourceIdentity.includes('ui/pipeline_test.lua')
+        && typeof receipt.currentTargetMetadata === 'string'
+        && receipt.currentTargetMetadata.includes('menu.createFrame')
+        && receipt.currentSceneStatus === 'partial'
+        && receipt.presetActive === true
+        && receipt.presetCanvasStatus === 'rendered/current'
+        && receipt.presetExportDisabled === false
+        && receipt.staleCanvasStatus === 'stale'
+        && receipt.staleCanvasRetained === true
+        && receipt.staleExportStatus === 'unavailable · Current rendered canvas evidence is unavailable or stale.'
+        && receipt.restoredCanvasStatus === 'rendered/current'
+        && receipt.restoredCanvasReplaced === true
+        && receipt.restoredExportDisabled === false;
+    },
+  );
 
   await recordP7SourceRow(
     'P7 SourceEditor default dual loader overlaps branches and preserves the fulfilled authority when the injected branch rejects',

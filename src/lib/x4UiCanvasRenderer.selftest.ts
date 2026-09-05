@@ -33,6 +33,7 @@ import {
 import {
   buildX4UiPreviewProfile,
   projectX4UiPreviewPipeline,
+  type X4UiPreviewSelection,
   type X4UiPreviewPipelineResult,
 } from './x4UiPreviewPipeline';
 import {
@@ -418,7 +419,7 @@ function boundedCompositionSourceFixture(): X4UiWorkspaceSource {
   ]));
 }
 
-function acceptedPlan(corpus: X4UiCorpusCanonicalSuccess): { readonly corpus: X4UiCorpusCanonicalSuccess; readonly preview: X4UiPreviewPipelineResult; readonly paint: Extract<X4UiPaintPlanResult, { readonly status: 'projected' | 'partial' }> } {
+function acceptedPlan(corpus: X4UiCorpusCanonicalSuccess): { readonly corpus: X4UiCorpusCanonicalSuccess; readonly source: X4UiWorkspaceSource; readonly selection: X4UiPreviewSelection; readonly preview: X4UiPreviewPipelineResult; readonly paint: Extract<X4UiPaintPlanResult, { readonly status: 'projected' | 'partial' }> } {
   const source = sourceFixture();
   const sourceFile = source.bundle?.sourceFiles.find(file => file.path === 'ui/canvas.lua');
   if (sourceFile === undefined) throw new Error('source fixture did not produce ui/canvas.lua');
@@ -438,14 +439,14 @@ function acceptedPlan(corpus: X4UiCorpusCanonicalSuccess): { readonly corpus: X4
   const keepOuts = [
     { context: KEEP_OUT_PRESET_IDS.cockpitConversation, entry: getBuiltInKeepOut(KEEP_OUT_IDS.conversationBackRow)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.conversationBackRow, viewport) },
     { context: KEEP_OUT_PRESET_IDS.cockpitConversation, entry: getBuiltInKeepOut(KEEP_OUT_IDS.conversationOptionStackStart)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.conversationOptionStackStart, viewport) },
-    { context: KEEP_OUT_PRESET_IDS.mapOpen, entry: getBuiltInKeepOut(KEEP_OUT_IDS.informationPanelLeftEdge)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.informationPanelLeftEdge, viewport) },
-    { context: KEEP_OUT_PRESET_IDS.fullscreenMenu, entry: getBuiltInKeepOut(KEEP_OUT_IDS.missionMessagesTicker)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.missionMessagesTicker, viewport) },
-    { context: KEEP_OUT_PRESET_IDS.firstPerson, entry: getBuiltInKeepOut(KEEP_OUT_IDS.topHudStrip)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.topHudStrip, viewport) },
+    { context: KEEP_OUT_PRESET_IDS.cockpitConversation, entry: getBuiltInKeepOut(KEEP_OUT_IDS.informationPanelLeftEdge)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.informationPanelLeftEdge, viewport) },
+    { context: KEEP_OUT_PRESET_IDS.mapOpen, entry: getBuiltInKeepOut(KEEP_OUT_IDS.topHudStrip)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.topHudStrip, viewport) },
+    { context: KEEP_OUT_PRESET_IDS.firstPerson, entry: getBuiltInKeepOut(KEEP_OUT_IDS.missionMessagesTicker)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.missionMessagesTicker, viewport) },
   ] as const;
   const selectedNode = preview.scene.scene.widgets[0]?.id;
   const paintResult = projectX4UiPaintPlan({ scene: preview.scene.scene, corpus, previewAuthority: preview, keepOuts, selection: selectedNode === undefined ? undefined : { nodeIds: [selectedNode] } });
   if (paintResult.status === 'refused') throw new Error(`paint fixture refused: ${JSON.stringify(paintResult)}`);
-  return { corpus, preview, paint: paintResult };
+  return { corpus, source, selection, preview, paint: paintResult };
 }
 
 type TraceEntry = { readonly role: string; readonly name: string; readonly args: readonly unknown[] };
@@ -1812,6 +1813,28 @@ const CANONICAL_POLYGON_COMPOSITE_TRACE: readonly TraceEntry[] = [
   traceEntry('composite', "stroke"),
   traceEntry('composite', "setStrokeStyle", "#fb7185"),
   traceEntry('composite', "setStrokeStyle", "#fb7185"),
+];
+
+const SCREENSHOT_CALIBRATED_TOP_HUD_TRACE: readonly TraceEntry[] = [
+  traceEntry('composite', 'setStrokeStyle', X4_UI_CANVAS_DIAGNOSTIC_PALETTE.keepOut),
+  traceEntry('composite', 'beginPath'),
+  traceEntry('composite', 'moveTo', 100 * 0.419811320754717, 80 * 0.008130081300813009),
+  traceEntry('composite', 'lineTo', 100 * 0.5794025157232704, 80 * 0.008130081300813009),
+  traceEntry('composite', 'lineTo', 100 * 0.5794025157232704, 80 * 0.07982261640798226),
+  traceEntry('composite', 'lineTo', 100 * 0.419811320754717, 80 * 0.07982261640798226),
+  traceEntry('composite', 'closePath'),
+  traceEntry('composite', 'stroke'),
+];
+
+const SCREENSHOT_CALIBRATED_MISSION_MESSAGES_TRACE: readonly TraceEntry[] = [
+  traceEntry('composite', 'setStrokeStyle', X4_UI_CANVAS_DIAGNOSTIC_PALETTE.keepOut),
+  traceEntry('composite', 'beginPath'),
+  traceEntry('composite', 'moveTo', 100 * 0.0994496855345912, 80 * 0.943089430894309),
+  traceEntry('composite', 'lineTo', 100 * 0.33372641509433965, 80 * 0.8484848484848485),
+  traceEntry('composite', 'lineTo', 100 * 0.33372641509433965, 80 * 0.9150036954915004),
+  traceEntry('composite', 'lineTo', 100 * 0.11006289308176101, 80),
+  traceEntry('composite', 'closePath'),
+  traceEntry('composite', 'stroke'),
 ];
 
 function successfulBoundaryIsComplete(result: X4UiCanvasRenderResult): boolean {
@@ -3598,7 +3621,11 @@ async function main(): Promise<void> {
   const firstResult = renderX4UiPaintPlanToCanvas(paint, corpus, { surfaceFactory: makeFactory(firstFactoryTraces) });
   const firstReceipt = firstResult.receipt;
   const firstCompositeTrace = firstFactoryTraces.filter(entry => entry.role === 'composite');
-  const expectedFirstCompositeTrace = CANONICAL_COMPOSITE_TRACE;
+  const expectedFirstCompositeTrace = [
+    ...CANONICAL_COMPOSITE_TRACE.slice(0, -2),
+    ...SCREENSHOT_CALIBRATED_TOP_HUD_TRACE,
+    ...SCREENSHOT_CALIBRATED_MISSION_MESSAGES_TRACE,
+  ];
   const rawFactoryTrace: TraceEntry[] = [];
   const rawAttempt = attemptRender(paint, corpus, makeFactory(rawFactoryTrace));
   const rawResult = completedResult(rawAttempt);
@@ -3773,52 +3800,200 @@ async function main(): Promise<void> {
         : { status: productionProjectedWithReasonResult?.status },
     },
   );
-  const unavailableReasonOmitted = forgedResult(paint, (_plan, layers) => {
-    const command = layers[3]?.commands.find(candidate => candidate.entryId === KEEP_OUT_IDS.missionMessagesTicker);
-    if (command !== undefined) Reflect.deleteProperty(command, 'reason');
-  });
-  const unavailableReasonOmittedAttempt = attemptRender(unavailableReasonOmitted, corpus, makeFactory([]));
-  const unavailableReasonOmittedResult = completedResult(unavailableReasonOmittedAttempt);
-  familyCheck(
-    'batch-6d-causal',
-    'causal unavailable production keep-out reason omission refuses before Canvas paint',
-    unavailableReasonOmittedAttempt.threw === false
-      && unavailableReasonOmittedResult?.status === 'refused'
-      && unavailableReasonOmittedResult.receipt.refusal.code === 'invalid-keepout'
-      && refusalBoundaryIsComplete(unavailableReasonOmittedResult),
-    {
-      fixtureReady: paint.plan.keepOuts.some(command => command.entryId === KEEP_OUT_IDS.missionMessagesTicker && command.status === 'unavailable'),
-      seamReached: true,
-      threw: unavailableReasonOmittedAttempt.threw,
-      expected: { status: 'refused', code: 'invalid-keepout', reason: 'unavailable commands require reference-unmeasured' },
-      observed: unavailableReasonOmittedResult?.status === 'refused'
-        ? { status: unavailableReasonOmittedResult.status, refusal: unavailableReasonOmittedResult.receipt.refusal }
-        : { status: unavailableReasonOmittedResult?.status },
+  const expectCalibratedProductionRefusal = (
+    name: string,
+    entryId: string,
+    mutate: (command: JsonRecord) => void,
+  ): void => {
+    const forged = forgedResult(paint, (_plan, layers) => {
+      const command = layers[3]?.commands.find(candidate => candidate.entryId === entryId);
+      if (command !== undefined) mutate(command);
+    });
+    const attempt = attemptRender(forged, corpus, makeFactory([]));
+    const result = completedResult(attempt);
+    familyCheck(
+      'batch-6d-causal',
+      name,
+      attempt.threw === false
+        && result?.status === 'refused'
+        && result.receipt.refusal.code === 'invalid-keepout'
+        && refusalBoundaryIsComplete(result),
+      {
+        fixtureReady: paint.plan.keepOuts.some(command => command.entryId === entryId && command.status === 'projected' && command.evidenceGrade === 'calibrated' && command.geometry?.kind === 'polygon'),
+        seamReached: true,
+        threw: attempt.threw,
+        expected: { status: 'refused', code: 'invalid-keepout', entryId },
+        observed: result?.status === 'refused'
+          ? { status: result.status, refusal: result.receipt.refusal }
+          : { status: result?.status },
+      },
+    );
+  };
+  expectCalibratedProductionRefusal(
+    'causal calibrated production keep-out reason injection refuses before Canvas paint',
+    KEEP_OUT_IDS.missionMessagesTicker,
+    command => { command.reason = 'unexpected-reason'; },
+  );
+  expectCalibratedProductionRefusal(
+    'causal calibrated production keep-out point mutation refuses before Canvas paint',
+    KEEP_OUT_IDS.missionMessagesTicker,
+    command => {
+      const geometry = command.geometry as JsonRecord;
+      const points = geometry.points as JsonRecord[];
+      const point = points[0];
+      if (point !== undefined) point.x = Number(point.x) + 1;
     },
   );
-  const unavailableWrongReason = forgedResult(paint, (_plan, layers) => {
-    const command = layers[3]?.commands.find(candidate => candidate.entryId === KEEP_OUT_IDS.missionMessagesTicker);
-    if (command !== undefined) command.reason = 'wrong-reason';
-  });
-  const unavailableWrongReasonAttempt = attemptRender(unavailableWrongReason, corpus, makeFactory([]));
-  const unavailableWrongReasonResult = completedResult(unavailableWrongReasonAttempt);
-  familyCheck(
-    'batch-6d-causal',
-    'causal unavailable production keep-out wrong reason refuses before Canvas paint',
-    unavailableWrongReasonAttempt.threw === false
-      && unavailableWrongReasonResult?.status === 'refused'
-      && unavailableWrongReasonResult.receipt.refusal.code === 'invalid-keepout'
-      && refusalBoundaryIsComplete(unavailableWrongReasonResult),
-    {
-      fixtureReady: paint.plan.keepOuts.some(command => command.entryId === KEEP_OUT_IDS.missionMessagesTicker && command.status === 'unavailable'),
-      seamReached: true,
-      threw: unavailableWrongReasonAttempt.threw,
-      expected: { status: 'refused', code: 'invalid-keepout', reason: 'unavailable commands require exact reference-unmeasured' },
-      observed: unavailableWrongReasonResult?.status === 'refused'
-        ? { status: unavailableWrongReasonResult.status, refusal: unavailableWrongReasonResult.receipt.refusal }
-        : { status: unavailableWrongReasonResult?.status },
+  expectCalibratedProductionRefusal(
+    'causal calibrated production keep-out evidence-grade mutation refuses before Canvas paint',
+    KEEP_OUT_IDS.topHudStrip,
+    command => { command.evidenceGrade = 'measured-guide'; },
+  );
+  expectCalibratedProductionRefusal(
+    'causal calibrated production keep-out status mutation refuses before Canvas paint',
+    KEEP_OUT_IDS.topHudStrip,
+    command => {
+      command.status = 'unavailable';
+      command.geometry = null;
+      command.reason = 'reference-unmeasured';
     },
   );
+  const unsupportedProductionContextCases = [
+    { entryId: KEEP_OUT_IDS.conversationBackRow, unsupportedContext: KEEP_OUT_PRESET_IDS.mapOpen },
+    { entryId: KEEP_OUT_IDS.conversationOptionStackStart, unsupportedContext: KEEP_OUT_PRESET_IDS.fullscreenMenu },
+    { entryId: KEEP_OUT_IDS.informationPanelLeftEdge, unsupportedContext: KEEP_OUT_PRESET_IDS.firstPerson },
+    { entryId: KEEP_OUT_IDS.missionMessagesTicker, unsupportedContext: KEEP_OUT_PRESET_IDS.mapOpen },
+    { entryId: KEEP_OUT_IDS.topHudStrip, unsupportedContext: KEEP_OUT_PRESET_IDS.cockpitConversation },
+  ] as const;
+  for (const testCase of unsupportedProductionContextCases) {
+    const forged = forgedResult(paint, (_plan, layers) => {
+      const command = layers[3]?.commands.find(candidate => candidate.entryId === testCase.entryId);
+      if (command !== undefined) command.context = testCase.unsupportedContext;
+    });
+    const activity = emptyActivityLedger();
+    const attempt = attemptRender(forged, corpus, makeObservedFactory(activity));
+    const result = completedResult(attempt);
+    familyCheck(
+      'batch-6d-causal',
+      `causal production keep-out ${testCase.entryId} rejects unsupported ${testCase.unsupportedContext} context before allocation or paint`,
+      attempt.threw === false
+        && result?.status === 'refused'
+        && result.receipt.refusal.code === 'invalid-keepout'
+        && refusalBoundaryIsComplete(result)
+        && activityIsZero(activity),
+      {
+        fixtureReady: paint.plan.keepOuts.some(command => command.entryId === testCase.entryId && command.status === 'projected'),
+        seamReached: true,
+        expected: { status: 'refused', code: 'invalid-keepout', allocationOrPaint: false },
+        observed: result?.status === 'refused'
+          ? { status: result.status, refusal: result.receipt.refusal }
+          : { status: result?.status },
+        threw: attempt.threw,
+        activity: activitySignature(activity),
+      },
+    );
+  }
+  const canvasContextCases = [
+    { context: KEEP_OUT_PRESET_IDS.cockpitConversation, entryId: KEEP_OUT_IDS.conversationBackRow, geometryKind: 'horizontal-guide' },
+    { context: KEEP_OUT_PRESET_IDS.mapOpen, entryId: KEEP_OUT_IDS.topHudStrip, geometryKind: 'polygon' },
+    { context: KEEP_OUT_PRESET_IDS.fullscreenMenu, entryId: KEEP_OUT_IDS.topHudStrip, geometryKind: 'polygon' },
+    { context: KEEP_OUT_PRESET_IDS.firstPerson, entryId: KEEP_OUT_IDS.missionMessagesTicker, geometryKind: 'polygon' },
+  ] as const;
+  for (const testCase of canvasContextCases) {
+    const entry = getBuiltInKeepOut(testCase.entryId);
+    const projection = entry === undefined ? undefined : projectBuiltInKeepOut(testCase.entryId, viewport);
+    const contextPaint = entry === undefined || projection === undefined || fixture.preview.scene === undefined
+      ? undefined
+      : projectX4UiPaintPlan({
+        scene: fixture.preview.scene,
+        corpus,
+        previewAuthority: fixture.preview,
+        keepOuts: [{ context: testCase.context, entry, projection }],
+      });
+    const contextTrace: TraceEntry[] = [];
+    const contextResult = contextPaint === undefined
+      ? undefined
+      : renderX4UiPaintPlanToCanvas(contextPaint, corpus, { surfaceFactory: makeFactory(contextTrace) });
+    const contextCommand = contextPaint?.status !== 'refused' ? contextPaint?.plan.keepOuts[0] : undefined;
+    const expectedContextTrace = contextCommand === undefined || contextPaint?.status === 'refused'
+      ? []
+      : expectedCommandTrace(contextCommand as unknown as JsonRecord, contextPaint.plan, corpus);
+    familyCheck(
+      'batch-6d-causal',
+      `four-context Canvas trace remains drawable for ${testCase.context}`,
+      contextPaint?.status !== 'refused'
+        && contextResult?.status === 'rendered'
+        && contextCommand?.context === testCase.context
+        && contextCommand.entryId === testCase.entryId
+        && contextCommand.status === 'projected'
+        && contextCommand.geometry?.kind === testCase.geometryKind
+        && traceContainsSequence(contextTrace.filter(trace => trace.role === 'composite'), expectedContextTrace),
+      {
+        context: testCase.context,
+        entryId: testCase.entryId,
+        paint: contextPaint?.status,
+        canvas: contextResult?.status,
+        command: contextCommand,
+        expectedContextTrace,
+      },
+    );
+  }
+  const calibratedDrawable = { width: 2544, height: 1353 } as const;
+  const calibratedProfile = {
+    id: 'canvas-preview-calibrated-drawable',
+    provenance: 'Batch 6D renderer calibrated-drawable selftest',
+    truthGrade: 'supplied' as const,
+    source: fixture.selection.sourceIdentity,
+    drawable: calibratedDrawable,
+    uiScale: 1,
+    minTextHeight: 10,
+  };
+  buildX4UiPreviewProfile(calibratedProfile);
+  const calibratedPreview = projectX4UiPreviewPipeline({ source: fixture.source, corpus, profile: calibratedProfile, selection: fixture.selection });
+  for (const testCase of canvasContextCases) {
+    const entry = getBuiltInKeepOut(testCase.entryId);
+    const projection = entry === undefined ? undefined : projectBuiltInKeepOut(testCase.entryId, calibratedDrawable);
+    const contextPaint = entry === undefined || projection === undefined || calibratedPreview.scene === undefined
+      ? undefined
+      : projectX4UiPaintPlan({
+        scene: calibratedPreview.scene,
+        corpus,
+        previewAuthority: calibratedPreview,
+        keepOuts: [{ context: testCase.context, entry, projection }],
+      });
+    const contextTrace: TraceEntry[] = [];
+    const contextResult = contextPaint === undefined
+      ? undefined
+      : renderX4UiPaintPlanToCanvas(contextPaint, corpus, { surfaceFactory: makeFactory(contextTrace) });
+    const contextCommand = contextPaint?.status !== 'refused' ? contextPaint?.plan.keepOuts[0] : undefined;
+    const expectedContextTrace = contextCommand === undefined || contextPaint?.status === 'refused'
+      ? []
+      : expectedCommandTrace(contextCommand as unknown as JsonRecord, contextPaint.plan, corpus);
+    familyCheck(
+      'batch-6d-causal',
+      `four-context Canvas trace remains drawable at 2544x1353 for ${testCase.context}`,
+      calibratedPreview.scene !== undefined
+        && contextPaint?.status !== 'refused'
+        && contextResult?.status === 'rendered'
+        && contextPaint.plan.logicalDrawable.width === calibratedDrawable.width
+        && contextPaint.plan.logicalDrawable.height === calibratedDrawable.height
+        && contextCommand?.context === testCase.context
+        && contextCommand.entryId === testCase.entryId
+        && contextCommand.status === 'projected'
+        && contextCommand.geometry?.kind === testCase.geometryKind
+        && traceContainsSequence(contextTrace.filter(trace => trace.role === 'composite'), expectedContextTrace),
+      {
+        drawable: calibratedDrawable,
+        context: testCase.context,
+        entryId: testCase.entryId,
+        preview: calibratedPreview.status,
+        paint: contextPaint?.status,
+        canvas: contextResult?.status,
+        command: contextCommand,
+        expectedContextTrace,
+      },
+    );
+  }
   const regularStagedRgba: Uint8ClampedArray[] = [];
   const boldStagedRgba: Uint8ClampedArray[] = [];
   const atlasRgbaActivity = emptyActivityLedger();
@@ -3950,16 +4125,20 @@ async function main(): Promise<void> {
       keepOuts: [
         { context: KEEP_OUT_PRESET_IDS.cockpitConversation, entry: getBuiltInKeepOut(KEEP_OUT_IDS.conversationBackRow)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.conversationBackRow, viewport) },
         { context: polygonEntry.context, entry: polygonEntry, projection: polygonProjection },
-        { context: KEEP_OUT_PRESET_IDS.mapOpen, entry: getBuiltInKeepOut(KEEP_OUT_IDS.informationPanelLeftEdge)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.informationPanelLeftEdge, viewport) },
-        { context: KEEP_OUT_PRESET_IDS.fullscreenMenu, entry: getBuiltInKeepOut(KEEP_OUT_IDS.missionMessagesTicker)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.missionMessagesTicker, viewport) },
-        { context: KEEP_OUT_PRESET_IDS.firstPerson, entry: getBuiltInKeepOut(KEEP_OUT_IDS.topHudStrip)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.topHudStrip, viewport) },
+        { context: KEEP_OUT_PRESET_IDS.cockpitConversation, entry: getBuiltInKeepOut(KEEP_OUT_IDS.informationPanelLeftEdge)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.informationPanelLeftEdge, viewport) },
+        { context: KEEP_OUT_PRESET_IDS.mapOpen, entry: getBuiltInKeepOut(KEEP_OUT_IDS.topHudStrip)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.topHudStrip, viewport) },
+        { context: KEEP_OUT_PRESET_IDS.firstPerson, entry: getBuiltInKeepOut(KEEP_OUT_IDS.missionMessagesTicker)!, projection: projectBuiltInKeepOut(KEEP_OUT_IDS.missionMessagesTicker, viewport) },
       ],
     });
   const polygonPlan = polygonPaintResult !== undefined && polygonPaintResult.status !== 'refused' ? polygonPaintResult : paint;
   const polygonTrace: TraceEntry[] = [];
   const polygonResult = renderX4UiPaintPlanToCanvas(polygonPlan, corpus, { surfaceFactory: makeFactory(polygonTrace) });
   const polygonCompositeTrace = polygonTrace.filter(entry => entry.role === 'composite');
-  const expectedPolygonTrace = CANONICAL_POLYGON_COMPOSITE_TRACE;
+  const expectedPolygonTrace = [
+    ...CANONICAL_POLYGON_COMPOSITE_TRACE.slice(0, -2),
+    ...SCREENSHOT_CALIBRATED_TOP_HUD_TRACE,
+    ...SCREENSHOT_CALIBRATED_MISSION_MESSAGES_TRACE,
+  ];
   const exactPolygonPath = [
     traceEntry('composite', 'setStrokeStyle', X4_UI_CANVAS_DIAGNOSTIC_PALETTE.keepOut),
     traceEntry('composite', 'beginPath'),
@@ -3969,8 +4148,8 @@ async function main(): Promise<void> {
     traceEntry('composite', 'closePath'),
     traceEntry('composite', 'stroke'),
   ];
-  const unavailableTrace = [traceEntry('composite', 'setStrokeStyle', X4_UI_CANVAS_DIAGNOSTIC_PALETTE.unavailableKeepOut)];
-  check('polygon and unavailable keep-out overlays are retained from real manual calibration', polygonCalibration.status === 'success' && polygonEntry !== undefined && polygonProjection?.status === 'projected' && polygonPaintResult?.status !== 'refused' && polygonPaintResult !== undefined && polygonResult.status === 'rendered' && polygonPlan.plan.keepOuts.some(command => command.entryId === polygonEntry.id && command.geometry?.kind === 'polygon') && polygonPlan.plan.keepOuts.some(command => command.status === 'unavailable' && command.geometry === null) && traceEquals(polygonCompositeTrace, expectedPolygonTrace) && traceContainsSequence(polygonCompositeTrace, exactPolygonPath) && traceContainsSequence(polygonCompositeTrace, unavailableTrace), { calibration: polygonCalibration.status, projection: polygonProjection?.status, paint: polygonPaintResult?.status, keepOuts: polygonPlan.plan.keepOuts, exactPolygonPath, unavailableTrace, firstTraceDifference: firstTraceDifference(expectedPolygonTrace, polygonCompositeTrace) });
+  const calibratedBuiltInTrace = [...SCREENSHOT_CALIBRATED_TOP_HUD_TRACE, ...SCREENSHOT_CALIBRATED_MISSION_MESSAGES_TRACE];
+  check('polygon and screenshot-calibrated built-in keep-out overlays retain exact Canvas traces', polygonCalibration.status === 'success' && polygonEntry !== undefined && polygonProjection?.status === 'projected' && polygonPaintResult?.status !== 'refused' && polygonPaintResult !== undefined && polygonResult.status === 'rendered' && polygonPlan.plan.keepOuts.some(command => command.entryId === polygonEntry.id && command.geometry?.kind === 'polygon') && polygonPlan.plan.keepOuts.filter(command => command.entryId === KEEP_OUT_IDS.missionMessagesTicker || command.entryId === KEEP_OUT_IDS.topHudStrip).every(command => command.status === 'projected' && command.geometry?.kind === 'polygon') && traceEquals(polygonCompositeTrace, expectedPolygonTrace) && traceContainsSequence(polygonCompositeTrace, exactPolygonPath) && traceContainsSequence(polygonCompositeTrace, SCREENSHOT_CALIBRATED_TOP_HUD_TRACE) && traceContainsSequence(polygonCompositeTrace, SCREENSHOT_CALIBRATED_MISSION_MESSAGES_TRACE), { calibration: polygonCalibration.status, projection: polygonProjection?.status, paint: polygonPaintResult?.status, keepOuts: polygonPlan.plan.keepOuts, exactPolygonPath, calibratedBuiltInTrace, firstTraceDifference: firstTraceDifference(expectedPolygonTrace, polygonCompositeTrace) });
   familyCheck(
     'emitted-trace',
     'composite trace exactly follows fixed layers and every command terminal operation',
@@ -3999,17 +4178,15 @@ async function main(): Promise<void> {
   );
   familyCheck(
     'emitted-trace',
-    'guide polygon and unavailable keep-out traces are exact with no invented unavailable geometry',
+    'guide and screenshot-calibrated keep-out traces are exact with no invented unavailable geometry',
     traceContainsSequence(firstCompositeTrace, horizontalGuideTrace)
       && traceContainsSequence(firstCompositeTrace, verticalGuideTrace)
       && traceEquals(polygonCompositeTrace, expectedPolygonTrace)
       && traceContainsSequence(polygonCompositeTrace, exactPolygonPath)
-      && traceContainsSequence(polygonCompositeTrace, unavailableTrace)
-      && polygonPlan.plan.keepOuts.filter(command => command.geometry === null).every(command => {
-        const expected = expectedCommandTrace(command as unknown as JsonRecord, polygonPlan.plan, corpus);
-        return expected.length === 1 && expected[0]?.name === 'setStrokeStyle' && expected[0]?.args[0] === X4_UI_CANVAS_DIAGNOSTIC_PALETTE.unavailableKeepOut;
-      }),
-    { horizontalGuideTrace, verticalGuideTrace, exactPolygonPath, unavailableTrace },
+      && traceContainsSequence(polygonCompositeTrace, SCREENSHOT_CALIBRATED_TOP_HUD_TRACE)
+      && traceContainsSequence(polygonCompositeTrace, SCREENSHOT_CALIBRATED_MISSION_MESSAGES_TRACE)
+      && polygonPlan.plan.keepOuts.every(command => command.geometry !== null),
+    { horizontalGuideTrace, verticalGuideTrace, exactPolygonPath, calibratedBuiltInTrace },
   );
   check('empty layer remains paintable', (() => {
     const empty = forgedResult(paint, (_plan, layers) => { layers[3] = { kind: 'keep-out-overlays', commands: [] }; });

@@ -17,6 +17,10 @@ import {
   type X4UiPaintEditBoxCompositionEvidence,
   type X4UiPaintPlanResult,
 } from './x4UiPaintPlan';
+import {
+  getBuiltInKeepOut,
+  projectBuiltInKeepOut,
+} from './x4UiKeepOuts';
 
 export const X4_UI_CANVAS_RENDERER_FORMAT = 'x4-ui-canvas-renderer' as const;
 export const X4_UI_CANVAS_RENDERER_VERSION = 1 as const;
@@ -321,14 +325,25 @@ const KEEP_OUT_CONTEXTS = new Set([
 
 const KEEP_OUT_PRODUCTION_RULES = new Map<string, {
   readonly status: 'projected' | 'unavailable';
-  readonly evidenceGrade: 'measured-guide' | 'reference-unmeasured';
-  readonly geometry: 'horizontal-guide' | 'vertical-guide' | 'unavailable';
+  readonly evidenceGrade: 'measured-guide' | 'calibrated' | 'reference-unmeasured';
+  readonly geometry: 'horizontal-guide' | 'vertical-guide' | 'polygon' | 'unavailable';
+  readonly allowedContexts?: readonly string[];
 }>([
-  ['conversation-back-row', { status: 'projected', evidenceGrade: 'measured-guide', geometry: 'horizontal-guide' }],
-  ['conversation-option-stack-start', { status: 'projected', evidenceGrade: 'measured-guide', geometry: 'horizontal-guide' }],
-  ['information-panel-left-edge', { status: 'projected', evidenceGrade: 'measured-guide', geometry: 'vertical-guide' }],
-  ['mission-messages-ticker', { status: 'unavailable', evidenceGrade: 'reference-unmeasured', geometry: 'unavailable' }],
-  ['top-hud-strip', { status: 'unavailable', evidenceGrade: 'reference-unmeasured', geometry: 'unavailable' }],
+  ['conversation-back-row', { status: 'projected', evidenceGrade: 'measured-guide', geometry: 'horizontal-guide', allowedContexts: ['cockpit-conversation'] }],
+  ['conversation-option-stack-start', { status: 'projected', evidenceGrade: 'measured-guide', geometry: 'horizontal-guide', allowedContexts: ['cockpit-conversation'] }],
+  ['information-panel-left-edge', { status: 'projected', evidenceGrade: 'measured-guide', geometry: 'vertical-guide', allowedContexts: ['cockpit-conversation'] }],
+  ['mission-messages-ticker', {
+    status: 'projected',
+    evidenceGrade: 'calibrated',
+    geometry: 'polygon',
+    allowedContexts: ['cockpit-conversation', 'first-person'],
+  }],
+  ['top-hud-strip', {
+    status: 'projected',
+    evidenceGrade: 'calibrated',
+    geometry: 'polygon',
+    allowedContexts: ['map-open', 'fullscreen-menu'],
+  }],
 ]);
 
 const EVIDENCE_GRADES = new Set(['measured-guide', 'calibrated', 'reference-unmeasured']);
@@ -1249,6 +1264,36 @@ const validKeepOutGeometry = (value: unknown, drawable: Rect): boolean => {
     && (fieldValue(point as object, 'y') as number) <= drawable.height);
 };
 
+const exactCatalogPolygonMatches = (
+  entryId: string,
+  geometry: unknown,
+  drawable: Rect,
+): boolean => {
+  try {
+    const builtIn = getBuiltInKeepOut(entryId as Parameters<typeof getBuiltInKeepOut>[0]);
+    if (builtIn === undefined
+      || builtIn.kind !== 'polygon'
+      || builtIn.provenance.source !== 'production-evidence'
+      || builtIn.provenance.evidenceGrade !== 'calibrated') return false;
+    const expected = projectBuiltInKeepOut(entryId, { width: drawable.width, height: drawable.height });
+    if (expected.status !== 'projected') return false;
+    const expectedGeometry = expected.geometry;
+    if (expectedGeometry.kind !== 'polygon') return false;
+    if (!exactRecord(geometry, ['kind', 'points']) || fieldValue(geometry, 'kind') !== 'polygon') return false;
+    const points = fieldValue(geometry, 'points');
+    if (!isDenseArray(points, 100_000) || points.length !== expectedGeometry.points.length) return false;
+    return points.every((point, index) => {
+      const expectedPoint = expectedGeometry.points[index];
+      return expectedPoint !== undefined
+        && exactRecord(point, ['x', 'y'])
+        && fieldValue(point, 'x') === expectedPoint.x
+        && fieldValue(point, 'y') === expectedPoint.y;
+    });
+  } catch {
+    return false;
+  }
+};
+
 const copyValidatedRect = (value: unknown): Rect => ({
   x: fieldValue(value as object, 'x') as number,
   y: fieldValue(value as object, 'y') as number,
@@ -1456,6 +1501,7 @@ const validateCommand = (
   if (productionRule !== undefined) {
     const geometryKind = isPlainDataRecord(geometry) ? fieldValue(geometry, 'kind') : undefined;
     if (!KEEP_OUT_CONTEXTS.has(context)
+      || productionRule.allowedContexts !== undefined && !productionRule.allowedContexts.includes(context)
       || status !== productionRule.status
       || evidenceGrade !== productionRule.evidenceGrade
       || productionRule.geometry === 'unavailable' && geometry !== null
@@ -1466,6 +1512,9 @@ const validateCommand = (
       ? !reasonPresent || reason !== 'reference-unmeasured'
       : reasonPresent) {
       return refusal('invalid-keepout', 'production keep-out reason is inconsistent with its issued status');
+    }
+    if (productionRule.geometry === 'polygon' && !exactCatalogPolygonMatches(entryId, geometry, drawable)) {
+      return refusal('invalid-keepout', 'production calibrated keep-out geometry does not match its issued catalog polygon');
     }
   } else if (status !== 'projected' || evidenceGrade !== 'calibrated' || geometry === null
     || !isPlainDataRecord(geometry) || fieldValue(geometry, 'kind') !== 'polygon' || reasonPresent) {

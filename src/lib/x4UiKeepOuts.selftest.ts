@@ -5,6 +5,7 @@ import {
   KEEP_OUT_PRESET_IDS,
   NOT_VERIFIED_IN_GAME,
   calibrateKeepOutPolygon,
+  isIssuedKeepOutEntry,
   projectBuiltInKeepOut,
   projectKeepOut,
   type KeepOutCalibrationInput,
@@ -197,6 +198,131 @@ const BATCH_8C1_CAUSAL_MATRIX: readonly {
       return result;
     },
   },
+  {
+    name: "production-catalog-issues-exact-calibrated-polygons",
+    expected: "both target built-ins are production calibrated polygons with immutable screenshot evidence",
+    run: () => {
+      const ticker = BUILT_IN_KEEP_OUTS.find(entry => entry.id === KEEP_OUT_IDS.missionMessagesTicker);
+      const hud = BUILT_IN_KEEP_OUTS.find(entry => entry.id === KEEP_OUT_IDS.topHudStrip);
+      check(ticker?.kind === "polygon" && hud?.kind === "polygon", "target built-ins are not polygon entries");
+      if (ticker?.kind !== "polygon" || hud?.kind !== "polygon") return { ticker, hud };
+      checkEqual(ticker.provenance.source, "production-evidence", "Ticker production source");
+      checkEqual(hud.provenance.source, "production-evidence", "HUD production source");
+      checkEqual(ticker.provenance.evidenceGrade, "calibrated", "Ticker calibrated grade");
+      checkEqual(hud.provenance.evidenceGrade, "calibrated", "HUD calibrated grade");
+      checkEqual(ticker.provenance.screenshot?.hash, "777D001A6CDF46F77AAEE76F9AC7F6E4FFF9E8CFF0F5E7C3082E93E88388DF20", "Ticker screenshot");
+      checkEqual(hud.provenance.screenshot?.hash, "2BA6C8C065EF3563A0C2C06E814BCD226BA160BC0EE64981D07E01C01AD2ADC8", "HUD screenshot");
+      checkJsonEqual(ticker.provenance.drawableBounds, { left: 1, top: 31, width: 2544, height: 1353 }, "Ticker drawable");
+      checkJsonEqual(hud.provenance.drawableBounds, { left: 1, top: 31, width: 2544, height: 1353 }, "HUD drawable");
+      checkJsonEqual(ticker.geometry.points, [
+        { x: 0.0994496855345912, y: 0.943089430894309 },
+        { x: 0.33372641509433965, y: 0.8484848484848485 },
+        { x: 0.33372641509433965, y: 0.9150036954915004 },
+        { x: 0.11006289308176101, y: 1 },
+      ], "Ticker points");
+      checkJsonEqual(hud.geometry.points, [
+        { x: 0.419811320754717, y: 0.008130081300813009 },
+        { x: 0.5794025157232704, y: 0.008130081300813009 },
+        { x: 0.5794025157232704, y: 0.07982261640798226 },
+        { x: 0.419811320754717, y: 0.07982261640798226 },
+      ], "HUD points");
+      check(hud.provenance.sourceNote.includes("BD1CAD7C69A5B11F87BEBF2BC8B5C65677654A3ECB89F9917C79BA577EC64F26"), "HUD corroboration");
+      checkDeepFrozen(ticker, "Ticker production entry");
+      checkDeepFrozen(hud, "HUD production entry");
+      return { ticker, hud };
+    },
+  },
+  {
+    name: "production-catalog-issues-only-capture-supported-applicability",
+    expected: "ticker cockpit/first-person and HUD map/fullscreen only",
+    run: () => {
+      const matrix = KEEP_OUT_PRESETS.map(preset => Object.fromEntries(preset.members.map(member => [member.entryId, member.applicability])));
+      checkJsonEqual(matrix, [
+        {
+          "conversation-back-row": "applicable",
+          "conversation-option-stack-start": "applicable",
+          "information-panel-left-edge": "applicable",
+          "mission-messages-ticker": "applicable",
+          "top-hud-strip": "not-applicable",
+        },
+        {
+          "conversation-back-row": "not-applicable",
+          "conversation-option-stack-start": "not-applicable",
+          "information-panel-left-edge": "not-applicable",
+          "mission-messages-ticker": "not-applicable",
+          "top-hud-strip": "applicable",
+        },
+        {
+          "conversation-back-row": "not-applicable",
+          "conversation-option-stack-start": "not-applicable",
+          "information-panel-left-edge": "not-applicable",
+          "mission-messages-ticker": "not-applicable",
+          "top-hud-strip": "applicable",
+        },
+        {
+          "conversation-back-row": "not-applicable",
+          "conversation-option-stack-start": "not-applicable",
+          "information-panel-left-edge": "not-applicable",
+          "mission-messages-ticker": "applicable",
+          "top-hud-strip": "not-applicable",
+        },
+      ], "capture-supported applicability matrix");
+      return matrix;
+    },
+  },
+  {
+    name: "production-calibrated-json-clones-refuse-without-accessor-execution",
+    expected: "both exact JSON clones are non-issued and refuse projection without throwing; hostile accessors are not invoked",
+    run: () => {
+      const cloneResults = [
+        KEEP_OUT_IDS.missionMessagesTicker,
+        KEEP_OUT_IDS.topHudStrip,
+      ].map(entryId => {
+        const canonical = BUILT_IN_KEEP_OUTS.find(entry => entry.id === entryId);
+        check(canonical?.kind === "polygon", `${entryId} canonical polygon fixture`);
+        if (canonical?.kind !== "polygon") return { entryId, canonical };
+        const clone = JSON.parse(JSON.stringify(canonical)) as X4UiKeepOutEntry;
+        let threw = false;
+        let projection: ReturnType<typeof projectKeepOut> | undefined;
+        try {
+          projection = projectKeepOut(clone, { width: 2544, height: 1353 });
+        } catch {
+          threw = true;
+        }
+        checkEqual(isIssuedKeepOutEntry(canonical), true, `${entryId} canonical issued identity`);
+        checkEqual(isIssuedKeepOutEntry(clone), false, `${entryId} clone issued identity`);
+        checkEqual(threw, false, `${entryId} clone projection throw`);
+        checkEqual(projection?.status, "refused", `${entryId} clone projection status`);
+        if (projection?.status === "refused") checkEqual(projection.reason, "invalid-entry", `${entryId} clone refusal reason`);
+        return { entryId, canonicalIssued: true, cloneIssued: false, threw, projection };
+      });
+
+      const ticker = BUILT_IN_KEEP_OUTS.find(entry => entry.id === KEEP_OUT_IDS.missionMessagesTicker);
+      check(ticker?.kind === "polygon", "Ticker accessor fixture");
+      if (ticker?.kind !== "polygon") return { cloneResults, ticker };
+      let getterReads = 0;
+      const accessorClone = JSON.parse(JSON.stringify(ticker)) as Record<string, unknown>;
+      Object.defineProperty(accessorClone, "provenance", {
+        enumerable: true,
+        configurable: true,
+        get: () => {
+          getterReads += 1;
+          throw new Error("production clone accessor executed");
+        },
+      });
+      let accessorThrew = false;
+      let accessorProjection: ReturnType<typeof projectKeepOut> | undefined;
+      try {
+        accessorProjection = projectKeepOut(accessorClone as unknown as X4UiKeepOutEntry, { width: 2544, height: 1353 });
+      } catch {
+        accessorThrew = true;
+      }
+      checkEqual(getterReads, 0, "Production clone accessor getter reads");
+      checkEqual(accessorThrew, false, "Production clone accessor projection throw");
+      checkEqual(accessorProjection?.status, "refused", "Production clone accessor projection status");
+      return { cloneResults, getterReads, accessorThrew, accessorProjection };
+    },
+  },
 ];
 
 function runBatch8C1CausalMatrix(): readonly CausalMatrixReceipt[] {
@@ -226,6 +352,20 @@ function runBatch8C1CausalMatrix(): readonly CausalMatrixReceipt[] {
 }
 
 const causalMatrixReceipt = runBatch8C1CausalMatrix();
+
+const EXPECTED_DRAWABLE_BOUNDS = { left: 1, top: 31, width: 2544, height: 1353 } as const;
+const EXPECTED_MISSION_MESSAGES_POINTS = [
+  { x: 0.0994496855345912, y: 0.943089430894309 },
+  { x: 0.33372641509433965, y: 0.8484848484848485 },
+  { x: 0.33372641509433965, y: 0.9150036954915004 },
+  { x: 0.11006289308176101, y: 1 },
+] as const;
+const EXPECTED_TOP_HUD_POINTS = [
+  { x: 0.419811320754717, y: 0.008130081300813009 },
+  { x: 0.5794025157232704, y: 0.008130081300813009 },
+  { x: 0.5794025157232704, y: 0.07982261640798226 },
+  { x: 0.419811320754717, y: 0.07982261640798226 },
+] as const;
 
 const tests: readonly TestCase[] = [
   {
@@ -258,23 +398,35 @@ const tests: readonly TestCase[] = [
     },
   },
   {
-    name: "no invented built-in polygons and explicit unmeasured entries",
+    name: "exact screenshot-calibrated built-in polygons and immutable provenance",
     run: () => {
       checkEqual(BUILT_IN_KEEP_OUTS.length, 5, "Built-in entry count");
-      check(
-        BUILT_IN_KEEP_OUTS.every((entry) => entry.kind !== "polygon"),
-        "A built-in polygon was invented",
-      );
       const ticker = BUILT_IN_KEEP_OUTS[3];
       const hud = BUILT_IN_KEEP_OUTS[4];
       checkEqual(ticker.id, KEEP_OUT_IDS.missionMessagesTicker, "Ticker id");
       checkEqual(hud.id, KEEP_OUT_IDS.topHudStrip, "HUD id");
-      checkEqual(ticker.kind, "unmeasured", "Ticker state");
-      checkEqual(hud.kind, "unmeasured", "HUD state");
-      checkEqual(ticker.geometry, null, "Ticker geometry");
-      checkEqual(hud.geometry, null, "HUD geometry");
-      checkEqual(ticker.provenance.evidenceGrade, "reference-unmeasured", "Ticker grade");
-      checkEqual(hud.provenance.evidenceGrade, "reference-unmeasured", "HUD grade");
+      checkEqual(ticker.kind, "polygon", "Ticker state");
+      checkEqual(hud.kind, "polygon", "HUD state");
+      checkEqual(ticker.provenance.source, "production-evidence", "Ticker source");
+      checkEqual(hud.provenance.source, "production-evidence", "HUD source");
+      checkEqual(ticker.provenance.evidenceGrade, "calibrated", "Ticker grade");
+      checkEqual(hud.provenance.evidenceGrade, "calibrated", "HUD grade");
+      checkEqual(ticker.provenance.screenshot?.hash, "777D001A6CDF46F77AAEE76F9AC7F6E4FFF9E8CFF0F5E7C3082E93E88388DF20", "Ticker screenshot hash");
+      checkEqual(ticker.provenance.screenshot?.profile, "x4-9.00-617726-windowed-2544x1353-ui-scale-1.0-first-person", "Ticker screenshot profile");
+      checkEqual(hud.provenance.screenshot?.hash, "2BA6C8C065EF3563A0C2C06E814BCD226BA160BC0EE64981D07E01C01AD2ADC8", "HUD screenshot hash");
+      checkEqual(hud.provenance.screenshot?.profile, "x4-9.00-617726-windowed-2544x1353-ui-scale-1.0-map-open", "HUD screenshot profile");
+      checkJsonEqual(ticker.provenance.drawableBounds, EXPECTED_DRAWABLE_BOUNDS, "Ticker drawable bounds");
+      checkJsonEqual(hud.provenance.drawableBounds, EXPECTED_DRAWABLE_BOUNDS, "HUD drawable bounds");
+      if (ticker.kind === "polygon" && hud.kind === "polygon") {
+        checkJsonEqual(ticker.geometry.points, EXPECTED_MISSION_MESSAGES_POINTS, "Ticker normalized points");
+        checkJsonEqual(hud.geometry.points, EXPECTED_TOP_HUD_POINTS, "HUD normalized points");
+      }
+      check(
+        hud.provenance.sourceNote.includes("BD1CAD7C69A5B11F87BEBF2BC8B5C65677654A3ECB89F9917C79BA577EC64F26"),
+        "HUD source note omits fullscreen corroboration hash",
+      );
+      checkDeepFrozen(ticker, "Ticker built-in");
+      checkDeepFrozen(hud, "HUD built-in");
     },
   },
   {
@@ -307,26 +459,38 @@ const tests: readonly TestCase[] = [
         );
       }
       const cockpit = KEEP_OUT_PRESETS[0];
-      checkEqual(cockpit.members[3].applicability, "unverified", "Cockpit ticker applicability");
-      checkEqual(cockpit.members[3].applicabilityEvidence, "not-established", "Cockpit ticker evidence");
+      checkEqual(cockpit.members[3].applicability, "applicable", "Cockpit ticker applicability");
+      checkEqual(cockpit.members[3].evidenceGrade, "calibrated", "Cockpit ticker grade");
+      checkEqual(cockpit.members[3].applicabilityEvidence, "context-evidenced", "Cockpit ticker evidence");
       check(
-        cockpit.members[3].note.includes("geometry and cockpit-conversation context applicability are both unverified"),
+        cockpit.members[3].note.toLowerCase().includes("screenshot-calibrated") && cockpit.members[3].note.includes("cockpit-conversation"),
         "Cockpit ticker evidence note overclaims applicability",
       );
-      checkEqual(cockpit.members[4].applicability, "unverified", "Cockpit HUD applicability");
+      checkEqual(cockpit.members[4].applicability, "not-applicable", "Cockpit HUD applicability");
       checkEqual(cockpit.members[4].applicabilityEvidence, "not-established", "Cockpit HUD evidence");
       check(
-        cockpit.members[4].note.includes("geometry and cockpit-conversation context applicability are both unverified"),
+        cockpit.members[4].note.includes("not issued for cockpit-conversation"),
         "Cockpit HUD evidence note overclaims applicability",
       );
+      const map = KEEP_OUT_PRESETS[1];
+      checkEqual(map.members[3].applicability, "not-applicable", "Map ticker applicability");
+      checkEqual(map.members[4].applicability, "applicable", "Map HUD applicability");
+      checkEqual(map.members[4].evidenceGrade, "calibrated", "Map HUD grade");
+      checkEqual(map.members[4].applicabilityEvidence, "context-evidenced", "Map HUD evidence");
+      const fullscreen = KEEP_OUT_PRESETS[2];
+      checkEqual(fullscreen.members[3].applicability, "not-applicable", "Fullscreen ticker applicability");
+      checkEqual(fullscreen.members[4].applicability, "applicable", "Fullscreen HUD applicability");
+      checkEqual(fullscreen.members[4].evidenceGrade, "calibrated", "Fullscreen HUD grade");
+      checkEqual(fullscreen.members[4].applicabilityEvidence, "context-evidenced", "Fullscreen HUD evidence");
       const firstPerson = KEEP_OUT_PRESETS[3];
-      checkEqual(firstPerson.members[3].applicability, "unverified", "First-person ticker applicability");
-      checkEqual(firstPerson.members[3].applicabilityEvidence, "not-established", "First-person ticker evidence");
-      checkEqual(firstPerson.members[4].applicability, "unverified", "First-person HUD applicability");
+      checkEqual(firstPerson.members[3].applicability, "applicable", "First-person ticker applicability");
+      checkEqual(firstPerson.members[3].evidenceGrade, "calibrated", "First-person ticker grade");
+      checkEqual(firstPerson.members[3].applicabilityEvidence, "context-evidenced", "First-person ticker evidence");
+      checkEqual(firstPerson.members[4].applicability, "not-applicable", "First-person HUD applicability");
       checkEqual(firstPerson.members[4].applicabilityEvidence, "not-established", "First-person HUD evidence");
       check(
-        KEEP_OUT_PRESETS[1].members.some((member) => member.applicability === "unverified"),
-        "Map preset silently promoted uncertain membership",
+        KEEP_OUT_PRESETS.every(preset => preset.members.filter(member => member.applicability === "applicable").length > 0),
+        "A named preset has no capture-supported member",
       );
     },
   },
@@ -395,19 +559,55 @@ const tests: readonly TestCase[] = [
     },
   },
   {
-    name: "unmeasured projection is typed unavailable, never zero geometry",
+    name: "screenshot-calibrated projections retain exact normalized points",
     run: () => {
-      const result = projectBuiltInKeepOut(
+      const ticker = expectProjected(projectBuiltInKeepOut(
         KEEP_OUT_IDS.missionMessagesTicker,
-        { width: 2560, height: 1440 },
-      );
-      checkEqual(result.status, "unavailable", "Ticker projection state");
+        { width: 2544, height: 1353 },
+      ), "Ticker projection");
+      const hud = expectProjected(projectBuiltInKeepOut(
+        KEEP_OUT_IDS.topHudStrip,
+        { width: 2544, height: 1353 },
+      ), "HUD projection");
+      checkEqual(ticker.evidenceGrade, "calibrated", "Ticker projected grade");
+      checkEqual(hud.evidenceGrade, "calibrated", "HUD projected grade");
+      checkEqual(ticker.advisoryOnly, true, "Ticker advisory state");
+      checkEqual(hud.advisoryOnly, true, "HUD advisory state");
+      checkEqual(ticker.gameVerification, NOT_VERIFIED_IN_GAME, "Ticker game state");
+      checkEqual(hud.gameVerification, NOT_VERIFIED_IN_GAME, "HUD game state");
+      if (ticker.geometry.kind === "polygon" && hud.geometry.kind === "polygon") {
+        checkJsonEqual(ticker.geometry.points, EXPECTED_MISSION_MESSAGES_POINTS.map(point => ({ x: point.x * 2544, y: point.y * 1353 })), "Ticker projected points");
+        checkJsonEqual(hud.geometry.points, EXPECTED_TOP_HUD_POINTS.map(point => ({ x: point.x * 2544, y: point.y * 1353 })), "HUD projected points");
+      }
+      checkDeepFrozen(ticker, "Ticker projected result");
+      checkDeepFrozen(hud, "HUD projected result");
+    },
+  },
+  {
+    name: "genuinely unavailable production evidence remains unavailable",
+    run: () => {
+      const entry = {
+        id: "future-reference-unmeasured",
+        label: "Future reference",
+        context: "shared-reference",
+        coordinateSpace: "normalized-drawable",
+        provenance: {
+          source: "production-evidence",
+          evidenceGrade: "reference-unmeasured",
+          sourceNote: "A retained reference entry without drawable evidence.",
+        },
+        notes: ["A retained reference entry without drawable evidence."],
+        kind: "unmeasured",
+        geometry: null,
+      } as unknown as X4UiKeepOutEntry;
+      const result = projectKeepOut(entry, { width: 2560, height: 1440 });
+      checkEqual(result.status, "unavailable", "Unmeasured projection state");
       if (result.status === "unavailable") {
-        checkEqual(result.geometry, null, "Ticker unavailable geometry");
-        checkEqual(result.reason, "reference-unmeasured", "Ticker unavailable reason");
-        checkEqual(result.advisoryOnly, true, "Ticker advisory state");
-        checkEqual(result.gameVerification, NOT_VERIFIED_IN_GAME, "Ticker game state");
-        checkDeepFrozen(result, "Ticker unavailable result");
+        checkEqual(result.geometry, null, "Unmeasured unavailable geometry");
+        checkEqual(result.reason, "reference-unmeasured", "Unmeasured unavailable reason");
+        checkEqual(result.advisoryOnly, true, "Unmeasured advisory state");
+        checkEqual(result.gameVerification, NOT_VERIFIED_IN_GAME, "Unmeasured game state");
+        checkDeepFrozen(result, "Unmeasured unavailable result");
       }
     },
   },
@@ -571,6 +771,7 @@ const tests: readonly TestCase[] = [
       const result = calibrateKeepOutPolygon(input);
       checkEqual(result.status, "success", "Calibration success state");
       if (result.status === "success") {
+        checkEqual(isIssuedKeepOutEntry(result.entry), true, "Manual calibration issued identity");
         checkEqual(result.entry.id, "manual-calibration-1", "Calibration id");
         checkEqual(result.entry.context, KEEP_OUT_PRESET_IDS.cockpitConversation, "Calibration context");
         checkEqual(result.entry.provenance.source, "manual-calibration", "Calibration source");

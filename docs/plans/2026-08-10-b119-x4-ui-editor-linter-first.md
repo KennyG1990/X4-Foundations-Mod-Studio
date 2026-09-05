@@ -11721,3 +11721,54 @@ Status: `BOUNDED VERIFIED / ORIGINAL BRIEF 4/6 VERIFIED / 2/6 PARTIAL / OVERALL 
   The first append joined the new heading to the preceding paragraph and styled the combined paragraph as
   `HEADING_2`; an exact-index newline/style repair restored the prior paragraph to `NORMAL_TEXT` and produced one
   separate heading. Fresh structural readback, not the initial connector success, is the accepted evidence.
+
+## 2026-09-05 — Four-Context Keep-Out Acceptance Close
+
+Status: `BOUNDED VERIFIED / ORIGINAL BRIEF 5/6 VERIFIED / 1/6 PARTIAL / OVERALL B119 IN_PROGRESS`.
+
+### PLAN / BASELINE / RECONCILE
+
+- The bounded unit calibrated only geometry supported by four retained X4 9.00 captures, extended the existing issued
+  KeepOut -> Session -> Paint -> Canvas chain, and kept every preview state `Not verified in game`. Exact task record:
+  `docs/plans/2026-09-03-b119-four-context-keepouts.md`.
+- Existing MESSAGES and top-HUD placeholders became hash/profile/drawable-bound production polygons. The three measured
+  conversation guides remain exactly `y=0.788`, `y=0.74`, and `x=0.664`; the INFORMATION panel remains an edge guide,
+  not an invented rectangle. Preset applicability is closed to cockpit `4`, map `1`, fullscreen `1`, first-person `1`.
+- Fresh-eyes review rejected structural-clone acceptance and wrong-context paint, then reproduced a mounted
+  source/target parent-snapshot race. Final authority requires issued entry/projection identity through Paint,
+  catalog-exact production geometry/context at Canvas, and a mounted current Canvas/export identity before the parent
+  receives a non-null verification snapshot.
+
+### VALIDATE / REVIEW
+
+- Focused final results: KeepOuts causal `9/9` plus historical `18/18`; PaintPlan `186/186`; CanvasRenderer `155/155`;
+  EditorSession correction `8/8` plus P7 `7/7`; SourceEditor complete matrix including P8 `13/13`; whole-repository
+  TypeScript and exact nine-path ESLint pass.
+- Final private `0.0.70` VSIX SHA-256 is
+  `737A755251BCD1B71D05C53F9040B7B631423D0BDE41F7AAD649C8B5FE40EA9E`; strict inspection and all-file installed
+  parity pass with zero missing/mismatched payload files. The installed sidecar served exact packaged assets and the
+  configured X4 9.00 corpus became canonical.
+- At native `2560x1440`, exact `ui/pipeline_test.lua -> menu.createFrame` reached `rendered/current`. All four preset
+  buttons and all seven applicable member checkboxes were exercised independently; every disable changed the native
+  Canvas hash and every re-enable restored the exact all-on hash while source, target, export authority, and
+  `Not verified in game` remained stable. Twenty retained screenshots and receipt:
+  `dev-docs/b119-x4-ui-pipeline-smoke/keepouts-20260903/forge-four-context/receipt.md`.
+- Complete precommit passes. Full serial e2e passes `106/106`, zero failed/flaky/bad/quarantined-blocking, complete
+  report, child exit `0`, `treeGone=true`, and ports `3100/3101` closed. Installed runtime oracles pass `134/134`.
+  Graphify refresh is `10,257/25,719/318`. X4 stayed stopped; no mod/game/public-release byte changed.
+- Requirement review: brief row 5 is directly `VERIFIED`. Rows 1, 3, 4, 5, and 6 are now verified; only row 2's three
+  complete real-menu column/row/wrap/truncation Forge/X4 comparison remains partial.
+
+### CLOSE / AAR
+
+- **Bounded status:** `VERIFIED`. **Overall B119:** `IN_PROGRESS / PARTIAL` at exactly `5/6` literal brief rows.
+- **Next bounded unit:** execute the specified three-menu parity plan. After row 2, visually inspect all twelve supplied
+  AI Influence references and reconstruct the real Lua UI through Forge before release acceptance and OpenVSX.
+- **Triggered lessons:** wait for `canonical` corpus readiness before source/target selection; a successful deep-scroll
+  CUA click is not product evidence without rendered state change; a clipped viewport may hide a real native Canvas
+  mutation, so keep-out toggles require native full-canvas export/hash proof. The first raw oracle sweep used its dead
+  default port; the supported live-sidecar base rerun passed `134/134`.
+- **Highest-risk retained boundary:** calibrated keep-outs and one-profile widget agreement do not prove C++ frame
+  acceptance, three-menu pixel parity, arbitrary Lua/Helper coverage, or AI Influence fidelity. The preview remains
+  explicitly non-authoritative.
+- Commit point: `feat(ui-editor): calibrate four keep-out contexts`.
