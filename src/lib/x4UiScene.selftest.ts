@@ -2485,12 +2485,13 @@ const rawTextScene = (
   content: string,
   textOptions: string,
   profileUpdate?: (profile: X4UiSceneProfile) => X4UiSceneProfile,
+  tableWidth = 40,
 ): X4UiScene => {
   const projected = rawProjectionFor([
     `local menu = { name = "${name}", layer = 1 }`,
     'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
-    'local table = frame:addTable(1, { width = 40, reserveScrollBar = false })',
-    'table:setColWidth(1, 40, false)',
+    `local table = frame:addTable(1, { width = ${tableWidth}, reserveScrollBar = false })`,
+    `table:setColWidth(1, ${tableWidth}, false)`,
     'local row = table:addRow(false, {})',
     `row[1]:createText(${JSON.stringify(content)}, { ${textOptions} })`,
     'frame:display()',
@@ -3443,22 +3444,13 @@ test('B119 fail-first: explicit wrapped-text height reports source-linked Scene 
   assert(placementWidget.outerRect !== undefined, '114px placement fixture must retain an explicit widget rectangle');
   const placementLineMinY = Math.min(...placementText.lines.map(line => line.rect.y));
   const placementLineMaxY = Math.max(...placementText.lines.map(line => line.rect.y + line.rect.height));
-  const placementBottomOverflow = placementLineMaxY - (placementWidget.outerRect!.y + placementWidget.outerRect!.height);
+  const placementBottomClearance = placementLineMaxY - (placementWidget.outerRect!.y + placementWidget.outerRect!.height);
   assert(placementWidget.outerRect!.y === 300 && placementWidget.outerRect!.height === 114
-    && placementLineMinY === 338.3125
-    && placementLineMaxY === 450.4375
-    && placementBottomOverflow === 36.4375, `114px placement fixture must reproduce the issued/widget bounds and bottom overflow: ${JSON.stringify({ widget: placementWidget.outerRect, lineMinY: placementLineMinY, lineMaxY: placementLineMaxY, bottomOverflow: placementBottomOverflow })}`);
+    && placementLineMinY === 300.9375
+    && placementLineMaxY === 413.0625
+    && placementBottomClearance === -0.9375, `114px placement fixture must center the issued span inside the widget: ${JSON.stringify({ widget: placementWidget.outerRect, lineMinY: placementLineMinY, lineMaxY: placementLineMaxY, bottomClearance: placementBottomClearance })}`);
   const placementGaps = placementScene.gaps.filter(gap => gap.nodeId === placementText.id && gap.category === 'height');
-  assert(placementGaps.length === 1, `114px explicit widget placement must produce exactly one text height gap for ${placementBottomOverflow}px bottom overflow; got ${JSON.stringify(placementGaps)}`);
-  assert(placementGaps[0]!.reason.includes('issued line bounds y=338.3125..450.4375 px')
-    && placementGaps[0]!.reason.includes('widget bounds y=300..414 px')
-    && placementGaps[0]!.reason.includes('bottom overflow 36.4375 px'), `114px placement gap must report auditable line/widget bounds and bottom overflow: ${placementGaps[0]!.reason}`);
-  assert(!/\bexcess\s+-/.test(placementGaps[0]!.reason), `114px placement gap must never label a negative value as excess: ${placementGaps[0]!.reason}`);
-  assert(placementGaps[0]!.reason.includes('span-height excess 0 px'), `114px placement gap must clamp its non-overflowing span-height excess to zero: ${placementGaps[0]!.reason}`);
-  assert(placementGaps[0]!.source.file === placementText.source.file
-    && placementGaps[0]!.source.sourcePath === placementText.source.sourcePath
-    && placementGaps[0]!.source.start.offset <= placementGaps[0]!.source.end.offset
-    && placementGaps[0]!.nodeId === placementText.id, 'placement gap must retain the source file and exact text owner');
+  assert(placementGaps.length === 0, `114px centered explicit widget placement must not report a false text height overflow: ${JSON.stringify(placementGaps)}`);
 
   const controlScene = build(187);
   const controlText = controlScene.texts.find(text => text.content === wrappedText)!;
@@ -4555,6 +4547,68 @@ test('retains missing-glyph, control, unsupported-font, and truncation evidence 
   assert(truncatedText.rect !== undefined && truncatedText.diagnosticStyle.geometry === 'source-derived', 'text-policy gaps must not erase known text geometry');
 });
 
+test('B119 exact A/B/C no-wrap periods remain paint-visible inside parent-relative text and cell clips', () => {
+  const cases = [
+    {
+      name: 'overflow-a',
+      sourceText: 'A_OVERFLOW_MARKER_ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789_END_A',
+      tableWidth: 55,
+      availableWidth: 53,
+      displayedText: 'A_OVERFLOW_MARKER_AB...',
+    },
+    {
+      name: 'overflow-b',
+      sourceText: 'B_OVERFLOW_MARKER_ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789_END_B',
+      tableWidth: 48,
+      availableWidth: 46,
+      displayedText: 'B_OVERFLOW_MARKER...',
+    },
+    {
+      name: 'overflow-c',
+      sourceText: 'C_OVERFLOW_MARKER_ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789_END_C',
+      tableWidth: 27,
+      availableWidth: 25,
+      displayedText: 'C_OVERFL...',
+    },
+  ] as const;
+  for (const fixture of cases) {
+    const scene = rawTextScene(
+      fixture.name,
+      fixture.sourceText,
+      'height = 16, width = 0, x = 2, wordwrap = false',
+      profile => ({
+        ...profile,
+        textPolicy: {
+          ...profile.textPolicy,
+          truncationMode: 'ellipsis',
+          ellipsisPolicy: { token: '...', placement: 'end' },
+        },
+      }),
+      fixture.tableWidth,
+    );
+    const widget = scene.widgets.find(candidate => candidate.kind === 'text');
+    const text = widget === undefined ? undefined : scene.texts.find(candidate => candidate.widgetId === widget.id);
+    const cell = widget === undefined ? undefined : scene.cells.find(candidate => candidate.id === widget.cellId);
+    assert(widget?.outerRect !== undefined && text?.layout !== undefined && text.lines.length === 1, `${fixture.name} must retain one laid-out no-wrap line`);
+    const line = text.lines[0]!;
+    const ellipsisGlyphs = scene.glyphs
+      .filter(candidate => candidate.textId === text.id && candidate.lineIndex === line.lineIndex && candidate.quad.isEllipsis);
+    const cellClip = cell?.clipRect || cell?.rect;
+    assert(text.availableWidth === fixture.availableWidth, `${fixture.name} must use parentwidth - x as the truncation width: ${JSON.stringify({ expected: fixture.availableWidth, actual: text.availableWidth, widget: widget.outerRect, cell: cell?.rect })}`);
+    assert(text.layout.profile.ellipsisPolicy.token === '...', `${fixture.name} must retain the ASCII period token in the issued text profile`);
+    assert(text.layout.originalText === fixture.sourceText, `${fixture.name} must preserve complete source text separately from display text`);
+    assert(line.displayedText === fixture.displayedText && text.layout.displayedText === fixture.displayedText, `${fixture.name} must match the native visible prefix/token: ${JSON.stringify({ expected: fixture.displayedText, line: line.displayedText, layout: text.layout.displayedText })}`);
+    assert(line.sourceRange.end < fixture.sourceText.length && line.sourceRange.end === fixture.displayedText.length - 3, `${fixture.name} source range must stop before display-only ellipsis: ${JSON.stringify({ line: line.sourceRange, sourceLength: fixture.sourceText.length, displayedLength: fixture.displayedText.length })}`);
+    assert(ellipsisGlyphs.length === 3 && ellipsisGlyphs.every(glyph => glyph.codePoint === 0x2e && glyph.rect !== undefined && glyph.clipRect !== undefined), `${fixture.name} must issue three ASCII-period glyphs: ${JSON.stringify(ellipsisGlyphs)}`);
+    for (const glyph of ellipsisGlyphs) {
+      assert(cellClip !== undefined && glyph.rect!.x >= text.clipRect.x && glyph.rect!.x + glyph.rect!.width <= text.clipRect.x + text.clipRect.width && glyph.rect!.y >= text.clipRect.y && glyph.rect!.y + glyph.rect!.height <= text.clipRect.y + text.clipRect.height, `${fixture.name} period must be fully inside the text clip: ${JSON.stringify({ glyph: glyph.rect, clip: text.clipRect })}`);
+      assert(cellClip !== undefined && glyph.rect!.x >= cellClip.x && glyph.rect!.x + glyph.rect!.width <= cellClip.x + cellClip.width && glyph.rect!.y >= cellClip.y && glyph.rect!.y + glyph.rect!.height <= cellClip.y + cellClip.height, `${fixture.name} period must be fully inside the cell clip: ${JSON.stringify({ glyph: glyph.rect, cellClip })}`);
+      assert(JSON.stringify(glyph.rect) === JSON.stringify(glyph.clipRect), `${fixture.name} period clip must retain its complete paint rectangle: ${JSON.stringify({ glyph: glyph.rect, clip: glyph.clipRect })}`);
+    }
+    assert(text.provenanceLinks.some(link => link.sourcePin?.sourcePath === WIDGET_PATH && link.sourcePin.lineStart === 17779 && link.sourcePin.lineEnd === 17784), `${fixture.name} must retain the shipped TruncateText source pin`);
+  }
+});
+
 test('plain createText wordwrap=false forces source no-wrap over the provisional profile', () => {
   const scene = rawTextScene('wordwrap-false', 'A A A A A A', 'height = 12, width = 10, wordwrap = false', profile => ({ ...profile, textPolicy: { ...profile.textPolicy, wrapMode: 'word-wrap' } }));
   const text = scene.texts.find(candidate => candidate.widgetId === scene.widgets.find(widget => widget.kind === 'text')!.id)!;
@@ -4567,6 +4621,55 @@ test('plain createText wordwrap=true enables the supplied provisional wrapping a
   const text = scene.texts.find(candidate => candidate.widgetId === scene.widgets.find(widget => widget.kind === 'text')!.id)!;
   assert(text.lines.length > 1 && text.lines.some(line => line.breakReason === 'word-wrap'), 'source wordwrap=true must enable the supplied provisional wrapping algorithm');
   assert(text.provenanceLinks.some(link => link.fact === 'wordwrap' && link.expression === 'true'), 'plain wordwrap=true must remain exact text provenance');
+});
+
+test('fail-first: wrapped plain createText centers the complete issued line-box block', () => {
+  const scene = rawTextScene('wrapped-block-anchor', 'A A A A A A', 'height = 12, width = 10, wordwrap = true', profile => ({ ...profile, textPolicy: { ...profile.textPolicy, wrapMode: 'word-wrap' } }));
+  const widget = scene.widgets.find(candidate => candidate.kind === 'text');
+  const text = widget === undefined ? undefined : scene.texts.find(candidate => candidate.widgetId === widget.id);
+  assert(widget?.outerRect !== undefined && text?.layout !== undefined, 'wrapped block fixture must retain a text widget and issued layout');
+  assert(text.lines.length === 3, `wrapped block fixture must issue exactly three lines: ${JSON.stringify({ lines: text.lines.length, content: text.content })}`);
+  const noWrapScene = rawTextScene('wrapped-block-no-wrap-control', 'A A A A A A', 'height = 12, width = 10, wordwrap = false');
+  const noWrapWidget = noWrapScene.widgets.find(candidate => candidate.kind === 'text');
+  const noWrapText = noWrapWidget === undefined ? undefined : noWrapScene.texts.find(candidate => candidate.widgetId === noWrapWidget.id);
+  const noWrapGeometry = {
+    widget: noWrapWidget?.outerRect,
+    text: noWrapText?.rect,
+    lines: noWrapText?.lines.map(line => line.rect),
+    glyphs: noWrapText === undefined ? [] : noWrapScene.glyphs.filter(glyph => glyph.textId === noWrapText.id).map(glyph => ({
+      rect: glyph.rect,
+      quadY: glyph.quad.y,
+      lineBoxY: glyph.quad.lineBoxY,
+    })),
+  };
+  const expectedNoWrapGeometry = {
+    widget: { x: 5, y: 0, width: 10, height: 12 },
+    text: { x: 5, y: 3.75, width: 24.75, height: 4.5 },
+    lines: [{ x: 5, y: 3.75, width: 24.75, height: 4.5 }],
+    glyphs: Array.from({ length: 11 }, (_, index) => ({
+      rect: { x: 5 + index * 2.25, y: 4.59375, width: 2.25, height: 2.8125 },
+      quadY: 4.59375,
+      lineBoxY: 3.75,
+    })),
+  };
+  assert(JSON.stringify(noWrapGeometry) === JSON.stringify(expectedNoWrapGeometry), `single-line no-wrap geometry must remain unchanged: ${JSON.stringify({ expected: expectedNoWrapGeometry, actual: noWrapGeometry })}`);
+  const lineMinY = Math.min(...text.lines.map(line => line.rect.y));
+  const lineMaxY = Math.max(...text.lines.map(line => line.rect.y + line.rect.height));
+  const widgetCenterY = widget.outerRect.y + widget.outerRect.height / 2;
+  const blockCenterY = (lineMinY + lineMaxY) / 2;
+  const lineOrigins = text.lines.map(line => {
+    const layoutLine = text.layout!.lines.find(candidate => candidate.lineIndex === line.lineIndex);
+    assert(layoutLine !== undefined, `wrapped block line ${line.lineIndex} must retain its issued layout line`);
+    return line.rect.y - layoutLine.lineBox.y;
+  });
+  assert(lineOrigins.every(origin => origin === lineOrigins[0]), `wrapped block lines must share one common y origin: ${JSON.stringify({ lineOrigins, lines: text.lines.map(line => line.rect) })}`);
+  const glyphOrigins = scene.glyphs.filter(glyph => glyph.textId === text.id).map(glyph => {
+    const layoutLine = text.layout!.lines.find(candidate => candidate.lineIndex === glyph.lineIndex);
+    assert(layoutLine !== undefined, `wrapped block glyph ${glyph.id} must retain its issued layout line`);
+    return glyph.quad.lineBoxY - layoutLine.lineBox.y;
+  });
+  assert(glyphOrigins.length > 0 && glyphOrigins.every(origin => origin === lineOrigins[0]), `wrapped block glyphs must share the line origin: ${JSON.stringify({ lineOrigins, glyphOrigins })}`);
+  assert(blockCenterY === widgetCenterY, `wrapped block must center its complete issued line-box span in the widget: ${JSON.stringify({ widget: widget.outerRect, lineMinY, lineMaxY, blockCenterY, widgetCenterY, lines: text.lines.map(line => line.rect) })}`);
 });
 
 test('plain createText wordwrap=true with no-wrap profile retains a missing-algorithm gap', () => {

@@ -226,8 +226,20 @@ const decodedInvalidNativePen = decodeZektonFontAssets(
   atlasBytes,
   regularAtlasIdentity,
 );
+const missingEllipsisDescriptorBytes = makeAbc(regularRecords, {
+  32: 1,
+  65: 2,
+  66: 3,
+  [SUPPLEMENTARY]: 5,
+});
+const decodedMissingEllipsis = decodeZektonFontAssets(
+  missingEllipsisDescriptorBytes,
+  regularIdentity,
+  atlasBytes,
+  regularAtlasIdentity,
+);
 assertCondition(
-  decodedRegular.ok && decodedBold.ok && decodedUnpinned.ok && decodedCrossPair.ok && decodedInvalidNativePen.ok,
+  decodedRegular.ok && decodedBold.ok && decodedUnpinned.ok && decodedCrossPair.ok && decodedInvalidNativePen.ok && decodedMissingEllipsis.ok,
   'layout font-pair fixtures must decode',
 );
 const regularFont = decodedRegular.value;
@@ -235,6 +247,7 @@ const boldFont = decodedBold.value;
 const unpinnedFont = decodedUnpinned.value;
 const crossPairFont = decodedCrossPair.value;
 const invalidNativePenFont = decodedInvalidNativePen.value;
+const missingEllipsisFont = decodedMissingEllipsis.value;
 const scale = 9 / 32;
 
 const tests: readonly [string, () => void][] = [
@@ -451,6 +464,36 @@ const tests: readonly [string, () => void][] = [
       assertEqual(overwideEllipsis.overflow, true, 'layout overflow state for overwide ellipsis');
       assertApprox(overwideEllipsis.lines[0].width, 2 * scale, 'overwide ellipsis width evidence');
       assertEqual(overwideEllipsis.gaps.some(gap => gap.reason === 'overflow'), true, 'overwide ellipsis gap');
+      const nativeAsciiEllipsis = expectSuccess(layoutZektonText(
+        regularFont,
+        'AB',
+        makeProfile(regularIdentity, regularAtlasIdentity, 6 * scale, {
+          truncationMode: 'ellipsis',
+          ellipsisPolicy: { token: '...', placement: 'end' },
+        }),
+      ));
+      assertEqual(nativeAsciiEllipsis.lines[0].displayedText, '...', 'native ASCII ellipsis display token');
+      assertEqual(nativeAsciiEllipsis.lines[0].glyphQuads.length, 3, 'native ASCII ellipsis emits three paintable glyph quads');
+      assertEqual(nativeAsciiEllipsis.lines[0].glyphQuads.every(quad => quad.isEllipsis && quad.codePoint === 0x2e), true, 'native ASCII ellipsis quads retain period provenance');
+      assertEqual(nativeAsciiEllipsis.lines[0].glyphQuads.every(quad => quad.sourceRange.start === 2 && quad.sourceRange.end === 2), true, 'native ASCII ellipsis remains display-only in source ranges');
+    },
+  ],
+  [
+    'missing ellipsis glyph remains an explicit gap instead of false paint evidence',
+    () => {
+      const missing = expectSuccess(layoutZektonText(
+        missingEllipsisFont,
+        'AB',
+        makeProfile(regularIdentity, regularAtlasIdentity, 4 * scale, {
+          truncationMode: 'ellipsis',
+          ellipsisPolicy: { token: '...', placement: 'end' },
+        }),
+      ));
+      assertEqual(missing.truncated, true, 'missing-ellipsis fixture still records truncation');
+      assertEqual(missing.lines[0].displayedText, '...', 'missing-ellipsis display remains source-independent text');
+      assertEqual(missing.lines[0].glyphQuads.length, 0, 'missing ellipsis emits no fabricated glyph quads');
+      assertEqual(missing.gaps.filter(gap => gap.reason === 'ellipsis-missing-glyph').length, 3, 'each missing ASCII period remains a typed gap');
+      assertEqual(missing.lines[0].gaps.filter(gap => gap.reason === 'ellipsis-missing-glyph').length, 3, 'line retains all missing ellipsis gaps');
     },
   ],
   [

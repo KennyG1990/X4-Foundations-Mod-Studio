@@ -51,7 +51,7 @@ import {
   ZEKTON_TEXT_TRUTH_GRADE,
   layoutZektonText,
 } from './x4UiTextLayout';
-import type { ZektonTextLayoutProfile } from './x4UiTextLayout';
+import type { ZektonTextLayout, ZektonTextLayoutProfile } from './x4UiTextLayout';
 import {
   addRow,
   createHelperTable,
@@ -1740,6 +1740,60 @@ interface DerivedTextHeightCandidate {
   readonly reason?: string;
 }
 
+const acceptsExpectedNoWrapOverflowForHeight = (layout: ZektonTextLayout): boolean => {
+  const finite = (value: number): boolean => Number.isFinite(value);
+  const finiteNonNegative = (value: number): boolean => finite(value) && value >= 0;
+  const lineGeometryIsFinite = layout.lines.length > 0 && layout.lines.every(line => {
+    const lineValues = [
+      line.width,
+      line.maxWidth,
+      line.lineBox.x,
+      line.lineBox.y,
+    ];
+    const nonNegativeLineValues = [
+      line.lineBox.width,
+      line.lineBox.height,
+      line.lineBox.lineAdvance,
+      line.lineBox.metrics.outer,
+      line.lineBox.metrics.top,
+      line.lineBox.metrics.bottom,
+      line.lineBox.metrics.inner,
+      line.lineBox.metrics.split20,
+      line.lineBox.metrics.split24,
+    ];
+    const glyphGeometryIsFinite = line.glyphQuads.length > 0 && line.glyphQuads.every(glyph => [
+      glyph.x,
+      glyph.y,
+      glyph.width,
+      glyph.height,
+      glyph.bitmapHeight,
+      glyph.lineBoxY,
+      glyph.lineBoxHeight,
+      glyph.bearingX,
+      glyph.bitmapWidth,
+      glyph.advance,
+      glyph.scaledAdvance,
+      glyph.bitmapBounds.left,
+      glyph.bitmapBounds.top,
+      glyph.bitmapBounds.right,
+      glyph.bitmapBounds.bottom,
+      glyph.uv.u0,
+      glyph.uv.v0,
+      glyph.uv.u1,
+      glyph.uv.v1,
+    ].every(finite));
+    return lineValues.every(finite)
+      && nonNegativeLineValues.every(finiteNonNegative)
+      && glyphGeometryIsFinite;
+  });
+  return layout.profile.wrapMode === 'no-wrap'
+    && layout.overflow
+    && layout.lines.every(line => line.overflow)
+    && layout.gaps.length > 0
+    && layout.gaps.every(gap => gap.reason === 'overflow' && gap.displayed)
+    && lineGeometryIsFinite;
+};
+
 const deriveCanonicalTextHeightCandidate = (
   canonicalCorpus: X4UiCorpusCanonicalSuccess,
   fontName: string | undefined,
@@ -1779,7 +1833,9 @@ const deriveCanonicalTextHeightCandidate = (
   };
   const layout = layoutZektonText(fontAssets, text, layoutProfile);
   if (layout.ok === false) return { reason: `canonical Zekton text layout was refused: ${layout.error.message}` };
-  if (layout.value.gaps.length > 0) return { reason: 'canonical Zekton text layout contains an unresolved glyph or layout gap' };
+  if (layout.value.gaps.length > 0 && !acceptsExpectedNoWrapOverflowForHeight(layout.value)) {
+    return { reason: 'canonical Zekton text layout contains an unresolved glyph or layout gap' };
+  }
   const height = layout.value.lines.reduce(
     (maximum, line) => Math.max(maximum, line.lineBox.y + line.lineBox.height),
     0,

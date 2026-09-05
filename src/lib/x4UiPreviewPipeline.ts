@@ -108,6 +108,12 @@ export interface X4UiPreviewTextPolicyInput {
   readonly truthGrade?: ZektonTextTruthGrade;
 }
 
+/**
+ * Shipped widget_fullscreen.lua delegates no-wrap truncation to TruncateText;
+ * the native visible token is three ASCII periods.
+ */
+export const X4_UI_DEFAULT_ELLIPSIS_TOKEN = '...' as const;
+
 export interface X4UiPreviewSelection {
   readonly sourceIndex: number;
   readonly path: string;
@@ -791,13 +797,13 @@ const defaultTextPolicy = (input: X4UiPreviewTextPolicyInput | undefined): X4UiS
   nominalDesignSize: 32,
   lineSpacing: input?.lineSpacing ?? 0,
   wrapMode: input?.wrapMode ?? 'word-wrap',
-  truncationMode: input?.truncationMode ?? 'none',
+  truncationMode: input?.truncationMode ?? 'ellipsis',
   whitespacePolicy: {
     mode: input?.whitespaceMode ?? 'preserve',
     breakOn: input?.breakOn ?? 'ascii-space',
   },
   ellipsisPolicy: {
-    token: input?.ellipsisToken ?? '…',
+    token: input?.ellipsisToken ?? X4_UI_DEFAULT_ELLIPSIS_TOKEN,
     placement: 'end',
   },
   newlinePolicy: input?.newlinePolicy ?? 'lf-crlf',

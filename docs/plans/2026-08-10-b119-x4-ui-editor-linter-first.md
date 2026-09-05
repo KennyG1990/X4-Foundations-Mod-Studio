@@ -11785,3 +11785,56 @@ Status: `BOUNDED VERIFIED / ORIGINAL BRIEF 5/6 VERIFIED / 1/6 PARTIAL / OVERALL 
   `ANLCKQmmV5DbvTyHnpcg-W_JJbmRqZvOZF7Dt_eETxHSKsR8BCnBACfrINJDNbgKRxChLcCD-r3RMZMVK_ozoeJH_ZCYMSEeY1iKtAf7vEQY`.
 - Repository Markdown remains authoritative. The only open original-brief row is the specified three-menu
   Forge/X4 column, row, wrap, and truncation comparison.
+
+## 2026-09-05 — Three Real-Menu Pixel-Parity Acceptance Close
+
+Status: `BOUNDED VERIFIED / ORIGINAL BRIEF 6/6 VERIFIED / OVERALL B119 IN_PROGRESS`.
+
+### PLAN / BASELINE / RECONCILE
+
+- The bounded unit used the existing `pipeline_test` workspace, source-preserving writer, artifact/deploy pipeline,
+  installed Source Editor, layout/scene/paint/canvas owners, configured X4 9.00 corpus, and native X4 runtime. It added
+  no parallel renderer or deployer. Exact task record:
+  `docs/plans/2026-09-03-b119-three-menu-pixel-parity.md`.
+- Three separately registered static-literal menus exercise unequal three-, four-, and five-column layouts, six row
+  boundaries, standard text/button sizing, deterministic wrapped lines, and deliberately overflowing no-wrap text.
+  `helper.lua` remains geometry authority; `widget_fullscreen.lua` and shipped Zekton remain truncation/text authority.
+- Source/staging reconciliation corrected one label: `X4Mods\pipeline_test` is the immutable imported source snapshot;
+  current Forge staging is `.forge-builds\loose\pipeline_test`. Loaded/modelled workspace bytes correctly override
+  stamped-disk bytes, while unclaimed/unloaded files remain sourced from the stamp.
+
+### IMPLEMENT / VALIDATE / REVIEW
+
+- The existing pipeline now mirrors three previously missing shipped relations: deterministic height survives a sole
+  finite displayed no-wrap overflow gap; displayed text width is constrained by `min(width, parentwidth - x)`; and a
+  multiline block shares one centered line-box origin. Default truncation emits the shipped ASCII `...`, not U+2026.
+- Exact Forge workspace/staging/export/install and X4 source identity is `ui/pipeline_test.lua`, `13,202` bytes,
+  `407` lines, SHA-256 `E75DEF8CBED95537EEF9B7D3BCD05155F22B82DC4EEFE828B1D37D3626708EC0`. X4 accepted all three frames,
+  navigated `A -> B -> C -> A`, and produced zero scoped DisplayView/Lua/traceback signatures.
+- Six hash-bound PNGs at exact
+  `x4-9.00|drawable=2544x1353|x4UserScale=1|effectiveHelperScale=1.2527777777777778` were visually inspected. The
+  closed receipt validates exactly three menus and `125` geometry features at maximum delta `3 px` against a `5 px`
+  ceiling. Wrapped baselines and line-ending words match exactly; visible overflow strings match as
+  `A_OVERFLOW_MARKER_AB...`, `B_OVERFLOW_MARKER...`, and `C_OVERFL...`. A non-deployed `6 px` mutation is rejected.
+- Focused TextLayout `13/13`, Scene `178/178`, PreviewPipeline `117/117`, parity classifier `26/26`, LayoutProgram
+  `705` pass plus `1` skip, whole-repository typecheck, zero-error targeted lint, production build `1,848`, staged probe
+  `16/16`, exact private-package/install parity, installed oracles `134/134`, and serial E2E `106/106` pass. The E2E
+  receipt has zero failed/flaky/bad/quarantined-blocking tests, `treeGone=true`, ports `3100/3101` closed, and unchanged
+  live-workspace identity. Complete `npm run precommit:check` passed exit `0` after record edits.
+- Fresh-eyes review found no blocking issue. The classifier deliberately checks declared measurements and identities,
+  not pixels; independent file hashes and human inspection remain mandatory. Every clause in the bounded contract is
+  done and evidenced.
+
+### CLOSE / AAR
+
+- **Bounded status:** `VERIFIED`; this promotes original-brief row 2 and closes the literal brief at `6/6 VERIFIED`.
+  **Overall B119 remains `IN_PROGRESS`** for the twelve-reference AI Influence reconstruction, native Save As
+  false-success repair, release acceptance, and OpenVSX. Arbitrary Lua/C++ acceptance is not claimed; preview remains
+  `Not verified in game` and exact deploy plus X4 remains authority.
+- The first oracle sweep timed out only the `20.94 s` integration endpoint under a `20 s` default; supported `60 s`
+  timeout passed `134/134`. The first E2E child exited Windows `0xC0000409` after `23` passes without a verdict; the run
+  failed closed, safety checks passed, and one unchanged retry produced the complete `106/106` receipt.
+- Capability-map delta: the existing source-first pipeline now has direct three-menu, same-source, same-profile
+  Forge/X4 pixel evidence for columns, rows, wrapping, and truncation. The evidence does not widen supported Lua/widget
+  vocabulary beyond the measured fixtures.
+- Commit point: `feat(ui-editor): prove three real-menu pixel parity`.

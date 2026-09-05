@@ -41,6 +41,7 @@ import {
   buildX4UiPreviewProfile,
   projectX4UiPreviewPipeline,
   scaleSizeMinValue,
+  X4_UI_DEFAULT_ELLIPSIS_TOKEN,
   type X4UiPreviewPipelineInput,
   type X4UiPreviewProfileInput,
   type X4UiPreviewSelection,
@@ -1159,6 +1160,90 @@ const canonicalLua = [
   '',
 ].join('\n');
 
+const overflowHeightXml = [
+  '<?xml version="1.0" encoding="utf-8"?>',
+  '<addon name="overflow-height-fixture">',
+  '  <environment type="menus">',
+  '    <file name="ui/overflow-height.lua" />',
+  '  </environment>',
+  '</addon>',
+  '',
+].join('\n');
+
+const overflowHeightLua = [
+  'local menuA = { name = "OverflowA", layer = 1 }',
+  'function menuA.createFrame()',
+  '  local frame = Helper.createFrameHandle(menuA, { width = 100, height = 80 })',
+  '  local table = frame:addTable(1, { width = 54, reserveScrollBar = false, scaling = false })',
+  '  local row = table:addRow(false, {})',
+  '  row[1]:createText("A_OVERFLOW_MARKER_ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789_END_A", { wordwrap = false, minRowHeight = 16, x = 2 })',
+  '  frame:display()',
+  'end',
+  'local menuB = { name = "OverflowB", layer = 1 }',
+  'function menuB.createFrame()',
+  '  local frame = Helper.createFrameHandle(menuB, { width = 100, height = 80 })',
+  '  local table = frame:addTable(1, { width = 47, reserveScrollBar = false, scaling = false })',
+  '  local row = table:addRow(false, {})',
+  '  row[1]:createText("B_OVERFLOW_MARKER_ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789_END_B", { wordwrap = false, minRowHeight = 16, x = 2 })',
+  '  frame:display()',
+  'end',
+  'local menuC = { name = "OverflowC", layer = 1 }',
+  'function menuC.createFrame()',
+  '  local frame = Helper.createFrameHandle(menuC, { width = 100, height = 80 })',
+  '  local table = frame:addTable(1, { width = 27, reserveScrollBar = false, scaling = false })',
+  '  local row = table:addRow(false, {})',
+  '  row[1]:createText("C_OVERFLOW_MARKER_ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789_END_C", { wordwrap = false, minRowHeight = 16, x = 2 })',
+  '  frame:display()',
+  'end',
+  'local menuMissing = { name = "OverflowMissingGlyph", layer = 1 }',
+  'function menuMissing.createFrame()',
+  '  local frame = Helper.createFrameHandle(menuMissing, { width = 100, height = 80 })',
+  '  local table = frame:addTable(1, { width = 20, reserveScrollBar = false, scaling = false })',
+  '  local row = table:addRow(false, {})',
+  '  row[1]:createText("MISSING_GLYPH_☃", { wordwrap = false, minRowHeight = 16 })',
+  '  frame:display()',
+  'end',
+  '',
+].join('\n');
+
+const overflowWrapXml = [
+  '<?xml version="1.0" encoding="utf-8"?>',
+  '<addon name="overflow-wrap-fixture">',
+  '  <environment type="menus">',
+  '    <file name="ui/overflow-wrap.lua" />',
+  '  </environment>',
+  '</addon>',
+  '',
+].join('\n');
+
+const overflowWrapLua = [
+  'local menuA = { name = "OverflowWrapA", layer = 1 }',
+  'function menuA.createFrame()',
+  '  local frame = Helper.createFrameHandle(menuA, { width = 100, height = 80 })',
+  '  local table = frame:addTable(1, { width = 64, reserveScrollBar = false, scaling = false })',
+  '  local row = table:addRow(false, {})',
+  '  row[1]:createText("A_OVERFLOW_MARKER_ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789_END_A", { wordwrap = true, minRowHeight = 16 })',
+  '  frame:display()',
+  'end',
+  'local menuB = { name = "OverflowWrapB", layer = 1 }',
+  'function menuB.createFrame()',
+  '  local frame = Helper.createFrameHandle(menuB, { width = 100, height = 80 })',
+  '  local table = frame:addTable(1, { width = 64, reserveScrollBar = false, scaling = false })',
+  '  local row = table:addRow(false, {})',
+  '  row[1]:createText("B_OVERFLOW_MARKER_ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789_END_B", { wordwrap = true, minRowHeight = 16 })',
+  '  frame:display()',
+  'end',
+  'local menuC = { name = "OverflowWrapC", layer = 1 }',
+  'function menuC.createFrame()',
+  '  local frame = Helper.createFrameHandle(menuC, { width = 100, height = 80 })',
+  '  local table = frame:addTable(1, { width = 96, reserveScrollBar = false, scaling = false })',
+  '  local row = table:addRow(false, {})',
+  '  row[1]:createText("C_OVERFLOW_MARKER_ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789_END_C", { wordwrap = true, minRowHeight = 16 })',
+  '  frame:display()',
+  'end',
+  '',
+].join('\n');
+
 const previewColorLua = [
   'local menu = { name = "PreviewColors", layer = 1 }',
   'local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
@@ -1729,6 +1814,48 @@ async function runIndependentReviewCorrections(): Promise<{
       readonly reorderedCalls: NormalizationControlResult | undefined;
     };
   };
+  readonly overflowHeightEvidence: ReadonlyArray<{
+    readonly programStatus: unknown;
+    readonly operationOuterHeight?: number;
+    readonly cellHeight?: number;
+    readonly rowHeight?: number;
+    readonly tableHeight?: number;
+  }>;
+  readonly overflowSceneEvidence: ReadonlyArray<{
+    readonly status: unknown;
+    readonly gameTruth: unknown;
+    readonly widgets?: number;
+    readonly texts?: number;
+    readonly glyphs?: number;
+    readonly displayedText?: string;
+    readonly availableWidth?: number;
+    readonly textClip?: unknown;
+    readonly cellClip?: unknown;
+    readonly truncationSourcePinned?: boolean;
+    readonly ellipsisToken?: string;
+    readonly ellipsisGlyphs?: ReadonlyArray<{
+      readonly id: string;
+      readonly codePoint: number;
+      readonly rect?: unknown;
+      readonly clipRect?: unknown;
+      readonly fullyVisibleInTextAndCellClip: boolean;
+    }>;
+    readonly layoutOverflow?: boolean;
+    readonly lineOverflow?: boolean;
+    readonly overflowGapReason?: string;
+  }>;
+  readonly overflowPaintEvidence: ReadonlyArray<{
+    readonly paintStatus: unknown;
+    readonly canvasStatus: unknown;
+    readonly ellipsisCommandCount: number;
+    readonly canvasGlyphBlitCount: number;
+  }>;
+  readonly overflowWrapEvidence: ReadonlyArray<{
+    readonly originalText?: string;
+    readonly displayedText?: string;
+    readonly lineCount?: number;
+    readonly lineTexts: readonly string[];
+  }>;
 }> {
   const minTextHeightGrades = ['supplied', 'captured', 'unverified-default'] as const;
   for (const truthGrade of minTextHeightGrades) {
@@ -1891,6 +2018,383 @@ async function runIndependentReviewCorrections(): Promise<{
         gaps: canonicalScene.gaps.length,
       },
       sceneGameTruth: canonicalScene?.gameTruth,
+    });
+
+  const overflowHeightSource = sourceFor([
+    passthrough('ui.xml', overflowHeightXml),
+    passthrough('ui/overflow-height.lua', overflowHeightLua, { reason: 'unparsed' }),
+  ]);
+  const overflowTargetNames = [
+    'menuA.createFrame',
+    'menuB.createFrame',
+    'menuC.createFrame',
+  ];
+  const overflowSelections = overflowTargetNames.map(name =>
+    selectionFor(overflowHeightSource, 'ui/overflow-height.lua', 'function', name));
+  const overflowResults = canonical === undefined
+    ? []
+    : overflowSelections.map(selection => pipeline(overflowHeightSource, selection, canonical, {}, {
+      truthGrade: 'supplied',
+      drawable: { width: 2544, height: 1353 },
+      uiScale: 1.2527777777777778,
+    }));
+  const overflowPrograms = overflowResults.map(result => result.program !== undefined && 'program' in result.program
+    ? result.program.program
+    : undefined);
+  const overflowScenes = overflowResults.map(result => result.scene !== undefined && 'scene' in result.scene
+    ? result.scene.scene
+    : undefined);
+  const overflowNoTruncationResults = canonical === undefined
+    ? []
+    : overflowSelections.map(selection => pipeline(overflowHeightSource, selection, canonical, {
+      textPolicy: { truncationMode: 'none' },
+    }, {
+      truthGrade: 'supplied',
+      drawable: { width: 2544, height: 1353 },
+      uiScale: 1.2527777777777778,
+    }));
+  const overflowNoTruncationScenes = overflowNoTruncationResults.map(result => result.scene !== undefined && 'scene' in result.scene
+    ? result.scene.scene
+    : undefined);
+  const overflowTextEvidenceFor = (scenes: typeof overflowScenes) => scenes.map(scene => {
+    const text = scene?.texts.find(candidate => candidate.content?.includes('_OVERFLOW_MARKER_'));
+    const overflowGap = scene?.gaps.find(gap => gap.category === 'text' && gap.reason.includes('Line or glyph width exceeds'));
+    const widget = text === undefined ? undefined : scene?.widgets.find(candidate => candidate.id === text.widgetId);
+    const cell = widget === undefined ? undefined : scene?.cells.find(candidate => candidate.id === widget.cellId);
+    const cellClip = cell?.clipRect || cell?.rect;
+    const ellipsisGlyphs = text === undefined
+      ? []
+      : scene?.glyphs
+        .filter(candidate => candidate.textId === text.id && candidate.quad.isEllipsis)
+        .map(candidate => {
+          const rect = candidate.rect;
+          const clipRect = candidate.clipRect;
+          const fullyVisible = rect !== undefined
+            && clipRect !== undefined
+            && rect.x >= clipRect.x
+            && rect.y >= clipRect.y
+            && rect.x + rect.width <= clipRect.x + clipRect.width
+            && rect.y + rect.height <= clipRect.y + clipRect.height
+            && rect.width > 0
+            && rect.height > 0
+            && clipRect.width > 0
+            && clipRect.height > 0;
+          const fullyVisibleInTextAndCellClip = fullyVisible
+            && cellClip !== undefined
+            && rect.x >= cellClip.x
+            && rect.y >= cellClip.y
+            && rect.x + rect.width <= cellClip.x + cellClip.width
+            && rect.y + rect.height <= cellClip.y + cellClip.height
+            && cellClip.width > 0
+            && cellClip.height > 0;
+          return {
+            id: candidate.id,
+            codePoint: candidate.codePoint,
+            rect,
+            clipRect,
+            fullyVisibleInTextAndCellClip,
+          };
+        });
+    return {
+      text,
+      overflowGap,
+      ellipsisGlyphs,
+      cellClip,
+      layoutOverflow: text?.layout?.overflow,
+      lineOverflow: text?.lines.some(line => line.overflow),
+    };
+  });
+  const overflowTextEvidence = overflowTextEvidenceFor(overflowScenes);
+  const overflowNoTruncationTextEvidence = overflowTextEvidenceFor(overflowNoTruncationScenes);
+  const overflowSceneEvidence = overflowScenes.map((scene, index) => ({
+    status: scene?.status,
+    gameTruth: scene?.gameTruth,
+    widgets: scene?.widgets.length,
+    texts: scene?.texts.length,
+    glyphs: scene?.glyphs.length,
+    displayedText: overflowTextEvidence[index]?.text?.layout?.displayedText,
+    availableWidth: overflowTextEvidence[index]?.text?.availableWidth,
+    textClip: overflowTextEvidence[index]?.text?.clipRect,
+    cellClip: overflowTextEvidence[index]?.cellClip,
+    truncationSourcePinned: overflowTextEvidence[index]?.text?.provenanceLinks.some(link =>
+      link.sourcePin?.sourcePath === WIDGET_SOURCE_PATH
+      && link.sourcePin.lineStart === 17779
+      && link.sourcePin.lineEnd === 17784),
+    ellipsisToken: overflowTextEvidence[index]?.text?.layout?.profile.ellipsisPolicy.token,
+    ellipsisGlyphs: overflowTextEvidence[index]?.ellipsisGlyphs,
+    layoutOverflow: overflowTextEvidence[index]?.layoutOverflow,
+    lineOverflow: overflowTextEvidence[index]?.lineOverflow,
+    overflowGapReason: overflowTextEvidence[index]?.overflowGap?.reason,
+  }));
+  const overflowTextDisplayEvidence = overflowTextEvidence.map(evidence => ({
+    displayedText: evidence.text?.layout?.displayedText,
+    truncated: evidence.text?.layout?.truncated,
+    lineCount: evidence.text?.lines.length,
+  }));
+  check('B119 default no-wrap createText uses source-backed end ellipsis',
+    overflowTextDisplayEvidence.length === 3
+      && overflowTextDisplayEvidence.every(evidence =>
+        typeof evidence.displayedText === 'string'
+        && evidence.displayedText.endsWith('...')
+        && evidence.truncated === true
+        && evidence.lineCount === 1),
+    {
+      fixtureReady: canonical !== undefined && overflowSelections.length === 3,
+      text: overflowTextDisplayEvidence,
+    });
+  check('B119 default no-wrap paint retains three visible ASCII-period ellipsis glyphs inside the text clip',
+    overflowSceneEvidence.length === 3
+      && overflowSceneEvidence.every(evidence =>
+        evidence.ellipsisToken === X4_UI_DEFAULT_ELLIPSIS_TOKEN
+        && evidence.truncationSourcePinned === true
+        && evidence.ellipsisGlyphs?.length === 3
+        && evidence.ellipsisGlyphs.every(glyph => glyph.codePoint === 0x2e && glyph.fullyVisibleInTextAndCellClip)),
+    {
+      fixtureReady: canonical !== undefined && overflowSelections.length === 3,
+      paint: overflowSceneEvidence.map(evidence => ({
+        token: evidence.ellipsisToken,
+        glyphs: evidence.ellipsisGlyphs,
+      })),
+    });
+  const expectedOverflowDisplay = [
+    'A_OVERFLOW_MARKER_AB...',
+    'B_OVERFLOW_MARKER...',
+    'C_OVERFL...',
+  ] as const;
+  check('B119 exact A/B/C no-wrap prefixes match the native visible token evidence',
+    overflowTextDisplayEvidence.length === expectedOverflowDisplay.length
+      && overflowTextDisplayEvidence.every((evidence, index) => evidence.displayedText === expectedOverflowDisplay[index])
+      && overflowSceneEvidence.map(evidence => evidence.availableWidth).join(',') === '52,45,25',
+    {
+      fixtureReady: canonical !== undefined && overflowSelections.length === expectedOverflowDisplay.length,
+      expected: expectedOverflowDisplay,
+      actual: overflowTextDisplayEvidence.map(evidence => evidence.displayedText),
+    });
+  const overflowPaintEvidence = overflowResults.map((result, index) => {
+    const scene = overflowScenes[index];
+    if (canonical === undefined || scene === undefined) {
+      return {
+        paintStatus: undefined,
+        canvasStatus: undefined,
+        ellipsisCommandCount: 0,
+        canvasGlyphBlitCount: 0,
+      };
+    }
+    const paint = projectX4UiPaintPlan({
+      scene,
+      corpus: canonical,
+      previewAuthority: result,
+    });
+    if (paint.status === 'refused') {
+      return {
+        paintStatus: paint.status,
+        canvasStatus: undefined,
+        ellipsisCommandCount: 0,
+        canvasGlyphBlitCount: 0,
+      };
+    }
+    const trace: ExactPipelineTraceEntry[] = [];
+    const canvas = renderX4UiPaintPlanToCanvas(paint, canonical, {
+      surfaceFactory: exactPipelineCanvasFactory(trace),
+      presentation: 'source-composition',
+    });
+    const text = overflowTextEvidence[index]?.text;
+    const ellipsisIds = new Set((overflowTextEvidence[index]?.ellipsisGlyphs || []).map(glyph => glyph.id));
+    const ellipsisCommandCount = paint.plan.layers
+      .flatMap(layer => layer.commands)
+      .filter(command => {
+        const record = asRecord(command);
+        return record?.kind === 'glyph-alpha-blit'
+          && typeof record.nodeId === 'string'
+          && ellipsisIds.has(record.nodeId);
+      }).length;
+    return {
+      paintStatus: paint.status,
+      canvasStatus: canvas.status,
+      ellipsisCommandCount,
+      canvasGlyphBlitCount: trace.filter(entry => entry.name === 'drawImage'
+        && (entry.args[0] === 'regular-atlas' || entry.args[0] === 'bold-atlas')).length,
+      textId: text?.id,
+    };
+  });
+  check('B119 exact A/B/C paint plan and canvas retain all final ellipsis glyphs',
+    overflowPaintEvidence.length === 3
+      && overflowPaintEvidence.every((evidence, index) =>
+        evidence.paintStatus !== 'refused'
+        && evidence.canvasStatus === 'rendered'
+        && evidence.ellipsisCommandCount === overflowSceneEvidence[index]?.ellipsisGlyphs?.length
+        && evidence.ellipsisCommandCount === 3
+        && evidence.canvasGlyphBlitCount >= evidence.ellipsisCommandCount),
+    {
+      fixtureReady: canonical !== undefined && overflowSelections.length === 3,
+      paint: overflowPaintEvidence,
+    });
+
+  const overflowWrapSource = sourceFor([
+    passthrough('ui.xml', overflowWrapXml),
+    passthrough('ui/overflow-wrap.lua', overflowWrapLua, { reason: 'unparsed' }),
+  ]);
+  const overflowWrapTargetNames = [
+    'menuA.createFrame',
+    'menuB.createFrame',
+    'menuC.createFrame',
+  ];
+  const overflowWrapSelections = overflowWrapTargetNames.map(name =>
+    selectionFor(overflowWrapSource, 'ui/overflow-wrap.lua', 'function', name));
+  const overflowWrapResults = canonical === undefined
+    ? []
+    : overflowWrapSelections.map(selection => pipeline(overflowWrapSource, selection, canonical, {}, {
+      truthGrade: 'supplied',
+      drawable: { width: 2544, height: 1353 },
+      uiScale: 1.2527777777777778,
+    }));
+  const overflowWrapScenes = overflowWrapResults.map(result => result.scene !== undefined && 'scene' in result.scene
+    ? result.scene.scene
+    : undefined);
+  const overflowWrapEvidence = overflowWrapScenes.map(scene => {
+    const text = scene?.texts.find(candidate => candidate.content?.includes('_OVERFLOW_MARKER_'));
+    return {
+      originalText: text?.layout?.originalText,
+      displayedText: text?.layout?.displayedText,
+      lineCount: text?.lines.length,
+      lineTexts: text?.lines.map(line => line.displayedText) || [],
+    };
+  });
+  check('B119 wordwrap=true preserves exact A/B/C line counts and source endings',
+    overflowWrapEvidence.length === 3
+      && overflowWrapEvidence.map(evidence => evidence.lineCount).join(',') === '3,3,2'
+      && overflowWrapEvidence.every((evidence, index) =>
+        evidence.originalText === [
+          'A_OVERFLOW_MARKER_ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789_END_A',
+          'B_OVERFLOW_MARKER_ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789_END_B',
+          'C_OVERFLOW_MARKER_ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789_END_C',
+        ][index]
+        && evidence.lineTexts.length === evidence.lineCount
+        && evidence.lineTexts.join('') === evidence.originalText
+        && evidence.lineTexts[evidence.lineTexts.length - 1]?.endsWith(['_A', '_B', '_C'][index])),
+    {
+      fixtureReady: canonical !== undefined && overflowWrapSelections.length === 3,
+      text: overflowWrapEvidence,
+    });
+  check('B119 explicit truncationMode none preserves hard no-wrap overflow',
+    overflowNoTruncationTextEvidence.length === 3
+      && overflowNoTruncationTextEvidence.every(evidence =>
+        evidence.layoutOverflow === true
+        && evidence.lineOverflow === true
+        && evidence.text?.layout?.truncated === false
+        && evidence.text?.lines.length === 1
+        && typeof evidence.text.layout.displayedText === 'string'
+        && !evidence.text.layout.displayedText.endsWith('...')),
+    {
+      fixtureReady: canonical !== undefined && overflowSelections.length === 3,
+      text: overflowNoTruncationTextEvidence.map(evidence => ({
+        displayedText: evidence.text?.layout?.displayedText,
+        truncated: evidence.text?.layout?.truncated,
+        layoutOverflow: evidence.layoutOverflow,
+        lineOverflow: evidence.lineOverflow,
+      })),
+    });
+  const overflowGeometry = overflowPrograms.map(program => {
+    const operation = program?.operations.find(candidate => candidate.kind === 'createText');
+    const cell = operation === undefined ? undefined : program?.cells.find(candidate => candidate.id === operation.cellId);
+    const row = program?.rows[0];
+    const table = program?.tables[0];
+    return {
+      programStatus: program?.status,
+      operationOuterHeight: operation?.descriptorFacts.outerHeight,
+      cellHeight: cell?.height,
+      rowHeight: row?.height,
+      tableHeight: table?.height,
+      operation,
+      cell,
+    };
+  });
+  const overflowHeightEvidence = overflowGeometry.map(geometry => ({
+    programStatus: geometry.programStatus,
+    operationOuterHeight: geometry.operationOuterHeight?.status === 'known'
+      && geometry.operationOuterHeight.expectedType === 'number'
+      && typeof geometry.operationOuterHeight.value === 'number'
+      ? geometry.operationOuterHeight.value
+      : undefined,
+    cellHeight: geometry.cellHeight?.status === 'known' ? geometry.cellHeight.value : undefined,
+    rowHeight: geometry.rowHeight?.status === 'known' ? geometry.rowHeight.value : undefined,
+    tableHeight: geometry.tableHeight?.status === 'known' ? geometry.tableHeight.value : undefined,
+  }));
+  check('B119 no-wrap overflow marker derives deterministic text/row/table height and bounded preview',
+    overflowGeometry.length === 3
+      && overflowGeometry.every(geometry => geometry.operationOuterHeight?.status === 'known'
+        && geometry.cellHeight?.status === 'known'
+        && geometry.rowHeight?.status === 'known'
+        && geometry.tableHeight?.status === 'known'
+        && Number.isFinite(geometry.operationOuterHeight.value)
+        && Number.isFinite(geometry.cellHeight.value)
+        && Number.isFinite(geometry.rowHeight.value)
+        && Number.isFinite(geometry.tableHeight.value)
+        && geometry.cellHeight.value === geometry.operationOuterHeight.value
+        && geometry.rowHeight.value >= geometry.cellHeight.value
+        && geometry.tableHeight.value >= geometry.rowHeight.value)
+      && overflowHeightEvidence.every(evidence => evidence.programStatus === 'projected'
+        && evidence.operationOuterHeight === 16
+        && evidence.cellHeight === 16
+        && evidence.rowHeight === 16
+        && evidence.tableHeight === 16)
+      && overflowSceneEvidence.length === 3
+      && overflowSceneEvidence.every(evidence => evidence.status !== undefined
+        && evidence.gameTruth === 'Not verified in game'
+        && typeof evidence.widgets === 'number' && evidence.widgets > 0
+        && typeof evidence.texts === 'number' && evidence.texts > 0
+        && typeof evidence.glyphs === 'number' && evidence.glyphs > 0
+        && evidence.layoutOverflow === false
+        && evidence.lineOverflow === false
+        && evidence.overflowGapReason === undefined),
+    {
+      fixtureReady: canonical !== undefined && overflowSelections.length === 3,
+      targets: overflowSelections.map(selection => ({
+        id: selection.target.id,
+        name: selection.target.name,
+      })),
+      geometry: overflowHeightEvidence,
+      geometryFacts: overflowGeometry.map(geometry => ({
+        programStatus: geometry.programStatus,
+        operationOuterHeight: geometry.operationOuterHeight,
+        cellHeight: geometry.cellHeight,
+        rowHeight: geometry.rowHeight,
+        tableHeight: geometry.tableHeight,
+      })),
+      sceneEvidence: overflowSceneEvidence,
+    });
+
+  const missingGlyphSelection = selectionFor(overflowHeightSource, 'ui/overflow-height.lua', 'function', 'menuMissing.createFrame');
+  const missingGlyphResult = canonical === undefined
+    ? undefined
+    : pipeline(overflowHeightSource, missingGlyphSelection, canonical, {}, {
+      truthGrade: 'supplied',
+      drawable: { width: 2544, height: 1353 },
+      uiScale: 1.2527777777777778,
+    });
+  const missingGlyphProgram = missingGlyphResult?.program !== undefined && 'program' in missingGlyphResult.program
+    ? missingGlyphResult.program.program
+    : undefined;
+  const missingGlyphOperation = missingGlyphProgram?.operations.find(operation => operation.kind === 'createText');
+  const missingGlyphCell = missingGlyphOperation === undefined
+    ? undefined
+    : missingGlyphProgram?.cells.find(cell => cell.id === missingGlyphOperation.cellId);
+  check('B119 missing-glyph gap still refuses text/row/table height',
+    missingGlyphProgram !== undefined
+      && missingGlyphOperation?.descriptorFacts.outerHeight?.status === 'unavailable'
+      && missingGlyphCell?.height?.status === 'unavailable'
+      && missingGlyphProgram.rows[0]?.height?.status === 'unavailable'
+      && missingGlyphProgram.tables[0]?.height?.status === 'unavailable'
+      && missingGlyphProgram.gaps.some(gap => gap.category === 'height'
+        && gap.reason.includes('unresolved glyph or layout gap')),
+    {
+      pipelineStatus: missingGlyphResult?.status,
+      programStatus: missingGlyphProgram?.status,
+      operationOuterHeight: missingGlyphOperation?.descriptorFacts.outerHeight,
+      cellHeight: missingGlyphCell?.height,
+      rowHeight: missingGlyphProgram?.rows[0]?.height,
+      tableHeight: missingGlyphProgram?.tables[0]?.height,
+      gaps: missingGlyphProgram?.gaps,
     });
 
   const previewColorSource = sourceFor([
@@ -2109,6 +2613,22 @@ return menu
   const exactPipeline125Program = exactPipelineProgram(exactPipelineAt125);
   const exactPipelineOneScene = exactPipelineScene(exactPipelineAtOne);
   const exactPipeline125Scene = exactPipelineScene(exactPipelineAt125);
+  const exactPipelineWrappedText = exactPipelineOneScene?.texts.find(text => text.content === 'Status: source-first Forge preview');
+  check('B119 wordwrap=true preserves issued line content and line count',
+    exactPipelineWrappedText?.layout?.displayedText === 'Status: source-first Forge preview'
+      && exactPipelineWrappedText.lines.length === 1
+      && exactPipelineWrappedText.lines[0]?.displayedText === 'Status: source-first Forge preview'
+      && exactPipelineWrappedText.layout?.truncated === false,
+    {
+      fixtureReady: exactPipelineOneScene !== undefined,
+      text: exactPipelineWrappedText === undefined ? undefined : {
+        content: exactPipelineWrappedText.content,
+        displayedText: exactPipelineWrappedText.layout.displayedText,
+        lineTexts: exactPipelineWrappedText.lines.map(line => line.displayedText),
+        lineCount: exactPipelineWrappedText.lines.length,
+        truncated: exactPipelineWrappedText.layout.truncated,
+      },
+    });
   const exactPipelineCellHeights = (program: typeof exactPipelineOneProgram) => program?.rows.map(row => {
     const cell = program.cells.find(candidate => candidate.id === row.cellIds[0]);
     return cell?.height?.value;
@@ -4545,6 +5065,10 @@ return menu
         reorderedCalls: reorderedCallsControl,
       },
     },
+    overflowHeightEvidence,
+    overflowSceneEvidence,
+    overflowPaintEvidence,
+    overflowWrapEvidence,
   };
 }
 
@@ -4590,6 +5114,10 @@ runIndependentReviewCorrections().then(result => {
       canonicalLoaderRestored: result.canonicalLoaderRestored,
       normalization: result.normalization,
       normalizationEvidence: result.normalizationEvidence,
+      overflowHeightEvidence: result.overflowHeightEvidence,
+      overflowSceneEvidence: result.overflowSceneEvidence,
+      overflowPaintEvidence: result.overflowPaintEvidence,
+      overflowWrapEvidence: result.overflowWrapEvidence,
     },
     failed: failed.map(candidate => ({ name: candidate.name, detail: candidate.detail })),
   };

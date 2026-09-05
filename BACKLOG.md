@@ -1963,6 +1963,18 @@ three-menu wrap/truncation parity, complete Helper/widget/keep-out coverage, AI 
 acceptance, or OpenVSX. Overall B119 and GitHub #41 remain `IN_PROGRESS / PARTIAL`; preview remains
 `Not verified in game`. Evidence: `dev-docs/b119-x4-ui-pipeline-smoke/source-editor-ingame-20260903/`.
 
+**B119 three real-menu pixel-parity checkpoint 2026-09-05 — ORIGINAL BRIEF 6/6 VERIFIED / FULL B119 IN PROGRESS:**
+Forge authored, guarded, staged, deployed, and rendered exact `ui/pipeline_test.lua` (`13,202` bytes /
+`E75DEF8C...8EC0`) for three separately registered X4 menus at one exact `2544x1353`, user-scale `1.0`, effective-scale
+`1.252777...` profile. X4 visibly accepted A/B/C and completed `A -> B -> C -> A` with zero scoped view/Lua failure
+signatures. The closed receipt accepts `125` column/row/button/wrap/overflow features with maximum normalized delta
+`3 px <= 5 px`; wrapped baselines and visible truncated strings match exactly, while a `6 px` perturbation is rejected.
+Installed package parity, focused suites, typecheck/lint/build/probe, runtime oracles `134/134`, serial E2E `106/106`,
+and six-image human review pass. This closes the sole remaining literal brief row, not the release program: twelve-image
+AI Influence reconstruction, native Save As false-success repair, release acceptance, and OpenVSX remain open. Preview
+still says `Not verified in game`; exact deploy plus X4 remains authority. Exact record:
+`docs/plans/2026-09-03-b119-three-menu-pixel-parity.md`.
+
 ### B115 · Forge Capability Convergence `in_progress` (P0, PRIORITY OVERRIDE)
 
 Ken explicitly promoted GitHub initiative #9 and child requests #10–#21 above the active R13 close on 2026-07-31.

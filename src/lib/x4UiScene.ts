@@ -2246,7 +2246,11 @@ const widgetSourceLinks = (
   widgetType: 'text' | 'button' | 'editbox' | 'icon',
 ): X4UiSceneProvenanceLink[] => {
   const pins = widgetType === 'text'
-    ? [{ lineStart: 6243, lineEnd: 6243 }, { lineStart: 13140, lineEnd: 13173 }]
+    ? [
+      { lineStart: 6243, lineEnd: 6243 },
+      { lineStart: 13140, lineEnd: 13173 },
+      { lineStart: 17779, lineEnd: 17784 },
+    ]
     : widgetType === 'button'
       ? [{ lineStart: 6279, lineEnd: 6279 }, { lineStart: 12135, lineEnd: 12176 }]
       : widgetType === 'editbox'
@@ -2490,7 +2494,16 @@ const buildTextNode = (
   if (!offsetY || !isFiniteSafe(offsetY.value)) gapForMissingFact(context, 'text', textNodeId, source, yName, offsetYFact, links);
   let availableWidth: number | undefined;
   if (widgetType === 'text') {
-    availableWidth = widgetRect.width;
+    const textOffsetX = offsetX?.value as number | undefined;
+    const parentAvailableWidth = textOffsetX === undefined
+      ? undefined
+      : safeArithmetic(parentRect.width - textOffsetX);
+    // setUpFontString uses min(width, parentwidth - x); the text anchor is
+    // parentx + x, so the truncation budget must be derived from that same
+    // parent-relative width before glyphs are placed.
+    availableWidth = parentAvailableWidth === undefined
+      ? widgetRect.width
+      : Math.min(widgetRect.width, parentAvailableWidth);
   } else if (widgetType === 'icon') {
     availableWidth = parentRect.width;
   } else if (offsetX) {
@@ -2545,6 +2558,16 @@ const buildTextNode = (
         textGapIds.push(policyGap);
         links.push(policyGap);
       }
+      const yAnchor = widgetType === 'text'
+        ? parentRect.y + parentRect.height / 2 - (offsetY.value as number)
+        : widgetType === 'icon'
+          ? parentRect.y + parentRect.height / 2 - widgetRect.height / 2 + (offsetY.value as number)
+          : widgetRect.y + widgetRect.height / 2 - (offsetY.value as number);
+      const lineBoxMinY = Math.min(...layout.lines.map(line => line.lineBox.y));
+      const lineBoxMaxY = Math.max(...layout.lines.map(line => line.lineBox.y + line.lineBox.height));
+      const yBase = layout.lines.length === 1
+        ? yAnchor - layout.lines[0]!.lineBox.height / 2
+        : yAnchor - (lineBoxMinY + lineBoxMaxY) / 2;
       for (const line of layout.lines) {
         const xValue = offsetX.value as number;
         let xAnchor: number;
@@ -2581,12 +2604,6 @@ const buildTextNode = (
           if (alignment === 'center') subtractHalfLineWidth = true;
         }
         const xBase = xAnchor! - (subtractLineWidth ? line.width : subtractHalfLineWidth ? line.width / 2 : 0);
-        const yAnchor = widgetType === 'text'
-          ? parentRect.y + parentRect.height / 2 - (offsetY.value as number)
-          : widgetType === 'icon'
-            ? parentRect.y + parentRect.height / 2 - widgetRect.height / 2 + (offsetY.value as number)
-            : widgetRect.y + widgetRect.height / 2 - (offsetY.value as number);
-        const yBase = yAnchor - line.lineBox.height / 2;
         const lineRect = rect(xBase + line.lineBox.x, yBase + line.lineBox.y, line.width, line.lineBox.height);
         const lineGlyphIds: string[] = [];
         for (let glyphIndex = 0; glyphIndex < line.glyphQuads.length; glyphIndex += 1) {
@@ -2739,6 +2756,12 @@ const buildTextNode = (
                 ? 'widget_fullscreen.lua setUpEditBox text anchor and border'
                 : 'widget_fullscreen.lua updateIcon text anchor and alignment',
         ),
+        ...(widgetType === 'text' ? [makeSourceLink(
+          'source-pin',
+          source,
+          { sourcePath: WIDGET_SOURCE_PATH, lineStart: 17779, lineEnd: 17784 },
+          'widget_fullscreen.lua no-wrap text delegates width-bounded output to TruncateText',
+        )] : []),
       ],
       diagnosticLinks: links,
       diagnosticStyle: diagnosticStyleForGeometry(Boolean(bounds)),
