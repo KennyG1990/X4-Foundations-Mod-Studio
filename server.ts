@@ -1495,11 +1495,17 @@ function namespaceModAiScripts(ws: ModWorkspace, modId: string): void {
   }
 }
 
-function buildWorkspaceFileManifest(workspaceInput: unknown, options: { includePassthrough?: boolean } = {}): { modId: string; files: CompiledFileManifest } {
+function buildWorkspaceFileManifest(workspaceInput: unknown): {
+  modId: string;
+  files: CompiledFileManifest;
+  generatedFiles: CompiledFileManifest;
+  passthroughFiles: CompiledFileManifest;
+} {
   const ws = activeBuildWorkspace(workspaceInput);
   const modId = effectiveModId(ws);
   namespaceModAiScripts(ws, modId);
   const files: CompiledFileManifest = {};
+  const passthroughFiles: CompiledFileManifest = {};
   const settings = ws.compileSettings || { md: true, ui: true, ai: true, library: true, translations: true, patches: true };
 
   files["content.xml"] = contentXmlFor(modId, ws);
@@ -1586,21 +1592,32 @@ function buildWorkspaceFileManifest(workspaceInput: unknown, options: { includeP
     }
   }
 
-  // Passthrough files preserved from an imported mod. Generated output always
-  // wins a path collision so the studio's modeled domains stay authoritative.
-  for (const pf of (options.includePassthrough === false ? [] : (ws.passthroughFiles || []))) {
+  // Canonical artifact precedence: generated/modeled output wins a path collision; a loaded
+  // passthrough is the next authoritative in-memory byte source; an omitted/unloaded
+  // passthrough stays absent here so the stamped disk source can supply it unchanged.
+  for (const pf of (ws.passthroughFiles || [])) {
     if (!pf || typeof pf.path !== 'string') continue;
     const rel = pf.path.replace(/\\/g, '/').replace(/^\/+/, '');
     if (!rel || rel.includes('..')) continue;
     if (pf.omitted || pf.content === undefined) continue; // tracked-not-loaded: preserved on disk, never overwrite with empty
     if (files[rel] === undefined) {
       files[rel] = pf.content;
+      passthroughFiles[rel] = pf.content;
     }
   }
 
   applyOriginalModeledFiles(ws, files);
 
-  return { modId, files };
+  // Keep the complete manifest for validation/UI callers, but expose the two in-memory
+  // ownership classes separately so artifact planning can apply its exclude/runtime-owned
+  // rules to loaded passthrough bytes before they override stamped disk files.
+  const generatedFiles: CompiledFileManifest = { ...files };
+  for (const rel of Object.keys(passthroughFiles)) {
+    if (files[rel] !== undefined) passthroughFiles[rel] = files[rel];
+    delete generatedFiles[rel];
+  }
+
+  return { modId, files, generatedFiles, passthroughFiles };
 }
 
 function summarizeWorkspaceDomains(ws: ModWorkspace) {
@@ -4046,6 +4063,19 @@ app.get("/api/agent/schema", (req, res) => {
         auth: true,
         body: { workspace: "optional ModWorkspace; defaults to active workspace" },
         purpose: "Compile and write the package into configured Mod Workspace and/or X4 game extensions paths."
+      },
+      {
+        method: "POST",
+        path: "/api/agent/deploy-verify",
+        auth: true,
+        body: {
+          path: "required when workspace is omitted: mod folder path under a configured root",
+          workspace: "required when path is omitted: ModWorkspace payload",
+          dryRun: "optional boolean; run the full preflight and exact deployment preview without writing",
+          autoReimport: "optional boolean; when the stamped source is stale, re-import it from disk before continuing",
+          deployFormat: "optional loose | catalog; request value wins, then persisted config, then loose default",
+        },
+        purpose: "Canonical guarded deployment route: perform source-sync, XML well-formedness, compile, full validation, deployment preview, optional dry run, materialization, byte confirmation, extension doctor, drift, and baseline checks."
       },
       {
         method: "GET",
@@ -11539,8 +11569,12 @@ function previewDeploymentEffect(ws: any, targetRoot: string, format: DeployForm
     const build = activeBuildWorkspace(ws);
     const stampedSource = typeof build?.sourceStamp?.dir === 'string' ? path.resolve(build.sourceStamp.dir) : '';
     const hasDiskSource = Boolean(stampedSource && fs.existsSync(stampedSource) && fs.statSync(stampedSource).isDirectory());
-    const generated = buildWorkspaceFileManifest(build, { includePassthrough: !hasDiskSource });
-    const plan = buildArtifactPlan({ sourceRoot: hasDiskSource ? stampedSource : '', generatedFiles: generated.files });
+    const generated = buildWorkspaceFileManifest(build);
+    const plan = buildArtifactPlan({
+      sourceRoot: hasDiskSource ? stampedSource : '',
+      generatedFiles: generated.generatedFiles,
+      passthroughFiles: generated.passthroughFiles,
+    });
     if (!plan.ok) return { error: `Cannot preview: artifact planning failed — ${plan.errors.join('; ')}` };
 
     // Catalog mode packs the payload, so the on-disk names are the catalog volumes, not the
@@ -11690,8 +11724,12 @@ function compileWorkspaceToFolder(
       throw new Error('Cannot build a complete artifact: omitted passthrough files have no available disk source. Re-import the project from its workspace folder.');
     }
     const sourceRoot = hasDiskSource ? stampedSource : (ephemeralSource = fs.mkdtempSync(path.join(os.tmpdir(), 'x4forge-generated-source-')));
-    const generated = buildWorkspaceFileManifest(ws, { includePassthrough: !hasDiskSource });
-    const plan = buildArtifactPlan({ sourceRoot, generatedFiles: generated.files });
+    const generated = buildWorkspaceFileManifest(ws);
+    const plan = buildArtifactPlan({
+      sourceRoot,
+      generatedFiles: generated.generatedFiles,
+      passthroughFiles: generated.passthroughFiles,
+    });
     if (!plan.ok) throw new Error(`Artifact planning failed: ${plan.errors.join('; ')}`);
 
     const artifactRoot = path.join(scratchParent, artifactMode);
@@ -11807,6 +11845,10 @@ function runCompileArtifactSelftest() {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, content);
   };
+  const exactLua = (marker: string, bytes: number): string => {
+    const line = `-- ${marker}\n`;
+    return line.repeat(Math.ceil(bytes / line.length)).slice(0, bytes);
+  };
   try {
     const patchOnly = sanitizeWorkspace({
       id: 'patch-only', name: 'Patch Only', version: '1.0', author: 'Forge', description: 'wares patch',
@@ -11909,12 +11951,21 @@ function runCompileArtifactSelftest() {
     record('genuinely empty extension remains blocked', validatePackageReadiness(emptyWorkspace)
       .some(finding => finding.code === 'package.empty_extension' && finding.severity === 'error'));
 
-    sourceWrite('content.xml', '<?xml version="1.0"?><content id="artifact_integration" name="Artifact Integration" version="100"/>');
+    sourceWrite('content.xml', '<?xml version="1.0"?><content id="artifact_integration" name="Artifact Integration" version="100" author="Forge" description="Artifact Integration"/>');
     sourceWrite('md/source.xml', '<?xml version="1.0"?><mdscript name="ArtifactIntegration"><cues/></mdscript>');
     sourceWrite('assets/over-legacy-total.bin', Buffer.alloc((7 * 1024 * 1024) + 19, 0x6d));
     sourceWrite('unknown/deep/path/file.arbitrary', Buffer.from([0x00, 0xff, 0x10, 0x20]));
     sourceWrite('unicode/船.txt', 'payload');
     sourceWrite('runtime/state.db', 'source placeholder');
+    const precedencePath = 'ui/pipeline_test.lua';
+    const omittedPath = 'ui/omitted-from-workspace.lua';
+    const unrelatedDiskPath = 'disk-only-untracked.custom';
+    const stalePassthroughLua = exactLua('stale stamped disk passthrough', 5488);
+    const committedPassthroughLua = exactLua('newer committed workspace passthrough', 12636);
+    const omittedDiskLua = 'return "omitted passthrough stays on disk"\n';
+    sourceWrite(precedencePath, stalePassthroughLua);
+    sourceWrite(omittedPath, omittedDiskLua);
+    sourceWrite(unrelatedDiskPath, 'unrelated disk source survives');
     sourceWrite('.git/config', 'must not deploy');
     sourceWrite('.forgeartifact.json', JSON.stringify({ runtimeOwned: ['runtime/**'] }));
 
@@ -11938,7 +11989,117 @@ function runCompileArtifactSelftest() {
         && !Object.prototype.hasOwnProperty.call(importedIdentityBuild.files, 'ui/ai_influence_friendly_name.lua'),
       Object.keys(importedIdentityBuild.files).filter(file => file.startsWith('ui/')).join(', '),
     );
+
+    // B119 causal regression: a loaded workspace-owned passthrough byte must beat the
+    // older stamped source copy, while omitted entries continue to fall back to disk.
+    const precedenceWorkspace = sanitizeWorkspace({
+      ...imported.workspace,
+      passthroughFiles: (imported.workspace.passthroughFiles || []).map((file: any) => {
+        if (String(file.path || '').toLowerCase() === precedencePath.toLowerCase()) {
+          return { ...file, content: committedPassthroughLua, omitted: false };
+        }
+        if (String(file.path || '').toLowerCase() === omittedPath.toLowerCase()) {
+          const withoutContent = { ...file };
+          delete withoutContent.content;
+          return { ...withoutContent, omitted: true, bytes: Buffer.byteLength(omittedDiskLua, 'utf8') };
+        }
+        if (String(file.path || '').toLowerCase() === unrelatedDiskPath.toLowerCase()) {
+          const withoutContent = { ...file };
+          delete withoutContent.content;
+          return { ...withoutContent, omitted: true, bytes: Buffer.byteLength('unrelated disk source survives', 'utf8') };
+        }
+        return file;
+      }),
+    });
+    const committedPassthroughHash = crypto.createHash('sha256').update(committedPassthroughLua, 'utf8').digest('hex');
+    const previewTarget = path.join(root, 'preview-target');
+    fs.mkdirSync(path.join(previewTarget, 'ui'), { recursive: true });
+    fs.writeFileSync(path.join(previewTarget, ...precedencePath.split('/')), stalePassthroughLua);
+    const previewEffect = previewDeploymentEffect(precedenceWorkspace, previewTarget, 'loose');
+    const previewEntry = 'error' in previewEffect ? undefined : previewEffect.overwritten.find(entry => entry.path === precedencePath);
+    record(
+      'B119 preview reports newer loaded passthrough bytes over stale disk bytes',
+      !!previewEntry && previewEntry.bytes === Buffer.byteLength(committedPassthroughLua, 'utf8') && previewEntry.wasBytes === Buffer.byteLength(stalePassthroughLua, 'utf8'),
+      'error' in previewEffect ? previewEffect.error : JSON.stringify(previewEntry),
+    );
+
+    const looseDeployRoot = path.join(root, 'loose-extensions');
+    const looseTarget = compileWorkspaceToFolder(precedenceWorkspace, looseDeployRoot, 'store', false, 'loose');
+    record(
+      'B119 loose materialization writes loaded workspace passthrough bytes',
+      fs.readFileSync(path.join(looseTarget, ...precedencePath.split('/'))).equals(Buffer.from(committedPassthroughLua, 'utf8')),
+      path.join(looseTarget, precedencePath),
+    );
+    record(
+      'B119 loose materialization falls back to omitted passthrough disk bytes',
+      fs.readFileSync(path.join(looseTarget, ...omittedPath.split('/')), 'utf8') === omittedDiskLua,
+    );
+    record(
+      'B119 loose materialization preserves unrelated disk source bytes',
+      fs.readFileSync(path.join(looseTarget, unrelatedDiskPath), 'utf8') === 'unrelated disk source survives',
+    );
+
+    const catalogDeployRoot = path.join(root, 'catalog-extensions');
+    const catalogTarget = compileWorkspaceToFolder(precedenceWorkspace, catalogDeployRoot, 'store', false, 'catalog');
+    let catalogPassthroughBytes: Buffer | undefined;
+    for (const catalogName of fs.readdirSync(catalogTarget).filter(name => /^ext_\d+\.cat$/i.test(name)).sort()) {
+      const entries = parseCat(path.join(catalogTarget, catalogName));
+      const entry = entries.find(candidate => candidate.name.replace(/\\/g, '/') === precedencePath);
+      if (entry) {
+        catalogPassthroughBytes = readEntryBytes(path.join(catalogTarget, catalogName.replace(/\.cat$/i, '.dat')), entry);
+        break;
+      }
+    }
+    record(
+      'B119 catalog DAT slice is byte-identical to loaded workspace passthrough',
+      !!catalogPassthroughBytes && catalogPassthroughBytes.equals(Buffer.from(committedPassthroughLua, 'utf8')),
+      catalogPassthroughBytes ? `${catalogPassthroughBytes.length} bytes` : 'catalog entry missing',
+    );
+
+    const collisionBytes = 'passthrough collision must lose to modeled output';
+    const collisionWorkspace = sanitizeWorkspace({
+      ...precedenceWorkspace,
+      uiWidgets: [b119Widget],
+      compileSettings: { ...(precedenceWorkspace.compileSettings || {}), ui: true },
+      passthroughFiles: [...(precedenceWorkspace.passthroughFiles || []), { path: `ui/${effectiveModId(precedenceWorkspace)}.lua`, content: collisionBytes, reason: 'partial' }],
+    });
+    const collisionManifest = buildWorkspaceFileManifest(collisionWorkspace).files;
+    const collisionPath = `ui/${effectiveModId(collisionWorkspace)}.lua`;
+    record(
+      'B119 modeled output wins a same-path passthrough collision',
+      typeof collisionManifest[collisionPath] === 'string' && collisionManifest[collisionPath] !== collisionBytes,
+      collisionPath,
+    );
+
+    const releaseResolved = { ...resolveXsdConfig(), modWorkspacePath: root, filesystemPath: root };
+    const preparedRelease = prepareReleaseBuild(precedenceWorkspace, 'none', 'nexus', releaseResolved);
+    if ('error' in preparedRelease) {
+      const releaseFailure = `${preparedRelease.error}; ${JSON.stringify(preparedRelease.stages)}`;
+      record('B119 release preparation uses loaded workspace passthrough bytes', false, releaseFailure);
+      record('B119 release archive contains loaded workspace passthrough bytes', false, releaseFailure);
+    } else {
+      const releaseEntry = preparedRelease.plan.entries.find(entry => entry.path === precedencePath);
+      record(
+        'B119 release preparation uses loaded workspace passthrough bytes',
+        !!releaseEntry && releaseEntry.size === Buffer.byteLength(committedPassthroughLua, 'utf8') && releaseEntry.sha256 === committedPassthroughHash,
+        releaseEntry ? `${releaseEntry.disposition} ${releaseEntry.size} bytes ${releaseEntry.sha256}` : 'release entry missing',
+      );
+      const releaseArchive = createNexusArchive(preparedRelease.plan, preparedRelease.folderName);
+      const releaseArchiveEntry = releaseArchive.entries.find(entry => entry.path === `${preparedRelease.folderName}/${precedencePath}`);
+      record(
+        'B119 release archive contains loaded workspace passthrough bytes',
+        releaseArchive.ok && !!releaseArchiveEntry && releaseArchiveEntry.size === Buffer.byteLength(committedPassthroughLua, 'utf8') && releaseArchiveEntry.sha256 === committedPassthroughHash,
+        releaseArchiveEntry ? `${releaseArchiveEntry.size} bytes ${releaseArchiveEntry.sha256}` : releaseArchive.errors.join('; '),
+      );
+      preparedRelease.cleanup();
+    }
+
     const target = path.join(deployRoot, effectiveModId(imported.workspace));
+    record(
+      'imported workspace retains stamped source for artifact fallback',
+      path.resolve(String(imported.workspace.sourceStamp?.dir || '')) === path.resolve(source),
+      JSON.stringify(imported.workspace.sourceStamp),
+    );
     fs.mkdirSync(path.join(target, 'runtime'), { recursive: true });
     fs.writeFileSync(path.join(target, 'runtime', 'state.db'), 'deployed mutable state');
     fs.writeFileSync(path.join(target, 'stale-loose.txt'), 'must disappear');
@@ -11948,6 +12109,18 @@ function runCompileArtifactSelftest() {
     fs.writeFileSync(path.join(target, 'preserved', 'state.bin'), 'forgekeep state');
     fs.writeFileSync(path.join(target, '.forgekeep'), 'preserved\n../outside\nC:\\escape\n');
 
+    const importedBuild = buildWorkspaceFileManifest(imported.workspace);
+    const importedPlan = buildArtifactPlan({
+      sourceRoot: source,
+      generatedFiles: importedBuild.generatedFiles,
+      passthroughFiles: importedBuild.passthroughFiles,
+    });
+    record(
+      'runtime-owned loaded passthrough stays outside the built artifact',
+      !importedPlan.entries.some(entry => entry.path.toLowerCase() === 'runtime/state.db')
+        && importedPlan.runtimeOwned.some(entry => entry.path.toLowerCase() === 'runtime/**'),
+      JSON.stringify({ entries: importedPlan.entries.filter(entry => entry.path.toLowerCase().startsWith('runtime')), runtimeOwned: importedPlan.runtimeOwned }),
+    );
     const deployed = compileWorkspaceToFolder(imported.workspace, deployRoot, 'store', false, 'catalog');
     record('compile returns expected target', deployed === target, deployed);
     record('content.xml remains loose', fs.existsSync(path.join(target, 'content.xml')));
@@ -12637,7 +12810,7 @@ app.post("/api/agent/deploy", (req, res) => {
   }
 });
 
-function buildDeployProjectValidation(ws: any, emitted?: ReturnType<typeof buildWorkspaceFileManifest>) {
+function buildDeployProjectValidation(ws: any, emitted?: { modId: string; files: CompiledFileManifest }) {
   const manifest = emitted || buildWorkspaceFileManifest(ws);
   const validationFiles = new Map<string, { path: string; kind: ReturnType<typeof classifyPath>; content: string }>(
     Object.entries(manifest.files).map(([p, c]) => [p.toLowerCase(), { path: p, kind: classifyPath(p), content: String(c) }]),
@@ -13419,7 +13592,7 @@ function prepareReleaseBuild(
       stages.push(releaseStage('source', 'Resolve complete source', 'warning', 'No imported disk source; packaging the complete in-memory workspace.'));
     }
 
-    const built = buildWorkspaceFileManifest(workspace, { includePassthrough: !stampedSource });
+    const built = buildWorkspaceFileManifest(workspace);
     const full = runFullWorkspaceValidation(workspace, built);
     const blocking = full.diagnostics.filter(diagnostic => diagnostic.severity === 'error');
     if (blocking.length > 0) {
@@ -13450,10 +13623,11 @@ function prepareReleaseBuild(
     }
     stages.push(releaseStage('manifest', 'Validate content.xml release metadata', 'pass', `id=${manifest.meta.id}; version=${manifest.meta.version}; author and description present.`));
 
-    const generatedFiles = { ...built.files, 'content.xml': manifestXml };
+    const generatedFiles = { ...built.generatedFiles, 'content.xml': manifestXml };
     const plan = buildArtifactPlan({
       sourceRoot,
       generatedFiles,
+      passthroughFiles: built.passthroughFiles,
       // Steam preview media is not game payload. Exclude every source candidate from
       // CAT/DAT ownership, validate the user's one selected image, then add exactly that
       // image to staging after catalog generation. Nexus keeps source media normally.

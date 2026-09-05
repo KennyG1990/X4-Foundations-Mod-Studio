@@ -73,6 +73,8 @@ export interface ArtifactVerificationResult {
 export interface BuildArtifactPlanOptions {
   sourceRoot: string;
   generatedFiles?: Record<string, string | Buffer>;
+  /** Loaded workspace-owned passthrough bytes. Generated output wins collisions; source-copy is the fallback. */
+  passthroughFiles?: Record<string, string | Buffer>;
   rules?: Partial<ArtifactRules>;
 }
 
@@ -254,6 +256,50 @@ export function buildArtifactPlan(options: BuildArtifactPlanOptions): ArtifactPl
       path: relativePath,
       disposition: 'generated',
       reason: 'claimed by compiler output',
+      size: bytes,
+      sha256: sha256Buffer(content),
+      content,
+      catalogLoose: Boolean(matchingRule(relativePath, rules.catalogLoose)),
+    };
+    occupied.set(key, relativePath);
+    generated.set(key, entry);
+  }
+
+  // Loaded passthrough is an in-memory source override, not compiler output. Apply the same
+  // exclude/runtime-owned rules as disk source before claiming it, then let modeled/generated
+  // output keep the collision it already claimed. Unloaded passthrough is intentionally absent
+  // from this map and therefore remains eligible for the stamped disk walk below.
+  for (const [rawPath, content] of Object.entries(options.passthroughFiles || {})) {
+    const relativePath = safeRelativePath(rawPath);
+    if (!relativePath) {
+      errors.push(`Unsafe passthrough artifact path: ${rawPath}`);
+      continue;
+    }
+    const key = comparisonKey(relativePath);
+    if (generated.has(key)) continue;
+    const excludeRule = matchingRule(relativePath, rules.exclude);
+    if (excludeRule) {
+      // The disk walk records excluded source paths (including an omitted passthrough's
+      // original file) with the directory-aware path that the artifact report expects.
+      continue;
+    }
+    const runtimeRule = matchingRule(relativePath, rules.runtimeOwned);
+    if (runtimeRule) {
+      // Runtime-owned bytes are never an in-memory artifact claim. The source walk below
+      // records the runtime-owned declaration and the deploy preservation layer copies the
+      // existing target state without treating it as built output.
+      continue;
+    }
+    const prior = occupied.get(key);
+    if (prior && prior !== relativePath) {
+      errors.push(`Artifact passthrough paths collide after case normalization: ${prior} and ${relativePath}`);
+      continue;
+    }
+    const bytes = Buffer.isBuffer(content) ? content.length : Buffer.byteLength(content, 'utf8');
+    const entry: ArtifactEntry = {
+      path: relativePath,
+      disposition: 'generated',
+      reason: 'loaded workspace passthrough byte',
       size: bytes,
       sha256: sha256Buffer(content),
       content,
