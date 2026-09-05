@@ -345,6 +345,23 @@ All points below are client-drawable pixels after subtracting the full-window or
   the installed sidecar remained HTTP `200`; installed runtime oracle sweep PASS `134/134`; Graphify refreshed to
   `10,257` nodes / `25,719` edges / `318` communities. X4 remained stopped and no live mod/game byte changed.
 
+### Durable projection readback
+
+- Source checkpoint `8b97ea556a13a638dd7db157883687dc79a9d6ce` is pushed with exact local `HEAD`, `origin/main`, and
+  direct-remote parity.
+- GitHub owner issue #41 remains open. Comment `5550124777` was written and read back with the exact package,
+  installed-canvas, test, `5/6 VERIFIED / 1/6 PARTIAL`, and remaining-row boundaries.
+- Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a` was read back at `In Progress / Partial`; its summary,
+  reverse-sync result, review dates, and newest progress section identify source checkpoint `8b97ea5` and GitHub
+  comment `5550124777`.
+- Google Current Status document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, passed the
+  file-backed trusted read with no protected controls, accepted a revision-guarded two-request batch, and was read
+  back at revision
+  `ANLCKQmmV5DbvTyHnpcg-W_JJbmRqZvOZF7Dt_eETxHSKsR8BCnBACfrINJDNbgKRxChLcCD-r3RMZMVK_ozoeJH_ZCYMSEeY1iKtAf7vEQY`.
+  The inserted heading is a separate `HEADING_2`; all six body paragraphs are `NORMAL_TEXT`.
+- Immutable trusted-read artifacts are under
+  `dev-docs/b119-x4-ui-pipeline-smoke/external-sync-20260905/drive-trusted-read-01/`.
+
 ## REVIEW
 
 - Requirements 1-7 are done and evidenced. Fresh-eyes review rejected the first complete candidate, forced issued-entry
@@ -362,7 +379,8 @@ All points below are client-drawable pixels after subtracting the full-window or
   and the permanent `Not verified in game` preview boundary.
 - Remaining risks/deferred work: original brief row 2, final AI Influence dogfood reconstruction, false-success native
   Save As wording, release acceptance, and OpenVSX remain separate.
-- Commit point: `feat(ui-editor): calibrate four keep-out contexts`.
+- Commit point completed: `8b97ea556a13a638dd7db157883687dc79a9d6ce` (`feat(ui-editor): calibrate four keep-out
+  contexts`).
 
 ## AAR
 

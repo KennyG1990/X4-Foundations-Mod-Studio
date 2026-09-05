@@ -10,8 +10,8 @@ Status: literal brief `5/6 VERIFIED / 1/6 PARTIAL`; overall B119 `IN_PROGRESS / 
 - Eyeball queue: none for the completed four-context unit. The remaining original-brief proof is three complete real
   Lua menus compared between Forge and X4 for columns, rows, wrapping, and truncation. The final dogfood benchmark then
   requires visual inspection of all twelve supplied AI Influence references.
-- Commit question: this verified unit is ready for exact-path staging as
-  `feat(ui-editor): calibrate four keep-out contexts`; do not leave the nine-file authority change stranded.
+- Commit question: the verified four-context unit is committed and pushed at
+  `8b97ea556a13a638dd7db157883687dc79a9d6ce`; local, tracking, and direct-remote refs matched at close.
 
 ## Current verified checkpoint
 
@@ -57,17 +57,23 @@ Status: literal brief `5/6 VERIFIED / 1/6 PARTIAL`; overall B119 `IN_PROGRESS / 
 
 ## Current bounded next unit
 
-1. Exact-stage, commit, and push the four-context close; assert `HEAD == origin/main ==` direct remote.
-2. Synchronize GitHub #41, Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Google Current Status document
-   `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`; read back each projection.
-3. Execute `docs/plans/2026-09-03-b119-three-menu-pixel-parity.md`: three separately registered Forge-authored Lua
+1. Execute `docs/plans/2026-09-03-b119-three-menu-pixel-parity.md`: three separately registered Forge-authored Lua
    menus, fixed profile, direct column/row/wrap/truncation measurements, `<=5 px` acceptance, exact deploy identity,
    X4 screenshots, and scoped runtime logs.
-4. After row 2, inspect all twelve images under
+2. After row 2, inspect all twelve images under
    `C:\Users\Moshi\Desktop\# AI Influence mod UI design\design_handoff_ai_influence` and author the real Lua through
    Forge as the final benchmark.
-5. Repair native Save As false-success wording before release. OpenVSX remains deferred until release acceptance and
+3. Repair native Save As false-success wording before release. OpenVSX remains deferred until release acceptance and
    publish-before-commit preparation.
+
+## Durable projection receipt
+
+- GitHub #41 comment `5550124777` was written and read back; the issue remains open.
+- Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a` was written and read back at `In Progress / Partial` with the
+  exact `5/6` checkpoint.
+- Google Current Status document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, was trusted-read,
+  revision-guarded, written, and structurally read back at
+  `ANLCKQmmV5DbvTyHnpcg-W_JJbmRqZvOZF7Dt_eETxHSKsR8BCnBACfrINJDNbgKRxChLcCD-r3RMZMVK_ozoeJH_ZCYMSEeY1iKtAf7vEQY`.
 
 ## AAR and preservation
 

@@ -53,6 +53,9 @@ disable and restoring exactly on re-enable while source identity and `Not verifi
 matrices, typecheck, exact lint, build/stage/probe, complete precommit, installed oracles `134/134`, and full serial e2e
 `106/106` with `treeGone=true` pass. Original-brief row 5 is `VERIFIED`; full record and twenty retained PNGs:
 `docs/plans/2026-09-03-b119-four-context-keepouts.md`.
+Projection close: source checkpoint `8b97ea556a13a638dd7db157883687dc79a9d6ce`, GitHub #41 comment
+`5550124777`, Notion owner read back `In Progress / Partial`, and Google Current Status tab `t.0` read back at
+revision `ANLCKQmmV5DbvTyHnpcg-W_JJbmRqZvOZF7Dt_eETxHSKsR8BCnBACfrINJDNbgKRxChLcCD-r3RMZMVK_ozoeJH_ZCYMSEeY1iKtAf7vEQY`.
 **UI-only end-to-end smoke 2026-08-28 — ONE-PROFILE X4 VERIFIED / FULL B119 PARTIAL:** Forge compiled,
 linted, project-validated, guarded-wrote, dry-deployed, and actually deployed the dedicated four-file `pipeline_test`
 mod. X4 9.00 visibly rendered the generated frame at the configured `2544x1353` drawable profile; both buttons were

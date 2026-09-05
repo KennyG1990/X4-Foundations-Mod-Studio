@@ -11771,4 +11771,17 @@ Status: `BOUNDED VERIFIED / ORIGINAL BRIEF 5/6 VERIFIED / 1/6 PARTIAL / OVERALL 
 - **Highest-risk retained boundary:** calibrated keep-outs and one-profile widget agreement do not prove C++ frame
   acceptance, three-menu pixel parity, arbitrary Lua/Helper coverage, or AI Influence fidelity. The preview remains
   explicitly non-authoritative.
-- Commit point: `feat(ui-editor): calibrate four keep-out contexts`.
+- Commit point completed: `8b97ea556a13a638dd7db157883687dc79a9d6ce` (`feat(ui-editor): calibrate four keep-out
+  contexts`).
+
+### DURABLE PROJECTION READBACK
+
+- GitHub issue #41 remains open; comment `5550124777` was written and read back with the exact `5/6` boundary.
+- Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a` was read back at `In Progress / Partial`; its summary,
+  reverse-sync result, and newest progress section identify checkpoint `8b97ea5` and comment `5550124777`.
+- Google Current Status document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, was first read
+  through the file-backed trusted-read bridge, which found no protected controls. A revision-guarded batch appended
+  one separate `HEADING_2` plus six `NORMAL_TEXT` paragraphs and was structurally read back at revision
+  `ANLCKQmmV5DbvTyHnpcg-W_JJbmRqZvOZF7Dt_eETxHSKsR8BCnBACfrINJDNbgKRxChLcCD-r3RMZMVK_ozoeJH_ZCYMSEeY1iKtAf7vEQY`.
+- Repository Markdown remains authoritative. The only open original-brief row is the specified three-menu
+  Forge/X4 column, row, wrap, and truncation comparison.
