@@ -1996,6 +1996,20 @@ fixtures, and full twelve-image reconstruction/current in-game validation remain
 `docs/plans/2026-09-05-b119-ai-influence-visual-dogfood.md` and
 `dev-docs/b119-ai-influence-dogfood/visual-release-20260905/CENSUS.md`. No capability-map delta.
 
+**B119 deterministic-math `0.0.72` checkpoint 2026-09-06 — BOUNDED VERIFIED / FULL B119 PARTIAL:** The existing
+source evaluator now admits only closed `math.floor/ceil/min/max` calls and fails closed when source-visible aliases,
+wrappers, dynamic global reads, control-flow merges, mutations, or opaque escapes can invalidate math authority.
+Focused gates pass at call model `102/102`, layout `721 passed + 1 standing skip`, linter `140/140`, typecheck/lint,
+runtime oracles `134/134`, serial E2E `106/106`, production build, complete precommit, and staged probe `16/16`.
+Installed Antigravity `0.0.72` exactly matches all `2,105` package payload files and, for exact current
+`aic_menu.lua -> menu.display`, exposes `19` owner-issued samples and `33` branch boundaries. The causal sample replay
+transitions to one current `2560x1440` Canvas when `_choiceY=979` is issued, visibly rendering only the static edit
+box plus `SEND` and `END`; omitted runtime content remains absent and `Not verified in game`. OpenVSX `/latest`, the
+direct version endpoint, and an independent download all prove `0.0.72`; public/local bytes are `26,303,425` with
+SHA-256 `5C6B2C20C42E93359DED03DBF199F00C1C858AFCC579388F10F94818CDDEA4B0`. Full current-path twelve-reference AI
+Influence reconstruction and universal engine acceptance remain open; overall B119 stays `IN_PROGRESS / PARTIAL`.
+Full record: `docs/plans/2026-09-02-b119-canonical-source-editor-game-pipeline.md`. No capability-map delta.
+
 ### B115 · Forge Capability Convergence `in_progress` (P0, PRIORITY OVERRIDE)
 
 Ken explicitly promoted GitHub initiative #9 and child requests #10–#21 above the active R13 close on 2026-07-31.

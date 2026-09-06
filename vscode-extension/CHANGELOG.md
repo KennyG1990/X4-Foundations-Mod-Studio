@@ -3,6 +3,13 @@
 The latest changes, newest first. (This page is generated automatically — see
 `release-notes.json` to edit the wording.)
 
+## 0.0.72 — 2026-09-06
+
+- Preview can now resolve supported deterministic layout math directly from real Lua source: closed numeric math.floor, math.ceil, math.min, and math.max expressions can become preview geometry.
+- Aliases, wrappers, and dynamic global reads that could mutate or escape the source math authority are rejected instead of being folded into stale geometry.
+- Runtime-dependent values, such as live menu state and branch-selected text, remain explicit samples so preview geometry does not present runtime guesses as source-derived layout.
+- Preview remains explicitly Not verified in game: this source-backed geometry support does not claim arbitrary Lua execution, universal helper, widget, or C++ parity, pixel-perfect parity, or completion of the twelve-reference AI Influence benchmark.
+
 ## 0.0.71 — 2026-09-06
 
 - Linter-first X4 static analysis uses the configured corpus to catch supported engine-impact frame traps and surface invalid UI layout assumptions instead of guessing from generic UI rules.

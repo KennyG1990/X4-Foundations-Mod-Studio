@@ -54,6 +54,18 @@ const KNOWN_HELPER_CONSTANTS = new Set([
   'viewHeight'
 ]);
 
+const SUPPORTED_NUMERIC_MATH_FUNCTIONS = new Set([
+  'floor',
+  'ceil',
+  'min',
+  'max',
+]);
+
+const SAFE_HELPER_MENU_LIFECYCLE_CALLS = new Set([
+  'clearDataForRefresh',
+  'registerMenu',
+]);
+
 const V1_PROPERTY_NAMES_BY_CALL: Readonly<Record<string, readonly string[]>> = {
   createFrameHandle: [
     'x', 'y', 'width', 'height', 'layer', 'standardButtons', 'blurBackground', 'autoFrameHeight'
@@ -565,6 +577,8 @@ export interface X4UiNumericHelperReceiver {
   readonly aliasSource?: X4UiSourceLocation;
 }
 
+export type X4UiNumericMathFunctionName = 'floor' | 'ceil' | 'min' | 'max';
+
 export type X4UiNumericExpression =
   | {
     readonly kind: 'literal';
@@ -582,6 +596,24 @@ export type X4UiNumericExpression =
   | {
     readonly kind: 'direct-helper-scale';
     readonly identity: X4UiDirectHelperScaleResultIdentity;
+      readonly expression: string;
+      readonly source: X4UiSourceLocation;
+    }
+  | {
+    readonly kind: 'math-call';
+    readonly name: X4UiNumericMathFunctionName;
+    readonly calleeExpression: string;
+    readonly calleeSource: X4UiSourceLocation;
+    readonly arguments: readonly X4UiNumericExpression[];
+    readonly expression: string;
+    readonly source: X4UiSourceLocation;
+  }
+  | {
+    readonly kind: 'table-field';
+    readonly base: string;
+    readonly property: string;
+    readonly tableSource: X4UiSourceLocation;
+    readonly value: X4UiNumericExpression;
     readonly expression: string;
     readonly source: X4UiSourceLocation;
   }
@@ -719,9 +751,17 @@ interface TrackedObject {
   known: boolean;
   fields: Map<string, InternalValue>;
   indexed: Map<string, TrackedObject>;
+  /** Private exact numeric/implicit table values, including authority-bearing values. */
+  indexedValues: Map<string, InternalValue>;
+  /** Private object-valued table-constructor edges, including unnamed/dynamic-key fields. */
+  reachableObjects: Set<TrackedObject>;
+  /** Private global-authority edges retained even when a constructor key is not static. */
+  reachableAuthorities: Set<InternalGlobalAuthority>;
   aliases: Set<string>;
   mutated: boolean;
   mutatedProperties: Set<string>;
+  /** The source table escaped to a call whose effects are not modeled. */
+  escaped: boolean;
   /** Private AST declaration retained for source-owned literal resolution. */
   declarationNode?: LuaNode;
   cellKind?: 'text' | 'button' | 'editbox' | 'icon';
@@ -732,6 +772,8 @@ interface InternalValue {
   /** AST node at the exact value use; private source evidence only. */
   sourceNode?: LuaNode;
   object?: TrackedObject;
+  /** Exact source-visible global authority carried through aliases and literal wrappers. */
+  globalAuthority?: InternalGlobalAuthority;
   /** Private row provenance retained across conservative control-flow merges. */
   rowBindingEvidence?: boolean;
   functionNode?: LuaNode;
@@ -740,6 +782,8 @@ interface InternalValue {
   helperAliasCandidate?: InternalHelperAliasCandidate;
   directHelperScaleCall?: InternalDirectHelperScaleCall;
 }
+
+type InternalGlobalAuthority = 'global-environment' | 'math' | 'possible-math';
 
 interface InternalDirectHelperScaleCall {
   readonly callName: X4UiDirectHelperScaleCallName;
@@ -785,9 +829,13 @@ interface TrackedObjectStateSnapshot {
   known: boolean;
   fields: Array<[string, InternalValue]>;
   indexed: Array<[string, TrackedObject]>;
+  indexedValues: Array<[string, InternalValue]>;
+  reachableObjects: TrackedObject[];
+  reachableAuthorities: InternalGlobalAuthority[];
   aliases: string[];
   mutated: boolean;
   mutatedProperties: string[];
+  escaped: boolean;
 }
 
 interface Binding {
@@ -1001,6 +1049,7 @@ class X4UiCallModelBuilder {
   private gapsTruncated = false;
   private verificationGapSuppressionDepth = 0;
   private functionAnalysisDepth = 0;
+  private numericMathAuthorityAvailable = true;
   private currentStatement: LuaNode | undefined;
   private currentStandaloneCallStatementRoot: LuaNode | undefined;
   private readonly fullLocation: X4UiSourceLocation;
@@ -1400,12 +1449,13 @@ class X4UiCallModelBuilder {
         expression: this.textOf(node),
         source: this.location(node),
       });
-    } else if (numericExpression?.kind === 'literal' || numericExpression?.kind === 'helper-constant') {
+    } else if (numericExpression?.kind === 'literal') {
       delete publicValue.numericExpression;
     }
     return {
       publicValue,
       object: source.object,
+      globalAuthority: source.globalAuthority,
       functionNode: source.functionNode,
       localFunction: source.localFunction,
       helperAlias: source.helperAlias,
@@ -1423,6 +1473,117 @@ class X4UiCallModelBuilder {
       expression: value.expression,
       source: value.location,
     });
+  }
+
+  private numericExpressionForValue(value: InternalValue): X4UiNumericExpression | undefined {
+    return value.publicValue.numericExpression || this.numericLiteralExpression(value.publicValue);
+  }
+
+  private invalidateEscapedAuthorities(
+    values: readonly (InternalValue | undefined)[],
+    invalidateNumericTables = true,
+  ): void {
+    const visited = new Set<TrackedObject>();
+    const visitValue = (value: InternalValue | undefined): void => {
+      if (!value) return;
+      if (value.globalAuthority) this.numericMathAuthorityAvailable = false;
+      if (value.object) visit(value.object);
+    };
+    const visit = (object: TrackedObject): void => {
+      if (visited.has(object)) return;
+      visited.add(object);
+
+      if (invalidateNumericTables
+        && object.reference.origin === 'literal'
+        && [...object.fields.values()].some(field => this.numericExpressionForValue(field) !== undefined)) {
+        object.escaped = true;
+        this.markObjectMutation(object);
+      }
+
+      if (object.reachableAuthorities.size > 0) this.numericMathAuthorityAvailable = false;
+      for (const field of object.fields.values()) visitValue(field);
+      for (const value of object.indexedValues.values()) visitValue(value);
+      for (const child of object.indexed.values()) visit(child);
+      for (const child of object.reachableObjects) visit(child);
+    };
+
+    for (const value of values) visitValue(value);
+  }
+
+  private invalidateOpaqueCallArguments(
+    shape: CallShape,
+    receiver: InternalValue | undefined,
+    args: readonly InternalValue[],
+  ): void {
+    const values: Array<InternalValue | undefined> = [receiver];
+    const exactHelperLifecycle = shape.method === '.'
+      && Boolean(shape.name && SAFE_HELPER_MENU_LIFECYCLE_CALLS.has(shape.name))
+      && receiver?.publicValue.reference?.kind === 'global'
+      && receiver.publicValue.reference.path === 'Helper';
+    const exactGlobalRawset = shape.method === 'direct'
+      && shape.name === 'rawset'
+      && shape.calleeNode.type === 'Identifier'
+      && nodeField<boolean>(shape.calleeNode, 'isLocal') === false
+      && !this.bindings.has('rawset')
+      && shape.args.length === 3;
+    const rawsetKey = exactGlobalRawset ? staticString(shape.args[1]) : undefined;
+
+    for (const [index, argument] of args.entries()) {
+      if (index === 0
+        && exactHelperLifecycle
+        && argument.object?.reference.kind === 'menu') continue;
+      if (index === 0
+        && exactGlobalRawset
+        && argument.globalAuthority === 'global-environment'
+        && rawsetKey !== undefined
+        && rawsetKey !== 'math') continue;
+      values.push(argument);
+    }
+    this.invalidateEscapedAuthorities(values);
+  }
+
+  private tableFieldValueAtUse(
+    baseNode: LuaNode,
+    base: InternalValue,
+    property: string,
+    field: InternalValue,
+    node: LuaNode,
+  ): InternalValue {
+    const result = this.valueAtUse(field, node);
+    const baseName = baseNode.type === 'Identifier' ? nodeField<string>(baseNode, 'name') : undefined;
+    const numericExpression = this.numericExpressionForValue(field);
+    const normalizedProperty = normalizePropertyName(property);
+    const sourceTableUnavailable = Boolean(base.object
+      && (base.object.escaped
+        || base.object.mutatedProperties.has(normalizedProperty)
+        || (base.object.mutated && base.object.mutatedProperties.size === 0)));
+    if (sourceTableUnavailable && numericExpression) {
+      return this.unknown(
+        node,
+        result.publicValue.type,
+        `property "${property}" belongs to a mutated or escaped source table`,
+      );
+    }
+    if (!numericExpression
+      || !baseName
+      || !base.object
+      || !base.object.known
+      || base.object.mutated
+      || !base.object.declarationNode
+      || base.object.reference.path !== baseName) {
+      delete result.publicValue.numericExpression;
+      return result;
+    }
+    result.publicValue.numericExpression = freezeNumericExpression({
+      kind: 'table-field',
+      base: baseName,
+      property,
+      tableSource: this.location(base.object.declarationNode),
+      value: numericExpression,
+      expression: this.textOf(node),
+      source: this.location(node),
+    });
+    return result;
   }
 
   private unknown(node: LuaNode | undefined, type: X4UiValueType, reason: string, symbol?: string): InternalValue {
@@ -1455,6 +1616,51 @@ class X4UiCallModelBuilder {
       source: this.location(node)
     };
     return { publicValue: this.value(node, 'static', 'reference', undefined, reference) };
+  }
+
+  private globalAuthorityValue(
+    name: 'math' | '_G',
+    node: LuaNode | undefined,
+  ): InternalValue {
+    return {
+      ...this.globalValue(name, node),
+      globalAuthority: name === 'math' ? 'math' : 'global-environment',
+    };
+  }
+
+  private possibleMathAuthorityValue(node: LuaNode | undefined, reason: string): InternalValue {
+    const value = this.dynamic(node, 'reference', reason);
+    value.globalAuthority = 'possible-math';
+    return value;
+  }
+
+  private mayReferenceMathAuthority(value: InternalValue | undefined): boolean {
+    return value?.globalAuthority === 'math'
+      || value?.globalAuthority === 'global-environment'
+      || value?.globalAuthority === 'possible-math'
+      || Boolean(value?.object && this.objectMayReachMathAuthority(value.object));
+  }
+
+  private objectMayReachMathAuthority(
+    object: TrackedObject,
+    visited = new Set<TrackedObject>(),
+  ): boolean {
+    if (visited.has(object)) return false;
+    visited.add(object);
+    if (object.reachableAuthorities.size > 0) return true;
+    for (const field of object.fields.values()) {
+      if (field.globalAuthority || (field.object && this.objectMayReachMathAuthority(field.object, visited))) return true;
+    }
+    for (const value of object.indexedValues.values()) {
+      if (value.globalAuthority || (value.object && this.objectMayReachMathAuthority(value.object, visited))) return true;
+    }
+    for (const child of object.indexed.values()) {
+      if (this.objectMayReachMathAuthority(child, visited)) return true;
+    }
+    for (const child of object.reachableObjects) {
+      if (this.objectMayReachMathAuthority(child, visited)) return true;
+    }
+    return false;
   }
 
   private helperAliasValue(alias: InternalHelperAlias, node: LuaNode | undefined): InternalValue {
@@ -1495,9 +1701,13 @@ class X4UiCallModelBuilder {
       known,
       fields: new Map(),
       indexed: new Map(),
+      indexedValues: new Map(),
+      reachableObjects: new Set(),
+      reachableAuthorities: new Set(),
       aliases: new Set(),
       mutated: false,
-      mutatedProperties: new Set()
+      mutatedProperties: new Set(),
+      escaped: false,
     };
   }
 
@@ -1511,6 +1721,7 @@ class X4UiCallModelBuilder {
   private bindingValue(name: string, node: LuaNode | undefined): InternalValue {
     const binding = this.bindings.get(name);
     if (binding) return this.valueAtUse(binding.value, node);
+    if (name === 'math' || name === '_G') return this.globalAuthorityValue(name, node);
     if (KNOWN_X4_GLOBALS.has(name)) return this.globalValue(name, node);
     return this.unknown(node, 'identifier', `identifier "${name}" has no statically traceable binding`, name);
   }
@@ -1634,12 +1845,20 @@ class X4UiCallModelBuilder {
   private evaluateTable(node: LuaNode, context: X4UiFunctionContext): InternalValue {
     const object = this.newObject('object', node, 'literal');
     object.declarationNode = node;
+    let implicitIndex = 1;
     for (const field of nodeArray(node, 'fields')) {
       const fieldValueNode = nodeField<LuaNode>(field, 'value');
       const fieldValue = this.evaluate(fieldValueNode, context);
+      if (fieldValue.object) object.reachableObjects.add(fieldValue.object);
+      if (fieldValue.globalAuthority) object.reachableAuthorities.add(fieldValue.globalAuthority);
       let name: string | undefined;
+      let numericKey: string | undefined;
       let keyNode: LuaNode = field;
-      if (field.type === 'TableKeyString') {
+      if (field.type === 'TableValue') {
+        object.indexedValues.set(String(implicitIndex), fieldValue);
+        implicitIndex += 1;
+        continue;
+      } else if (field.type === 'TableKeyString') {
         const key = nodeField<LuaNode>(field, 'key');
         name = nodeField<string>(key, 'name');
         keyNode = key || field;
@@ -1647,6 +1866,7 @@ class X4UiCallModelBuilder {
         const key = this.evaluate(nodeField<LuaNode>(field, 'key'), context);
         if (key.publicValue.status === 'static' && (key.publicValue.type === 'string' || key.publicValue.type === 'number')) {
           name = String(key.publicValue.value);
+          if (key.publicValue.type === 'number') numericKey = name;
           keyNode = nodeField<LuaNode>(field, 'key') || field;
         } else {
           this.addValueGap('data-flow', key, 'table field key is not statically traceable');
@@ -1655,6 +1875,7 @@ class X4UiCallModelBuilder {
 
       if (!name) continue;
       object.fields.set(name, fieldValue);
+      if (numericKey !== undefined) object.indexedValues.set(numericKey, fieldValue);
       this.refreshObjectKind(object);
       if (this.isRelevantProperty(name)) {
         this.addProperty(object, name, keyNode, fieldValue, 'table-field', field, context);
@@ -1668,6 +1889,12 @@ class X4UiCallModelBuilder {
     const base = this.evaluate(baseNode, context);
     const property = luaNodeName(nodeField<LuaNode>(node, 'identifier'));
     if (!property) return this.unknown(node, 'expression', 'member property is not statically named');
+    if (base.globalAuthority === 'global-environment' && property === 'math') {
+      return this.globalAuthorityValue('math', node);
+    }
+    if (base.globalAuthority === 'possible-math' && property === 'math') {
+      return this.possibleMathAuthorityValue(node, 'member read may resolve through the global math authority');
+    }
     if (
       base.publicValue.reference?.kind === 'global'
       && base.publicValue.reference.path === 'Helper'
@@ -1704,7 +1931,7 @@ class X4UiCallModelBuilder {
     }
     if (base.object) {
       const field = this.findField(base.object, [property]);
-      if (field) return this.valueAtUse(field, node);
+      if (field) return this.tableFieldValueAtUse(baseNode, base, property, field, node);
       return this.unknown(node, 'identifier', `property "${property}" is not statically defined`);
     }
     return this.unknown(node, 'identifier', `base value for property "${property}" is unresolved`);
@@ -1715,12 +1942,28 @@ class X4UiCallModelBuilder {
     const indexNode = nodeField<LuaNode>(node, 'index');
     const base = this.evaluate(baseNode, context);
     const index = this.evaluate(indexNode, context);
+    if (base.globalAuthority === 'global-environment') {
+      if (index.publicValue.status === 'static') {
+        if (index.publicValue.type === 'string' && index.publicValue.value === 'math') {
+          return this.globalAuthorityValue('math', node);
+        }
+      } else {
+        return this.possibleMathAuthorityValue(node, 'dynamic global-environment index may resolve to math');
+      }
+    }
+    if (base.globalAuthority === 'possible-math' && index.publicValue.status !== 'static') {
+      return this.possibleMathAuthorityValue(node, 'dynamic index retains possible math authority');
+    }
     if (!base.object) return this.unknown(node, 'reference', 'indexed base value is unresolved');
 
     if (index.publicValue.status === 'static' && (index.publicValue.type === 'string' || index.publicValue.type === 'number')) {
       const key = String(index.publicValue.value);
+      const indexedValue = index.publicValue.type === 'number'
+        ? base.object.indexedValues.get(key)
+        : undefined;
+      if (indexedValue) return this.valueAtUse(indexedValue, node);
       const field = this.findField(base.object, [key]);
-      if (field) return this.valueAtUse(field, node);
+      if (field) return this.tableFieldValueAtUse(baseNode, base, key, field, node);
       if (base.object.reference.kind === 'row' || base.object.reference.kind === 'table') {
         const existing = base.object.indexed.get(key);
         if (existing) return this.referenceValue(existing, node);
@@ -1730,6 +1973,10 @@ class X4UiCallModelBuilder {
         return this.referenceValue(cell, node);
       }
       return this.unknown(node, 'reference', `indexed property "${key}" is not statically defined`);
+    }
+
+    if (this.objectMayReachMathAuthority(base.object)) {
+      return this.possibleMathAuthorityValue(node, 'dynamic wrapper index may resolve to global math authority');
     }
 
     if (base.object.reference.kind === 'row' || base.object.reference.kind === 'table' || base.object.reference.kind === 'unknown') {
@@ -1798,6 +2045,11 @@ class X4UiCallModelBuilder {
       || this.numericLiteralExpression(left.publicValue);
     const rightNumericExpression = right.publicValue.numericExpression
       || this.numericLiteralExpression(right.publicValue);
+    if ((operator === 'and' || operator === 'or')
+      && luaTruthy(left.publicValue) === undefined
+      && (this.mayReferenceMathAuthority(left) || this.mayReferenceMathAuthority(right))) {
+      return this.possibleMathAuthorityValue(node, `logical ${operator} may select a global math authority value`);
+    }
     if (operator === 'or' && leftNumericExpression) {
       const leftTruth = luaTruthy(left.publicValue);
       if (leftTruth === undefined || !rightNumericExpression) {
@@ -2015,6 +2267,49 @@ class X4UiCallModelBuilder {
     return this.referenceValue(cell, base);
   }
 
+  private rawgetAuthorityValue(
+    node: LuaNode,
+    shape: CallShape,
+    args: readonly InternalValue[],
+  ): InternalValue | undefined {
+    if (shape.name !== 'rawget'
+      || shape.method !== 'direct'
+      || shape.calleeNode.type !== 'Identifier'
+      || nodeField<boolean>(shape.calleeNode, 'isLocal') !== false
+      || this.bindings.has('rawget')
+      || args.length !== 2) return undefined;
+
+    const [base, key] = args;
+    const staticKey = key.publicValue.status === 'static'
+      && (key.publicValue.type === 'string' || key.publicValue.type === 'number')
+      ? String(key.publicValue.value)
+      : undefined;
+    if (base.globalAuthority === 'global-environment') {
+      if (staticKey === 'math') return this.globalAuthorityValue('math', node);
+      if (key.publicValue.status !== 'static') {
+        return this.possibleMathAuthorityValue(node, 'dynamic rawget global key may resolve to math');
+      }
+      return undefined;
+    }
+    if (base.globalAuthority === 'possible-math'
+      && (staticKey === 'math' || key.publicValue.status !== 'static')) {
+      return this.possibleMathAuthorityValue(node, 'rawget may resolve through a possible global math authority value');
+    }
+
+    if (!base.object) return undefined;
+    if (staticKey !== undefined) {
+      const value = key.publicValue.type === 'number'
+        ? base.object.indexedValues.get(staticKey)
+        : base.object.fields.get(staticKey);
+      if (value && this.mayReferenceMathAuthority(value)) return this.valueAtUse(value, node);
+      return undefined;
+    }
+    if (key.publicValue.status !== 'static' && this.objectMayReachMathAuthority(base.object)) {
+      return this.possibleMathAuthorityValue(node, 'dynamic rawget wrapper key may resolve to global math authority');
+    }
+    return undefined;
+  }
+
   private rawgetHelperAliasCandidate(node: LuaNode, shape: CallShape): InternalValue | undefined {
     if (shape.name !== 'rawget') return undefined;
     const callSource = this.location(node);
@@ -2098,6 +2393,82 @@ class X4UiCallModelBuilder {
     return invocation;
   }
 
+  private exactNumericMathFunction(
+    node: LuaNode,
+    shape: CallShape,
+  ): X4UiNumericMathFunctionName | undefined {
+    if (!this.numericMathAuthorityAvailable
+      || shape.method !== '.'
+      || !shape.name
+      || !SUPPORTED_NUMERIC_MATH_FUNCTIONS.has(shape.name)) return undefined;
+    const callee = nodeField<LuaNode>(node, 'base');
+    const receiver = callee?.type === 'MemberExpression'
+      ? nodeField<LuaNode>(callee, 'base')
+      : undefined;
+    const identifier = callee?.type === 'MemberExpression'
+      ? nodeField<LuaNode>(callee, 'identifier')
+      : undefined;
+    if (callee?.type !== 'MemberExpression'
+      || nodeField<string>(callee, 'indexer') !== '.'
+      || receiver?.type !== 'Identifier'
+      || nodeField<string>(receiver, 'name') !== 'math'
+      || nodeField<boolean>(receiver, 'isLocal') !== false
+      || identifier?.type !== 'Identifier'
+      || nodeField<string>(identifier, 'name') !== shape.name
+      || this.bindings.has('math')) return undefined;
+    return shape.name as X4UiNumericMathFunctionName;
+  }
+
+  private evaluateNumericMathCall(
+    node: LuaNode,
+    name: X4UiNumericMathFunctionName,
+    args: readonly InternalValue[],
+  ): InternalValue {
+    const validArity = name === 'floor' || name === 'ceil'
+      ? args.length === 1
+      : args.length >= 1;
+    const numericArguments = args.map(argument => this.numericExpressionForValue(argument));
+    if (!validArity || numericArguments.some(argument => argument === undefined)) {
+      return this.dynamic(node, 'number', `math.${name} requires closed numeric arguments with valid arity`);
+    }
+
+    const numericExpression = freezeNumericExpression({
+      kind: 'math-call',
+      name,
+      calleeExpression: this.textOf(nodeField<LuaNode>(node, 'base')),
+      calleeSource: this.location(nodeField<LuaNode>(node, 'base')),
+      arguments: numericArguments as X4UiNumericExpression[],
+      expression: this.textOf(node),
+      source: this.location(node),
+    });
+    const staticArguments = args.map(argument => argument.publicValue);
+    const canFold = staticArguments.every(argument =>
+      argument.status === 'static'
+        && argument.type === 'number'
+        && typeof argument.value === 'number'
+        && Number.isFinite(argument.value));
+    let result: number | undefined;
+    if (canFold) {
+      const values = staticArguments.map(argument => argument.value as number);
+      result = name === 'floor' ? Math.floor(values[0])
+        : name === 'ceil' ? Math.ceil(values[0])
+          : name === 'min' ? Math.min(...values)
+            : Math.max(...values);
+    }
+    const publicValue = result !== undefined && Number.isFinite(result)
+      ? this.value(node, 'static', 'number', result)
+      : this.value(
+        node,
+        staticArguments.some(argument => argument.status === 'unknown') ? 'unknown' : 'dynamic',
+        'number',
+        undefined,
+        undefined,
+        `math.${name} result is not a finite static number`,
+      );
+    publicValue.numericExpression = numericExpression;
+    return { publicValue };
+  }
+
   private evaluateCall(
     node: LuaNode,
     context: X4UiFunctionContext,
@@ -2107,6 +2478,8 @@ class X4UiCallModelBuilder {
     const receiver = shape.receiver ? this.evaluate(shape.receiver, context) : undefined;
     const evaluated = this.evaluateCallArguments(node, shape, receiver, context);
     const args = evaluated.args;
+    const rawgetAuthority = this.rawgetAuthorityValue(node, shape, args);
+    if (rawgetAuthority) return rawgetAuthority;
     const helperAliasCandidate = this.rawgetHelperAliasCandidate(node, shape);
     if (helperAliasCandidate) return helperAliasCandidate;
 
@@ -2118,8 +2491,12 @@ class X4UiCallModelBuilder {
       return this.referenceValue(receiver.object, node, receiver.publicValue.status);
     }
 
+    const numericMathFunction = this.exactNumericMathFunction(node, shape);
+    if (numericMathFunction) return this.evaluateNumericMathCall(node, numericMathFunction, args);
+
     const directBinding = shape.method === 'direct' && shape.name ? this.bindings.get(shape.name) : undefined;
     if (directBinding?.value.localFunction) {
+      this.invalidateOpaqueCallArguments(shape, receiver, args);
       const invocation = this.addLocalInvocation(node, shape, args, context, resultConsumed, directBinding);
       const result = this.dynamic(node, 'expression', 'local helper return value is not inferred');
       result.publicValue.localInvocationResult = {
@@ -2131,6 +2508,7 @@ class X4UiCallModelBuilder {
     }
     if (!shape.name || !RELEVANT_CALL_NAMES.has(shape.name as X4UiRelevantCallName)) {
       const invocation = this.addLocalInvocation(node, shape, args, context, resultConsumed, directBinding);
+      this.invalidateOpaqueCallArguments(shape, receiver, args);
       const result = this.dynamic(node, 'expression', invocation.reason || 'call result is not statically modeled');
       if (invocation.calleeDeclarationId) {
         result.publicValue.localInvocationResult = {
@@ -3473,8 +3851,15 @@ class X4UiCallModelBuilder {
         this.addGap('unsupported', 'unsupported', this.location(target), 'member assignment has no static property name', this.textOf(target));
         return;
       }
+      if (baseValue.globalAuthority === 'math'
+        || baseValue.globalAuthority === 'possible-math'
+        || (baseValue.globalAuthority === 'global-environment' && name === 'math')) {
+        this.invalidateEscapedAuthorities([baseValue], false);
+      }
       if (object) {
         object.fields.set(name, value);
+        if (value.object) object.reachableObjects.add(value.object);
+        if (value.globalAuthority) object.reachableAuthorities.add(value.globalAuthority);
         this.markObjectMutation(object, name);
       }
       if (object) this.recordControlFlowPropertyMutation(object, name);
@@ -3487,6 +3872,16 @@ class X4UiCallModelBuilder {
       const baseValue = this.evaluate(baseNode, context);
       const object = this.ensureObjectForTarget(baseNode || target, baseValue, context);
       const index = this.evaluate(nodeField<LuaNode>(target, 'index'), context);
+      if (object && value.object) object.reachableObjects.add(value.object);
+      if (object && value.globalAuthority) object.reachableAuthorities.add(value.globalAuthority);
+      const staticNonMathGlobalKey = index.publicValue.status === 'static'
+        && (index.publicValue.type === 'number'
+          || (index.publicValue.type === 'string' && index.publicValue.value !== 'math'));
+      if (baseValue.globalAuthority === 'math'
+        || baseValue.globalAuthority === 'possible-math'
+        || (baseValue.globalAuthority === 'global-environment' && !staticNonMathGlobalKey)) {
+        this.invalidateEscapedAuthorities([baseValue], false);
+      }
       if (index.publicValue.status !== 'static') this.addValueGap('index', index, 'indexed assignment position is dynamic or unknown');
       if (object && index.publicValue.status !== 'static') {
         this.markObjectMutation(object);
@@ -3499,8 +3894,9 @@ class X4UiCallModelBuilder {
           this.markObjectMutation(object, property);
           this.recordControlFlowPropertyMutation(object, property);
           this.addProperty(object, property, nodeField<LuaNode>(target, 'index') || target, value, 'index-assignment', target, context);
-        } else if (value.object) {
-          object.indexed.set(property, value.object);
+        } else {
+          object.indexedValues.set(property, value);
+          if (value.object) object.indexed.set(property, value.object);
         }
       }
       return;
@@ -3525,14 +3921,22 @@ class X4UiCallModelBuilder {
         known: object.known,
         fields: [...object.fields.entries()],
         indexed: [...object.indexed.entries()],
+        indexedValues: [...object.indexedValues.entries()],
+        reachableObjects: [...object.reachableObjects],
+        reachableAuthorities: [...object.reachableAuthorities],
         aliases: [...object.aliases],
         mutated: object.mutated,
-        mutatedProperties: [...object.mutatedProperties]
+        mutatedProperties: [...object.mutatedProperties],
+        escaped: object.escaped,
       });
       for (const value of object.fields.values()) {
         if (value.object) visit(value.object);
       }
+      for (const value of object.indexedValues.values()) {
+        if (value.object) visit(value.object);
+      }
       for (const child of object.indexed.values()) visit(child);
+      for (const child of object.reachableObjects) visit(child);
     };
 
     for (const binding of bindings.values()) {
@@ -3548,11 +3952,18 @@ class X4UiCallModelBuilder {
       for (const [name, value] of snapshot.fields) object.fields.set(name, value);
       object.indexed.clear();
       for (const [index, child] of snapshot.indexed) object.indexed.set(index, child);
+      object.indexedValues.clear();
+      for (const [index, value] of snapshot.indexedValues) object.indexedValues.set(index, value);
+      object.reachableObjects.clear();
+      for (const child of snapshot.reachableObjects) object.reachableObjects.add(child);
+      object.reachableAuthorities.clear();
+      for (const authority of snapshot.reachableAuthorities) object.reachableAuthorities.add(authority);
       object.aliases.clear();
       for (const alias of snapshot.aliases) object.aliases.add(alias);
       object.mutated = snapshot.mutated;
       object.mutatedProperties.clear();
       for (const property of snapshot.mutatedProperties) object.mutatedProperties.add(property);
+      object.escaped = snapshot.escaped;
 
       const reference = object.reference as unknown as Record<string, unknown>;
       const savedReference = snapshot.reference as unknown as Record<string, unknown>;
@@ -3575,6 +3986,7 @@ class X4UiCallModelBuilder {
     this.processedFunctions.add(key);
 
     const objectState = this.snapshotTrackedObjectState(this.bindings);
+    const numericMathAuthorityAvailable = this.numericMathAuthorityAvailable;
     const localBindings = new Map(this.bindings);
     for (const [index, parameter] of nodeArray(node, 'parameters').entries()) {
       const parameterName = nodeField<string>(parameter, 'name');
@@ -3620,6 +4032,7 @@ class X4UiCallModelBuilder {
     } finally {
       this.functionAnalysisDepth -= 1;
       this.restoreTrackedObjectState(objectState);
+      this.numericMathAuthorityAvailable = numericMathAuthorityAvailable;
     }
   }
 
@@ -3793,13 +4206,21 @@ class X4UiCallModelBuilder {
     for (const name of reassignments) {
       const binding = preBodyBindings.get(name);
       if (!binding || !this.shouldInvalidateControlFlowBinding(binding.value)) continue;
+      const possibleValues = [
+        ...(preBodyPathPossible ? [binding.value] : []),
+        ...bodyResults.map(result => result.get(name)?.value).filter((value): value is InternalValue => Boolean(value)),
+      ];
+      const value = this.unknown(
+        boundary,
+        'identifier',
+        `identifier "${name}" may be reassigned in a control-flow block`,
+        name
+      );
+      if (possibleValues.some(candidate => this.mayReferenceMathAuthority(candidate))) {
+        value.globalAuthority = 'possible-math';
+      }
       this.bindings.set(name, {
-        value: this.unknown(
-          boundary,
-          'identifier',
-          `identifier "${name}" may be reassigned in a control-flow block`,
-          name
-        ),
+        value,
         source: binding.source
       });
     }

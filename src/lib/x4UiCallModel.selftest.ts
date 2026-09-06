@@ -902,6 +902,426 @@ function run(): { allPassed: boolean; pass: boolean; passed: number; total: numb
           && alias.value.numericExpression === undefined),
     detail({ aliases: numericExpressionModel.aliases, calls: numericExpressionModel.calls.filter(candidate => candidate.name === 'scaleFont') }));
 
+  const numericMathSource = [
+    'local menu = { name = "NumericMath", layer = 1 }',
+    'local LAY = { plateL = 600 / 2560, plateR = 1650 / 2560 }',
+    'function menu.display()',
+    '  local floorValue = math.floor(Helper.viewWidth * LAY.plateL)',
+    '  local ceilValue = math.ceil((Helper.viewHeight * LAY.plateR) + 0.5)',
+    '  local minValue = math.min(floorValue, ceilValue, 1000)',
+    '  local maxValue = math.max(1, minValue)',
+    '  menu.frame = Helper.createFrameHandle(menu, { x = floorValue, y = ceilValue, width = maxValue, height = math.floor(2.5) })',
+    'end',
+  ].join('\n');
+  const numericMathModel = buildX4UiCallModel(input(numericMathSource, 'selftest/numeric-math.lua'));
+  const numericMathAliases = ['floorValue', 'ceilValue', 'minValue', 'maxValue']
+    .map(name => numericMathModel.aliases.find(alias => alias.name === name)?.value);
+  const numericMathKinds = numericMathAliases.map(value => value?.numericExpression?.kind);
+  const numericMathNames = numericMathAliases.map(value => {
+    const descriptor = value?.numericExpression as { readonly name?: string } | undefined;
+    return descriptor?.name;
+  });
+  const numericMathTableFields: Record<string, unknown>[] = [];
+  const collectNumericMathTableFields = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      value.forEach(collectNumericMathTableFields);
+      return;
+    }
+    if (value === null || typeof value !== 'object') return;
+    const record = value as Record<string, unknown>;
+    if (record.kind === 'table-field') numericMathTableFields.push(record);
+    Object.values(record).forEach(collectNumericMathTableFields);
+  };
+  numericMathAliases.slice(0, 2).forEach(value => collectNumericMathTableFields(value?.numericExpression));
+  check('closed numeric math calls preserve every supported function, nested arithmetic, table-field provenance, and deep freeze',
+    numericMathKinds.join(',') === 'math-call,math-call,math-call,math-call'
+      && numericMathNames.join(',') === 'floor,ceil,min,max'
+      && numericMathTableFields.length === 2
+      && numericMathTableFields.every(field => field.base === 'LAY' && (field.property === 'plateL' || field.property === 'plateR'))
+      && numericMathAliases.every(value => value?.numericExpression !== undefined && closedFrozenData(value.numericExpression))
+      && numericMathSource.slice(
+        numericMathAliases[0]?.numericExpression?.source.start.offset || 0,
+        numericMathAliases[0]?.numericExpression?.source.end.offset || 0,
+      ) === 'math.floor(Helper.viewWidth * LAY.plateL)',
+    detail({
+      kinds: numericMathKinds,
+      names: numericMathNames,
+      tableFields: numericMathTableFields.map(field => ({ base: field.base, property: field.property })),
+      frozen: numericMathAliases.map(value => value?.numericExpression !== undefined && closedFrozenData(value.numericExpression)),
+      source: numericMathSource.slice(
+        numericMathAliases[0]?.numericExpression?.source.start.offset || 0,
+        numericMathAliases[0]?.numericExpression?.source.end.offset || 0,
+      ),
+    }));
+
+  const overriddenMathSource = [
+    'math = { floor = function(v) return 999 end }',
+    'local replacedGlobal = math.floor(1.5)',
+    'math.floor = customFloor',
+    'local replacedMember = math.floor(1.5)',
+  ].join('\n');
+  const overriddenMathModel = buildX4UiCallModel(input(
+    overriddenMathSource,
+    'selftest/numeric-math-overridden.lua',
+  ));
+  const overriddenMathAliases = ['replacedGlobal', 'replacedMember'].map(name =>
+    overriddenMathModel.aliases.find(alias => alias.name === name));
+  check('numeric math calls reject a source-overridden global math binding and supported member binding',
+    overriddenMathAliases.every(alias => alias?.value.numericExpression === undefined),
+    detail({
+      aliases: overriddenMathAliases,
+      gaps: overriddenMathModel.verificationGaps,
+    }));
+
+  const numericMathAuthoritySource = (
+    mutationLines: readonly string[],
+    mutationBeforeUse = true,
+  ): string => [
+    'local menu = { name = "NumericMathAuthority", layer = 4 }',
+    'local customMath = { floor = function(v) return 999 end }',
+    'local customFloor = function(v) return 999 end',
+    'local function localMutate(t) t.floor = customFloor end',
+    'function menu.display()',
+    ...(mutationBeforeUse
+      ? [...mutationLines.map(line => `  ${line}`), '  local x = math.floor(1.5)']
+      : ['  local x = math.floor(1.5)', ...mutationLines.map(line => `  ${line}`)]),
+    '  Helper.createFrameHandle(menu, { x = x, width = 80, height = 80, layer = 4 })',
+    'end',
+  ].join('\n');
+  const numericMathAuthorityCases = [
+    ['opaque math escape', ['mutate(math)']],
+    ['rawset global math', ['rawset(_G, "math", customMath)']],
+    ['rawset global math member', ['rawset(_G.math, "floor", customFloor)']],
+    ['global math member assignment', ['_G.math.floor = customFloor']],
+    ['global indexed math member assignment', ['_G["math"]["floor"] = customFloor']],
+    ['math alias escape', ['local m = math', 'mutate(m)']],
+    ['math wrapper escape', ['local w = { m = math }', 'mutate(w)']],
+    ['same-file math escape', ['localMutate(math)']],
+    ['same-file math wrapper escape', ['local w = { m = math }', 'localMutate(w)']],
+    ['global environment escape', ['mutate(_G)']],
+    ['global environment wrapper escape', ['local w = { g = _G }', 'mutate(w)']],
+    ['math alias member assignment', ['local m = math', 'm.floor = customFloor']],
+    ['global environment alias member assignment', ['local g = _G', 'g.math.floor = customFloor']],
+    ['dynamic global environment assignment', ['_G[runtimeKey] = customMath']],
+    ['dynamic math assignment control', ['math[runtimeKey] = customFloor']],
+    ['rawget global math member assignment', ['local m = rawget(_G, "math")', 'm.floor = customFloor']],
+    ['rawget aliased global math member assignment', ['local g = _G', 'local m = rawget(g, "math")', 'm.floor = customFloor']],
+    ['rawget wrapped global math member assignment', ['local w = { _G }', 'local g = w[1]', 'local m = rawget(g, "math")', 'm.floor = customFloor']],
+    ['rawget dynamic-wrapped global math member assignment', ['local w = { [runtimeKey] = _G }', 'local g = w[runtimeKey]', 'local m = rawget(g, "math")', 'm.floor = customFloor']],
+    ['dynamic global read member assignment', ['local m = _G[runtimeKey]', 'm.floor = customFloor']],
+    ['direct dynamic global read member assignment', ['_G[runtimeKey].floor = customFloor']],
+    ['dynamic rawget global read member assignment', ['local m = rawget(_G, runtimeKey)', 'm.floor = customFloor']],
+    ['rawget global math escape', ['local m = rawget(_G, "math")', 'mutate(m)']],
+    ['implicit math wrapper member assignment', ['local w = { math }', 'local m = w[1]', 'm.floor = customFloor']],
+    ['implicit global wrapper member assignment', ['local w = { _G }', 'local g = w[1]', 'g.math.floor = customFloor']],
+    ['dynamic-key math wrapper member assignment', ['local w = { [runtimeKey] = math }', 'local m = w[runtimeKey]', 'm.floor = customFloor']],
+    ['numeric-assignment math wrapper member assignment', ['local w = {}', 'w[1] = math', 'local m = w[1]', 'm.floor = customFloor']],
+    ['rawget named math wrapper member assignment', ['local w = { m = math }', 'local m = rawget(w, "m")', 'm.floor = customFloor']],
+    ['rawget implicit math wrapper member assignment', ['local w = { math }', 'local m = rawget(w, 1)', 'm.floor = customFloor']],
+    ['nested implicit math wrapper member assignment', ['local w = { { math } }', 'local inner = w[1]', 'local m = inner[1]', 'm.floor = customFloor']],
+    ['conditional math introduction', ['local m = {}', 'if runtimeCondition then m = math end', 'm.floor = customFloor']],
+    ['conditional math removal', ['local m = math', 'if runtimeCondition then m = {} end', 'm.floor = customFloor']],
+    ['logical math selection', ['local m = runtimeCondition and math or {}', 'm.floor = customFloor']],
+    ['conditional math escape', ['if runtimeCondition then mutate(math) end']],
+  ] as const;
+  const numericMathAuthorityFrameX = (authorityModel: ReturnType<typeof buildX4UiCallModel>) =>
+    authorityModel.calls.find(candidate => candidate.name === 'createFrameHandle')?.semantics.properties
+      ?.find(candidate => candidate.name === 'x')?.value;
+  const numericMathAuthorityFacts = numericMathAuthorityCases.map(([name, lines]) => {
+    const authorityModel = buildX4UiCallModel(input(
+      numericMathAuthoritySource(lines),
+      `selftest/numeric-math-authority-${name.replaceAll(' ', '-')}.lua`,
+    ));
+    return {
+      name,
+      x: numericMathAuthorityFrameX(authorityModel),
+    };
+  });
+  const numericMathPostUseFacts = [
+    ['global escape', ['mutate(_G)']],
+    ['rawget math mutation', ['local m = rawget(_G, "math")', 'm.floor = customFloor']],
+    ['conditional authority mutation', ['local m = {}', 'if runtimeCondition then m = math end', 'm.floor = customFloor']],
+  ].map(([name, lines]) => ({
+    name,
+    x: numericMathAuthorityFrameX(buildX4UiCallModel(input(
+      numericMathAuthoritySource(lines as readonly string[], false),
+      `selftest/numeric-math-authority-post-use-${String(name).replaceAll(' ', '-')}.lua`,
+    ))),
+  }));
+  const numericMathSafeReadCases = [
+    ['exact rawget math', ['local m = rawget(_G, "math")']],
+    ['aliased rawget math', ['local g = _G', 'local m = rawget(g, "math")']],
+    ['wrapped rawget math', ['local w = { _G }', 'local g = w[1]', 'local m = rawget(g, "math")']],
+    ['dynamic global read', ['local m = _G[runtimeKey]']],
+    ['dynamic rawget global read', ['local m = rawget(_G, runtimeKey)']],
+    ['implicit wrapper read', ['local w = { math }', 'local m = w[1]']],
+    ['conditional authority read', ['local m = {}', 'if runtimeCondition then m = math end']],
+    ['logical authority read', ['local m = runtimeCondition and math or {}']],
+    ['static non-math global read', ['local v = _G["string"]']],
+    ['static non-authority wrapper rawget', ['local w = { v = 1 }', 'local v = rawget(w, "v")']],
+    ['exact Helper rawget', ['local SafeHelper = rawget(_G, "Helper")']],
+  ] as const;
+  const numericMathSafeReadFacts = numericMathSafeReadCases.map(([name, lines]) => ({
+    name,
+    x: numericMathAuthorityFrameX(buildX4UiCallModel(input(
+      numericMathAuthoritySource(lines),
+      `selftest/numeric-math-authority-safe-read-${name.replaceAll(' ', '-')}.lua`,
+    ))),
+  }));
+  check('source-visible math/_G mutation, alias, wrapper, dynamic-key, and conditional authority paths fail closed in source order',
+    numericMathAuthorityFacts.every(candidate =>
+      candidate.x !== undefined
+        && candidate.x.status !== 'static'
+        && candidate.x.numericExpression === undefined)
+      && numericMathPostUseFacts.every(candidate =>
+        candidate.x?.status === 'static'
+          && candidate.x.value === 1
+          && candidate.x.numericExpression?.kind === 'math-call'),
+    detail({ rejected: numericMathAuthorityFacts, postUse: numericMathPostUseFacts }));
+  check('exact, dynamic, wrapper, conditional, non-math, and Helper authority reads stay pure until mutation or escape',
+    numericMathSafeReadFacts.every(candidate =>
+      candidate.x?.status === 'static'
+        && candidate.x.value === 1
+        && candidate.x.numericExpression?.kind === 'math-call'),
+    detail({ safeReads: numericMathSafeReadFacts }));
+
+  const escapedNumericTableSource = [
+    'local LAY = { plateL = 600 / 2560 }',
+    'local beforeEscape = math.floor(100 * LAY.plateL)',
+    'mutate(LAY)',
+    'local afterEscape = math.floor(100 * LAY.plateL)',
+  ].join('\n');
+  const escapedNumericTableModel = buildX4UiCallModel(input(
+    escapedNumericTableSource,
+    'selftest/numeric-math-escaped-table.lua',
+  ));
+  const beforeEscapeAlias = escapedNumericTableModel.aliases.find(alias => alias.name === 'beforeEscape');
+  const afterEscapeAlias = escapedNumericTableModel.aliases.find(alias => alias.name === 'afterEscape');
+  check('numeric table-field provenance is source-ordered and stops after the source table escapes to an opaque call',
+    beforeEscapeAlias?.value.numericExpression?.kind === 'math-call'
+      && afterEscapeAlias?.value.numericExpression === undefined,
+    detail({ beforeEscape: beforeEscapeAlias, afterEscape: afterEscapeAlias }));
+
+  const localHelperNumericSource = (mutationBeforeUse: boolean): string => [
+    'local menu = { name = "LocalHelperNumeric", layer = 4 }',
+    'local function mutate(t)',
+    '  t.plateL = 0.9',
+    'end',
+    'local LAY = { plateL = 600 / 2560 }',
+    'function menu.display()',
+    ...(mutationBeforeUse
+      ? [
+        '  mutate(LAY)',
+        '  local x = math.floor(100 * LAY.plateL)',
+      ]
+      : [
+        '  local x = math.floor(100 * LAY.plateL)',
+        '  mutate(LAY)',
+      ]),
+    '  local frame = Helper.createFrameHandle(menu, { x = x, width = 80, height = 80, layer = 4 })',
+    'end',
+  ].join('\n');
+  const localHelperBeforeUseModel = buildX4UiCallModel(input(
+    localHelperNumericSource(true),
+    'selftest/numeric-math-local-helper-before-use.lua',
+  ));
+  const localHelperAfterUseModel = buildX4UiCallModel(input(
+    localHelperNumericSource(false),
+    'selftest/numeric-math-local-helper-after-use.lua',
+  ));
+  const frameXValue = (model: typeof localHelperBeforeUseModel) =>
+    model.calls.find(candidate => candidate.name === 'createFrameHandle')?.semantics.properties
+      ?.find(candidate => candidate.name === 'x')?.value;
+  const localHelperBeforeUseX = frameXValue(localHelperBeforeUseModel);
+  const localHelperAfterUseX = frameXValue(localHelperAfterUseModel);
+  check('same-file local helper numeric-table mutation invalidates only later source uses while preserving earlier x=23',
+    (localHelperBeforeUseX?.status === 'dynamic' || localHelperBeforeUseX?.status === 'unknown')
+      && localHelperBeforeUseX?.numericExpression === undefined
+      && localHelperAfterUseX?.status === 'static'
+      && localHelperAfterUseX.value === 23
+      && localHelperAfterUseX.numericExpression?.kind === 'math-call'
+      && localHelperBeforeUseModel.localInvocations.some(invocation =>
+        invocation.calleeExpression === 'mutate'
+          && invocation.status === 'supported'),
+    detail({
+      beforeUse: localHelperBeforeUseX,
+      afterUse: localHelperAfterUseX,
+      invocations: localHelperBeforeUseModel.localInvocations,
+    }));
+
+  const wrappedNumericSource = (
+    wrapperExpression: string,
+    localHelper: boolean,
+    mutationBeforeUse: boolean,
+    dynamicAssignment = false,
+    layExpression = '{ plateL = 600 / 2560 }',
+  ): string => [
+    'local menu = { name = "WrappedLocalHelperNumeric", layer = 4 }',
+    ...(localHelper
+      ? [
+        'local function mutate(t)',
+        '  t.lay.plateL = 0.9',
+        'end',
+      ]
+      : []),
+    `local LAY = ${layExpression}`,
+    `local wrapper = ${wrapperExpression}`,
+    ...(dynamicAssignment
+      ? [
+        'wrapper[runtimeKey] = LAY',
+        'wrapper.self = wrapper',
+      ]
+      : []),
+    'function menu.display()',
+    ...(mutationBeforeUse
+      ? [
+        '  mutate(wrapper)',
+        '  local x = math.floor(100 * LAY.plateL)',
+      ]
+      : [
+        '  local x = math.floor(100 * LAY.plateL)',
+        '  mutate(wrapper)',
+      ]),
+    '  local frame = Helper.createFrameHandle(menu, { x = x, width = 80, height = 80, layer = 4 })',
+    'end',
+  ].join('\n');
+  const wrappedCallCases = [
+    {
+      name: 'opaque named field',
+      model: buildX4UiCallModel(input(
+        wrappedNumericSource('{ lay = LAY }', false, true),
+        'selftest/numeric-math-opaque-wrapper.lua',
+      )),
+    },
+    {
+      name: 'local helper named field',
+      model: buildX4UiCallModel(input(
+        wrappedNumericSource('{ lay = LAY }', true, true),
+        'selftest/numeric-math-local-helper-wrapper.lua',
+      )),
+    },
+    {
+      name: 'local helper implicit array',
+      model: buildX4UiCallModel(input(
+        wrappedNumericSource('{ LAY }', true, true),
+        'selftest/numeric-math-local-helper-array-wrapper.lua',
+      )),
+    },
+    {
+      name: 'local helper nested array',
+      model: buildX4UiCallModel(input(
+        wrappedNumericSource('{ { LAY } }', true, true),
+        'selftest/numeric-math-local-helper-nested-array-wrapper.lua',
+      )),
+    },
+    {
+      name: 'local helper dynamic-key constructor',
+      model: buildX4UiCallModel(input(
+        wrappedNumericSource('{ [runtimeKey] = LAY }', true, true),
+        'selftest/numeric-math-local-helper-dynamic-key-wrapper.lua',
+      )),
+    },
+    {
+      name: 'local helper dynamic-key assignment cycle',
+      model: buildX4UiCallModel(input(
+        wrappedNumericSource('{}', true, true, true),
+        'selftest/numeric-math-local-helper-dynamic-assignment-cycle.lua',
+      )),
+    },
+    {
+      name: 'opaque name-bearing numeric descendant',
+      model: buildX4UiCallModel(input(
+        wrappedNumericSource('{ lay = LAY }', false, true, false, '{ name = "LAY", plateL = 600 / 2560 }'),
+        'selftest/numeric-math-opaque-name-bearing-wrapper.lua',
+      )),
+    },
+    {
+      name: 'local helper name-bearing numeric descendant',
+      model: buildX4UiCallModel(input(
+        wrappedNumericSource('{ lay = LAY }', true, true, false, '{ name = "LAY", plateL = 600 / 2560 }'),
+        'selftest/numeric-math-local-helper-name-bearing-wrapper.lua',
+      )),
+    },
+  ];
+  const wrappedCallAfterUseModel = buildX4UiCallModel(input(
+    wrappedNumericSource('{ [runtimeKey] = LAY }', true, false),
+    'selftest/numeric-math-local-helper-dynamic-key-after-use.lua',
+  ));
+  const wrappedFrameXValue = (model: ReturnType<typeof buildX4UiCallModel>) =>
+    model.calls.find(candidate => candidate.name === 'createFrameHandle')?.semantics.properties
+      ?.find(candidate => candidate.name === 'x')?.value;
+  const wrappedCallFacts = wrappedCallCases.map(candidate => ({
+    name: candidate.name,
+    value: wrappedFrameXValue(candidate.model),
+    invocation: candidate.model.localInvocations[0]?.status,
+  }));
+  const wrappedCallAfterUseX = wrappedFrameXValue(wrappedCallAfterUseModel);
+  check('opaque and local-helper escapes recursively invalidate named, array, dynamic-key, and cyclic numeric table descendants',
+    wrappedCallFacts.every(candidate =>
+      (candidate.value?.status === 'dynamic' || candidate.value?.status === 'unknown')
+        && candidate.value.numericExpression === undefined)
+      && wrappedCallFacts.filter(candidate => candidate.name.startsWith('opaque'))
+        .every(candidate => candidate.invocation === 'unsupported')
+      && wrappedCallFacts.filter(candidate => !candidate.name.startsWith('opaque'))
+        .every(candidate => candidate.invocation === 'supported')
+      && wrappedCallAfterUseX?.status === 'static'
+      && wrappedCallAfterUseX.value === 23
+      && wrappedCallAfterUseX.numericExpression?.kind === 'math-call',
+    detail({ beforeUse: wrappedCallFacts, afterUse: wrappedCallAfterUseX }));
+
+  const reachabilitySnapshotSource = [
+    'local LAY = { plateL = 600 / 2560 }',
+    'local wrapper = { { [runtimeKey] = LAY } }',
+    'wrapper.self = wrapper',
+    'do',
+    '  local LAY = 0',
+    '  local function dormantAnalysis()',
+    '    mutate(wrapper)',
+    '  end',
+    'end',
+    'local beforeConditionalEscape = math.floor(100 * LAY.plateL)',
+    'if runtimeCondition then',
+    '  mutate(wrapper)',
+    'end',
+    'do',
+    '  local LAY = 0',
+    '  local function unrelatedAnalysis()',
+    '    return true',
+    '  end',
+    'end',
+    'local afterConditionalEscape = math.floor(100 * LAY.plateL)',
+  ].join('\n');
+  const reachabilitySnapshotModel = buildX4UiCallModel(input(
+    reachabilitySnapshotSource,
+    'selftest/numeric-table-reachability-snapshot.lua',
+  ));
+  const beforeConditionalEscape = reachabilitySnapshotModel.aliases.find(alias => alias.name === 'beforeConditionalEscape')?.value;
+  const afterConditionalEscape = reachabilitySnapshotModel.aliases.find(alias => alias.name === 'afterConditionalEscape')?.value;
+  check('reachable-only cyclic descendants restore after dormant function analysis but retain conservative conditional escape state',
+    beforeConditionalEscape?.status === 'static'
+      && beforeConditionalEscape.value === 23
+      && beforeConditionalEscape.numericExpression?.kind === 'math-call'
+      && afterConditionalEscape?.status !== 'static'
+      && afterConditionalEscape?.numericExpression === undefined,
+    detail({ beforeConditionalEscape, afterConditionalEscape }));
+
+  const spacedNumericMathSource = [
+    'local spaced = math  .  floor(1.5)',
+    'local commented = math --[[ exact global ]] . --[[ exact member ]] floor(1.5)',
+  ].join('\n');
+  const spacedNumericMathModel = buildX4UiCallModel(input(
+    spacedNumericMathSource,
+    'selftest/numeric-math-spaced.lua',
+  ));
+  const spacedNumericMathAliases = ['spaced', 'commented'].map(name =>
+    spacedNumericMathModel.aliases.find(alias => alias.name === name)?.value.numericExpression);
+  check('numeric math callee authority accepts parser-valid source whitespace and comments without canonical spelling',
+    spacedNumericMathModel.parsed
+      && spacedNumericMathAliases.every(expression => expression?.kind === 'math-call')
+      && spacedNumericMathAliases.map(expression => expression?.calleeExpression).join('|')
+        === 'math  .  floor|math --[[ exact global ]] . --[[ exact member ]] floor',
+    detail({ parsed: spacedNumericMathModel.parsed, expressions: spacedNumericMathAliases }));
+
   const constantsSource = [
     'local menu = { name = "Constants", layer = 1 }',
     'local frame = Helper.createFrameHandle(menu, { width = Helper.viewWidth, height = Helper.viewHeight })',

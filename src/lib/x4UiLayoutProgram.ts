@@ -24,6 +24,7 @@ import type {
   X4UiLocalInvocationResultIdentity,
   X4UiRelevantCallName,
   X4UiNumericExpression,
+  X4UiNumericMathFunctionName,
   X4UiSourceLocation,
   X4UiValue,
   X4UiValueReference,
@@ -1999,6 +2000,7 @@ const localScaleFontWrapperForValue = (
 
 const NUMERIC_LITERAL_EXPRESSION = /^(?:0[xX][0-9A-Fa-f]+|(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)$/;
 const NUMERIC_EXPRESSION_OPERATORS = ['+', '-', '*', '/'] as const;
+const NUMERIC_MATH_FUNCTIONS: readonly X4UiNumericMathFunctionName[] = ['floor', 'ceil', 'min', 'max'];
 
 const sourcePositionAtOffset = (
   text: string,
@@ -2121,12 +2123,18 @@ interface NumericExpressionSourceAstNode {
   readonly raw?: unknown;
   readonly value?: unknown;
   readonly indexer?: unknown;
+  readonly isLocal?: unknown;
   readonly base?: unknown;
   readonly identifier?: unknown;
   readonly argument?: unknown;
   readonly expression?: unknown;
   readonly left?: unknown;
   readonly right?: unknown;
+  readonly arguments?: unknown;
+  readonly fields?: unknown;
+  readonly variables?: unknown;
+  readonly init?: unknown;
+  readonly key?: unknown;
   readonly [key: string]: unknown;
 }
 
@@ -2200,15 +2208,133 @@ const numericExpressionSourceAstIndex = (model: X4UiCallModel): NumericExpressio
   }
 };
 
+const exactNumericExpressionAliasBinding = (
+  descriptor: unknown,
+  model: X4UiCallModel,
+  useOffset?: number,
+  bindingName?: string,
+): X4UiCallModel['aliases'][number] | undefined => {
+  if (!isObject(descriptor)) return undefined;
+  const candidates = model.aliases
+    .filter(alias => alias.value.numericExpression !== undefined
+      && jsonEqual(alias.value.numericExpression, descriptor)
+      && (bindingName === undefined || alias.name === bindingName)
+      && (useOffset === undefined || alias.source.end.offset <= useOffset))
+    .sort((left, right) => left.source.start.offset - right.source.start.offset);
+  const binding = candidates[candidates.length - 1];
+  if (!binding) return undefined;
+  const endOffset = useOffset === undefined ? Number.MAX_SAFE_INTEGER : useOffset;
+  return model.aliases.some(candidate => candidate !== binding
+    && candidate.name === binding.name
+    && locationsEqual(candidate.context.source, binding.context.source)
+    && candidate.source.start.offset > binding.source.start.offset
+    && candidate.source.start.offset < endOffset
+    && candidate.context.reachability !== 'unreachable')
+    ? undefined
+    : binding;
+};
+
 const numericExpressionStructureError = (
   descriptor: X4UiNumericExpression,
   model: X4UiCallModel,
 ): string | undefined => {
   const index = numericExpressionSourceAstIndex(model);
   if (index.error) return index.error;
+  const nodesOfType = (type: string): readonly NumericExpressionSourceAstNode[] => [...index.nodesByRange.values()]
+    .flatMap(nodes => nodes)
+    .filter(node => node.type === type);
+  const rangeEqualsLocation = (
+    range: readonly [number, number] | undefined,
+    source: X4UiSourceLocation,
+  ): boolean => Boolean(range
+    && range[0] === source.start.offset
+    && range[1] === source.end.offset);
+  const nodeMatchesExactAlias = (
+    candidate: X4UiNumericExpression,
+    node: NumericExpressionSourceAstNode,
+  ): boolean => {
+    if (node.type !== 'Identifier' || typeof node.name !== 'string') return false;
+    const range = sourceAstRange(node);
+    const source = range ? localAstSource(model, node) : undefined;
+    if (!range || !source || !sourceLocationMatchesModel(model, source, node.name)) return false;
+    const binding = exactNumericExpressionAliasBinding(candidate, model, range[0], node.name);
+    return Boolean(binding
+      && binding.name === node.name
+      && locationContains(binding.context.source, source));
+  };
+  const writeBeforeTableFieldUse = (candidate: Extract<X4UiNumericExpression, { kind: 'table-field' }>): boolean => {
+    const useOffset = candidate.source.start.offset;
+    const assignmentWrites = nodesOfType('AssignmentStatement').some(statement => {
+      const statementRange = sourceAstRange(statement);
+      if (!statementRange || statementRange[0] >= useOffset) return false;
+      const variables = localAstNodes(statement.variables);
+      return Boolean(variables?.some(variable => {
+        if (localAstIdentifier(variable, candidate.base)) return true;
+        const target = localAstNode(variable);
+        if (!target || (target.type !== 'MemberExpression' && target.type !== 'IndexExpression')) return false;
+        return localAstIdentifier(target.base, candidate.base);
+      }));
+    });
+    if (assignmentWrites) return true;
+    return nodesOfType('CallExpression').some(call => {
+      const callRange = sourceAstRange(call);
+      const callSource = callRange ? localAstSource(model, call) : undefined;
+      if (!callRange || callRange[0] >= useOffset || !callSource) return false;
+      const modeled = model.records.some(record => record.recordType === 'call'
+        && locationsEqual(record.source, callSource));
+      if (modeled) return false;
+      const callee = localAstNode(call.base);
+      const receiver = callee?.type === 'MemberExpression' || callee?.type === 'IndexExpression'
+        ? localAstNode(callee.base)
+        : undefined;
+      const argumentsList = localAstNodes(call.arguments);
+      return localAstIdentifier(receiver, candidate.base)
+        || Boolean(argumentsList?.some(argument => localAstIdentifier(argument, candidate.base)));
+    });
+  };
+  const writeBeforeNumericMathUse = (candidate: Extract<X4UiNumericExpression, { kind: 'math-call' }>): boolean => {
+    const useOffset = candidate.source.start.offset;
+    const writesMathAuthority = (value: unknown): boolean => {
+      const target = localAstNode(value);
+      if (!target) return false;
+      if (localAstIdentifier(target, 'math', false)) return true;
+      const base = localAstNode(target.base);
+      if (!localAstIdentifier(base, 'math', false)) return false;
+      if (target.type === 'MemberExpression' && target.indexer === '.') {
+        return localAstIdentifier(target.identifier, candidate.name);
+      }
+      if (target.type !== 'IndexExpression') return false;
+      const key = localAstStringValue(model, target.index);
+      return key === undefined || key === candidate.name;
+    };
+    return nodesOfType('AssignmentStatement').some(statement => {
+      const statementRange = sourceAstRange(statement);
+      return Boolean(statementRange
+        && statementRange[0] < useOffset
+        && localAstNodes(statement.variables)?.some(writesMathAuthority));
+    }) || nodesOfType('FunctionDeclaration').some(declaration => {
+      const declarationRange = sourceAstRange(declaration);
+      return Boolean(declarationRange
+        && declarationRange[0] < useOffset
+        && declaration.isLocal === false
+        && writesMathAuthority(declaration.identifier));
+    }) || nodesOfType('CallExpression').some(call => {
+      const callRange = sourceAstRange(call);
+      const argumentsList = localAstNodes(call.arguments);
+      if (!callRange
+        || callRange[0] >= useOffset
+        || !localAstIdentifier(call.base, 'rawset', false)
+        || !argumentsList
+        || argumentsList.length !== 3
+        || !localAstIdentifier(argumentsList[0], 'math', false)) return false;
+      const key = localAstStringValue(model, argumentsList[1]);
+      return key === undefined || key === candidate.name;
+    });
+  };
   const nodeMatches = (candidate: X4UiNumericExpression, nodeValue: unknown): boolean => {
     if (!isObject(nodeValue)) return false;
     const node = nodeValue as NumericExpressionSourceAstNode;
+    if (nodeMatchesExactAlias(candidate, node)) return true;
     const range = sourceAstRange(node);
     if (!range
       || range[0] !== candidate.source.start.offset
@@ -2231,6 +2357,72 @@ const numericExpressionStructureError = (
       }
       case 'direct-helper-scale':
         return node.type === 'Identifier' && node.name === candidate.identity.bindingName;
+      case 'math-call': {
+        if (node.type !== 'CallExpression') return false;
+        const callee = localAstNode(node.base);
+        const receiver = callee ? localAstNode(callee.base) : undefined;
+        const identifier = callee ? localAstNode(callee.identifier) : undefined;
+        const argumentsList = localAstNodes(node.arguments);
+        const calleeRange = callee ? sourceAstRange(callee) : undefined;
+        if (callee?.type !== 'MemberExpression'
+          || callee.indexer !== '.'
+          || !localAstIdentifier(receiver, 'math', false)
+          || !localAstIdentifier(identifier, candidate.name)
+          || writeBeforeNumericMathUse(candidate)
+          || !rangeEqualsLocation(calleeRange, candidate.calleeSource)
+          || model.file.text.slice(calleeRange![0], calleeRange![1]) !== candidate.calleeExpression
+          || !argumentsList
+          || argumentsList.length !== candidate.arguments.length) return false;
+        return candidate.arguments.every((argument, argumentIndex) => nodeMatches(argument, argumentsList[argumentIndex]));
+      }
+      case 'table-field': {
+        const base = localAstNode(node.base);
+        const identifier = localAstNode(node.identifier);
+        const memberMatch = node.type === 'MemberExpression'
+          && node.indexer === '.'
+          && localAstIdentifier(base, candidate.base)
+          && localAstIdentifier(identifier, candidate.property);
+        const indexBase = localAstNode(node.base);
+        const indexKey = node.type === 'IndexExpression' ? localAstNode(node.index) : undefined;
+        const indexMatch = node.type === 'IndexExpression'
+          && localAstIdentifier(indexBase, candidate.base)
+          && (localAstStringValue(model, indexKey) === candidate.property
+            || (indexKey?.type === 'NumericLiteral'
+              && typeof indexKey.value === 'number'
+              && String(indexKey.value) === candidate.property));
+        if (!memberMatch && !indexMatch) return false;
+        const tableNodes = index.nodesByRange.get(sourceAstRangeKey(
+          candidate.tableSource.start.offset,
+          candidate.tableSource.end.offset,
+        )) || [];
+        if (tableNodes.filter(table => table.type === 'TableConstructorExpression').length !== 1
+          || writeBeforeTableFieldUse(candidate)) return false;
+        const table = tableNodes.find(tableNode => tableNode.type === 'TableConstructorExpression');
+        const fields = table ? localAstNodes(table.fields) : undefined;
+        const matchingFields = fields?.filter(field => {
+          const key = localAstNode(field.key);
+          const value = localAstNode(field.value);
+          const keyMatches = field.type === 'TableKeyString'
+            ? localAstIdentifier(key, candidate.property)
+            : field.type === 'TableKey'
+              && (localAstStringValue(model, key) === candidate.property
+                || (key?.type === 'NumericLiteral'
+                  && typeof key.value === 'number'
+                  && String(key.value) === candidate.property));
+          return keyMatches
+            && rangeEqualsLocation(value ? sourceAstRange(value) : undefined, candidate.value.source)
+            && nodeMatches(candidate.value, value);
+        }) || [];
+        if (matchingFields.length !== 1) return false;
+        return nodesOfType('LocalStatement').some(statement => {
+          const variables = localAstNodes(statement.variables);
+          const initializers = localAstNodes(statement.init);
+          if (!variables || !initializers) return false;
+          return variables.some((variable, variableIndex) =>
+            localAstIdentifier(variable, candidate.base)
+              && rangeEqualsLocation(sourceAstRange(initializers[variableIndex]), candidate.tableSource));
+        });
+      }
       case 'group':
         return node.type === 'ParenthesizedExpression'
           && nodeMatches(candidate.operand, node.expression || node.argument);
@@ -2333,11 +2525,65 @@ const numericExpressionError = (
           }
           return finish();
         }
+        case 'math-call': {
+          const name = candidate.name as X4UiNumericMathFunctionName;
+          const argumentsList = candidate.arguments;
+          const validArity = name === 'floor' || name === 'ceil'
+            ? Array.isArray(argumentsList) && argumentsList.length === 1
+            : Array.isArray(argumentsList) && argumentsList.length >= 1;
+          if (!hasExactRecordKeys(candidate, [
+            'kind', 'name', 'calleeExpression', 'calleeSource', 'arguments', 'expression', 'source',
+          ])
+            || !NUMERIC_MATH_FUNCTIONS.includes(name)
+            || !sourceLocationMatchesModel(model, candidate.calleeSource, candidate.calleeExpression)
+            || !Array.isArray(argumentsList)
+            || !validArity
+            || !locationContains(source, candidate.calleeSource as X4UiSourceLocation)) {
+            return finish('numeric math-call descriptor is malformed');
+          }
+          let previousArgumentStart = -1;
+          for (const argument of argumentsList) {
+            const error = visit(argument);
+            if (error) return finish(error);
+            const argumentIsAlias = exactNumericExpressionAliasBinding(argument, model, source.start.offset) !== undefined;
+            if (!isObject(argument)
+              || (!locationContains(source, argument.source as X4UiSourceLocation) && !argumentIsAlias)
+              || ((argument.source as X4UiSourceLocation).start.offset < previousArgumentStart && !argumentIsAlias)) {
+              return finish('numeric math-call arguments escape or reorder the source range');
+            }
+            previousArgumentStart = (argument.source as X4UiSourceLocation).start.offset;
+          }
+          return finish();
+        }
+        case 'table-field': {
+          if (!hasExactRecordKeys(candidate, [
+            'kind', 'base', 'property', 'tableSource', 'value', 'expression', 'source',
+          ])
+            || typeof candidate.base !== 'string'
+            || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(candidate.base)
+            || typeof candidate.property !== 'string'
+            || !/^(?:[A-Za-z_][A-Za-z0-9_]*|\d+)$/.test(candidate.property)
+            || !modelSourceLocationIsExact(model, candidate.tableSource)) {
+            return finish('numeric table-field descriptor is malformed');
+          }
+          const tableSource = candidate.tableSource as X4UiSourceLocation;
+          const tableFieldValue = candidate.value as X4UiNumericExpression;
+          const valueError = visit(tableFieldValue);
+          if (valueError) return finish(valueError);
+          if (!isObject(tableFieldValue)
+            || !locationContains(tableSource, tableFieldValue.source as X4UiSourceLocation)
+            || tableSource.end.offset > source.start.offset) {
+            return finish('numeric table-field value or declaration escapes its source order');
+          }
+          return finish();
+        }
         case 'group': {
           if (!hasExactRecordKeys(candidate, ['kind', 'operand', 'expression', 'source'])) return finish('numeric group descriptor is malformed');
           const error = visit(candidate.operand);
           if (error) return finish(error);
-          if (!isObject(candidate.operand) || !locationContains(source, candidate.operand.source as X4UiSourceLocation)) {
+          const operandIsAlias = exactNumericExpressionAliasBinding(candidate.operand, model, source.start.offset) !== undefined;
+          if (!isObject(candidate.operand)
+            || (!locationContains(source, candidate.operand.source as X4UiSourceLocation) && !operandIsAlias)) {
             return finish('numeric group operand escapes its source range');
           }
           return finish();
@@ -2347,7 +2593,9 @@ const numericExpressionError = (
             || (candidate.operator !== '+' && candidate.operator !== '-')) return finish('numeric unary descriptor is malformed');
           const error = visit(candidate.operand);
           if (error) return finish(error);
-          if (!isObject(candidate.operand) || !locationContains(source, candidate.operand.source as X4UiSourceLocation)) {
+          const operandIsAlias = exactNumericExpressionAliasBinding(candidate.operand, model, source.start.offset) !== undefined;
+          if (!isObject(candidate.operand)
+            || (!locationContains(source, candidate.operand.source as X4UiSourceLocation) && !operandIsAlias)) {
             return finish('numeric unary operand escapes its source range');
           }
           return finish();
@@ -2361,10 +2609,13 @@ const numericExpressionError = (
           if (leftError) return finish(leftError);
           const rightError = visit(candidate.right);
           if (rightError) return finish(rightError);
+          const leftIsAlias = exactNumericExpressionAliasBinding(candidate.left, model, source.start.offset) !== undefined;
+          const rightIsAlias = exactNumericExpressionAliasBinding(candidate.right, model, source.start.offset) !== undefined;
           if (!isObject(candidate.left) || !isObject(candidate.right)
-            || !locationContains(source, candidate.left.source as X4UiSourceLocation)
-            || !locationContains(source, candidate.right.source as X4UiSourceLocation)
-            || (candidate.left.source as X4UiSourceLocation).start.offset > (candidate.right.source as X4UiSourceLocation).start.offset) {
+            || (!locationContains(source, candidate.left.source as X4UiSourceLocation) && !leftIsAlias)
+            || (!locationContains(source, candidate.right.source as X4UiSourceLocation) && !rightIsAlias)
+            || ((candidate.left.source as X4UiSourceLocation).start.offset > (candidate.right.source as X4UiSourceLocation).start.offset
+              && !leftIsAlias && !rightIsAlias)) {
             return finish('numeric binary operands escape or reorder the source range');
           }
           return finish();
@@ -2375,9 +2626,11 @@ const numericExpressionError = (
           if (leftError) return finish(leftError);
           const rightError = visit(candidate.right);
           if (rightError) return finish(rightError);
+          const leftIsAlias = exactNumericExpressionAliasBinding(candidate.left, model, source.start.offset) !== undefined;
+          const rightIsAlias = exactNumericExpressionAliasBinding(candidate.right, model, source.start.offset) !== undefined;
           if (!isObject(candidate.left) || !isObject(candidate.right)
-            || !locationContains(source, candidate.left.source as X4UiSourceLocation)
-            || !locationContains(source, candidate.right.source as X4UiSourceLocation)) {
+            || (!locationContains(source, candidate.left.source as X4UiSourceLocation) && !leftIsAlias)
+            || (!locationContains(source, candidate.right.source as X4UiSourceLocation) && !rightIsAlias)) {
             return finish('numeric or operands escape the source range');
           }
           return finish();
@@ -2488,6 +2741,38 @@ const resolveNumericExpression = (
           return expressionGap(expression, `${label} uses an unavailable or disallowed direct Helper scale result`);
         }
         return { value: directScale.value, source: cloneLocation(directScale.source), provenance: 'direct-helper-scale' };
+      }
+      case 'table-field': {
+        const field = evaluate(expression.value);
+        if (field.gap || field.value === undefined) {
+          return expressionGap(expression, `${label} contains an unavailable table field`);
+        }
+        return {
+          value: field.value,
+          source: cloneLocation(expression.source),
+          provenance: field.provenance || 'source-literal',
+          ...(field.sourcePin ? { sourcePin: cloneDeep(field.sourcePin) as X4UiLayoutSourcePin } : {}),
+        };
+      }
+      case 'math-call': {
+        const argumentsList = expression.arguments.map(argument => evaluate(argument));
+        if (argumentsList.some(argument => argument.gap || argument.value === undefined)) {
+          return expressionGap(expression, `${label} contains an unavailable math argument`);
+        }
+        const values = argumentsList.map(argument => argument.value as number);
+        const validArity = expression.name === 'floor' || expression.name === 'ceil'
+          ? values.length === 1
+          : values.length >= 1;
+        if (!validArity || values.some(number => !Number.isFinite(number))) {
+          return expressionGap(expression, `${label} math call has invalid arity or a non-finite argument`);
+        }
+        const result = expression.name === 'floor' ? Math.floor(values[0])
+          : expression.name === 'ceil' ? Math.ceil(values[0])
+            : expression.name === 'min' ? Math.min(...values)
+              : Math.max(...values);
+        return Number.isFinite(result)
+          ? { value: result, source: cloneLocation(expression.source), provenance: 'source-literal' }
+          : expressionGap(expression, `${label} math result is not finite`);
       }
       case 'group': {
         const operand = evaluate(expression.operand);
@@ -5920,6 +6205,52 @@ const schemaNumericExpression = (value: unknown, path: string): ClosedSchemaErro
         : `${path}.identity.callName must be scaleX or scaleY`)
       || schemaString(candidate.expression, `${path}.expression`)
       || schemaSource(candidate.source, `${path}.source`);
+  }
+  if (candidate.kind === 'math-call') {
+    const objectError = schemaObject(value, path, [
+      'kind', 'name', 'calleeExpression', 'calleeSource', 'arguments', 'expression', 'source',
+    ]);
+    if (objectError) return objectError;
+    const errors = schemaEnum(candidate.kind, `${path}.kind`, ['math-call'])
+      || schemaEnum(candidate.name, `${path}.name`, ['floor', 'ceil', 'min', 'max'])
+      || schemaString(candidate.calleeExpression, `${path}.calleeExpression`, true)
+      || schemaSource(candidate.calleeSource, `${path}.calleeSource`)
+      || schemaArray(candidate.arguments, `${path}.arguments`)
+      || schemaString(candidate.expression, `${path}.expression`)
+      || schemaSource(candidate.source, `${path}.source`);
+    if (errors) return errors;
+    const argumentsList = candidate.arguments as unknown[];
+    if ((candidate.name === 'floor' || candidate.name === 'ceil')
+      ? argumentsList.length !== 1
+      : argumentsList.length < 1) {
+      return `${path}.arguments has invalid math-call arity`;
+    }
+    for (let index = 0; index < argumentsList.length; index += 1) {
+      const error = schemaNumericExpression(argumentsList[index], `${path}.arguments[${index}]`);
+      if (error) return error;
+    }
+    return undefined;
+  }
+  if (candidate.kind === 'table-field') {
+    const objectError = schemaObject(value, path, [
+      'kind', 'base', 'property', 'tableSource', 'value', 'expression', 'source',
+    ]);
+    if (objectError) return objectError;
+    const errors = schemaEnum(candidate.kind, `${path}.kind`, ['table-field'])
+      || schemaString(candidate.base, `${path}.base`, true)
+      || schemaString(candidate.property, `${path}.property`, true)
+      || schemaSource(candidate.tableSource, `${path}.tableSource`)
+      || schemaNumericExpression(candidate.value, `${path}.value`)
+      || schemaString(candidate.expression, `${path}.expression`)
+      || schemaSource(candidate.source, `${path}.source`);
+    if (errors) return errors;
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(String(candidate.base))) {
+      return `${path}.base must be a direct local identifier`;
+    }
+    if (!/^(?:[A-Za-z_][A-Za-z0-9_]*|\d+)$/.test(String(candidate.property))) {
+      return `${path}.property must be a direct table field name`;
+    }
+    return undefined;
   }
   if (candidate.kind === 'group') {
     const objectError = schemaObject(value, path, ['kind', 'operand', 'expression', 'source']);

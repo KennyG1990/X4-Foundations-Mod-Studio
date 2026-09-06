@@ -1509,3 +1509,287 @@ and temporary backup are rollback/evidence artifacts and remain untracked.
 - Google Current Status document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, accepted five exact
   revision-guarded replacements and was read back at revision
   `ANLCKQmDhtrpnfO1W9qZ6MVOrOmzKfNGmkBKS448FRbrYxIfcMjuN05OKv67TGvna9Q-6vbzu18Dr6EPWABJ_-TCT1Z_EgF1orlcMRiEQjU-`.
+
+## 2026-09-06 CONTINUATION — closed numeric `math.*` geometry for real AI Influence source
+
+Task: B119 source-preview deterministic math geometry
+Lane: FULL
+Status: `IN_PROGRESS` (reconciled acceptance revised; review repair required)
+
+### PLAN
+
+- **Bounded unit:** extend the existing closed numeric-expression model so the exact current
+  `ui/addons/ai_influence_chat/aic_menu.lua -> menu.display` source can preserve and resolve only deterministic
+  `math.floor`, `math.ceil`, `math.min`, and `math.max` calls whose arguments are already closed numeric
+  expressions. Re-run the same installed Forge source/profile comparison after focused and release-level validation.
+- **Assumptions / unresolved facts:** X4's Lua/UI runtime remains authoritative. The source parser can prove the
+  callee and argument structure, but menu-history rows, branch-selected text, `_useH`, and the resulting `ty` are
+  runtime state and must remain explicitly absent or owner-sampled. C++ frame acceptance remains unknowable in the
+  browser and is not promoted by this unit.
+- **Authoritative references:** current AI Influence source SHA-256
+  `4253D9BD9DE4113D4DE0B881DBF5A1E90CAA7B30F735BA925403EBEF7EC47DD7`; configured canonical unpacked corpus
+  generation `1788680993999-6fc9cf04ab`; the existing `x4UiCallModel` closed expression grammar; exact source-AST
+  checks in `x4UiLayoutProgram`; and the current 2560x1440 / X4 user scale 1.05 / effective Helper scale 1.4 profile.
+- **In scope:** exact descriptors, source validation, schema/evidence serialization, deterministic resolution,
+  immutability, preservation of closed numeric provenance when read from an exact source-owned tracked table field,
+  focused negative tests, and the real-source/profile probe plus installed rendered-host inspection.
+- **Out of scope:** arbitrary Lua execution; arbitrary `math` functions; random/time/runtime calls; trig; user-defined
+  callees; inferring menu rows or branch text; sample-alias redesign; AI Influence source/game mutation; deployment;
+  universal Helper/widget/C++ parity; and completion of the twelve-reference benchmark.
+- **Affected implementation surfaces:** `src/lib/x4UiCallModel.ts`, `src/lib/x4UiLayoutProgram.ts`, and their focused
+  selftests. A preview-pipeline selftest may change only if needed to prove the public source/profile contract. UI,
+  server, package/release, corpus, workspace, mod, and game files are forbidden in this unit.
+- **Risks / authorization boundaries:** accepting an unproven callee or forged descriptor would turn source evidence
+  into invented geometry. Resolution must reject malformed, non-finite, zero-argument, unsupported, or cross-source
+  structures. No mod/game/settings bytes are written. Rollback is a path-limited revert of only the worker-owned files.
+- **Acceptance criteria (revised after real-source reconciliation):**
+  1. Exact source/profile projection automatically resolves `px=600` and `tw=1050`; those values no longer appear in
+     the opaque sample catalog. `_choiceY` remains an explicit sample in this bounded unit because the final source
+     binding is conditionally reassigned; `979` is only the no-pending-action path value, not a universal source fact.
+  2. The frame remains source/profile resolved at `x=0`, `y=0`, `width=2560`, `height=1440`, `layer=4`.
+  3. Runtime-dependent `_choiceY`, `_useH`, `ty`, branch text, and rows remain explicit partial/sample state; no content
+     is invented. A later path-sensitive unit may remove the `_choiceY` sample only after Forge can select and prove an
+     implicit false arm for the exact source conditional.
+  4. Forged or cross-source descriptors, wrong callees, unsupported functions, zero-argument min/max, malformed arity,
+     and non-finite results reject or remain unavailable without false success.
+  5. Descriptor schema, evidence JSON, canonical ordering, and deep-freeze behavior are covered and deterministic.
+  6. Focused call-model/layout tests, typecheck, owned-path lint, real-source public probe, full oracle/e2e/build/package
+     gates required by an eventual installed update, and negative lifecycle checks pass.
+  7. The updated installed Forge visually exposes more source-static menu structure with only genuinely runtime values
+     sampled, while retaining `Not verified in game`. No game proof is claimed from the preview.
+- **Evidence locations:** focused command receipts in this record; installed Forge screenshots under
+  `dev-docs/b119-x4-ui-pipeline-smoke/`; release evidence only after all source gates pass.
+
+### BASELINE / RECONCILE
+
+- **Revision / worktree:** `HEAD == origin/main == 596ef0c79ac3c574ed1ca1af96840705388e24c2`; the broad unrelated
+  modified/untracked tree and empty intended-code diff are preserved. X4 is stopped; installed Forge `0.0.71` is live
+  on sidecar port `56347` with the configured `x4 AiLive` workspace and canonical corpus.
+- **Reproduced visible baseline:** the installed editor can be made `rendered/current`, but the real full canvas is
+  predominantly black and exposes only the bottom input plus `SEND` / `END` controls. That is nonzero geometry, not a
+  useful whole-menu render and not game proof.
+- **Correction to the prior diagnosis:** the frame call is already exact and source/profile resolved. Its 2560x1440
+  geometry is not the current blocker. The missing static plate/choice geometry comes from safe deterministic
+  `math.floor(...)` expressions becoming opaque values.
+- **Existing capability reused:** literals, Helper view constants, `or`, unary/binary arithmetic, grouping, direct
+  Helper scale calls, exact source ranges, AST validation, source/profile evidence, and resolver/schema machinery
+  already exist. This unit extends that owner rather than adding another evaluator or parser.
+- **Plan change after implementation reconciliation:** the exact `LAY.plateL` / `LAY.plateR` reads showed that the
+  call model also discards an already-closed numeric descriptor when reading a source-owned tracked table field. That
+  preservation is necessary for the documented real-source acceptance, so it is included in the same bounded owner.
+  Dynamic/reassigned/unknown table fields remain unavailable, and negative tests must reject provenance that is not
+  tied to the exact source-owned field read.
+- **Second plan change after the real-source probe:** `tw = floor(vw * (plateR - plateL)) = 1050` and
+  `px = floor(vw * plateL) = 600` are unconditional source/profile facts. `_choiceY` starts as
+  `floor(vh * 0.68) = 979` but line 492 conditionally subtracts `Helper.scaleY(150)` when
+  `menu._pendingAction` is true. The existing path catalog exposes only the explicit `then` arm and cannot select the
+  implicit false arm, so the post-branch use must remain sampled. The prior universal-979 acceptance was incorrect and
+  is withdrawn rather than weakening control-flow invalidation.
+- **Fresh-eyes review repair contract:** reproduced counterexamples must reject source-overridden global `math` or
+  `math.<function>`; reject a numeric source table that escaped through an opaque call before its field read; preserve
+  the original alias when another name copies the same descriptor; accept parser-valid whitespace/comments around the
+  exact global math member; and make the non-finite regression assert the affected frame fact rather than a nonexistent
+  cell. These repairs remain within the same four owned source/selftest files.
+- **Second fresh-eyes repair contract:** a same-file local helper currently returns through the call model's early
+  local-invocation branch before numeric literal-table arguments are marked escaped. The layout projector independently
+  rejects `mutate(LAY)` before `LAY.plateL`, so rendered geometry is fail-closed, but the public call model still reports
+  the resulting alias as static and the linter consumes static call values directly. A second counterexample wraps the
+  same object as `{ lay = LAY }`; `mutate(wrapper)` currently leaves both the call model and projected frame at the false
+  known value `23`, because escape tracking does not traverse reachable tracked literal objects. Implicit array fields
+  (`{ LAY }`), nested arrays, and dynamic-key fields (`{ [runtimeKey] = LAY }`) reproduce the same false render; the
+  evaluator currently evaluates those child values but discards their reachability when no static field name exists.
+  A post-construction `wrapper[runtimeKey] = LAY` assignment reproduces it as well, including when the wrapper also has
+  a self-cycle.
+  The call model must therefore taint numeric literal-table arguments and every reachable source-object descendant,
+  including unnamed or dynamically keyed constructor and assignment values, before returning from an unexpanded
+  local-helper or opaque invocation. Traversal must be cycle-safe. A call after the field read must not retroactively
+  invalidate the earlier value, and the known menu lifecycle layer must remain intact.
+- **Third fresh-eyes repair contract:** review of the recursive candidate found three remaining authority bypasses.
+  Snapshot traversal records each object's private reachable edges but does not visit descendants that exist only on
+  those edges; control-flow restore must traverse them. A numeric table with an ordinary `name` field is classified as
+  a menu and therefore remains falsely known when escaped through a wrapper; menu lifecycle preservation must be tied
+  to exact safe lifecycle call context rather than exempting every menu-shaped object from mutation authority. Finally,
+  the exact-global `math` proof detects direct `math` writes but not explicit aliases through `_G`: opaque
+  `mutate(math)`, `rawset(_G, "math", ...)`, `rawset(_G.math, "floor", ...)`, `_G.math.floor = ...`, and
+  `_G["math"]["floor"] = ...` all currently leave a falsely known projected result. Exact source-visible global-math
+  replacement or escape before use must invalidate later math descriptors. Follow-up probes reproduce the same false
+  known result for `mutate(_G)`, a wrapper carrying `_G`, `local m = math; m.floor = ...`,
+  `local g = _G; g.math.floor = ...`, and `_G[runtimeKey] = ...`; direct `math[runtimeKey] = ...` already fails closed.
+  Exact aliases, wrappers, and dynamic global keys therefore belong to the same private authority model. The same
+  operations after use must not invalidate an earlier fact. This does not claim protection against invisible external
+  runtime monkey-patching with no source-visible authority path.
+- **Fourth fresh-eyes repair contract:** coordinator validation of the third candidate reproduced four related
+  source-visible global-read bypasses. `rawget(_G, "math")`, `rawget(g, "math")` after `g = _G`, `_G[runtimeKey]`,
+  and `rawget(_G, runtimeKey)` can each yield the real math table, but the returned value currently loses private
+  authority identity. Mutating `.floor` through that value before `math.floor(1.5)` therefore leaves a falsely static
+  result of `1`; the direct `_G[runtimeKey].floor = ...` form reproduces the same defect. Exact or possibly-math reads
+  from a source-proven global-environment value must retain private math authority through aliases and wrappers until
+  mutation or opaque escape, while static non-math reads and pure reads remain usable. The same false-known result is
+  reproduced when math or `_G` is stored in an implicit array field, dynamically keyed wrapper field, or numeric
+  post-construction assignment and then read back before mutation; named `w.m` already fails closed. Authority-bearing
+  unnamed/indexed wrapper reads therefore belong to this same repair, including nested wrapper reachability. Exact
+  unshadowed `rawget(w, "m")` / `rawget(w, 1)` over authority-bearing wrappers reproduce the same loss and must preserve
+  private authority without turning ordinary static non-authority reads into math. Conditional aliases also reproduce
+  the defect when a binding may become math, may cease being math, or is formed by
+  `runtimeCondition and math or {}` and is then mutated after the merge. Control-flow reconciliation must retain
+  conservative possible-math identity across those source-visible paths. Preserve exact
+  `rawget(_G, "Helper")`, source-order after-use controls, and the nineteen-sample real-source result. This repair is
+  required before broad gates or release.
+- **Capability-map delta:** none at specification time; this is a fidelity repair within the existing B119 capability.
+- **Negative baseline / AAR triggers:** nested-scroll clipping initially captured the linter instead of the canvas;
+  browser download capture timed out; sanitized DOM inspection could not call `canvas.toDataURL`; and the earlier frame
+  diagnosis was stale. These are evidence/tooling failures to retain in the close even if the repair succeeds.
+
+### IMPLEMENT / VALIDATE / REVIEW / CLOSE / AAR
+
+- First Luna pass added closed `floor` / `ceil` / `min` / `max` descriptors plus source-owned table-field provenance.
+  Focused call-model `94/94`, layout `713 passed / 1 skipped`, typecheck, and owned-path lint passed after one owned
+  TypeScript narrowing repair. The real-source probe resolved frame `0/0/2560/1440/layer4`, `px=600`, and `tw=1050`.
+- The first review-forced repair closed all five causal counterexamples, then passed call-model `97/97`, layout
+  `718 passed / 1 skipped`, typecheck, owned-path lint, diff hygiene, and the exact real-source probe. That probe retains
+  `_choiceY` as a sample and reports nineteen runtime-state samples total. It also caught and repaired an over-broad
+  escape rule that had invalidated the normal `menu.layer` lifecycle.
+- Coordinator review then reproduced one narrower remaining defect: `local function mutate(t) ...; mutate(LAY)` leaves
+  the call-model alias static even though the layout projector correctly makes frame geometry unavailable. A
+  source-order control with the call after the read remains known, and conditional `math.floor` replacement before the
+  read is likewise rejected by the projector. Nested-wrapper probes then reproduced a stronger false-render case:
+  `local wrapper = { lay = LAY }; mutate(wrapper)` remains projected with known frame `x=23` for both an opaque global
+  callee and a same-file local helper. A direct alias argument is already rejected, proving the missing boundary is
+  reachable-object traversal rather than alias ownership. Follow-up probes reproduced the same false known render for
+  `{ LAY }`, `{{ LAY }}`, and `{ [runtimeKey] = LAY }`; the latter already emits a dynamic-key verification gap but still
+  promotes the later geometry. `wrapper[runtimeKey] = LAY; wrapper.self = wrapper; mutate(wrapper)` reproduces the same
+  false projection, establishing both post-construction reachability and cycle-safety requirements. The public-model/
+  linter mismatch and false projected geometry require the second bounded repair above.
+- The recursive repair then passed call-model `99/99`, layout `719 passed / 1 skipped`, typecheck, exact lint, diff
+  hygiene, and the real-source `px=600` / `tw=1050` / nineteen-sample probe. Independent review did not accept that
+  intermediate green state: it reproduced known frame `x=23` through a wrapped numeric table carrying a normal `name`
+  field, found missing reachable-edge snapshot traversal, and reproduced known frame `x=1` after all five explicit
+  `_G`/global-math mutation forms listed in the third repair contract (the already-supported
+  `rawset(math, "floor", ...)` control alone failed closed). Alias/global-table follow-ups listed in that contract also
+  reproduced false known output; direct dynamic `math[...]` is the positive rejection control. The third repair is
+  complete at call-model `101/101`, layout `720 passed / 1 skipped`, typecheck, exact lint, diff hygiene, and the exact
+  real-source `px=600` / `tw=1050` / one `_choiceY` sample / nineteen-total-samples probe. Independent coordinator
+  replay confirmed those counts and the linter remained `140/140`, but fresh-eyes review then reproduced all four
+  global-read authority bypasses in the fourth contract above.
+- The fourth repair is now complete. It retains exact and possible `math` / `_G` authority through direct and aliased
+  `rawget`, implicit and nested table slots, dynamic-key wrappers, numeric assignments, opaque/local-helper escape,
+  conditional merges, and logical selection. Numeric and string table keys remain distinct and overwrite order remains
+  source-ordered. Pure reads, static non-math reads, exact `rawget(_G, "Helper")`, menu lifecycle layer `4`, and
+  post-use mutation controls remain known. The exact worker gates passed at call-model `102/102`, layout
+  `721 passed / 1 skipped / 722 total`, project typecheck, exact four-file ESLint, and exact diff hygiene.
+- Independent coordinator validation replayed the original fifteen false-known mutations and confirmed all fifteen now
+  return non-static geometry with no trusted math descriptor. Four pure-read/non-math/Helper controls and one post-use
+  control remain static `1` with a `math-call` descriptor. Independent focused gates also passed at call-model
+  `102/102`, layout `721 passed / 1 skipped`, linter `140/140`, typecheck, exact lint, and diff hygiene. The exact current
+  `aic_menu.lua -> menu.display` probe remains `parsed=true`, `projection=partial`, `px=600`, `tw=1050`, one
+  `_choiceY` sample, and nineteen samples total.
+- Broad oracle/e2e/build/package gates, installed Forge rendered-host inspection, and any later game comparison are
+  still pending. No package, install, or release is claimed from this checkpoint. Overall B119 remains
+  `PARTIAL / IN_PROGRESS / Not verified in game`.
+
+### 2026-09-06 broad-gate and release checkpoint
+
+- The isolated oracle wrapper passed `134/134` on port `8972`; its process tree exited and the port closed. A prior
+  direct `node scripts/oracle-sweep.mjs` invocation failed `0/133` because it requires a running API server; that is a
+  reproduced command-precondition failure and an AAR trigger, not a product regression.
+- The first full E2E invocation failed before test discovery with no structured report and Windows child exit
+  `0xC0000409`; lifecycle cleanup still reported `treeGone=true`. An exact Playwright `--list` then discovered
+  `106` tests in `24` files. The controlled serial retry passed `106/106`, zero failed/flaky/bad/quarantined results,
+  from the authoritative JSON report in `test-results/e2e-verdict.json`, and closed ports `3100/3101`.
+- The protected live mod workspace remained exact after E2E: excluding its non-deployable `.git` metadata, it is
+  `127 files / 19 directories / 11,262,724 bytes /
+  9B1A0021A22927D55168A8904C255CEDC630853DB02B07389A64742E269C0BEC`, and its Git worktree remains clean at
+  `4c0a422b7e3d0f492b572b9da8d2d7ea19a2b453`.
+- Production build passed `1,848` modules. `npm run precommit:check` passed canon mirrors, tripwires, E2E verdict
+  `55/55`, Vite lifecycle, product-copy, durable writers, capability contract, MCP contract, action-receipt coverage
+  (`82 routes / 57 surfaces`, manifest `396865ea4e877035d8f8c29607d9b5e22dd5ca891b420855b59efbf8087b23bb`),
+  typecheck, and size guards.
+- **Next bounded unit — public `0.0.72` release:** change only extension version/release metadata and its generated
+  changelog; describe deterministic real-source `math.floor/ceil/min/max` geometry, fail-closed escaped/mutated math
+  authority, and the retained `Not verified in game` boundary. Then run changelog, stage-app, extension build,
+  `16/16` probe, stable VSIX package, secret/path scan, and independent artifact inspection/hash. Publish to OpenVSX
+  before committing, verify remote version and downloaded-byte parity, install into Antigravity with a retained
+  `0.0.71` rollback copy, and inspect the real rendered host. Release metadata must not claim in-game verification,
+  pixel parity, arbitrary Lua execution, or completion of the twelve-reference benchmark.
+- Overall B119 remains `PARTIAL / IN_PROGRESS / Not verified in game`; this checkpoint authorizes only release and
+  installed-host validation of the bounded deterministic-math repair.
+
+### 2026-09-06 deterministic-math `0.0.72` release close
+
+#### IMPLEMENT / VALIDATE
+
+- Release metadata was advanced only from `0.0.71` to `0.0.72`. The notes state the bounded capability: exact closed
+  numeric `math.floor`, `math.ceil`, `math.min`, and `math.max` expressions can contribute source geometry; aliases,
+  wrappers, dynamic global reads, control-flow merges, mutation, and opaque escape invalidate later math authority;
+  runtime-dependent values remain preview-only samples. The notes retain `Not verified in game` and make no arbitrary
+  Lua, universal Helper/widget/C++, pixel-parity, or twelve-reference-completion claim.
+- Changelog generation passed with `60` versions and `0.0.72` newest. Production stage/build passed, the staged-app
+  probe passed `16/16`, and stable VSIX packaging produced
+  `vscode-extension/x4-forge-studio-0.0.72.vsix`: `2,107` archive entries, `2,105` extension payload files,
+  `71,654,054` unpacked bytes, `26,303,425` archive bytes, SHA-256
+  `5C6B2C20C42E93359DED03DBF199F00C1C858AFCC579388F10F94818CDDEA4B0`. Independent package inspection found no
+  secret or machine-path leak.
+- OpenVSX accepted one publication of `x4forge.x4-forge-studio` `0.0.72`. Initial direct-version readback returned
+  `404` while indexing; no duplicate publish was attempted. At `2026-09-06T12:10Z`, `/latest` and the direct
+  `0.0.72` endpoint both returned `0.0.72`. An independent public download to
+  `C:\Users\Moshi\AppData\Local\Temp\x4forge-openvsx-0.0.72-20260906T081058030Z\x4forge.x4-forge-studio-0.0.72.vsix`
+  was exactly `26,303,425` bytes with the same SHA-256, proving byte-for-byte public artifact parity.
+- Installed Antigravity `0.0.71` was retained recoverably at
+  `C:\Users\Moshi\AppData\Local\Temp\x4forge-b119-0.0.71-final-install-backup-20260906T024434135Z`. Antigravity was
+  closed gracefully, the real Electron CLI installed `0.0.72`, and all `2,105` packaged payload files matched the
+  installed extension exactly; the only extra was the expected IDE `.vsixmanifest`. Antigravity restarted visibly.
+  Installed sidecar evidence was one supervisor plus one server, port `60966`, HTTP root `200`, exact configured
+  corpus, and unauthenticated configuration `401`. Installed runtime oracles passed `134/134`.
+- In the installed `0.0.72` editor, exact current source
+  `ui/addons/ai_influence_chat/aic_menu.lua` at SHA-256
+  `4253D9BD9DE4113D4DE0B881DBF5A1E90CAA7B30F735BA925403EBEF7EC47DD7` and target `menu.display` exposed exactly
+  `19` owner-issued samples and `33` source branch boundaries. Before samples, source composition correctly refused
+  because it had no authoritative visible source operation. The first ten supplied samples retained that refusal.
+  Supplying the source-issued `_choiceY` sample as `979` after the preceding required geometry/text samples caused a
+  deterministic transition to `rendered/current`, mounted one native `2560x1440` Canvas, and retained `Not verified
+  in game`. Visual inspection found the source-defined edit box plus `SEND` and `END` controls at the low panel
+  anchor; no unissued transcript, rail, or runtime-built choice content was invented.
+- Retained installed visual evidence:
+  `dev-docs/b119-ai-influence-dogfood/installed-release-20260906/installed-0.0.72-menu-display-sampled-current-2560x1440.png`,
+  `45,676` bytes, SHA-256
+  `5286095C6B16A15230D79F770B4FB6CD026B80BC08F59E32D215FC4AD37D6A8F`. An all-samples/all-branches stress probe
+  later produced a refused successor while retaining the prior bitmap as `stale`, proving the current-only commit
+  boundary rather than replacing it with misleading output. Both standard browser probes had zero page/console
+  errors.
+- No mod or game byte changed in this release unit. The same exact AI source hash already has retained X4 acceptance
+  from the 2026-09-03 current-COMM checkpoint and the 2026-09-05 three-menu parity run, but those prior game receipts
+  do not promote this new Forge preview to game truth. X4 was not relaunched for the parser-only release close.
+
+#### REVIEW / CLOSE
+
+- **Done and evidenced:** all four focused implementation suites and negative authority matrix; linter `140/140`;
+  typecheck and exact lint; oracle `134/134`; serial E2E `106/106` with zero failed/flaky/bad/quarantined tests and
+  `treeGone=true`; production build and complete precommit; stable package inspection; installed byte/runtime/UI
+  proof; a positive source-composition bitmap caused by the exact issued sample boundary; OpenVSX version/latest and
+  independently downloaded artifact parity.
+- **Deliberately unchanged:** AI Influence source, workspace, deployed game extension, saves, corpus, game settings,
+  renderer game-truth language, and all unrelated dirty paths. No capability-map delta: this strengthens the existing
+  source-faithful preview owner without establishing a new universal engine capability.
+- **Bounded status:** `VERIFIED` for deterministic-math authority, release `0.0.72`, installed rendered-host behavior,
+  and public artifact parity. **Overall B119:** `IN_PROGRESS / PARTIAL`. The rendered current bitmap is a faithful
+  static fragment, not the complete runtime menu; full twelve-reference AI Influence reconstruction/current-path game
+  validation and universal Helper/widget/C++ acceptance remain open. Preview remains permanently `Not verified in
+  game`.
+- Suggested commit title: `feat(ui-editor): resolve source math geometry and publish 0.0.72`.
+
+#### AAR
+
+- **Sustain:** preserve exact source/profile identity, source-order authority invalidation, positive-pixel proof,
+  package/install/public hashes, and game truth as separate evidence layers.
+- **Improve work/approach:** the first all-samples/all-branches replay rebuilt the complete projection after every
+  input and took several minutes. A causal replay that stopped at the first current bitmap identified `_choiceY` as
+  the final required sample with less ambiguity. Do not interpret a retained stale bitmap as the latest render.
+- **Improve tools:** a computer-use native-select wrapper could change the DOM selection without completing React's
+  controlled event path, while ordinary Playwright selected the same exact option cleanly. The Electron installer
+  also returned blank output despite a successful install, and the first process census counted the supervisor command
+  line as a second server. Verify actual installed bytes, child topology, DOM state, and console errors instead of
+  trusting wrapper return text. The first OpenVSX download command used unsupported `New-Item -LiteralPath`; the exact
+  `-Path` retry succeeded.
+- **Highest-risk evidenced weakness:** a believable static fragment can be mistaken for the whole runtime menu.
+  Continue to expose every omitted sample/branch, preserve stale/refused states, and require exact clean deploy plus X4
+  for each player-experience claim. Project-specific gotcha card `40` banks the source-visible math-authority lesson.

@@ -5191,6 +5191,105 @@ const run = (): {
     moduloExpressionFact?.status !== 'known',
     detail({ status: moduloExpressionResult.status, fact: moduloExpressionFact }));
 
+  const numericMathLayoutSource = [
+    'local menu = { name = "NumericMathLayout", layer = 4 }',
+    'local LAY = { plateL = 600 / 2560, plateR = 1650 / 2560 }',
+    'function menu.display()',
+    '  local vw = Helper.viewWidth',
+    '  local vh = Helper.viewHeight',
+    '  local px = math.floor(vw * LAY.plateL)',
+    '  local tw = math.floor(vw * (LAY.plateR - LAY.plateL))',
+    '  local _choiceY = math.floor(vh * 0.68)',
+    '  local frame = Helper.createFrameHandle(menu, { x = 0, y = 0, width = vw, height = vh, layer = 4 })',
+    '  local table = frame:addTable(1, { width = tw })',
+    '  local row = table:addRow(false, {})',
+    '  row[1]:createText("choice", { x = px, y = _choiceY, scaling = false })',
+    '  frame:display()',
+    'end',
+  ].join('\n');
+  const numericMathLayoutModel = buildX4UiCallModel(input(
+    numericMathLayoutSource,
+    'selftest/b119-numeric-math-layout.lua',
+  ));
+  const numericMathLayoutBaseProfile = profileFor(numericMathLayoutModel, { uiScale: 1.4 });
+  const numericMathLayoutProfile: X4UiLayoutProjectionProfile = {
+    ...numericMathLayoutBaseProfile,
+    id: 'selftest-b119-numeric-math-2560x1440',
+    frame: { width: 2560, height: 1440 },
+    helper: {
+      ...numericMathLayoutBaseProfile.helper,
+      constants: {
+        ...numericMathLayoutBaseProfile.helper.constants,
+        viewWidth: pin(2560, 707),
+        viewHeight: pin(1440, 708),
+      },
+    },
+  };
+  const numericMathLayoutResult = projectX4UiLayoutProgram(
+    numericMathLayoutModel,
+    namedTarget(numericMathLayoutModel, 'menu.display'),
+    numericMathLayoutProfile,
+  );
+  const numericMathLayoutProgram = resultProgram(numericMathLayoutResult);
+  const numericMathLayoutAuthority = evidenceAuthorityOf(numericMathLayoutResult);
+  const numericMathLayoutFrame = numericMathLayoutProgram?.frames[0];
+  const numericMathLayoutTable = numericMathLayoutProgram?.tables[0];
+  const numericMathLayoutText = numericMathLayoutProgram
+    ?.cells.find(candidate => candidate.kernelState?.type === 'text');
+  const numericMathLayoutSchema = numericMathLayoutProgram && numericMathLayoutAuthority
+    ? safeSchemaPairValidation(numericMathLayoutProgram, numericMathLayoutAuthority)
+    : { threw: false, valid: false, reason: 'numeric math program or authority missing' };
+  const numericMathLayoutRoundTripSchema = numericMathLayoutProgram && numericMathLayoutAuthority
+    ? safeSchemaPairValidation(
+      freezeClone(jsonClone(numericMathLayoutProgram)),
+      freezeClone(jsonClone(numericMathLayoutAuthority)),
+    )
+    : { threw: false, valid: false, reason: 'numeric math program or authority missing' };
+  check('B119 exact menu.display numeric math derives px, tw, and _choiceY without opaque samples',
+    numericMathLayoutResult.status !== 'refused'
+      && numericMathLayoutFrame !== undefined
+      && numericMathLayoutTable !== undefined
+      && numericMathLayoutText !== undefined
+      && factValue(numericMathLayoutFrame.descriptorFacts.x) === 0
+      && factValue(numericMathLayoutFrame.descriptorFacts.y) === 0
+      && factValue(numericMathLayoutFrame.descriptorFacts.width) === 2560
+      && factValue(numericMathLayoutFrame.descriptorFacts.height) === 1440
+      && factValue(numericMathLayoutFrame.descriptorFacts.layer) === 4
+      && factValue(numericMathLayoutTable.descriptorFacts.requestedWidth) === 1050
+      && factValue(numericMathLayoutText.descriptorFacts.outerX) === 600
+      && factValue(numericMathLayoutText.descriptorFacts.outerY) === 979
+      && !numericMathLayoutProgram.sampleCatalog.entries.some(entry => [
+        'vw', 'vh', 'px', 'tw', '_choiceY', 'LAY.plateL', 'LAY.plateR',
+      ].includes(entry.expression)),
+    detail({
+      status: numericMathLayoutResult.status,
+      frame: numericMathLayoutFrame?.descriptorFacts,
+      table: numericMathLayoutTable?.descriptorFacts,
+      text: numericMathLayoutText?.descriptorFacts,
+      samples: numericMathLayoutProgram?.sampleCatalog.entries,
+    }));
+  check('B119 numeric math descriptor evidence is schema-valid, round-trippable, and deeply frozen',
+    numericMathLayoutAuthority !== undefined
+      && numericMathLayoutSchema.threw === false
+      && numericMathLayoutSchema.valid === true
+      && numericMathLayoutRoundTripSchema.threw === false
+      && numericMathLayoutRoundTripSchema.valid === true
+      && Object.isFrozen(numericMathLayoutProgram)
+      && Object.isFrozen(numericMathLayoutProgram?.frames)
+      && Object.isFrozen(numericMathLayoutProgram?.sampleCatalog)
+      && Object.isFrozen(numericMathLayoutAuthority)
+      && JSON.stringify(numericMathLayoutProgram) === JSON.stringify(JSON.parse(JSON.stringify(numericMathLayoutProgram))),
+    detail({
+      schema: numericMathLayoutSchema,
+      roundTrip: numericMathLayoutRoundTripSchema,
+      frozen: {
+        program: Object.isFrozen(numericMathLayoutProgram),
+        frames: Object.isFrozen(numericMathLayoutProgram?.frames),
+        sampleCatalog: Object.isFrozen(numericMathLayoutProgram?.sampleCatalog),
+        authority: Object.isFrozen(numericMathLayoutAuthority),
+      },
+    }));
+
   const forgedPipelineModelRecord = jsonClone(pipelineModel) as unknown as ValueRecord;
   const forgedPipelineWidthAlias = (forgedPipelineModelRecord.aliases as ValueRecord[]).find(alias =>
     alias.name === 'width' && (alias.value as ValueRecord).directHelperScaleResult !== undefined);
@@ -5259,6 +5358,519 @@ const run = (): {
     visit(candidate);
     return { matchedCopies, mutatedNodes };
   };
+  const projectNumericMathNegative = (
+    expression: string,
+    rel: string,
+    declarations: readonly string[] = ['local LAY = { plateL = 600 / 2560 }'],
+  ): {
+    readonly model: X4UiCallModel;
+    readonly result: ReturnType<typeof projectX4UiLayoutProgram>;
+    readonly program: X4UiLayoutProgram | undefined;
+  } => {
+    const source = [
+      'local menu = { name = "NumericMathNegative", layer = 4 }',
+      ...declarations,
+      'function menu.display()',
+      `  local x = ${expression}`,
+      '  local frame = Helper.createFrameHandle(menu, { x = x, width = 80, height = 80, layer = 4 })',
+      '  frame:display()',
+      'end',
+    ].join('\n');
+    const model = buildX4UiCallModel(input(source, rel));
+    const result = projectX4UiLayoutProgram(model, namedTarget(model, 'menu.display'), profileFor(model));
+    return { model, result, program: resultProgram(result) };
+  };
+
+  const numericMathNegativeCases = [
+    { name: 'wrong callee', expression: 'other.floor(1)' },
+    { name: 'unsupported math call', expression: 'math.sin(1)' },
+    { name: 'floor arity', expression: 'math.floor(1, 2)' },
+    { name: 'min zero arity', expression: 'math.min()' },
+    { name: 'max zero arity', expression: 'math.max()' },
+    { name: 'dynamic table field', expression: 'math.floor(100 * LAY.plateL)', declarations: ['local LAY = { plateL = runtimePlateL }'] },
+    {
+      name: 'reassigned table field',
+      expression: 'math.floor(100 * LAY.plateL)',
+      declarations: ['local LAY = { plateL = 600 / 2560 }', 'LAY.plateL = runtimePlateL'],
+    },
+    { name: 'unknown table field', expression: 'math.floor(100 * LAY.missing)' },
+  ].map(candidate => ({
+    ...candidate,
+    projection: projectNumericMathNegative(
+      candidate.expression,
+      `selftest/b119-numeric-math-${candidate.name.replaceAll(' ', '-')}.lua`,
+      candidate.declarations,
+    ),
+  }));
+  const numericMathNonFinite = projectNumericMathNegative(
+    'math.floor(1e308 * 1e308)',
+    'selftest/b119-numeric-math-non-finite.lua',
+  );
+  const numericMathNonFiniteAlias = numericMathNonFinite.model.aliases.find(alias => alias.name === 'x');
+  const numericMathProjectionCellFact = (program: X4UiLayoutProgram | undefined) =>
+    program?.cells.find(candidate => candidate.kernelState?.type === 'text')?.descriptorFacts.outerX;
+  check('B119 unsupported, malformed, dynamic, reassigned, and unknown math/table-field paths fail closed',
+    numericMathNegativeCases.every(candidate => {
+      const { result, model, program } = candidate.projection;
+      const xAlias = model.aliases.find(alias => alias.name === 'x');
+      const sourceModelRejectsDescriptor = ['wrong callee', 'unsupported math call', 'floor arity', 'min zero arity', 'max zero arity']
+        .includes(candidate.name)
+        ? xAlias?.value.numericExpression === undefined
+        : true;
+      return sourceModelRejectsDescriptor
+        && (result.status === 'refused' || program?.frames[0]?.descriptorFacts.x.status !== 'known');
+    })
+      && (numericMathNonFinite.result.status === 'refused'
+        || numericMathNonFinite.program?.frames[0]?.descriptorFacts.x.status !== 'known')
+      && numericMathNonFiniteAlias?.value.numericExpression?.kind === 'math-call',
+    detail({
+      cases: numericMathNegativeCases.map(candidate => ({
+        name: candidate.name,
+        status: candidate.projection.result.status,
+        modelKind: candidate.projection.model.aliases.find(alias => alias.name === 'x')?.value.numericExpression?.kind,
+        frameX: candidate.projection.program?.frames[0]?.descriptorFacts.x.status,
+      })),
+      nonFinite: {
+        status: numericMathNonFinite.result.status,
+        modelKind: numericMathNonFiniteAlias?.value.numericExpression?.kind,
+        frameX: numericMathNonFinite.program?.frames[0]?.descriptorFacts.x,
+      },
+    }));
+
+  const overriddenGlobalMath = projectNumericMathNegative(
+    'math.floor(1.5)',
+    'selftest/b119-numeric-math-overridden-global.lua',
+    ['math = { floor = function(v) return 999 end }'],
+  );
+  const overriddenMathMember = projectNumericMathNegative(
+    'math.floor(1.5)',
+    'selftest/b119-numeric-math-overridden-member.lua',
+    ['math.floor = customFloor'],
+  );
+  check('B119 source-overridden global math and math.floor never produce known frame geometry',
+    overriddenGlobalMath.program?.frames[0]?.descriptorFacts.x.status !== 'known'
+      && overriddenMathMember.program?.frames[0]?.descriptorFacts.x.status !== 'known'
+      && overriddenGlobalMath.model.aliases.find(alias => alias.name === 'x')?.value.numericExpression === undefined
+      && overriddenMathMember.model.aliases.find(alias => alias.name === 'x')?.value.numericExpression === undefined,
+    detail({
+      global: {
+        status: overriddenGlobalMath.result.status,
+        frameX: overriddenGlobalMath.program?.frames[0]?.descriptorFacts.x,
+        alias: overriddenGlobalMath.model.aliases.find(alias => alias.name === 'x'),
+      },
+      member: {
+        status: overriddenMathMember.result.status,
+        frameX: overriddenMathMember.program?.frames[0]?.descriptorFacts.x,
+        alias: overriddenMathMember.model.aliases.find(alias => alias.name === 'x'),
+      },
+    }));
+
+  const projectNumericMathAuthorityMutation = (
+    mutationLines: readonly string[],
+    mutationBeforeUse = true,
+  ): {
+    readonly model: X4UiCallModel;
+    readonly result: ReturnType<typeof projectX4UiLayoutProgram>;
+    readonly program: X4UiLayoutProgram | undefined;
+  } => {
+    const source = [
+      'local menu = { name = "NumericMathAuthorityProjection", layer = 4 }',
+      'local customMath = { floor = function(v) return 999 end }',
+      'local customFloor = function(v) return 999 end',
+      'local function localMutate(t) t.floor = customFloor end',
+      'function menu.display()',
+      ...(mutationBeforeUse
+        ? [...mutationLines.map(line => `  ${line}`), '  local x = math.floor(1.5)']
+        : ['  local x = math.floor(1.5)', ...mutationLines.map(line => `  ${line}`)]),
+      '  local frame = Helper.createFrameHandle(menu, { x = x, width = 80, height = 80, layer = 4 })',
+      '  frame:display()',
+      'end',
+    ].join('\n');
+    const rel = `selftest/b119-numeric-math-authority-${mutationLines.join('-').replaceAll(/[^a-zA-Z0-9-]/g, '_')}-${mutationBeforeUse ? 'before' : 'after'}.lua`;
+    const model = buildX4UiCallModel(input(source, rel));
+    const result = projectX4UiLayoutProgram(model, namedTarget(model, 'menu.display'), profileFor(model));
+    return { model, result, program: resultProgram(result) };
+  };
+  const numericMathAuthorityProjectionCases = [
+    ['opaque math escape', ['mutate(math)']],
+    ['rawset global math', ['rawset(_G, "math", customMath)']],
+    ['rawset global math member', ['rawset(_G.math, "floor", customFloor)']],
+    ['global math member assignment', ['_G.math.floor = customFloor']],
+    ['global indexed math member assignment', ['_G["math"]["floor"] = customFloor']],
+    ['math alias escape', ['local m = math', 'mutate(m)']],
+    ['math wrapper escape', ['local w = { m = math }', 'mutate(w)']],
+    ['same-file math escape', ['localMutate(math)']],
+    ['same-file math wrapper escape', ['local w = { m = math }', 'localMutate(w)']],
+    ['global environment escape', ['mutate(_G)']],
+    ['global environment wrapper escape', ['local w = { g = _G }', 'mutate(w)']],
+    ['math alias member assignment', ['local m = math', 'm.floor = customFloor']],
+    ['global environment alias member assignment', ['local g = _G', 'g.math.floor = customFloor']],
+    ['dynamic global environment assignment', ['_G[runtimeKey] = customMath']],
+    ['dynamic math assignment control', ['math[runtimeKey] = customFloor']],
+    ['rawget global math member assignment', ['local m = rawget(_G, "math")', 'm.floor = customFloor']],
+    ['rawget aliased global math member assignment', ['local g = _G', 'local m = rawget(g, "math")', 'm.floor = customFloor']],
+    ['rawget wrapped global math member assignment', ['local w = { _G }', 'local g = w[1]', 'local m = rawget(g, "math")', 'm.floor = customFloor']],
+    ['rawget dynamic-wrapped global math member assignment', ['local w = { [runtimeKey] = _G }', 'local g = w[runtimeKey]', 'local m = rawget(g, "math")', 'm.floor = customFloor']],
+    ['dynamic global read member assignment', ['local m = _G[runtimeKey]', 'm.floor = customFloor']],
+    ['direct dynamic global read member assignment', ['_G[runtimeKey].floor = customFloor']],
+    ['dynamic rawget global read member assignment', ['local m = rawget(_G, runtimeKey)', 'm.floor = customFloor']],
+    ['rawget global math escape', ['local m = rawget(_G, "math")', 'mutate(m)']],
+    ['implicit math wrapper member assignment', ['local w = { math }', 'local m = w[1]', 'm.floor = customFloor']],
+    ['implicit global wrapper member assignment', ['local w = { _G }', 'local g = w[1]', 'g.math.floor = customFloor']],
+    ['dynamic-key math wrapper member assignment', ['local w = { [runtimeKey] = math }', 'local m = w[runtimeKey]', 'm.floor = customFloor']],
+    ['numeric-assignment math wrapper member assignment', ['local w = {}', 'w[1] = math', 'local m = w[1]', 'm.floor = customFloor']],
+    ['rawget named math wrapper member assignment', ['local w = { m = math }', 'local m = rawget(w, "m")', 'm.floor = customFloor']],
+    ['rawget implicit math wrapper member assignment', ['local w = { math }', 'local m = rawget(w, 1)', 'm.floor = customFloor']],
+    ['nested implicit math wrapper member assignment', ['local w = { { math } }', 'local inner = w[1]', 'local m = inner[1]', 'm.floor = customFloor']],
+    ['conditional math introduction', ['local m = {}', 'if runtimeCondition then m = math end', 'm.floor = customFloor']],
+    ['conditional math removal', ['local m = math', 'if runtimeCondition then m = {} end', 'm.floor = customFloor']],
+    ['logical math selection', ['local m = runtimeCondition and math or {}', 'm.floor = customFloor']],
+    ['conditional math escape', ['if runtimeCondition then mutate(math) end']],
+  ] as const;
+  const numericMathAuthorityProjections = numericMathAuthorityProjectionCases.map(([name, lines]) => ({
+    name,
+    projection: projectNumericMathAuthorityMutation(lines),
+  }));
+  const numericMathAuthorityPostUse = [
+    ['global escape', ['mutate(_G)']],
+    ['rawget math mutation', ['local m = rawget(_G, "math")', 'm.floor = customFloor']],
+    ['conditional authority mutation', ['local m = {}', 'if runtimeCondition then m = math end', 'm.floor = customFloor']],
+  ].map(([name, lines]) => ({
+    name,
+    projection: projectNumericMathAuthorityMutation(lines as readonly string[], false),
+  }));
+  const numericMathAuthoritySafeReads = [
+    ['exact rawget math', ['local m = rawget(_G, "math")']],
+    ['aliased rawget math', ['local g = _G', 'local m = rawget(g, "math")']],
+    ['wrapped rawget math', ['local w = { _G }', 'local g = w[1]', 'local m = rawget(g, "math")']],
+    ['dynamic global read', ['local m = _G[runtimeKey]']],
+    ['dynamic rawget global read', ['local m = rawget(_G, runtimeKey)']],
+    ['implicit wrapper read', ['local w = { math }', 'local m = w[1]']],
+    ['conditional authority read', ['local m = {}', 'if runtimeCondition then m = math end']],
+    ['logical authority read', ['local m = runtimeCondition and math or {}']],
+    ['static non-math global read', ['local v = _G["string"]']],
+    ['static non-authority wrapper rawget', ['local w = { v = 1 }', 'local v = rawget(w, "v")']],
+    ['exact Helper rawget', ['local SafeHelper = rawget(_G, "Helper")']],
+  ] as const;
+  const numericMathAuthoritySafeReadProjections = numericMathAuthoritySafeReads.map(([name, lines]) => ({
+    name,
+    projection: projectNumericMathAuthorityMutation(lines),
+  }));
+  const numericMathAuthorityProjectionFacts = numericMathAuthorityProjections.map(candidate => ({
+    name: candidate.name,
+    status: candidate.projection.result.status,
+    x: candidate.projection.model.calls.find(callRecord => callRecord.name === 'createFrameHandle')
+      ?.semantics.properties?.find(propertyRecord => propertyRecord.name === 'x')?.value,
+    frameX: candidate.projection.program?.frames[0]?.descriptorFacts.x,
+  }));
+  const numericMathAuthorityPostUseFacts = numericMathAuthorityPostUse.map(candidate => ({
+    name: candidate.name,
+    x: candidate.projection.program?.frames[0]?.descriptorFacts.x,
+  }));
+  const numericMathAuthoritySafeReadFacts = numericMathAuthoritySafeReadProjections.map(candidate => ({
+    name: candidate.name,
+    x: candidate.projection.program?.frames[0]?.descriptorFacts.x,
+  }));
+  check('B119 source-visible math/_G mutation, alias, wrapper, dynamic-key, and conditional authority paths never project known geometry',
+    numericMathAuthorityProjectionFacts.every(candidate =>
+      candidate.x !== undefined
+        && candidate.x.status !== 'static'
+        && candidate.x.numericExpression === undefined
+        && candidate.frameX !== undefined
+        && candidate.frameX.status !== 'known')
+      && numericMathAuthorityPostUseFacts.every(candidate =>
+        candidate.x?.status === 'known' && factValue(candidate.x) === 1),
+    detail({
+      rejected: numericMathAuthorityProjectionFacts,
+      postUse: numericMathAuthorityPostUseFacts,
+    }));
+  check('B119 exact, dynamic, wrapper, conditional, non-math, and Helper authority reads remain known until mutation or escape',
+    numericMathAuthoritySafeReadFacts.every(candidate =>
+      candidate.x?.status === 'known' && factValue(candidate.x) === 1),
+    detail({ safeReads: numericMathAuthoritySafeReadFacts }));
+
+  const escapedNumericTable = projectNumericMathNegative(
+    'math.floor(100 * LAY.plateL)',
+    'selftest/b119-numeric-math-escaped-table.lua',
+    ['local LAY = { plateL = 600 / 2560 }', 'mutate(LAY)'],
+  );
+  check('B119 numeric table-field geometry is unavailable after its source table escapes to an opaque call',
+    escapedNumericTable.program?.frames[0]?.descriptorFacts.x.status !== 'known'
+      && escapedNumericTable.model.aliases.find(alias => alias.name === 'x')?.value.numericExpression === undefined,
+    detail({
+      status: escapedNumericTable.result.status,
+      frameX: escapedNumericTable.program?.frames[0]?.descriptorFacts.x,
+      alias: escapedNumericTable.model.aliases.find(alias => alias.name === 'x'),
+    }));
+
+  const projectWrappedNumericEscape = (
+    wrapperExpression: string,
+    localHelper: boolean,
+    mutationBeforeUse: boolean,
+    dynamicAssignment = false,
+    layExpression = '{ plateL = 600 / 2560 }',
+  ): {
+    readonly model: X4UiCallModel;
+    readonly result: ReturnType<typeof projectX4UiLayoutProgram>;
+    readonly program: X4UiLayoutProgram | undefined;
+  } => {
+    const source = [
+      'local menu = { name = "WrappedNumericLayout", layer = 4 }',
+      ...(localHelper
+        ? [
+          'local function mutate(t)',
+          '  t.lay.plateL = 0.9',
+          'end',
+        ]
+        : []),
+      `local LAY = ${layExpression}`,
+      `local wrapper = ${wrapperExpression}`,
+      ...(dynamicAssignment
+        ? [
+          'wrapper[runtimeKey] = LAY',
+          'wrapper.self = wrapper',
+        ]
+        : []),
+      'function menu.display()',
+      ...(mutationBeforeUse
+        ? [
+          '  mutate(wrapper)',
+          '  local x = math.floor(100 * LAY.plateL)',
+        ]
+        : [
+          '  local x = math.floor(100 * LAY.plateL)',
+          '  mutate(wrapper)',
+        ]),
+      '  local frame = Helper.createFrameHandle(menu, { x = x, width = 80, height = 80, layer = 4 })',
+      '  frame:display()',
+      'end',
+    ].join('\n');
+    const model = buildX4UiCallModel(input(source, `selftest/b119-numeric-math-wrapper-${localHelper ? 'local' : 'opaque'}-${wrapperExpression.length}-${mutationBeforeUse ? 'before' : 'after'}-${dynamicAssignment ? 'assigned-cycle' : 'constructor'}.lua`));
+    const result = projectX4UiLayoutProgram(model, namedTarget(model, 'menu.display'), profileFor(model));
+    return { model, result, program: resultProgram(result) };
+  };
+  const wrappedProjectionCases = [
+    {
+      name: 'opaque named field',
+      projection: projectWrappedNumericEscape('{ lay = LAY }', false, true),
+    },
+    {
+      name: 'local helper named field',
+      projection: projectWrappedNumericEscape('{ lay = LAY }', true, true),
+    },
+    {
+      name: 'local helper implicit array',
+      projection: projectWrappedNumericEscape('{ LAY }', true, true),
+    },
+    {
+      name: 'local helper nested array',
+      projection: projectWrappedNumericEscape('{ { LAY } }', true, true),
+    },
+    {
+      name: 'local helper dynamic-key constructor',
+      projection: projectWrappedNumericEscape('{ [runtimeKey] = LAY }', true, true),
+    },
+    {
+      name: 'local helper dynamic-key assignment cycle',
+      projection: projectWrappedNumericEscape('{}', true, true, true),
+    },
+    {
+      name: 'opaque name-bearing numeric descendant',
+      projection: projectWrappedNumericEscape(
+        '{ lay = LAY }',
+        false,
+        true,
+        false,
+        '{ name = "LAY", plateL = 600 / 2560 }',
+      ),
+    },
+    {
+      name: 'local helper name-bearing numeric descendant',
+      projection: projectWrappedNumericEscape(
+        '{ lay = LAY }',
+        true,
+        true,
+        false,
+        '{ name = "LAY", plateL = 600 / 2560 }',
+      ),
+    },
+  ];
+  const wrappedProjectionAfterUse = projectWrappedNumericEscape('{ [runtimeKey] = LAY }', true, false);
+  const wrappedProjectionFacts = wrappedProjectionCases.map(candidate => ({
+    name: candidate.name,
+    status: candidate.projection.result.status,
+    program: candidate.projection.program !== undefined,
+    frameX: candidate.projection.program?.frames[0]?.descriptorFacts.x,
+    modelKind: candidate.projection.model.aliases.find(alias => alias.name === 'x')?.value.numericExpression?.kind,
+  }));
+  const wrappedAfterUseFrameX = wrappedProjectionAfterUse.program?.frames[0]?.descriptorFacts.x;
+  check('B119 recursive opaque/local-helper wrapper escapes fail closed through named, array, dynamic-key, and cyclic full projections',
+    wrappedProjectionFacts.every(candidate =>
+      candidate.program
+        && candidate.frameX !== undefined
+        && candidate.frameX.status !== 'known')
+      && wrappedAfterUseFrameX?.status === 'known'
+      && factValue(wrappedAfterUseFrameX) === 23,
+    detail({
+      beforeUse: wrappedProjectionFacts,
+      afterUse: {
+        status: wrappedProjectionAfterUse.result.status,
+        frameX: wrappedAfterUseFrameX,
+        modelKind: wrappedProjectionAfterUse.model.aliases.find(alias => alias.name === 'x')?.value.numericExpression?.kind,
+      },
+    }));
+
+  const menuLifecycleSource = [
+    'local menu = { name = "NumericMathMenuLifecycle", layer = 4 }',
+    'Helper.registerMenu(menu)',
+    'function menu.display()',
+    '  Helper.clearDataForRefresh(menu, menu.layer)',
+    '  local frame = Helper.createFrameHandle(menu, { x = 0, width = 80, height = 80, layer = menu.layer })',
+    '  frame:display()',
+    'end',
+  ].join('\n');
+  const menuLifecycleModel = buildX4UiCallModel(input(
+    menuLifecycleSource,
+    'selftest/b119-numeric-math-menu-lifecycle.lua',
+  ));
+  const menuLifecycleResult = projectX4UiLayoutProgram(
+    menuLifecycleModel,
+    namedTarget(menuLifecycleModel, 'menu.display'),
+    profileFor(menuLifecycleModel),
+  );
+  const menuLifecycleProgram = resultProgram(menuLifecycleResult);
+  check('B119 opaque source-table escape tracking does not invalidate the known menu lifecycle layer',
+    menuLifecycleProgram?.frames[0]?.descriptorFacts.layer.status === 'known'
+      && menuLifecycleProgram.frames[0].descriptorFacts.layer.value === 4,
+    detail({
+      status: menuLifecycleResult.status,
+      layer: menuLifecycleProgram?.frames[0]?.descriptorFacts.layer,
+    }));
+
+  const copiedAliasSource = [
+    'local menu = { name = "NumericMathCopiedAlias", layer = 4 }',
+    'function menu.display()',
+    '  local vw = Helper.viewWidth',
+    '  local copied = vw',
+    '  local x = math.floor(vw * 0.5)',
+    '  local frame = Helper.createFrameHandle(menu, { x = x, width = 80, height = 80, layer = 4 })',
+    '  frame:display()',
+    'end',
+  ].join('\n');
+  const copiedAliasModel = buildX4UiCallModel(input(
+    copiedAliasSource,
+    'selftest/b119-numeric-math-copied-alias.lua',
+  ));
+  const copiedAliasResult = projectX4UiLayoutProgram(
+    copiedAliasModel,
+    namedTarget(copiedAliasModel, 'menu.display'),
+    profileFor(copiedAliasModel),
+  );
+  const copiedAliasProgram = resultProgram(copiedAliasResult);
+  check('B119 numeric alias validation matches the identifier used when another alias copies the descriptor',
+    copiedAliasProgram?.frames[0]?.descriptorFacts.x.status === 'known'
+      && copiedAliasProgram.frames[0].descriptorFacts.x.value === 50,
+    detail({
+      status: copiedAliasResult.status,
+      frameX: copiedAliasProgram?.frames[0]?.descriptorFacts.x,
+      aliases: copiedAliasModel.aliases.filter(alias => alias.name === 'vw' || alias.name === 'copied'),
+    }));
+
+  const spacedMathCall = projectNumericMathNegative(
+    'math  .  floor(1.5)',
+    'selftest/b119-numeric-math-spaced-callee.lua',
+    [],
+  );
+  const commentedMathCall = projectNumericMathNegative(
+    'math --[[ exact global ]] . --[[ exact member ]] floor(1.5)',
+    'selftest/b119-numeric-math-commented-callee.lua',
+    [],
+  );
+  check('B119 exact global math member accepts parser-valid whitespace and comments',
+    spacedMathCall.program?.frames[0]?.descriptorFacts.x.status === 'known'
+      && spacedMathCall.program.frames[0].descriptorFacts.x.value === 1
+      && commentedMathCall.program?.frames[0]?.descriptorFacts.x.status === 'known'
+      && commentedMathCall.program.frames[0].descriptorFacts.x.value === 1,
+    detail({
+      spaced: { status: spacedMathCall.result.status, frameX: spacedMathCall.program?.frames[0]?.descriptorFacts.x },
+      commented: { status: commentedMathCall.result.status, frameX: commentedMathCall.program?.frames[0]?.descriptorFacts.x },
+    }));
+
+  const numericMathForgedModelRecord = jsonClone(numericMathLayoutModel) as unknown as ValueRecord;
+  const numericMathFloorExpression = 'math.floor(vw * LAY.plateL)';
+  const numericMathForgedMutation = mutateAllNumericDescriptorCopies(
+    numericMathForgedModelRecord,
+    numericMathFloorExpression,
+    descriptor => {
+      if (descriptor.kind !== 'math-call') return 0;
+      descriptor.name = 'ceil';
+      descriptor.calleeExpression = 'math.ceil';
+      return 1;
+    },
+  );
+  const numericMathForgedModel = freezeClone(numericMathForgedModelRecord) as unknown as X4UiCallModel;
+  const numericMathForgedResult = projectX4UiLayoutProgram(
+    numericMathForgedModel,
+    namedTarget(numericMathForgedModel, 'menu.display'),
+    numericMathLayoutProfile,
+  );
+  const numericMathForgedProgram = resultProgram(numericMathForgedResult);
+
+  const numericMathCrossSourceModelRecord = jsonClone(numericMathLayoutModel) as unknown as ValueRecord;
+  const numericMathCrossSourceMutation = mutateAllNumericDescriptorCopies(
+    numericMathCrossSourceModelRecord,
+    numericMathFloorExpression,
+    descriptor => {
+      let mutations = 0;
+      const visitDescriptor = (value: unknown): void => {
+        if (Array.isArray(value)) {
+          value.forEach(visitDescriptor);
+          return;
+        }
+        if (value === null || typeof value !== 'object') return;
+        const record = value as ValueRecord;
+        if (record.kind === 'table-field' && record.property === 'plateL') {
+          const tableSource = record.tableSource as ValueRecord | undefined;
+          if (tableSource) {
+            tableSource.file = 'selftest/other-source.lua';
+            mutations += 1;
+          }
+        }
+        Object.values(record).forEach(visitDescriptor);
+      };
+      visitDescriptor(descriptor);
+      return mutations;
+    },
+  );
+  const numericMathCrossSourceModel = freezeClone(numericMathCrossSourceModelRecord) as unknown as X4UiCallModel;
+  const numericMathCrossSourceResult = projectX4UiLayoutProgram(
+    numericMathCrossSourceModel,
+    namedTarget(numericMathCrossSourceModel, 'menu.display'),
+    numericMathLayoutProfile,
+  );
+  const numericMathCrossSourceProgram = resultProgram(numericMathCrossSourceResult);
+  check('B119 forged math callee and cross-source table-field provenance never produce known geometry',
+    numericMathForgedMutation.matchedCopies > 1
+      && numericMathForgedMutation.mutatedNodes === numericMathForgedMutation.matchedCopies
+      && (numericMathForgedResult.status === 'refused'
+        || numericMathProjectionCellFact(numericMathForgedProgram)?.status !== 'known')
+      && numericMathCrossSourceMutation.matchedCopies > 1
+      && numericMathCrossSourceMutation.mutatedNodes === numericMathCrossSourceMutation.matchedCopies
+      && (numericMathCrossSourceResult.status === 'refused'
+        || numericMathProjectionCellFact(numericMathCrossSourceProgram)?.status !== 'known'),
+    detail({
+      forged: {
+        mutation: numericMathForgedMutation,
+        status: numericMathForgedResult.status,
+        cellX: numericMathProjectionCellFact(numericMathForgedProgram)?.status,
+      },
+      crossSource: {
+        mutation: numericMathCrossSourceMutation,
+        status: numericMathCrossSourceResult.status,
+        cellX: numericMathProjectionCellFact(numericMathCrossSourceProgram)?.status,
+      },
+    }));
+
   const aliasBindingForgerySource = [
     'local menu = { name = "PipelineAliasBindingForgery", layer = 1 }',
     'function menu.createFrame()',
