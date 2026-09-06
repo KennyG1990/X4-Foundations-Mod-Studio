@@ -17,14 +17,14 @@ Status: bounded deterministic-math/release/install/public-parity unit `VERIFIED`
      selected compact direction, expanded COMM, proposal gate/sheet, and each hub tab through valid current paths.
      Compare only against Forge output with the same source hash, drawable, scale, samples, and branch selections.
      Do not treat missing runtime body content as a preview success or a game failure.
-- **Commit question:** pending at this handoff write. Parent checkpoint is
-  `596ef0c79ac3c574ed1ca1af96840705388e24c2`; intended commit title is
-  `feat(ui-editor): resolve source math geometry and publish 0.0.72`. Run final precommit, stage only the listed
-  owned paths, commit/push, and assert local/tracking/direct-remote parity.
+- **Commit question:** answered. Feature checkpoint
+  `b3613e2f9e6fe6418dbf3c6879c8a6bb9b2a0b12` (`feat(ui-editor): resolve source math geometry and publish
+  0.0.72`) is pushed; local `HEAD`, `origin/main`, and the direct remote `main` ref were read back byte-exact. This
+  external-projection receipt is the next docs-only commit point.
 
 ## Exact current evidence
 
-- Intended implementation/test paths:
+- Committed implementation/test paths:
   `src/lib/x4UiCallModel.ts`, `src/lib/x4UiCallModel.selftest.ts`, `src/lib/x4UiLayoutProgram.ts`, and
   `src/lib/x4UiLayoutProgram.selftest.ts`. Release paths:
   `vscode-extension/package.json`, `vscode-extension/release-notes.json`, and
@@ -90,6 +90,15 @@ Status: bounded deterministic-math/release/install/public-parity unit `VERIFIED`
   blank Electron installer output; supervisor/server process double-count; computer-use controlled-select mismatch;
   first headless replay on the wrong workspace; expensive all-input projection replay; and unsupported
   `New-Item -LiteralPath` before exact public-download retry.
-- External GitHub #41, Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a`, and Google Current Status document
-  `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE` still need this `0.0.72` checkpoint written/read back after the
-  source commit exists. Keep all three `In Progress / Partial`; do not close B119.
+- GitHub #41 comment `5559268309` was written and read back at
+  `https://github.com/KennyG1990/X4_Forge/issues/41#issuecomment-5559268309`; the owner issue remains open.
+- Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a` was updated in place and read back at
+  `2026-09-06T12:39:28.684Z` with `Status=In Progress`, `Evidence Grade=Partial`, exact commit, comment, release,
+  public hash, causal canvas, and `Not verified in game` boundary present.
+- Google Current Status document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, accepted the update
+  under required revision
+  `ANLCKQmDhtrpnfO1W9qZ6MVOrOmzKfNGmkBKS448FRbrYxIfcMjuN05OKv67TGvna9Q-6vbzu18Dr6EPWABJ_-TCT1Z_EgF1orlcMRiEQjU-`
+  and was read back at revision
+  `ANLCKQlFytgNaLmoBnbWVFkLjaadVaFfLQtd_RbwbaoUtzWRsZIwDywbjvK8SBkYmYuQZ-4VAb3DpcrGtHrUzSktHmXRHTm2YDf8AHxGfYAJ`.
+  Its top checkpoint, release, knowledge-base, executive-state, and appended receipt fields all contain the exact
+  commit/comment/hash and retain overall `PARTIAL / IN PROGRESS / Not verified in game`.

@@ -1793,3 +1793,24 @@ Status: `IN_PROGRESS` (reconciled acceptance revised; review repair required)
 - **Highest-risk evidenced weakness:** a believable static fragment can be mistaken for the whole runtime menu.
   Continue to expose every omitted sample/branch, preserve stale/refused states, and require exact clean deploy plus X4
   for each player-experience claim. Project-specific gotcha card `40` banks the source-visible math-authority lesson.
+
+### EXTERNAL PROJECTION RECEIPT — `0.0.72`
+
+- Feature commit `b3613e2f9e6fe6418dbf3c6879c8a6bb9b2a0b12` is pushed with exact local `HEAD`, `origin/main`, and direct
+  remote `main` parity. The committed title is `feat(ui-editor): resolve source math geometry and publish 0.0.72`.
+- GitHub #41 comment `5559268309` was written and read back with the exact commit, `102/102`, `721+1/722`,
+  `140/140`, `134/134`, `106/106`, public/install hash, installed causal canvas, and no-game-write boundary. The
+  owner issue remains open and overall B119 remains `IN PROGRESS / PARTIAL`.
+- Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a` was updated in place and read back at
+  `2026-09-06T12:39:28.684Z`. Its properties remain `Status=In Progress` and `Evidence Grade=Partial`; the exact
+  commit, GitHub comment, `0.0.72`, public hash, `_choiceY=979` installed-canvas fact, and `Not verified in game`
+  boundary are present.
+- Google Current Status document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, accepted eleven
+  ordered native requests under required revision
+  `ANLCKQmDhtrpnfO1W9qZ6MVOrOmzKfNGmkBKS448FRbrYxIfcMjuN05OKv67TGvna9Q-6vbzu18Dr6EPWABJ_-TCT1Z_EgF1orlcMRiEQjU-`.
+  Readback revision
+  `ANLCKQlFytgNaLmoBnbWVFkLjaadVaFfLQtd_RbwbaoUtzWRsZIwDywbjvK8SBkYmYuQZ-4VAb3DpcrGtHrUzSktHmXRHTm2YDf8AHxGfYAJ`
+  confirms the top checkpoint/release/knowledge-base/executive-state fields and appended receipt all carry the exact
+  commit/comment/package hash and overall partial boundary.
+- Repository Markdown remains technical authority. These projections record the bounded verified release; they do
+  not close the full twelve-reference/current-game AI benchmark or remove `Not verified in game` from preview.
