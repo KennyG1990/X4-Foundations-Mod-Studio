@@ -21,13 +21,14 @@ Status: bounded `0.0.71` publish/artifact-parity unit `VERIFIED`; AI Influence d
      any unavailable/refused state. In X4, click through the real conversation/hub entry paths to inspect `1b`-`1j`,
      including both tabs represented by `1i` and `1j`; do not merge either composite reference into one screen. Keep
      `1a` unsupported and `1f` data-blocked until its deterministic pricing contract exists.
-- **Commit question:** was the last code/release close committed and pushed? This Luna worker was forbidden to stage or
-  commit; the coordinator owns reconciliation, any commit decision, and the pre-written documentation close title.
+- **Commit question:** answered. Source/release checkpoint `981eb507811572e2daaadae6549490223f144266` is committed,
+  pushed, and identical at local `HEAD`, `origin/main`, and direct `refs/heads/main` readback.
 
 ## Exact latest evidence
 
-- Forge pre-release baseline is `HEAD == origin/main == 1690898eda51c3caf6adb1252ac35b38368b8bc6`. The broad dirty
-  worktree is user state; preserve all unrelated modified, deleted, and untracked paths.
+- Forge source/release checkpoint is `981eb507811572e2daaadae6549490223f144266`, with exact local, tracking, and
+  direct-remote parity. The broad remaining dirty worktree is user state; preserve all unrelated modified, deleted,
+  and untracked paths.
 - Direct `x4UiLint` selftest is `140/140`, including clean, warning, blocking `addTable(24)`, whole-frame, and
   conversation-close symptom coverage. Clean lint remains `No known rule violated` plus `Not verified in game`, not
   engine acceptance.
@@ -57,6 +58,11 @@ Status: bounded `0.0.71` publish/artifact-parity unit `VERIFIED`; AI Influence d
   `3143296C72B5A8B6A526148CA98048FA340FA534BB41A1D890F930DA69FB054B`, an exact match to the local VSIX. At
   `2026-09-06T07:08:17Z`, `/latest` also returned `0.0.71` with that same URL. The earlier `0.0.70` result was
   transient indexing lag that resolved, not a publish failure or remaining blocker.
+- **External projection proof:** GitHub #41 comment `5557777386` was written and read back; the issue remains open.
+  Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a` was updated and read back as `In Progress / Partial` with the
+  exact checkpoint, public artifact hash, GitHub comment, and remaining gates. Google Current Status document
+  `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, was revision-guarded and read back at revision
+  `ANLCKQmDhtrpnfO1W9qZ6MVOrOmzKfNGmkBKS448FRbrYxIfcMjuN05OKv67TGvna9Q-6vbzu18Dr6EPWABJ_-TCT1Z_EgF1orlcMRiEQjU-`.
 
 ## Current boundary
 
@@ -71,8 +77,9 @@ Status: bounded `0.0.71` publish/artifact-parity unit `VERIFIED`; AI Influence d
 
 ## Preservation and next unit
 
-- Do not revert, format, stage, commit, or alter any unrelated dirty path. No source, test, package/release, game/mod,
-  configured-workspace, Git, GitHub, Notion, Drive, or credential path was part of this documentation close.
+- Do not revert, format, stage, commit, or alter any unrelated dirty path. This projection close changed only this
+  handoff/canonical record plus GitHub #41, its existing Notion owner, and the existing Google Current Status document;
+  it did not change source, tests, package/release bytes, game/mod bytes, configured workspaces, or credentials.
 - Next bounded unit: prove exact cross-menu source-to-game parity and the complete AI Influence twelve-image benchmark
   through valid real entry paths. OpenVSX artifact and `/latest` pointer convergence are closed for this release
   checkpoint; the earlier transient indexing lag is not a remaining B119 blocker.
