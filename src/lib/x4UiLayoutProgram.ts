@@ -622,6 +622,9 @@ export interface X4UiLayoutEvidenceAuthority {
   readonly gaps: readonly X4UiLayoutEvidenceGap[];
   readonly linkedGapIndexes: readonly number[];
   readonly unlinkedGapIndexes: readonly number[];
+  /** Exact source-bound branch authority used by both direct and expanded preview calls. */
+  readonly previewPathCatalog: X4UiLayoutPreviewPathCatalog;
+  readonly previewPathSelections: readonly X4UiLayoutPreviewPathSelectionBinding[];
   readonly expansion?: X4UiLayoutEvidenceExpansion;
 }
 
@@ -724,6 +727,9 @@ export interface X4UiLayoutProgram {
   readonly gaps: readonly X4UiLayoutGap[];
   readonly sampleCatalog: X4UiLayoutPreviewSampleCatalog;
   readonly previewSampleBindings: readonly X4UiLayoutPreviewSampleBinding[];
+  /** Exact source-bound branch catalog; selections are preview-only inputs. */
+  readonly previewPathCatalog: X4UiLayoutPreviewPathCatalog;
+  readonly previewPathSelections: readonly X4UiLayoutPreviewPathSelectionBinding[];
   readonly localExpansion?: X4UiLayoutLocalExpansionState;
   readonly verification: {
     readonly game: typeof X4_UI_LAYOUT_GAME_TRUTH;
@@ -1025,19 +1031,51 @@ const hasOnlyJsonDataProperties = (
   }
 };
 
-const normalizeCompleteX4UiCallModelContent = (model: unknown): unknown | undefined => {
+const isLayoutScalarIdentifierAlias = (value: Record<string, unknown>): boolean => {
+  const expression = value.expression;
+  return value.status === 'static'
+    && (value.type === 'number' || value.type === 'string' || value.type === 'boolean')
+    && typeof expression === 'string'
+    && /^[A-Za-z_][A-Za-z0-9_]*$/.test(expression)
+    && isSourceLocationShape(value.location)
+    && isSourceLocationShape(value.sourceLiteral)
+    && !locationsEqual(value.location, value.sourceLiteral);
+};
+
+const normalizeLayoutModelAliases = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(item => normalizeLayoutModelAliases(item));
+  if (!isObject(value)) return value;
+  const aliased = isLayoutScalarIdentifierAlias(value);
+  const result: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (aliased && key === 'sourceLiteral') continue;
+    result[key] = normalizeLayoutModelAliases(child);
+  }
+  return result;
+};
+
+/**
+ * Return the one owner-defined complete model view used for layout issuance and
+ * every downstream provenance comparison.  Parser-owned explicit undefined
+ * object members are removed, and only sourceLiteral on a static scalar
+ * identifier alias is hidden from layout semantics.  Source-edit consumers keep
+ * the raw model separately so that alias locations remain locked edit evidence.
+ */
+export const canonicalizeX4UiLayoutModel = (model: unknown): X4UiCallModel | undefined => {
   try {
     if (!hasOnlyJsonDataProperties(model)) return undefined;
-    const normalized = cloneJsonLike(model);
+    const normalized = normalizeLayoutModelAliases(cloneJsonLike(model));
     if (!hasOnlyJsonDataProperties(normalized)
       || closedJsonDomain(normalized, 'normalized model') !== undefined) {
       return undefined;
     }
-    return normalized;
+    return normalized as X4UiCallModel;
   } catch {
     return undefined;
   }
 };
+
+const normalizeCompleteX4UiCallModelContent = canonicalizeX4UiLayoutModel;
 
 const snapshotCompleteX4UiCallModel = (model: X4UiCallModel): X4UiCallModel | undefined => {
   const normalized = normalizeCompleteX4UiCallModelContent(model);
@@ -1390,7 +1428,6 @@ const refusalResult = (
   source?: X4UiSourceLocation,
 ): X4UiLayoutProgramResult => freezeDeep({
   status: 'refused' as const,
-  program: undefined,
   refusal: { code, message, ...(source ? { source: cloneLocation(source) } : {}) },
   analysis: invalidAnalysis('refused', model?.parsed ?? false, model?.verificationGaps.length || 0, model?.verificationGapsTruncated || false),
   verification: { game: X4_UI_LAYOUT_GAME_TRUTH, gameVerified: false as const },
@@ -3299,16 +3336,28 @@ const isReachabilityBlocked = (context: X4UiFunctionContext): X4UiLayoutOperatio
   return undefined;
 };
 
-const isCallReachabilityBlocked = (call: ProjectableCall): X4UiLayoutOperationStatus | undefined => {
+const isCallReachabilityBlocked = (
+  call: ProjectableCall,
+  selectedPaths?: ReadonlyMap<string, X4UiLayoutPreviewPathCatalogEntry>,
+): X4UiLayoutOperationStatus | undefined => {
   const context = call.context;
   if (context.reachability === 'unreachable'
     || context.branchPath.some(segment => segment.reachability === 'unreachable')) return 'unreachable';
-  if (!call.expansionInstance) return isReachabilityBlocked(context);
   if (context.loopPath.length > 0) return 'conditional';
-  const selected = new Set(call.expansionInstance.selectedBoundaryIds);
-  if (context.branchPath.some(segment => !selected.has(segment.boundaryId))) return 'conditional';
-  if (context.reachability === 'conditional' && context.branchPath.length === 0) return 'conditional';
-  return undefined;
+  const selectedArmIds = call.expansionInstance
+    ? new Set(call.expansionInstance.selectedArmIds)
+    : undefined;
+  if (call.expansionInstance || selectedPaths !== undefined) {
+    if (context.branchPath.some(segment => {
+      const selected = selectedPaths?.get(segment.boundaryId);
+      return selectedPaths !== undefined
+        ? selected === undefined || selected.armId !== segment.armId
+        : selectedArmIds === undefined || !selectedArmIds.has(segment.armId);
+    })) return 'conditional';
+    if (context.reachability === 'conditional' && context.branchPath.length === 0) return 'conditional';
+    return undefined;
+  }
+  return isReachabilityBlocked(context);
 };
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
@@ -3449,6 +3498,7 @@ interface ProjectableCall extends X4UiCallRecord {
     readonly depth: number;
     readonly previewPathSelectionIds: readonly string[];
     readonly selectedBoundaryIds: readonly string[];
+    readonly selectedArmIds: readonly string[];
   };
 }
 
@@ -3769,32 +3819,43 @@ const createPreviewPathCatalog = (
   const declarations = new Map((model.localFunctions || []).map(declaration => [declaration.id, declaration]));
   const visitedContexts = new Set<string>();
   const queue: X4UiSourceLocation[] = [target.source];
+  const addPathSegments = (
+    context: X4UiFunctionContext,
+    invocationId?: string,
+  ): void => {
+    for (const segment of context.branchPath) {
+      const id = previewPathIdFor(identity, segment.boundaryId, segment.armId);
+      const existing = entries.get(id);
+      if (existing) {
+        if (invocationId !== undefined && !existing.invocationIds.includes(invocationId)) {
+          existing.invocationIds.push(invocationId);
+        }
+      } else {
+        entries.set(id, {
+          id,
+          boundaryId: segment.boundaryId,
+          armId: segment.armId,
+          boundary: cloneLocation(segment.boundary),
+          arm: segment.arm,
+          armIndex: segment.armIndex,
+          reachability: segment.reachability,
+          invocationIds: invocationId === undefined ? [] : [invocationId],
+          provenance: 'preview-only'
+        });
+      }
+    }
+  };
   while (queue.length > 0) {
     const contextSource = queue.shift()!;
     const contextId = locationKey(contextSource);
     if (visitedContexts.has(contextId)) continue;
     visitedContexts.add(contextId);
+    const calls = (model.records || []).filter(record => record.recordType === 'call'
+      && contextSourceMatches(record.context, contextSource));
+    for (const call of calls) addPathSegments(call.context);
     const invocations = (model.localInvocations || []).filter(invocation => contextSourceMatches(invocation.context, contextSource));
     for (const invocation of invocations) {
-      for (const segment of invocation.context.branchPath) {
-        const id = previewPathIdFor(identity, segment.boundaryId, segment.armId);
-        const existing = entries.get(id);
-        if (existing) {
-          if (!existing.invocationIds.includes(invocation.id)) existing.invocationIds.push(invocation.id);
-        } else {
-          entries.set(id, {
-            id,
-            boundaryId: segment.boundaryId,
-            armId: segment.armId,
-            boundary: cloneLocation(segment.boundary),
-            arm: segment.arm,
-            armIndex: segment.armIndex,
-            reachability: segment.reachability,
-            invocationIds: [invocation.id],
-            provenance: 'preview-only'
-          });
-        }
-      }
+      addPathSegments(invocation.context, invocation.id);
       const declaration = invocation.calleeDeclarationId
         ? declarations.get(invocation.calleeDeclarationId)
         : undefined;
@@ -3822,7 +3883,6 @@ const normalizePreviewPaths = (
   input: X4UiLayoutPreviewPathSelectionInput | undefined,
   identity: X4UiLayoutModelIdentity,
   catalog: X4UiLayoutPreviewPathCatalog,
-  enabled: boolean
 ):
   | { ok: true; value: NormalizedPreviewPaths }
   | {
@@ -3831,9 +3891,6 @@ const normalizePreviewPaths = (
     message: string;
   } => {
   if (input === undefined) return { ok: true, value: { byBoundary: new Map(), ordered: [] } };
-  if (!enabled) {
-    return { ok: false, code: 'invalid-preview-path', message: 'preview-path selections require explicit localExpansion limits' };
-  }
   if (!isObject(input) || typeof input.catalogId !== 'string' || !isObject(input.source) || !Array.isArray(input.selections)) {
     return { ok: false, code: 'malformed-preview-path', message: 'preview-path input must carry catalogId, exact source identity, and a selections array' };
   }
@@ -4543,12 +4600,16 @@ const buildLocalExpansionPlan = (
           const selectedBoundaryIds = owner.previewPathSelectionIds
             .map(id => previewPaths.ordered.find(selection => selection.id === id)?.boundaryId)
             .filter((id): id is string => Boolean(id));
+          const selectedArmIds = owner.previewPathSelectionIds
+            .map(id => previewPaths.ordered.find(selection => selection.id === id)?.armId)
+            .filter((id): id is string => Boolean(id));
           const instance = {
             invocationId: owner.id,
             ancestry: owner.ancestry,
             depth: owner.depth,
             previewPathSelectionIds: owner.previewPathSelectionIds,
-            selectedBoundaryIds
+            selectedBoundaryIds,
+            selectedArmIds,
           };
           localCalls.push(instantiateCall(event.call, parentContext!, instance, parameterBindings));
         }
@@ -4735,8 +4796,11 @@ const makeOperation = (call: ProjectableCall, status: X4UiLayoutOperationStatus,
   ...(reason ? { reason } : {}),
 });
 
-const evidenceReachabilityFor = (call: ProjectableCall): X4UiLayoutEvidenceReachability => {
-  const blocked = isCallReachabilityBlocked(call);
+const evidenceReachabilityFor = (
+  call: ProjectableCall,
+  selectedPaths?: ReadonlyMap<string, X4UiLayoutPreviewPathCatalogEntry>,
+): X4UiLayoutEvidenceReachability => {
+  const blocked = isCallReachabilityBlocked(call, selectedPaths);
   return blocked === 'unreachable' ? 'unreachable' : blocked === 'conditional' ? 'conditional' : 'reachable';
 };
 
@@ -4905,6 +4969,8 @@ const buildEvidenceAuthority = (
   tables: readonly X4UiLayoutTableNode[],
   rows: readonly X4UiLayoutRowNode[],
   cells: readonly X4UiLayoutCellNode[],
+  previewPathCatalog: X4UiLayoutPreviewPathCatalog,
+  previewPathSelections: readonly X4UiLayoutPreviewPathSelectionBinding[],
   localExpansion?: X4UiLayoutLocalExpansionState,
 ): X4UiLayoutEvidenceAuthority => {
   const relevantCalls = targetCalls.filter(call => EVIDENCE_RELEVANT_CALL_NAMES.includes(call.name));
@@ -4914,6 +4980,17 @@ const buildEvidenceAuthority = (
   const calls: X4UiLayoutEvidenceCall[] = [];
   const authorityOperations: X4UiLayoutEvidenceOperation[] = [];
   const sourceBindings: X4UiLayoutEvidenceSourceBinding[] = [];
+  const selectedPaths = previewPathSelections.length === 0
+    ? undefined
+    : new Map<string, X4UiLayoutPreviewPathCatalogEntry>();
+  if (selectedPaths !== undefined) {
+    for (const selection of previewPathSelections) {
+      const entry = previewPathCatalog.entries.find(candidate => candidate.id === selection.id
+        && candidate.boundaryId === selection.boundaryId
+        && candidate.armId === selection.armId);
+      if (entry !== undefined) selectedPaths.set(selection.boundaryId, entry);
+    }
+  }
   for (const [streamIndex, call] of relevantCalls.entries()) {
     const event = operationEvents[streamIndex];
     const operation = event.operation;
@@ -4932,7 +5009,7 @@ const buildEvidenceAuthority = (
       modelOrder: call.order,
       streamIndex,
       status: operation.status,
-      reachability: evidenceReachabilityFor(call),
+      reachability: evidenceReachabilityFor(call, selectedPaths),
       ...(expansion ? { expansion: cloneDeep(expansion) as X4UiLayoutEvidenceExpansionLink } : {}),
     });
     sourceBindings.push({
@@ -4944,7 +5021,7 @@ const buildEvidenceAuthority = (
       sourceOrder: call.source.start.offset,
       modelOrder: call.order,
       streamIndex,
-      reachability: evidenceReachabilityFor(call),
+      reachability: evidenceReachabilityFor(call, selectedPaths),
       metadata: cloneJsonLike(operation.metadata) as X4UiLayoutCallMetadata,
       ...(expansion ? { expansion: cloneDeep(expansion) as X4UiLayoutEvidenceExpansionLink } : {}),
     });
@@ -4987,6 +5064,8 @@ const buildEvidenceAuthority = (
     gaps: authorityGaps,
     linkedGapIndexes,
     unlinkedGapIndexes,
+    previewPathCatalog: cloneDeep(previewPathCatalog) as X4UiLayoutPreviewPathCatalog,
+    previewPathSelections: cloneDeep(previewPathSelections) as X4UiLayoutPreviewPathSelectionBinding[],
     ...(localExpansion ? { expansion: cloneEvidenceExpansion(localExpansion) } : {}),
   });
 };
@@ -5150,6 +5229,8 @@ const finishProgram = (
   sampleCatalog: X4UiLayoutPreviewSampleCatalog,
   previewSamples: NormalizedPreviewSamples,
   consumedSamples: ReadonlySet<string>,
+  previewPathCatalog: X4UiLayoutPreviewPathCatalog,
+  previewPathSelections: readonly X4UiLayoutPreviewPathSelectionBinding[],
   model: X4UiCallModel,
   targetCalls: readonly ProjectableCall[],
   operationEvents: readonly EvidenceOperationEvent[],
@@ -5256,6 +5337,8 @@ const finishProgram = (
         ? { reason: 'sample was valid but its conditional, unreachable, or unresolved owner was not applied' }
         : {}),
     })),
+    previewPathCatalog,
+    previewPathSelections,
     ...(localExpansion ? { localExpansion } : {}),
     verification: { game: X4_UI_LAYOUT_GAME_TRUTH, gameVerified: false },
   };
@@ -5272,6 +5355,8 @@ const finishProgram = (
     program.tables,
     program.rows,
     program.cells,
+    program.previewPathCatalog,
+    program.previewPathSelections,
     localExpansion,
   );
   const result = freezeDeep({
@@ -6976,6 +7061,16 @@ const schemaExpansionSelection = (value: unknown, path: string): ClosedSchemaErr
     || schemaEnum(selection.provenance, `${path}.provenance`, ['preview-only']);
 };
 
+const schemaPreviewPathSelections = (value: unknown, path: string): ClosedSchemaError => {
+  const arrayError = schemaArray(value, path);
+  if (arrayError) return arrayError;
+  for (const [index, selection] of (value as readonly unknown[]).entries()) {
+    const error = schemaExpansionSelection(selection, `${path}[${index}]`);
+    if (error) return error;
+  }
+  return undefined;
+};
+
 const schemaExpansionInvocation = (value: unknown, path: string): ClosedSchemaError => {
   const objectError = schemaObject(value, path, [
     'id', 'sourceInvocationId', 'source', 'ancestry', 'depth', 'status', 'resultConsumed', 'previewPathSelectionIds', 'operationIds',
@@ -7036,7 +7131,7 @@ const schemaGap = (value: unknown, path: string): ClosedSchemaError => {
 
 const schemaProgram = (value: unknown): ClosedSchemaError => {
   const objectError = schemaObject(value, 'program', [
-    'status', 'target', 'profile', 'analysis', 'localIdentities', 'frames', 'tables', 'rows', 'cells', 'operations', 'gaps', 'sampleCatalog', 'previewSampleBindings', 'verification',
+    'status', 'target', 'profile', 'analysis', 'localIdentities', 'frames', 'tables', 'rows', 'cells', 'operations', 'gaps', 'sampleCatalog', 'previewSampleBindings', 'previewPathCatalog', 'previewPathSelections', 'verification',
   ], ['localExpansion']);
   if (objectError) return objectError;
   const program = value as Record<string, unknown>;
@@ -7052,6 +7147,8 @@ const schemaProgram = (value: unknown): ClosedSchemaError => {
     || schemaArray(program.gaps, 'program.gaps')
     || schemaSampleCatalog(program.sampleCatalog, 'program.sampleCatalog')
     || schemaSampleBindings(program.previewSampleBindings, 'program.previewSampleBindings')
+    || schemaPreviewCatalog(program.previewPathCatalog, 'program.previewPathCatalog')
+    || schemaPreviewPathSelections(program.previewPathSelections, 'program.previewPathSelections')
     || schemaObject(program.verification, 'program.verification', ['game', 'gameVerified'])
     || ((program.verification as Record<string, unknown>).game === X4_UI_LAYOUT_GAME_TRUTH
       ? undefined
@@ -7296,7 +7393,7 @@ const schemaEvidenceLocalIdentities = (
 
 const schemaAuthority = (value: unknown): ClosedSchemaError => {
   const objectError = schemaObject(value, 'authority', [
-    'version', 'sourceIdentity', 'profile', 'targetId', 'targetSource', 'calls', 'operations', 'sourceBindings', 'nodes', 'localIdentities', 'gaps', 'linkedGapIndexes', 'unlinkedGapIndexes',
+    'version', 'sourceIdentity', 'profile', 'targetId', 'targetSource', 'calls', 'operations', 'sourceBindings', 'nodes', 'localIdentities', 'gaps', 'linkedGapIndexes', 'unlinkedGapIndexes', 'previewPathCatalog', 'previewPathSelections',
   ], ['expansion']);
   if (objectError) return objectError;
   const authority = value as Record<string, unknown>;
@@ -7312,6 +7409,8 @@ const schemaAuthority = (value: unknown): ClosedSchemaError => {
     || schemaArray(authority.gaps, 'authority.gaps')
     || schemaArray(authority.linkedGapIndexes, 'authority.linkedGapIndexes')
     || schemaArray(authority.unlinkedGapIndexes, 'authority.unlinkedGapIndexes')
+    || schemaPreviewCatalog(authority.previewPathCatalog, 'authority.previewPathCatalog')
+    || schemaPreviewPathSelections(authority.previewPathSelections, 'authority.previewPathSelections')
     || schemaObject(authority.nodes, 'authority.nodes', ['frames', 'tables', 'rows', 'cells'])
     || schemaEvidenceLocalIdentities(authority.localIdentities, 'authority.localIdentities', authority.sourceIdentity as X4UiLayoutModelIdentity);
   if (baseError) return baseError;
@@ -7461,7 +7560,7 @@ export const validateX4UiLayoutEvidencePair = (
   const manifest = isObject(manifestValue) && !Array.isArray(manifestValue) ? manifestValue : undefined;
   if (!manifest) return fail('evidence authority is missing or malformed');
   if (!exactKeys(manifest, [
-    'version', 'sourceIdentity', 'profile', 'targetId', 'targetSource', 'calls', 'operations', 'sourceBindings', 'nodes', 'localIdentities', 'gaps', 'linkedGapIndexes', 'unlinkedGapIndexes',
+    'version', 'sourceIdentity', 'profile', 'targetId', 'targetSource', 'calls', 'operations', 'sourceBindings', 'nodes', 'localIdentities', 'gaps', 'linkedGapIndexes', 'unlinkedGapIndexes', 'previewPathCatalog', 'previewPathSelections',
   ], ['expansion'])) return fail('evidence authority contains an unknown or missing top-level key');
   if (manifest.version !== 3) return fail('evidence authority version is unsupported');
   if (manifest.targetId !== program.target.id) return fail('evidence authority target identity does not match the program target');
@@ -7482,6 +7581,12 @@ export const validateX4UiLayoutEvidencePair = (
   }
   if (!jsonEqual(manifest.profile, program.profile)) {
     return fail('evidence authority profile does not exactly match the emitted program profile');
+  }
+  if (!jsonEqual(manifest.previewPathCatalog, program.previewPathCatalog)) {
+    return fail('evidence authority preview-path catalog does not exactly match the emitted program catalog');
+  }
+  if (!jsonEqual(manifest.previewPathSelections, program.previewPathSelections)) {
+    return fail('evidence authority preview-path selections do not exactly match the emitted program selections');
   }
   if (!jsonEqual(program.localIdentities, manifest.localIdentities)) {
     return fail('program and evidence authority local identity ledgers are not exactly equal');
@@ -8653,12 +8758,14 @@ export function projectX4UiLayoutProgram(
   const normalizedPaths = normalizePreviewPaths(
     previewPathInput,
     normalizedProfile.value.sourceIdentity,
-    previewPathCatalog,
-    Boolean(profileValue.localExpansion)
+    previewPathCatalog
   );
   if (normalizedPaths.ok === false) {
     return refusalResult(normalizedPaths.code, normalizedPaths.message, model, target.source);
   }
+  const selectedPreviewPaths = normalizedPaths.value.ordered.length === 0
+    ? undefined
+    : normalizedPaths.value.byBoundary;
   const localExpansionPlan = profileValue.localExpansion
     ? buildLocalExpansionPlan(
       model,
@@ -8673,7 +8780,7 @@ export function projectX4UiLayoutProgram(
   const resolvedDirectScaleLocations = new Set<string>();
   for (const call of targetCalls) {
     if ((call.name !== 'scaleX' && call.name !== 'scaleY' && call.name !== 'scaleFont')
-      || isCallReachabilityBlocked(call)
+      || isCallReachabilityBlocked(call, selectedPreviewPaths)
       || !isHelperReceiver(call)
       || call.semantics.dataFlow) continue;
     const instanceScope = call.expansionInstance?.ancestry.join('>') || '';
@@ -9122,7 +9229,7 @@ export function projectX4UiLayoutProgram(
   const displayedFrameIds = new Set<string>();
   for (const call of targetCalls) {
     activeCall = call;
-    const blocked = isCallReachabilityBlocked(call);
+    const blocked = isCallReachabilityBlocked(call, selectedPreviewPaths);
     if (call.name === 'createFrameHandle') {
       const reference = call.result;
       const identity = referenceKey(reference) || `${call.source.start.offset}`;
@@ -11471,6 +11578,17 @@ export function projectX4UiLayoutProgram(
             ? { ...priorHeight, value: descriptorHeight.value }
             : knownSourceFact(descriptorHeight.value, 'number', cell.source, 'Helper cell:getHeight(true)', 'source-pinned-default')
           : unavailableFact('number', descriptorHeight.message, cell.source);
+      } else if ((cellState.type === 'button' || cellState.type === 'icon' || cellState.type === 'editbox')
+        && descriptorHeight.status === 'ok') {
+        // A row containing unresolved text can have an unavailable row height
+        // while its widget cells still have deterministic scaled outer heights.
+        // Keep those producer facts in the same shape as the Helper's widget
+        // result so Scene can validate the independent cell geometry.
+        const priorHeight = cell.descriptorFacts.outerHeight;
+        cell.descriptorFacts.outerHeight = priorHeight.status === 'known'
+          && priorHeight.expectedType === 'number'
+          ? { ...priorHeight, value: descriptorHeight.value }
+          : knownSourceFact(descriptorHeight.value, 'number', cell.source, 'Helper cell:getHeight(true)', 'source-pinned-default');
       }
       const span = getColSpanWidth(table.kernelState, rowIndex, cell.column);
       cell.spanWidth = span.status === 'ok'
@@ -11546,7 +11664,12 @@ export function projectX4UiLayoutProgram(
           ...entry,
           invocationIds: entry.invocationIds.filter(id => expansionSourceInvocationIds.has(id)),
         }))
-        .filter(entry => entry.invocationIds.length > 0),
+        // Direct calls belong to the selected target stream rather than an
+        // invocation ledger.  Retain those source-bound entries alongside the
+        // invocation-reciprocal edges so a local-expansion profile can select
+        // a direct target arm without weakening the ledger contract.
+        .filter(entry => entry.invocationIds.length > 0 || previewPathCatalog.entries
+          .some(candidate => candidate.id === entry.id && candidate.invocationIds.length === 0)),
     };
     localExpansionState = {
       limits: cloneDeep(profileValue.localExpansion) as NonNullable<X4UiLayoutProjectionProfile['localExpansion']>,
@@ -11580,7 +11703,8 @@ export function projectX4UiLayoutProgram(
     callModelGaps: model.verificationGaps.length,
     incomplete: analysis.incomplete || gaps.length > 0,
     staticSource: analysis.incomplete || gaps.length > 0 ? 'incomplete' : 'complete',
-  }, frames, tables, rows, cells, operations, gaps, sampleCatalog, previewSamples, consumedSamples, model,
+  }, frames, tables, rows, cells, operations, gaps, sampleCatalog, previewSamples, consumedSamples,
+  previewPathCatalog, normalizedPaths.value.ordered, model,
   targetCalls, operationEvents, nodeLedgerEvents, gapEvents, localExpansionState, colorEvidenceInput);
 }
 

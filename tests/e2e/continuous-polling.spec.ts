@@ -552,7 +552,8 @@ test('large sparse workspace closes and remounts Bridge without losing the rende
 });
 
 test('large dense workspace pointer-close control keeps all rendered nodes responsive', async ({ page }, testInfo) => {
-  test.setTimeout(45_000);
+  // The setup envelope is 60 seconds; pointerCloseMeasurement retains its 5-second product thresholds.
+  test.setTimeout(60_000);
   await seedServerWorkspace(buildLargeWorkspace({ layout: 'dense' }));
   await page.route('**/api/agent/compile', route => route.fulfill({ json: { diagnostics: [], validation: { scope: 'full-project' } } }));
   await bootWithFetchCounts(page);

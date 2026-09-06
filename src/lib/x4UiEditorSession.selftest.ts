@@ -40,9 +40,15 @@ import {
   adoptX4UiEditorCanvasResult,
   parseX4UiEditorSampleInput,
   projectX4UiEditorSession,
+  reconcileX4UiEditorPathState,
   reconcileX4UiEditorSampleState,
+  resetX4UiEditorPathState,
+  sameX4UiEditorPathBinding,
+  updateX4UiEditorPathState,
   updateX4UiEditorSampleState,
+  type X4UiEditorPathCatalogAuthority,
   type X4UiEditorProfile,
+  type X4UiEditorPathState,
   type X4UiEditorSampleState,
   type X4UiEditorSessionInput,
 } from './x4UiEditorSession';
@@ -563,6 +569,43 @@ function sampleWorkspace(): ModWorkspace {
   ]);
 }
 
+const pathLua = [
+  'local Helper = rawget(_G, "Helper")',
+  'local menu = { name = "Paths", layer = 1 }',
+  'function menu.display(tab)',
+  '  local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+  '  local table = frame:addTable(1, { width = 100 })',
+  '  local row = table:addRow(false, {})',
+  '  if tab == "first" then',
+  '    row[1]:createText("FIRST", { height = 10 })',
+  '  elseif tab == "second" then',
+  '    row[1]:createText("SECOND", { height = 10 })',
+  '  else',
+  '    row[1]:createText("OTHER", { height = 10 })',
+  '  end',
+  '  if false then',
+  '    row[1]:createText("NEVER", { height = 10 })',
+  '  end',
+  '  frame:display()',
+  'end',
+  '',
+].join('\n');
+
+function pathWorkspace(content = pathLua): ModWorkspace {
+  return workspace([
+    passthrough('ui.xml', [
+      '<?xml version="1.0" encoding="utf-8"?>',
+      '<addon name="editor-session-paths">',
+      '  <environment type="menus">',
+      '    <file name="ui/paths.lua" />',
+      '  </environment>',
+      '</addon>',
+      '',
+    ].join('\n')),
+    passthrough('ui/paths.lua', content, { reason: 'unparsed' }),
+  ], { id: 'batch-7a-editor-session-paths' });
+}
+
 const p7ColorXml = [
   '<?xml version="1.0" encoding="utf-8"?>',
   '<addon name="editor-session-p7-colors">',
@@ -824,7 +867,7 @@ const P7_SESSION_EXPECTED_CARDINALITIES: P7SessionCardinalities = Object.freeze(
   widgets: 4,
   texts: 6,
   colorFacts: 13,
-  paintTints: 31,
+  paintTints: 30,
 });
 
 const P7_SESSION_EXPECTED_FACT_OWNERS = Object.freeze({
@@ -852,6 +895,10 @@ type P7SessionPaintExpectedEntry = {
 
 const P7_SESSION_CANONICAL_COLOR_DOMAIN = 'canonical-xml-byte-alpha';
 const P7_SESSION_LITERAL_COLOR_DOMAIN = 'source-literal-percent-alpha';
+// The narrow first cell contains seven source characters ("literal"), but
+// native Zekton C.GetTextWidth uses horizontalBearing + advance and clips the
+// final character, so the current layout emits six visible glyph quads/tints.
+const P7_SESSION_NARROW_CELL_VISIBLE_GLYPH_COUNT = 6;
 
 const P7_SESSION_SELECTED_CELL_OWNER_PREFIX = 'scene:cell:table:table|table|call|ui/p7-colors.lua||3:14:159|3:144:289|frame|||row:row|row|call|ui/p7-colors.lua||8:12:430|8:123:541|table|||';
 const P7_SESSION_SELECTED_WIDGET_OWNER_PREFIX = 'scene:widget:cell:table:table|table|call|ui/p7-colors.lua||3:14:159|3:144:289|frame|||row:row|row|call|ui/p7-colors.lua||8:12:430|8:123:541|table|||';
@@ -909,7 +956,7 @@ function p7SessionPaintExpectedMultiplicity(entries: readonly P7SessionPaintExpe
 
 const P7_SESSION_EXPECTED_SELECTED_PAINT_OWNERS = p7SessionPaintExpectedMultiplicity([
   p7SessionPaintExpectedEntry('cellbgcolor', 'cell-background', P7_SESSION_CANONICAL_COLOR_DOMAIN, [51, 52, 53, 54], 'row_background', `${P7_SESSION_SELECTED_CELL_OWNER_PREFIX}1`),
-  ...p7SessionPaintExpectedGlyphEntries('color', 'primary-text', P7_SESSION_LITERAL_COLOR_DOMAIN, [12.5, 23.5, 34.5, 45.5], '', `${P7_SESSION_SELECTED_TEXT_OWNER_PREFIX}1:primary`, 7),
+  ...p7SessionPaintExpectedGlyphEntries('color', 'primary-text', P7_SESSION_LITERAL_COLOR_DOMAIN, [12.5, 23.5, 34.5, 45.5], '', `${P7_SESSION_SELECTED_TEXT_OWNER_PREFIX}1:primary`, P7_SESSION_NARROW_CELL_VISIBLE_GLYPH_COUNT),
   p7SessionPaintExpectedEntry('cellbgcolor', 'cell-background', P7_SESSION_CANONICAL_COLOR_DOMAIN, [51, 52, 53, 54], 'row_background', `${P7_SESSION_SELECTED_CELL_OWNER_PREFIX}2`),
   p7SessionPaintExpectedEntry('bgcolor', 'widget-background', P7_SESSION_CANONICAL_COLOR_DOMAIN, [61, 62, 63, 64], 'button_background_default', `${P7_SESSION_SELECTED_WIDGET_OWNER_PREFIX}2:button`),
   p7SessionPaintExpectedEntry('highlightcolor', 'widget-highlight', P7_SESSION_CANONICAL_COLOR_DOMAIN, [71, 72, 73, 74], 'button_highlight_default', `${P7_SESSION_SELECTED_WIDGET_OWNER_PREFIX}2:button`),
@@ -924,7 +971,7 @@ const P7_SESSION_EXPECTED_SELECTED_PAINT_OWNERS = p7SessionPaintExpectedMultipli
 
 const P7_SESSION_EXPECTED_SAMPLED_PAINT_OWNERS = p7SessionPaintExpectedMultiplicity([
   p7SessionPaintExpectedEntry('cellbgcolor', 'cell-background', P7_SESSION_CANONICAL_COLOR_DOMAIN, [51, 52, 53, 54], 'row_background', `${P7_SESSION_SAMPLED_CELL_OWNER_PREFIX}1`),
-  ...p7SessionPaintExpectedGlyphEntries('color', 'primary-text', P7_SESSION_CANONICAL_COLOR_DOMAIN, [101, 102, 103, 104], 'text_normal', `${P7_SESSION_SAMPLED_TEXT_OWNER_PREFIX}1:primary`, 7),
+  ...p7SessionPaintExpectedGlyphEntries('color', 'primary-text', P7_SESSION_CANONICAL_COLOR_DOMAIN, [101, 102, 103, 104], 'text_normal', `${P7_SESSION_SAMPLED_TEXT_OWNER_PREFIX}1:primary`, P7_SESSION_NARROW_CELL_VISIBLE_GLYPH_COUNT),
   p7SessionPaintExpectedEntry('cellbgcolor', 'cell-background', P7_SESSION_CANONICAL_COLOR_DOMAIN, [51, 52, 53, 54], 'row_background', `${P7_SESSION_SAMPLED_CELL_OWNER_PREFIX}2`),
   p7SessionPaintExpectedEntry('bgcolor', 'widget-background', P7_SESSION_CANONICAL_COLOR_DOMAIN, [61, 62, 63, 64], 'button_background_default', `${P7_SESSION_SAMPLED_WIDGET_OWNER_PREFIX}2:button`),
   p7SessionPaintExpectedEntry('highlightcolor', 'widget-highlight', P7_SESSION_CANONICAL_COLOR_DOMAIN, [71, 72, 73, 74], 'button_highlight_default', `${P7_SESSION_SAMPLED_WIDGET_OWNER_PREFIX}2:button`),
@@ -1529,6 +1576,8 @@ function recordP7SessionRow(
 async function run(): Promise<void> {
   const proxyTrapOracleSensitivity = assertProxyTrapCensusOracleSensitivity(SESSION_ONE_ITEM_CONTAINER_PROXY_TRAPS);
   assert.equal(X4_UI_EDITOR_SESSION_GAME_TRUTH, 'Not verified in game');
+  assert.equal('literal'.length, 7, 'P7 narrow-cell source literal must remain seven characters');
+  assert.equal(P7_SESSION_NARROW_CELL_VISIBLE_GLYPH_COUNT, 'literal'.length - 1, 'native Zekton pen metrics must clip one glyph from the seven-character narrow-cell source');
   assert.equal(X4_UI_EDITOR_DEFAULT_PROFILE.drawable.width, 2560);
   assert.equal(X4_UI_EDITOR_DEFAULT_PROFILE.drawable.height, 1440);
   assert.equal(X4_UI_EDITOR_DEFAULT_PROFILE.uiScale, 1.4);
@@ -2276,6 +2325,237 @@ async function run(): Promise<void> {
   expectSampleRefusal('sample value accessor', reconcileX4UiEditorSampleState({ ...sampleState, values: [sampleValueAccessor, ...sampleState.values.slice(1)] }, sampleCatalog, sampleCatalogAuthority));
   const missingSampleValue = { id: sampleValue.id };
   expectSampleRefusal('sample value missing scalar', reconcileX4UiEditorSampleState({ ...sampleState, values: [missingSampleValue, ...sampleState.values.slice(1)] }, sampleCatalog, sampleCatalogAuthority));
+
+  const pathWorkspaceValue = pathWorkspace();
+  const pathWorkspaceJson = JSON.stringify(pathWorkspaceValue);
+  const pathBaseline = projectX4UiEditorSession({
+    workspace: pathWorkspaceValue,
+    corpus: undefined,
+    profile: X4_UI_EDITOR_DEFAULT_PROFILE,
+  });
+  const pathSelection = selectionFor(pathBaseline.source, 'ui/paths.lua', 'function');
+  const pathProfile: X4UiEditorProfile = {
+    ...X4_UI_EDITOR_DEFAULT_PROFILE,
+    id: 'editor-session-paths-profile',
+    provenance: 'Batch 7C source-backed path selftest',
+    truthGrade: 'supplied',
+    source: pathSelection.sourceIdentity,
+    drawable: { width: 100, height: 80 },
+    uiScale: 1,
+    minTextHeight: 10,
+  };
+  const pathUnprojected = projectX4UiEditorSession({
+    workspace: pathWorkspaceValue,
+    corpus: canonical,
+    profile: pathProfile,
+    selection: pathSelection,
+  });
+  const pathCatalog = pathUnprojected.pathCatalog;
+  const pathBinding = pathUnprojected.pathBinding;
+  const pathCatalogAuthority = pathUnprojected.pathCatalogAuthority;
+  assert.ok(pathCatalog, 'path fixture projection must expose the exact catalog issued with its authority');
+  assert.ok(pathBinding, 'path fixture projection must issue an editor-only binding');
+  assert.ok(pathCatalogAuthority, 'path fixture projection must issue a catalog authority');
+  const pathArms = pathCatalog.entries.filter(entry => entry.invocationIds.length === 0);
+  const pathThen = pathArms.find(entry => entry.arm === 'then' && entry.reachability !== 'unreachable');
+  const pathElseIf = pathArms.find(entry => entry.arm === 'elseif' && entry.reachability !== 'unreachable');
+  const pathElse = pathArms.find(entry => entry.arm === 'else' && entry.reachability !== 'unreachable');
+  const pathUnreachable = pathArms.find(entry => entry.reachability === 'unreachable');
+  assert.ok(pathThen && pathElseIf && pathElse && pathUnreachable, 'path fixture must expose reachable mutually-exclusive arms and an unreachable arm');
+  const pathState: X4UiEditorPathState = {
+    catalogId: pathCatalog.id,
+    source: pathCatalog.sourceIdentity,
+    selections: [{ id: pathThen.id, boundaryId: pathThen.boundaryId, armId: pathThen.armId }],
+  };
+  const pathProgramUnselected = pathUnprojected.preview.program;
+  assert.ok(pathProgramUnselected && pathProgramUnselected.status !== 'refused');
+  const unselectedPathTextOperations = pathProgramUnselected.program.operations.filter(operation => operation.kind === 'createText');
+  assert.equal(unselectedPathTextOperations.filter(operation => operation.status === 'conditional').length, 3, 'no path selection must preserve conservative branch evidence');
+  assert.equal(unselectedPathTextOperations.some(operation => operation.status === 'unreachable'), true, 'unreachable path operation must remain unavailable without a selection');
+
+  const pathSelected = projectX4UiEditorSession({
+    workspace: pathWorkspaceValue,
+    corpus: canonical,
+    profile: pathProfile,
+    selection: pathSelection,
+    paths: pathState,
+    pathBinding,
+    pathCatalogAuthority,
+  });
+  const pathSelectedProgram = pathSelected.preview.program;
+  assert.ok(pathSelectedProgram && pathSelectedProgram.status !== 'refused');
+  const selectedPathTextOperations = pathSelectedProgram.program.operations.filter(operation => operation.kind === 'createText');
+  assert.equal(pathSelected.pathReconciliation.status, 'accepted');
+  assert.equal(pathSelected.paths?.selections.length, 1);
+  assert.equal(pathSelected.paths?.selections[0]?.id, pathThen.id);
+  assert.equal(selectedPathTextOperations.filter(operation => operation.status === 'applied').length, 1, 'one selected direct branch arm must apply');
+  assert.equal(selectedPathTextOperations.filter(operation => operation.status === 'conditional').length, 2, 'unselected sibling arms must remain conditional');
+  assert.equal(selectedPathTextOperations.some(operation => operation.status === 'unreachable'), true, 'selected path projection must retain explicit unreachable evidence');
+  const pathSelectedScene = pathSelected.preview.scene;
+  assert.ok(pathSelectedScene && pathSelectedScene.status !== 'refused');
+  assert.ok(pathSelectedScene.scene.texts.some(text => text.content === 'FIRST'), 'selected path must reach the Scene text widget');
+  assert.ok(pathSelected.paint && pathSelected.paint.status !== 'refused', 'selected path must reach the Paint owner');
+  assert.equal(pathSelected.canRender, true);
+  assert.equal(pathSelected.gameTruth, X4_UI_EDITOR_SESSION_GAME_TRUTH);
+  assert.equal(pathSelected.gameVerified, false);
+  assert.equal(pathSelected.preview.gameTruth, X4_UI_EDITOR_SESSION_GAME_TRUTH);
+  assert.equal(pathSelected.preview.verification.gameVerified, false);
+  assert.equal(JSON.stringify(pathWorkspaceValue), pathWorkspaceJson, 'path controls must not mutate workspace bytes or source identity');
+  assertFrozenGraph(pathSelected);
+
+  const pathRoundTrip = JSON.parse(JSON.stringify(pathState)) as unknown;
+  const pathRoundTripProjection = projectX4UiEditorSession({
+    workspace: pathWorkspaceValue,
+    corpus: canonical,
+    profile: pathProfile,
+    selection: pathSelection,
+    paths: pathRoundTrip as X4UiEditorPathState,
+    pathBinding,
+    pathCatalogAuthority,
+  });
+  assert.equal(pathRoundTripProjection.pathReconciliation.status, 'accepted', 'JSON-round-tripped path state must reconcile through the issued authority');
+  assert.deepEqual(pathRoundTripProjection.paths, pathState);
+  assert.equal(sameX4UiEditorPathBinding(JSON.parse(JSON.stringify(pathBinding)), pathBinding), true, 'path binding data must remain comparable after JSON round-trip');
+  const forgedPathAuthority = JSON.parse(JSON.stringify(pathCatalogAuthority)) as unknown;
+  const forgedPathProjection = projectX4UiEditorSession({
+    workspace: pathWorkspaceValue,
+    corpus: canonical,
+    profile: pathProfile,
+    selection: pathSelection,
+    paths: pathState,
+    pathBinding,
+    pathCatalogAuthority: forgedPathAuthority as X4UiEditorPathCatalogAuthority,
+  });
+  assert.equal(forgedPathProjection.pathReconciliation.status, 'refused');
+  assert.equal(forgedPathProjection.pathReconciliation.code, 'catalog-authority-required');
+  assert.equal(forgedPathProjection.paths, undefined, 'copied path authority must fail closed');
+
+  const controlPathCatalog = pathRoundTripProjection.pathCatalog;
+  const controlPathAuthority = pathRoundTripProjection.pathCatalogAuthority;
+  assert.ok(controlPathCatalog && controlPathAuthority, 'control path projection must retain its matching catalog authority');
+  const updatedPath = updateX4UiEditorPathState(undefined, controlPathCatalog, pathThen.id, controlPathAuthority);
+  assert.equal(updatedPath.status, 'accepted', JSON.stringify(updatedPath));
+  assert.equal(updatedPath.changed, true, 'first valid arm selection must report a returned path-state transition');
+  assert.equal(updatedPath.paths?.selections.length, 1);
+  assert.equal(updatedPath.paths?.selections[0]?.id, pathThen.id);
+  const repeatedPath = updateX4UiEditorPathState(updatedPath.paths, controlPathCatalog, pathThen.id, controlPathAuthority);
+  assert.equal(repeatedPath.status, 'accepted');
+  assert.equal(repeatedPath.changed, false, 'repeating the selected arm must not report a path-state transition');
+  assert.equal(repeatedPath.paths?.selections[0]?.id, pathThen.id);
+  const switchedPath = updateX4UiEditorPathState(updatedPath.paths, controlPathCatalog, pathElse.id, controlPathAuthority);
+  assert.equal(switchedPath.status, 'accepted');
+  assert.equal(switchedPath.changed, true, 'switching arms must report a returned path-state transition');
+  assert.equal(switchedPath.paths?.selections.length, 1, 'path controls must allow at most one arm per boundary');
+  assert.equal(switchedPath.paths?.selections[0]?.id, pathElse.id);
+  const resetPath = resetX4UiEditorPathState(switchedPath.paths, controlPathCatalog, controlPathAuthority);
+  assert.equal(resetPath.status, 'reset');
+  assert.equal(resetPath.changed, true, 'resetting a selected arm must report a returned path-state transition');
+  assert.equal(resetPath.paths, undefined);
+  const resetEmptyPath = resetX4UiEditorPathState(undefined, controlPathCatalog, controlPathAuthority);
+  assert.equal(resetEmptyPath.status, 'reset');
+  assert.equal(resetEmptyPath.changed, false, 'resetting an empty path state must not report a transition');
+  assert.equal(resetEmptyPath.paths, undefined);
+
+  const expectPathRefusal = (name: string, candidate: unknown, code: string): void => {
+    const result = reconcileX4UiEditorPathState(candidate, controlPathCatalog, controlPathAuthority);
+    assert.equal(result.status, 'refused', `${name} must be refused`);
+    assert.equal(result.code, code, `${name} must have deterministic refusal code`);
+    assert.equal(result.paths, undefined, `${name} must not leave a forwardable path state`);
+  };
+  const pathSelectionValue = (entry: { readonly id: string; readonly boundaryId: string; readonly armId: string }): JsonRecord => ({
+    id: entry.id,
+    boundaryId: entry.boundaryId,
+    armId: entry.armId,
+  });
+  expectPathRefusal('duplicate path selection', {
+    ...pathState,
+    selections: [pathSelectionValue(pathThen), pathSelectionValue(pathThen)],
+  }, 'duplicate-path');
+  expectPathRefusal('conflicting path selection', {
+    ...pathState,
+    selections: [pathSelectionValue(pathThen), pathSelectionValue(pathElse)],
+  }, 'conflicting-path');
+  expectPathRefusal('unknown path selection', {
+    ...pathState,
+    selections: [{ id: 'unknown-path', boundaryId: pathThen.boundaryId, armId: pathThen.armId }],
+  }, 'unknown-path');
+  expectPathRefusal('mismatched path selection', {
+    ...pathState,
+    selections: [{ id: pathThen.id, boundaryId: pathElse.boundaryId, armId: pathElse.armId }],
+  }, 'path-boundary-mismatch');
+  expectPathRefusal('unreachable path selection', {
+    ...pathState,
+    selections: [pathSelectionValue(pathUnreachable)],
+  }, 'unreachable-path');
+  expectPathRefusal('malformed path selection', {
+    ...pathState,
+    selections: [{ ...pathSelectionValue(pathThen), extra: true }],
+  }, 'malformed-paths');
+  const noPathAuthority = reconcileX4UiEditorPathState(pathState, controlPathCatalog, undefined);
+  assert.equal(noPathAuthority.status, 'refused');
+  assert.equal(noPathAuthority.code, 'catalog-authority-required');
+  const stalePathSource = reconcileX4UiEditorPathState({
+    ...pathState,
+    source: { ...pathState.source, sha256: 'b'.repeat(64) },
+  }, controlPathCatalog, controlPathAuthority);
+  assert.equal(stalePathSource.status, 'cleared');
+  assert.equal(stalePathSource.code, 'stale-paths');
+  const stalePathCatalog = reconcileX4UiEditorPathState({
+    ...pathState,
+    catalogId: `${pathState.catalogId}:stale`,
+  }, controlPathCatalog, controlPathAuthority);
+  assert.equal(stalePathCatalog.status, 'cleared');
+  assert.equal(stalePathCatalog.code, 'stale-paths');
+
+  const profileDriftedPath = projectX4UiEditorSession({
+    workspace: pathWorkspaceValue,
+    corpus: canonical,
+    profile: { ...pathProfile, drawable: { width: 1280, height: 720 }, uiScale: 1.1 },
+    selection: pathSelection,
+    paths: pathState,
+    pathBinding,
+    pathCatalogAuthority,
+  });
+  assert.equal(profileDriftedPath.pathReconciliation.status, 'cleared', 'profile identity drift must clear paths');
+  assert.equal(profileDriftedPath.paths, undefined);
+  const changedPathWorkspace = pathWorkspace(`${pathLua}\n-- source identity drift\n`);
+  const changedPathSeed = projectX4UiEditorSession({ workspace: changedPathWorkspace, corpus: undefined, profile: X4_UI_EDITOR_DEFAULT_PROFILE });
+  const changedPathSelection = selectionFor(changedPathSeed.source, 'ui/paths.lua', 'function');
+  const sourceDriftedPath = projectX4UiEditorSession({
+    workspace: changedPathWorkspace,
+    corpus: canonical,
+    profile: { ...pathProfile, source: changedPathSelection.sourceIdentity },
+    selection: changedPathSelection,
+    paths: pathState,
+    pathBinding,
+    pathCatalogAuthority,
+  });
+  assert.equal(sourceDriftedPath.pathReconciliation.status, 'cleared', 'source identity drift must clear paths');
+  assert.equal(sourceDriftedPath.paths, undefined);
+  const targetDriftedPath = projectX4UiEditorSession({
+    workspace: pathWorkspaceValue,
+    corpus: canonical,
+    profile: pathProfile,
+    selection: { ...pathSelection, target: { ...pathSelection.target, id: 'stale-path-target' } },
+    paths: pathState,
+    pathBinding,
+    pathCatalogAuthority,
+  });
+  assert.equal(targetDriftedPath.pathReconciliation.status, 'cleared', 'exact target identity drift must clear paths');
+  assert.equal(targetDriftedPath.paths, undefined);
+  const forgedPathBinding = { ...pathBinding, profileKey: `${pathBinding.profileKey}:stale` };
+  const bindingDriftedPath = projectX4UiEditorSession({
+    workspace: pathWorkspaceValue,
+    corpus: canonical,
+    profile: pathProfile,
+    selection: pathSelection,
+    paths: pathState,
+    pathBinding: forgedPathBinding,
+    pathCatalogAuthority,
+  });
+  assert.equal(bindingDriftedPath.pathReconciliation.status, 'cleared', 'catalog binding drift must clear paths');
+  assert.equal(bindingDriftedPath.paths, undefined);
+  assert.equal(JSON.stringify(pathWorkspaceValue), pathWorkspaceJson, 'stale path reconciliation must remain preview-only');
 
   const profileDrifted = projectX4UiEditorSession({
     workspace: sampleWorkspaceValue,

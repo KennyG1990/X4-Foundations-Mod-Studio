@@ -3,6 +3,19 @@
 The latest changes, newest first. (This page is generated automatically — see
 `release-notes.json` to edit the wording.)
 
+## 0.0.71 — 2026-09-06
+
+- Linter-first X4 static analysis uses the configured corpus to catch supported engine-impact frame traps and surface invalid UI layout assumptions instead of guessing from generic UI rules.
+- Where supported, the preview ports and reuses authoritative helper, widget, and Zekton inputs from the configured unpacked X4 corpus; unsupported or no-geometry targets are refused rather than rendered as guessed output.
+- The renderer refuses to present an invisible or stale preview, and PNG handoff is described honestly as an export of the Forge preview rather than proof of engine acceptance.
+- A bounded generated menu has rendered in X4, but preview-to-game pixel parity remains unverified; the UI keeps the exact product boundary prominent: Not verified in game.
+
+## 0.0.70 — 2026-08-21
+
+- Extension gallery and documentation now feature high-resolution visual showcase captures across all primary Forge Studio workbenches: Visual Mission Director graphs, XML Diff Patching, Bulk Transforms, HUD & Lua UI 2D Canvas designer, External Integration Contracts, Galaxy Map & Sectors, Wares & Jobs configurator, AI Scripts Behavior-Tree engine, and Multi-Language T-Files localization.
+- Packaged extension assets now include embedded showcase media for Open VSX and VS Code Marketplace galleries.
+- Cleaned up UI overlay visibility during documentation capture and verified deterministic live-canvas representations across all core authoring workflows.
+
 ## 0.0.69 — 2026-08-09
 
 - Agents can now retrieve the addressed mod-aware runtime debugger through the authenticated Agent API (GET /api/agent/runtime-debugger) or the runtime_debugger MCP operation without opening a browser or using computer control. The read is governed by the runtime.debug.read@1 capability and exact route and effect authority.

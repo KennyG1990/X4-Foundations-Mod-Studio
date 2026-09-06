@@ -8,7 +8,7 @@
 !CHANGELOG.md
 !LICENSE.txt
 !icon.png
-!media/activitybar.svg
+!media/**
 !mcp/**
 
 # Never ship these even if present under an allowed tree (runtime writes land in

@@ -1975,6 +1975,27 @@ AI Influence reconstruction, native Save As false-success repair, release accept
 still says `Not verified in game`; exact deploy plus X4 remains authority. Exact record:
 `docs/plans/2026-09-03-b119-three-menu-pixel-parity.md`.
 
+**B119 linter-first dogfood and `0.0.71` release checkpoint 2026-09-06 — RELEASE ARTIFACT UNIT VERIFIED / FULL B119
+PARTIAL:** The implemented source-backed linter passes direct selftest `140/140`, including clean, warning, blocking
+`addTable(24)`, whole-frame, and conversation-close symptom coverage. Final VSIX
+`vscode-extension/x4-forge-studio-0.0.71.vsix` is `26,296,414` bytes / SHA-256
+`3143296C72B5A8B6A526148CA98048FA340FA534BB41A1D890F930DA69FB054B`; package inspection is `2,107` archive entries /
+`2,105` payload files, and installed parity is exact for those payload files aside from the expected IDE
+`.vsixmanifest` extra. Installed runtime oracles pass `134/134` at port `56347` with `X4_FORGE_TIMEOUT_MS=90000`;
+serial E2E passes `106/106` with `treeGone=true`; production build, stage/probe `16/16`, precommit, and Graphify
+`10,396/26,075/336` pass/refresh. The final install backup remains at
+`C:\Users\Moshi\AppData\Local\Temp\x4forge-b119-0.0.71-final-install-backup-20260906T024434135Z`.
+
+At `2026-09-06T06:59:36Z`, OpenVSX returned HTTP `200` for version `0.0.71`, `/versions` contained `0.0.71`, and
+the independently downloaded artifact from the public version URL matched the local VSIX exactly by size and SHA-256.
+At `2026-09-06T07:08:17Z`, `/latest` also returned `0.0.71` with the same public download URL. The earlier `0.0.70`
+result was transient indexing lag that resolved, not a publish failure or remaining blocker. The AI Influence census
+remains `PARTIAL / IN_PROGRESS`: exact cross-menu few-pixel game parity, exact scale correlation beyond bounded
+fixtures, and full twelve-image reconstruction/current in-game validation remain open;
+`Not verified in game` and no universal Helper/widget parity claim remain. Full record:
+`docs/plans/2026-09-05-b119-ai-influence-visual-dogfood.md` and
+`dev-docs/b119-ai-influence-dogfood/visual-release-20260905/CENSUS.md`. No capability-map delta.
+
 ### B115 · Forge Capability Convergence `in_progress` (P0, PRIORITY OVERRIDE)
 
 Ken explicitly promoted GitHub initiative #9 and child requests #10–#21 above the active R13 close on 2026-07-31.

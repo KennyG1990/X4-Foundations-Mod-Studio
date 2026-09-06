@@ -6576,6 +6576,35 @@ const acceptedRawSceneResult = (): X4UiLayoutProgramResult => {
   return result;
 };
 
+test('B119 fail-first: real producer refusal crosses Scene without wrapper substitution', () => {
+  const model = buildX4UiCallModel({ rel: 'raw-scene.lua', text: rawProducerSource, sourcePath: 'fixture://raw-scene.lua' });
+  const target = createX4UiLayoutTargetCatalog(model).targets.find(candidate => candidate.kind === 'top-level');
+  assert(target !== undefined && rawProducerProjection.program !== undefined, 'real refusal fixture must retain its source target and baseline profile');
+  const producerRefusal = projectX4UiLayoutProgram(
+    model,
+    target,
+    rawProducerProjection.program.profile,
+    undefined,
+    { catalogId: 'forged-preview-path-catalog', source: target.sourceIdentity, selections: [] },
+  );
+  assert('refusal' in producerRefusal && producerRefusal.status === 'refused' && producerRefusal.refusal.source !== undefined, `real producer refusal must include source evidence: ${JSON.stringify(producerRefusal)}`);
+  assert(JSON.stringify(Object.keys(producerRefusal).sort()) === JSON.stringify(['analysis', 'refusal', 'status', 'verification'])
+    && !Object.prototype.hasOwnProperty.call(producerRefusal, 'program'), `real producer refusal wrapper shape drifted: ${JSON.stringify({ status: producerRefusal.status, ownKeys: Object.keys(producerRefusal) })}`);
+
+  const sceneResult = buildX4UiScene(producerRefusal, corpus, rawProducerProjection.profile!);
+  assert(sceneResult.status === 'refused' && !('scene' in sceneResult), `real producer refusal must not create Scene geometry: ${JSON.stringify(sceneResult)}`);
+  assert(sceneResult.refusal.message === producerRefusal.refusal.message
+    && isDeepStrictEqual(sceneResult.refusal.source, producerRefusal.refusal.source), `Scene must preserve the producer refusal message/source: ${JSON.stringify({ producer: producerRefusal.refusal, scene: sceneResult.refusal })}`);
+  assert(sceneResult.refusal.message !== 'refused layout program result wrapper is malformed', 'real producer refusal must not be rewritten as a malformed wrapper');
+  assert(producerRefusal.verification.game === X4_UI_LAYOUT_GAME_TRUTH && producerRefusal.verification.gameVerified === false, 'real producer refusal must retain the game-verification boundary');
+
+  const forged = { ...producerRefusal, extra: true } as unknown as X4UiLayoutProgramResult;
+  const forgedResult = buildX4UiScene(forged, corpus, rawProducerProjection.profile!);
+  assert(forgedResult.status === 'refused' && !('scene' in forgedResult)
+    && forgedResult.refusal.code === 'invalid-program'
+    && forgedResult.refusal.message === 'refused layout program result wrapper is malformed', `forged refused wrapper with an extra key must remain rejected: ${JSON.stringify(forgedResult)}`);
+});
+
 test('9th audit: one-sided producer-fact and reduced setColSpan mutations stop at the pair boundary', () => {
   const sourceText = [
     'local menu = { name = "NinthAuditFacts", layer = 1 }',
@@ -8880,6 +8909,208 @@ if (b119ConfiguredCensus.status === 'unavailable') {
     assert(sampled.status === 'partial' && sampled.preview.status === 'partial' && sceneResult.status === 'partial' && sampled.paint.status === 'partial' && sampled.canRender, source.label + ' exact public session status chain changed');
     assert(sampled.preview.gaps.length === 0, source.label + ' exact public session must not carry a downstream preview refusal gap');
     assert(sampled.gameTruth === 'Not verified in game' && sampled.gameVerified === false && scene.verification.gameVerified === false && sampled.paint.verification.gameVerified === false, source.label + ' exact public session must remain Not verified in game');
+
+    if (source.label === 'MENU') {
+      const selectedProfile = { width: 2560, height: 1440, uiScale: 1.4 } as const;
+      const selectedUnprojected = projectX4UiEditorSession({ workspace, corpus, profile: selectedProfile, selection });
+      const selectedPathCatalog = selectedUnprojected.pathCatalog;
+      const selectedSampleCatalog = selectedUnprojected.sampleCatalog;
+      assert(selectedPathCatalog !== undefined && selectedSampleCatalog !== null
+        && selectedUnprojected.pathBinding !== undefined
+        && selectedUnprojected.pathCatalogAuthority !== undefined
+        && selectedUnprojected.sampleBinding !== undefined
+        && selectedUnprojected.sampleCatalogAuthority !== undefined, 'MENU selected canonical case must issue both path and sample authorities');
+      const selectedPathEntries = selectedPathCatalog.entries.filter(entry => [711, 717, 721].includes(entry.boundary.start.line)
+        && entry.arm === 'then');
+      assert(selectedPathEntries.length === 3, 'MENU selected canonical case must issue exactly the direct-target 711/717/721 then arms: ' + JSON.stringify(selectedPathEntries));
+      const selectedPaths = {
+        catalogId: selectedPathCatalog.id,
+        source: selectedPathCatalog.sourceIdentity,
+        selections: selectedPathEntries.map(entry => ({ id: entry.id, boundaryId: entry.boundaryId, armId: entry.armId })),
+      };
+      const selectedValues = selectedSampleCatalog.entries.map((entry, index) => {
+        const exactValue: number | string | undefined = {
+          4: 600,
+          5: 670,
+          6: 1050,
+          7: 99,
+          8: 600,
+          9: 1050,
+          10: 'Faction Officer      ^ scroll - 4 of 8 turns',
+          11: 600,
+          12: 770,
+          13: 1050,
+          14: 'ON THE TABLE - PAYMENT REQUESTED',
+          15: 'ref 24K',
+        }[index];
+        return {
+          id: entry.id,
+          value: exactValue ?? (entry.expectedType === 'boolean' ? true : entry.expectedType === 'number' ? 80 : 'sampled'),
+        };
+      });
+      const selectedSampleInput = {
+        catalogId: selectedSampleCatalog.id,
+        source: selectedSampleCatalog.sourceIdentity,
+        values: selectedValues,
+      };
+      const conservative = projectX4UiEditorSession({
+        workspace,
+        corpus,
+        profile: selectedProfile,
+        selection,
+        samples: selectedSampleInput,
+        sampleBinding: selectedUnprojected.sampleBinding,
+        sampleCatalogAuthority: selectedUnprojected.sampleCatalogAuthority,
+      });
+      const conservativeProgram = conservative.preview.program !== null && conservative.preview.program.status !== 'refused'
+        ? conservative.preview.program.program
+        : undefined;
+      const conservativeNestedOperations = conservativeProgram?.operations.filter(operation => [725, 726, 729, 741, 742, 744, 750, 751, 755].includes(operation.source.start.line)) ?? [];
+      assert(conservativeNestedOperations.length > 0
+        && conservativeNestedOperations.every(operation => operation.status === 'conditional' || operation.status === 'unreachable'), 'MENU canonical no-selection case must retain conservative nested pending evidence: ' + JSON.stringify(conservativeNestedOperations.map(operation => ({ line: operation.source.start.line, kind: operation.kind, status: operation.status }))));
+      const selected = projectX4UiEditorSession({
+        workspace,
+        corpus,
+        profile: selectedProfile,
+        selection,
+        samples: selectedSampleInput,
+        sampleBinding: selectedUnprojected.sampleBinding,
+        sampleCatalogAuthority: selectedUnprojected.sampleCatalogAuthority,
+        paths: selectedPaths,
+        pathBinding: selectedUnprojected.pathBinding,
+        pathCatalogAuthority: selectedUnprojected.pathCatalogAuthority,
+      });
+      const selectedProgramResult = selected.preview.program;
+      const selectedProgram = selectedProgramResult !== null && selectedProgramResult.status !== 'refused'
+        ? selectedProgramResult.program
+        : undefined;
+      const selectedEvidenceAuthority = selectedProgramResult !== null && selectedProgramResult.status !== 'refused'
+        ? selectedProgramResult.evidenceAuthority
+        : undefined;
+      const selectedStage = selectedProgramResult === null || selectedProgram === undefined
+        ? 'preview-program-unavailable'
+        : selectedEvidenceAuthority === undefined
+          ? 'preview-evidence-authority-unavailable'
+          : diagnoseX4UiSceneStructureForTest(selectedProgram, selectedEvidenceAuthority);
+      const selectedLayout = selectedProgram === undefined ? undefined : {
+        samples: selectedValues.length,
+        consumed: selectedProgram.previewSampleBindings.filter(binding => binding.status === 'consumed').length,
+        notConsumed: selectedProgram.previewSampleBindings.filter(binding => binding.status !== 'consumed').length,
+        operations: selectedProgram.operations.length,
+        applied: selectedProgram.operations.filter(operation => operation.status === 'applied').length,
+        frames: selectedProgram.frames.length,
+        tables: selectedProgram.tables.length,
+        rows: selectedProgram.rows.length,
+        cells: selectedProgram.cells.length,
+      };
+      const selectedOperationReceipt = selectedProgram?.operations
+        .filter(operation => [711, 717, 721, 725, 726, 729, 741, 742, 744, 750, 751, 755, 826, 830, 838, 840].includes(operation.source.start.line))
+        .map(operation => ({
+          line: operation.source.start.line,
+          kind: operation.kind,
+          status: operation.status,
+          table: operation.tableId?.split('|')[1],
+          kernel: operation.kernel === undefined ? undefined : {
+            beforeRows: operation.kernel.stateBefore?.rows.length,
+            afterRows: operation.kernel.stateAfter?.rows.length,
+            beforeCells: operation.kernel.stateBefore?.rows.reduce((count, row) => count + row.cells.length, 0),
+            afterCells: operation.kernel.stateAfter?.rows.reduce((count, row) => count + row.cells.length, 0),
+          },
+        }));
+      const selectedKernelReceipt = selectedProgram?.tables.map(table => ({
+        table: table.id.split('|')[1],
+        status: table.status,
+        rows: table.rowIds.length,
+        kernelRows: table.kernelState?.rows.length,
+        kernelCells: table.kernelState?.rows.reduce((count, row) => count + row.cells.length, 0),
+        final: table.kernelState?.final,
+      }));
+      const selectedFactReceipt = (fact: X4UiLayoutDescriptorFact | undefined): unknown => fact === undefined ? undefined : {
+        status: fact.status,
+        expectedType: fact.expectedType,
+        value: fact.status === 'known' ? fact.value : undefined,
+        expression: fact.expression,
+        sourcePin: fact.sourcePin,
+      };
+      const selectedReviewCell = selectedProgram?.cells.find(cell => selectedProgram.operations.some(operation => operation.cellId === cell.id
+        && operation.kind === 'createButton' && operation.source.start.line === 755));
+      const selectedReviewCreator = selectedReviewCell === undefined ? undefined : selectedProgram?.operations.find(operation => operation.cellId === selectedReviewCell.id
+        && operation.kind === 'createButton' && operation.source.start.line === 755);
+      console.log('B119 canonical selected nested receipt: ' + JSON.stringify({
+        profile: selectedProfile,
+        sourceSha256: selectedPathCatalog.sourceIdentity.sha256,
+        pathLines: selectedPathEntries.map(entry => ({ line: entry.boundary.start.line, invocationIds: entry.invocationIds.length, arm: entry.arm })),
+        sampleValues: selectedSampleCatalog.entries
+          .map((entry, index) => ({ line: entry.source.start.line, value: selectedValues[index]?.value }))
+          .filter((_, index) => [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].includes(index)),
+        layout: selectedLayout,
+        firstSceneStage: selectedStage,
+        producer: selectedOperationReceipt,
+        kernel: selectedKernelReceipt,
+        reviewCell: selectedReviewCell === undefined ? undefined : {
+          rowIndex: selectedReviewCell.rowIndex,
+          column: selectedReviewCell.column,
+          status: selectedReviewCell.status,
+          kernel: selectedReviewCell.kernelState === undefined ? undefined : {
+            type: selectedReviewCell.kernelState.type,
+            height: selectedReviewCell.kernelState.height,
+            scaling: selectedReviewCell.kernelState.scaling,
+            colspan: selectedReviewCell.kernelState.colspan,
+          },
+          outerHeight: selectedFactReceipt(selectedReviewCell.descriptorFacts.outerHeight),
+          creatorOuterHeight: selectedFactReceipt(selectedReviewCreator?.descriptorFacts.outerHeight),
+        },
+        pathReconciliation: selected.pathReconciliation.status,
+        sampleReconciliation: selected.sampleReconciliation.status,
+        scene: selected.preview.scene?.status,
+        paint: selected.paint?.status,
+        canRender: selected.canRender,
+        gameTruth: selected.gameTruth,
+        gameVerified: selected.gameVerified,
+      }));
+      assert(selected.pathReconciliation.status === 'accepted' && selected.sampleReconciliation.status === 'accepted', 'MENU selected canonical path/sample authority must be accepted');
+      assert(selectedLayout !== undefined
+        && selectedLayout.samples === 22
+        && selectedLayout.operations === 66
+        && selectedLayout.applied === 35
+        && selectedLayout.frames === 1
+        && selectedLayout.tables === 4
+        && selectedLayout.rows === 9
+        && selectedLayout.cells === 88, 'MENU selected canonical Layout counts must be 66/35 and 1/4/9/88: ' + JSON.stringify(selectedLayout));
+      assert(selectedProgram !== undefined, 'MENU selected canonical projection must expose its Layout program');
+      const selectedFactValue = (fact: X4UiLayoutDescriptorFact | undefined): unknown => fact?.status === 'known' ? fact.value : undefined;
+      const selectedOperation = (line: number, kind: X4UiLayoutOperation['kind']): X4UiLayoutOperation | undefined => selectedProgram?.operations.find(operation => operation.source.start.line === line && operation.kind === kind);
+      const selectedPendingHeader = selectedOperation(726, 'createText');
+      const selectedPendingTx = selectedOperation(729, 'createText');
+      const selectedFooter = selectedOperation(751, 'createText');
+      const selectedReview = selectedOperation(755, 'setText');
+      const selectedSend = selectedOperation(838, 'createButton');
+      const selectedEnd = selectedOperation(840, 'createButton');
+      const selectedLoopOperations = selectedProgram?.operations.filter(operation => operation.kind === 'createText'
+        && (operation.source.start.line === 742 || operation.source.start.line === 744)) ?? [];
+      assert(selectedProgram?.localExpansion === undefined && selectedProgram.previewPathSelections.length === 3, 'MENU selected canonical projection must forward three path selections without replaying local invocations');
+      assert(selectedPendingHeader?.status === 'unresolved'
+        && selectedFactValue(selectedPendingHeader.descriptorFacts.primaryContent) === 'ON THE TABLE - PAYMENT REQUESTED'
+        && selectedPendingTx?.status === 'unresolved'
+        && selectedFactValue(selectedPendingTx.descriptorFacts.primaryContent) === 'ref 24K'
+        && selectedFooter?.status === 'unresolved'
+        && selectedReview?.status === 'applied'
+        && selectedFactValue(selectedReview.descriptorFacts.text) === 'REVIEW'
+        && selectedSend?.status === 'applied'
+        && selectedEnd?.status === 'applied', 'MENU selected canonical pending/footer ownership must retain header, tx, REVIEW, SEND, and END: ' + JSON.stringify({
+          header: selectedPendingHeader,
+          tx: selectedPendingTx,
+          footer: selectedFooter,
+          review: selectedReview,
+          send: selectedSend,
+          end: selectedEnd,
+        }));
+      assert(selectedLoopOperations.length === 2 && selectedLoopOperations.every(operation => operation.status === 'conditional'), 'MENU selected canonical pending.rows loop terms must remain conditional and unavailable: ' + JSON.stringify(selectedLoopOperations));
+      assert(selectedStage === undefined, 'MENU selected canonical program still refuses at Scene structure stage ' + String(selectedStage));
+      assert(selected.preview.scene !== null && selected.preview.scene.status !== 'refused', 'MENU selected canonical session must reach non-refused Scene: ' + JSON.stringify(selected.preview.scene));
+      assert(selected.paint !== null && selected.paint.status !== 'refused' && selected.canRender, 'MENU selected canonical session must reach Paint and canRender');
+      assert(selected.gameTruth === 'Not verified in game' && selected.gameVerified === false, 'MENU selected canonical case must remain Not verified in game');
+    }
 
     console.log('B119 exact configured public-session census ' + source.label + ': ' + JSON.stringify({
       sourceSha256: source.sourceSha256,

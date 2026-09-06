@@ -8,6 +8,7 @@
 
 import type { ModWorkspace } from '../types';
 import {
+  canonicalizeX4UiLayoutModel,
   createX4UiLayoutTargetCatalog,
   isExactX4UiLayoutColorValue,
   isIssuedX4UiLayoutEvidencePair,
@@ -884,16 +885,6 @@ const isStructuredCloneableClosedData = (value: unknown): boolean => {
   }
 };
 
-const removeUndefined = (value: unknown): unknown => {
-  if (Array.isArray(value)) return value.map(item => removeUndefined(item));
-  if (!isRecord(value)) return value;
-  const result: Record<string, unknown> = {};
-  for (const [key, child] of Object.entries(value)) {
-    if (child !== undefined) result[key] = removeUndefined(child);
-  }
-  return result;
-};
-
 const isCallModel = (value: unknown): value is X4UiCallModel => {
   if (!isRecord(value) || value.parsed !== true || !isRecord(value.file)) return false;
   return typeof value.file.rel === 'string'
@@ -945,55 +936,19 @@ const isX4UiValue = (value: unknown): value is X4UiValue => Boolean(
   && isLocationRecord(value.location),
 );
 
-const sameNormalizedLocation = (left: unknown, right: unknown): boolean => {
-  if (!isLocationRecord(left) || !isLocationRecord(right)) return false;
-  return left.file === right.file
-    && left.sourcePath === right.sourcePath
-    && left.start.line === right.start.line
-    && left.start.column === right.start.column
-    && left.start.offset === right.start.offset
-    && left.end.line === right.end.line
-    && left.end.column === right.end.column
-    && left.end.offset === right.end.offset;
-};
-
-const isAliasedScalarValue = (value: Record<string, unknown>): boolean => {
-  const expression = value.expression;
-  return value.status === 'static'
-    && (value.type === 'number' || value.type === 'string' || value.type === 'boolean')
-    && typeof expression === 'string'
-    && /^[A-Za-z_][A-Za-z0-9_]*$/.test(expression)
-    && isLocationRecord(value.location)
-    && isLocationRecord(value.sourceLiteral)
-    && !sameNormalizedLocation(value.location, value.sourceLiteral);
-};
-
 /**
- * Remove explicit undefined optional location fields and hide only the
- * sourceLiteral on identifier aliases before the existing JSON evidence owner
- * runs. The raw call model remains authoritative for edit locking; this
- * normalization only lets the layout owner project an otherwise valid alias.
+ * Validate the source-edit boundary, then consume the layout owner's single
+ * canonical complete model view. The raw call model remains authoritative for
+ * edit locking; this view only lets the layout owner project an otherwise valid
+ * identifier alias.
  */
 export const normalizeX4UiSourceEditLayoutModel = (model: X4UiCallModel): X4UiCallModel => {
   if (!isClosedPlainOwnData(model)) throw new Error(CLOSED_MODEL_ERROR);
   if (!isCallModel(model)) throw new Error(CLOSED_MODEL_ERROR);
   if (hasDuplicateCallEvidence(model)) throw new Error(DUPLICATE_MODEL_ERROR);
-  const withoutUndefined = removeUndefined(model);
-  const normalized = normalizeAliasedLayoutEvidence(withoutUndefined);
+  const normalized = canonicalizeX4UiLayoutModel(model);
   if (!isCallModel(normalized) || !isClosedPlainOwnData(normalized)) throw new Error(CLOSED_MODEL_ERROR);
   return normalized;
-};
-
-const normalizeAliasedLayoutEvidence = (value: unknown): unknown => {
-  if (Array.isArray(value)) return value.map(item => normalizeAliasedLayoutEvidence(item));
-  if (!isRecord(value)) return value;
-  const aliased = isAliasedScalarValue(value);
-  const result: Record<string, unknown> = {};
-  for (const [key, child] of Object.entries(value)) {
-    if (aliased && key === 'sourceLiteral') continue;
-    result[key] = normalizeAliasedLayoutEvidence(child);
-  }
-  return result;
 };
 
 const layoutModel = normalizeX4UiSourceEditLayoutModel;

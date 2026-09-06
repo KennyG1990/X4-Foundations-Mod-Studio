@@ -582,6 +582,41 @@ const programWithAuthority = (
 const refusalCode = (result: ReturnType<typeof projectX4UiLayoutProgram>): string | undefined =>
   'refusal' in result ? result.refusal.code : undefined;
 
+const b119RefusalModel = buildX4UiCallModel(input(
+  'local menu = { name = "B119 refusal", layer = 1 }',
+  'selftest/b119-refusal.lua',
+));
+const b119RefusalResult = projectX4UiLayoutProgram(
+  b119RefusalModel,
+  topTarget(b119RefusalModel),
+  {} as never,
+);
+const b119Refusal = 'refusal' in b119RefusalResult ? b119RefusalResult : undefined;
+check('B119 fail-first refusal result has the exact producer-owned key shape',
+  b119Refusal !== undefined
+    && b119Refusal.status === 'refused'
+    && JSON.stringify(Object.keys(b119RefusalResult).sort()) === JSON.stringify(['analysis', 'refusal', 'status', 'verification'])
+    && !Object.prototype.hasOwnProperty.call(b119RefusalResult, 'program')
+    && b119Refusal.refusal.code === 'malformed-profile'
+    && b119Refusal.refusal.message === 'projection profile contains an unknown or missing key'
+    && Object.isFrozen(b119RefusalResult)
+    && Object.isFrozen(b119Refusal.refusal)
+    && Object.isFrozen(b119Refusal.analysis)
+    && Object.isFrozen(b119Refusal.verification)
+    && b119Refusal.verification.game === X4_UI_LAYOUT_GAME_TRUTH
+    && b119Refusal.verification.gameVerified === false,
+  detail({
+    status: b119RefusalResult.status,
+    ownKeys: Object.keys(b119RefusalResult),
+    refusal: b119Refusal?.refusal,
+    frozen: {
+      result: Object.isFrozen(b119RefusalResult),
+      refusal: b119Refusal !== undefined && Object.isFrozen(b119Refusal.refusal),
+      analysis: b119Refusal !== undefined && Object.isFrozen(b119Refusal.analysis),
+      verification: Object.isFrozen(b119RefusalResult.verification),
+    },
+  }));
+
 const operation = (program: X4UiLayoutProgram, kind: string, index = 0) =>
   program.operations.filter(candidate => candidate.kind === kind)[index];
 
@@ -9200,6 +9235,117 @@ const run = (): {
       && selectedBranchProgram.status === 'partial'
       && selectedBranchProgram.verification.game === X4_UI_LAYOUT_GAME_TRUTH,
     detail({ tables: selectedBranchProgram.tables, expansion: selectedBranchProgram.localExpansion }));
+
+  const helperBodyBranchSource = [
+    'local Helper = rawget(_G, "Helper")',
+    'local function renderBranch(frame, branch)',
+    '  local table = frame:addTable(1, { width = 40 })',
+    '  local row = table:addRow(false, {})',
+    '  if branch == "first" then',
+    '    row[1]:createText("HELPER_FIRST", { height = 10 })',
+    '  elseif branch == "second" then',
+    '    row[1]:createText("HELPER_SECOND", { height = 10 })',
+    '  else',
+    '    row[1]:createText("HELPER_OTHER", { height = 10 })',
+    '  end',
+    'end',
+    'local function display()',
+    '  local menu = { name = "HelperBodyBranches", layer = 1 }',
+    '  local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    '  renderBranch(frame, "first")',
+    '  frame:display()',
+    'end',
+  ].join('\n');
+  const helperBodyBranchModel = buildX4UiCallModel(input(
+    helperBodyBranchSource,
+    'selftest/helper-body-branch-preview.lua',
+  ));
+  const helperBodyBranchTarget = namedTarget(helperBodyBranchModel, 'display');
+  const helperBodyBranchProfile = profileFor(helperBodyBranchModel, {
+    minTextHeight: 10,
+    localExpansion: { maxDepth: 2, maxInvocations: 4 },
+  });
+  const helperBodyBranchUnselectedProgram = programOf(projectX4UiLayoutProgram(
+    helperBodyBranchModel,
+    helperBodyBranchTarget,
+    helperBodyBranchProfile,
+  ));
+  const helperBodyBranchCatalog = helperBodyBranchUnselectedProgram.localExpansion?.previewPathCatalog;
+  if (!helperBodyBranchCatalog) throw new Error('helper-body branch preview catalog missing');
+  const helperBodyBranchEntries = helperBodyBranchCatalog.entries.filter(candidate =>
+    candidate.reachability !== 'unreachable');
+  const helperBodyFirstPath = helperBodyBranchEntries.find(candidate => candidate.arm === 'then');
+  const helperBodySecondPath = helperBodyBranchEntries.find(candidate =>
+    candidate.arm !== 'then' && candidate.arm !== 'else');
+  const helperBodyOtherPath = helperBodyBranchEntries.find(candidate => candidate.arm === 'else');
+  if (!helperBodyFirstPath || !helperBodySecondPath || !helperBodyOtherPath
+    || new Set(helperBodyBranchEntries.map(candidate => candidate.boundaryId)).size !== 1) {
+    throw new Error('helper-body branch preview catalog entries missing');
+  }
+  const helperBodySelectedPathInput: X4UiLayoutPreviewPathSelectionInput = {
+    catalogId: helperBodyBranchCatalog.id,
+    source: helperBodyBranchCatalog.sourceIdentity,
+    selections: [{
+      id: helperBodyFirstPath.id,
+      boundaryId: helperBodyFirstPath.boundaryId,
+      armId: helperBodyFirstPath.armId,
+    }],
+  };
+  const helperBodySelectedResult = projectX4UiLayoutProgram(
+    helperBodyBranchModel,
+    helperBodyBranchTarget,
+    helperBodyBranchProfile,
+    undefined,
+    helperBodySelectedPathInput,
+  );
+  const helperBodySelectedProgram = programOf(helperBodySelectedResult);
+  const helperBodySelectedAuthority = evidenceAuthorityOf(helperBodySelectedResult);
+  const helperBodyTextOperations = (candidate: X4UiLayoutProgram) => candidate.operations.filter(operation =>
+    operation.kind === 'createText');
+  const helperBodyOperationFor = (candidate: X4UiLayoutProgram, text: string) =>
+    helperBodyTextOperations(candidate).find(operation =>
+      helperBodyBranchSource.slice(operation.source.start.offset, operation.source.end.offset).includes(`"${text}"`));
+  const helperBodySelectedFirstOperation = helperBodyOperationFor(helperBodySelectedProgram, 'HELPER_FIRST');
+  const helperBodySelectedSecondOperation = helperBodyOperationFor(helperBodySelectedProgram, 'HELPER_SECOND');
+  const helperBodySelectedOtherOperation = helperBodyOperationFor(helperBodySelectedProgram, 'HELPER_OTHER');
+  const helperBodyUnselectedStatuses = helperBodyTextOperations(helperBodyBranchUnselectedProgram).map(operation => operation.status);
+  const helperBodySelectedStatuses = {
+    first: helperBodySelectedFirstOperation?.status,
+    second: helperBodySelectedSecondOperation?.status,
+    other: helperBodySelectedOtherOperation?.status,
+  };
+  const helperBodyPairValidation = helperBodySelectedAuthority
+    ? validateX4UiLayoutEvidencePair(helperBodySelectedProgram, helperBodySelectedAuthority)
+    : undefined;
+  const helperBodyDeeplyFrozen = helperBodySelectedAuthority !== undefined
+    && [
+      ...ownDataDescriptorCensus(helperBodySelectedProgram),
+      ...ownDataDescriptorCensus(helperBodySelectedAuthority),
+    ].every(candidate => Object.isFrozen(candidate));
+  check('B119 fail-first expanded helper-body branch applies the exact selected arm and keeps sibling/unselected calls conditional',
+    helperBodyBranchEntries.length === 3
+      && helperBodyBranchUnselectedProgram.localExpansion?.invocations.filter(candidate => candidate.status === 'expanded').length === 1
+      && helperBodyUnselectedStatuses.length === 3
+      && helperBodyUnselectedStatuses.every(status => status === 'conditional')
+      && helperBodySelectedFirstOperation?.status === 'applied'
+      && helperBodySelectedSecondOperation?.status === 'conditional'
+      && helperBodySelectedOtherOperation?.status === 'conditional'
+      && helperBodySelectedProgram.cells.some(candidate =>
+        factValue(candidate.descriptorFacts.primaryContent) === 'HELPER_FIRST')
+      && helperBodySelectedProgram.localExpansion?.previewPathSelections.length === 1
+      && helperBodySelectedProgram.localExpansion.previewPathSelections[0]?.provenance === 'preview-only'
+      && helperBodyDeeplyFrozen
+      && helperBodyPairValidation?.valid === true,
+    detail({
+      selectedStatuses: helperBodySelectedStatuses,
+      unselectedStatuses: helperBodyUnselectedStatuses,
+      tables: helperBodySelectedProgram.tables,
+      cells: helperBodySelectedProgram.cells,
+      expansion: helperBodySelectedProgram.localExpansion,
+      deeplyFrozen: helperBodyDeeplyFrozen,
+      pair: helperBodyPairValidation,
+    }));
+
   const selectedExpandedInvocation = selectedBranchAuthority?.expansion?.invocations.find(
     invocation => invocation.status === 'expanded',
   );
@@ -9553,11 +9699,13 @@ const run = (): {
       && extraPathResult.status === 'refused' && refusalCode(extraPathResult) === 'invalid-preview-path'
       && stalePathResult.status === 'refused' && refusalCode(stalePathResult) === 'preview-path-source-mismatch'
       && unreachablePathResult.status === 'refused' && refusalCode(unreachablePathResult) === 'invalid-preview-path'
-      && disabledPathResult.status === 'refused' && refusalCode(disabledPathResult) === 'invalid-preview-path'
+      && disabledPathResult.status !== 'refused'
+      && disabledPathResult.program?.previewPathSelections.length === 1
+      && disabledPathResult.program?.tables.length === 0
       && malformedPathResult.status === 'refused' && refusalCode(malformedPathResult) === 'malformed-preview-path'
       && !duplicatePathResult.program && !conflictingPathResult.program && !extraPathResult.program
       && !stalePathResult.program && !unreachablePathResult.program
-      && !disabledPathResult.program && !malformedPathResult.program,
+      && malformedPathResult.program === undefined,
     detail({
       duplicatePathResult,
       conflictingPathResult,
@@ -9566,6 +9714,215 @@ const run = (): {
       unreachablePathResult,
       disabledPathResult,
       malformedPathResult,
+    }));
+
+  // The B119 repair exposes the existing source-bound catalog at the program
+  // boundary even when no local-expansion profile is enabled, so direct calls
+  // can consume exact selected arms without expanding local functions.
+  const directBranchSource = [
+    'local Helper = rawget(_G, "Helper")',
+    'local function display(tab)',
+    '  local menu = { name = "DirectBranches", layer = 1 }',
+    '  local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    '  local table = frame:addTable(1, { width = 100 })',
+    '  local row = table:addRow(false, {})',
+    '  if tab == "first" then',
+    '    row[1]:createText("FIRST", { height = 10 })',
+    '  elseif tab == "second" then',
+    '    row[1]:createText("SECOND", { height = 10 })',
+    '  else',
+    '    row[1]:createText("OTHER", { height = 10 })',
+    '  end',
+    '  frame:display()',
+    'end',
+  ].join('\n');
+  const directBranchModel = buildX4UiCallModel(input(directBranchSource, 'selftest/direct-branch-preview.lua'));
+  const directBranchTarget = namedTarget(directBranchModel, 'display');
+  const directBranchProfile = profileFor(directBranchModel, { minTextHeight: 10 });
+  const directBranchUnselected = programOf(projectX4UiLayoutProgram(
+    directBranchModel,
+    directBranchTarget,
+    directBranchProfile,
+  ));
+  const directBranchCatalog = (directBranchUnselected as unknown as {
+    readonly previewPathCatalog?: {
+      readonly id: string;
+      readonly sourceIdentity: X4UiLayoutPreviewPathSelectionInput['source'];
+      readonly entries: readonly { readonly id: string; readonly boundaryId: string; readonly armId: string; readonly arm: string; readonly reachability: string }[];
+    };
+  }).previewPathCatalog;
+  const directFirstPath = directBranchCatalog?.entries.find(candidate =>
+    candidate.arm !== 'else' && candidate.reachability !== 'unreachable');
+  const directBranchSelection = directBranchCatalog && directFirstPath
+    ? {
+      catalogId: directBranchCatalog.id,
+      source: directBranchCatalog.sourceIdentity,
+      selections: [{ id: directFirstPath.id, boundaryId: directFirstPath.boundaryId, armId: directFirstPath.armId }],
+    } satisfies X4UiLayoutPreviewPathSelectionInput
+    : undefined;
+  const directBranchSelected = directBranchSelection === undefined
+    ? undefined
+    : projectX4UiLayoutProgram(
+      directBranchModel,
+      directBranchTarget,
+      directBranchProfile,
+      undefined,
+      directBranchSelection,
+    );
+  check('B119 fail-first direct target catalog exposes a selectable arm without local expansion',
+    directBranchCatalog !== undefined
+      && directBranchSelected?.status !== 'refused'
+      && directBranchSelected?.program?.previewPathSelections.length === 1
+      && directBranchSelected.program.previewPathSelections[0]?.id === directFirstPath?.id
+      && directBranchSelected.program.operations.some(operation => operation.kind === 'createText'
+        && operation.status === 'applied'
+        && directBranchSource.slice(operation.source.start.offset, operation.source.end.offset).includes('"FIRST"')) === true
+      && directBranchSelected.program.operations.filter(operation => operation.kind === 'createText').filter(operation =>
+        directBranchSource.slice(operation.source.start.offset, operation.source.end.offset).includes('"SECOND"')
+        || directBranchSource.slice(operation.source.start.offset, operation.source.end.offset).includes('"OTHER"')).every(operation => operation.status === 'conditional')
+      && directBranchSelected.program.cells.some(candidate => factValue(candidate.descriptorFacts.primaryContent) === 'FIRST')
+      && directBranchSelected.program.previewPathCatalog.entries.length >= 3
+      && Object.isFrozen(directBranchSelected.program.previewPathCatalog)
+      && validateX4UiLayoutEvidencePair(
+        directBranchSelected.program,
+        evidenceAuthorityOf(directBranchSelected)!,
+      ).valid,
+    detail({
+      catalog: directBranchCatalog,
+      selectedStatus: directBranchSelected?.status,
+      selectedOperations: directBranchSelected?.program?.operations.filter(operation => operation.kind === 'createText'),
+    }));
+
+  const hermeticPendingSourceText = [
+    'local Helper = rawget(_G, "Helper")',
+    'local menu = { name = "HermeticPending", layer = 1 }',
+    'function menu.display(pending, bridge, action, termRows, pendingHeader, pendingTx, pendingFooter)',
+    '  local frame = Helper.createFrameHandle(menu, { width = 530, height = 436 })',
+    '  local table = frame:addTable(12, { width = 530, reserveScrollBar = false, scaling = false })',
+    '  if pending then',
+    '    if bridge then',
+    '      if action then',
+    '        local row = table:addRow(false, {})',
+    '        row[1]:setColSpan(7):createText(pendingHeader, { height = 12 })',
+    '        row[8]:setColSpan(5):createText(pendingTx, { height = 12 })',
+    '        for _, term in ipairs(termRows or {}) do',
+    '          row = table:addRow(false, {})',
+    '          row[1]:setColSpan(5):createText(term.left, { height = 10 })',
+    '          row[6]:setColSpan(7):createText(term.right, { height = 10 })',
+    '        end',
+    '        row = table:addRow(true, {})',
+    '        row[1]:setColSpan(9):createText(pendingFooter, { height = 10 })',
+    '        row[10]:setColSpan(3):createButton({ active = true }):setText("REVIEW", { halign = "center" })',
+    '      end',
+    '    end',
+    '  end',
+    '  frame:display()',
+    'end',
+    '',
+  ].join('\n');
+  const hermeticPendingModel = buildX4UiCallModel(input(hermeticPendingSourceText, 'selftest/hermetic-pending-preview.lua'));
+  const hermeticPendingTarget = namedTarget(hermeticPendingModel, 'menu.display');
+  const hermeticPendingProfile = profileFor(hermeticPendingModel, { minTextHeight: 10 });
+  const hermeticPendingBefore = JSON.stringify(hermeticPendingSourceText);
+  const hermeticPendingUnselected = projectX4UiLayoutProgram(
+    hermeticPendingModel,
+    hermeticPendingTarget,
+    hermeticPendingProfile,
+  );
+  const hermeticPendingUnselectedProgram = hermeticPendingUnselected.status === 'refused'
+    ? undefined
+    : hermeticPendingUnselected.program;
+  const hermeticPendingSamples: X4UiLayoutPreviewSampleInput | undefined = hermeticPendingUnselectedProgram === undefined
+    ? undefined
+    : {
+      catalogId: hermeticPendingUnselectedProgram.sampleCatalog.id,
+      source: hermeticPendingUnselectedProgram.sampleCatalog.sourceIdentity,
+      values: hermeticPendingUnselectedProgram.sampleCatalog.entries.map(entry => ({
+        id: entry.id,
+        value: entry.expectedType === 'number'
+          ? 100
+          : entry.expectedType === 'boolean'
+            ? true
+            : entry.expression.toLowerCase().includes('header')
+              ? 'ON THE TABLE - PREVIEW'
+              : entry.expression.toLowerCase().includes('footer')
+                ? 'Nothing moves until you say so... remember that you did.'
+                : entry.expression.toLowerCase().includes('tx')
+                  ? 'REF-PREVIEW'
+                  : 'PREVIEW',
+      })),
+    };
+  const hermeticPendingBoundaryStartOffsets = new Set(
+    ['pending', 'bridge', 'action'].map(name => hermeticPendingSourceText.indexOf(`if ${name} then`)),
+  );
+  const hermeticPendingThenEntries = hermeticPendingUnselectedProgram?.previewPathCatalog.entries.filter(entry =>
+    entry.boundary.sourcePath === hermeticPendingUnselectedProgram.previewPathCatalog.sourceIdentity.sourcePath
+      && hermeticPendingBoundaryStartOffsets.has(entry.boundary.start.offset)
+      && entry.arm === 'then'
+      && entry.reachability !== 'unreachable') ?? [];
+  const hermeticPendingPaths: X4UiLayoutPreviewPathSelectionInput | undefined = hermeticPendingUnselectedProgram === undefined
+    ? undefined
+    : {
+      catalogId: hermeticPendingUnselectedProgram.previewPathCatalog.id,
+      source: hermeticPendingUnselectedProgram.previewPathCatalog.sourceIdentity,
+      selections: hermeticPendingThenEntries.map(entry => ({ id: entry.id, boundaryId: entry.boundaryId, armId: entry.armId })),
+    };
+  const hermeticPendingSelected = hermeticPendingPaths === undefined || hermeticPendingSamples === undefined
+    ? undefined
+    : projectX4UiLayoutProgram(
+      hermeticPendingModel,
+      hermeticPendingTarget,
+      hermeticPendingProfile,
+      hermeticPendingSamples,
+      hermeticPendingPaths,
+    );
+  const hermeticPendingSelectedProgram = hermeticPendingSelected?.status === 'refused'
+    ? undefined
+    : hermeticPendingSelected?.program;
+  const hermeticPendingOperations = hermeticPendingSelectedProgram?.operations ?? [];
+  const hermeticPendingOperationText = (operation: { readonly source: { readonly start: { readonly offset: number }; readonly end: { readonly offset: number } } }): string => (
+    hermeticPendingSourceText.slice(operation.source.start.offset, operation.source.end.offset)
+  );
+  const hermeticHeaderOperation = hermeticPendingOperations.find(operation => operation.kind === 'createText' && hermeticPendingOperationText(operation).includes('pendingHeader'));
+  const hermeticFooterOperation = hermeticPendingOperations.find(operation => operation.kind === 'createText' && hermeticPendingOperationText(operation).includes('pendingFooter'));
+  const hermeticReviewOperation = hermeticPendingOperations.find(operation => operation.kind === 'setText' && hermeticPendingOperationText(operation).includes('"REVIEW"'));
+  const hermeticTermOperations = hermeticPendingOperations.filter(operation => operation.kind === 'createText'
+    && (hermeticPendingOperationText(operation).includes('term.left') || hermeticPendingOperationText(operation).includes('term.right')));
+  const hermeticReviewCell = hermeticPendingSelectedProgram?.cells.find(cell => factValue(cell.descriptorFacts.span) === 3
+    && hermeticPendingSourceText.slice(cell.source.start.offset, cell.source.end.offset).includes('row[10]'));
+  const hermeticReviewRow = hermeticPendingSelectedProgram?.rows.find(row => hermeticPendingSourceText.slice(row.source.start.offset, row.source.end.offset).includes('addRow(true)'));
+  check('B119 hermetic nested pending paths materialize dynamic header and REVIEW ownership while generic-loop terms stay unavailable',
+    hermeticPendingThenEntries.length === 3
+      && hermeticPendingSelected?.status !== 'refused'
+      && hermeticPendingSelectedProgram?.localExpansion === undefined
+      && hermeticPendingSelectedProgram?.previewPathSelections.length === 3
+      && hermeticHeaderOperation?.status !== 'conditional'
+      && hermeticPendingSelectedProgram?.cells.some(cell => factValue(cell.descriptorFacts.primaryContent) === 'ON THE TABLE - PREVIEW')
+      && hermeticFooterOperation?.status !== 'conditional'
+      && hermeticPendingSelectedProgram?.cells.some(cell => factValue(cell.descriptorFacts.primaryContent) === 'Nothing moves until you say so... remember that you did.')
+      && hermeticReviewOperation?.status === 'applied'
+      && factValue(hermeticReviewOperation?.descriptorFacts.text) === 'REVIEW'
+      && hermeticReviewRow?.status !== 'unreachable'
+      && hermeticReviewRow?.status !== 'conditional'
+      && hermeticReviewCell?.status !== 'unreachable'
+      && hermeticReviewCell?.status !== 'conditional'
+      && factValue(hermeticReviewCell?.descriptorFacts.span) === 3
+      && hermeticTermOperations.length === 2
+      && hermeticTermOperations.every(operation => operation.status === 'conditional')
+      && hermeticPendingSelectedProgram?.verification.game === X4_UI_LAYOUT_GAME_TRUTH
+      && hermeticPendingBefore === JSON.stringify(hermeticPendingSourceText),
+    detail({
+      target: hermeticPendingTarget.name,
+      pendingSelections: hermeticPendingThenEntries,
+      selectedStatus: hermeticPendingSelected?.status,
+      selectedPaths: hermeticPendingSelectedProgram?.previewPathSelections,
+      header: hermeticHeaderOperation,
+      footer: hermeticFooterOperation,
+      review: hermeticReviewOperation,
+      reviewRow: hermeticReviewRow,
+      reviewCell: hermeticReviewCell,
+      termOperations: hermeticTermOperations,
+      sourceUnchanged: hermeticPendingBefore === JSON.stringify(hermeticPendingSourceText),
     }));
 
   const invocationRefusalSource = [

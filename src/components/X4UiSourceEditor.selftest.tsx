@@ -4,6 +4,7 @@
  */
 
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import React, { act } from 'react';
@@ -38,7 +39,11 @@ import {
 import { projectX4UiEditorSession } from '../lib/x4UiEditorSession';
 import { KEEP_OUT_IDS, KEEP_OUT_PRESET_IDS, KEEP_OUT_PRESETS } from '../lib/x4UiKeepOuts';
 import { lintX4UiCallModel } from '../lib/x4UiLint';
-import type { X4UiLayoutPreviewSampleCatalog } from '../lib/x4UiLayoutProgram';
+import type {
+  X4UiLayoutPreviewPathCatalog,
+  X4UiLayoutPreviewPathSelectionInput,
+  X4UiLayoutPreviewSampleCatalog,
+} from '../lib/x4UiLayoutProgram';
 import { applyX4UiSourceEdit, type X4UiSourceEditCatalog } from '../lib/x4UiSourceEdits';
 import {
   ZEKTON_DDS_HEADER_SIZE,
@@ -50,6 +55,7 @@ import UIBuilder, * as UIBuilderApiModule from './UIBuilder';
 import X4UiSourceEditor, {
   X4UiSourceEditorLinter,
   X4UiSourceEditorPreviewGeometry,
+  X4UiSourceEditorPreviewPaths,
   X4UiSourceEditorSamples,
   addX4UiManualCalibrationPoint,
   addX4UiManualCalibrationDraft,
@@ -129,6 +135,9 @@ assert.match(sourceMarkup, /Source and target selection/);
 assert.match(sourceMarkup, /Imported-source linter/);
 assert.match(sourceMarkup, /Preview geometry diagnostics/);
 assert.match(sourceMarkup, /Layout evidence only · Not verified in game/);
+assert.match(sourceMarkup, /Preview branch paths/);
+assert.match(sourceMarkup, /owner-issued preview path catalog/);
+assert.match(sourceMarkup, /Preview only/);
 
 const canvasExportFailFirstApi = X4UiSourceEditorApiModule as unknown as Record<string, unknown>;
 const canvasExportFailFirstMissing = [
@@ -294,6 +303,74 @@ assert.match(sampleMarkup, /type="number"/);
 assert.match(sampleMarkup, /type="text"/);
 assert.match(sampleMarkup, /true/);
 assert.match(sampleMarkup, /false/);
+
+const pathCatalog: X4UiLayoutPreviewPathCatalog = {
+  id: 'preview-path-catalog-selftest',
+  sourceIdentity: sampleCatalog.sourceIdentity,
+  targetId: 'target-selftest',
+  entries: [
+    {
+      id: 'path-then',
+      boundaryId: 'boundary-one',
+      armId: 'boundary-one:then:0',
+      boundary: { ...sampleLocation, start: { line: 5, column: 2, offset: 120 }, end: { line: 12, column: 3, offset: 260 } },
+      arm: 'then',
+      armIndex: 0,
+      reachability: 'reachable',
+      invocationIds: [],
+      provenance: 'preview-only',
+    },
+    {
+      id: 'path-elseif',
+      boundaryId: 'boundary-one',
+      armId: 'boundary-one:elseif:1',
+      boundary: { ...sampleLocation, start: { line: 5, column: 2, offset: 120 }, end: { line: 12, column: 3, offset: 260 } },
+      arm: 'elseif',
+      armIndex: 1,
+      reachability: 'conditional',
+      invocationIds: [],
+      provenance: 'preview-only',
+    },
+    {
+      id: 'path-else',
+      boundaryId: 'boundary-one',
+      armId: 'boundary-one:else:2',
+      boundary: { ...sampleLocation, start: { line: 5, column: 2, offset: 120 }, end: { line: 12, column: 3, offset: 260 } },
+      arm: 'else',
+      armIndex: 2,
+      reachability: 'unreachable',
+      invocationIds: [],
+      provenance: 'preview-only',
+    },
+  ],
+};
+const pathInput: X4UiLayoutPreviewPathSelectionInput = {
+  catalogId: pathCatalog.id,
+  source: pathCatalog.sourceIdentity,
+  selections: [{ id: 'path-then', boundaryId: 'boundary-one', armId: 'boundary-one:then:0' }],
+};
+let renderedPathSelections = 0;
+const pathMarkup = renderToStaticMarkup(
+  <X4UiSourceEditorPreviewPaths
+    catalog={pathCatalog}
+    paths={pathInput}
+    onPathSelection={() => { renderedPathSelections += 1; }}
+    onReset={() => { renderedPathSelections += 1; }}
+  />,
+);
+assert.equal(renderedPathSelections, 0, 'path controls must not mutate state during SSR');
+assert.match(pathMarkup, /data-testid="x4-ui-preview-paths-region"/);
+assert.match(pathMarkup, /Preview branch paths/);
+assert.match(pathMarkup, /Preview only/);
+assert.match(pathMarkup, /selftest\/ui\/samples\.lua:5:3-12:4/);
+assert.match(pathMarkup, /arm then \[0\]/);
+assert.match(pathMarkup, /arm elseif \[1\]/);
+assert.match(pathMarkup, /arm else \[2\]/);
+assert.match(pathMarkup, /unavailable · statically unreachable/);
+assert.match(pathMarkup, /data-testid="x4-ui-preview-paths-reset"/);
+assert.match(pathMarkup, /Reset path selections/);
+assert.match(pathMarkup, /Not verified in game/);
+assert.doesNotMatch(pathMarkup, /programKey|profileKey|selectionKey/);
 
 const fixtureBefore = JSON.stringify(workspace);
 renderSource(workspace);
@@ -1318,6 +1395,18 @@ assert.match(sourceText, /sameX4UiEditorSampleBinding/);
 assert.match(sourceText, /sampleCatalogAuthority/);
 assert.match(sourceText, /projection\.sampleCatalogAuthority/);
 assert.match(sourceText, /updateX4UiEditorSampleState\(sampleInput, projection\.sampleCatalog, entryId, raw, projection\.sampleCatalogAuthority\)/);
+assert.match(sourceText, /X4UiSourceEditorPreviewPaths/);
+assert.match(sourceText, /pathBinding/);
+assert.match(sourceText, /projection\.pathBinding/);
+assert.match(sourceText, /sameX4UiEditorPathBinding/);
+assert.match(sourceText, /pathCatalogAuthority/);
+assert.match(sourceText, /projection\.pathCatalogAuthority/);
+assert.match(sourceText, /updateX4UiEditorPathState\(pathInput, projection\.pathCatalog, entryId, projection\.pathCatalogAuthority\)/);
+assert.match(sourceText, /resetX4UiEditorPathState\(pathInput, projection\.pathCatalog, projection\.pathCatalogAuthority\)/);
+assert.match(sourceText, /name=\{`x4-ui-preview-path-\$\{boundaryId\}`\}/);
+assert.match(sourceText, /disabled=\{unavailable\}/);
+assert.match(sourceText, /onPathSelection=\{updatePath\}/);
+assert.match(sourceText, /onReset=\{resetPaths\}/);
 assert.doesNotMatch(sampleMarkup, /programKey|profileKey|selectionKey/);
 assert.match(sourceText, /whole frame disappears; UI reloads; conversation closes\./);
 assert.match(sourceText, /workspace,\n\s+corpus:/);
@@ -4125,6 +4214,16 @@ function p7SourceRecord(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 }
 
+function p7SourceString(record: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = record?.[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function p7SourceNumber(record: Record<string, unknown> | undefined, key: string): number | undefined {
+  const value = record?.[key];
+  return typeof value === 'number' ? value : undefined;
+}
+
 function p7SourceClassify(
   result: unknown,
   overrides: Partial<{ readonly signalAborted: boolean; readonly requestActive: boolean; readonly requestGeneration: number; readonly currentGeneration: number }> = {},
@@ -4173,7 +4272,7 @@ function p7SourceReceipt(value: unknown): unknown {
   if (record === undefined) return value;
   if (typeof record.error === 'string') return { error: record.error };
   const receipt: Record<string, unknown> = {};
-  for (const key of ['status', 'accepted', 'detail', 'colorStatus', 'colorDetail', 'getterReads', 'getTrapReads', 'threw', 'dualCanonical', 'detached', 'timeout', 'statusCallCount', 'overlapBeforeEitherSettled', 'callsUseSharedSignal', 'coreCanonical', 'colorCanonical', 'canonicalCount', 'failedBranchOrdinary', 'coreLoaderStarted', 'colorLoaderStarted', 'branchStartsBeforeSettlement', 'injectedBranchRejected', 'branchSignalsUseSharedSignal', 'initialCanvasStatus', 'initialCanvasDetail', 'parentInitialSnapshot', 'sourceOnlyCanvasStatus', 'sourceOnlyCanvasDetail', 'parentSourceOnlySnapshot', 'sourceOnlyCanvasRetained', 'currentCanvasStatus', 'currentCanvasDetail', 'currentCanvasMounted', 'currentCanvasReplaced', 'currentCanvasWidth', 'currentCanvasHeight', 'targetCommitCanvasStatus', 'parentTargetSnapshot', 'parentTargetCallbackCanvasStatus', 'parentTargetCallbackCanvasMounted', 'parentTargetCallbackExportDisabled', 'currentExportDisabled', 'currentExportStatus', 'currentExportProfile', 'currentNativeBitmapWidth', 'currentNativeBitmapHeight', 'currentSourceIdentity', 'currentTargetMetadata', 'currentSceneStatus', 'presetActive', 'presetCanvasStatus', 'presetExportDisabled', 'staleCanvasStatus', 'staleCanvasRetained', 'staleExportStatus', 'restoredCanvasStatus', 'restoredCanvasReplaced', 'restoredExportDisabled']) {
+  for (const key of ['status', 'accepted', 'detail', 'colorStatus', 'colorDetail', 'getterReads', 'getTrapReads', 'threw', 'dualCanonical', 'detached', 'timeout', 'statusCallCount', 'overlapBeforeEitherSettled', 'callsUseSharedSignal', 'coreCanonical', 'colorCanonical', 'canonicalCount', 'failedBranchOrdinary', 'coreLoaderStarted', 'colorLoaderStarted', 'branchStartsBeforeSettlement', 'injectedBranchRejected', 'branchSignalsUseSharedSignal', 'initialCanvasStatus', 'initialCanvasDetail', 'parentInitialSnapshot', 'sourceOnlyCanvasStatus', 'sourceOnlyCanvasDetail', 'parentSourceOnlySnapshot', 'sourceOnlyCanvasRetained', 'currentCanvasStatus', 'currentCanvasDetail', 'currentCanvasMounted', 'currentCanvasReplaced', 'currentCanvasWidth', 'currentCanvasHeight', 'targetCommitCanvasStatus', 'parentTargetSnapshot', 'parentTargetCallbackCanvasStatus', 'parentTargetCallbackCanvasMounted', 'parentTargetCallbackExportDisabled', 'currentExportDisabled', 'currentExportStatus', 'currentExportProfile', 'currentNativeBitmapWidth', 'currentNativeBitmapHeight', 'currentSourceIdentity', 'currentTargetMetadata', 'currentSceneStatus', 'presetActive', 'presetCanvasStatus', 'presetExportDisabled', 'staleCanvasStatus', 'staleCanvasRetained', 'staleExportStatus', 'restoredCanvasStatus', 'restoredCanvasReplaced', 'restoredExportDisabled', 'sourcePath', 'targetOptionCount', 'targetOptionValueBefore', 'targetOptionValueAfter', 'targetSelectValue', 'targetRetained', 'targetMetadata', 'canvasStatus', 'canvasDetail', 'canvasExportDisabled', 'canvasExportStatus', 'pathRegion', 'parentReconciled', 'fixtureHash', 'targetOptionValue', 'targetCanvasStatus', 'targetCanvasDetail', 'targetCanvasMounted', 'targetCanvasReplaced', 'targetExportDisabled', 'targetExportStatus', 'targetSourceIdentity', 'targetSceneStatus', 'handlerOptionValue', 'handlerCanvasStatus', 'handlerCanvasDetail', 'handlerCanvasMounted', 'handlerExportStatus', 'handlerTargetMetadata', 'restoredCanvasDetail', 'restoredCanvasMounted', 'restoredExportDisabled', 'restoredExportStatus', 'parentReconciliations', 'parentCallbackNotifications', 'gameTruth']) {
     if (Object.hasOwn(record, key)) receipt[key] = record[key];
   }
   if (Object.hasOwn(record, 'result')) receipt.result = record.result === null ? null : record.result === undefined ? undefined : 'present';
@@ -4819,6 +4918,448 @@ async function runMountedSourceEditorTransitionRegression(
   }
 }
 
+const PORTABLE_PIPELINE_TEST_SOURCE = [
+  'local menuA = { name = "pipeline_test_menu_a", layer = 4 }',
+  'function menuA.createFrame()',
+  '  local frame = Helper.createFrameHandle(menuA, { width = 530, height = 436, layer = menuA.layer })',
+  '  local ftable = frame:addTable(1, { width = 530 })',
+  '  local row = ftable:addRow(true, {})',
+  '  row[1]:createButton({ active = true }):setText("Menu A")',
+  '  row[1].handlers.onClick = function() menuA.clicked = true end',
+  '  frame:display()',
+  'end',
+  '',
+  'local menuB = { name = "pipeline_test_menu_b", layer = 4 }',
+  'function menuB.createFrame()',
+  '  local frame = Helper.createFrameHandle(menuB, { width = 420, height = 260, layer = menuB.layer })',
+  '  frame:addTable(1, { width = 420 })',
+  '  frame:display()',
+  'end',
+  '',
+  'local menuC = { name = "pipeline_test_menu_c", layer = 4 }',
+  'function menuC.createFrame()',
+  '  local frame = Helper.createFrameHandle(menuC, { width = 360, height = 220, layer = menuC.layer })',
+  '  frame:addTable(1, { width = 360 })',
+  '  frame:display()',
+  'end',
+  '',
+  'return menuA',
+  '',
+].join('\n');
+
+const PORTABLE_PIPELINE_TEST_XML = [
+  '<?xml version="1.0" encoding="utf-8"?>',
+  '<addon name="pipeline_test">',
+  '  <environment type="menus">',
+  '    <file name="ui/pipeline_test.lua" />',
+  '  </environment>',
+  '</addon>',
+].join('\n');
+
+type MountedExactPipelineWorkspaceFile = {
+  readonly path: string;
+  readonly content: string;
+  readonly reason: string;
+};
+
+type MountedExactPipelineWorkspace = Record<string, unknown> & {
+  readonly passthroughFiles: readonly MountedExactPipelineWorkspaceFile[];
+};
+
+type MountedExactPipelineTransitionReceipt = {
+  readonly fixtureHash: string;
+  readonly initialCanvasStatus: string;
+  readonly initialCanvasDetail: string;
+  readonly sourceOnlyCanvasStatus: string;
+  readonly sourceOnlyCanvasDetail: string;
+  readonly targetOptionValue: string;
+  readonly targetCanvasStatus: string;
+  readonly targetCanvasDetail: string;
+  readonly targetCanvasMounted: boolean;
+  readonly targetCanvasReplaced: boolean;
+  readonly targetExportDisabled: boolean;
+  readonly targetExportStatus: string;
+  readonly targetSourceIdentity: string;
+  readonly targetMetadata: string;
+  readonly targetSceneStatus: string;
+  readonly handlerOptionValue: string;
+  readonly handlerCanvasStatus: string;
+  readonly handlerCanvasDetail: string;
+  readonly handlerCanvasMounted: boolean;
+  readonly handlerExportStatus: string;
+  readonly handlerTargetMetadata: string;
+  readonly restoredCanvasStatus: string;
+  readonly restoredCanvasDetail: string;
+  readonly restoredCanvasMounted: boolean;
+  readonly restoredCanvasReplaced: boolean;
+  readonly restoredExportDisabled: boolean;
+  readonly restoredExportStatus: string;
+  readonly parentReconciliations: number;
+  readonly parentCallbackNotifications: number;
+  readonly gameTruth: string;
+};
+
+function portablePipelineTestWorkspace(): {
+  readonly workspace: MountedExactPipelineWorkspace;
+  readonly sourceHash: string;
+} {
+  const sourceHash = createHash('sha256').update(PORTABLE_PIPELINE_TEST_SOURCE, 'utf8').digest('hex').toUpperCase();
+  const baseWorkspace = workspace as unknown as MountedExactPipelineWorkspace;
+  return {
+    workspace: {
+      ...baseWorkspace,
+      id: 'x4-ui-source-editor-mounted-portable-pipeline-test',
+      compileSettings: { ui: true },
+      passthroughFiles: [
+        { path: 'ui.xml', content: PORTABLE_PIPELINE_TEST_XML, reason: 'unknown_domain' },
+        { path: 'ui/pipeline_test.lua', content: PORTABLE_PIPELINE_TEST_SOURCE, reason: 'partial' },
+      ],
+    },
+    sourceHash,
+  };
+}
+
+async function runMountedExactPipelineTestTransitionRegression(
+  fixture: P7SourceAuthorityFixture,
+): Promise<MountedExactPipelineTransitionReceipt> {
+  const exactFixture = portablePipelineTestWorkspace();
+  const mountedDocument = new MountedDomDocument();
+  const restoreGlobals = installMountedDomGlobals(mountedDocument);
+  const container = mountedDocument.createElement('div');
+  mountedDocument.body.appendChild(container);
+  const baseFiles = exactFixture.workspace.passthroughFiles.map(file => ({ ...file }));
+  const baseWorkspace = exactFixture.workspace;
+  const flush = async (operation: () => void): Promise<void> => {
+    await act(async () => {
+      operation();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  };
+  const canonicalLoader = async (): Promise<{ readonly core: P7SourceAuthorityFixture['core']; readonly color: P7SourceAuthorityFixture['color'] }> => ({
+    core: fixture.core,
+    color: fixture.color,
+  });
+  const mountedSurfaceFactory = (width: number, height: number): MountedCanvasElement => new MountedCanvasElement(mountedDocument, width, height);
+  let parentRevision = 0;
+  let parentCallbackNotifications = 0;
+  let parentCallbackReconciled = false;
+  let requestParentRender: (() => void) | undefined;
+  const MountedSourceEditorParent = (): React.ReactElement => {
+    const [, setParentSnapshot] = React.useState<unknown>(null);
+    const [, setParentRevision] = React.useState(0);
+    requestParentRender = () => {
+      parentRevision += 1;
+      setParentRevision(previous => previous + 1);
+    };
+    const onVerificationSnapshotChange = React.useCallback((snapshot: unknown): void => {
+      if (snapshot === null) return;
+      parentCallbackNotifications += 1;
+      if (!parentCallbackReconciled) {
+        parentCallbackReconciled = true;
+        setParentSnapshot(snapshot);
+      }
+    }, []);
+    const renderedWorkspace = parentRevision === 0
+      ? baseWorkspace
+      : {
+        ...baseWorkspace,
+        passthroughFiles: baseFiles.map(file => ({ ...file })),
+      };
+    return (
+      <X4UiSourceEditor
+        workspace={renderedWorkspace}
+        corpusLoader={canonicalLoader}
+        surfaceFactory={mountedSurfaceFactory}
+        onVerificationSnapshotChange={onVerificationSnapshotChange}
+      />
+    );
+  };
+  const requestParentRenderOnChange = (): void => requestParentRender?.();
+  container.addEventListener('change', requestParentRenderOnChange);
+  let root: ReturnType<typeof createRoot> | undefined;
+  try {
+    await flush(() => {
+      root = createRoot(container as unknown as Element);
+      root.render(<React.StrictMode><MountedSourceEditorParent /></React.StrictMode>);
+    });
+    const sourceSelect = mountedElementByTestId(container, 'x4-ui-source-selector');
+    if (sourceSelect === null) throw new Error('exact pipeline_test SourceEditor source selector was not rendered');
+    const sourceOption = mountedOptionByText(sourceSelect, 'ui/pipeline_test.lua');
+    if (sourceOption === null) throw new Error('exact pipeline_test SourceEditor source option was not rendered');
+    const initialCanvasStatus = mountedElementText(container, 'x4-ui-canvas-status');
+    const initialCanvasDetail = mountedElementText(container, 'x4-ui-canvas-detail');
+
+    await flush(() => {
+      sourceSelect.value = sourceOption.value;
+      sourceSelect.dispatchEvent(new MountedDomEvent('change', { bubbles: true, cancelable: true }));
+    });
+    const sourceOnlyCanvasStatus = mountedElementText(container, 'x4-ui-canvas-status');
+    const sourceOnlyCanvasDetail = mountedElementText(container, 'x4-ui-canvas-detail');
+    const sourceOnlyCanvas = mountedElementByTestId(container, 'x4-ui-canvas-host')?.firstElementChild ?? null;
+    const sourceTargetSelect = mountedElementByTestId(container, 'x4-ui-target-selector');
+    if (sourceTargetSelect === null) throw new Error('exact pipeline_test target selector disappeared after source selection');
+    for (const targetName of ['menuA.createFrame', 'menuB.createFrame', 'menuC.createFrame']) {
+      if (mountedOptionByText(sourceTargetSelect, targetName) === null) {
+        throw new Error(`portable pipeline_test did not expose ${targetName}`);
+      }
+    }
+    const targetOption = mountedOptionByText(sourceTargetSelect, 'menuA.createFrame');
+    if (targetOption === null) throw new Error('exact pipeline_test menuA.createFrame target option was not rendered');
+    const targetOptionValue = targetOption.value;
+
+    await flush(() => {
+      sourceTargetSelect.value = targetOptionValue;
+      sourceTargetSelect.dispatchEvent(new MountedDomEvent('change', { bubbles: true, cancelable: true }));
+    });
+    const targetCanvas = mountedElementByTestId(container, 'x4-ui-canvas-host')?.firstElementChild ?? null;
+    const targetCanvasStatus = mountedElementText(container, 'x4-ui-canvas-status');
+    const targetCanvasDetail = mountedElementText(container, 'x4-ui-canvas-detail');
+    const targetExport = mountedElementByTestId(container, 'x4-ui-canvas-export');
+    const targetExportStatus = mountedElementText(container, 'x4-ui-canvas-export-status');
+    const targetSourceIdentity = mountedElementText(container, 'x4-ui-selected-source-identity');
+    const targetMetadata = mountedElementText(container, 'x4-ui-canvas-export-target');
+    const targetSceneStatus = mountedElementText(container, 'x4-ui-preview-geometry-scene-status');
+
+    const exactTargetSelect = mountedElementByTestId(container, 'x4-ui-target-selector');
+    if (exactTargetSelect === null) throw new Error('exact pipeline_test target selector disappeared after menuA.createFrame');
+    const handlerOption = exactTargetSelect.options.find(option => option.textContent.includes('handler'));
+    if (handlerOption === undefined) throw new Error(`exact pipeline_test handler target option was not rendered: ${exactTargetSelect.options.map(option => option.textContent).join(', ')}`);
+    const handlerOptionValue = handlerOption.value;
+    await flush(() => {
+      exactTargetSelect.value = handlerOptionValue;
+      exactTargetSelect.dispatchEvent(new MountedDomEvent('change', { bubbles: true, cancelable: true }));
+    });
+    const handlerCanvas = mountedElementByTestId(container, 'x4-ui-canvas-host')?.firstElementChild ?? null;
+    const handlerCanvasStatus = mountedElementText(container, 'x4-ui-canvas-status');
+    const handlerCanvasDetail = mountedElementText(container, 'x4-ui-canvas-detail');
+    const handlerExportStatus = mountedElementText(container, 'x4-ui-canvas-export-status');
+    const handlerTargetMetadata = mountedElementText(container, 'x4-ui-canvas-export-target');
+
+    const handlerTargetSelect = mountedElementByTestId(container, 'x4-ui-target-selector');
+    if (handlerTargetSelect === null) throw new Error('exact pipeline_test target selector disappeared at handler target');
+    const restoredTargetOption = mountedOptionByText(handlerTargetSelect, 'menuA.createFrame');
+    if (restoredTargetOption === null) throw new Error('exact pipeline_test menuA.createFrame target disappeared after handler transition');
+    await flush(() => {
+      handlerTargetSelect.value = restoredTargetOption.value;
+      handlerTargetSelect.dispatchEvent(new MountedDomEvent('change', { bubbles: true, cancelable: true }));
+    });
+    const restoredCanvas = mountedElementByTestId(container, 'x4-ui-canvas-host')?.firstElementChild ?? null;
+    const restoredCanvasStatus = mountedElementText(container, 'x4-ui-canvas-status');
+    const restoredCanvasDetail = mountedElementText(container, 'x4-ui-canvas-detail');
+    const restoredExport = mountedElementByTestId(container, 'x4-ui-canvas-export');
+    const restoredExportStatus = mountedElementText(container, 'x4-ui-canvas-export-status');
+    return {
+      fixtureHash: exactFixture.sourceHash,
+      initialCanvasStatus,
+      initialCanvasDetail,
+      sourceOnlyCanvasStatus,
+      sourceOnlyCanvasDetail,
+      targetOptionValue,
+      targetCanvasStatus,
+      targetCanvasDetail,
+      targetCanvasMounted: targetCanvas instanceof MountedCanvasElement,
+      targetCanvasReplaced: targetCanvas !== null && targetCanvas !== sourceOnlyCanvas,
+      targetExportDisabled: targetExport?.disabled === true,
+      targetExportStatus,
+      targetSourceIdentity,
+      targetMetadata,
+      targetSceneStatus,
+      handlerOptionValue,
+      handlerCanvasStatus,
+      handlerCanvasDetail,
+      handlerCanvasMounted: handlerCanvas instanceof MountedCanvasElement,
+      handlerExportStatus,
+      handlerTargetMetadata,
+      restoredCanvasStatus,
+      restoredCanvasDetail,
+      restoredCanvasMounted: restoredCanvas instanceof MountedCanvasElement,
+      restoredCanvasReplaced: restoredCanvas !== targetCanvas,
+      restoredExportDisabled: restoredExport?.disabled === true,
+      restoredExportStatus,
+      parentReconciliations: parentRevision,
+      parentCallbackNotifications,
+      gameTruth: mountedElementText(container, 'x4-ui-canvas-export-boundary'),
+    };
+  } finally {
+    if (root !== undefined) {
+      await act(async () => {
+        root?.unmount();
+        await Promise.resolve();
+      });
+    }
+    restoreGlobals();
+    container.removeEventListener('change', requestParentRenderOnChange);
+  }
+}
+
+type MountedLargeSourceTargetSelectionReceipt = {
+  readonly sourcePath: string;
+  readonly targetOptionCount: number;
+  readonly targetOptionValueBefore: string;
+  readonly targetOptionValueAfter: string;
+  readonly targetSelectValue: string;
+  readonly targetRetained: boolean;
+  readonly targetMetadata: string;
+  readonly canvasStatus: string;
+  readonly canvasDetail: string;
+  readonly canvasExportDisabled: boolean;
+  readonly canvasExportStatus: string;
+  readonly pathRegion: string;
+  readonly parentReconciled: boolean;
+};
+
+async function runMountedLargeSourceTargetSelectionRegression(
+  fixture: P7SourceAuthorityFixture,
+): Promise<MountedLargeSourceTargetSelectionReceipt> {
+  const mountedDocument = new MountedDomDocument();
+  const restoreGlobals = installMountedDomGlobals(mountedDocument);
+  const container = mountedDocument.createElement('div');
+  mountedDocument.body.appendChild(container);
+  const helperFunctions = Array.from({ length: 128 }, (_, index) => [
+    `function menu.helper${index}()`,
+    '  local frame = Helper.createFrameHandle(menu, {})',
+    `  frame:addTable(${(index % 4) + 1}, { width = ${530 + index} })`,
+    '  frame:display()',
+    'end',
+  ].join('\n'));
+  const sourceContent = [
+    '-- Large canonical source selection regression for the installed UI editor.',
+    'local menu = {}',
+    'function menu.display()',
+    '  local frame = Helper.createFrameHandle(menu, {})',
+    '  if menu.active then',
+    '    frame:addTable(2, { width = 530 })',
+    '  elseif menu.retry then',
+    '    frame:addTable(3, { width = 531 })',
+    '  else',
+    '    frame:addTable(4, { width = 532 })',
+    '  end',
+    '  frame:display()',
+    'end',
+    ...helperFunctions,
+    'return menu',
+  ].join('\n\n');
+  const basePassthroughFiles = [
+    {
+      path: 'ui.xml',
+      content: '<?xml version="1.0" encoding="utf-8"?>\n<addon name="ai_influence_chat" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../ui/core/addon.xsd">\n  <environment type="menus">\n    <file name="ui/addons/ai_influence_chat/aic_menu.lua" />\n  </environment>\n</addon>',
+      reason: 'unknown_domain',
+    },
+    {
+      path: 'ui/addons/ai_influence_chat/aic_menu.lua',
+      content: sourceContent,
+      reason: 'partial',
+    },
+  ];
+  const baseWorkspace = {
+    ...workspace,
+    id: 'x4-ui-source-editor-mounted-large-target',
+    compileSettings: { ui: true },
+    passthroughFiles: basePassthroughFiles,
+  };
+  const flush = async (operation: () => void): Promise<void> => {
+    await act(async () => {
+      operation();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  };
+  const canonicalLoader = async (): Promise<{ readonly core: P7SourceAuthorityFixture['core']; readonly color: P7SourceAuthorityFixture['color'] }> => ({
+    core: fixture.core,
+    color: fixture.color,
+  });
+  const mountedSurfaceFactory = (width: number, height: number): MountedCanvasElement => new MountedCanvasElement(mountedDocument, width, height);
+  let requestParentRender: (() => void) | undefined;
+  let parentRevision = 0;
+  const MountedSourceEditorParent = (): React.ReactElement => {
+    const [, setParentRevision] = React.useState(0);
+    requestParentRender = () => {
+      parentRevision += 1;
+      setParentRevision(previous => previous + 1);
+    };
+    const renderedWorkspace = parentRevision === 0
+      ? baseWorkspace
+      : {
+        ...baseWorkspace,
+        passthroughFiles: basePassthroughFiles.map(file => ({ ...file })),
+      };
+    return (
+      <X4UiSourceEditor
+        workspace={renderedWorkspace}
+        corpusLoader={canonicalLoader}
+        surfaceFactory={mountedSurfaceFactory}
+        onVerificationSnapshotChange={() => undefined}
+      />
+    );
+  };
+  const requestParentRenderOnChange = (): void => requestParentRender?.();
+  container.addEventListener('change', requestParentRenderOnChange);
+  let root: ReturnType<typeof createRoot> | undefined;
+  try {
+    await flush(() => {
+      root = createRoot(container as unknown as Element);
+      root.render(<React.StrictMode><MountedSourceEditorParent /></React.StrictMode>);
+    });
+    const sourceSelect = mountedElementByTestId(container, 'x4-ui-source-selector');
+    const targetSelect = mountedElementByTestId(container, 'x4-ui-target-selector');
+    if (sourceSelect === null || targetSelect === null) throw new Error('large-source SourceEditor selectors were not rendered');
+    const sourceOption = mountedOptionByText(sourceSelect, 'ui/addons/ai_influence_chat/aic_menu.lua');
+    if (sourceOption === null) throw new Error('large-source SourceEditor did not expose the exact aic_menu.lua source');
+    await flush(() => {
+      sourceSelect.value = sourceOption.value;
+      sourceSelect.dispatchEvent(new MountedDomEvent('change', { bubbles: true, cancelable: true }));
+    });
+    const sourceTargetSelect = mountedElementByTestId(container, 'x4-ui-target-selector');
+    if (sourceTargetSelect === null) throw new Error('large-source target selector disappeared after source selection');
+    const targetOptionBefore = mountedOptionByText(sourceTargetSelect, 'menu.display');
+    if (targetOptionBefore === null) throw new Error('large-source SourceEditor did not expose the menu.display target');
+    const targetOptionValueBefore = targetOptionBefore.value;
+    const targetOptionCount = sourceTargetSelect.options.length;
+    await flush(() => {
+      sourceTargetSelect.value = targetOptionValueBefore;
+      sourceTargetSelect.dispatchEvent(new MountedDomEvent('change', { bubbles: true, cancelable: true }));
+    });
+    const finalTargetSelect = mountedElementByTestId(container, 'x4-ui-target-selector');
+    const targetOptionAfter = finalTargetSelect === null ? null : mountedOptionByText(finalTargetSelect, 'menu.display');
+    const targetOptionValueAfter = targetOptionAfter?.value ?? '';
+    const targetSelectValue = finalTargetSelect?.value ?? '';
+    const targetMetadata = mountedElementText(container, 'x4-ui-canvas-export-target');
+    const canvasStatus = mountedElementText(container, 'x4-ui-canvas-status');
+    const canvasDetail = mountedElementText(container, 'x4-ui-canvas-detail');
+    const canvasExport = mountedElementByTestId(container, 'x4-ui-canvas-export');
+    const canvasExportStatus = mountedElementText(container, 'x4-ui-canvas-export-status');
+    const pathRegion = mountedElementText(container, 'x4-ui-preview-paths-region');
+    if (finalTargetSelect === null) throw new Error('large-source target selector disappeared after target selection');
+    return {
+      sourcePath: mountedElementText(container, 'x4-ui-selected-source-identity'),
+      targetOptionCount,
+      targetOptionValueBefore,
+      targetOptionValueAfter,
+      targetSelectValue,
+      targetRetained: targetSelectValue.length > 0
+        && targetSelectValue === targetOptionValueBefore
+        && targetOptionValueAfter === targetOptionValueBefore,
+      targetMetadata,
+      canvasStatus,
+      canvasDetail,
+      canvasExportDisabled: canvasExport?.disabled === true,
+      canvasExportStatus,
+      pathRegion,
+      parentReconciled: parentRevision > 0,
+    };
+  } finally {
+    if (root !== undefined) {
+      await act(async () => {
+        root?.unmount();
+        await Promise.resolve();
+      });
+    }
+    restoreGlobals();
+    container.removeEventListener('change', requestParentRenderOnChange);
+  }
+}
+
 async function recordP7SourceRow(
   name: string,
   fixtureReady: boolean,
@@ -4848,6 +5389,103 @@ async function runP7SourceEditorCanonicalColorMatrix(): Promise<void> {
   const core = fixture?.core;
   const color = fixture?.color;
   const fixtureReady = fixture !== undefined;
+
+  await recordP7SourceRow(
+    'P10 mounted portable three-menu pipeline_test source and target transitions commit the current canvas',
+    fixtureReady,
+    'the inline source-derived hash is selected from no selection, menuA.createFrame commits a current replacement canvas with exact export identity, a non-renderable handler transition does not poison the later menuA.createFrame commit, and the permanent game-truth boundary remains visible',
+    async () => {
+      if (fixture === undefined) throw new Error(fixtureError ?? 'SourceEditor P10 portable pipeline_test fixture unavailable');
+      return runMountedExactPipelineTestTransitionRegression(fixture);
+    },
+    observed => {
+      const receipt = p7SourceRecord(observed);
+      const fixtureHash = p7SourceString(receipt, 'fixtureHash');
+      const initialCanvasDetail = p7SourceString(receipt, 'initialCanvasDetail');
+      const sourceOnlyCanvasDetail = p7SourceString(receipt, 'sourceOnlyCanvasDetail');
+      const targetOptionValue = p7SourceString(receipt, 'targetOptionValue');
+      const targetCanvasDetail = p7SourceString(receipt, 'targetCanvasDetail');
+      const targetExportStatus = p7SourceString(receipt, 'targetExportStatus');
+      const targetSourceIdentity = p7SourceString(receipt, 'targetSourceIdentity');
+      const targetMetadata = p7SourceString(receipt, 'targetMetadata');
+      const targetSceneStatus = p7SourceString(receipt, 'targetSceneStatus');
+      const handlerOptionValue = p7SourceString(receipt, 'handlerOptionValue');
+      const handlerCanvasDetail = p7SourceString(receipt, 'handlerCanvasDetail');
+      const handlerExportStatus = p7SourceString(receipt, 'handlerExportStatus');
+      const handlerTargetMetadata = p7SourceString(receipt, 'handlerTargetMetadata');
+      const restoredCanvasDetail = p7SourceString(receipt, 'restoredCanvasDetail');
+      const restoredExportStatus = p7SourceString(receipt, 'restoredExportStatus');
+      const parentReconciliations = p7SourceNumber(receipt, 'parentReconciliations');
+      const parentCallbackNotifications = p7SourceNumber(receipt, 'parentCallbackNotifications');
+      return fixtureHash !== undefined
+        && /^[A-F0-9]{64}$/.test(fixtureHash)
+        && receipt.initialCanvasStatus === 'refused'
+        && initialCanvasDetail?.includes('exact source index/path/identity and target ID/range are required') === true
+        && receipt.sourceOnlyCanvasStatus === 'refused'
+        && sourceOnlyCanvasDetail?.includes('exact source index/path/identity and target ID/range are required') === true
+        && targetOptionValue !== undefined
+        && targetOptionValue.length > 0
+        && receipt.targetCanvasStatus === 'rendered/current'
+        && receipt.targetCanvasMounted === true
+        && receipt.targetCanvasReplaced === true
+        && targetCanvasDetail?.includes('Not verified in game') === true
+        && receipt.targetExportDisabled === false
+        && targetExportStatus === 'ready · native PNG export uses the mounted current canvas'
+        && targetSourceIdentity?.includes('ui/pipeline_test.lua') === true
+        && targetSourceIdentity?.includes(fixtureHash) === true
+        && targetMetadata?.includes('menuA.createFrame') === true
+        && targetSceneStatus === 'partial'
+        && handlerOptionValue !== undefined
+        && handlerOptionValue.length > 0
+        && (receipt.handlerCanvasStatus === 'stale' || receipt.handlerCanvasStatus === 'refused')
+        && receipt.handlerCanvasMounted === true
+        && handlerCanvasDetail?.includes('Not verified in game') === true
+        && handlerExportStatus === 'unavailable · Current rendered canvas evidence is unavailable or stale.'
+        && handlerTargetMetadata?.includes('handlers.onClick') === true
+        && receipt.restoredCanvasStatus === 'rendered/current'
+        && receipt.restoredCanvasMounted === true
+        && receipt.restoredCanvasReplaced === true
+        && restoredCanvasDetail?.includes('Not verified in game') === true
+        && receipt.restoredExportDisabled === false
+        && restoredExportStatus === 'ready · native PNG export uses the mounted current canvas'
+        && parentReconciliations !== undefined
+        && parentReconciliations >= 4
+        && parentCallbackNotifications === 2
+        && p7SourceString(receipt, 'gameTruth') === 'Preview evidence only · Not verified in game';
+    },
+  );
+
+  await recordP7SourceRow(
+    'P9 mounted large-source menu.display target survives controlled React reconciliation',
+    fixtureReady,
+    'the exact aic_menu.lua source exposes a large owner-issued target catalog; selecting menu.display through the mounted controlled select survives the parent reconciliation rerender, retains the byte-identical option value, produces a non-empty target, and keeps the branch-path preview attached to that target',
+    async () => {
+      if (fixture === undefined) throw new Error(fixtureError ?? 'SourceEditor P9 canonical fixture unavailable');
+      return runMountedLargeSourceTargetSelectionRegression(fixture);
+    },
+    observed => {
+      const receipt = p7SourceRecord(observed);
+      return typeof receipt?.sourcePath === 'string'
+        && receipt.sourcePath.includes('ui/addons/ai_influence_chat/aic_menu.lua')
+        && typeof receipt.targetOptionCount === 'number'
+        && receipt.targetOptionCount >= 90
+        && typeof receipt.targetOptionValueBefore === 'string'
+        && receipt.targetOptionValueBefore.length > 0
+        && receipt.targetOptionValueAfter === receipt.targetOptionValueBefore
+        && receipt.targetSelectValue === receipt.targetOptionValueBefore
+        && receipt.targetRetained === true
+        && typeof receipt.targetMetadata === 'string'
+        && receipt.targetMetadata.includes('menu.display')
+        && receipt.canvasStatus === 'refused'
+        && typeof receipt.canvasDetail === 'string'
+        && receipt.canvasDetail.includes('source-composition has no renderer-issued visible source geometry fill/border or canonical tinted glyph; visual diagnostics require an authoritative source operation')
+        && receipt.canvasExportDisabled === true
+        && receipt.canvasExportStatus === 'unavailable · Current rendered canvas evidence is unavailable or stale.'
+        && typeof receipt.pathRegion === 'string'
+        && receipt.pathRegion.includes('Preview branch paths')
+        && receipt.parentReconciled === true;
+    },
+  );
 
   await recordP7SourceRow(
     'P8 mounted SourceEditor source-then-target transition replaces the prior refusal and preserves stale-result semantics',

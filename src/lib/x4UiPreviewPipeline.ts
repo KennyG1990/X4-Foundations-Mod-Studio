@@ -21,9 +21,11 @@ import {
   X4_LAYOUT_PROVENANCE,
 } from './x4UiLayoutKernel';
 import {
+  canonicalizeX4UiLayoutModel,
   createX4UiLayoutTargetCatalog,
   projectX4UiLayoutProgram,
   type X4UiLayoutModelIdentity,
+  type X4UiLayoutPreviewPathCatalog,
   type X4UiLayoutPreviewPathSelectionInput,
   type X4UiLayoutPreviewSampleInput,
   type X4UiLayoutProjectionProfile,
@@ -259,6 +261,10 @@ export interface X4UiPreviewPipelineResult {
   readonly selection: X4UiPreviewSelectionState;
   readonly selectedSource?: X4UiPreviewSourceCandidate;
   readonly selectedTarget?: X4UiLayoutTarget;
+  /** Source-bound branch authority issued by the selected layout program. */
+  readonly pathCatalog: X4UiLayoutPreviewPathCatalog | null;
+  /** Accepted preview-only path state, reissued from the selected program. */
+  readonly paths: X4UiLayoutPreviewPathSelectionInput | undefined;
   readonly profile: {
     readonly layout?: X4UiLayoutProjectionProfile;
     readonly scene?: X4UiSceneProfile;
@@ -872,6 +878,28 @@ const minTextHeightEvidenceFor = (profile: X4UiLayoutProjectionProfile): {
     },
   };
 
+const previewPathsForProgram = (
+  program: X4UiLayoutProgramResult,
+): { readonly pathCatalog: X4UiLayoutPreviewPathCatalog | null; readonly paths: X4UiLayoutPreviewPathSelectionInput | undefined } => {
+  if (!('program' in program) || program.program === undefined) return { pathCatalog: null, paths: undefined };
+  const catalog = program.program.previewPathCatalog;
+  const selections = program.program.previewPathSelections;
+  return {
+    pathCatalog: catalog,
+    paths: selections.length === 0
+      ? undefined
+      : freezeDeep({
+        catalogId: catalog.id,
+        source: cloneJson(catalog.sourceIdentity) as X4UiLayoutModelIdentity,
+        selections: selections.map(selection => ({
+          id: selection.id,
+          boundaryId: selection.boundaryId,
+          armId: selection.armId,
+        })),
+      }),
+  };
+};
+
 const baseResult = (
   source: X4UiWorkspaceSource,
   corpus: unknown,
@@ -898,6 +926,8 @@ const baseResult = (
     ...(tableView === undefined ? {} : { tableView: cloneJson(tableView) as Readonly<Record<string, X4UiSceneTableViewState>> }),
     ...minTextHeightEvidenceFor(profile),
   },
+  pathCatalog: null,
+  paths: undefined,
   lint,
   gaps,
   authority: {
@@ -945,6 +975,8 @@ const invalidInputResult = (message: string): X4UiPreviewPipelineResult => {
     targetCandidates: [],
     selection: { status: 'unavailable' as const, reason: 'invalid-input' },
     profile: {},
+    pathCatalog: null,
+    paths: undefined,
     lint: [],
     gaps: [{ stage: 'source' as const, reason: message }],
     authority: {
@@ -1059,11 +1091,10 @@ export function projectX4UiPreviewPipeline(input: X4UiPreviewPipelineInput): X4U
         selectedTarget: target,
       });
     }
-    // Workspace-source bundles may retain optional undefined members on call-model source records.
-    // The accepted producer boundary is JSON-domain strict, so project a detached JSON-normalized
-    // view of that existing model; linting above still uses the original callModel directly and no
-    // parser/model rebuild is performed here.
-    const projectModel = cloneJson(sourceFile.callModel) as typeof sourceFile.callModel;
+    // The layout owner defines the canonical complete model view shared with
+    // source-safe provenance checks. Linting above still uses the raw source
+    // callModel; no parser/model rebuild is performed here.
+    const projectModel = canonicalizeX4UiLayoutModel(sourceFile.callModel) || sourceFile.callModel;
     const canonical = isX4UiCorpusCanonicalSuccess(input.corpus) ? input.corpus : undefined;
     const program = projectX4UiLayoutProgram(
       projectModel,
@@ -1074,6 +1105,7 @@ export function projectX4UiPreviewPipeline(input: X4UiPreviewPipelineInput): X4U
       colorEvidence,
       canonical,
     );
+    const previewPaths = previewPathsForProgram(program);
     if (program.status === 'refused' && 'refusal' in program) {
       gaps.push({ stage: 'program', reason: program.refusal.message });
       return freezeDeep({
@@ -1089,6 +1121,8 @@ export function projectX4UiPreviewPipeline(input: X4UiPreviewPipelineInput): X4U
           ...(input.tableView === undefined ? {} : { tableView: cloneJson(input.tableView) as Readonly<Record<string, X4UiSceneTableViewState>> }),
           ...minTextHeightEvidenceFor(layoutProfile),
         },
+        pathCatalog: previewPaths.pathCatalog,
+        paths: previewPaths.paths,
         program,
       });
     }
@@ -1107,6 +1141,8 @@ export function projectX4UiPreviewPipeline(input: X4UiPreviewPipelineInput): X4U
           ...(input.tableView === undefined ? {} : { tableView: cloneJson(input.tableView) as Readonly<Record<string, X4UiSceneTableViewState>> }),
           ...minTextHeightEvidenceFor(layoutProfile),
         },
+        pathCatalog: previewPaths.pathCatalog,
+        paths: previewPaths.paths,
         program,
         scene: refusedScene('canonical configured-corpus evidence is unavailable; no Scene geometry was produced'),
       });
@@ -1125,6 +1161,8 @@ export function projectX4UiPreviewPipeline(input: X4UiPreviewPipelineInput): X4U
       selection: { status: 'selected', reason: 'exact-source-and-target-selected', sourceIndex: selected.sourceIndex, targetId: target.id },
       selectedSource,
       selectedTarget: target,
+      pathCatalog: previewPaths.pathCatalog,
+      paths: previewPaths.paths,
       profile: {
         layout: layoutProfile,
         scene: sceneProfile,

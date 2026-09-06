@@ -97,7 +97,8 @@ export type X4UiCanvasRenderRefusalCode =
   | 'missing-context'
   | 'allocation-failure'
   | 'post-validation-mutation'
-  | 'surface-failure';
+  | 'surface-failure'
+  | 'no-visible-output';
 
 export interface X4UiCanvasRenderRefusal {
   readonly code: X4UiCanvasRenderRefusalCode;
@@ -1894,6 +1895,8 @@ const activeFillTint = (tints: readonly ValidatedTint[] | undefined): ValidatedT
 
 const borderTint = (tints: readonly ValidatedTint[] | undefined): ValidatedTint | undefined => tints?.find(tint => tint.slot === 'widget-border');
 
+const tintCanContributeAlpha = (tint: ValidatedTint | undefined): tint is ValidatedTint => tint !== undefined && tint.alphaScale > 0;
+
 const positiveRect = (x: number, y: number, width: number, height: number): Rect | undefined => width <= 0 || height <= 0 ? undefined : { x, y, width, height };
 
 const subtractRectangles = (base: Rect, exclusions: readonly Rect[]): readonly Rect[] => {
@@ -1939,16 +1942,59 @@ const sourceCompositionCoverage = (validated: ValidatedPlan): readonly Rect[] =>
   const coverage: Rect[] = [];
   for (const command of validated.layers[0]) {
     if (command.kind !== 'node-geometry' || command.geometry === undefined) continue;
-    if (activeFillTint(command.tints) === undefined && borderTint(command.tints) === undefined) continue;
+    if (!tintCanContributeAlpha(activeFillTint(command.tints)) && !tintCanContributeAlpha(borderTint(command.tints))) continue;
     const visible = intersectRectangles(command.geometry, command.clip);
     if (visible !== undefined) coverage.push(visible);
   }
   for (const command of validated.layers[1]) {
-    if (command.kind !== 'glyph-alpha-blit') continue;
+    if (command.kind !== 'glyph-alpha-blit' || command.tint === undefined) continue;
     const visible = intersectRectangles(command.destination, command.clip);
     if (visible !== undefined) coverage.push(visible);
   }
   return coverage;
+};
+
+const glyphSourceCanContributeAlpha = (command: DetachedGlyphCommand, font: FontBinding): boolean => {
+  if (!tintCanContributeAlpha(command.tint)) return false;
+  const left = Math.max(0, Math.floor(command.source.x));
+  const top = Math.max(0, Math.floor(command.source.y));
+  const right = Math.min(font.width, Math.ceil(command.source.x + command.source.width));
+  const bottom = Math.min(font.height, Math.ceil(command.source.y + command.source.height));
+  for (let y = top; y < bottom; y += 1) {
+    for (let x = left; x < right; x += 1) {
+      const rawAlpha = font.alphaBytes[y * font.width + x];
+      if (rawAlpha !== undefined && applyZektonSdfAlpha(rawAlpha, command.tint.alphaScale) > 0) return true;
+    }
+  }
+  return false;
+};
+
+const sourceCompositionDiagnosticFragments = (
+  command: DetachedDiagnosticCommand,
+  preserveCoverage: readonly Rect[],
+): readonly Rect[] => {
+  if (command.sourceComposition === 'diagnostic-only') return [];
+  const geometry = command.geometry ?? command.clip;
+  if (geometry === undefined) return [];
+  const visibleGeometry = intersectRectangles(geometry, command.clip);
+  return visibleGeometry === undefined ? [] : subtractRectangles(visibleGeometry, preserveCoverage);
+};
+
+const sourceCompositionVisibleOperationIds = (
+  validated: ValidatedPlan,
+  fonts: { readonly regular: FontBinding; readonly bold: FontBinding },
+): readonly string[] => {
+  const ids: string[] = [];
+  for (const command of validated.layers[0]) {
+    if (command.kind !== 'node-geometry' || command.geometry === undefined) continue;
+    if (!tintCanContributeAlpha(activeFillTint(command.tints)) && !tintCanContributeAlpha(borderTint(command.tints))) continue;
+    if (intersectRectangles(command.geometry, command.clip) !== undefined) ids.push(command.id);
+  }
+  for (const command of validated.layers[1]) {
+    if (command.kind !== 'glyph-alpha-blit' || !glyphSourceCanContributeAlpha(command, fonts[command.role])) continue;
+    if (intersectRectangles(command.destination, command.clip) !== undefined) ids.push(command.id);
+  }
+  return ids;
 };
 
 const buildOperations = (
@@ -2001,6 +2047,7 @@ const buildOperations = (
           continue;
         }
         if (item.kind === 'glyph-alpha-blit') {
+          if (presentation === 'source-composition' && item.tint === undefined) continue;
           const surface = atlasSurfaces.get(atlasSurfaceKey(item.role, item.tint));
           const source = item.source;
           const destination = item.destination;
@@ -2055,10 +2102,7 @@ const buildOperations = (
             }
             if (item.sourceComposition === 'diagnostic-only') return;
             api.setStrokeStyle(color);
-            if (geometry === undefined) return;
-            const visibleGeometry = intersectRectangles(geometry, clip);
-            if (visibleGeometry === undefined) return;
-            for (const fragment of subtractRectangles(visibleGeometry, preserveCoverage)) {
+            for (const fragment of sourceCompositionDiagnosticFragments(item, preserveCoverage)) {
               withClip(api, clip, () => {
                 api.beginPath();
                 api.rect(fragment.x, fragment.y, fragment.width, fragment.height);
@@ -2095,6 +2139,12 @@ export function renderX4UiPaintPlanToCanvas(
     const { factory, presentation, session } = optionsValidation.value;
     const acceptedResultFingerprint = structuralFingerprint(result);
     if (acceptedResultFingerprint === undefined) return makeRefusalResult(refusal('invalid-result', 'paint result cannot be fingerprinted as exact own data'));
+    const visibleSourceOperationIds = presentation === 'source-composition'
+      ? sourceCompositionVisibleOperationIds(planValidation.value, corpusValidation.value)
+      : [];
+    if (presentation === 'source-composition' && visibleSourceOperationIds.length === 0) {
+      return makeRefusalResult(refusal('no-visible-output', 'source-composition has no renderer-issued visible source geometry fill/border or canonical tinted glyph; visual diagnostics require an authoritative source operation'));
+    }
     const atlasSnapshots: { readonly regular: AtlasSnapshot; readonly bold: AtlasSnapshot } = {
       regular: {
         role: 'regular',

@@ -2176,8 +2176,12 @@ async function runIndependentReviewCorrections(): Promise<{
       return {
         paintStatus: undefined,
         canvasStatus: undefined,
+        diagnosticMapStatus: undefined,
         ellipsisCommandCount: 0,
         canvasGlyphBlitCount: 0,
+        diagnosticMapGlyphBlitCount: 0,
+        sourceCompositionTraceLength: 0,
+        diagnosticMapTraceLength: 0,
       };
     }
     const paint = projectX4UiPaintPlan({
@@ -2189,14 +2193,23 @@ async function runIndependentReviewCorrections(): Promise<{
       return {
         paintStatus: paint.status,
         canvasStatus: undefined,
+        diagnosticMapStatus: undefined,
         ellipsisCommandCount: 0,
         canvasGlyphBlitCount: 0,
+        diagnosticMapGlyphBlitCount: 0,
+        sourceCompositionTraceLength: 0,
+        diagnosticMapTraceLength: 0,
       };
     }
     const trace: ExactPipelineTraceEntry[] = [];
     const canvas = renderX4UiPaintPlanToCanvas(paint, canonical, {
       surfaceFactory: exactPipelineCanvasFactory(trace),
       presentation: 'source-composition',
+    });
+    const diagnosticMapTrace: ExactPipelineTraceEntry[] = [];
+    const diagnosticMap = renderX4UiPaintPlanToCanvas(paint, canonical, {
+      surfaceFactory: exactPipelineCanvasFactory(diagnosticMapTrace),
+      presentation: 'diagnostic-map',
     });
     const text = overflowTextEvidence[index]?.text;
     const ellipsisIds = new Set((overflowTextEvidence[index]?.ellipsisGlyphs || []).map(glyph => glyph.id));
@@ -2211,9 +2224,14 @@ async function runIndependentReviewCorrections(): Promise<{
     return {
       paintStatus: paint.status,
       canvasStatus: canvas.status,
+      diagnosticMapStatus: diagnosticMap.status,
       ellipsisCommandCount,
       canvasGlyphBlitCount: trace.filter(entry => entry.name === 'drawImage'
         && (entry.args[0] === 'regular-atlas' || entry.args[0] === 'bold-atlas')).length,
+      diagnosticMapGlyphBlitCount: diagnosticMapTrace.filter(entry => entry.name === 'drawImage'
+        && (entry.args[0] === 'regular-atlas' || entry.args[0] === 'bold-atlas')).length,
+      sourceCompositionTraceLength: trace.length,
+      diagnosticMapTraceLength: diagnosticMapTrace.length,
       textId: text?.id,
     };
   });
@@ -2221,10 +2239,14 @@ async function runIndependentReviewCorrections(): Promise<{
     overflowPaintEvidence.length === 3
       && overflowPaintEvidence.every((evidence, index) =>
         evidence.paintStatus !== 'refused'
-        && evidence.canvasStatus === 'rendered'
+        && evidence.canvasStatus === 'refused'
+        && evidence.sourceCompositionTraceLength === 0
+        && evidence.diagnosticMapStatus === 'rendered'
         && evidence.ellipsisCommandCount === overflowSceneEvidence[index]?.ellipsisGlyphs?.length
         && evidence.ellipsisCommandCount === 3
-        && evidence.canvasGlyphBlitCount >= evidence.ellipsisCommandCount),
+        && evidence.canvasGlyphBlitCount === 0
+        && evidence.diagnosticMapGlyphBlitCount >= evidence.ellipsisCommandCount
+        && evidence.diagnosticMapTraceLength > 0),
     {
       fixtureReady: canonical !== undefined && overflowSelections.length === 3,
       paint: overflowPaintEvidence,
@@ -3173,6 +3195,24 @@ return menu
       surfaceFactory: exactPipelineCanvasFactory(frameTextureExactKeyExactTrace),
       presentation: 'source-composition',
     });
+  const frameTextureExactKeyWrongDiagnosticTrace: ExactPipelineTraceEntry[] = [];
+  const frameTextureExactKeyWrongDiagnosticMap = frameTextureExactKeyWrongPaint === undefined
+    || frameTextureExactKeyWrongPaint.status === 'refused'
+    || canonical === undefined
+    ? undefined
+    : renderX4UiPaintPlanToCanvas(frameTextureExactKeyWrongPaint, canonical, {
+      surfaceFactory: exactPipelineCanvasFactory(frameTextureExactKeyWrongDiagnosticTrace),
+      presentation: 'diagnostic-map',
+    });
+  const frameTextureExactKeyExactDiagnosticTrace: ExactPipelineTraceEntry[] = [];
+  const frameTextureExactKeyExactDiagnosticMap = frameTextureExactKeyExactPaint === undefined
+    || frameTextureExactKeyExactPaint.status === 'refused'
+    || canonical === undefined
+    ? undefined
+    : renderX4UiPaintPlanToCanvas(frameTextureExactKeyExactPaint, canonical, {
+      surfaceFactory: exactPipelineCanvasFactory(frameTextureExactKeyExactDiagnosticTrace),
+      presentation: 'diagnostic-map',
+    });
   const frameTextureExactKeySourceFile = frameTextureExactKeySource.bundle?.sourceFiles.find(file =>
     file.path === 'ui/frame-texture-exact-key.lua');
   const frameTextureExactKeyWrongCall = frameTextureExactKeySourceFile?.callModel.calls.find(call =>
@@ -3183,19 +3223,34 @@ return menu
       && frameTextureExactKeyLua.slice(call.source.start.offset, call.source.end.offset).includes('icon = ""'));
   const frameTextureExactKeyWrongRect = frameTextureExactKeyWrongScene?.frames[0]?.rect;
   const frameTextureExactKeyExactRect = frameTextureExactKeyExactScene?.frames[0]?.rect;
+  const frameTextureExactKeyWrongDiagnosticFullFramePaintCount = exactPipelineFullFramePaintCount(
+    frameTextureExactKeyWrongDiagnosticTrace,
+    frameTextureExactKeyWrongRect,
+  );
+  const frameTextureExactKeyExactDiagnosticFullFramePaintCount = exactPipelineFullFramePaintCount(
+    frameTextureExactKeyExactDiagnosticTrace,
+    frameTextureExactKeyExactRect,
+  );
   check('B119 Preview wrong-case Icon preserves an active unresolved texture/frame boundary',
     frameTextureExactKeyWrongCall?.semantics.icon?.value === 'positional-icon'
       && frameTextureExactKeyWrongCall.semantics.properties?.some(property => property.name === 'Icon') !== true
       && frameTextureExactKeyWrongCall.semantics.unsupportedProperties?.some(property => property.name === 'Icon') === true
       && frameTextureExactKeyWrongResult?.status === 'partial'
       && frameTextureExactKeyWrongSurface?.layers.find(layer => layer.name === 'background')?.applicability === 'active-unresolved'
-      && frameTextureExactKeyWrongCanvas?.status === 'rendered'
-      && frameTextureExactKeyWrongCanvas.receipt.gameTruth === 'Not verified in game'
-      && exactPipelineHasFullFrameStroke(frameTextureExactKeyWrongTrace, frameTextureExactKeyWrongRect)
+      && frameTextureExactKeyWrongCanvas?.status === 'refused'
+      && frameTextureExactKeyWrongTrace.length === 0
+      && frameTextureExactKeyWrongDiagnosticMap?.status === 'rendered'
+      && frameTextureExactKeyWrongDiagnosticMap.receipt.gameTruth === 'Not verified in game'
+      && frameTextureExactKeyWrongDiagnosticMap.receipt.gameVerified === false
+      && frameTextureExactKeyWrongDiagnosticFullFramePaintCount > frameTextureExactKeyExactDiagnosticFullFramePaintCount
       && frameTextureExactKeyExactCall?.semantics.properties?.some(property => property.name === 'icon') === true
       && frameTextureExactKeyExactSurface?.layers.find(layer => layer.name === 'background')?.applicability === 'inactive'
-      && frameTextureExactKeyExactCanvas?.status === 'rendered'
-      && !exactPipelineHasFullFrameStroke(frameTextureExactKeyExactTrace, frameTextureExactKeyExactRect), {
+      && frameTextureExactKeyExactCanvas?.status === 'refused'
+      && frameTextureExactKeyExactTrace.length === 0
+      && frameTextureExactKeyExactDiagnosticMap?.status === 'rendered'
+      && frameTextureExactKeyExactDiagnosticMap.receipt.gameTruth === 'Not verified in game'
+      && frameTextureExactKeyExactDiagnosticMap.receipt.gameVerified === false
+      && frameTextureExactKeyExactDiagnosticFullFramePaintCount < frameTextureExactKeyWrongDiagnosticFullFramePaintCount, {
     wrong: {
       call: frameTextureExactKeyWrongCall,
       resultStatus: frameTextureExactKeyWrongResult?.status,
@@ -3203,6 +3258,9 @@ return menu
       paintStatus: frameTextureExactKeyWrongPaint?.status,
       canvasStatus: frameTextureExactKeyWrongCanvas?.status,
       trace: frameTextureExactKeyWrongTrace,
+      diagnosticMapStatus: frameTextureExactKeyWrongDiagnosticMap?.status,
+      diagnosticMapFullFramePaintCount: frameTextureExactKeyWrongDiagnosticFullFramePaintCount,
+      diagnosticMapTrace: frameTextureExactKeyWrongDiagnosticTrace,
     },
     exact: {
       call: frameTextureExactKeyExactCall,
@@ -3211,6 +3269,9 @@ return menu
       paintStatus: frameTextureExactKeyExactPaint?.status,
       canvasStatus: frameTextureExactKeyExactCanvas?.status,
       trace: frameTextureExactKeyExactTrace,
+      diagnosticMapStatus: frameTextureExactKeyExactDiagnosticMap?.status,
+      diagnosticMapFullFramePaintCount: frameTextureExactKeyExactDiagnosticFullFramePaintCount,
+      diagnosticMapTrace: frameTextureExactKeyExactDiagnosticTrace,
     },
   });
   const exactPipelineActualReferenceFrameSurface = exactPipelineFrameSurface(exactPipelineActualReferenceScene);
@@ -4609,6 +4670,123 @@ return menu
     selection: branchSelectedProgram?.localExpansion?.previewPathSelections,
     branchStatus: branchSelected?.status,
     sceneStatus: branchSelectedScene?.status,
+  });
+
+  const directBranchXml = [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    '<addon name="direct-branch-fixture">',
+    '  <environment type="menus">',
+    '    <file name="ui/direct-branch.lua" />',
+    '  </environment>',
+    '</addon>',
+    '',
+  ].join('\n');
+  const directBranchLua = [
+    'local Helper = rawget(_G, "Helper")',
+    'local menu = { name = "DirectBranches", layer = 1 }',
+    'function menu.display(tab)',
+    '  local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+    '  local table = frame:addTable(1, { width = 100 })',
+    '  local row = table:addRow(false, {})',
+    '  if tab == "first" then',
+    '    row[1]:createText("FIRST", { height = 10 })',
+    '  elseif tab == "second" then',
+    '    row[1]:createText("SECOND", { height = 10 })',
+    '  else',
+    '    row[1]:createText("OTHER", { height = 10 })',
+    '  end',
+    '  frame:display()',
+    'end',
+    '',
+  ].join('\n');
+  const directBranchSource = sourceFor([
+    passthrough('ui.xml', directBranchXml),
+    passthrough('ui/direct-branch.lua', directBranchLua, { reason: 'unparsed' }),
+  ]);
+  const directBranchSelection = selectionFor(directBranchSource, 'ui/direct-branch.lua', 'function');
+  const directBranchBefore = JSON.stringify(directBranchSource);
+  const directBranchProfileOverrides: Partial<Pick<X4UiPreviewProfileInput, 'truthGrade' | 'minTextHeight' | 'localExpansion' | 'drawable' | 'uiScale'>> = {
+    truthGrade: 'unverified-default',
+    minTextHeight: 10,
+    drawable: { width: 100, height: 80 },
+    uiScale: 1,
+  };
+  const directBranchBaseline = pipeline(
+    directBranchSource,
+    directBranchSelection,
+    canonical,
+    {},
+    directBranchProfileOverrides,
+  );
+  const directBranchBaselineProgram = directBranchBaseline.program !== undefined && 'program' in directBranchBaseline.program
+    ? directBranchBaseline.program.program
+    : undefined;
+  const directBranchCatalog = directBranchBaselineProgram?.previewPathCatalog;
+  const directBranchArms = directBranchCatalog?.entries.filter(entry =>
+    entry.invocationIds.length === 0 && entry.reachability !== 'unreachable');
+  const directBranchSelectedArm = directBranchArms?.find(entry => entry.arm === 'then');
+  const directBranchInput: X4UiLayoutPreviewPathSelectionInput | undefined = directBranchCatalog === undefined || directBranchSelectedArm === undefined
+    ? undefined
+    : {
+      catalogId: directBranchCatalog.id,
+      source: directBranchCatalog.sourceIdentity,
+      selections: [{
+        id: directBranchSelectedArm.id,
+        boundaryId: directBranchSelectedArm.boundaryId,
+        armId: directBranchSelectedArm.armId,
+      }],
+    };
+  const directBranchSelected = directBranchInput === undefined
+    ? undefined
+    : pipeline(
+      directBranchSource,
+      directBranchSelection,
+      canonical,
+      { paths: directBranchInput },
+      directBranchProfileOverrides,
+    );
+  const directBranchSelectedProgram = directBranchSelected?.program !== undefined && 'program' in directBranchSelected.program
+    ? directBranchSelected.program.program
+    : undefined;
+  const directBranchSelectedScene = directBranchSelected?.scene !== undefined && 'scene' in directBranchSelected.scene
+    ? directBranchSelected.scene.scene
+    : undefined;
+  const directBranchTextOperations = directBranchSelectedProgram?.operations.filter(operation => operation.kind === 'createText') || [];
+  const directBranchSelectedText = directBranchSelectedScene?.texts.find(text => text.content === 'FIRST');
+  const directBranchPathProof = directBranchInput !== undefined
+    && directBranchSelected?.status !== 'refused'
+    && directBranchSelectedProgram?.previewPathSelections.length === 1
+    && directBranchSelectedProgram.previewPathSelections[0]?.id === directBranchSelectedArm?.id
+    && directBranchTextOperations.length === 3
+    && directBranchTextOperations.filter(operation => operation.status === 'applied').length === 1
+    && directBranchTextOperations.some(operation => operation.status === 'applied' && operation.source.start.line === directBranchSelectedArm?.boundary.start.line + 1)
+    && directBranchTextOperations.filter(operation => operation.status === 'conditional').length === 2
+    && directBranchSelectedText?.content === 'FIRST'
+    && directBranchSelectedScene?.widgets.some(widget => widget.kind === 'text')
+    && directBranchSelectedScene?.gameTruth === 'Not verified in game'
+    && directBranchSelected?.gameTruth === 'Not verified in game'
+    && JSON.stringify(directBranchSource) === directBranchBefore;
+  check('direct-target preview path selection reaches selected Scene/Paint widget while siblings remain conditional', directBranchPathProof, {
+    fixtureReady: directBranchCatalog !== undefined && directBranchSelectedArm !== undefined,
+    catalog: directBranchCatalog?.entries.map(entry => ({
+      id: entry.id,
+      boundaryId: entry.boundaryId,
+      arm: entry.arm,
+      armIndex: entry.armIndex,
+      invocationIds: entry.invocationIds,
+      reachability: entry.reachability,
+    })),
+    selected: directBranchSelectedProgram?.previewPathSelections,
+    operations: directBranchTextOperations.map(operation => ({
+      status: operation.status,
+      source: operation.source,
+      reason: operation.reason,
+    })),
+    selectedText: directBranchSelectedText?.content,
+    sceneStatus: directBranchSelectedScene?.status,
+    sceneGameTruth: directBranchSelectedScene?.gameTruth,
+    pipelineGameTruth: directBranchSelected?.gameTruth,
+    sourceUnchanged: JSON.stringify(directBranchSource) === directBranchBefore,
   });
   const partialProgram = partialResult?.status === 'partial'
     && partialResult.program?.status === 'partial'

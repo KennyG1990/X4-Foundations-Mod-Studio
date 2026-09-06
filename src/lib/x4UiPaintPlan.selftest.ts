@@ -553,6 +553,7 @@ function frameTextureSourceFixture(
   includeVisualCause = false,
 ): X4UiWorkspaceSource {
   const backgroundIcon = unresolvedNonEmptyTexture ? 'getRuntimeIcon()' : '""';
+  const includeContent = unresolvedNonEmptyTexture || includeVisualCause;
   const lua = [
     'local Helper = rawget(_G, "Helper")',
     'local menu = { name = "FrameTexturePaint", layer = 1 }',
@@ -560,10 +561,12 @@ function frameTextureSourceFixture(
     `frame:setBackground(${backgroundIcon}, {})`,
     'frame:setBackground2("", {})',
     'frame:setOverlay("", {})',
-    'local table = frame:addTable(1, { width = 80, reserveScrollBar = false, scaling = false })',
-    'table:setColWidth(1, 80, false)',
-    'local row = table:addRow(false, {})',
-    'row[1]:createText("content", { height = 10 })',
+    ...(includeContent ? [
+      'local table = frame:addTable(1, { width = 80, reserveScrollBar = false, scaling = false })',
+      'table:setColWidth(1, 80, false)',
+      'local row = table:addRow(false, {})',
+      'row[1]:createText("content", { height = 10 })',
+    ] : []),
     'frame:display()',
     ...(includeVisualCause ? ['frame:setBackground("post-display", {})'] : []),
     '',
@@ -1377,8 +1380,12 @@ async function main(): Promise<void> {
         && diagnostic(frameTextureBlur, 'unavailable-node')?.sourceComposition === 'diagnostic-only'
         && diagnostic(frameTextureBlur, 'gap', 'backdrop')?.sourceComposition === 'diagnostic-only'
         && diagnostic(frameTextureNoBlur, 'unavailable-node')?.sourceComposition === 'diagnostic-only'
-        && frameTextureBlurCanvas.sourceComposition?.status === 'rendered'
-        && frameTextureNoBlurCanvas.sourceComposition?.status === 'rendered'
+        && frameTextureBlurCanvas.sourceComposition?.status === 'refused'
+        && frameTextureBlurCanvas.sourceComposition.receipt.refusal.code === 'no-visible-output'
+        && frameTextureBlurCanvas.sourceTrace.length === 0
+        && frameTextureNoBlurCanvas.sourceComposition?.status === 'refused'
+        && frameTextureNoBlurCanvas.sourceComposition.receipt.refusal.code === 'no-visible-output'
+        && frameTextureNoBlurCanvas.sourceTrace.length === 0
         && frameTextureBlurCanvas.unavailableStroke === false
         && frameTextureNoBlurCanvas.unavailableStroke === false
         && frameTextureBlurCanvas.diagnosticMap?.status === 'rendered'
@@ -1409,8 +1416,10 @@ async function main(): Promise<void> {
         && helperAvailabilityDiagnostic(frameTextureVisualCause)?.sourceComposition === 'diagnostic-only'
         && postDisplayDataFlowDiagnostic(frameTextureVisualCause)?.sourceComposition === 'visual'
         && diagnostic(frameTextureVisualCause, 'unavailable-node')?.sourceComposition === 'visual'
-        && frameTextureVisualCauseCanvas.sourceComposition?.status === 'rendered'
-        && frameTextureVisualCauseCanvas.unavailableStroke
+        && frameTextureVisualCauseCanvas.sourceComposition?.status === 'refused'
+        && frameTextureVisualCauseCanvas.sourceComposition.receipt.refusal.code === 'no-visible-output'
+        && frameTextureVisualCauseCanvas.sourceTrace.length === 0
+        && frameTextureVisualCauseCanvas.unavailableStroke === false
         && frameTextureVisualCauseCanvas.diagnosticMap?.status === 'rendered'
         && frameTextureVisualCauseCanvas.unavailableMapFill,
       {

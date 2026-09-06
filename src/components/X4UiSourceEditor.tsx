@@ -11,9 +11,15 @@ import {
   X4_UI_EDITOR_UNSELECTED_SOURCE,
   adoptX4UiEditorCanvasResult,
   projectX4UiEditorSession,
+  resetX4UiEditorPathState,
+  sameX4UiEditorPathBinding,
   sameX4UiEditorSampleBinding,
+  updateX4UiEditorPathState,
   updateX4UiEditorSampleState,
   type X4UiEditorCanvasState,
+  type X4UiEditorPathBinding,
+  type X4UiEditorPathCatalogAuthority,
+  type X4UiEditorPathState,
   type X4UiEditorProfileControls,
   type X4UiEditorSampleBinding,
   type X4UiEditorSampleCatalogAuthority,
@@ -22,6 +28,8 @@ import {
   type X4UiEditorSessionProjection,
 } from '../lib/x4UiEditorSession';
 import type {
+  X4UiLayoutPreviewPathCatalog,
+  X4UiLayoutPreviewPathSelectionInput,
   X4UiLayoutPreviewSampleCatalog,
   X4UiLayoutPreviewSampleInput,
   X4UiLayoutScalar,
@@ -1514,7 +1522,10 @@ export const classifyX4UiCanvasCommit = (
   previous: X4UiEditorCanvasState,
   result: X4UiCanvasRenderResult,
 ): X4UiCanvasCommitDecision => {
-  const nextState = adoptX4UiEditorCanvasResult(previous, result);
+  const commitResult = result.status === 'refused' && result.receipt.refusal.code === 'no-visible-output'
+    ? sessionRefusalResult(result.receipt.refusal.message)
+    : result;
+  const nextState = adoptX4UiEditorCanvasResult(previous, commitResult);
   if (result.status !== 'rendered'
     || nextState.status !== 'current'
     || nextState.surface !== result.surface
@@ -2438,6 +2449,94 @@ export function X4UiSourceEditorSamples({
   );
 }
 
+export interface X4UiSourceEditorPreviewPathsProps {
+  readonly catalog: X4UiLayoutPreviewPathCatalog | null;
+  readonly paths: X4UiLayoutPreviewPathSelectionInput | undefined;
+  readonly onPathSelection: (entryId: string) => void;
+  readonly onReset: () => void;
+  readonly error?: string;
+}
+
+const pathSelectionFor = (
+  paths: X4UiLayoutPreviewPathSelectionInput | undefined,
+  boundaryId: string,
+): string | undefined => paths?.selections.find(selection => selection.boundaryId === boundaryId)?.id;
+
+const pathBoundaryLabel = (entry: X4UiLayoutPreviewPathCatalog['entries'][number]): string => {
+  const sourcePath = entry.boundary.sourcePath ?? entry.boundary.file;
+  return `${sourcePath}:${entry.boundary.start.line}:${entry.boundary.start.column + 1}-${entry.boundary.end.line}:${entry.boundary.end.column + 1}`;
+};
+
+export function X4UiSourceEditorPreviewPaths({
+  catalog,
+  paths,
+  onPathSelection,
+  onReset,
+  error,
+}: X4UiSourceEditorPreviewPathsProps) {
+  const groups = catalog === null
+    ? []
+    : [...catalog.entries.reduce((grouped, entry) => {
+      const current = grouped.get(entry.boundaryId);
+      if (current === undefined) grouped.set(entry.boundaryId, [entry]);
+      else current.push(entry);
+      return grouped;
+    }, new Map<string, X4UiLayoutPreviewPathCatalog['entries'][number][]>()).values()];
+  return (
+    <section data-testid="x4-ui-preview-paths-region" className="mt-3 rounded border border-fuchsia-500/30 bg-fuchsia-950/10 p-3">
+      <div className="flex items-start justify-between gap-2">
+        <h2 className="text-[10px] font-bold uppercase tracking-wider text-fuchsia-300">Preview branch paths</h2>
+        <span data-testid="x4-ui-preview-paths-preview-only" className="font-bold text-amber-300">Preview only</span>
+      </div>
+      <div className="mt-2 text-amber-200">Selected arms affect source preview only. They never change source, workspace, export bytes, linter truth, deploy state, or <span className="font-bold">Not verified in game</span>.</div>
+      {catalog === null ? (
+        <div data-testid="x4-ui-preview-paths-empty" className="mt-2 text-slate-500">Select an exact source and target to expose the owner-issued preview path catalog.</div>
+      ) : catalog.entries.length === 0 ? (
+        <div data-testid="x4-ui-preview-paths-none" className="mt-2 text-slate-500">The selected layout program declares no selectable branch arms.</div>
+      ) : (
+        <div className="mt-2 space-y-2">
+          {groups.map(entries => {
+            const boundaryId = entries[0]!.boundaryId;
+            const selectedId = pathSelectionFor(paths, boundaryId);
+            return (
+              <fieldset key={boundaryId} data-testid={`x4-ui-preview-path-boundary-${boundaryId}`} className="rounded border border-white/10 bg-black/25 p-2">
+                <legend className="break-all px-1 text-[10px] font-bold text-slate-200">Source boundary · {pathBoundaryLabel(entries[0]!)}</legend>
+                <div className="mt-1 space-y-1">
+                  {entries.map(entry => {
+                    const unavailable = entry.reachability === 'unreachable';
+                    return (
+                      <label key={entry.id} data-testid={`x4-ui-preview-path-${entry.id}`} className={`flex items-start gap-2 rounded border border-white/5 px-2 py-1 text-[10px] ${unavailable ? 'text-slate-600' : 'text-slate-400'}`}>
+                        <input
+                          type="radio"
+                          name={`x4-ui-preview-path-${boundaryId}`}
+                          data-testid={`x4-ui-preview-path-control-${entry.id}`}
+                          checked={selectedId === entry.id}
+                          disabled={unavailable}
+                          onChange={() => onPathSelection(entry.id)}
+                        />
+                        <span className="break-all">
+                          <span className="font-bold text-slate-200">arm {entry.arm} [{entry.armIndex}]</span>
+                          {' · '}{unavailable ? 'unavailable · statically unreachable' : entry.reachability}
+                          {' · '}{entry.id}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
+            );
+          })}
+        </div>
+      )}
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button type="button" data-testid="x4-ui-preview-paths-reset" onClick={onReset} disabled={paths === undefined} className="rounded border border-fuchsia-500/30 px-2 py-1 text-[9px] font-bold uppercase text-fuchsia-300 disabled:border-white/10 disabled:text-slate-600">Reset path selections</button>
+        <span data-testid="x4-ui-preview-paths-truth" className="font-bold text-amber-300">{X4_UI_EDITOR_SESSION_GAME_TRUTH}</span>
+      </div>
+      {error !== undefined && <div data-testid="x4-ui-preview-paths-error" className="mt-2 break-words text-red-300">{error}</div>}
+    </section>
+  );
+}
+
 export default function X4UiSourceEditor({
   workspace,
   corpusLoader,
@@ -2458,6 +2557,10 @@ export default function X4UiSourceEditor({
   const [sampleBinding, setSampleBinding] = useState<X4UiEditorSampleBinding | undefined>(undefined);
   const [sampleCatalogAuthority, setSampleCatalogAuthority] = useState<X4UiEditorSampleCatalogAuthority | undefined>(undefined);
   const [sampleError, setSampleError] = useState<string | undefined>(undefined);
+  const [pathInput, setPathInput] = useState<X4UiEditorPathState>(undefined);
+  const [pathBinding, setPathBinding] = useState<X4UiEditorPathBinding | undefined>(undefined);
+  const [pathCatalogAuthority, setPathCatalogAuthority] = useState<X4UiEditorPathCatalogAuthority | undefined>(undefined);
+  const [pathError, setPathError] = useState<string | undefined>(undefined);
   const [activePresetId, setActivePresetId] = useState<string | null>(null);
   const [enabledEntryIds, setEnabledEntryIds] = useState<readonly string[]>([]);
   const [manualCalibrationState, setManualCalibrationState] = useState<X4UiManualCalibrationState>(() => createX4UiManualCalibrationState());
@@ -2612,6 +2715,9 @@ export default function X4UiSourceEditor({
     ...(sampleBinding === undefined ? {} : { sampleBinding }),
     ...(sampleCatalogAuthority === undefined ? {} : { sampleCatalogAuthority }),
     ...(sampleInput === undefined ? {} : { samples: sampleInput }),
+    ...(pathBinding === undefined ? {} : { pathBinding }),
+    ...(pathCatalogAuthority === undefined ? {} : { pathCatalogAuthority }),
+    ...(pathInput === undefined ? {} : { paths: pathInput }),
     ...(activePresetId === null ? {} : { activePresetId }),
     ...(selection.selection === undefined ? {} : { selection: selection.selection }),
   }) as unknown as X4UiEditorSessionInput, [
@@ -2625,6 +2731,9 @@ export default function X4UiSourceEditor({
     sampleBinding,
     sampleCatalogAuthority,
     sampleInput,
+    pathBinding,
+    pathCatalogAuthority,
+    pathInput,
     selection.selection,
     workspace,
   ]);
@@ -2644,6 +2753,20 @@ export default function X4UiSourceEditor({
     [projectionView.normalizedProfile, selection.selection],
   );
   currentVerificationSnapshotRef.current = currentVerificationSnapshot;
+  const currentVerificationSnapshotKey = currentVerificationSnapshot === null
+    ? 'none'
+    : canvasExportIdentityKey(currentVerificationSnapshot);
+  const committedVerificationSnapshotKey = canvasExportIdentityRef.current === null
+    ? null
+    : canvasExportIdentityKey(canvasExportIdentityRef.current);
+  const canvasCommitMatchesSnapshot = currentVerificationSnapshot === null
+    ? canvasState.status !== 'current'
+    : canvasState.status === 'current'
+      && canvasState.stale === false
+      && canvasState.surface === (canvasHostRef.current?.firstElementChild as unknown as X4UiCanvasSurface | null | undefined)
+      && (currentVerificationSnapshotKey !== null && committedVerificationSnapshotKey !== null
+        ? currentVerificationSnapshotKey === committedVerificationSnapshotKey
+        : canvasExportIdentityRef.current === currentVerificationSnapshot);
 
   const source = projectionView.source;
   const lintInspection = lintInspectionFor(preview);
@@ -2708,6 +2831,15 @@ export default function X4UiSourceEditor({
   }, [projection.sampleBinding, projection.sampleCatalogAuthority, projection.sampleReconciliation, projection.samples, sampleBinding, sampleCatalogAuthority, sampleInput]);
 
   useEffect(() => {
+    if (projection.paths !== pathInput) setPathInput(projection.paths);
+    if (!sameX4UiEditorPathBinding(projection.pathBinding, pathBinding)) setPathBinding(projection.pathBinding);
+    if (projection.pathCatalogAuthority !== pathCatalogAuthority) setPathCatalogAuthority(projection.pathCatalogAuthority);
+    if (projection.pathReconciliation.status !== 'accepted') {
+      setPathError(projection.pathReconciliation.message);
+    }
+  }, [pathBinding, pathCatalogAuthority, pathInput, projection.pathBinding, projection.pathCatalogAuthority, projection.pathReconciliation, projection.paths]);
+
+  useEffect(() => {
     if (selection.reconciled.sourceSelector !== sourceSelector) setSourceSelector(selection.reconciled.sourceSelector);
     if (selection.reconciled.targetSelector !== targetSelector) setTargetSelector(selection.reconciled.targetSelector);
   }, [selection.reconciled.sourceSelector, selection.reconciled.targetSelector, sourceSelector, targetSelector]);
@@ -2762,17 +2894,10 @@ export default function X4UiSourceEditor({
 
   useLayoutEffect(() => {
     if (onVerificationSnapshotChange === undefined) return;
-    const mountedSurface = canvasHostRef.current?.firstElementChild as unknown as X4UiCanvasSurface | null | undefined;
-    const canvasCommitMatchesSnapshot = currentVerificationSnapshot === null
-      ? canvasState.status !== 'current'
-      : canvasState.status === 'current'
-        && canvasState.stale === false
-        && canvasState.surface === mountedSurface
-        && canvasExportIdentityRef.current === currentVerificationSnapshot;
     if (!canvasCommitMatchesSnapshot) return;
-    onVerificationSnapshotChange(currentVerificationSnapshot);
+    onVerificationSnapshotChange(currentVerificationSnapshotRef.current);
     return () => onVerificationSnapshotChange(null);
-  }, [canvasState, currentVerificationSnapshot, onVerificationSnapshotChange]);
+  }, [canvasCommitMatchesSnapshot, currentVerificationSnapshotKey, onVerificationSnapshotChange]);
 
   const updateProfileDimension = (field: 'width' | 'height' | 'uiScale', raw: string): void => {
     const value = Number(raw);
@@ -2888,6 +3013,18 @@ export default function X4UiSourceEditor({
     const result = updateX4UiEditorSampleState(sampleInput, projection.sampleCatalog, entryId, raw, projection.sampleCatalogAuthority);
     setSampleInput(result.samples);
     setSampleError(result.status === 'refused' ? result.message : undefined);
+  };
+
+  const updatePath = (entryId: string): void => {
+    const result = updateX4UiEditorPathState(pathInput, projection.pathCatalog, entryId, projection.pathCatalogAuthority);
+    setPathInput(result.paths);
+    setPathError(result.status === 'refused' ? result.message : undefined);
+  };
+
+  const resetPaths = (): void => {
+    const result = resetX4UiEditorPathState(pathInput, projection.pathCatalog, projection.pathCatalogAuthority);
+    setPathInput(result.paths);
+    setPathError(result.status === 'refused' ? result.message : undefined);
   };
 
   const stageSourceEdit = (entryId: string, raw: string): void => {
@@ -3200,7 +3337,7 @@ export default function X4UiSourceEditor({
           return;
         }
         canvasExportInFlightRef.current = false;
-        if (canvasHostRef.current !== null) setCanvasExportFeedback(`exported one image/png · ${filename} · ${X4_UI_EDITOR_SESSION_GAME_TRUTH}`);
+        if (canvasHostRef.current !== null) setCanvasExportFeedback(`PNG serialization succeeded; a save/download request was handed to the host/browser · final Save As/file completion is not verified; please confirm the file · ${X4_UI_EDITOR_SESSION_GAME_TRUTH}`);
       }, 'image/png');
     } catch {
       if (!callbackSettled) {
@@ -3333,6 +3470,14 @@ export default function X4UiSourceEditor({
         samples={projection.samples}
         onSampleInput={updateSample}
         error={sampleError}
+      />
+
+      <X4UiSourceEditorPreviewPaths
+        catalog={projection.pathCatalog}
+        paths={projection.paths}
+        onPathSelection={updatePath}
+        onReset={resetPaths}
+        error={pathError}
       />
 
       <section data-testid="x4-ui-keepout-region" className="mt-3 rounded border border-white/10 bg-black/20 p-3">

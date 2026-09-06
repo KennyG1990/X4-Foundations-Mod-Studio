@@ -1431,3 +1431,68 @@ and temporary backup are rollback/evidence artifacts and remain untracked.
   plaintext exists only in the temporary operator artifact used for this run; revocation/deletion remains a separately
   confirmed credential action rather than being hidden in document close.
 - Suggested commit title: `docs(ui-editor): record current COMM game checkpoint`.
+
+## 2026-09-06 CONTINUATION — B119 dogfood and `0.0.71` release checkpoint
+
+### PLAN / BASELINE / RECONCILE
+
+- **Bounded unit:** close the already-implemented linter-first editor and record the final AI Influence visual census
+  and public `0.0.71` artifact boundary without reopening implementation or game writes.
+- **Baseline:** Forge main pre-release `HEAD == origin/main == 1690898eda51c3caf6adb1252ac35b38368b8bc6`; the broad
+  unrelated dirty tree remains preserved. X4 is not running for this documentation close. The final package and
+  installed/runtime evidence are retained under the B119 visual-release record.
+- **Reconciliation:** direct `x4UiLint` is `140/140`, including clean, warning, blocking `addTable(24)`, whole-frame,
+  and conversation-close symptom coverage. The implementation is linter-first and source-backed; it does not claim
+  universal Helper/widget parity, exact scale correlation, or universal Forge/X4 pixel equality.
+- **Capability-map delta:** none. This checkpoint strengthens existing source-preview/linter evidence; no new
+  demonstrated capability or cross-project lesson requires a map/workflow-ledger update.
+
+### IMPLEMENT / VALIDATE
+
+- No source, test, package, game, or workspace implementation changed in this documentation close. The final VSIX is
+  `F:\DEV_ENV\X4_Forge\vscode-extension\x4-forge-studio-0.0.71.vsix`, `26,296,414` bytes, SHA-256
+  `3143296C72B5A8B6A526148CA98048FA340FA534BB41A1D890F930DA69FB054B`; inspection passed with `2,107` archive
+  entries / `2,105` extension payload files.
+- The retained install backup is
+  `C:\Users\Moshi\AppData\Local\Temp\x4forge-b119-0.0.71-final-install-backup-20260906T024434135Z` (`2,106`
+  files / `71,618,336` bytes). Installed parity passed for all `2,105` packaged files, with only the expected IDE
+  `.vsixmanifest` extra; normalized `package.json` and app JS/CSS/server identities match. Installed sidecar: port
+  `56347`, PID `64300`, cwd the installed `0.0.71` app.
+- Installed runtime oracle sweep passed `134/134` with `X4_FORGE_TIMEOUT_MS=90000`; serial E2E passed `106/106`, zero
+  failed/flaky/bad/quarantined results, `treeGone=true`, and closed ports `3100/3101`; the live workspace remained
+  unchanged. Production build passed `1,848` modules, stage/build and probe passed `16/16`, precommit passed, and
+  Graphify refreshed to `10,396` nodes / `26,075` edges / `336` communities (HTML skipped above its size guard).
+- Installed visual smoke rendered the Forge workbench and setup modal. The prior Pipeline Test Menu A canvas/export is
+  current at `2560x1440`, but visible text-row/wrap overlap prevents a universal pixel-fidelity claim. The exact
+  installed `x4 AiLive` `aic_menu.lua -> menu.display` path refused with
+  `source-composition has no renderer-issued visible source geometry fill/border or canonical tinted glyph; visual
+  diagnostics require an authoritative source operation`; export was disabled, source SHA-256 remained
+  `4253D9BD9DE4113D4DE0B881DBF5A1E90CAA7B30F735BA925403EBEF7EC47DD7`, and preview remains `Not verified in game`.
+- At `2026-09-06T06:59:36Z`, OpenVSX version `0.0.71` returned HTTP `200` and `/versions` contained `0.0.71`.
+  Independent download from
+  `https://open-vsx.org/api/x4forge/x4-forge-studio/0.0.71/file/x4forge.x4-forge-studio-0.0.71.vsix` was exactly
+  `26,296,414` bytes with SHA-256
+  `3143296C72B5A8B6A526148CA98048FA340FA534BB41A1D890F930DA69FB054B`, matching the local VSIX exactly. At
+  `2026-09-06T07:08:17Z`, the registry `/latest` pointer also returned `0.0.71` with that same download URL. The
+  earlier `0.0.70` result was transient indexing lag that resolved, not a publish failure; pointer convergence is now
+  verified.
+
+### REVIEW / CLOSE / AAR
+
+- **Bounded release unit:** `VERIFIED` for publication, version-endpoint presence, independently downloaded public
+  artifact parity, and the resolved `/latest` pointer readback.
+- **Overall B119:** `PARTIAL / IN_PROGRESS`. Exact few-pixel parity across the required real menus, exact scale
+  correlation beyond bounded fixtures, full AI Influence reference reconstruction/current in-game validation, and
+  permanent `Not verified in game` preview semantics remain open. Historical `1b`/`1c`/`1d`/hub captures and the
+  current census do not establish universal helper/widget parity; `1e` is not re-established through a valid current
+  path and `1f` remains data-blocked.
+- **AAR:** the documented false-red default oracle timeout, aborted/fast-failed E2E attempts, missed workspace-switch
+  confirmation, command-policy rejection, same-version install lock/`EPERM` retries, stale-directory recovery, and
+  Graphify HTML size guard, and corrected quoting-safe PowerShell whitespace/readback probes are retained as
+  tool/approach triggers.
+  Highest risk is a Forge source-composition receipt
+  that can report current while its Canvas has zero visible pixels; the positive-geometry/refusal rule is a Forge
+  preview rule, not a proven X4 engine behavior.
+- **Durable close:** the AI Influence census, this checkpoint, UI gotcha cards, and X4 Forge AAR are the evidence
+  records. No capability-map delta and no cross-project workflow AAR are recorded. Suggested commit title:
+  `docs(ui-editor): close B119 dogfood and 0.0.71 parity`.

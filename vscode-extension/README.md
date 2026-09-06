@@ -26,62 +26,78 @@ then run **X4 Forge: Open Studio** from your editor's Command Palette.
 
 ## Shipped capability pillars
 
-### Author visually or source-first
+### Visual Mission Director & Script Authoring
 
-- Turn Mission Director cues, events, conditions, actions, branches, loops, signals, and sub-cues
-  into a navigable graph.
-- Inspect and edit the real XML at any point. Forge supports both graph-first and native,
-  source-first workflows; it does not hide or remove the generated source.
-- Import existing extensions as complete graph lanes, while preserving unsupported or
-  extension-defined elements as localized raw XML at their original position.
-- Keep related X4 domains together, including AI scripts, wares and jobs, translations, patches,
-  HUD and Lua UI work, package metadata, and data-only extensions.
+![Visual Mission Director Graph](media/showcase/01_visual_mission_director_graph.png)
 
-### Edit against X4's real reference data
+- Turn Mission Director cues, events, conditions, actions, branches, loops, signals, and sub-cues into a navigable graph.
+- Inspect and edit the real XML at any point. Forge supports both graph-first and native, source-first workflows; it does not hide or remove the generated source.
+- Import existing extensions as complete graph lanes, while preserving unsupported or extension-defined elements as localized raw XML at their original position.
 
-Point Forge at the game installation or configured unpacked reference corpus and it can provide:
+### XML Patching & Diff Simulation
 
-- XSD-aware completion for legal elements, attributes, enums, and typed script-expression chains.
-- Canonical faction, ware, sector, macro, job, and AI-script suggestions.
-- Hover documentation, types, provenance, near-match suggestions, and native IDE diagnostics.
-- Cross-file references grounded in effective base-game, DLC, and extension layers.
+![XML Patching and Diff Simulation](media/showcase/02_xml_patching_and_diff_simulation.png)
 
-### Validate the whole project deterministically
+- Surgical XML patching workbench targeting real base-game, DLC, and extension files.
+- Preview the effective document before and after a change, validate selectors, simulate every emitted operation, and keep the base file, candidate, revision, and generated patch aligned.
 
-Forge checks more than whether one XML file parses. Its deterministic checks cover XML and XSD
-validity, X4 identifiers and references, script properties and expressions, cue lineage,
-MD-to-Lua events and payloads, package completeness, patch simulation, and installed-extension
-dependencies and overrides.
+### Bulk XML Transforms Workbench
 
-Open **Why** on a finding to see the rule, evidence, likely impact, and bounded next action.
-Validation can also compare the current result with the last accepted green baseline, so new
-warnings are distinguishable from existing debt.
+![Bulk XML Transforms Workbench](media/showcase/03_bulk_xml_transforms_workbench.png)
 
-### Make patches and bulk changes inspectable
+- Parameterized numeric and attribute transforms across hundreds of game files simultaneously.
+- Preview diffs across all target files atomically before applying changes, with strict collision and selector checks.
 
-The XML Patching workbench targets real base-game, DLC, and extension files. Preview the effective
-document before and after a change, validate selectors, simulate every emitted operation, and
-keep the base file, candidate, revision, and generated patch aligned.
+### HUD & Lua UI 2D Canvas Designer
 
-Bounded numeric bulk transforms can preview several changes together and apply the complete,
-validated set atomically. Stale plans, traversal, ambiguous matches, invalid selectors, conflicts,
-and partial bundles are refused instead of being turned into silent edits.
+![HUD and Lua UI Editor](media/showcase/04_x4_ui_hud_and_lua_editor.png)
 
-### Find conflicts and prepare safer releases
+- Linter-first, source-backed X4 static checks use the configured corpus to catch supported engine-impact frame traps and other invalid UI layout assumptions.
+- The preview path ports and reuses authoritative helper, widget, and Zekton inputs from the configured unpacked X4 corpus where supported; unsupported or no-geometry targets are refused rather than guessed.
+- It is a bounded source preview, not a universal Lua renderer: unsupported or dynamic Lua is not rendered as verified geometry. A bounded generated menu has rendered in X4, but preview-to-game pixel parity remains unverified. **Not verified in game.**
+- Drag-and-drop widget layout, styling, and automated Lua glue generation.
 
-**Extension Doctor** scans installed extensions for duplicate IDs, missing dependencies, override
-claims, selector and file conflicts, and load-order winners. It distinguishes softer curated or
-heuristic third-party findings from schema-backed validation.
+### External Integration Contracts & REST API Seam
 
-For releases, Forge can validate a disk-backed project, reopen generated artifacts, preserve
-independent hashes, and prepare:
+![External Integration Contracts](media/showcase/05_external_integration_contracts_editor.png)
 
-- An install-root ZIP for Nexus Mods.
-- Steam Workshop staging with CAT/DAT output, metadata and preview checks, a rollback archive,
-  and the exact WorkshopTool handoff.
+- Connect external AI models, companion apps, and web services to X4 with typed JSON contracts.
+- Auto-generates bidirectional `UI/<ID>_HTTP.LUA` and `MD/<ID>_HTTP.XML` integration code.
 
-Forge does not upload releases, accept legal prompts, or press Enter for you. The irreversible
-step stays visible and under your control.
+### Galaxy Map & Sector Navigator
+
+![Galaxy Map Navigator](media/showcase/07_galaxy_map_and_sector_navigator.png)
+
+- Interactive galaxy map with cluster/sector nodes, coordinate projection, macro details, and object indexing.
+- Direct integration with reference corpus for macro and gate discovery.
+
+### Wares & Jobs Data Configurator
+
+![Wares and Jobs Configurator](media/showcase/08_wares_and_jobs_configurator.png)
+
+- Custom ware definition, transport categories, production cycle inputs, and dynamic pricing matrices.
+- Faction job quota and fleet spawning configuration.
+
+### AI Scripts Behavior-Tree Engine
+
+![AI Scripts Behavior Editor](media/showcase/09_aiscripts_behavior_editor.png)
+
+- Ship AI behavior builder with high-attention (in-sector) vs low-attention (OOS) protocols.
+- Structured pilot parameters, variables, interrupt conditions, and task action pipelines (`<move_to>`, `<find_objects>`, `<shoot>`).
+
+### Multi-Language T-Files Localization Workbench
+
+![T-File Localization Editor](media/showcase/10_t_file_localization_editor.png)
+
+- String catalog manager for voice lines, briefings, and UI text across all X4 language IDs (`0001-l044.xml`, `0001-l049.xml`, etc.).
+- Page trees, developer notes, and live Egosoft-compliant XML compilation.
+
+### Project Packaging & Release Center
+
+![Project Overview and Release Center](media/showcase/06_project_overview_and_release_center.png)
+
+- Whole-project validation ladder, dependency checking, and conflict analysis.
+- One-click packaging for Nexus Mods (install-root ZIP) and Steam Workshop (CAT/DAT staging with preview metadata).
 
 ## The trust boundary
 

@@ -451,6 +451,7 @@ test('SourceEditor exports only the current mounted PNG evidence', async ({ page
   const userScale = page.getByTestId('x4-ui-profile-user-scale');
   const effectiveScale = page.getByTestId('x4-ui-profile-scale');
   const gameTruth = page.getByTestId('x4-ui-game-truth');
+  const expectedSuccessfulDownloadStatus = /^PNG serialization succeeded; a save\/download request was handed to the host\/browser · final Save As\/file completion is not verified; please confirm the file · Not verified in game$/;
   await expect(exportButton).toBeDisabled();
   await expect(canvas).toHaveCount(0);
   await expect(gameTruth).toHaveText(/^Not verified in game$/);
@@ -500,7 +501,7 @@ test('SourceEditor exports only the current mounted PNG evidence', async ({ page
   await expect.poll(() => downloads.length).toBe(1);
   const firstFilename = firstDownload.suggestedFilename();
   expect(firstFilename).toMatch(/^x4-ui-[A-Za-z0-9._-]+-[A-Za-z0-9._-]+-2560x1440-effective-scale-1\.4\.png$/);
-  await expect(exportStatus).toHaveText(/exported one image\/png/);
+  await expect(exportStatus).toHaveText(expectedSuccessfulDownloadStatus);
   await expect(exportStatus).toContainText('Not verified in game');
   const sameMountedCanvasAfterExport = await page.evaluate(() => {
     const host = document.querySelector('[data-testid="x4-ui-canvas-host"]');
@@ -541,7 +542,7 @@ test('SourceEditor exports only the current mounted PNG evidence', async ({ page
   const secondDownload = await secondDownloadPromise;
   await expect.poll(() => downloads.length).toBe(2);
   expect(secondDownload.suggestedFilename()).toMatch(/-1800x900-effective-scale-0\.875\.png$/);
-  await expect(exportStatus).toHaveText(/exported one image\/png/);
+  await expect(exportStatus).toHaveText(expectedSuccessfulDownloadStatus);
 
   const downloadCountBeforeSerializationNegatives = downloads.length;
   const serializationNegative = async (mode: 'missing' | 'throw' | 'empty', expected: RegExp): Promise<void> => {

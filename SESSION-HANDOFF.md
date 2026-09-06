@@ -1,111 +1,85 @@
-# Session handoff — B119 brief 6/6; AI Influence benchmark next
+# Session handoff — B119 `0.0.71` artifact verified; AI Influence benchmark remains open
 
-Date: 2026-09-05
+Date: `2026-09-06`
 Project: `F:\DEV_ENV\X4_Forge`
-Status: literal brief `6/6 VERIFIED`; overall B119 `IN_PROGRESS`
+Status: bounded `0.0.71` publish/artifact-parity unit `VERIFIED`; AI Influence dogfood `PARTIAL`; overall B119
+`IN_PROGRESS / PARTIAL`
 
 ## Session-start brief
 
-- Project: X4 Forge B119, the linter-first source-faithful X4 Lua UI editor. GitHub owner: #41.
-- Eyeball queue: no operator check blocks the completed three-menu unit. The next visual unit must inspect all twelve
-  supplied references under `C:\Users\Moshi\Desktop\# AI Influence mod UI design\design_handoff_ai_influence` and
-  compare the Forge-authored result with those references before release acceptance.
-- Commit question: the verified three-menu code/records are committed and pushed at
-  `7263fbe6552337d52fd29784954d7239451e6d8f`; local HEAD, `origin/main`, and direct remote matched at close. The
-  projection-readback record below is the documentation close paired with that source checkpoint; verify its own
-  checkpoint is pushed before resuming implementation.
+- **Project identity:** X4 Forge B119, the linter-first source-faithful X4 Lua UI editor; GitHub owner #41.
+- **Eyeball queue:**
+  1. **Exact cross-menu parity:** launch X4 -> click `Speak to AI` -> click the selected `1b` direction -> capture;
+     click the expand/COMM control -> capture `1c`; click the valid source-backed proposal action in `1d` -> click the
+     valid `1e` transition -> capture; then click each hub tab and compare every same-source frame against the Forge
+     export at the exact drawable/effective scale. Check title, rail, body rows, wrap/truncation, buttons, footer, and
+     bottom anchoring; retain a scoped debuglog search and do not diagnose frame rejection from a close without a
+     matching error.
+  2. **Full AI Influence benchmark:** in installed Forge `0.0.71`, click workspace `x4 AiLive` -> select exact
+     `aic_menu.lua` -> select `menu.display` -> verify source/target/profile identity -> enter only owner-issued
+     samples/arms -> click render -> export the full native Canvas only when non-zero source geometry exists; retain
+     any unavailable/refused state. In X4, click through the real conversation/hub entry paths to inspect `1b`-`1j`,
+     including both tabs represented by `1i` and `1j`; do not merge either composite reference into one screen. Keep
+     `1a` unsupported and `1f` data-blocked until its deterministic pricing contract exists.
+- **Commit question:** was the last code/release close committed and pushed? This Luna worker was forbidden to stage or
+  commit; the coordinator owns reconciliation, any commit decision, and the pre-written documentation close title.
 
-## Current verified checkpoint
+## Exact latest evidence
 
-- Original brief rows 1 through 6 are now directly `VERIFIED`. This does not close the larger release program.
-- Three separately registered `pipeline_test` Lua menus exercise unequal 3/4/5-column allocation, six row boundaries,
-  standard text/button sizing, deterministic multiline wrapping, and deliberate no-wrap truncation.
-- Existing owners were repaired, not duplicated:
-  - LayoutProgram derives deterministic height when the only retained gap is finite displayed no-wrap overflow.
-  - Scene applies `min(width, parentwidth - x)` and one common multiline line-box origin.
-  - PreviewPipeline defaults no-wrap overflow to source-pinned ASCII `...`.
-- Preview remains permanently non-authoritative. Exact deploy plus observed X4 behavior is still the game-truth gate.
+- Forge pre-release baseline is `HEAD == origin/main == 1690898eda51c3caf6adb1252ac35b38368b8bc6`. The broad dirty
+  worktree is user state; preserve all unrelated modified, deleted, and untracked paths.
+- Direct `x4UiLint` selftest is `140/140`, including clean, warning, blocking `addTable(24)`, whole-frame, and
+  conversation-close symptom coverage. Clean lint remains `No known rule violated` plus `Not verified in game`, not
+  engine acceptance.
+- Final VSIX: `F:\DEV_ENV\X4_Forge\vscode-extension\x4-forge-studio-0.0.71.vsix`, `26,296,414` bytes, SHA-256
+  `3143296C72B5A8B6A526148CA98048FA340FA534BB41A1D890F930DA69FB054B`. Package inspection passed with `2,107`
+  archive entries / `2,105` extension payload files.
+- Retained install backup:
+  `C:\Users\Moshi\AppData\Local\Temp\x4forge-b119-0.0.71-final-install-backup-20260906T024434135Z`,
+  `2,106` files / `71,618,336` bytes. After the recoverable stale-install move, installed parity passed for all
+  `2,105` packaged files; only the expected IDE `.vsixmanifest` extra remained, normalized `package.json` matched,
+  and app JS/CSS/server identities matched. Installed sidecar: port `56347`, PID `64300`, installed `0.0.71` cwd.
+- Installed runtime oracle sweep is `134/134` with `X4_FORGE_TIMEOUT_MS=90000`; serial E2E is `106/106`, zero
+  failed/flaky/bad/quarantined results, `treeGone=true`; ports `3100/3101` are closed and the live workspace is
+  unchanged. Production build passed `1,848` modules, stage/build and probe passed `16/16`, precommit passed, and
+  Graphify refreshed to `10,396` nodes / `26,075` edges / `336` communities; HTML was intentionally skipped above
+  the size guard.
+- Installed visual smoke visibly rendered the Forge workbench and setup modal, not a blank/stale host. A prior installed
+  Pipeline Test Menu A proof has a current `2560x1440` canvas/export, but text-row/wrap overlap prevents universal
+  pixel-fidelity acceptance. The exact installed `x4 AiLive` `aic_menu.lua -> menu.display` check refused with
+  `source-composition has no renderer-issued visible source geometry fill/border or canonical tinted glyph; visual
+  diagnostics require an authoritative source operation`; export was disabled. Source SHA-256:
+  `4253D9BD9DE4113D4DE0B881DBF5A1E90CAA7B30F735BA925403EBEF7EC47DD7`.
+- **Public release proof:** at `2026-09-06T06:59:36Z`, OpenVSX version endpoint `0.0.71` returned HTTP `200` and
+  `/versions` contained `0.0.71`. The independent download URL
+  `https://open-vsx.org/api/x4forge/x4-forge-studio/0.0.71/file/x4forge.x4-forge-studio-0.0.71.vsix` returned
+  exactly `26,296,414` bytes and SHA-256
+  `3143296C72B5A8B6A526148CA98048FA340FA534BB41A1D890F930DA69FB054B`, an exact match to the local VSIX. At
+  `2026-09-06T07:08:17Z`, `/latest` also returned `0.0.71` with that same URL. The earlier `0.0.70` result was
+  transient indexing lag that resolved, not a publish failure or remaining blocker.
 
-## Exact source, runtime, and visual evidence
+## Current boundary
 
-- Accepted Lua: `ui/pipeline_test.lua`, `13,202` bytes, `407` lines, SHA-256
-  `E75DEF8CBED95537EEF9B7D3BCD05155F22B82DC4EEFE828B1D37D3626708EC0`.
-- Exact identity agrees across guarded workspace, in-memory export, Forge staging at
-  `F:\DEV_ENV\projects\Mods\X4Mods\.forge-builds\loose\pipeline_test`, installed X4 loose extension, Forge export
-  authority, and X4 runtime. `F:\DEV_ENV\projects\Mods\X4Mods\pipeline_test` is the immutable imported source snapshot,
-  not current staging.
-- Native X4 accepted Menu A/B/C at drawable `2544x1353`, user scale `1.0`, effective Helper scale
-  `1.2527777777777778`, and navigated `A -> B -> C -> A`. Scoped DisplayView/Lua/traceback signatures are zero.
-- Forge PNG hashes: A `AAD06821...3908`, B `980EF382...0B2E`, C `B108CF27...1D8A`.
-- X4 PNG hashes: A `38A6209C...9AE`, B `A3FF5AD6...37A`, C `3F2629A8...C9E`.
-- Receipt `dev-docs/b119-x4-ui-pipeline-smoke/three-menu-parity-20260905/parity-receipt.json` accepts all three
-  menus and exactly `125` geometry features, maximum delta `3 px <= 5 px`. Wrapped baselines and ending words match
-  exactly; overflow strings match as `A_OVERFLOW_MARKER_AB...`, `B_OVERFLOW_MARKER...`, and `C_OVERFL...`.
-- A non-deployed `6 px` Menu A boundary perturbation is rejected with `NUMERIC_DELTA_EXCEEDED`. All six source images
-  were hash-checked and visually inspected; the classifier itself validates declared measurements and does not decode
-  pixels.
+- The bounded `0.0.71` publish/artifact-parity unit is `VERIFIED`.
+- The AI Influence visual census and overall B119 remain `PARTIAL / IN_PROGRESS`. Exact few-pixel same-source parity
+  across the required real menus, exact scale correlation beyond bounded fixtures, and full reference reconstruction
+  plus current in-game validation remain open. No universal Helper/widget parity claim is allowed.
+- Preview remains permanently `Not verified in game`. X4 is not running now; this documentation close adds no new live
+  game acceptance.
+- No capability-map delta and no cross-project workflow AAR are recorded. The existing capability claims were
+  strengthened, not expanded.
 
-## Installed package and validation
+## Preservation and next unit
 
-- Installed private package:
-  `vscode-extension/x4-forge-studio-0.0.70-b119-ellipsis-parity-20260905.vsix`, `26,292,779` bytes, `2,107` entries,
-  SHA-256 `541CF6CD33BCF3322EFD1017F75F5DB379E73F66D555C51DED44F638B78570D6`. Package/install parity is exact.
-- Installed sidecar PID `66324` is healthy at `http://127.0.0.1:57771/`; X4 is stopped. Pipeline Test workspace record
-  remains `16,570` bytes / SHA-256 `168EF21392FFB7897CD001F77BB927E2E9A7B3A8757A23DF57C0E9EA6E4D339B`.
-- Focused: TextLayout `13/13`; Scene `178/178`; PreviewPipeline `117/117`; parity classifier `26/26`; LayoutProgram
-  `705` pass plus `1` skip; typecheck; zero-error targeted lint.
-- Production build `1,848` modules; staged-app probe `16/16`; installed runtime oracles `134/134` using the supported
-  `60,000 ms` timeout.
-- Full serial E2E passes `106/106`, zero failed/flaky/bad/quarantined-blocking, verdict SHA-256
-  `9E15D34F158F5693D5E7DE26F3B2F919186C60BC6C799939A63612ABC202D33B`, `treeGone=true`; ports `3100/3101` are
-  closed and the live workspace hash is unchanged.
-- Complete `npm run precommit:check` passed exit `0` after record edits. Graphify is refreshed to `10,344` nodes /
-  `25,894` edges / `342` communities.
+- Do not revert, format, stage, commit, or alter any unrelated dirty path. No source, test, package/release, game/mod,
+  configured-workspace, Git, GitHub, Notion, Drive, or credential path was part of this documentation close.
+- Next bounded unit: prove exact cross-menu source-to-game parity and the complete AI Influence twelve-image benchmark
+  through valid real entry paths. OpenVSX artifact and `/latest` pointer convergence are closed for this release
+  checkpoint; the earlier transient indexing lag is not a remaining B119 blocker.
 
-## Exact owned commit set
+## Durable records
 
-- `docs/plans/2026-08-10-b119-x4-ui-editor-linter-first.md`
-- `docs/plans/2026-09-03-b119-three-menu-pixel-parity.md`
-- `BACKLOG.md`
-- `SESSION-HANDOFF.md`
-- `src/lib/x4UiLayoutProgram.ts`
-- `src/lib/x4UiPreviewPipeline.ts`
-- `src/lib/x4UiPreviewPipeline.selftest.ts`
-- `src/lib/x4UiScene.ts`
-- `src/lib/x4UiScene.selftest.ts`
-- `src/lib/x4UiTextLayout.selftest.ts`
-- `scripts/x4-ui-parity-receipt.ts`
-- `scripts/x4-ui-parity-receipt.selftest.ts`
-
-Do not stage ignored screenshots/receipts/VSIX files or any unrelated modified, deleted, and untracked path.
-
-## Current next units
-
-1. Inspect all twelve AI Influence reference images visually, reconcile their specification/source, and author the real
-   Lua UI through Forge as the final dogfood benchmark.
-2. Repair native Save As false-success wording, rerun release acceptance, then perform the separately required OpenVSX
-   publish-before-commit sequence. Public version remains `0.0.69`; installed `0.0.70` is private.
-
-## Durable projection receipt
-
-- GitHub #41 comment `5552639115` was written and read back; the issue remains open.
-- Notion owner `3b84618e-d15b-8190-821e-c0eb96f43d5a` was written and read back at `In Progress / Partial` with the
-  exact commit, `6/6` brief result, permanent preview boundary, and remaining release work.
-- Google Current Status document `17VLaIsT499KHg7zg30hOyLaBXB0-9jlrX3dQ63s3dtE`, tab `t.0`, was revision-guarded,
-  written, repaired after terminal-character drift, and structurally read back at
-  `ANLCKQnYROzvfxvwNyTirhxtKIk-ZHYjuM5e-1iu3eBF8DJ5UkCOOOLpLSitXJB2VHwkN2IrWePWhBLUVg8eVF-fOE5JXokBbNAUf9UA5Wpv`.
-- Capability map, project AAR, and UI gotcha card 36 were updated in `F:\StarForge\wiki\`.
-
-## AAR and preservation
-
-- First oracle sweep was `133/134` because one clean endpoint required `20.94 s` under a `20 s` default; supported
-  `60 s` rerun passed `134/134`.
-- First E2E run passed `23` cases before Windows child exit `0xC0000409` produced no verdict. It failed closed; ports
-  and live workspace were verified safe before one unchanged complete `106/106` retry.
-- Identify repeated folder names by owner: import source, workspace state, build staging, and installed target are
-  separate authorities.
-- Google Docs insertion indexes are not a substitute for readback. The initial append and two index repairs moved a
-  terminal character; only the final exact paragraph/style readback is accepted.
-- No native Luna worker remains open. Any implementation/test edit requires one exact native `gpt-5.6-luna`
-  `luna_executor`, max reasoning, bounded non-overlapping ownership.
-- Repository Markdown remains authoritative; external projections are current through the receipt above.
+- `docs/plans/2026-09-05-b119-ai-influence-visual-dogfood.md` and
+  `dev-docs/b119-ai-influence-dogfood/visual-release-20260905/CENSUS.md` contain the visual classifications and close.
+- `docs/plans/2026-09-02-b119-canonical-source-editor-game-pipeline.md` and `BACKLOG.md` contain the release checkpoint.
+- UI gotcha cards 38-39 and the X4 Forge AAR record the zero-pixel/refusal lessons as Forge preview rules only.

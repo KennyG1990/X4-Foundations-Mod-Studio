@@ -20,6 +20,10 @@ import {
 } from './x4UiPreviewPipeline';
 import type {
   X4UiLayoutModelIdentity,
+  X4UiLayoutPreviewPathCatalog,
+  X4UiLayoutPreviewPathCatalogEntry,
+  X4UiLayoutPreviewPathSelectionInput,
+  X4UiLayoutPreviewPathSelectionValue,
   X4UiLayoutPreviewSampleCatalog,
   X4UiLayoutPreviewSampleInput,
   X4UiLayoutPreviewSampleValue,
@@ -78,6 +82,20 @@ export interface X4UiEditorSampleCatalogAuthority {
   readonly kind: 'x4-ui-editor-sample-catalog-authority';
 }
 
+export type X4UiEditorPathState = X4UiLayoutPreviewPathSelectionInput | undefined;
+
+export interface X4UiEditorPathBinding {
+  readonly catalogId: string;
+  readonly programKey: string;
+  readonly profileKey: string;
+  readonly selectionKey: string;
+}
+
+/** Opaque authority issued by the selected projected editor session. */
+export interface X4UiEditorPathCatalogAuthority {
+  readonly kind: 'x4-ui-editor-preview-path-catalog-authority';
+}
+
 export type X4UiEditorSampleParseResult =
   | { readonly status: 'accepted'; readonly value: X4UiLayoutScalar }
   | { readonly status: 'reset' }
@@ -133,6 +151,54 @@ export type X4UiEditorSampleUpdateResult =
     readonly code: 'malformed-input' | 'nonfinite-number' | 'boolean-literal' | 'unknown-type'
       | 'catalog-unavailable' | 'catalog-authority-required' | 'malformed-catalog' | 'duplicate-catalog-entry' | 'malformed-samples'
       | 'stale-samples' | 'unknown-sample' | 'duplicate-sample' | 'nonfinite-sample' | 'sample-type-mismatch';
+    readonly message: string;
+  };
+
+export type X4UiEditorPathReconciliationCode =
+  | 'catalog-unavailable'
+  | 'catalog-authority-required'
+  | 'malformed-catalog'
+  | 'duplicate-catalog-entry'
+  | 'malformed-paths'
+  | 'stale-paths'
+  | 'unknown-path'
+  | 'duplicate-path'
+  | 'path-boundary-mismatch'
+  | 'unreachable-path'
+  | 'conflicting-path';
+
+export type X4UiEditorPathReconciliation =
+  | {
+    readonly status: 'accepted';
+    readonly paths: X4UiEditorPathState;
+    readonly changed: boolean;
+  }
+  | {
+    readonly status: 'cleared';
+    readonly paths: undefined;
+    readonly changed: true;
+    readonly code: 'catalog-unavailable' | 'stale-paths';
+    readonly message: string;
+  }
+  | {
+    readonly status: 'refused';
+    readonly paths: X4UiEditorPathState;
+    readonly changed: boolean;
+    readonly code: Exclude<X4UiEditorPathReconciliationCode, 'catalog-unavailable' | 'stale-paths'>;
+    readonly message: string;
+  };
+
+export type X4UiEditorPathUpdateResult =
+  | {
+    readonly status: 'accepted' | 'reset';
+    readonly paths: X4UiEditorPathState;
+    readonly changed: boolean;
+  }
+  | {
+    readonly status: 'refused';
+    readonly paths: X4UiEditorPathState;
+    readonly changed: boolean;
+    readonly code: X4UiEditorPathReconciliationCode;
     readonly message: string;
   };
 
@@ -195,6 +261,11 @@ export interface X4UiEditorSessionInput {
   readonly sampleBinding?: X4UiEditorSampleBinding;
   /** Editor-only session-issued sample authority; never forwarded to the layout-program owner. */
   readonly sampleCatalogAuthority?: X4UiEditorSampleCatalogAuthority;
+  readonly paths?: X4UiLayoutPreviewPathSelectionInput;
+  /** Editor-only binding; never forwarded to the layout-program owner. */
+  readonly pathBinding?: X4UiEditorPathBinding;
+  /** Editor-only session-issued path authority; never forwarded to the layout-program owner. */
+  readonly pathCatalogAuthority?: X4UiEditorPathCatalogAuthority;
   readonly activePresetId?: KeepOutContextPresetId | string;
   readonly enabledEntryIds?: readonly string[];
   /** Session-local screenshot evidence; never persisted or forwarded as an entry. */
@@ -248,6 +319,11 @@ export interface X4UiEditorSessionProjection {
   readonly samples: X4UiEditorSampleState;
   readonly sampleBinding: X4UiEditorSampleBinding | undefined;
   readonly sampleReconciliation: X4UiEditorSampleReconciliation;
+  readonly pathCatalog: X4UiLayoutPreviewPathCatalog | null;
+  readonly pathCatalogAuthority: X4UiEditorPathCatalogAuthority | undefined;
+  readonly paths: X4UiEditorPathState;
+  readonly pathBinding: X4UiEditorPathBinding | undefined;
+  readonly pathReconciliation: X4UiEditorPathReconciliation;
   readonly keepOutPresets: readonly X4UiEditorKeepOutPresetProjection[];
   /** Alias retained for callers that call the entries simply presets. */
   readonly presets: readonly X4UiEditorKeepOutPresetProjection[];
@@ -515,6 +591,188 @@ function sampleCatalogMatchesProgram(catalog: X4UiLayoutPreviewSampleCatalog, pr
     && closedSampleSourceIdentity(targetSourceIdentity)
     && dataField(catalog as unknown as JsonRecord, 'targetId') === dataField(target, 'id')
     && sameLayoutIdentity(catalog.sourceIdentity, targetSourceIdentity);
+}
+
+function pathSourceMatchesIdentity(
+  source: { readonly file: string; readonly sourcePath?: string },
+  identity: X4UiLayoutModelIdentity,
+): boolean {
+  return source.file === identity.file && source.sourcePath === identity.sourcePath;
+}
+
+function validatePathCatalog(
+  value: unknown,
+):
+  | { readonly ok: true; readonly catalog: X4UiLayoutPreviewPathCatalog }
+  | { readonly ok: false; readonly code: 'malformed-catalog' | 'duplicate-catalog-entry'; readonly message: string } {
+  if (!hasClosedOwnDataFields(value, ['id', 'sourceIdentity', 'targetId', 'entries'])
+    || !isNonEmptyString(dataField(value, 'id'))
+    || !closedSampleSourceIdentity(dataField(value, 'sourceIdentity'))
+    || !isNonEmptyString(dataField(value, 'targetId'))) {
+    return { ok: false, code: 'malformed-catalog', message: 'preview path catalog is malformed' };
+  }
+  const sourceIdentity = dataField(value, 'sourceIdentity') as X4UiLayoutModelIdentity;
+  const entries = closedArrayValues(dataField(value, 'entries'));
+  if (entries === null) return { ok: false, code: 'malformed-catalog', message: 'preview path catalog entries must be a dense own-data array' };
+  const ids = new Set<string>();
+  for (const entryValue of entries) {
+    if (!hasClosedOwnDataFields(entryValue, [
+      'id', 'boundaryId', 'armId', 'boundary', 'arm', 'armIndex', 'reachability', 'invocationIds', 'provenance',
+    ])
+      || !isNonEmptyString(dataField(entryValue, 'id'))
+      || !isNonEmptyString(dataField(entryValue, 'boundaryId'))
+      || !isNonEmptyString(dataField(entryValue, 'armId'))
+      || !closedSampleSourceLocation(dataField(entryValue, 'boundary'))
+      || !['then', 'elseif', 'else'].includes(String(dataField(entryValue, 'arm')))
+      || !Number.isSafeInteger(dataField(entryValue, 'armIndex'))
+      || (dataField(entryValue, 'armIndex') as number) < 0
+      || !['reachable', 'conditional', 'unreachable'].includes(String(dataField(entryValue, 'reachability')))
+      || dataField(entryValue, 'provenance') !== 'preview-only') {
+      return { ok: false, code: 'malformed-catalog', message: 'preview path catalog contains a malformed entry' };
+    }
+    const entryId = dataField(entryValue, 'id') as string;
+    if (ids.has(entryId)) return { ok: false, code: 'duplicate-catalog-entry', message: `duplicate preview path catalog ID: ${entryId}` };
+    ids.add(entryId);
+    const boundary = dataField(entryValue, 'boundary') as X4UiLayoutPreviewPathCatalogEntry['boundary'];
+    if (!pathSourceMatchesIdentity(boundary, sourceIdentity)) {
+      return { ok: false, code: 'malformed-catalog', message: `preview path catalog entry ${entryId} has a foreign source identity` };
+    }
+    const invocationIds = closedArrayValues(dataField(entryValue, 'invocationIds'));
+    if (invocationIds === null || invocationIds.some(id => !isNonEmptyString(id))) {
+      return { ok: false, code: 'malformed-catalog', message: `preview path catalog entry ${entryId} has malformed invocation IDs` };
+    }
+    if (new Set(invocationIds).size !== invocationIds.length) {
+      return { ok: false, code: 'malformed-catalog', message: `preview path catalog entry ${entryId} has duplicate invocation IDs` };
+    }
+  }
+  return { ok: true, catalog: value as unknown as X4UiLayoutPreviewPathCatalog };
+}
+
+function pathCatalogMatchesProgram(catalog: X4UiLayoutPreviewPathCatalog, program: unknown): boolean {
+  if (!isRecord(program)) return false;
+  const target = dataField(program, 'target');
+  const targetIdentity = isRecord(target) ? dataField(target, 'sourceIdentity') : undefined;
+  const programCatalog = dataField(program, 'previewPathCatalog');
+  return isRecord(target)
+    && isNonEmptyString(dataField(target, 'id'))
+    && closedSampleSourceIdentity(targetIdentity)
+    && dataField(catalog as unknown as JsonRecord, 'targetId') === dataField(target, 'id')
+    && sameLayoutIdentity(catalog.sourceIdentity, targetIdentity)
+    && programCatalog === catalog;
+}
+
+function pathBindingFor(
+  preview: X4UiPreviewPipelineResult,
+  profile: X4UiEditorNormalizedProfile,
+  selection: X4UiPreviewSelection | undefined,
+  catalog: X4UiLayoutPreviewPathCatalog | null,
+): X4UiEditorPathBinding | undefined {
+  const programResult = isRecord(preview.program) ? preview.program : null;
+  const program = isRecord(programResult?.program) ? programResult.program : null;
+  if (catalog === null || program === null) return undefined;
+  const target = isRecord(dataField(program, 'target')) ? dataField(program, 'target') : undefined;
+  return freezeDeep({
+    catalogId: catalog.id,
+    programKey: stableDataKey({ target, previewPathCatalog: catalog }),
+    profileKey: stableDataKey(profile),
+    selectionKey: stableDataKey({
+      sourceIndex: selection?.sourceIndex,
+      path: selection?.path,
+      sourceIdentity: selection?.sourceIdentity,
+      target: target ?? selection?.target,
+    }),
+  });
+}
+
+function isPathBinding(value: unknown): value is X4UiEditorPathBinding {
+  return hasClosedOwnDataFields(value, ['catalogId', 'programKey', 'profileKey', 'selectionKey'])
+    && isNonEmptyString(dataField(value, 'catalogId'))
+    && isNonEmptyString(dataField(value, 'programKey'))
+    && isNonEmptyString(dataField(value, 'profileKey'))
+    && isNonEmptyString(dataField(value, 'selectionKey'));
+}
+
+export function sameX4UiEditorPathBinding(left: unknown, right: unknown): boolean {
+  if (left === undefined || right === undefined) return left === right;
+  if (!isPathBinding(left) || !isPathBinding(right)) return false;
+  const leftRecord = left as unknown as JsonRecord;
+  const rightRecord = right as unknown as JsonRecord;
+  return dataField(leftRecord, 'catalogId') === dataField(rightRecord, 'catalogId')
+    && dataField(leftRecord, 'programKey') === dataField(rightRecord, 'programKey')
+    && dataField(leftRecord, 'profileKey') === dataField(rightRecord, 'profileKey')
+    && dataField(leftRecord, 'selectionKey') === dataField(rightRecord, 'selectionKey');
+}
+
+type IssuedPathCatalogAuthority = {
+  catalog: X4UiLayoutPreviewPathCatalog;
+  binding: X4UiEditorPathBinding;
+};
+
+const issuedPathCatalogAuthorities = new WeakMap<object, IssuedPathCatalogAuthority>();
+
+function issuePathCatalogAuthority(
+  catalog: X4UiLayoutPreviewPathCatalog,
+  binding: X4UiEditorPathBinding,
+): X4UiEditorPathCatalogAuthority {
+  const authority = Object.freeze({ kind: 'x4-ui-editor-preview-path-catalog-authority' as const });
+  issuedPathCatalogAuthorities.set(authority, { catalog, binding });
+  return authority;
+}
+
+function issuedPathCatalogAuthorityFor(value: unknown): IssuedPathCatalogAuthority | null {
+  if (value === null || typeof value !== 'object') return null;
+  return issuedPathCatalogAuthorities.get(value) ?? null;
+}
+
+function rebindPathCatalogAuthority(
+  value: unknown,
+  catalog: X4UiLayoutPreviewPathCatalog | null,
+  binding: X4UiEditorPathBinding | undefined,
+): X4UiEditorPathCatalogAuthority | undefined {
+  if (catalog === null || binding === undefined) return undefined;
+  const record = issuedPathCatalogAuthorityFor(value);
+  if (record === null || !sameX4UiEditorPathBinding(record.binding, binding)) return undefined;
+  record.catalog = catalog;
+  record.binding = binding;
+  return value as X4UiEditorPathCatalogAuthority;
+}
+
+function pathCatalogAuthorityMatches(catalog: unknown, authority: unknown): boolean {
+  const record = issuedPathCatalogAuthorityFor(authority);
+  return record !== null && record.catalog === catalog;
+}
+
+function samePathInput(left: X4UiLayoutPreviewPathSelectionInput, right: X4UiLayoutPreviewPathSelectionInput): boolean {
+  return left.catalogId === right.catalogId
+    && sameLayoutIdentity(left.source, right.source)
+    && left.selections.length === right.selections.length
+    && left.selections.every((selection, index) => {
+      const candidate = right.selections[index];
+      return candidate !== undefined
+        && candidate.id === selection.id
+        && candidate.boundaryId === selection.boundaryId
+        && candidate.armId === selection.armId;
+    });
+}
+
+function pathInputFor(
+  catalog: X4UiLayoutPreviewPathCatalog,
+  selections: readonly X4UiLayoutPreviewPathSelectionValue[],
+): X4UiEditorPathState {
+  if (selections.length === 0) return undefined;
+  return freezeDeep({
+    catalogId: catalog.id,
+    source: {
+      file: catalog.sourceIdentity.file,
+      ...(catalog.sourceIdentity.sourcePath === undefined ? {} : { sourcePath: catalog.sourceIdentity.sourcePath }),
+      sha256: catalog.sourceIdentity.sha256,
+    },
+    selections: selections.map(selection => ({
+      id: selection.id,
+      boundaryId: selection.boundaryId,
+      armId: selection.armId,
+    })),
+  });
 }
 
 function stableDataKey(value: unknown, active = new WeakSet<object>()): string {
@@ -924,6 +1182,270 @@ export function updateX4UiEditorSampleState(
   };
 }
 
+/** Reconcile preview-only branch state against one exact layout-program catalog. */
+export function reconcileX4UiEditorPathState(
+  paths: unknown,
+  catalog: unknown,
+  authority: unknown,
+): X4UiEditorPathReconciliation {
+  if (catalog === null || catalog === undefined) {
+    if (paths === undefined) return { status: 'accepted', paths: undefined, changed: false };
+    return {
+      status: 'cleared',
+      paths: undefined,
+      changed: true,
+      code: 'catalog-unavailable',
+      message: 'preview paths were cleared because no selected layout-program catalog is available',
+    };
+  }
+  if (!pathCatalogAuthorityMatches(catalog, authority)) {
+    return {
+      status: 'refused',
+      paths: undefined,
+      changed: true,
+      code: 'catalog-authority-required',
+      message: 'preview paths require the exact catalog authority issued by the selected editor session',
+    };
+  }
+  const catalogResult = validatePathCatalog(catalog);
+  if (catalogResult.ok === false) {
+    return {
+      status: 'refused',
+      paths: undefined,
+      changed: true,
+      code: catalogResult.code,
+      message: catalogResult.message,
+    };
+  }
+  if (paths === undefined) return { status: 'accepted', paths: undefined, changed: false };
+  if (!hasClosedOwnDataFields(paths, ['catalogId', 'source', 'selections'])
+    || !isNonEmptyString(dataField(paths, 'catalogId'))
+    || !closedSampleSourceIdentity(dataField(paths, 'source'))) {
+    return {
+      status: 'refused',
+      paths: undefined,
+      changed: true,
+      code: 'malformed-paths',
+      message: 'preview paths must carry catalogId, exact source identity, and a selections array',
+    };
+  }
+  const selections = closedArrayValues(dataField(paths, 'selections'));
+  if (selections === null) {
+    return {
+      status: 'refused',
+      paths: undefined,
+      changed: true,
+      code: 'malformed-paths',
+      message: 'preview path selections must be a dense own-data array',
+    };
+  }
+  const typedPaths = paths as unknown as X4UiLayoutPreviewPathSelectionInput;
+  const suppliedCatalogId = dataField(paths, 'catalogId');
+  const suppliedSource = dataField(paths, 'source');
+  if (suppliedCatalogId !== catalogResult.catalog.id
+    || !sameLayoutIdentity(suppliedSource as X4UiLayoutModelIdentity, catalogResult.catalog.sourceIdentity)) {
+    return {
+      status: 'cleared',
+      paths: undefined,
+      changed: true,
+      code: 'stale-paths',
+      message: 'preview paths were cleared because source, target, or selected program identity changed',
+    };
+  }
+  const entriesById = new Map(catalogResult.catalog.entries.map(entry => [entry.id, entry]));
+  const seen = new Set<string>();
+  const selected: X4UiLayoutPreviewPathSelectionValue[] = [];
+  const selectedByBoundary = new Map<string, X4UiLayoutPreviewPathCatalogEntry>();
+  for (const selection of selections) {
+    if (!hasClosedOwnDataFields(selection, ['id', 'boundaryId', 'armId'])
+      || !isNonEmptyString(dataField(selection, 'id'))
+      || !isNonEmptyString(dataField(selection, 'boundaryId'))
+      || !isNonEmptyString(dataField(selection, 'armId'))) {
+      return {
+        status: 'refused',
+        paths: undefined,
+        changed: true,
+        code: 'malformed-paths',
+        message: 'each preview path selection requires exact id, boundaryId, and armId strings',
+      };
+    }
+    const id = dataField(selection, 'id') as string;
+    const boundaryId = dataField(selection, 'boundaryId') as string;
+    const armId = dataField(selection, 'armId') as string;
+    if (seen.has(id)) {
+      return {
+        status: 'refused',
+        paths: undefined,
+        changed: true,
+        code: 'duplicate-path',
+        message: `duplicate preview path selection ID: ${id}`,
+      };
+    }
+    const entry = entriesById.get(id);
+    if (entry === undefined) {
+      return {
+        status: 'refused',
+        paths: undefined,
+        changed: true,
+        code: 'unknown-path',
+        message: `unknown or no-longer-catalogued preview path selection ID: ${id}`,
+      };
+    }
+    if (entry.boundaryId !== boundaryId || entry.armId !== armId) {
+      return {
+        status: 'refused',
+        paths: undefined,
+        changed: true,
+        code: 'path-boundary-mismatch',
+        message: `preview path selection ${id} does not match its catalog boundary and arm`,
+      };
+    }
+    if (entry.reachability === 'unreachable') {
+      return {
+        status: 'refused',
+        paths: undefined,
+        changed: true,
+        code: 'unreachable-path',
+        message: `statically unreachable preview path arm cannot be selected: ${id}`,
+      };
+    }
+    const prior = selectedByBoundary.get(entry.boundaryId);
+    if (prior !== undefined && prior.armId !== entry.armId) {
+      return {
+        status: 'refused',
+        paths: undefined,
+        changed: true,
+        code: 'conflicting-path',
+        message: `conflicting preview path arms for boundary ${entry.boundaryId}`,
+      };
+    }
+    seen.add(id);
+    selectedByBoundary.set(entry.boundaryId, entry);
+    selected.push({ id, boundaryId, armId });
+  }
+  const ordered = catalogResult.catalog.entries
+    .map(entry => selected.find(selection => selection.id === entry.id))
+    .filter((selection): selection is X4UiLayoutPreviewPathSelectionValue => selection !== undefined);
+  const normalized = pathInputFor(catalogResult.catalog, ordered);
+  if (normalized === undefined) return { status: 'accepted', paths: undefined, changed: true };
+  if (samePathInput(typedPaths, normalized)) return { status: 'accepted', paths: typedPaths, changed: false };
+  return { status: 'accepted', paths: normalized, changed: true };
+}
+
+/** Apply one mutually-exclusive exact branch-arm control update. */
+export function updateX4UiEditorPathState(
+  current: X4UiEditorPathState,
+  catalog: unknown,
+  entryId: string,
+  authority: unknown,
+): X4UiEditorPathUpdateResult {
+  const reconciled = reconcileX4UiEditorPathState(current, catalog, authority);
+  if (reconciled.status === 'refused') {
+    return {
+      status: 'refused',
+      paths: reconciled.paths,
+      changed: reconciled.changed,
+      code: reconciled.code,
+      message: reconciled.message,
+    };
+  }
+  if (catalog === null || catalog === undefined) {
+    return {
+      status: 'refused',
+      paths: reconciled.paths,
+      changed: reconciled.changed,
+      code: 'catalog-unavailable',
+      message: 'preview path updates require an available selected layout-program catalog',
+    };
+  }
+  const catalogResult = validatePathCatalog(catalog);
+  if (catalogResult.ok === false) {
+    return {
+      status: 'refused',
+      paths: undefined,
+      changed: true,
+      code: catalogResult.code,
+      message: catalogResult.message,
+    };
+  }
+  const entry = catalogResult.catalog.entries.find(candidate => candidate.id === entryId);
+  if (entry === undefined) {
+    return {
+      status: 'refused',
+      paths: reconciled.paths,
+      changed: reconciled.changed,
+      code: 'unknown-path',
+      message: `unknown preview path ID: ${entryId}`,
+    };
+  }
+  if (entry.reachability === 'unreachable') {
+    return {
+      status: 'refused',
+      paths: reconciled.paths,
+      changed: reconciled.changed,
+      code: 'unreachable-path',
+      message: `statically unreachable preview path arm cannot be selected: ${entryId}`,
+    };
+  }
+  const selections = (reconciled.paths?.selections ?? [])
+    .filter(selection => selection.boundaryId !== entry.boundaryId)
+    .concat([{ id: entry.id, boundaryId: entry.boundaryId, armId: entry.armId }]);
+  const updated = reconcileX4UiEditorPathState({
+    catalogId: catalogResult.catalog.id,
+    source: catalogResult.catalog.sourceIdentity,
+    selections,
+  }, catalogResult.catalog, authority);
+  if (updated.status !== 'accepted') {
+    return {
+      status: 'refused',
+      paths: updated.paths,
+      changed: true,
+      code: updated.code,
+      message: updated.message,
+    };
+  }
+  const previousPaths = reconciled.paths;
+  const nextPaths = updated.paths;
+  const pathStateChanged = previousPaths === undefined
+    ? nextPaths !== undefined
+    : nextPaths === undefined || !samePathInput(previousPaths, nextPaths);
+  return {
+    status: 'accepted',
+    paths: updated.paths,
+    changed: reconciled.changed || pathStateChanged,
+  };
+}
+
+/** Reset all preview branch selections after authority validation. */
+export function resetX4UiEditorPathState(
+  current: X4UiEditorPathState,
+  catalog: unknown,
+  authority: unknown,
+): X4UiEditorPathUpdateResult {
+  const reconciled = reconcileX4UiEditorPathState(current, catalog, authority);
+  if (reconciled.status === 'refused') {
+    return {
+      status: 'refused',
+      paths: reconciled.paths,
+      changed: reconciled.changed,
+      code: reconciled.code,
+      message: reconciled.message,
+    };
+  }
+  if (catalog === null || catalog === undefined) {
+    return {
+      status: 'reset',
+      paths: undefined,
+      changed: reconciled.paths !== undefined || reconciled.changed,
+    };
+  }
+  return {
+    status: 'reset',
+    paths: undefined,
+    changed: reconciled.paths !== undefined || reconciled.changed,
+  };
+}
+
 function copySource(value: X4UiEditorProfileSource): X4UiEditorProfileSource {
   return {
     file: value.file,
@@ -1108,6 +1630,7 @@ function previewFor(
   profile: X4UiEditorNormalizedProfile,
   selection: X4UiPreviewSelection | undefined,
   samples: X4UiLayoutPreviewSampleInput | undefined,
+  paths: X4UiLayoutPreviewPathSelectionInput | undefined,
   colorEvidence: X4UiCorpusCanonicalColorSuccess | undefined,
 ): X4UiPreviewPipelineResult {
   const previewInput: X4UiPreviewPipelineInput = {
@@ -1125,6 +1648,7 @@ function previewFor(
     ...(colorEvidence === undefined ? {} : { colorEvidence }),
     ...(selection === undefined ? {} : { selection }),
     ...(samples === undefined ? {} : { samples }),
+    ...(paths === undefined ? {} : { paths }),
   };
   try {
     return projectX4UiPreviewPipeline(previewInput);
@@ -1141,6 +1665,7 @@ function previewFor(
         uiScale: X4_UI_EDITOR_DEFAULT_PROFILE.uiScale,
       },
       samples: undefined,
+      paths: undefined,
     });
   }
 }
@@ -1151,6 +1676,15 @@ function sampleCatalogFor(preview: X4UiPreviewPipelineResult): X4UiLayoutPreview
   if (program === null) return null;
   const catalogResult = validateSampleCatalog(dataField(program, 'sampleCatalog'));
   if (catalogResult.ok === false || !sampleCatalogMatchesProgram(catalogResult.catalog, program)) return null;
+  return catalogResult.catalog;
+}
+
+function pathCatalogFor(preview: X4UiPreviewPipelineResult): X4UiLayoutPreviewPathCatalog | null {
+  const programResult = isRecord(preview.program) ? preview.program : null;
+  const program = isRecord(programResult?.program) ? programResult.program : null;
+  if (program === null || preview.pathCatalog === null) return null;
+  const catalogResult = validatePathCatalog(preview.pathCatalog);
+  if (catalogResult.ok === false || !pathCatalogMatchesProgram(catalogResult.catalog, program)) return null;
   return catalogResult.catalog;
 }
 
@@ -1332,9 +1866,11 @@ export function projectX4UiEditorSession(input: X4UiEditorSessionInput): X4UiEdi
       && normalized.raw.enabledEntryIds.every(value => typeof value === 'string')
       ? Array.from(new Set(normalized.raw.enabledEntryIds))
       : undefined;
-    const catalogPreview = previewFor(source, corpus, normalized.profile, normalized.selection, undefined, normalized.colorEvidence);
+    const catalogPreview = previewFor(source, corpus, normalized.profile, normalized.selection, undefined, undefined, normalized.colorEvidence);
     const sampleCatalog = sampleCatalogFor(catalogPreview);
+    const pathCatalog = pathCatalogFor(catalogPreview);
     const sampleBinding = sampleBindingFor(catalogPreview, normalized.profile, normalized.selection, sampleCatalog);
+    const pathBinding = pathBindingFor(catalogPreview, normalized.profile, normalized.selection, pathCatalog);
     const issuedSampleCatalogAuthority = sampleCatalog !== null && sampleBinding !== undefined
       ? issueSampleCatalogAuthority(sampleCatalog, sampleBinding)
       : undefined;
@@ -1346,9 +1882,24 @@ export function projectX4UiEditorSession(input: X4UiEditorSessionInput): X4UiEdi
       sampleCatalog,
       sampleBinding,
     ) ?? issuedSampleCatalogAuthority;
+    const issuedPathCatalogAuthority = pathCatalog !== null && pathBinding !== undefined
+      ? issuePathCatalogAuthority(pathCatalog, pathBinding)
+      : undefined;
+    const suppliedPathCatalogAuthority = hasOwn(normalized.raw, 'pathCatalogAuthority')
+      ? normalized.raw.pathCatalogAuthority
+      : undefined;
+    const pathCatalogAuthority = rebindPathCatalogAuthority(
+      suppliedPathCatalogAuthority,
+      pathCatalog,
+      pathBinding,
+    ) ?? issuedPathCatalogAuthority;
     const suppliedSamples = hasOwn(normalized.raw, 'samples') ? normalized.raw.samples : undefined;
     const suppliedSampleBinding = hasOwn(normalized.raw, 'sampleBinding')
       ? normalized.raw.sampleBinding
+      : undefined;
+    const suppliedPaths = hasOwn(normalized.raw, 'paths') ? normalized.raw.paths : undefined;
+    const suppliedPathBinding = hasOwn(normalized.raw, 'pathBinding')
+      ? normalized.raw.pathBinding
       : undefined;
     let sampleReconciliation: X4UiEditorSampleReconciliation;
     if (suppliedSamples !== undefined
@@ -1374,12 +1925,38 @@ export function projectX4UiEditorSession(input: X4UiEditorSessionInput): X4UiEdi
     const samples = sampleReconciliation.status === 'accepted'
       ? sampleReconciliation.samples
       : undefined;
-    const preview = samples === undefined
+    let pathReconciliation: X4UiEditorPathReconciliation;
+    if (suppliedPaths !== undefined
+      && pathBinding !== undefined
+      && !sameX4UiEditorPathBinding(suppliedPathBinding, pathBinding)) {
+      pathReconciliation = {
+        status: 'cleared',
+        paths: undefined,
+        changed: true,
+        code: 'stale-paths',
+        message: 'preview paths were cleared because the selected program or normalized profile identity changed',
+      };
+    } else {
+      const authorityForReconciliation = suppliedPaths === undefined
+        ? pathCatalogAuthority
+        : suppliedPathCatalogAuthority;
+      pathReconciliation = reconcileX4UiEditorPathState(
+        suppliedPaths,
+        pathCatalog,
+        authorityForReconciliation,
+      );
+    }
+    const paths = pathReconciliation.status === 'accepted'
+      ? pathReconciliation.paths
+      : undefined;
+    const preview = samples === undefined && paths === undefined
       ? catalogPreview
-      : previewFor(source, corpus, normalized.profile, normalized.selection, samples, normalized.colorEvidence);
-    const sessionIssues = sampleReconciliation.status === 'refused'
-      ? [...normalized.issues, sampleReconciliation.message]
-      : normalized.issues;
+      : previewFor(source, corpus, normalized.profile, normalized.selection, samples, paths, normalized.colorEvidence);
+    const sessionIssues = [
+      ...normalized.issues,
+      ...(sampleReconciliation.status === 'refused' ? [sampleReconciliation.message] : []),
+      ...(pathReconciliation.status === 'refused' ? [pathReconciliation.message] : []),
+    ];
     const keepOutPresets = keepOutPresetsFor(normalized.profile.drawable, activePresetId, enabledEntryIds);
     const manualCalibrations = manualCalibrationProjections(
       normalized.manualCalibrations,
@@ -1423,6 +2000,11 @@ export function projectX4UiEditorSession(input: X4UiEditorSessionInput): X4UiEdi
       samples,
       sampleBinding,
       sampleReconciliation,
+      pathCatalog,
+      pathCatalogAuthority,
+      paths,
+      pathBinding,
+      pathReconciliation,
       keepOutPresets,
       presets: keepOutPresets,
       activePresetId,
@@ -1437,7 +2019,7 @@ export function projectX4UiEditorSession(input: X4UiEditorSessionInput): X4UiEdi
   } catch (error) {
     const fallback = normalizeInput(undefined);
     const source = buildSource(fallback);
-    const preview = previewFor(source, undefined, fallback.profile, undefined, undefined, undefined);
+    const preview = previewFor(source, undefined, fallback.profile, undefined, undefined, undefined, undefined);
     const keepOutPresets = keepOutPresetsFor(fallback.profile.drawable, null, undefined);
     const manualCalibrations: readonly X4UiEditorManualCalibrationProjection[] = [];
     return freezeDeep({
@@ -1453,6 +2035,11 @@ export function projectX4UiEditorSession(input: X4UiEditorSessionInput): X4UiEdi
       samples: undefined,
       sampleBinding: undefined,
       sampleReconciliation: { status: 'accepted', samples: undefined, changed: false },
+      pathCatalog: null,
+      pathCatalogAuthority: undefined,
+      paths: undefined,
+      pathBinding: undefined,
+      pathReconciliation: { status: 'accepted', paths: undefined, changed: false },
       keepOutPresets,
       presets: keepOutPresets,
       activePresetId: null,

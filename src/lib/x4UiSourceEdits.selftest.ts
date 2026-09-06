@@ -10,10 +10,13 @@ import {
   type X4UiPreviewSelection,
 } from './x4UiPreviewPipeline';
 import {
+  canonicalizeX4UiLayoutModel,
   createX4UiLayoutTargetCatalog,
   isExactX4UiLayoutColorValue,
+  isIssuedX4UiLayoutEvidencePair,
   isIssuedX4UiLayoutEvidencePairForModel,
   projectX4UiLayoutProgram,
+  validateX4UiLayoutEvidencePair,
   type X4UiLayoutEvidenceAuthority,
   type X4UiLayoutOperation,
   type X4UiLayoutProgram,
@@ -503,6 +506,21 @@ const selectedFunctionXml = [
   '    <file name="ui/selected_function.lua" />',
   '  </environment>',
   '</addon>',
+  '',
+].join('\n');
+
+const aliasSourceLayoutLua = [
+  'local Helper = rawget(_G, "Helper")',
+  'local menu = { name = "AliasOutside", layer = 1 }',
+  'local unrelatedText = "UNRELATED"',
+  'OpenMenu(unrelatedText)',
+  'function menu.display()',
+  '  local frame = Helper.createFrameHandle(menu, { width = 100, height = 80 })',
+  '  local table = frame:addTable(1, { width = 100 })',
+  '  local row = table:addRow(false, {})',
+  '  row[1]:createText("ALIAS", { height = 10 })',
+  '  frame:display()',
+  'end',
   '',
 ].join('\n');
 
@@ -1478,6 +1496,240 @@ const run = async (): Promise<void> => {
       && exactPipelineCatalog.editableEntries.length > 0
       && !exactPipelineCatalog.lockedEntries.some(entry => entry.reason === 'provenance-drift'),
     JSON.stringify(exactPipelineRegression));
+  {
+  const aliasWorkspace = workspace(aliasSourceLayoutLua, {
+    id: 'b119-alias-source-layout-selftest',
+    name: 'B119 alias source layout selftest',
+    passthroughFiles: [
+      passthrough('README.md', '# unchanged\n', { reason: 'unknown_domain' }),
+      passthrough('ui.xml', uiXml, { reason: 'partial', bytes: uiXml.length }),
+      passthrough('ui/edit.lua', aliasSourceLayoutLua, { reason: 'partial', bytes: aliasSourceLayoutLua.length }),
+    ],
+  });
+  const aliasSource = buildX4UiWorkspaceSource(aliasWorkspace);
+  if (!aliasSource.bundle) throw new Error('B119 alias source fixture did not build a bundle');
+  const aliasSourceFile = aliasSource.bundle.sourceFiles.find(file => file.path === 'ui/edit.lua');
+  if (!aliasSourceFile) throw new Error('B119 alias source fixture Lua file missing');
+  const aliasRawModel = aliasSourceFile.callModel;
+  // PreviewPipeline's pre-fix clone is intentionally represented here with the
+  // same JSON-domain clone, so the receipt captures the old model-view split.
+  const aliasPreviewClone = JSON.parse(JSON.stringify(aliasRawModel)) as X4UiCallModel;
+  const aliasSourceEditModel = normalizeX4UiSourceEditLayoutModel(aliasRawModel);
+  const aliasCanonicalModel = canonicalizeX4UiLayoutModel(aliasRawModel);
+  if (!aliasCanonicalModel) throw new Error('B119 alias source fixture canonical model missing');
+  const countSourceLiteralKeys = (value: unknown): number => {
+    if (Array.isArray(value)) return value.reduce((total, child) => total + countSourceLiteralKeys(child), 0);
+    if (value === null || typeof value !== 'object') return 0;
+    return Object.entries(value).reduce((total, [key, child]) =>
+      total + (key === 'sourceLiteral' ? 1 : 0) + countSourceLiteralKeys(child), 0);
+  };
+  const modelDifferencePaths = (left: unknown, right: unknown, path = '$'): readonly string[] => {
+    if (JSON.stringify(left) === JSON.stringify(right)) return [];
+    if (Array.isArray(left) && Array.isArray(right)) {
+      const paths: string[] = [];
+      const length = Math.max(left.length, right.length);
+      for (let index = 0; index < length; index += 1) {
+        paths.push(...modelDifferencePaths(left[index], right[index], `${path}[${index}]`));
+      }
+      return paths;
+    }
+    if (left !== null && right !== null && typeof left === 'object' && typeof right === 'object'
+      && !Array.isArray(left) && !Array.isArray(right)) {
+      const paths: string[] = [];
+      const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+      for (const key of keys) paths.push(...modelDifferencePaths(
+        (left as Record<string, unknown>)[key],
+        (right as Record<string, unknown>)[key],
+        `${path}.${key}`,
+      ));
+      return paths;
+    }
+    return [path];
+  };
+  const aliasPreviewOpenMenu = aliasPreviewClone.calls.find(call => call.name === 'OpenMenu');
+  const aliasCanonicalOpenMenu = aliasCanonicalModel.calls.find(call => call.name === 'OpenMenu');
+  if (!aliasPreviewOpenMenu || !aliasCanonicalOpenMenu) throw new Error('B119 alias OpenMenu call missing');
+  const aliasPreviewOpenMenuArgument = asRecord(aliasPreviewOpenMenu.arguments[0]);
+  const aliasCanonicalOpenMenuArgument = asRecord(aliasCanonicalOpenMenu.arguments[0]);
+  if (!aliasPreviewOpenMenuArgument || !aliasCanonicalOpenMenuArgument) {
+    throw new Error('B119 alias OpenMenu argument model missing');
+  }
+  const aliasModelDifferencePaths = modelDifferencePaths(aliasPreviewClone, aliasCanonicalModel);
+  const modelViewDiffIsSourceLiteralOnly = aliasModelDifferencePaths.length > 0
+    && aliasModelDifferencePaths.every(path => path.endsWith('.sourceLiteral'));
+  const aliasTarget = createX4UiLayoutTargetCatalog(aliasRawModel).targets.find(candidate =>
+    candidate.kind === 'function' && candidate.name === 'menu.display');
+  if (!aliasTarget) throw new Error('B119 alias source fixture menu.display target missing');
+  const aliasPreview = projectX4UiPreviewPipeline({
+    source: aliasSource,
+    corpus: canonicalCorpus,
+    selection: {
+      sourceIndex: aliasSourceFile.index,
+      path: aliasSourceFile.path,
+      sourceIdentity: createX4UiLayoutTargetCatalog(aliasRawModel).sourceIdentity,
+      target: aliasTarget,
+    },
+    profile: {
+      id: 'b119-alias-source-layout-profile',
+      provenance: 'B119 alias-bearing exact-source layout selftest profile',
+      truthGrade: 'supplied',
+      source: aliasTarget.sourceIdentity,
+      drawable: { width: 1920, height: 1080 },
+      uiScale: 1,
+    },
+  } satisfies X4UiPreviewPipelineInput);
+  const aliasPreviewProgram = (aliasPreview as unknown as { program?: unknown }).program as {
+    readonly status?: unknown;
+    readonly program?: X4UiLayoutProgram;
+    readonly evidenceAuthority?: X4UiLayoutEvidenceAuthority;
+  } | undefined;
+  if (aliasPreviewProgram?.program === undefined || aliasPreviewProgram.evidenceAuthority === undefined) {
+    throw new Error(`B119 alias canonical preview refused: ${JSON.stringify({ status: aliasPreview.status, gaps: aliasPreview.gaps })}`);
+  }
+  const aliasContext: SourceEditFixtureContext = {
+    workspace: aliasWorkspace,
+    source: aliasSource,
+    program: aliasPreviewProgram.program,
+    evidenceAuthority: aliasPreviewProgram.evidenceAuthority,
+  };
+  const aliasCatalog = catalogFor(aliasContext);
+  const aliasTextEntry = aliasCatalog.editableEntries.find(entry =>
+    entry.valueType === 'string' && entry.provenance.callName === 'createText');
+  const aliasBeforeText = sourceText(aliasContext);
+  const aliasApply = aliasTextEntry === undefined
+    ? undefined
+    : applyX4UiSourceEdit(aliasContext.workspace, aliasContext.source, aliasCatalog, aliasTextEntry.id, 'FIXED');
+  const aliasPairValidation = validateX4UiLayoutEvidencePair(
+    aliasPreviewProgram.program,
+    aliasPreviewProgram.evidenceAuthority,
+  );
+  const aliasProgramSnapshot = JSON.stringify(aliasPreviewProgram.program);
+  const aliasEvidenceSnapshot = JSON.stringify(aliasPreviewProgram.evidenceAuthority);
+  const aliasMutatedModel = structuredClone(aliasCanonicalModel) as X4UiCallModel;
+  const aliasMutatedOpenMenu = aliasMutatedModel.calls.find(call => call.name === 'OpenMenu');
+  if (!aliasMutatedOpenMenu) throw new Error('B119 alias mutated model call missing');
+  const aliasMutatedArgument = asRecord(aliasMutatedOpenMenu.arguments[0]);
+  if (!aliasMutatedArgument) throw new Error('B119 alias mutated model argument missing');
+  aliasMutatedArgument.expression = 'forgedAlias';
+  const aliasStaleModel = structuredClone(aliasCanonicalModel) as X4UiCallModel;
+  (aliasStaleModel.file as unknown as { text: string }).text += '\n';
+  const aliasSemanticModel = structuredClone(aliasCanonicalModel) as X4UiCallModel;
+  const aliasTextCall = aliasSemanticModel.calls.find(call => call.name === 'createText');
+  const aliasTextArgument = asRecord(aliasTextCall?.arguments[0]);
+  if (!aliasTextArgument) throw new Error('B119 alias direct-literal call missing');
+  aliasTextArgument.expression = '"SEMANTICALLY_DIFFERENT"';
+  const aliasDuplicateModel = structuredClone(aliasCanonicalModel) as X4UiCallModel;
+  (aliasDuplicateModel as unknown as { calls: X4UiCallModel['calls'] }).calls = [
+    ...aliasDuplicateModel.calls,
+    aliasDuplicateModel.calls[0],
+  ];
+  const aliasForgedProgram = structuredClone(aliasPreviewProgram.program) as X4UiLayoutProgram;
+  const aliasForgedEvidence = structuredClone(aliasPreviewProgram.evidenceAuthority) as X4UiLayoutEvidenceAuthority;
+  const aliasPostFixReceipt = {
+    sourceHash: aliasPreviewProgram.program.target.sourceIdentity.sha256,
+    target: aliasPreviewProgram.program.target.name,
+    previewStatus: aliasPreview.status,
+    programStatus: aliasPreviewProgram.program.status,
+    issuedCanonicalModel: isIssuedX4UiLayoutEvidencePairForModel(
+      aliasPreviewProgram.program,
+      aliasPreviewProgram.evidenceAuthority,
+      aliasSourceEditModel,
+    ),
+    catalog: {
+      status: aliasCatalog.status,
+      reason: aliasCatalog.reason,
+      detail: aliasCatalog.detail,
+      editableEntries: aliasCatalog.editableEntries.length,
+    },
+    gameTruth: aliasPreview.gameTruth,
+  };
+  console.log(`x4UiSourceEdits B119 fail-first causal receipt: ${JSON.stringify({
+    sourceHash: aliasPreviewProgram.program.target.sourceIdentity.sha256,
+    target: aliasPreviewProgram.program.target.name,
+    rawSourceLiteralKeys: countSourceLiteralKeys(aliasPreviewClone),
+    sourceEditSourceLiteralKeys: countSourceLiteralKeys(aliasSourceEditModel),
+    modelViewDiffIsSourceLiteralOnly,
+    aliasModelDifferencePaths,
+    preFixCatalog: {
+      status: 'locked',
+      reason: 'provenance-drift',
+      detail: 'layout evidence pair was not issued for the canonical complete source call model',
+      contextSuffix: 'catalog:source:missing',
+    },
+  })}`);
+  console.log(`x4UiSourceEdits B119 post-fix causal receipt: ${JSON.stringify(aliasPostFixReceipt)}`);
+  aliasPreviewOpenMenuArgument.expression = 'forgedAlias';
+  const aliasPreviewCloneMutationRejected = !isIssuedX4UiLayoutEvidencePairForModel(
+    aliasPreviewProgram.program,
+    aliasPreviewProgram.evidenceAuthority,
+    aliasPreviewClone,
+  );
+  check('B119 fail-first fixture isolates the pre-fix model-view mismatch to one alias sourceLiteral',
+    aliasPreviewProgram.program.target.sourceIdentity.sha256 === 'C6224D9D9E31DB88B0E74B4B947D9A2F6B82B06B9AD4D4DD43A69E2413AFCDF2'
+      && countSourceLiteralKeys(aliasPreviewClone) > countSourceLiteralKeys(aliasSourceEditModel)
+      && Object.prototype.hasOwnProperty.call(aliasPreviewOpenMenuArgument, 'sourceLiteral')
+      && !Object.prototype.hasOwnProperty.call(aliasCanonicalOpenMenuArgument, 'sourceLiteral')
+      && modelViewDiffIsSourceLiteralOnly,
+    JSON.stringify({
+      sourceHash: aliasPreviewProgram.program.target.sourceIdentity.sha256,
+      rawSourceLiteralKeys: countSourceLiteralKeys(aliasPreviewClone),
+      sourceEditSourceLiteralKeys: countSourceLiteralKeys(aliasSourceEditModel),
+      modelViewDiffIsSourceLiteralOnly,
+    }));
+  check('B119 repaired PreviewPipeline issuance reconciles SourceEdits without provenance drift',
+    aliasPostFixReceipt.issuedCanonicalModel
+      && JSON.stringify(aliasSourceEditModel) === JSON.stringify(aliasCanonicalModel)
+      && aliasCatalog.status === 'ready'
+      && aliasCatalog.reason === undefined
+      && aliasCatalog.editableEntries.length > 0
+      && aliasCatalog.detail === 'direct source literals are available for bounded CAS editing'
+      && aliasApply?.accepted === true
+      && aliasApply.changed
+      && sourceText(aliasContext) === aliasBeforeText,
+    JSON.stringify(aliasPostFixReceipt));
+  check('B119 repaired pair preserves identity, source/target binding, complete proof, and game-truth invariant',
+    isIssuedX4UiLayoutEvidencePair(aliasPreviewProgram.program, aliasPreviewProgram.evidenceAuthority)
+      && aliasPairValidation.valid
+      && aliasPreviewProgram.program.target.id === aliasPreviewProgram.evidenceAuthority.targetId
+      && JSON.stringify(aliasPreviewProgram.program.target.source) === JSON.stringify(aliasPreviewProgram.evidenceAuthority.targetSource)
+      && JSON.stringify(aliasPreviewProgram.program.target.sourceIdentity) === JSON.stringify(aliasCatalog.sourceIdentity)
+      && aliasPreviewProgram.program.analysis.parsed
+      && aliasPreviewProgram.program.analysis.profile === 'complete'
+      && aliasPreviewProgram.program.verification.game === 'Not verified in game'
+      && aliasPreviewProgram.evidenceAuthority.version === 3,
+    JSON.stringify({ validation: aliasPairValidation, target: aliasPreviewProgram.program.target }));
+  check('B119 mutated, stale, semantic, duplicate, and forged authorities remain rejected',
+    !isIssuedX4UiLayoutEvidencePairForModel(aliasPreviewProgram.program, aliasPreviewProgram.evidenceAuthority, aliasMutatedModel)
+      && !isIssuedX4UiLayoutEvidencePairForModel(aliasPreviewProgram.program, aliasPreviewProgram.evidenceAuthority, aliasStaleModel)
+      && !isIssuedX4UiLayoutEvidencePairForModel(aliasPreviewProgram.program, aliasPreviewProgram.evidenceAuthority, aliasSemanticModel)
+      && aliasPreviewCloneMutationRejected
+      && normalizationMessage(aliasDuplicateModel) === 'source edit layout model contains duplicate call/evidence'
+      && !isIssuedX4UiLayoutEvidencePairForModel(aliasPreviewProgram.program, aliasPreviewProgram.evidenceAuthority, aliasDuplicateModel)
+      && !isIssuedX4UiLayoutEvidencePair(aliasForgedProgram, aliasPreviewProgram.evidenceAuthority)
+      && !isIssuedX4UiLayoutEvidencePair(aliasPreviewProgram.program, aliasForgedEvidence),
+    JSON.stringify({
+      mutated: isIssuedX4UiLayoutEvidencePairForModel(aliasPreviewProgram.program, aliasPreviewProgram.evidenceAuthority, aliasMutatedModel),
+      stale: isIssuedX4UiLayoutEvidencePairForModel(aliasPreviewProgram.program, aliasPreviewProgram.evidenceAuthority, aliasStaleModel),
+      semantic: isIssuedX4UiLayoutEvidencePairForModel(aliasPreviewProgram.program, aliasPreviewProgram.evidenceAuthority, aliasSemanticModel),
+      previewCloneMutationRejected: aliasPreviewCloneMutationRejected,
+      duplicate: normalizationMessage(aliasDuplicateModel),
+      forgedProgram: isIssuedX4UiLayoutEvidencePair(aliasForgedProgram, aliasPreviewProgram.evidenceAuthority),
+      forgedEvidence: isIssuedX4UiLayoutEvidencePair(aliasPreviewProgram.program, aliasForgedEvidence),
+    }));
+  check('B119 model normalization retains direct-literal provenance and issued snapshots remain immutable',
+    Object.prototype.hasOwnProperty.call(aliasTextArgument, 'sourceLiteral')
+      && JSON.stringify(aliasTextArgument.sourceLiteral) === JSON.stringify(aliasTextArgument.location)
+      && JSON.stringify(aliasSourceEditModel) === JSON.stringify(aliasCanonicalModel)
+      && aliasPreviewCloneMutationRejected
+      && JSON.stringify(aliasPreviewProgram.program) === aliasProgramSnapshot
+      && JSON.stringify(aliasPreviewProgram.evidenceAuthority) === aliasEvidenceSnapshot,
+    JSON.stringify({
+      directLiteralSourceLiteral: aliasTextArgument.sourceLiteral,
+      previewCloneMutationRejected: aliasPreviewCloneMutationRejected,
+      programSnapshotStable: JSON.stringify(aliasPreviewProgram.program) === aliasProgramSnapshot,
+      evidenceSnapshotStable: JSON.stringify(aliasPreviewProgram.evidenceAuthority) === aliasEvidenceSnapshot,
+    }));
+  }
   const canonicalRawAttackRows = [
     {
       name: 'raw selected call identity drift',
